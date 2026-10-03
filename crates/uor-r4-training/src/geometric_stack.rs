@@ -889,7 +889,7 @@ pub struct StackConfig {
     /// Score of the geometric reads.
     pub read: ReadScore,
     /// Learned quaternion transport; `false` fixes `u_t` to the identity, which
-    /// leaves a real gated linear recurrence with one decay per lane.
+    /// leaves a real gated linear recurrence with one decay per channel.
     pub rotation: bool,
     /// The transport's group with `rotation`: quaternion (default, absent from
     /// configurations saved before the control existed) or the abelian U(1)
@@ -1122,7 +1122,7 @@ impl StackConfig {
                     shapes.insert(name("rec.conv.bias"), vec![d]);
                     shapes.insert(name("rec.gate.weight"), vec![gates, d]);
                     shapes.insert(name("rec.gate.bias"), vec![gates]);
-                    shapes.insert(name("rec.decay"), vec![lanes]);
+                    shapes.insert(name("rec.decay"), vec![d]);
                     shapes.insert(name("rec.out.weight"), vec![d, d]);
                 }
                 (StackArch::Geometric, _) => {
@@ -1389,9 +1389,11 @@ impl StackModel {
                         }
                     })
                     .collect(),
+                // One decay per channel, its timescale spread geometrically
+                // over the width as it was over the lanes.
                 "rec.decay" => (0..count)
-                    .map(|lane| {
-                        let fraction = lane as f64 / (count.max(2) - 1) as f64;
+                    .map(|channel| {
+                        let fraction = channel as f64 / (count.max(2) - 1) as f64;
                         let (fast, slow) = DECAY_TIMESCALES;
                         let tau = fast * (slow / fast).powf(fraction);
                         let a = (-1.0 / (DECAY_EXPONENT * tau)).exp();
@@ -6828,7 +6830,9 @@ impl StackModel {
         let gates = Self::linear(&u, p.layer(layer, "rec.gate.weight")?)?
             .broadcast_add(p.layer(layer, "rec.gate.bias")?)?;
         let opening = candle_nn::ops::sigmoid(&gates.narrow(2, 0, lanes)?)?;
-        // log a = -softplus(-decay) keeps a in (0, 1); log lambda = c r log a.
+        // log a = -softplus(-decay) keeps a in (0, 1), one value per channel;
+        // log lambda = c r log a. The lane's opening broadcasts over its four
+        // channels.
         let log_a = p
             .layer(layer, "rec.decay")?
             .to_dtype(DType::F64)?
@@ -6837,9 +6841,13 @@ impl StackModel {
             .affine(1.0, 1.0)?
             .log()?
             .neg()?
-            .to_dtype(DType::F32)?;
-        let log_lambda = opening.broadcast_mul(&log_a)?.affine(DECAY_EXPONENT, 0.0)?;
-        let lambda = log_lambda.exp()?.unsqueeze(3)?;
+            .to_dtype(DType::F32)?
+            .reshape((lanes, 4))?;
+        let log_lambda = opening
+            .unsqueeze(3)?
+            .broadcast_mul(&log_a)?
+            .affine(DECAY_EXPONENT, 0.0)?;
+        let lambda = log_lambda.exp()?;
         let keep = lambda
             .sqr()?
             .affine(-1.0, 1.0)?
@@ -6867,10 +6875,12 @@ impl StackModel {
                     unit.add(&snapped.sub(&unit)?.detach())?
                 }
             };
+            // q = lambda .* u per channel.
             unit.broadcast_mul(&lambda)?
         } else {
+            // Only the real component transports; its channel 0 decay scales it.
             let zeros = Tensor::zeros((batch, time, lanes, 3), DType::F32, &self.device)?;
-            Tensor::cat(&[&lambda, &zeros], 3)?
+            Tensor::cat(&[&lambda.narrow(3, 0, 1)?, &zeros], 3)?
         };
         let drive = convolved
             .reshape((batch, time, lanes, 4))?
@@ -8640,8 +8650,13 @@ fn gelu(x: f32) -> (f32, f32) {
 /// Inputs: branches [batch, time, 2 width] (the scan drive `a`, then the gate
 /// `g`); gates [batch, time, lanes (+ width with rotation)] (decay-gate logits,
 /// then the raw rotation quaternions); parameters packed as the convolution
-/// taps [4, width], its bias [width] and the lane decays [lanes]. Output:
+/// taps [4, width], its bias [width] and the per-channel decays [width]. Output:
 /// `h * gelu(g)` [batch, time, width].
+///
+/// The decay is per channel: `q = lambda .* u` scales component `k` of the
+/// lane's transition by `exp(8 opening log a[4 lane + k])`, while the gate
+/// logit (and so `opening`) stays per lane. A lane whose four decays are equal
+/// computes the pre-per-channel core bit for bit.
 ///
 /// With `snap` (and rotation), each unit quaternion is replaced by its nearest
 /// root before its scaling by lambda, and the backward passes the root's
@@ -8660,14 +8675,20 @@ struct RecurrenceCore {
 }
 
 /// One lane's transition at one position.
+///
+/// `lambda`, `keep` and `clamped` are per channel (the lane's four quaternion
+/// components): the decay parameter is per channel, while the gate logit and
+/// so the opening stay per lane.
 #[derive(Clone, Copy, Default)]
 struct Transition {
     /// Decay gate sigma(logit).
     opening: f32,
-    lambda: f32,
-    keep: f32,
-    /// `1 - lambda^2` fell below the floor, so `keep` carries no gradient.
-    clamped: bool,
+    /// `exp(8 opening log a)` of the lane's channel `k`.
+    lambda: [f32; 4],
+    /// `sqrt(1 - lambda_k^2)`, or the floor below.
+    keep: [f32; 4],
+    /// `1 - lambda_k^2` fell below the floor, so `keep[k]` carries no gradient.
+    clamped: [bool; 4],
     /// The transport's unit quaternion, `q = lambda rotation`: `unit`, or with
     /// a snap its nearest root.
     rotation: [f32; 4],
@@ -8686,10 +8707,11 @@ impl RecurrenceCore {
     }
 
     fn parameter_len(&self) -> usize {
-        CONVOLUTION_WIDTH * self.width + self.width + self.lanes()
+        CONVOLUTION_WIDTH * self.width + self.width + self.width
     }
 
-    /// `log a` per lane: `-softplus(-decay)`.
+    /// `log a` per channel: `-softplus(-decay)`, one value per quaternion
+    /// component (`4 * lane + k`), not one per lane.
     fn log_a(&self, parameters: &[f32]) -> Vec<f32> {
         let decay = &parameters[(CONVOLUTION_WIDTH + 1) * self.width..];
         decay
@@ -8731,15 +8753,27 @@ impl RecurrenceCore {
             let gate_row = &gates[t * gate_width..(t + 1) * gate_width];
             for lane in 0..lanes {
                 let opening = sigmoid(gate_row[lane]);
-                let lambda = (DECAY_EXPONENT as f32 * opening * log_a[lane]).exp();
-                let complement = 1.0 - lambda * lambda;
-                let (keep, clamped) = if complement < 1e-6 {
-                    (1e-3, true)
-                } else {
-                    (complement.sqrt(), false)
-                };
+                let offset = 4 * lane;
+                // One decay per channel: `lambda_k = exp(e opening log a_k)`,
+                // with the lane's gate shared by its four components. Equal
+                // per-channel decays reproduce the per-lane core bit for bit.
+                let mut lambda = [0f32; 4];
+                let mut keep = [0f32; 4];
+                let mut clamped = [false; 4];
+                for k in 0..4 {
+                    let decay = (DECAY_EXPONENT as f32 * opening * log_a[offset + k]).exp();
+                    let complement = 1.0 - decay * decay;
+                    let (kept, floor) = if complement < 1e-6 {
+                        (1e-3, true)
+                    } else {
+                        (complement.sqrt(), false)
+                    };
+                    lambda[k] = decay;
+                    keep[k] = kept;
+                    clamped[k] = floor;
+                }
                 let (rotation, unit, norm) = if self.rotation {
-                    let mut raw = quad(gate_row, lanes + 4 * lane);
+                    let mut raw = quad(gate_row, lanes + offset);
                     if self.group == RotationGroup::U1 {
                         raw[2] = 0.0;
                         raw[3] = 0.0;
@@ -8762,16 +8796,16 @@ impl RecurrenceCore {
                     unit,
                     norm,
                 };
-                let q = rotation.map(|v| v * lambda);
+                let q = [0, 1, 2, 3].map(|k| rotation[k] * lambda[k]);
                 let previous = if t > 0 {
-                    quad(&state, (t - 1) * width + 4 * lane)
+                    quad(&state, (t - 1) * width + offset)
                 } else {
                     [0.0; 4]
                 };
                 let moved = quaternion_product(q, previous);
-                let offset = t * width + 4 * lane;
+                let offset = t * width + offset;
                 for k in 0..4 {
-                    state[offset + k] = moved[k] + keep * drive[offset + k];
+                    state[offset + k] = moved[k] + keep[k] * drive[offset + k];
                 }
             }
         }
@@ -8861,7 +8895,7 @@ impl RecurrenceCore {
         self.snap.is_none() && self.group == RotationGroup::Quaternion
     }
 
-    /// `log a` per lane computed on the device (no host synchronization).
+    /// `log a` per channel computed on the device (no host synchronization).
     fn metal_log_a(
         &self,
         device: &candle_core::MetalDevice,
@@ -8869,17 +8903,16 @@ impl RecurrenceCore {
         parameter_offset: usize,
     ) -> candle_core::Result<Arc<candle_metal_kernels::metal::Buffer>> {
         use crate::metal_stack_kernels::metal::{launch, Arg};
-        let lanes = self.lanes();
-        let log_a = device.new_buffer(lanes, DType::F32, "recurrence_log_a")?;
+        let width = self.width;
+        let log_a = device.new_buffer(width, DType::F32, "recurrence_log_a")?;
         launch(
             device,
             "recurrence_log_a",
-            lanes,
+            width,
             &[
                 Arg::InAt(parameters, parameter_offset),
                 Arg::Out(&log_a),
-                Arg::U32(self.width as u32),
-                Arg::U32(lanes as u32),
+                Arg::U32(width as u32),
             ],
         )?;
         Ok(log_a)
@@ -9143,9 +9176,10 @@ impl CustomOp3 for RecurrenceCore {
                 let dy = &d_out[window * time * width..(window + 1) * time * width];
                 let (drive, state, transitions) =
                     self.window(branch, gate, &parameter_values, &log_a);
-                // Partial parameter gradients: taps, bias, then log a per lane.
+                // Partial parameter gradients: taps, bias, then log a per
+                // channel.
                 let mut d_parameters = vec![0f64; self.parameter_len()];
-                let mut d_log_a = vec![0f64; lanes];
+                let mut d_log_a = vec![0f64; width];
                 let mut carried = vec![[0f32; 4]; lanes];
                 let mut d_drive = vec![0f32; width];
                 for t in (0..time).rev() {
@@ -9162,7 +9196,12 @@ impl CustomOp3 for RecurrenceCore {
                         let mut total = quad(&d_drive, offset);
                         if t + 1 < time {
                             let next = transitions[(t + 1) * lanes + lane];
-                            let q_next = next.rotation.map(|v| v * next.lambda);
+                            // q = lambda u per channel: the conjugate scales
+                            // its component by the same per-channel lambda.
+                            let mut q_next = [0f32; 4];
+                            for k in 0..4 {
+                                q_next[k] = next.rotation[k] * next.lambda[k];
+                            }
                             let back = quaternion_product(conjugate(q_next), *held);
                             for k in 0..4 {
                                 total[k] += back[k];
@@ -9171,12 +9210,15 @@ impl CustomOp3 for RecurrenceCore {
                         *held = total;
                         let transition = transitions[t * lanes + lane];
                         let c = quad(&drive, t * width + offset);
-                        // x = keep c.
-                        let d_keep: f32 = (0..4).map(|k| total[k] * c[k]).sum();
+                        // x = keep .* c (per channel).
+                        let mut d_keep = [0f32; 4];
                         for k in 0..4 {
-                            d_drive[offset + k] = transition.keep * total[k];
+                            d_keep[k] = total[k] * c[k];
                         }
-                        // q = lambda u (u the unit, or with a snap its root),
+                        for k in 0..4 {
+                            d_drive[offset + k] = transition.keep[k] * total[k];
+                        }
+                        // q = lambda .* u (u the unit, or with a snap its root),
                         // with h_{-1} = 0.
                         let dq = if t > 0 {
                             quaternion_product(
@@ -9187,13 +9229,19 @@ impl CustomOp3 for RecurrenceCore {
                             [0.0; 4]
                         };
                         let u = transition.rotation;
-                        let mut d_lambda: f32 = (0..4).map(|k| dq[k] * u[k]).sum();
-                        if !transition.clamped {
-                            d_lambda -= d_keep * transition.lambda / transition.keep;
+                        // Per channel: d lambda_k = dq_k u_k, and the `keep`
+                        // floor drops its gradient where it clamped.
+                        let mut d_opening = 0f32;
+                        for k in 0..4 {
+                            let mut d_lambda = dq[k] * u[k];
+                            if !transition.clamped[k] {
+                                d_lambda -= d_keep[k] * transition.lambda[k] / transition.keep[k];
+                            }
+                            let d_log_lambda = d_lambda * transition.lambda[k];
+                            d_log_a[offset + k] +=
+                                f64::from(d_log_lambda * exponent * transition.opening);
+                            d_opening += d_log_lambda * exponent * log_a[offset + k];
                         }
-                        let d_log_lambda = d_lambda * transition.lambda;
-                        let d_opening = d_log_lambda * exponent * log_a[lane];
-                        d_log_a[lane] += f64::from(d_log_lambda * exponent * transition.opening);
                         d_gate[t * gate_width + lane] =
                             d_opening * transition.opening * (1.0 - transition.opening);
                         if self.rotation {
@@ -9201,7 +9249,10 @@ impl CustomOp3 for RecurrenceCore {
                             // rotation's gradient reaches u unchanged
                             // (straight-through), so the normalization is
                             // differentiated at the unsnapped unit.
-                            let du = dq.map(|v| v * transition.lambda);
+                            let mut du = [0f32; 4];
+                            for k in 0..4 {
+                                du[k] = dq[k] * transition.lambda[k];
+                            }
                             let unit = transition.unit;
                             let projection: f32 = (0..4).map(|k| du[k] * unit[k]).sum();
                             for k in 0..4 {
@@ -9229,11 +9280,11 @@ impl CustomOp3 for RecurrenceCore {
                     }
                 }
                 let decay_offset = (CONVOLUTION_WIDTH + 1) * width;
-                d_parameters[decay_offset..decay_offset + lanes].copy_from_slice(&d_log_a);
+                d_parameters[decay_offset..decay_offset + width].copy_from_slice(&d_log_a);
                 d_parameters
             })
             .collect();
-        // d log a / d decay = sigma(-decay).
+        // d log a / d decay = sigma(-decay), per channel.
         let decay_offset = (CONVOLUTION_WIDTH + 1) * width;
         let mut d_parameters = vec![0f64; self.parameter_len()];
         for partial in &partials {
@@ -9241,9 +9292,9 @@ impl CustomOp3 for RecurrenceCore {
                 *a += b;
             }
         }
-        for lane in 0..lanes {
-            let decay = f64::from(parameter_values[decay_offset + lane]);
-            d_parameters[decay_offset + lane] *= 1.0 / (1.0 + decay.exp());
+        for channel in 0..width {
+            let decay = f64::from(parameter_values[decay_offset + channel]);
+            d_parameters[decay_offset + channel] *= 1.0 / (1.0 + decay.exp());
         }
         let d_parameters: Vec<f32> = d_parameters.into_iter().map(|v| v as f32).collect();
         Ok((
@@ -10597,7 +10648,7 @@ pub fn recurrence_core_grouped(
     let gate_width = lanes + if rotation { 4 * lanes } else { 0 };
     let expected_branches = batch * time * 2 * width;
     let expected_gates = batch * time * gate_width;
-    let expected_params = (CONVOLUTION_WIDTH + 1) * width + lanes;
+    let expected_params = (CONVOLUTION_WIDTH + 1) * width + width;
     if branches.elem_count() != expected_branches
         || gates.elem_count() != expected_gates
         || parameters.elem_count() != expected_params
@@ -12655,7 +12706,7 @@ mod tests {
         let gates = Var::from_tensor(&random(&mut rng, &[batch, time, lanes + width], 1.0))?;
         let parameters = Var::from_tensor(&random(
             &mut rng,
-            &[(CONVOLUTION_WIDTH + 1) * width + lanes],
+            &[(CONVOLUTION_WIDTH + 1) * width + width],
             0.5,
         ))?;
         let weights = random(&mut rng, &[batch, time, width], 1.0);
@@ -12719,7 +12770,7 @@ mod tests {
         let mut rng = Initializer(61);
         let branches = random(&mut rng, &[batch, time, 2 * width], 1.0);
         let gates = random(&mut rng, &[batch, time, lanes + width], 1.0);
-        let parameters = random(&mut rng, &[(CONVOLUTION_WIDTH + 1) * width + lanes], 0.5);
+        let parameters = random(&mut rng, &[(CONVOLUTION_WIDTH + 1) * width + width], 0.5);
         let core = |group| RecurrenceCore {
             batch,
             time,
@@ -12745,7 +12796,7 @@ mod tests {
                 let qs: Vec<[f32; 4]> = (0..time)
                     .map(|t| {
                         let tr = transitions[t * lanes + lane];
-                        tr.rotation.map(|v| v * tr.lambda)
+                        [0, 1, 2, 3].map(|k| tr.rotation[k] * tr.lambda[k])
                     })
                     .collect();
                 for x in &qs {
@@ -17216,8 +17267,10 @@ mod tests {
 
     /// The float forward composed directly from the variables with the
     /// stack's kernels, in the order the forward pass took before the served
-    /// representation existed, and with the recurrence core as it was before
-    /// the transport snap existed ([`LegacyRecurrenceCore`]).
+    /// representation existed, and with the snap-free fused core (the core's
+    /// own pre-snap identity is checked separately by
+    /// [`Self::without_a_snap_the_core_is_bit_identical_to_the_pre_snap_core`],
+    /// which the per-channel decay leaves only lane-uniform).
     fn float_reference_logits(
         model: &StackModel,
         ids: &[u32],
@@ -17264,11 +17317,13 @@ mod tests {
                 let core = branches.contiguous()?.apply_op3(
                     &gates.contiguous()?,
                     &parameters,
-                    LegacyRecurrenceCore {
+                    RecurrenceCore {
                         batch,
                         time,
                         width: c.width,
                         rotation: c.rotation,
+                        group: c.rotation_group,
+                        snap: None,
                     },
                 )?;
                 linear(&core, &l(layer, "rec.out.weight")?)?
@@ -18247,9 +18302,147 @@ mod tests {
         Ok(())
     }
 
+    /// The key correctness check for per-channel decay: a lane whose four
+    /// decays are equal takes exactly the pre-per-channel (per-lane) path, bit
+    /// for bit, while unequal channels change the forward (so the new
+    /// parameterisation is active, not a no-op).
+    #[test]
+    fn per_channel_decay_generalises_the_per_lane_core() -> Result<()> {
+        for rotation in [true, false] {
+            let (batch, time, width) = (2, 7, 16);
+            let lanes = width / 4;
+            let gate_width = lanes + if rotation { width } else { 0 };
+            let mut rng = Initializer(61);
+            let branches = random(&mut rng, &[batch, time, 2 * width], 1.0);
+            let gates = random(&mut rng, &[batch, time, gate_width], 1.0);
+            let taps = random(&mut rng, &[(CONVOLUTION_WIDTH + 1) * width], 0.5);
+            let per_lane = random(&mut rng, &[lanes], 0.5)
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            let uniform: Vec<f32> = per_lane.iter().flat_map(|&decay| [decay; 4]).collect();
+            let unequal: Vec<f32> = per_lane
+                .iter()
+                .flat_map(|&decay| [0, 1, 2, 3].map(|k| decay + 0.05 * k as f32))
+                .collect();
+            let core = |decay: &[f32]| -> Result<Tensor> {
+                let parameters = Tensor::cat(&[&taps, &Tensor::new(decay, &cpu())?], 0)?;
+                Ok(branches.contiguous()?.apply_op3(
+                    &gates.contiguous()?,
+                    &parameters,
+                    RecurrenceCore {
+                        batch,
+                        time,
+                        width,
+                        rotation,
+                        group: RotationGroup::Quaternion,
+                        snap: None,
+                    },
+                )?)
+            };
+            let legacy_parameters =
+                Tensor::cat(&[&taps, &Tensor::new(per_lane.as_slice(), &cpu())?], 0)?;
+            let legacy = branches.contiguous()?.apply_op3(
+                &gates.contiguous()?,
+                &legacy_parameters,
+                LegacyRecurrenceCore {
+                    batch,
+                    time,
+                    width,
+                    rotation,
+                },
+            )?;
+            let reduced = core(&uniform)?;
+            assert_eq!(
+                bits(&reduced)?,
+                bits(&legacy)?,
+                "rotation {rotation}: equal per-channel decays left the per-lane forward"
+            );
+            let spread = core(&unequal)?;
+            let gap = max_abs_gap(&spread, &legacy)?;
+            assert!(
+                gap > 1e-6,
+                "rotation {rotation}: unequal per-channel decays changed nothing ({gap})"
+            );
+        }
+        Ok(())
+    }
+
+    /// The decay parameter's analytic gradient, per channel: the fused core's
+    /// backward must index the decay exactly as its forward does. Deliberately
+    /// unequal decays keep the run away from the per-lane special case.
+    ///
+    /// The exact reference is the composed Candle path (autodiff through the
+    /// per-channel broadcast), which is independent of the hand-written
+    /// backward. Central finite differences are run too, but only for the
+    /// rotation-free model: `check_gradient` evaluates the loss in f32, and at
+    /// this loss magnitude one decay parameter's directional derivative can sit
+    /// below the loss's own rounding, where the difference is unmeasurable
+    /// rather than wrong.
+    #[test]
+    fn per_channel_decay_gradient_matches_reference_and_finite_differences() -> Result<()> {
+        for rotation in [false, true] {
+            let model = StackModel::new(
+                tiny(StackArch::Geometric, "ra", ReadScore::Dot, rotation),
+                &cpu(),
+            )?;
+            let var = &model.variables()["layers.00.rec.decay"];
+            let decay: Vec<f32> = (0..model.config.width)
+                .map(|channel| 2.6 + 0.1 * (channel % 7) as f32)
+                .collect();
+            var.set(&Tensor::new(decay.as_slice(), &cpu())?)?;
+            let (batch, time) = (2, 12);
+            let width = model.config.width;
+            let ids = token_ids(batch * time, 37, 5);
+            let weights = random(&mut Initializer(23), &[batch * time, 37], 1.0);
+            let p = model.params()?;
+            let x = random(&mut Initializer(29), &[batch, time, width], 1.0);
+            let core_weights = random(&mut Initializer(31), &[batch, time, width], 1.0);
+            let fused = model
+                .recurrence(&p, 0, &x, &mut None)?
+                .mul(&core_weights)?
+                .sum_all()?
+                .backward()?;
+            let composed = model
+                .composed_recurrence(&p, 0, &x, ComposedTransport::Free)?
+                .mul(&core_weights)?
+                .sum_all()?
+                .backward()?;
+            let fused_grad = fused
+                .get(var.as_tensor())
+                .ok_or_else(|| invalid("no fused decay gradient"))?;
+            let composed_grad = composed
+                .get(var.as_tensor())
+                .ok_or_else(|| invalid("no composed decay gradient"))?;
+            let magnitude = composed_grad.abs()?.max_all()?.to_scalar::<f32>()?;
+            assert!(
+                magnitude > 1e-5,
+                "rotation {rotation}: the decay gradient is only {magnitude}"
+            );
+            let gap = max_abs_gap(fused_grad, composed_grad)? / magnitude;
+            assert!(
+                gap < 1e-3,
+                "rotation {rotation}: the fused decay gradient differs from the composed \
+                 reference by {gap} (relative)"
+            );
+            if !rotation {
+                check_gradient(
+                    std::slice::from_ref(var),
+                    || Ok(model.forward(&ids, batch, time)?.mul(&weights)?.sum_all()?),
+                    5e-2,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn without_a_snap_the_core_is_bit_identical_to_the_pre_snap_core() -> Result<()> {
         // The op itself, on random inputs: forward and every input gradient.
+        // The current core decays per channel, so the legacy per-lane core is
+        // recovered by giving each lane four equal decays; the forward is then
+        // bit for bit the same, while the decay gradient reaches one parameter
+        // per channel instead of one per lane (their lane sums agree only up to
+        // floating-point reassociation, so they are compared by value).
         for rotation in [true, false] {
             let (batch, time, width) = (3, 11, 16);
             let lanes = width / 4;
@@ -18257,11 +18450,19 @@ mod tests {
             let mut rng = Initializer(101);
             let branches = Var::from_tensor(&random(&mut rng, &[batch, time, 2 * width], 1.0))?;
             let gates = Var::from_tensor(&random(&mut rng, &[batch, time, gate_width], 1.0))?;
-            let parameters = Var::from_tensor(&random(
-                &mut rng,
-                &[(CONVOLUTION_WIDTH + 1) * width + lanes],
-                0.5,
-            ))?;
+            let taps = random(&mut rng, &[(CONVOLUTION_WIDTH + 1) * width], 0.5);
+            let per_lane = random(&mut rng, &[lanes], 0.5)
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            let channels: Vec<f32> = per_lane.iter().flat_map(|&decay| [decay; 4]).collect();
+            let parameters = Var::from_tensor(&Tensor::cat(
+                &[&taps, &Tensor::new(channels.as_slice(), &cpu())?],
+                0,
+            )?)?;
+            let legacy_parameters = Var::from_tensor(&Tensor::cat(
+                &[&taps, &Tensor::new(per_lane.as_slice(), &cpu())?],
+                0,
+            )?)?;
             let weights = random(&mut rng, &[batch, time, width], 1.0);
             let current = branches.as_tensor().apply_op3(
                 gates.as_tensor(),
@@ -18277,7 +18478,7 @@ mod tests {
             )?;
             let legacy = branches.as_tensor().apply_op3(
                 gates.as_tensor(),
-                parameters.as_tensor(),
+                legacy_parameters.as_tensor(),
                 LegacyRecurrenceCore {
                     batch,
                     time,
@@ -18292,22 +18493,64 @@ mod tests {
             );
             let a = current.mul(&weights)?.sum_all()?.backward()?;
             let b = legacy.mul(&weights)?.sum_all()?.backward()?;
-            for (name, var) in [
-                ("branches", &branches),
-                ("gates", &gates),
-                ("parameters", &parameters),
-            ] {
-                let grad = |grads: &candle_core::backprop::GradStore| -> Result<Vec<u32>> {
-                    bits(
-                        grads
-                            .get(var.as_tensor())
-                            .ok_or_else(|| invalid(format!("no gradient for {name}")))?,
-                    )
-                };
-                assert_eq!(
-                    grad(&a)?,
-                    grad(&b)?,
-                    "rotation {rotation}: gradient of {name}"
+            let branch_grad = |grads: &candle_core::backprop::GradStore| -> Result<Vec<u32>> {
+                bits(
+                    grads
+                        .get(branches.as_tensor())
+                        .ok_or_else(|| invalid("no branch gradient"))?,
+                )
+            };
+            assert_eq!(
+                branch_grad(&a)?,
+                branch_grad(&b)?,
+                "rotation {rotation}: gradient of branches"
+            );
+            // The gate gradient sums the lane's four per-channel decay terms
+            // where the legacy core summed once, so it agrees only up to
+            // floating-point reassociation (a few units in the last place).
+            let gate_grad = |grads: &candle_core::backprop::GradStore| -> Result<Tensor> {
+                Ok(grads
+                    .get(gates.as_tensor())
+                    .ok_or_else(|| invalid("no gate gradient"))?
+                    .clone())
+            };
+            let (gate_a, gate_b) = (gate_grad(&a)?, gate_grad(&b)?);
+            let scale = gate_b.abs()?.max_all()?.to_scalar::<f32>()?;
+            let gap = max_abs_gap(&gate_a, &gate_b)? / scale;
+            assert!(
+                gap < 1e-5,
+                "rotation {rotation}: gate gradients differ by {gap} (relative)"
+            );
+            // Taps and bias: bit for bit. Decays: each channel equals the
+            // legacy lane total when the lane's four channels are summed.
+            let decay = (CONVOLUTION_WIDTH + 1) * width;
+            let current_grad = a
+                .get(parameters.as_tensor())
+                .ok_or_else(|| invalid("current parameter gradient"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            let legacy_grad = b
+                .get(legacy_parameters.as_tensor())
+                .ok_or_else(|| invalid("legacy parameter gradient"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            assert!(
+                current_grad[..decay]
+                    .iter()
+                    .map(|v| v.to_bits())
+                    .eq(legacy_grad[..decay].iter().map(|v| v.to_bits())),
+                "rotation {rotation}: taps and bias gradients"
+            );
+            for lane in 0..lanes {
+                let channel_sum: f64 = (0..4)
+                    .map(|k| f64::from(current_grad[decay + 4 * lane + k]))
+                    .sum();
+                let lane_grad = f64::from(legacy_grad[decay + lane]);
+                let scale = lane_grad.abs().max(1e-6);
+                assert!(
+                    (channel_sum - lane_grad).abs() <= 1e-5 * scale,
+                    "rotation {rotation}: lane {lane} decay gradient {channel_sum} \
+                     differs from the legacy {lane_grad}"
                 );
             }
         }
@@ -18625,7 +18868,7 @@ mod tests {
         let gates = Var::from_tensor(&random(&mut rng, &[batch, time, lanes + width], 1.0))?;
         let parameters = Var::from_tensor(&random(
             &mut rng,
-            &[(CONVOLUTION_WIDTH + 1) * width + lanes],
+            &[(CONVOLUTION_WIDTH + 1) * width + width],
             0.3,
         ))?;
         let weights = random(&mut rng, &[batch, time, width], 1.0);

@@ -108,7 +108,14 @@ fn artifact(seed: u64) -> Vec<u8> {
         .collect();
     b.i32s("l0.conv_bias", &biases[..WIDTH]);
     b.i32s("l0.gate_bias", &biases);
-    let rates: Vec<i16> = (0..lanes).map(|_| code(rng.next(), 1)).collect();
+    // One draw per lane, repeated over its four channels: the table is now
+    // per channel, and the draw count keeps every later fixture value fixed.
+    let rates: Vec<i16> = (0..lanes)
+        .flat_map(|_| {
+            let decay = code(rng.next(), 1);
+            [decay; 4]
+        })
+        .collect();
     b.i16s("l0.decay_rate", &rates);
     for part in ["query", "key", "value", "out"] {
         b.matrix(&mut rng, &format!("l1.{part}"), WIDTH, WIDTH);
@@ -400,13 +407,13 @@ fn snap_rotation_matches_the_float_recipe_within_two_quanta() {
     let phi = PHI_Q32 as f64 / 4294967296.0;
     for _ in 0..2000 {
         let raw: [i32; 4] = std::array::from_fn(|_| (rng.next() % 200_001) as i32 - 100_000);
-        let lambda = rng.next() % 131_072;
+        let lambda: [u64; 4] = std::array::from_fn(|_| rng.next() % 131_072);
         let selected = super::stack_snap_select(raw);
         let rotated = stack_snap_rotation(raw, lambda);
         let root = &H4_ROOT_COEFFICIENTS[selected];
         for c in 0..4 {
             let [a, b] = root[c];
-            let expected = lambda as f64 * (f64::from(a) + f64::from(b) * phi) / 2.0;
+            let expected = lambda[c] as f64 * (f64::from(a) + f64::from(b) * phi) / 2.0;
             let gap = (rotated[c] as f64 - expected).abs();
             assert!(gap <= 2.0, "component {c}: {rotated:?} vs {expected}");
         }

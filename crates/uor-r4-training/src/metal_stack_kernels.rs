@@ -441,9 +441,22 @@ kernel void recurrence_core_fwd(
 
         uint gate_base = (b * time + t) * gate_width;
         float r_val = 1.0f / (1.0f + exp(-gates[gate_base + lane]));
-        float decay = exp(8.0f * r_val * log_a[lane]);
-        float complement = 1.0f - decay * decay;
-        float keep = (complement < 1e-6f) ? 1e-3f : sqrt(complement);
+        // One decay per channel; the lane's opening is shared by its four
+        // components.
+        uint lane_ch = 4 * lane;
+        float4 decay = float4(
+            exp(8.0f * r_val * log_a[lane_ch + 0]),
+            exp(8.0f * r_val * log_a[lane_ch + 1]),
+            exp(8.0f * r_val * log_a[lane_ch + 2]),
+            exp(8.0f * r_val * log_a[lane_ch + 3])
+        );
+        float4 complement = 1.0f - decay * decay;
+        float4 keep = float4(
+            complement.x < 1e-6f ? 1e-3f : sqrt(complement.x),
+            complement.y < 1e-6f ? 1e-3f : sqrt(complement.y),
+            complement.z < 1e-6f ? 1e-3f : sqrt(complement.z),
+            complement.w < 1e-6f ? 1e-3f : sqrt(complement.w)
+        );
 
         float4 q;
         if (rotation != 0) {
@@ -452,10 +465,10 @@ kernel void recurrence_core_fwd(
             float u2 = gates[gate_base + lanes + 4 * lane + 2];
             float u3 = gates[gate_base + lanes + 4 * lane + 3];
             float norm = sqrt(u0 * u0 + u1 * u1 + u2 * u2 + u3 * u3 + 1e-6f);
-            float s = decay / norm;
-            q = float4(u0 * s, u1 * s, u2 * s, u3 * s);
+            float4 s = decay / norm;
+            q = float4(u0 * s.x, u1 * s.y, u2 * s.z, u3 * s.w);
         } else {
-            q = float4(decay, 0.0f, 0.0f, 0.0f);
+            q = float4(decay.x, 0.0f, 0.0f, 0.0f);
         }
 
         held = quat_mul(q, held) + keep * d_val;
@@ -557,15 +570,14 @@ inline float2 gelu_value_slope(float x) {
     return float2(value, slope);
 }
 
-// log a = -softplus(-decay) per lane.
+// log a = -softplus(-decay) per channel.
 kernel void recurrence_log_a(
     device const float* params [[buffer(0)]],
     device float* log_a [[buffer(1)]],
     constant uint& width [[buffer(2)]],
-    constant uint& lanes [[buffer(3)]],
     uint id [[thread_position_in_grid]]
 ) {
-    if (id >= lanes) return;
+    if (id >= width) return;
     float x = -params[5 * width + id];
     float softplus = max(x, 0.0f) + log1p_accurate(precise::exp(-fabs(x)));
     log_a[id] = -softplus;
@@ -600,7 +612,7 @@ kernel void recurrence_core_bwd(
     uint ch = 4 * lane;
     uint two_w = 2 * width;
     device const float* taps = params;
-    float la = log_a[lane];
+    float4 la = float4(log_a[ch + 0], log_a[ch + 1], log_a[ch + 2], log_a[ch + 3]);
 
     for (uint t = 0; t < time; ++t) {
         uint src = (b * time + t) * two_w + ch;
@@ -617,7 +629,7 @@ kernel void recurrence_core_bwd(
     float4 d_tap1 = float4(0.0f);
     float4 d_tap2 = float4(0.0f);
     float4 d_tap3 = float4(0.0f);
-    float d_log_a = 0.0f;
+    float4 d_log_a = float4(0.0f);
     float4 tap0 = float4(taps[0 * width + ch], taps[0 * width + ch + 1], taps[0 * width + ch + 2], taps[0 * width + ch + 3]);
     float4 tap1 = float4(taps[1 * width + ch], taps[1 * width + ch + 1], taps[1 * width + ch + 2], taps[1 * width + ch + 3]);
     float4 tap2 = float4(taps[2 * width + ch], taps[2 * width + ch + 1], taps[2 * width + ch + 2], taps[2 * width + ch + 3]);
@@ -639,10 +651,21 @@ kernel void recurrence_core_bwd(
         // This position's transition.
         uint gate_row = row * gate_width;
         float opening = 1.0f / (1.0f + precise::exp(-gates[gate_row + lane]));
-        float lambda = precise::exp(8.0f * opening * la);
-        float complement = 1.0f - lambda * lambda;
-        bool clamped = complement < 1e-6f;
-        float keep = clamped ? 1e-3f : precise::sqrt(complement);
+        // Scalar overloads: `precise::exp` on a vector is not required by the
+        // MSL spec, and these must compile on every transport.
+        float4 lambda = float4(
+            precise::exp(8.0f * opening * la.x),
+            precise::exp(8.0f * opening * la.y),
+            precise::exp(8.0f * opening * la.z),
+            precise::exp(8.0f * opening * la.w)
+        );
+        float4 complement = 1.0f - lambda * lambda;
+        float4 keep;
+        bool4 clamped;
+        for (uint k = 0; k < 4; ++k) {
+            clamped[k] = complement[k] < 1e-6f;
+            keep[k] = clamped[k] ? 1e-3f : precise::sqrt(complement[k]);
+        }
         float4 unit = float4(1.0f, 0.0f, 0.0f, 0.0f);
         float norm = 1.0f;
         if (rotation != 0) {
@@ -657,7 +680,7 @@ kernel void recurrence_core_bwd(
         }
         held = total;
         float4 c = float4(drive[base], drive[base + 1], drive[base + 2], drive[base + 3]);
-        float d_keep = dot(total, c);
+        float4 d_keep = total * c;
         float4 dd = keep * total;
         float4 dq = float4(0.0f);
         if (t > 0) {
@@ -665,12 +688,19 @@ kernel void recurrence_core_bwd(
             float4 earlier = float4(state[prev], state[prev + 1], state[prev + 2], state[prev + 3]);
             dq = quat_mul(total, quat_conj(earlier));
         }
-        float d_lambda = dot(dq, unit);
-        if (!clamped) {
-            d_lambda -= d_keep * lambda / keep;
+        // Per channel: d lambda_k = dq_k u_k, the `keep` floor drops its
+        // gradient where it clamped, and the lane's opening sums the channels.
+        float4 d_lambda = dq * unit;
+        for (uint k = 0; k < 4; ++k) {
+            if (!clamped[k]) {
+                d_lambda[k] -= d_keep[k] * lambda[k] / keep[k];
+            }
         }
-        float d_log_lambda = d_lambda * lambda;
-        float d_opening = d_log_lambda * 8.0f * la;
+        float4 d_log_lambda = d_lambda * lambda;
+        float d_opening = 0.0f;
+        for (uint k = 0; k < 4; ++k) {
+            d_opening += d_log_lambda[k] * 8.0f * la[k];
+        }
         d_log_a += d_log_lambda * 8.0f * opening;
         d_gates[gate_row + lane] = d_opening * opening * (1.0f - opening);
         if (rotation != 0) {
@@ -709,8 +739,8 @@ kernel void recurrence_core_bwd(
         p[2 * width + ch + k] = d_tap2[k];
         p[3 * width + ch + k] = d_tap3[k];
         p[4 * width + ch + k] = d_bias[k];
+        p[5 * width + ch + k] = d_log_a[k];
     }
-    p[5 * width + lane] = d_log_a;
 }
 
 // Sums the windows' parameter partials; d log a / d decay = sigma(-decay).

@@ -5,11 +5,12 @@
 //! residual blocks. The mixers are:
 //!
 //! - **quaternion transport recurrence** (`r`): per lane of four channels,
-//!   `h_t = lambda_t (u_t (x) h_{t-1}) + sqrt(1 - lambda_t^2) c_t`, where
-//!   `u_t` is a unit quaternion (the identity without learned rotations),
-//!   `lambda_t = exp(-rate r_t)` for the decay gate `r_t = sigmoid(.)`, `(x)`
-//!   is the Hamilton product and `c_t` a width-4 causal convolution of the
-//!   drive. The output is `h_t gelu(g_t)`;
+//!   `h_t = lambda_t (x) (u_t (x) h_{t-1}) + sqrt(1 - lambda_t^2) (x) c_t`,
+//!   where `u_t` is a unit quaternion (the identity without learned
+//!   rotations), `lambda_t = exp(-rate r_t)` is one decay **per channel**
+//!   (the lane's gate `r_t = sigmoid(.)` is shared by its four components),
+//!   `(x)` is the Hamilton product and `c_t` a width-4 causal convolution of
+//!   the drive. The output is `h_t gelu(g_t)`;
 //! - **read** (`a`): multi-head attention over the positions so far, scored by
 //!   `<q, k> / sqrt(d)` (Dot) or `-beta (d(q, k) - offset)` (Lorentz: the
 //!   hyperboloid distance of the lifted points `(sqrt(1 + |x|^2), x)`), plus a
@@ -105,7 +106,7 @@ struct Recurrence {
     taps: Vec<i16>,
     conv_bias: Vec<i32>,
     gate_bias: Vec<i32>,
-    /// Grid codes of `8 softplus(-decay)` per lane.
+    /// Grid codes of `8 softplus(-decay)` per channel (`width` of them).
     rates: Vec<i16>,
 }
 
@@ -228,7 +229,7 @@ impl StackModel {
                     taps: codes(&name("conv_taps"), CONVOLUTION_WIDTH * d, false)?,
                     conv_bias: integers(&name("conv_bias"), d)?,
                     gate_bias: integers(&name("gate_bias"), shape.gate_rows())?,
-                    rates: codes(&name("decay_rate"), shape.lanes(), true)?,
+                    rates: codes(&name("decay_rate"), d, true)?,
                 }))
             } else {
                 let lorentz = shape.lorentz();
@@ -681,20 +682,27 @@ fn recurrence(
     history.copy_within(0..(CONVOLUTION_WIDTH - 2) * d, d);
     history[..d].copy_from_slice(drive);
     for lane in 0..lanes {
-        // Decay gate, decay and the drive's weight, all Q31.
+        // Decay gate, decay and the drive's weight, all Q31. One decay per
+        // channel: the lane's gate is shared by its four components, each with
+        // its own `l{l}.decay_rate` grid code.
         let opening = sigmoid_q31(
             i64::from(b.gate_out[lane]),
             &model.exp_table,
             n.exp_step_log2,
         );
-        let exponent = grid_apply(opening as i64, r.rates[lane]).max(0);
-        let lambda = exp_neg(exponent, GATE_EXP, &model.exp_table, n.exp_step_log2);
-        let complement = (1u64 << 62).saturating_sub(lambda * lambda);
-        let keep = if complement < COMPLEMENT_FLOOR_Q62 {
-            KEEP_FLOOR_Q31
-        } else {
-            isqrt(u128::from(complement)) as u64
-        };
+        let mut lambda = [0u64; 4];
+        let mut keep = [0u64; 4];
+        for k in 0..4 {
+            let exponent = grid_apply(opening as i64, r.rates[4 * lane + k]).max(0);
+            let decay = exp_neg(exponent, GATE_EXP, &model.exp_table, n.exp_step_log2);
+            let complement = (1u64 << 62).saturating_sub(decay * decay);
+            lambda[k] = decay;
+            keep[k] = if complement < COMPLEMENT_FLOOR_Q62 {
+                KEEP_FLOOR_Q31
+            } else {
+                isqrt(u128::from(complement)) as u64
+            };
+        }
         let transition: [i64; 4] = if s.rotation {
             let raw: [i32; 4] = b.gate_out[lanes + 4 * lane..lanes + 4 * lane + 4]
                 .try_into()
@@ -703,14 +711,17 @@ fn recurrence(
                 .iter()
                 .map(|v| (i128::from(*v) * i128::from(*v)) as u128)
                 .sum();
-            // |raw| at exponent -32; raw / |raw| at Q30, then times lambda at Q31.
+            // |raw| at exponent -32; raw / |raw| at Q30, then times this
+            // channel's lambda at Q31.
             let norm = isqrt((square + ROTATION_EPSILON) << 32) as i128;
-            raw.map(|v| {
+            let mut transition = [0i64; 4];
+            for (k, (slot, &v)) in transition.iter_mut().zip(&raw).enumerate() {
                 let unit = (i128::from(v) << 46) / norm;
-                ((i128::from(lambda) * unit) >> 30) as i64
-            })
+                *slot = ((i128::from(lambda[k]) * unit) >> 30) as i64;
+            }
+            transition
         } else {
-            [lambda as i64, 0, 0, 0]
+            [lambda[0] as i64, 0, 0, 0]
         };
         let held: [i64; 4] = state[4 * lane..4 * lane + 4]
             .try_into()
@@ -719,7 +730,7 @@ fn recurrence(
         for k in 0..4 {
             // Transport (Q31 times exponent -32) plus drive (Q31 times exponent
             // -16, raised to -63), back to exponent -32.
-            let pushed = i128::from(keep) * i128::from(b.wide[4 * lane + k]);
+            let pushed = i128::from(keep[k]) * i128::from(b.wide[4 * lane + k]);
             state[4 * lane + k] = shift_wide(moved[k] + (pushed << 16), 31);
         }
     }

@@ -302,7 +302,6 @@ fn export_stack_candidate(
         gelu_step_log2: GELU_STEP_LOG2,
         gelu_range_log2: GELU_RANGE_LOG2,
     };
-    let lanes = shape.lanes();
     let gate_rows = shape.gate_rows();
     let mut builder = StackArtifactBuilder::new(shape, numerics, source)?;
     if let Some(snap) = snap {
@@ -401,8 +400,8 @@ fn export_stack_candidate(
                 .iter()
                 .map(|&v| decay_rate(f64::from(v)))
                 .collect();
-            if rates.len() != lanes {
-                return Err("decay count differs from the lane count".into());
+            if rates.len() != d {
+                return Err("decay count differs from the width".into());
             }
             codes(&mut builder, &name("decay_rate"), &rates)?;
         } else {

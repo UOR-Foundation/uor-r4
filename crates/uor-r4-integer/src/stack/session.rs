@@ -189,7 +189,7 @@ impl IntegerStackModel {
                     taps: codes(&name("conv_taps"), CONVOLUTION_WIDTH * d, false)?,
                     conv_bias: integers(&name("conv_bias"), d)?,
                     gate_bias: integers(&name("gate_bias"), shape.gate_rows())?,
-                    rates: codes(&name("decay_rate"), shape.lanes(), true)?,
+                    rates: codes(&name("decay_rate"), d, true)?,
                 }))
             } else {
                 let lorentz = shape.lorentz();
@@ -1265,22 +1265,28 @@ fn stack_recurrence(
     history.copy_within(..history.len() - d, d);
     history[..d].copy_from_slice(drive);
     let (decays, rotations) = b.gate_out.split_at(lanes);
-    for (lane, ((held, pushed), (&decay, &rate))) in state
+    for (lane, (held, pushed)) in state
         .chunks_exact_mut(4)
         .zip(b.wide.chunks_exact(4))
-        .zip(decays.iter().zip(&r.rates))
         .enumerate()
     {
-        // Decay gate, decay and the drive's weight, all Q31.
-        let opening = stack_sigmoid_q31(i64::from(decay), &model.exp_table, n.exp_step_log2);
-        let exponent = grid_apply(opening as i64, rate).max(0);
-        let lambda = stack_exp_neg(exponent, GATE_EXP, &model.exp_table, n.exp_step_log2);
-        let complement = (1u64 << 62).saturating_sub(stack_mul_u64(lambda, lambda));
-        let keep = if complement < COMPLEMENT_FLOOR_Q62 {
-            KEEP_FLOOR_Q31
-        } else {
-            stack_isqrt(u128::from(complement)) as u64
-        };
+        // Decay gate, decay and the drive's weight, all Q31. One decay per
+        // channel: the lane's gate is shared by its four components, each with
+        // its own `l{l}.decay_rate` grid code.
+        let opening = stack_sigmoid_q31(i64::from(decays[lane]), &model.exp_table, n.exp_step_log2);
+        let mut lambda = [0u64; 4];
+        let mut keep = [0u64; 4];
+        for k in 0..4 {
+            let exponent = grid_apply(opening as i64, r.rates[4 * lane + k]).max(0);
+            let decay = stack_exp_neg(exponent, GATE_EXP, &model.exp_table, n.exp_step_log2);
+            let complement = (1u64 << 62).saturating_sub(stack_mul_u64(decay, decay));
+            lambda[k] = decay;
+            keep[k] = if complement < COMPLEMENT_FLOOR_Q62 {
+                KEEP_FLOOR_Q31
+            } else {
+                stack_isqrt(u128::from(complement)) as u64
+            };
+        }
         let transition: [i64; 4] = if s.rotation {
             let at = lane << 2;
             let raw = [
@@ -1300,13 +1306,13 @@ fn stack_recurrence(
                 stack_rotation(raw, lambda)
             }
         } else {
-            [lambda as i64, 0, 0, 0]
+            [lambda[0] as i64, 0, 0, 0]
         };
         let moved = stack_hamilton(transition, [held[0], held[1], held[2], held[3]]);
-        for ((h, &c), m) in held.iter_mut().zip(pushed).zip(moved) {
+        for (k, ((h, &c), m)) in held.iter_mut().zip(pushed).zip(moved).enumerate() {
             // Transport (Q31 times exponent -32) plus drive (Q31 times exponent
             // -16, raised to -63), back to exponent -32.
-            let drive = mul_i128(i128::from(keep), i128::from(c));
+            let drive = mul_i128(i128::from(keep[k]), i128::from(c));
             *h = shift_wide(m.wrapping_add(drive << 16), 31);
         }
     }
@@ -1321,10 +1327,11 @@ fn stack_recurrence(
     stack_gemv(&r.out, &b.tables, act_exp, &mut b.proj);
 }
 
-/// `lambda raw / |raw|` per coordinate: the unit rotation (Q30, rounded toward
-/// zero as the D10 engine's signed division) times the decay (Q31), at Q31.
+/// `lambda_k raw_k / |raw|` per coordinate: the unit rotation (Q30, rounded
+/// toward zero as the D10 engine's signed division) times that channel's decay
+/// (Q31), at Q31.
 #[inline(never)]
-fn stack_rotation(raw: [i32; 4], lambda: u64) -> [i64; 4] {
+fn stack_rotation(raw: [i32; 4], lambda: [u64; 4]) -> [i64; 4] {
     let mut square = 0u128;
     for &v in &raw {
         square = square.wrapping_add(u128::from(stack_square(i64::from(v))));
@@ -1334,10 +1341,10 @@ fn stack_rotation(raw: [i32; 4], lambda: u64) -> [i64; 4] {
     // An explicit loop, not `raw.map`: the closure of `map` compiles to a
     // `core::array` symbol of its own, outside the audited `stack_` names.
     let mut transition = [0i64; 4];
-    for (slot, &v) in transition.iter_mut().zip(&raw) {
+    for (k, (slot, &v)) in transition.iter_mut().zip(&raw).enumerate() {
         let magnitude = stack_div_u128(u128::from(v.unsigned_abs()) << 46, norm) as i128;
         let unit = if v < 0 { -magnitude } else { magnitude };
-        *slot = (mul_i128(i128::from(lambda), unit) >> 30) as i64;
+        *slot = (mul_i128(i128::from(lambda[k]), unit) >> 30) as i64;
     }
     transition
 }

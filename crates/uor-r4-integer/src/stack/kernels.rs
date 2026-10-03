@@ -1096,26 +1096,27 @@ pub fn stack_snap_select(raw: [i32; 4]) -> usize {
 }
 
 /// The snapped transition quaternion: the root [`stack_snap_select`] chooses
-/// for `raw`, scaled by `lambda` (Q31), at Q31 — per coordinate
-/// `shift(lambda a + lambda_phi b, 1)` with `lambda_phi = lambda phi` at the
-/// same scale, matching `stack_rotation`'s `lambda unit` for `unit` replaced
-/// by the root. The Hamilton product that consumes it is unchanged.
+/// for `raw`, scaled per channel by `lambda_k` (Q31), at Q31 — for coordinate
+/// `k`, `shift(lambda_k a + lambda_k phi b, 1)` with `lambda_k phi` at the same
+/// scale, matching `stack_rotation`'s `lambda_k unit_k` for `unit` replaced by
+/// the root. The Hamilton product that consumes it is unchanged.
 #[inline(never)]
-pub(crate) fn stack_snap_rotation(raw: [i32; 4], lambda: u64) -> [i64; 4] {
+pub(crate) fn stack_snap_rotation(raw: [i32; 4], lambda: [u64; 4]) -> [i64; 4] {
     let root = &H4_ROOT_COEFFICIENTS[stack_snap_select(raw)];
-    // lambda phi at Q31, rounded: with PHI_Q32 = 2^32 + PHI_LO,
-    // (lambda PHI_Q32 + 2^31) >> 32 = lambda + ((lambda PHI_LO + 2^31) >> 32)
-    // in u64 (lambda < 2^32, so lambda PHI_LO + 2^31 < 2^64). A u128 shift
-    // here would compile to NEON register moves the audit forbids.
-    debug_assert!(lambda < (1 << 32));
-    let lambda_phi = lambda.wrapping_add(
-        stack_mul_u64(lambda, (PHI_Q32 - (1 << 32)) as u64).wrapping_add(1 << 31) >> 32,
-    );
     // An explicit loop, not `root.map`: the closure of `map` compiles to a
     // `core::array` symbol of its own, outside the audited `stack_` names.
     let mut transition = [0i64; 4];
-    for (slot, coefficient) in transition.iter_mut().zip(root) {
-        let sum = small_mul(lambda as i64, coefficient[0])
+    for (k, (slot, coefficient)) in transition.iter_mut().zip(root).enumerate() {
+        let decay = lambda[k];
+        // lambda phi at Q31, rounded: with PHI_Q32 = 2^32 + PHI_LO,
+        // (lambda PHI_Q32 + 2^31) >> 32 = lambda + ((lambda PHI_LO + 2^31) >> 32)
+        // in u64 (lambda < 2^32, so lambda PHI_LO + 2^31 < 2^64). A u128 shift
+        // here would compile to NEON register moves the audit forbids.
+        debug_assert!(decay < (1 << 32));
+        let lambda_phi = decay.wrapping_add(
+            stack_mul_u64(decay, (PHI_Q32 - (1 << 32)) as u64).wrapping_add(1 << 31) >> 32,
+        );
+        let sum = small_mul(decay as i64, coefficient[0])
             .wrapping_add(small_mul(lambda_phi as i64, coefficient[1]));
         // `black_box` keeps LLVM from packing the four lanes into a NEON
         // pair (`fmov`/`dup`), which the serving audit forbids.

@@ -294,7 +294,8 @@ pub struct StackNumerics {
 /// `l{l}.rec_gate` (`gate_rows x width`) and `l{l}.rec_out`, and the tables
 /// `l{l}.conv_taps` (grid codes, `[4][width]`, tap `s` on the input `s`
 /// positions back), `l{l}.conv_bias` and `l{l}.gate_bias` (exponent -16) and
-/// `l{l}.decay_rate` (grid codes of `8 softplus(-decay)` per lane). A read has
+/// `l{l}.decay_rate` (grid codes of `8 softplus(-decay)` per channel,
+/// `width` of them). A read has
 /// `l{l}.query`, `l{l}.key`, `l{l}.value`, `l{l}.null` (`heads x width`) and
 /// `l{l}.out`, and the tables `l{l}.null_bias` and `l{l}.age` (`[heads]
 /// [context]`, exponent -16), plus for Lorentz `l{l}.beta` (grid codes) and
