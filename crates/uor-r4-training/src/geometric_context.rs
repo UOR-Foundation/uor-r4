@@ -805,7 +805,7 @@ impl ContextWeights {
 pub struct PreparedContextQ4<'a> {
     config: GeometricContextConfig,
     codec: &'a uor_r4_integer::geometric_context_q4::NativeContextQ4,
-    geometry: Arc<HistoricalH4Tables>,
+    geometry: HistoricalH4Tables,
     tokens: Tensor,
     basis: Tensor,
 }
