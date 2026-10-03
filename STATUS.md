@@ -40,5 +40,6 @@ Preserve live runs' reservations. No paid compute or destruction of unique
 material is authorized.
 
 Protected PRs require recorded exact-head review and actual scoped checks.
-Historical queue status names are acknowledgements, not compile/test evidence;
+Main's merge queue requires no status checks (owner, 3 October 2026); the historical
+acknowledgement jobs are not compile/test evidence;
 the delivery-evidence check remains advisory under the owner's current rule.

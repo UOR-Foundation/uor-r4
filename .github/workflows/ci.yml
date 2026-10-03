@@ -3,7 +3,8 @@ name: ci
 # Pre-alpha verification is issue-scoped: developers compile and run the path
 # they changed instead of paying for the full release ladder on every PR.
 # Owner-directed fast iteration: pull requests and merge groups emit only the
-# five historical status acknowledgements required by the ruleset. Native
+# five historical status acknowledgements. Main's ruleset no longer requires
+# them (owner, 3 October 2026); the protected merge queue alone gates merges. Native
 # verification is available through explicit native_checks dispatch; broader
 # product/release workflows remain separately selectable.
 on:
