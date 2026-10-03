@@ -98,6 +98,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use candle_core::backend::BackendStorage;
+#[cfg(feature = "cuda")]
+use candle_core::CudaStorage;
 use candle_core::{CpuStorage, CustomOp2, CustomOp3, DType, Device, Layout, Shape, Tensor, Var};
 #[cfg(feature = "metal")]
 use candle_core::{MetalStorage, Storage};
@@ -122,6 +124,9 @@ use crate::stack_memory::{keys_aux_len, product_key_memory, MemoryConfig, Memory
 use crate::stack_prime_route::PrimeRegistry;
 use crate::{invalid, Result};
 use uor_r4_integer::geometric_span::SpanAction;
+
+#[cfg(feature = "cuda")]
+mod cuda_ops;
 
 /// Lower bound on `z - 1` in the Lorentz score. Below it the distance is
 /// clamped and carries no gradient.
@@ -1615,6 +1620,26 @@ impl StackModel {
 
     pub fn variables(&self) -> &BTreeMap<String, Var> {
         &self.variables
+    }
+
+    /// Data-parallel replica sync: set every variable to `source`'s current
+    /// value, copied to this model's device. Both models must hold the same
+    /// variable names and shapes (a replica built from the same config).
+    pub fn copy_variables_from(&self, source: &StackModel) -> Result<()> {
+        if self.variables.len() != source.variables.len() {
+            return Err(invalid("replica and source hold different variable sets"));
+        }
+        for (name, var) in &self.variables {
+            let from = source
+                .variables
+                .get(name)
+                .ok_or_else(|| invalid(format!("the source has no variable {name}")))?;
+            if from.shape() != var.shape() {
+                return Err(invalid(format!("variable {name} differs in shape")));
+            }
+            var.set(&from.as_tensor().to_device(&self.device)?)?;
+        }
+        Ok(())
     }
 
     /// The tensors a forward pass reads: the variables, or in served mode the
@@ -7882,6 +7907,17 @@ impl CustomOp2 for StraightThrough {
         ))
     }
 
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        cuda_ops::straight_through_fwd(s1, l1, s2, l2)
+    }
+
     fn bwd(
         &self,
         _source: &Tensor,
@@ -8305,6 +8341,44 @@ pub struct StackAdamW {
     moments: BTreeMap<String, (Var, Var)>,
 }
 
+/// Data parallel over two replicas of one model: replace each gradient in
+/// `primary_grads` by the mean of it and the replica's gradient for the same
+/// variable (copied to the primary's device). When each replica's loss is the
+/// mean over an equal half of the batch, the result is the full-batch mean
+/// gradient (equal in exact arithmetic; rounding differs from one device).
+pub fn average_replica_gradients(
+    primary: &StackModel,
+    primary_grads: &mut candle_core::backprop::GradStore,
+    replica: &StackModel,
+    replica_grads: &candle_core::backprop::GradStore,
+) -> Result<()> {
+    if primary.variables().len() != replica.variables().len() {
+        return Err(invalid("replicas hold different variable sets"));
+    }
+    for (name, var) in primary.variables() {
+        let other = replica
+            .variables()
+            .get(name)
+            .ok_or_else(|| invalid(format!("the replica has no variable {name}")))?;
+        match (
+            primary_grads.get(var.as_tensor()),
+            replica_grads.get(other.as_tensor()),
+        ) {
+            (Some(local), Some(remote)) => {
+                let mean = ((local + remote.to_device(primary.device())?)? * 0.5)?;
+                primary_grads.insert(var.as_tensor(), mean);
+            }
+            (None, None) => {}
+            _ => {
+                return Err(invalid(format!(
+                    "only one replica has a gradient for {name}"
+                )))
+            }
+        }
+    }
+    Ok(())
+}
+
 impl StackAdamW {
     pub fn new(model: &StackModel, weight_decay: f64, clip: f64) -> Result<Self> {
         let mut moments = BTreeMap::new();
@@ -8336,7 +8410,7 @@ impl StackAdamW {
         lr: f64,
     ) -> Result<f64> {
         let mut total = 0f64;
-        if matches!(model.device(), Device::Metal(_)) {
+        if matches!(model.device(), Device::Metal(_) | Device::Cuda(_)) {
             // One host synchronization for the whole norm: each variable's
             // squared sum stays on the device, then their f32 sum is read.
             let sums = model
@@ -8395,6 +8469,11 @@ impl StackAdamW {
             #[cfg(feature = "metal")]
             if let Device::Metal(device) = var.device() {
                 adam_step_metal(device, var, grad, m, v, &constants)?;
+                continue;
+            }
+            #[cfg(feature = "cuda")]
+            if let Device::Cuda(device) = var.device() {
+                cuda_ops::adam_step_cuda(device, var, grad, m, v, &constants)?;
                 continue;
             }
             let mut parameters = var.as_tensor().flatten_all()?.to_vec1::<f32>()?;
@@ -8601,6 +8680,17 @@ impl CustomOp2 for QuaternionScan {
 
     /// Reverse scan: `g_t = dh_t + conj(q_{t+1}) * g_{t+1}` is the total
     /// gradient of `h_t`; then `db_t = g_t` and `dq_t = g_t * conj(h_{t-1})`.
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        cuda_ops::quaternion_scan_fwd(s1, l1, s2, l2)
+    }
+
     fn bwd(
         &self,
         transition: &Tensor,
@@ -8608,6 +8698,11 @@ impl CustomOp2 for QuaternionScan {
         state: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "cuda")]
+        if let Device::Cuda(device) = transition.device() {
+            let (first, second) = cuda_ops::quaternion_scan_bwd(device, transition, state, grad)?;
+            return Ok((Some(first), Some(second)));
+        }
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = transition.device() {
             if transition.dtype() != DType::F32
@@ -9235,6 +9330,19 @@ impl CustomOp3 for RecurrenceCore {
         ))
     }
 
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+        s3: &CudaStorage,
+        l3: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        self.cuda_fwd_impl(s1, l1, s2, l2, s3, l3)
+    }
+
     fn bwd(
         &self,
         branches: &Tensor,
@@ -9243,6 +9351,12 @@ impl CustomOp3 for RecurrenceCore {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "cuda")]
+        if let (Device::Cuda(device), true) = (branches.device(), self.cuda_covered()) {
+            let (d_branches, d_gates, d_parameters) =
+                self.cuda_bwd(device, branches, gates, parameters, grad)?;
+            return Ok((Some(d_branches), Some(d_gates), Some(d_parameters)));
+        }
         #[cfg(feature = "metal")]
         if let (Device::Metal(device), true) = (branches.device(), self.metal_covered()) {
             let (d_branches, d_gates, d_parameters) =
@@ -10369,6 +10483,19 @@ impl CustomOp3 for FusedRead {
         ))
     }
 
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+        s3: &CudaStorage,
+        l3: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        self.cuda_fwd_impl(s1, l1, s2, l2, s3, l3)
+    }
+
     fn bwd(
         &self,
         query: &Tensor,
@@ -10377,6 +10504,11 @@ impl CustomOp3 for FusedRead {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "cuda")]
+        if let (Device::Cuda(device), true) = (query.device(), self.cuda_covered()) {
+            let (dq, dkv, d_aux) = self.cuda_bwd(device, query, kv, aux, grad)?;
+            return Ok((Some(dq), Some(dkv), Some(d_aux)));
+        }
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = query.device() {
             if self.metal_covered() {
@@ -10839,6 +10971,17 @@ impl CustomOp2 for RmsNorm {
         ))
     }
 
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        cuda_ops::rms_norm_fwd(s1, l1, s2, l2)
+    }
+
     fn bwd(
         &self,
         x: &Tensor,
@@ -10846,6 +10989,11 @@ impl CustomOp2 for RmsNorm {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "cuda")]
+        if let Device::Cuda(device) = x.device() {
+            let (first, second) = cuda_ops::rms_norm_bwd(device, x, w, grad)?;
+            return Ok((Some(first), Some(second)));
+        }
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = x.device() {
             if x.dtype() != DType::F32 || w.dtype() != DType::F32 || grad.dtype() != DType::F32 {
@@ -11054,6 +11202,17 @@ impl CustomOp2 for SwiGlu {
         ))
     }
 
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        cuda_ops::swiglu_fwd(s1, l1, s2, l2)
+    }
+
     fn bwd(
         &self,
         gate: &Tensor,
@@ -11061,6 +11220,11 @@ impl CustomOp2 for SwiGlu {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "cuda")]
+        if let Device::Cuda(device) = gate.device() {
+            let (first, second) = cuda_ops::swiglu_bwd(device, gate, up, grad)?;
+            return Ok((Some(first), Some(second)));
+        }
         #[cfg(feature = "metal")]
         if let Device::Metal(device) = gate.device() {
             if gate.dtype() != DType::F32 || up.dtype() != DType::F32 || grad.dtype() != DType::F32
@@ -11280,12 +11444,27 @@ impl candle_core::CustomOp1 for CrossEntropy {
         ))
     }
 
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        storage: &CudaStorage,
+        layout: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        cuda_ops::cross_entropy_fwd(self, storage, layout)
+    }
+
     fn bwd(
         &self,
         logits: &Tensor,
         _loss: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<Option<Tensor>> {
+        #[cfg(feature = "cuda")]
+        if let Device::Cuda(device) = logits.device() {
+            return Ok(Some(cuda_ops::cross_entropy_bwd(
+                self, device, logits, grad,
+            )?));
+        }
         let (rows, vocabulary) = logits.dims2()?;
         #[cfg(feature = "metal")]
         if self.weights.is_none() {
@@ -11776,6 +11955,19 @@ impl CustomOp3 for PointerMixture {
         l3: &Layout,
     ) -> candle_core::Result<(MetalStorage, Shape)> {
         metal_via_host(self, [(s1, l1), (s2, l2), (s3, l3)])
+    }
+
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+        s3: &CudaStorage,
+        l3: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        cuda_ops::via_host3(self, [(s1, l1), (s2, l2), (s3, l3)])
     }
 
     fn bwd(
@@ -13020,6 +13212,56 @@ mod tests {
                 .to_vec1::<f32>()?;
             assert!(g.iter().all(|v| v.is_finite()) && g.iter().any(|&v| v != 0.0));
         }
+        Ok(())
+    }
+
+    /// data_parallel=2's arithmetic on the CPU: a replica copied from the
+    /// primary holds equal weights, and the averaged gradient of two equal
+    /// half-batch losses equals the full-batch gradient within f32 rounding.
+    #[test]
+    fn replica_copy_and_half_batch_gradient_average_match_the_full_batch() -> Result<()> {
+        let config = tiny(StackArch::Geometric, "ra", ReadScore::L2, true);
+        let primary = StackModel::new(config.clone(), &cpu())?;
+        let mut other = config;
+        other.seed ^= 0x55;
+        let replica = StackModel::new(other, &cpu())?;
+        replica.copy_variables_from(&primary)?;
+        for (name, var) in primary.variables() {
+            let a = var.as_tensor().flatten_all()?.to_vec1::<f32>()?;
+            let b = replica.variables()[name]
+                .as_tensor()
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            assert_eq!(a, b, "{name}");
+        }
+        let (batch, time) = (4, 8);
+        let ids: Vec<u32> = (0..batch * time).map(|i| (i * 7 % 37) as u32).collect();
+        let targets: Vec<u32> = ids.iter().map(|&i| (i + 1) % 37).collect();
+        let full = primary.loss(&ids, &targets, batch, time)?.backward()?;
+        let split = (batch / 2) * time;
+        let mut merged = primary
+            .loss(&ids[..split], &targets[..split], batch / 2, time)?
+            .backward()?;
+        let remote = replica
+            .loss(&ids[split..], &targets[split..], batch / 2, time)?
+            .backward()?;
+        average_replica_gradients(&primary, &mut merged, &replica, &remote)?;
+        let mut compared = 0;
+        for (name, var) in primary.variables() {
+            let (Some(f), Some(m)) = (full.get(var.as_tensor()), merged.get(var.as_tensor()))
+            else {
+                continue;
+            };
+            let (f, m) = (
+                f.flatten_all()?.to_vec1::<f32>()?,
+                m.flatten_all()?.to_vec1::<f32>()?,
+            );
+            for (x, y) in f.iter().zip(&m) {
+                assert!((x - y).abs() <= 1e-5 + 1e-4 * x.abs(), "{name}: {x} vs {y}");
+            }
+            compared += 1;
+        }
+        assert!(compared > 0);
         Ok(())
     }
 
