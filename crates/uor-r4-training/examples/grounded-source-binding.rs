@@ -408,15 +408,15 @@ fn evaluate(a: &Args, suite: Suite) -> Result<()> {
     let mut rows = Vec::new();
     for (case_index, c) in suite.cases.iter().enumerate() {
         for read in [true, false] {
+            write(
+                &a.out.join("active.json"),
+                &json!({"case_index":case_index,"case":c,"read":read,"stage":"opening_model","completed_outcomes":[]}),
+            )?;
             if started.elapsed().as_secs() >= a.maximum_seconds {
                 return Err(invalid(
                     "configured wall budget reached before next conversation",
                 ));
             }
-            write(
-                &a.out.join("active.json"),
-                &json!({"case_index":case_index,"case":c,"read":read,"stage":"opening_model","completed_outcomes":[]}),
-            )?;
             let mut session = GroundedSession::from_checkpoint_path(
                 checkpoint,
                 tokenizer_bytes.clone(),
