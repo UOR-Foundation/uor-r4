@@ -32,6 +32,12 @@ fn write(p: PathBuf, v: &impl serde::Serialize) -> Result<()> {
     fs::write(p, serde_json::to_vec_pretty(v)?)?;
     Ok(())
 }
+fn trace_record(t: &geometric_event::NativeEventTrace) -> Value {
+    json!({"batch":t.batch,"time":t.time,"lanes":t.lanes,
+        "actions":t.actions.iter().map(|a|*a as u8).collect::<Vec<_>>(),
+        "transition_actions":t.transition_actions,"states":t.states,
+        "event_scores":t.event_scores,"coefficient_reads":t.coefficient_reads})
+}
 fn main() -> Result<()> {
     let mut cli = std::env::args().skip(1);
     let input = cli
@@ -169,7 +175,7 @@ fn run(a: &Args, at: Instant) -> Result<()> {
                     .filter(|(a, b)| a != b)
                     .count();
                 changed += changes;
-                rows.push(json!({"index":index,"episode":episode,"old_trace":old,"q4_trace":native,"changed_actions":changes,"source_native_exact":true}));
+                rows.push(json!({"index":index,"episode":episode,"old_trace":trace_record(&old),"q4_trace":trace_record(&native),"changed_actions":changes,"source_native_exact":true}));
             }
             write(a.out.join(format!("{panel}-event-rows.json")), &rows)?;
             panels.push(json!({"panel":panel,"rows":rows.len(),"input_sha256":sha256_bytes(&input),"changed_actions":changed}));
