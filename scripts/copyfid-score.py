@@ -235,6 +235,7 @@ def score_arm(
             "reply": reply,
             "condition": condition,
             "wanted": want,
+            "distractor": bool(distractor and phrase_pattern(distractor).search(reply)),
         }
     summary = {"label": label, "chat": chat_path, "cells": {}, "rows": per_row}
     keys = [c for c in CONDITIONS if c in cells]
