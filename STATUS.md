@@ -1,45 +1,59 @@
 # Status
 
-Updated 3 October 2026 (Eastern Time). **Pre-alpha: useful conversation, broad reasoning,
-coding, frontier capability and lower complete-path energy remain unestablished.**
+Updated October 3, 2026. **Pre-alpha: useful conversation, broad reasoning,
+frontier capability and lower complete-path energy remain unestablished.**
 
 The owner-adopted [active plan](docs/integration/project-track.md) prioritizes
 **grounded conversation and durable memory**, then the same model's broader
-language, coding/reasoning and efficient D11/D5 laptop execution. [Current state](docs/integration/current-state.md)
-and live [#1552](https://github.com/UOR-Foundation/uor-r4/issues/1552) own results.
-This page is navigation, not an independent results ledger. See [ROADMAP](ROADMAP.md).
+language, coding/reasoning and efficient D11/D5 laptop execution.
+[Current state](docs/integration/current-state.md) and live [#1552](https://github.com/UOR-Foundation/uor-r4/issues/1552)
+own results. This page is navigation, not an independent results ledger. See [ROADMAP](ROADMAP.md).
 
-**Owner direction, 3 October:** no transformer baselines. Mechanisms are compared with
-matched geometric alternatives and with the previous best geometric model.
+**[Owner direction, 3 October](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5971681179):** no transformer baselines. Mechanisms are compared
+with matched geometric alternatives and with the previous best geometric model.
 
 | Boundary | Current evidence and remaining work |
 |---|---|
-|---|---|
-| Exact retrieval and emission | E1 lexical sieve reports 747/747 development MQAR and independent reproduction. emit-1 (2.1M, context 384) gets 106/109 with supplied recall; oracle open relation 48/52 versus lexical sieve 1/52. These are harness results with reference history/category assistance, not a served memory assistant. |
-| Semantic compiler | E3 v14 R1 + 776 raw teacher paraphrases: gated trunk head relation 1754/2098 (0.836), act 0.766; dense combined head 0.949 and word table 0.900 on relations. Original 0.9/0.95 gate fails. The raw paraphrases carry audited label errors. A saved compiler with a learned value-span head now drives the grounded session (34/52 open, 13/17 closed relation on one development cell; see current state). A combined R1-trunk head is a recorded negative there (26/52). A reviewed 394-row paraphrase derivative (#1573) awaits its paired fit. E3 training includes development-value identities, so this is not unseen-value evidence. |
-| Scale ladder (Claude lab report, #820) | 20M geometric model (quaternion rotation, flat L2 read, context 384; 300M tokens of TinyStories, TinyDialogues and chat-v0): TinyStories validation NLL 1.3882 (seed 1), 1.3858 (seed 2). Learning rate 0.001 beat 0.002 by about 0.045 nats at steps 5k and 7.5k. At 8M, quaternion lanes beat U(1) lanes and the flat L2 read beat the Lorentz read. A 29M run (434M tokens) is training. These are language-modelling losses on one data mix, not conversation results. |
-| Chat | **Not achieved.** Best D19 grounded session (exact store plus prime-atom log-recall sieve, `chat-8m-a`): 959 of 1,075 turns. On the 232-reply panel judged by qwen2.5:7b, 21 replies are acceptable against 8 for the deranged control. 20M chat fine-tunes are being graded. |
-| Integer serving | Existing D11 stack has scoped opcode/parity evidence. emit-1's learned pointer is not exported; head-0 copy boost is a different mechanism. Dense layer/output access remains and no valid complete-path J/token result exists. Serving of the 20M/29M models has no recorded D11 check yet. |
-| Geometry | Exact tables, quaternion state, trained-in 2I and historical binding components remain available. Their semantic and efficiency contribution needs matched consumer evidence; failed promotion does not retire a family. |
-| Compute | Training on a rented Runpod 2×RTX 4090 pod; grading on the M1. Optional `cuda` feature for offline training is [PR #1649](https://github.com/UOR-Foundation/uor-r4/pull/1649) (18 device-parity tests reported passing at `0ebaa75b`; not merged when written). Hosted GitHub runners are reserved for `main`'s required checks. |
-| Track B | Parked. #1518's original 1e-4 parity failure stands; no automatic retry or transformer serving follows. |
+| Geometric development model | Completed matched 8M text-loss comparisons retain the geometric emitter; flat L2 wins the three measured splits. These floating training/reference models are separate from complete native serving. [Loaded results and identities](docs/integration/current-state.md#delivered-overnight-results-and-geometric-chat-blocker--october-3). |
+| Grounded response and durable memory | Saved compiler → exact store → generated-history emitter is exercised. The selected payload can be delivered correctly while the answer follows a distractor. Same-process save/reload continuation is measured; useful chat and broad scope/version coverage remain unfinished. [Source-consumption result](docs/integration/geometric-chat-source-binding-2026-10-03.md). |
+| Geometric attention | Persistent integer attention, strict q4 context/value/potential/NoRead and connected capture/age components are merged. Component replay is fidelity; mixed capture learning is retained. Next: typed selected-record occurrence→actual-BPE consumer with connected answer credit and measured cost. |
+| Data and query conditioning | Surface-form breadth improves its synthetic statement-prefix panel; question-side transfer remains unresolved. Distance recipe is a retained negative confounded by reduced binding practice. Neither establishes a unique capacity or addressing cause. [Current evidence](docs/integration/current-state.md#deepseek-research-and-next-integration). |
+| Native serving and efficiency | Scoped integer opcode/parity results remain. Current grounded generation retains a floating development path; bounded complete native chat, selected parameter access and full-path energy savings remain open. |
+| Scale ladder (Claude lab report, #820) | 20M geometric model (512 wide, 8 heads, 8 layers, `rrarrarr`; quaternion rotation, flat L2 read, context 384; 300M tokens of TinyStories, TinyDialogues and chat-v0 weighted 0.6/0.15/0.25): TinyStories validation NLL 1.3882 (seed 1), 1.3858 (seed 2). At 20M, learning rate 0.001 beat 0.002 by about 0.045 nats at steps 5k and 7.5k; 0.0005 was better still (dev NLL 1.8173 / 1.7294 at steps 5k / 7.5k; the learning-rate checks stopped at 660 s). 29M (576 wide, 8 heads, 10 layers; 434M tokens) at learning rate 0.001 finished at TinyStories validation NLL 1.2989. At 8M, quaternion lanes beat U(1) lanes and the flat L2 read beat the Lorentz read. These are language-modelling losses on one data mix, not conversation results. |
+| Chat | **Not achieved.** `chat-8m-a` (exact store plus prime-atom log-recall sieve): 959 of 1,075 D19 grounded-session turns; 21 of 232 panel replies acceptable under the qwen2.5:7b judge, against 8 for its deranged control. The 20M chat fine-tune with M-world and chat-v0 data: 28 acceptable and 40 relevant on the same 232-reply panel (relevant p=0.003 against `chat-8m-a`), session 960 of 1,075. The 29M chat fine-tune is being graded. Authored development panels, not general chat. |
+| Compute | Training on a rented Runpod 2×RTX 4090 pod; grading on the M1. Optional `cuda` feature for offline training merged in [PR #1649](https://github.com/UOR-Foundation/uor-r4/pull/1649) at `dc28b495` (18 device-parity tests passing at `c17411b8`). Hosted GitHub runners are reserved for `main`'s required checks. |
+| Track B | Parked. #1518's original full-model parity failure stands; no automatic retry or transformer serving follows. |
 
-The first three rows are as of 1 October and have not been refreshed here; see the
-[evidence review](docs/integration/grounded-memory-evidence-2026-10-01.md) and current state
-for scope, hashes and newer results. D18's A1 outcome D is preserved; old A1 training does not resume.
+Read the [evidence review](docs/integration/grounded-memory-evidence-2026-10-01.md)
+for scope, hashes and primary result links. D18's A1 outcome D is preserved;
+old A1 training does not resume. The best E4 route (v16) reports 36/52 open relations, 2/17 closed and 106/109
+MQAR, against 48/52 with the oracle recall line and 27/52 for the best trained
+read; its extraction drops fixed-vocabulary values. v17 (trunk features in the
+table) is a recorded negative at 33/52. These are diagnostics, not promotion.
+
+Provenance: the Geometric development model, Grounded response, Geometric attention,
+Data and query conditioning, Native serving and Track B rows are from
+[#1644](https://github.com/UOR-Foundation/uor-r4/pull/1644) (merged at `de0b9d10`, 3 October).
+The Scale ladder, Chat and Compute rows are the Claude lab's 3 October reports on #820,
+copied rather than re-measured here.
 
 ## Coordination
 
-- Claude: #1511 / #1552, compiler/emitter integration, training and evaluation.
-- DeepSeek (its own harness; OpenCode was removed 3 October): #1512, geometry, data/read research and shared interfaces.
-- Codex: #1515 / #1563, owner-reauthorized adoption and integration; activity not confirmed since 1 October.
+- Claude: #1511 / #1552, current compiler/emitter integration.
+- DeepSeek (its own harness; OpenCode was removed 3 October): #1512, current data/read
+  research and shared interfaces.
+- Codex: #1552 / #1512, geometric source-consumer integration and protected delivery
+  (#1644, #1650 merged; #1652 open, 3 October).
 - Support lab (Antigravity): documentation, issue hygiene and cleanup only; no model code.
   Kimi and the older boards remain historical.
 
-Live GitHub claims and actual process handles determine activity and ownership. Use the
-[shared protocol](docs/labs/protocol.md), [host guide](docs/labs/operations.md) and a prospective
-resource work card before compute. Preserve live runs' reservations. No paid compute beyond the
-authorized pod and no destruction of unique material.
+Live GitHub claims and actual process handles determine activity and ownership.
+Use the [shared protocol](docs/labs/protocol.md), [host guide](docs/labs/operations.md)
+and prospective resource work card before compute. Current FIFO admission uses
+aggregate host limits; small bounded checks need no heavy-job reservation.
+Preserve live runs' reservations. No paid compute or destruction of unique
+material is authorized.
 
-Protected PRs require recorded exact-head review and actual scoped checks. Historical queue
-status names are acknowledgements, not compile/test evidence.
+Protected PRs require recorded exact-head review and actual scoped checks.
+Historical queue status names are acknowledgements, not compile/test evidence;
+the delivery-evidence check remains advisory under the owner's current rule.

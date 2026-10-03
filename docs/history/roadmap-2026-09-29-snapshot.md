@@ -1,6 +1,6 @@
 # ROADMAP.md historical snapshot (through 2026-10-03)
 
-> **Historical.** This is lines 45–1037 of `ROADMAP.md` as of `origin/main` `a621514c`
+> **Historical.** This is lines 3–43 and 45–1037 of `ROADMAP.md` as of `origin/main` `a621514c`
 > (3 October 2026), moved here **verbatim** so the live roadmap can stay short. The only
 > edit is mechanical: relative links to repository paths (`](docs/…)`, `](.codex-lab/…)`, `](handoff/…)`) gained a `../` or `../../` prefix so they still resolve from
 > this directory. Its lab assignments, dated next tasks, fixed leadership and "dead path"
@@ -8,6 +8,48 @@
 > [current state](../integration/current-state.md) and [DECISIONS](../integration/DECISIONS.md).
 > Section anchors such as `#lab-1-leadership-and-restart-packet` and "§0"/"§4.2" now live in
 > this file.
+
+## Active programme — October 1
+
+The owner adopted **grounded conversation and durable memory first** under
+[D19](../integration/DECISIONS.md#d19--grounded-conversation-and-durable-memory-first).
+The [canonical plan](../integration/project-track.md) owns the implementation
+sequence and acceptance; [current state](../integration/current-state.md) owns
+changing evidence. [Admissibility](../integration/mechanism-admissibility-2026-10.md)
+protects valid discovery without weakening past gates. [Issue reconciliation](../integration/roadmap-reconciliation-2026-10-01.md)
+preserves every transferred capability obligation.
+
+Ready work follows this dependency graph: learned saved compiler/store/emitter
+(#1552, #1508, #973) → durable grounded conversation (#962, #954) → faithful
+integer serving (#964) → useful language → executable reasoning/coding (#955,
+#1088) → API/WASM/Studio and full alpha (#1172, #1173, #965). Geometric semantic
+addressing (#973/#1512) and selected-access design (#963) share that path and may
+advance in parallel. Infrastructure #1510 serves concrete execution needs.
+Track B #1509/#1518 remains parked, with its original failed parity preserved.
+
+**Immediate geometric mechanism work remains #1512.** Claude's #1552 session
+and dialogue-protocol work is concurrent and does not redirect this track.
+The retained chain is geometric capture → learned retained context → integer
+compatibility/normalization/reduction → learned geometric values and NoRead →
+geometric output/composition and bounded access. The value learning bridge and
+source-bound integer producer are implemented in #1608; joint fitting is the
+next task. Exact frozen-input donor imitation is not its acceptance gate.
+Preserve offline donor compilation, prior successful rows and negative evidence;
+keep learning, representation, compilation, whole serving and language claims
+separate. The canonical plan specifies the fixed primary-answer/auxiliary-packet
+objective and paired comparisons, without duplicating live status here.
+
+Claude, OpenCode–DeepSeek and owner-reauthorized Codex coordinate via #1511,
+#1512 and #1515. These are authorized participants, not assertions of process
+liveness. Refresh live claims/jobs before mutation. The owner's protected-merge
+authorization removes per-merge permission requests; exact-head checks and
+review, evidence integrity, storage preservation and resource admission remain.
+
+The historical snapshot below is retained for source/evidence links and old
+contracts. Its fixed leadership, dated next tasks, retirement labels and broad
+cost assertions do not supersede D19, D12 or current measured evidence. In
+particular, bytes/row inspections are not joules and a tracking closure does not
+mean the corresponding capability was delivered.
 
 ## Historical roadmap snapshot
 

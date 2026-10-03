@@ -16,7 +16,7 @@ verbatim in [docs/history/roadmap-2026-09-29-snapshot.md](docs/history/roadmap-2
 - **No transformer baselines.** Comparisons stay inside the geometric design: a mechanism
   against a matched geometric alternative, and each model against the previous best geometric
   model. Earlier transformer results keep their recorded scope; the transformer-gap kill rule
-  is withdrawn (see the [3 October comment on #820](https://github.com/UOR-Foundation/uor-r4/issues/820)).
+  is withdrawn (see the [3 October comment on #820](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5971681179)).
 - **Grounded conversation and durable memory first** (D19), then the same model's broader
   language, coding/reasoning and efficient D11/D5 laptop execution. The integration owner is
   [#973](https://github.com/UOR-Foundation/uor-r4/issues/973); the active work card is
@@ -31,13 +31,15 @@ conversation, coding or efficiency result.
 | Rung | Configuration | Reported outcome |
 |---|---|---|
 | 8M | width 288, 6 heads, 6 layers, pattern `rrarra` | Done. Controls at this size: quaternion lanes beat U(1) lanes; the flat L2 read beat the Lorentz read. |
-| 20M | width 512, 8 heads, 8 layers, `rrarrarr`, quaternion rotation, flat L2 read, context 384; 300M tokens of TinyStories, TinyDialogues and chat-v0 weighted 0.6/0.15/0.25 | Final TinyStories validation NLL **1.3882** (seed 1) and **1.3858** (seed 2). Learning rate 0.001 beat the 0.002 default by about 0.045 nats at steps 5k and 7.5k; 0.003 was worse. |
-| 29M | width 576, 8 heads, 10 layers; 434M tokens | Training. |
+| 20M | width 512, 8 heads, 8 layers, `rrarrarr`, quaternion rotation, flat L2 read, context 384; 300M tokens of TinyStories, TinyDialogues and chat-v0 weighted 0.6/0.15/0.25 | Final TinyStories validation NLL **1.3882** (seed 1) and **1.3858** (seed 2). Learning rate 0.001 beat the 0.002 default by about 0.045 nats at steps 5k and 7.5k; 0.003 was worse; 0.0005 was better still (dev NLL 1.8173 / 1.7294 at steps 5k / 7.5k; the learning-rate checks stopped at 660 s). |
+| 29M | width 576, 8 heads, 10 layers; 434M tokens | Learning rate 0.001 run finished at TinyStories validation NLL **1.2989**. |
 
 **Chat is not achieved.** The best D19 grounded session (exact store plus prime-atom
 log-recall sieve) answers 959 of 1,075 turns (`chat-8m-a`). On the 232-reply panel judged by
-qwen2.5:7b, 21 replies are acceptable against 8 for the deranged control. 20M chat fine-tunes
-are being graded.
+qwen2.5:7b, 21 replies are acceptable against 8 for the deranged control. The 20M chat
+fine-tune with M-world and chat-v0 data scores 28 acceptable and 40 relevant on the same panel
+(relevant p=0.003 against `chat-8m-a`), with session 960 of 1,075. The 29M chat fine-tune is
+being graded. These are authored development panels, not general chat.
 
 ## Order of work
 
@@ -51,9 +53,9 @@ Track B conversion (#1509) is parked; its original failed parity stands.
 ## Compute and delivery
 
 - **Training** runs on a rented Runpod 2×RTX 4090 pod, administered by the Claude lab. The
-  optional `cuda` feature ([PR #1649](https://github.com/UOR-Foundation/uor-r4/pull/1649),
-  offline training only) reports 18 device-parity tests passing at `0ebaa75b`; it was not merged
-  when this page was written. **Grading** runs on the M1 laptop.
+  optional `cuda` feature for offline training merged in
+  [PR #1649](https://github.com/UOR-Foundation/uor-r4/pull/1649) at `dc28b495` (18 device-parity
+  tests passing at `c17411b8`). **Grading** runs on the M1 laptop.
 - **GitHub hosted runners are reserved for `main`'s required PR and merge-queue checks** (owner
   direction, 3 October). Do not push `codex/ci/*` branches; run exact-head checks locally or on the
   pod and record head SHA, clean tree, command and exit codes on the PR.
