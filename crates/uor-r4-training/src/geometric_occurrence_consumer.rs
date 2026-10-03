@@ -669,7 +669,26 @@ impl NativeConsumerArtifact {
                 "consumer native payload differs from actual source/canonical table",
             ));
         }
-        Ok(expected)
+        // Execute the exported payload, not the source-recompiled comparator.
+        let [context, potential, no_read, exp_bytes]: [Vec<u8>; 4] = files
+            .try_into()
+            .map_err(|_| invalid("consumer native payload inventory differs"))?;
+        let exp = exp_bytes
+            .chunks_exact(4)
+            .map(|x| u32::from_le_bytes([x[0], x[1], x[2], x[3]]))
+            .collect();
+        let mut loaded = Self::from_parts(
+            metadata.context,
+            metadata.potential,
+            metadata.no_read,
+            context,
+            potential,
+            no_read,
+            exp,
+            identity.clone(),
+        )?;
+        loaded.metadata = metadata;
+        Ok(loaded)
     }
 }
 
