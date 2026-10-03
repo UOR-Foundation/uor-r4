@@ -1,0 +1,117 @@
+name: geometric-event-age-evidence
+on:
+  push:
+    branches: ['codex/ci/geometric-event-age-093dc5e7-20261002']
+permissions:
+  contents: read
+concurrency:
+  group: event-age-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: 0
+  CARGO_TARGET_DIR: target/codex-geometric-event-age-q4
+  CARGO_BUILD_JOBS: 2
+  RAYON_NUM_THREADS: 2
+  VECLIB_MAXIMUM_THREADS: 2
+jobs:
+  focused:
+    name: ${{ matrix.task }}
+    runs-on: macos-14
+    timeout-minutes: ${{ matrix.limit }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - task: integer-event-age
+            limit: 10
+          - task: connected-training-and-driver
+            limit: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Bind exact product source
+        shell: bash
+        run: |
+          mkdir evidence
+          tested=$(git rev-parse HEAD^)
+          test "$tested" = 093dc5e7b508af8066c65a02abd1b2161a42433a
+          test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/geometric-event-age-evidence.yml
+          echo "UOR_BUILD_SOURCE_COMMIT=$tested" >> "$GITHUB_ENV"
+          git log -2 --format='%H %s' > evidence/source-identity.txt
+          git ls-files 'crates/uor-r4-integer/src/*.rs' 'crates/uor-r4-training/src/*.rs' 'crates/uor-r4-training/examples/attention-geometric-event-age-q4.rs' | xargs shasum -a 256 > evidence/source-sha256.txt
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - name: Platform compiler
+        run: |
+          rustc -Vv > evidence/compiler.txt
+          cargo -V >> evidence/compiler.txt
+          uname -a > evidence/platform.txt
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: event-age-${{ runner.os }}-${{ matrix.task }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            event-age-${{ runner.os }}-${{ matrix.task }}-${{ hashFiles('Cargo.lock') }}-
+            merge-evidence-v2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+            merge-evidence-v2-${{ runner.os }}-
+      - name: Residual integer and direct-grid compatibility
+        id: integer
+        if: matrix.task == 'integer-event-age'
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked --release -p uor-r4-integer --lib age_residual_q4_ -- --nocapture 2>&1 | tee evidence/age-residual-tests.log
+          grep -F 'test result: ok. 2 passed; 0 failed;' evidence/age-residual-tests.log
+          cargo test --locked --release -p uor-r4-integer --lib age_q4_ -- --nocapture 2>&1 | tee evidence/age-direct-tests.log
+          grep -F 'test result: ok. 2 passed; 0 failed;' evidence/age-direct-tests.log
+      - name: Prior residual source and actual answer checks
+        id: training
+        if: matrix.task == 'connected-training-and-driver'
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked --release -p uor-r4-training --lib native_read_age_residual_ -- --nocapture 2>&1 | tee evidence/age-residual-training-tests.log
+          grep -F 'test result: ok. 3 passed; 0 failed;' evidence/age-residual-training-tests.log
+          cargo test --locked --release -p uor-r4-training --lib native_read_q4_age_ -- --nocapture 2>&1 | tee evidence/age-direct-training-tests.log
+          grep -F 'test result: ok. 3 passed; 0 failed;' evidence/age-direct-training-tests.log
+          cargo test --locked --release -p uor-r4-training --lib geometric_event_q4_age_residual_answer_credit_and_common_denominator -- --nocapture 2>&1 | tee evidence/residual-answer-tests.log
+          grep -F 'test result: ok. 1 passed; 0 failed;' evidence/residual-answer-tests.log
+          cargo test --locked --release -p uor-r4-training --lib geometric_event_q4_age_answer_credit_crosses_span_attention_and_head -- --nocapture 2>&1 | tee evidence/quarter-answer-tests.log
+          grep -F 'test result: ok. 1 passed; 0 failed;' evidence/quarter-answer-tests.log
+      - name: Build loaded admission driver
+        id: driver
+        if: matrix.task == 'connected-training-and-driver'
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked --release -p uor-r4-training --example attention-geometric-event-age-q4 2>&1 | tee evidence/driver-build.log
+          cp "$CARGO_TARGET_DIR"/release/examples/attention-geometric-event-age-q4 evidence/
+          shasum -a 256 evidence/attention-geometric-event-age-q4 > evidence/binary-sha256.txt
+      - uses: actions/cache/save@v4
+        if: success()
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/codex-geometric-event-age-q4
+          key: event-age-${{ runner.os }}-${{ matrix.task }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+      - name: Record step outcomes
+        if: always()
+        run: |
+          mkdir -p evidence
+          printf '%s\n' 'integer=${{ steps.integer.outcome }}' 'training=${{ steps.training.outcome }}' 'driver=${{ steps.driver.outcome }}' > evidence/outcome.txt
+          cat evidence/outcome.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: event-age-${{ matrix.task }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 7
+          if-no-files-found: error
