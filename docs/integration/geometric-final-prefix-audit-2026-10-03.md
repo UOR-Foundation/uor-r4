@@ -94,8 +94,8 @@ readout-only adjoint. Retain every row regression. This is a proposed bounded
 direction diagnostic, not a new learner or another unrestricted joint fit.
 
 Improving native directions justify focused existing-readout learning; opposite
-predicted/actual directions justify examining that credit path. No sampled
-one-step improvement proves neither family impossibility nor a need for new
+predicted/actual directions justify examining that credit path. Failure to find a sampled
+one-step improvement establishes neither family impossibility nor a need for new
 progress state. Diagnostic candidates do not silently become adopted models.
 Shared `stack_grounded_session.rs` remains untouched and coordinated on#1552.
 The alpha goal remains useful grounded conversation/memory through the same
@@ -115,3 +115,12 @@ Complete new-task preparation/build/errors/reviews/audit/transfer/delivery and
 remaining cleanup are charged as a conservative60-minute estimate, separately
 from measured workers and previous source-fit charges. The cumulative ledger
 moves1,051,635,028→1,055,235,028ms under the unchanged1,130,000,000ms limit.
+
+After reconciling fresh main, committed head
+`ebd0a891d19ed23461c980157f6add0dec9140ae` passes the locked training-example
+Cargo check on the pod (exit0,46.949s, sampled process-tree peak
+RSS2,454,286,336B). The numerical consumer/context/realizer sources and audit
+example are unchanged from the executed audit source; this check validates
+integration and is not another model evaluation. The Codex job card is released.
+Final `/root/codex` allocation is4,287,792KiB (about4.09GiB), below the10GiB
+limit. All results and execution receipts have been brought back locally.
