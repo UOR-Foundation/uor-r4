@@ -22,6 +22,8 @@ use std::path::Path;
 use candle_core::{DType, Device, Tensor};
 use safetensors::{Dtype as SafeDtype, SafeTensors};
 use serde::{Deserialize, Serialize};
+use uor_r4_integer::geometric_age_q4::{AgeQ4Config, NativeAgeQ4};
+use uor_r4_integer::geometric_no_read::pack_coefficients;
 use uor_r4_integer::geometric_read::{
     NativeGeometricRead, EXP_STEP_LOG2, EXP_TABLE_LEN, MAX_CONTEXT, MAX_VALUE_WIDTH, WEIGHT_ONE,
 };
@@ -33,6 +35,10 @@ use crate::geometric_stack::{
 use crate::{invalid, sha256_bytes, Result};
 
 pub const SCHEMA: &str = "uor-r4.geometric-read-reducer/1";
+pub const Q4_AGE_SCHEMA: &str = "uor-r4.geometric-read-reducer/2";
+pub const Q4_AGE_FILE: &str = "age-coefficients-q4.bin";
+pub const Q4_AGE_TRAINING_POLICY: &str = "CPU-F32-nat-shadows;fixed-quarter-grid-nearest-ties-away;reject-outside[-1.75,1.75];live-shadow-minus-detached-shadow-plus-detached-current-grid;identity-STE;no-reducer-backward/1";
+const Q4_AGE_QUANTIZATION: &str = "age-packed-signed-q4[-7,7]-quarter-nat-exact-Q24;NoRead-signed-i64-Q24;value-and-output-signed-i32-Q16;nearest-ties-away;nonfinite-overflow-reject/1";
 const QUANTIZATION: &str = "age-and-NoRead-signed-i64-Q24;value-and-output-signed-i32-Q16;nearest-ties-away;nonfinite-overflow-reject/1";
 const EXP_POLICY: &str = "Rust-F64-exp(-index/256)*2^31;nearest-ties-away;8194-u32-entries;step-8;interpolation-a-minus-floor-decrement;bias-less-than-one-Q31-unit;outside-table-zero/1";
 const REDUCTION: &str = "full-causal-prefix-current-included;age=query-source;NoRead-zero-payload;max-subtract;Q31-exponentials;i128-weighted-sum;exact-integer-division-nearest-ties-away;no-support-pruning/1";
@@ -43,6 +49,24 @@ const FILES: [&str; 4] = [
     "exp-u32le.bin",
     "tokenizer-identity.bin",
 ];
+
+/// Inventory dispatch for dependency snapshots. This does not replace `load`,
+/// which independently regenerates and admits all numerical payloads.
+pub fn native_file_names(directory: &Path) -> Result<Vec<&'static str>> {
+    let metadata: GeometricReadMetadata =
+        serde_json::from_slice(&fs::read(directory.join(FILES[0]))?)?;
+    let mut files = FILES.to_vec();
+    match (metadata.schema.as_str(), metadata.age_q4.as_ref()) {
+        (SCHEMA, None) => {}
+        (Q4_AGE_SCHEMA, Some(_)) => files.push(Q4_AGE_FILE),
+        _ => {
+            return Err(invalid(
+                "native read schema/age policy combination is unsupported",
+            ))
+        }
+    }
+    Ok(files)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -218,6 +242,63 @@ fn tensor_age(age: &Tensor, heads: usize, context: usize) -> Result<Vec<f32>> {
     Ok(values)
 }
 
+fn q4_age(config: AgeQ4Config, shadow: &[f32]) -> Result<NativeAgeQ4> {
+    let count = config
+        .coefficient_count()
+        .map_err(|e| invalid(e.to_string()))?;
+    if shadow.len() != count {
+        return Err(invalid("q4 age shadow coefficient count differs"));
+    }
+    let coefficients = shadow
+        .iter()
+        .map(|&value| {
+            if !value.is_finite() || !(-1.75..=1.75).contains(&value) {
+                return Err(invalid(
+                    "q4 age shadow outside fixed [-1.75,1.75] nat range",
+                ));
+            }
+            Ok((f64::from(value) * 4.).round() as i8)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    NativeAgeQ4::new(
+        config,
+        &pack_coefficients(&coefficients).map_err(|e| invalid(e.to_string()))?,
+    )
+    .map_err(|e| invalid(e.to_string()))
+}
+
+/// Current hard quarter-nat age with an explicitly chosen identity surrogate.
+/// This does not attach gradients to the integer reducer. The caller must use
+/// this graph in its actual normalized score path. Every call re-quantizes the
+/// live shadows; no compiled snapshot is reused as a live hard value.
+pub fn q4_age_training_view(age: &Tensor, heads: usize, context: usize) -> Result<Tensor> {
+    let codec = q4_age(
+        AgeQ4Config { heads, context },
+        &tensor_age(age, heads, context)?,
+    )?;
+    let grid = Tensor::from_vec(
+        codec
+            .age_q24()
+            .iter()
+            .map(|&x| (x as f64 / 16_777_216.) as f32)
+            .collect::<Vec<_>>(),
+        (heads, context),
+        age.device(),
+    )?;
+    Ok((age - &age.detach())?.add(&grid)?)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgeQ4Metadata {
+    pub schema: String,
+    pub policy: String,
+    pub config: AgeQ4Config,
+    pub coefficient_count: usize,
+    pub packed_coefficients: ReadBoundFile,
+    pub training_policy: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GeometricReadMetadata {
@@ -243,6 +324,9 @@ pub struct GeometricReadMetadata {
     pub exp_policy: String,
     pub reduction: String,
     pub producer_policy: String,
+    /// Omitted entirely in schema /1, retaining its serialized interpretation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub age_q4: Option<AgeQ4Metadata>,
 }
 fn metadata(source: &ReadSourceBinding, age: &[i64], exp: &[u32]) -> GeometricReadMetadata {
     GeometricReadMetadata {
@@ -268,6 +352,7 @@ fn metadata(source: &ReadSourceBinding, age: &[i64], exp: &[u32]) -> GeometricRe
         exp_policy: EXP_POLICY.into(),
         reduction: REDUCTION.into(),
         producer_policy: PRODUCER.into(),
+        age_q4: None,
     }
 }
 
@@ -276,6 +361,7 @@ pub struct CompiledGeometricRead {
     age: Vec<i64>,
     exp: Vec<u32>,
     tokenizer: Vec<u8>,
+    age_coefficients_q4: Option<Vec<u8>>,
 }
 impl CompiledGeometricRead {
     pub fn compile(
@@ -292,6 +378,22 @@ impl CompiledGeometricRead {
         }
         Self::from_source(source)
     }
+    /// Explicit strict conversion. Raw saved F32 age remains the immutable
+    /// source identity; neither range clipping nor source mutation is allowed.
+    pub fn compile_q4_age(
+        age: &Tensor,
+        potential: &CompiledGeometricPotentials,
+        source: &ReadSourceBinding,
+    ) -> Result<Self> {
+        if f32_bytes(&tensor_age(age, source.heads, source.context)?) != f32_bytes(&source.age)
+            || serde_json::to_vec_pretty(potential.metadata())? != source.potential_metadata
+        {
+            return Err(invalid(
+                "live q4 read age/potential differs from saved raw source",
+            ));
+        }
+        Self::from_source_q4(source)
+    }
     fn from_source(source: &ReadSourceBinding) -> Result<Self> {
         let age = source
             .age
@@ -307,6 +409,36 @@ impl CompiledGeometricRead {
             age,
             exp,
             tokenizer: source.tokenizer.clone(),
+            age_coefficients_q4: None,
+        })
+    }
+    fn from_source_q4(source: &ReadSourceBinding) -> Result<Self> {
+        let config = AgeQ4Config {
+            heads: source.heads,
+            context: source.context,
+        };
+        let codec = q4_age(config, &source.age)?;
+        let age = codec.age_q24().to_vec();
+        let exp = canonical_exp();
+        NativeGeometricRead::new(source.context, source.value_width, &exp)
+            .map_err(|e| invalid(e.to_string()))?;
+        let mut metadata = metadata(source, &age, &exp);
+        metadata.schema = Q4_AGE_SCHEMA.into();
+        metadata.quantization = Q4_AGE_QUANTIZATION.into();
+        metadata.age_q4 = Some(AgeQ4Metadata {
+            schema: uor_r4_integer::geometric_age_q4::SCHEMA.into(),
+            policy: uor_r4_integer::geometric_age_q4::POLICY.into(),
+            config,
+            coefficient_count: source.age.len(),
+            packed_coefficients: bound(codec.packed()),
+            training_policy: Q4_AGE_TRAINING_POLICY.into(),
+        });
+        Ok(Self {
+            metadata,
+            age,
+            exp,
+            tokenizer: source.tokenizer.clone(),
+            age_coefficients_q4: Some(codec.packed().to_vec()),
         })
     }
     pub fn metadata(&self) -> &GeometricReadMetadata {
@@ -320,6 +452,42 @@ impl CompiledGeometricRead {
     /// Admitted immutable score units; zero age is lag zero.
     pub fn age_q24(&self) -> &[i64] {
         &self.age
+    }
+    pub fn is_q4_age(&self) -> bool {
+        self.age_coefficients_q4.is_some()
+    }
+    pub fn packed_age_coefficients(&self) -> Option<&[u8]> {
+        self.age_coefficients_q4.as_deref()
+    }
+    pub fn age_training_view(&self, age: &Tensor) -> Result<Tensor> {
+        if !self.is_q4_age() || age.dims() != [self.metadata.heads, self.metadata.context] {
+            return Err(invalid(
+                "q4 age training view requires strict artifact and matching shape",
+            ));
+        }
+        q4_age_training_view(age, self.metadata.heads, self.metadata.context)
+    }
+    /// A training-lineage check, not equality to the immutable compiled ages.
+    /// The caller must consume `age_training_view` for current hard score values.
+    pub fn validate_q4_training(
+        &self,
+        age: &Tensor,
+        potential: &CompiledGeometricPotentials,
+    ) -> Result<()> {
+        if !self.is_q4_age()
+            || bound(&serde_json::to_vec_pretty(potential.metadata())?)
+                != self.metadata.potential_metadata
+        {
+            return Err(invalid("q4 age training artifact/potential differs"));
+        }
+        q4_age(
+            AgeQ4Config {
+                heads: self.metadata.heads,
+                context: self.metadata.context,
+            },
+            &tensor_age(age, self.metadata.heads, self.metadata.context)?,
+        )?;
+        Ok(())
     }
 
     pub fn validate_for(
@@ -351,6 +519,9 @@ impl CompiledGeometricRead {
         ] {
             fs::File::create_new(directory.join(name))?.write_all(&bytes)?;
         }
+        if let Some(packed) = &self.age_coefficients_q4 {
+            fs::File::create_new(directory.join(Q4_AGE_FILE))?.write_all(packed)?;
+        }
         Ok(())
     }
     pub fn load(directory: &Path, source: &ReadSourceBinding) -> Result<Self> {
@@ -367,10 +538,29 @@ impl CompiledGeometricRead {
                     .map_err(|_| invalid("native read artifact non-UTF8 name"))?,
             );
         }
-        if names != FILES.iter().map(|s| s.to_string()).collect() {
+        let saved: GeometricReadMetadata =
+            serde_json::from_slice(&fs::read(directory.join(FILES[0]))?)?;
+        let strict = match (saved.schema.as_str(), saved.age_q4.as_ref()) {
+            (SCHEMA, None) => false,
+            (Q4_AGE_SCHEMA, Some(_)) => true,
+            _ => {
+                return Err(invalid(
+                    "native read schema/age policy combination is unsupported",
+                ))
+            }
+        };
+        let mut expected_names: BTreeSet<String> = FILES.iter().map(|s| s.to_string()).collect();
+        if strict {
+            expected_names.insert(Q4_AGE_FILE.into());
+        }
+        if names != expected_names {
             return Err(invalid("native read artifact file set differs"));
         }
-        let expected = Self::from_source(source)?;
+        let expected = if strict {
+            Self::from_source_q4(source)?
+        } else {
+            Self::from_source(source)?
+        };
         let age = age_bytes(&expected.age);
         let exp = exp_bytes(&expected.exp);
         if fs::metadata(directory.join(FILES[1]))?.len() != age.len() as u64
@@ -379,8 +569,15 @@ impl CompiledGeometricRead {
         {
             return Err(invalid("native read artifact payload length differs"));
         }
-        let saved: GeometricReadMetadata =
-            serde_json::from_slice(&fs::read(directory.join(FILES[0]))?)?;
+        if let Some(packed) = &expected.age_coefficients_q4 {
+            if fs::metadata(directory.join(Q4_AGE_FILE))?.len() != packed.len() as u64
+                || fs::read(directory.join(Q4_AGE_FILE))? != *packed
+            {
+                return Err(invalid(
+                    "native read packed age differs from raw-source recompilation",
+                ));
+            }
+        }
         if saved != expected.metadata
             || fs::read(directory.join(FILES[1]))? != age
             || fs::read(directory.join(FILES[2]))? != exp
@@ -750,6 +947,182 @@ mod tests {
             potential,
             source,
         })
+    }
+
+    #[test]
+    fn native_read_q4_age_live_grid_units_and_identity_gradient() -> Result<()> {
+        use candle_core::Var;
+        let shadow = Var::from_vec(
+            vec![-1.75f32, -0.125, 0., 0.125, 0.249, 1.75],
+            (2, 3),
+            &Device::Cpu,
+        )?;
+        let expected = vec![-1.75f32, -0.25, 0., 0.25, 0.25, 1.75];
+        let view = q4_age_training_view(shadow.as_tensor(), 2, 3)?;
+        assert_eq!(view.flatten_all()?.to_vec1::<f32>()?, expected);
+        let coefficients = Tensor::from_vec(vec![1f32, 2., 3., 4., 5., 6.], (2, 3), &Device::Cpu)?;
+        let gradient = (&view * &coefficients)?.sum_all()?.backward()?;
+        assert_eq!(
+            gradient
+                .get(shadow.as_tensor())
+                .ok_or_else(|| invalid("q4 age adjoint missing"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?,
+            vec![1f32, 2., 3., 4., 5., 6.]
+        );
+        let mut changed = vec![-1.75f32, -0.125, 0., 0.125, 0.249, 1.75];
+        changed[0] = 0.4;
+        shadow.set(&Tensor::from_vec(changed, (2, 3), &Device::Cpu)?)?;
+        assert_eq!(
+            q4_age_training_view(shadow.as_tensor(), 2, 3)?
+                .flatten_all()?
+                .to_vec1::<f32>()?[0],
+            0.5
+        );
+        assert!(q4_age_training_view(shadow.as_tensor(), 1, 6).is_err());
+        assert!(q4_age_training_view(&shadow.to_dtype(DType::F64)?, 2, 3).is_err());
+        for invalid_value in [
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            1.750001,
+            -1.750001,
+        ] {
+            let tensor = Tensor::from_vec(vec![invalid_value], (1, 1), &Device::Cpu)?;
+            assert!(q4_age_training_view(&tensor, 1, 1).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn native_read_q4_age_artifact_recompile_inventory_and_resealed_tamper() -> Result<()> {
+        let fixture = fixture(
+            (0..HEADS * CONTEXT)
+                .map(|i| i as f32 * 0.021 - 0.126)
+                .collect(),
+        )?;
+        let legacy = fixture.compile()?;
+        let strict = CompiledGeometricRead::compile_q4_age(
+            fixture.age(),
+            &fixture.potential,
+            &fixture.source,
+        )?;
+        assert!(!legacy.is_q4_age());
+        assert!(strict.is_q4_age());
+        assert_eq!(strict.exp_q31(), legacy.exp_q31());
+        assert_eq!(strict.metadata.age_f32, legacy.metadata.age_f32);
+        assert_eq!(strict.metadata.source_files, legacy.metadata.source_files);
+        assert_ne!(strict.age_q24(), legacy.age_q24());
+        let legacy_json = serde_json::to_value(legacy.metadata())?;
+        assert!(legacy_json.get("age_q4").is_none());
+        // A missing optional field retains the schema /1 metadata bytes.
+        let reloaded_metadata: GeometricReadMetadata = serde_json::from_value(legacy_json)?;
+        assert_eq!(
+            serde_json::to_vec_pretty(&reloaded_metadata)?,
+            serde_json::to_vec_pretty(legacy.metadata())?
+        );
+        let legacy_directory = fixture.directory.join("legacy-age");
+        legacy.save(&legacy_directory)?;
+        assert_eq!(native_file_names(&legacy_directory)?, FILES);
+        let artifact = fixture.directory.join("q4-age");
+        strict.save(&artifact)?;
+        assert_eq!(native_file_names(&artifact)?.len(), 5);
+        assert_eq!(
+            CompiledGeometricRead::load(&artifact, &fixture.source)?.metadata(),
+            strict.metadata()
+        );
+        assert!(legacy.age_training_view(fixture.age()).is_err());
+        let grid = strict
+            .age_training_view(fixture.age())?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert_eq!(
+            grid.iter()
+                .map(|&v| quantize_score_q24(v))
+                .collect::<Result<Vec<_>>>()?,
+            strict.age_q24()
+        );
+        let original_metadata = fs::read(artifact.join(FILES[0]))?;
+        for filename in [Q4_AGE_FILE, FILES[1], FILES[2]] {
+            let original = fs::read(artifact.join(filename))?;
+            let mut changed = original.clone();
+            changed[0] ^= 1;
+            fs::write(artifact.join(filename), &changed)?;
+            let mut lied = strict.metadata.clone();
+            if filename == Q4_AGE_FILE {
+                lied.age_q4
+                    .as_mut()
+                    .ok_or_else(|| invalid("missing test q4 metadata"))?
+                    .packed_coefficients = bound(&changed);
+            } else if filename == FILES[1] {
+                lied.age_q24 = bound(&changed);
+            } else {
+                lied.exp_q31 = bound(&changed);
+            }
+            fs::write(artifact.join(FILES[0]), serde_json::to_vec_pretty(&lied)?)?;
+            assert!(CompiledGeometricRead::load(&artifact, &fixture.source).is_err());
+            fs::write(artifact.join(filename), original)?;
+            fs::write(artifact.join(FILES[0]), &original_metadata)?;
+        }
+        let packed = fs::read(artifact.join(Q4_AGE_FILE))?;
+        fs::remove_file(artifact.join(Q4_AGE_FILE))?;
+        assert!(CompiledGeometricRead::load(&artifact, &fixture.source).is_err());
+        fs::write(artifact.join(Q4_AGE_FILE), packed)?;
+        fs::write(artifact.join("unbound"), b"extra")?;
+        assert!(CompiledGeometricRead::load(&artifact, &fixture.source).is_err());
+        fs::remove_file(artifact.join("unbound"))?;
+        for schema in [SCHEMA, "uor-r4.geometric-read-reducer/unknown"] {
+            let mut lied = strict.metadata.clone();
+            lied.schema = schema.into();
+            fs::write(artifact.join(FILES[0]), serde_json::to_vec_pretty(&lied)?)?;
+            assert!(CompiledGeometricRead::load(&artifact, &fixture.source).is_err());
+            assert!(native_file_names(&artifact).is_err());
+        }
+        fs::write(artifact.join(FILES[0]), original_metadata)?;
+        assert!(CompiledGeometricRead::load(&artifact, &fixture.source).is_ok());
+        fs::remove_dir_all(fixture.directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn native_read_q4_age_raw_source_identity_and_live_training_are_distinct() -> Result<()> {
+        let fixture = fixture(vec![0.; HEADS * CONTEXT])?;
+        let strict = CompiledGeometricRead::compile_q4_age(
+            fixture.age(),
+            &fixture.potential,
+            &fixture.source,
+        )?;
+        let artifact = fixture.directory.join("q4-age");
+        strict.save(&artifact)?;
+        let mut changed = vec![0f32; HEADS * CONTEXT];
+        changed[0] = f32::from_bits(1); // Same grid, different raw source identity.
+        let same_grid = Tensor::from_vec(changed.clone(), (HEADS, CONTEXT), &Device::Cpu)?;
+        assert!(strict.validate_for(&same_grid, &fixture.potential).is_err());
+        assert!(CompiledGeometricRead::compile_q4_age(
+            &same_grid,
+            &fixture.potential,
+            &fixture.source
+        )
+        .is_err());
+        strict.validate_q4_training(&same_grid, &fixture.potential)?;
+        let mut changed_source = fixture.source;
+        changed_source.age[0] = f32::from_bits(1);
+        assert!(CompiledGeometricRead::load(&artifact, &changed_source).is_err());
+        changed[0] = 0.5;
+        let live = Tensor::from_vec(changed, (HEADS, CONTEXT), &Device::Cpu)?;
+        strict.validate_q4_training(&live, &fixture.potential)?;
+        assert_eq!(strict.age_q24()[0], 0); // The saved artifact is still immutable.
+        assert_eq!(
+            strict
+                .age_training_view(&live)?
+                .flatten_all()?
+                .to_vec1::<f32>()?[0],
+            0.5
+        );
+        changed_source.age[0] = 1.8;
+        assert!(CompiledGeometricRead::from_source_q4(&changed_source).is_err());
+        fs::remove_dir_all(fixture.directory)?;
+        Ok(())
     }
 
     #[test]
