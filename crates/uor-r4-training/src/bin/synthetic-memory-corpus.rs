@@ -969,6 +969,29 @@ const ASK_TEMPLATES: &[&str] = &[
     "Tell me again about my {t}.",
 ];
 
+/// Minimal-change probe: the trained question with a single word substituted
+/// (a contraction or a spelling variant), while the statement keeps its
+/// canonical trained form. Returns `None` when no substitution applies, so the
+/// panel only emits rows for relations where the question really did change.
+fn perturbed_ask(ask: &str) -> Option<String> {
+    const SWAPS: &[(&str, &str)] = &[
+        ("favourite", "favorite"),
+        ("colour", "color"),
+        ("neighbour", "neighbor"),
+        ("timezone", "time zone"),
+        ("postcode", "post code"),
+        ("What is ", "What's "),
+        ("Who is ", "Who's "),
+        ("What do ", "What d'you "),
+    ];
+    for (from, to) in SWAPS {
+        if ask.contains(from) {
+            return Some(ask.replacen(from, to, 1));
+        }
+    }
+    None
+}
+
 /// Extra statement forms (`{t}` = topic, `{v}` = value). Index i is form i+1.
 const STATE_TEMPLATES: &[&str] = &[
     // trainer-visible (forms 1..=7)
@@ -1649,6 +1672,15 @@ fn panel_rows() -> Result<Vec<(String, Vec<String>, String)>> {
             ],
             wanted.to_string(),
         ));
+        // Minimal-change probe: one substituted word in the question, the
+        // statement untouched. Only relations where a substitution applies.
+        if let Some(ask) = perturbed_ask(ask_seen) {
+            rows.push((
+                format!("cf-form-perturb-ask-{id}"),
+                vec![state_seen.replace("{v}", wanted), ask],
+                wanted.to_string(),
+            ));
+        }
     }
     Ok(rows)
 }
@@ -1688,7 +1720,8 @@ fn write_panel(out: &std::path::Path, seed: u64, rows: usize) -> Result<()> {
             "unseen-state",
             "unseen-ask",
             "unseen",
-            "unseen-comp"
+            "unseen-comp",
+            "perturb-ask"
         ],
         "rows": panel.len(),
         // The full value set per relation, so a scorer can tell an answer from

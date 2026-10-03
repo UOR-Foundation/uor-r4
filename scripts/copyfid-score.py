@@ -37,13 +37,21 @@ import re
 import sys
 from collections import defaultdict
 
-CONDITIONS = ["seen", "seen-comp", "unseen-state", "unseen-ask", "unseen", "unseen-comp"]
+CONDITIONS = [
+    "seen",
+    "seen-comp",
+    "unseen-state",
+    "unseen-ask",
+    "unseen",
+    "unseen-comp",
+    "perturb-ask",
+]
 
 
 def parse_condition(row_id: str) -> str:
     """Panel ids are cf-form-<condition>-<relation>."""
     body = row_id[len("cf-form-") :] if row_id.startswith("cf-form-") else row_id
-    for condition in ["seen-comp", "unseen-comp", "unseen-state", "unseen-ask", "seen", "unseen"]:
+    for condition in ["seen-comp", "unseen-comp", "perturb-ask", "unseen-state", "unseen-ask", "seen", "unseen"]:
         if body.startswith(condition + "-"):
             return condition
     return "panel"
@@ -51,7 +59,7 @@ def parse_condition(row_id: str) -> str:
 
 def relation_of(row_id: str) -> str:
     body = row_id[len("cf-form-") :] if row_id.startswith("cf-form-") else row_id
-    for condition in ["seen-comp", "unseen-comp", "unseen-state", "unseen-ask", "seen", "unseen"]:
+    for condition in ["seen-comp", "unseen-comp", "perturb-ask", "unseen-state", "unseen-ask", "seen", "unseen"]:
         if body.startswith(condition + "-"):
             return body[len(condition) + 1 :]
     return body
