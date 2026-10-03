@@ -311,7 +311,7 @@
     "decision": "EVENT_BLOCK_REPRODUCES_ALL_ACCURACY_LOSS;AGE_ONLY_RETAINS_ACCURACY;notgradient_sign_proof",
     "independent_review": {
       "verdict": "NO_SAVED_CROSSOVER_RESULT_CONSISTENCY_BLOCKER",
-      "sha256": "e615cf759128a0167923ab0950fd549a886af250d1814a0edd65b650ba2b8f4d",
+      "sha256": "b734d0a7ab34d70db7b7dab1fe7deab8b3cb206add9c23ad1801f2b978d0a4ad",
       "rows_reconstructed": 256,
       "saved_endpoint_and_crossed_answer_vectors": 1024,
       "scope": [
@@ -319,7 +319,8 @@
         "No all-position model recomputation or backward. Frozen in-memory identity, absence of update/sampler calls and source-native numerical behavior retain executed-driver/source-review status.",
         "No BLAKE3 rehash; exact manifest inventory/sizes and independent current SHA256 are distinct checks.",
         "Same exposed seed2 rows and selected sources; this crossover isolates final event versus final age substitution at these endpoints, not the trajectory that made event learning regress or a general geometric/language conclusion."
-      ]
+      ],
+      "final_note_sha256": "005b6f7c4026459f192270571983d84b91bc75a2b4c5f5aa81bd92027810c7b2"
     },
     "age_numerically_inert": false,
     "age_changes_correctness_rows": 0,
