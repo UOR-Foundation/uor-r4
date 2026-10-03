@@ -341,6 +341,18 @@ fn evaluate(a: &Args, suite: Suite) -> Result<()> {
     let compiler_path = need(&a.compiler, "compiler")?;
     let compiler_bytes = fs::read(compiler_path)?;
     let checkpoint = need(&a.checkpoint, "checkpoint")?;
+    let retained_root = need(&a.retained_report, "retained_report")?
+        .parent()
+        .ok_or_else(|| invalid("retained report has no parent"))?;
+    report_output::verify(retained_root)?;
+    if sealed_manifest_sha256(checkpoint).map_err(|e| invalid(e.to_string()))?
+        != sealed_manifest_sha256(&retained_root.join("checkpoint"))
+            .map_err(|e| invalid(e.to_string()))?
+    {
+        return Err(invalid(
+            "checkpoint differs from retained configuration/protocol/store",
+        ));
+    }
     let retained: Value =
         serde_json::from_slice(&fs::read(need(&a.retained_report, "retained_report")?)?)?;
     if sha256_file(need(&a.retained_report, "retained_report")?)? != suite.retained_report_sha256 {
@@ -394,13 +406,17 @@ fn evaluate(a: &Args, suite: Suite) -> Result<()> {
             uor_r4_training::milestone_world_v2::sieve_value_text(log, q)
         });
     let mut rows = Vec::new();
-    for c in &suite.cases {
+    for (case_index, c) in suite.cases.iter().enumerate() {
         for read in [true, false] {
             if started.elapsed().as_secs() >= a.maximum_seconds {
                 return Err(invalid(
                     "configured wall budget reached before next conversation",
                 ));
             }
+            write(
+                &a.out.join("active.json"),
+                &json!({"case_index":case_index,"case":c,"read":read,"stage":"opening_model","completed_outcomes":[]}),
+            )?;
             let mut session = GroundedSession::from_checkpoint_path(
                 checkpoint,
                 tokenizer_bytes.clone(),
@@ -412,7 +428,11 @@ fn evaluate(a: &Args, suite: Suite) -> Result<()> {
             .map_err(|e| invalid(e.to_string()))?
             .with_log_recall("sieve", recall.clone());
             let mut outcomes = Vec::new();
-            for source in &c.source {
+            for (turn_index, source) in c.source.iter().enumerate() {
+                write(
+                    &a.out.join("active.json"),
+                    &json!({"case_index":case_index,"case":c,"read":read,"stage":"before_turn","turn_index":turn_index,"source":source,"completed_outcomes":outcomes}),
+                )?;
                 if started.elapsed().as_secs() >= a.maximum_seconds {
                     return Err(invalid(
                         "configured wall budget reached before next bounded turn",
@@ -427,7 +447,16 @@ fn evaluate(a: &Args, suite: Suite) -> Result<()> {
             let last = outcomes.last().ok_or_else(|| invalid("empty outcome"))?;
             let classification = stage(last, c.relation, &c.selected, &tokenizer, read);
             let complete_answer = c.answers.accepts(&last.reply_text);
-            rows.push(json!({"case":c,"read":read,"stage":classification,"complete_answer":complete_answer,"mentions_selected_diagnostic_only":last.reply_text.contains(&c.selected),"mentions_distractor_diagnostic_only":last.reply_text.contains(&c.distractor),"source_bpe_lengths":c.source.iter().map(|s|tokenizer.encode(s).len()).collect::<Vec<_>>(),"emitter_input_decoded":String::from_utf8_lossy(&tokenizer.decode_bytes(&last.emitter_input_ids)),"outcomes":outcomes}));
+            let row = json!({"case":c,"read":read,"stage":classification,"complete_answer":complete_answer,"mentions_selected_diagnostic_only":last.reply_text.contains(&c.selected),"mentions_distractor_diagnostic_only":last.reply_text.contains(&c.distractor),"source_bpe_lengths":c.source.iter().map(|s|tokenizer.encode(s).len()).collect::<Vec<_>>(),"emitter_input_decoded":String::from_utf8_lossy(&tokenizer.decode_bytes(&last.emitter_input_ids)),"outcomes":outcomes});
+            write(
+                &a.out.join(format!("case-{case_index:02}-read-{read}.json")),
+                &row,
+            )?;
+            write(
+                &a.out.join("active.json"),
+                &json!({"case_index":case_index,"case_id":c.id,"read":read,"stage":"completed","completed_turns":c.source.len()}),
+            )?;
+            rows.push(row);
             println!(
                 "{} read={read} stage={classification} answer={complete_answer}",
                 c.id
