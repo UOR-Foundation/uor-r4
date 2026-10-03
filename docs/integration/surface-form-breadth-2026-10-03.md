@@ -11,13 +11,14 @@ almost nothing (95%), so the lock is on the sentence *frame*, not the string.
 
 ## Question
 
-Training on 76 relations gave 14/120 hits on unseen relations while training on
-10 gave 0/120, but a one-letter change in a relation phrase
+Training on 76 relations was reported to give 14/120 hits on unseen relations
+while training on 10 gave 0/120, but a one-letter change in a relation phrase
 (`color` -> `colour`) breaks binding, and the model fails to answer a question
 about a fact it has just been given while it can echo a value verbatim. The
 working hypothesis is **phrase lock-in**: binding is keyed to the exact trained
 *shaped phrase*, not to the relation concept, and relation breadth helped only
-because it multiplied surface phrases.
+because it multiplied surface phrases. (The 14/120 is the given figure; my own
+strict count for that arm on the same panels is 31/120 — see the last section.)
 
 Prediction under test: training with **many surface forms per relation**
 generalises to unseen *forms* the way 76 relations generalised to unseen
