@@ -1,5 +1,31 @@
 # Current UOR-R4 research state
 
+## Native q4 readout directions — existing learning works locally, October 3
+
+The [executed readout diagnostic](geometric-q4-readout-direction-2026-10-03.md)
+reuses the trained64 checkpoint and existing Rust learner, zero optimizer updates.
+Six focused tests and optimized build pass at7a517dff on the authorized Runpod CPU
+lane. The30.399s worker verifies baseline114 canonical traces and M1 generation
+replay, then measures ten independent one-quantum candidates. All five selected
+adjoints match analytic reconstruction (max1.28e−8); context/terminal scores and
+all other packed payloads stay fixed. Independent reviews verify raw rows and
+119 returned files. This is local readout direction evidence, not a new learner.
+
+All four geometric descent directions improve joint and conditional Copy CE;
+Copy-only top1 remains20/74. Joint baseline46/114 falls to42/36/40 for three
+descents; context_unary[24]−1 preserves46. Opposite29−1 raises CE but gains two
+joint Copy choices (48/114); its first-token error persists. Mean CE alone is
+therefore not a complete-answer criterion. Candidate own-prefix generation is
+NOT_RUN; baseline remains4/20 complete and20/20 EOS. No candidate is adopted.
+
+Next: one bounded continuation of the existing Copy/Period/Stop readouts with
+learned context frozen and ordinary joint CE unchanged. Let terminals coadapt;
+retain parent and stage rows, and evaluate complete own-prefix replies/EOS at
+checkpoints. No new state/estimator/loss or unchanged context-joint fit. This
+continuation is NOT_RUN. The Codex pod card is released, results returned, final
+ownedarea about5.21GiB; no GPU/GitHub research runner/session-hook changes.
+[Bound evidence](../evidence/geometric-q4-readout-direction-2026-10-03.json).
+
 ## Final native source artifact — existing Copy ranking, October 3
 
 The [final-prefix audit](geometric-final-prefix-audit-2026-10-03.md) reuses the

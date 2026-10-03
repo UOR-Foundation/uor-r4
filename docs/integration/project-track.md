@@ -90,10 +90,16 @@ coefficients; the four successes repeat one source value. The [final-artifact
 audit](geometric-final-prefix-audit-2026-10-03.md) now finds46/114 canonical choices
 correct and54/74 Copy targets outranked by other Copy actions, without observed
 feature conflicts. Reuse the existing learner and checkpoint for bounded native
-q4 potential direction diagnosis with context/Period/Stop fixed. Do not add a
-new learning framework or progress state from this result, or repeat the joint
-dose unchanged. Preserve these partial results; they do not establish complete
-chat, family capacity or generalization.
+q4 potential direction diagnosis with context/Period/Stop fixed. The
+[executed direction diagnostic](geometric-q4-readout-direction-2026-10-03.md)
+now establishes selected adjoint agreement and local native joint/conditional
+Copy CE descents, with joint-choice regressions and no Copy-only top1 gain.
+Next freeze learned context while the existing Copy/Period/Stop readouts coadapt
+under unchanged ordinary answer CE; judge complete own-prefix replies/EOS and
+stage rows alongside loss. This continuation is NOT_RUN and no diagnostic
+candidate is adopted. Do not add a new learning framework or progress state,
+or repeat the context-joint dose unchanged. Preserve these partial results;
+they do not establish complete chat, family capacity or generalization.
 
 The [implemented occurrence consumer](geometric-source-consumer-2026-10-03.md)
 passes the bounded actual-BPE zero-update credit/export construction; it is not
