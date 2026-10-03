@@ -3,8 +3,22 @@
 //! Mirrors `metal_stack_ops_parity.rs` (same shapes and tolerances) for the
 //! CUDA kernels in `cuda_stack_kernels.rs`, plus the configurations only
 //! CUDA runs on the device: the U(1) recurrence control and the L2 read
-//! control. Every device test returns `Ok(())` at once when no CUDA device
-//! exists; the NVRTC compile test needs only the toolkit.
+//! control. Without a CUDA device every device test prints that it was
+//! skipped and returns `Ok(())`, so a pass count proves nothing; set
+//! `UOR_REQUIRE_CUDA=1` to make a missing device fail every device test (use it
+//! on GPU hosts and in any lane that claims GPU results). The NVRTC compile
+//! test needs only the toolkit.
+
+/// A missing device: a failure under `UOR_REQUIRE_CUDA=1`, otherwise a
+/// printed skip (never a silent pass).
+#[cfg(feature = "cuda")]
+fn no_device(error: impl std::fmt::Display) -> uor_r4_training::Result<()> {
+    if std::env::var("UOR_REQUIRE_CUDA").is_ok_and(|v| v == "1") {
+        panic!("UOR_REQUIRE_CUDA=1 but no CUDA device: {error}");
+    }
+    println!("SKIPPED (no CUDA device): {error}");
+    Ok(())
+}
 
 /// The kernel source compiles with the installed NVRTC (no device needed).
 #[cfg(feature = "cuda")]
@@ -22,10 +36,7 @@ fn test_cuda_device_available() -> uor_r4_training::Result<()> {
             println!("CUDA device 0 initialized successfully: {:?}", device);
             Ok(())
         }
-        Err(e) => {
-            println!("CUDA device unavailable (skipping GPU tests): {e}");
-            Ok(())
-        }
+        Err(e) => no_device(e),
     }
 }
 
@@ -63,7 +74,7 @@ fn assert_finite_and_close(cpu: &[f32], cuda: &[f32], tol: f32, op_name: &str) -
 fn test_straight_through_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -95,7 +106,7 @@ fn test_straight_through_parity() -> uor_r4_training::Result<()> {
 fn test_swiglu_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -125,7 +136,7 @@ fn test_swiglu_parity() -> uor_r4_training::Result<()> {
 fn test_rms_norm_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -157,7 +168,7 @@ fn test_rms_norm_parity() -> uor_r4_training::Result<()> {
 fn test_quaternion_scan_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -203,7 +214,7 @@ fn test_quaternion_scan_parity() -> uor_r4_training::Result<()> {
 fn test_cross_entropy_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -241,7 +252,7 @@ fn test_cross_entropy_parity() -> uor_r4_training::Result<()> {
 fn test_swiglu_backward_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -315,7 +326,7 @@ fn test_swiglu_backward_parity() -> uor_r4_training::Result<()> {
 fn test_rms_norm_backward_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -391,7 +402,7 @@ fn test_rms_norm_backward_parity() -> uor_r4_training::Result<()> {
 fn test_cross_entropy_backward_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -439,7 +450,7 @@ fn test_cross_entropy_backward_parity() -> uor_r4_training::Result<()> {
 fn test_weighted_cross_entropy_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let (rows, vocab) = (6usize, 300usize);
     let logits_data: Vec<f32> = (0..rows * vocab)
@@ -493,7 +504,7 @@ fn test_weighted_cross_entropy_parity() -> uor_r4_training::Result<()> {
 fn test_quaternion_scan_backward_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -585,7 +596,7 @@ fn test_cuda_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> {
 
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -720,7 +731,7 @@ fn test_cuda_stack_ops_throughput_and_speedup() -> uor_r4_training::Result<()> {
 fn test_fused_read_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -790,7 +801,7 @@ fn test_fused_read_parity() -> uor_r4_training::Result<()> {
 fn test_recurrence_core_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
 
@@ -937,7 +948,7 @@ fn recurrence_run(
 fn test_recurrence_core_backward_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
     use uor_r4_training::geometric_stack::RotationGroup;
@@ -1051,7 +1062,7 @@ fn test_fused_read_general_parity() -> uor_r4_training::Result<()> {
     use uor_r4_training::geometric_stack::{fused_aux_len, ReadScore};
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
     let shapes = [
@@ -1117,7 +1128,7 @@ fn bench_training_size_read_and_recurrence() -> uor_r4_training::Result<()> {
     use uor_r4_training::geometric_stack::{fused_aux_len, ReadScore};
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let (batch, heads, time, key, value, width) = (16, 8, 384, 64, 64, 512);
     let shape = (batch, heads, time, key, value);
@@ -1178,7 +1189,7 @@ fn bench_training_size_read_and_recurrence() -> uor_r4_training::Result<()> {
 fn test_recurrence_core_large_gate_parity() -> uor_r4_training::Result<()> {
     let cuda_dev = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
-        Err(_) => return Ok(()),
+        Err(e) => return no_device(e),
     };
     let cpu_dev = candle_core::Device::Cpu;
     let (batch, time, width) = (2, 9, 32);
