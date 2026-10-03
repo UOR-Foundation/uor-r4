@@ -1,5 +1,32 @@
 # Current UOR-R4 research state
 
+## Selected-record BPE consumer — connected construction, October 3
+
+The [geometric source consumer](geometric-source-consumer-2026-10-03.md) now connects
+an exact selected record to ordinary actual-BPE answer loss through native q4 H4
+context, directed occurrence scoring and NoRead. One complete teacher-forced
+answer (four BPE tokens plus EOS) produces finite, nonzero context, potential and
+NoRead gradients in all five rows. Exported-payload native reload preserves exact
+traces, disabled mixing preserves the full pointer-aware parent's score bits,
+and a changed packed payload is rejected. Four focused tests pass. Source/outcome
+review approves source `b3fcbc4a`; [report](../evidence/geometric-source-consumer-construction-2026-10-03.json).
+
+Zero optimizer updates. The worker takes 55.44s real, maximum RSS 1,020,280,832B;
+context retains 8,963,136 coefficients and 44,564,480 expanded-table bytes.
+This is a connected hybrid construction, not fitted language, autonomous chat,
+a learned-control comparison, native whole-path serving or energy evidence.
+Typed frame metadata is preserved outside scoring; only Found/non-conflicting
+frames are used here, content/age/held-span channels are inactive, and stopping
+still depends on the floating parent. The first sealed attempt preserves the
+potential-constructor admission error repaired in the second attempt.
+
+**Next:** implement the learned ordinary reader control and measure complete
+short/long B8 cost before a paired fit. Keep complete generated responses and EOS
+as outcomes; the mixture cannot independently reorder non-source vocabulary.
+Coordinate any shared session hook on #1552. Claude's emitter/control/CUDA and
+DeepSeek's distance/surface-form work remain separate. No unchanged capture or
+selector dose is admitted by this construction result.
+
 ## Retained native capture/age learning — mixed result, October 2
 
 The [connected native reader](geometric-native-held-credit-2026-10-02.md) now carries

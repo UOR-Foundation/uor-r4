@@ -78,6 +78,19 @@ authored answer template alone is not a learned geometric consumer. Compare a
 geometric selector with an ordinary control given the same frame information,
 candidate access, capacity and cost. Gold labels remain training/diagnostic only.
 
+The [implemented occurrence consumer](geometric-source-consumer-2026-10-03.md)
+passes the bounded actual-BPE zero-update credit/export construction; it is not
+yet fitted or integrated into the shared chat session. Next implement a learned
+ordinary reader control and measure short/long complete B8 cost before admitting
+the paired continuation. Preserve the registered information/capacity/cost
+qualification: a stronger full bilinear read control has additional active
+coefficients and table cost, which must be disclosed rather than described as an
+exact match. Both readers retain the same H4 context, so that comparison isolates
+the read relation. Judge complete generated answers and EOS, not copied words or
+teacher-forced loss alone. The current floating mixture cannot independently
+reorder two tokens absent from the selected source; a witnessed non-copy/Stop
+failure calls for conditional emission support instead of another selector dose.
+
 If predicted actions or stored records are wrong, repair the existing supervised
 compiler/write interface. If answers follow the right value but fail wording or
 Stop, repair emission. Mixed evidence does not automatically admit a scale run,
