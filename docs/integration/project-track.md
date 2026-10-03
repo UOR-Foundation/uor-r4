@@ -80,10 +80,14 @@ candidate access, capacity and cost. Gold labels remain training/diagnostic only
 
 The [implemented occurrence consumer](geometric-source-consumer-2026-10-03.md)
 passes the bounded actual-BPE zero-update credit/export construction; it is not
-yet fitted or integrated into the shared chat session. Next implement a learned
-ordinary reader control and measure short/long complete B8 cost before admitting
-the paired continuation. Preserve the registered information/capacity/cost
-qualification: a stronger full bilinear read control has additional active
+yet fitted or integrated into the shared chat session. **Owner correction,
+October 3:** first make this geometric path learn useful source-bound complete
+responses; beating a transformer is a later programme goal, not the admission
+criterion for developing or retaining these mechanisms. Measure short/long
+complete B8 cost and admit a bounded geometric continuation. Learned reader
+controls follow for attribution and improvement, rather than blocking this
+first working path. Preserve the information/capacity/cost boundaries for later
+comparative claims: a stronger full bilinear read control has additional active
 coefficients and table cost, which must be disclosed rather than described as an
 exact match. Both readers retain the same H4 context, so that comparison isolates
 the read relation. Judge complete generated answers and EOS, not copied words or

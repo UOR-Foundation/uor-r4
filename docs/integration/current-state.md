@@ -20,9 +20,12 @@ frames are used here, content/age/held-span channels are inactive, and stopping
 still depends on the floating parent. The first sealed attempt preserves the
 potential-constructor admission error repaired in the second attempt.
 
-**Next:** implement the learned ordinary reader control and measure complete
-short/long B8 cost before a paired fit. Keep complete generated responses and EOS
-as outcomes; the mixture cannot independently reorder non-source vocabulary.
+**Next, owner correction:** make the geometric consumer learn source-bound
+complete responses, after measuring complete short/long B8 cost and admitting
+the bounded continuation. A transformer win or learned ordinary-control result
+is not a prerequisite for this development fit or for retaining a mechanism.
+Reader controls follow as attribution work. Keep complete generated responses
+and EOS as outcomes; the mixture cannot independently reorder non-source vocabulary.
 Coordinate any shared session hook on #1552. Claude's emitter/control/CUDA and
 DeepSeek's distance/surface-form work remain separate. No unchanged capture or
 selector dose is admitted by this construction result.

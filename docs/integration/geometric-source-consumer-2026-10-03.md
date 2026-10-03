@@ -110,9 +110,16 @@ advantage, complete native serving or energy result follows from construction.
 
 ## Next causal decision
 
-Before fitting, measure complete short/long B8 cost witnesses and implement a
-learned ordinary reader control with identical candidates, context, NoRead,
-parent inputs and answer objective. A full directed bilinear reader provides
+The owner's October 3 correction puts **making geometric chat work first**.
+Beating a transformer is a later goal. It is not a threshold for admitting this
+development fit, keeping a mechanism, or preserving a bounded negative.
+Measure complete short/long B8 cost witnesses, then admit one bounded geometric
+consumer continuation whose primary outcome is source-bound complete responses.
+No automatic scale/dose sweep follows from a failure.
+
+Implement a learned ordinary reader control later for attribution, with identical
+candidates, context, NoRead, parent inputs and answer objective. It is not a
+precondition for the first working geometric path. A full directed bilinear reader provides
 a stronger useful control than a symmetric diagonal score. Its sixteen active
 directional coefficients per lane exceed the geometric reader's four: report
 the extra 96 coefficients and actual table/read cost rather than padding with
