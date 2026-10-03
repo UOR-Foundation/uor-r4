@@ -45,6 +45,28 @@ and will conflict textually):
 * Startup validation: every relation has exactly one slot, every slot names a
   relation, and the value sets cover the table exactly.
 
+**Combined with the distance curriculum (#1642).** The generator now carries
+both knob families in one file. `document()` draws one form index per selection
+site in the order the narrow generator used, so `forms=1` adds `below(1)` draws
+that leave the rng stream untouched, and the filler turns sit between the
+statement pair and the question exactly as #1642 wrote them. Verified against
+the pre-forms generator built from `origin/main`, `rows=64 seed=17`:
+
+| args | tokens.u16 | response_mask.u8 | vs main |
+|---|---|---|---|
+| `distance=0 forms=1` | `380ebdaf690283cd…` | `c53704a4026838ca…` | byte-identical to main `distance=0` |
+| `distance=3 forms=1` | `4722a1f03f0caf38…` | `bd1deb4530c8853d…` | byte-identical to main `distance=3` |
+| `curriculum=1 forms=1` | `38e9e39c0f15a534…` | `32ca23a45da7def1…` | byte-identical to main `curriculum=1` |
+| `distance=0 forms=8` | `8132103eaa929433…` | `d966c51d54d9d59f…` | paraphrases drawn, held-out tail never |
+| `curriculum=1 forms=8` | `de7c8ecd0e63883b…` | `3d40d4a5e699ed95…` | fillers and paraphrases together |
+
+Decoding the stores confirms the content, not just the option: at `distance=3`
+three filler turns sit between the fact and the question; at `forms=8` the fact
+is stated as "By the way, my market is St George." and asked as "Who's my
+teacher?"; at `forms=1` both are the canonical phrase. Seven focused tests cover
+the two knob families together (four from #1642, three for the forms
+invariants).
+
 **Byte identity of the fixed-form path.** `forms=1` must reproduce the previous
 recipe exactly. With `rows=30000 seed=17` the new binary writes
 
