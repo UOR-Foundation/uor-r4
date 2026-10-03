@@ -1006,7 +1006,6 @@ fn test_recurrence_core_backward_parity() -> uor_r4_training::Result<()> {
 
 /// Output and input gradients of the fused read for a weighted-sum loss.
 #[cfg(feature = "cuda")]
-#[allow(clippy::too_many_arguments)]
 fn read_run(
     device: &candle_core::Device,
     data: [&Vec<f32>; 5],
@@ -1014,6 +1013,21 @@ fn read_run(
     score: uor_r4_training::geometric_stack::ReadScore,
     null: bool,
     age: bool,
+) -> uor_r4_training::Result<Vec<Vec<f32>>> {
+    read_run_with(device, data, shape, score, null, age, false)
+}
+
+/// [`read_run`] with RoPE of queries and keys when `rope` is set.
+#[cfg(feature = "cuda")]
+#[allow(clippy::too_many_arguments)]
+fn read_run_with(
+    device: &candle_core::Device,
+    data: [&Vec<f32>; 5],
+    shape: (usize, usize, usize, usize, usize),
+    score: uor_r4_training::geometric_stack::ReadScore,
+    null: bool,
+    age: bool,
+    rope: bool,
 ) -> uor_r4_training::Result<Vec<Vec<f32>>> {
     let (batch, heads, time, key, value) = shape;
     let q = candle_core::Var::from_tensor(&candle_core::Tensor::from_vec(
@@ -1046,7 +1060,7 @@ fn read_run(
         score,
         null,
         age,
-        false,
+        rope,
     )?;
     let grads = out.mul(&w)?.sum_all()?.backward()?;
     let mut results = vec![values(&out)?];
@@ -1110,6 +1124,75 @@ fn test_fused_read_general_parity() -> uor_r4_training::Result<()> {
                     1e-3,
                     &format!(
                         "FusedRead {score:?} null{null} age{age} b{batch} h{heads} t{time} k{key} v{value} {name}"
+                    ),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// RoPE reads on the device (the transformer control's `read=dot` with
+/// rope, and the Lorentz/L2 scores with rope) against the CPU: outputs and
+/// the query, key, value and auxiliary gradients, over shapes with time not a
+/// multiple of 16, several heads and even key widths.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_fused_read_rope_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{fused_aux_len, ReadScore};
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+    let shapes = [
+        (2usize, 3usize, 13usize, 8usize, 9usize),
+        (1, 2, 37, 16, 16),
+        (2, 4, 5, 4, 5),
+        (1, 1, 1, 4, 4),
+        (1, 2, 64, 32, 24),
+        (2, 2, 19, 2, 3),
+    ];
+    let configs = [
+        (ReadScore::Dot, false, false),
+        (ReadScore::Dot, true, false),
+        (ReadScore::Dot, false, true),
+        (ReadScore::Dot, true, true),
+        (ReadScore::Lorentz, true, true),
+        (ReadScore::Lorentz, false, false),
+        (ReadScore::L2, true, true),
+        (ReadScore::L2, false, false),
+    ];
+    let mut case = 0u64;
+    for &shape in &shapes {
+        let (batch, heads, time, key, value) = shape;
+        for &(score, null, age) in &configs {
+            case += 1;
+            let seed = 5000 + 23 * case;
+            let q_data = noise(batch * heads * time * key, seed, 0.8);
+            let k_data = noise(batch * heads * time * key, seed + 1, 0.8);
+            let v_data = noise(batch * heads * time * value, seed + 2, 1.0);
+            let aux_len = fused_aux_len(batch, heads, time, score, null, age).max(1);
+            let mut aux_data = noise(aux_len, seed + 3, 0.5);
+            if score.scaled() {
+                let base = aux_len - 2 * heads;
+                for h in 0..heads {
+                    // beta (already exponentiated) and offset.
+                    aux_data[base + h] = 0.7 + 0.3 * h as f32;
+                    aux_data[base + heads + h] = 0.2 * h as f32 - 0.1;
+                }
+            }
+            let w_data = noise(batch * heads * time * value, seed + 4, 1.0);
+            let data = [&q_data, &k_data, &v_data, &aux_data, &w_data];
+            let cpu = read_run_with(&cpu_dev, data, shape, score, null, age, true)?;
+            let cuda = read_run_with(&cuda_dev, data, shape, score, null, age, true)?;
+            for (k, name) in ["out", "dq", "dk", "dv", "d_aux"].iter().enumerate() {
+                compare(
+                    &cpu[k],
+                    &cuda[k],
+                    1e-3,
+                    &format!(
+                        "FusedRead rope {score:?} null{null} age{age} b{batch} h{heads} t{time} k{key} v{value} {name}"
                     ),
                 );
             }

@@ -939,6 +939,40 @@ extern "C" __global__ void read_dbeta(
     d_aux[read_beta_offset(d) + id] = (float)sum;
 }
 
+// RoPE of the read, the CPU `rope_rotate` exactly: rows [index * time + t]
+// of `stride` features, of which the first `d.key` are rotated by position
+// t with rotate-half pairing (i, i + key / 2); the rest are copied. The
+// cosine and sine tables [time, key / 2] are the host's `rope_tables`.
+// `inverse` rotates by -t (the transpose, mapping gradients back).
+// Non-contracting intrinsics keep the CPU's f32 operations (no FMA).
+extern "C" __global__ void read_rope(
+    const float* src, float* dst, const float* cosine, const float* sine,
+    ReadDims d, uint stride, uint inverse
+) {
+    u64 id = (u64)blockIdx.x * blockDim.x + threadIdx.x;
+    u64 rows = (u64)d.batch * d.heads * d.time;
+    if (id >= rows * stride) return;
+    uint c = (uint)(id % stride);
+    u64 row = id / stride;
+    if (c >= d.key) {
+        dst[id] = src[id];
+        return;
+    }
+    uint t = (uint)(row % d.time);
+    uint half = d.key / 2;
+    uint i = c < half ? c : c - half;
+    const float* base = src + row * stride;
+    float a = base[i];
+    float b = base[i + half];
+    float cs = cosine[(u64)t * half + i];
+    float sn = inverse ? -sine[(u64)t * half + i] : sine[(u64)t * half + i];
+    if (c < half) {
+        dst[id] = __fsub_rn(__fmul_rn(a, cs), __fmul_rn(b, sn));
+    } else {
+        dst[id] = __fadd_rn(__fmul_rn(b, cs), __fmul_rn(a, sn));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 8. AdamW step in place, the CPU `adam_step`'s f32 operations in its order
 // (non-contracting intrinsics, IEEE sqrt and division).

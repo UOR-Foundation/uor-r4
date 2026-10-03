@@ -1,8 +1,8 @@
 //! CUDA forward and backward paths of the geometric stack ops.
 //!
 //! Each op's `cuda_fwd` and its backward's `Device::Cuda` branch call into
-//! this module. Configurations without a kernel (a transport snap, RoPE or a
-//! flock selection in the read, the pointer mixture, non-contiguous inputs)
+//! this module. Configurations without a kernel (a transport snap, a flock
+//! selection in the read, the pointer mixture, non-contiguous inputs)
 //! run the exact CPU forward on host copies ([`via_host1`] and friends), and
 //! their backward takes the generic host path, so CUDA training always
 //! computes what the CPU computes. The kernels live in
@@ -720,6 +720,14 @@ impl RecurrenceCore {
 // ---------------------------------------------------------------------------
 // The fused read.
 
+/// RoPE-rotated copies of a read's queries and key-value rows, and the
+/// tables that rotated them (reused to map gradients back).
+struct RotatedRead {
+    query: CudaSlice<f32>,
+    kv: CudaSlice<f32>,
+    tables: (CudaSlice<f32>, CudaSlice<f32>),
+}
+
 /// The device buffers of one recomputed read: probabilities [index, t, j]
 /// (j <= t used), NoRead probabilities, the f64 query and key lifts and,
 /// when asked for, the f64 Lorentz excesses or L2 squared distances.
@@ -732,10 +740,65 @@ struct CudaReadPass {
 }
 
 impl FusedRead {
-    /// Whether the CUDA kernels cover this configuration (all three scores;
-    /// RoPE and flock selection run on the host).
+    /// Whether the CUDA kernels cover this configuration (all three scores,
+    /// with or without RoPE; flock selection runs on the host).
     pub(super) fn cuda_covered(&self) -> bool {
-        !self.rope && self.select.is_none()
+        self.select.is_none() && (!self.rope || self.key % 2 == 0)
+    }
+
+    /// The host's exact RoPE tables ([`rope_tables`]) on `device`.
+    fn cuda_rope_tables(&self, device: &CudaDevice) -> CResult<(CudaSlice<f32>, CudaSlice<f32>)> {
+        let (cosine, sine) = rope_tables(self.time, self.key);
+        Ok((device.clone_htod(&cosine)?, device.clone_htod(&sine)?))
+    }
+
+    /// A copy of `rows` ([index * time + t] rows of `stride` features) with
+    /// the first `key` features of each rotated by position, exactly as
+    /// [`rope_rotate`]; `inverse` applies the transpose (for gradients).
+    fn cuda_rope(
+        &self,
+        device: &CudaDevice,
+        rows: CudaView<'_, f32>,
+        stride: usize,
+        tables: &(CudaSlice<f32>, CudaSlice<f32>),
+        inverse: bool,
+    ) -> CResult<CudaSlice<f32>> {
+        let len = self.batch * self.heads * self.time * stride;
+        if rows.len() != len {
+            candle_core::bail!("CUDA RoPE input has the wrong size");
+        }
+        let out = zeros::<f32>(device, len)?;
+        launch(
+            device,
+            "read_rope",
+            len,
+            &[
+                Arg::F(rows),
+                Arg::f(&out),
+                Arg::f(&tables.0),
+                Arg::f(&tables.1),
+                Arg::Dims(self.cuda_dims()?),
+                Arg::U32(u32_of(stride, "RoPE stride")?),
+                Arg::U32(u32::from(inverse)),
+            ],
+        )?;
+        Ok(out)
+    }
+
+    /// Queries and keys rotated by RoPE (values copied), when the read has it.
+    fn cuda_rotated(
+        &self,
+        device: &CudaDevice,
+        query: CudaView<'_, f32>,
+        kv: CudaView<'_, f32>,
+    ) -> CResult<Option<RotatedRead>> {
+        if !self.rope {
+            return Ok(None);
+        }
+        let tables = self.cuda_rope_tables(device)?;
+        let query = self.cuda_rope(device, query, self.key, &tables, false)?;
+        let kv = self.cuda_rope(device, kv, self.width(), &tables, false)?;
+        Ok(Some(RotatedRead { query, kv, tables }))
     }
 
     fn cuda_dims(&self) -> CResult<[u32; 8]> {
@@ -874,6 +937,13 @@ impl FusedRead {
             return via_host3(self, [(s1, l1), (s2, l2), (s3, l3)]);
         };
         let device = &s1.device;
+        // With RoPE the whole read runs on rotated queries and keys, as the
+        // CPU's `block` rotates them before every product.
+        let rotated = self.cuda_rotated(device, query.slice(..), kv.slice(..))?;
+        let (query, kv) = match &rotated {
+            Some(rotated) => (rotated.query.as_view(), rotated.kv.as_view()),
+            None => (query, kv),
+        };
         let pass = self.cuda_pass(device, query, kv.slice(..), aux, false)?;
         let total = rows * value;
         let out = zeros::<f32>(device, total)?;
@@ -923,6 +993,11 @@ impl FusedRead {
             view(&ds, dl)?,
         );
         let scaled = self.score.scaled();
+        let rotated = self.cuda_rotated(device, qv.slice(..), kvv.slice(..))?;
+        let (qv, kvv) = match &rotated {
+            Some(rotated) => (rotated.query.as_view(), rotated.kv.as_view()),
+            None => (qv, kvv),
+        };
         let pass = self.cuda_pass(device, qv.slice(..), kvv.slice(..), av.slice(..), true)?;
         let dims = self.cuda_dims()?;
         let square = rows * self.time;
@@ -1051,6 +1126,16 @@ impl FusedRead {
                 ],
             )?;
         }
+        let (dq, dkv) = match &rotated {
+            // Gradients of the rotated rows map back by the inverse rotation
+            // (after the Lorentz/L2 self terms, as on the CPU); value
+            // gradients are copied.
+            Some(rotated) => (
+                self.cuda_rope(device, dq.as_view(), self.key, &rotated.tables, true)?,
+                self.cuda_rope(device, dkv.as_view(), self.width(), &rotated.tables, true)?,
+            ),
+            None => (dq, dkv),
+        };
         let d_aux = if aux_parts {
             tensor(d_aux, device, aux.shape())
         } else {
