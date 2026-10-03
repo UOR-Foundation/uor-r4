@@ -1,0 +1,69 @@
+name: source-binding-evidence
+on:
+  push:
+    branches: ['codex/ci/source-binding-20261003']
+permissions:
+  contents: read
+env:
+  CARGO_TARGET_DIR: target/codex-source-binding-20261003
+  CARGO_BUILD_JOBS: 2
+  CARGO_INCREMENTAL: 0
+  RAYON_NUM_THREADS: 2
+  VECLIB_MAXIMUM_THREADS: 2
+jobs:
+  source-binding:
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Bind exact product source
+        shell: bash
+        run: |
+          mkdir evidence
+          tested=$(git rev-parse HEAD^)
+          test "$tested" = 37cd4baa253040ddab4cf2040ef5a1ba429514e1
+          test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/source-binding-evidence.yml
+          echo "UOR_BUILD_SOURCE_COMMIT=$tested" >> "$GITHUB_ENV"
+          git log -2 --format='%H %s' > evidence/source-identity.txt
+          git ls-files 'crates/uor-r4-training/src/*.rs' 'crates/uor-r4-training/examples/grounded-source-binding.rs' 'crates/uor-r4-tokenizer/src/*.rs' | xargs shasum -a 256 > evidence/source-sha256.txt
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/codex-source-binding-20261003
+          key: source-binding-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            source-binding-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+      - name: Identity and focused checks
+        shell: bash
+        run: |
+          set -o pipefail
+          rustc -Vv > evidence/compiler.txt
+          uname -a > evidence/platform.txt
+          rustfmt --edition 2021 --check crates/uor-r4-training/examples/grounded-source-binding.rs
+          cargo test --locked --release -p uor-r4-training --example grounded-source-binding source_binding_ -- --nocapture 2>&1 | tee evidence/tests.log
+          grep -F 'test result: ok. 2 passed; 0 failed;' evidence/tests.log
+          cargo build --locked --release -p uor-r4-training --example grounded-source-binding 2>&1 | tee evidence/build.log
+          cp "$CARGO_TARGET_DIR/release/examples/grounded-source-binding" evidence/
+          shasum -a 256 evidence/grounded-source-binding > evidence/binary-sha256.txt
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/codex-source-binding-20261003
+          key: source-binding-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-binding-${{ github.run_id }}
+          path: evidence/
+          retention-days: 7
+          if-no-files-found: error
