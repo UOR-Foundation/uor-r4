@@ -1,6 +1,6 @@
 # CUDA training runbook (offline, optional)
 
-Written 3 October 2026 (Eastern Time) by the support lab from [PR #1649](https://github.com/UOR-Foundation/uor-r4/pull/1649) as merged at 63ec8388, `crates/uor-r4-training` and the device-parity evidence. The Claude lab administers the GPU pod and owns the training code; if this page disagrees with the code or with `docs/evidence/cuda-delivery-2026-10-03.json`, those win.
+Written 3 October 2026 (Eastern Time) by the support lab from [PR #1649](https://github.com/UOR-Foundation/uor-r4/pull/1649) (merged at `dc28b495`; read at main `63ec8388`), `crates/uor-r4-training` and the device-parity evidence. The Claude lab administers the GPU pod and owns the training code; if this page disagrees with the code or with `docs/evidence/cuda-delivery-2026-10-03.json`, those win.
 
 ## 1. Scope and non-claims
 
@@ -25,6 +25,7 @@ Written 3 October 2026 (Eastern Time) by the support lab from [PR #1649](https:/
 ## 3. Prerequisites on a GPU host
 
 - NVIDIA driver and a **CUDA toolkit** on the build host. `cudarc` is built with `driver`, `nvrtc`, `cuda-version-from-build-system` and `dynamic-linking`, so the toolkit must be discoverable at build time and the driver at run time. CUDA 12.6 with driver 595.91.07 is what was verified; other versions are untested here.
+- **`nvcc` must be on `PATH` at build time.** The `cuda-version-from-build-system` feature of `cudarc` runs `nvcc` from its build script to pick the CUDA version, and the build fails without it (for example `export PATH=/usr/local/cuda/bin:$PATH`). This is separate from the stack kernels themselves, which are compiled at run time with NVRTC.
 - Set `CUDA_COMPUTE_CAP` for the card (89 for RTX 4090) as the verified run did.
 - A pinned Rust toolchain matching the verified run is preferable; record `rustc -V`.
 - Kernels are compiled at run time with NVRTC; `test_cuda_kernels_compile_with_nvrtc` needs only the toolkit, not a device.
@@ -34,6 +35,7 @@ Written 3 October 2026 (Eastern Time) by the support lab from [PR #1649](https:/
 The training driver is the `geometric-stack` example. Build once per pod and **record the executable's sha256 before the pod is destroyed**; the earlier runs could not be bound for exactly that reason.
 
 ```sh
+export PATH=/usr/local/cuda/bin:$PATH   # nvcc for cudarc's build script
 CARGO_INCREMENTAL=0 CUDA_COMPUTE_CAP=89 \
   cargo build --release -p uor-r4-training --features cuda --example geometric-stack
 shasum -a 256 target/release/examples/geometric-stack   # record this
@@ -41,10 +43,11 @@ shasum -a 256 target/release/examples/geometric-stack   # record this
 
 Select the device explicitly: `device=cuda`. There is **no implicit fallback**; omitting `device=` runs on the CPU. Options come from the example's `--help`; the ones that matter operationally are:
 
-- `train`: `out=NEW_REPORT_ROOT`, `arch=geometric`, `read=l2|lorentz|dot`, `rotation_group=quaternion|u1`, `steps`, `batch`, `lr`, `warmup`, `eval_every`, `checkpoint_every`, `resume=OLD_ROOT/checkpoint`, `max_seconds`, `width`, `heads`, `layers`, `context`.
+- `train`: `out=NEW_REPORT_ROOT`, `arch=geometric`, `read=lorentz|l2|dot` (**default `lorentz`**; the current scale ladder uses `read=l2`, so pass it explicitly), `rotation_group=quaternion|u1`, `steps`, `batch`, `lr`, `warmup`, `eval_every`, `checkpoint_every`, `resume=OLD_ROOT/checkpoint`, `max_seconds`, `width`, `heads`, `layers`, `context`.
 - `dialogue-train` (chat fine-tunes): the same device/checkpoint options plus tokenizer, train/dev token+mask+manifest paths, `policy=`, `protocol=1|2`, `data_seed`.
 - Report roots are created exclusively (a new `out=` every run); never reuse a sealed root.
 - Use `checkpoint_every` and `max_seconds` so a stop (pod preemption, wall limit) resumes via `resume=`. A configured limit is a stop, not a budget.
+- `UOR_CUDA_PROFILE=1` synchronizes after each launched custom kernel and prints its wall time on stderr. It is diagnostic only: it serializes the GPU, and it does not see cuBLAS calls or host/device copies.
 - `UOR_NAN_TRACE=1` checks every gradient and parameter each step. The retained 8M Lorentz seed-2 trace ran to step 4000 with 0 non-finite reports.
 
 ## 5. Checks before trusting a GPU result
