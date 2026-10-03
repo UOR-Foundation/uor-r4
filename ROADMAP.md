@@ -32,14 +32,16 @@ conversation, coding or efficiency result.
 |---|---|---|
 | 8M | width 288, 6 heads, 6 layers, pattern `rrarra` | Done. Controls at this size: quaternion lanes beat U(1) lanes; the flat L2 read beat the Lorentz read. |
 | 20M | width 512, 8 heads, 8 layers, `rrarrarr`, quaternion rotation, flat L2 read, context 384; 300M tokens of TinyStories, TinyDialogues and chat-v0 weighted 0.6/0.15/0.25 | Final TinyStories validation NLL **1.3882** (seed 1) and **1.3858** (seed 2). Learning rate 0.001 beat the 0.002 default by about 0.045 nats at steps 5k and 7.5k; 0.003 was worse; 0.0005 was better still (dev NLL 1.8173 / 1.7294 at steps 5k / 7.5k; the learning-rate checks stopped at 660 s). |
-| 29M | width 576, 8 heads, 10 layers; 434M tokens | Learning rate 0.001 run finished at TinyStories validation NLL **1.2989**. |
+| 29M | width 576, 8 heads, 10 layers; 434M tokens | Finished at TinyStories validation NLL **1.2857** (learning rate 5e-4) and 1.2989 (learning rate 1e-3). |
+| ~96M | geometric run on two GPUs, 1.5B tokens | Started 5:35 PM ET, 3 October; no result yet. |
 
-**Chat is not achieved.** The best D19 grounded session (exact store plus prime-atom
-log-recall sieve) answers 959 of 1,075 turns (`chat-8m-a`). On the 232-reply panel judged by
+**Chat is not achieved.** The `chat-8m-a` D19 grounded session (exact store plus prime-atom
+log-recall sieve) answers 959 of 1,075 turns. On the 232-reply panel judged by
 qwen2.5:7b, 21 replies are acceptable against 8 for the deranged control. The 20M chat
 fine-tune with M-world and chat-v0 data scores 28 acceptable and 40 relevant on the same panel
-(relevant p=0.003 against `chat-8m-a`), with session 960 of 1,075. The 29M chat fine-tune is
-being graded. These are authored development panels, not general chat.
+(relevant p=0.003 against `chat-8m-a`), with session 960 of 1,075. The 29M chat fine-tune
+(learning rate 5e-4) scores 972 of 1,075 on the D19 session, the best so far (store off: 865;
+MQAR 108 → 1). These are authored development panels, not general chat.
 
 ## Order of work
 
