@@ -1,6 +1,6 @@
 //! Fixed event/standalone-age continuation of the actual retained native reader.
 //! A completed same-parent credit check is mandatory. This executable exposes
-//! only the separately admitted fixed640-update fit; it has no check-mode fit.
+//! the separately admitted fixed640-update fit and an optional zero-update crossover.
 use candle_core::{Device, Tensor, Var};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -29,6 +29,8 @@ use uor_r4_training::{
     geometric_value_producer_native::{CompiledValueProducer, ValueProducerSourcePaths},
     sha256_bytes, Result,
 };
+#[path = "attention-geometric-event-age-fit/cross.rs"]
+mod cross;
 #[path = "attention-geometric-value-learned/data.rs"]
 mod data;
 #[path = "attention-geometric-event-age-fit/fit.rs"]
@@ -39,6 +41,8 @@ struct Args {
     credit_check: PathBuf,
     out: PathBuf,
     maximum_seconds: u64,
+    #[serde(default)]
+    counterfactual_fit: Option<PathBuf>,
 }
 fn invalid(x: impl Into<String>) -> uor_r4_training::TrainingError {
     uor_r4_training::TrainingError::Invalid(x.into())
@@ -342,9 +346,14 @@ fn main() -> Result<()> {
     }
     let bytes = fs::read(file)?;
     let a: Args = serde_json::from_slice(&bytes)?;
-    if !(361..=86400).contains(&a.maximum_seconds) {
+    let time_ok = if a.counterfactual_fit.is_some() {
+        (61..=840).contains(&a.maximum_seconds)
+    } else {
+        (361..=86400).contains(&a.maximum_seconds)
+    };
+    if !time_ok {
         return Err(invalid(
-            "explicit361..86400 second whole-worker limit required; fit needs separate admission",
+            "explicit61..840 seconds for crossover or361..86400 for fit required; each needs separate admission",
         ));
     }
     report_output::claim(&a.out)?;
@@ -363,7 +372,11 @@ fn main() -> Result<()> {
 }
 fn run(a: &Args, started: Instant) -> Result<()> {
     let deadline = started + Duration::from_secs(a.maximum_seconds);
-    let fit_deadline = deadline - Duration::from_secs(300);
+    let fit_deadline = if a.counterfactual_fit.is_some() {
+        deadline
+    } else {
+        deadline - Duration::from_secs(300)
+    };
     report_output::verify(&a.credit_check)?;
     let checkbytes = fs::read(a.credit_check.join("report.json"))?;
     let check: Value = serde_json::from_slice(&checkbytes)?;
@@ -599,6 +612,60 @@ fn run(a: &Args, started: Instant) -> Result<()> {
         "initial_generator_state":initial_rng,"initial_parameters":fit::parameter_hashes(&event_weights,&age)?,
         "frozen_artifact_files":files_before,"hard_backward_policy":POLICY});
     write(&a.out.join("inputs.json"), &parent_binding)?;
+    if let Some(fit_root) = &a.counterfactual_fit {
+        let panels = panels(&conversion_attempt, &context_parent)?;
+        let forward = |ids: &[u32], ew: &EventWeights, ag: &Tensor| {
+            model.forward_geometric_event_age_native_credit(
+                ids,
+                1,
+                ids.len(),
+                &context,
+                &events,
+                &span,
+                &potential,
+                &reducer,
+                &values,
+                &null,
+                &composition,
+                ew,
+                ag,
+                &vw,
+                &nw,
+                &pw,
+                &bw,
+                [false; 4],
+            )
+        };
+        let mut report = cross::run(
+            &a.out,
+            fit_root,
+            &model_path,
+            &tokenizer,
+            &binding,
+            &parent_binding,
+            &event_weights,
+            age.as_tensor(),
+            &panels,
+            deadline,
+            forward,
+        )?;
+        if snapshot(&roots)? != files_before
+            || hashes(model.variables())? != base_before
+            || hashes(cw.parameters())? != context_before
+            || [
+                hashes(vw.parameters())?,
+                hashes(nw.parameters())?,
+                hashes(pw.parameters())?,
+                hashes(bw.parameters())?,
+            ] != frozen_before
+        {
+            return Err(invalid("crossover changed a frozen file or parameter"));
+        }
+        report["frozen_files_and_parameters_unchanged"] = json!(true);
+        report["elapsed_seconds"] = json!(started.elapsed().as_secs_f64());
+        write(&a.out.join("report.json"), &report)?;
+        return Ok(());
+    }
     fs::create_dir(a.out.join("checkpoints"))?;
     fit::checkpoint(
         &a.out.join("checkpoints/step-0000"),
