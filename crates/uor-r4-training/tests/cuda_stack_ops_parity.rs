@@ -11,7 +11,8 @@
 
 /// A missing device: a failure under `UOR_REQUIRE_CUDA=1`, otherwise a
 /// printed skip (never a silent pass).
-#[cfg(feature = "cuda")]
+/// Not feature-gated: `test_recurrence_core_large_gate_parity` also builds
+/// without the `cuda` feature, where it always skips.
 fn no_device(error: impl std::fmt::Display) -> uor_r4_training::Result<()> {
     if std::env::var("UOR_REQUIRE_CUDA").is_ok_and(|v| v == "1") {
         panic!("UOR_REQUIRE_CUDA=1 but no CUDA device: {error}");
