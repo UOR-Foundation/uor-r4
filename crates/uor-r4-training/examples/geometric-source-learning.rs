@@ -450,7 +450,7 @@ fn evaluate(
         json!({"scope":"all20exposed development, greedy ownprefix, exact finite complete answer membership plus EOS; not heldout","complete_answers":complete,"cases":rows.len(),"elapsed_seconds":begun.elapsed().as_secs_f64(),"rows":rows}),
     )
 }
-fn save_checkpoint(
+fn save_checkpoint_with_reader(
     path: &Path,
     weights: &ConsumerWeights,
     identity: &ConsumerIdentity,
@@ -458,7 +458,7 @@ fn save_checkpoint(
     cache: &ParentCache,
     updates: usize,
     status: &str,
-) -> Result<Value> {
+) -> Result<(Value, NativeConsumerArtifact)> {
     report_output::claim(path)?;
     weights.save_source(&path.join("consumer-source"))?;
     let native = weights.compile(identity.clone())?;
@@ -491,7 +491,19 @@ fn save_checkpoint(
     write(&path.join("checkpoint.json"), &receipt)?;
     report_output::seal(path)?;
     report_output::verify(path)?;
-    Ok(receipt)
+    Ok((receipt, loaded))
+}
+fn save_checkpoint(
+    path: &Path,
+    weights: &ConsumerWeights,
+    identity: &ConsumerIdentity,
+    episodes: &[Episode],
+    cache: &ParentCache,
+    updates: usize,
+    status: &str,
+) -> Result<Value> {
+    save_checkpoint_with_reader(path, weights, identity, episodes, cache, updates, status)
+        .map(|(receipt, _reader)| receipt)
 }
 fn run(a: &Args) -> Result<()> {
     let start = Instant::now();
@@ -507,6 +519,8 @@ fn run(a: &Args) -> Result<()> {
         &a.out.join("binding.json"),
         &json!({"source_commit":source_commit,"retained_report_sha256":sha256_file(&a.retained_report)?,"tokenizer_sha256":sha256_file(&a.tokenizer)?,"parent_checkpoint_manifest_sha256":sealed_manifest_sha256(&a.checkpoint).map_err(|e|invalid(e.to_string()))?,"parent_model_sha256":parent.record.model_sha256,"initial_construction_manifest_sha256":sha256_file(&a.initial_construction.join("manifest.json"))?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"protocol_identity":parent.identity().protocol.identity().map_err(|e|invalid(e.to_string()))?,"mode":a.mode,"maximum_updates":a.maximum_updates,"maximum_seconds":a.maximum_seconds,"optimizer":{"name":"AdamW","lr":0.003,"beta1":0.9,"beta2":0.999,"epsilon":1e-8,"weight_decay":0.,"global_gradient_clip":1.,"projection":"quarter-code shadow range after each B8 update"},"objective":"mean8episodes(mean token CE including EOS)","control_scope":"frozen floating pointer-aware parent; no trained ordinary control or transformer superiority gate","evaluation_scope":"20 exposed development cases, no heldout"}),
     )?;
+    let mut saved_final_checkpoint: Option<Value> = None;
+    let mut final_checkpoint_started = false;
     let work = (|| -> Result<()> {
         if a.mode == "cost" {
             let mut sorted: Vec<usize> = (0..episodes.len()).collect();
@@ -596,8 +610,18 @@ fn run(a: &Args) -> Result<()> {
                     )?;
                 }
             }
-            let final_native = weights.compile(identity.clone())?;
-            let final_eval = evaluate(
+            final_checkpoint_started = true;
+            let (receipt, final_native) = save_checkpoint_with_reader(
+                &a.out.join("final-checkpoint"),
+                &weights,
+                &identity,
+                &episodes,
+                &cache,
+                updates,
+                "fit_updates_completed_before_final_eval",
+            )?;
+            saved_final_checkpoint = Some(receipt);
+            let mut final_eval = evaluate(
                 "final",
                 &episodes,
                 &parent.model,
@@ -607,24 +631,36 @@ fn run(a: &Args) -> Result<()> {
                 start,
                 a,
             )?;
+            final_eval["consumer_loaded_from_disk"] = json!(true);
+            final_eval["consumer_artifact_metadata_sha256"] = json!(sha256_file(
+                &a.out.join("final-checkpoint/consumer-native/metadata.json"),
+            )?);
+            final_eval["consumer_source_root"] =
+                json!(a.out.join("final-checkpoint/consumer-source"));
             write(&a.out.join("final-evaluation.json"), &final_eval)?;
         }
         Ok(())
     })();
-    let status = if work.is_ok() {
-        "completed"
+    let fallback_checkpoint_status = if work.is_ok() {
+        "cost_completed"
     } else {
         "stopped_or_error"
     };
-    let final_checkpoint = save_checkpoint(
-        &a.out.join("final-checkpoint"),
-        &weights,
-        &identity,
-        &episodes,
-        &cache,
-        updates,
-        status,
-    );
+    let final_checkpoint = match saved_final_checkpoint {
+        Some(receipt) => Ok(receipt),
+        None if final_checkpoint_started => Err(invalid(
+            "final checkpoint attempt failed; partial directory retained without a duplicate claim",
+        )),
+        None => save_checkpoint(
+            &a.out.join("final-checkpoint"),
+            &weights,
+            &identity,
+            &episodes,
+            &cache,
+            updates,
+            fallback_checkpoint_status,
+        ),
+    };
     if let Err(e) = &final_checkpoint {
         write(
             &a.out.join("checkpoint-error.json"),
@@ -645,9 +681,15 @@ fn run(a: &Args) -> Result<()> {
         }
     }
     let hard_change_available = final_checkpoint.is_ok();
+    let cost_hard_invariant = a.mode != "cost" || (hard_change_available && !any_hard_change);
+    let status = if work.is_ok() && final_checkpoint.is_ok() && cost_hard_invariant {
+        "completed"
+    } else {
+        "stopped_or_error"
+    };
     write(
         &a.out.join("report.json"),
-        &json!({"schema":"uor-r4.geometric-source-learning/1","mode":a.mode,"status":status,"optimizer_updates":updates,"declared_updates":a.maximum_updates,"scope":"exposed-development frozen floating parent and learned geometric consumer; not native complete chat or heldout quality","batches":batch_reports,"wall_seconds":start.elapsed().as_secs_f64(),"source_commit":source_commit,"final_checkpoint":final_checkpoint.as_ref().ok(),"hard_payload_change_available":hard_change_available,"hard_payload_changes":hard_payload_changes,"any_hard_native_payload_changed":if hard_change_available {Some(any_hard_change)}else{None},"shadow_only_fit":if hard_change_available {Some(updates>0&&!any_hard_change)}else{None},"hard_change_scope":"packed q4 coefficient changes; not evidence of changed trace, quality or generalization","work_error":work.as_ref().err().map(|x|x.to_string())}),
+        &json!({"schema":"uor-r4.geometric-source-learning/1","mode":a.mode,"status":status,"optimizer_updates":updates,"declared_updates":a.maximum_updates,"scope":"exposed-development frozen floating parent and learned geometric consumer; not native complete chat or heldout quality","batches":batch_reports,"wall_seconds":start.elapsed().as_secs_f64(),"source_commit":source_commit,"final_checkpoint":final_checkpoint.as_ref().ok(),"hard_payload_change_available":hard_change_available,"hard_payload_changes":hard_payload_changes,"any_hard_native_payload_changed":if hard_change_available {Some(any_hard_change)}else{None},"shadow_only_fit":if hard_change_available {Some(updates>0&&!any_hard_change)}else{None},"hard_change_scope":"packed q4 coefficient changes; not evidence of changed trace, quality or generalization","work_error":work.as_ref().err().map(|x|x.to_string()),"final_checkpoint_error":final_checkpoint.as_ref().err().map(|x|x.to_string()),"cost_hard_unchanged_invariant":if a.mode=="cost" {Some(cost_hard_invariant)}else{None}}),
     )?;
     work?;
     final_checkpoint?;
