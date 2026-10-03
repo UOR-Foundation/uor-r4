@@ -3,7 +3,7 @@
 //! Admission regenerates head-major [head, lag] Q24 entries. Lag zero is
 //! retained; no slope, bucketing, centering or semantic metric is introduced.
 //! This codec changes coefficient storage, not causal support or normalization.
-use crate::geometric_no_read::{unpack_coefficients, NoReadError};
+use crate::geometric_context_q4::{unpack_coefficients, ContextQ4Error};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -32,7 +32,7 @@ impl AgeQ4Config {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AgeQ4Error {
     Configuration,
-    Packed(NoReadError),
+    Packed(ContextQ4Error),
 }
 impl fmt::Display for AgeQ4Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -49,7 +49,7 @@ pub struct NativeAgeQ4 {
 impl NativeAgeQ4 {
     pub fn new(config: AgeQ4Config, packed: &[u8]) -> Result<Self, AgeQ4Error> {
         let coefficients =
-            unpack_coefficients(packed, config.coefficient_count()?).map_err(AgeQ4Error::Packed)?;
+            unpack_coefficients(config.coefficient_count()?, packed).map_err(AgeQ4Error::Packed)?;
         Ok(Self {
             config,
             packed: packed.to_vec(),
