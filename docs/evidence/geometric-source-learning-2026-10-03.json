@@ -12758,7 +12758,10 @@
       "complete_answer_losses": 0,
       "observed_exact_complete_state_repeats": 0,
       "scope": "Independent saved-trace score sums, mass totals and greedy-choice audit; no observed exact-state repeat is not proof of general representational sufficiency.",
-      "status": "receipt_pending"
+      "status": "COMPLETE_SAVED_TRACE_AUDIT",
+      "receipt": "/Users/casey.allard/uor-r4-local/workspace/research/geometric-source-learning-20261003/source-result-review-ab4d3d7a.json",
+      "receipt_sha256": "6374761ae6988d60993c9d8f0bb3317e3ef584936030cb542c9f1b211352ca70",
+      "snapshot_boundary": "Saved batch64 traces precede update64 and are not final-model teacher-forced traces; do not combine them with final own-prefix scores as a state-collision test."
     }
   },
   "native_row_comparison": [
@@ -12972,5 +12975,18 @@
       "Distinguishable inputs with wrong ranking require inspection of training coverage and hard/relaxed estimator, without an unchanged dose sweep."
     ],
     "limitations": "4/20 exposed rows are four presentations of one successful source value, dancer; no unique-value generalization established."
+  },
+  "complete_resources": {
+    "schema": "uor-r4.geometric-source-learning-resource-summary/1",
+    "charge_receipt": "/Users/casey.allard/.local/share/uor-r4/ledger/charge-resource-v1-6e5bfac3d5dc1f1ad10421b495d06bd228ad16a555b184ff130f6eea90d23f15.json",
+    "complete_work_estimate_ms": 12600000,
+    "cumulative_before_ms": 1039035028,
+    "cumulative_after_ms": 1051635028,
+    "limit_ms": 1130000000,
+    "build_negative_scope": [
+      "41.058s own build interrupted for mistaken source SHA binding before final executable",
+      "444.928s test build/run failed4 malformed tokenizer fixtures, repaired then focused8pass"
+    ],
+    "tests": "8view/action +2realizer local PASS at frozenab4d; result artifact built and fitted atsame source; merged main CUDA code not exercised by these checks."
   }
 }

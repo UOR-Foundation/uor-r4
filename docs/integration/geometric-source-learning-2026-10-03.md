@@ -128,6 +128,8 @@ Independent saved-result review checks all96 generated steps: summed head
 scores, token masses and greedy decisions agree. The20 rows contain five distinct
 numerical source/query inputs, and no complete observed state repeats within a
 reply. Suffix repetition does not establish a geometric-state cycle or collision.
+Saved batch64 traces precede update64; they cannot substitute for final-artifact
+correct-prefix evaluation or be mixed with final scores to assert a collision.
 These are exposed development results. No heldout, free-prose, shared-session,
 geometry-superiority, energy or complete-chat claim follows.
 
@@ -157,3 +159,12 @@ Boundary executable SHA256:
 `52e76ab55b2396570278062da86a0deec3e840b3f8ce4bbe592c1b459cd791b0`.
 Audit helper and linked library source identities are deliberately separate.
 All20 cases are exposed development, not a final held-out evaluation.
+
+Complete preparation/build/model/review/delivery/remaining cleanup is charged as
+a conservative3.5-hour estimate, separately from measured workers. The shared
+ledger moves1,039,035,028→1,051,635,028ms under the unchanged1,130,000,000ms limit.
+The41.058s interrupted source-binding build and444.928s malformed-fixture failed
+test attempt are retained and included; neither is model-quality evidence.
+The measured fit remains bound to `ab4d3d7a`; subsequent main merge/documentation
+commits do not rename that executable identity. CUDA delivered by another lab
+is preserved in the merge and is not validated or adopted by this CPU result.
