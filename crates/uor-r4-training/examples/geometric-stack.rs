@@ -2386,9 +2386,9 @@ fn continue_prompt(
 
 impl Engine {
     fn load(bytes: Vec<u8>, threads: usize) -> Result<Self> {
-        use uor_r4_lut::format::{schema_of, Artifact, StackArtifact, SCHEMA, STACK_SCHEMA};
+        use uor_r4_lut::format::{is_stack_schema, schema_of, Artifact, StackArtifact, SCHEMA};
         let schema = schema_of(&bytes).map_err(lut)?;
-        Ok(if schema == STACK_SCHEMA {
+        Ok(if is_stack_schema(&schema) {
             let mut model = uor_r4_lut::stack::StackModel::from_artifact(
                 StackArtifact::parse(bytes).map_err(lut)?,
             )

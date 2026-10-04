@@ -20,6 +20,26 @@ use crate::{format_error, invalid, Result};
 pub const MAGIC: &[u8; 8] = b"UORLUT01";
 pub const SCHEMA: &str = "uor-r4.lut-llama/1";
 pub const STACK_SCHEMA: &str = "uor-r4.lut-stack/1";
+/// Header schema of a geometric stack with a pointer-copy head. A distinct
+/// schema, not an optional field under [`STACK_SCHEMA`]: an engine built before
+/// the pointer port ignores the unknown `pointer` field and would serve the
+/// plain output distribution, so it must refuse the artifact instead.
+pub const STACK_POINTER_SCHEMA: &str = "uor-r4.lut-stack/2";
+
+/// The stack schema for a shape: [`STACK_POINTER_SCHEMA`] exactly when it has a
+/// pointer head.
+pub fn stack_schema_for(shape: &StackShape) -> &'static str {
+    if shape.pointer.is_some() {
+        STACK_POINTER_SCHEMA
+    } else {
+        STACK_SCHEMA
+    }
+}
+
+/// Whether `schema` is a geometric-stack schema (plain or pointer).
+pub fn is_stack_schema(schema: &str) -> bool {
+    schema == STACK_SCHEMA || schema == STACK_POINTER_SCHEMA
+}
 const ALIGN: usize = 64;
 const MAX_HEADER: u64 = 64 << 20;
 
@@ -394,8 +414,10 @@ pub struct StackHeader {
 
 impl Sections for StackHeader {
     fn validate(&self) -> Result<()> {
-        if self.schema != STACK_SCHEMA || self.group != crate::GROUP {
-            return Err(format_error("unsupported schema or group size"));
+        if self.schema != stack_schema_for(&self.shape) || self.group != crate::GROUP {
+            return Err(format_error(
+                "unsupported schema or group size (a pointer head needs uor-r4.lut-stack/2, a plain stack /1)",
+            ));
         }
         if let Some(snap) = &self.transport_snap {
             return Err(format_error(format!(
@@ -408,8 +430,10 @@ impl Sections for StackHeader {
     }
 
     fn validate_for_reference(&self) -> Result<()> {
-        if self.schema != STACK_SCHEMA || self.group != crate::GROUP {
-            return Err(format_error("unsupported schema or group size"));
+        if self.schema != stack_schema_for(&self.shape) || self.group != crate::GROUP {
+            return Err(format_error(
+                "unsupported schema or group size (a pointer head needs uor-r4.lut-stack/2, a plain stack /1)",
+            ));
         }
         self.shape.validate()
     }
@@ -482,7 +506,7 @@ impl Builder<StackHeader> {
         shape.validate()?;
         Ok(Self {
             header: StackHeader {
-                schema: STACK_SCHEMA.to_owned(),
+                schema: stack_schema_for(&shape).to_owned(),
                 shape,
                 group: crate::GROUP,
                 numerics,
@@ -922,5 +946,60 @@ mod tests {
         ] {
             assert!(broken.validate().is_err(), "{broken:?}");
         }
+    }
+
+    /// A pointer stack is written under [`STACK_POINTER_SCHEMA`] and a plain
+    /// stack under [`STACK_SCHEMA`], and each header is refused under the
+    /// other's schema: an engine built before the pointer port must refuse a
+    /// pointer artifact rather than serve its plain output distribution.
+    #[test]
+    fn a_pointer_stack_needs_its_own_schema() {
+        let pointer_shape = StackShape {
+            read: "dot".to_owned(),
+            pointer: Some(StackPointer {
+                dim: 8,
+                score: "dot".to_owned(),
+                score_scale_q30: 1 << 28,
+            }),
+            ..stack_shape()
+        };
+        assert_eq!(stack_schema_for(&pointer_shape), STACK_POINTER_SCHEMA);
+        assert_eq!(stack_schema_for(&stack_shape()), STACK_SCHEMA);
+        assert!(is_stack_schema(STACK_SCHEMA) && is_stack_schema(STACK_POINTER_SCHEMA));
+        assert!(!is_stack_schema(SCHEMA));
+        let header = |schema: &str, shape: StackShape| StackHeader {
+            schema: schema.to_owned(),
+            shape,
+            group: crate::GROUP,
+            numerics: StackNumerics {
+                rms_eps: Fixed {
+                    mantissa: 1,
+                    exp: -48,
+                },
+                score_scale_q30: 1 << 28,
+                exp_step_log2: -8,
+                silu_step_log2: -8,
+                silu_range_log2: 4,
+                gelu_step_log2: -8,
+                gelu_range_log2: 4,
+            },
+            matrices: Vec::new(),
+            tables: Vec::new(),
+            source: serde_json::json!({}),
+            transport_snap: None,
+        };
+        assert!(header(STACK_POINTER_SCHEMA, pointer_shape.clone())
+            .validate()
+            .is_ok());
+        assert!(header(STACK_SCHEMA, pointer_shape.clone())
+            .validate()
+            .is_err());
+        assert!(header(STACK_SCHEMA, pointer_shape)
+            .validate_for_reference()
+            .is_err());
+        assert!(header(STACK_SCHEMA, stack_shape()).validate().is_ok());
+        assert!(header(STACK_POINTER_SCHEMA, stack_shape())
+            .validate()
+            .is_err());
     }
 }

@@ -26,6 +26,10 @@ use super::StackError;
 pub const MAGIC: &[u8; 8] = b"UORLUT01";
 /// Header schema of a geometric-stack artifact.
 pub const STACK_SCHEMA: &str = "uor-r4.lut-stack/1";
+/// Header schema of a stack with a pointer-copy head (`uor-r4-lut`'s
+/// `STACK_POINTER_SCHEMA`): an engine built before the pointer port refuses it
+/// instead of ignoring the head and serving the plain distribution.
+pub const STACK_POINTER_SCHEMA: &str = "uor-r4.lut-stack/2";
 /// Weights per scale group along a matrix row.
 pub const GROUP: usize = 32;
 /// Alignment of the data start and of every section.
@@ -355,7 +359,12 @@ impl<'a> Container<'a> {
             })?;
         let header: Header =
             serde_json::from_slice(&bytes[16..header_end]).map_err(StackError::Header)?;
-        if header.schema != STACK_SCHEMA {
+        let expected = if header.shape.pointer.is_some() {
+            STACK_POINTER_SCHEMA
+        } else {
+            STACK_SCHEMA
+        };
+        if header.schema != expected {
             return Err(StackError::Schema(header.schema));
         }
         if header.group != GROUP {

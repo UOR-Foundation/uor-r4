@@ -637,10 +637,35 @@ fn pointer_artifacts_require_their_maps_and_tables_in_both_engines() {
             result.err().map(|e| e.to_string()).unwrap_or_default()
         );
     }
-    // Removing the pointer record serves the plain model in both engines
-    // alike (its maps are then unused sections).
+    // The pointer schema is bound to the pointer record in both engines: a
+    // pointer artifact relabelled with the plain schema (what an engine built
+    // before the pointer port would read as a plain model) is refused, and so
+    // is a pointer schema without its record.
+    assert_eq!(split(&dot).0["schema"], "uor-r4.lut-stack/2");
+    assert_eq!(split(&plain_bytes).0["schema"], "uor-r4.lut-stack/1");
+    for (label, bytes) in [
+        (
+            "a pointer artifact under the plain schema",
+            with_header(&dot, |h| h["schema"] = json!("uor-r4.lut-stack/1")),
+        ),
+        (
+            "the pointer schema without its record",
+            with_header(&dot, |h| {
+                h["shape"].as_object_mut().expect("shape").remove("pointer");
+            }),
+        ),
+    ] {
+        assert!(
+            IntegerStackModel::parse(&bytes).is_err(),
+            "D11 accepted {label}"
+        );
+        assert!(!d10_accepts(&bytes), "D10 accepted {label}");
+    }
+    // Removing the pointer record and relabelling the plain schema serves the
+    // plain model in both engines alike (its maps are then unused sections).
     let without = with_header(&dot, |h| {
         h["shape"].as_object_mut().expect("shape").remove("pointer");
+        h["schema"] = json!("uor-r4.lut-stack/1");
     });
     let (d10, d11) = engines(&without);
     assert!(d11.pointer().is_none() && d10.pointer().is_none());
