@@ -658,6 +658,11 @@ STACK_MANDATORY_SYMBOLS = [
     _stack_kernel("stack_step", "session", "D11 stack step body (run on the calling thread or the model's pool)"),
     _stack_kernel("stack_map_pairs", "session", "Pair-table weight map, rows split across the pool"),
     _stack_kernel("stack_map_nibbles", "session", "Activation-table weight map, rows split across the pool"),
+    _stack_kernel("stack_step_call", "session", "Pool task: the step body"),
+    _stack_kernel("stack_map_task", "session", "Pool task: one pair-table map"),
+    _stack_kernel("stack_head_task", "session", "Pool task: a range of read heads"),
+    _stack_kernel("stack_heads", "session", "Read heads: scores, softmax weights and value mixture"),
+    _stack_kernel("stack_lanes", "session", "Recurrence lanes: decay, transition and state update"),
     _stack_kernel("stack_recurrence", "session", "Quaternion transport recurrence mixer"),
     _stack_kernel("stack_rotation", "session", "Unit rotation quaternion by long division"),
     _stack_kernel("stack_read", "session", "Dot/Lorentz/L2 read mixer with NoRead softmax"),
@@ -700,8 +705,19 @@ STACK_MANDATORY_SYMBOLS = [
 # crossbeam's deques. That scheduling code computes no model value (it picks a
 # victim thread, indexes a job deque and waits on latches), and it contains
 # multiplies and divides (`find_work`'s random victim, deque slot indexing), so
-# a stack audit does not descend into it. Every kernel a task runs remains a
-# mandatory symbol above and is reached from the step's single-thread path.
+# a stack audit does not descend into it. A scheduler symbol whose name also
+# carries a `uor_r4_integer::stack` item is an instantiation over one of our
+# closures, which
+# may hold the closure's inlined arithmetic: it is audited (every such symbol
+# in the binary) and walked. Every kernel a task runs remains a mandatory
+# symbol above and is reached from the step's single-thread path.
+# An item of our stack engine (v0-mangled `14uor_r4_integer5stack...` or
+# demangled `uor_r4_integer::stack::...`) in a symbol name: a scheduler generic
+# instantiated over one of the engine's closures or task records. A bare crate
+# name at the end of a v0 name is only the instantiating crate (pool
+# construction or drop glue), not one of our closures.
+OWN_CRATE_PATTERN = re.compile(r"uor_r4_integer(?:5stack|::stack)")
+
 STACK_SCHEDULER_ALLOW = [
     r"rayon_core",
     r"crossbeam_deque",
@@ -1433,9 +1449,18 @@ def run_call_graph_audit(path, disasm_choice="auto", extra_roots=(), extra_allow
         r"load",
         r"from_file",
         r"from_serialized",
-    ] + list(extra_allow)
+    ]
+
+    def is_scheduler(name):
+        return any(re.search(pat, name) for pat in extra_allow)
 
     def is_allowlisted(name):
+        # A scheduler symbol is skipped only when it is pure scheduling: an
+        # instantiation over one of our closures (its name carries a stack item)
+        # may hold the closure's inlined arithmetic, so it is audited and
+        # walked like any other function.
+        if is_scheduler(name) and not OWN_CRATE_PATTERN.search(name):
+            return True
         return any(re.search(pat, name) for pat in allow_patterns)
 
     visited = set()
@@ -1458,6 +1483,24 @@ def run_call_graph_audit(path, disasm_choice="auto", extra_roots=(), extra_allow
                 if not is_allowlisted(c):
                     visited.add(c)
                     queue.append(c)
+
+    if extra_allow:
+        # Every scheduler instantiation over our closures in the binary is
+        # audited, whether or not the walk reached it by a direct call.
+        ours = sorted(fn for fn in functions if is_scheduler(fn) and OWN_CRATE_PATTERN.search(fn))
+        flagged = set()
+        for fn in ours:
+            if fn not in visited:
+                for l in functions[fn]:
+                    if STRICT_FORBIDDEN_PATTERN.search(l):
+                        violations.append((fn, l.strip()))
+            if any(v_fn == fn for v_fn, _ in violations):
+                flagged.add(fn)
+        reached = sum(1 for fn in ours if fn in visited)
+        print(
+            f"Scheduler instantiations over uor_r4_integer::stack closures: {len(ours)} in the binary "
+            f"({reached} reached by the walk), all audited; {len(flagged)} contain forbidden instructions"
+        )
 
     return len(visited), violations, missing_roots
 

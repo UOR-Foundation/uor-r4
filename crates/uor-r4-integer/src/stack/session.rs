@@ -1380,11 +1380,37 @@ impl IntegerStackSession<'_> {
     pub fn step(&mut self, token: u32) -> Result<&[i32], StackError> {
         let model = self.model;
         match &model.pool {
-            Some(pool) => pool.install(|| stack_step(self, token, true))?,
+            Some(pool) => {
+                let mut call = StepCall {
+                    session: self,
+                    token,
+                    result: Ok(()),
+                };
+                pool.install(|| stack_step_call(&mut call));
+                call.result?
+            }
             None => stack_step(self, token, false)?,
         }
         Ok(&self.b.logits)
     }
+}
+
+// Every closure handed to the pool (`install`, `join`) captures exactly one
+// pointer, to a task record, and only calls a named function. The pool's
+// job wrappers then move one word, not a multi-word capture through a SIMD
+// register (`fmov`), and no arithmetic of ours is inlined into them.
+
+/// One step to run on the pool, and its outcome.
+struct StepCall<'s, 'm> {
+    session: &'s mut IntegerStackSession<'m>,
+    token: u32,
+    result: Result<(), StackError>,
+}
+
+/// [`stack_step`] of a [`StepCall`], on the model's pool.
+#[inline(never)]
+fn stack_step_call(call: &mut StepCall<'_, '_>) {
+    call.result = stack_step(call.session, call.token, true);
 }
 
 /// [`IntegerStackSession::step`]'s work: with `parallel` (on the model's
@@ -1542,10 +1568,37 @@ where
     // A task boundary at or below the middle, so every task but the last is full.
     let mid = (((out.len() >> 1) >> task_log2) << task_log2).max(task);
     let (low, high) = out.split_at_mut(mid);
-    rayon::join(
-        || split_rows(first, low, task_log2, kernel),
-        || split_rows(first + mid, high, task_log2, kernel),
-    );
+    let mut low = RowTask {
+        first,
+        out: low,
+        task_log2,
+        kernel,
+    };
+    let mut high = RowTask {
+        first: first + mid,
+        out: high,
+        task_log2,
+        kernel,
+    };
+    rayon::join(|| stack_row_task(&mut low), || stack_row_task(&mut high));
+}
+
+/// One half of a [`split_rows`] split.
+struct RowTask<'a, T, F> {
+    first: usize,
+    out: &'a mut [T],
+    task_log2: u32,
+    kernel: &'a F,
+}
+
+/// [`split_rows`] over a [`RowTask`].
+#[inline(never)]
+fn stack_row_task<T, F>(task: &mut RowTask<'_, T, F>)
+where
+    T: Send,
+    F: Fn(usize, &mut [T]) + Sync,
+{
+    split_rows(task.first, task.out, task.task_log2, task.kernel);
 }
 
 /// A pair-table weight map ([`stack_gemv_pairs`]) into `out`; with `parallel`
@@ -1597,14 +1650,40 @@ fn stack_map_pairs2(
     (m1, out1): (&PackedMatrix, &mut [i32]),
 ) {
     if parallel {
+        let mut first = MapTask {
+            m: m0,
+            pairs,
+            x_exp,
+            out: out0,
+        };
+        let mut second = MapTask {
+            m: m1,
+            pairs,
+            x_exp,
+            out: out1,
+        };
         rayon::join(
-            || stack_map_pairs(true, m0, pairs, x_exp, out0),
-            || stack_map_pairs(true, m1, pairs, x_exp, out1),
+            || stack_map_task(&mut first),
+            || stack_map_task(&mut second),
         );
     } else {
         stack_gemv_pairs(m0, pairs, x_exp, 0, out0);
         stack_gemv_pairs(m1, pairs, x_exp, 0, out1);
     }
+}
+
+/// One pair-table map of [`stack_map_pairs2`].
+struct MapTask<'a> {
+    m: &'a PackedMatrix,
+    pairs: &'a [[i32; 256]],
+    x_exp: i32,
+    out: &'a mut [i32],
+}
+
+/// [`stack_map_pairs`] of a [`MapTask`], on the model's pool.
+#[inline(never)]
+fn stack_map_task(task: &mut MapTask<'_>) {
+    stack_map_pairs(true, task.m, task.pairs, task.x_exp, task.out);
 }
 
 /// `silu(gate) up` per MLP unit at exponent -32.
@@ -1960,38 +2039,48 @@ fn split_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
     let (mix_low, mix_high) = mix.split_at_mut(head_at);
     let (scores_low, scores_high) = scores.split_at_mut(row_at);
     let (weights_low, weights_high) = weights.split_at_mut(row_at);
-    rayon::join(
-        || {
-            split_heads(
-                read,
-                HeadParts {
-                    first,
-                    count: low,
-                    wide: wide_low,
-                    query_tables: tables_low,
-                    scores: scores_low,
-                    weights: weights_low,
-                    mix: mix_low,
-                    pointer_weights,
-                },
-            )
-        },
-        || {
-            split_heads(
-                read,
-                HeadParts {
-                    first: first + low,
-                    count: count - low,
-                    wide: wide_high,
-                    query_tables: tables_high,
-                    scores: scores_high,
-                    weights: weights_high,
-                    mix: mix_high,
-                    pointer_weights: None,
-                },
-            )
-        },
-    );
+    let (high_first, high_count) = (first + low, count - low);
+    let mut low = HeadTask {
+        read,
+        parts: Some(HeadParts {
+            first,
+            count: low,
+            wide: wide_low,
+            query_tables: tables_low,
+            scores: scores_low,
+            weights: weights_low,
+            mix: mix_low,
+            pointer_weights,
+        }),
+    };
+    let mut high = HeadTask {
+        read,
+        parts: Some(HeadParts {
+            first: high_first,
+            count: high_count,
+            wide: wide_high,
+            query_tables: tables_high,
+            scores: scores_high,
+            weights: weights_high,
+            mix: mix_high,
+            pointer_weights: None,
+        }),
+    };
+    rayon::join(|| stack_head_task(&mut low), || stack_head_task(&mut high));
+}
+
+/// One half of a [`split_heads`] split.
+struct HeadTask<'r, 'a> {
+    read: &'r HeadRead<'r>,
+    parts: Option<HeadParts<'a>>,
+}
+
+/// [`split_heads`] over a [`HeadTask`].
+#[inline(never)]
+fn stack_head_task(task: &mut HeadTask<'_, '_>) {
+    if let Some(parts) = task.parts.take() {
+        split_heads(task.read, parts);
+    }
 }
 
 /// The heads of `parts`, one after another: each head's scores over the
