@@ -3941,6 +3941,8 @@ fn session(args: &Args, out: &Path) -> Result<()> {
 
     let mut arm_reports = serde_json::Map::new();
     let mut default_outcomes: Vec<Vec<Option<TurnOutcome>>> = Vec::new();
+    // Compiler trace over the GENERATED world, to compare against the panel trace.
+    let mut world_trace: Vec<Value> = Vec::new();
     for arm in &arms {
         let controls = controls_of(arm)?;
         let mut card = Scorecard::default();
@@ -3963,6 +3965,20 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 let gold = gold_action(compiler.base(), &turn.user, turn)?;
                 let (pass, row, outcome) = match session.turn_with_controls(&turn.user, controls) {
                     Ok(outcome) => {
+                        // Same mechanism trace as the panel path, so compiler defects
+                        // can be compared between the generated world (whose relations
+                        // the compiler KNOWS) and the disjoint panel (whose relations it
+                        // does not). This separates compiler-wide defects from
+                        // disjoint-panel artefacts.
+                        {
+                            let (akind, arel, aspan) = describe_action(&outcome.action, &turn.user);
+                            world_trace.push(json!({
+                                "conversation": index, "turn": rows.len(), "user": turn.user,
+                                "intent": turn.intent, "category": turn.category,
+                                "action": akind, "relation": arel, "span_text": aspan,
+                                "memory": format!("{:?}", outcome.memory),
+                            }));
+                        }
                         let pass = judge_v2(&turn.checks, &turn.user, &outcome.reply_text);
                         *dispositions
                             .entry(disposition_name(&outcome.recall))
@@ -4367,6 +4383,9 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     let mut report = report;
     if let Some(block) = panel_block {
         report["external_panel"] = block;
+    }
+    if !world_trace.is_empty() {
+        report["world_trace"] = Value::Array(world_trace);
     }
     fs::write(out.join("report.json"), serde_json::to_vec_pretty(&report)?)?;
     Ok(())
