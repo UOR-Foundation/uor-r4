@@ -48,13 +48,18 @@ build, review, execution and delivery; it is not measured model time.
 
 ## Next causal task
 
-Use saved native traces and artifact-bound geometric features to distinguish
+Use saved native action traces to distinguish
 Stop/Period competition from wrong-occurrence Copy ranking on the six known-token
 failures. Compare each against fitted successful rows and every retained parent.
-Inspect active presence/root/phase/transport features and how source changes alter
-query/prefix state. Treat query/source factorization, relative transport and
-termination calibration as competing hypotheses, not established repairs. Run a
-new native diagnostic only if saved evidence cannot answer the causal question.
+The compact transfer traces omit context states, so a complete active-feature audit
+requires a bounded zero-update native read diagnostic. Start with two matched pairs:
+fitted construction00 versus fresh repetition-left, and fitted construction05
+versus fresh order-right, each at empty response prefix. Shared source prefixes
+fix the early keys while the changed suffix can alter query/controller geometry.
+Export active presence/root/phase/transport features and readout contributions;
+check preservation rows before changing representation. Treat query/source factorization, relative transport and
+termination calibration as competing hypotheses, not established repairs. The four-read diagnostic is NOT_RUN; it must bind the same selected artifact and
+keep labels outside native reads.
 Do not repeat the64-update dose, force a cursor, suppress Stop or retire geometry
 on this evidence. Transferable source consumption remains the gate before shared
 session integration; coordinate#1552 before touching the session boundary.
