@@ -1,6 +1,12 @@
 # Current UOR-R4 research state
 
 
+## Native context direction — October 4
+
+The [four legal context-neighbor diagnostic](geometric-context-direction-2026-10-04.md) is executed at8499adc5 from retained composition32 with readouts fixed. Both self-transition neighbors worsen construction CE and reduce original completion20→14/10. The predicted improving neighbor-category change lowers construction CE1.351153→1.337870 and retains20 originals, but worsens original CE. All8 construction generated sequences remain unchanged; its two improved action distributions occur at later correct-prefix steps3/7, beyond actual failures at0/2. None is a trajectory plateau, and no candidate is adopted. This is useful local geometry direction evidence, not complete attention progress or a family rejection.
+
+Next probe root/category direction credit at the actual first divergence of each construction reply, with transitions/readouts fixed and at most four legal neighbors. Advancing those generated prefixes would justify a bounded native-screened learner. Retain full-answer CE and all28 own-prefix gains/losses; preservation is evidence, not a blanket veto. This successor is NOT_RUN. No unchanged joint-dose sweep or session hook. Independent source/raw review,14 focused tests/releasebuild and18.244s actual native run pass;113files385,573,571B returned. [Bound evidence](../evidence/geometric-context-direction-2026-10-04.json).
+
 ## Geometric context learning and family isolation — October 4
 
 The [existing context adaptation](geometric-context-adaptation-2026-10-03.md) is
@@ -28,7 +34,7 @@ Next: start from retained old32 with readouts fixed, and reuse the existing boun
 native direction machinery for at most two justified packed context coordinates
 at the actual failed source/prefix. Compare surrogate credit with actual legal
 one-quarter changes, native target mass/CE, actions and all 28 original/construction
-reply gains and losses before another fit. This diagnostic is NOT_RUN. No unchanged
+reply gains and losses before another fit. This diagnostic is now executed in the entry above. No unchanged
 dose, presumed completion anchor or session hook; coordinate on #1552 before any
 later shared-session edit. Preservation is stability evidence, not a blanket veto
 against a mechanism with broader measured usefulness.
