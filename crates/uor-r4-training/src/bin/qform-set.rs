@@ -518,6 +518,23 @@ fn build() -> Result<(Vec<(String, Vec<String>)>, Vec<(String, String)>), String
     Ok((rows, expected))
 }
 
+/// The panel value-disjointness check, shared by the test and `verify panel=` so the two
+/// cannot drift.
+fn check_panel_disjoint(panel_text: &str) -> Result<(), String> {
+    let (_, exp) = build()?;
+    let here: std::collections::BTreeSet<String> =
+        exp.iter().map(|(_, v)| normalize_template(v)).collect();
+    let panel: serde_json::Value =
+        serde_json::from_str(panel_text).map_err(|e| format!("panel is not JSON: {e}"))?;
+    for (_, v) in panel.as_object().ok_or("panel is not an object")? {
+        let pv = normalize_template(v.as_str().unwrap_or_default());
+        if here.contains(&pv) {
+            return Err(format!("value collision with the frozen panel: {pv}"));
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mode = args
@@ -575,6 +592,13 @@ fn main() -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             let same_r = got_r == py_dumps(&rows);
             let same_e = got_e == py_dumps_map(&exp);
+            if let Some(panel) = kv("panel") {
+                let text = fs::read_to_string(&panel).map_err(|e| {
+                    format!("UNAVAILABLE: cannot read panel {panel}: {e}; refusing a vacuous PASS")
+                })?;
+                check_panel_disjoint(&text)?;
+                println!("  panel value disjointness: checked against {panel}");
+            }
             println!("  rows regenerated: {}", rows.len());
             println!("  requests byte-identical: {same_r}");
             println!("  expected byte-identical: {same_e}");
@@ -614,25 +638,36 @@ mod tests {
         }
     }
 
-    /// Values must stay disjoint from the frozen disjoint panel's, so the two
-    /// instruments cannot share an answer.
+    /// Values must stay disjoint from the frozen disjoint panel's, so the two instruments
+    /// cannot share an answer.
+    ///
+    /// This does NOT silently pass when the panel file is absent. A test that exits zero
+    /// because its fixture is missing is the conditional-exit-zero pitfall: it reports
+    /// PASS while checking nothing. The path comes from QFORM_PANEL_EXPECTED and the test
+    /// FAILS when it is unset or unreadable; `qform-set verify panel=<path>` repeats the
+    /// same check explicitly, and also fails rather than skipping.
     #[test]
     fn values_are_disjoint_from_the_frozen_panel() {
+        let path = std::env::var("QFORM_PANEL_EXPECTED").unwrap_or_else(|_| {
+            panic!(
+                "UNAVAILABLE: QFORM_PANEL_EXPECTED is unset, so this check would pass while \
+                 checking nothing. Set it to the frozen panel's panel-expected.json, or run \
+                 `qform-set verify panel=<path>`."
+            )
+        });
+        let text = fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!("UNAVAILABLE: cannot read {path}: {e}; refusing to report a vacuous PASS")
+        });
         let (_, exp) = build().expect("build");
         let here: std::collections::BTreeSet<String> =
             exp.iter().map(|(_, v)| normalize_template(v)).collect();
-        // the panel's expected file, if present locally
-        let p = PathBuf::from(std::env::var("HOME").unwrap_or_default())
-            .join("uor-r4-local/ladder/disjoint-panel/panel-expected.json");
-        if let Ok(text) = fs::read_to_string(&p) {
-            let panel: serde_json::Value = serde_json::from_str(&text).expect("panel json");
-            for (_, v) in panel.as_object().expect("object") {
-                let pv = normalize_template(v.as_str().unwrap_or_default());
-                assert!(
-                    !here.contains(&pv),
-                    "value collision with the frozen panel: {pv}"
-                );
-            }
+        let panel: serde_json::Value = serde_json::from_str(&text).expect("panel json");
+        for (_, v) in panel.as_object().expect("object") {
+            let pv = normalize_template(v.as_str().unwrap_or_default());
+            assert!(
+                !here.contains(&pv),
+                "value collision with the frozen panel: {pv}"
+            );
         }
     }
 
