@@ -281,6 +281,7 @@ struct TransferLabel {
     stratum: String,
     pair_id: String,
     side: String,
+    pool_index: usize,
     literal: String,
     query: String,
     answers: FrozenAnswers,
@@ -380,6 +381,34 @@ fn validate_seeded_transfer_receipt(
     }
     Ok(())
 }
+/// Labels retain provenance from the sealed seeded pool; this never supplies a
+/// serving action, source offset or native target to the reader.
+fn validate_transfer_pool_label(
+    label: &TransferLabel,
+    row: usize,
+    pool: &Value,
+    selected: &[(usize, usize, usize)],
+) -> Result<()> {
+    let chosen = selected
+        .get(row / 2)
+        .ok_or_else(|| invalid("selected pool pair absent"))?;
+    let side = if row % 2 == 0 { "left" } else { "right" };
+    let pair = pool["pairs"]
+        .as_array()
+        .and_then(|pairs| pairs.get(label.pool_index))
+        .ok_or_else(|| invalid("label pool index is out of bounds"))?;
+    if label.pool_index != chosen.0
+        || label.side != side
+        || pair[side] != label.literal
+        || pair["stratum"] != label.stratum
+        || label.pair_id != format!("native-route-pair-{:02}", row / 2)
+    {
+        return Err(
+            invalid("label literal/side/stratum differs from selected frozen pool row").into(),
+        );
+    }
+    Ok(())
+}
 fn transfer_cases(
     a: &Args,
     compiler: &SourceEmissionCompiler,
@@ -437,12 +466,29 @@ fn transfer_cases(
     {
         return Err(invalid("frozen transfer32 schemas/count differ").into());
     }
+    let pool = read_json(&a.transfer_panel_root.join("pair-pool.json"))?;
+    let eligibility = read_json(&a.transfer_panel_root.join("eligibility.json"))?;
+    if pool["seed"] != a.transfer_preparation_seed
+        || pool["version"] != "native-route-transfer-pairs-v1"
+        || eligibility["seed"] != a.transfer_preparation_seed
+        || eligibility["schema"] != "uor-r4.native-route-transfer-eligibility/1"
+        || eligibility["pool_version"] != pool["version"]
+    {
+        return Err(invalid("frozen pool/eligibility seed/version differs").into());
+    }
+    let mut selected: Vec<(usize, usize, usize)> =
+        serde_json::from_value(eligibility["selected_pool_indices"].clone())?;
+    if selected.len() != 16 || selected.iter().map(|s| s.0).collect::<BTreeSet<_>>().len() != 16 {
+        return Err(invalid("selected frozen pool count/uniqueness differs").into());
+    }
+    selected.sort_by_key(|(_, class_index, class)| (*class, *class_index));
     let mut seen = BTreeSet::new();
     let mut literals = BTreeSet::new();
     let mut targets = Vec::new();
     let mut accepted = Vec::new();
     let mut views = Vec::new();
-    for (s, l) in inputs.cases.iter().zip(&labels.cases) {
+    for (row, (s, l)) in inputs.cases.iter().zip(&labels.cases).enumerate() {
+        validate_transfer_pool_label(l, row, &pool, &selected)?;
         l.answers.validate()?;
         let view = compiler.compile(&s.original_source_ids)?;
         if s.id != l.id
@@ -470,7 +516,7 @@ fn transfer_cases(
         accepted.push(l.answers.accepted.clone());
         views.push(view);
     }
-    let diagnostics=serde_json::to_value(labels.cases.iter().map(|l|json!({"id":l.id,"stratum":l.stratum,"pair_id":l.pair_id,"side":l.side,"literal":l.literal,"query":l.query,"token_support":l.token_support})).collect::<Vec<_>>())?;
+    let diagnostics=serde_json::to_value(labels.cases.iter().map(|l|json!({"id":l.id,"stratum":l.stratum,"pair_id":l.pair_id,"side":l.side,"pool_index":l.pool_index,"literal":l.literal,"query":l.query,"token_support":l.token_support})).collect::<Vec<_>>())?;
     Ok((
         Cases {
             inputs: inputs.cases,
@@ -1438,6 +1484,27 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_route_fit_actual_seeded_label_schema_requires_bound_pool_index() -> Result<()> {
+        let packet = json!({"id":"native-route-fresh-00","stratum":"known-token-order-repeat","pair_id":"native-route-pair-00","side":"left","pool_index":109,"literal":"Louston Brimfold Louston Louston","query":"Remind me what my job is.","answers":{"intent":"current","accepted":["Louston Brimfold Louston Louston."]},"target_ids_labels_only":[363,277,353,292,16,1],"source_view":{},"token_support":{"positive_native_target_mass":"NOT_RUN"}});
+        let label: TransferLabel = serde_json::from_value(packet.clone())?;
+        let mut pairs = vec![Value::Null; 110];
+        pairs[109] = json!({"left":"Louston Brimfold Louston Louston","right":"Louston Louston Brimfold Louston","stratum":"known-token-order-repeat"});
+        let pool = json!({"pairs":pairs});
+        validate_transfer_pool_label(&label, 0, &pool, &[(109, 0, 0)])?;
+        assert!(validate_transfer_pool_label(&label, 0, &pool, &[(108, 0, 0)]).is_err());
+        assert!(validate_transfer_pool_label(&label, 1, &pool, &[(109, 0, 0)]).is_err());
+        let mut missing = packet.clone();
+        missing
+            .as_object_mut()
+            .ok_or_else(|| invalid("label object absent"))?
+            .remove("pool_index");
+        assert!(serde_json::from_value::<TransferLabel>(missing).is_err());
+        let mut extra = packet;
+        extra["unbound_provenance"] = json!(1);
+        assert!(serde_json::from_value::<TransferLabel>(extra).is_err());
+        Ok(())
+    }
     #[test]
     fn native_route_fit_cost_guard_covers_all_updates_and_export_reserve_before_step1() -> Result<()>
     {
