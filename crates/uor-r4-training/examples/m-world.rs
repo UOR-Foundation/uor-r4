@@ -3469,6 +3469,10 @@ struct PanelRow {
     id: String,
     turns: Vec<String>,
     answers: Vec<String>,
+    /// Values of the row's distractor facts. Used to reject a reply that contains a
+    /// distractor which itself contains an accepted answer ("half an hour" contains
+    /// "an hour"), which whole-word matching alone cannot exclude.
+    distractors: Vec<String>,
 }
 
 /// Load and validate an external panel. Both files are read ONCE here and their
@@ -3525,14 +3529,38 @@ fn load_panel(
             .get(&id)
             .ok_or_else(|| invalid(format!("expected answers have no entry for panel row {id}")))?;
         // Accept either a bare string or a list of accepted answers.
-        let accepted: Vec<String> = match entry {
-            Value::String(s) if !s.is_empty() => vec![s.clone()],
-            Value::Array(a) => a
+        let distractor_list: Vec<String> = match entry.get("distractors") {
+            Some(Value::Array(a)) => a
                 .iter()
-                .filter_map(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect(),
+                .map(|v| {
+                    v.as_str().map(str::to_string).ok_or_else(|| {
+                        invalid(format!("distractors for {id} contain a non-string"))
+                    })
+                })
+                .collect::<Result<_>>()?,
+            Some(_) => return Err(invalid(format!("distractors for {id} is not an array"))),
+            None => Vec::new(),
+        };
+        let accepted_src = entry.get("answers").unwrap_or(entry);
+        let accepted: Vec<String> = match accepted_src {
+            Value::String(s) if !s.is_empty() => vec![s.clone()],
+            // Every element must be a non-empty string: a mixed array like
+            // ["a", 5] is rejected, not silently trimmed to ["a"].
+            Value::Array(a) => {
+                let mut out = Vec::with_capacity(a.len());
+                for v in a {
+                    let t = v.as_str().ok_or_else(|| {
+                        invalid(format!("accepted answers for {id} contain a non-string"))
+                    })?;
+                    if t.is_empty() {
+                        return Err(invalid(format!(
+                            "accepted answers for {id} contain an empty string"
+                        )));
+                    }
+                    out.push(t.to_string());
+                }
+                out
+            }
             _ => {
                 return Err(invalid(format!(
                     "expected answer for {id} is empty or not a string"
@@ -3546,6 +3574,7 @@ fn load_panel(
             id,
             turns,
             answers: accepted,
+            distractors: distractor_list,
         });
     }
     for key in answers.keys() {
@@ -3572,7 +3601,6 @@ fn load_panel(
 /// (no recall line enters the emitter) and `no_write` (statements are not
 /// stored). The first `reload=` conversations of the default arm are also run
 /// with a save and load at their middle turn, and must match.
-
 fn session(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
     if args.optional("world").as_deref() != Some("v2") {
@@ -3932,6 +3960,15 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         let (mut correct, mut never_stored, mut stored_not_recalled) = (0usize, 0usize, 0usize);
         let (mut recalled_wrong_value, mut recalled_misrendered, mut unverified, mut errors) =
             (0usize, 0usize, 0usize, 0usize);
+        // `stored_total` is UNCONDITIONAL: any write before the final turn, matching
+        // or not. It is the storage measure and must be IDENTICAL between the off and
+        // sieve arms, because the compiler sees only the current user turn. The
+        // earlier "never_stored falls when the sieve runs" reading was a bucket-ORDER
+        // artefact: `hit` was tested before `!stored`, so rows answered via the
+        // user-turn log sieve left never_stored and became "correct".
+        let (mut stored_total, mut correct_with_store_read, mut correct_via_log_without_store) =
+            (0usize, 0usize, 0usize);
+        let mut unknown_path_no_store_read = 0usize;
         let mut error_examples: Vec<Value> = Vec::new();
         let mut judged = Vec::with_capacity(rows_in.len());
         // A FRESH session per row. Reuse does not work: the session accumulates
@@ -3942,6 +3979,8 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             let last = row.turns.len() - 1;
             let (mut stored, mut read_value, mut read_found, mut log_value) =
                 (false, String::new(), false, false);
+            let mut stored_total_row = false;
+            let mut log_answered = false;
             let mut reply = String::new();
             let mut recalled_value = String::new();
             let mut turn_error: Option<String> = None;
@@ -3950,6 +3989,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                     Ok(outcome) => {
                         if i < last {
                             if let MemoryEffect::Write { value_tokens, .. } = &outcome.memory {
+                                stored_total_row = true;
                                 let text = tokenizer.decode(value_tokens);
                                 if row.answers.iter().any(|a| a == text.trim()) {
                                     stored = true;
@@ -3964,6 +4004,10 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                                 }
                             }
                             log_value = matches!(outcome.recall, RecallDisposition::LogValue);
+                            // The log sieve supplied a line on a turn the compiler
+                            // left unresolved: a SECOND memory path that can answer
+                            // with nothing stored for the row.
+                            log_answered = log_value && !read_found;
                         }
                     }
                     Err(e) => {
@@ -3980,51 +4024,103 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 judged.push(json!({"id": row.id, "error": e}));
                 continue;
             }
-            // Which accepted answer, if any, did the reply contain? An accepted
-            // answer that CONTAINS a longer one ("an hour" in "half an hour") is
-            // only counted when the retrieved value confirms it, so a whole-word
-            // match alone cannot award a wrong value.
-            let hit = row.answers.iter().any(|a| {
-                contains_word(&reply, a)
-                    && (read_found || !row.answers.iter().any(|o| o != a && o.contains(a.as_str())))
+            // Accept ONLY when the store returned an accepted answer, or when the
+            // reply contains one AND no distractor.
+            //
+            // Two earlier defects are fixed here: the guard compared only against
+            // other ACCEPTED answers, so a retrieved distractor was never excluded
+            // (accepted ["an hour"], reply "half an hour", scored correct); and when
+            // read_found was true, `hit` ignored `verified`, so a retrieved
+            // DISTRACTOR value still scored correct.
+            let verified_answer = if read_found {
+                row.answers
+                    .iter()
+                    .find(|a| a.as_str() == read_value.trim())
+                    .cloned()
+            } else {
+                None
+            };
+            let mentioned = row
+                .answers
+                .iter()
+                .find(|a| contains_word(&reply, a))
+                .cloned();
+            let distractor_present = row.distractors.iter().any(|d| {
+                contains_word(&reply, d)
+                    && row.answers.iter().any(|a| a != d && d.contains(a.as_str()))
             });
-            let verified = read_found && row.answers.iter().any(|a| a == read_value.trim());
+            let hit = match (&verified_answer, &mentioned) {
+                (Some(v), _) => contains_word(&reply, v),
+                (None, Some(_)) => !distractor_present,
+                (None, None) => false,
+            };
+            let answered_from_store = hit && verified_answer.is_some();
+            let answered_from_log = hit && verified_answer.is_none() && log_answered;
             if hit {
                 correct += 1;
+                if answered_from_store {
+                    correct_with_store_read += 1;
+                } else if answered_from_log {
+                    correct_via_log_without_store += 1;
+                }
             } else if !stored {
                 never_stored += 1;
-            } else if read_found && !verified {
+            } else if read_found && verified_answer.is_none() {
                 recalled_wrong_value += 1;
                 recalled_value = read_value.clone();
-            } else if verified {
+            } else if verified_answer.is_some() {
                 recalled_misrendered += 1;
                 recalled_value = read_value.clone();
             } else if log_value {
-                unverified += 1;
+                // No store read for this row and, with the sieve on, no log answer
+                // either; on the off arm this is the parametric path.
+                unknown_path_no_store_read += 1;
             } else {
                 stored_not_recalled += 1;
             }
+            if stored_total_row {
+                stored_total += 1;
+            }
+
             judged.push(json!({
                 "id": row.id, "expected": row.answers, "reply": reply, "hit": hit,
-                "stored": stored, "read_found": read_found,
+                // `stored` is the value-matched measure; `stored_any` is the
+                // unconditional one. Both are reported per row so the off and sieve
+                // arms can be DIFFED -- and they should be identical, because the
+                // compiler does not see the log sieve.
+                "stored": stored, "stored_any": stored_total_row,
+                "answered_from_store": answered_from_store, "answered_from_log": answered_from_log,
+                "read_found": read_found,
                 "read_value": read_value, "recalled_value": recalled_value,
                 "log_value": log_value,
             }));
         }
         let total = rows_in.len();
         println!(
-            "panel memory: {correct}/{total}; misses never_stored={never_stored} stored_not_recalled={stored_not_recalled} recalled_wrong_value={recalled_wrong_value} misrendered={recalled_misrendered} unverified={unverified} errors={errors}"
+            "panel memory: {correct}/{total}; stored_total={stored_total} correct_with_store_read={correct_with_store_read} correct_via_log_without_store={correct_via_log_without_store}"
+        );
+        println!(
+            "panel misses: never_stored={never_stored} stored_not_recalled={stored_not_recalled} recalled_wrong_value={recalled_wrong_value} misrendered={recalled_misrendered} unknown_path_no_store_read={unknown_path_no_store_read} unverified_log_value={unverified} errors={errors}"
         );
         panel_block = Some(json!({
             "panel": panel_name, "panel_sha256": panel_sha,
             "panel_expected": expected_name, "panel_expected_sha256": expected_sha,
             "rows_total": total, "correct": correct,
+            // Storage is measured UNCONDITIONALLY and must be identical between the
+            // off and sieve arms: the compiler sees only the current user turn.
+            // Reporting it beside the correctness split is what makes storage and
+            // retrieval readable separately, and what shows the user-turn log sieve
+            // is a SECOND memory path that can answer with nothing stored.
+            "stored_total": stored_total,
+            "correct_with_store_read": correct_with_store_read,
+            "correct_via_log_without_store": correct_via_log_without_store,
             "miss_split": {
                 "never_stored": never_stored,
                 "stored_but_not_recalled": stored_not_recalled,
                 "recalled_wrong_value": recalled_wrong_value,
                 "recalled_but_misrendered": recalled_misrendered,
                 "unverified_log_value": unverified,
+                "unknown_path_no_store_read": unknown_path_no_store_read,
                 "turn_errors": errors,
                 "rule": "mechanism state, not reply text. stored counts only writes on turns before the final one whose decoded value_tokens match an accepted answer. verified means the final turn's StoreRead::Found tokens decode to an accepted answer. unverified_log_value counts rows where the log-sieve supplied a value that the session does not expose as tokens, so retrieval cannot be confirmed either way.",
             },
