@@ -3611,23 +3611,17 @@ fn same_value(a: &str, b: &str) -> bool {
     !x.is_empty() && x == y
 }
 
-/// Whether the ASKED fact is stored. Accepted answers are compared NORMALIZED, so a
-/// stored "dust." matches an accepted "dust", and a value equal to a listed
-/// distractor is rejected -- otherwise storing the distractor would count as storing
-/// the asked fact.
 /// The compiler's action for a turn, with the emitted VALUE recovered exactly from
 /// the span's byte range into the user text.
-fn describe_action<'a>(
-    action: &CompiledAction,
-    source: &'a str,
-) -> (&'static str, Option<u32>, String) {
+fn describe_action(action: &CompiledAction, source: &str) -> (&'static str, Option<u32>, String) {
     let slice = |sp: &SourceSpan| -> String {
+        // `get` rather than indexing: `start`/`end` are byte offsets that may not
+        // land on char boundaries, and indexing would panic on multi-byte text.
         let (a, b) = (sp.start.min(source.len()), sp.end.min(source.len()));
-        if a <= b {
-            source[a..b].to_string()
-        } else {
-            String::new()
+        if a > b {
+            return String::new();
         }
+        source.get(a..b).unwrap_or_default().to_string()
     };
     match action {
         CompiledAction::Assert { relation, span } => ("assert", Some(*relation), slice(span)),
@@ -3641,29 +3635,37 @@ fn describe_action<'a>(
     }
 }
 
-/// The storage-vs-retrieval diagnosis for one row, from the mechanism fields:
-///   storage side (fact turn)
-///     fact_unresolved          the compiler emitted Unresolved for every pre-question turn
-///     distractor_only_written  a write landed but only for a value that is not the answer
-///   retrieval side (question turn)
-///     question_not_a_query     the question action is not Query/QueryCurrent
-///     query_but_no_read        the question was a query but no store read returned a value
-/// "stored" and "read_found" are passed in from the same mechanism fields the split uses.
+/// The storage-vs-retrieval diagnosis for one row. Every argument is a mechanism
+/// fact the session already exposes; nothing is inferred from reply text.
+///
+///   fact_unresolved          no pre-question turn produced a write at all
+///   distractor_only_written  a write landed, but never for an accepted answer
+///   question_not_a_query     the final turn's action is not Query/QueryCurrent
+///   query_but_no_read        the question was a query, but no store read returned
+///   read_wrong_value         a store read returned, but not an accepted answer
+///   stored_and_read          the asked fact was stored AND a read returned it
+///
+/// `read_verified` is whether the read's decoded value equalled an accepted answer,
+/// so `stored_and_read` means the READ SUCCEEDED, not merely that a read occurred.
 fn diagnoses_row(
     stored: bool,
     read_found: bool,
+    read_verified: bool,
     question_action: &str,
     any_write: bool,
 ) -> &'static str {
     if stored {
-        if read_found {
+        if read_verified {
             return "stored_and_read";
         }
-        return if matches!(question_action, "query" | "query_current") {
-            "query_but_no_read"
-        } else {
-            "question_not_a_query"
-        };
+        if !read_found {
+            return if matches!(question_action, "query" | "query_current") {
+                "query_but_no_read"
+            } else {
+                "question_not_a_query"
+            };
+        }
+        return "read_wrong_value";
     }
     if !any_write {
         return "fact_unresolved";
@@ -4293,7 +4295,13 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 "trace": trace,
                 "write_texts": write_texts, "question_action": question_action,
                 "question_relation": question_relation,
-                "diagnosis": diagnoses_row(stored, read_found, &question_action, stored_total_row),
+                "diagnosis": diagnoses_row(
+                    stored,
+                    read_found,
+                    read_found && row.answers.iter().any(|a| same_value(a, &read_value)),
+                    &question_action,
+                    stored_total_row,
+                ),
                 "answered_from_store": answered_from_store, "answered_from_log": answered_from_log,
                 "read_found": read_found,
                 "read_value": read_value, "recalled_value": recalled_value,
@@ -5278,5 +5286,102 @@ mod panel_scoring_tests {
         let err = load_panel(p.to_str().unwrap(), e.to_str().unwrap()).unwrap_err();
         assert!(err.to_string().contains("unknown panel row"), "got: {err}");
         let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod diagnosis_tests {
+    use super::{describe_action, diagnoses_row, CompiledAction, SourceSpan};
+
+    fn span(start: usize, end: usize) -> SourceSpan {
+        SourceSpan { start, end }
+    }
+
+    /// `describe_action` recovers the emitted value from the span's byte range.
+    #[test]
+    fn describe_action_recovers_the_span_text() {
+        let src = "I react badly to latex.";
+        let a = CompiledAction::Assert {
+            relation: 7,
+            span: span(17, 22),
+        }; // "latex", excluding the "."
+        let (kind, rel, text) = describe_action(&a, src);
+        assert_eq!(kind, "assert");
+        assert_eq!(rel, Some(7));
+        assert_eq!(text, "latex", "the span must recover the value exactly");
+    }
+
+    /// A span that does not land on a char boundary must NOT panic -- indexing would.
+    /// "naïve café" is multi-byte; offsets 1 and 2 fall INSIDE the first character.
+    #[test]
+    fn describe_action_is_char_boundary_safe() {
+        let src = "naïve café";
+        for (a, b) in [(1, 2), (0, 1), (2, 3), (5, 6), (99, 120), (4, 2)] {
+            let act = CompiledAction::Assert {
+                relation: 1,
+                span: span(a, b),
+            };
+            let (kind, _, text) = describe_action(&act, src);
+            assert_eq!(kind, "assert", "must not panic for span {a}..{b}");
+            let _ = text;
+        }
+        // a span that IS on a boundary still yields the right text
+        let act = CompiledAction::Assert {
+            relation: 1,
+            span: span(0, 6),
+        };
+        assert_eq!(
+            describe_action(&act, src).2,
+            "naïve",
+            "0..6 is the full multi-byte word in BYTES"
+        );
+    }
+
+    /// Unresolved carries no relation and no value.
+    #[test]
+    fn describe_action_handles_unresolved() {
+        let (kind, rel, text) = describe_action(
+            &CompiledAction::Unresolved { reason: "x".into() },
+            "anything",
+        );
+        assert_eq!(kind, "unresolved");
+        assert_eq!(rel, None);
+        assert!(text.is_empty());
+    }
+
+    /// Every diagnosis category is reachable, and `stored_and_read` requires a
+    /// VERIFIED read rather than merely a read.
+    #[test]
+    fn diagnosis_categories_are_reachable() {
+        // stored + verified read -> success
+        assert_eq!(
+            diagnoses_row(true, true, true, "query_current", true),
+            "stored_and_read"
+        );
+        // stored, a read happened, but it returned something else
+        assert_eq!(
+            diagnoses_row(true, true, false, "query_current", true),
+            "read_wrong_value"
+        );
+        // stored, query attempted, nothing read back
+        assert_eq!(
+            diagnoses_row(true, false, false, "query_current", true),
+            "query_but_no_read"
+        );
+        // stored, but the final turn was not parsed as a query
+        assert_eq!(
+            diagnoses_row(true, false, false, "assert", true),
+            "question_not_a_query"
+        );
+        // nothing written at all
+        assert_eq!(
+            diagnoses_row(false, false, false, "query_current", false),
+            "fact_unresolved"
+        );
+        // something written, but never an accepted answer
+        assert_eq!(
+            diagnoses_row(false, false, false, "query_current", true),
+            "distractor_only_written"
+        );
     }
 }
