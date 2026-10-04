@@ -111,7 +111,7 @@ struct Authored {
     source_tuple: Vec<String>,
     source_views: Vec<Value>,
     facts: Vec<Fact>,
-    answer: String,
+    accepted: Vec<String>,
     parent_id: Option<String>,
     original_target: Option<Vec<u32>>,
 }
@@ -369,7 +369,7 @@ fn finish(
     for row in rows {
         let answers = FrozenAnswers {
             intent: RecordedValueIntent::Current,
-            accepted: vec![row.answer],
+            accepted: row.accepted,
         };
         answers.validate()?;
         let mut target = encoded(
@@ -581,7 +581,7 @@ fn bank_rows(
                         source_tuple: tuple.clone(),
                         source_views: views.clone(),
                         facts: facts.clone(),
-                        answer,
+                        accepted: vec![answer],
                         parent_id: None,
                         original_target: None,
                     });
@@ -640,7 +640,7 @@ fn run(a: &Args, start: Instant) -> Result<()> {
     for e in compiled.training64 {
         limit(start)?;
         if !ids.insert(e.id.clone())
-            || e.accepted.len() != 1
+            || e.accepted.is_empty()
             || tok.decode(&e.original_source_ids) != e.literal
             || e.query_ids.is_empty()
         {
@@ -668,7 +668,7 @@ fn run(a: &Args, start: Instant) -> Result<()> {
         horizon(view.emitted_token_ids().len(), packet.query_ids.len())?;
         literals.insert(e.literal.clone());
         excluded.insert(tuple_key(&[e.literal.clone()])?);
-        golden.push(json!({"id":e.id,"packet_sha256":sha256_bytes(&serde_json::to_vec(&packet)?),"original_source_ids_sha256":sha256_bytes(&serde_json::to_vec(&e.original_source_ids)?),"query_ids_sha256":sha256_bytes(&serde_json::to_vec(&packet.query_ids)?),"source_view_sha256":sha256_bytes(&serde_json::to_vec(&view)?)}));
+        golden.push(json!({"id":e.id,"packet_sha256":sha256_bytes(&serde_json::to_vec(&packet)?),"original_source_ids_sha256":sha256_bytes(&serde_json::to_vec(&e.original_source_ids)?),"query_ids_sha256":sha256_bytes(&serde_json::to_vec(&packet.query_ids)?),"source_view_sha256":sha256_bytes(&serde_json::to_vec(&view)?),"accepted_sha256":sha256_bytes(&serde_json::to_vec(&e.accepted)?),"target_ids_labels_only_sha256":sha256_bytes(&serde_json::to_vec(&e.target_ids_labels_only)?)}));
         authored.push(Authored {
             packet,
             kind: "single-source",
@@ -678,7 +678,7 @@ fn run(a: &Args, start: Instant) -> Result<()> {
             source_tuple: vec![e.literal],
             source_views: vec![json!({"segment_index":0,"source_view":view})],
             facts: vec![],
-            answer: e.accepted[0].clone(),
+            accepted: e.accepted,
             parent_id: Some(e.id),
             original_target: Some(e.target_ids_labels_only),
         });
@@ -852,6 +852,65 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preservation_keeps_all_answer_aliases_and_original_canonical_target() -> Result<()> {
+        const TOKENIZER: &str = r#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5,"Ġ":6,"Ġa":7},"merges":["Ġ a"]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
+        let tok = ByteBpeTokenizer::from_tokenizer_json_bytes(TOKENIZER.as_bytes())
+            .ok_or_else(|| invalid("fixture tokenizer invalid"))?;
+        let binding = SourceActionBinding::new(TOKENIZER.as_bytes())?;
+        let compiler = SourceEmissionCompiler::new(TOKENIZER.as_bytes())?;
+        let view = compiler.compile(&[4])?;
+        // The retained first twenty controls have these five rendering forms;
+        // membership must preserve all of them, while CE uses the first only.
+        let accepted: Vec<String> = [
+            "a.",
+            "It's a.",
+            "It is a.",
+            "You work as a a.",
+            "Your job is a.",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        let canonical = vec![7, 3, 1];
+        let prepared = finish(
+            vec![Authored {
+                packet: Packet {
+                    id: "preserved-five-aliases".into(),
+                    segments: vec![Segment::Source {
+                        event: 10,
+                        record: 2,
+                        commit: 2,
+                        scope: "m-world-v2".into(),
+                        entity: vec![4],
+                        relation: 7,
+                        view: 0,
+                        original_source_ids: vec![4],
+                    }],
+                    query_ids: vec![5],
+                    actual_prefix_ids: vec![],
+                },
+                kind: "single-source",
+                stratum: "preservation",
+                pair_id: None,
+                query_role: "job",
+                source_tuple: vec!["a".into()],
+                source_views: vec![json!({"segment_index":0,"source_view":view})],
+                facts: vec![],
+                accepted: accepted.clone(),
+                parent_id: Some("old-control".into()),
+                original_target: Some(canonical.clone()),
+            }],
+            &tok,
+            &binding,
+        )?;
+        assert_eq!(prepared.labels[0]["answers"]["accepted"], json!(accepted));
+        assert_eq!(prepared.data[0]["target_ids_labels_only"], json!(canonical));
+        assert!(serde_json::to_value(&prepared.packets[0])?
+            .get("answers")
+            .is_none());
+        Ok(())
+    }
     #[test]
     fn bank_horizon_and_target_free_packet_contract() -> Result<()> {
         assert_eq!(horizon(87, 9)?, 128);

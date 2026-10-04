@@ -347,6 +347,16 @@ impl Episode {
             .collect()
     }
 }
+fn validate_answers(answers: &FrozenAnswers, single_source: bool) -> Result<()> {
+    answers.validate()?;
+    if answers.intent != RecordedValueIntent::Current
+        || answers.accepted.is_empty()
+        || (!single_source && answers.accepted.len() != 1)
+    {
+        return Err(invalid("accepted answer policy differs").into());
+    }
+    Ok(())
+}
 fn load_panel(
     root: &Path,
     expected_count: usize,
@@ -374,15 +384,17 @@ fn load_panel(
     let mut ids = BTreeSet::new();
     let mut result = Vec::new();
     for (i, (packet, label)) in inputs.cases.into_iter().zip(labels.cases).enumerate() {
-        label.answers.validate()?;
+        let single_source = context
+            .as_ref()
+            .map(|c| c["cases"][i]["kind"] == "single-source")
+            .unwrap_or(true);
+        validate_answers(&label.answers, single_source)?;
         if packet.id != label.id
             || packet.id.is_empty()
             || !ids.insert(packet.id.clone())
             || packet.segments.is_empty()
             || packet.query_ids.is_empty()
             || !packet.actual_prefix_ids.is_empty()
-            || label.answers.intent != RecordedValueIntent::Current
-            || label.answers.accepted.len() != 1
         {
             return Err(
                 invalid("panel case/label binding differs; nonempty prefix unsupported").into(),
@@ -390,6 +402,12 @@ fn load_panel(
         }
         let mut target = tok.encode(&format!(" {}", label.answers.accepted[0]));
         target.push(native.binding().eos_token_id());
+        for accepted in &label.answers.accepted {
+            let text = format!(" {accepted}");
+            if String::from_utf8(tok.decode_bytes(&tok.encode(&text)))? != text {
+                return Err(invalid("accepted alternative byte-BPE roundtrip differs").into());
+            }
+        }
         if target.len() > 32
             || String::from_utf8(tok.decode_bytes(&target[..target.len() - 1]))?
                 != format!(" {}", label.answers.accepted[0])
@@ -1124,6 +1142,21 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preserved_five_alias_answers_keep_canonical_first_and_all_membership() -> Result<()> {
+        let answers: FrozenAnswers = serde_json::from_value(
+            json!({"intent":"current","accepted":["singer.","It's singer.","It is singer.","You work as a singer.","Your job is singer."]}),
+        )?;
+        validate_answers(&answers, true)?;
+        assert_eq!(answers.accepted[0], "singer.");
+        assert_eq!(answers.accepted.len(), 5);
+        for text in &answers.accepted {
+            assert!(answers.accepts(text));
+        }
+        assert!(!answers.accepts("dancer."));
+        assert!(validate_answers(&answers, false).is_err());
+        Ok(())
+    }
     #[test]
     fn native_selection_infinity_ties_and_episode_scaling() -> Result<()> {
         let s = vec![
