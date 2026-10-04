@@ -3615,6 +3615,62 @@ fn same_value(a: &str, b: &str) -> bool {
 /// stored "dust." matches an accepted "dust", and a value equal to a listed
 /// distractor is rejected -- otherwise storing the distractor would count as storing
 /// the asked fact.
+/// The compiler's action for a turn, with the emitted VALUE recovered exactly from
+/// the span's byte range into the user text.
+fn describe_action<'a>(
+    action: &CompiledAction,
+    source: &'a str,
+) -> (&'static str, Option<u32>, String) {
+    let slice = |sp: &SourceSpan| -> String {
+        let (a, b) = (sp.start.min(source.len()), sp.end.min(source.len()));
+        if a <= b {
+            source[a..b].to_string()
+        } else {
+            String::new()
+        }
+    };
+    match action {
+        CompiledAction::Assert { relation, span } => ("assert", Some(*relation), slice(span)),
+        CompiledAction::Correct { relation, span } => ("correct", Some(*relation), slice(span)),
+        CompiledAction::QueryCurrent { relation } => {
+            ("query_current", Some(*relation), String::new())
+        }
+        CompiledAction::Query { relation, .. } => ("query", Some(*relation), String::new()),
+        CompiledAction::Unresolved { .. } => ("unresolved", None, String::new()),
+        _ => ("other", None, String::new()),
+    }
+}
+
+/// The storage-vs-retrieval diagnosis for one row, from the mechanism fields:
+///   storage side (fact turn)
+///     fact_unresolved          the compiler emitted Unresolved for every pre-question turn
+///     distractor_only_written  a write landed but only for a value that is not the answer
+///   retrieval side (question turn)
+///     question_not_a_query     the question action is not Query/QueryCurrent
+///     query_but_no_read        the question was a query but no store read returned a value
+/// "stored" and "read_found" are passed in from the same mechanism fields the split uses.
+fn diagnoses_row(
+    stored: bool,
+    read_found: bool,
+    question_action: &str,
+    any_write: bool,
+) -> &'static str {
+    if stored {
+        if read_found {
+            return "stored_and_read";
+        }
+        return if matches!(question_action, "query" | "query_current") {
+            "query_but_no_read"
+        } else {
+            "question_not_a_query"
+        };
+    }
+    if !any_write {
+        return "fact_unresolved";
+    }
+    "distractor_only_written"
+}
+
 fn asked_fact_is_stored(value_text: &str, answers: &[String], distractors: &[String]) -> bool {
     let v = normalize_value(value_text);
     if v.is_empty() {
@@ -4096,6 +4152,11 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             let last = row.turns.len() - 1;
             let (mut stored, mut read_value, mut read_found, mut log_value) =
                 (false, String::new(), false, false);
+            // Per-turn mechanism trace for the storage-vs-retrieval diagnosis.
+            let mut trace: Vec<Value> = Vec::new();
+            let mut write_texts: Vec<String> = Vec::new();
+            let mut question_action = String::from("none");
+            let mut question_relation: Option<u32> = None;
             let mut stored_total_row = false;
             let mut log_answered = false;
             let mut reply = String::new();
@@ -4104,14 +4165,21 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             for (i, user) in row.turns.iter().enumerate() {
                 match session.turn_with_controls(user, TurnControls::default()) {
                     Ok(outcome) => {
+                        let (akind, arel, aspan) = describe_action(&outcome.action, user);
+                        if i == last {
+                            question_action = akind.to_string();
+                            question_relation = arel;
+                        }
+                        trace.push(json!({
+                            "turn": i, "last": i == last, "user": user,
+                            "action": akind, "relation": arel, "span_text": aspan,
+                        }));
                         if i < last {
                             if let MemoryEffect::Write { value_tokens, .. } = &outcome.memory {
                                 stored_total_row = true;
-                                if asked_fact_is_stored(
-                                    &tokenizer.decode(value_tokens),
-                                    &row.answers,
-                                    &row.distractors,
-                                ) {
+                                let decoded = tokenizer.decode(value_tokens);
+                                write_texts.push(decoded.clone());
+                                if asked_fact_is_stored(&decoded, &row.answers, &row.distractors) {
                                     stored = true;
                                 }
                             }
@@ -4206,6 +4274,10 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 // arms can be DIFFED -- and they should be identical, because the
                 // compiler does not see the log sieve.
                 "stored": stored, "stored_any": stored_total_row,
+                "trace": trace,
+                "write_texts": write_texts, "question_action": question_action,
+                "question_relation": question_relation,
+                "diagnosis": diagnoses_row(stored, read_found, &question_action, stored_total_row),
                 "answered_from_store": answered_from_store, "answered_from_log": answered_from_log,
                 "read_found": read_found,
                 "read_value": read_value, "recalled_value": recalled_value,
