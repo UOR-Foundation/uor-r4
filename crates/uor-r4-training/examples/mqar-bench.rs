@@ -6,7 +6,7 @@
 //! mqar-bench out=NEW_REPORT_ROOT [device=cpu|metal] [context=512] [pairs_per_bucket=8] \
 //!   [batch=8] [steps=1800] [lr=0.001] [warmup=100] [min_lr=0.1] [weight_decay=0.1] [clip=1.0] \
 //!   [eval_every=100] [curve_sequences=8] [final_sequences=64] [seed=1] [max_seconds=1200] \
-//!   [arm=stack] ARM OPTIONS
+//!   [mode=train|task-baselines] [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
 //!   [mlp=384] [age=default|flat]
 //! ```
@@ -515,6 +515,39 @@ impl ContextArm for StackArm {
     }
 }
 
+/// The value written most recently before `query` (by any pair): what a pure
+/// recency read with no key match would answer.
+fn most_recent_value(sequence: &Sequence, query: &Query) -> Option<u32> {
+    sequence
+        .queries
+        .iter()
+        .map(|pair| (pair.position - pair.distance + 1, pair.value))
+        .filter(|&(value_position, _)| value_position < query.position)
+        .max_by_key(|&(value_position, _)| value_position)
+        .map(|(_, value)| value)
+}
+
+/// Data-only baselines per bucket, independent of any arm: the accuracy of
+/// answering with the most recently written value (recency, no key match).
+fn task_baselines(sequences: &[Sequence], buckets: &[Bucket]) -> Value {
+    let mut hits = vec![(0usize, 0usize); buckets.len()];
+    for sequence in sequences {
+        for query in &sequence.queries {
+            let entry = &mut hits[query.bucket];
+            entry.1 += 1;
+            entry.0 += usize::from(most_recent_value(sequence, query) == Some(query.value));
+        }
+    }
+    let mut by_bucket = serde_json::Map::new();
+    for (bucket, (hit, total)) in buckets.iter().zip(&hits) {
+        by_bucket.insert(
+            bucket.name.into(),
+            json!({"recency_accuracy": *hit as f64 / (*total).max(1) as f64, "total": total}),
+        );
+    }
+    json!({"by_bucket": by_bucket, "rule": "answer the value written most recently before the query"})
+}
+
 /// Recall by bucket: argmax over the whole vocabulary at each query.
 fn evaluate(
     arm: &dyn ContextArm,
@@ -564,6 +597,7 @@ fn evaluate(
                 tally.correct += usize::from(argmax == query.value as usize);
                 tally.nll += nll;
                 tally.distance += query.distance;
+                // The most recent value written by another pair.
                 let most_recent = sequence
                     .queries
                     .iter()
@@ -614,6 +648,7 @@ fn evaluate(
         "accuracy": correct as f64 / total.max(1) as f64,
         "chance_accuracy": 1.0 / f64::from(VALUES.1 - VALUES.0),
         "positions_scored_per_query_token_mean": scored as f64 / total.max(1) as f64,
+        "task_baselines": task_baselines(sequences, buckets),
     }))
 }
 
@@ -708,8 +743,13 @@ impl Common {
     }
 }
 
-fn settings() -> Result<(Common, ArmSpec)> {
+fn settings() -> Result<(Common, ArmSpec, bool)> {
     let mut args = Args::parse()?;
+    let baselines_only = match args.take("mode").as_deref() {
+        None | Some("train") => false,
+        Some("task-baselines") => true,
+        Some(other) => return Err(invalid(format!("invalid mode={other}"))),
+    };
     let out = PathBuf::from(
         args.take("out")
             .ok_or_else(|| invalid("out=NEW_REPORT_ROOT is required"))?,
@@ -750,7 +790,7 @@ fn settings() -> Result<(Common, ArmSpec)> {
         return Err(invalid("the context holds no distance bucket"));
     }
     arm.validate(&common)?;
-    Ok((common, arm))
+    Ok((common, arm, baselines_only))
 }
 
 const TRAIN_DOMAIN: u64 = 0x7472_6169_6E;
@@ -944,8 +984,42 @@ fn write_json(path: &Path, value: &Value) -> Result<()> {
 /// The report's fixed per-arm record schema.
 const REPORT_SCHEMA: &str = "uor-r4/mqar-bench/arm-record/v1";
 
+/// `mode=task-baselines`: the data-only baselines of the final evaluation
+/// sets that the same task settings generate, with no arm and no training.
+fn task_baselines_report(common: &Common) -> Result<Value> {
+    let buckets = buckets_for(common.context);
+    let in_class = sequences(
+        common,
+        &buckets,
+        IN_CLASS_DOMAIN,
+        common.final_sequences,
+        Pairing::Train,
+    )?;
+    let held_out = sequences(
+        common,
+        &buckets,
+        HELD_OUT_DOMAIN,
+        common.final_sequences / 2,
+        Pairing::HeldOut,
+    )?;
+    Ok(json!({
+        "schema": REPORT_SCHEMA, "status": "complete", "mode": "task-baselines",
+        "task": common.record(), "argv": std::env::args().collect::<Vec<_>>(),
+        "final_in_class_fresh_pairings": task_baselines(&in_class, &buckets),
+        "final_held_out_class_pairings": task_baselines(&held_out, &buckets),
+    }))
+}
+
 fn main() -> Result<()> {
-    let (common, spec) = settings()?;
+    let (common, spec, baselines_only) = settings()?;
+    if baselines_only {
+        report_output::claim(&common.out)?;
+        let report = task_baselines_report(&common)?;
+        write_json(&common.out.join("report.json"), &report)?;
+        report_output::seal(&common.out)?;
+        report_output::verify(&common.out)?;
+        return Ok(());
+    }
     // Claimed exclusively after argument validation, before any model work.
     report_output::claim(&common.out)?;
     let task = common.record();
@@ -1140,5 +1214,18 @@ mod tests {
         let report = evaluate(&*arm, &batch, common.context, &buckets, 2).expect("evaluate");
         assert_eq!(report["total"], 2 * 2 * buckets.len());
         assert_eq!(arm.record()["age_init"], "flat");
+    }
+
+    #[test]
+    fn the_recency_baseline_reads_the_latest_value_before_the_query() {
+        for sequence in draw(TRAIN_DOMAIN, 16, Pairing::Train, 512) {
+            for query in &sequence.queries {
+                let expected = (0..query.position)
+                    .rev()
+                    .find(|&p| (VALUES.0..VALUES.1).contains(&sequence.tokens[p]))
+                    .map(|p| sequence.tokens[p]);
+                assert_eq!(most_recent_value(&sequence, query), expected);
+            }
+        }
     }
 }
