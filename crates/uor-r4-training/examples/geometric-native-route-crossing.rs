@@ -230,7 +230,7 @@ fn tree_bytes(root: &Path) -> Result<usize> {
     }
     Ok(sum)
 }
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 struct SourceInput {
     id: String,
