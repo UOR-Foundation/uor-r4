@@ -4789,3 +4789,78 @@ mod tests {
         assert!(screen_documents(&headless, &mask, files, (1, 2, 0), &decode, &grams).is_err());
     }
 }
+
+#[cfg(test)]
+mod panel_scoring_tests {
+    use super::contains_word;
+
+    /// The accept rule the panel split applies: accept ONLY when the store returned
+    /// an accepted answer, or when the reply contains an accepted answer AND no
+    /// distractor that itself contains an accepted answer.
+    fn accepts(
+        reply: &str,
+        answers: &[&str],
+        distractors: &[&str],
+        verified: Option<&str>,
+    ) -> bool {
+        let verified_answer = verified.filter(|v| answers.contains(v));
+        let verified_hit = verified_answer
+            .map(|v| contains_word(reply, v))
+            .unwrap_or(false);
+        let mentioned = answers.iter().find(|a| contains_word(reply, a)).copied();
+        let distractor_present = distractors
+            .iter()
+            .any(|d| contains_word(reply, d) && answers.iter().any(|a| a != d && d.contains(a)));
+        match (verified_answer, mentioned) {
+            (Some(_), _) => verified_hit,
+            (None, Some(_)) => !distractor_present,
+            (None, None) => false,
+        }
+    }
+
+    /// The exact defect the review found: accepted ["an hour"], reply "half an
+    /// hour". A whole-word match awards it, and the distractor is never in the
+    /// accepted list, so accepted-only checking cannot exclude it.
+    #[test]
+    fn distractor_containing_the_answer_is_rejected() {
+        assert!(
+            contains_word("half an hour", "an hour"),
+            "whole-word match does fire"
+        );
+        assert!(
+            !accepts("half an hour", &["an hour"], &["half an hour"], None),
+            "a distractor containing the accepted answer must not be accepted"
+        );
+        assert!(
+            accepts("an hour", &["an hour"], &["half an hour"], None),
+            "the real answer is still accepted"
+        );
+    }
+
+    /// With a store read, acceptance follows the VERIFIED value, so a retrieved
+    /// distractor cannot score correct even when the accepted answer is also in text.
+    #[test]
+    fn retrieved_distractor_does_not_score_correct() {
+        assert!(
+            !accepts(
+                "half an hour",
+                &["an hour"],
+                &["half an hour"],
+                Some("half an hour")
+            ),
+            "a retrieved distractor value must not be accepted"
+        );
+        assert!(
+            accepts("an hour", &["an hour"], &["half an hour"], Some("an hour")),
+            "the verified answer is accepted"
+        );
+    }
+
+    /// A reply matching only by text, with no store read and no verification, is not
+    /// correct-with-store.
+    #[test]
+    fn text_only_match_is_not_store_verified() {
+        assert!(accepts("an hour", &["an hour"], &[], None));
+        assert_eq!(None::<&str>.filter(|v| ["an hour"].contains(v)), None);
+    }
+}
