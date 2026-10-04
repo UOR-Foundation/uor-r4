@@ -1048,10 +1048,10 @@ fn main() -> Result<()> {
         ));
     }
     if (a.mode == "readout-geometry-radial-learn") != a.radial_admission.is_some()
-        || (a.mode == "readout-geometry-radial-learn" && a.maximum_seconds > 6000)
+        || (a.mode == "readout-geometry-radial-learn" && a.maximum_seconds > 8800)
     {
         return Err(invalid(
-            "radial learner requires separate admission and maximum6000",
+            "radial learner requires separate admission and maximum8800",
         ));
     }
     let admitted = admission(&a)?;
@@ -2466,7 +2466,7 @@ fn radial_admission(a: &Args) -> Result<RadialAdmission> {
     if admission.source_commit != source_commit()?
         || admission.updates != RADIAL_UPDATES
         || admission.optimizer != optimizer_identity()
-        || admission.maximum_arm_seconds != 2800
+        || admission.maximum_arm_seconds != 4200
         || admission.starting_role != "selected0064-zero-context-radius-unadopted"
         || admission.panel_spec_sha256
             != "300fd1e00de8e6eee1f88bf4020f2969491bbd259785056bd20cb602d1110184"
@@ -2960,6 +2960,40 @@ fn radial_zero_probes(
         json!({"native_reads":4,"saved_factual_reads":4,"rows":receipts,"scope":"radial-only numerical intervention, not an adopted serving ablation"}),
     )
 }
+// Compact receipts name the bit representation explicitly; the sealed source
+// checkpoints retain the complete coefficients and RAM equality guards remain.
+fn radial_parameter_bit_receipts(
+    parameters: &BTreeMap<String, Var>,
+) -> Result<BTreeMap<String, Value>> {
+    parameter_bits(parameters)?
+        .into_iter()
+        .map(|(name, bits)| {
+            let bytes = bits
+                .iter()
+                .flat_map(|word| word.to_le_bytes())
+                .collect::<Vec<_>>();
+            Ok((
+                name,
+                json!({"bit_count":bits.len()*32,"elements":bits.len(),
+            "encoding":"f32 bits as little-endian u32 bytes/1",
+            "sha256":uor_r4_training::sha256_bytes(&bytes)}),
+            ))
+        })
+        .collect()
+}
+fn radial_evaluation_references(root: &Path, stages: &[Value]) -> Result<Vec<Value>> {
+    stages.iter().map(|stage| {
+        let step=stage["optimizer_updates"].as_u64().ok_or_else(||invalid("radial reference step absent"))?;
+        let name=format!("evaluation-{step:04}.json");
+        Ok(json!({"format":"sealed-evaluation-reference/1","optimizer_updates":step,
+            "evaluation_path":name,"evaluation_sha256":sha256_file(&root.join(&name))?,
+            "checkpoint_path":format!("checkpoint-{step:04}"),"checkpoint_manifest_sha256":stage["checkpoint_manifest_sha256"],
+            "all64_equal_episode_ce":stage["all64_equal_episode_ce"],"radial_quantum":stage["radial_quantum"],
+            "generation_summary":{"cases":stage["generation"]["cases"],"complete_answers":stage["generation"]["complete_answers"],"eos_count":stage["generation"]["eos_count"]},
+            "canonical_summary":{"target_steps":stage["canonical"]["target_steps"],"zero_target_mass_positions":stage["canonical"]["zero_target_mass_positions"],"mean_episode_ce":stage["canonical"]["mean_episode_ce"]},
+            "raw_evidence":"referenced evaluation retains checkpoint receipt, full canonical/action records, generation and every prior-stage comparison"}))
+    }).collect()
+}
 fn radial_peak_rss_kib() -> Option<u64> {
     fs::read_to_string("/proc/self/status")
         .ok()?
@@ -3220,13 +3254,14 @@ fn radial_arm(
             Err(error) => work = Err(error),
         }
     }
+    let checkpoint_references = radial_evaluation_references(root, &checkpoints)?;
     let report = json!({"schema":"uor-r4.geometric-radial-sharing-arm/1","status":if work.is_ok(){"completed"}else{"stopped_or_error"},
         "shared_signed_difference":shared,"optimizer":optimizer_identity(),"optimizer_updates":updates,"declared_updates":RADIAL_UPDATES,
         "objective":"mean64episodes(mean token+EOS ordinary aliased marginal CE); every64 each update",
         "optimizer_moments":"fresh AdamW on actual independent coordinates","context_cache":"none",
         "updated_families":["context_unary","context_radius","context_presence","content_presence","Stop","Period"],
         "frozen_families":["consumer.context.*","content_unary","content_radius","pair"],
-        "measured_admission":measured_admission,"checkpoints":checkpoints,"batch_receipts":receipts,
+        "measured_admission":measured_admission,"checkpoints":checkpoint_references,"checkpoint_payload_format":"sealed-evaluation-reference/1; paths relative to this arm root","batch_receipts":receipts,
         "selected_checkpoint_index":selected,"selection":"lowest finite native all64 equal-episode CE including zero baseline; earliest ties; heldout not used",
         "untouched32_selected_only":holdout_result,"first_packed_nonzero_update":first_packed_update,
         "work_error":work.as_ref().err().map(|e|e.to_string()),"no_adopted_model":true,"wall_seconds":arm_start.elapsed().as_secs_f64()});
@@ -3382,7 +3417,7 @@ fn geometry_radial_learn(a: &Args) -> Result<()> {
     write(
         &zero_root.join("receipt.json"),
         &json!({"native_files_sha256":common_native_inventory,
-        "source_parameter_bits":parameter_bits(&zero_source.parameters())?,"zero_radius_only":true}),
+        "source_parameter_bit_receipts":radial_parameter_bit_receipts(&zero_source.parameters())?,"zero_radius_only":true}),
     )?;
     report_output::seal(&zero_root)?;
     report_output::verify(&zero_root)?;
@@ -3438,11 +3473,22 @@ fn geometry_radial_learn(a: &Args) -> Result<()> {
     } else {
         None
     };
+    let arm_references=arms.iter().map(|arm| {
+        let name=if arm["shared_signed_difference"]==true {"difference63"}else{"grid1024"};
+        let root=a.out.join(name);
+        Ok(json!({"format":"sealed-arm-report-reference/1","arm":name,
+            "report_path":format!("{name}/report.json"),"report_sha256":sha256_file(&root.join("report.json"))?,
+            "manifest_path":format!("{name}/manifest.json"),"manifest_sha256":sha256_file(&root.join("manifest.json"))?,
+            "status":arm["status"],"shared_signed_difference":arm["shared_signed_difference"],
+            "optimizer_updates":arm["optimizer_updates"],"selected_checkpoint_index":arm["selected_checkpoint_index"],
+            "first_packed_nonzero_update":arm["first_packed_nonzero_update"],
+            "selected_holdout_summary":{"cases":arm["untouched32_selected_only"]["cases"],"complete_answers":arm["untouched32_selected_only"]["complete_answers"],"eos_count":arm["untouched32_selected_only"]["eos_count"]}}))
+    }).collect::<Result<Vec<Value>>>()?;
     write(
         &a.out.join("report.json"),
         &json!({"schema":"uor-r4.geometric-radial-sharing/1","status":if work.is_ok(){"completed"}else{"stopped_or_error"},
         "source_commit":source_commit()?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"radial_admission":radial_admission,
-        "transfer_admission":admission,"saved_identity":identity,"arms":arms,"selected_holdout_comparison":comparison,
+        "transfer_admission":admission,"saved_identity":identity,"arms":arm_references,"arm_payload_format":"sealed-arm-report-reference/1; paths relative to this run root","selected_holdout_comparison":comparison,
         "starting_parent":"selected0064; zero radius common baseline; research candidates only","context_cache":"none; existing full native/context/credit recomputation",
         "all_input_files_unchanged":true,"no_adopted_model":true,"work_error":work.as_ref().err().map(|e|e.to_string()),
         "scope":"matched finite-cell radial parameter-sharing comparison on broader development64 and untouched32; no general chat, energy or geometry advantage qualification",
