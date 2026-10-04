@@ -6520,20 +6520,21 @@ mod direction_tests {
                 candle_core::Var::from_vec(vec![1f32, 2f32], 2, &Device::Cpu)?,
             ),
         ];
-        let before = parameter_bits(&params)?;
+        let parameter_map = params.iter().cloned().collect::<BTreeMap<_, _>>();
+        let before = parameter_bits(&parameter_map)?;
         params[1]
             .1
             .set(&Tensor::from_vec(vec![3f32, 4f32], 2, &Device::Cpu)?)?;
         assert!(frozen_readout_source_bits_fixed(
             &before,
-            &parameter_bits(&params)?
+            &parameter_bits(&parameter_map)?
         ));
         params[0]
             .1
             .set(&Tensor::from_vec(vec![0f32, 0f32], 2, &Device::Cpu)?)?;
         assert!(!frozen_readout_source_bits_fixed(
             &before,
-            &parameter_bits(&params)?
+            &parameter_bits(&parameter_map)?
         ));
         let gradients = params
             .iter()
@@ -6591,7 +6592,7 @@ mod direction_tests {
             parent_config_sha256: "f".into(),
         };
         let mut admission = GeometryReadoutAdmission {
-            source_commit: source_commit()?,
+            source_commit: source_commit()?.to_owned(),
             geometry_run_source_commit: "geometry-source".into(),
             geometry_run_manifest_sha256: "manifest".into(),
             geometry_checkpoint_manifest_sha256: "checkpoint".into(),
