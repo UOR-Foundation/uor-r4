@@ -3,10 +3,12 @@
 //! recall and measure in-context recall accuracy by query distance.
 //!
 //! ```text
-//! mqar-bench out=NEW_REPORT_ROOT [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] \
-//!   [device=cpu|metal] [width=128] [heads=4] [mlp=384] [context=512] [pairs_per_bucket=8] \
-//!   [batch=8] [steps=1500] [lr=0.001] [warmup=100] [min_lr=0.1] [weight_decay=0.1] [clip=1.0] \
-//!   [eval_every=100] [curve_sequences=8] [final_sequences=64] [seed=1] [max_seconds=1200]
+//! mqar-bench out=NEW_REPORT_ROOT [device=cpu|metal] [context=512] [pairs_per_bucket=8] \
+//!   [batch=8] [steps=1800] [lr=0.001] [warmup=100] [min_lr=0.1] [weight_decay=0.1] [clip=1.0] \
+//!   [eval_every=100] [curve_sequences=8] [final_sequences=64] [seed=1] [max_seconds=1200] \
+//!   [arm=stack] ARM OPTIONS
+//! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
+//!   [mlp=384] [age=default|flat]
 //! ```
 //!
 //! Each sequence is a fixed-length window of filler tokens holding
@@ -17,10 +19,20 @@
 //! the pair's bucket, so no fixed offset reaches the key. Keys, values and
 //! filler come from disjoint token ranges; keys and values are distinct inside
 //! a sequence. Every sequence draws fresh pairings from its own seed, so a key's
-//! value cannot be memorized. The pairing space is split by
-//! `(key_index + value_index) % 4`: training draws only classes 1..3, and the
-//! primary evaluation draws only class 0, pairings no training sequence ever
-//! contains. A second evaluation reports fresh pairings of the training class.
+//! value cannot be memorized: a pairing recurs across sequences only at the rate
+//! of independent uniform draws.
+//!
+//! Two final evaluations use fresh seeds. The primary one (`in_class`) draws
+//! pairings from the training pairing classes. The pairing space is split by
+//! `(key_index + value_index) % 4`; training never draws class 0, and the
+//! second evaluation (`held_out_class`) draws only class 0. It is adversarial:
+//! a model that learns the class rule as a prior is penalized there even when
+//! it reads the context, so it measures prior-over-context, not recall alone.
+//!
+//! The arm (the context-access mechanism under test) is defined separately
+//! from the task, training loop and scoring: see `ContextArm` and `ArmSpec`.
+//! Each report records the arm in a fixed schema (`REPORT_SCHEMA`), including
+//! its context-access cost in positions scored per query token.
 //!
 //! The report root is claimed exclusively before any model work and sealed
 //! with its manifest at the end. Offline floating-point training only; nothing
@@ -272,27 +284,257 @@ struct Tally {
     absent_value: usize,
     /// Wrong answers that echo the query key.
     echoed_key: usize,
+    /// Wrong answers that are the value written most recently before the
+    /// query (by another pair): a recency read instead of a key match.
+    most_recent_value: usize,
+}
+
+// ---------------------------------------------------------------------------
+// Context-access arms. The task generator above, and the training loop and
+// per-distance scoring below, see an arm only through `ContextArm`. To add an
+// arm (for example a routed or admitted read), add an `ArmSpec` variant, its
+// parse branch and its constructor in `ArmSpec::build`; nothing else changes.
+// ---------------------------------------------------------------------------
+
+/// What every arm gives the bench.
+trait ContextArm {
+    /// Stable arm kind, e.g. `geometric_stack`.
+    fn kind(&self) -> &'static str;
+    /// The arm's own configuration, recorded verbatim in the report.
+    fn record(&self) -> Value;
+    fn parameters(&self) -> usize;
+    fn device(&self) -> &Device;
+    /// Weighted next-token loss over `batch` windows of `time` tokens.
+    fn loss(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor>;
+    /// Logits [batch * time, vocabulary].
+    fn logits(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor>;
+    /// One optimizer update from the loss's gradients; returns the gradient norm.
+    fn update(&mut self, loss: &Tensor, lr: f64) -> Result<f64>;
+    /// Context positions the arm scores for the token at `position`, summed
+    /// over its layers and heads (a recurrence scores none; a full causal read
+    /// head scores `position + 1`).
+    fn positions_scored(&self, position: usize) -> usize;
+    /// What `positions_scored` counts, for the report.
+    fn access_note(&self) -> String;
+}
+
+/// The arm registry: one variant per context-access mechanism.
+#[derive(Clone, Debug)]
+enum ArmSpec {
+    /// `arm=stack`: the geometric stack with a layer pattern of `r`
+    /// (quaternion recurrence) and `a` (read) letters.
+    Stack {
+        pattern: String,
+        read: ReadScore,
+        rotation: bool,
+        width: usize,
+        heads: usize,
+        mlp_hidden: usize,
+        /// The reads' learned per-distance age bias starts at zero instead of
+        /// the stack's recency slopes.
+        flat_age: bool,
+    },
+}
+
+impl ArmSpec {
+    fn parse(args: &mut Args) -> Result<Self> {
+        match args.take("arm").as_deref() {
+            None | Some("stack") => Ok(ArmSpec::Stack {
+                pattern: args.take("pattern").unwrap_or_else(|| "aaaaaa".into()),
+                read: match args.take("read").as_deref() {
+                    None | Some("l2") => ReadScore::L2,
+                    Some("dot") => ReadScore::Dot,
+                    Some("lorentz") => ReadScore::Lorentz,
+                    Some(other) => return Err(invalid(format!("invalid read={other}"))),
+                },
+                rotation: args.parsed("rotation", true)?,
+                width: args.parsed("width", 128usize)?,
+                heads: args.parsed("heads", 4usize)?,
+                mlp_hidden: args.parsed("mlp", 384usize)?,
+                flat_age: match args.take("age").as_deref() {
+                    None | Some("default") => false,
+                    Some("flat") => true,
+                    Some(other) => return Err(invalid(format!("invalid age={other}"))),
+                },
+            }),
+            Some(other) => Err(invalid(format!("unknown arm={other}"))),
+        }
+    }
+
+    /// A short label for logs and report paths.
+    fn label(&self) -> String {
+        match self {
+            ArmSpec::Stack {
+                pattern,
+                read,
+                flat_age,
+                ..
+            } => format!(
+                "stack-{pattern}-{read:?}{}",
+                if *flat_age { "-flat-age" } else { "" }
+            )
+            .to_lowercase(),
+        }
+    }
+
+    /// Validates without building, so a bad arm fails before the report claim.
+    fn validate(&self, common: &Common) -> Result<()> {
+        match self {
+            ArmSpec::Stack { .. } => self.stack_config(common)?.validate(),
+        }
+    }
+
+    fn stack_config(&self, common: &Common) -> Result<StackConfig> {
+        match self {
+            ArmSpec::Stack {
+                pattern,
+                read,
+                rotation,
+                width,
+                heads,
+                mlp_hidden,
+                ..
+            } => {
+                let config = StackConfig {
+                    arch: StackArch::Geometric,
+                    vocab_size: VOCAB,
+                    width: *width,
+                    heads: *heads,
+                    mlp_hidden: *mlp_hidden,
+                    context: common.context,
+                    pattern: pattern.clone(),
+                    read: *read,
+                    rotation: *rotation,
+                    rotation_group: RotationGroup::Quaternion,
+                    seed: common.seed,
+                    memory: None,
+                    select: None,
+                    pointer: None,
+                };
+                config.validate()?;
+                Ok(config)
+            }
+        }
+    }
+
+    fn build(&self, common: &Common, device: &Device) -> Result<Box<dyn ContextArm>> {
+        match self {
+            ArmSpec::Stack { flat_age, .. } => {
+                let model = StackModel::new(self.stack_config(common)?, device)?;
+                if *flat_age {
+                    for (name, var) in model.variables() {
+                        if name.ends_with(".read.age") {
+                            var.set(&var.as_tensor().zeros_like()?)?;
+                        }
+                    }
+                }
+                let optimizer = StackAdamW::new(&model, common.weight_decay, common.clip)?;
+                Ok(Box::new(StackArm {
+                    model,
+                    optimizer,
+                    flat_age: *flat_age,
+                }))
+            }
+        }
+    }
+}
+
+struct StackArm {
+    model: StackModel,
+    optimizer: StackAdamW,
+    flat_age: bool,
+}
+
+impl StackArm {
+    fn read_layers(&self) -> usize {
+        self.model
+            .config
+            .pattern
+            .chars()
+            .filter(|&c| c == 'a')
+            .count()
+    }
+}
+
+impl ContextArm for StackArm {
+    fn kind(&self) -> &'static str {
+        "geometric_stack"
+    }
+
+    fn record(&self) -> Value {
+        json!({
+            "stack_config": self.model.config,
+            "age_init": if self.flat_age { "flat" } else { "default" },
+            "read_layers": self.read_layers(),
+            "recurrence_layers": self.model.config.layers() - self.read_layers(),
+            "recurrent_state_floats_per_layer": self.model.config.width,
+        })
+    }
+
+    fn parameters(&self) -> usize {
+        self.model.parameter_count()
+    }
+
+    fn device(&self) -> &Device {
+        self.model.device()
+    }
+
+    fn loss(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        batch: usize,
+        time: usize,
+    ) -> Result<Tensor> {
+        self.model.weighted_loss(ids, targets, weights, batch, time)
+    }
+
+    fn logits(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
+        self.model.forward(ids, batch, time)
+    }
+
+    fn update(&mut self, loss: &Tensor, lr: f64) -> Result<f64> {
+        let grads = loss.backward()?;
+        self.optimizer.update(&self.model, &grads, lr)
+    }
+
+    fn positions_scored(&self, position: usize) -> usize {
+        self.read_layers() * self.model.config.heads * (position + 1)
+    }
+
+    fn access_note(&self) -> String {
+        "read layers x heads x (position + 1): every causal position is scored by each read head (plus one NoRead slot, not counted); recurrence layers score no positions".into()
+    }
 }
 
 /// Recall by bucket: argmax over the whole vocabulary at each query.
 fn evaluate(
-    model: &StackModel,
+    arm: &dyn ContextArm,
     sequences: &[Sequence],
     context: usize,
     buckets: &[Bucket],
     chunk: usize,
 ) -> Result<Value> {
     let mut tallies = vec![Tally::default(); buckets.len()];
+    let mut scored = 0usize;
     for group in sequences.chunks(chunk.max(1)) {
         let (ids, _, _) = batch_arrays(group, context);
-        let logits = model.forward(&ids, group.len(), context)?;
+        let logits = arm.logits(&ids, group.len(), context)?;
         let mut rows = Vec::new();
         for (s, sequence) in group.iter().enumerate() {
             for query in &sequence.queries {
                 rows.push((s * context + query.position) as u32);
             }
         }
-        let index = Tensor::from_vec(rows.clone(), rows.len(), model.device())?;
+        let index = Tensor::from_vec(rows.clone(), rows.len(), arm.device())?;
         let selected = logits
             .index_select(&index, 0)?
             .to_device(&Device::Cpu)?
@@ -303,6 +545,7 @@ fn evaluate(
             for query in &sequence.queries {
                 let scores = &selected[row];
                 row += 1;
+                scored += arm.positions_scored(query.position);
                 let (argmax, maximum) =
                     scores
                         .iter()
@@ -321,8 +564,18 @@ fn evaluate(
                 tally.correct += usize::from(argmax == query.value as usize);
                 tally.nll += nll;
                 tally.distance += query.distance;
+                let most_recent = sequence
+                    .queries
+                    .iter()
+                    .filter(|other| {
+                        other.value != query.value
+                            && other.position - other.distance + 1 < query.position
+                    })
+                    .max_by_key(|other| other.position - other.distance)
+                    .map(|other| other.value);
                 let predicted = argmax as u32;
                 if predicted != query.value {
+                    tally.most_recent_value += usize::from(most_recent == Some(predicted));
                     if in_window.contains(&predicted) {
                         tally.other_pair_value += 1;
                     } else if (VALUES.0..VALUES.1).contains(&predicted) {
@@ -350,6 +603,7 @@ fn evaluate(
                 "wrong_other_pair_value": tally.other_pair_value,
                 "wrong_absent_value": tally.absent_value,
                 "wrong_echoed_key": tally.echoed_key,
+                "wrong_most_recent_pair_value": tally.most_recent_value,
             }),
         );
     }
@@ -359,6 +613,7 @@ fn evaluate(
         "total": total,
         "accuracy": correct as f64 / total.max(1) as f64,
         "chance_accuracy": 1.0 / f64::from(VALUES.1 - VALUES.0),
+        "positions_scored_per_query_token_mean": scored as f64 / total.max(1) as f64,
     }))
 }
 
@@ -409,10 +664,11 @@ impl Args {
     }
 }
 
-struct Settings {
+/// Task, training and evaluation settings shared by every arm.
+struct Common {
     out: PathBuf,
-    config: StackConfig,
     device_name: String,
+    context: usize,
     pairs_per_bucket: usize,
     batch: usize,
     steps: usize,
@@ -428,49 +684,43 @@ struct Settings {
     max_seconds: f64,
 }
 
-fn settings() -> Result<Settings> {
+impl Common {
+    fn record(&self) -> Value {
+        let buckets = buckets_for(self.context);
+        json!({
+            "device": self.device_name,
+            "threads": std::env::var("RAYON_NUM_THREADS").ok(),
+            "context": self.context,
+            "vocab": VOCAB,
+            "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
+            "pairing_split": {
+                "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
+                "rule": "(key - 64 + value - 288) % 4; training draws classes 1..3, the held-out evaluation class 0",
+            },
+            "buckets": buckets.iter().map(|b| json!({"name": b.name, "low": b.low, "high": b.high})).collect::<Vec<_>>(),
+            "pairs_per_bucket": self.pairs_per_bucket,
+            "batch": self.batch, "steps": self.steps, "lr": self.lr, "warmup": self.warmup,
+            "min_lr": self.min_lr, "weight_decay": self.weight_decay, "clip": self.clip,
+            "eval_every": self.eval_every, "curve_sequences": self.curve_sequences,
+            "final_sequences": self.final_sequences, "seed": self.seed,
+            "max_seconds": self.max_seconds,
+        })
+    }
+}
+
+fn settings() -> Result<(Common, ArmSpec)> {
     let mut args = Args::parse()?;
     let out = PathBuf::from(
         args.take("out")
             .ok_or_else(|| invalid("out=NEW_REPORT_ROOT is required"))?,
     );
-    let pattern = args.take("pattern").unwrap_or_else(|| "aaaaaa".into());
-    let read = match args.take("read").as_deref() {
-        None | Some("l2") => ReadScore::L2,
-        Some("dot") => ReadScore::Dot,
-        Some("lorentz") => ReadScore::Lorentz,
-        Some(other) => return Err(invalid(format!("invalid read={other}"))),
-    };
-    let rotation = args.parsed("rotation", true)?;
-    let width = args.parsed("width", 128usize)?;
-    let heads = args.parsed("heads", 4usize)?;
-    let mlp_hidden = args.parsed("mlp", 384usize)?;
-    let context = args.parsed("context", 512usize)?;
-    let seed = args.parsed("seed", 1u64)?;
-    let config = StackConfig {
-        arch: StackArch::Geometric,
-        vocab_size: VOCAB,
-        width,
-        heads,
-        mlp_hidden,
-        context,
-        pattern,
-        read,
-        rotation,
-        rotation_group: RotationGroup::Quaternion,
-        seed,
-        memory: None,
-        select: None,
-        pointer: None,
-    };
-    config.validate()?;
-    let settings = Settings {
+    let common = Common {
         out,
-        config,
         device_name: args.take("device").unwrap_or_else(|| "cpu".into()),
+        context: args.parsed("context", 512usize)?,
         pairs_per_bucket: args.parsed("pairs_per_bucket", 8usize)?,
         batch: args.parsed("batch", 8usize)?,
-        steps: args.parsed("steps", 1500usize)?,
+        steps: args.parsed("steps", 1800usize)?,
         lr: args.parsed("lr", 1e-3f64)?,
         warmup: args.parsed("warmup", 100usize)?,
         min_lr: args.parsed("min_lr", 0.1f64)?,
@@ -479,35 +729,38 @@ fn settings() -> Result<Settings> {
         eval_every: args.parsed("eval_every", 100usize)?,
         curve_sequences: args.parsed("curve_sequences", 8usize)?,
         final_sequences: args.parsed("final_sequences", 64usize)?,
-        seed,
+        seed: args.parsed("seed", 1u64)?,
         max_seconds: args.parsed("max_seconds", 1200f64)?,
     };
+    let arm = ArmSpec::parse(&mut args)?;
     args.finish()?;
-    if settings.batch == 0
-        || settings.steps == 0
-        || settings.eval_every == 0
-        || settings.curve_sequences == 0
-        || settings.final_sequences == 0
-        || !(settings.lr > 0.0)
-        || !(settings.max_seconds > 0.0)
+    if common.batch == 0
+        || common.steps == 0
+        || common.eval_every == 0
+        || common.curve_sequences == 0
+        || common.final_sequences < 2
+        || !(common.lr > 0.0)
+        || !(common.max_seconds > 0.0)
     {
         return Err(invalid(
             "batch, steps, eval_every, sequences, lr and max_seconds must be positive",
         ));
     }
-    if buckets_for(settings.config.context).is_empty() {
+    if buckets_for(common.context).is_empty() {
         return Err(invalid("the context holds no distance bucket"));
     }
-    Ok(settings)
+    arm.validate(&common)?;
+    Ok((common, arm))
 }
 
 const TRAIN_DOMAIN: u64 = 0x7472_6169_6E;
 const CURVE_DOMAIN: u64 = 0x6375_7276_65;
+const CURVE_IN_CLASS_DOMAIN: u64 = 0x6375_7276_63;
 const HELD_OUT_DOMAIN: u64 = 0x6865_6C64;
 const IN_CLASS_DOMAIN: u64 = 0x636C_6173_73;
 
 fn sequences(
-    s: &Settings,
+    s: &Common,
     buckets: &[Bucket],
     domain: u64,
     count: usize,
@@ -516,47 +769,64 @@ fn sequences(
     (0..count)
         .map(|i| {
             let mut rng = Rng::new(s.seed, domain, i as u64);
-            generate(
-                &mut rng,
-                s.config.context,
-                buckets,
-                s.pairs_per_bucket,
-                pairing,
-            )
+            generate(&mut rng, s.context, buckets, s.pairs_per_bucket, pairing)
         })
         .collect()
 }
 
-fn run(s: &Settings, log: &mut fs::File) -> Result<Value> {
+fn bucket_line(result: &Value, buckets: &[Bucket]) -> String {
+    buckets
+        .iter()
+        .map(|b| {
+            format!(
+                "{}={:.3}",
+                b.name,
+                result["by_bucket"][b.name]["accuracy"]
+                    .as_f64()
+                    .unwrap_or(f64::NAN)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Trains `arm` on the task and scores it; returns the arm-independent
+/// results block of the report.
+fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value> {
     use std::io::Write;
     let started = Instant::now();
-    let device = uor_r4_training::baseline_protocol::device(&s.device_name)?;
-    let buckets = buckets_for(s.config.context);
-    let model = StackModel::new(s.config.clone(), &device)?;
-    let mut optimizer = StackAdamW::new(&model, s.weight_decay, s.clip)?;
-    let parameters = model.parameter_count();
+    let buckets = buckets_for(s.context);
     let line = format!(
-        "pattern {} read {:?} rotation {}: {} parameters, context {}, buckets {:?}",
-        s.config.pattern,
-        s.config.read,
-        s.config.rotation,
-        parameters,
-        s.config.context,
+        "{} {}: {} parameters, context {}, buckets {:?}",
+        arm.kind(),
+        arm.record(),
+        arm.parameters(),
+        s.context,
         buckets.iter().map(|b| b.name).collect::<Vec<_>>()
     );
     eprintln!("{line}");
     writeln!(log, "{line}")?;
-    let curve_set = sequences(
+    let curve_held_out = sequences(
         s,
         &buckets,
         CURVE_DOMAIN,
         s.curve_sequences,
         Pairing::HeldOut,
     )?;
+    let curve_in_class = sequences(
+        s,
+        &buckets,
+        CURVE_IN_CLASS_DOMAIN,
+        s.curve_sequences,
+        Pairing::Train,
+    )?;
     let chunk = s.batch;
     let mut curve = Vec::new();
-    let initial = evaluate(&model, &curve_set, s.config.context, &buckets, chunk)?;
-    curve.push(json!({"step": 0, "held_out": initial}));
+    curve.push(json!({
+        "step": 0,
+        "in_class": evaluate(&*arm, &curve_in_class, s.context, &buckets, chunk)?,
+        "held_out": evaluate(&*arm, &curve_held_out, s.context, &buckets, chunk)?,
+    }));
     let (mut window_loss, mut window_steps) = (0f64, 0usize);
     let mut step_seconds = Vec::new();
     let mut stopped_early = false;
@@ -573,49 +843,40 @@ fn run(s: &Settings, log: &mut fs::File) -> Result<Value> {
                 let mut rng = Rng::new(s.seed, TRAIN_DOMAIN, (step * s.batch + b) as u64);
                 generate(
                     &mut rng,
-                    s.config.context,
+                    s.context,
                     &buckets,
                     s.pairs_per_bucket,
                     Pairing::Train,
                 )
             })
             .collect::<Result<_>>()?;
-        let (ids, targets, weights) = batch_arrays(&batch, s.config.context);
-        let loss = model.weighted_loss(&ids, &targets, &weights, s.batch, s.config.context)?;
+        let (ids, targets, weights) = batch_arrays(&batch, s.context);
+        let loss = arm.loss(&ids, &targets, &weights, s.batch, s.context)?;
         let value = f64::from(loss.to_scalar::<f32>()?);
         if !value.is_finite() {
             return Err(invalid(format!("nonfinite loss at step {step}")));
         }
-        let grads = loss.backward()?;
-        let grad_norm = optimizer.update(&model, &grads, lr)?;
+        let grad_norm = arm.update(&loss, lr)?;
         step += 1;
         step_seconds.push(clock.elapsed().as_secs_f64());
         window_loss += value;
         window_steps += 1;
         if step % s.eval_every == 0 || step == s.steps {
-            let held_out = evaluate(&model, &curve_set, s.config.context, &buckets, chunk)?;
+            let in_class = evaluate(&*arm, &curve_in_class, s.context, &buckets, chunk)?;
+            let held_out = evaluate(&*arm, &curve_held_out, s.context, &buckets, chunk)?;
             let train_loss = window_loss / window_steps.max(1) as f64;
             let line = format!(
-                "step {step} lr {lr:.2e} train query NLL {train_loss:.4} grad {grad_norm:.3} held-out acc {:.4} {} ({:.0}s)",
+                "step {step} lr {lr:.2e} train query NLL {train_loss:.4} grad {grad_norm:.3} in-class acc {:.3} {} | held-out acc {:.3} ({:.0}s)",
+                in_class["accuracy"].as_f64().unwrap_or(f64::NAN),
+                bucket_line(&in_class, &buckets),
                 held_out["accuracy"].as_f64().unwrap_or(f64::NAN),
-                buckets
-                    .iter()
-                    .map(|b| format!(
-                        "{}={:.3}",
-                        b.name,
-                        held_out["by_bucket"][b.name]["accuracy"]
-                            .as_f64()
-                            .unwrap_or(f64::NAN)
-                    ))
-                    .collect::<Vec<_>>()
-                    .join(" "),
                 started.elapsed().as_secs_f64()
             );
             eprintln!("{line}");
             writeln!(log, "{line}")?;
             curve.push(json!({
                 "step": step, "lr": lr, "train_query_nll": train_loss,
-                "grad_norm": grad_norm, "held_out": held_out,
+                "grad_norm": grad_norm, "in_class": in_class, "held_out": held_out,
                 "elapsed_seconds": started.elapsed().as_secs_f64(),
             }));
             window_loss = 0.0;
@@ -624,37 +885,48 @@ fn run(s: &Settings, log: &mut fs::File) -> Result<Value> {
     }
     let train_seconds: f64 = step_seconds.iter().sum();
     let eval_clock = Instant::now();
-    let held_out_set = sequences(
-        s,
-        &buckets,
-        HELD_OUT_DOMAIN,
-        s.final_sequences,
-        Pairing::HeldOut,
-    )?;
-    let held_out = evaluate(&model, &held_out_set, s.config.context, &buckets, chunk)?;
     let in_class_set = sequences(
         s,
         &buckets,
         IN_CLASS_DOMAIN,
-        s.final_sequences / 2,
+        s.final_sequences,
         Pairing::Train,
     )?;
-    let in_class = evaluate(&model, &in_class_set, s.config.context, &buckets, chunk)?;
+    let in_class = evaluate(&*arm, &in_class_set, s.context, &buckets, chunk)?;
+    let held_out_set = sequences(
+        s,
+        &buckets,
+        HELD_OUT_DOMAIN,
+        s.final_sequences / 2,
+        Pairing::HeldOut,
+    )?;
+    let held_out = evaluate(&*arm, &held_out_set, s.context, &buckets, chunk)?;
     let line = format!(
-        "final held-out acc {:.4}; in-class fresh acc {:.4}",
+        "final in-class fresh acc {:.4} {}; held-out-class acc {:.4} {}",
+        in_class["accuracy"].as_f64().unwrap_or(f64::NAN),
+        bucket_line(&in_class, &buckets),
         held_out["accuracy"].as_f64().unwrap_or(f64::NAN),
-        in_class["accuracy"].as_f64().unwrap_or(f64::NAN)
+        bucket_line(&held_out, &buckets),
     );
     eprintln!("{line}");
     writeln!(log, "{line}")?;
     let mut sorted = step_seconds.clone();
     sorted.sort_by(f64::total_cmp);
+    let mean_positions = (0..s.context)
+        .map(|t| arm.positions_scored(t) as f64)
+        .sum::<f64>()
+        / s.context as f64;
     Ok(json!({
-        "parameters": parameters,
+        "context_access": {
+            "positions_scored_per_query_token_mean": in_class["positions_scored_per_query_token_mean"],
+            "positions_scored_per_token_mean_over_window": mean_positions,
+            "positions_scored_at_last_position": arm.positions_scored(s.context - 1),
+            "counts": arm.access_note(),
+        },
         "steps_completed": step,
         "stopped_early_at_max_seconds": stopped_early,
-        "final_held_out_pairings": held_out,
         "final_in_class_fresh_pairings": in_class,
+        "final_held_out_class_pairings": held_out,
         "curve": curve,
         "train_seconds": train_seconds,
         "median_step_seconds": sorted.get(sorted.len() / 2).copied(),
@@ -669,40 +941,46 @@ fn write_json(path: &Path, value: &Value) -> Result<()> {
     Ok(())
 }
 
+/// The report's fixed per-arm record schema.
+const REPORT_SCHEMA: &str = "uor-r4/mqar-bench/arm-record/v1";
+
 fn main() -> Result<()> {
-    let s = settings()?;
+    let (common, spec) = settings()?;
     // Claimed exclusively after argument validation, before any model work.
-    report_output::claim(&s.out)?;
-    let buckets = buckets_for(s.config.context);
-    let config = json!({
-        "stack_config": s.config,
-        "device": s.device_name,
-        "threads": std::env::var("RAYON_NUM_THREADS").ok(),
-        "vocab": VOCAB,
-        "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
-        "pairing_split": {
-            "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
-            "rule": "(key - 64 + value - 288) % 4; training draws classes 1..3, the primary evaluation class 0",
-        },
-        "buckets": buckets.iter().map(|b| json!({"name": b.name, "low": b.low, "high": b.high})).collect::<Vec<_>>(),
-        "pairs_per_bucket": s.pairs_per_bucket,
-        "batch": s.batch, "steps": s.steps, "lr": s.lr, "warmup": s.warmup, "min_lr": s.min_lr,
-        "weight_decay": s.weight_decay, "clip": s.clip, "eval_every": s.eval_every,
-        "curve_sequences": s.curve_sequences, "final_sequences": s.final_sequences,
-        "seed": s.seed, "max_seconds": s.max_seconds,
-        "argv": std::env::args().collect::<Vec<_>>(),
-    });
-    write_json(&s.out.join("config.json"), &config)?;
-    let mut log = fs::File::create(s.out.join("log.txt"))?;
-    let result = run(&s, &mut log);
+    report_output::claim(&common.out)?;
+    let task = common.record();
+    let argv = std::env::args().collect::<Vec<_>>();
+    write_json(
+        &common.out.join("config.json"),
+        &json!({"schema": REPORT_SCHEMA, "task": task, "arm_label": spec.label(), "argv": argv}),
+    )?;
+    let mut log = fs::File::create(common.out.join("log.txt"))?;
+    let result = (|| -> Result<(Value, Value)> {
+        let device = uor_r4_training::baseline_protocol::device(&common.device_name)?;
+        let mut arm = spec.build(&common, &device)?;
+        let arm_record = json!({
+            "label": spec.label(),
+            "kind": arm.kind(),
+            "parameters": arm.parameters(),
+            "config": arm.record(),
+        });
+        let results = run(&common, arm.as_mut(), &mut log)?;
+        Ok((arm_record, results))
+    })();
     drop(log);
     let report = match &result {
-        Ok(run) => json!({"status": "complete", "config": config, "run": run}),
-        Err(error) => json!({"status": "failed", "config": config, "error": error.to_string()}),
+        Ok((arm, results)) => json!({
+            "schema": REPORT_SCHEMA, "status": "complete", "task": task, "argv": argv,
+            "arm": arm, "results": results,
+        }),
+        Err(error) => json!({
+            "schema": REPORT_SCHEMA, "status": "failed", "task": task, "argv": argv,
+            "arm": {"label": spec.label()}, "error": error.to_string(),
+        }),
     };
-    write_json(&s.out.join("report.json"), &report)?;
-    report_output::seal(&s.out)?;
-    report_output::verify(&s.out)?;
+    write_json(&common.out.join("report.json"), &report)?;
+    report_output::seal(&common.out)?;
+    report_output::verify(&common.out)?;
     result.map(|_| ())
 }
 
@@ -817,5 +1095,50 @@ mod tests {
             assert!(targets[i] >= VALUES.0 && targets[i] < VALUES.1);
             assert!(ids[i] >= KEYS.0 && ids[i] < KEYS.1);
         }
+    }
+
+    #[test]
+    fn a_stack_arm_trains_scores_and_counts_its_context_access() {
+        let common = Common {
+            out: PathBuf::from("unused"),
+            device_name: "cpu".into(),
+            context: 64,
+            pairs_per_bucket: 2,
+            batch: 2,
+            steps: 1,
+            lr: 1e-3,
+            warmup: 1,
+            min_lr: 0.1,
+            weight_decay: 0.1,
+            clip: 1.0,
+            eval_every: 1,
+            curve_sequences: 1,
+            final_sequences: 2,
+            seed: 3,
+            max_seconds: 60.0,
+        };
+        let spec = ArmSpec::Stack {
+            pattern: "rar".into(),
+            read: ReadScore::L2,
+            rotation: true,
+            width: 16,
+            heads: 2,
+            mlp_hidden: 16,
+            flat_age: true,
+        };
+        spec.validate(&common).expect("valid arm");
+        let mut arm = spec.build(&common, &Device::Cpu).expect("arm");
+        assert_eq!(arm.positions_scored(0), 2);
+        assert_eq!(arm.positions_scored(63), 2 * 64);
+        let buckets = buckets_for(common.context);
+        let batch = sequences(&common, &buckets, TRAIN_DOMAIN, 2, Pairing::Train).expect("batch");
+        let (ids, targets, weights) = batch_arrays(&batch, common.context);
+        let loss = arm
+            .loss(&ids, &targets, &weights, 2, common.context)
+            .expect("loss");
+        assert!(arm.update(&loss, 1e-3).expect("update").is_finite());
+        let report = evaluate(&*arm, &batch, common.context, &buckets, 2).expect("evaluate");
+        assert_eq!(report["total"], 2 * 2 * buckets.len());
+        assert_eq!(arm.record()["age_init"], "flat");
     }
 }
