@@ -3243,8 +3243,8 @@ fn context_direction(a: &Args) -> Result<()> {
             .ok_or_else(|| invalid("composition envelope absent"))?
             .join("construction-panel/panel.json"),
     )?)?;
-    if saved_panel["original_cases"] != episode_labels(&episodes)
-        || saved_panel["construction_cases"] != episode_labels(&construction)
+    if saved_panel["original_cases"] != serde_json::to_value(episode_labels(&episodes))?
+        || saved_panel["construction_cases"] != serde_json::to_value(episode_labels(&construction))?
     {
         return Err(invalid("context direction frozen panels differ"));
     }
