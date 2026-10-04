@@ -13,7 +13,6 @@
 
 use std::fmt::Write as _;
 use std::fs;
-use std::path::PathBuf;
 
 const N: usize = 624;
 const M: usize = 397;
@@ -841,19 +840,6 @@ fn interrogatives_of(text: &str, label: &str) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-/// Read a JSON object whose values are strings (panel-expected shape) and return them.
-fn strings_of(text: &str, label: &str) -> Result<Vec<String>, String> {
-    let v: serde_json::Value =
-        serde_json::from_str(text).map_err(|e| format!("{label} is not JSON: {e}"))?;
-    let obj = v
-        .as_object()
-        .ok_or_else(|| format!("{label} is not an object"))?;
-    Ok(obj
-        .values()
-        .filter_map(|x| x.as_str().map(str::to_string))
-        .collect())
-}
-
 /// Read a JSON object whose values are ARRAYS of strings (training-forms shape).
 fn strings_of_lists(text: &str, label: &str) -> Result<Vec<String>, String> {
     let v: serde_json::Value =
@@ -948,9 +934,24 @@ fn main() -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             let same_r = got_r == py_dumps(&rows);
             let same_e = got_e == py_dumps_map(&exp);
-            // Disjointness against every external pool. Each is EXPLICIT: a missing or
-            // unreadable path FAILS rather than skipping, so a green result here cannot
-            // mean "checked nothing".
+            // Disjointness against every external pool. Each given path is EXPLICIT: a
+            // missing or unreadable file FAILS rather than skipping. Each ABSENT argument
+            // is reported as NOT CHECKED, so a partial verify cannot read as complete --
+            // the four pools below are the whole check, and silence about one of them
+            // would look the same as having passed it.
+            let mut not_checked: Vec<&str> = Vec::new();
+            if kv("panel").is_none() {
+                not_checked.push("panel values (no panel=)");
+            }
+            if kv("panel_requests").is_none() {
+                not_checked.push("panel interrogatives (no panel_requests=)");
+            }
+            if kv("training_forms").is_none() {
+                not_checked.push("training forms (no training_forms=)");
+            }
+            if kv("training_values").is_none() {
+                not_checked.push("training values (no training_values=)");
+            }
             if let Some(panel) = kv("panel") {
                 let text = fs::read_to_string(&panel).map_err(|e| {
                     format!("UNAVAILABLE: cannot read panel {panel}: {e}; refusing a vacuous PASS")
@@ -990,6 +991,9 @@ fn main() -> Result<(), String> {
                     "the training values",
                 )?;
                 println!("  training values disjoint  ({tv})");
+            }
+            for pool in &not_checked {
+                println!("  NOT CHECKED: {pool}");
             }
             println!("  rows regenerated: {} (version {version})", rows.len());
             println!("  requests byte-identical: {same_r}");
