@@ -2794,9 +2794,9 @@ fn frozen_transfer_output_location(a: &Args) -> Result<()> {
             .ok_or_else(|| invalid("transfer output leaf absent"))?,
     );
     for root in [
-        &admission.frozen_fit_root,
-        &admission.composition_root,
-        &a.checkpoint,
+        admission.frozen_fit_root.as_path(),
+        admission.composition_root.as_path(),
+        a.checkpoint.as_path(),
         a.retained_report
             .parent()
             .ok_or_else(|| invalid("retained root absent"))?,
