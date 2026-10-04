@@ -61,7 +61,7 @@ native actions. At stage32 the target-versus-wrong integer token mass margin for
 construction01 step5 changes−484,337,078→+3,342,626,928; construction07 step6's
 Period margin changes−2,492,242,365→+1,786,522,851. Readout learning resolves these
 specific aggregate competitions without changing geometric state or alias rules.
-No identical-state/conflicting-target witness was found at those inspected errors.
+No identical active-feature/conflicting-target witness was found at those inspected errors.
 This does not prove general low-bit capacity or eliminate the future need for
 selected-occurrence transport.
 
