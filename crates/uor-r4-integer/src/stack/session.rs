@@ -148,16 +148,6 @@ pub struct IntegerStackModel {
     pool: Option<rayon::ThreadPool>,
 }
 
-/// The default thread count of a loaded model: the available parallelism,
-/// at most [`DEFAULT_MAX_THREADS`].
-pub const DEFAULT_MAX_THREADS: usize = 4;
-
-fn default_threads() -> usize {
-    std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .clamp(1, DEFAULT_MAX_THREADS)
-}
-
 /// A worker pool of `threads` threads, or `None` for one thread.
 fn thread_pool(threads: usize) -> Result<Option<rayon::ThreadPool>, StackError> {
     match threads {
@@ -374,18 +364,7 @@ impl IntegerStackModel {
             weights_per_token: weights,
             threads: 1,
             pool: None,
-        }
-        .with_default_threads())
-    }
-
-    /// The model with [`default_threads`] threads, or one thread when the
-    /// pool cannot be built (the outputs are the same either way).
-    fn with_default_threads(mut self) -> Self {
-        let threads = default_threads();
-        if let Ok(pool) = thread_pool(threads) {
-            (self.threads, self.pool) = (threads, pool);
-        }
-        self
+        })
     }
 
     /// Threads that a step's weight maps run on. Every thread count computes
@@ -395,8 +374,9 @@ impl IntegerStackModel {
     }
 
     /// Run the weight maps of every step on `threads` threads (1: the calling
-    /// thread only). The default is the available parallelism, at most
-    /// [`DEFAULT_MAX_THREADS`]. The outputs do not depend on it.
+    /// thread only, the default: laptop jobs register their thread counts in
+    /// a shared budget, so a loaded model never starts threads by itself).
+    /// The outputs do not depend on it.
     pub fn set_threads(&mut self, threads: usize) -> Result<(), StackError> {
         self.pool = thread_pool(threads)?;
         self.threads = threads;

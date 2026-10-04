@@ -43,8 +43,8 @@
 //! The engine is dense: every weight map is read in full per token
 //! ([`IntegerStackModel::weights_per_token`]), the labelled interim stepping
 //! stone of R3. The rows of a large map run on a worker pool
-//! ([`IntegerStackModel::set_threads`]; by default the available parallelism,
-//! at most [`DEFAULT_MAX_THREADS`]); each output row is computed whole by one
+//! ([`IntegerStackModel::set_threads`]; one thread, the calling one, by
+//! default); each output row is computed whole by one
 //! thread with the same kernel, so every thread count gives the same
 //! integers. The instruction audit of the
 //! `uor-r4-stack` binary (`scripts/audit_zero_matmul_serving.py --stack`)
@@ -72,7 +72,7 @@ pub use format::{
 pub use kernels::{stack_argmax, stack_snap_select};
 pub use session::{
     IntegerStackModel, IntegerStackSession, SerializedStackLayerState, SerializedStackSession,
-    SnapTraceEntry, CONVOLUTION_WIDTH, DEFAULT_MAX_THREADS, STACK_SESSION_SCHEMA,
+    SnapTraceEntry, CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
 };
 
 /// SHA-256 of the 120 unit icosians of 2I (the transport snap's roots) as

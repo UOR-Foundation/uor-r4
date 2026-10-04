@@ -687,8 +687,9 @@ fn every_thread_count_serves_the_same_integers() {
             }
         }
     }
+    // A loaded model starts no threads of its own.
     let mut model = IntegerStackModel::parse(&lorentz).expect("parse");
-    assert!((1..=super::DEFAULT_MAX_THREADS).contains(&model.threads()));
+    assert_eq!(model.threads(), 1);
     assert!(matches!(model.set_threads(0), Err(StackError::Threads(_))));
 }
 

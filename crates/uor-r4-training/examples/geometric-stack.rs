@@ -172,8 +172,7 @@
 //! has them, so the integer and float replies compare id for id. Sampling
 //! options (`temperature`, `top_k`, `top_p`, `seed`) are refused for a pointer
 //! artifact, and `engine=` for a plain one. The D11 engine runs its weight
-//! maps on `threads=` threads, or without it on its default pool (the
-//! available parallelism, at most 4); the integers do not depend on it. Its
+//! maps on `threads=` threads (default 1); the integers do not depend on it. Its
 //! `chat.json` (`uor-r4.geometric-stack-lut-chat/2`) records the engine's
 //! thread count, each reply's generated ids, seconds and ids per second, and
 //! the panel totals.
@@ -4355,8 +4354,6 @@ fn lut_chat_mode(arguments: &[String]) -> Result<()> {
     let top_p: f64 = args.number("top_p", 1.0)?;
     let seed: u64 = args.number("seed", 1)?;
     let threads: usize = args.number("threads", 1)?;
-    // The D11 engine runs on its default pool unless threads= is given.
-    let d11_threads = args.optional("threads").is_some().then_some(threads);
     if !(1..=MAX_NEW_TOKENS).contains(&max_new_tokens) {
         return Err(invalid(format!(
             "max_new_tokens must be 1..{MAX_NEW_TOKENS}"
@@ -4390,7 +4387,7 @@ fn lut_chat_mode(arguments: &[String]) -> Result<()> {
             let chat = mixture_chat(
                 bytes,
                 engine,
-                d11_threads,
+                threads,
                 &tokenizer,
                 &protocol,
                 requests.as_deref(),
@@ -4577,7 +4574,7 @@ struct MixtureChat {
 fn mixture_chat(
     bytes: Vec<u8>,
     engine: MixtureEngine,
-    threads: Option<usize>,
+    threads: usize,
     tokenizer: &uor_r4_tokenizer::ByteBpeTokenizer,
     protocol: &DialogueProtocol,
     requests: Option<&[uor_r4_training::stack_dialogue::Request]>,
@@ -4602,11 +4599,9 @@ fn mixture_chat(
             let mut model = uor_r4_integer::stack::IntegerStackModel::parse(&bytes)
                 .map_err(|e| invalid(e.to_string()))?;
             model.pointer().ok_or_else(no_head)?;
-            if let Some(threads) = threads {
-                model
-                    .set_threads(threads)
-                    .map_err(|e| invalid(e.to_string()))?;
-            }
+            model
+                .set_threads(threads)
+                .map_err(|e| invalid(e.to_string()))?;
             let clock = Instant::now();
             let (record, failure) = chat_with(
                 &|| D11Mixture(model.session()),
@@ -4636,7 +4631,6 @@ fn mixture_chat(
             )
             .map_err(lut)?;
             model.pointer().ok_or_else(no_head)?;
-            let threads = threads.unwrap_or(1);
             model.set_threads(threads).map_err(lut)?;
             let clock = Instant::now();
             let (record, failure) = chat_with(
@@ -5404,7 +5398,7 @@ mod tests {
             mixture_chat(
                 bytes.clone(),
                 engine,
-                Some(1),
+                1,
                 &tokenizer,
                 &protocol,
                 Some(&requests),
