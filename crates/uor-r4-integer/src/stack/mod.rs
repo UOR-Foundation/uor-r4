@@ -62,7 +62,8 @@ pub use flock::{
     MAX_FLOCK_CONTEXT, RAW_RANK_WEIGHTS_Q16, RECIPROCAL_Q32,
 };
 pub use format::{
-    Fixed, StackNumerics, StackShape, StackTransportSnap, GROUP, MAGIC, STACK_SCHEMA,
+    Fixed, StackNumerics, StackPointer, StackShape, StackTransportSnap, GROUP, MAGIC,
+    MAX_POINTER_DIM, STACK_SCHEMA,
 };
 pub use kernels::{stack_argmax, stack_snap_select};
 pub use session::{
