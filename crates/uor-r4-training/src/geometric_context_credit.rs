@@ -1279,7 +1279,7 @@ pub fn frozen_snapshot_observation(
             let at = row * width + lane;
             let s = code(original.states[row][lane])?;
             states.push(s);
-            source_latent.extend(root(s).map(|x| x as f32));
+            source_latent.extend(root(s.index()).map(|x| x as f32));
             let r = original.raw_roots[at];
             code(r)?;
             let category = usize::from(original.categories[at]);
