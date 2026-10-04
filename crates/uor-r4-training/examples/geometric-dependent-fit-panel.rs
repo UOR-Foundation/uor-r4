@@ -77,7 +77,7 @@ const PAIRS: [(&str, &str, &str); 16] = [
     (
         "composition-order",
         "singer Brimfold dancer Louston",
-        "Louston dancer Brimfold singer",
+        "Louston singer dancer Brimfold",
     ),
     (
         "composition-order",
