@@ -64,7 +64,8 @@ pub struct SelectedRecordFrame<'a> {
     pub token_ids: &'a [u32],
 }
 
-/// Chronological causal input. Event ordinals must strictly increase. Context
+/// Causal chronology is caller slice order. Event IDs are opaque provenance
+/// and may repeat or decrease; no sorting or deduplication is performed. Context
 /// tokens affect state but are never admitted as Copy candidates; role is bound
 /// provenance, not a new learned numeric feature.
 #[derive(Clone, Copy, Debug)]
@@ -110,7 +111,6 @@ pub enum OccurrenceReadError {
     UnsupportedStatus(FrameStatus),
     EmptyQuery,
     EmptyBank,
-    NonChronologicalBank,
     SequenceLength { actual: usize, maximum: usize },
     Token { token: u32, vocabulary: usize },
     Context(ContextError),
@@ -312,18 +312,6 @@ mod tests {
             reader.prepare_bank(&segments, &[1; 128], &[]),
             Err(OccurrenceReadError::SequenceLength { .. })
         ));
-        let unordered = [
-            segments[0],
-            OccurrenceBankSegment::Context {
-                token_ids: &[1],
-                event: 1,
-                role: 0,
-            },
-        ];
-        assert!(matches!(
-            reader.prepare_bank(&unordered, &[1], &[]),
-            Err(OccurrenceReadError::NonChronologicalBank)
-        ));
         assert!(matches!(
             reader.prepare_bank(&[], &[1], &[]),
             Err(OccurrenceReadError::EmptyBank)
@@ -340,6 +328,53 @@ mod tests {
             reader.prepare_bank(&invalid, &[1], &[]),
             Err(OccurrenceReadError::Token { .. })
         ));
+        Ok(())
+    }
+    #[test]
+    fn bank_opaque_shared_events_and_reverse_ids_preserve_caller_causal_replay() -> TestResult {
+        let f = Fixture::new()?;
+        let reader = f.reader()?;
+        let segments = [
+            OccurrenceBankSegment::Context {
+                token_ids: &[3],
+                event: 42,
+                role: 0,
+            },
+            OccurrenceBankSegment::Source {
+                frame: frame(&[2, 1]),
+                event: 42,
+            },
+            OccurrenceBankSegment::Context {
+                token_ids: &[3],
+                event: 7,
+                role: 0,
+            },
+            OccurrenceBankSegment::Source {
+                frame: frame(&[1, 2]),
+                event: 7,
+            },
+        ];
+        let bank = reader.prepare_bank(&segments, &[1], &[3])?;
+        assert_eq!(bank.tokens(), &[3, 2, 1, 3, 1, 2, 1, 3]);
+        assert_eq!(bank.candidate_events(), &[42, 42, 7, 7]);
+        assert_eq!(bank.candidate_positions(), &[1, 2, 4, 5]);
+        assert_eq!(
+            bank.source_occurrences()
+                .iter()
+                .map(|o| (o.token_offset, o.token_id))
+                .collect::<Vec<_>>(),
+            vec![(0, 2), (1, 1), (0, 1), (1, 2)]
+        );
+        let mut state = NativeContextState::new(f.context.heads(), f.context.lanes_per_head())?;
+        for (&token, step) in bank.tokens().iter().zip(bank.steps()) {
+            assert_eq!(*step, state.step(token as usize, &f.context, &f.geometry)?);
+        }
+        let reversed = [segments[2], segments[3], segments[0], segments[1]];
+        let reverse = reader.prepare_bank(&reversed, &[1], &[3])?;
+        assert_eq!(reverse.tokens(), &[3, 1, 2, 3, 2, 1, 1, 3]);
+        assert_eq!(reverse.candidate_events(), &[7, 7, 42, 42]);
+        assert_eq!(reverse.candidate_positions(), bank.candidate_positions());
+        assert_ne!(reverse.binding(), bank.binding());
         Ok(())
     }
     fn frame(tokens: &[u32]) -> SelectedRecordFrame<'_> {
@@ -556,6 +591,9 @@ impl<'a> BankPreparedOccurrenceContext<'a> {
     pub fn logical_prepared_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
     }
+    /// Digest of derived numerical segments/metadata/query/prefix. Original
+    /// BPE bytes, tokenizer and view policy are bound by the caller's inventory;
+    /// this digest alone is not a complete original lexical-source receipt.
     pub fn binding(&self) -> &[u8; 32] {
         &self.prepared.frame_binding
     }
@@ -875,12 +913,7 @@ impl<'a> NativeOccurrenceReader<'a> {
         let mut total = query.len().checked_add(prefix.len()).unwrap_or(usize::MAX);
         let mut count = 0usize;
         let mut first = None;
-        let mut previous = None;
         for segment in segments {
-            if previous.is_some_and(|e| e >= segment.event()) {
-                return Err(OccurrenceReadError::NonChronologicalBank);
-            }
-            previous = Some(segment.event());
             total = total
                 .checked_add(segment.tokens().len())
                 .unwrap_or(usize::MAX);
@@ -1120,6 +1153,7 @@ fn frame_digest(frame: SelectedRecordFrame<'_>, query: &[u32], prefix: &[u32]) -
     h.finalize().into()
 }
 
+// Derived numerical replay binding; original lexical provenance is external.
 fn bank_digest(segments: &[OccurrenceBankSegment<'_>], query: &[u32], prefix: &[u32]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();

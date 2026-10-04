@@ -302,6 +302,8 @@ pub struct BankCandidateTrace {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct BankRealizerTrace {
     pub policy: &'static str,
+    /// Derived numerical replay digest, not the complete original lexical
+    /// identity. `segments` retains original IDs/bytes, tokenizer and view policy.
     pub bank_binding_sha256: String,
     pub segments: Vec<BankSegmentTrace>,
     pub candidates: Vec<BankCandidateTrace>,
