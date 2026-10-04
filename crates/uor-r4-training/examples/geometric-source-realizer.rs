@@ -535,7 +535,7 @@ fn generate(
             if chosen as usize >= 4096 {
                 return Err(invalid("chosen action token outsideV4096"));
             }
-            traces.push(if (a.mode == "transfer" && stage.starts_with("transfer-")) || ((a.mode == "composition-fit" && stage != "readout-baseline") || a.mode == "context-fit") {
+            traces.push(if (a.mode == "transfer" && stage.starts_with("transfer-")) || ((a.mode == "composition-fit" && stage != "readout-baseline") || matches!(a.mode.as_str(), "context-fit" | "context-transplant")) {
                 json!({"step":step,"own_prefix_ids":prefix,"chosen_token_id":chosen,"actions":trace.actions})
             } else {
                 json!({"step":step,"own_prefix_ids":prefix,"chosen_token_id":chosen,"trace":trace})
@@ -556,7 +556,7 @@ fn generate(
         }
         let first_divergence = if matches!(
             a.mode.as_str(),
-            "transfer" | "composition-fit" | "context-fit"
+            "transfer" | "composition-fit" | "context-fit" | "context-transplant"
         ) {
             (0..actual_ids.len().max(e.target.len()))
                 .find(|i| actual_ids.get(*i) != e.target.get(*i))
@@ -567,7 +567,7 @@ fn generate(
         rows.push(json!({"id":e.id,"source_record":e.record,"source_commit":e.commit,"original_source_ids":e.tokens,"source_text":e.source_text,"source_view":e.view,"query_ids":e.query,"generated_ids":prefix,"reply_text":text,"raw_decoded_bytes_hex":hex::encode(tok.decode_bytes(&prefix)),"raw_decoded_text_lossy":decoded,"raw_utf8_valid":String::from_utf8(tok.decode_bytes(&prefix)).is_ok(),"text_policy":"strip only protocol2 single leading content separator","eos":ended,"stop":if ended{"eos"}else{"max64"},"accepted_complete_answer":accepted,"source_mention_diagnostic_only":text.contains(&e.source_text),"tokens":traces}));
         if (a.mode == "transfer" && stage.starts_with("transfer-"))
             || ((a.mode == "composition-fit" && stage != "readout-baseline")
-                || a.mode == "context-fit")
+                || matches!(a.mode.as_str(), "context-fit" | "context-transplant"))
         {
             if let Some(row) = rows.last_mut() {
                 row["first_divergence_from_frozen_target"] = json!(first_divergence);
@@ -822,6 +822,7 @@ fn main() -> Result<()> {
             | "transfer"
             | "composition-fit"
             | "context-fit"
+            | "context-transplant"
     ) || a.maximum_seconds == 0
         || (a.mode == "construction" && a.maximum_seconds > 300)
         || (a.mode == "fit" && a.maximum_seconds > 1200)
@@ -847,6 +848,13 @@ fn main() -> Result<()> {
                 || a.transfer_checkpoint.is_none()
                 || a.audit_report.is_some()
                 || a.fit_admission.is_some()))
+        || (a.mode == "context-transplant"
+            && (a.maximum_seconds > 300
+                || a.audit_checkpoint.is_none()
+                || a.transfer_checkpoint.is_none()
+                || a.expected_generation.is_some()
+                || a.audit_report.is_some()
+                || a.fit_admission.is_some()))
         || (matches!(a.mode.as_str(), "composition-fit" | "context-fit")
             && (a.maximum_seconds > 1200
                 || a.audit_checkpoint.is_none()
@@ -856,29 +864,43 @@ fn main() -> Result<()> {
                 || a.fit_admission.is_some()))
         || (!matches!(
             a.mode.as_str(),
-            "transfer" | "composition-fit" | "context-fit"
+            "transfer" | "composition-fit" | "context-fit" | "context-transplant"
         ) && a.transfer_checkpoint.is_some())
         || (!matches!(
             a.mode.as_str(),
-            "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit" | "context-fit"
+            "audit"
+                | "direction"
+                | "readout-fit"
+                | "transfer"
+                | "composition-fit"
+                | "context-fit"
+                | "context-transplant"
         ) && (a.audit_checkpoint.is_some()
             || a.expected_generation.is_some()
             || a.audit_report.is_some()))
     {
         return Err(invalid(
-            "construction/audit limit 1..300; direction/transfer limit 1..900; fit/readout-fit/composition-fit/context-fit limit 1..1200 with fixed64 updates",
+            "construction/audit/context-transplant limit 1..300; direction/transfer limit 1..900; fit/readout-fit/composition-fit/context-fit limit 1..1200 with fixed64 updates",
         ));
     }
     let admitted = admission(&a)?;
     if matches!(
         a.mode.as_str(),
-        "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit" | "context-fit"
+        "audit"
+            | "direction"
+            | "readout-fit"
+            | "transfer"
+            | "composition-fit"
+            | "context-fit"
+            | "context-transplant"
     ) {
         audit_output_location(&a)?;
     }
     report_output::claim(&a.out)?;
     write(&a.out.join("args.json"), &a)?;
-    let result = if a.mode == "transfer" {
+    let result = if a.mode == "context-transplant" {
+        context_transplant(&a)
+    } else if a.mode == "transfer" {
         transfer(&a)
     } else if matches!(
         a.mode.as_str(),
@@ -2273,6 +2295,307 @@ struct LoadedContinuation {
     evaluation: Value,
     bins: BTreeMap<String, String>,
 }
+fn parameter_bits(
+    parameters: &BTreeMap<String, candle_core::Var>,
+) -> Result<BTreeMap<String, Vec<u32>>> {
+    parameters
+        .iter()
+        .map(|(name, var)| {
+            Ok((
+                name.clone(),
+                var.flatten_all()?
+                    .to_vec1::<f32>()?
+                    .into_iter()
+                    .map(f32::to_bits)
+                    .collect(),
+            ))
+        })
+        .collect()
+}
+fn transplant_family(
+    destination: &BTreeMap<String, candle_core::Var>,
+    donor: &BTreeMap<String, candle_core::Var>,
+    copy_context: bool,
+) -> Result<()> {
+    if destination.is_empty() || destination.keys().ne(donor.keys()) {
+        return Err(invalid("transplant parameter inventory differs"));
+    }
+    // Validate every family before changing any destination variable.
+    for (name, var) in destination {
+        if (!name.starts_with("consumer.context.") && !readout_parameter(name))
+            || donor.get(name).is_none_or(|v| v.shape() != var.shape())
+        {
+            return Err(invalid("transplant family or dimensions differ"));
+        }
+    }
+    for (name, var) in destination {
+        if name.starts_with("consumer.context.") == copy_context {
+            var.set(
+                donor
+                    .get(name)
+                    .ok_or_else(|| invalid("transplant donor absent"))?
+                    .as_tensor(),
+            )?;
+        }
+    }
+    Ok(())
+}
+fn context_transplant(a: &Args) -> Result<()> {
+    let start = Instant::now();
+    let LoadedFinal {
+        identity,
+        tok,
+        episodes,
+        retained_sha,
+        before,
+        ..
+    } = load_final(a)?;
+    let new_path = a
+        .transfer_checkpoint
+        .as_ref()
+        .ok_or_else(|| invalid("transplant final checkpoint missing"))?;
+    if new_path.file_name().and_then(|x| x.to_str()) != Some("checkpoint-0064") {
+        return Err(invalid("transplant requires context-fit final64"));
+    }
+    let root = new_path
+        .parent()
+        .ok_or_else(|| invalid("context-fit parent envelope missing"))?;
+    report_output::verify(root)?;
+    report_output::verify(new_path)?;
+    let saved_args: Args = serde_json::from_slice(&fs::read(root.join("args.json"))?)?;
+    if saved_args.mode != "context-fit"
+        || saved_args.period_seed != a.period_seed
+        || sha256_file(&saved_args.tokenizer)? != sha256_file(&a.tokenizer)?
+        || sha256_file(&saved_args.retained_report)? != retained_sha
+        || sealed_manifest_sha256(&saved_args.checkpoint).map_err(|e| invalid(e.to_string()))?
+            != identity.parent_checkpoint_manifest_sha256
+        || sha256_file(
+            &saved_args
+                .audit_checkpoint
+                .as_ref()
+                .ok_or_else(|| invalid("saved original checkpoint missing"))?
+                .join("manifest.json"),
+        )? != sha256_file(
+            &a.audit_checkpoint
+                .as_ref()
+                .ok_or_else(|| invalid("original checkpoint missing"))?
+                .join("manifest.json"),
+        )?
+    {
+        return Err(invalid("transplant context-fit input identities differ"));
+    }
+    let old = load_context_parent(&saved_args, &identity, &retained_sha, &before)?;
+    let old_path = saved_args
+        .transfer_checkpoint
+        .as_ref()
+        .ok_or_else(|| invalid("old context checkpoint missing"))?;
+    let fit: Value = serde_json::from_slice(&fs::read(root.join("report.json"))?)?;
+    let initial: Value = serde_json::from_slice(&fs::read(root.join("evaluation-0000.json"))?)?;
+    let final_evaluation: Value =
+        serde_json::from_slice(&fs::read(root.join("evaluation-0064.json"))?)?;
+    let receipt: Value = serde_json::from_slice(&fs::read(new_path.join("checkpoint.json"))?)?;
+    report_output::verify(&root.join("construction-panel"))?;
+    if fit["schema"] != "uor-r4.geometric-context-adaptation/1"
+        || fit["mode"] != "context-fit"
+        || fit["status"] != "completed"
+        || fit["optimizer_updates"] != 64
+        || fit["retained_report_sha256"] != retained_sha
+        || fit["saved_identity"] != serde_json::to_value(&identity)?
+        || fit["initial_checkpoint_manifest_sha256"]
+            != sha256_file(&old_path.join("manifest.json"))?
+        || fit["fit_source_commit"] != old.fit["source_commit"]
+        || !fit["source_commit"]
+            .as_str()
+            .is_some_and(|s| s.len() == 40 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+        || fit["construction_manifest_sha256"]
+            != sha256_file(&root.join("construction-panel/manifest.json"))?
+        || !fit["checkpoints"]
+            .as_array()
+            .is_some_and(|v| v.contains(&initial) && v.contains(&final_evaluation))
+        || initial["optimizer_updates"] != 0
+        || final_evaluation["optimizer_updates"] != 64
+        || receipt["optimizer_updates"] != 64
+        || receipt != final_evaluation["checkpoint"]
+        || final_evaluation["ownprefix"]["native_metadata_sha256"]
+            != sha256_file(&new_path.join("realizer-native/metadata.json"))?
+    {
+        return Err(invalid(
+            "transplant context-fit report/checkpoint binding differs",
+        ));
+    }
+    let bytes = fs::read(&a.tokenizer)?;
+    let new_source = SourceRealizerWeights::load_source(&new_path.join("realizer-source"), &bytes)?;
+    let new_native =
+        NativeSourceRealizer::load(&new_path.join("realizer-native"), &new_source, &identity)?;
+    let new_bins = bin_files(&new_path.join("realizer-native"))?;
+    if new_bins
+        != serde_json::from_value::<BTreeMap<String, String>>(
+            final_evaluation["hard_payload_sha256"].clone(),
+        )?
+        || old.bins
+            != serde_json::from_value::<BTreeMap<String, String>>(
+                initial["hard_payload_sha256"].clone(),
+            )?
+        || old.bins.keys().ne(new_bins.keys())
+        || old.bins.get("consumer/exp-q31.bin") != new_bins.get("consumer/exp-q31.bin")
+    {
+        return Err(invalid("transplant parent payload identities differ"));
+    }
+    let compiler = SourceEmissionCompiler::new(&bytes)?;
+    let first = episodes
+        .first()
+        .ok_or_else(|| invalid("original episodes missing"))?;
+    let construction =
+        composition_panel(first, &tok, &compiler, old.native.binding().eos_token_id())?;
+    let (_, transfer_labels) = transfer_panel(
+        first,
+        &episodes,
+        &tok,
+        &compiler,
+        old.native.binding().eos_token_id(),
+    )?;
+    let mut training = construction.clone();
+    training.extend(episodes.iter().cloned());
+    let labels = json!({"schema":"uor-r4.geometric-composition-construction/1","original_cases":episode_labels(&episodes),"construction_cases":episode_labels(&construction),"development_transfer":transfer_labels,"training_cases":training.len(),"training_order_ids":training.iter().map(|e|e.id.clone()).collect::<Vec<_>>(),"answer_policy":"FrozenAnswers Current literal plus period; membership only","development_transfer_not_fresh_holdout":true,"transfer_targets_excluded_from_training":true});
+    if labels
+        != serde_json::from_slice::<Value>(&fs::read(root.join("construction-panel/panel.json"))?)?
+    {
+        return Err(invalid(
+            "transplant panel differs from frozen context-fit panel",
+        ));
+    }
+    let panel = a.out.join("frozen-panel");
+    report_output::claim(&panel)?;
+    write(&panel.join("panel.json"), &labels)?;
+    report_output::seal(&panel)?;
+    report_output::verify(&panel)?;
+    let mut input_files = BTreeMap::new();
+    for (name, path) in [("old", old_path), ("new", new_path)] {
+        input_files.insert(name, source_files(path)?);
+    }
+    let old_bits = parameter_bits(&old.source.parameters())?;
+    let new_bits = parameter_bits(&new_source.parameters())?;
+    if old_bits.keys().ne(new_bits.keys()) {
+        return Err(invalid("transplant source family inventories differ"));
+    }
+    let mut results = Vec::new();
+    let mut fixed_traces = Vec::new();
+    for (name, native, saved) in [
+        ("old-context-old-readouts", &old.native, &initial),
+        ("new-context-new-readouts", &new_native, &final_evaluation),
+    ] {
+        deadline(start, a)?;
+        let original = generate(
+            &format!("{name}-original"),
+            native,
+            &episodes,
+            &tok,
+            start,
+            a,
+        )?;
+        let construction_generation = generate(
+            &format!("{name}-construction"),
+            native,
+            &construction,
+            &tok,
+            start,
+            a,
+        )?;
+        if original["rows"] != saved["ownprefix"]["rows"]
+            || construction_generation["rows"] != saved["construction_ownprefix"]["rows"]
+        {
+            return Err(invalid(
+                "transplant saved original20/construction8 parent replay differs",
+            ));
+        }
+        fixed_traces.push(json!({"cell":name,"id":first.id,"prefix_ids":Vec::<u32>::new(),"trace":native.read(first.frame(),&first.view,&first.query,&[])?}));
+        results.push(json!({"cell":name,"saved_rows_exact":true,"original":original,"construction":construction_generation}));
+    }
+    for (name, copy_context) in [
+        ("old-context-new-readouts", false),
+        ("new-context-old-readouts", true),
+    ] {
+        deadline(start, a)?;
+        let mixed = SourceRealizerWeights::load_source(&old_path.join("realizer-source"), &bytes)?;
+        transplant_family(&mixed.parameters(), &new_source.parameters(), copy_context)?;
+        let expected_bits: BTreeMap<_, _> = old_bits
+            .iter()
+            .map(|(name, bits)| {
+                (
+                    name.clone(),
+                    if name.starts_with("consumer.context.") == copy_context {
+                        new_bits.get(name).cloned().unwrap_or_default()
+                    } else {
+                        bits.clone()
+                    },
+                )
+            })
+            .collect();
+        if parameter_bits(&mixed.parameters())? != expected_bits {
+            return Err(invalid("transplanted source family exact bits differ"));
+        }
+        let path = a.out.join(name);
+        let (receipt, native) = checkpoint(
+            &path,
+            &mixed,
+            &identity,
+            &bytes,
+            &episodes,
+            0,
+            "zero_update_context_readout_transplant_unadopted",
+        )?;
+        let bins = bin_files(&path.join("realizer-native"))?;
+        let expected_bins: BTreeMap<_, _> = old
+            .bins
+            .iter()
+            .map(|(file, sha)| {
+                (
+                    file.clone(),
+                    if (file == "consumer/context-q4.bin") == copy_context {
+                        new_bins.get(file).cloned().unwrap_or_default()
+                    } else {
+                        sha.clone()
+                    },
+                )
+            })
+            .collect();
+        if bins != expected_bins {
+            return Err(invalid("transplanted native payload mosaic differs"));
+        }
+        let original = generate(
+            &format!("{name}-original"),
+            &native,
+            &episodes,
+            &tok,
+            start,
+            a,
+        )?;
+        let construction_generation = generate(
+            &format!("{name}-construction"),
+            &native,
+            &construction,
+            &tok,
+            start,
+            a,
+        )?;
+        fixed_traces.push(json!({"cell":name,"id":first.id,"prefix_ids":Vec::<u32>::new(),"trace":native.read(first.frame(),&first.view,&first.query,&[])?}));
+        results.push(json!({"cell":name,"checkpoint":receipt,"source_family_bits_exact":true,"native_payload_mosaic_exact":true,"native_payload_sha256":bins,"original":original,"construction":construction_generation,
+            "original_comparisons":{"versus_start":generation_comparison(&initial["ownprefix"],&original)?,"versus_final64":generation_comparison(&final_evaluation["ownprefix"],&original)?},
+            "construction_comparisons":{"versus_start":generation_comparison(&initial["construction_ownprefix"],&construction_generation)?,"versus_final64":generation_comparison(&final_evaluation["construction_ownprefix"],&construction_generation)?}}));
+        write(&a.out.join("transplant-progress.json"), &results)?;
+    }
+    for (name, path) in [("old", old_path), ("new", new_path)] {
+        if input_files.get(name) != Some(&source_files(path)?) {
+            return Err(invalid("transplant input file set mutated"));
+        }
+        report_output::verify(path)?;
+    }
+    write(
+        &a.out.join("report.json"),
+        &json!({"schema":"uor-r4.geometric-context-transplant/1","mode":a.mode,"status":"completed","source_commit":source_commit()?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"optimizer_updates":0,"native_hybrid_exports":2,"saved_identity":identity,"retained_report_sha256":retained_sha,"context_fit_source_commit":fit["source_commit"],"context_fit_manifest_sha256":sha256_file(&root.join("manifest.json"))?,"old_checkpoint_manifest_sha256":sha256_file(&old_path.join("manifest.json"))?,"new_checkpoint_manifest_sha256":sha256_file(&new_path.join("manifest.json"))?,"frozen_panel_manifest_sha256":sha256_file(&panel.join("manifest.json"))?,"input_files_sha256":input_files,"input_files_unchanged":true,"results":results,"fixed_first_original_empty_prefix_traces":fixed_traces,"transfer_generation_run":false,"no_adopted_model":true,"scope":"zero-update2x2 component transplant diagnosis on20 exposed original+8 construction replies; mathematical factorization intervention, no heldout/geometric-advantage/chat qualification","wall_seconds":start.elapsed().as_secs_f64()}),
+    )?;
+    Ok(())
+}
 fn load_context_parent(
     a: &Args,
     identity: &ConsumerIdentity,
@@ -3070,6 +3393,68 @@ mod direction_tests {
         assert_eq!(compared[0]["gain"], false);
         after["original_source_ids"] = json!([8]);
         assert!(generation_comparison(&json!({"rows":[row]}), &json!({"rows":[after]})).is_err());
+        Ok(())
+    }
+    #[test]
+    fn transplant_selects_exact_families_without_mutating_donor() -> Result<()> {
+        for copy_context in [false, true] {
+            let destination = BTreeMap::from([
+                (
+                    "consumer.context.transition".into(),
+                    candle_core::Var::from_vec(vec![-0f32], 1, &Device::Cpu)?,
+                ),
+                (
+                    "consumer.potential.content_unary".into(),
+                    candle_core::Var::from_vec(vec![1f32], 1, &Device::Cpu)?,
+                ),
+                (
+                    "consumer.no_read.bias".into(),
+                    candle_core::Var::from_vec(vec![2f32], 1, &Device::Cpu)?,
+                ),
+                (
+                    "period.bias".into(),
+                    candle_core::Var::from_vec(vec![3f32], 1, &Device::Cpu)?,
+                ),
+            ]);
+            let donor = BTreeMap::from([
+                (
+                    "consumer.context.transition".into(),
+                    candle_core::Var::from_vec(vec![0f32], 1, &Device::Cpu)?,
+                ),
+                (
+                    "consumer.potential.content_unary".into(),
+                    candle_core::Var::from_vec(vec![4f32], 1, &Device::Cpu)?,
+                ),
+                (
+                    "consumer.no_read.bias".into(),
+                    candle_core::Var::from_vec(vec![5f32], 1, &Device::Cpu)?,
+                ),
+                (
+                    "period.bias".into(),
+                    candle_core::Var::from_vec(vec![6f32], 1, &Device::Cpu)?,
+                ),
+            ]);
+            let before = parameter_bits(&destination)?;
+            let donor_before = parameter_bits(&donor)?;
+            transplant_family(&destination, &donor, copy_context)?;
+            let after = parameter_bits(&destination)?;
+            for (name, bits) in &after {
+                assert_eq!(
+                    bits,
+                    if name.starts_with("consumer.context.") == copy_context {
+                        &donor_before[name]
+                    } else {
+                        &before[name]
+                    }
+                );
+            }
+            assert_eq!(parameter_bits(&donor)?, donor_before);
+        }
+        let unknown = BTreeMap::from([(
+            "unknown.parameter".into(),
+            candle_core::Var::from_vec(vec![1f32], 1, &Device::Cpu)?,
+        )]);
+        assert!(transplant_family(&unknown, &unknown, true).is_err());
         Ok(())
     }
     #[test]
