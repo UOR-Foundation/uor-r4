@@ -4107,7 +4107,6 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                         if i < last {
                             if let MemoryEffect::Write { value_tokens, .. } = &outcome.memory {
                                 stored_total_row = true;
-                                let text = tokenizer.decode(value_tokens);
                                 if asked_fact_is_stored(
                                     &tokenizer.decode(value_tokens),
                                     &row.answers,
@@ -4233,14 +4232,22 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             + recalled_wrong_value
             + recalled_misrendered
             + log_answered_but_wrong;
-        if correct + misses != total {
+        // A row whose turn errored increments `errors` and is skipped, so it is
+        // counted in `total` but lands in no correctness bucket. The check must
+        // include it, or a single turn error would fail the sum and lose the whole
+        // report.
+        if correct + misses + errors != total {
             return Err(invalid(format!(
-                "panel buckets do not sum to the row count: {correct} correct + {misses} misses != {total}"
+                "panel buckets do not sum to the row count: {correct} correct + {misses} misses + {errors} errors != {total}"
             )));
         }
-        if never_stored > asked_fact_stored_total {
+        // `never_stored` counts misses whose asked fact was NOT stored, so it can
+        // never overlap the rows where the asked fact WAS stored. The bound is
+        // therefore never_stored + asked_fact_stored_total <= the non-error rows.
+        if never_stored + asked_fact_stored_total > total - errors {
             return Err(invalid(format!(
-                "never_stored ({never_stored}) exceeds asked_fact_stored_total ({asked_fact_stored_total}), which is impossible"
+                "never_stored ({never_stored}) + asked_fact_stored_total ({asked_fact_stored_total}) exceeds the scored rows ({})",
+                total - errors
             )));
         }
         println!(
@@ -4278,7 +4285,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 "recalled_but_misrendered": recalled_misrendered,
                 "log_answered_but_wrong": log_answered_but_wrong,
                 "turn_errors": errors,
-                "rule": "mechanism state, not reply text. never_stored = no accepted-answer write; stored_but_not_recalled = the asked fact was stored but nothing was read; recalled_wrong_value = a store read returned a value that is not an accepted answer; recalled_but_misrendered = a store read returned an accepted answer but the reply lacks it; log_answered_but_wrong = the log sieve supplied a value for a row with no store read and the reply was wrong; unverified_log_value = a log-sieve value the session does not expose as tokens, so retrieval cannot be confirmed either way.",
+                "rule": "mechanism state, not reply text. never_stored = no accepted-answer write; stored_but_not_recalled = the asked fact was stored but nothing was read; recalled_wrong_value = a store read returned a value that is not an accepted answer; recalled_but_misrendered = a store read returned an accepted answer but the reply lacks it; log_answered_but_wrong = the log sieve supplied a value for a row with no store read and the reply was wrong.",
             },
             "error_examples": error_examples,
             "rows": judged,
