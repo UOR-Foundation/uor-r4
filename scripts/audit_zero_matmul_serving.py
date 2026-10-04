@@ -655,6 +655,9 @@ STACK_MANDATORY_SYMBOLS = [
         "mangled": re.compile(r"__RNv.*19IntegerStackSession(?:L[0-9A-Za-z_]*E)?4step\b"),
         "description": "D11 stack step: embedding, mixers, MLPs, final norm and head",
     },
+    _stack_kernel("stack_step", "session", "D11 stack step body (run on the calling thread or the model's pool)"),
+    _stack_kernel("stack_map_pairs", "session", "Pair-table weight map, rows split across the pool"),
+    _stack_kernel("stack_map_nibbles", "session", "Activation-table weight map, rows split across the pool"),
     _stack_kernel("stack_recurrence", "session", "Quaternion transport recurrence mixer"),
     _stack_kernel("stack_rotation", "session", "Unit rotation quaternion by long division"),
     _stack_kernel("stack_read", "session", "Dot/Lorentz/L2 read mixer with NoRead softmax"),
@@ -690,6 +693,20 @@ STACK_MANDATORY_SYMBOLS = [
     _stack_kernel("stack_pointer_mixture", "kernels", "Pointer mixture by multiple-table products"),
     _stack_kernel("stack_snap_select", "kernels", "Icosian root selection by exact Z[phi] comparison"),
     _stack_kernel("stack_snap_rotation", "kernels", "Snapped rotation by shift-add golden-ratio terms"),
+]
+
+# The stack engine's worker pool (`IntegerStackModel::set_threads`) schedules
+# the rows of its weight maps through rayon-core's work-stealing registry and
+# crossbeam's deques. That scheduling code computes no model value (it picks a
+# victim thread, indexes a job deque and waits on latches), and it contains
+# multiplies and divides (`find_work`'s random victim, deque slot indexing), so
+# a stack audit does not descend into it. Every kernel a task runs remains a
+# mandatory symbol above and is reached from the step's single-thread path.
+STACK_SCHEDULER_ALLOW = [
+    r"rayon_core",
+    r"crossbeam_deque",
+    r"crossbeam_epoch",
+    r"crossbeam_utils",
 ]
 
 # Call-graph roots of the stack engine (v0-mangled names, as `otool -tvV`
@@ -1337,12 +1354,13 @@ def find_serving_roots(functions, keywords, extra_roots):
     return roots, missing
 
 
-def run_call_graph_audit(path, disasm_choice="auto", extra_roots=()):
+def run_call_graph_audit(path, disasm_choice="auto", extra_roots=(), extra_allow=()):
     """Transitive call-graph reachability traversal from serving roots.
     Checks 100% of reachable numerical serving functions in compiled binaries.
     `extra_roots` are (name, compiled pattern) pairs naming further roots (the
-    stack set). Returns the functions visited, the violations and the names of
-    the `extra_roots` that no function matched."""
+    stack set); `extra_allow` are further name patterns the traversal does not
+    enter (the stack set's thread-pool scheduler). Returns the functions visited,
+    the violations and the names of the `extra_roots` that no function matched."""
     try:
         output = subprocess.check_output(["otool", "-tvV", path]).decode("utf-8", errors="ignore")
     except Exception as e:
@@ -1415,7 +1433,7 @@ def run_call_graph_audit(path, disasm_choice="auto", extra_roots=()):
         r"load",
         r"from_file",
         r"from_serialized",
-    ]
+    ] + list(extra_allow)
 
     def is_allowlisted(name):
         return any(re.search(pat, name) for pat in allow_patterns)
@@ -1558,6 +1576,7 @@ def main():
             target_path,
             args.disassembler,
             extra_roots=STACK_CALL_GRAPH_ROOTS if stack else (),
+            extra_allow=STACK_SCHEDULER_ALLOW if stack else (),
         )
         results["call_graph_checked"] = cg_visited
         results["call_graph_violations"] = cg_violations
