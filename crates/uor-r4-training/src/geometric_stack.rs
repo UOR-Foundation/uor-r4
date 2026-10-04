@@ -8878,7 +8878,6 @@ impl CustomOp2 for QuaternionScan {
     }
 }
 
-/// Runs the quaternion transport recurrence over whole windows.
 /// Left multiplication by the unit quaternion `j` of every four-channel lane
 /// of the last dimension: `j (a + b i + c j + d k) = -c + d i + a j - b k`,
 /// the signed permutation `(a, b, c, d) -> (-c, d, a, -b)`. Exact (no
@@ -8916,6 +8915,7 @@ fn previous_key_channel(key: &Tensor) -> Result<Tensor> {
     Ok(key.add(&quaternion_j_left(&previous)?)?)
 }
 
+/// Runs the quaternion transport recurrence over whole windows.
 pub fn quaternion_scan(transition: &Tensor, drive: &Tensor) -> Result<Tensor> {
     if transition.dtype() != DType::F32 || drive.dtype() != DType::F32 {
         return Err(invalid("quaternion_scan requires F32 tensors"));
