@@ -2076,5 +2076,96 @@
     "intermediate_period_observation_only_changes": 115,
     "source_offsets_differ_all_eight_lanes": true,
     "interpretation": "consumed-feature ranking failure; intermediate observation no longer consumed, no sourcecollision/alias/NoRead justification for controller"
+  },
+  "interpretation_review": {
+    "status": "PASS",
+    "scope": "Independent causal interpretation from saved native outputs and inspected serving scorer; no additional model execution.",
+    "source_commit": "81bb164b5e57b5c727818a286dd2b1add2eca9a8",
+    "raw_review": "independent-review.json",
+    "attribution_detail": "independent-attribution-review.json",
+    "finding": "The presence change allows one first source token to be generated. Once that token is in the prefix, the period-token observation edit is no longer in the consumed source-key or final-query features. The next error is incorrect ranking between distinct source occurrences.",
+    "checks": [
+      {
+        "candidate": 5,
+        "actual_prefix": [
+          363
+        ],
+        "canonical_parent_action_trace_equals_candidate_actual": true,
+        "transition_states_equal": true,
+        "source_key_codes_equal": true,
+        "final_query_codes_equal": true,
+        "intermediate_observation_changes": [
+          {
+            "observation_index": 115,
+            "old": {
+              "present": false,
+              "radius_bin": 0,
+              "root": 1
+            },
+            "new": {
+              "present": true,
+              "radius_bin": 5,
+              "root": 105
+            }
+          }
+        ]
+      },
+      {
+        "candidate": 9,
+        "actual_prefix": [
+          363
+        ],
+        "canonical_parent_action_trace_equals_candidate_actual": true,
+        "transition_states_equal": true,
+        "source_key_codes_equal": true,
+        "final_query_codes_equal": true,
+        "intermediate_observation_changes": [
+          {
+            "observation_index": 115,
+            "old": {
+              "present": false,
+              "radius_bin": 0,
+              "root": 1
+            },
+            "new": {
+              "present": true,
+              "radius_bin": 5,
+              "root": 116
+            }
+          }
+        ]
+      }
+    ],
+    "next_failure": {
+      "id": "construction-05",
+      "prefix_ids": [
+        363
+      ],
+      "target_token_id": 277,
+      "target_source_offset": 1,
+      "chosen_token_id": 292,
+      "chosen_source_offset": 3,
+      "target_q24": 4500274,
+      "chosen_q24": 19369439,
+      "target_minus_chosen_q24": -14869165,
+      "target_mass_q31": 885171593,
+      "chosen_mass_q31": 2147483648,
+      "all_eight_source_key_codes_distinct": true,
+      "collision_scope": "Distinct keys under the same query have distinct relative H4 roots in every present lane; this is not an erased-key collision. Learned scoring still chooses the wrong occurrence."
+    },
+    "attribution": "Category-only control 9 improves the frozen frontier more than selected pair 5 and produces the same generated sequence. Its individual surrogate gain is positive. Pair coupling is unnecessary for this observed improvement; the extra root change reduces the useful margin. Controls remain unadopted.",
+    "ranking_tradeoff": "Candidate 6 has lower full-answer construction CE than selected candidate 5, but the preregistered selection objective was frozen first-error CE. Keep both and do not change ranking retroactively.",
+    "recommendation": {
+      "deliverable": "Implement consumer-aware observable-cell learning with prospective category-part admission.",
+      "causal_changes": [
+        "Restrict proposal witnesses to source key observations or the final query observation that the current scorer consumes at each frozen reached error. Intermediate observations that neither update state nor enter a scorer cannot establish relevant progress.",
+        "Prospectively admit matched category-only parts of hidden-root/presence pairs as main candidates; keep ranking and total native evaluation bounds fixed before predictions.",
+        "After an accepted native-screened update, regenerate replies and refresh the actual first errors. Compare proposals within each round on the same frozen prefixes.",
+        "Preserve full-answer CE, all 28 replies, all prior candidates and the no-adoption boundary. Stop at no beneficial declared candidate or the fixed limits."
+      ],
+      "why_next": "This addresses observed proposal relevance and source-occurrence ranking using the existing geometric representation and native scorer. It avoids repeating the unchanged period-token dose or installing a forced cursor.",
+      "deferred": "The retained dependent-read/query-update bridge remains appropriate after reliable initial source consumption or a demonstrated need for dependent reads. This result does not establish that a new multi-read controller repairs the present occurrence-order error.",
+      "execution": "NOT_RUN"
+    }
   }
 }
