@@ -511,7 +511,7 @@ mod tests {
         geometric_source_realizer::{ArtifactIdentity, RealizerExecution},
         h4_tables::HistoricalH4Tables,
     };
-    const TOKENIZER: &[u8] = br#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
+    const TOKENIZER: &[u8] = br#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5,"\u0120":6,"\u0120a":7,"\u0120b":8},"merges":["\u0120 a","\u0120 b"]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
     struct Fixture {
         context: NativeContextQ4,
         potential: crate::geometric_potential::NativePotentialTables,
@@ -526,7 +526,7 @@ mod tests {
     impl Fixture {
         fn new() -> Result<Self> {
             let c = ContextQ4Config {
-                vocab_size: 6,
+                vocab_size: 9,
                 heads: 1,
                 lanes_per_head: 1,
             };
@@ -565,7 +565,7 @@ mod tests {
             .into_native()
             .map_err(|e| error(e.to_string()))?;
             let nc = NoReadConfig {
-                vocabulary: 6,
+                vocabulary: 9,
                 heads: 1,
                 latent_lanes_per_head: 1,
             };
@@ -573,7 +573,7 @@ mod tests {
                 let mut q = vec![0; nc.coefficient_count()];
                 q[0] = bias;
                 q[1 + 4] = bias;
-                q[1 + 6] = 7;
+                q[1 + nc.vocabulary] = 7;
                 NativeGeometricNoRead::new(
                     nc,
                     &geometric_no_read::pack_coefficients(&q).map_err(|e| error(e.to_string()))?,
@@ -681,6 +681,7 @@ mod tests {
     fn dependent_identity_both_input_modes_preserve_complete_legacy_trace() -> Result<()> {
         let f = Fixture::new()?;
         let v = f.compiler.compile(&[4, 5])?;
+        assert_eq!(v.emitted_token_ids(), &[7, 5]);
         let baseline = f.execution().read(frame(&[4, 5]), &v, &[4], &[])?;
         let feedback = f.feedback(false, false)?;
         for mode in [FeedbackInputMode::JointCopy, FeedbackInputMode::RoleSurface] {
@@ -707,6 +708,7 @@ mod tests {
     fn dependent_copy_feedback_under_stop_changes_one_shared_controller_snapshot() -> Result<()> {
         let f = Fixture::new()?;
         let v = f.compiler.compile(&[4, 5])?;
+        assert_eq!(v.emitted_token_ids(), &[7, 5]);
         let r = f.execution().read_dependent(
             frame(&[4, 5]),
             &v,
@@ -724,7 +726,7 @@ mod tests {
             .ok_or_else(|| error("selected occurrence missing"))?;
         assert_eq!(
             (o.record, o.commit, o.token_offset, o.token_id),
-            (17, 9, 0, 4)
+            (17, 9, 0, 7)
         );
         assert_ne!(r.feedback.before.states, r.feedback.after.states);
         assert_eq!(r.stage2_controller_snapshot, r.feedback.after);
@@ -831,6 +833,7 @@ mod tests {
     fn cancelled_present_k2_atoms_are_not_absence_or_projected_state() -> Result<()> {
         let f = Fixture::new()?;
         let v = f.compiler.compile(&[4, 5])?;
+        assert_eq!(v.emitted_token_ids(), &[7, 5]);
         let r = f.execution().read_dependent(
             frame(&[4, 5]),
             &v,
@@ -854,19 +857,34 @@ mod tests {
             r.feedback.value.packets[0][1].root
         );
         assert_eq!(r.feedback.actions, vec![0]);
-        let empty = f.compiler.compile(&[])?;
-        let r = f.execution().read_dependent(
-            frame(&[]),
-            &empty,
-            &[4],
+        // Empty selected views are invalid; exercise the reader's supported
+        // empty-source absence boundary without constructing an unchecked view.
+        let reader = f.reader()?;
+        let empty = reader
+            .prepare(frame(&[]), &[4], &[])
+            .map_err(|e| error(e.to_string()))?;
+        let snapshot = empty
+            .original_snapshot()
+            .map_err(|e| error(e.to_string()))?;
+        let mut actions = NativeSourceActions::new(f.binding.clone(), 1, &f.exp)?;
+        let terminal = actions.reduce(
             &[],
+            &[ActionHeadScores {
+                copy_q24: &[],
+                period_q24: 0,
+                stop_q24: 10 << 24,
+            }],
+        )?;
+        let (_, absent) = f.feedback(true, false)?.apply(
             &f.parent,
-            &f.feedback(true, false)?,
+            &empty,
+            &snapshot,
+            &terminal,
             FeedbackInputMode::JointCopy,
         )?;
-        assert!(!r.feedback.value.occurrence_valid);
-        assert!(r.feedback.selected_occurrence.is_none());
-        assert_eq!(r.feedback.value.packets[0][0].state, "Absent");
+        assert!(!absent.value.occurrence_valid);
+        assert!(absent.selected_occurrence.is_none());
+        assert_eq!(absent.value.packets[0][0].state, "Absent");
         let zero = NativeReadFeedback::compile(
             f.parent.clone(),
             f.context.config(),
