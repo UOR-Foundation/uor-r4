@@ -453,7 +453,7 @@ fn batch(
                     }
                 }
             }
-            trace_rows.push(if a.mode == "composition-fit" {
+            trace_rows.push(if matches!(a.mode.as_str(), "composition-fit" | "context-fit") {
                 json!({"step":step,"target_label_only":target,"teacherforced_prefix_ids":&e.target[..step],"nll":loss,"native_target_probability":probability,"native_loss_equal":true,"actions":out.trace.actions})
             } else { json!({"step":step,"target_label_only":target,"teacherforced_prefix_ids":&e.target[..step],"nll":loss,"native_target_probability":probability,"native_loss_equal":true,"trace":out.trace}) });
         }
@@ -535,7 +535,7 @@ fn generate(
             if chosen as usize >= 4096 {
                 return Err(invalid("chosen action token outsideV4096"));
             }
-            traces.push(if (a.mode == "transfer" && stage.starts_with("transfer-")) || (a.mode == "composition-fit" && stage != "readout-baseline") {
+            traces.push(if (a.mode == "transfer" && stage.starts_with("transfer-")) || ((a.mode == "composition-fit" && stage != "readout-baseline") || a.mode == "context-fit") {
                 json!({"step":step,"own_prefix_ids":prefix,"chosen_token_id":chosen,"actions":trace.actions})
             } else {
                 json!({"step":step,"own_prefix_ids":prefix,"chosen_token_id":chosen,"trace":trace})
@@ -554,7 +554,10 @@ fn generate(
         if ended {
             actual_ids.push(native.binding().eos_token_id());
         }
-        let first_divergence = if matches!(a.mode.as_str(), "transfer" | "composition-fit") {
+        let first_divergence = if matches!(
+            a.mode.as_str(),
+            "transfer" | "composition-fit" | "context-fit"
+        ) {
             (0..actual_ids.len().max(e.target.len()))
                 .find(|i| actual_ids.get(*i) != e.target.get(*i))
         } else {
@@ -563,7 +566,8 @@ fn generate(
         complete += usize::from(accepted);
         rows.push(json!({"id":e.id,"source_record":e.record,"source_commit":e.commit,"original_source_ids":e.tokens,"source_text":e.source_text,"source_view":e.view,"query_ids":e.query,"generated_ids":prefix,"reply_text":text,"raw_decoded_bytes_hex":hex::encode(tok.decode_bytes(&prefix)),"raw_decoded_text_lossy":decoded,"raw_utf8_valid":String::from_utf8(tok.decode_bytes(&prefix)).is_ok(),"text_policy":"strip only protocol2 single leading content separator","eos":ended,"stop":if ended{"eos"}else{"max64"},"accepted_complete_answer":accepted,"source_mention_diagnostic_only":text.contains(&e.source_text),"tokens":traces}));
         if (a.mode == "transfer" && stage.starts_with("transfer-"))
-            || (a.mode == "composition-fit" && stage != "readout-baseline")
+            || ((a.mode == "composition-fit" && stage != "readout-baseline")
+                || a.mode == "context-fit")
         {
             if let Some(row) = rows.last_mut() {
                 row["first_divergence_from_frozen_target"] = json!(first_divergence);
@@ -817,6 +821,7 @@ fn main() -> Result<()> {
             | "readout-fit"
             | "transfer"
             | "composition-fit"
+            | "context-fit"
     ) || a.maximum_seconds == 0
         || (a.mode == "construction" && a.maximum_seconds > 300)
         || (a.mode == "fit" && a.maximum_seconds > 1200)
@@ -842,30 +847,32 @@ fn main() -> Result<()> {
                 || a.transfer_checkpoint.is_none()
                 || a.audit_report.is_some()
                 || a.fit_admission.is_some()))
-        || (a.mode == "composition-fit"
+        || (matches!(a.mode.as_str(), "composition-fit" | "context-fit")
             && (a.maximum_seconds > 1200
                 || a.audit_checkpoint.is_none()
                 || a.expected_generation.is_none()
                 || a.transfer_checkpoint.is_none()
                 || a.audit_report.is_some()
                 || a.fit_admission.is_some()))
-        || (!matches!(a.mode.as_str(), "transfer" | "composition-fit")
-            && a.transfer_checkpoint.is_some())
         || (!matches!(
             a.mode.as_str(),
-            "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit"
+            "transfer" | "composition-fit" | "context-fit"
+        ) && a.transfer_checkpoint.is_some())
+        || (!matches!(
+            a.mode.as_str(),
+            "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit" | "context-fit"
         ) && (a.audit_checkpoint.is_some()
             || a.expected_generation.is_some()
             || a.audit_report.is_some()))
     {
         return Err(invalid(
-            "construction/audit limit 1..300; direction/transfer limit 1..900; fit/readout-fit/composition-fit limit 1..1200 with fixed64 updates",
+            "construction/audit limit 1..300; direction/transfer limit 1..900; fit/readout-fit/composition-fit/context-fit limit 1..1200 with fixed64 updates",
         ));
     }
     let admitted = admission(&a)?;
     if matches!(
         a.mode.as_str(),
-        "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit"
+        "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit" | "context-fit"
     ) {
         audit_output_location(&a)?;
     }
@@ -873,7 +880,10 @@ fn main() -> Result<()> {
     write(&a.out.join("args.json"), &a)?;
     let result = if a.mode == "transfer" {
         transfer(&a)
-    } else if matches!(a.mode.as_str(), "readout-fit" | "composition-fit") {
+    } else if matches!(
+        a.mode.as_str(),
+        "readout-fit" | "composition-fit" | "context-fit"
+    ) {
         readout_fit(&a)
     } else if a.mode == "direction" {
         direction(&a)
@@ -1557,6 +1567,68 @@ fn readout_gradients(gradients: BTreeMap<String, Tensor>) -> Result<BTreeMap<Str
         .filter(|(n, _)| readout_parameter(n))
         .collect())
 }
+fn context_gradients(gradients: BTreeMap<String, Tensor>) -> Result<BTreeMap<String, Tensor>> {
+    if gradients
+        .keys()
+        .any(|n| !readout_parameter(n) && !n.starts_with("consumer.context."))
+    {
+        return Err(invalid("unexpected context adaptation gradient family"));
+    }
+    Ok(gradients)
+}
+fn source_files(root: &Path) -> Result<BTreeMap<String, String>> {
+    fn visit(root: &Path, path: &Path, out: &mut BTreeMap<String, String>) -> Result<()> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let p = entry.path();
+            if entry.file_type()?.is_dir() {
+                visit(root, &p, out)?;
+            } else {
+                let relative = p
+                    .strip_prefix(root)
+                    .map_err(|e| invalid(e.to_string()))?
+                    .to_string_lossy()
+                    .into_owned();
+                out.insert(relative, sha256_file(&p)?);
+            }
+        }
+        Ok(())
+    }
+    let mut result = BTreeMap::new();
+    visit(root, root, &mut result)?;
+    Ok(result)
+}
+fn changed_file_bytes(before: &Path, after: &Path) -> Result<usize> {
+    let before = fs::read(before)?;
+    let after = fs::read(after)?;
+    if before.len() != after.len() {
+        return Err(invalid("native context dimensions changed"));
+    }
+    Ok(before.iter().zip(&after).filter(|(a, b)| a != b).count())
+}
+fn context_bit_changes(
+    before: &BTreeMap<String, Vec<u32>>,
+    after: &BTreeMap<String, Vec<u32>>,
+) -> Result<BTreeMap<String, usize>> {
+    if before.is_empty() || before.keys().ne(after.keys()) {
+        return Err(invalid("context source inventory differs"));
+    }
+    before
+        .iter()
+        .map(|(name, bits)| {
+            let current = after
+                .get(name)
+                .ok_or_else(|| invalid("context source family absent"))?;
+            if bits.len() != current.len() {
+                return Err(invalid("context source dimension differs"));
+            }
+            Ok((
+                name.clone(),
+                bits.iter().zip(current).filter(|(a, b)| a != b).count(),
+            ))
+        })
+        .collect()
+}
 fn context_shadow(weights: &SourceRealizerWeights) -> Result<BTreeMap<String, Vec<u32>>> {
     weights
         .parameters()
@@ -1585,7 +1657,8 @@ fn verify_context_shadow(
 }
 fn readout_fit(a: &Args) -> Result<()> {
     let start = Instant::now();
-    let composition = a.mode == "composition-fit";
+    let context_fit = a.mode == "context-fit";
+    let composition = matches!(a.mode.as_str(), "composition-fit" | "context-fit");
     let LoadedFinal {
         source: mut weights,
         mut native,
@@ -1601,13 +1674,41 @@ fn readout_fit(a: &Args) -> Result<()> {
         .as_ref()
         .ok_or_else(|| invalid("original checkpoint missing"))?;
     let mut composition_expected = None;
+    let mut context_parent_evaluation = None;
+    let mut prior_coadapt = None;
     if composition {
-        let loaded = load_continuation(a, &identity, &retained_sha, &before)?;
+        let loaded = if context_fit {
+            load_context_parent(a, &identity, &retained_sha, &before)?
+        } else {
+            load_continuation(a, &identity, &retained_sha, &before)?
+        };
         weights = loaded.source;
         native = loaded.native;
         fit = loaded.fit;
         before = loaded.bins;
         composition_expected = Some(loaded.evaluation["ownprefix"].clone());
+        if context_fit {
+            context_parent_evaluation = Some(loaded.evaluation.clone());
+            let root = a
+                .transfer_checkpoint
+                .as_ref()
+                .and_then(|p| p.parent())
+                .ok_or_else(|| invalid("context parent root missing"))?;
+            let parent_args: Args = serde_json::from_slice(&fs::read(root.join("args.json"))?)?;
+            let coadapt_root = parent_args
+                .transfer_checkpoint
+                .as_ref()
+                .and_then(|p| p.parent())
+                .ok_or_else(|| invalid("coadapt root missing"))?;
+            prior_coadapt = Some((
+                serde_json::from_slice::<Value>(&fs::read(
+                    coadapt_root.join("evaluation-0032.json"),
+                )?)?,
+                serde_json::from_slice::<Value>(&fs::read(
+                    coadapt_root.join("evaluation-0064.json"),
+                )?)?,
+            ));
+        }
     }
     let input = if composition {
         a.transfer_checkpoint
@@ -1616,6 +1717,8 @@ fn readout_fit(a: &Args) -> Result<()> {
     } else {
         original_input
     };
+    let input_source_files = source_files(&input.join("realizer-source"))?;
+    let input_native_files = source_files(&input.join("realizer-native"))?;
     let expected_path = a
         .expected_generation
         .as_ref()
@@ -1694,6 +1797,19 @@ fn readout_fit(a: &Args) -> Result<()> {
         report_output::seal(&root)?;
         report_output::verify(&root)?;
     }
+    if context_fit {
+        let root = input
+            .parent()
+            .ok_or_else(|| invalid("context parent envelope missing"))?;
+        report_output::verify(&root.join("construction-panel"))?;
+        let saved: Value =
+            serde_json::from_slice(&fs::read(root.join("construction-panel/panel.json"))?)?;
+        let current: Value =
+            serde_json::from_slice(&fs::read(a.out.join("construction-panel/panel.json"))?)?;
+        if saved != current {
+            return Err(invalid("context adaptation frozen panels differ"));
+        }
+    }
     let frozen = context_shadow(&weights)?;
     verify_context_shadow(&weights, &frozen)?;
     let context_sha = before
@@ -1704,7 +1820,7 @@ fn readout_fit(a: &Args) -> Result<()> {
         weights
             .parameters()
             .into_iter()
-            .filter(|(n, _)| readout_parameter(n))
+            .filter(|(n, _)| context_fit || readout_parameter(n))
             .map(|(_, v)| v)
             .collect(),
         ParamsAdamW {
@@ -1723,7 +1839,9 @@ fn readout_fit(a: &Args) -> Result<()> {
     let mut first_evaluation = None::<Value>;
     let mut export = |updates: usize| -> Result<()> {
         deadline(start, a)?;
-        verify_context_shadow(&weights, &frozen)?;
+        if !context_fit {
+            verify_context_shadow(&weights, &frozen)?;
+        }
         let path = a.out.join(format!("checkpoint-{updates:04}"));
         let (receipt, loaded) = checkpoint(
             &path,
@@ -1737,7 +1855,7 @@ fn readout_fit(a: &Args) -> Result<()> {
         let bins = bin_files(&path.join("realizer-native"))?;
         if before.keys().ne(bins.keys())
             || (updates == 0 && bins != before)
-            || bins.get("consumer/context-q4.bin") != Some(context_sha)
+            || (!context_fit && bins.get("consumer/context-q4.bin") != Some(context_sha))
             || bins.get("consumer/exp-q31.bin") != before.get("consumer/exp-q31.bin")
         {
             return Err(invalid(
@@ -1793,6 +1911,17 @@ fn readout_fit(a: &Args) -> Result<()> {
         } else {
             json!(null)
         };
+        if updates == 0 {
+            if let Some(parent) = &context_parent_evaluation {
+                if parent["ownprefix"]["rows"] != generation["rows"]
+                    || parent["construction_ownprefix"]["rows"] != construction_generation["rows"]
+                    || parent["development_transfer_ownprefix"]["rows"]
+                        != transfer_generation["rows"]
+                {
+                    return Err(invalid("context adaptation all44 saved parent rows differ"));
+                }
+            }
+        }
         let comparisons = if composition {
             let now = json!({"original":generation,"construction":construction_generation,"transfer":transfer_generation});
             let base = first_evaluation.as_ref().unwrap_or(&now);
@@ -1809,7 +1938,7 @@ fn readout_fit(a: &Args) -> Result<()> {
         } else {
             json!(null)
         };
-        let evaluation = json!({"optimizer_updates":updates,"checkpoint":receipt,"canonical":canonical,"ownprefix":generation,"construction_ownprefix":construction_generation,"development_transfer_ownprefix":transfer_generation,"row_comparisons":comparisons,"original_parent_comparison":if composition{Some(generation_comparison(&saved_original,&generation)?)}else{None},"context_source_bits_unchanged":true,"context_native_payload_unchanged":true,"hard_payload_sha256":bins});
+        let evaluation = json!({"optimizer_updates":updates,"checkpoint":receipt,"canonical":canonical,"ownprefix":generation,"construction_ownprefix":construction_generation,"development_transfer_ownprefix":transfer_generation,"row_comparisons":comparisons,"original_parent_comparison":if composition{Some(generation_comparison(&saved_original,&generation)?)}else{None},"context_source_bits_unchanged":context_shadow(&weights)? == frozen,"context_source_bit_changes":context_bit_changes(&frozen,&context_shadow(&weights)?)?,"context_native_payload_unchanged":bins.get("consumer/context-q4.bin") == Some(context_sha),"context_native_changed_bytes":changed_file_bytes(&input.join("realizer-native/consumer/context-q4.bin"),&path.join("realizer-native/consumer/context-q4.bin"))?,"prior_coadapt_original_comparisons":if let Some((p32,p64))=&prior_coadapt{Some(json!({"checkpoint0032":generation_comparison(&p32["ownprefix"],&generation)?,"checkpoint0064":generation_comparison(&p64["ownprefix"],&generation)?}))}else{None},"hard_payload_sha256":bins});
         write(
             &a.out.join(format!("evaluation-{updates:04}.json")),
             &evaluation,
@@ -1828,6 +1957,15 @@ fn readout_fit(a: &Args) -> Result<()> {
             let current = weights.compile(identity.clone())?;
             let measured = batch(&indices, &training, &weights, &current, start, a)?;
             if step == 0 {
+                if context_fit
+                    && !measured.report["gradient_family_l1"]["consumer.context"]
+                        .as_f64()
+                        .is_some_and(|v| v.is_finite() && v > 0.)
+                {
+                    return Err(invalid(
+                        "first construction B8 has no nonzero context gradient",
+                    ));
+                }
                 let first_b8_seconds = measured.report["elapsed_seconds"]
                     .as_f64()
                     .ok_or_else(|| invalid("first B8 elapsed absent"))?;
@@ -1849,13 +1987,19 @@ fn readout_fit(a: &Args) -> Result<()> {
                     return Err(invalid("measured first B8 continuation projection exceeds remaining wall allowance"));
                 }
             }
-            // Frozen gradients are removed before the existing global clipping
-            // calculation, not merely omitted from the optimizer parameter list.
-            let gradients = readout_gradients(measured.gradients)?;
+            // Readout-only modes filter frozen gradients before clipping. Context-fit
+            // deliberately clips the complete existing context+readout gradient.
+            let gradients = if context_fit {
+                context_gradients(measured.gradients)?
+            } else {
+                readout_gradients(measured.gradients)?
+            };
             let clip = apply(&weights, &mut optimizer, gradients)?;
-            verify_context_shadow(&weights, &frozen)?;
+            if !context_fit {
+                verify_context_shadow(&weights, &frozen)?;
+            }
             updates += 1;
-            batches.push(json!({"optimizer_update":updates,"readout_only_clip_factor":clip,"unfiltered_batch_diagnostic":measured.report}));
+            batches.push(json!({"optimizer_update":updates,"readout_only_clip_factor":if context_fit{None}else{Some(clip)},"all_family_clip_factor":if context_fit{Some(clip)}else{None},"unfiltered_batch_diagnostic":measured.report}));
             write(
                 &a.out.join("progress.json"),
                 &json!({"mode":a.mode,"optimizer_updates":updates,"declared_updates":UPDATES,"batches":batches,"wall_seconds":start.elapsed().as_secs_f64()}),
@@ -1869,18 +2013,18 @@ fn readout_fit(a: &Args) -> Result<()> {
     write(
         &a.out.join("report.json"),
         &json!({
-            "schema":if composition{"uor-r4.geometric-composition-continuation/1"}else{"uor-r4.geometric-readout-continuation/1"},"mode":a.mode,"status":if work.is_ok(){"completed"}else{"stopped_or_error"},
+            "schema":if context_fit{"uor-r4.geometric-context-adaptation/1"}else if composition{"uor-r4.geometric-composition-continuation/1"}else{"uor-r4.geometric-readout-continuation/1"},"mode":a.mode,"status":if work.is_ok(){"completed"}else{"stopped_or_error"},
             "source_commit":source_commit()?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"fit_source_commit":fit["source_commit"],
             "initial_checkpoint_manifest_sha256":sha256_file(&input.join("manifest.json"))?,"retained_report_sha256":retained_sha,"saved_identity":identity,
             "optimizer_updates":updates,"declared_updates":UPDATES,"measured_admission":measured_admission,"optimizer":optimizer_identity(),"optimizer_moments":"fresh AdamW state; original moments not saved",
-            "updated_families":["consumer.potential.*","consumer.no_read.*","period.*"],"frozen_families":["consumer.context.*"],
-            "gradient_filter_before_clipping":true,"objective":"unchanged mean8episodes(mean joint answer token+EOS CE)","baseline_saved_generation_exact":true,
+            "updated_families":if context_fit{vec!["consumer.context.*","consumer.potential.*","consumer.no_read.*","period.*"]}else{vec!["consumer.potential.*","consumer.no_read.*","period.*"]},"frozen_families":if context_fit{vec![]}else{vec!["consumer.context.*"]},
+            "gradient_filter_before_clipping":!context_fit,"context_gradient_rule":if context_fit{Some("existing declared context straight-through estimator; biased adjoint, not exact derivative of hard integer transitions")}else{None},"clipping_scope":if context_fit{"all existing context and readout gradient families"}else{"readout families only"},"objective":"unchanged mean8episodes(mean joint answer token+EOS CE)","baseline_saved_generation_exact":true,
             "checkpoints":checkpoints,"batches":batches,"context_source_bits_unchanged":context_shadow(&weights)? == frozen,
-            "input_native_payload_unchanged":bin_files(&input.join("realizer-native"))? == before,"no_adopted_model":true,
+            "input_native_payload_unchanged":bin_files(&input.join("realizer-native"))? == before,"input_source_files_unchanged":source_files(&input.join("realizer-source"))? == input_source_files,"input_source_files_sha256":input_source_files,"input_all_native_files_unchanged":source_files(&input.join("realizer-native"))? == input_native_files,"baseline_all44_saved_rows_exact":if context_fit{Some(true)}else{None},"no_adopted_model":true,
             "training_cases":training.len(),"sampling":"fixed cyclic B8; equal episode loss within batch, per-episode update visits differ by at most one",
             "training_case_visits":training.iter().enumerate().map(|(i,e)|json!({"id":e.id,"visits":(0..updates*8).filter(|j|j%training.len()==i).count()})).collect::<Vec<_>>(),"construction_cases":construction.len(),"development_transfer_cases":transfer_cases.len(),"development_transfer_not_fresh_holdout":composition,
             "construction_manifest_sha256":if composition{Some(sha256_file(&a.out.join("construction-panel/manifest.json"))?)}else{None},
-            "scope":if composition{"64-update readout-only composition continuation;20 preservation+8 fixed construction training,16 previously examined development transfer; no heldout/geometric-advantage/chat qualification"}else{"64-update existing-readout continuation on20 exposed development cases; five numerical source/query groups; no heldout, geometric-advantage or complete-chat qualification"},
+            "scope":if context_fit{"64-update existing context+readout adaptation;20 preservation+8 fixed construction training,16 previously examined development transfer; no heldout/geometric-advantage/chat qualification"}else if composition{"64-update readout-only composition continuation;20 preservation+8 fixed construction training,16 previously examined development transfer; no heldout/geometric-advantage/chat qualification"}else{"64-update existing-readout continuation on20 exposed development cases; five numerical source/query groups; no heldout, geometric-advantage or complete-chat qualification"},
             "work_error":work.as_ref().err().map(|e|e.to_string()),"wall_seconds":start.elapsed().as_secs_f64()
         }),
     )?;
@@ -2128,6 +2272,100 @@ struct LoadedContinuation {
     fit: Value,
     evaluation: Value,
     bins: BTreeMap<String, String>,
+}
+fn load_context_parent(
+    a: &Args,
+    identity: &ConsumerIdentity,
+    retained_sha: &str,
+    before: &BTreeMap<String, String>,
+) -> Result<LoadedContinuation> {
+    let path = a
+        .transfer_checkpoint
+        .as_ref()
+        .ok_or_else(|| invalid("context parent checkpoint missing"))?;
+    if path.file_name().and_then(|x| x.to_str()) != Some("checkpoint-0032") {
+        return Err(invalid("context adaptation requires fixed checkpoint-0032"));
+    }
+    let root = path
+        .parent()
+        .ok_or_else(|| invalid("context parent envelope missing"))?;
+    report_output::verify(root)?;
+    report_output::verify(path)?;
+    let parent_args: Args = serde_json::from_slice(&fs::read(root.join("args.json"))?)?;
+    let coadapt = load_continuation(&parent_args, identity, retained_sha, before)?;
+    let fit: Value = serde_json::from_slice(&fs::read(root.join("report.json"))?)?;
+    let evaluation: Value = serde_json::from_slice(&fs::read(root.join("evaluation-0032.json"))?)?;
+    let receipt: Value = serde_json::from_slice(&fs::read(path.join("checkpoint.json"))?)?;
+    let coadapt_path = parent_args
+        .transfer_checkpoint
+        .as_ref()
+        .ok_or_else(|| invalid("coadapt checkpoint missing"))?;
+    if fit["schema"] != "uor-r4.geometric-composition-continuation/1"
+        || fit["mode"] != "composition-fit"
+        || fit["status"] != "completed"
+        || fit["optimizer_updates"] != 64
+        || fit["initial_checkpoint_manifest_sha256"]
+            != sha256_file(&coadapt_path.join("manifest.json"))?
+        || fit["retained_report_sha256"] != retained_sha
+        || fit["saved_identity"] != serde_json::to_value(identity)?
+        || !fit["source_commit"]
+            .as_str()
+            .is_some_and(|s| s.len() == 40 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+        || fit["fit_source_commit"] != coadapt.fit["source_commit"]
+        || fit["construction_manifest_sha256"]
+            != sha256_file(&root.join("construction-panel/manifest.json"))?
+        || !fit["checkpoints"]
+            .as_array()
+            .is_some_and(|stages| stages.iter().any(|v| v == &evaluation))
+        || evaluation["ownprefix"]["native_metadata_sha256"]
+            != sha256_file(&path.join("realizer-native/metadata.json"))?
+        || sha256_file(&parent_args.tokenizer)? != sha256_file(&a.tokenizer)?
+        || sha256_file(&parent_args.retained_report)? != retained_sha
+        || parent_args.period_seed != a.period_seed
+        || sha256_file(
+            &parent_args
+                .audit_checkpoint
+                .as_ref()
+                .ok_or_else(|| invalid("composition original checkpoint missing"))?
+                .join("manifest.json"),
+        )? != sha256_file(
+            &a.audit_checkpoint
+                .as_ref()
+                .ok_or_else(|| invalid("current original checkpoint missing"))?
+                .join("manifest.json"),
+        )?
+        || sealed_manifest_sha256(&parent_args.checkpoint).map_err(|e| invalid(e.to_string()))?
+            != sealed_manifest_sha256(&a.checkpoint).map_err(|e| invalid(e.to_string()))?
+        || receipt["optimizer_updates"] != 32
+        || evaluation["optimizer_updates"] != 32
+        || receipt != evaluation["checkpoint"]
+        || evaluation["ownprefix"]["complete_answers"] != 20
+        || evaluation["ownprefix"]["eos_count"] != 20
+    {
+        return Err(invalid("context parent identity/checkpoint/result differs"));
+    }
+    let bytes = fs::read(&a.tokenizer)?;
+    let source = SourceRealizerWeights::load_source(&path.join("realizer-source"), &bytes)?;
+    let native = NativeSourceRealizer::load(&path.join("realizer-native"), &source, identity)?;
+    let bins = bin_files(&path.join("realizer-native"))?;
+    if bins
+        != serde_json::from_value::<BTreeMap<String, String>>(
+            evaluation["hard_payload_sha256"].clone(),
+        )?
+        || before.keys().ne(bins.keys())
+        || ["consumer/context-q4.bin", "consumer/exp-q31.bin"]
+            .iter()
+            .any(|n| before.get(*n) != bins.get(*n))
+    {
+        return Err(invalid("context parent payload binding differs"));
+    }
+    Ok(LoadedContinuation {
+        source,
+        native,
+        fit,
+        evaluation,
+        bins,
+    })
 }
 fn load_continuation(
     a: &Args,
@@ -2832,6 +3070,45 @@ mod direction_tests {
         assert_eq!(compared[0]["gain"], false);
         after["original_source_ids"] = json!([8]);
         assert!(generation_comparison(&json!({"rows":[row]}), &json!({"rows":[after]})).is_err());
+        Ok(())
+    }
+    #[test]
+    fn context_adaptation_retains_context_gradients() -> Result<()> {
+        let mut gradients = BTreeMap::new();
+        gradients.insert(
+            "consumer.context.transition".into(),
+            Tensor::new(&[2f32], &Device::Cpu)?,
+        );
+        gradients.insert(
+            "consumer.potential.context_unary".into(),
+            Tensor::new(&[1f32], &Device::Cpu)?,
+        );
+        let gradients = context_gradients(gradients)?;
+        assert_eq!(gradients.len(), 2);
+        assert!(gradients.contains_key("consumer.context.transition"));
+        let mut unknown = BTreeMap::new();
+        unknown.insert(
+            "unknown.parameter".into(),
+            Tensor::new(&[1f32], &Device::Cpu)?,
+        );
+        assert!(context_gradients(unknown).is_err());
+        Ok(())
+    }
+    #[test]
+    fn context_bit_changes_preserves_exact_float_bits() -> Result<()> {
+        let before = BTreeMap::from([(
+            "consumer.context.transition".into(),
+            vec![0f32.to_bits(), 1f32.to_bits()],
+        )]);
+        let after = BTreeMap::from([(
+            "consumer.context.transition".into(),
+            vec![(-0f32).to_bits(), 1f32.to_bits()],
+        )]);
+        assert_eq!(
+            context_bit_changes(&before, &after)?.get("consumer.context.transition"),
+            Some(&1)
+        );
+        assert!(context_bit_changes(&before, &BTreeMap::new()).is_err());
         Ok(())
     }
     #[test]
