@@ -3826,7 +3826,7 @@ fn observable_cell_proposals(
                         };
                         let witness = json!({"event":event,"id":position.id,"context_time":time,"lane":lane,"old_root":root_winner,"old_category":category_winner,"family":family,"old_winner":cell_winner(values)?,"new_winner":new,"class":class,"minimal_legal_directional_crossing":true});
                         if family == "token_root" && category_winner == 0 {
-                            hidden.push((edit, witness, gain));
+                            hidden.push((edit.clone(), witness.clone(), gain));
                         } else {
                             single_witnesses += 1;
                             retain_cell(
