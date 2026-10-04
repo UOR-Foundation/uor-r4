@@ -2340,6 +2340,70 @@ fn transplant_family(
     }
     Ok(())
 }
+fn saved_failure_prefix(row: &Value, episode: &Episode) -> Result<(usize, Vec<u32>, u32)> {
+    if row["id"] != episode.id {
+        return Err(invalid("fixed failure row identity differs"));
+    }
+    let tokens = row["tokens"]
+        .as_array()
+        .ok_or_else(|| invalid("fixed failure tokens absent"))?;
+    for (step, token) in tokens.iter().enumerate() {
+        let chosen = u32::try_from(
+            token["chosen_token_id"]
+                .as_u64()
+                .ok_or_else(|| invalid("fixed failure chosen token absent"))?,
+        )
+        .map_err(|_| invalid("fixed failure token exceeds u32"))?;
+        let target = *episode
+            .target
+            .get(step)
+            .ok_or_else(|| invalid("fixed failure has no frozen target at step"))?;
+        if chosen != target {
+            let prefix: Vec<u32> = serde_json::from_value(token["own_prefix_ids"].clone())?;
+            if prefix.len() != step || prefix != episode.target[..step] {
+                return Err(invalid(
+                    "fixed first divergence prefix differs from preceding frozen targets",
+                ));
+            }
+            return Ok((step, prefix, target));
+        }
+    }
+    Err(invalid(
+        "fixed final first original has no divergent chosen token",
+    ))
+}
+fn fixed_failure_trace(
+    cell: &str,
+    native: &NativeSourceRealizer,
+    episode: &Episode,
+    step: usize,
+    prefix: &[u32],
+    target: u32,
+) -> Result<Value> {
+    // The frozen target is a report label only; read receives the same saved
+    // actual final64 prefix for each of the four factorization cells.
+    let trace = native.read(episode.frame(), &episode.view, &episode.query, prefix)?;
+    let target_mass = trace
+        .actions
+        .token_masses
+        .iter()
+        .find(|m| m.token_id == target)
+        .map(|m| m.weight_q31)
+        .unwrap_or(0);
+    let other_mass = trace
+        .actions
+        .token_masses
+        .iter()
+        .filter(|m| m.token_id != target)
+        .map(|m| m.weight_q31)
+        .max()
+        .unwrap_or(0);
+    let margin = i64::try_from(i128::from(target_mass) - i128::from(other_mass))
+        .map_err(|_| invalid("fixed failure action margin exceeds i64"))?;
+    Ok(
+        json!({"cell":cell,"id":episode.id,"step":step,"prefix_ids":prefix,"prefix_policy":"identical saved final64 own-prefix at first divergence for all cells","target_label_only":target,"winner_token_id":trace.actions.chosen_token_id,"target_mass_q31":target_mass,"best_other_mass_q31":other_mass,"target_minus_best_other_mass_q31":margin,"trace":trace}),
+    )
+}
 fn context_transplant(a: &Args) -> Result<()> {
     let start = Instant::now();
     let LoadedFinal {
@@ -2480,6 +2544,12 @@ fn context_transplant(a: &Args) -> Result<()> {
     }
     let mut results = Vec::new();
     let mut fixed_traces = Vec::new();
+    let mut fixed_failure_traces = Vec::new();
+    let final_first = final_evaluation["ownprefix"]["rows"]
+        .as_array()
+        .and_then(|rows| rows.first())
+        .ok_or_else(|| invalid("final first original row absent"))?;
+    let (failure_step, failure_prefix, failure_target) = saved_failure_prefix(final_first, first)?;
     for (name, native, saved) in [
         ("old-context-old-readouts", &old.native, &initial),
         ("new-context-new-readouts", &new_native, &final_evaluation),
@@ -2509,6 +2579,14 @@ fn context_transplant(a: &Args) -> Result<()> {
             ));
         }
         fixed_traces.push(json!({"cell":name,"id":first.id,"prefix_ids":Vec::<u32>::new(),"trace":native.read(first.frame(),&first.view,&first.query,&[])?}));
+        fixed_failure_traces.push(fixed_failure_trace(
+            name,
+            &native,
+            first,
+            failure_step,
+            &failure_prefix,
+            failure_target,
+        )?);
         results.push(json!({"cell":name,"saved_rows_exact":true,"original":original,"construction":construction_generation}));
     }
     for (name, copy_context) in [
@@ -2579,6 +2657,14 @@ fn context_transplant(a: &Args) -> Result<()> {
             a,
         )?;
         fixed_traces.push(json!({"cell":name,"id":first.id,"prefix_ids":Vec::<u32>::new(),"trace":native.read(first.frame(),&first.view,&first.query,&[])?}));
+        fixed_failure_traces.push(fixed_failure_trace(
+            name,
+            &native,
+            first,
+            failure_step,
+            &failure_prefix,
+            failure_target,
+        )?);
         results.push(json!({"cell":name,"checkpoint":receipt,"source_family_bits_exact":true,"native_payload_mosaic_exact":true,"native_payload_sha256":bins,"original":original,"construction":construction_generation,
             "original_comparisons":{"versus_start":generation_comparison(&initial["ownprefix"],&original)?,"versus_final64":generation_comparison(&final_evaluation["ownprefix"],&original)?},
             "construction_comparisons":{"versus_start":generation_comparison(&initial["construction_ownprefix"],&construction_generation)?,"versus_final64":generation_comparison(&final_evaluation["construction_ownprefix"],&construction_generation)?}}));
@@ -2592,7 +2678,7 @@ fn context_transplant(a: &Args) -> Result<()> {
     }
     write(
         &a.out.join("report.json"),
-        &json!({"schema":"uor-r4.geometric-context-transplant/1","mode":a.mode,"status":"completed","source_commit":source_commit()?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"optimizer_updates":0,"native_hybrid_exports":2,"saved_identity":identity,"retained_report_sha256":retained_sha,"context_fit_source_commit":fit["source_commit"],"context_fit_manifest_sha256":sha256_file(&root.join("manifest.json"))?,"old_checkpoint_manifest_sha256":sha256_file(&old_path.join("manifest.json"))?,"new_checkpoint_manifest_sha256":sha256_file(&new_path.join("manifest.json"))?,"frozen_panel_manifest_sha256":sha256_file(&panel.join("manifest.json"))?,"input_files_sha256":input_files,"input_files_unchanged":true,"results":results,"fixed_first_original_empty_prefix_traces":fixed_traces,"transfer_generation_run":false,"no_adopted_model":true,"scope":"zero-update2x2 component transplant diagnosis on20 exposed original+8 construction replies; mathematical factorization intervention, no heldout/geometric-advantage/chat qualification","wall_seconds":start.elapsed().as_secs_f64()}),
+        &json!({"schema":"uor-r4.geometric-context-transplant/1","mode":a.mode,"status":"completed","source_commit":source_commit()?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"optimizer_updates":0,"native_hybrid_exports":2,"saved_identity":identity,"retained_report_sha256":retained_sha,"context_fit_source_commit":fit["source_commit"],"context_fit_manifest_sha256":sha256_file(&root.join("manifest.json"))?,"old_checkpoint_manifest_sha256":sha256_file(&old_path.join("manifest.json"))?,"new_checkpoint_manifest_sha256":sha256_file(&new_path.join("manifest.json"))?,"frozen_panel_manifest_sha256":sha256_file(&panel.join("manifest.json"))?,"input_files_sha256":input_files,"input_files_unchanged":true,"results":results,"fixed_first_original_empty_prefix_traces":fixed_traces,"fixed_first_original_final64_divergence_prefix_traces":fixed_failure_traces,"transfer_generation_run":false,"no_adopted_model":true,"scope":"zero-update2x2 component transplant diagnosis on20 exposed original+8 construction replies; mathematical factorization intervention, no heldout/geometric-advantage/chat qualification","wall_seconds":start.elapsed().as_secs_f64()}),
     )?;
     Ok(())
 }
