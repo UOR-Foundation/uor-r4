@@ -3594,27 +3594,51 @@ fn load_panel(
     ))
 }
 
-/// Normalized form for comparing a stored value against an accepted answer:
-/// lowercased, surrounding punctuation and whitespace stripped. The store can hold
-/// "dust." where the accepted answer is "dust", and a raw equality test would report
-/// the asked fact as never stored.
+/// Only TRAILING punctuation and surrounding whitespace/quotes are stripped.
+/// Stripping every non-alphanumeric character would merge "-5" with "5" and "$5"
+/// with "5", which are different answers.
 fn normalize_value(text: &str) -> String {
     text.trim()
-        .trim_matches(|c: char| !c.is_alphanumeric())
+        .trim_matches(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+        .trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ':' | '!' | '?'))
+        .trim_matches(|c: char| c.is_whitespace() || c == '"' || c == '\'')
         .to_lowercase()
 }
 
-/// The panel decision, as a PURE function so the session loop and the tests cannot
-/// drift apart. Returns (hit, bucket).
+/// Equal-answer test for storage, ignoring only case and trailing punctuation.
+fn same_value(a: &str, b: &str) -> bool {
+    let (x, y) = (normalize_value(a), normalize_value(b));
+    !x.is_empty() && x == y
+}
+
+/// Whether the ASKED fact is stored. Accepted answers are compared NORMALIZED, so a
+/// stored "dust." matches an accepted "dust", and a value equal to a listed
+/// distractor is rejected -- otherwise storing the distractor would count as storing
+/// the asked fact.
+fn asked_fact_is_stored(value_text: &str, answers: &[String], distractors: &[String]) -> bool {
+    let v = normalize_value(value_text);
+    if v.is_empty() {
+        return false;
+    }
+    if distractors.iter().any(|d| same_value(d, &v)) {
+        return false;
+    }
+    answers.iter().any(|a| same_value(a, &v))
+}
+
+/// The panel decision, as a PURE function of the mechanism facts, so the session loop
+/// and the tests cannot drift. EVERY per-row decision is made here: the 3-way correct
+/// split and the whole miss split. The loop only accumulates the returned labels.
 ///
-/// Accept ONLY when the value the store returned IS an accepted answer, or when the
-/// reply contains an accepted answer AND no distractor that itself contains one.
-/// A distractor is never in the accepted list, so accepted-only checking cannot
-/// exclude it -- that was the defect this guards.
-/// True when a store read returned a value that is NOT an accepted answer.
-fn verified_answer_absent(answers: &[String], read_value: &str) -> bool {
-    let v = normalize_value(read_value);
-    !v.is_empty() && !answers.iter().any(|a| normalize_value(a) == v)
+/// A single decision point matters because earlier versions split the logic between
+/// this function and the loop, and the loop's half -- the log-path choice and the
+/// miss chain -- was covered by no test.
+pub(crate) struct RowJudgement {
+    pub hit: bool,
+    /// `store_read` | `log_without_store` | `other` | `none`
+    pub path: &'static str,
+    /// A miss bucket name, or `hit`.
+    pub bucket: &'static str,
 }
 
 pub(crate) fn judge_row(
@@ -3622,38 +3646,60 @@ pub(crate) fn judge_row(
     answers: &[String],
     distractors: &[String],
     read_value: Option<&str>,
-) -> (bool, &'static str) {
+    stored: bool,
+    log_answered: bool,
+) -> RowJudgement {
     let verified_answer = read_value
         .map(normalize_value)
         .filter(|v| !v.is_empty())
         .and_then(|v| answers.iter().find(|a| normalize_value(a) == v).cloned());
     let mentioned = answers.iter().find(|a| contains_word(reply, a)).cloned();
-    // Case-INSENSITIVE, like contains_word: a distractor that contains an accepted
-    // answer ("half an hour" contains "an hour") must be rejected even when the
-    // distractor and the answer differ in case.
+    // Case-INSENSITIVE, like contains_word: a distractor containing an accepted answer
+    // ("half an hour" contains "an hour") must be rejected even when cases differ.
     let distractor_present = distractors.iter().any(|d| {
-        let dl = d.to_lowercase();
+        let dl = normalize_value(d);
         contains_word(reply, d)
-            && answers.iter().any(|a| {
-                let al = a.to_lowercase();
-                al != dl && dl.contains(&al)
-            })
+            && answers
+                .iter()
+                .any(|a| !dl.is_empty() && !same_value(a, d) && dl.contains(&normalize_value(a)))
     });
     let hit = match (&verified_answer, &mentioned) {
         (Some(v), _) => contains_word(reply, v),
         (None, Some(m)) => !distractor_present && !m.is_empty(),
         (None, None) => false,
     };
-    let bucket = if hit {
-        if verified_answer.is_some() {
-            "correct_with_store_read"
-        } else {
-            "correct_other"
-        }
+    if hit {
+        return RowJudgement {
+            hit: true,
+            path: if verified_answer.is_some() {
+                "store_read"
+            } else if log_answered {
+                "log_without_store"
+            } else {
+                "other"
+            },
+            bucket: "hit",
+        };
+    }
+    // No separate `unverified` bucket: by the time the chain reaches a log-sieve row,
+    // `log_answered` is already true, so a LogValue bucket was unreachable. A log row
+    // is either attributed (log_answered_but_wrong) or it is the parametric path.
+    let bucket = if !stored {
+        "never_stored"
+    } else if read_value.is_some() && verified_answer.is_none() {
+        "recalled_wrong_value"
+    } else if verified_answer.is_some() {
+        "recalled_but_misrendered"
+    } else if log_answered {
+        "log_answered_but_wrong"
     } else {
-        "miss"
+        "stored_but_not_recalled"
     };
-    (hit, bucket)
+    RowJudgement {
+        hit: false,
+        path: "none",
+        bucket,
+    }
 }
 
 /// `session`: M-world development conversations through the actual grounded
@@ -4021,8 +4067,8 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     let mut panel_block: Option<Value> = None;
     if let Some((rows_in, panel_sha, expected_sha, panel_name, expected_name)) = loaded_panel {
         let (mut correct, mut never_stored, mut stored_not_recalled) = (0usize, 0usize, 0usize);
-        let (mut recalled_wrong_value, mut recalled_misrendered, mut unverified, mut errors) =
-            (0usize, 0usize, 0usize, 0usize);
+        let (mut recalled_wrong_value, mut recalled_misrendered, mut errors) =
+            (0usize, 0usize, 0usize);
         // `stored_total` is UNCONDITIONAL: any write before the final turn, matching
         // or not. It is the storage measure and must be IDENTICAL between the off and
         // sieve arms, because the compiler sees only the current user turn. The
@@ -4062,7 +4108,11 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                             if let MemoryEffect::Write { value_tokens, .. } = &outcome.memory {
                                 stored_total_row = true;
                                 let text = tokenizer.decode(value_tokens);
-                                if row.answers.iter().any(|a| a == text.trim()) {
+                                if asked_fact_is_stored(
+                                    &tokenizer.decode(value_tokens),
+                                    &row.answers,
+                                    &row.distractors,
+                                ) {
                                     stored = true;
                                 }
                             }
@@ -4103,7 +4153,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             // (accepted ["an hour"], reply "half an hour", scored correct); and when
             // read_found was true, `hit` ignored `verified`, so a retrieved
             // DISTRACTOR value still scored correct.
-            let (hit, bucket) = judge_row(
+            let verdict = judge_row(
                 &reply,
                 &row.answers,
                 &row.distractors,
@@ -4112,35 +4162,33 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 } else {
                     None
                 },
+                stored,
+                log_answered,
             );
-            let answered_from_store = bucket == "correct_with_store_read";
-            let answered_from_log = hit && !answered_from_store && log_answered;
+            let hit = verdict.hit;
+            let answered_from_store = verdict.path == "store_read";
+            let answered_from_log = verdict.path == "log_without_store";
             if hit {
                 correct += 1;
-                if answered_from_store {
-                    correct_with_store_read += 1;
-                } else if answered_from_log {
-                    correct_via_log_without_store += 1;
-                } else {
-                    correct_other += 1;
+                match verdict.path {
+                    "store_read" => correct_with_store_read += 1,
+                    "log_without_store" => correct_via_log_without_store += 1,
+                    _ => correct_other += 1,
                 }
-            } else if !stored {
-                never_stored += 1;
-            } else if read_found && verified_answer_absent(&row.answers, &read_value) {
-                recalled_wrong_value += 1;
-                recalled_value = read_value.clone();
-            } else if read_found {
-                recalled_misrendered += 1;
-                recalled_value = read_value.clone();
-            } else if log_answered {
-                // The fact was stored, no store read happened, and the log sieve DID
-                // supply a value for this row: "the log answered and the reply was
-                // wrong", not an unexplained path.
-                log_answered_but_wrong += 1;
-            } else if log_value {
-                unverified += 1;
             } else {
-                stored_not_recalled += 1;
+                match verdict.bucket {
+                    "never_stored" => never_stored += 1,
+                    "recalled_wrong_value" => {
+                        recalled_wrong_value += 1;
+                        recalled_value = read_value.clone();
+                    }
+                    "recalled_but_misrendered" => {
+                        recalled_misrendered += 1;
+                        recalled_value = read_value.clone();
+                    }
+                    "log_answered_but_wrong" => log_answered_but_wrong += 1,
+                    _ => stored_not_recalled += 1,
+                }
             }
             // Storage is computed for EVERY row, not only misses.
             if stored_total_row {
@@ -4166,6 +4214,35 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             }));
         }
         let total = rows_in.len();
+        // FIX 2: the invariants are CHECKED, not merely true by construction. A
+        // failure returns an error rather than panicking, so a defective split cannot
+        // be reported as a result.
+        let paths = correct_with_store_read + correct_via_log_without_store + correct_other;
+        if paths != correct {
+            return Err(invalid(format!(
+                "panel paths do not partition correct: {correct_with_store_read} + {correct_via_log_without_store} + {correct_other} = {paths}, correct = {correct}"
+            )));
+        }
+        if asked_fact_stored_total + wrote_other_than_asked != any_write_total {
+            return Err(invalid(format!(
+                "panel storage does not partition: {asked_fact_stored_total} + {wrote_other_than_asked} != {any_write_total}"
+            )));
+        }
+        let misses = never_stored
+            + stored_not_recalled
+            + recalled_wrong_value
+            + recalled_misrendered
+            + log_answered_but_wrong;
+        if correct + misses != total {
+            return Err(invalid(format!(
+                "panel buckets do not sum to the row count: {correct} correct + {misses} misses != {total}"
+            )));
+        }
+        if never_stored > asked_fact_stored_total {
+            return Err(invalid(format!(
+                "never_stored ({never_stored}) exceeds asked_fact_stored_total ({asked_fact_stored_total}), which is impossible"
+            )));
+        }
         println!(
             "panel memory: {correct}/{total}; any_write_total={any_write_total} asked_fact_stored_total={asked_fact_stored_total} wrote_other_than_asked={wrote_other_than_asked}"
         );
@@ -4173,7 +4250,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             "panel paths: store_read={correct_with_store_read} log_without_store={correct_via_log_without_store} other={correct_other}"
         );
         println!(
-            "panel misses: never_stored={never_stored} stored_not_recalled={stored_not_recalled} recalled_wrong_value={recalled_wrong_value} misrendered={recalled_misrendered} log_answered_but_wrong={log_answered_but_wrong} unverified_log_value={unverified} errors={errors}"
+            "panel misses: never_stored={never_stored} stored_not_recalled={stored_not_recalled} recalled_wrong_value={recalled_wrong_value} misrendered={recalled_misrendered} log_answered_but_wrong={log_answered_but_wrong} errors={errors}"
         );
         panel_block = Some(json!({
             "panel": panel_name, "panel_sha256": panel_sha,
@@ -4200,7 +4277,6 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                 "recalled_wrong_value": recalled_wrong_value,
                 "recalled_but_misrendered": recalled_misrendered,
                 "log_answered_but_wrong": log_answered_but_wrong,
-                "unverified_log_value": unverified,
                 "turn_errors": errors,
                 "rule": "mechanism state, not reply text. never_stored = no accepted-answer write; stored_but_not_recalled = the asked fact was stored but nothing was read; recalled_wrong_value = a store read returned a value that is not an accepted answer; recalled_but_misrendered = a store read returned an accepted answer but the reply lacks it; log_answered_but_wrong = the log sieve supplied a value for a row with no store read and the reply was wrong; unverified_log_value = a log-sieve value the session does not expose as tokens, so retrieval cannot be confirmed either way.",
             },
@@ -4872,117 +4948,219 @@ mod tests {
 
 #[cfg(test)]
 mod panel_scoring_tests {
-    use super::{judge_row, load_panel, normalize_value};
+    use super::{asked_fact_is_stored, judge_row, load_panel, normalize_value};
 
     fn v(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
     }
 
-    /// The exact defect the review found: accepted ["an hour"], reply "half an
-    /// hour". A whole-word match DOES fire, and the distractor is never in the
-    /// accepted list, so accepted-only checking cannot exclude it.
+    /// Runs judge_row and asserts the 3-way correct split and the miss split through
+    /// the SAME function the session loop calls.
+    fn judge(
+        reply: &str,
+        answers: &[&str],
+        distractors: &[&str],
+        read: Option<&str>,
+        stored: bool,
+        log_answered: bool,
+    ) -> (bool, &'static str, &'static str) {
+        let r = judge_row(
+            reply,
+            &v(answers),
+            &v(distractors),
+            read,
+            stored,
+            log_answered,
+        );
+        (r.hit, r.path, r.bucket)
+    }
+
+    fn tmp(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("panel-test-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// The exact defect the review found: accepted ["an hour"], reply "half an hour".
     #[test]
     fn distractor_containing_the_answer_is_rejected() {
         assert!(
             super::contains_word("half an hour", "an hour"),
-            "the trap is real: whole-word match fires across the embedded answer"
-        );
-        let (hit, _) = judge_row(
-            "half an hour",
-            &v(&["an hour"]),
-            &v(&["half an hour"]),
-            None,
+            "the trap is real: a whole-word match fires across the embedded answer"
         );
         assert!(
-            !hit,
-            "a distractor containing the accepted answer must be rejected"
+            !judge(
+                "half an hour",
+                &["an hour"],
+                &["half an hour"],
+                None,
+                true,
+                false
+            )
+            .0
         );
-        let (hit, _) = judge_row("an hour", &v(&["an hour"]), &v(&["half an hour"]), None);
-        assert!(hit, "the real answer is still accepted");
+        assert!(
+            judge(
+                "an hour",
+                &["an hour"],
+                &["half an hour"],
+                None,
+                true,
+                false
+            )
+            .0
+        );
     }
 
-    /// A retrieved distractor cannot score correct, even with the accepted answer
-    /// also present in the text.
     #[test]
     fn retrieved_distractor_does_not_score_correct() {
-        let (hit, _) = judge_row(
+        let (hit, _, _) = judge(
             "half an hour",
-            &v(&["an hour"]),
-            &v(&["half an hour"]),
+            &["an hour"],
+            &["half an hour"],
             Some("half an hour"),
+            true,
+            false,
         );
         assert!(!hit, "a retrieved distractor value must not be accepted");
-        let (hit, b) = judge_row(
+        let (hit, path, _) = judge(
             "an hour",
-            &v(&["an hour"]),
-            &v(&["half an hour"]),
+            &["an hour"],
+            &["half an hour"],
             Some("an hour"),
+            true,
+            false,
         );
-        assert!(hit, "the verified answer is accepted");
-        assert_eq!(b, "correct_with_store_read");
+        assert!(hit);
+        assert_eq!(path, "store_read");
     }
 
-    /// Case-insensitivity: the distractor test must not pass just because the case
-    /// differs, which the old `d.contains(a)` comparison allowed.
     #[test]
     fn distractor_rejection_is_case_insensitive() {
-        let (hit, _) = judge_row(
-            "HALF AN HOUR",
-            &v(&["an hour"]),
-            &v(&["Half An Hour"]),
-            None,
+        assert!(
+            !judge(
+                "HALF AN HOUR",
+                &["an hour"],
+                &["Half An Hour"],
+                None,
+                true,
+                false
+            )
+            .0
         );
-        assert!(!hit, "case must not defeat the distractor rejection");
-        let (hit, _) = judge_row("an hour", &v(&["An Hour"]), &v(&["half an hour"]), None);
-        assert!(hit);
+        assert!(
+            judge(
+                "an hour",
+                &["An Hour"],
+                &["half an hour"],
+                None,
+                true,
+                false
+            )
+            .0
+        );
     }
 
-    /// The three paths partition `correct`: a reply with no store read and no log
-    /// value is `correct_other`, not correct-with-store.
+    /// The 3-way split, exercised through judge_row rather than asserted in the loop.
     #[test]
-    fn text_only_match_is_correct_other_not_store_read() {
-        let (hit, b) = judge_row("an hour", &v(&["an hour"]), &[], None);
-        assert!(hit);
-        assert_eq!(b, "correct_other");
+    fn correct_paths_are_split_three_ways() {
+        assert_eq!(
+            judge("an hour", &["an hour"], &[], Some("an hour"), true, false).1,
+            "store_read"
+        );
+        assert_eq!(
+            judge("an hour", &["an hour"], &[], None, true, true).1,
+            "log_without_store"
+        );
+        assert_eq!(
+            judge("an hour", &["an hour"], &[], None, true, false).1,
+            "other"
+        );
+        assert_eq!(
+            judge("an hour", &["an hour"], &[], None, false, false).1,
+            "other"
+        );
     }
 
-    /// Normalization: the store can hold "dust." where the answer is "dust".
+    /// Every miss bucket is reachable through judge_row.
     #[test]
-    fn normalize_strips_punctuation_and_case() {
+    fn miss_buckets_are_reachable() {
+        assert_eq!(
+            judge("wrong", &["an hour"], &[], None, false, false).2,
+            "never_stored"
+        );
+        assert_eq!(
+            judge("wrong", &["an hour"], &[], None, true, false).2,
+            "stored_but_not_recalled"
+        );
+        assert_eq!(
+            judge("wrong", &["an hour"], &[], Some("Cork"), true, false).2,
+            "recalled_wrong_value"
+        );
+        assert_eq!(
+            judge(
+                "something else",
+                &["an hour"],
+                &[],
+                Some("an hour"),
+                true,
+                false
+            )
+            .2,
+            "recalled_but_misrendered"
+        );
+        assert_eq!(
+            judge("wrong", &["an hour"], &[], None, true, true).2,
+            "log_answered_but_wrong"
+        );
+    }
+
+    /// normalize_value must NOT merge values that differ by a leading sign or symbol.
+    #[test]
+    fn normalize_keeps_leading_sign_and_symbol() {
         assert_eq!(normalize_value("Dust."), "dust");
-        assert_eq!(normalize_value("  an hour  "), "an hour");
+        assert_ne!(normalize_value("-5"), normalize_value("5"));
+        assert_ne!(normalize_value("$5"), normalize_value("5"));
         assert_eq!(normalize_value("  nine  "), "nine");
     }
 
-    /// A mixed accepted-answers array is rejected, not silently trimmed.
+    /// Storage must be NORMALIZED (the PR claimed it was; it was not) and must exclude
+    /// a value that merely equals a distractor.
+    #[test]
+    fn asked_fact_storage_is_normalized_and_excludes_distractors() {
+        assert!(
+            asked_fact_is_stored("dust.", &v(&["dust"]), &[]),
+            "trailing period must not defeat storage"
+        );
+        assert!(
+            asked_fact_is_stored("DUST", &v(&["dust"]), &[]),
+            "case must not defeat storage"
+        );
+        assert!(
+            !asked_fact_is_stored("Cork", &v(&["dust"]), &v(&["Cork"])),
+            "a distractor value is not the asked fact"
+        );
+        assert!(!asked_fact_is_stored("", &v(&["dust"]), &[]));
+        assert!(!asked_fact_is_stored("something", &v(&["dust"]), &[]));
+    }
+
     #[test]
     fn load_panel_rejects_non_string_answers() {
-        let dir = std::env::temp_dir().join(format!("panel-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("bad.json");
-        let e = dir.join("bad-exp.json");
-        std::fs::write(
-            &p,
-            br#"[{"id":"r1","user_turns":["I grew up in Tulsa.","Where did I grow up?"]}]"#,
-        )
-        .unwrap();
+        let d = tmp("answers");
+        let (p, e) = (d.join("p.json"), d.join("e.json"));
+        std::fs::write(&p, br#"[{"id":"r1","user_turns":["a","b"]}]"#).unwrap();
         std::fs::write(&e, br#"{"r1":["Tulsa",5]}"#).unwrap();
         let err = load_panel(p.to_str().unwrap(), e.to_str().unwrap()).unwrap_err();
         assert!(err.to_string().contains("non-string"), "got: {err}");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
-    /// A non-string distractor element is rejected too.
     #[test]
     fn load_panel_rejects_non_string_distractors() {
-        let dir = std::env::temp_dir().join(format!("panel-test2-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("bad2.json");
-        let e = dir.join("bad2-exp.json");
-        std::fs::write(
-            &p,
-            br#"[{"id":"r1","user_turns":["I grew up in Tulsa.","Where did I grow up?"]}]"#,
-        )
-        .unwrap();
+        let d = tmp("distractors");
+        let (p, e) = (d.join("p.json"), d.join("e.json"));
+        std::fs::write(&p, br#"[{"id":"r1","user_turns":["a","b"]}]"#).unwrap();
         std::fs::write(
             &e,
             br#"{"r1":{"answers":"Tulsa","distractors":["Cork",7]}}"#,
@@ -4990,18 +5168,17 @@ mod panel_scoring_tests {
         .unwrap();
         let err = load_panel(p.to_str().unwrap(), e.to_str().unwrap()).unwrap_err();
         assert!(err.to_string().contains("distractor"), "got: {err}");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
-    /// An expected answer with no matching row is rejected rather than ignored.
     #[test]
     fn load_panel_rejects_orphan_expected_key() {
-        let dir = std::env::temp_dir().join(format!("panel-test3-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("bad3.json");
-        let e = dir.join("bad3-exp.json");
+        let d = tmp("orphan");
+        let (p, e) = (d.join("p.json"), d.join("e.json"));
         std::fs::write(&p, br#"[{"id":"r1","user_turns":["a","b"]}]"#).unwrap();
         std::fs::write(&e, br#"{"r1":"x","r9":"y"}"#).unwrap();
         let err = load_panel(p.to_str().unwrap(), e.to_str().unwrap()).unwrap_err();
         assert!(err.to_string().contains("unknown panel row"), "got: {err}");
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
