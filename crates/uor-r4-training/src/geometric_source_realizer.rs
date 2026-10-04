@@ -1094,7 +1094,7 @@ mod tests {
         let ids = [4, 4, 4];
         let view = SourceEmissionCompiler::new(TOK.as_bytes())?.compile(&ids)?;
         let var = &bridge.parameters()["bridge.coefficients"];
-        let mut values = vec![0.; var.elem_count()];
+        let mut values = vec![0f32; var.elem_count()];
         values[0] = 0.124;
         var.set(&Tensor::from_vec(
             values.clone(),
