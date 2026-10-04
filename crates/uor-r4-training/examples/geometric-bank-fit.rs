@@ -908,6 +908,14 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         if initial != parameter_receipts(&source.parameters())? {
             return Err(invalid("zero-update broadbatch changed source").into());
         }
+        for (p, h) in &inputs {
+            if sha256_file(Path::new(p))? != *h {
+                return Err(invalid("immutable broadbatch input changed").into());
+            }
+        }
+        for p in &sealed {
+            report_output::verify(p)?;
+        }
         return Ok(
             json!({"schema":"uor-r4.geometric-bank-fit/1","mode":"broadbatch","status":"completed","optimizer_updates":0,"cases":128,"native_equal_episode_ce":base["native_equal_episode_ce"],"complete_objective_finite":true,"gradient_report":measured.report,"source_parameters_unchanged":true,"input_manifests_sha256":inputs,"development_manifest_sha256":a.development_manifest_sha256,"fresh_manifest_sha256":a.fresh_manifest_sha256,"trusted_binding_sha256":sha256_file(&a.trusted_native_binding)?,"source_parameter_receipts":initial,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib(),"fit_admitted":false,"scope":"broadbatch instrument only; no automatic optimization or fresh predictions"}),
         );
