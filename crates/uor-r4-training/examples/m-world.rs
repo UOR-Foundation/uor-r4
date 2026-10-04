@@ -3673,6 +3673,10 @@ fn diagnoses_row(
     "distractor_only_written"
 }
 
+/// Whether the ASKED fact is stored. Accepted answers are compared NORMALIZED, so a
+/// stored "dust." matches an accepted "dust", and a value equal to a listed
+/// distractor is rejected -- otherwise storing the distractor would count as storing
+/// the asked fact.
 fn asked_fact_is_stored(value_text: &str, answers: &[String], distractors: &[String]) -> bool {
     let v = normalize_value(value_text);
     if v.is_empty() {
@@ -5312,7 +5316,9 @@ mod diagnosis_tests {
     }
 
     /// A span that does not land on a char boundary must NOT panic -- indexing would.
-    /// "naïve café" is multi-byte; offsets 1 and 2 fall INSIDE the first character.
+    /// "naïve café" in bytes: n 0..1, a 1..2, ï 2..4, v 4..5, e 5..6, ' ' 6..7,
+    /// c 7..8, a 8..9, f 9..10, é 10..12. So boundaries are
+    /// {0,1,2,4,5,6,7,8,9,10,12} and ONLY (2,3) splits a character ("ï" at 2..4).
     #[test]
     fn describe_action_is_char_boundary_safe() {
         let src = "naïve café";
@@ -5323,7 +5329,12 @@ mod diagnosis_tests {
             };
             let (kind, _, text) = describe_action(&act, src);
             assert_eq!(kind, "assert", "must not panic for span {a}..{b}");
-            let _ = text;
+            if (a, b) == (2, 3) {
+                assert!(
+                    text.is_empty(),
+                    "a range splitting \"ï\" (bytes 2..4) must yield empty"
+                );
+            }
         }
         // a span that IS on a boundary still yields the right text
         let act = CompiledAction::Assert {
