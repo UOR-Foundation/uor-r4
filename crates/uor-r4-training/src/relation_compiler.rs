@@ -1228,19 +1228,12 @@ fn align_to_words(source: &str, start: usize, end: usize) -> (usize, usize) {
     (lo, hi)
 }
 
-/// The action of a generated op for `source`. A statement's value must occur
-/// in the source (exactly, else ignoring ASCII case), and its span is that
-/// occurrence; a statement whose value does not occur is a query of its
-/// relation (the turn holds no value to store); anything else is unresolved
-/// with a reason. `relation_id` maps a relation name to its store ID.
-
-/// a relation name to its store ID.
-/// The action of a generated op for `source`. A statement's value must occur
-/// in the source (exactly, else ignoring ASCII case), and its span is that
-/// occurrence; a statement whose value does not occur is a query of its
-/// relation (the turn holds no value to store); anything else is unresolved
-/// with a reason. `relation_id` maps
-/// a relation name to its store ID.
+/// The action of a generated op for `source`. A statement's value must occur in the
+/// source starting at a word boundary (exactly, else ignoring ASCII case); its span is
+/// that occurrence widened to the whole words it overlaps (`align_to_words`). A statement
+/// whose value does not occur is a query of its relation (the turn holds no value to
+/// store); anything else is unresolved with a reason. `relation_id` maps a relation name
+/// to its store ID.
 pub fn parse_op(
     text: &str,
     source: &str,
@@ -2228,6 +2221,7 @@ pub fn score(
 mod tests {
     use super::*;
     use crate::milestone_world_v2::{Category2, Tag};
+    use crate::stack_grounded_session::CompiledAction;
 
     fn turn(intent: &str) -> Turn2 {
         Turn2 {
@@ -2950,6 +2944,7 @@ mod tests {
         let features = lexicon.features("My buddy is Tam.");
         assert_eq!(features.iter().filter(|&&v| v == 1.0).count(), 2);
     }
+
     #[test]
     fn a_generated_prefix_is_widened_to_the_whole_word() {
         let src = "I react badly to penicillin.";
@@ -2957,6 +2952,7 @@ mod tests {
         let (a, b) = align_to_words(src, at, at + "penic".len());
         assert_eq!(&src[a..b], "penicillin");
     }
+
     #[test]
     fn a_value_missing_its_last_character_is_widened() {
         for (src, gen, want) in [
@@ -2969,6 +2965,7 @@ mod tests {
             assert_eq!(&src[a..b], want, "{src}");
         }
     }
+
     #[test]
     fn multi_word_values_widen_per_word() {
         let src = "The last digits of my landline are six three zero.";
@@ -2976,6 +2973,7 @@ mod tests {
         let (a, b) = align_to_words(src, at, at + "six three zer".len());
         assert_eq!(&src[a..b], "six three zero");
     }
+
     #[test]
     fn alignment_does_not_swallow_the_following_word() {
         let src = "I am allergic to pollen and dust.";
@@ -2983,6 +2981,7 @@ mod tests {
         let (a, b) = align_to_words(src, at, at + "pollen".len());
         assert_eq!(&src[a..b], "pollen", "must not include 'and'");
     }
+
     #[test]
     fn alignment_is_char_boundary_safe() {
         let src = "naïve café";
@@ -2995,7 +2994,6 @@ mod tests {
         let (x, y) = align_to_words(src, at, at + "naïv".len());
         assert_eq!(&src[x..y], "naïve");
     }
-    use crate::stack_grounded_session::CompiledAction;
 
     /// A generated value that occurs INSIDE a longer word must not be located there.
     /// With widening, "pen" inside "spend" would otherwise be stored as "spend".
