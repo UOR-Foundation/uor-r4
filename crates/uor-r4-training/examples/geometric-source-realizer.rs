@@ -105,6 +105,7 @@ struct Labels {
 struct Answers {
     accepted: Vec<String>,
 }
+#[derive(Clone)]
 struct Episode {
     id: String,
     query: Vec<u32>,
@@ -452,7 +453,9 @@ fn batch(
                     }
                 }
             }
-            trace_rows.push(json!({"step":step,"target_label_only":target,"teacherforced_prefix_ids":&e.target[..step],"nll":loss,"native_target_probability":probability,"native_loss_equal":true,"trace":out.trace}));
+            trace_rows.push(if a.mode == "composition-fit" {
+                json!({"step":step,"target_label_only":target,"teacherforced_prefix_ids":&e.target[..step],"nll":loss,"native_target_probability":probability,"native_loss_equal":true,"actions":out.trace.actions})
+            } else { json!({"step":step,"target_label_only":target,"teacherforced_prefix_ids":&e.target[..step],"nll":loss,"native_target_probability":probability,"native_loss_equal":true,"trace":out.trace}) });
         }
         let episode_mean = sum / e.target.len() as f64;
         mean += episode_mean / 8.;
@@ -532,7 +535,7 @@ fn generate(
             if chosen as usize >= 4096 {
                 return Err(invalid("chosen action token outsideV4096"));
             }
-            traces.push(if a.mode == "transfer" && stage.starts_with("transfer-") {
+            traces.push(if (a.mode == "transfer" && stage.starts_with("transfer-")) || (a.mode == "composition-fit" && stage != "readout-baseline") {
                 json!({"step":step,"own_prefix_ids":prefix,"chosen_token_id":chosen,"actions":trace.actions})
             } else {
                 json!({"step":step,"own_prefix_ids":prefix,"chosen_token_id":chosen,"trace":trace})
@@ -551,7 +554,7 @@ fn generate(
         if ended {
             actual_ids.push(native.binding().eos_token_id());
         }
-        let first_divergence = if a.mode == "transfer" {
+        let first_divergence = if matches!(a.mode.as_str(), "transfer" | "composition-fit") {
             (0..actual_ids.len().max(e.target.len()))
                 .find(|i| actual_ids.get(*i) != e.target.get(*i))
         } else {
@@ -559,7 +562,9 @@ fn generate(
         };
         complete += usize::from(accepted);
         rows.push(json!({"id":e.id,"source_record":e.record,"source_commit":e.commit,"original_source_ids":e.tokens,"source_text":e.source_text,"source_view":e.view,"query_ids":e.query,"generated_ids":prefix,"reply_text":text,"raw_decoded_bytes_hex":hex::encode(tok.decode_bytes(&prefix)),"raw_decoded_text_lossy":decoded,"raw_utf8_valid":String::from_utf8(tok.decode_bytes(&prefix)).is_ok(),"text_policy":"strip only protocol2 single leading content separator","eos":ended,"stop":if ended{"eos"}else{"max64"},"accepted_complete_answer":accepted,"source_mention_diagnostic_only":text.contains(&e.source_text),"tokens":traces}));
-        if a.mode == "transfer" && stage.starts_with("transfer-") {
+        if (a.mode == "transfer" && stage.starts_with("transfer-"))
+            || (a.mode == "composition-fit" && stage != "readout-baseline")
+        {
             if let Some(row) = rows.last_mut() {
                 row["first_divergence_from_frozen_target"] = json!(first_divergence);
             }
@@ -805,7 +810,13 @@ fn main() -> Result<()> {
     let a: Args = serde_json::from_slice(&fs::read(p)?)?;
     if !matches!(
         a.mode.as_str(),
-        "construction" | "fit" | "audit" | "direction" | "readout-fit" | "transfer"
+        "construction"
+            | "fit"
+            | "audit"
+            | "direction"
+            | "readout-fit"
+            | "transfer"
+            | "composition-fit"
     ) || a.maximum_seconds == 0
         || (a.mode == "construction" && a.maximum_seconds > 300)
         || (a.mode == "fit" && a.maximum_seconds > 1200)
@@ -831,22 +842,30 @@ fn main() -> Result<()> {
                 || a.transfer_checkpoint.is_none()
                 || a.audit_report.is_some()
                 || a.fit_admission.is_some()))
-        || (a.mode != "transfer" && a.transfer_checkpoint.is_some())
+        || (a.mode == "composition-fit"
+            && (a.maximum_seconds > 1200
+                || a.audit_checkpoint.is_none()
+                || a.expected_generation.is_none()
+                || a.transfer_checkpoint.is_none()
+                || a.audit_report.is_some()
+                || a.fit_admission.is_some()))
+        || (!matches!(a.mode.as_str(), "transfer" | "composition-fit")
+            && a.transfer_checkpoint.is_some())
         || (!matches!(
             a.mode.as_str(),
-            "audit" | "direction" | "readout-fit" | "transfer"
+            "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit"
         ) && (a.audit_checkpoint.is_some()
             || a.expected_generation.is_some()
             || a.audit_report.is_some()))
     {
         return Err(invalid(
-            "construction/audit limit 1..300; direction limit 1..900; fit/readout-fit limit 1..1200 with fixed64 updates",
+            "construction/audit limit 1..300; direction/transfer limit 1..900; fit/readout-fit/composition-fit limit 1..1200 with fixed64 updates",
         ));
     }
     let admitted = admission(&a)?;
     if matches!(
         a.mode.as_str(),
-        "audit" | "direction" | "readout-fit" | "transfer"
+        "audit" | "direction" | "readout-fit" | "transfer" | "composition-fit"
     ) {
         audit_output_location(&a)?;
     }
@@ -854,7 +873,7 @@ fn main() -> Result<()> {
     write(&a.out.join("args.json"), &a)?;
     let result = if a.mode == "transfer" {
         transfer(&a)
-    } else if a.mode == "readout-fit" {
+    } else if matches!(a.mode.as_str(), "readout-fit" | "composition-fit") {
         readout_fit(&a)
     } else if a.mode == "direction" {
         direction(&a)
@@ -1566,20 +1585,37 @@ fn verify_context_shadow(
 }
 fn readout_fit(a: &Args) -> Result<()> {
     let start = Instant::now();
+    let composition = a.mode == "composition-fit";
     let LoadedFinal {
-        source: weights,
-        native,
+        source: mut weights,
+        mut native,
         identity,
         tok,
         episodes,
-        fit,
+        mut fit,
         retained_sha,
-        before,
+        mut before,
     } = load_final(a)?;
-    let input = a
+    let original_input = a
         .audit_checkpoint
         .as_ref()
-        .ok_or_else(|| invalid("continuation checkpoint missing"))?;
+        .ok_or_else(|| invalid("original checkpoint missing"))?;
+    let mut composition_expected = None;
+    if composition {
+        let loaded = load_continuation(a, &identity, &retained_sha, &before)?;
+        weights = loaded.source;
+        native = loaded.native;
+        fit = loaded.fit;
+        before = loaded.bins;
+        composition_expected = Some(loaded.evaluation["ownprefix"].clone());
+    }
+    let input = if composition {
+        a.transfer_checkpoint
+            .as_ref()
+            .ok_or_else(|| invalid("composition checkpoint missing"))?
+    } else {
+        original_input
+    };
     let expected_path = a
         .expected_generation
         .as_ref()
@@ -1589,7 +1625,19 @@ fn readout_fit(a: &Args) -> Result<()> {
             .parent()
             .ok_or_else(|| invalid("expected envelope missing"))?,
     )?;
-    let expected: Value = serde_json::from_slice(&fs::read(expected_path)?)?;
+    let saved_original: Value = serde_json::from_slice(&fs::read(expected_path)?)?;
+    if composition
+        && (saved_original["native_loaded_from_disk"] != true
+            || saved_original["native_metadata_sha256"]
+                != sha256_file(&original_input.join("realizer-native/metadata.json"))?)
+    {
+        return Err(invalid("original saved generation binding differs"));
+    }
+    let expected: Value = if let Some(value) = composition_expected {
+        value
+    } else {
+        saved_original.clone()
+    };
     let initial_generation = generate("readout-baseline", &native, &episodes, &tok, start, a)?;
     if expected["native_loaded_from_disk"] != true
         || expected["native_metadata_sha256"]
@@ -1599,6 +1647,52 @@ fn readout_fit(a: &Args) -> Result<()> {
         return Err(invalid(
             "readout continuation baseline own-prefix replay differs",
         ));
+    }
+    let bytes = fs::read(&a.tokenizer)?;
+    let compiler = SourceEmissionCompiler::new(&bytes)?;
+    let template = episodes
+        .first()
+        .ok_or_else(|| invalid("original cases missing"))?;
+    let construction = if composition {
+        composition_panel(template, &tok, &compiler, native.binding().eos_token_id())?
+    } else {
+        Vec::new()
+    };
+    let (transfer_cases, transfer_labels) = if composition {
+        transfer_panel(
+            template,
+            &episodes,
+            &tok,
+            &compiler,
+            native.binding().eos_token_id(),
+        )?
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    if composition
+        && construction.iter().any(|e| {
+            transfer_cases
+                .iter()
+                .any(|t| t.source_text == e.source_text)
+        })
+    {
+        return Err(invalid(
+            "composition construction overlaps development transfer literals",
+        ));
+    }
+    // Start the cyclic schedule with the longer construction B8 so its actual
+    // cost, rather than the short original cases, admits the remaining fit.
+    let mut training = construction.clone();
+    training.extend(episodes.iter().cloned());
+    if composition {
+        let root = a.out.join("construction-panel");
+        report_output::claim(&root)?;
+        write(
+            &root.join("panel.json"),
+            &json!({"schema":"uor-r4.geometric-composition-construction/1","original_cases":episode_labels(&episodes),"construction_cases":episode_labels(&construction),"development_transfer":transfer_labels,"training_cases":training.len(),"training_order_ids":training.iter().map(|e|e.id.clone()).collect::<Vec<_>>(),"answer_policy":"FrozenAnswers Current literal plus period; membership only","development_transfer_not_fresh_holdout":true,"transfer_targets_excluded_from_training":true}),
+        )?;
+        report_output::seal(&root)?;
+        report_output::verify(&root)?;
     }
     let frozen = context_shadow(&weights)?;
     verify_context_shadow(&weights, &frozen)?;
@@ -1625,6 +1719,8 @@ fn readout_fit(a: &Args) -> Result<()> {
     let mut batches = Vec::new();
     let mut checkpoints = Vec::new();
     let mut measured_admission = None::<Value>;
+    let mut previous_evaluation = None::<Value>;
+    let mut first_evaluation = None::<Value>;
     let mut export = |updates: usize| -> Result<()> {
         deadline(start, a)?;
         verify_context_shadow(&weights, &frozen)?;
@@ -1648,8 +1744,12 @@ fn readout_fit(a: &Args) -> Result<()> {
                 "continuation native context/table inventory changed",
             ));
         }
-        let canonical = canonical_measure(&loaded, &episodes, start, a)?;
-        if canonical["target_steps"] != 114 {
+        let canonical = if composition {
+            json!(null)
+        } else {
+            canonical_measure(&loaded, &episodes, start, a)?
+        };
+        if !composition && canonical["target_steps"] != 114 {
             return Err(invalid(
                 "continuation requires exact114 canonical positions",
             ));
@@ -1669,7 +1769,47 @@ fn readout_fit(a: &Args) -> Result<()> {
         generation["native_loaded_from_disk"] = json!(true);
         generation["native_metadata_sha256"] =
             json!(sha256_file(&path.join("realizer-native/metadata.json"))?);
-        let evaluation = json!({"optimizer_updates":updates,"checkpoint":receipt,"canonical":canonical,"ownprefix":generation,"context_source_bits_unchanged":true,"context_native_payload_unchanged":true,"hard_payload_sha256":bins});
+        let construction_generation = if composition {
+            generate(
+                &format!("composition-construction-{updates:04}"),
+                &loaded,
+                &construction,
+                &tok,
+                start,
+                a,
+            )?
+        } else {
+            json!(null)
+        };
+        let transfer_generation = if composition {
+            generate(
+                &format!("composition-transfer-{updates:04}"),
+                &loaded,
+                &transfer_cases,
+                &tok,
+                start,
+                a,
+            )?
+        } else {
+            json!(null)
+        };
+        let comparisons = if composition {
+            let now = json!({"original":generation,"construction":construction_generation,"transfer":transfer_generation});
+            let base = first_evaluation.as_ref().unwrap_or(&now);
+            let prev = previous_evaluation.as_ref().unwrap_or(&now);
+            let mut comparison = BTreeMap::new();
+            for category in ["original", "construction", "transfer"] {
+                comparison.insert(category,json!({"versus_start":generation_comparison(&base[category],&now[category])?,"versus_previous":generation_comparison(&prev[category],&now[category])?}));
+            }
+            if first_evaluation.is_none() {
+                first_evaluation = Some(now.clone());
+            }
+            previous_evaluation = Some(now);
+            json!(comparison)
+        } else {
+            json!(null)
+        };
+        let evaluation = json!({"optimizer_updates":updates,"checkpoint":receipt,"canonical":canonical,"ownprefix":generation,"construction_ownprefix":construction_generation,"development_transfer_ownprefix":transfer_generation,"row_comparisons":comparisons,"original_parent_comparison":if composition{Some(generation_comparison(&saved_original,&generation)?)}else{None},"context_source_bits_unchanged":true,"context_native_payload_unchanged":true,"hard_payload_sha256":bins});
         write(
             &a.out.join(format!("evaluation-{updates:04}.json")),
             &evaluation,
@@ -1683,10 +1823,10 @@ fn readout_fit(a: &Args) -> Result<()> {
         for step in 0..UPDATES {
             deadline(start, a)?;
             let indices = (0..8)
-                .map(|i| (step * 8 + i) % episodes.len())
+                .map(|i| (step * 8 + i) % training.len())
                 .collect::<Vec<_>>();
             let current = weights.compile(identity.clone())?;
-            let measured = batch(&indices, &episodes, &weights, &current, start, a)?;
+            let measured = batch(&indices, &training, &weights, &current, start, a)?;
             if step == 0 {
                 let first_b8_seconds = measured.report["elapsed_seconds"]
                     .as_f64()
@@ -1729,7 +1869,7 @@ fn readout_fit(a: &Args) -> Result<()> {
     write(
         &a.out.join("report.json"),
         &json!({
-            "schema":"uor-r4.geometric-readout-continuation/1","mode":a.mode,"status":if work.is_ok(){"completed"}else{"stopped_or_error"},
+            "schema":if composition{"uor-r4.geometric-composition-continuation/1"}else{"uor-r4.geometric-readout-continuation/1"},"mode":a.mode,"status":if work.is_ok(){"completed"}else{"stopped_or_error"},
             "source_commit":source_commit()?,"executable_sha256":sha256_file(&std::env::current_exe()?)?,"fit_source_commit":fit["source_commit"],
             "initial_checkpoint_manifest_sha256":sha256_file(&input.join("manifest.json"))?,"retained_report_sha256":retained_sha,"saved_identity":identity,
             "optimizer_updates":updates,"declared_updates":UPDATES,"measured_admission":measured_admission,"optimizer":optimizer_identity(),"optimizer_moments":"fresh AdamW state; original moments not saved",
@@ -1737,7 +1877,10 @@ fn readout_fit(a: &Args) -> Result<()> {
             "gradient_filter_before_clipping":true,"objective":"unchanged mean8episodes(mean joint answer token+EOS CE)","baseline_saved_generation_exact":true,
             "checkpoints":checkpoints,"batches":batches,"context_source_bits_unchanged":context_shadow(&weights)? == frozen,
             "input_native_payload_unchanged":bin_files(&input.join("realizer-native"))? == before,"no_adopted_model":true,
-            "scope":"64-update existing-readout continuation on20 exposed development cases; five numerical source/query groups; no heldout, geometric-advantage or complete-chat qualification",
+            "training_cases":training.len(),"sampling":"fixed cyclic B8; equal episode loss within batch, per-episode update visits differ by at most one",
+            "training_case_visits":training.iter().enumerate().map(|(i,e)|json!({"id":e.id,"visits":(0..updates*8).filter(|j|j%training.len()==i).count()})).collect::<Vec<_>>(),"construction_cases":construction.len(),"development_transfer_cases":transfer_cases.len(),"development_transfer_not_fresh_holdout":composition,
+            "construction_manifest_sha256":if composition{Some(sha256_file(&a.out.join("construction-panel/manifest.json"))?)}else{None},
+            "scope":if composition{"64-update readout-only composition continuation;20 preservation+8 fixed construction training,16 previously examined development transfer; no heldout/geometric-advantage/chat qualification"}else{"64-update existing-readout continuation on20 exposed development cases; five numerical source/query groups; no heldout, geometric-advantage or complete-chat qualification"},
             "work_error":work.as_ref().err().map(|e|e.to_string()),"wall_seconds":start.elapsed().as_secs_f64()
         }),
     )?;
@@ -1897,6 +2040,63 @@ fn transfer_panel(
     }
     Ok((episodes, labels))
 }
+fn composition_panel(
+    template: &Episode,
+    tok: &ByteBpeTokenizer,
+    compiler: &SourceEmissionCompiler,
+    eos: u32,
+) -> Result<Vec<Episode>> {
+    let literals = [
+        "singer dancer singer",
+        "dancer singer dancer",
+        "singer Brimfold",
+        "dancer Louston",
+        "Brimfold singer",
+        "Louston dancer",
+        "singer singer singer",
+        "dancer dancer dancer",
+    ];
+    literals
+        .iter()
+        .enumerate()
+        .map(|(index, literal)| {
+            let answers = uor_r4_core::answer_oracle::FrozenAnswers {
+                intent: uor_r4_core::answer_oracle::RecordedValueIntent::Current,
+                accepted: vec![format!("{literal}.")],
+            };
+            answers.validate().map_err(|e| invalid(e.to_string()))?;
+            let tokens = tok.encode(literal);
+            let view = compiler.compile(&tokens)?;
+            let mut target = tok.encode(&format!(" {literal}."));
+            target.push(eos);
+            if view.original_bytes() != literal.as_bytes()
+                || target.len() > 64
+                || view.emitted_token_ids().len() + template.query.len() + 64 > 128
+                || tokens.iter().chain(&target).any(|id| *id >= 4096)
+            {
+                return Err(invalid("composition literal sequence/identity invalid"));
+            }
+            Ok(Episode {
+                id: format!("construction-{index:02}"),
+                query: template.query.clone(),
+                tokens,
+                record: template.record,
+                commit: template.commit,
+                relation: template.relation,
+                entity: template.entity.clone(),
+                target,
+                accepted: answers.accepted,
+                source_text: (*literal).into(),
+                view,
+            })
+        })
+        .collect()
+}
+fn episode_labels(episodes: &[Episode]) -> Vec<Value> {
+    episodes.iter().map(|e|json!({"id":e.id,"typed_intent":"current","accepted":e.accepted,
+        "literal":e.source_text,"query_ids":e.query,"original_source_ids":e.tokens,"source_view":e.view,
+        "target_ids_labels_only":e.target,"record":e.record,"commit":e.commit,"relation":e.relation,"entity":e.entity})).collect()
+}
 fn shared_prefix_diverges(left: &[u32], right: &[u32]) -> bool {
     let prefix = left.iter().zip(right).take_while(|(a, b)| a == b).count();
     prefix > 0 && prefix < left.len().min(right.len()) && left[prefix] != right[prefix]
@@ -1922,17 +2122,19 @@ fn generation_comparison(parent: &Value, candidate: &Value) -> Result<Vec<Value>
             "parent_generated_ids":a["generated_ids"],"candidate_generated_ids":b["generated_ids"]}))
     }).collect()
 }
-fn transfer(a: &Args) -> Result<()> {
-    let start = Instant::now();
-    let LoadedFinal {
-        native: parent,
-        identity,
-        tok,
-        episodes,
-        retained_sha,
-        before,
-        ..
-    } = load_final(a)?;
+struct LoadedContinuation {
+    source: SourceRealizerWeights,
+    native: NativeSourceRealizer,
+    fit: Value,
+    evaluation: Value,
+    bins: BTreeMap<String, String>,
+}
+fn load_continuation(
+    a: &Args,
+    identity: &ConsumerIdentity,
+    retained_sha: &str,
+    before: &BTreeMap<String, String>,
+) -> Result<LoadedContinuation> {
     let original = a
         .audit_checkpoint
         .as_ref()
@@ -1940,7 +2142,7 @@ fn transfer(a: &Args) -> Result<()> {
     let candidate_path = a
         .transfer_checkpoint
         .as_ref()
-        .ok_or_else(|| invalid("transfer checkpoint missing"))?;
+        .ok_or_else(|| invalid("continuation checkpoint missing"))?;
     if candidate_path.file_name().and_then(|x| x.to_str()) != Some("checkpoint-0064") {
         return Err(invalid("transfer requires fixed checkpoint-0064"));
     }
@@ -1961,7 +2163,7 @@ fn transfer(a: &Args) -> Result<()> {
         || fit["initial_checkpoint_manifest_sha256"]
             != sha256_file(&original.join("manifest.json"))?
         || fit["retained_report_sha256"] != retained_sha
-        || fit["saved_identity"] != serde_json::to_value(&identity)?
+        || fit["saved_identity"] != serde_json::to_value(identity)?
         || receipt["optimizer_updates"] != 64
         || evaluation["optimizer_updates"] != 64
     {
@@ -1973,7 +2175,7 @@ fn transfer(a: &Args) -> Result<()> {
     let candidate = NativeSourceRealizer::load(
         &candidate_path.join("realizer-native"),
         &candidate_source,
-        &identity,
+        identity,
     )?;
     let candidate_bins = bin_files(&candidate_path.join("realizer-native"))?;
     if before.keys().ne(candidate_bins.keys())
@@ -1985,6 +2187,43 @@ fn transfer(a: &Args) -> Result<()> {
     {
         return Err(invalid("transfer candidate context differs from parent"));
     }
+    Ok(LoadedContinuation {
+        source: candidate_source,
+        native: candidate,
+        fit,
+        evaluation,
+        bins: candidate_bins,
+    })
+}
+fn transfer(a: &Args) -> Result<()> {
+    let start = Instant::now();
+    let LoadedFinal {
+        native: parent,
+        identity,
+        tok,
+        episodes,
+        retained_sha,
+        before,
+        ..
+    } = load_final(a)?;
+    let original = a
+        .audit_checkpoint
+        .as_ref()
+        .ok_or_else(|| invalid("original checkpoint missing"))?;
+    let candidate_path = a
+        .transfer_checkpoint
+        .as_ref()
+        .ok_or_else(|| invalid("transfer checkpoint missing"))?;
+    let LoadedContinuation {
+        native: candidate,
+        evaluation,
+        bins: candidate_bins,
+        ..
+    } = load_continuation(a, &identity, &retained_sha, &before)?;
+    let candidate_root = candidate_path
+        .parent()
+        .ok_or_else(|| invalid("candidate envelope missing"))?;
+    let bytes = fs::read(&a.tokenizer)?;
     let compiler = SourceEmissionCompiler::new(&bytes)?;
     let template = episodes
         .first()
