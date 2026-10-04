@@ -546,6 +546,9 @@ impl<'a> RealizerExecution<'a> {
             .iter()
             .map(|action| H4Code::try_from(*action).map_err(|e| invalid(e.to_string())))
             .collect::<Result<Vec<_>>>()?;
+        if factual_actions.len() != lane_count {
+            return Err(invalid("factual action-vector shape differs"));
+        }
         let mut lanes = Vec::with_capacity(requests.len());
         for request in requests {
             let mut actions = Vec::with_capacity(request.actions.len());
