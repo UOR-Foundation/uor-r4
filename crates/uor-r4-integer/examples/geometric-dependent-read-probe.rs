@@ -318,17 +318,23 @@ fn execute(a: &Args) -> Result<()> {
         fs::write(a.out.join(&name), &serialized)?;
         rows.push(json!({"id":row["id"],"path":name,"sha256":digest(&serialized),"eos":terminated,"steps":steps.len()}));
     }
-    let executable = match std::env::current_exe() {
-        Ok(p) => p,
-        Err(_) => PathBuf::from(
-            std::env::args_os()
-                .next()
-                .ok_or_else(|| invalid("executable path absent"))?,
-        ),
+    let (executable, executable_lookup) = match std::env::current_exe() {
+        Ok(p) => (p, "current_exe"),
+        Err(_) => {
+            let p = PathBuf::from(
+                std::env::args_os()
+                    .next()
+                    .ok_or_else(|| invalid("executable path absent"))?,
+            );
+            if !p.is_absolute() {
+                return Err(invalid("restricted replay requires absolute executable argv0").into());
+            }
+            (p, "absolute_argv0; independently bound by supervisor")
+        }
     };
     let executable_bytes = read_capped(&executable, 64 * 1024 * 1024)?;
     let report = json!({"schema":"uor-r4.geometric-dependent-read-probe/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),
-        "executable_sha256":digest(&executable_bytes),"inputs_sha256":digest(&bytes),"trusted_binding_sha256":digest(&binding_bytes),
+        "executable_sha256":digest(&executable_bytes),"executable_lookup":executable_lookup,"inputs_sha256":digest(&bytes),"trusted_binding_sha256":digest(&binding_bytes),
         "mode":a.mode,"feedback_input":a.feedback_input,"generation_token_cap":a.generation_tokens,"optimizer_updates":0,
         "elapsed_seconds":start.elapsed().as_secs_f64(),"rows":rows,"native_stats":native.stats(),
         "construction":"producer approximate canonical-root own-state classifier with constant nonzero category; bridge actual atom0 root basis only; allzero bridge for identity",
