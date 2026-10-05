@@ -78,7 +78,11 @@ fn collect_opened_wires(
 ) -> Result<()> {
     match v {
         Value::Object(o) => {
-            if let Ok(w) = serde_json::from_value::<Wire>(v.clone()) {
+            if let Some(w) = o
+                .contains_key("template")
+                .then(|| serde_json::from_value::<Wire>(v.clone()).ok())
+                .flatten()
+            {
                 if w.act == "query" {
                     queries.insert(w.text);
                 } else if matches!(w.act.as_str(), "assert" | "update") {
@@ -102,7 +106,11 @@ fn opened_wire_counts(v: &Value) -> (usize, usize) {
     let mut counts = (0, 0);
     match v {
         Value::Object(o) => {
-            if let Ok(w) = serde_json::from_value::<Wire>(v.clone()) {
+            if let Some(w) = o
+                .contains_key("template")
+                .then(|| serde_json::from_value::<Wire>(v.clone()).ok())
+                .flatten()
+            {
                 if w.act == "query" {
                     counts.1 += 1;
                 } else if matches!(w.act.as_str(), "assert" | "update") {
@@ -1126,6 +1134,21 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod supported_current_role_tests {
     use super::*;
+    #[test]
+    fn exposure_scanner_distinguishes_metadata_from_complete_wires() -> Result<()> {
+        let metadata = json!({"act":"assert","relation":"home","text":"I am now {v}.","source_template":"I moved to {v}."});
+        let wire = json!({"act":"assert","relation":"home","text":"I currently live in copper cedar.","template":"I currently live in {v}."});
+        let source = json!([metadata, wire]);
+        let mut values = BTreeSet::new();
+        let mut queries = BTreeSet::new();
+        collect_opened_wires(&source, &mut values, &mut queries)?;
+        assert_eq!(values, BTreeSet::from(["copper cedar".to_owned()]));
+        assert!(queries.is_empty());
+        assert_eq!(opened_wire_counts(&source), (1, 0));
+        let malformed = json!({"act":"assert","relation":"home","text":"unbound text","template":"I currently live in {v}."});
+        assert!(collect_opened_wires(&malformed, &mut values, &mut queries).is_err());
+        Ok(())
+    }
     #[test]
     fn untouched_profile_preserves_matched_banks_and_binds_actual_frames() -> Result<()> {
         assert_eq!(
