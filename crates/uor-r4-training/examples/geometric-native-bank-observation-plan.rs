@@ -682,8 +682,12 @@ fn diversity_histories(
             .iter()
             .map(literal)
             .collect::<Result<BTreeSet<_>>>()?;
+        // Predeclared public donor bound, never chosen from native outcomes/addresses.
+        // Four reassertion training blocks can cover at most eight vertices.
+        let vertex_cap = if stratum == "reassert" { 8 } else { 10 };
         let values = job
             .intersection(&home)
+            .take(vertex_cap)
             .map(|v| (*v).to_owned())
             .collect::<Vec<_>>();
         let mut selected = 0usize;
@@ -1591,9 +1595,12 @@ mod supported_current_role_tests {
 mod prospective_diversity_tests {
     use super::*;
     fn donors() -> Vec<Wire> {
+        donors_with_count(10)
+    }
+    fn donors_with_count(count: usize) -> Vec<Wire> {
         let mut all = Vec::new();
         for n in [2usize, 4, 8] {
-            for i in 0..10 {
+            for i in 0..count {
                 let value = (0..n)
                     .map(|j| format!("v{i}w{j}"))
                     .collect::<Vec<_>>()
@@ -1670,6 +1677,39 @@ mod prospective_diversity_tests {
             role_diversity::bank_keys(&fp)?,
             role_diversity::bank_keys(&relabelled)?
         );
+        Ok(())
+    }
+    #[test]
+    fn larger_donor_pool_uses_predeclared_vertex_caps_and_retains_training_witnesses() -> Result<()>
+    {
+        let all = donors_with_count(20);
+        let repeats = pool(&all, "job", "assert", Some(2))?
+            .into_iter()
+            .chain(pool(&all, "home", "assert", Some(2))?)
+            .collect::<Vec<_>>();
+        let (mut dev, mut fresh) = diversity_histories(&all, &repeats, &BTreeSet::new())?;
+        apply_supported_policy_mode(&mut dev, true)?;
+        apply_supported_policy_mode(&mut fresh, true)?;
+        let dp = json!({"split":"development","histories":dev});
+        let fp = json!({"split":"fresh","histories":fresh});
+        role_diversity::validate(&dp)?;
+        role_diversity::validate(&fp)?;
+        role_diversity::validate_literal_coverage(&dp, &fp)?;
+        for (stratum, cap) in [
+            ("length2", 10usize),
+            ("length4", 10),
+            ("length8", 10),
+            ("reassert", 8),
+        ] {
+            let values = dev
+                .iter()
+                .chain(&fresh)
+                .filter(|h| h.stratum.starts_with(&format!("{stratum}/")))
+                .flat_map(|h| h.turns.iter())
+                .map(literal)
+                .collect::<Result<BTreeSet<_>>>()?;
+            assert!(values.len() <= cap);
+        }
         Ok(())
     }
     #[test]

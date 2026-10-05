@@ -194,7 +194,7 @@ pub(super) fn validate(plan: &Value) -> Result<Value> {
         }
     }
     Ok(
-        json!({"histories":histories.len(),"rows":histories.len()*2,"unordered_literal_bank_blocks":banks.len(),"ordered_role_value_banks":banks.len()*2,"wording_pairs_per_bank":2,"role_assignments_per_block":2,"chronology_orders_per_wording":2,"query_counts":query_counts.iter().map(|((role,text),count)|json!({"role":role,"text":text,"histories":count})).collect::<Vec<_>>(),"literal_role_balance":true,"literal_initial_position_balance":true,"scope":"known retained full literals; heldout bank combinations with familiar wording; no unseen-word/literal/paraphrase claim; no model or geometry selection"}),
+        json!({"shared_literal_vertex_caps":{"length2":10,"length4":10,"length8":10,"update":10,"reassert":8},"candidate_order":"deterministic round-robin circle schedule over sorted capped shared exact donor literals; public exclusions only", "histories":histories.len(),"rows":histories.len()*2,"unordered_literal_bank_blocks":banks.len(),"ordered_role_value_banks":banks.len()*2,"wording_pairs_per_bank":2,"role_assignments_per_block":2,"chronology_orders_per_wording":2,"query_counts":query_counts.iter().map(|((role,text),count)|json!({"role":role,"text":text,"histories":count})).collect::<Vec<_>>(),"literal_role_balance":true,"literal_initial_position_balance":true,"scope":"known retained full literals; heldout bank combinations with familiar wording; no unseen-word/literal/paraphrase claim; no model or geometry selection"}),
     )
 }
 
