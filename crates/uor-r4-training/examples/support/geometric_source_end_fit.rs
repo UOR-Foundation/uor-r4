@@ -6,6 +6,111 @@ use uor_r4_integer::geometric_source_end_transport::{
 use uor_r4_integer::geometric_source_realizer::SourceEndBankRealizerTrace;
 use uor_r4_training::geometric_occurrence_consumer::source_realizer::SourceEndAngularWeights;
 
+fn calibration_report(a: &Args, initial: &str, mut report: Value) -> Result<Value> {
+    if source_end_calibration(a) {
+        report["schema"] = json!("uor-r4.geometric-source-end-calibration/1");
+        report
+            .as_object_mut()
+            .ok_or_else(|| invalid("endpoint report object absent"))?
+            .remove("zero_source_end_native_metadata_sha256");
+        report["initial_source_end_native_metadata_sha256"] = json!(initial);
+        report["source_end_warmstart"] = warm_receipt(a)?;
+        report["initialization"]=json!("current-parent native packed endpoint coefficients unpacked to exact quarters; not historical optimizer resume");
+        report["batch_schedule"] = json!(if a.mode == "source-end-calibration-fit" {
+            "all128bank rows;4rows pereach64row half;two intact querypairs perhalf;4visits/episode;fixed cyclic order"
+        } else {
+            "zero-update full128 gradient admission; no optimizer visits"
+        });
+        report["development_adjacent_query_pairs"] = json!(64);
+        report["fresh_scope"]=json!("exposed composition diagnostic; no untouched transfer claim; predictions only after development selector freezes");
+    }
+    Ok(report)
+}
+fn warm_receipt(a: &Args) -> Result<Value> {
+    Ok(serde_json::to_value(&a.source_end_warmstart)?)
+}
+fn initial_hash_key(a: &Args) -> &'static str {
+    if source_end_calibration(a) {
+        "initial_source_end_native_metadata_sha256"
+    } else {
+        "zero_source_end_native_metadata_sha256"
+    }
+}
+fn pair_diagnostics(
+    panel: &Path,
+    canonical: &Value,
+    generation: &Value,
+    a: &Args,
+) -> Result<Value> {
+    if !source_end_calibration(a) {
+        return factor_pair_report(panel, canonical, generation);
+    }
+    let data = read_json(&panel.join("context-data.json"))?;
+    let rows = data["cases"]
+        .as_array()
+        .ok_or_else(|| invalid("natural pair metadata absent"))?;
+    let cr = canonical["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("natural canonical rows absent"))?;
+    let gr = generation["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("natural generated rows absent"))?;
+    if rows.len() != 128 || cr.len() != 128 || gr.len() != 128 {
+        return Err(invalid("natural pair row count differs").into());
+    }
+    let mut pairs = BTreeMap::<String, Vec<Value>>::new();
+    for ((d, c), g) in rows.iter().zip(cr).zip(gr) {
+        if d["id"] != c["id"] || d["id"] != g["id"] {
+            return Err(invalid("natural pair identities differ").into());
+        }
+        let id = d["pair_id"]
+            .as_str()
+            .ok_or_else(|| invalid("natural pair ID absent"))?;
+        pairs.entry(id.into()).or_default().push(json!({"id":d["id"],"query_role":d["query_role"],"first_canonical_position":c["tokens"][0],"native_mean_token_ce":c["native_mean_token_ce"],"generated_ids_including_eos":g["generated_ids_including_eos"],"accepted_complete_answer":g["accepted_complete_answer"]}));
+    }
+    if pairs.len() != 64
+        || pairs
+            .values()
+            .any(|p| p.len() != 2 || p[0]["query_role"] == p[1]["query_role"])
+    {
+        return Err(invalid("natural panel requires64 intact query pairs").into());
+    }
+    Ok(
+        json!({"pairs":pairs,"scope":"all128 bank rows;64query pairs; labels only after native read"}),
+    )
+}
+fn exact_warm_fidelity(donor: &Value, warm: &Value) -> Result<()> {
+    if donor != warm {
+        return Err(invalid("native packed donor/warm-start full baseline differs").into());
+    }
+    Ok(())
+}
+fn load_calibration_panel(
+    root: &Path,
+    count: usize,
+    native: &IntegerRealizer,
+    tok: &ByteBpeTokenizer,
+    a: &Args,
+) -> Result<Vec<Episode>> {
+    let w = a
+        .source_end_warmstart
+        .as_ref()
+        .ok_or_else(|| invalid("warmstart absent"))?;
+    let report = read_json(&root.join("report.json"))?;
+    if report["cue_origin_policy"] != "prospectively-authored-current-role-bytes/bound-byteBPE/2"
+        || report["source_policy"] != w.data_scope
+    {
+        return Err(invalid("natural current-role cue construction scope differs").into());
+    }
+    let rows = load_natural_panel(root, count, native, tok)?;
+    validate_raw_cues(
+        root,
+        &rows,
+        tok,
+        &sha256_bytes(&fs::read(a.native_artifact.join("tokenizer.json"))?),
+    )?;
+    Ok(rows)
+}
 fn native_load<'a>(
     root: &Path,
     parent: &'a IntegerRealizer,
@@ -547,7 +652,12 @@ struct EndAuthorization {
     frozen_cue_packed_sha256: String,
     frozen_prefix_native_metadata_sha256: String,
     frozen_prefix_packed_sha256: String,
-    zero_source_end_native_metadata_sha256: String,
+    #[serde(default)]
+    zero_source_end_native_metadata_sha256: Option<String>,
+    #[serde(default)]
+    initial_source_end_native_metadata_sha256: Option<String>,
+    #[serde(default)]
+    source_end_warmstart: Option<SourceEndWarmstart>,
     updates: usize,
     batch_episodes: usize,
     maximum_fit_seconds: u64,
@@ -610,8 +720,20 @@ fn admission_matches(
     zero: &str,
     receipts: &Value,
 ) -> bool {
-    r["schema"] == "uor-r4.geometric-source-end-fit/1"
-        && r["mode"] == "source-end-broadbatch"
+    r["schema"]
+        == if source_end_calibration(a) {
+            "uor-r4.geometric-source-end-calibration/1"
+        } else {
+            "uor-r4.geometric-source-end-fit/1"
+        }
+        && r["mode"]
+            == if source_end_calibration(a) {
+                "source-end-calibration-broadbatch"
+            } else {
+                "source-end-broadbatch"
+            }
+        && Some(r["source_end_warmstart"].clone())
+            == serde_json::to_value(&a.source_end_warmstart).ok()
         && r["status"] == "completed"
         && r["optimizer_updates"] == 0
         && r["cases"] == 128
@@ -625,7 +747,7 @@ fn admission_matches(
         && r["development_manifest_sha256"] == a.development_manifest_sha256
         && r["fresh_manifest_sha256"] == a.fresh_manifest_sha256
         && r["trusted_binding_sha256"] == trusted
-        && r["zero_source_end_native_metadata_sha256"] == zero
+        && r[initial_hash_key(a)] == zero
         && r["frozen_parent_source_receipts"] == *receipts
         && r["frozen_cue_native_metadata_sha256"] == json!(a.frozen_cue_native_metadata_sha256)
         && r["frozen_cue_packed_sha256"] == json!(a.frozen_cue_packed_sha256)
@@ -672,6 +794,27 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         );
         sealed.insert(root);
     }
+    validate_warmstart(a)?;
+    if let Some(w) = &a.source_end_warmstart {
+        let root = nearest_seal(&w.native_bundle)?;
+        report_output::verify(&root)?;
+        inputs.insert(
+            root.join("manifest.json").to_string_lossy().into_owned(),
+            sha256_file(&root.join("manifest.json"))?,
+        );
+        sealed.insert(root);
+        for (name, hash) in [
+            ("native-metadata.json", &w.native_metadata_sha256),
+            ("source-end-period-q4.bin", &w.period_packed_sha256),
+            ("source-end-stop-q4.bin", &w.stop_packed_sha256),
+        ] {
+            let path = w.native_bundle.join(name);
+            if sha256_file(&path)? != *hash {
+                return Err(invalid("warmstart native endpoint hash differs").into());
+            }
+            inputs.insert(path.to_string_lossy().into_owned(), hash.clone());
+        }
+    }
     if let Some(p) = &a.exposed_controls {
         let root = nearest_seal(p)?;
         report_output::verify(&root)?;
@@ -717,10 +860,38 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     let tp = training_prefix(a, &parent, &tc)?;
     let cue = cue_native_load(cr, &integer)?;
     let prefix = prefix_native_load(pr, &integer, &cue)?;
-    let weights =
-        SourceEndAngularWeights::zero(&parent, &a.native_artifact, cr, pr, &tc, &tp, mode)?;
-    let development = load_panel(&a.development_panel, 128, &integer, &tok, true)?;
-    let fresh = load_panel(&a.fresh_panel, 32, &integer, &tok, true)?;
+    let weights = if let Some(w) = &a.source_end_warmstart {
+        let donor_meta = read_json(&w.native_bundle.join("native-metadata.json"))?;
+        let donor = parent.compile_source_end_transport(
+            &tc,
+            &tp,
+            SourceEndAngularQ4::new(
+                serde_json::from_value(donor_meta["potential"].clone())?,
+                &fs::read(w.native_bundle.join("source-end-period-q4.bin"))?,
+                &fs::read(w.native_bundle.join("source-end-stop-q4.bin"))?,
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        if serde_json::to_value(donor.metadata())? != donor_meta
+            || donor.metadata().potential.mode != mode
+        {
+            return Err(invalid("warmstart donor current parent/config binding differs").into());
+        }
+        SourceEndAngularWeights::from_native(&parent, &a.native_artifact, cr, pr, &tc, &tp, &donor)?
+    } else {
+        SourceEndAngularWeights::zero(&parent, &a.native_artifact, cr, pr, &tc, &tp, mode)?
+    };
+    let development = if source_end_calibration(a) {
+        load_calibration_panel(&a.development_panel, 128, &integer, &tok, a)?
+    } else {
+        load_panel(&a.development_panel, 128, &integer, &tok, true)?
+    };
+    // Calibration opens diagnostic rows only after selection; legacy preparation unchanged.
+    let fresh = if source_end_calibration(a) {
+        None
+    } else {
+        Some(load_panel(&a.fresh_panel, 32, &integer, &tok, true)?)
+    };
     write_json(
         &a.out,
         "fresh-preparation-scope.json",
@@ -739,7 +910,9 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
             &cue,
             &prefix,
             &development,
-            &fresh,
+            fresh
+                .as_deref()
+                .ok_or_else(|| invalid("legacy refinement fresh preparation absent"))?,
             &receipts,
             inputs,
             sealed,
@@ -754,30 +927,62 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         return Err(invalid("source-end complete objective infinite; no support filter").into());
     }
     write_json(&a.out, "initial-canonical.json", &baseline)?;
-    let old = prefix_canonical(&integer, &cue, &prefix, &development, a, start)?;
-    zero_fidelity(&old, &baseline)?;
     let parent_gen = generation(&integer, &cue, &prefix, &end, &development, &tok, a, start)?;
-    let oldgen = prefix_generation(&integer, &cue, &prefix, &development, &tok, a, start)?;
-    zero_fidelity(&oldgen, &parent_gen)?;
-    for (a, b) in oldgen["rows"]
-        .as_array()
-        .ok_or_else(|| invalid("old generation rows absent"))?
-        .iter()
-        .zip(
-            parent_gen["rows"]
-                .as_array()
-                .ok_or_else(|| invalid("end generation rows absent"))?,
-        )
-    {
-        for key in [
-            "generated_ids_including_eos",
-            "eos",
-            "reply_text",
-            "raw_decoded_bytes_hex",
-            "accepted_complete_answer",
-        ] {
-            if a[key] != b[key] {
-                return Err(invalid("source-end zero generation output differs").into());
+    if let Some(w) = &a.source_end_warmstart {
+        let donor = native_load(&w.native_bundle, &integer, &cue, &prefix)?;
+        if end.period_packed_coefficients() != donor.period_packed_coefficients()
+            || end.stop_packed_coefficients() != donor.stop_packed_coefficients()
+            || end.metadata() != donor.metadata()
+        {
+            return Err(invalid("warm-start payload/metadata identity differs").into());
+        }
+        exact_warm_fidelity(
+            &canonical(&integer, &cue, &prefix, &donor, &development, a, start)?,
+            &baseline,
+        )?;
+        exact_warm_fidelity(
+            &generation(
+                &integer,
+                &cue,
+                &prefix,
+                &donor,
+                &development,
+                &tok,
+                a,
+                start,
+            )?,
+            &parent_gen,
+        )?;
+        write_json(
+            &a.out,
+            "warm-start-fidelity.json",
+            &json!({"status":"PASS","source_end_warmstart":w,"quarter_values_exact_packed_roundtrip":true,"full_native_canonical_actions_CE_equal":true,"complete_own_prefix_generation_equal":true,"scope":"original current-parent native donor vs independently saved/reloaded exact-quarter trainable baseline"}),
+        )?;
+    } else {
+        let old = prefix_canonical(&integer, &cue, &prefix, &development, a, start)?;
+        zero_fidelity(&old, &baseline)?;
+        let oldgen = prefix_generation(&integer, &cue, &prefix, &development, &tok, a, start)?;
+        zero_fidelity(&oldgen, &parent_gen)?;
+        for (a, b) in oldgen["rows"]
+            .as_array()
+            .ok_or_else(|| invalid("old generation rows absent"))?
+            .iter()
+            .zip(
+                parent_gen["rows"]
+                    .as_array()
+                    .ok_or_else(|| invalid("end generation rows absent"))?,
+            )
+        {
+            for key in [
+                "generated_ids_including_eos",
+                "eos",
+                "reply_text",
+                "raw_decoded_bytes_hex",
+                "accepted_complete_answer",
+            ] {
+                if a[key] != b[key] {
+                    return Err(invalid("source-end zero generation output differs").into());
+                }
             }
         }
     }
@@ -787,9 +992,12 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     write_json(
         &a.out,
         "parent-query-pair-diagnostics.json",
-        &factor_pair_report(&a.development_panel, &baseline, &parent_gen)?,
+        &pair_diagnostics(&a.development_panel, &baseline, &parent_gen, a)?,
     )?;
-    if a.mode == "source-end-broadbatch" {
+    if matches!(
+        a.mode.as_str(),
+        "source-end-broadbatch" | "source-end-calibration-broadbatch"
+    ) {
         let b = batch(
             &(0..128).collect::<Vec<_>>(),
             &development,
@@ -803,11 +1011,16 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         write_json(&a.out, "broadbatch.json", &b.report)?;
         frozen(a, &source, &receipts)?;
         immutable(&inputs, &sealed)?;
-        return Ok(
+        return Ok(calibration_report(
+            a,
+            initial_sha.as_str(),
             json!({"schema":"uor-r4.geometric-source-end-fit/1","mode":a.mode,"status":"completed","optimizer_updates":0,"cases":128,"source_end_score_mode":mode,"parent_frozen":true,"active_families":SOURCE_END_FAMILIES,"complete_objective_finite":true,"native_equal_episode_ce":baseline["native_equal_episode_ce"],"gradient_report":b.report,"zero_source_end_native_metadata_sha256":initial_sha,"development_manifest_sha256":a.development_manifest_sha256,"fresh_manifest_sha256":a.fresh_manifest_sha256,"trusted_binding_sha256":trusted_sha,"frozen_parent_source_receipts":receipts,"frozen_cue_native_metadata_sha256":a.frozen_cue_native_metadata_sha256,"frozen_cue_packed_sha256":a.frozen_cue_packed_sha256,"frozen_prefix_native_metadata_sha256":a.frozen_prefix_native_metadata_sha256,"frozen_prefix_packed_sha256":a.frozen_prefix_packed_sha256,"input_manifests_sha256":inputs,"storage_projection":storage_projection,"fit_admitted":false,"fresh_predictions":"NOT_RUN","elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib()}),
-        );
+        )?);
     }
-    if a.mode != "source-end-fit" {
+    if !matches!(
+        a.mode.as_str(),
+        "source-end-fit" | "source-end-calibration-fit"
+    ) {
         return Err(invalid("source-end mode unknown").into());
     }
     let admission = a
@@ -825,7 +1038,13 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         .ok_or_else(|| invalid("source-end authorization absent"))?;
     let auth: EndAuthorization = serde_json::from_slice(&read_capped(authpath)?)?;
     if !admission_matches(&report, a, mode, &trusted_sha, &initial_sha, &receipts)
-        || auth.schema != "uor-r4.source-end-fit-authorization/1"
+        || auth.schema
+            != if source_end_calibration(a) {
+                "uor-r4.source-end-calibration-fit-authorization/1"
+            } else {
+                "uor-r4.source-end-fit-authorization/1"
+            }
+        || auth.source_end_warmstart != a.source_end_warmstart
         || !auth.fit_admitted
         || !auth.parent_frozen
         || auth.active_families != SOURCE_END_FAMILIES
@@ -834,7 +1053,13 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         || auth.development_manifest_sha256 != a.development_manifest_sha256
         || auth.fresh_manifest_sha256 != a.fresh_manifest_sha256
         || auth.trusted_binding_sha256 != trusted_sha
-        || auth.zero_source_end_native_metadata_sha256 != initial_sha
+        || (if source_end_calibration(a) {
+            auth.initial_source_end_native_metadata_sha256.as_deref()
+        } else {
+            auth.zero_source_end_native_metadata_sha256.as_deref()
+        }) != Some(initial_sha.as_str())
+        || (source_end_calibration(a) && auth.zero_source_end_native_metadata_sha256.is_some())
+        || (!source_end_calibration(a) && auth.initial_source_end_native_metadata_sha256.is_some())
         || Some(auth.frozen_cue_native_metadata_sha256) != a.frozen_cue_native_metadata_sha256
         || Some(auth.frozen_cue_packed_sha256) != a.frozen_cue_packed_sha256
         || Some(auth.frozen_prefix_native_metadata_sha256) != a.frozen_prefix_native_metadata_sha256
@@ -983,8 +1208,13 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     write_json(
         &a.out,
         "selected-query-pair-diagnostics.json",
-        &factor_pair_report(&a.development_panel, &selected_can, &selected_gen)?,
+        &pair_diagnostics(&a.development_panel, &selected_can, &selected_gen, a)?,
     )?;
+    let fresh = if source_end_calibration(a) {
+        load_calibration_panel(&a.fresh_panel, 32, &integer, &tok, a)?
+    } else {
+        fresh.ok_or_else(|| invalid("legacy fresh preparation absent"))?
+    };
     write_json(
         &a.out,
         "fresh-parent-generation.json",
@@ -1028,13 +1258,67 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     }
     frozen(a, &source, &receipts)?;
     immutable(&inputs, &sealed)?;
-    Ok(
+    calibration_report(
+        a,
+        initial_sha.as_str(),
         json!({"schema":"uor-r4.geometric-source-end-fit/1","mode":a.mode,"status":"completed","source_end_score_mode":mode,"parent_frozen":true,"active_families":SOURCE_END_FAMILIES,"optimizer_updates":UPDATES,"batch_episodes":BATCH,"episode_visits":4,"batch_schedule":"balanced4single+4bank intactpairs","checkpoints":stages,"selected_updates":step,"first_native_packed_crossing_update":first_cross,"frozen_parent_source_receipts":receipts,"frozen_cue_native_metadata_sha256":a.frozen_cue_native_metadata_sha256,"frozen_cue_packed_sha256":a.frozen_cue_packed_sha256,"frozen_prefix_native_metadata_sha256":a.frozen_prefix_native_metadata_sha256,"frozen_prefix_packed_sha256":a.frozen_prefix_packed_sha256,"input_manifests_sha256":inputs,"fresh_predictions_before_selection":0,"native_only_source_end_generation":true,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib(),"scope":"factual-reader-bound Source-end relation; actualprefix; fixedCopy and terminalparent; no gold/source gate/cursor; no generalchat qualification"}),
     )
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn calibration_rejects_stale_warm_scope_and_preserves_legacy_receipt() -> Result<()> {
+        let mut args: Args = serde_json::from_value(
+            json!({"mode":"source-end-calibration-broadbatch","source_weights":"s","native_artifact":"n","trusted_native_binding":"b","development_panel":"d","development_manifest_sha256":"x","fresh_panel":"f","fresh_manifest_sha256":"y","out":"o","maximum_seconds":300,"maximum_context_tokens":128,"maximum_generation_tokens":32,"maximum_report_bytes":134217728,"source_end_warmstart":{"native_bundle":"e","native_metadata_sha256":"a".repeat(64),"period_packed_sha256":"b".repeat(64),"stop_packed_sha256":"c".repeat(64),"data_scope":"explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"}}),
+        )?;
+        validate_warmstart(&args)?;
+        let receipt = calibration_report(
+            &args,
+            "initial",
+            json!({"zero_source_end_native_metadata_sha256":"wrong-zero"}),
+        )?;
+        assert!(receipt
+            .get("zero_source_end_native_metadata_sha256")
+            .is_none());
+        assert_eq!(
+            receipt["initial_source_end_native_metadata_sha256"],
+            "initial"
+        );
+        assert_eq!(receipt["source_end_warmstart"], warm_receipt(&args)?);
+        args.source_end_warmstart
+            .as_mut()
+            .ok_or_else(|| invalid("fixture warm absent"))?
+            .period_packed_sha256 = "stale".into();
+        assert!(validate_warmstart(&args).is_err());
+        args.source_end_warmstart
+            .as_mut()
+            .ok_or_else(|| invalid("fixture warm absent"))?
+            .period_packed_sha256 = "b".repeat(64);
+        args.mode = "source-end-broadbatch".into();
+        assert!(validate_warmstart(&args).is_err());
+        args.source_end_warmstart = None;
+        validate_warmstart(&args)?;
+        let legacy = json!({"schema":"old","zero_source_end_native_metadata_sha256":"zero"});
+        assert_eq!(calibration_report(&args, "zero", legacy.clone())?, legacy);
+        Ok(())
+    }
+    #[test]
+    fn calibration_full_fidelity_rejects_ce_action_and_generated_sequence_changes() -> Result<()> {
+        let baseline = json!({"native_equal_episode_ce":0.2,"rows":[{"id":"row","tokens":[{"native":{"actions":{"score_q24":42}}}],"generated_ids_including_eos":[2,1]}]});
+        exact_warm_fidelity(&baseline, &baseline)?;
+        for kind in 0..3 {
+            let mut changed = baseline.clone();
+            match kind {
+                0 => changed["native_equal_episode_ce"] = json!(0.3),
+                1 => changed["rows"][0]["tokens"][0]["native"]["actions"]["score_q24"] = json!(43),
+                _ => changed["rows"][0]["generated_ids_including_eos"] = json!([3, 1]),
+            };
+            assert!(exact_warm_fidelity(&baseline, &changed).is_err());
+        }
+        Ok(())
+    }
+
     #[test]
     fn source_end_harness_zero_fidelity_rejects_truncation_and_final_action_change() -> Result<()> {
         let row = json!({"id":"r","tokens":[{"native":{"actions":{"chosen_token_id":7,"total_weight_q31":20}},"cue_carrier":{"bin":2},"prefix_transport":{"bin":3}}]});

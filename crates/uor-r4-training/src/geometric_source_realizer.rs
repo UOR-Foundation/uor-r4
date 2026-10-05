@@ -28,7 +28,7 @@ use uor_r4_integer::{
     geometric_no_read::{NativeGeometricNoRead, NoReadConfig},
     geometric_occurrence_read::SelectedRecordFrame,
     geometric_potential::AddressLane,
-    geometric_potential_q4::pack_coefficients,
+    geometric_potential_q4::{pack_coefficients, unpack_coefficients},
     geometric_prefix_transport::{
         NativePrefixTransport, PrefixAngularConfig, PrefixAngularQ4, PrefixScoreMode,
     },
@@ -1607,6 +1607,64 @@ fn source_end_packed(var: &Var) -> Result<Vec<u8>> {
     .map_err(|e| invalid(e.to_string()))
 }
 impl SourceEndAngularWeights {
+    /// Derive exact quarter-grid shadows from an already compiled endpoint.
+    /// All metadata is constructed from the current parent and actual frozen
+    /// bundles; historical source metadata is neither imported nor rewritten.
+    /// The donor must replay under precisely these parent/cue/prefix bindings.
+    pub fn from_native(
+        parent: &NativeSourceRealizer,
+        native_root: &Path,
+        cue_root: &Path,
+        prefix_root: &Path,
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        donor: &NativeSourceEndTransport<'_>,
+    ) -> Result<Self> {
+        let config = donor.metadata().potential;
+        let current = parent.consumer.context.config();
+        if config.heads != current.heads || config.lanes_per_head != current.lanes_per_head {
+            return Err(invalid("source-end warm-start parent dimensions differ"));
+        }
+        let count = config
+            .coefficient_count()
+            .map_err(|e| invalid(e.to_string()))?;
+        let decode = |packed: &[u8]| -> Result<Vec<f32>> {
+            Ok(unpack_coefficients(count, packed)
+                .map_err(|e| invalid(e.to_string()))?
+                .into_iter()
+                .map(|q| f32::from(q) * 0.25)
+                .collect())
+        };
+        let period = decode(donor.period_packed_coefficients())?;
+        let stop = decode(donor.stop_packed_coefficients())?;
+        // zero() verifies the on-disk current parent and sidecar bindings and
+        // establishes fresh source metadata before donor shadows are installed.
+        let mut result = Self::zero(
+            parent,
+            native_root,
+            cue_root,
+            prefix_root,
+            cue,
+            prefix,
+            config.mode,
+        )?;
+        result.period_coefficients = Var::from_vec(period, count, &Device::Cpu)?;
+        result.stop_coefficients = Var::from_vec(stop, count, &Device::Cpu)?;
+        if result.period_packed_coefficients()? != donor.period_packed_coefficients()
+            || result.stop_packed_coefficients()? != donor.stop_packed_coefficients()
+        {
+            return Err(invalid("source-end warm-start quarter-grid replay differs"));
+        }
+        let replay = parent.compile_source_end_transport(cue, prefix, result.native()?)?;
+        if replay.metadata() != donor.metadata() {
+            return Err(invalid(
+                "source-end warm-start donor parent/carrier binding differs",
+            ));
+        }
+        result.metadata.native_metadata = serde_json::to_value(replay.metadata())?;
+        Ok(result)
+    }
+
     pub fn zero(
         parent: &NativeSourceRealizer,
         native_root: &Path,
@@ -3773,6 +3831,149 @@ mod tests {
         }
         Ok(())
     }
+    #[test]
+    fn source_end_native_warm_start_preserves_signed_grid_read_and_rejects_foreign_carrier(
+    ) -> Result<()> {
+        let (fixture, native, _) = dependent_fixture()?;
+        let native_root = fixture.path.join("dependent-native");
+        let cue_root = fixture.path.join("warm-start-cue");
+        let prefix_root = fixture.path.join("warm-start-prefix");
+        let cue_weights =
+            CueAngularWeights::zero(&native, &native_root, CueScoreMode::DirectedRelative)?;
+        cue_weights.save(&cue_root)?;
+        let cue = native.compile_cue_carrier(cue_weights.native()?)?;
+        let prefix_weights = PrefixAngularWeights::zero(
+            &native,
+            &native_root,
+            &cue_root,
+            &cue,
+            PrefixScoreMode::DirectedRelative,
+        )?;
+        prefix_weights.save(&prefix_root)?;
+        let prefix = native.compile_prefix_transport(&cue, prefix_weights.native()?)?;
+        let c = native.consumer.context.config();
+        let config = SourceEndAngularConfig {
+            heads: c.heads,
+            lanes_per_head: c.lanes_per_head,
+            mode: SourceEndScoreMode::DirectedRelative,
+        };
+        let count = config
+            .coefficient_count()
+            .map_err(|e| invalid(e.to_string()))?;
+        let period = (0..count)
+            .map(|i| if i % 2 == 0 { -7 } else { 3 })
+            .collect::<Vec<i8>>();
+        let stop = (0..count)
+            .map(|i| if i % 2 == 0 { -1 } else { 7 })
+            .collect::<Vec<i8>>();
+        let period_packed = pack_coefficients(&period).map_err(|e| invalid(e.to_string()))?;
+        let stop_packed = pack_coefficients(&stop).map_err(|e| invalid(e.to_string()))?;
+        let donor = native.compile_source_end_transport(
+            &cue,
+            &prefix,
+            SourceEndAngularQ4::new(config, &period_packed, &stop_packed)
+                .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let warm = SourceEndAngularWeights::from_native(
+            &native,
+            &native_root,
+            &cue_root,
+            &prefix_root,
+            &cue,
+            &prefix,
+            &donor,
+        )?;
+        assert_eq!(warm.period_packed_coefficients()?, period_packed);
+        assert_eq!(warm.stop_packed_coefficients()?, stop_packed);
+        assert_eq!(
+            warm.period_coefficients.to_vec1::<f32>()?,
+            period
+                .iter()
+                .map(|&q| f32::from(q) * 0.25)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            warm.stop_coefficients.to_vec1::<f32>()?,
+            stop.iter()
+                .map(|&q| f32::from(q) * 0.25)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            warm.parameters().keys().cloned().collect::<Vec<_>>(),
+            vec![
+                "source_end.period_coefficients",
+                "source_end.stop_coefficients"
+            ]
+        );
+        let warm_root = fixture.path.join("warm-start-source-end");
+        warm.save(&warm_root)?;
+        let reloaded = SourceEndAngularWeights::load(
+            &warm_root,
+            &native,
+            &native_root,
+            &cue_root,
+            &prefix_root,
+            &cue,
+            &prefix,
+        )?;
+        let replay = native.compile_source_end_transport(&cue, &prefix, reloaded.native()?)?;
+        assert_eq!(replay.metadata(), donor.metadata());
+        let ids = [4, 4, 4];
+        let view = SourceEmissionCompiler::new(TOK.as_bytes())?.compile(&ids)?;
+        let segments = [SourceBankSegment::Source {
+            frame: frame(&ids),
+            view: &view,
+            event: 7,
+        }];
+        let donor_read = native.read_bank_with_source_end_transport(
+            &segments,
+            &[5],
+            &[4],
+            &cue,
+            &prefix,
+            &donor,
+        )?;
+        let replay_read = native.read_bank_with_source_end_transport(
+            &segments,
+            &[5],
+            &[4],
+            &cue,
+            &prefix,
+            &replay,
+        )?;
+        assert_eq!(donor_read, replay_read);
+        assert!(donor_read.source_end.period_q24.iter().any(|&q| q != 0));
+        assert!(donor_read.source_end.stop_q24.iter().any(|&q| q != 0));
+
+        // A valid compiled endpoint from another cue/prefix chain must not be
+        // relabelled as the current chain, even when its endpoint bytes match.
+        let foreign_packed =
+            pack_coefficients(&vec![1; count]).map_err(|e| invalid(e.to_string()))?;
+        let foreign_cue = native.compile_cue_carrier(
+            CueAngularQ4::new(cue_weights.config(), &foreign_packed)
+                .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let foreign_prefix =
+            native.compile_prefix_transport(&foreign_cue, prefix_weights.native()?)?;
+        let foreign_end = native.compile_source_end_transport(
+            &foreign_cue,
+            &foreign_prefix,
+            SourceEndAngularQ4::new(config, &period_packed, &stop_packed)
+                .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        assert!(SourceEndAngularWeights::from_native(
+            &native,
+            &native_root,
+            &cue_root,
+            &prefix_root,
+            &cue,
+            &prefix,
+            &foreign_end,
+        )
+        .is_err());
+        Ok(())
+    }
+
     #[test]
     fn source_end_zero_alias_loss_gradients_and_bound_bundle_replay() -> Result<()> {
         let (fixture, native, _) = dependent_fixture()?;

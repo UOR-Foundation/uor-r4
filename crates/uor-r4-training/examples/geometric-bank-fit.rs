@@ -2,7 +2,7 @@
 //! Zero updates; source-only runtime packets and separately frozen typed answers.
 use candle_core::{Device, Tensor, Var};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -37,8 +37,11 @@ mod output_support;
 use uor_r4_integer::geometric_prefix_transport::{
     NativePrefixTransport, PrefixAngularConfig, PrefixAngularQ4, PrefixScoreMode,
 };
+#[path = "support/geometric_natural_raw_cues.rs"]
+mod natural_raw_cues;
 #[path = "support/geometric_source_end_fit.rs"]
 mod source_end_fit;
+pub(crate) use natural_raw_cues::validate_raw_cues;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const REPORT_CAP: usize = 512 * 1024 * 1024;
 const FACTOR_REPORT_CAP: usize = 256 * 1024 * 1024;
@@ -71,6 +74,50 @@ fn source_end_mode(a: &Args) -> bool {
 }
 const UPDATES: usize = 64;
 const BATCH: usize = 8;
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SourceEndWarmstart {
+    pub(crate) native_bundle: PathBuf,
+    pub(crate) native_metadata_sha256: String,
+    pub(crate) period_packed_sha256: String,
+    pub(crate) stop_packed_sha256: String,
+    pub(crate) data_scope: String,
+}
+fn source_end_calibration(a: &Args) -> bool {
+    matches!(
+        a.mode.as_str(),
+        "source-end-calibration-broadbatch" | "source-end-calibration-fit"
+    )
+}
+fn validate_warmstart(a: &Args) -> Result<()> {
+    if source_end_calibration(a) != a.source_end_warmstart.is_some() {
+        return Err(
+            invalid("native warmstart is required only for explicit endpoint calibration").into(),
+        );
+    }
+    if let Some(w) = &a.source_end_warmstart {
+        if w.data_scope
+            != "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+            || [
+                &w.native_metadata_sha256,
+                &w.period_packed_sha256,
+                &w.stop_packed_sha256,
+            ]
+            .iter()
+            .any(|h| h.len() != 64 || !h.bytes().all(|b| b.is_ascii_hexdigit()))
+            || a.maximum_generation_tokens != 32
+            || a.exposed_controls.is_some()
+            || a.learned_source_weights.is_some()
+            || a.learned_native_artifact.is_some()
+            || a.learned_trusted_native_binding.is_some()
+        {
+            return Err(
+                invalid("calibration warmstart scope/hash/argument contract differs").into(),
+            );
+        }
+    }
+    Ok(())
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Args {
@@ -88,6 +135,8 @@ pub(crate) struct Args {
     pub(crate) learned_source_weights: Option<PathBuf>,
     pub(crate) learned_native_artifact: Option<PathBuf>,
     pub(crate) learned_trusted_native_binding: Option<PathBuf>,
+    #[serde(default)]
+    pub(crate) source_end_warmstart: Option<SourceEndWarmstart>,
     pub(crate) source_end_incumbent_fit: Option<PathBuf>,
     pub(crate) source_end_incumbent_manifest_sha256: Option<String>,
     pub(crate) source_weights: PathBuf,
@@ -349,13 +398,18 @@ fn checked_args() -> Result<Args> {
         "source-end-broadbatch",
         "source-end-fit",
         "source-end-refine",
+        "source-end-calibration-broadbatch",
+        "source-end-calibration-fit",
     ]
     .contains(&a.mode.as_str())
         || a.maximum_seconds == 0
         || a.maximum_seconds
             > if a.mode == "source-end-refine" {
                 600
-            } else if matches!(a.mode.as_str(), "terminal-fit" | "source-end-fit") {
+            } else if matches!(
+                a.mode.as_str(),
+                "terminal-fit" | "source-end-fit" | "source-end-calibration-fit"
+            ) {
                 900
             } else if a.mode == "fit" {
                 3600
@@ -369,7 +423,10 @@ fn checked_args() -> Result<Args> {
         || a.maximum_report_bytes
             != if a.mode == "source-end-refine" {
                 768 * 1024 * 1024
-            } else if a.mode == "source-end-fit" {
+            } else if matches!(
+                a.mode.as_str(),
+                "source-end-fit" | "source-end-calibration-fit"
+            ) {
                 // Observed full-cap projection is 568 MB; retain legacy admission
                 // while permitting the prospectively recorded 640 MiB fit cap.
                 if a.maximum_report_bytes == 640 * 1024 * 1024 {
@@ -377,7 +434,10 @@ fn checked_args() -> Result<Args> {
                 } else {
                     512 * 1024 * 1024
                 }
-            } else if a.mode == "source-end-broadbatch" {
+            } else if matches!(
+                a.mode.as_str(),
+                "source-end-broadbatch" | "source-end-calibration-broadbatch"
+            ) {
                 128 * 1024 * 1024
             } else if a.mode == "terminal-fit" {
                 1024 * 1024 * 1024
@@ -403,9 +463,16 @@ fn checked_args() -> Result<Args> {
     {
         return Err(invalid("mode/resource contract differs").into());
     }
+    validate_warmstart(&a)?;
     if matches!(
         a.mode.as_str(),
-        "fit" | "readout-fit" | "cue-fit" | "prefix-fit" | "terminal-fit" | "source-end-fit"
+        "fit"
+            | "readout-fit"
+            | "cue-fit"
+            | "prefix-fit"
+            | "terminal-fit"
+            | "source-end-fit"
+            | "source-end-calibration-fit"
     ) && (a.admission.is_none()
         || a.admission_manifest_sha256.is_none()
         || a.fit_authorization.is_none())
@@ -419,7 +486,8 @@ fn checked_args() -> Result<Args> {
         || a.mode == "cue-broadbatch"
         || a.mode == "prefix-broadbatch"
         || a.mode == "terminal-broadbatch"
-        || a.mode == "source-end-broadbatch")
+        || a.mode == "source-end-broadbatch"
+        || a.mode == "source-end-calibration-broadbatch")
         && (a.admission.is_some() || a.fit_authorization.is_some())
     {
         return Err(invalid("broadbatch cannot automatically fit").into());
@@ -506,6 +574,7 @@ fn checked_args() -> Result<Args> {
     paths.extend(a.frozen_cue_bundle.iter());
     paths.extend(a.frozen_prefix_bundle.iter());
     paths.extend(a.source_end_incumbent_fit.iter());
+    paths.extend(a.source_end_warmstart.iter().map(|w| &w.native_bundle));
     paths.extend(a.admission.iter());
     paths.extend(a.fit_authorization.iter());
     paths.extend(a.exposed_controls.iter());
