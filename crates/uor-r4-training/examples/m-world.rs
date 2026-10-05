@@ -4169,6 +4169,11 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         // artefact: `hit` was tested before `!stored`, so rows answered via the
         // user-turn log sieve left never_stored and became "correct".
         let (mut correct_with_store_read, mut correct_via_log_without_store) = (0usize, 0usize);
+        // MASKING CHECK: a row the LOG answered while the store read FOUND a record. The log
+        // fallback exists so a store miss still gets answered, but it must not hide a store
+        // defect: if the store had a record and the log answered anyway, that row cannot
+        // distinguish "the store path works" from "the log covered for it".
+        let mut log_answered_while_store_had_record = 0usize;
         // Storage, separated by DEFINITION. `any_write_total` counts any write before
         // the final turn -- including the distractor fact every row writes.
         // `asked_fact_stored_total` counts rows where the ASKED fact was stored,
@@ -4282,6 +4287,10 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             let hit = verdict.hit;
             let answered_from_store = verdict.path == "store_read";
             let answered_from_log = verdict.path == "log_without_store";
+            let masked_by_log = answered_from_log && read_found;
+            if masked_by_log {
+                log_answered_while_store_had_record += 1;
+            }
             if hit {
                 correct += 1;
                 match verdict.path {
@@ -4332,6 +4341,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                     stored_total_row,
                 ),
                 "answered_from_store": answered_from_store, "answered_from_log": answered_from_log,
+                "masked_by_log": masked_by_log,
                 "read_found": read_found,
                 "read_value": read_value, "recalled_value": recalled_value,
                 "log_value": log_value,
@@ -4379,7 +4389,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             "panel memory: {correct}/{total}; any_write_total={any_write_total} asked_fact_stored_total={asked_fact_stored_total} wrote_other_than_asked={wrote_other_than_asked}"
         );
         println!(
-            "panel paths: store_read={correct_with_store_read} log_without_store={correct_via_log_without_store} other={correct_other}"
+            "panel paths: store_read={correct_with_store_read} log_without_store={correct_via_log_without_store} other={correct_other} masked_by_log={log_answered_while_store_had_record}"
         );
         println!(
             "panel misses: never_stored={never_stored} stored_not_recalled={stored_not_recalled} recalled_wrong_value={recalled_wrong_value} misrendered={recalled_misrendered} log_answered_but_wrong={log_answered_but_wrong} errors={errors}"
