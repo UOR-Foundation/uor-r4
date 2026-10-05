@@ -170,6 +170,18 @@ pub(super) fn run(
     }
     let initial_receipts = parameter_receipts(&weights.parameters())?;
     let initial_packed = weights.packed_coefficients()?;
+    let actual_cue = integer.compile_cue_carrier(weights.native()?)?;
+    let actual_cue_metadata = serde_json::to_value(actual_cue.metadata())?;
+    for (episode, row) in development.iter().zip(reference_rows) {
+        if row["id"] != episode.packet.id
+            || row["tokens"][0]["cue_carrier"]["metadata"] != actual_cue_metadata
+        {
+            return Err(
+                invalid("cue credit saved angular incidence checkpoint metadata differs").into(),
+            );
+        }
+    }
+
     let data = read_json(&a.development_panel.join("context-data.json"))?;
     let labels = data["cases"]
         .as_array()
