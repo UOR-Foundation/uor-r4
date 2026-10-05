@@ -1730,20 +1730,28 @@ fn test_bf16_exact_inputs_round_once() -> uor_r4_training::Result<()> {
     assert_bf16_rounds_once(&f32_scan, &bf16_scan, "QuaternionScan")?;
 
     // Fused read, the gate's L2 score.
-    let (heads, key, value) = (2usize, 4usize, 4usize);
+    let (heads, key) = (2usize, 4usize);
     let rows = batch * heads * time;
+    let (keys, values) = (4usize, 3usize);
     let query = exact(bf16_exact(rows * key, 1), vec![batch, heads, time, key])?;
-    let kv = exact(
-        bf16_exact(rows * (key + value), 2),
-        vec![batch, heads, time, key + value],
-    )?;
+    let key_tensor = exact(bf16_exact(rows * keys, 2), vec![batch, heads, time, keys])?;
+    let value_tensor = exact(bf16_exact(rows * values, 9), vec![batch, heads, time, values])?;
     let aux_len = fused_aux_len(batch, heads, time, ReadScore::L2, true, true).max(1);
     let aux = exact(bf16_exact(aux_len, 4), vec![aux_len])?;
-    let f32_read = fused_read(&query, &kv, &kv, &aux, ReadScore::L2, true, true, false)?;
+    let f32_read = fused_read(
+        &query,
+        &key_tensor,
+        &value_tensor,
+        &aux,
+        ReadScore::L2,
+        true,
+        true,
+        false,
+    )?;
     let bf16_read = fused_read(
         &as_bf16(&query)?,
-        &as_bf16(&kv)?,
-        &as_bf16(&kv)?,
+        &as_bf16(&key_tensor)?,
+        &as_bf16(&value_tensor)?,
         &aux,
         ReadScore::L2,
         true,
@@ -1854,17 +1862,22 @@ fn test_bf16_quaternion_scan_parity() -> uor_r4_training::Result<()> {
         &f32_transition.to_dtype(candle_core::DType::BF16)?,
         &f32_drive.to_dtype(candle_core::DType::BF16)?,
     )?;
+    // The carried state is a sum of bf16-rounded drives (|drive| <= 1 here),
+    // so the absolute error follows the input scale, not the output: a step
+    // whose state nearly cancels has a tiny reference value and still carries
+    // the ~2e-3 rounding of the terms that produced it. 5e-3 + 5e-3 rel covers
+    // the 12-position accumulation measured on the 4090 (6.3e-3).
     let worst = assert_bf16_close(
         &f32_out.flatten_all()?.to_vec1::<f32>()?,
         &bf16_out
             .to_dtype(candle_core::DType::F32)?
             .flatten_all()?
             .to_vec1::<f32>()?,
-        2e-3,
+        5e-3,
         5e-3,
         "QuaternionScan bf16",
     );
-    println!("bf16 QuaternionScan max |diff| {worst:e} (tolerance 2e-3 + 5e-3 rel)");
+    println!("bf16 QuaternionScan max |diff| {worst:e} (tolerance 5e-3 + 5e-3 rel)");
     Ok(())
 }
 
@@ -1886,19 +1899,24 @@ fn test_bf16_fused_read_parity() -> uor_r4_training::Result<()> {
     };
     let query =
         candle_core::Tensor::from_vec(gen(rows * key, 0.0), (batch, heads, time, key), &cuda)?;
-    let kv = candle_core::Tensor::from_vec(
-        gen(rows * (key + value), 1.7),
-        (batch, heads, time, key + value),
+    let keys = candle_core::Tensor::from_vec(
+        gen(rows * key, 1.7),
+        (batch, heads, time, key),
+        &cuda,
+    )?;
+    let values = candle_core::Tensor::from_vec(
+        gen(rows * value, 2.4),
+        (batch, heads, time, value),
         &cuda,
     )?;
     for score in [ReadScore::Dot, ReadScore::Lorentz, ReadScore::L2] {
         let aux_len = fused_aux_len(batch, heads, time, score, true, true).max(1);
         let aux = candle_core::Tensor::from_vec(gen(aux_len, 3.1), aux_len, &cuda)?;
-        let f32_out = fused_read(&query, &kv, &kv, &aux, score, true, true, false)?;
+        let f32_out = fused_read(&query, &keys, &values, &aux, score, true, true, false)?;
         let bf16_out = fused_read(
             &query.to_dtype(candle_core::DType::BF16)?,
-            &kv.to_dtype(candle_core::DType::BF16)?,
-            &kv.to_dtype(candle_core::DType::BF16)?,
+            &keys.to_dtype(candle_core::DType::BF16)?,
+            &values.to_dtype(candle_core::DType::BF16)?,
             &aux,
             score,
             true,
