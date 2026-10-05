@@ -35,6 +35,16 @@ complete answer/EOS and paired opposite-role questions. Source-separated
 raw-history/compiler/store/emission integration, generated conversation and full
 D19/D11/D5 goals remain outstanding.
 
+The prospective implementation in [PR1762](https://github.com/UOR-Foundation/uor-r4/pull/1762)
+now supplies the broader fixed composition panel and explicit512/128 discrete
+configuration. Keep the selected native chain as initializer; recover it from
+the canonical volume before preparation/fit. Do not substitute the earlier local
+model. Next verify real donor availability and public formatter eligibility,
+then project actual full-gradient/canonical/generation cost before admitting the
+fit. Report first-read bin/joint coverage alongside source choice, continuity and
+complete answers. The new panel's claim is composition of familiar literals and
+questions; the full raw-history/chat path remains outstanding.
+
 ## Active programme — grounded conversation and durable memory, October 1
 
 **Owner-adopted direction:** [D19](DECISIONS.md#d19--grounded-conversation-and-durable-memory-first).

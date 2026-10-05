@@ -1,5 +1,36 @@
 # Current UOR-R4 research state
 
+## Prospective cue composition implementation — October 5
+
+[PR1762](https://github.com/UOR-Foundation/uor-r4/pull/1762) implements opt-in
+`supported-prospective-role-diversity/1`: 512 development/128 evaluation rows,
+32/8 disjoint unordered literal-bank families, crossed role assignments and
+chronological orders, and balanced familiar question pairs. Every fresh full
+literal has a development witness; sorted fixed vertex caps and round-robin
+pairing prevent donor hubs. The scope is combinations of known literal bytes
+and familiar questions, not unseen language. Whole bank/history families and
+prior exposed plan/panel roots are excluded before predictions.
+
+The discrete driver uses every loaded development row and preserves the legal
+quarter-step proposal/reloaded native CE acceptance rule. First-read coverage
+reports separate observed joint tuples, new joints over observed constituent
+bins, and unsupported bins without correctness filtering. Observed coverage is
+not proof of nonzero learning credit. Source preparation, new fit and transfer
+qualification remain NOT_RUN. Exact selected-discrete-2 continuation requires
+its retained native/source/cue/prefix/endpoint artifacts on the canonical
+EUR-NO volume; locally available order061 is an earlier model and cannot silently
+replace it.
+
+Numerical head `219c73a7bd703d3a9b8df1284a198117e102b0b2` also repairs the baseline
+pair diagnostic's inherited 32/128 count limit, allowing 512 only with the bound
+prospective development profile, all-source policy and 256 pairs. Exact source
+review passes. Executed exact-head checks pass: 38 bank-fit, 14 plan and
+25 panel tests, rustfmt and release builds on Linux x86_64 host `27ca5ab08a91`: CPU8,
+CUDA hidden, 76.237s and peak owned process-group RSS4,970,483,712B. This is implementation evidence, not a model
+result. Durable receipts live at
+`/workspace/uor-r4/codex/cue-composition/checks-2` on the EU-RO shared volume.
+The merged main pod tool owns status/renewal; DeepSeek retains the shared GPU.
+
 ## Native discrete cue learning improves source choice — October 5
 
 The bounded discrete learner at numerical head
