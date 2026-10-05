@@ -703,6 +703,9 @@ enum Values {
     Hometown,
     LuckyNumber,
     CodeWord,
+    /// An OPEN relation: its NAME comes from the generated pool and its value from the
+    /// same syllable scheme, so neither is drawn from a fixed label list.
+    Open,
     Closed(&'static [&'static str], &'static [&'static str]),
 }
 
@@ -727,6 +730,7 @@ impl Rel {
     fn draw(&self, rng: &mut Rng, split: Split) -> Result<String> {
         match self.values {
             Values::UserName | Values::PetName | Values::FriendName => name(rng, split),
+            Values::Open => word(rng, split, 2, 3),
             Values::Hometown => town(rng, split),
             Values::LuckyNumber => digits(rng, split),
             Values::CodeWord => word(rng, split, 2, 3),
@@ -877,6 +881,256 @@ pub fn relation_names() -> Vec<&'static str> {
     relations().iter().map(|relation| relation.name).collect()
 }
 
+/// Whether the run wants OPEN RELATION NAMES (`world=v2r`).
+///
+/// The relation table is process-wide and every caller must agree on it — the world
+/// generates with it and the compiler validates names against it — so the variant is a
+/// property of the RUN, set once at startup. `v2` never sets it, so the v2 table is
+/// returned untouched and v2 stays byte-identical by construction.
+static OPEN_RELATIONS: OnceLock<bool> = OnceLock::new();
+
+/// Enable open relation names for this process. Called once by the CLI when
+/// `world=v2r`; a no-op for `v2`.
+pub fn enable_open_relations() {
+    let _ = OPEN_RELATIONS.set(true);
+}
+
+pub fn open_relations() -> bool {
+    *OPEN_RELATIONS.get().unwrap_or(&false)
+}
+
+/// The generated nonsense pool size. Large so any one name appears in only a handful of
+/// episodes; the English names recur far more often, which is what the held-out English
+/// split measures.
+const OPEN_NONSENSE_POOL: usize = 5_000;
+const OPEN_POOL_SEED: u64 = 20261006;
+
+/// The 175 authored English relation nouns, pinned by file-byte sha256 on #1552.
+const OPEN_ENGLISH: [&str; 175] = [
+    "dentist",
+    "gym",
+    "landlord",
+    "plumber",
+    "barber",
+    "accountant",
+    "neighbour",
+    "cousin",
+    "school",
+    "car",
+    "laptop",
+    "phone",
+    "dog walker",
+    "piano teacher",
+    "gp",
+    "optician",
+    "physio",
+    "tutor",
+    "childminder",
+    "cleaner",
+    "hairdresser",
+    "butcher",
+    "baker",
+    "postman",
+    "librarian",
+    "nurse",
+    "chemist",
+    "mechanic",
+    "electrician",
+    "painter",
+    "builder",
+    "gardener",
+    "tailor",
+    "cobbler",
+    "welder",
+    "joiner",
+    "roofer",
+    "glazier",
+    "locksmith",
+    "chimney sweep",
+    "university",
+    "college",
+    "library",
+    "museum",
+    "theatre",
+    "cinema",
+    "stadium",
+    "swimming pool",
+    "leisure centre",
+    "train station",
+    "bus stop",
+    "airport",
+    "harbour",
+    "market",
+    "supermarket",
+    "pharmacy",
+    "hospital",
+    "surgery",
+    "clinic",
+    "village hall",
+    "community centre",
+    "town hall",
+    "post office",
+    "fire station",
+    "police station",
+    "courthouse",
+    "prison",
+    "monastery",
+    "cathedral",
+    "mosque",
+    "synagogue",
+    "temple",
+    "chapel",
+    "allotment",
+    "playground",
+    "bicycle",
+    "motorbike",
+    "scooter",
+    "van",
+    "truck",
+    "caravan",
+    "tent",
+    "rucksack",
+    "briefcase",
+    "umbrella",
+    "watch",
+    "camera",
+    "guitar",
+    "violin",
+    "flute",
+    "drum kit",
+    "keyboard",
+    "desk",
+    "chair",
+    "wardrobe",
+    "bookcase",
+    "sofa",
+    "mattress",
+    "kettle",
+    "toaster",
+    "blender",
+    "microwave",
+    "oven",
+    "fridge",
+    "freezer",
+    "washing machine",
+    "dishwasher",
+    "vacuum cleaner",
+    "iron",
+    "sewing machine",
+    "lawnmower",
+    "hedge trimmer",
+    "wheelbarrow",
+    "ladder",
+    "toolbox",
+    "birthday",
+    "anniversary",
+    "wedding",
+    "funeral",
+    "holiday home",
+    "mortgage",
+    "overdraft",
+    "pension",
+    "insurance",
+    "utilities",
+    "broadband",
+    "mobile contract",
+    "gym membership",
+    "season ticket",
+    "bus pass",
+    "loyalty card",
+    "library card",
+    "passport",
+    "driving licence",
+    "national insurance",
+    "blood type",
+    "eye prescription",
+    "shoe width",
+    "hat size",
+    "glove size",
+    "collar size",
+    "ring size",
+    "wrist size",
+    "waist size",
+    "inside leg",
+    "favourite band",
+    "favourite film",
+    "favourite book",
+    "favourite restaurant",
+    "favourite pub",
+    "favourite cafe",
+    "favourite shop",
+    "favourite park",
+    "favourite walk",
+    "favourite view",
+    "morning routine",
+    "evening routine",
+    "weekend plan",
+    "commute route",
+    "school run",
+    "lunch break",
+    "tea break",
+    "bedtime",
+    "wake-up time",
+    "alarm",
+    "allergy test",
+    "blood donor",
+    "dentist appointment",
+    "optician appointment",
+    "car service",
+    "boiler service",
+    "mOT",
+    "tax return",
+    "council tax",
+    "water bill",
+];
+
+/// A nonsense relation name in the generator's own syllable scheme, under a split
+/// distinct from the value generators so a relation name cannot collide with a value.
+fn open_nonsense(rng: &mut Rng) -> String {
+    let n = 2 + rng.below(2);
+    (0..n)
+        .map(|_| {
+            format!(
+                "{}{}{}",
+                pick(
+                    rng,
+                    &[
+                        "b", "br", "ch", "d", "dr", "f", "g", "gr", "h", "j", "k", "kl", "l", "m",
+                        "n", "p", "pl", "r", "s", "sh", "st", "t", "tr", "v", "w", "z"
+                    ]
+                ),
+                pick(rng, &["a", "e", "i", "o", "u", "ai", "ou", "ee"]),
+                pick(
+                    rng,
+                    &["", "n", "m", "r", "l", "s", "k", "t", "d", "nd", "rk", "st"]
+                ),
+            )
+        })
+        .collect()
+}
+
+/// The full fixed pool, built ONCE: every name unique. The 50/50 English/nonsense mix
+/// belongs to the per-episode DRAW, not to the pool's composition.
+fn open_pool() -> &'static [(String, bool)] {
+    static POOL: OnceLock<Vec<(String, bool)>> = OnceLock::new();
+    POOL.get_or_init(|| {
+        let mut rng = Rng::new(OPEN_POOL_SEED);
+        let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut v: Vec<(String, bool)> =
+            Vec::with_capacity(OPEN_NONSENSE_POOL + OPEN_ENGLISH.len());
+        while v.len() < OPEN_NONSENSE_POOL {
+            let w = open_nonsense(&mut rng);
+            if seen.insert(w.clone()) {
+                v.push((w, false)); // nonsense
+            }
+        }
+        for w in OPEN_ENGLISH.iter() {
+            v.push(((*w).to_string(), true)); // english
+        }
+        v
+    })
+}
+
 /// The relation table: open relations first, then the closed minority.
 fn relations() -> &'static [Rel] {
     static TABLE: OnceLock<Vec<Rel>> = OnceLock::new();
@@ -969,8 +1223,46 @@ fn relations() -> &'static [Rel] {
                 answers: &["Your favorite color is {v}.", "You love {v}."],
             },
         ]
+        .into_iter()
+        .chain(if open_relations() {
+            // OPEN RELATION NAMES: append the fixed pool. Names are leaked ONCE here, in
+            // the OnceLock, so the table's `&'static str` holds and the leak is bounded
+            // (~5k short strings) rather than per episode. `v2` never sets the switch, so
+            // this branch is dead for v2 and its table is untouched.
+            open_pool()
+                .iter()
+                .map(|(name, _english)| Rel {
+                    name: Box::leak(name.clone().into_boxed_str()) as &'static str,
+                    values: Values::Open,
+                    assert: &OPEN_ASSERT,
+                    update: &OPEN_UPDATE,
+                    query: &OPEN_QUERY,
+                    acks: &["Got it, I'll remember that."],
+                    answers: &["Your {r} is {v}."],
+                })
+                .collect::<Vec<Rel>>()
+        } else {
+            Vec::new()
+        })
+        .collect::<Vec<Rel>>()
     })
 }
+
+/// Phrasings for an OPEN relation. `{r}` is the relation's own name, so the statement and
+/// the question both name the relation by the SAME words — which is what lets an exact
+/// phrase key address the record without a label list.
+static OPEN_ASSERT: Phrasings = Phrasings {
+    train: &["My {r} is {v}.", "I'd say my {r} is {v}."],
+    development: &["My {r} is {v}."],
+};
+static OPEN_UPDATE: Phrasings = Phrasings {
+    train: &["Actually my {r} is {v}."],
+    development: &["Actually my {r} is {v}."],
+};
+static OPEN_QUERY: Phrasings = Phrasings {
+    train: &["What is my {r}?", "What's my {r}?"],
+    development: &["What is my {r}?"],
+};
 
 const UPDATE_ACKS: &[&str] = &[
     "Okay, I'll remember that.",

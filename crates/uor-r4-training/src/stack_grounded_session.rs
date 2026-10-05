@@ -679,11 +679,12 @@ impl<C: TurnCompiler> GroundedSession<C> {
                 ));
             }
         };
-        if !self
-            .compiler_identity
-            .relations
-            .iter()
-            .any(|label| label.id == relation)
+        if !derived_relation_allowed(relation)
+            && !self
+                .compiler_identity
+                .relations
+                .iter()
+                .any(|label| label.id == relation)
         {
             return Err(GroundedSessionError::Compiler(
                 "predicted relation is outside the saved label schema".into(),
@@ -740,9 +741,38 @@ impl<C: TurnCompiler> GroundedSession<C> {
                     (Some(format!("Memory: {text}.")), RecallDisposition::Value)
                 }
             }
+            // OPEN RELATIONS: a store MISS is not evidence of absence.
+            //
+            // Under open relations the write and the read derive their address
+            // INDEPENDENTLY, from the relation phrase each turn names. A question can
+            // therefore resolve to a relation, read a slot the fact never reached, and
+            // report absence — while the log sieve, which answers from the conversation
+            // itself, would have had the value. The sieve is consulted below only for
+            // `Unresolved`, so once questions began resolving to relation ids the log path
+            // stopped answering entirely (measured: `log_without_store` 62 -> 0).
+            //
+            // So under open relations a miss falls back to the sieve exactly as an
+            // unresolved question does. `world=v2` never reaches this branch.
             MemoryEffect::Read {
                 read: StoreRead::Absent,
-            } => (Some("Memory: none.".to_owned()), RecallDisposition::Absent),
+            } => {
+                let mut out = (Some("Memory: none.".to_owned()), RecallDisposition::Absent);
+                if crate::milestone_world_v2::open_relations() {
+                    if let Some((_, recall)) = &self.log_recall {
+                        let log: Vec<&str> =
+                            prior.iter().map(|turn| turn.source.as_str()).collect();
+                        if let Some(value) = recall(&log, source) {
+                            if value != "none" && !value.contains('\r') {
+                                out = (
+                                    Some(format!("Memory: {value}.")),
+                                    RecallDisposition::LogValue,
+                                );
+                            }
+                        }
+                    }
+                }
+                out
+            }
             // Unresolved, NoHistory and Evicted are not evidence of absence.
             MemoryEffect::Read { .. } => (
                 None,
@@ -1234,11 +1264,12 @@ impl<C: TurnCompiler> GroundedSession<C> {
     }
 
     fn check_relation(&self, relation: u32) -> Result<(), GroundedSessionError> {
-        if self
-            .compiler_identity
-            .relations
-            .iter()
-            .any(|label| label.id == relation)
+        if derived_relation_allowed(relation)
+            || self
+                .compiler_identity
+                .relations
+                .iter()
+                .any(|label| label.id == relation)
         {
             Ok(())
         } else {
@@ -1247,6 +1278,18 @@ impl<C: TurnCompiler> GroundedSession<C> {
             ))
         }
     }
+}
+
+/// Whether a relation id is a DERIVED address rather than a saved label id.
+///
+/// A derived id is a deterministic function of the relation phrase taken from the turn's
+/// own words ([`relation_compiler::relation_phrase`]). It is not in the saved label
+/// schema — the schema is the closed set — but the store addresses any `u32`, so admitting
+/// it is what lets a relation the compiler was never trained on be written and read at
+/// all. A derived id can never collide with a closed one: the base sits far above the
+/// closed ids, which are small.
+fn derived_relation_allowed(relation: u32) -> bool {
+    relation >= crate::relation_compiler::DERIVED_RELATION_ID_BASE
 }
 
 /// Reconstruct a receipt, not a live read, from a validated immutable chain.
