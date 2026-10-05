@@ -409,6 +409,7 @@ fn store_episodes(
                             });
                         }
                     }
+                    bank.sort_by_key(|r| (r.event, r.commit, r.record));
                     for (lane, records) in [
                         (
                             "selected-record",
@@ -487,9 +488,7 @@ fn store_episodes(
         json!({"episodes":rows,"query_rows":queries_total,"exact_store_answers":correct,"selected_record_complete":selected_complete,"all_bank_complete":bank_complete,"policy":"predicted-address-and-source-span-only;serialize-reload-after-writes;original-statement-cues;gold-used-only-to-score"}),
     )
 }
-fn main() -> Result<()> {
-    let a = args()?;
-    report_output::claim(&a.output)?;
+fn run(a: &Args) -> Result<()> {
     let started = Instant::now();
     let (training, development, fresh) = (panel("training"), panel("development"), panel("fresh"));
     if training.len() > 512 || development.len() > 128 || fresh.len() > 64 {
@@ -569,4 +568,52 @@ fn main() -> Result<()> {
     report_output::verify(&a.output)?;
     println!("sealed {}", a.output.display());
     Ok(())
+}
+
+fn main() -> Result<()> {
+    let a = args()?;
+    if !a.output.is_absolute() {
+        return Err(fail("output must be absolute").into());
+    }
+    let parent = a
+        .output
+        .parent()
+        .ok_or_else(|| fail("output has no parent"))?;
+    let output = fs::canonicalize(parent)?.join(
+        a.output
+            .file_name()
+            .ok_or_else(|| fail("output needs basename"))?,
+    );
+    for input in [
+        &a.native,
+        &a.binding,
+        &a.tokenizer,
+        &a.cue,
+        &a.prefix,
+        &a.end,
+    ] {
+        let input = fs::canonicalize(input)?;
+        if output.starts_with(&input) {
+            return Err(fail("output is beneath input").into());
+        }
+        for ancestor in input.ancestors() {
+            if ancestor.join(report_output::MANIFEST_FILE).is_file() && output.starts_with(ancestor)
+            {
+                return Err(fail("output is beneath sealed input").into());
+            }
+        }
+    }
+    report_output::claim(&a.output)?;
+    match run(&a) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            write_json(
+                &a.output.join("failure.json"),
+                &json!({"status":"execution-failure","error":error.to_string(),"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"model_quality_evidence":false}),
+            )?;
+            report_output::seal(&a.output)?;
+            report_output::verify(&a.output)?;
+            Err(error)
+        }
+    }
 }
