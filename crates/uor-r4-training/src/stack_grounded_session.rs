@@ -84,6 +84,25 @@ pub trait TurnCompiler {
     fn identity(&self) -> &CompilerIdentity;
     fn artifact_bytes(&self) -> &[u8];
     fn compile(&self, source: &str) -> Result<CompiledAction, GroundedSessionError>;
+
+    /// Compile a turn, given the relation phrases this CONVERSATION has already named.
+    ///
+    /// The default IGNORES the registry and defers to [`Self::compile`], so every existing
+    /// compiler stays valid and behaves exactly as before. A compiler that can use it
+    /// matches an already-named relation exactly instead of re-deriving the phrase boundary
+    /// from the question's own words — which is where the reader's errors are:
+    /// "What is my flatmate these days?" keys to "flatmate these days" on its own, and to
+    /// "flatmate" once the statement has named it.
+    ///
+    /// The registry is passed IN rather than held, so the contract that a compiler is
+    /// stateless across calls and predicts from `source` still holds.
+    fn compile_with_seen(
+        &self,
+        source: &str,
+        _seen: &[String],
+    ) -> Result<CompiledAction, GroundedSessionError> {
+        self.compile(source)
+    }
 }
 
 /// Half-open byte offsets into the original, unnormalized UTF-8 user text.
