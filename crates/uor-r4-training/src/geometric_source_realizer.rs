@@ -1206,6 +1206,42 @@ fn cue_parent_files(
     .collect()
 }
 impl CueAngularWeights {
+    /// Install exact signed quarter-grid shadows from a current native cue.
+    /// Construct metadata from the actual parent; do not import donor source
+    /// metadata or resume its historical fractional optimizer state.
+    pub fn from_native(
+        parent: &NativeSourceRealizer,
+        native_root: &Path,
+        donor: &NativeCueCarrier<'_>,
+    ) -> Result<Self> {
+        let config = donor.metadata().potential;
+        let current = parent.consumer.context.config();
+        if config.heads != current.heads || config.lanes_per_head != current.lanes_per_head {
+            return Err(invalid("cue warm-start parent dimensions differ"));
+        }
+        let count = config
+            .coefficient_count()
+            .map_err(|e| invalid(e.to_string()))?;
+        let values = unpack_coefficients(count, donor.packed_coefficients())
+            .map_err(|e| invalid(e.to_string()))?
+            .into_iter()
+            .map(|q| f32::from(q) * 0.25)
+            .collect::<Vec<_>>();
+        let mut result = Self::zero(parent, native_root, config.mode)?;
+        result.coefficients = Var::from_vec(values, count, &Device::Cpu)?;
+        if result.packed_coefficients()? != donor.packed_coefficients() {
+            return Err(invalid("cue warm-start quarter-grid replay differs"));
+        }
+        let replay = parent.compile_cue_carrier(result.native()?)?;
+        if replay.metadata() != donor.metadata() {
+            return Err(invalid(
+                "cue warm-start donor current-parent binding differs",
+            ));
+        }
+        result.metadata.native_metadata = serde_json::to_value(replay.metadata())?;
+        Ok(result)
+    }
+
     pub fn zero(
         parent: &NativeSourceRealizer,
         native_root: &Path,
@@ -1851,6 +1887,13 @@ pub struct SourceEndBankRealizerLoss {
     pub target_probability: f64,
 }
 
+/// Cue-coefficient-only credit on the complete factual native endpoint path.
+pub struct CueSourceEndBankRealizerLoss {
+    pub loss: Tensor,
+    pub trace: uor_r4_integer::geometric_source_realizer::SourceEndBankRealizerTrace,
+    pub target_probability: f64,
+}
+
 pub struct ObservationBankRealizerLoss {
     pub loss: Tensor,
     pub trace: uor_r4_integer::geometric_source_realizer::SourceEndBankRealizerTrace,
@@ -2450,6 +2493,95 @@ impl PreparedSourceRealizer<'_> {
         let probability = mass as f64 / actions.total_weight_q31 as f64;
         let loss = marginal_action_loss(actions, &credit, target, probability)?;
         Ok(CueBankRealizerLoss {
+            loss,
+            trace,
+            target_probability: probability,
+        })
+    }
+
+    /// Only the current cue table receives credit on the complete native path.
+    /// Query/assertion encoders, Copy parent, prefix and endpoint are constants.
+    /// Native factual source/endpoint selection occurs before target labels and
+    /// remains a stopped-gradient branch; no source-selection adjoint is claimed.
+    pub fn loss_bank_cue_source_end(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        target: u32,
+        weights: &CueAngularWeights,
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        end: &NativeSourceEndTransport<'_>,
+    ) -> Result<CueSourceEndBankRealizerLoss> {
+        if weights.parent_binding() != &self.native.artifact_binding()?
+            || weights.packed_coefficients()?.as_slice() != cue.packed_coefficients()
+            || weights.config() != cue.metadata().potential
+        {
+            return Err(invalid("cue endpoint current packed/source parent differs"));
+        }
+        // This native call validates current parent/context/geometry and the
+        // cue -> prefix -> endpoint metadata chain before executing all routes.
+        let trace = self.native.read_bank_with_source_end_transport(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            end,
+        )?;
+        let actions = &trace.actions;
+        let mass = actions
+            .token_masses
+            .iter()
+            .find(|v| v.token_id == target)
+            .map_or(0, |v| v.weight_q31);
+        if mass == 0 || actions.total_weight_q31 == 0 || mass > actions.total_weight_q31 {
+            return Err(invalid(
+                "cue endpoint native target has zero/invalid support; no floor",
+            ));
+        }
+        let count = trace.prefix_bank.cue_bank.bank.candidates.len();
+        let carrier = &trace.prefix_bank.cue_bank.carrier;
+        let lanes = weights.config().heads * weights.config().lanes_per_head;
+        if count == 0
+            || actions.actions.len() != count + 2
+            || carrier.angular_indices.len() != lanes
+            || carrier.angular_indices.iter().any(|v| v.len() != count)
+        {
+            return Err(invalid(
+                "cue endpoint native coefficient address shape differs",
+            ));
+        }
+        let mut indices = Vec::with_capacity(lanes * count);
+        let mut masks = Vec::with_capacity(lanes * count);
+        for (lane, row) in carrier.angular_indices.iter().enumerate() {
+            for index in row {
+                if index.is_some_and(|i| i >= 120) {
+                    return Err(invalid("cue endpoint native angular address exceeds120"));
+                }
+                indices.push((lane * 120 + usize::from(index.unwrap_or(0))) as u32);
+                masks.push(if index.is_some() { 1f32 } else { 0f32 });
+            }
+        }
+        let selected = weights
+            .coefficients
+            .index_select(&Tensor::from_vec(indices, lanes * count, &Device::Cpu)?, 0)?;
+        let copies = (selected * Tensor::from_vec(masks, lanes * count, &Device::Cpu)?)?
+            .reshape((lanes, count))?
+            .sum(0)?;
+        let credit = Tensor::cat(
+            &[
+                copies,
+                Tensor::zeros(2, candle_core::DType::F32, &Device::Cpu)?,
+            ],
+            0,
+        )?;
+        let probability = mass as f64 / actions.total_weight_q31 as f64;
+        // Authoritative final scores anchor the numerical loss. Zero endpoint
+        // adjoints do not remove the calibrated Period/Stop logits or masses.
+        let loss = marginal_action_loss(actions, &credit, target, probability)?;
+        Ok(CueSourceEndBankRealizerLoss {
             loss,
             trace,
             target_probability: probability,
@@ -4378,6 +4510,496 @@ mod tests {
         assert!(PrefixAngularWeights::load(&path, &native, &parent, &cue_path, &cue).is_err());
         Ok(())
     }
+    #[test]
+    fn cue_native_warm_start_signed_grid_reload_and_foreign_parent_rejection() -> Result<()> {
+        let (fixture, native, _) = dependent_fixture()?;
+        let native_root = fixture.path.join("dependent-native");
+        let c = native.consumer.context.config();
+        let config = CueAngularConfig {
+            heads: c.heads,
+            lanes_per_head: c.lanes_per_head,
+            mode: CueScoreMode::DirectedRelative,
+        };
+        let count = config
+            .coefficient_count()
+            .map_err(|e| invalid(e.to_string()))?;
+        let quarters = (0..count)
+            .map(|i| if i % 2 == 0 { -7 } else { 3 })
+            .collect::<Vec<i8>>();
+        let packed = pack_coefficients(&quarters).map_err(|e| invalid(e.to_string()))?;
+        let donor = native.compile_cue_carrier(
+            CueAngularQ4::new(config, &packed).map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let warm = CueAngularWeights::from_native(&native, &native_root, &donor)?;
+        assert_eq!(warm.packed_coefficients()?, packed);
+        assert_eq!(
+            warm.coefficients.to_vec1::<f32>()?,
+            quarters
+                .iter()
+                .map(|&q| f32::from(q) * 0.25)
+                .collect::<Vec<_>>()
+        );
+        let root = fixture.path.join("native-cue-warm-start");
+        warm.save(&root)?;
+        let restored = CueAngularWeights::load(&root, &native, &native_root)?;
+        let replay = native.compile_cue_carrier(restored.native()?)?;
+        assert_eq!(replay.metadata(), donor.metadata());
+        assert_eq!(replay.packed_coefficients(), donor.packed_coefficients());
+        let ids = [4, 4, 4];
+        let view = SourceEmissionCompiler::new(TOK.as_bytes())?.compile(&ids)?;
+        let segments = [
+            SourceBankSegment::Context {
+                token_ids: &[5],
+                role: 1,
+                event: 42,
+            },
+            SourceBankSegment::Source {
+                frame: frame(&ids),
+                view: &view,
+                event: 7,
+            },
+        ];
+        let original = native.read_bank_with_cue_carrier(&segments, &[5], &[4], &donor)?;
+        assert_eq!(
+            original,
+            native.read_bank_with_cue_carrier(&segments, &[5], &[4], &replay)?
+        );
+        assert!(original.carrier.copy_q24.iter().flatten().any(|&q| q != 0));
+        let mut identity = fixture.identity.clone();
+        identity.parent_model_sha256 = "d".repeat(64);
+        let foreign = fixture.weights.compile(identity.clone())?;
+        let foreign_root = fixture.path.join("foreign-cue-parent");
+        foreign.save(&foreign_root)?;
+        let foreign = NativeSourceRealizer::load(&foreign_root, &fixture.weights, &identity)?;
+        let foreign_donor = foreign.compile_cue_carrier(
+            CueAngularQ4::new(config, &packed).map_err(|e| invalid(e.to_string()))?,
+        )?;
+        assert_ne!(
+            foreign_donor.metadata().parent_artifact,
+            donor.metadata().parent_artifact
+        );
+        assert!(CueAngularWeights::from_native(&native, &native_root, &foreign_donor).is_err());
+        assert!(CueAngularWeights::from_native(&native, &foreign_root, &donor).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn cue_source_end_loss_uses_final_logits_connects_only_cue_and_refuses_stale_chain(
+    ) -> Result<()> {
+        let (fixture, native, _) = dependent_fixture()?;
+        let native_root = fixture.path.join("dependent-native");
+        let cue_root = fixture.path.join("cue-endpoint-cue");
+        let prefix_root = fixture.path.join("cue-endpoint-prefix");
+        let cue_weights =
+            CueAngularWeights::zero(&native, &native_root, CueScoreMode::DirectedRelative)?;
+        cue_weights.coefficients.set(&Tensor::full(
+            0.75f32,
+            cue_weights.coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        cue_weights.save(&cue_root)?;
+        let cue = native.compile_cue_carrier(cue_weights.native()?)?;
+        let prefix_weights = PrefixAngularWeights::zero(
+            &native,
+            &native_root,
+            &cue_root,
+            &cue,
+            PrefixScoreMode::DirectedRelative,
+        )?;
+        prefix_weights.coefficients.set(&Tensor::full(
+            0.25f32,
+            prefix_weights.coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        prefix_weights.save(&prefix_root)?;
+        let prefix = native.compile_prefix_transport(&cue, prefix_weights.native()?)?;
+        let end_weights = SourceEndAngularWeights::zero(
+            &native,
+            &native_root,
+            &cue_root,
+            &prefix_root,
+            &cue,
+            &prefix,
+            SourceEndScoreMode::DirectedRelative,
+        )?;
+        end_weights.period_coefficients.set(&Tensor::full(
+            0.5f32,
+            end_weights.period_coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        end_weights.stop_coefficients.set(&Tensor::full(
+            -0.25f32,
+            end_weights.stop_coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        let end = native.compile_source_end_transport(&cue, &prefix, end_weights.native()?)?;
+        let ids = [4, 4, 4];
+        let view = SourceEmissionCompiler::new(TOK.as_bytes())?.compile(&ids)?;
+        let segments = [
+            SourceBankSegment::Context {
+                token_ids: &[5],
+                role: 1,
+                event: 42,
+            },
+            SourceBankSegment::Source {
+                frame: frame(&ids),
+                view: &view,
+                event: 7,
+            },
+        ];
+        let prepared = fixture.weights.prepare(&native)?;
+        let factual = native.read_bank_with_source_end_transport(
+            &segments,
+            &[5],
+            &[4],
+            &cue,
+            &prefix,
+            &end,
+        )?;
+        assert!(factual
+            .prefix_bank
+            .prefix
+            .copy_q24
+            .iter()
+            .flatten()
+            .any(|&q| q != 0));
+        assert!(factual.source_end.period_q24.iter().any(|&q| q != 0));
+        assert!(factual.source_end.stop_q24.iter().any(|&q| q != 0));
+        for target in [4, 3, 1] {
+            let out = prepared.loss_bank_cue_source_end(
+                &segments,
+                &[5],
+                &[4],
+                target,
+                &cue_weights,
+                &cue,
+                &prefix,
+                &end,
+            )?;
+            assert_eq!(out.trace, factual);
+            let actions = &factual.actions;
+            let mass = actions
+                .token_masses
+                .iter()
+                .find(|v| v.token_id == target)
+                .ok_or_else(|| invalid("cue endpoint fixture target missing"))?
+                .weight_q31;
+            let probability = mass as f64 / actions.total_weight_q31 as f64;
+            assert_eq!(out.target_probability, probability);
+            assert!((f64::from(out.loss.to_scalar::<f32>()?) + probability.ln()).abs() < 1e-5);
+            let old = prepared.loss_bank_cue(&segments, &[5], &[4], target, &cue_weights, &cue)?;
+            assert_ne!(out.target_probability, old.target_probability);
+            let gradients = out.loss.backward()?;
+            let gradient = gradients
+                .get(cue_weights.coefficients.as_tensor())
+                .ok_or_else(|| invalid("full-path cue gradient absent"))?
+                .to_vec1::<f32>()?;
+            assert!(gradient.iter().all(|v| v.is_finite()));
+            assert!(gradient.iter().any(|v| v.abs() > 1e-8));
+            let parentvars = fixture.weights.parameters();
+            let prefixvars = prefix_weights.parameters();
+            let endvars = end_weights.parameters();
+            for var in parentvars
+                .values()
+                .chain(prefixvars.values())
+                .chain(endvars.values())
+            {
+                assert!(gradients.get(var.as_tensor()).is_none());
+            }
+        }
+        let no_cue = [SourceBankSegment::Source {
+            frame: frame(&ids),
+            view: &view,
+            event: 7,
+        }];
+        let masked = prepared.loss_bank_cue_source_end(
+            &no_cue,
+            &[5],
+            &[4],
+            4,
+            &cue_weights,
+            &cue,
+            &prefix,
+            &end,
+        )?;
+        assert!(masked
+            .trace
+            .prefix_bank
+            .cue_bank
+            .carrier
+            .angular_indices
+            .iter()
+            .flatten()
+            .all(Option::is_none));
+        let masked_grad = masked.loss.backward()?;
+        let gradient = masked_grad
+            .get(cue_weights.coefficients.as_tensor())
+            .ok_or_else(|| invalid("masked full-path cue graph absent"))?
+            .to_vec1::<f32>()?;
+        assert!(gradient.iter().all(|&v| v == 0.));
+        let unsupported = prepared.loss_bank_cue_source_end(
+            &segments,
+            &[5],
+            &[4],
+            7,
+            &cue_weights,
+            &cue,
+            &prefix,
+            &end,
+        );
+        assert!(unsupported.is_err());
+        cue_weights.coefficients.set(&Tensor::full(
+            1.0f32,
+            cue_weights.coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        assert!(prepared
+            .loss_bank_cue_source_end(&segments, &[5], &[4], 4, &cue_weights, &cue, &prefix, &end)
+            .is_err());
+        let changed = native.compile_cue_carrier(cue_weights.native()?)?;
+        assert!(prepared
+            .loss_bank_cue_source_end(
+                &segments,
+                &[5],
+                &[4],
+                4,
+                &cue_weights,
+                &changed,
+                &prefix,
+                &end
+            )
+            .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn cue_source_end_competing_records_receive_distinct_credit_and_native_margin_change(
+    ) -> Result<()> {
+        let (fixture, _, _) = dependent_fixture()?;
+        // Give two assertion tokens explicitly different present observations.
+        // These are actual encoder weights, not injected cue descriptors.
+        let context_vars = fixture.weights.consumer.context.parameters();
+        let own = &context_vars["self_root"];
+        own.set(&Tensor::zeros_like(own.as_tensor())?)?;
+        let token = &context_vars["token_root"];
+        assert_eq!(token.dims(), &[8, 1, 1, 120]);
+        let mut roots = vec![0f32; token.elem_count()];
+        roots[5 * 120 + 2] = 1.75;
+        roots[6 * 120 + 3] = 1.75;
+        token.set(&Tensor::from_vec(roots, token.shape(), &Device::Cpu)?)?;
+        let native = fixture.weights.compile(fixture.identity.clone())?;
+        let native_root = fixture.path.join("competing-cue-native");
+        native.save(&native_root)?;
+        let native = NativeSourceRealizer::load(&native_root, &fixture.weights, &fixture.identity)?;
+        let cue_root = fixture.path.join("competing-cue");
+        let prefix_root = fixture.path.join("competing-prefix");
+        let weights =
+            CueAngularWeights::zero(&native, &native_root, CueScoreMode::DirectedRelative)?;
+        weights.save(&cue_root)?;
+        let cue = native.compile_cue_carrier(weights.native()?)?;
+        let prefix_weights = PrefixAngularWeights::zero(
+            &native,
+            &native_root,
+            &cue_root,
+            &cue,
+            PrefixScoreMode::DirectedRelative,
+        )?;
+        prefix_weights.coefficients.set(&Tensor::full(
+            0.25f32,
+            prefix_weights.coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        prefix_weights.save(&prefix_root)?;
+        let prefix = native.compile_prefix_transport(&cue, prefix_weights.native()?)?;
+        let end_weights = SourceEndAngularWeights::zero(
+            &native,
+            &native_root,
+            &cue_root,
+            &prefix_root,
+            &cue,
+            &prefix,
+            SourceEndScoreMode::DirectedRelative,
+        )?;
+        end_weights.period_coefficients.set(&Tensor::full(
+            0.5f32,
+            end_weights.period_coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        end_weights.stop_coefficients.set(&Tensor::full(
+            -0.25f32,
+            end_weights.stop_coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        let end = native.compile_source_end_transport(&cue, &prefix, end_weights.native()?)?;
+        let ids = [4, 4, 4];
+        let other_ids = [5, 5, 5];
+        let compiler = SourceEmissionCompiler::new(TOK.as_bytes())?;
+        let view = compiler.compile(&ids)?;
+        let other_view = compiler.compile(&other_ids)?;
+        let mut other_frame = frame(&other_ids);
+        other_frame.identity = SourceIdentity {
+            record: 8,
+            commit: 11,
+        };
+        let segments = [
+            SourceBankSegment::Context {
+                token_ids: &[5],
+                role: 1,
+                event: 42,
+            },
+            SourceBankSegment::Source {
+                frame: frame(&ids),
+                view: &view,
+                event: 42,
+            },
+            SourceBankSegment::Context {
+                token_ids: &[6],
+                role: 1,
+                event: 7,
+            },
+            SourceBankSegment::Source {
+                frame: other_frame,
+                view: &other_view,
+                event: 7,
+            },
+        ];
+        let prepared = fixture.weights.prepare(&native)?;
+        let out = prepared.loss_bank_cue_source_end(
+            &segments,
+            &[5],
+            &[],
+            4,
+            &weights,
+            &cue,
+            &prefix,
+            &end,
+        )?;
+        let bank = &out.trace.prefix_bank.cue_bank.bank;
+        assert_eq!(
+            bank.candidates.len(),
+            view.emitted_token_ids().len() + other_view.emitted_token_ids().len()
+        );
+        assert!(bank.candidates.iter().any(|c| c.occurrence.record == 7));
+        assert!(bank.candidates.iter().any(|c| c.occurrence.record == 8));
+        let target_candidate = bank
+            .candidates
+            .iter()
+            .position(|c| c.occurrence.record == 7)
+            .ok_or_else(|| invalid("target record not admitted"))?;
+        let other_candidate = bank
+            .candidates
+            .iter()
+            .position(|c| c.occurrence.record == 8)
+            .ok_or_else(|| invalid("distractor record not admitted"))?;
+        let bins = &out.trace.prefix_bank.cue_bank.carrier.angular_indices[0];
+        let target_bin = usize::from(
+            bins[target_candidate].ok_or_else(|| invalid("target cue structurally absent"))?,
+        );
+        let other_bin = usize::from(
+            bins[other_candidate].ok_or_else(|| invalid("distractor cue structurally absent"))?,
+        );
+        assert_ne!(
+            target_bin, other_bin,
+            "fixture must preserve distinct consumed cue directions"
+        );
+        assert_eq!(
+            out.trace,
+            native.read_bank_with_source_end_transport(
+                &segments,
+                &[5],
+                &[],
+                &cue,
+                &prefix,
+                &end
+            )?
+        );
+        let actions = &out.trace.actions;
+        let mass = actions
+            .token_masses
+            .iter()
+            .find(|v| v.token_id == 4)
+            .ok_or_else(|| invalid("competing target missing"))?
+            .weight_q31;
+        assert_eq!(
+            out.target_probability,
+            mass as f64 / actions.total_weight_q31 as f64
+        );
+        assert!(
+            (f64::from(out.loss.to_scalar::<f32>()?) + out.target_probability.ln()).abs() < 1e-5
+        );
+        let gradients = out.loss.backward()?;
+        let g = gradients
+            .get(weights.coefficients.as_tensor())
+            .ok_or_else(|| invalid("competing cue gradient absent"))?
+            .to_vec1::<f32>()?;
+        assert!(g.iter().all(|v| v.is_finite()));
+        assert!(
+            g[target_bin] < -1e-8,
+            "correct record cue must receive score-increasing credit"
+        );
+        assert!(
+            g[other_bin] > 1e-8,
+            "distractor cue must receive score-decreasing credit"
+        );
+        let parentvars = fixture.weights.parameters();
+        let prefixvars = prefix_weights.parameters();
+        let endvars = end_weights.parameters();
+        for var in parentvars
+            .values()
+            .chain(prefixvars.values())
+            .chain(endvars.values())
+        {
+            assert!(gradients.get(var.as_tensor()).is_none());
+        }
+        let margin = |trace: &uor_r4_integer::geometric_source_realizer::SourceEndBankRealizerTrace| -> Result<i64> {
+            let bank = &trace.prefix_bank.cue_bank.bank;
+            let best = |record| bank.candidates.iter().enumerate().filter(|(_,c)|c.occurrence.record==record).map(|(j,_)|trace.source_end.factual_joint_copy_q24[j]).max().ok_or_else(|| invalid("record disappeared in native cue perturbation"));
+            Ok(best(7)?-best(8)?)
+        };
+        let old_margin = margin(&out.trace)?;
+        let mut quarter_step = vec![0f32; weights.coefficients.elem_count()];
+        quarter_step[target_bin] = 0.25;
+        weights.coefficients.set(&Tensor::from_vec(
+            quarter_step,
+            weights.coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        let changed_cue = native.compile_cue_carrier(weights.native()?)?;
+        let changed_prefix =
+            native.compile_prefix_transport(&changed_cue, prefix_weights.native()?)?;
+        let changed_end = native.compile_source_end_transport(
+            &changed_cue,
+            &changed_prefix,
+            end_weights.native()?,
+        )?;
+        assert_eq!(
+            changed_prefix.packed_coefficients(),
+            prefix.packed_coefficients()
+        );
+        assert_eq!(
+            changed_end.period_packed_coefficients(),
+            end.period_packed_coefficients()
+        );
+        assert_eq!(
+            changed_end.stop_packed_coefficients(),
+            end.stop_packed_coefficients()
+        );
+        let changed = native.read_bank_with_source_end_transport(
+            &segments,
+            &[5],
+            &[],
+            &changed_cue,
+            &changed_prefix,
+            &changed_end,
+        )?;
+        assert_eq!(margin(&changed)? - old_margin, 1i64 << 22);
+        assert_eq!(
+            changed.prefix_bank.cue_bank.bank.candidates,
+            bank.candidates
+        );
+        Ok(())
+    }
+
     #[test]
     fn cue_loss_zero_replay_alias_credit_and_frozen_parent_graph() -> Result<()> {
         let (fixture, native, _) = dependent_fixture()?;
