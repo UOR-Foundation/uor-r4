@@ -2198,7 +2198,8 @@ mod tests {
         assert!(old_empty.is_err());
         assert!(new_empty.is_err());
         let mut foreign = f.parent.clone();
-        foreign.metadata_sha256 = "0".repeat(64);
+        foreign.metadata_sha256 = "1".repeat(64);
+        assert_ne!(foreign.metadata_sha256, f.parent.metadata_sha256);
         assert!(f
             .execution()
             .read_bank_with_source_end_transport(
