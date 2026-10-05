@@ -257,7 +257,36 @@
     "interrupted_updates": 30,
     "three_order_verdict": "NOT_AVAILABLE",
     "next_policy": "supported-current-role/1",
-    "changed_path_execution": "PENDING",
+    "changed_path_execution": "PASS_AT_83d6722f",
     "no_further_fit_before_admission": true
+  },
+  "supported_current_role_admission": {
+    "source_commit": "83d6722f025010635a1e8fc4cf7a7e1188c8b632",
+    "release_tests": {
+      "plan": 5,
+      "panel": 18,
+      "observation": 26
+    },
+    "release_build": "PASS_ALL_THREE_EXAMPLES",
+    "construction": {
+      "development": 128,
+      "evaluation": 32
+    },
+    "saved_semantic_checks": 5332,
+    "actual_native_zero_trace_parity": true,
+    "target_positions": 1268,
+    "root_gradients_finite": true,
+    "gradient_global_norm": 0.003230170463729881,
+    "native_ce": 1.1386944226545161,
+    "own_prefix_complete": 10,
+    "own_prefix_total": 128,
+    "worker_seconds": 154.26055342145264,
+    "sampled_process_tree_RSS_bytes": 645132288,
+    "b8_seconds": 11.249103006,
+    "corrected_fit": "NOT_RUN",
+    "corrected_evaluation_predictions": "NOT_RUN",
+    "evaluation_scope": "rewritten packets over exposed donor histories, values and dev-seen queries;not unexposed semantic transfer",
+    "query_wordings_shared": 12,
+    "donor_histories_reused": true
   }
 }
