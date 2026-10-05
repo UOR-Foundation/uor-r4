@@ -94,8 +94,10 @@ fn prepare(checkpoint: &Path, out: &Path) -> Result<()> {
         out,
         "provenance.json",
         &json!({
-            "schema":"uor-r4.selected-reader-binding-preparation/1",
-            "status":"PASS", "checkpoint":checkpoint, "verified_input_root":sealed,
+        "schema":"uor-r4.selected-reader-binding-preparation/1",
+        "status":"PASS", "checkpoint":checkpoint, "verified_input_root":sealed,
+        "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),
+        "executable_sha256":sha256_file(&std::env::current_exe()?)?,
             "input_manifest_sha256":manifest_hash,
             "checkpoint_receipt_sha256":sha256_file(&receipt_path)?,
             "native_metadata_sha256":sha256_file(&native_root.join("metadata.json"))?,
