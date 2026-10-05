@@ -52,11 +52,11 @@ fn main() -> Result<(), String> {
     // derived address once open relations are on? This decides whether the 36/200 comes from
     // the compiler or from how the panel path drives it.
     if kv("mode").as_deref() == Some("compile") {
-        uor_r4_training::milestone_world_v2::enable_open_relations();
+        uor_r4_training::milestone_world_v2::enable_open_relation_pool();
         let derived_base = uor_r4_training::relation_compiler::DERIVED_RELATION_ID_BASE;
         println!(
             "  open_relations enabled: {}",
-            uor_r4_training::milestone_world_v2::open_relations()
+            uor_r4_training::milestone_world_v2::open_relation_pool()
         );
         for text in [
             // CONDITION 2 counter-cases (Claude): statements ending in "?", questions without

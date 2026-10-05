@@ -3824,6 +3824,9 @@ fn session(args: &Args, out: &Path) -> Result<()> {
     }
     // A combined compiler loads only with the trunk it binds; otherwise the
     // artifact's own schema chooses the grounded compiler.
+    // OPEN RELATIONS is an explicit setting on the compiler and the session, not process
+    // state: `world=v2r` selects it, and both the write path and the read path must agree.
+    let open_relations = matches!(world_of(args)?, World::V2r);
     let load_compiler = || -> Result<GroundedCompiler> {
         match &trunk_directory {
             Some(directory) => Ok(GroundedCompiler::Legacy(
@@ -3831,7 +3834,8 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                     compiler_bytes.clone(),
                     Some(Trunk::load(directory, &tokenizer_json, &Device::Cpu)?),
                 )?
-                .with_op_policy(op_policy)?,
+                .with_op_policy(op_policy)?
+                .with_open_relations(open_relations),
             )),
             None => GroundedCompiler::from_bytes(compiler_bytes.clone()),
         }
@@ -3927,9 +3931,12 @@ fn session(args: &Args, out: &Path) -> Result<()> {
             &device,
         )
         .map_err(|e| invalid(e.to_string()))
-        .map(|session| match &log_recall {
-            Some(recall) => session.with_log_recall("sieve", recall.clone()),
-            None => session,
+        .map(|session| {
+            let session = session.with_open_relations(open_relations);
+            match &log_recall {
+                Some(recall) => session.with_log_recall("sieve", recall.clone()),
+                None => session,
+            }
         })
     };
     let count = |text: &str| tokenizer.encode(text).len();
@@ -4123,6 +4130,9 @@ fn session(args: &Args, out: &Path) -> Result<()> {
         "trunk": trunk_directory.as_ref().map(|d| d.display().to_string()),
         "op_policy": format!("{op_policy:?}"),
         "log_recall": args.optional("log_recall").unwrap_or_else(|| "off".into()),
+        // Recorded so the compiler's behaviour is bound to the REPORT, not to process
+        // state: an open-relations result must be identifiable from its own artifact.
+        "open_relations": open_relations,
         "dialogue_protocol_version": protocol_version,
         "tokenizer_sha256": sha256_file(&tokenizer_path)?,
         "limits": limits,
@@ -4701,7 +4711,7 @@ fn main() -> Result<()> {
     // freeze the closed table and `v2r` would silently behave as `v2`. Scanned here from
     // the raw arguments, ahead of every other step.
     if rest.iter().any(|a| a == "world=v2r") {
-        uor_r4_training::milestone_world_v2::enable_open_relations();
+        uor_r4_training::milestone_world_v2::enable_open_relation_pool();
     }
     if let Some(result) = run_v2_extras(mode, rest) {
         return result;

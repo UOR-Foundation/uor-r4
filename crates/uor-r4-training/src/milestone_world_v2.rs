@@ -881,22 +881,23 @@ pub fn relation_names() -> Vec<&'static str> {
     relations().iter().map(|relation| relation.name).collect()
 }
 
-/// Whether the run wants OPEN RELATION NAMES (`world=v2r`).
+/// Whether the WORLD's relation table carries the generated open-name pool (`world=v2r`).
 ///
-/// The relation table is process-wide and every caller must agree on it — the world
-/// generates with it and the compiler validates names against it — so the variant is a
-/// property of the RUN, set once at startup. `v2` never sets it, so the v2 table is
-/// returned untouched and v2 stays byte-identical by construction.
-static OPEN_RELATIONS: OnceLock<bool> = OnceLock::new();
+/// This is the WORLD's switch, not the compiler's. The compiler and the session each take
+/// an explicit `with_open_relations(bool)` setting, because compiler behaviour must be
+/// bound to the artifact and the report rather than to process state. The world's relation
+/// TABLE is a different thing: it is built once by the CLI for the selected world variant,
+/// and it is the variant that decides whether the pool is present.
+static OPEN_RELATION_POOL: OnceLock<bool> = OnceLock::new();
 
-/// Enable open relation names for this process. Called once by the CLI when
-/// `world=v2r`; a no-op for `v2`.
-pub fn enable_open_relations() {
-    let _ = OPEN_RELATIONS.set(true);
+/// Include the generated open-name pool in the world's relation table. Called by the CLI
+/// when `world=v2r` is selected.
+pub fn enable_open_relation_pool() {
+    let _ = OPEN_RELATION_POOL.set(true);
 }
 
-pub fn open_relations() -> bool {
-    *OPEN_RELATIONS.get().unwrap_or(&false)
+pub fn open_relation_pool() -> bool {
+    *OPEN_RELATION_POOL.get().unwrap_or(&false)
 }
 
 /// The generated nonsense pool size. Large so any one name appears in only a handful of
@@ -1224,7 +1225,7 @@ fn relations() -> &'static [Rel] {
             },
         ]
         .into_iter()
-        .chain(if open_relations() {
+        .chain(if open_relation_pool() {
             // OPEN RELATION NAMES: append the fixed pool. Names are leaked ONCE here, in
             // the OnceLock, so the table's `&'static str` holds and the leak is bounded
             // (~5k short strings) rather than per episode. `v2` never sets the switch, so

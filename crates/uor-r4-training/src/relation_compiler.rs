@@ -1709,6 +1709,14 @@ pub struct SavedCompiler {
     op: Option<std::sync::Arc<Trunk>>,
     act_rule: ActRule,
     op_policy: OpPolicy,
+    /// Whether the relation a turn names may be taken from the turn's OWN WORDS rather
+    /// than only from the closed label set.
+    ///
+    /// An EXPLICIT setting, not process state. This began as a global `OnceLock` set once by
+    /// the CLI and never unset, which meant (a) any test that enabled it silently switched
+    /// every later `world=v2` test in the same process into the open branch, and (b) the
+    /// compiler's behaviour depended on a flag bound to neither the artifact nor the report.
+    open_relations: bool,
     identity: crate::stack_grounded_session::CompilerIdentity,
 }
 
@@ -2002,6 +2010,7 @@ impl SavedCompiler {
             op: op.map(std::sync::Arc::new),
             act_rule: settings.act_rule,
             op_policy: OpPolicy::Op,
+            open_relations: false,
             identity,
         })
     }
@@ -2016,6 +2025,18 @@ impl SavedCompiler {
         }
         self.op_policy = policy;
         Ok(self)
+    }
+
+    /// Take the relation a turn names from the turn's own words when the heads name
+    /// nothing, and address it with a derived id. Off by default, so a compiler that never
+    /// asks for it behaves exactly as before.
+    pub fn with_open_relations(mut self, open: bool) -> Self {
+        self.open_relations = open;
+        self
+    }
+
+    pub fn open_relations(&self) -> bool {
+        self.open_relations
     }
 
     pub fn op_policy(&self) -> OpPolicy {
@@ -2275,7 +2296,7 @@ impl SavedCompiler {
         // So under open relations the phrase decides the address whenever it extracts, and
         // the act still comes from the span rule (no span => query). `world=v2` never
         // reaches this branch.
-        if crate::milestone_world_v2::open_relations() {
+        if self.open_relations {
             if let Some(phrase) = relation_phrase(source) {
                 let id = self.relation_address(&phrase);
                 // AN INTERROGATIVE ASKS; IT DOES NOT WRITE.
@@ -2334,7 +2355,7 @@ impl SavedCompiler {
             // query. The mechanism exists for relations the closed label set cannot name,
             // so it is active exactly when the world has open relations (world=v2r), and
             // `world=v2` is untouched by construction.
-            if !crate::milestone_world_v2::open_relations() {
+            if !self.open_relations {
                 return unresolved("the heads name no relation");
             }
             // DETERMINISTIC RELATION IDENTITY. Closed-first is preserved by construction:
@@ -3509,5 +3530,59 @@ mod tests {
             relation_phrase("What is mousbror's name?").map(|p| derived_relation_id(&p)),
             "the question must derive its statement's address"
         );
+    }
+
+    /// A closed compiler and an open one must COEXIST in one process with different
+    /// behaviour.
+    ///
+    /// This is the regression test for the deleted process-wide `open_relations()`
+    /// `OnceLock`: while that existed, enabling it for one compiler silently changed every
+    /// later compiler in the same process — including every `world=v2` test — so this test
+    /// could not have passed. The setting is now bound to the compiler.
+    #[test]
+    fn open_and_closed_relations_coexist_in_one_process() -> Result<()> {
+        use crate::stack_grounded_session::{CompiledAction, TurnCompiler};
+        let train = small_world();
+        let saved = SavedCompiler::fit(
+            &train,
+            &"ab".repeat(32),
+            json!({"draw": "coexistence"}),
+            CompilerSettings::default(),
+        )?;
+        let closed = saved.clone().with_open_relations(false);
+        let open = saved.with_open_relations(true);
+        assert!(!closed.open_relations());
+        assert!(open.open_relations());
+        assert!(
+            !SavedCompiler::fit(
+                &train,
+                &"ab".repeat(32),
+                json!({"draw": "default"}),
+                CompilerSettings::default()
+            )?
+            .open_relations(),
+            "open relations must default OFF"
+        );
+        // An unseen relation: the open compiler addresses it from the turn's own words.
+        let turn = "My zzzqqq is Ferlin.";
+        let compile = |c: &SavedCompiler, t: &str| c.compile(t).map_err(|e| invalid(e.to_string()));
+        let open_action = compile(&open, turn)?;
+        assert!(
+            matches!(&open_action, CompiledAction::Assert { relation, .. }
+                if *relation >= DERIVED_RELATION_ID_BASE),
+            "the open compiler must derive the address, got {open_action:?}"
+        );
+        // ...and the closed compiler, asked in the same process, is unaffected.
+        let closed_action = compile(&closed, turn)?;
+        assert_ne!(
+            open_action, closed_action,
+            "the two compilers must differ in one process"
+        );
+        assert!(
+            !matches!(&closed_action, CompiledAction::Assert { relation, .. }
+                if *relation >= DERIVED_RELATION_ID_BASE),
+            "the closed compiler must not derive, got {closed_action:?}"
+        );
+        Ok(())
     }
 }

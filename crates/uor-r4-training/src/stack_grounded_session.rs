@@ -344,6 +344,11 @@ pub struct GroundedSession<C: TurnCompiler> {
     history_ids: Vec<u32>,
     turns: Vec<TurnOutcome>,
     log_recall: Option<(String, LogRecall)>,
+    /// Whether a question may resolve to a relation taken from its OWN WORDS. Mirrors
+    /// [`relation_compiler::SavedCompiler::open_relations`] and is recorded in the session
+    /// report, so the behaviour is bound to the configuration rather than to process state.
+    /// Off by default.
+    open_relations: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -455,6 +460,7 @@ impl<C: TurnCompiler> GroundedSession<C> {
             history_ids,
             turns: Vec::new(),
             log_recall: None,
+            open_relations: false,
         })
     }
 
@@ -466,6 +472,18 @@ impl<C: TurnCompiler> GroundedSession<C> {
     pub fn with_log_recall(mut self, name: &str, recall: LogRecall) -> Self {
         self.log_recall = Some((name.to_owned(), recall));
         self
+    }
+
+    /// Allow a question to resolve to a relation taken from its own words. Set together
+    /// with the compiler's own `with_open_relations`, so the read path and the write path
+    /// agree on whether derived addresses are in play.
+    pub fn with_open_relations(mut self, open: bool) -> Self {
+        self.open_relations = open;
+        self
+    }
+
+    pub fn open_relations(&self) -> bool {
+        self.open_relations
     }
 
     pub fn compiler_identity(&self) -> &CompilerIdentity {
@@ -757,7 +775,7 @@ impl<C: TurnCompiler> GroundedSession<C> {
                 read: StoreRead::Absent,
             } => {
                 let mut out = (Some("Memory: none.".to_owned()), RecallDisposition::Absent);
-                if crate::milestone_world_v2::open_relations() {
+                if self.open_relations {
                     if let Some((_, recall)) = &self.log_recall {
                         let log: Vec<&str> =
                             prior.iter().map(|turn| turn.source.as_str()).collect();
