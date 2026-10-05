@@ -9,16 +9,19 @@ checks. Its first64-update/B8 fit changes shadows but no native Q4 coefficient;
 source80/128, both-source pairs24/64 and complete23/128 are unchanged. Do not score
 this as a geometric mechanism rejection or resume an unchanged dose.
 
-The measured maximum shadow movement0.0964629 is below the0.125 rounding boundary,
-with sparse fresh-credit exposure. Next compare a fixed matched native-quarter
-change at stable cue index123 against its opposite:−0.25 baseline,−0.5 preferred,
-0 opposite. Keep other coefficients and roots/prefix/end bytes frozen, rebind the
-full native chain and measure CE/source/pair margins/own-prefix replies separately.
-Baseline-inclusive development selection precedes exposed diagnostic predictions.
-Realized credit leads to discrete-update calibration; preferred-direction harm leads
-to hard-branch/STE alignment review; CE-only gain leads to alias/terminal diagnosis.
-Preserve every candidate. Raw-history/compiler/store/emission integration, generated
-conversation and full D19/D11/D5 goals remain outstanding.
+The matched legal-quarter probe at `002c9a75` now realizes that credit direction:
+preferred−0.5 at cue index123 improves source80→81/128, paired source24→25/64,
+first token70→71/128 and native CE0.966181→0.962571; opposite0 harms those source
+counts and gives CE0.976522. Other959 cue coefficients and prefix/end payloads are
+frozen. Complete replies23/128 and exposed diagnostic source15/32, complete1/32
+remain unchanged. This is one-address directional evidence, not attention qualification.
+
+Next implement bounded native discrete-update calibration. Use gradient-proposed
+legal cue quanta, actual full-path development loss for accept/reject, baseline
+retention and per-row/pair harms. Keep source margins separate from token loss;
+terminal/alias contributions remain open. Preserve all candidates. Source-separated
+raw-history/compiler/store/emission integration, generated conversation and full
+D19/D11/D5 goals remain outstanding.
 
 ## Active programme — grounded conversation and durable memory, October 1
 

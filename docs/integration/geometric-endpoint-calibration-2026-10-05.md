@@ -169,3 +169,7 @@ checks are separately preserved. Cloud-store `cue-library-checks-20261005` is MD
 verified (`999602ddcca5160942bd27b4b939fb2a`). No GPU/session/grade job was run; paid
 pod creation was not attempted. Draft PR1751/1752 and their parents have no merge
 receipt. Whole-work precharges remain cumulative, distinct from measured worker time.
+
+## Matched native cue quantum result
+
+The completed probe at `002c9a75` independently reloads baseline−0.25, preferred−0.5 and opposite0 at coefficient123. Native CE is respectively0.9661806631536866,0.9625709251001775 and0.9765216011535572. Development factual source counts80/81/79, paired source24/25/23 and first token70/71/69 move in the predicted direction. Complete own-prefix counts remain23 in all arms; exposed diagnostic selected versus parent is unchanged15/32 source and1/32 complete. Each proposal verifies the actual ±2²² Q24 consumed-address Copy change in10 rows. This is small directional native evidence, with zero optimizer updates; no transfer/chat qualification or no-loss assertion follows from net counts. Independent receipt review supports bounded discrete-update calibration, preserving baseline and row/pair harms. Worker20.030424s, peak1,698,410,496 bytes, CPU16/CUDA hidden; all30 driver plus one sibling test and release build pass. Durable report: `/workspace/uor-r4/codex/geometric-cue-calibration-20261005/quantum-1`. Source PR1756 and parents remain unmerged.

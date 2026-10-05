@@ -1,5 +1,30 @@
 # Current UOR-R4 research state
 
+## Native cue quantum realizes directional credit — October 5
+
+The matched probe at numerical head `002c9a75a6ea76dd6348ae17067ce87787832082`
+completes on the existing Linux pod: CPU16, CUDA hidden, worker20.030s,
+peak RSS1,698,410,496 bytes. All30 bank-fit tests, one sibling rejection test,
+rustfmt and release build pass at that head; independent source review passes.
+
+At coefficient123 only, preferred−0.5 versus baseline−0.25 improves native
+CE0.966180663→0.962570925, initial factual source80→81/128, paired sources24→25/64
+and first token70→71/128. Opposite0 gives CE0.976521601, source79, pairs23 and
+first token69. Both interventions verify the expected consumed-address Copy delta
+of ±2²² Q24 in10 rows, preserve other959 coefficients and frozen prefix/Period/Stop
+payloads, and independently reload the rebound native chains. Selection includes
+baseline and precedes exposed diagnostic predictions. There are zero optimizer updates.
+
+Complete own-prefix replies remain23/128 in every arm; exposed diagnostic remains
+source15/32 and complete1/32. These net counts establish a small native retrieval
+intervention, not transferable attention, a general learning algorithm or chat.
+Terminal contribution and shared-bin aliasing remain possible. Next implement bounded
+discrete-update calibration: gradient-proposed legal cue quanta accepted/rejected by
+actual full-path development loss, retaining baseline and row/pair harms. No unchanged
+fractional-fit repeat. [PR1756](https://github.com/UOR-Foundation/uor-r4/pull/1756)
+and its parents remain drafts/unmerged. Reports are durable under
+`/workspace/uor-r4/codex/geometric-cue-calibration-20261005/quantum-1`.
+
 ## Cue credit connected; native quantization unchanged — October 5
 
 The [cue follow-up](geometric-endpoint-calibration-2026-10-05.md#cue-only-full-path-follow-up)
