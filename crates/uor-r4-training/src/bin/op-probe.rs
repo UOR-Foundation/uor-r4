@@ -48,6 +48,61 @@ fn main() -> Result<(), String> {
     .with_op_policy(OpPolicy::UnlessQuery)
     .map_err(|e| format!("policy: {e}"))?;
 
+    // mode=compile: does the loaded compiler give BOTH structurally identical statements a
+    // derived address once open relations are on? This decides whether the 36/200 comes from
+    // the compiler or from how the panel path drives it.
+    if kv("mode").as_deref() == Some("compile") {
+        uor_r4_training::milestone_world_v2::enable_open_relations();
+        let derived_base = uor_r4_training::relation_compiler::DERIVED_RELATION_ID_BASE;
+        println!(
+            "  open_relations enabled: {}",
+            uor_r4_training::milestone_world_v2::open_relations()
+        );
+        for text in [
+            // CONDITION 2 counter-cases (Claude): statements ending in "?", questions without
+            "Can you remember my vet is Ola?",
+            "Did I mention my bank is Monzo?",
+            "Tell me my vet's name.",
+            "Remind me what my landline is",
+            "My mousbror is bokstaik.",
+            "My fumgrek is jirkdraik.",
+            "What is mousbror's name?",
+            "What is the fumgrek?",
+            "My seekbend is brikjeer.",
+            "The weather is nice today.",
+            "What is it?",
+        ] {
+            let action = compiler.action(text).map_err(|e| format!("{e}"))?;
+            use uor_r4_training::stack_grounded_session::CompiledAction as CA;
+            let (kind, rel, span) = match &action {
+                CA::Assert { relation, span } => (
+                    "assert",
+                    Some(relation),
+                    text.get(span.start..span.end)
+                        .unwrap_or_default()
+                        .to_string(),
+                ),
+                CA::Correct { relation, span } => (
+                    "correct",
+                    Some(relation),
+                    text.get(span.start..span.end)
+                        .unwrap_or_default()
+                        .to_string(),
+                ),
+                CA::QueryCurrent { relation } => ("query_current", Some(relation), String::new()),
+                CA::Unresolved { .. } => ("unresolved", None, String::new()),
+                _ => ("other", None, String::new()),
+            };
+            let tag = match rel {
+                Some(r) if *r >= derived_base => "DERIVED",
+                Some(_) => "CLOSED",
+                None => "-",
+            };
+            println!("    {tag:>7}  rel={rel:?} act={kind} span={span:?}  {text:?}");
+        }
+        return Ok(());
+    }
+
     let panel: serde_json::Value =
         serde_json::from_slice(&fs::read(&panel_path).map_err(|e| format!("panel: {e}"))?)
             .map_err(|e| format!("panel json: {e}"))?;

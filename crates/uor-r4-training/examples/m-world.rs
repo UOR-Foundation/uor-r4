@@ -340,6 +340,10 @@ impl Args {
 enum World {
     V1,
     V2,
+    /// v2 with OPEN RELATION NAMES: the same world, but the relation table also carries
+    /// relations whose names are drawn per episode from a mixed pool (half real English
+    /// nouns, half syllable-generated). `v2` is unchanged, so its reports stay comparable.
+    V2r,
 }
 
 /// `recall=` of `evaluate world=v2`: the emission of the log-sieve design
@@ -427,7 +431,8 @@ fn world_of(args: &Args) -> Result<World> {
             Ok(World::V1)
         }
         Some("v2") => Ok(World::V2),
-        Some(other) => Err(invalid(format!("unknown world={other}; use v1 or v2"))),
+        Some("v2r") => Ok(World::V2r),
+        Some(other) => Err(invalid(format!("unknown world={other}; use v1, v2 or v2r"))),
     }
 }
 
@@ -2462,7 +2467,7 @@ fn baseline_row(name: &str, run: &RuleRun) -> Value {
 /// development cell); otherwise the report names the leaking templates.
 fn baselines(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
-    if args.optional("world").as_deref() != Some("v2") {
+    if !matches!(args.optional("world").as_deref(), Some("v2") | Some("v2r")) {
         return Err(invalid("baselines needs world=v2"));
     }
     let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
@@ -2564,7 +2569,7 @@ fn baselines(args: &Args, out: &Path) -> Result<()> {
 /// repeat verbatim), not a model.
 fn route(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
-    if args.optional("world").as_deref() != Some("v2") {
+    if !matches!(args.optional("world").as_deref(), Some("v2") | Some("v2r")) {
         return Err(invalid("route needs world=v2"));
     }
     let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
@@ -2721,7 +2726,7 @@ fn fit_route(
 /// act accuracy is over every user turn.
 fn compiler(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
-    if args.optional("world").as_deref() != Some("v2") {
+    if !matches!(args.optional("world").as_deref(), Some("v2") | Some("v2r")) {
         return Err(invalid("compiler needs world=v2"));
     }
     let model_dir = PathBuf::from(args.required("model")?);
@@ -3169,7 +3174,7 @@ fn same_action(a: &CompiledAction, b: &CompiledAction) -> bool {
 /// `recall=route`'s draw (both value splits, so development values are seen).
 fn compiler_save(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
-    if args.optional("world").as_deref() != Some("v2") {
+    if !matches!(args.optional("world").as_deref(), Some("v2") | Some("v2r")) {
         return Err(invalid("compiler-save needs world=v2"));
     }
     let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
@@ -3774,7 +3779,7 @@ pub(crate) fn judge_row(
 /// with a save and load at their middle turn, and must match.
 fn session(args: &Args, out: &Path) -> Result<()> {
     let started = Instant::now();
-    if args.optional("world").as_deref() != Some("v2") {
+    if !matches!(args.optional("world").as_deref(), Some("v2") | Some("v2r")) {
         return Err(invalid("session needs world=v2"));
     }
     let model_root = PathBuf::from(args.required("model_root")?);
@@ -4192,9 +4197,19 @@ fn session(args: &Args, out: &Path) -> Result<()> {
                             question_action = akind.to_string();
                             question_relation = arel;
                         }
+                        // The reason is the diagnostic: parse_op's reasons correspond
+                        // one-to-one with op shapes (unknown relation = an act with a
+                        // relation name that did not resolve; "does not parse" = the op
+                        // did not split into act/relation/value at all). Recording it is
+                        // an INSTRUMENT addition, not a fix.
+                        let unresolved_reason = match &outcome.action {
+                            CompiledAction::Unresolved { reason } => reason.clone(),
+                            _ => String::new(),
+                        };
                         trace.push(json!({
                             "turn": i, "last": i == last, "user": user,
                             "action": akind, "relation": arel, "span_text": aspan,
+                            "unresolved_reason": unresolved_reason,
                         }));
                         if i < last {
                             if let MemoryEffect::Write { value_tokens, .. } = &outcome.memory {
@@ -4416,7 +4431,7 @@ fn session(args: &Args, out: &Path) -> Result<()> {
 /// values (plus any teacher paraphrases); `dev/` draws training phrasings with
 /// development values, so checkpoint selection never sees development phrasings.
 fn compile_corpus(args: &Args, out: &Path) -> Result<()> {
-    if args.optional("world").as_deref() != Some("v2") {
+    if !matches!(args.optional("world").as_deref(), Some("v2") | Some("v2r")) {
         return Err(invalid("compile-corpus needs world=v2"));
     }
     let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
@@ -4681,6 +4696,13 @@ fn main() -> Result<()> {
     let (mode, rest) = arguments
         .split_first()
         .ok_or_else(|| invalid("usage: m-world corpus|evaluate|rejudge key=value..."))?;
+    // OPEN RELATION NAMES must be switched on BEFORE anything reads the relation table:
+    // `relations()` is a OnceLock, so touching it first (argument validation does) would
+    // freeze the closed table and `v2r` would silently behave as `v2`. Scanned here from
+    // the raw arguments, ahead of every other step.
+    if rest.iter().any(|a| a == "world=v2r") {
+        uor_r4_training::milestone_world_v2::enable_open_relations();
+    }
     if let Some(result) = run_v2_extras(mode, rest) {
         return result;
     }
@@ -4742,7 +4764,7 @@ fn main() -> Result<()> {
     // `protocol=`, which only world=v2 encodes, and never with chat=.
     if mode == "corpus" || mode == "evaluate" {
         let version = protocol_version_of(&args)?;
-        if version != 1 && world_of(&args)? != World::V2 {
+        if version != 1 && !matches!(world_of(&args)?, World::V2 | World::V2r) {
             return Err(invalid("protocol=2 needs world=v2"));
         }
     }
@@ -4775,7 +4797,7 @@ fn main() -> Result<()> {
     if mode == "evaluate" {
         let recall = recall_of(&args)?;
         recall_at_of(&args)?;
-        if recall != Recall::Off && world_of(&args)? != World::V2 {
+        if recall != Recall::Off && !matches!(world_of(&args)?, World::V2 | World::V2r) {
             return Err(invalid("recall= needs world=v2"));
         }
         if recall == Recall::Off && args.optional("recall_at").is_some() {
@@ -4800,10 +4822,10 @@ fn main() -> Result<()> {
     report_output::claim(&out)?;
     let result = match (mode.as_str(), world) {
         ("corpus", World::V1) => corpus(&args, &out),
-        ("corpus", World::V2) => corpus_v2(&args, &out),
+        ("corpus", World::V2 | World::V2r) => corpus_v2(&args, &out),
         ("rejudge", _) => rejudge(&args, &out),
         (_, World::V1) => evaluate(&args, &out),
-        (_, World::V2) => evaluate_v2(&args, &out),
+        (_, World::V2 | World::V2r) => evaluate_v2(&args, &out),
     };
     if let Err(error) = &result {
         fs::write(

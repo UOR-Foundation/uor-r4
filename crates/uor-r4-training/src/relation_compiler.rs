@@ -1277,6 +1277,42 @@ pub fn relation_phrase(source: &str) -> Option<String> {
     }
 }
 
+/// Whether a turn opens with a cue that asks for something rather than states it.
+/// Imperatives and wh-words, so a question written without a `?` is still read as one.
+fn recall_cue(source: &str) -> bool {
+    const CUES: [&str; 12] = [
+        "what",
+        "where",
+        "who",
+        "when",
+        "which",
+        "how",
+        "tell me",
+        "remind me",
+        "do you",
+        "did i",
+        "can you",
+        "could you",
+    ];
+    let lower = source.trim_start().to_lowercase();
+    CUES.iter().any(|cue| lower.starts_with(cue))
+}
+
+/// Whether every word of a marked span already appears in the relation phrase — i.e. the
+/// span is the relation's own words rather than a value held for it.
+fn phrase_words(span_text: &str, phrase: &str) -> bool {
+    let p: Vec<String> = phrase
+        .split_whitespace()
+        .map(|w| w.to_lowercase())
+        .collect();
+    let words: Vec<String> = span_text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(|w| w.to_lowercase())
+        .collect();
+    !words.is_empty() && words.iter().all(|w| p.contains(w))
+}
+
 /// The first derived relation ID. Chosen far above any identity ID (the closed table has
 /// 11 labels, so IDs are small) so a derived ID can never collide with a closed one, and
 /// so a derived ID is recognisable as derived.
@@ -2227,8 +2263,107 @@ impl SavedCompiler {
         };
         let row = self.combined_row(source)?;
         let (relation, act) = self.classify_row(source, row.as_deref())?;
+        // OPEN RELATIONS: the address is the relation AS NAMED IN THE TURN, on BOTH sides.
+        //
+        // Taking the phrase only when the heads say NONE put the WRITE and the READ in
+        // different places: a statement's heads often name a closed label ("my ... is"
+        // fires user_name), so the fact was written at the closed id, while the question —
+        // whose heads say NONE — derived a phrase id and read an empty slot. Measured:
+        // `stored_not_recalled` 70 -> 135 and `log_without_store` 62 -> 0, i.e. the read
+        // moved off the log path and missed.
+        //
+        // So under open relations the phrase decides the address whenever it extracts, and
+        // the act still comes from the span rule (no span => query). `world=v2` never
+        // reaches this branch.
+        if crate::milestone_world_v2::open_relations() {
+            if let Some(phrase) = relation_phrase(source) {
+                let id = self.relation_address(&phrase);
+                // AN INTERROGATIVE ASKS; IT DOES NOT WRITE.
+                //
+                // The span head will mark a "value" inside a question — "What is
+                // mousbror's name?" hands it the word "name" — and the span rule would then
+                // compile the question as a statement, so it WROTE instead of reading.
+                // Measured: 130 of 200 rows came out `question_not_a_query`, and the trace
+                // shows the question compiled to `assert` (rs-002 rel 12957859, rs-007 rel
+                // 31164985). The question then stored a value and never queried, so
+                // `log_without_store` fell to 0 and nothing answered.
+                //
+                // A turn ending in `?` is a query, full stop. This is the deterministic
+                // interrogative rule, and it is the `ActRule::Span` intent stated
+                // explicitly rather than left to the span head.
+                // A QUERY NAMES A RELATION AND HOLDS NO VALUE FOR IT.
+                //
+                // A bare `?` test was too blunt: "Can you remember my vet is Ola?" ends in
+                // `?` but STATES a value, and forcing it to a query meant it never stored
+                // (measured on both counter-cases). The cue must be paired with the span
+                // rule — a turn is a query only when an interrogative/recall cue is present
+                // AND the span head marks no value OUTSIDE the relation phrase itself.
+                //
+                //   "What is mousbror's name?"          cue + span "name" is the relation's
+                //                                       own words  -> query
+                //   "Can you remember my vet is Ola?"   cue + span "Ola" is a value -> stores
+                //   "Tell me my vet's name."            cue + span is the relation -> query
+                let cue = source.trim_end().ends_with('?') || recall_cue(source);
+                let span = self.span().decode(source);
+                let value_outside = span.filter(|(a, b)| {
+                    let text = source.get(*a..*b).unwrap_or_default();
+                    !phrase_words(text, &phrase)
+                });
+                if cue && value_outside.is_none() {
+                    return Ok(CompiledAction::QueryCurrent { relation: id });
+                }
+                let _ = value_outside;
+                return Ok(match span {
+                    None => CompiledAction::QueryCurrent { relation: id },
+                    Some((start, end)) => {
+                        let span = SourceSpan { start, end };
+                        if self.statement_act(source, row.as_deref())? == "update" {
+                            CompiledAction::Correct { relation: id, span }
+                        } else {
+                            CompiledAction::Assert { relation: id, span }
+                        }
+                    }
+                });
+            }
+        }
         if relation == NONE {
-            return unresolved("the heads name no relation");
+            // SCOPED TO OPEN RELATIONS. Turning this on unconditionally moved the closed
+            // world's MQAR cell (22/23 -> 18/23), because a turn whose relation head says
+            // NONE is not necessarily a relation turn at all — MQAR and copy turns reach
+            // this branch too, and an interrogative MQAR query would be read as a relation
+            // query. The mechanism exists for relations the closed label set cannot name,
+            // so it is active exactly when the world has open relations (world=v2r), and
+            // `world=v2` is untouched by construction.
+            if !crate::milestone_world_v2::open_relations() {
+                return unresolved("the heads name no relation");
+            }
+            // DETERMINISTIC RELATION IDENTITY. Closed-first is preserved by construction:
+            // this branch runs only when the heads named NOTHING, so every relation the
+            // heads can name keeps its identity id and its behaviour is unchanged.
+            //
+            // Neither learned component can name a relation outside the closed set —
+            // measured, the op model emits `Op: none` or a CLOSED label — so for an unseen
+            // relation the turn's own words are the only signal. Taking the phrase from
+            // them reaches the full pre-registered ceiling: 140 of 200 rows extracted,
+            // 0 wrong, and the 60 it declines are exactly the anaphoric rows that need
+            // previous-turn state.
+            let derived = relation_phrase(source).map(|phrase| self.relation_address(&phrase));
+            let Some(id) = derived else {
+                return unresolved("the heads name no relation");
+            };
+            // The write gate holds here too: a decoded value span makes the turn a
+            // statement, and no span makes it a query.
+            return Ok(match self.span().decode(source) {
+                None => CompiledAction::QueryCurrent { relation: id },
+                Some((start, end)) => {
+                    let span = SourceSpan { start, end };
+                    if self.statement_act(source, row.as_deref())? == "update" {
+                        CompiledAction::Correct { relation: id, span }
+                    } else {
+                        CompiledAction::Assert { relation: id, span }
+                    }
+                }
+            });
         }
         let id = self
             .relation_id(relation)
