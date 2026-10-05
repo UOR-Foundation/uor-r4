@@ -320,6 +320,323 @@ fn source_changes(old: &Value, new: &Value) -> Result<Value> {
     )
 }
 
+// A failed sealed fit is immutable evidence; completion never enters the optimizer.
+pub(super) fn complete(a: &Args, start: Instant, failed_root: &Path) -> Result<Value> {
+    report_output::verify(failed_root)?;
+    let failed_manifest = sha256_file(&failed_root.join("manifest.json"))?;
+    if a.cue_discrete_completion_manifest_sha256.as_deref() != Some(failed_manifest.as_str()) {
+        return Err(invalid("completion failed attempt manifest differs").into());
+    }
+    let attempt = read_json(&failed_root.join("attempt.json"))?;
+    let config_path = attempt["argv"][1]
+        .as_str()
+        .ok_or_else(|| invalid("completion original configuration path absent"))?;
+    let config_sha = sha256_file(Path::new(config_path))?;
+    if a.cue_discrete_completion_config_sha256.as_deref() != Some(config_sha.as_str()) {
+        return Err(invalid("completion original configuration hash differs").into());
+    }
+    let original: Args = serde_json::from_slice(&read_capped(Path::new(config_path))?)?;
+    macro_rules! same { ($($field:ident),+ $(,)?) => { $(
+        if a.$field != original.$field { return Err(invalid(concat!("completion configuration differs: ", stringify!($field))).into()); }
+    )+ }; }
+    same!(
+        source_weights,
+        native_artifact,
+        trusted_native_binding,
+        development_panel,
+        development_manifest_sha256,
+        fresh_panel,
+        fresh_manifest_sha256,
+        cue_calibration_warmstart,
+        frozen_prefix_bundle,
+        frozen_prefix_native_metadata_sha256,
+        frozen_prefix_packed_sha256,
+        cue_score_mode,
+        prefix_score_mode,
+        cue_discrete_fit,
+        maximum_context_tokens,
+        maximum_generation_tokens
+    );
+    if original.mode != "cue-calibration-discrete-fit"
+        || original.out != failed_root
+        || a.out == failed_root
+        || a.out.starts_with(failed_root)
+    {
+        return Err(invalid("completion original mode/output differs").into());
+    }
+    let failure = read_json(&failed_root.join("failure.json"))?;
+    let selection = read_json(&failed_root.join("selection-before-fresh.json"))?;
+    let progress = read_json(&failed_root.join("progress.json"))?;
+    let selected_trial = selection["selected_trial"]
+        .as_u64()
+        .ok_or_else(|| invalid("completion selected trial absent"))?;
+    let accepted = selection["accepted_discrete_updates"]
+        .as_u64()
+        .ok_or_else(|| invalid("completion accepted count absent"))?;
+    if failure["error"] != "report cap reached"
+        || failure["mode"] != original.mode
+        || selected_trial == 0
+        || selected_trial != accepted
+        || selection["fresh_predictions_before_selection"] != 0
+        || selection["stop_reason"] != "maximum_accepted_updates"
+        || selection["selected_trial"] != progress["selected_trial"]
+        || selection["accepted_discrete_updates"] != progress["accepted_discrete_updates"]
+        || failure["completed_updates_in_progress"] != progress
+        || failed_root.join("fresh-selected-generation.json").exists()
+        || accepted
+            != a.cue_discrete_fit
+                .as_ref()
+                .ok_or_else(|| invalid("completion frozen discrete configuration absent"))?
+                .maximum_accepted_updates as u64
+    {
+        return Err(invalid("completion selected failed fit state differs").into());
+    }
+    let w = warm(a)?;
+    let pr = a
+        .frozen_prefix_bundle
+        .as_ref()
+        .ok_or_else(|| invalid("frozen prefix donor absent"))?;
+    let mut inputs = BTreeMap::new();
+    let mut seals = BTreeSet::new();
+    for (root, expected) in [
+        (&a.development_panel, &a.development_manifest_sha256),
+        (&a.fresh_panel, &a.fresh_manifest_sha256),
+    ] {
+        report_output::verify(root)?;
+        if sha256_file(&root.join("manifest.json"))? != *expected {
+            return Err(invalid("cue calibration panel manifest differs").into());
+        }
+    }
+    for root in [
+        &a.source_weights,
+        &a.native_artifact,
+        &a.development_panel,
+        &a.fresh_panel,
+        &w.initial_cue_bundle,
+        pr,
+        &w.frozen_end_bundle,
+    ] {
+        let seal = nearest_seal(root)?;
+        report_output::verify(&seal)?;
+        inputs.insert(
+            seal.join("manifest.json").to_string_lossy().into_owned(),
+            sha256_file(&seal.join("manifest.json"))?,
+        );
+        seals.insert(seal);
+    }
+    for (root, name, expected) in [
+        (
+            &w.initial_cue_bundle,
+            "native-metadata.json",
+            &w.initial_cue_metadata_sha256,
+        ),
+        (
+            &w.initial_cue_bundle,
+            "cue-q4.bin",
+            &w.initial_cue_packed_sha256,
+        ),
+        (
+            pr,
+            "native-metadata.json",
+            a.frozen_prefix_native_metadata_sha256
+                .as_ref()
+                .ok_or_else(|| invalid("prefix metadata SHA absent"))?,
+        ),
+        (
+            pr,
+            "prefix-q4.bin",
+            a.frozen_prefix_packed_sha256
+                .as_ref()
+                .ok_or_else(|| invalid("prefix packed SHA absent"))?,
+        ),
+        (
+            &w.frozen_end_bundle,
+            "native-metadata.json",
+            &w.frozen_end_metadata_sha256,
+        ),
+        (
+            &w.frozen_end_bundle,
+            "source-end-period-q4.bin",
+            &w.frozen_end_period_packed_sha256,
+        ),
+        (
+            &w.frozen_end_bundle,
+            "source-end-stop-q4.bin",
+            &w.frozen_end_stop_packed_sha256,
+        ),
+    ] {
+        let path = root.join(name);
+        if sha256_file(&path)? != *expected {
+            return Err(invalid("cue calibration initializer/frozen hash differs").into());
+        }
+        inputs.insert(path.to_string_lossy().into_owned(), expected.clone());
+    }
+    let trusted = sha256_file(&a.trusted_native_binding)?;
+    inputs.insert(
+        a.trusted_native_binding.to_string_lossy().into_owned(),
+        trusted.clone(),
+    );
+    let binding: NativeArtifactBinding =
+        serde_json::from_slice(&read_capped(&a.trusted_native_binding)?)?;
+    let integer = IntegerRealizer::load_native(&a.native_artifact, &binding)?;
+    let bytes = fs::read(a.native_artifact.join("tokenizer.json"))?;
+    let tok = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
+        .ok_or_else(|| invalid("cue calibration ByteBPE absent"))?;
+    let source = SourceRealizerWeights::load_source(&a.source_weights, &bytes)?;
+    let identity: ConsumerIdentity = serde_json::from_value(
+        read_json(&a.native_artifact.join("metadata.json"))?["identity"].clone(),
+    )?;
+    let parent = NativeSourceRealizer::load(&a.native_artifact, &source, &identity)?;
+    if parent.artifact_binding()? != binding {
+        return Err(invalid("cue calibration source/native binding differs").into());
+    }
+    let receipts = parameter_receipts(&source.parameters())?;
+    let donor = prefix_training_cue_load(&w.initial_cue_bundle, &parent)?;
+    let weights = CueAngularWeights::from_native(&parent, &a.native_artifact, &donor)?;
+    let cue = cue_native_load(&w.initial_cue_bundle, &integer)?;
+    let prefix = prefix_native_load(pr, &integer, &cue)?;
+    if Some(donor.metadata().potential.mode) != a.cue_score_mode
+        || Some(cue.metadata().potential.mode) != a.cue_score_mode
+        || Some(prefix.metadata().potential.mode) != a.prefix_score_mode
+    {
+        return Err(
+            invalid("actual cue/prefix donor modes differ from declared configuration").into(),
+        );
+    }
+    let end_meta = read_json(&w.frozen_end_bundle.join("native-metadata.json"))?;
+    let f = Frozen {
+        prefix_config: prefix.metadata().potential,
+        prefix: fs::read(pr.join("prefix-q4.bin"))?,
+        end_config: serde_json::from_value(end_meta["potential"].clone())?,
+        period: fs::read(w.frozen_end_bundle.join("source-end-period-q4.bin"))?,
+        stop: fs::read(w.frozen_end_bundle.join("source-end-stop-q4.bin"))?,
+    };
+    if f.end_config.mode != SourceEndScoreMode::DirectedRelative {
+        return Err(invalid("cue calibration endpoint mode differs").into());
+    }
+    let (_, end) = f.integer(&integer, &cue)?;
+    if serde_json::to_value(end.metadata())? != end_meta {
+        return Err(invalid("cue calibration original endpoint chain differs").into());
+    }
+    let (tp, te) = f.training(&parent, &donor)?;
+    if serde_json::to_value(tp.metadata())? != serde_json::to_value(prefix.metadata())?
+        || serde_json::to_value(te.metadata())? != end_meta
+    {
+        return Err(invalid("cue calibration training/independent donor metadata differs").into());
+    }
+    inputs.insert(config_path.into(), config_sha.clone());
+    inputs.insert(
+        failed_root
+            .join("manifest.json")
+            .to_string_lossy()
+            .into_owned(),
+        failed_manifest.clone(),
+    );
+    seals.insert(failed_root.to_path_buf());
+    let selected_root = failed_root.join(format!("trial-{selected_trial:04}"));
+    report_output::verify(&selected_root)?;
+    let selected_receipt = read_json(&selected_root.join("receipt.json"))?;
+    let selected_hash = sha256_file(&selected_root.join("cue/cue-q4.bin"))?;
+    if selected_receipt["accepted"] != true
+        || selected_receipt["trial"] != selected_trial
+        || selected_receipt["accepted_updates_after"] != accepted
+        || selected_receipt["proposal_cue_packed_sha256"] != selected_hash
+        || progress["current_cue_packed_sha256"] != selected_hash
+        || selected_receipt["actual_proposal_ce"] != progress["incumbent_native_ce"]
+        || selected_receipt["frozen_payloads"] != f.hashes()
+    {
+        return Err(invalid("completion selected native identity differs").into());
+    }
+    let initial_root = failed_root.join("initial-chain");
+    report_output::verify(&initial_root)?;
+    let restored = CueAngularWeights::load(&initial_root.join("cue"), &parent, &a.native_artifact)?;
+    if parameter_receipts(&restored.parameters())? != parameter_receipts(&weights.parameters())? {
+        return Err(invalid("completion original cue shadow differs").into());
+    }
+    for root in [&initial_root, &selected_root] {
+        for (relative, expected) in [
+            ("prefix/prefix-q4.bin", &f.prefix),
+            ("source-end/source-end-period-q4.bin", &f.period),
+            ("source-end/source-end-stop-q4.bin", &f.stop),
+        ] {
+            if fs::read(root.join(relative))? != *expected {
+                return Err(invalid("completion frozen payload changed").into());
+            }
+        }
+    }
+    let (baseline_cue, _baseline_prefix, _baseline_end) = load_chain(&initial_root, &integer)?;
+    if serde_json::to_value(baseline_cue.metadata())? != serde_json::to_value(cue.metadata())? {
+        return Err(invalid("completion original native cue differs").into());
+    }
+    let (c, p, e) = load_chain(&selected_root, &integer)?;
+    let (development_rows, evaluation_rows) = panel_counts(a);
+    let development = panel(&a.development_panel, development_rows, &integer, &tok, a)?;
+    let diagnostic = panel(&a.fresh_panel, evaluation_rows, &integer, &tok, a)?;
+    let baseline = read_json(&failed_root.join("initial-canonical.json"))?;
+    let final_canonical = read_json(&failed_root.join("development-selected-canonical.json"))?;
+    let parent_gen = read_json(&failed_root.join("development-parent-generation.json"))?;
+    let final_gen = read_json(&failed_root.join("development-selected-generation.json"))?;
+    let oldcan = read_json(&failed_root.join("fresh-parent-canonical.json"))?;
+    let newcan = read_json(&failed_root.join("fresh-selected-canonical.json"))?;
+    let oldgen = read_json(&failed_root.join("fresh-parent-generation.json"))?;
+    if final_canonical["native_equal_episode_ce"] != progress["incumbent_native_ce"] {
+        return Err(invalid("completion saved selected objective differs").into());
+    }
+    let olddev = causal_metrics(&a.development_panel, &development, &baseline, &parent_gen)?;
+    let newdev = causal_metrics(
+        &a.development_panel,
+        &development,
+        &final_canonical,
+        &final_gen,
+    )?;
+    let devout =
+        json!({"parent":olddev,"selected":newdev,"comparison":causal_comparison(&olddev,&newdev)?});
+    if devout != read_json(&failed_root.join("development-causal-outcomes.json"))? {
+        return Err(invalid("completion saved development metrics differ").into());
+    }
+    drop(final_canonical);
+    drop(parent_gen);
+    drop(final_gen);
+    immutable(&inputs, &seals)?;
+    deadline(a, start)?;
+    // The only model execution in this path. Selection is already sealed.
+    let newgen = source_end_fit::generation(&integer, &c, &p, &e, &diagnostic, &tok, a, start)?;
+    write_json(&a.out, "fresh-selected-generation.json", &newgen)?;
+    if a.cue_discrete_fit
+        .as_ref()
+        .is_some_and(|cfg| cfg.composition_panel.is_some())
+    {
+        write_json(
+            &a.out,
+            "prospective-first-read-coverage.json",
+            &coverage_strata(&baseline, &oldcan)?,
+        )?;
+    }
+    let oldmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &oldcan, &oldgen)?;
+    let newmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &newcan, &newgen)?;
+    write_json(&a.out, "development-causal-outcomes.json", &devout)?;
+    write_json(
+        &a.out,
+        "fresh-causal-outcomes.json",
+        &json!({"parent":oldmetrics,"selected":newmetrics,"comparison":causal_comparison(&oldmetrics,&newmetrics)?}),
+    )?;
+    frozen(&source, &receipts)?;
+    immutable(&inputs, &seals)?;
+    Ok(
+        json!({"schema":"uor-r4.geometric-cue-discrete-completion/1","mode":a.mode,"status":"completed",
+        "failed_attempt":failed_root,"failed_attempt_manifest_sha256":failed_manifest,
+        "original_configuration_sha256":config_sha,"original_source_commit":failure["source_commit"],
+        "selected_trial":selected_trial,"selected_cue_packed_sha256":selected_hash,
+        "original_accepted_discrete_updates":accepted,"original_selection":selection,
+        "optimizer_updates":0,"adam_updates":0,"accepted_discrete_updates":0,"proposal_count":0,"gradient_passes":0,
+        "model_operations":"only selected prospective own-prefix generation; no optimization/canonical rerun",
+        "reused_saved_files":["initial-canonical.json","development-selected-canonical.json","development-parent-generation.json","development-selected-generation.json","fresh-parent-canonical.json","fresh-selected-canonical.json","fresh-parent-generation.json"],
+        "input_manifests_sha256":inputs,"frozen_source_receipts":receipts,"frozen_payloads":f.hashes(),
+        "cases":development_rows,"evaluation_cases":evaluation_rows,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib(),
+        "claim":"evaluation-only completion of sealed accepted native cue checkpoint; no new learning or general chat qualification"}),
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run(
     a: &Args,

@@ -35,8 +35,23 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     if (a.mode == "cue-calibration-quantum-probe") != a.cue_quantum_probe.is_some() {
         return Err(invalid("cue quantum proposal is explicit-probe-only").into());
     }
-    if (a.mode == "cue-calibration-discrete-fit") != a.cue_discrete_fit.is_some() {
+    if matches!(
+        a.mode.as_str(),
+        "cue-calibration-discrete-fit" | "cue-calibration-discrete-complete"
+    ) != a.cue_discrete_fit.is_some()
+    {
         return Err(invalid("cue discrete configuration is explicit-discrete-fit-only").into());
+    }
+    if (a.mode == "cue-calibration-discrete-complete") != a.cue_discrete_completion_root.is_some()
+        || a.cue_discrete_completion_root.is_some()
+            != a.cue_discrete_completion_manifest_sha256.is_some()
+        || a.cue_discrete_completion_root.is_some()
+            != a.cue_discrete_completion_config_sha256.is_some()
+    {
+        return Err(invalid(
+            "completion requires explicit sealed failed root and manifest binding",
+        )
+        .into());
     }
     if let Some(c) = &a.cue_discrete_fit {
         if let Some(p) = &c.composition_panel {
@@ -672,6 +687,9 @@ fn admission_matches(
 
 pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     validate(a)?;
+    if let Some(root) = &a.cue_discrete_completion_root {
+        return discrete::complete(a, start, root);
+    }
     let w = warm(a)?;
     let pr = a
         .frozen_prefix_bundle

@@ -969,6 +969,9 @@ mod reuse {
             || a.bank.cue_calibration_warmstart.is_some()
             || a.bank.cue_quantum_probe.is_some()
             || a.bank.cue_discrete_fit.is_some()
+            || a.bank.cue_discrete_completion_root.is_some()
+            || a.bank.cue_discrete_completion_manifest_sha256.is_some()
+            || a.bank.cue_discrete_completion_config_sha256.is_some()
         {
             return Err(
                 invalid("unsupported legacy overlay/control arguments in dedicated draft").into(),
@@ -1469,7 +1472,17 @@ mod reuse {
             config["bank"]["cue_discrete_fit"] = json!({
                 "maximum_trials":16, "maximum_accepted_updates":8
             });
-            assert!(validate(&serde_json::from_value(config)?).is_err());
+            assert!(validate(&serde_json::from_value(config.clone())?).is_err());
+            config["bank"]["cue_discrete_fit"] = Value::Null;
+            for field in [
+                "cue_discrete_completion_root",
+                "cue_discrete_completion_manifest_sha256",
+                "cue_discrete_completion_config_sha256",
+            ] {
+                config["bank"][field] = json!("bound");
+                assert!(validate(&serde_json::from_value(config.clone())?).is_err());
+                config["bank"][field] = Value::Null;
+            }
             Ok(())
         }
         #[test]

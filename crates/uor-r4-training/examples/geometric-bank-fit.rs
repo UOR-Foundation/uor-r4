@@ -68,6 +68,7 @@ fn cue_calibration_mode(a: &Args) -> bool {
             | "cue-calibration-fit"
             | "cue-calibration-quantum-probe"
             | "cue-calibration-discrete-fit"
+            | "cue-calibration-discrete-complete"
     )
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -175,6 +176,12 @@ pub(crate) struct Args {
     pub(crate) cue_quantum_probe: Option<CueQuantumProbe>,
     #[serde(default)]
     pub(crate) cue_discrete_fit: Option<CueDiscreteFit>,
+    #[serde(default)]
+    pub(crate) cue_discrete_completion_root: Option<PathBuf>,
+    #[serde(default)]
+    pub(crate) cue_discrete_completion_manifest_sha256: Option<String>,
+    #[serde(default)]
+    pub(crate) cue_discrete_completion_config_sha256: Option<String>,
     pub(crate) cue_score_mode: Option<CueScoreMode>,
     pub(crate) prefix_score_mode: Option<PrefixScoreMode>,
     pub(crate) source_end_score_mode:
@@ -364,34 +371,46 @@ pub(crate) fn directory_bytes(path: &Path) -> Result<usize> {
     }
     Ok(n)
 }
+fn report_attempt_root(mut root: &Path) -> &Path {
+    while let Some(parent) = root.parent() {
+        if parent.join("attempt.json").is_file() {
+            root = parent;
+        } else {
+            break;
+        }
+    }
+    root
+}
+fn admitted_report_cap(root: &Path) -> Result<Option<usize>> {
+    let receipt = report_attempt_root(root).join("resource-cap.json");
+    if !receipt.is_file() {
+        return Ok(None);
+    }
+    let bytes = read_json(&receipt)?["maximum_report_bytes"]
+        .as_u64()
+        .ok_or_else(|| invalid("report cap receipt absent"))?;
+    Ok(Some(
+        usize::try_from(bytes).map_err(|_| invalid("report cap exceeds host usize"))?,
+    ))
+}
 pub(crate) fn write_json(root: &Path, name: &str, v: &Value) -> Result<()> {
-    write_json_limited(root, name, v, REPORT_CAP)
+    write_json_limited(
+        root,
+        name,
+        v,
+        admitted_report_cap(root)?.unwrap_or(REPORT_CAP),
+    )
 }
 pub(crate) fn write_json_limited(root: &Path, name: &str, v: &Value, cap: usize) -> Result<()> {
     let b = serde_json::to_vec(v)?;
     let p = root.join(name);
     let previous = fs::metadata(&p).map_or(0, |m| m.len() as usize);
-    let mut total_root = root;
-    while let Some(parent) = total_root.parent() {
-        if parent.join("attempt.json").is_file() {
-            total_root = parent;
-        } else {
-            break;
-        }
-    }
-    let cap = if total_root.join("resource-cap.json").is_file() {
-        cap.min(
-            read_json(&total_root.join("resource-cap.json"))?["maximum_report_bytes"]
-                .as_u64()
-                .ok_or_else(|| invalid("report cap receipt absent"))? as usize,
-        )
-    } else {
-        cap
-    };
+    let total_root = report_attempt_root(root);
+    let cap = admitted_report_cap(root)?.map_or(cap, |admitted| cap.min(admitted));
     if directory_bytes(total_root)?
         .saturating_sub(previous)
         .saturating_add(b.len())
-        > cap - 1024 * 1024
+        > cap.saturating_sub(1024 * 1024)
     {
         return Err(invalid("report cap reached").into());
     }
@@ -448,6 +467,7 @@ fn checked_args() -> Result<Args> {
         "cue-calibration-fit",
         "cue-calibration-quantum-probe",
         "cue-calibration-discrete-fit",
+        "cue-calibration-discrete-complete",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -491,7 +511,9 @@ fn checked_args() -> Result<Args> {
         || a.maximum_context_tokens != 128
         || a.maximum_generation_tokens > 32
         || a.maximum_report_bytes
-            != if a.mode == "source-end-refine" {
+            != if a.mode == "cue-calibration-discrete-complete" {
+                128 * 1024 * 1024
+            } else if a.mode == "source-end-refine" {
                 768 * 1024 * 1024
             } else if matches!(
                 a.mode.as_str(),
@@ -5039,6 +5061,40 @@ mod natural_panel_layout_tests {
             &np.iter().collect::<Vec<_>>()
         )
         .is_err());
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod report_cap_tests {
+    use super::*;
+    #[test]
+    fn ordinary_report_cap_uses_admitted_receipt_and_explicit_limit_stays_narrow() -> Result<()> {
+        let root = std::env::temp_dir().join(format!(
+            "uor-report-cap-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos()
+        ));
+        fs::create_dir(&root)?;
+        fs::write(root.join("attempt.json"), b"{}")?;
+        fs::write(
+            root.join("resource-cap.json"),
+            br#"{"maximum_report_bytes":1073741824}"#,
+        )?;
+        let child = root.join("trial");
+        fs::create_dir(&child)?;
+        assert_eq!(admitted_report_cap(&child)?, Some(1024 * 1024 * 1024));
+        write_json(&child, "ordinary.json", &json!({"ok":true}))?;
+        assert!(
+            write_json_limited(&child, "narrow.json", &json!({"ok":true}), 1024 * 1024).is_err()
+        );
+        fs::remove_file(child.join("ordinary.json"))?;
+        fs::remove_dir(child)?;
+        fs::remove_file(root.join("resource-cap.json"))?;
+        fs::remove_file(root.join("attempt.json"))?;
+        fs::remove_dir(root)?;
         Ok(())
     }
 }
