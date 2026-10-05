@@ -234,5 +234,30 @@
     "worker_first_pid_reported": 29299,
     "status": "STARTED_NO_RESULTS_YET",
     "fresh_predictions": "NOT_RUN"
+  },
+  "semantic_audit_correction": {
+    "status": "OLD_PANEL_SYNTHETIC_LITERAL_ROLE_PILOT_ONLY",
+    "rows": 160,
+    "structural_eligibility": 160,
+    "origin_not_entailed": {
+      "development": 20,
+      "fresh": 4
+    },
+    "address_specificity_not_supplied": {
+      "development": 26,
+      "fresh": 6
+    },
+    "fresh_unseen_query_wording": false,
+    "control_scope": "exact template question bytes and current store, not independent English entailment",
+    "complete_order_runs": [
+      202610051,
+      202610052
+    ],
+    "interrupted_order": 202610053,
+    "interrupted_updates": 30,
+    "three_order_verdict": "NOT_AVAILABLE",
+    "next_policy": "supported-current-role/1",
+    "changed_path_execution": "PENDING",
+    "no_further_fit_before_admission": true
   }
 }

@@ -51,6 +51,8 @@ struct Args {
     out: PathBuf,
     maximum_seconds: u64,
     maximum_report_bytes: usize,
+    #[serde(default)]
+    assertion_query_policy: AssertionQueryPolicy,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -74,13 +76,162 @@ struct History {
     turns: Vec<WireExample>,
     queries: Vec<WireExample>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, serde::Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct WireExample {
     text: String,
     relation: String,
     act: String,
     template: Option<String>,
+}
+#[derive(Clone, Copy, Default, Deserialize, serde::Serialize, PartialEq, Eq)]
+enum AssertionQueryPolicy {
+    #[default]
+    #[serde(rename = "retained-original/1")]
+    RetainedOriginal,
+    #[serde(rename = "supported-current-role/1")]
+    SupportedCurrentRole,
+}
+impl AssertionQueryPolicy {
+    fn source_policy(self) -> &'static str {
+        match self {
+            Self::RetainedOriginal => "original-assertion-cues/raw-queries/all-source-candidates/1",
+            Self::SupportedCurrentRole => {
+                "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+            }
+        }
+    }
+}
+fn exact_literal(w: &WireExample) -> Result<&str> {
+    let template = w
+        .template
+        .as_deref()
+        .ok_or_else(|| invalid("write template absent"))?;
+    let (prefix, suffix) = template
+        .split_once("{v}")
+        .ok_or_else(|| invalid("write slot absent"))?;
+    if suffix.contains("{v}") {
+        return Err(invalid("multiple write slots").into());
+    }
+    let value = w
+        .text
+        .strip_prefix(prefix)
+        .and_then(|x| x.strip_suffix(suffix))
+        .filter(|x| !x.is_empty())
+        .ok_or_else(|| invalid("write text/template differs"))?;
+    Ok(value)
+}
+fn supported_wire_contract(w: &WireExample) -> Result<()> {
+    let valid = match (w.relation.as_str(), w.act.as_str()) {
+        ("job", "assert") => {
+            w.template.as_deref() == Some("My current job is {v}.") && exact_literal(w).is_ok()
+        }
+        ("job", "update") => {
+            w.template.as_deref() == Some("My current job has changed to {v}.")
+                && exact_literal(w).is_ok()
+        }
+        ("home", "assert") => {
+            w.template.as_deref() == Some("I currently live in {v}.") && exact_literal(w).is_ok()
+        }
+        ("home", "update") => {
+            w.template.as_deref() == Some("I now live in {v}.") && exact_literal(w).is_ok()
+        }
+        ("job", "query") => {
+            [
+                "What is my current job?",
+                "What job do I currently have?",
+                "What is my job now?",
+                "Which job do I have now?",
+                "Remind me of my current job.",
+                "Tell me my current job.",
+            ]
+            .contains(&w.text.as_str())
+                && w.template.as_deref() == Some(w.text.as_str())
+        }
+        ("home", "query") => {
+            [
+                "Where do I currently live?",
+                "Where do I live now?",
+                "What is my current residence?",
+                "Remind me where I currently live.",
+                "Tell me where I live now.",
+                "Where is my current home?",
+            ]
+            .contains(&w.text.as_str())
+                && w.template.as_deref() == Some(w.text.as_str())
+        }
+        _ => false,
+    };
+    if !valid {
+        return Err(invalid("unsupported current-role assertion/question").into());
+    }
+    Ok(())
+}
+fn validate_origin_wire(
+    w: &WireExample,
+    receipt: &Value,
+    ordinal: usize,
+    split: &str,
+    opened: &[WireExample],
+) -> Result<()> {
+    let donor: WireExample = serde_json::from_value(receipt["donor_construction_wire"].clone())?;
+    let authored: WireExample = serde_json::from_value(receipt["authored_wire"].clone())?;
+    if receipt["ordinal"].as_u64()!=Some(ordinal as u64) || authored!=*w
+        || receipt["donor_text_sha256"]!=sha256_bytes(donor.text.as_bytes())
+        || receipt["origin"]!="prospectively authored explicit-current-role frame/question;not retained original assertion bytes"
+        || donor.act!=w.act || donor.relation!=w.relation || donor.text.is_empty()
+    {return Err(invalid("derived donor/authored wire binding differs").into());}
+    supported_wire_contract(w)?;
+    if w.act != "query" && exact_literal(&donor)? != exact_literal(w)? {
+        return Err(invalid("derived assertion changed literal bytes").into());
+    }
+    let admitted = if split == "development" || w.act == "query" {
+        opened.contains(&donor)
+    } else {
+        opened.iter().any(|e| {
+            e.act == donor.act && e.relation == donor.relation && e.template == donor.template
+        })
+    };
+    if !admitted {
+        return Err(
+            invalid("derived donor not in exact opened pool/declared fresh frame pool").into(),
+        );
+    }
+    Ok(())
+}
+fn validate_supported_origins(
+    plan: &Plan,
+    origin: &Value,
+    bundle_sha: &str,
+    opened: &[WireExample],
+) -> Result<()> {
+    let histories = origin["histories"]
+        .as_array()
+        .ok_or_else(|| invalid("derived histories absent"))?;
+    if origin["schema"] != "uor-r4.supported-current-role-source-origin/1"
+        || origin["policy"] != "supported-current-role/1"
+        || origin["source_bundle_manifest_sha256"] != bundle_sha
+        || histories.len() != plan.histories.len()
+    {
+        return Err(invalid("derived source origin scope differs").into());
+    }
+    for (h, r) in plan.histories.iter().zip(histories) {
+        if r["history"] != h.id {
+            return Err(invalid("derived history chronology differs").into());
+        }
+        for (key, wires) in [("turns", &h.turns), ("queries", &h.queries)] {
+            let receipts = r[key]
+                .as_array()
+                .ok_or_else(|| invalid("derived wire receipts absent"))?;
+            if receipts.len() != wires.len() {
+                return Err(invalid("derived wire count differs").into());
+            }
+            for (ordinal, (w, receipt)) in wires.iter().zip(receipts).enumerate() {
+                validate_origin_wire(w, receipt, ordinal, &plan.split, opened)?;
+            }
+        }
+    }
+    Ok(())
 }
 fn example(w: &WireExample) -> Result<Example> {
     Ok(Example {
@@ -192,7 +343,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     let histories = if a.split == "development" { 64 } else { 16 };
     if plan.schema != "uor-r4.raw-natural-reader-construction-plan/1"
         || plan.split != a.split
-        || plan.source_policy != "original-assertion-cues/raw-queries/all-source-candidates/1"
+        || plan.source_policy != a.assertion_query_policy.source_policy()
         || plan.histories.len() != histories
     {
         return Err(invalid("construction plan scope/count differs").into());
@@ -227,6 +378,27 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             .filter_map(|x| x["text"].as_str())
             .map(str::to_owned),
     );
+    let derived_origin = if a.assertion_query_policy == AssertionQueryPolicy::SupportedCurrentRole {
+        let report = read_json(&a.construction_plan.join("report.json"))?;
+        let bytes = fs::read(a.construction_plan.join("derived-source-origin.json"))?;
+        let digest = sha256_bytes(&bytes);
+        if report["derived_source_origin_sha256"] != digest
+            || report["plan_sha256"] != sha256_bytes(&rawplan)
+            || report["assertion_query_policy"] != "supported-current-role/1"
+            || report["source_bundle_manifest_sha256"] != a.curriculum_manifest_sha256
+        {
+            return Err(invalid("sealed authorer source/plan receipt binding differs").into());
+        }
+        let origin: Value = serde_json::from_slice(&bytes)?;
+        let pool=opened["training"].as_array().ok_or_else(||invalid("training absent"))?.iter()
+            .chain(opened["development"].as_array().ok_or_else(||invalid("development absent"))?)
+            .chain(repeats).map(|v|serde_json::from_value::<WireExample>(json!({"text":v["text"],"relation":v["relation"],"act":v["act"],"template":v["template"]})))
+            .collect::<std::result::Result<Vec<_>,_>>()?;
+        validate_supported_origins(&plan, &origin, &a.curriculum_manifest_sha256, &pool)?;
+        Some((origin, digest))
+    } else {
+        None
+    };
     let mut excluded_fingerprints = BTreeSet::new();
     let mut exposure_receipts = Vec::new();
     for exposed in &a.exposed_roots {
@@ -303,7 +475,10 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             if w.text.is_empty() || tok.encode(&w.text).len() > 128 {
                 return Err(invalid("raw turn byteBPE budget").into());
             }
-            if a.split == "development" && !open_pool.contains(&w.text) {
+            if a.assertion_query_policy == AssertionQueryPolicy::RetainedOriginal
+                && a.split == "development"
+                && !open_pool.contains(&w.text)
+            {
                 return Err(invalid(
                     "development text not in declared open training/development pool",
                 )
@@ -485,6 +660,9 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     let inputs = json!({"schema":"uor-r4.native-source-bank-probe-input/1","cases":runtime});
     let lab = json!({"schema":"uor-r4.native-source-bank-labels/1","protocol":"uor-r4.literal-role-dialogue/2","membership_only":true,"cases":labels});
     let ctx = json!({"schema":"uor-r4.geometric-bank-context-data/1","split":a.split,"layout_policy":"raw-natural-allbank-pairs/1","cases":context});
+    if let Some((origin, _)) = &derived_origin {
+        write_json(a, "derived-source-origin.json", origin)?;
+    }
     write_json(a, "inputs.json", &inputs)?;
     write_json(a, "labels.json", &lab)?;
     write_json(a, "context-data.json", &ctx)?;
@@ -510,7 +688,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         return Err(invalid("native input changed during preparation").into());
     }
     Ok(
-        json!({"schema":"uor-r4.native-bank-observation-panel/1","status":"COMPLETED","split":a.split,"cases":histories*2,"samebank_query_pairs":histories,"single_record_episode_count":0,"multi_record_episode_count":histories*2,"query_counts":{"job":histories,"where":histories},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"tokenizer_sha256":tokenizer_sha,"native_parent_manifest_sha256":parent_manifest_sha,"construction_plan_manifest_sha256":a.construction_manifest_sha256,"construction_plan_sha256":sha256_bytes(&rawplan),"curriculum_manifest_sha256":a.curriculum_manifest_sha256,"exposed_roots":exposure_receipts,"semantic_packet_fingerprints":semantic,"cue_origin_policy":"original-assertion-bytes/bound-byteBPE/1","raw_cue_provenance_sha256":sha256_file(&a.out.join("raw-cue-provenance.json"))?,"inputs_sha256":sha256_file(&a.out.join("inputs.json"))?,"labels_sha256":sha256_file(&a.out.join("labels.json"))?,"context_data_sha256":sha256_file(&a.out.join("context-data.json"))?,"trusted_binding_sha256":a.trusted_binding_sha256,"native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE;source-preparation-only","fresh_scope":"separate preauthored prospective histories;exact source/semantic-packet exclusion;no global pretraining exclusion claim","elapsed_seconds":t.elapsed().as_secs_f64()}),
+        json!({"schema":"uor-r4.native-bank-observation-panel/1","status":"COMPLETED","split":a.split,"cases":histories*2,"samebank_query_pairs":histories,"single_record_episode_count":0,"multi_record_episode_count":histories*2,"query_counts":{"job":histories,"where":histories},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"tokenizer_sha256":tokenizer_sha,"native_parent_manifest_sha256":parent_manifest_sha,"construction_plan_manifest_sha256":a.construction_manifest_sha256,"construction_plan_sha256":sha256_bytes(&rawplan),"curriculum_manifest_sha256":a.curriculum_manifest_sha256,"exposed_roots":exposure_receipts,"semantic_packet_fingerprints":semantic,"assertion_query_policy":a.assertion_query_policy,"source_policy":plan.source_policy,"derived_source_origin_sha256":derived_origin.as_ref().map(|(_,sha)|sha),"source_origin":if derived_origin.is_some(){"prospectively authored explicit-current-role utterances;retained donor literal bytes/chronology;not original donor utterance bytes"}else{"retained original assertion/question bytes"},"fresh_payload_novelty_claimed":false,"cue_origin_policy":if derived_origin.is_some(){"prospectively-authored-current-role-bytes/bound-byteBPE/2"}else{"original-assertion-bytes/bound-byteBPE/1"},"raw_cue_provenance_sha256":sha256_file(&a.out.join("raw-cue-provenance.json"))?,"inputs_sha256":sha256_file(&a.out.join("inputs.json"))?,"labels_sha256":sha256_file(&a.out.join("labels.json"))?,"context_data_sha256":sha256_file(&a.out.join("context-data.json"))?,"trusted_binding_sha256":a.trusted_binding_sha256,"native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE;source-preparation-only","fresh_scope":"separate preauthored prospective histories;exact source/semantic-packet exclusion;no global pretraining exclusion claim","elapsed_seconds":t.elapsed().as_secs_f64()}),
     )
 }
 fn main() -> Result<()> {
@@ -558,4 +736,115 @@ fn main() -> Result<()> {
     report_output::seal(&a.out)?;
     report_output::verify(&a.out)?;
     result.map(|_| ())
+}
+
+#[cfg(test)]
+mod supported_current_role_panel_tests {
+    use super::*;
+    fn write(text: &str, template: &str) -> WireExample {
+        WireExample {
+            text: text.into(),
+            template: Some(template.into()),
+            relation: "job".into(),
+            act: "assert".into(),
+        }
+    }
+    fn receipt(donor: &WireExample, authored: &WireExample) -> Value {
+        json!({"ordinal":0,"donor_construction_wire":donor,"authored_wire":authored,
+            "donor_text_sha256":sha256_bytes(donor.text.as_bytes()),
+            "origin":"prospectively authored explicit-current-role frame/question;not retained original assertion bytes"})
+    }
+    #[test]
+    fn opt_in_preserves_legacy_default_and_rejects_unknown_policy() -> Result<()> {
+        assert!(AssertionQueryPolicy::default() == AssertionQueryPolicy::RetainedOriginal);
+        let supported: AssertionQueryPolicy = serde_json::from_str("\"supported-current-role/1\"")?;
+        assert!(supported == AssertionQueryPolicy::SupportedCurrentRole);
+        assert!(serde_json::from_str::<AssertionQueryPolicy>("\"silently-relabeled\"").is_err());
+        Ok(())
+    }
+    #[test]
+    fn donor_bytes_literal_and_actual_authored_wire_are_bound() -> Result<()> {
+        let donor = write("I work as azure orchard.", "I work as {v}.");
+        let authored = write("My current job is azure orchard.", "My current job is {v}.");
+        let r = receipt(&donor, &authored);
+        validate_origin_wire(&authored, &r, 0, "development", &[donor.clone()])?;
+        let mut bad = r.clone();
+        bad["donor_text_sha256"] = json!("wrong");
+        assert!(validate_origin_wire(&authored, &bad, 0, "development", &[donor.clone()]).is_err());
+        let changed = write("My current job is copper oasis.", "My current job is {v}.");
+        assert!(validate_origin_wire(
+            &changed,
+            &receipt(&donor, &changed),
+            0,
+            "development",
+            &[donor.clone()]
+        )
+        .is_err());
+        assert!(validate_origin_wire(&changed, &r, 0, "development", &[donor.clone()]).is_err());
+        assert!(validate_origin_wire(&authored, &r, 1, "development", &[donor]).is_err());
+        Ok(())
+    }
+    #[test]
+    fn prospective_fresh_value_requires_known_frame_without_claiming_exact_text() -> Result<()> {
+        let opened = write("I work as old value.", "I work as {v}.");
+        let donor = write("I work as new value.", "I work as {v}.");
+        let authored = write("My current job is new value.", "My current job is {v}.");
+        let r = receipt(&donor, &authored);
+        validate_origin_wire(&authored, &r, 0, "fresh", &[opened.clone()])?;
+        assert!(validate_origin_wire(&authored, &r, 0, "development", &[opened]).is_err());
+        assert!(validate_origin_wire(&authored, &r, 0, "fresh", &[]).is_err());
+        Ok(())
+    }
+    #[test]
+    fn origin_address_and_role_action_conflations_are_rejected() -> Result<()> {
+        for text in [
+            "What city am I from?",
+            "What is my address?",
+            "What town am I from?",
+        ] {
+            let w = WireExample {
+                text: text.into(),
+                template: Some(text.into()),
+                relation: "home".into(),
+                act: "query".into(),
+            };
+            assert!(supported_wire_contract(&w).is_err());
+        }
+        let mut w = write("My current job is azure orchard.", "My current job is {v}.");
+        supported_wire_contract(&w)?;
+        w.act = "update".into();
+        assert!(supported_wire_contract(&w).is_err());
+        w.act = "assert".into();
+        w.relation = "home".into();
+        assert!(supported_wire_contract(&w).is_err());
+        Ok(())
+    }
+    #[test]
+    fn all_history_wires_and_bundle_identity_are_required() -> Result<()> {
+        let donor = write("I work as azure orchard.", "I work as {v}.");
+        let authored = write("My current job is azure orchard.", "My current job is {v}.");
+        let plan = Plan {
+            schema: "uor-r4.raw-natural-reader-construction-plan/1".into(),
+            split: "development".into(),
+            source_policy: AssertionQueryPolicy::SupportedCurrentRole
+                .source_policy()
+                .into(),
+            histories: vec![History {
+                id: "h1".into(),
+                stratum: "test".into(),
+                turns: vec![authored.clone()],
+                queries: vec![],
+            }],
+        };
+        let origin = json!({"schema":"uor-r4.supported-current-role-source-origin/1","policy":"supported-current-role/1","source_bundle_manifest_sha256":"bound","histories":[{"history":"h1","turns":[receipt(&donor,&authored)],"queries":[]}]});
+        validate_supported_origins(&plan, &origin, "bound", &[donor.clone()])?;
+        assert!(validate_supported_origins(&plan, &origin, "other", &[donor.clone()]).is_err());
+        let mut missing = origin.clone();
+        missing["histories"][0]["turns"] = json!([]);
+        assert!(validate_supported_origins(&plan, &missing, "bound", &[donor.clone()]).is_err());
+        let mut changed = origin;
+        changed["histories"][0]["history"] = json!("other");
+        assert!(validate_supported_origins(&plan, &changed, "bound", &[donor]).is_err());
+        Ok(())
+    }
 }

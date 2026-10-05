@@ -13,10 +13,10 @@
 //! Config: schema=uor-r4.native-bank-observation-args/1; bank={existing strict Args,
 //! mode:observation-broadbatch|observation-fit; maxcontext128/maxgen32; broad<=300s,
 //! 64MiB; fit<=1200s,512MiB}; frozen_end_bundle and exact metadata/period/stop SHA;
-//! data_scope=original-assertion-cues/raw-queries/all-source-candidates/1.
+//! data_scope explicitly selects retained original cues or supported current-role authored cues.
 //! Existing cue/prefix SHA fields required. Development128, sealed fresh32 REQUIRED
 //! before fit; this draft never draws data and does not inspect fresh until selection.
-//! Natural panel report requires cue_origin_policy=original-assertion-bytes/bound-byteBPE/1.
+//! Each panel report must bind the matching original/authored cue policy.
 //! Root-owned preparer must supply original-statement provenance receipt before execution.
 //! New fit authorization schema=uor-r4.native-bank-observation-fit-authorization/1:
 //! fit_admitted,admission_report_sha256,development_manifest_sha256,fresh_manifest_sha256,
@@ -749,7 +749,9 @@ mod reuse {
         }
         if a.schema != "uor-r4.native-bank-observation-args/1"
             || (!fit && !broad)
-            || a.data_scope != "original-assertion-cues/raw-queries/all-source-candidates/1"
+            || !matches!(a.data_scope.as_str(),
+                "original-assertion-cues/raw-queries/all-source-candidates/1"
+                | "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2")
             || a.bank.maximum_context_tokens != 128
             || a.bank.maximum_generation_tokens != 32
             || a.bank.maximum_seconds == 0
@@ -825,7 +827,7 @@ mod reuse {
                         .collect::<Vec<_>>();
                     if matching.len() != 1 {
                         return Err(invalid(
-                            "each raw Context needs one original-utterance receipt",
+                            "each raw Context needs one recorded-assertion receipt",
                         )
                         .into());
                     }
@@ -954,12 +956,26 @@ mod reuse {
         // dedicated task; old authored cue packets cannot masquerade as raw statements.
         // Root-owned preparation must hash actual original utterance bytes/tokenization;
         // this field is provenance admission, never an inference filter.
-        let panel_report = read_json(&a.bank.development_panel.join("report.json"))?;
-        if panel_report["cue_origin_policy"] != "original-assertion-bytes/bound-byteBPE/1" {
+        let expected_cue_origin = match a.data_scope.as_str() {
+            "original-assertion-cues/raw-queries/all-source-candidates/1" => {
+                "original-assertion-bytes/bound-byteBPE/1"
+            }
+            "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2" => {
+                "prospectively-authored-current-role-bytes/bound-byteBPE/2"
+            }
+            _ => return Err(invalid("unrecognized cue data scope").into()),
+        };
+        // Metadata admission does not evaluate fresh predictions or use its labels.
+        for panel in [&a.bank.development_panel, &a.bank.fresh_panel] {
+            let panel_report = read_json(&panel.join("report.json"))?;
+            if panel_report["cue_origin_policy"] != expected_cue_origin
+            || (a.data_scope == "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+                && panel_report["source_policy"] != a.data_scope) {
             return Err(invalid(
                 "natural cue construction receipt absent; no synthetic Memory-line fallback",
             )
             .into());
+        }
         }
         // Validate all frozen sidecars against original loaded parent BEFORE rebinding payloads.
         let oldcue = cue_native_load(
@@ -990,7 +1006,7 @@ mod reuse {
         write_json(
             &a.bank.out,
             "frozen-inputs.json",
-            &json!({"schema":a.schema,"host":std::env::consts::OS,"architecture":std::env::consts::ARCH,"executable_sha256":sha256_file(&executable()?.0)?,"executable_lookup":executable()?.1,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"mode":a.bank.mode,"input_sha256":inputs,"frozen_sidecars":f.receipt,"data_scope":a.data_scope,"validated_original_cue_records":raw_cues,"active_families":ROOT_FAMILIES,"learning_seed":a.learning_seed,"learning_schedule":schedule,"learning_schedule_sha256":schedule_sha,"initialization":"same unchanged learned parent;no random root perturbation","updates":if a.bank.mode=="observation-fit"{64}else{0},"fresh_predictions":"NOT_RUN_UNTIL_SELECTION","configuration_subset_sha256":sha256_bytes(&serde_json::to_vec(&json!({"scope":a.data_scope,"bounds":[a.bank.maximum_context_tokens,a.bank.maximum_generation_tokens],"frozen":f.receipt}))?),"panel_layout_policy":NATURAL_PANEL_LAYOUT,"development_allbank_rows":128,"development_adjacent_query_pairs":64,"runtime_packet_schema":"uor-r4.native-source-bank-probe-input/1","membership_labels_runtime":false}),
+            &json!({"schema":a.schema,"host":std::env::consts::OS,"architecture":std::env::consts::ARCH,"executable_sha256":sha256_file(&executable()?.0)?,"executable_lookup":executable()?.1,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"mode":a.bank.mode,"input_sha256":inputs,"frozen_sidecars":f.receipt,"data_scope":a.data_scope,"validated_cue_records":raw_cues,"active_families":ROOT_FAMILIES,"learning_seed":a.learning_seed,"learning_schedule":schedule,"learning_schedule_sha256":schedule_sha,"initialization":"same unchanged learned parent;no random root perturbation","updates":if a.bank.mode=="observation-fit"{64}else{0},"fresh_predictions":"NOT_RUN_UNTIL_SELECTION","configuration_subset_sha256":sha256_bytes(&serde_json::to_vec(&json!({"scope":a.data_scope,"bounds":[a.bank.maximum_context_tokens,a.bank.maximum_generation_tokens],"frozen":f.receipt}))?),"panel_layout_policy":NATURAL_PANEL_LAYOUT,"development_allbank_rows":128,"development_adjacent_query_pairs":64,"runtime_packet_schema":"uor-r4.native-source-bank-probe-input/1","membership_labels_runtime":false}),
         )?;
         let fit = a.bank.mode == "observation-fit";
         let initial_evaluation_start = Instant::now();

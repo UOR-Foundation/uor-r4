@@ -28,6 +28,8 @@ struct Args {
     schema: String,
     #[serde(default)]
     mode: Option<String>,
+    #[serde(default)]
+    assertion_query_policy: AssertionQueryPolicy,
     input_bundle: PathBuf,
     input_manifest_sha256: String,
     exposed_roots: Vec<BoundRoot>,
@@ -38,6 +40,121 @@ struct Args {
     fresh_out: PathBuf,
     maximum_seconds: u64,
     maximum_report_bytes: usize,
+}
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+enum AssertionQueryPolicy {
+    #[default]
+    #[serde(rename = "retained-original/1")]
+    RetainedOriginal,
+    #[serde(rename = "supported-current-role/1")]
+    SupportedCurrentRole,
+}
+impl AssertionQueryPolicy {
+    fn source_policy(self) -> &'static str {
+        match self {
+            Self::RetainedOriginal => "original-assertion-cues/raw-queries/all-source-candidates/1",
+            Self::SupportedCurrentRole => {
+                "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+            }
+        }
+    }
+}
+const CURRENT_JOB_QUERIES: [&str; 6] = [
+    "What is my current job?",
+    "What job do I currently have?",
+    "What is my job now?",
+    "Which job do I have now?",
+    "Remind me of my current job.",
+    "Tell me my current job.",
+];
+const CURRENT_HOME_QUERIES: [&str; 6] = [
+    "Where do I currently live?",
+    "Where do I live now?",
+    "What is my current residence?",
+    "Remind me where I currently live.",
+    "Tell me where I live now.",
+    "Where is my current home?",
+];
+fn supported_wire(donor: &Wire, pair_index: usize) -> Result<Wire> {
+    let template = match (donor.relation.as_str(), donor.act.as_str()) {
+        ("job", "assert") => "My current job is {v}.",
+        ("job", "update") => "My current job has changed to {v}.",
+        ("home", "assert") => "I currently live in {v}.",
+        ("home", "update") => "I now live in {v}.",
+        ("job", "query") => CURRENT_JOB_QUERIES[pair_index % CURRENT_JOB_QUERIES.len()],
+        ("home", "query") => CURRENT_HOME_QUERIES[pair_index % CURRENT_HOME_QUERIES.len()],
+        _ => return Err(invalid("unsupported current-role relation/action").into()),
+    };
+    let text = if donor.act == "query" {
+        template.to_owned()
+    } else {
+        template.replace("{v}", literal(donor)?)
+    };
+    Ok(Wire {
+        text,
+        relation: donor.relation.clone(),
+        act: donor.act.clone(),
+        template: Some(template.into()),
+    })
+}
+fn supported_contract(w: &Wire) -> Result<()> {
+    let valid = match (w.relation.as_str(), w.act.as_str()) {
+        ("job", "assert") => {
+            w.template.as_deref() == Some("My current job is {v}.") && literal(w).is_ok()
+        }
+        ("job", "update") => {
+            w.template.as_deref() == Some("My current job has changed to {v}.")
+                && literal(w).is_ok()
+        }
+        ("home", "assert") => {
+            w.template.as_deref() == Some("I currently live in {v}.") && literal(w).is_ok()
+        }
+        ("home", "update") => {
+            w.template.as_deref() == Some("I now live in {v}.") && literal(w).is_ok()
+        }
+        ("job", "query") => {
+            CURRENT_JOB_QUERIES.contains(&w.text.as_str())
+                && w.template.as_deref() == Some(w.text.as_str())
+        }
+        ("home", "query") => {
+            CURRENT_HOME_QUERIES.contains(&w.text.as_str())
+                && w.template.as_deref() == Some(w.text.as_str())
+        }
+        _ => false,
+    };
+    if !valid {
+        return Err(invalid("assertion/question does not establish supported current role").into());
+    }
+    Ok(())
+}
+fn apply_supported_policy(histories: &mut [History]) -> Result<Vec<Value>> {
+    let mut origins = Vec::new();
+    for (index, history) in histories.iter_mut().enumerate() {
+        let mut turns = Vec::new();
+        let mut queries = Vec::new();
+        for (kind, packets) in [
+            ("turn", &mut history.turns),
+            ("query", &mut history.queries),
+        ] {
+            for (ordinal, wire) in packets.iter_mut().enumerate() {
+                let donor = wire.clone();
+                let authored = supported_wire(&donor, index / 2)?;
+                supported_contract(&authored)?;
+                if kind == "turn" && literal(&donor)? != literal(&authored)? {
+                    return Err(invalid("supported rewrite changed literal bytes").into());
+                }
+                let receipt = json!({"ordinal":ordinal,"donor_construction_wire":donor,"donor_text_sha256":sha256_bytes(wire.text.as_bytes()),"authored_wire":authored,"origin":"prospectively authored explicit-current-role frame/question;not retained original assertion bytes"});
+                if kind == "turn" {
+                    turns.push(receipt);
+                } else {
+                    queries.push(receipt);
+                }
+                *wire = authored;
+            }
+        }
+        origins.push(json!({"history":history.id,"turns":turns,"queries":queries}));
+    }
+    Ok(origins)
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -469,6 +586,13 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             qpair(&train, i)?,
         ));
     }
+    let (development_origins, fresh_origins) = match a.assertion_query_policy {
+        AssertionQueryPolicy::RetainedOriginal => (Vec::new(), Vec::new()),
+        AssertionQueryPolicy::SupportedCurrentRole => (
+            apply_supported_policy(&mut development)?,
+            apply_supported_policy(&mut fresh)?,
+        ),
+    };
     let mut dev_fp = BTreeSet::new();
     for h in &development {
         for fp in semantic_history(h)? {
@@ -532,15 +656,33 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         (&a.development_out, "development", &development, &dev_fp),
         (&a.fresh_out, "fresh", &fresh, &fresh_fp),
     ] {
-        let plan = json!({"schema":"uor-r4.raw-natural-reader-construction-plan/1","split":split,"source_policy":"original-assertion-cues/raw-queries/all-source-candidates/1","histories":histories});
+        let plan = json!({"schema":"uor-r4.raw-natural-reader-construction-plan/1","split":split,"source_policy":a.assertion_query_policy.source_policy(),"histories":histories});
         let planbytes = serde_json::to_vec_pretty(&plan)?;
-        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"source_origin":"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions","source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
+        let origins = if split == "development" {
+            &development_origins
+        } else {
+            &fresh_origins
+        };
+        let origin_bytes = if a.assertion_query_policy == AssertionQueryPolicy::SupportedCurrentRole
+        {
+            Some(serde_json::to_vec_pretty(
+                &json!({"schema":"uor-r4.supported-current-role-source-origin/1","policy":a.assertion_query_policy,"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":origins,"scope":"original donor values/chronology retained;assertion and query frames newly authored;payload novelty not claimed"}),
+            )?)
+        } else {
+            None
+        };
+        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"fresh_payload_novelty_claimed":false,"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
         let rb = serde_json::to_vec_pretty(&receipt)?;
         let eb = serde_json::to_vec_pretty(
             &json!({"rows":eligibility.iter().filter(|x|histories.iter().any(|h|x["history"]==h.id)).collect::<Vec<_>>()}),
         )?;
-        if planbytes.len() + rb.len() + eb.len() > a.maximum_report_bytes {
+        if planbytes.len() + rb.len() + eb.len() + origin_bytes.as_ref().map_or(0, Vec::len)
+            > a.maximum_report_bytes
+        {
             return Err(invalid("source plan report cap").into());
+        }
+        if let Some(bytes) = origin_bytes {
+            fs::write(out.join("derived-source-origin.json"), bytes)?;
         }
         fs::write(out.join("plan.json"), planbytes)?;
         fs::write(out.join("report.json"), rb)?;
@@ -714,5 +856,148 @@ fn main() -> Result<()> {
         input_bundle(serde_json::from_value(value)?)
     } else {
         author(serde_json::from_value(value)?)
+    }
+}
+
+#[cfg(test)]
+mod supported_current_role_tests {
+    use super::*;
+    #[test]
+    fn rejects_unentailed_question_aliases_and_wrong_roles() -> Result<()> {
+        for text in [
+            "Where am I from?",
+            "What is my address?",
+            "What town do I live in?",
+            "What field do I work in?",
+            "What tasks do I do?",
+        ] {
+            for role in ["job", "home"] {
+                assert!(supported_contract(&Wire {
+                    text: text.into(),
+                    relation: role.into(),
+                    act: "query".into(),
+                    template: Some(text.into())
+                })
+                .is_err());
+            }
+        }
+        for text in CURRENT_JOB_QUERIES {
+            assert!(supported_contract(&Wire {
+                text: text.into(),
+                relation: "home".into(),
+                act: "query".into(),
+                template: Some(text.into())
+            })
+            .is_err());
+        }
+        for text in CURRENT_HOME_QUERIES {
+            assert!(supported_contract(&Wire {
+                text: text.into(),
+                relation: "job".into(),
+                act: "query".into(),
+                template: Some(text.into())
+            })
+            .is_err());
+        }
+        Ok(())
+    }
+    #[test]
+    fn explicit_assertion_and_queries_preserve_literal_role_act() -> Result<()> {
+        for role in ["job", "home"] {
+            let mut write_templates = BTreeSet::new();
+            for act in ["assert", "update"] {
+                let old = Wire {
+                    text: "Legacy cedar cedar meadow meadow.".into(),
+                    relation: role.into(),
+                    act: act.into(),
+                    template: Some("Legacy {v}.".into()),
+                };
+                let new = supported_wire(&old, 0)?;
+                supported_contract(&new)?;
+                assert_eq!(literal(&old)?, literal(&new)?);
+                assert_eq!(old.relation, new.relation);
+                assert_eq!(old.act, new.act);
+                assert!(write_templates.insert(new.template.clone()));
+                let mut wrong_act = new;
+                wrong_act.act = if act == "assert" { "update" } else { "assert" }.into();
+                assert!(supported_contract(&wrong_act).is_err());
+            }
+            for i in 0..6 {
+                let old = Wire {
+                    text: "Legacy question?".into(),
+                    relation: role.into(),
+                    act: "query".into(),
+                    template: None,
+                };
+                supported_contract(&supported_wire(&old, i)?)?;
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn policy_default_and_paired_history_chronology_are_explicit() -> Result<()> {
+        assert_eq!(
+            AssertionQueryPolicy::default(),
+            AssertionQueryPolicy::RetainedOriginal
+        );
+        let j = Wire {
+            text: "Legacy cedar.".into(),
+            relation: "job".into(),
+            act: "assert".into(),
+            template: Some("Legacy {v}.".into()),
+        };
+        let h = Wire {
+            text: "Legacy meadow.".into(),
+            relation: "home".into(),
+            act: "assert".into(),
+            template: Some("Legacy {v}.".into()),
+        };
+        let update = Wire {
+            text: "Legacy copper.".into(),
+            relation: "job".into(),
+            act: "update".into(),
+            template: Some("Legacy {v}.".into()),
+        };
+        let queries = vec![
+            Wire {
+                text: "Where am I from?".into(),
+                relation: "home".into(),
+                act: "query".into(),
+                template: None,
+            },
+            Wire {
+                text: "What tasks do I do?".into(),
+                relation: "job".into(),
+                act: "query".into(),
+                template: None,
+            },
+        ];
+        let mut histories = chronologies("pair", "version", j, h.clone(), vec![update, h], queries);
+        let before = histories.clone();
+        let origins = apply_supported_policy(&mut histories)?;
+        assert_eq!(origins.len(), 2);
+        for (old, new) in before.iter().zip(&histories) {
+            for (old, new) in old.turns.iter().zip(&new.turns) {
+                assert_eq!(old.relation, new.relation);
+                assert_eq!(old.act, new.act);
+                assert_eq!(literal(old)?, literal(new)?);
+            }
+        }
+        assert_eq!(
+            histories[0]
+                .queries
+                .iter()
+                .map(|q| &q.text)
+                .collect::<Vec<_>>(),
+            histories[1]
+                .queries
+                .iter()
+                .map(|q| &q.text)
+                .collect::<Vec<_>>()
+        );
+        assert!(origins[0]["turns"][0]["origin"]
+            .as_str()
+            .is_some_and(|s| s.contains("not retained original")));
+        Ok(())
     }
 }

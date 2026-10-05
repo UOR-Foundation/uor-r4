@@ -1,5 +1,11 @@
 # Current UOR-R4 research state
 
+## Reader data answerability correction supersedes old fit schedule — October 5
+
+The [semantic audit](geometric-natural-panel-admission-2026-10-05.md) finds origin20/4 and address26/6 development/fresh questions unsupported by residence-only assertions. Exact store/alphabet/context eligibility160/160 and a template-registry control do not prove English entailment. Two completed order fits remain synthetic literal-role pilots; the third was deliberately stopped at30updates and is excluded. No three-order or grounded-chat verdict. Fresh question wording was development-seen.
+
+**Next:** explicit opt-in supported-current-role source/panel policy retains donor values, updates/reassertions and two competing records while prospectively authoring current-job/current-residence statements/questions with exact derived provenance. Compile/test the changed Rust contract and run a new zero-update/control admission before any corrected-data fit. No runtime selected record, role label or gold mask is added; numerical geometry/learner is unchanged. Current120mincard is amended without resetting cumulative charges; CPU48/noGPU/resource bounds retained. Older dated fit-running entries below are superseded. GroundedSession untouched.
+
 ## Natural competing-bank reader admission passes; root learning starts — October 5
 
 The [natural-bank admission](geometric-natural-panel-admission-2026-10-05.md) now executes original assertions/raw questions with both current records admitted through actual reference-compiled Store construction. All 128 episodes/1,268 target positions pass exact native hard-forward parity, CE1.0606013661; the unchanged parent completes9/128 own-prefix answers. All three token/self/neighbor root families have finite nonzero combined Copy-context plus query/cue credit. Opposite-role query descriptors remain distinct; cue-only gradient magnitude is unmeasured. Fresh32 is prospectively sealed and predictions remain NOT_RUN at admission. This establishes a learning connection, not an attention gain.
