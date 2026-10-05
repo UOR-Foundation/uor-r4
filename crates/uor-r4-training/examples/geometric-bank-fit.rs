@@ -686,6 +686,7 @@ fn checked_args() -> Result<Args> {
     paths.extend(a.frozen_cue_bundle.iter());
     paths.extend(a.frozen_prefix_bundle.iter());
     paths.extend(a.source_end_incumbent_fit.iter());
+    paths.extend(a.cue_discrete_completion_root.iter());
     paths.extend(a.source_end_warmstart.iter().map(|w| &w.native_bundle));
     paths.extend(
         a.cue_calibration_warmstart
