@@ -7,9 +7,9 @@
 //!   [count=48] [max_words=24] [seed=1]
 //! chat-grade grade out=NEW_REPORT_ROOT model=ROOT/model tokenizer=T.json \
 //!   requests=PANEL.json[,MORE.json] [protocol=2] [max_new_tokens=64] \
-//!   [grader=qwen2.5:1.5b] [ollama_url=http://127.0.0.1:11434]
+//!   [grader=qwen2.5:1.5b] [ollama_url=http://127.0.0.1:11434] [device=cpu|cuda|metal]
 //! chat-grade reply out=NEW_REPORT_ROOT model=ROOT/model tokenizer=T.json \
-//!   requests=PANEL.json[,MORE.json] [protocol=2] [max_new_tokens=64]
+//!   requests=PANEL.json[,MORE.json] [protocol=2] [max_new_tokens=64] [device=cpu|cuda|metal]
 //! chat-grade grade-replies out=NEW_REPORT_ROOT replies=REPLIES.json \
 //!   [grader=qwen2.5:1.5b] [ollama_url=http://127.0.0.1:11434]
 //! ```
@@ -31,6 +31,14 @@
 //! the `reply_panel` record with each reply's generated ids, seconds and ids
 //! per second), so a served integer artifact's replies (`geometric-stack
 //! lut-chat`) can be compared with the float model's id for id.
+//!
+//! `device=` (`grade` and `reply`; default `cpu`, so a command without it is
+//! unchanged) is where the stack model generates its replies; the grader and
+//! everything else stay where they were. `cuda` needs a `--features cuda`
+//! build (ordinal 0 of CUDA_VISIBLE_DEVICES), `metal` a `--features metal`
+//! one; there is no fallback and TF32 is off. The device is opened before
+//! the report root is claimed and recorded in the report. Greedy replies can
+//! differ from the CPU's where float reduction order changes an argmax.
 
 #![forbid(unsafe_code)]
 
@@ -40,6 +48,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use candle_core::Device;
 use serde_json::{json, Value};
 use uor_r4_core::native_geometric::mmap_corpus::MmapCorpusReader;
 use uor_r4_core::report_output;
@@ -93,6 +102,35 @@ impl Args {
             Some(v) => v.parse().map_err(|_| format!("invalid {key}={v}").into()),
         }
     }
+
+    /// `device=cpu|cuda|metal` (default cpu): its name and the opened device.
+    fn device(&self) -> Result<(&'static str, Device), Error> {
+        let name = device_name(self.0.get("device").map(String::as_str))?;
+        let device = uor_r4_training::baseline_protocol::device(name)?;
+        candle_core::cuda::set_gemm_reduced_precision_f32(false);
+        Ok((name, device))
+    }
+}
+
+/// The name of `device=`, default `cpu`; anything else is refused.
+fn device_name(given: Option<&str>) -> Result<&'static str, Error> {
+    match given {
+        None | Some("cpu") => Ok("cpu"),
+        Some("cuda") => Ok("cuda"),
+        Some("metal") => Ok("metal"),
+        Some(other) => {
+            Err(format!("unknown device={other} (cpu, cuda or metal; no implicit fallback)").into())
+        }
+    }
+}
+
+/// The report record of where the replies were generated.
+fn device_record(name: &str) -> Value {
+    json!({
+        "device": name,
+        "tf32": false,
+        "cuda_visible_devices": std::env::var("CUDA_VISIBLE_DEVICES").ok(),
+    })
 }
 
 fn run() -> Result<(), Error> {
@@ -411,6 +449,7 @@ fn grade(arguments: &[String]) -> Result<(), Error> {
             "max_new_tokens",
             "grader",
             "ollama_url",
+            "device",
         ],
     )?;
     let out = PathBuf::from(args.required("out")?);
@@ -423,6 +462,7 @@ fn grade(arguments: &[String]) -> Result<(), Error> {
         .collect();
     let version: u8 = args.number("protocol", 2)?;
     let max_new_tokens: usize = args.number("max_new_tokens", 64)?;
+    let device = args.device()?;
     let grader = Grader {
         url: args
             .0
@@ -443,6 +483,7 @@ fn grade(arguments: &[String]) -> Result<(), Error> {
         &request_paths,
         version,
         max_new_tokens,
+        &device,
         &grader,
         started,
     );
@@ -475,6 +516,7 @@ fn answer(
     request_paths: &[PathBuf],
     version: u8,
     max_new_tokens: usize,
+    device: &Device,
 ) -> Result<Answered, Error> {
     let tokenizer = load_tokenizer(tokenizer_path)?;
     let protocol = DialogueProtocol::literal_roles_version(&tokenizer, version)?;
@@ -483,7 +525,7 @@ fn answer(
     for path in request_paths {
         requests.extend(load_requests(path)?);
     }
-    let model = StackModel::load(model_dir, &candle_core::Device::Cpu)?;
+    let model = StackModel::load(model_dir, device)?;
     let mut costs = Vec::new();
     let clock = Instant::now();
     let mut panel = reply_panel(
@@ -526,6 +568,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             "requests",
             "protocol",
             "max_new_tokens",
+            "device",
         ],
     )?;
     let out = PathBuf::from(args.required("out")?);
@@ -538,6 +581,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
         .collect();
     let version: u8 = args.number("protocol", 2)?;
     let max_new_tokens: usize = args.number("max_new_tokens", 64)?;
+    let (device_label, device) = args.device()?;
     report_output::claim(&out)?;
     let result = (|| -> Result<(), Error> {
         let answered = answer(
@@ -546,6 +590,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             &request_paths,
             version,
             max_new_tokens,
+            &device,
         )?;
         let report = json!({
             "schema": "uor-r4.chat-grade-reply/1",
@@ -557,6 +602,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             "requests": request_paths.iter().map(|p| json!({"path": p.display().to_string(), "sha256": sha256_file(p).ok()})).collect::<Vec<_>>(),
             "max_new_tokens": max_new_tokens,
             "decoding": "greedy over the float model's next-token scores (a pointer model's mixture), ties to the lower id; each step recomputes the whole window",
+            "device": device_record(device_label),
             "panel": answered.panel,
             "generation_seconds": answered.generation_seconds,
             "executable_sha256": sha256_file(&std::env::current_exe()?)?,
@@ -592,6 +638,7 @@ fn grade_into(
     request_paths: &[PathBuf],
     version: u8,
     max_new_tokens: usize,
+    (device_label, device): &(&'static str, Device),
     grader: &Grader,
     started: Instant,
 ) -> Result<(), Error> {
@@ -607,6 +654,7 @@ fn grade_into(
         request_paths,
         version,
         max_new_tokens,
+        device,
     )?;
     let judged = judge_panel(&panel, grader)?;
     let report = json!({
@@ -619,6 +667,7 @@ fn grade_into(
         "requests": request_paths.iter().map(|p| json!({"path": p.display().to_string(), "sha256": sha256_file(p).ok()})).collect::<Vec<_>>(),
         "max_new_tokens": max_new_tokens,
         "decoding": "greedy",
+        "device": device_record(device_label),
         "grader": {
             "engine": "ollama (local)", "model": grader.model, "digest": grader.digest()?,
             "role": "offline judge only; it never serves", "temperature": 0, "seed": 1,
@@ -829,5 +878,34 @@ mod tests {
             Some("Hello there".into())
         );
         assert_eq!(first_user_turn("Assistant: Hi"), None);
+    }
+
+    /// `device=` defaults to the CPU, takes three names and never falls back.
+    #[test]
+    fn the_device_defaults_to_the_cpu_and_never_falls_back() {
+        assert_eq!(device_name(None).expect("default"), "cpu");
+        assert_eq!(device_name(Some("cpu")).expect("cpu"), "cpu");
+        assert_eq!(device_name(Some("cuda")).expect("cuda"), "cuda");
+        assert_eq!(device_name(Some("metal")).expect("metal"), "metal");
+        for bad in ["gpu", "CUDA", "", "cuda:1"] {
+            assert!(device_name(Some(bad)).is_err(), "{bad}");
+        }
+        let keys = ["out", "device"];
+        let args = |given: &[&str]| {
+            Args::parse(
+                &given.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+                &keys,
+            )
+            .expect("arguments")
+        };
+        let (name, device) = args(&["out=r"]).device().expect("cpu by default");
+        assert_eq!(name, "cpu");
+        assert!(device.is_cpu());
+        assert!(args(&["out=r", "device=gpu"]).device().is_err());
+        #[cfg(not(feature = "cuda"))]
+        assert!(args(&["out=r", "device=cuda"]).device().is_err());
+        assert_eq!(device_record("cpu")["tf32"], json!(false));
+        // A mode's key list without `device` refuses it.
+        assert!(Args::parse(&["device=cpu".to_owned()], &["out"]).is_err());
     }
 }
