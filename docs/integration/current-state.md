@@ -1,5 +1,49 @@
 # Current UOR-R4 research state
 
+## Native discrete cue learning improves source choice — October 5
+
+The bounded discrete learner at numerical head
+`3be93ab7aeac4de4b3d6b07217d39e2e85ea43c8` completes on Linux x86_64 host
+`62979c12a0b4`: CPU16, CUDA hidden, worker90.142s, peak owned RSS2,305,454,080B.
+35 bank-fit tests, one sibling rejection test, rustfmt and release build pass;
+independent exact-head source review passes. Eight proposals are accepted, with
+fresh full128 credit after each acceptance; five distinct coefficients change.
+There are eight native discrete updates and zero Adam updates. No rejected trial
+was observed in this run.
+
+Ordinary development equal-episode answer/EOS CE falls0.966180663→0.925796035.
+Initial factual source80→87/128, both-source pairs24→29/64, first token70→74/128,
+complete own-prefix replies23→26/128 and both-complete pairs1→2/64. Exact row
+comparison finds seven source gains, four first-token gains and three complete
+reply gains, with no losses in those measures. All Sources remain admitted;
+source labels are post-prediction diagnostics, not proposal or acceptance gates.
+Frozen source/roots/prefix/Period/Stop payloads and actual consumed-address deltas
+are checked. Saved canonical analysis partitions the CE reduction: payload0.0212998821
+(52.7%), Period/EOS0.0190847461 (47.3%). Full row CE improves36, harms0, ties92;
+individual token CE worsens at one payload and eleven terminal positions. Thus the
+no-loss finding concerns row/correctness outcomes, not every token. All26 changed
+canonical source positions become correct (nine payload, seventeen terminal).
+
+The exposed diagnostic remains source15/32, complete1/32 and paired complete0/16;
+there is no fresh qualification or seed replication. Only one of the three complete
+reply gains also changes initial-source correctness, so source selection alone does
+not explain completion. This is useful native learning on structured current-role
+recall, not general chat, transferable attention or whole-path serving evidence.
+The exact writer already constructed the two-record bank.
+
+Preserve selected trial8, cue packed SHA256
+`49ea88b581763fa15a9d8646a8d8441b85d081a11b4db69aa1a0ed5ad831b3d6`,
+and every baseline/trial/diagnostic artifact under
+`/workspace/uor-r4/codex/geometric-cue-calibration-20261005/discrete-2`.
+The first attempt stopped before learning because transported AppleDouble files
+violated sealed input membership; only verified metadata companions were removed,
+real input hashes were unchanged, and the retry used a new report root.
+[PR1760](https://github.com/UOR-Foundation/uor-r4/pull/1760) is stacked and unmerged.
+Next inspect changed-bin coverage and payload/terminal/source-continuity attribution
+in the saved result, then freeze the discrete rule for a prospective transfer test.
+Do not repeat the same dose or treat the flat exposed diagnostic as family rejection.
+Shared compiler/session files remain untouched.
+
 ## Native cue quantum realizes directional credit — October 5
 
 The matched probe at numerical head `002c9a75a6ea76dd6348ae17067ce87787832082`

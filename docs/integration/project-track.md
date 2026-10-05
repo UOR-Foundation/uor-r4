@@ -16,10 +16,18 @@ counts and gives CE0.976522. Other959 cue coefficients and prefix/end payloads a
 frozen. Complete replies23/128 and exposed diagnostic source15/32, complete1/32
 remain unchanged. This is one-address directional evidence, not attention qualification.
 
-Next implement bounded native discrete-update calibration. Use gradient-proposed
-legal cue quanta, actual full-path development loss for accept/reject, baseline
-retention and per-row/pair harms. Keep source margins separate from token loss;
-terminal/alias contributions remain open. Preserve all candidates. Source-separated
+The bounded native discrete learner now executes at `3be93ab7`: eight accepted
+quarter updates across five coefficients reduce ordinary native CE to0.925796;
+source87/128, paired source29/64 and complete26/128 improve without lost cases.
+Exposed diagnostic source15/32 and complete1/32 stay flat. Preserve the selected
+native chain, all trials and the original baseline. This establishes a useful
+learning change at the current structured recall scope, not transferable attention.
+
+Next use saved changed-bin coverage and payload/terminal/source-continuity evidence
+to define the transfer discriminator. Freeze the learning rule before prospectively
+unexposed compositions/paraphrases are evaluated; do not select a model from the
+exposed32 or repeat dose without a causal decision. Keep full all-source choice,
+complete answer/EOS and paired opposite-role questions. Source-separated
 raw-history/compiler/store/emission integration, generated conversation and full
 D19/D11/D5 goals remain outstanding.
 

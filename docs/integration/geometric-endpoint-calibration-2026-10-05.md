@@ -173,3 +173,63 @@ receipt. Whole-work precharges remain cumulative, distinct from measured worker 
 ## Matched native cue quantum result
 
 The completed probe at `002c9a75` independently reloads baseline−0.25, preferred−0.5 and opposite0 at coefficient123. Native CE is respectively0.9661806631536866,0.9625709251001775 and0.9765216011535572. Development factual source counts80/81/79, paired source24/25/23 and first token70/71/69 move in the predicted direction. Complete own-prefix counts remain23 in all arms; exposed diagnostic selected versus parent is unchanged15/32 source and1/32 complete. Each proposal verifies the actual ±2²² Q24 consumed-address Copy change in10 rows. This is small directional native evidence, with zero optimizer updates; no transfer/chat qualification or no-loss assertion follows from net counts. Independent receipt review supports bounded discrete-update calibration, preserving baseline and row/pair harms. Worker20.030424s, peak1,698,410,496 bytes, CPU16/CUDA hidden; all30 driver plus one sibling test and release build pass. Durable report: `/workspace/uor-r4/codex/geometric-cue-calibration-20261005/quantum-1`. Source PR1756 and parents remain unmerged.
+
+
+## Native discrete cue learner — executed
+
+Numerical source `3be93ab7aeac4de4b3d6b07217d39e2e85ea43c8` adds explicit
+`cue-calibration-discrete-fit`: at most16 trials and8 accepted updates. Proposals
+are legal quarter steps ranked by absolute ordinary full128 gradient; ties use
+coordinate index. Actual independently reloaded native CE must improve by more
+than1e-9. Rejections are scoped to the current packed head and credit refreshes
+after acceptance. Gold source identity is used only after prediction. The original
+baseline, full candidate chains and row/pair harms remain available.
+
+All eight proposed updates are accepted, affecting indices776,123,563,97,769.
+Native equal-episode CE0.9661806631536866→0.9257960349428097 selects trial8.
+There are8 actual discrete updates,8 gradient passes and0 Adam updates; no measured
+rejection trajectory. Source80→87/128 and paired source24→29/64; first token70→74;
+complete23→26 and paired complete1→2/64. Exact source/first-token/complete outcomes
+have7/4/3 gains and0 losses. Only one complete gain overlaps initial-source gain;
+continuity and terminal competition therefore require separate attribution.
+The exposed diagnostic is unchanged15/32 source,1/32 complete and0/16 paired
+complete. This is one fixed structured recall fit, not seed replication, fresh
+transfer, general language, learned ingestion or an attention-family verdict.
+
+Independent exact-head source review passes. On the replacement existing shared
+pod, rustfmt,35 bank-fit tests,1 sibling rejection test and release build pass;
+checks take403.892s cold with peak owned RSS5,042,688,000B. Model worker90.142s
+peaks2,305,454,080B. CPU16/CUDA hidden; no GPU, session or grading job. Host
+`62979c12a0b4`, Linux x86_64. The previous pod stopped before this fit launched;
+there was no new pod creation. The first transported attempt failed before learning
+on AppleDouble metadata companions; a magic/companion/hash audit removes only those
+foreign files, and a new root preserves both attempts.
+
+Durable result: `/workspace/uor-r4/codex/geometric-cue-calibration-20261005/discrete-2`.
+Executable SHA256 `d33e1161bcbd6912af6ffe6f4fc02df4bd78c9e505c74d362a2f3c5f1ccc2c01`;
+config SHA256 `21df06d2358be4f4864d6ecec9fd02efd7d2107c3b20cfd51671dd3e9509df59`;
+selected cue SHA256 `49ea88b581763fa15a9d8646a8d8441b85d081a11b4db69aa1a0ed5ad831b3d6`.
+Checks are retained under `cue-discrete-checks-newhost-20261005` on the same store.
+Whole-work projections remain cumulative1,345,035,028ms/limit1,345,800,028ms;
+these are conservative ledger charges, separate from measured worker time.
+PR1760 and its stacked parents remain unmerged. Preserve this positive native
+parent and use saved attribution/coverage to define a prospective transfer test,
+without unchanged-dose fitting or shared-session edits.
+
+
+Independent saved-canonical review partitions the CE reduction into payload
+0.0212998821 (52.7%) and Period/EOS0.0190847461 (47.3%). Row CE improves36, worsens0,
+ties92; individual payload tokens improve313/worsen1/tie698, terminal tokens
+improve61/worsen11/tie184. All26 changed canonical factual-source selections become
+correct: nine payload and seventeen terminal positions. Do not describe this as
+pure retrieval loss or universal token-level preservation. Diagnostic address
+coverage remains UNVERIFIED: the replacement pod was shut down at21:08:10UTC while
+parent exact-head compile checks were running. Fit artifacts and checks already
+persisted on the network volume; main receipts were copied locally before shutdown.
+Parent delivery checks have no recovered final receipt and remain UNVERIFIED,
+separate from completed3be checks and fit. No new pod or laptop fallback was used.
+
+The owner's latest shared spending limit is at most four running pods and $8/hour
+across all labs. Until PR1758 merges, pod creation requires asking the owner on#820.
+Lease/status and live job checks precede resource use; a spending ceiling is not
+an automatic pod-creation instruction.
