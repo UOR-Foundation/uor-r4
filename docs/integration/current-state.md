@@ -1,5 +1,46 @@
 # Current UOR-R4 research state
 
+## Supported geometric reader: three orders complete, source credit next — October 5
+
+The [supported-reader transfer](geometric-supported-reader-transfer-2026-10-05.md)
+executes explicit current-role assertions, both current records and raw questions,
+with no supplied selected record. Development128 remains byte-identical to the
+corrected parent; the new32 panel covers four banks/eight write histories with
+matched familiar/reordered known-word queries. All160 answers are entailed and
+public tokenizer/alphabet/horizon controls pass. Maximum actual fresh episode124
+fits context128; the original131-token construction failed before fitting and is
+retained. This tests an exact-writer-resolved current bank, not unaided history
+retrieval or a learned integrated compiler.
+
+At executed numerical source4d9534a3,55 release tests and three examples pass.
+Full128 zero-update native admission reproduces CE1.138694423 and finite/nonzero
+token/self/neighbor root gradients; aggregate norms do not isolate cue-only credit.
+Three64-update/B8 orders from the same initialization select64 by development
+native full-answer/EOS CE before fresh predictions. Development initial source
+57→76/73/78 and complete10→12/11/6; fresh initial17→15/21/15 and complete1→2/3/1.
+All complete exit0 with frozen sidecars and native export/reload at five checkpoints.
+Saved-output reviews are separate from native reexecution. No fresh order winner,
+consistent transfer or chat qualification. Preserve every checkpoint/regression.
+
+**Next:** add offline record-provenance credit to existing geometric scores,
+retaining ordinary token loss and label-free runtime all-bank access. Independent
+source-view audit finds shared competing-record payload IDs at108/1012 development
+positions and160/340 fresh positions; eight fresh cases have every payload token
+ID somewhere in the other record. These are membership counts, not actual gradient
+or ordering evidence. Token-only loss need not require the correct record there.
+Use shared-token, label-swap and duplicate-alias controls; distinguish per-record
+max factual Copy ranking from aggregate source/token mass and its length bias.
+Keep endpoint/prefix failure diagnosis separate. The fresh32 is now exposed for a
+successor; no unchanged dose, runtime gold gate, source latch or geometry retirement.
+
+CPU-only existing Runpod Linux x86_64,48cores; measured wrappers746.529/768.869/
+704.449s, no GPU/Metal/laptop model CPU. One reserved135min full-work charge retains
+all prior preparation/build/retry/admission/fit/review costs:
+cumulative1,314,735,028/limit1,315,500,000ms. The numerical head is committed/shipped
+source, independent data/receipt checks pass, returned archives are bound in the
+report. Protected delivery and historical single-source/compiler binding remain
+separate obligations; GroundedSession and relation compiler are untouched.
+
 ## Reader data answerability correction supersedes old fit schedule — October 5
 
 The [semantic audit](geometric-natural-panel-admission-2026-10-05.md) finds origin20/4 and address26/6 development/fresh questions unsupported by residence-only assertions. Exact store/alphabet/context eligibility160/160 and a template-registry control do not prove English entailment. Two completed order fits remain synthetic literal-role pilots; the third was deliberately stopped at30updates and is excluded. No three-order or grounded-chat verdict. Fresh question wording was development-seen.

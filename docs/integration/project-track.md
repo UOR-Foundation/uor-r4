@@ -21,6 +21,19 @@ operator family throughout the programme.
 
 ### What changes and why
 
+**October 5 reader sequencing:** the [supported current-bank reader study](geometric-supported-reader-transfer-2026-10-05.md)
+completes three fixed episode orders on semantically entailed data. Development
+source selection improves, but transfer and complete replies remain unstable.
+The next attention change is offline record-provenance credit through the existing
+geometric score adapters, retaining ordinary token supervision and full label-free
+candidate admission. Shared-token and duplicate-alias controls distinguish this
+from token-only likelihood. Keep factual source ranking, chosen-token provenance,
+prefix progression and endpoint timing distinct. Reuse retained endpoint tools for
+their measured completion scope; do not count termination gains as retrieval.
+Then qualify coherent compiler/store/reader/emitter binding and generated-history
+conversation. This sequencing preserves the full D19/alpha goal and final D11/D5
+contract; it does not promote current-bank fixtures to chat or raw-history retrieval.
+
 The [October 1 evidence review](grounded-memory-evidence-2026-10-01.md) separates
 the useful components from the missing integration. Exact identity retrieval
 works on its bounded tests. emit-1 can use a supplied value, but semantic recall,
