@@ -122,6 +122,12 @@ not a warm-up artifact.
 Note the shape differs from the ladder's 96M run, which splits batch 32 over two
 GPUs (`data_parallel=2`); this is a single-GPU probe, not a ladder result.
 
+**No A100 or H100 was available** in the owner's account for this phase (both
+authorized pods are 2× RTX 4090). The A100 profile that motivated the work —
+matmul ~14% of a step, tensor cores barely used — is unchanged and untested
+here; the 4090 numbers above are the only measured ones, and a bf16 run on an
+A100/H100 is the first thing Phase 2 should measure when one is available.
+
 Why only 1.14–1.22×: at these shapes the matmul share of a step is ~14%, so even
 an infinitely fast GEMM cannot give more. The recurrence scan (~18%) and the
 fused read (~14%) do not use tensor cores at all — Phase 1 only halves the bytes
