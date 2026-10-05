@@ -211,7 +211,6 @@ struct Row {
     answer: String,
     /// The relation phrase each turn names, as the compiler would take it from the source.
     stmt_phrase: String,
-    question: String,
     q_phrase: String,
 }
 
@@ -279,7 +278,6 @@ fn build(per_relation: usize, seed: u64) -> Vec<Row> {
                 turns,
                 answer: v,
                 stmt_phrase: phrase.clone(),
-                question,
                 q_phrase,
             });
         }

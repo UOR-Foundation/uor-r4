@@ -1277,29 +1277,6 @@ pub fn relation_phrase(source: &str) -> Option<String> {
     }
 }
 
-/// Whether a turn opens with a cue that asks for something rather than states it.
-/// Imperatives and wh-words, so a question written without a `?` is still read as one.
-fn recall_cue(source: &str) -> bool {
-    const CUES: [&str; 12] = [
-        "what", "where", "who", "when", "which", "how", "tell me", "remind me", "do you",
-        "did i", "can you", "could you",
-    ];
-    let lower = source.trim_start().to_lowercase();
-    CUES.iter().any(|cue| lower.starts_with(cue))
-}
-
-/// Whether every word of a marked span already appears in the relation phrase — i.e. the
-/// span is the relation's own words rather than a value held for it.
-fn phrase_words(span_text: &str, phrase: &str) -> bool {
-    let p: Vec<String> = phrase.split_whitespace().map(|w| w.to_lowercase()).collect();
-    let words: Vec<String> = span_text
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(|w| w.to_lowercase())
-        .collect();
-    !words.is_empty() && words.iter().all(|w| p.contains(w))
-}
-
 /// The first derived relation ID. Chosen far above any identity ID (the closed table has
 /// 11 labels, so IDs are small) so a derived ID can never collide with a closed one, and
 /// so a derived ID is recognisable as derived.
@@ -2223,27 +2200,7 @@ impl SavedCompiler {
                     return Ok(table);
                 }
                 let op = self.op_action(source)?;
-                // A DERIVED-ADDRESS table action is NOT overridden by the op model.
-                //
-                // `unless_query` prefers the op's statement when it produces one ("the op
-                // model's statement is used unless the table reads a query"). That is right
-                // in the closed world, where both name the same labels. It is wrong for an
-                // open relation: the op model emits CLOSED labels only (measured), so it
-                // would overwrite an address derived from the turn's own words with a
-                // closed one — and the QUESTION, whose heads say NONE, then derives the
-                // phrase address and reads an empty slot. Measured: the fact written at
-                // closed id 3/6/7 while its question queried a derived id.
-                let table_derived = matches!(
-                    &table,
-                    CompiledAction::Assert { relation, .. }
-                        | CompiledAction::Correct { relation, .. }
-                        if *relation >= DERIVED_RELATION_ID_BASE
-                );
-                Ok(if statement(&op) && !table_derived {
-                    op
-                } else {
-                    table
-                })
+                Ok(if statement(&op) { op } else { table })
             }
             OpPolicy::UnlessQuery => {
                 let table = self.table_action(source)?;
@@ -2254,29 +2211,7 @@ impl SavedCompiler {
                     return Ok(table);
                 }
                 let op = self.op_action(source)?;
-                // A DERIVED-ADDRESS table action is NOT overridden by the op model.
-                //
-                // `unless_query` prefers the op's statement when it produces one. That is
-                // right in the closed world, where both name the same labels. It is wrong
-                // for an open relation: the op model emits CLOSED labels only (measured),
-                // so it would overwrite an address derived from the turn's own words with a
-                // closed one, and the QUESTION — whose heads say NONE — then derives the
-                // phrase address and reads an empty slot.
-                //
-                // THIS GUARD MUST LIVE HERE. It was first written into the TableStatements
-                // arm above, which sessions never take (they run op_policy=unless_query), so
-                // it was unreached and its "no effect" measurement was meaningless.
-                let table_derived = matches!(
-                    &table,
-                    CompiledAction::Assert { relation, .. }
-                        | CompiledAction::Correct { relation, .. }
-                        if *relation >= DERIVED_RELATION_ID_BASE
-                );
-                Ok(if statement(&op) && !table_derived {
-                    op
-                } else {
-                    table
-                })
+                Ok(if statement(&op) { op } else { table })
             }
         }
     }
