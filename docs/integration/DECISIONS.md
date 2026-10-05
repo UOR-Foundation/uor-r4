@@ -190,7 +190,9 @@ better mechanism that maintains our project goal of a geometric language model."
 ### Decision rule
 
 - **Never retire** an `enabler` or `selector` on a near-zero or negative delta. Repair the
-  wiring or change the instrument and re-measure.
+  wiring or change the instrument and re-measure. **Bounded by [D20](#d20--geometry-stays-first-the-no-loss-rule-is-suspended-only-after-exhaustion-so-a-measurement-can-decide),
+  which specifies the exhaustion precondition under which this clause and the next are suspended so
+  that one pre-registered contest can decide.**
 - Only a `count-table` or a correctly wired `primary-carrier` that is measurably
   net-negative is a removal candidate, and then on resource cost as much as accuracy.
 - Record the identified wiring defect with the delta, so a small number is never read as a
@@ -436,6 +438,10 @@ Context. Near misses on one configuration of mechanisms still under construction
 - **The native geometric engine** was set aside at 1.68M parameters, and never compared at matched capacity.
 
 1. **Gates promote; they never kill.**
+   - **Bounded by [D20](#d20--geometry-stays-first-the-no-loss-rule-is-suspended-only-after-exhaustion-so-a-measurement-can-decide)**:
+     after the exhaustion precondition is met and recorded, this clause and the FAIL relabelling below
+     are suspended for one pre-registered geometry-vs-matched-control contest, and the no-loss rule
+     resumes on its report.
    - A pre-registered gate decides only whether a mechanism enters the served or main-line model now.
    - A miss keeps the mechanism active, with its next diagnosed step recorded.
    - **Parking a mechanism family** needs a written root-cause case and the owner's OK.
@@ -880,3 +886,134 @@ evidence, delete artifacts or restore obsolete serving exceptions. Any later
 working change records the affected interface, costs and next discriminator
 prospectively. The existing sealed milestone stays fixed unless the owner
 explicitly changes it before a new candidate.
+
+---
+
+## D20 — Geometry stays first; the no-loss rule is suspended only after exhaustion, so a measurement can decide
+
+Owner: Casey · Drafted by: DeepSeek lab (agent) · Date: 2026-10-05 · **Owner decision, 2026-10-05.**
+
+Owner direction, quoted: *"move 1, please make the change, but document it clearly that geometric
+mechanisms will need to be prioritized and novel invention of geometric mechanisms will likely be
+needed, but if we have exhausted everything, we can suspend the rule until we have something
+working so we can measure and then we build the fix."*
+
+### 1. Priority is reaffirmed, and the expectation is raised
+
+- **Geometric mechanisms stay first.** The objective is unchanged: a geometric language model,
+  useful conversation/memory and coding/reasoning, ultimately frontier capability on consumer
+  M1-class laptops. D11/D5 serving, R4/S3/H4 state and transport, exact `Z[phi]`, typed
+  paired-H4/icosian geometry and UOR identity remain the declared mechanisms.
+- **Novel invention is expected, not merely tolerated.** D2's `enabler` class exists precisely
+  because a geometric mechanism's value may appear only once composed with a component that does
+  not yet exist. **Inventing that component is project work, not a diagnostic excuse.** A mechanism
+  parked as `enabler` carries an obligation to name the missing component and attempt to build it.
+  The measured record (`docs/research/retired-mechanisms-catalogue-2026-10-01.md` Part 0) shows the
+  opposite happened: items marked retired between 2026-09-19 and 2026-09-28 were **un-retired by D12
+  before any re-measurement**, and that gap — *"un-retired on policy, never re-tested"* — is named
+  there as the largest single risk to the programme. **D20 closes that gap by making re-measurement
+  the price of retention.**
+
+### 2. What "exhausted everything" means — the precondition, stated objectively
+
+Suspension under §3 requires **all five** of the following, recorded on the owning issue. Any one
+missing means the precondition is not met and the rule stays in force.
+
+1. **Every** mechanism in the barrier-assessment ledger (`synthesis.md` §3: ACTIVE, SAVED OPTION,
+   DORMANT-BUT-PROMISING) has a result from a **parameter- and compute-matched ordinary control** —
+   not a component result, not a non-learned-rule comparison, not an unreached code path.
+2. Every such result carries **≥3 seeds**. (The assessment's own rule; its completeness critique
+   found it violated at 2 seeds.)
+3. Every candidate's wiring is **verified reached in a real run** — a firing counter or equivalent —
+   so that "no effect" cannot mean "never executed". The `unless_query` precedence guard that was
+   written into an unreached policy arm, and the closed-label fallback that fired **0 times in 60
+   conversations**, are the recorded examples of why this is a precondition and not a formality.
+4. Each non-promoted mechanism has a **written root-cause case naming what would change the answer**,
+   not a wiring attribution alone.
+5. **Novel geometric candidates have been invented and tested to the same standard.** This is the
+   owner's explicit requirement: exhaustion is not "every existing mechanism failed", it is
+   "we built the missing components and invented the new geometric mechanisms, and they were
+   measured". A programme that has not attempted invention has not exhausted anything.
+
+### 3. The suspension — bounded, and triggered only by §2
+
+Once §2 is recorded complete, **and only then**, these three clauses are suspended:
+
+- `DECISIONS.md:158` (D2) — the near-zero-delta exemption.
+- `DECISIONS.md:192` (D2) — the *negative*-delta exemption. **A mechanism that measurably hurts may
+  lose.**
+- `DECISIONS.md:438/443` (D12) — "gates never kill", and the FAIL → "not yet promoted at that scope"
+  relabelling.
+
+**Purpose, in the owner's words: suspend "until we have something working so we can measure and then
+we build the fix."** The suspension exists to **produce a measurement**, not to end the geometric
+programme. It lapses on report, and §1 continues to govern throughout.
+
+**Nothing else is suspended.** D11/D5 serving constraints, evidence discipline, ≥3-seed rules,
+resource admission, preservation of negative results and protected delivery all remain in force.
+
+### 4. The measurement the suspension exists to permit
+
+**One pre-registered contest**, on `mqar-bench`, with the instrument change it requires: `enum
+ArmSpec` currently has a single variant and `arch: StackArch::Geometric` is hardcoded
+(`mqar-bench.rs:449-465, :570`), so the bench has **never** compared the geometric stack to a
+parameter-matched ordinary model — only to non-learned rules.
+
+```
+Arms        geometry ON (Lorentz read, rotation on) vs geometry OFF (Dot/L2, rotation off)
+Matching    equal parameters, equal tokens, equal data, >=3 seeds
+Metric      held-out nats, with the paired difference and its CI
+```
+
+**Decision rules — total and disjoint.** The completeness critique found the previous rules
+defective: Step 1's promote (≥10) and kill (both ≤15) could **both** fire, and the 16–29 band had
+**no action**. These cannot overlap and none is empty:
+
+```
+d = geometric - matched ordinary control, held-out nats
+
+d <= -0.01                      -> the geometric score mechanism is RETIRED from the critical path
+-0.01 < d < +0.01   (a tie)     -> RETIRED: no advantage demonstrated at this scope
+d >= +0.01, p<0.05, >=3 seeds   -> PROMOTED; the effect size becomes the claim
+```
+
+**A tie is a loss.** That single change is what makes the contest worth running, and it is the
+narrowest form of the suspension that can produce an answer.
+
+**Retirement means removal from the critical path and from claim language — not deletion.** Code,
+artifacts and the negative result are preserved. This is D12's "not yet promoted" with one
+difference: it stops counting as a reason to keep building on it.
+
+### 5. The exit condition
+
+The suspension **lapses automatically** when either holds:
+
+- a mechanism is promoted under §4, in which case **the no-loss rule resumes and the winning
+  geometric mechanism is carried forward**; or
+- the contest reports a tie or a loss, in which case **the fix is built for the measured defect**
+  rather than another mechanism added on top of it, and the rule resumes with that defect named.
+
+**"Something working" is the exit, and it is a measurement, not a policy.** If the contest says the
+geometric score mechanism does not beat a matched ordinary control at this scope, then the finding
+is *that*, recorded at its exact scope — and the geometric programme continues under §1 with a
+defect named instead of a rule suspended.
+
+### 6. Consequences
+
+- **D2's escape hatch is narrowed, not removed.** `enabler` and `selector` retain their meaning; what
+  changes is that an `enabler` claim now requires the missing component to be **attempted**, and a
+  `selector` claim requires its own instrument (decision-flip rate), per D2's existing table.
+- **D12's "never kill" becomes "never kill without a measurement".** A mechanism may still be parked
+  with the owner's OK; it may no longer be *retained against a matched-control result* without one.
+- **`formal_vocabulary.md:99`** — the `E8 = H4 x H4` row's *"architectural load-bearing is assumed;
+  held-out advantage remains unproven"* — is now **scheduled for test under §4** rather than standing
+  as a permanent exemption. The vocabulary's distinction between structural priority and measured
+  advantage stays normative.
+- **Nothing here changes the mission, the serving contract, or any historical result's scope.**
+
+**Effect, review and rollback.** Effective on protected delivery of this change. The documentation
+task adds no model compute and no new numerical result. Reverting D20 would restore the prior rules
+and would not invalidate new evidence or delete artifacts. The suspension is bounded by §3, triggered
+by §2 and ended by §5; it is not a standing repeal.
+
+Refs #820, #1552, #1746.
