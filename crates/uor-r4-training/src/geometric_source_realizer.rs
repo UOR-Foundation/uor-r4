@@ -4737,11 +4737,12 @@ mod tests {
             .ok_or_else(|| invalid("masked full-path cue graph absent"))?
             .to_vec1::<f32>()?;
         assert!(gradient.iter().all(|&v| v == 0.));
+        assert!(factual.actions.token_masses.iter().all(|m| m.token_id != 2));
         let unsupported = prepared.loss_bank_cue_source_end(
             &segments,
             &[5],
             &[4],
-            7,
+            2,
             &cue_weights,
             &cue,
             &prefix,
