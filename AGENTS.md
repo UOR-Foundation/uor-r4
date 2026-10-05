@@ -165,6 +165,8 @@ acceptance criteria and protected delivery requirements remain in force.
 
 ## Resources, verification and delivery
 
+Owner-funded Runpod GPU pods are seen, leased, created, shared and deleted only through `scripts/pod/uor-pod`, following [docs/labs/compute.md](docs/labs/compute.md) (GPU policy, placement, caps, takeover).
+
 Project complete preparation/build/fit/controls/evaluation/retries/checkpoint work before execution: context/data windows, wall time, CPU/threads, peak RAM, new/temporary/retained storage and stop margin. Charge the shared cumulative ledger; an issue or session does not reset it. Training duration is secondary to inference usefulness and efficiency, but authorization and machine ceilings still apply. Do not silently raise limits or incur external compute cost. Reuse valid binaries/checkpoints and preserve negative candidates. No CUDA/external GPU is authorized by this plan.
 
 Compile and exercise a changed Rust path with focused checks for real arithmetic, causality, serialization, interfaces and allocation risks. Typical commands use rustup-managed `~/.cargo/bin/cargo`: `cargo fmt --check`, a touched-package offline check and named focused tests. Run actual generated behavior for a model change. Run `python3 scripts/check_claim_wording.py` when editing capability claims. No blanket full suite, proof campaign, ledger/replay framework or corpus run is required for every edit.
