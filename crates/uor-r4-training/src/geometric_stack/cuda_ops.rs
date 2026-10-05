@@ -777,18 +777,24 @@ impl FusedRead {
         let write_excess = scaled && keep_excess;
         let excess = zeros::<f64>(device, if write_excess { square } else { 1 })?;
         if scaled {
-            launch(
-                device,
-                "read_lift",
-                rows,
-                &[
-                    Arg::F(query.slice(..)),
-                    Arg::F(kv.slice(..)),
-                    Arg::d(&query_lift),
-                    Arg::d(&key_lift),
-                    Arg::Dims(dims),
-                ],
-            )?;
+            let args = [
+                Arg::F(query.slice(..)),
+                Arg::F(kv.slice(..)),
+                Arg::d(&query_lift),
+                Arg::d(&key_lift),
+                Arg::Dims(dims),
+            ];
+            if legacy_read_kernels() {
+                launch(device, "read_lift", rows, &args)?;
+            } else {
+                launch_groups(
+                    device,
+                    "read_lift_staged",
+                    (rows.div_ceil(32), 1, 1),
+                    (32, 1, 1),
+                    &args,
+                )?;
+            }
         }
         let geometry = [
             u32_of(self.key, "key")?,
@@ -1025,20 +1031,27 @@ impl FusedRead {
             ],
         )?;
         if scaled {
-            launch(
-                device,
-                "read_key_self",
-                rows,
-                &[
-                    Arg::d(&d_scores),
-                    Arg::d(&pass.excess),
-                    Arg::F(av),
-                    Arg::d(&pass.query_lift),
-                    Arg::d(&pass.key_lift),
-                    Arg::d(&key_self),
-                    Arg::Dims(dims),
-                ],
-            )?;
+            let args = [
+                Arg::d(&d_scores),
+                Arg::d(&pass.excess),
+                Arg::F(av),
+                Arg::d(&pass.query_lift),
+                Arg::d(&pass.key_lift),
+                Arg::d(&key_self),
+                Arg::Dims(dims),
+            ];
+            let groups = self.batch * self.heads;
+            if legacy_read_kernels() || groups > 65_535 {
+                launch(device, "read_key_self", rows, &args)?;
+            } else {
+                launch_groups(
+                    device,
+                    "read_key_self_coalesced",
+                    (self.time.div_ceil(32), groups, 1),
+                    (32, 1, 1),
+                    &args,
+                )?;
+            }
         }
         self.launch_read(
             device,
@@ -1077,9 +1090,9 @@ impl FusedRead {
             } else {
                 launch_groups(
                     device,
-                    "read_dage_unrolled",
-                    ((self.heads * self.time).div_ceil(32), 1, 1),
-                    (32, 1, 1),
+                    "read_dage_staged",
+                    (self.time.div_ceil(32), self.heads, 1),
+                    (256, 1, 1),
                     &args,
                 )?;
             }

@@ -1058,13 +1058,23 @@ __device__ __forceinline__ void read_lower_tiles(
                 ? x[((u64)index * time + jr) * x_stride + x_offset + c] : 0.0f;
         }
         __syncthreads();
-        uint jn = min(32u, t_end - j0);
-        for (uint jj = 0; jj < jn; ++jj) {
-            float xv = xs[jj][cx];
-            uint j = j0 + jj;
-            #pragma unroll
-            for (uint k = 0; k < 4; ++k) {
-                if (j <= t0 + ty + 8 * k) acc[k] += gs[ty + 8 * k][jj] * xv;
+        if (j0 + 32 <= t0) {
+            // Below the diagonal tile: every j <= t, so no per-term test.
+            #pragma unroll 8
+            for (uint jj = 0; jj < 32; ++jj) {
+                float xv = xs[jj][cx];
+                #pragma unroll
+                for (uint k = 0; k < 4; ++k) acc[k] += gs[ty + 8 * k][jj] * xv;
+            }
+        } else {
+            uint jn = min(32u, t_end - j0);
+            for (uint jj = 0; jj < jn; ++jj) {
+                float xv = xs[jj][cx];
+                uint j = j0 + jj;
+                #pragma unroll
+                for (uint k = 0; k < 4; ++k) {
+                    if (j <= t0 + ty + 8 * k) acc[k] += gs[ty + 8 * k][jj] * xv;
+                }
             }
         }
         __syncthreads();
@@ -1157,14 +1167,25 @@ extern "C" __global__ void read_dkv_tiled(
             xs[r][cx] = xv;
         }
         __syncthreads();
+        float (*g)[33] = is_key ? gk : gv;
         uint tn = min(32u, time - t0);
-        for (uint tt = 0; tt < tn; ++tt) {
-            float xv = xs[tt][cx];
-            uint t = t0 + tt;
-            #pragma unroll
-            for (uint k = 0; k < 4; ++k) {
-                uint jj = ty + 8 * k;
-                if (t >= j0 + jj) acc[k] += (is_key ? gk[tt][jj] : gv[tt][jj]) * xv;
+        if (t0 >= j0 + 32 && tn == 32) {
+            // Past the diagonal tile: every t >= j, so no per-term test.
+            #pragma unroll 8
+            for (uint tt = 0; tt < 32; ++tt) {
+                float xv = xs[tt][cx];
+                #pragma unroll
+                for (uint k = 0; k < 4; ++k) acc[k] += g[tt][ty + 8 * k] * xv;
+            }
+        } else {
+            for (uint tt = 0; tt < tn; ++tt) {
+                float xv = xs[tt][cx];
+                uint t = t0 + tt;
+                #pragma unroll
+                for (uint k = 0; k < 4; ++k) {
+                    uint jj = ty + 8 * k;
+                    if (t >= j0 + jj) acc[k] += g[tt][jj] * xv;
+                }
             }
         }
         __syncthreads();
@@ -1183,31 +1204,125 @@ extern "C" __global__ void read_dkv_tiled(
     }
 }
 
-// read_dage with 32-thread blocks (spread over the SMs) and sixteen loads in
-// flight per thread; the f64 sum runs in the legacy order.
-extern "C" __global__ void read_dage_unrolled(const double* ds, float* d_aux, ReadDims d) {
-    uint id = blockIdx.x * blockDim.x + threadIdx.x;
+// read_dage over blocks of 256 threads per (32 consecutive distances, head).
+// For one (window, t) the 32 distances read 32 adjacent ds entries, so the
+// eight warps stage 64 (window, t) rows at a time with coalesced loads and
+// warp 0 adds them, lane = distance, in the legacy (window, t) order. Rows
+// with t < distance stage +0.0; adding +0.0 leaves the f64 sum unchanged
+// (the sum starts at +0.0 and round-to-nearest addition never produces -0.0
+// from a +0.0 operand), so the result is the legacy sum bit for bit.
+extern "C" __global__ void read_dage_staged(const double* ds, float* d_aux, ReadDims d) {
+    __shared__ double staged[64][33];
     uint time = d.time;
-    if (id >= d.heads * time) return;
-    uint distance = id % time;
-    uint head = id / time;
+    uint head = blockIdx.y;
+    uint d0 = blockIdx.x * 32;
+    uint lane = threadIdx.x & 31;
+    uint warp = threadIdx.x >> 5;
+    uint distance = d0 + lane;
+    uint per = time - d0;
+    uint n = d.batch * per;
     double sum = 0.0;
-    u64 step = (u64)time + 1;
-    for (uint b = 0; b < d.batch; ++b) {
-        u64 index = (u64)b * d.heads + head;
-        const double* p = ds + (index * time + distance) * time;
-        uint count = time - distance;
-        uint i = 0;
-        for (; i + 16 <= count; i += 16) {
-            double v[16];
-            #pragma unroll
-            for (uint k = 0; k < 16; ++k) v[k] = p[(u64)(i + k) * step];
-            #pragma unroll
-            for (uint k = 0; k < 16; ++k) sum += v[k];
+    for (uint base = 0; base < n; base += 64) {
+        for (uint r = warp; r < 64; r += 8) {
+            uint i = base + r;
+            double v = 0.0;
+            if (i < n) {
+                uint b = i / per;
+                uint t = d0 + i % per;
+                if (t >= distance) {
+                    u64 index = (u64)b * d.heads + head;
+                    v = ds[(index * time + t) * time + (t - distance)];
+                }
+            }
+            staged[r][lane] = v;
         }
-        for (; i < count; ++i) sum += p[(u64)i * step];
+        __syncthreads();
+        if (warp == 0) {
+            uint m = min(64u, n - base);
+            for (uint r = 0; r < m; ++r) sum += staged[r][lane];
+        }
+        __syncthreads();
     }
-    d_aux[read_age_offset(d) + id] = (float)sum;
+    if (warp == 0 && distance < time) {
+        d_aux[read_age_offset(d) + (u64)head * time + distance] = (float)sum;
+    }
+}
+
+// read_key_self over blocks of 32 threads per (32 consecutive j, index): the
+// lanes walk t together from the block's first j, so the ds and excess loads
+// of one t are adjacent; each lane adds only its t >= j terms, in the legacy
+// order with the legacy operations.
+extern "C" __global__ void read_key_self_coalesced(
+    const double* ds, const double* excess, const float* aux,
+    const double* query_lift, const double* key_lift, double* key_self, ReadDims d
+) {
+    uint time = d.time;
+    uint j0 = blockIdx.x * 32;
+    uint j = j0 + threadIdx.x;
+    u64 index = blockIdx.y;
+    uint head = (uint)(index % d.heads);
+    u64 beta_offset = read_beta_offset(d);
+    double beta = (double)aux[beta_offset + head];
+    u64 id = index * time + j;
+    double sum = 0.0;
+    for (uint t = j0; t < time; ++t) {
+        if (t < j || j >= time) continue;
+        u64 slot = (index * time + t) * time + j;
+        double e = excess[slot];
+        if (d.score == 1) {
+            if (e > LORENTZ_MIN_EXCESS) {
+                double de = -beta * ds[slot] / sqrt(e * (e + 2.0));
+                sum += de * query_lift[index * time + t] / key_lift[id];
+            }
+        } else if (e > L2_MIN_SQUARED) {
+            double ds_ds = -beta * ds[slot] / (2.0 * read_distance(d, e));
+            sum += 2.0 * ds_ds;
+        }
+    }
+    if (j < time) key_self[id] = sum;
+}
+
+// read_lift over blocks of 32 threads per 32 rows: the rows' columns are
+// staged 32 at a time with coalesced loads and each lane sums its own row in
+// the legacy order.
+extern "C" __global__ void read_lift_staged(
+    const float* query, const float* kv, double* query_lift, double* key_lift, ReadDims d
+) {
+    __shared__ float qs[32][33];
+    __shared__ float ks[32][33];
+    uint lane = threadIdx.x;
+    uint rows = d.batch * d.heads * d.time;
+    uint row0 = blockIdx.x * 32;
+    uint width = d.key + d.value;
+    float qq = 0.0f;
+    float kk = 0.0f;
+    for (uint c0 = 0; c0 < d.key; c0 += 32) {
+        uint c = c0 + lane;
+        for (uint r = 0; r < 32; ++r) {
+            uint row = row0 + r;
+            bool inside = row < rows && c < d.key;
+            qs[r][lane] = inside ? query[(u64)row * d.key + c] : 0.0f;
+            ks[r][lane] = inside ? kv[(u64)row * width + c] : 0.0f;
+        }
+        __syncwarp();
+        uint cn = min(32u, d.key - c0);
+        for (uint k = 0; k < cn; ++k) {
+            float q = qs[lane][k];
+            float kv_value = ks[lane][k];
+            qq += q * q;
+            kk += kv_value * kv_value;
+        }
+        __syncwarp();
+    }
+    uint id = row0 + lane;
+    if (id >= rows) return;
+    if (d.score == 1) {
+        query_lift[id] = sqrt(1.0 + (double)qq);
+        key_lift[id] = sqrt(1.0 + (double)kk);
+    } else {
+        query_lift[id] = (double)qq;
+        key_lift[id] = (double)kk;
+    }
 }
 
 // read_dbeta with one 256-thread block per output: the block stages the
