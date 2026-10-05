@@ -642,9 +642,6 @@ impl RecurrenceCore {
         l3: &Layout,
     ) -> Forward {
         if s1.dtype() == DType::BF16 {
-            if self.supervise {
-                candle_core::bail!("precision=bf16 has no bf16 pointer gate supervision kernel");
-            }
             if !self.cuda_covered() {
                 candle_core::bail!(
                     "precision=bf16 has no bf16 recurrence kernel for a transport snap"
@@ -1151,9 +1148,6 @@ impl FusedRead {
         l3: &Layout,
     ) -> Forward {
         if s1.dtype() == DType::BF16 {
-            if self.supervise {
-                candle_core::bail!("precision=bf16 has no bf16 pointer gate supervision kernel");
-            }
             if !self.cuda_covered() {
                 candle_core::bail!(
                     "precision=bf16 has no bf16 read kernel for RoPE or a flock selection"
