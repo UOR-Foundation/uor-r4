@@ -145,7 +145,7 @@ fn coverage_strata(training: &Value, evaluation: &Value) -> Result<Value> {
 
 // These labels only score already-produced canonical predictions. No generation
 // is fabricated for trials, and this summary never ranks or accepts a proposal.
-fn source_summary(
+pub(super) fn source_summary(
     panel: &Path,
     episodes: &[Episode],
     canonical: &Value,
@@ -259,7 +259,7 @@ fn source_summary(
         json!({"rows":summaries,"native_equal_episode_ce":canonical["native_equal_episode_ce"],"source_correct":source_correct,"both_paired_source_correct":pairs.values().filter(|p|p.iter().all(|x|*x)).count(),"own_prefix_generation":"NOT_RUN_FOR_TRIAL; canonical source/CE summary only","cases":episodes.len(),"scope":"all-panel actual native canonical predictions; typed role truth only after read; payload/Period-EOS target CE partition is descriptive, not alternate objective"}),
     )
 }
-fn source_changes(old: &Value, new: &Value) -> Result<Value> {
+pub(super) fn source_changes(old: &Value, new: &Value) -> Result<Value> {
     let a = old["rows"]
         .as_array()
         .ok_or_else(|| invalid("discrete old summary absent"))?;

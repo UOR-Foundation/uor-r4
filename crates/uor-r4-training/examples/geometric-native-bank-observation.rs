@@ -970,6 +970,7 @@ mod reuse {
             || a.bank.cue_quantum_probe.is_some()
             || a.bank.cue_discrete_fit.is_some()
             || a.bank.cue_credit_audit.is_some()
+            || a.bank.cue_support_probe.is_some()
             || a.bank.cue_discrete_completion_root.is_some()
             || a.bank.cue_discrete_completion_manifest_sha256.is_some()
             || a.bank.cue_discrete_completion_config_sha256.is_some()

@@ -4,6 +4,8 @@ use super::*;
 mod credit_audit;
 #[path = "geometric_cue_discrete.rs"]
 mod discrete;
+#[path = "geometric_cue_support_probe.rs"]
+mod support_probe;
 use uor_r4_integer::geometric_source_end_transport::{
     NativeSourceEndTransport, SourceEndAngularConfig, SourceEndAngularQ4, SourceEndScoreMode,
 };
@@ -17,6 +19,7 @@ fn composition_panel(a: &Args) -> Option<&CueCompositionPanel> {
     a.cue_credit_audit
         .as_ref()
         .map(|c| &c.composition_panel)
+        .or_else(|| a.cue_support_probe.as_ref().map(|c| &c.composition_panel))
         .or_else(|| {
             a.cue_discrete_fit
                 .as_ref()
@@ -64,6 +67,27 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     }
     if (a.mode == "cue-calibration-credit-audit") != a.cue_credit_audit.is_some() {
         return Err(invalid("credit audit configuration is explicit-audit-only").into());
+    }
+    if (a.mode == "cue-calibration-support-probe") != a.cue_support_probe.is_some() {
+        return Err(invalid("cue support configuration is explicit-probe-only").into());
+    }
+    if let Some(c) = &a.cue_support_probe {
+        if c.composition_panel.profile != COMPOSITION_PROFILE
+            || c.composition_panel.development_rows != 512
+            || c.composition_panel.evaluation_rows != 128
+            || c.audit_manifest_sha256.len() != 64
+            || !c
+                .audit_manifest_sha256
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit())
+            || a.admission.is_some()
+            || a.fit_authorization.is_some()
+            || a.admission_manifest_sha256.is_some()
+        {
+            return Err(
+                invalid("cue support frozen audit/profile/no-optimizer contract differs").into(),
+            );
+        }
     }
     if let Some(c) = &a.cue_credit_audit {
         let w = warm(a)?;
@@ -724,6 +748,12 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         return discrete::complete(a, start, root);
     }
     let w = warm(a)?;
+    if let Some(c) = &a.cue_support_probe {
+        report_output::verify(&c.audit_root)?;
+        if sha256_file(&c.audit_root.join("manifest.json"))? != c.audit_manifest_sha256 {
+            return Err(invalid("cue support audit manifest differs").into());
+        }
+    }
     let pr = a
         .frozen_prefix_bundle
         .as_ref()
@@ -925,6 +955,9 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
             &receipts,
         );
     }
+    if a.cue_support_probe.is_some() {
+        support_probe::validate_binding(a, &weights, &f, &receipts, &inputs)?;
+    }
     let initial = a.out.join("initial-chain");
     report_output::claim(&initial)?;
     save_chain(&initial, &weights, &parent, &f)?;
@@ -982,6 +1015,24 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
             evidence
                 .as_ref()
                 .ok_or_else(|| invalid("probe evidence absent"))?,
+        );
+    }
+    if a.mode == "cue-calibration-support-probe" {
+        return support_probe::run(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &tok,
+            &weights,
+            &f,
+            &development,
+            &baseline,
+            &parent_gen,
+            &inputs,
+            &seals,
+            &receipts,
         );
     }
     if a.mode == "cue-calibration-discrete-fit" {
