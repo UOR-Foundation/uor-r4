@@ -35,15 +35,29 @@ complete answer/EOS and paired opposite-role questions. Source-separated
 raw-history/compiler/store/emission integration, generated conversation and full
 D19/D11/D5 goals remain outstanding.
 
-The prospective implementation in [PR1762](https://github.com/UOR-Foundation/uor-r4/pull/1762)
-now supplies the broader fixed composition panel and explicit512/128 discrete
-configuration. Keep the selected native chain as initializer; recover it from
-the canonical volume before preparation/fit. Do not substitute the earlier local
-model. Next verify real donor availability and public formatter eligibility,
-then project actual full-gradient/canonical/generation cost before admitting the
-fit. Report first-read bin/joint coverage alongside source choice, continuity and
-complete answers. The new panel's claim is composition of familiar literals and
-questions; the full raw-history/chat path remains outstanding.
+The prospective composition implementation in
+[PR1762](https://github.com/UOR-Foundation/uor-r4/pull/1762) now executes512/128
+rows from disjoint known-literal banks. Eight accepted discrete updates improve
+development source258→271 and complete40→51/512, but prospective source67/128,
+first emitted62/128 and complete15/128 remain unchanged in aggregate (one
+complete gain/one loss). A reporting ceiling defect was repaired; separate
+sealed evaluation completion adds zero learning and preserves the failed fit.
+This is one trajectory, not a replicated family verdict. Keep its selected
+chain and all negatives; the evaluation panel is now exposed.
+
+Thirty-six prospective queries consume changed coefficients, and correct-source
+margins improve24/worsen10 without crossing. Next audit per-row signed ordinary
+CE credit at the fixed selected checkpoint, with no training or reselection.
+Measure reinforcement/cancellation at shared lane/bin addresses across roles,
+wordings, value assignments and record order. Low conflict supports testing a
+predeclared compatible multi-address quarter proposal; strong shared-address
+conflict motivates a typed joint or ordered geometric binding intervention.
+Distinct descriptors alone do not prove unary coefficients are expressive
+enough. Neither a longer unchanged greedy fit nor an evaluation-authored feature
+is justified by these results. Full all-source choice, complete answer/EOS,
+paired opposite-role questions and retained regressions remain the instrument.
+Raw-history/compiler/store/emission integration, generated conversation and
+D19/D11/D5 goals remain outstanding.
 
 ## Active programme — grounded conversation and durable memory, October 1
 

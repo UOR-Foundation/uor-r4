@@ -1,35 +1,75 @@
 # Current UOR-R4 research state
 
-## Prospective cue composition implementation — October 5
+## Prospective geometric cue composition — October 5
 
-[PR1762](https://github.com/UOR-Foundation/uor-r4/pull/1762) implements opt-in
-`supported-prospective-role-diversity/1`: 512 development/128 evaluation rows,
-32/8 disjoint unordered literal-bank families, crossed role assignments and
-chronological orders, and balanced familiar question pairs. Every fresh full
-literal has a development witness; sorted fixed vertex caps and round-robin
-pairing prevent donor hubs. The scope is combinations of known literal bytes
-and familiar questions, not unseen language. Whole bank/history families and
-prior exposed plan/panel roots are excluded before predictions.
+[PR1762](https://github.com/UOR-Foundation/uor-r4/pull/1762) prepares the opt-in
+`supported-prospective-role-diversity/1` panel from retained corpus literals:
+512 development and 128 prospective evaluation rows, 32/8 disjoint unordered
+literal-bank families, crossed role assignments and current-record orders, and
+balanced familiar question pairs. Every evaluation literal has a training
+witness; the scope is novel banks of familiar literals/questions, not unseen
+language. Both actual Source records are admitted; labels are scorer-only.
+The runtime receives the two latest records, not the whole original chronology.
 
-The discrete driver uses every loaded development row and preserves the legal
-quarter-step proposal/reloaded native CE acceptance rule. First-read coverage
-reports separate observed joint tuples, new joints over observed constituent
-bins, and unsupported bins without correctness filtering. Observed coverage is
-not proof of nonzero learning credit. Source preparation, new fit and transfer
-qualification remain NOT_RUN. Exact selected-discrete-2 continuation requires
-its retained native/source/cue/prefix/endpoint artifacts on the canonical
-EUR-NO volume; locally available order061 is an earlier model and cannot silently
-replace it.
+Real preparation exposed two instrument defects, retained as failed attempts:
+the repeat-token corpus could not supply five disjoint reassert banks, and
+reasserting a fixed role collapsed forward/reverse current-record order.
+Preparation now uses exact two-word assertion donors for same-value reassertion,
+and each variant reasserts its own first initial role. No duplicate guard was
+relaxed. Actual preparation at `efff860f` passes in 5.863s; all 640 semantic and
+tokenized packet fingerprints are unique, panels have zero bank overlap, and
+public formatting/128-token eligibility and seals pass. Manifests:
+development `2d7d45c366b702a6fb0f607e53f0022b976f7d1d6816bc65b8542406a21c1aeb`,
+evaluation `33e1da8521993cdb9b53d1b913e9a951fb982457fd8af37acf43bf3207577c17`.
 
-Numerical head `219c73a7bd703d3a9b8df1284a198117e102b0b2` also repairs the baseline
-pair diagnostic's inherited 32/128 count limit, allowing 512 only with the bound
-prospective development profile, all-source policy and 256 pairs. Exact source
-review passes. Executed exact-head checks pass: 38 bank-fit, 14 plan and
-25 panel tests, rustfmt and release builds on Linux x86_64 host `27ca5ab08a91`: CPU8,
-CUDA hidden, 76.237s and peak owned process-group RSS4,970,483,712B. This is implementation evidence, not a model
-result. Durable receipts live at
-`/workspace/uor-r4/codex/cue-composition/checks-2` on the EU-RO shared volume.
-The merged main pod tool owns status/renewal; DeepSeek retains the shared GPU.
+Eight native discrete quarter updates are accepted at `efff860f`, selected before
+prospective predictions. CPU16 worker160.148s, peak owned RSS8,263,553,024B,
+Linux x86_64 host `6afb4b06ad9e`; CUDA hidden. Development native CE falls
+1.0167891394→0.9860807734; source258→271/512, first emitted token203→214/512,
+complete own-prefix answers40→51/512. Source has14 gains/1 loss and complete
+answers12 gains/1 loss. Both-query source pairs61→67/256 and complete pairs2→3.
+The original selected cue payload is
+`7c577ec5ce6d0d20b10a999752febc40a0e490af9e56474df4ab472be452265f`.
+
+The fit then failed writing its final generation report: generic writes silently
+clipped the admitted1GiB ceiling to legacy512MiB. The failed sealed attempt is
+preserved. At `f254565a`, the writer uses the admitted default while preserving
+explicit narrower limits. A separate, manifest/config-bound completion root
+loads the frozen selected chain and performs only the missing evaluation
+generation, with zero gradients, proposals or new updates. Wrong-manifest
+rejection passes; valid completion passes in17.281s, peak owned RSS5,049,626,624B.
+Frozen source/prefix/end bytes and immutable input seals pass. Release checks
+pass39 bank-fit,16 plan,25 panel and46 sibling observation tests, plus rustfmt and
+release builds (98.323s, CPU8, peak RSS2,357,411,840B). Independent exact-head
+source review passes. No Metal or GPU model behavior was tested.
+
+Prospective CE1.0235465889→1.0219290489; source67→67/128, first emitted62→62,
+complete answers15→15 (one gain/one loss). Both-query source13/64 and complete0/64
+stay flat. This is one trajectory and a bounded composition result, not a
+replicated transfer verdict or attention/chat qualification. The evaluation
+panel is now exposed; recovery is not a new untouched draw.
+
+Coverage separates80 rows with supported constituent bins/new joint tuples and
+48 with unsupported bins. Five changed coordinates affect36 evaluation reads;
+34 have differing incidence between candidates. Correct-source margins improve
+on24 rows and worsen on10, with no source crossings. Thus the old zero-exposure
+explanation does not apply. Distinct paired descriptors do not establish that
+unary additive cue coefficients can represent their needed interactions.
+**Next:** fixed-selected-checkpoint ordinary-CE per-row signed-credit/conflict
+attribution, no optimization or reselection. Use development evidence to decide
+between a compatible multi-address quarter proposal and a typed joint/ordered
+geometric binding intervention; prospective labels remain descriptive. Preserve
+all source/complete-answer regressions. Full history, compiler/store integration,
+generated conversation, reasoning and D11/D5 remain open.
+
+Durable evidence is on canonical EUR-NO volume `lmd1pfah3y` under
+`/workspace/uor-r4/codex/cue-composition/`: `panel-development-3`, `panel-fresh-3`,
+`checks-4`, `checks-5`, failed `discrete-fit-1`, and successful
+`discrete-completion-1` (manifest
+`6b4882752f2274d4d8f2554ce8098ebe81ca0f36a811f0ea959c3187691b9c67`).
+Selected parent was recovered by exact hashes; earlier local order061 was not
+substituted. All jobs use main's shared pod tool and session identity. No shared
+GroundedSession or other lab's files/jobs were changed. PR1762 remains unmerged.
 
 ## Native discrete cue learning improves source choice — October 5
 
