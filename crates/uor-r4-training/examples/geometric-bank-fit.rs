@@ -363,7 +363,13 @@ fn checked_args() -> Result<Args> {
         || a.maximum_generation_tokens > 32
         || a.maximum_report_bytes
             != if a.mode == "source-end-fit" {
-                512 * 1024 * 1024
+                // Observed full-cap projection is 568 MB; retain legacy admission
+                // while permitting the prospectively recorded 640 MiB fit cap.
+                if a.maximum_report_bytes == 640 * 1024 * 1024 {
+                    640 * 1024 * 1024
+                } else {
+                    512 * 1024 * 1024
+                }
             } else if a.mode == "source-end-broadbatch" {
                 128 * 1024 * 1024
             } else if a.mode == "terminal-fit" {
