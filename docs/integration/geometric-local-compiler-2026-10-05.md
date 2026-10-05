@@ -72,8 +72,10 @@ value span accuracy is47–60/64. The failure is broader than span truncation.
 ## Instrument and evidence boundaries
 
 The authored reference compiler passes44/44 development and44/44 fresh actions,
-including32/32 writes, with no false prose writes. It also passes the actual
-store episodes. It is an instrument positive control, not a learned mechanism.
+including32/32 writes, with no false prose writes. The earlier independently labelled reference control executes store4/4 with
+native selected-record2/4 and all-bank0/4, as the preceding audit records;
+these six runs do not repeat reference-store execution. The current reference
+is an action/span instrument positive control, not a learned mechanism.
 Actual learned predictions use original tokenization/casing, natural questions,
 original statement cues, serialize/reload after writes, and separately report
 selected-record versus all-bank admission. Gold labels score outputs only.
