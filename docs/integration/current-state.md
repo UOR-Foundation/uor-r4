@@ -1,5 +1,39 @@
 # Current UOR-R4 research state
 
+## Cue credit connected; native quantization unchanged — October 5
+
+The [cue follow-up](geometric-endpoint-calibration-2026-10-05.md#cue-only-full-path-follow-up)
+implements exact native warm-start and cue-only credit through the full calibrated
+Copy/Period/Stop pipeline. Independent exact-head source review and executed pod
+checks pass: eight cue library tests at19bef97b;28 driver tests, one observation
+rejection test and release build at86bbdaae. No session/compiler seam changed.
+
+The current128-row data contains both records on every row, no supplied selected
+record, no answer literal in a query and no oracle Memory line. Gold records split
+64 earlier/64 latest; all128 answers match the appropriate compiled stored source.
+This remains structured current-bank recall, not learned raw-history writing/chat.
+
+Zero-update replay is exact. Full128 cue gradient norm0.0979658 and actual B8 norm
+0.371413 are finite/nonzero; parent gradients are absent. The first64-update/B8 fit
+completes in80.070s, but all64 recovery Q4 tables remain identical to baseline.
+All five canonical checkpoints and parent/selected generation files are byte-identical;
+selector retains0, CE0.966180663. Development source80/128, both-source pairs24/64,
+complete23/128 remain unchanged; exposed diagnostic source15/32, complete1/32.
+
+Independent shadow audit finds466/960 changed shadows, maximum drift0.0964629 below
+half-quarter0.125. Median active coefficient receives four fresh-credit batches;
+337/466 addresses have one-signed batch credit. This is nonrealized native learning,
+not an attention-family rejection. Next run a matched legal-quarter intervention at
+stable coefficient123 (lane1/bin3): baseline−0.25, credit-preferred−0.5, opposite0.
+Freeze all other coefficients/roots/prefix/end payloads and honestly rebind metadata.
+Measure actual native CE, source/pair margins and complete own-prefix outputs; baseline
+remains eligible before diagnostic predictions. Alias/terminal-only gains do not
+establish retrieval. No unchanged dose/seed repeat or transformer gate is adopted.
+
+Artifacts are sealed on the shared pod `/workspace/uor-r4/codex/`; draft PR1751/1752
+and parents1745/1748 are not merged. GPU/session/grading work was not performed.
+
+
 ## Endpoint calibration repairs boundaries; geometric binding remains — October 5
 
 The [endpoint calibration](geometric-endpoint-calibration-2026-10-05.md) warm-starts

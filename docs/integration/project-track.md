@@ -1,17 +1,24 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Immediate geometric attention dependency — October 5 endpoint result
+## Immediate geometric attention dependency — October 5 cue result
 
-Retain [calibrated native endpoints](geometric-endpoint-calibration-2026-10-05.md):
-development complete replies11→23/128,12 gains/no losses, diagnostic1/32 unchanged.
-The reader is frozen; attention is still open.58 remaining payload first-errors
-occur at token0,46 with the wrong factual source. Investigate geometric query/record
-binding next. Saved64-pair audit verifies distinct consumed query/source descriptors,
-while70/128 source cue bonuses tie. Warm-start existing cue tables on the complete
-calibrated native objective; freeze roots/prefix/endpoints and prove native baseline
-replay/connected credit before fitting. Preserve terminals and inspect later correct→wrong
-source switches separately. No unchanged endpoint dose or traversal-only repair;
-component likelihood/boundary gains do not qualify chat or retire mechanisms.
+Retain [calibrated native endpoints and cue evidence](geometric-endpoint-calibration-2026-10-05.md):
+complete development replies11→23/128; attention remains open. The cue-only full-path
+learner now has exact baseline replay, connected finite credit and scoped executed
+checks. Its first64-update/B8 fit changes shadows but no native Q4 coefficient;
+source80/128, both-source pairs24/64 and complete23/128 are unchanged. Do not score
+this as a geometric mechanism rejection or resume an unchanged dose.
+
+The measured maximum shadow movement0.0964629 is below the0.125 rounding boundary,
+with sparse fresh-credit exposure. Next compare a fixed matched native-quarter
+change at stable cue index123 against its opposite:−0.25 baseline,−0.5 preferred,
+0 opposite. Keep other coefficients and roots/prefix/end bytes frozen, rebind the
+full native chain and measure CE/source/pair margins/own-prefix replies separately.
+Baseline-inclusive development selection precedes exposed diagnostic predictions.
+Realized credit leads to discrete-update calibration; preferred-direction harm leads
+to hard-branch/STE alignment review; CE-only gain leads to alias/terminal diagnosis.
+Preserve every candidate. Raw-history/compiler/store/emission integration, generated
+conversation and full D19/D11/D5 goals remain outstanding.
 
 ## Active programme — grounded conversation and durable memory, October 1
 

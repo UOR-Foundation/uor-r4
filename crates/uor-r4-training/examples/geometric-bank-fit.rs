@@ -64,7 +64,7 @@ fn cue_mode(a: &Args) -> bool {
 fn cue_calibration_mode(a: &Args) -> bool {
     matches!(
         a.mode.as_str(),
-        "cue-calibration-broadbatch" | "cue-calibration-fit"
+        "cue-calibration-broadbatch" | "cue-calibration-fit" | "cue-calibration-quantum-probe"
     )
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -78,6 +78,15 @@ pub(crate) struct CueCalibrationWarmstart {
     pub(crate) frozen_end_period_packed_sha256: String,
     pub(crate) frozen_end_stop_packed_sha256: String,
     pub(crate) data_scope: String,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CueQuantumProbe {
+    pub(crate) coefficient_index: usize,
+    pub(crate) initial_quarters: i8,
+    pub(crate) preferred_step: i8,
+    pub(crate) evidence_receipt: PathBuf,
+    pub(crate) evidence_receipt_sha256: String,
 }
 const PREFIX_FIT_CAP: usize = 512 * 1024 * 1024;
 const PREFIX_FAMILIES: &str = "prefix-angular-HxLx120/1";
@@ -144,6 +153,8 @@ pub(crate) struct Args {
     pub(crate) mode: String,
     #[serde(default)]
     pub(crate) cue_calibration_warmstart: Option<CueCalibrationWarmstart>,
+    #[serde(default)]
+    pub(crate) cue_quantum_probe: Option<CueQuantumProbe>,
     pub(crate) cue_score_mode: Option<CueScoreMode>,
     pub(crate) prefix_score_mode: Option<PrefixScoreMode>,
     pub(crate) source_end_score_mode:
@@ -415,6 +426,7 @@ fn checked_args() -> Result<Args> {
         "cue-fit",
         "cue-calibration-broadbatch",
         "cue-calibration-fit",
+        "cue-calibration-quantum-probe",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -468,6 +480,8 @@ fn checked_args() -> Result<Args> {
                     | "cue-calibration-broadbatch"
             ) {
                 128 * 1024 * 1024
+            } else if a.mode == "cue-calibration-quantum-probe" {
+                256 * 1024 * 1024
             } else if a.mode == "terminal-fit" {
                 1024 * 1024 * 1024
             } else if a.mode == "terminal-broadbatch" {
@@ -516,6 +530,7 @@ fn checked_args() -> Result<Args> {
     if (broad_mode(&a)
         || a.mode == "cue-broadbatch"
         || a.mode == "cue-calibration-broadbatch"
+        || a.mode == "cue-calibration-quantum-probe"
         || a.mode == "prefix-broadbatch"
         || a.mode == "terminal-broadbatch"
         || a.mode == "source-end-broadbatch"
@@ -619,6 +634,7 @@ fn checked_args() -> Result<Args> {
             .iter()
             .map(|w| &w.frozen_end_bundle),
     );
+    paths.extend(a.cue_quantum_probe.iter().map(|q| &q.evidence_receipt));
     paths.extend(a.admission.iter());
     paths.extend(a.fit_authorization.iter());
     paths.extend(a.exposed_controls.iter());

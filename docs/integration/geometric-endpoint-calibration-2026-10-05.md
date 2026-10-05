@@ -98,3 +98,74 @@ separately verified record-credit archive. Recovery30min and fit/review/delivery
 are conservative whole-work precharges retaining prior costs: cumulative
 1,327,035,028ms/limit1,327,800,000ms. Worker times are separate. Protected PR1748 is
 stacked on1745; neither a merge receipt nor final language qualification is asserted.
+
+## Cue-only full-path follow-up
+
+PR1751 (`19bef97b`) adds exact signed-Q4 cue warm-start and a cue-only surrogate
+anchored to the authoritative full Copy/Period/Stop action distribution. Eight scoped
+release library tests pass, including opposite competing-record gradients and an
+actual legal quarter-step native score-margin change. The first test attempt falsely
+called leading-space alias token7 unsupported; the corrected test asserts unknown
+ID2 absent. Both attempts are retained as an instrument correction.
+
+PR1752 (`86bbdaae`) adds explicit calibration modes and independently reloaded cue →
+prefix → endpoint chains. Prefix/end bytes and source/Copy/roots are frozen; metadata
+is honestly recompiled as cue hashes change.28 driver tests, one sibling observation
+rejection test and release build pass on Linux x86_64 pod CPU16 affinity,70.178s,
+peak process-group2,738,561,024B. Exact-head independent source review passes.
+
+Data audit binds development manifest `8806679bd900cf5c4477bb3e5aa711b162926a9f6cbfa9fbe365d794912db75d`
+and input `8ec23c55a32536cfa6a8b26dbc6fbe354678247d7718a23ecc5cd426c1007a5e`.
+All128 rows provide two Sources/full assertions; no single selected answer record,
+answer-bearing query or Memory line.64 targets require the earlier record;64 the
+latest. All target payloads equal their correct source's compiled emitted IDs.
+Bounded ByteBPE/casing is shared within this component; query re-encoding was not
+executed in the source-only data audit. The exact writer has already extracted the
+bank values. This does not qualify learned raw-history compilation or general chat.
+
+Zero-update admission executes exact full canonical and own-prefix donor replay.
+Full128 gradient norm0.0979657979 (466/960 nonzero) and B8 norm0.371412831 are finite;
+parent Var credit absent and independent full trace parity passes. Actual B8 time
+0.747216433s is measured rather than obtained by dividing the broad batch. Whole
+admission worker12.028s/report10.160s, no optimizer updates. Executable SHA256
+`8cfda9ea8647dd679267b74b59976cf963e5e0628d8ff2caa2dc1321e6ce2d4a`.
+
+The64-update/B8/lr0.003 fit completes worker80.070s/report75.907s, peak1,945,853,952B.
+Every row receives four visits; all64 batches have finite/nonzero gradients and clip1.
+All64 recovery cue packed payloads remain baseline. Five checkpoint canonical JSON
+files and parent/selected generation JSON are byte-identical; ordinary CE selects0.
+
+| Measure | Development | Exposed diagnostic |
+|---|---:|---:|
+| Initial factual source |80/128|15/32|
+| Both paired factual sources |24/64|4/16|
+| First emitted token |70/128|15/32|
+| Complete own-prefix reply |23/128|1/32|
+| Both paired complete replies |1/64|0/16|
+
+All gain/loss lists are empty. Frozen endpoint coefficients do not in general freeze
+terminal corrections when a cue changes factual source; here no native change occurs.
+This is not a replicated family verdict: one fixed episode order was run.
+
+Independent saved-shadow analysis finds466 coefficients moved,212 positive/254
+negative; median absolute movement0.0440334, maximum0.0964629 versus0.125 boundary.
+337 active addresses have one sign of batch credit,129 both; median address receives
+four fresh-credit batches. Reconstructed analytic credit matches recorded Rust batch
+norms within3.29e-8; this is saved numerical analysis, not a Python model or native
+counterfactual. Largest stable movement is index123/lane1/bin3:−0.25→−0.3464629,
+20 positive-gradient batches/zero negative, no reversals. Shadow audit SHA256
+`7f2d33f5fc9562922110b2e5d9f032553665d7a4b2263c51ace113a6793a41d1`.
+
+**Next causal discriminator:** native baseline−0.25 versus preferred−0.5 and opposite0
+at that single coefficient, with no optimizer updates. Recompile/reload the full
+frozen chain, measure actual record margins/source/pairs and generated replies, keep
+baseline in ordinary CE selection before diagnostic predictions. A CE-only gain is
+not retrieval. If the preferred direction harms the native objective, inspect hard
+source/endpoint branches and STE alignment; if it helps, calibrate discrete delivery.
+Do not retire geometry or repeat unchanged dose based on unmodified native tables.
+
+All reports are Rust sealed/verified under `/workspace/uor-r4/codex/geometric-cue-calibration-20261005`;
+checks are separately preserved. Cloud-store `cue-library-checks-20261005` is MD5
+verified (`999602ddcca5160942bd27b4b939fb2a`). No GPU/session/grade job was run; paid
+pod creation was not attempted. Draft PR1751/1752 and their parents have no merge
+receipt. Whole-work precharges remain cumulative, distinct from measured worker time.

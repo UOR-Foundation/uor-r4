@@ -12,6 +12,25 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     if cue_calibration_mode(a) != a.cue_calibration_warmstart.is_some() {
         return Err(invalid("cue calibration warmstart is explicit-mode-only").into());
     }
+    if (a.mode == "cue-calibration-quantum-probe") != a.cue_quantum_probe.is_some() {
+        return Err(invalid("cue quantum proposal is explicit-probe-only").into());
+    }
+    if let Some(q) = &a.cue_quantum_probe {
+        if q.coefficient_index != 123
+            || q.initial_quarters != -1
+            || q.preferred_step != -1
+            || q.evidence_receipt_sha256
+                != "7f2d33f5fc9562922110b2e5d9f032553665d7a4b2263c51ace113a6793a41d1"
+            || a.admission.is_some()
+            || a.admission_manifest_sha256.is_some()
+            || a.fit_authorization.is_some()
+        {
+            return Err(invalid(
+                "quantum probe predeclared coordinate/evidence/no-optimizer scope differs",
+            )
+            .into());
+        }
+    }
     if let Some(w) = &a.cue_calibration_warmstart {
         if w.data_scope != DATA_SCOPE
             || a.cue_score_mode != Some(CueScoreMode::DirectedRelative)
@@ -716,6 +735,40 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     {
         return Err(invalid("cue calibration training/independent donor metadata differs").into());
     }
+    let evidence = if let Some(q) = &a.cue_quantum_probe {
+        if sha256_file(&q.evidence_receipt)? != q.evidence_receipt_sha256 {
+            return Err(invalid("quantum audit receipt SHA differs").into());
+        }
+        let v = read_json(&q.evidence_receipt)?;
+        if v["schema"] != "uor-r4.cue-quantization-audit/1"
+            || v["fit_report"]["selected_updates"] != 0
+            || v["fit_report"]["updates"] != 64
+            || v["shadow"]["packed_equal_all64"] != true
+            || v["shadow"]["coefficients"] != weights.config().coefficient_count()?
+            || v["recommended_next_discriminator"]["coefficient"]["index"] != q.coefficient_index
+            || v["recommended_next_discriminator"]["coefficient"]["parent"]
+                != f64::from(q.initial_quarters) / 4.
+            || v["inputs_sha256"]["initial-chain/cue/cue-source-f32.bin"]
+                != parameter_receipts(&weights.parameters())?["cue.coefficients"]
+                    ["f32_le_bits_sha256"]
+        {
+            return Err(
+                invalid("quantum audit source/coordinate/warm-shadow evidence differs").into(),
+            );
+        }
+        let donor_seal = nearest_seal(&q.evidence_receipt).ok();
+        if let Some(seal) = donor_seal {
+            report_output::verify(&seal)?;
+            seals.insert(seal);
+        }
+        inputs.insert(
+            q.evidence_receipt.to_string_lossy().into_owned(),
+            q.evidence_receipt_sha256.clone(),
+        );
+        Some(v)
+    } else {
+        None
+    };
     let development = panel(&a.development_panel, 128, &integer, &tok, a)?;
     let initial = a.out.join("initial-chain");
     report_output::claim(&initial)?;
@@ -755,6 +808,27 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         "parent-query-pair-diagnostics.json",
         &source_end_fit::natural_pair_diagnostics(&a.development_panel, &baseline, &parent_gen)?,
     )?;
+    if a.mode == "cue-calibration-quantum-probe" {
+        return quantum_probe(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &tok,
+            &weights,
+            &f,
+            &development,
+            &baseline,
+            &parent_gen,
+            &inputs,
+            &seals,
+            &receipts,
+            evidence
+                .as_ref()
+                .ok_or_else(|| invalid("probe evidence absent"))?,
+        );
+    }
     let mut projection = source_end_fit::project_storage(&baseline, &parent_gen, a)?;
     // This driver additionally retains both 32-row diagnostic canonical traces,
     // and all 64 recoverable cue shadows; do not reuse endpoint-only accounting.
@@ -1053,6 +1127,327 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     Ok(r)
 }
 
+fn quantum_packed(original: &[u8], count: usize, q: &CueQuantumProbe, step: i8) -> Result<Vec<u8>> {
+    use uor_r4_integer::geometric_potential_q4::{pack_coefficients, unpack_coefficients};
+    let original_values =
+        unpack_coefficients(count, original).map_err(|e| invalid(e.to_string()))?;
+    let mut values = original_values.clone();
+    let slot = values
+        .get_mut(q.coefficient_index)
+        .ok_or_else(|| invalid("quantum coordinate outside actual donor"))?;
+    if *slot != q.initial_quarters || !matches!(step, -1 | 1) {
+        return Err(invalid("quantum initial donor quarter/step differs").into());
+    }
+    *slot = slot
+        .checked_add(step)
+        .filter(|x| (-7..=7).contains(x))
+        .ok_or_else(|| invalid("quantum legal quarter range exceeded"))?;
+    if values
+        .iter()
+        .zip(&original_values)
+        .filter(|(a, b)| a != b)
+        .count()
+        != 1
+    {
+        return Err(invalid("quantum altered more than one coefficient").into());
+    }
+    let packed = pack_coefficients(&values).map_err(|e| invalid(e.to_string()))?;
+    if unpack_coefficients(count, &packed).map_err(|e| invalid(e.to_string()))? != values
+        || packed.iter().zip(original).filter(|(a, b)| a != b).count() != 1
+    {
+        return Err(invalid("quantum packed one-quarter witness differs").into());
+    }
+    Ok(packed)
+}
+
+// A score audit of saved native predictions, never a substitute for native runs.
+fn quantum_margin_changes(
+    baseline: &Value,
+    candidate: &Value,
+    truth: &Value,
+    q: &CueQuantumProbe,
+    step: i8,
+) -> Result<Value> {
+    let old = baseline["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("quantum baseline rows absent"))?;
+    let new = candidate["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("quantum candidate rows absent"))?;
+    let labels = truth["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("quantum truth rows absent"))?;
+    if old.len() != new.len() || old.len() != labels.len() {
+        return Err(invalid("quantum margin row count differs").into());
+    }
+    let lane = q.coefficient_index / 120;
+    let bin = q.coefficient_index % 120;
+    let mut rows = Vec::new();
+    let mut touched_rows = 0;
+    let mut touched_positions = 0;
+    let mut checked_copy_positions = 0;
+    for ((a, b), label) in old.iter().zip(new).zip(labels) {
+        if a["id"] != b["id"] || a["id"] != label["id"] {
+            return Err(invalid("quantum margin IDs differ").into());
+        }
+        let aa = a["tokens"]
+            .as_array()
+            .ok_or_else(|| invalid("quantum tokens absent"))?;
+        let bb = b["tokens"]
+            .as_array()
+            .ok_or_else(|| invalid("quantum tokens absent"))?;
+        if aa.len() != bb.len() {
+            return Err(invalid("quantum canonical target count differs").into());
+        }
+        let mut row_touch = false;
+        let mut first_record_scores = Vec::new();
+        for (position, (ta, tb)) in aa.iter().zip(bb).enumerate() {
+            let mapping = ta["native"]["candidate_mapping"]
+                .as_array()
+                .ok_or_else(|| invalid("quantum map absent"))?;
+            if ta["native"]["candidate_mapping"] != tb["native"]["candidate_mapping"]
+                || ta["cue_carrier"]["angular_indices"] != tb["cue_carrier"]["angular_indices"]
+            {
+                return Err(
+                    invalid("quantum changed frozen occurrence/address representation").into(),
+                );
+            }
+            let bins = ta["cue_carrier"]["angular_indices"][lane]
+                .as_array()
+                .ok_or_else(|| invalid("quantum lane absent"))?;
+            let acts_a = ta["native"]["actions"]["actions"]
+                .as_array()
+                .ok_or_else(|| invalid("quantum native actions absent"))?;
+            let acts_b = tb["native"]["actions"]["actions"]
+                .as_array()
+                .ok_or_else(|| invalid("quantum native actions absent"))?;
+            if bins.len() != mapping.len()
+                || acts_a.len() != mapping.len() + 2
+                || acts_b.len() != acts_a.len()
+            {
+                return Err(invalid("quantum native Copy shape differs").into());
+            }
+            let mut records = BTreeMap::<(u64, u64), (i64, i64, bool)>::new();
+            for (j, m) in mapping.iter().enumerate() {
+                let x = acts_a[j]["score_q24"]
+                    .as_i64()
+                    .ok_or_else(|| invalid("quantum raw Copy absent"))?;
+                let y = acts_b[j]["score_q24"]
+                    .as_i64()
+                    .ok_or_else(|| invalid("quantum raw Copy absent"))?;
+                let touched = bins[j].as_u64() == Some(bin as u64);
+                let expected = if touched {
+                    i64::from(step) * (1i64 << 22)
+                } else {
+                    0
+                };
+                if y.checked_sub(x) != Some(expected) {
+                    return Err(invalid(
+                        "quantum native Copy delta does not match actual single address",
+                    )
+                    .into());
+                }
+                checked_copy_positions += 1;
+                touched_positions += usize::from(touched);
+                row_touch |= touched;
+                let id = (
+                    m["occurrence"]["record"]
+                        .as_u64()
+                        .ok_or_else(|| invalid("quantum record absent"))?,
+                    m["occurrence"]["commit"]
+                        .as_u64()
+                        .ok_or_else(|| invalid("quantum commit absent"))?,
+                );
+                let v = records.entry(id).or_insert((i64::MIN, i64::MIN, false));
+                v.0 = v.0.max(x);
+                v.1 = v.1.max(y);
+                v.2 |= touched;
+            }
+            if position == 0 {
+                for ((record, commit), (x, y, touched)) in records {
+                    first_record_scores.push(json!({"record":record,"commit":commit,"baseline_max_raw_copy_q24":x,"candidate_max_raw_copy_q24":y,"delta_q24":y-x,"touched_address":touched}));
+                }
+            }
+        }
+        touched_rows += usize::from(row_touch);
+        let expected = &label["expected_source_labels_only"];
+        let mut good = None;
+        let mut other_old = i64::MIN;
+        let mut other_new = i64::MIN;
+        for r in &first_record_scores {
+            let old = r["baseline_max_raw_copy_q24"]
+                .as_i64()
+                .ok_or_else(|| invalid("quantum record score absent"))?;
+            let new = r["candidate_max_raw_copy_q24"]
+                .as_i64()
+                .ok_or_else(|| invalid("quantum record score absent"))?;
+            if r["record"] == expected["record"] && r["commit"] == expected["commit"] {
+                good = Some((old, new));
+            } else {
+                other_old = other_old.max(old);
+                other_new = other_new.max(new);
+            }
+        }
+        let (good_old, good_new) =
+            good.ok_or_else(|| invalid("quantum true record missing from native map"))?;
+        if other_old == i64::MIN || other_new == i64::MIN {
+            return Err(invalid("quantum distractor record missing").into());
+        }
+        rows.push(json!({"id":a["id"],"touched":row_touch,"first_record_scores":first_record_scores,"baseline_correct_vs_distractor_margin_q24":good_old-other_old,"candidate_correct_vs_distractor_margin_q24":good_new-other_new,"margin_delta_q24":(good_new-other_new)-(good_old-other_old)}));
+    }
+    if touched_positions == 0 {
+        return Err(invalid("quantum declared address not consumed").into());
+    }
+    Ok(
+        json!({"rows":rows,"touched_rows":touched_rows,"touched_copy_positions":touched_positions,"checked_copy_positions":checked_copy_positions,"native_one_quarter_address_delta_verified":true,"scope":"actual canonical native outputs; raw Copy max per exact record/commit; role truth only after native read; terminals may change conditionally"}),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn quantum_probe(
+    a: &Args,
+    start: Instant,
+    source: &SourceRealizerWeights,
+    parent: &NativeSourceRealizer,
+    integer: &IntegerRealizer,
+    tok: &ByteBpeTokenizer,
+    weights: &CueAngularWeights,
+    f: &Frozen,
+    development: &[Episode],
+    baseline: &Value,
+    parent_gen: &Value,
+    inputs: &BTreeMap<String, String>,
+    seals: &BTreeSet<PathBuf>,
+    receipts: &Value,
+    evidence: &Value,
+) -> Result<Value> {
+    use uor_r4_integer::geometric_cue_carrier::CueAngularQ4;
+    let q = a
+        .cue_quantum_probe
+        .as_ref()
+        .ok_or_else(|| invalid("quantum configuration absent"))?;
+    if evidence["inputs_sha256"]["initial-canonical.json"]
+        != sha256_file(&a.out.join("initial-canonical.json"))?
+    {
+        return Err(invalid("quantum warm native baseline differs from audit evidence").into());
+    }
+    let original = weights.packed_coefficients()?;
+    let count = weights.config().coefficient_count()?;
+    let cue_receipts = parameter_receipts(&weights.parameters())?;
+    let baseline_metrics = causal_metrics(&a.development_panel, development, baseline, parent_gen)?;
+    let baseline_ce = baseline["native_equal_episode_ce"]
+        .as_f64()
+        .filter(|x| x.is_finite())
+        .ok_or_else(|| invalid("quantum finite baseline CE absent"))?;
+    let canonical_bytes = serde_json::to_vec(baseline)?.len();
+    let generation_bytes = serde_json::to_vec(parent_gen)?.len();
+    let observed_total = canonical_bytes
+        .saturating_add(generation_bytes)
+        .saturating_mul(7)
+        .div_ceil(2)
+        .saturating_add(16 * 1024 * 1024);
+    if observed_total.saturating_add(1024 * 1024) > a.maximum_report_bytes {
+        return Err(
+            invalid("quantum observed-shape report projection exceeds admitted cap").into(),
+        );
+    }
+    let projection = json!({"configured_report_cap_bytes":a.maximum_report_bytes,"observed_shape_total_bytes":observed_total,"initial_and_baseline_canonical_bytes":canonical_bytes,"observed_parent_generation_bytes":generation_bytes,"arms":3,"proposals":2,"maximum_generation_tokens":a.maximum_generation_tokens,"administrative_reserve_bytes":16*1024*1024,"scope":"baseline observed sizes; each proposal retains one canonical and one actual ownprefix trace; selected diagnostic32 after freeze; write_json enforces total256MiB actual cap with1MiB stop margin; no optimizer/recovery artifacts"});
+    write_json(&a.out, "storage-projection.json", &projection)?;
+    let mut arms = vec![
+        json!({"name":"baseline","proposal":false,"optimizer_updates":0,"coefficient_quarters":q.initial_quarters,"native_equal_episode_ce":baseline_ce,"cue_packed_sha256":sha256_bytes(&original),"chain":"initial-chain","canonical":"initial-canonical.json","generation":"development-parent-generation.json","causal_outcomes":baseline_metrics}),
+    ];
+    let mut selected_name = "baseline";
+    let mut best = baseline_ce;
+    for (name, step) in [
+        ("preferred", q.preferred_step),
+        ("opposite", -q.preferred_step),
+    ] {
+        deadline(a, start)?;
+        let packed = quantum_packed(&original, count, q, step)?;
+        let cue = parent.compile_cue_carrier(
+            CueAngularQ4::new(weights.config(), &packed).map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let candidate = CueAngularWeights::from_native(parent, &a.native_artifact, &cue)?;
+        if candidate.packed_coefficients()? != packed {
+            return Err(invalid("quantum signed-quarter source reload differs").into());
+        }
+        let root = a.out.join(format!("arm-{name}"));
+        report_output::claim(&root)?;
+        save_chain(&root, &candidate, parent, f)?;
+        let restored = CueAngularWeights::load(&root.join("cue"), parent, &a.native_artifact)?;
+        if parameter_receipts(&candidate.parameters())?
+            != parameter_receipts(&restored.parameters())?
+        {
+            return Err(invalid("quantum source shadow reload differs").into());
+        }
+        let (c, p, e) = load_chain(&root, integer)?;
+        if c.packed_coefficients() != packed {
+            return Err(invalid("quantum independent native cue differs").into());
+        }
+        let canonical = source_end_fit::canonical(integer, &c, &p, &e, development, a, start)?;
+        let generation =
+            source_end_fit::generation(integer, &c, &p, &e, development, tok, a, start)?;
+        let metrics = causal_metrics(&a.development_panel, development, &canonical, &generation)?;
+        let margins = quantum_margin_changes(baseline, &canonical, &baseline_metrics, q, step)?;
+        write_json(&root, "canonical.json", &canonical)?;
+        write_json(&root, "generation.json", &generation)?;
+        write_json(
+            &root,
+            "causal-outcomes.json",
+            &json!({"parent":baseline_metrics,"candidate":metrics,"comparison":causal_comparison(&baseline_metrics,&metrics)?}),
+        )?;
+        write_json(&root, "record-margin-changes.json", &margins)?;
+        let ce = canonical["native_equal_episode_ce"]
+            .as_f64()
+            .filter(|x| x.is_finite());
+        let receipt = json!({"name":name,"proposal":true,"optimizer_updates":0,"coefficient_index":q.coefficient_index,"coefficient_quarters":q.initial_quarters+step,"step_quarters":step,"native_equal_episode_ce":ce,"zero_support_positions":canonical["zero_support_positions"],"cue_packed_sha256":sha256_bytes(&packed),"all_other_coefficients_unchanged":true,"native_one_quarter_address_delta_verified":true,"independent_native_reload":true,"frozen_payloads":f.hashes(),"cue_native_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"rebound_prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"rebound_end_metadata_sha256":sha256_file(&root.join("source-end/native-metadata.json"))?,"causal_counts":metrics["counts"],"touched_rows":margins["touched_rows"]});
+        write_json(&root, "receipt.json", &receipt)?;
+        report_output::seal(&root)?;
+        report_output::verify(&root)?;
+        if ce.is_some_and(|x| x < best) {
+            best = ce.ok_or_else(|| invalid("quantum selector CE absent"))?;
+            selected_name = name;
+        }
+        arms.push(receipt);
+    }
+    write_json(
+        &a.out,
+        "selection-before-fresh.json",
+        &json!({"selected_arm":selected_name,"criterion":"ordinary full128 native equalepisode answer+EOS CE; baseline-inclusive; earliest strict minimum in baseline/preferred/opposite order","fresh_predictions_before_selection":0,"optimizer_updates":0,"proposal_count":2}),
+    )?;
+    let selected_root = if selected_name == "baseline" {
+        a.out.join("initial-chain")
+    } else {
+        a.out.join(format!("arm-{selected_name}"))
+    };
+    let (c, p, e) = load_chain(&selected_root, integer)?;
+    let diagnostic = panel(&a.fresh_panel, 32, integer, tok, a)?;
+    let (bc, bp, be) = load_chain(&a.out.join("initial-chain"), integer)?;
+    let oldcan = source_end_fit::canonical(integer, &bc, &bp, &be, &diagnostic, a, start)?;
+    let oldgen = source_end_fit::generation(integer, &bc, &bp, &be, &diagnostic, tok, a, start)?;
+    let newcan = source_end_fit::canonical(integer, &c, &p, &e, &diagnostic, a, start)?;
+    let newgen = source_end_fit::generation(integer, &c, &p, &e, &diagnostic, tok, a, start)?;
+    let oldmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &oldcan, &oldgen)?;
+    let newmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &newcan, &newgen)?;
+    write_json(&a.out, "fresh-parent-canonical.json", &oldcan)?;
+    write_json(&a.out, "fresh-selected-canonical.json", &newcan)?;
+    write_json(&a.out, "fresh-parent-generation.json", &oldgen)?;
+    write_json(&a.out, "fresh-selected-generation.json", &newgen)?;
+    write_json(
+        &a.out,
+        "fresh-causal-outcomes.json",
+        &json!({"parent":oldmetrics,"selected":newmetrics,"comparison":causal_comparison(&oldmetrics,&newmetrics)?}),
+    )?;
+    if parameter_receipts(&weights.parameters())? != cue_receipts {
+        return Err(invalid("quantum original cue source mutated").into());
+    }
+    frozen(source, receipts)?;
+    immutable(inputs, seals)?;
+    Ok(
+        json!({"schema":"uor-r4.geometric-cue-quantum-probe/1","mode":a.mode,"status":"completed","cases":128,"optimizer_updates":0,"proposal_count":2,"selected_arm":selected_name,"selected_native_equal_episode_ce":best,"arms":arms,"cue_quantum_probe":q,"cue_calibration_warmstart":a.cue_calibration_warmstart,"input_manifests_sha256":inputs,"evidence_source_commit":evidence["source_commit"],"evidence_executable_sha256":evidence["executable_sha256"],"evidence_receipt_sha256":q.evidence_receipt_sha256,"frozen_source_receipts":receipts,"frozen_payloads":f.hashes(),"storage_projection":projection,"fresh_predictions_before_selection":0,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib(),"claim":"bounded single-address actual native quarter intervention; development selection plus exposed diagnostic; no learned-update/seed/transfer/chat/energy claim"}),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1136,6 +1531,91 @@ mod tests {
         assert!(!admission_matches(
             &r, &a, "trusted", "initial", &receipts, &f, &inputs
         ));
+        Ok(())
+    }
+    fn probe() -> CueQuantumProbe {
+        CueQuantumProbe {
+            coefficient_index: 123,
+            initial_quarters: -1,
+            preferred_step: -1,
+            evidence_receipt: "receipt.json".into(),
+            evidence_receipt_sha256:
+                "7f2d33f5fc9562922110b2e5d9f032553665d7a4b2263c51ace113a6793a41d1".into(),
+        }
+    }
+    #[test]
+    fn quantum_mode_coordinate_and_donor_quarter_are_explicit() -> Result<()> {
+        use uor_r4_integer::geometric_potential_q4::{pack_coefficients, unpack_coefficients};
+        let mut a = valid_args()?;
+        a.mode = "cue-calibration-quantum-probe".into();
+        a.cue_quantum_probe = Some(probe());
+        validate(&a)?;
+        a.mode = "cue-calibration-fit".into();
+        assert!(validate(&a).is_err());
+        a.mode = "cue-calibration-quantum-probe".into();
+        a.cue_quantum_probe
+            .as_mut()
+            .ok_or_else(|| invalid("test probe absent"))?
+            .coefficient_index = 122;
+        assert!(validate(&a).is_err());
+        a.cue_quantum_probe = Some(probe());
+        a.fit_authorization = Some("optimizer.json".into());
+        assert!(validate(&a).is_err());
+        a.fit_authorization = None;
+        a.cue_quantum_probe
+            .as_mut()
+            .ok_or_else(|| invalid("test probe absent"))?
+            .evidence_receipt_sha256 = "stale".into();
+        assert!(validate(&a).is_err());
+        let q = probe();
+        let mut values = vec![0i8; 960];
+        values[122] = 3;
+        values[123] = -1;
+        let packed = pack_coefficients(&values).map_err(|e| invalid(e.to_string()))?;
+        for step in [-1, 1] {
+            let changed = quantum_packed(&packed, 960, &q, step)?;
+            let decoded = unpack_coefficients(960, &changed).map_err(|e| invalid(e.to_string()))?;
+            assert_eq!(decoded[123], -1 + step);
+            assert_eq!(decoded[122], 3);
+            assert_eq!(
+                decoded.iter().zip(&values).filter(|(a, b)| a != b).count(),
+                1
+            );
+        }
+        values[123] = 0;
+        let wrong = pack_coefficients(&values).map_err(|e| invalid(e.to_string()))?;
+        assert!(quantum_packed(&wrong, 960, &q, -1).is_err());
+        assert!(quantum_packed(&packed, 120, &q, -1).is_err());
+        assert!(quantum_packed(&packed, 960, &q, 0).is_err());
+        Ok(())
+    }
+    #[test]
+    fn quantum_saved_score_audit_checks_consumed_address_and_record_binding() -> Result<()> {
+        let q = probe();
+        let mapping =
+            json!([{"occurrence":{"record":1,"commit":1}},{"occurrence":{"record":2,"commit":2}}]);
+        let old = json!({"rows":[{"id":"x","tokens":[{"native":{"candidate_mapping":mapping,"actions":{"actions":[{"score_q24":10},{"score_q24":20},{"score_q24":0},{"score_q24":0}]}},"cue_carrier":{"angular_indices":[[null,null],[3,4]]}}]}]});
+        let mut new = old.clone();
+        new["rows"][0]["tokens"][0]["native"]["actions"]["actions"][0]["score_q24"] =
+            json!(10 - (1i64 << 22));
+        let truth =
+            json!({"rows":[{"id":"x","expected_source_labels_only":{"record":1,"commit":1}}]});
+        let result = quantum_margin_changes(&old, &new, &truth, &q, -1)?;
+        assert_eq!(result["touched_rows"], 1);
+        assert_eq!(result["touched_copy_positions"], 1);
+        assert_eq!(
+            result["rows"][0]["baseline_correct_vs_distractor_margin_q24"],
+            -10
+        );
+        assert_eq!(result["rows"][0]["margin_delta_q24"], -(1i64 << 22));
+        let mut bad = new.clone();
+        bad["rows"][0]["tokens"][0]["native"]["candidate_mapping"][0]["occurrence"]["record"] =
+            json!(9);
+        assert!(quantum_margin_changes(&old, &bad, &truth, &q, -1).is_err());
+        assert!(quantum_margin_changes(&old, &old, &truth, &q, -1).is_err());
+        let mut absent = old.clone();
+        absent["rows"][0]["tokens"][0]["cue_carrier"]["angular_indices"][1][0] = json!(4);
+        assert!(quantum_margin_changes(&absent, &absent, &truth, &q, -1).is_err());
         Ok(())
     }
 }
