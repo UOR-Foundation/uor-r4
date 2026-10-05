@@ -741,6 +741,7 @@ fn validate_answers(answers: &FrozenAnswers, single_source: bool) -> Result<()> 
 enum PanelLayout {
     Legacy,
     NaturalAllBank,
+    ProspectiveAllBank,
 }
 pub(crate) const NATURAL_PANEL_LAYOUT: &str = "raw-natural-allbank-pairs/1";
 pub(crate) fn load_natural_panel(
@@ -881,6 +882,10 @@ fn load_panel_with_layout(
                 let packets = result.iter().map(|e| &e.packet).collect::<Vec<_>>();
                 validate_natural_layout(&c, expected_count, &packets)?;
             }
+            PanelLayout::ProspectiveAllBank => {
+                let packets = result.iter().map(|e| &e.packet).collect::<Vec<_>>();
+                validate_natural_layout_count(&c, expected_count, &packets, true)?;
+            }
         }
     }
     Ok(result)
@@ -927,11 +932,23 @@ fn validate_natural_layout(
     expected_count: usize,
     packets: &[&Packet],
 ) -> Result<()> {
+    validate_natural_layout_count(context, expected_count, packets, false)
+}
+fn validate_natural_layout_count(
+    context: &Value,
+    expected_count: usize,
+    packets: &[&Packet],
+    prospective: bool,
+) -> Result<()> {
     let rows = context["cases"]
         .as_array()
         .ok_or_else(|| invalid("natural context cases absent"))?;
     if context["layout_policy"] != NATURAL_PANEL_LAYOUT
-        || !matches!(expected_count, 128 | 32)
+        || !(if prospective {
+            matches!(expected_count, 512 | 128)
+        } else {
+            matches!(expected_count, 128 | 32)
+        })
         || rows.len() != expected_count
         || packets.len() != expected_count
         || rows.iter().any(|r| r["kind"] != "bank")

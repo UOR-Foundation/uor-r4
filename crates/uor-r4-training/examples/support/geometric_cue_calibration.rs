@@ -178,7 +178,32 @@ fn panel(
     {
         return Err(invalid("cue calibration natural source/cue policy differs").into());
     }
-    let rows = load_natural_panel(root, count, integer, tok)?;
+    let rows = if a
+        .cue_discrete_fit
+        .as_ref()
+        .is_some_and(|c| c.composition_panel.is_some())
+    {
+        let split = if root == a.development_panel {
+            "development"
+        } else if root == a.fresh_panel {
+            "fresh"
+        } else {
+            return Err(invalid("unbound prospective panel root").into());
+        };
+        if !composition_report_matches(&read_json(&root.join("report.json"))?, split, count) {
+            return Err(invalid("prospective layout report mismatch").into());
+        }
+        load_panel_with_layout(
+            root,
+            count,
+            integer,
+            tok,
+            true,
+            PanelLayout::ProspectiveAllBank,
+        )?
+    } else {
+        load_natural_panel(root, count, integer, tok)?
+    };
     validate_raw_cues(
         root,
         &rows,
