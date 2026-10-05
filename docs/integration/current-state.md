@@ -61,6 +61,39 @@ bilinear weights would merely transpose the parameterization. No new joint
 mechanism is yet adopted. General attention/chat, full history/compiler/store
 integration and D11/D5 remain open; DeepSeek's softmax/tensor-core work is separate.
 
+The bounded development-only binding analysis now supports freezing **lanes5,7**
+(second head) for one candidate joint overlay. All512 first-read angular arrays
+and occurrence mappings remain unchanged under support8. Credit is attributable
+only for uniquely owned Source-record anchor bins with a unique companion;
+shared/ambiguous/null contributions are excluded and counted. For7→5,758
+eligible contributions have cancellation0.64389 unary versus0.01970 conditional;
+three fixed within-anchor companion permutations give0.4180/0.4347/0.4133 on the
+same contributions. Leave-literal-bank-family-out matched credit agreement is
+259/426 unary versus407/426 conditional, across332 rows/29 families. Reciprocal
+5→7 gives300/468 versus440/468. This predicts signed row credit, not source truth
+or a learned joint gradient. Real/permutation leave-out support sets differ and
+are not an agreement-rate comparator.
+
+Sparse support remains adverse evidence: roughly260 conditional cells, median
+effective credit rows about2 and largest-row fraction about52%;298 of758
+7→5 contributions lack outside-family joint support, with34 additional unary
+unsupported. The trial8 row gradient spans teacher-forced answer/EOS and is a
+feature heuristic for the support8 parent, not that parent's new gradient.
+Matched query-frame groups have67 both-correct/137 one-correct/52 both-wrong of256;
+matched assignment swaps have78/115/63. No evaluation labels select the pair.
+
+Next candidate uses ordered tuple(5,7), parent support8 payload
+`771864b7581b79a9d7b93137eb5e28e863da1361e04f41c0bf8810e442469781`, zero overlay
+and unchanged unary/prefix/end/source. Reuse the16-Q4 bilinear/table construction
+with explicit presence masks; require actual zero-parent parity and native
+finite-step behavior before any fit/capability conclusion. Frozen reversed-input
+order is a control; reversed refitting merely transposes the free matrix.
+Independent analysis2 exits0 in5.246s, CPU2/RSS678,756,352B,2GiB/120s cap;
+receipt SHA256`9e8199ab93a4c870293f2ce78e9102affad8c7e7701e2dcfdad4355deb86f87f`.
+Script/inputs/exclusions/all24 directions and permutation controls remain in
+`/workspace/uor-r4/codex/cue-support-probe/analysis-2`. No new joint implementation
+or fit has occurred yet; this is candidate admission, not adoption.
+
 Full60min preparation/checks/measurement/review/preservation/delivery precharge
 and necessary allowance extension preserves prior charges: cumulative
 1,357,635,028ms, limit1,358,400,028ms. Native CPU16/RSS12GiB/900s+30stop,

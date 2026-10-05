@@ -52,10 +52,11 @@ complete development answers. The wider step regresses the exposed composition
 panel; retain both its development donor and the original parent, without a chat
 promotion or unchanged dose extension. Current state owns exact counters/receipts.
 
-Next perform development-only binding/pair analysis, with uniquely attributable
-Source-record credit and companion-permutation controls, before freezing one
-within-head ordered pair for an isolated joint cue overlay. Reuse the existing
-16-Q4 bilinear-to-table compiler if warranted; do not search twelve fitted models
+The development-only binding analysis now motivates freezing ordered lanes5,7
+for one isolated zero-initialized joint cue overlay, with uniquely attributable
+Source-record credit and companion-permutation controls retained. Sparse joint
+support and the difference between credit heuristics and actual joint gradients
+remain explicit. Reuse the existing16-Q4 bilinear-to-table compiler; do not search twelve fitted models
 or infer representation impossibility from cancellation. Zero-overlay parity,
 frozen reversed-input order, companion erasure and a matched additive arm retain
 causal interpretation. No exposed evaluation labels choose pair/features.
