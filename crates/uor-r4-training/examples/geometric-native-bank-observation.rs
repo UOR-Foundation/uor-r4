@@ -966,6 +966,7 @@ mod reuse {
             || a.bank.learned_native_artifact.is_some()
             || a.bank.learned_trusted_native_binding.is_some()
             || a.bank.source_end_warmstart.is_some()
+            || a.bank.cue_calibration_warmstart.is_some()
         {
             return Err(
                 invalid("unsupported legacy overlay/control arguments in dedicated draft").into(),
@@ -1443,6 +1444,16 @@ mod reuse {
             config["bank"]["source_end_warmstart"] = json!({
                 "native_bundle":"end", "native_metadata_sha256":"a".repeat(64),
                 "period_packed_sha256":"b".repeat(64), "stop_packed_sha256":"c".repeat(64),
+                "data_scope":"explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+            });
+            assert!(validate(&serde_json::from_value(config.clone())?).is_err());
+            config["bank"]["source_end_warmstart"] = Value::Null;
+            config["bank"]["cue_calibration_warmstart"] = json!({
+                "initial_cue_bundle":"cue", "initial_cue_metadata_sha256":"a".repeat(64),
+                "initial_cue_packed_sha256":"b".repeat(64), "frozen_end_bundle":"end",
+                "frozen_end_metadata_sha256":"c".repeat(64),
+                "frozen_end_period_packed_sha256":"d".repeat(64),
+                "frozen_end_stop_packed_sha256":"e".repeat(64),
                 "data_scope":"explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
             });
             assert!(validate(&serde_json::from_value(config)?).is_err());
