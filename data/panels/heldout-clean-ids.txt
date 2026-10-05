@@ -1,13 +1,11 @@
-# heldout-200 ids not in heldout-ill-posed-ids.txt (tier K-clean)
+# Tier K-clean: the heldout-200 ids not in heldout-ill-posed-ids.txt.
 heldout-000
-heldout-001
 heldout-003
 heldout-004
 heldout-005
 heldout-007
 heldout-010
 heldout-011
-heldout-016
 heldout-017
 heldout-018
 heldout-020
@@ -37,7 +35,6 @@ heldout-061
 heldout-062
 heldout-064
 heldout-065
-heldout-070
 heldout-071
 heldout-072
 heldout-075
@@ -45,8 +42,6 @@ heldout-076
 heldout-077
 heldout-081
 heldout-084
-heldout-086
-heldout-087
 heldout-088
 heldout-089
 heldout-090
@@ -54,7 +49,6 @@ heldout-092
 heldout-093
 heldout-094
 heldout-096
-heldout-097
 heldout-098
 heldout-099
 heldout-101
@@ -66,32 +60,24 @@ heldout-109
 heldout-111
 heldout-113
 heldout-115
-heldout-117
 heldout-119
 heldout-120
 heldout-121
 heldout-122
-heldout-123
-heldout-124
 heldout-125
 heldout-126
-heldout-128
 heldout-130
 heldout-132
 heldout-133
 heldout-134
-heldout-135
 heldout-136
 heldout-138
-heldout-139
-heldout-141
 heldout-142
 heldout-143
 heldout-145
 heldout-146
 heldout-148
 heldout-149
-heldout-150
 heldout-151
 heldout-152
 heldout-153
@@ -110,12 +96,8 @@ heldout-170
 heldout-171
 heldout-172
 heldout-173
-heldout-174
-heldout-175
-heldout-176
 heldout-177
 heldout-178
-heldout-180
 heldout-183
 heldout-184
 heldout-185
@@ -125,6 +107,5 @@ heldout-188
 heldout-192
 heldout-193
 heldout-194
-heldout-195
 heldout-197
 heldout-198

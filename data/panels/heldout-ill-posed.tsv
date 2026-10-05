@@ -1,72 +1,91 @@
-# id	source	note
-heldout-002	screen	constraint template with no task; [forbidden_words] placeholder
-heldout-006	screen	letter salutation only
-heldout-008	0a-29m+0a-96m	0a label ill=1
-heldout-009	screen	letter salutation only
-heldout-012	0a-29m+0a-96m	0a label ill=1
-heldout-013	0a-29m+0a-96m	0a label ill=1
-heldout-014	0a-29m+0a-96m	0a label ill=1
-heldout-015	screen	[city] placeholder
-heldout-019	screen	letter salutation only
-heldout-021	0a-29m+0a-96m	0a label ill=1
-heldout-023	0a-29m+0a-96m	0a label ill=1
-heldout-024	screen	first line of an announcement post; no request
-heldout-030	screen	'Given the text:' with the question missing
-heldout-031	0a-96m	0a label ill=1
-heldout-034	0a-29m+0a-96m	0a label ill=1
-heldout-035	0a-29m+0a-96m	0a label ill=1
-heldout-037	0a-29m+0a-96m	0a label ill=1
-heldout-038	0a-29m+0a-96m	0a label ill=1
-heldout-039	0a-29m	0a label ill=1
-heldout-046	0a-29m+0a-96m	0a label ill=1
-heldout-047	screen	salutation only
-heldout-049	0a-29m+0a-96m	0a label ill=1
-heldout-050	screen	salutation only
-heldout-051	0a-29m+0a-96m	0a label ill=1
-heldout-054	0a-29m+0a-96m	0a label ill=1
-heldout-056	0a-29m+0a-96m	0a label ill=1
-heldout-059	0a-96m	0a label ill=1
-heldout-063	0a-29m+0a-96m	0a label ill=1
-heldout-066	0a-29m+0a-96m	0a label ill=1
-heldout-067	0a-29m+0a-96m	0a label ill=1
-heldout-068	0a-29m+0a-96m	0a label ill=1
-heldout-069	0a-29m	0a label ill=1
-heldout-073	screen	asks to review a description that is not included
-heldout-074	0a-29m	0a label ill=1
-heldout-078	0a-29m+0a-96m	0a label ill=1
-heldout-079	0a-29m+0a-96m	0a label ill=1
-heldout-080	0a-29m+0a-96m	0a label ill=1
-heldout-082	0a-96m	0a label ill=1
-heldout-083	0a-96m	0a label ill=1
-heldout-085	0a-29m+0a-96m	0a label ill=1
-heldout-091	0a-29m+0a-96m	0a label ill=1
-heldout-095	0a-29m+0a-96m	0a label ill=1
-heldout-100	screen	salutation only
-heldout-102	screen	letter salutation only
-heldout-105	0a-29m+0a-96m	0a label ill=1
-heldout-107	0a-29m+0a-96m	0a label ill=1
-heldout-110	0a-29m	0a label ill=1
-heldout-112	0a-29m+0a-96m	0a label ill=1
-heldout-114	0a-29m+0a-96m	0a label ill=1
-heldout-116	screen	a statement fragment from a document; no request
-heldout-118	screen	asks to refine text that is not included
-heldout-127	0a-96m	0a label ill=1
-heldout-129	0a-29m+0a-96m	0a label ill=1
-heldout-131	screen	letter salutation only
-heldout-137	0a-29m+0a-96m	0a label ill=1
-heldout-140	0a-29m+0a-96m	0a label ill=1
-heldout-144	screen	constraint template with no task; [forbidden_words] placeholder
-heldout-147	0a-29m+0a-96m	0a label ill=1
-heldout-154	0a-29m+0a-96m	0a label ill=1
-heldout-156	0a-29m+0a-96m	0a label ill=1
-heldout-162	0a-29m+0a-96m	0a label ill=1
-heldout-163	0a-29m+0a-96m	0a label ill=1
-heldout-166	0a-96m	0a label ill=1
-heldout-179	0a-29m+0a-96m	0a label ill=1
-heldout-181	0a-29m+0a-96m	0a label ill=1
-heldout-182	0a-29m	0a label ill=1
-heldout-189	0a-29m+0a-96m	0a label ill=1
-heldout-190	0a-29m	0a label ill=1
-heldout-191	0a-29m	0a label ill=1
-heldout-196	0a-29m	0a label ill=1
-heldout-199	0a-29m+0a-96m	0a label ill=1
+# id	reason	(text-only criterion of data/panels/README.md, applied to all 200 heldout-200 rows)
+heldout-001	absent
+heldout-002	constraints_only
+heldout-006	fragment
+heldout-008	fragment
+heldout-009	fragment
+heldout-012	absent
+heldout-013	template
+heldout-014	absent
+heldout-015	template
+heldout-016	constraints_only
+heldout-019	fragment
+heldout-021	fragment
+heldout-023	fragment
+heldout-024	fragment
+heldout-030	fragment
+heldout-031	fragment
+heldout-034	fragment
+heldout-035	fragment
+heldout-037	fragment
+heldout-038	absent
+heldout-039	absent
+heldout-046	fragment
+heldout-047	fragment
+heldout-049	template
+heldout-050	fragment
+heldout-051	absent
+heldout-054	fragment
+heldout-056	fragment
+heldout-059	absent
+heldout-063	absent
+heldout-066	fragment
+heldout-067	absent
+heldout-068	fragment
+heldout-069	absent
+heldout-070	constraints_only
+heldout-073	absent
+heldout-074	fragment
+heldout-078	fragment
+heldout-079	absent
+heldout-080	template
+heldout-082	fragment
+heldout-083	fragment
+heldout-085	absent
+heldout-086	absent
+heldout-087	fragment
+heldout-091	fragment
+heldout-095	absent
+heldout-097	fragment
+heldout-100	fragment
+heldout-102	fragment
+heldout-105	absent
+heldout-107	absent
+heldout-110	fragment
+heldout-112	absent
+heldout-114	fragment
+heldout-116	fragment
+heldout-117	constraints_only
+heldout-118	absent
+heldout-123	fragment
+heldout-124	constraints_only
+heldout-127	fragment
+heldout-128	fragment
+heldout-129	fragment
+heldout-131	fragment
+heldout-135	constraints_only
+heldout-137	absent
+heldout-139	constraints_only
+heldout-140	fragment
+heldout-141	fragment
+heldout-144	constraints_only
+heldout-147	absent
+heldout-150	constraints_only
+heldout-154	absent
+heldout-156	fragment
+heldout-162	absent
+heldout-163	fragment
+heldout-166	fragment
+heldout-174	constraints_only
+heldout-175	fragment
+heldout-176	constraints_only
+heldout-179	fragment
+heldout-180	constraints_only
+heldout-181	fragment
+heldout-182	template
+heldout-189	fragment
+heldout-190	absent
+heldout-191	absent
+heldout-195	constraints_only
+heldout-196	fragment
+heldout-199	fragment
