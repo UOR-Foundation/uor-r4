@@ -141,11 +141,6 @@ fn u32_of(value: usize, what: &str) -> CResult<u32> {
     u32::try_from(value).map_err(|_| candle_core::Error::Msg(format!("CUDA {what} too large")))
 }
 
-/// The bf16 copy of an f32 buffer, for a f32 workspace a kernel filled.
-fn bf16_of(tensor: Tensor) -> CResult<Tensor> {
-    tensor.to_dtype(DType::BF16)
-}
-
 // ---------------------------------------------------------------------------
 // StraightThrough, SwiGLU, RMSNorm, the quaternion scan.
 

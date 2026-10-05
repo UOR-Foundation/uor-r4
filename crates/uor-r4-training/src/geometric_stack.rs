@@ -8444,8 +8444,14 @@ impl CustomOp2 for StraightThrough {
 
 /// Straight-through estimator: forward is `quantized`, backward gradient flows to `continuous`.
 pub fn straight_through(continuous: &Tensor, quantized: &Tensor) -> Result<Tensor> {
-    if continuous.dtype() != DType::F32 || quantized.dtype() != DType::F32 {
-        return Err(invalid("straight_through requires F32 tensors"));
+    // Under `precision=bf16` both sides are bf16 activations; the op copies
+    // the served value's storage either way.
+    if !matches!(continuous.dtype(), DType::F32 | DType::BF16)
+        || quantized.dtype() != continuous.dtype()
+    {
+        return Err(invalid(
+            "straight_through needs one f32 or bf16 dtype on both sides",
+        ));
     }
     if continuous.shape() != quantized.shape() {
         return Err(invalid("straight-through inputs must have one shape"));
@@ -9518,8 +9524,14 @@ fn previous_key_channel(key: &Tensor) -> Result<Tensor> {
 
 /// Runs the quaternion transport recurrence over whole windows.
 pub fn quaternion_scan(transition: &Tensor, drive: &Tensor) -> Result<Tensor> {
-    if transition.dtype() != DType::F32 || drive.dtype() != DType::F32 {
-        return Err(invalid("quaternion_scan requires F32 tensors"));
+    // The scan reads bf16 storage and multiplies in f32 under
+    // `precision=bf16` (see [`Precision`]).
+    if !matches!(transition.dtype(), DType::F32 | DType::BF16)
+        || drive.dtype() != transition.dtype()
+    {
+        return Err(invalid(
+            "quaternion_scan needs one f32 or bf16 dtype on both inputs",
+        ));
     }
     let (batch, time, lanes, four) = transition.dims4()?;
     if four != 4 || drive.shape() != transition.shape() {

@@ -1685,7 +1685,10 @@ fn assert_bf16_rounds_once(
             "{op}: element {i} is {have}, not the f32 result {want} rounded once to bf16"
         );
     }
-    println!("{op}: bf16 output is the f32 output rounded once ({})", expected.len());
+    println!(
+        "{op}: bf16 output is the f32 output rounded once ({})",
+        expected.len()
+    );
     Ok(())
 }
 
@@ -1709,13 +1712,13 @@ fn test_bf16_exact_inputs_round_once() -> uor_r4_training::Result<()> {
         Ok(dev) => dev,
         Err(e) => return no_device(e),
     };
-    let exact = |values: Vec<f32>, shape: Vec<usize>| -> uor_r4_training::Result<candle_core::Tensor> {
-        Ok(candle_core::Tensor::from_vec(values, shape, &cuda)?)
-    };
-    let as_bf16 =
-        |tensor: &candle_core::Tensor| -> uor_r4_training::Result<candle_core::Tensor> {
-            Ok(tensor.to_dtype(candle_core::DType::BF16)?)
+    let exact =
+        |values: Vec<f32>, shape: Vec<usize>| -> uor_r4_training::Result<candle_core::Tensor> {
+            Ok(candle_core::Tensor::from_vec(values, shape, &cuda)?)
         };
+    let as_bf16 = |tensor: &candle_core::Tensor| -> uor_r4_training::Result<candle_core::Tensor> {
+        Ok(tensor.to_dtype(candle_core::DType::BF16)?)
+    };
 
     // Quaternion scan.
     let (batch, time, lanes) = (2usize, 6usize, 4usize);
@@ -1761,10 +1764,7 @@ fn test_bf16_exact_inputs_round_once() -> uor_r4_training::Result<()> {
         bf16_exact(batch * time * (lanes + width), 6),
         vec![batch, time, lanes + width],
     )?;
-    let parameters = exact(
-        bf16_exact(5 * width + lanes, 7),
-        vec![5 * width + lanes],
-    )?;
+    let parameters = exact(bf16_exact(5 * width + lanes, 7), vec![5 * width + lanes])?;
     let f32_core = recurrence_core(
         &branches,
         &gates,
