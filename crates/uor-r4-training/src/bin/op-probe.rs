@@ -119,6 +119,72 @@ fn main() -> Result<(), String> {
             .map_err(|e| format!("panel json: {e}"))?;
     let rows = panel.as_array().ok_or("panel is not an array")?;
 
+    // mode=prose measures the FALSE-WRITE rate: how often ordinary prose compiles to a
+    // WRITE. An assert adds a fact nobody stated; a correct OVERWRITES one. Run with
+    // open=0 (shipped world=v2 behaviour) and open=1 (this branch) to see whether the
+    // open path's out-of-scope guard actually protects against this.
+    if let Some(path) = kv("prose") {
+        use uor_r4_training::stack_grounded_session::CompiledAction as CA;
+        let open = kv("open").as_deref() == Some("1");
+        let compiler = compiler.with_open_relations(open);
+        let body = fs::read_to_string(&path).map_err(|e| format!("prose: {e}"))?;
+        let (mut unres, mut asserts, mut corrects, mut errs) = (0usize, 0usize, 0usize, 0usize);
+        let mut ex: Vec<(String, u32, String)> = Vec::new();
+        let mut total = 0usize;
+        for line in body.lines() {
+            let text = line.trim();
+            if text.is_empty() {
+                continue;
+            }
+            total += 1;
+            match compiler.action(text) {
+                Ok(CA::Assert { relation, span }) => {
+                    asserts += 1;
+                    if ex.len() < 8 {
+                        ex.push((
+                            "ASSERT".into(),
+                            relation,
+                            text.get(span.start..span.end).unwrap_or_default().to_string(),
+                        ));
+                    }
+                }
+                Ok(CA::Correct { relation, span }) => {
+                    corrects += 1;
+                    if ex.len() < 8 {
+                        ex.push((
+                            "CORRECT".into(),
+                            relation,
+                            text.get(span.start..span.end).unwrap_or_default().to_string(),
+                        ));
+                    }
+                }
+                Ok(_) => unres += 1,
+                Err(_) => errs += 1,
+            }
+        }
+        let writes = asserts + corrects;
+        println!("  prose set: {total} sentences   open_relations={open}");
+        println!("    unresolved      {unres:>4}");
+        println!("    ASSERT (adds)   {asserts:>4}");
+        println!("    CORRECT (overwrites) {corrects:>4}");
+        println!("    errors          {errs:>4}");
+        println!(
+            "    FALSE-WRITE RATE {writes}/{total} = {:.1}%",
+            100.0 * writes as f64 / total.max(1) as f64
+        );
+        println!(
+            "    OVERWRITE RATE   {corrects}/{total} = {:.1}%",
+            100.0 * corrects as f64 / total.max(1) as f64
+        );
+        if !ex.is_empty() {
+            println!("\n    first writes:");
+            for (k, r, sp) in &ex {
+                println!("      {k:<8} rel={r:<4} span={sp:?}");
+            }
+        }
+        return Ok(());
+    }
+
     // mode=phrase validates the DETERMINISTIC extractor against the panel's own relation
     // field: does the phrase taken from the turn's words name the row's relation, and do
     // the statement and the question derive the SAME address?
