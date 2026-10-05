@@ -13,8 +13,11 @@ unchanged. No retrieval, transfer, general-chat or full serving qualification.
 Independent saved-row review finds80 remaining payload first-errors:58 at token0
 (46 wrong factual source,12 right) and22 later, including five correct→wrong source
 switches. Preserve calibrated64. Next isolate geometric query-conditioned cue/record
-ranking, relation/role information retained in candidate geometry, and frozen
-cue/prefix potentials. Separate initial binding from later continuity; no repeated
+ranking. Saved64-pair audit finds no full query/source cue-descriptor collisions,
+but70/128 equal source cue bonuses; current cue helps7 source winners/harms2. Full
+assertion role text is consumed. Next warm-start cue-only credit against the complete
+calibrated native path, preserving roots/prefix/endpoints and exact baseline. Separate
+initial binding from later continuity; no repeated
 endpoint dose or traversal-only repair. Shared compiler/session untouched.
 
 CPU16/noGPU remaining Linux pod; fit exit0/243.849s. Actual1library+1observation+

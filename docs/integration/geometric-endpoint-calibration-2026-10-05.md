@@ -56,12 +56,25 @@ source. First-error counts move from payload80/Period34/Stop3/exact11 to
 payload80/Period20/Stop5/exact23. PrematurePeriod during payload remains12 and
 prematureStop22. Thus the gains repair boundaries without reducing payload errors.
 
-Preserve calibrated64. Next isolate geometric query-conditioned cue/record ranking
-against currently frozen cue/prefix potentials: check what relation/role information
-survives into candidate geometry, descriptor collisions, and native counterfactual
-rank changes before another fit. Separate initial binding from later source
-continuity. A traversal-only cursor cannot repair58 token0 failures; do not repeat
-endpoint dose or infer geometry-family incapacity. See the owning live plan/state.
+Preserve calibrated64. The subsequent saved-trace audit of64 truthful same-bank
+query pairs finds no identical full query observations, latent states or cue angular
+descriptors, and no row with identical eight-lane descriptors across its two sources.
+But24/64 pairs have different descriptors and identical cue score vectors, and70/128
+reads give both sources the same cue bonus. The actual cue changes nine source
+winners, helping seven/harming two: saved-score subtraction yields75/128 correct
+versus actual80/128. This is an exact saved-score ablation, not native reexecution or
+complete-reply evidence. It does not prove global additive-table separability.
+Full assertion role text reaches both recurrence and cue encoding; numeric metadata
+is intentionally excluded from semantic scoring. Literal role deletion is ruled out.
+
+**Next:** warm-start existing cue coefficients against the authoritative complete
+native SourceEnd pipeline while freezing observation roots, prefix and calibrated
+endpoint payloads. First prove independent baseline replay and connected cue-only
+credit. Existing cue-only loss omits the retained prefix/endpoint path and cannot be
+reused unchanged. Rebind unchanged payload metadata honestly when cue hashes change.
+Distinguish initial binding from later continuity; do not repeat endpoint/root dose,
+add a traversal-only repair for58 token0 failures, or invent a new role representation
+on the basis of a measured collision that is absent here.
 
 ## Checks, preservation and cost
 
