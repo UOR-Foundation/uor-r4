@@ -233,3 +233,15 @@ The owner's latest shared spending limit is at most four running pods and $8/hou
 across all labs. Until PR1758 merges, pod creation requires asking the owner on#820.
 Lease/status and live job checks precede resource use; a spending ceiling is not
 an automatic pod-creation instruction.
+
+
+The second saved-trace reviewer completes the diagnostic coverage audit from cached
+artifacts: five changed coordinates are consumed on36/128 development rows and0/32
+diagnostic rows, at token0 or any canonical position. Development raw Copy arrays
+change on exactly those36 rows. Diagnostic raw Copy arrays change on0 rows and its
+CE remains exactly1.1520349773590852. Rebound metadata changes whole JSON bytes;
+that is not numerical movement. The earlier UNVERIFIED coverage status is superseded
+by this saved-artifact audit, not a new model run. Broaden prospectively authored
+training compositions while freezing the discrete law, then evaluate disjoint
+untouched compositions. Do not author targeted coordinate fixes from diagnostic
+labels or infer geometric generalization from development gains.

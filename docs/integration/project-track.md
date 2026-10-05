@@ -23,8 +23,12 @@ Exposed diagnostic source15/32 and complete1/32 stay flat. Preserve the selected
 native chain, all trials and the original baseline. This establishes a useful
 learning change at the current structured recall scope, not transferable attention.
 
-Next use saved changed-bin coverage and payload/terminal/source-continuity evidence
-to define the transfer discriminator. Freeze the learning rule before prospectively
+Saved coverage now explains the unchanged diagnostic: none of its32 rows consumes
+any changed coordinate, while36/128 development rows do. Raw diagnostic Copy scores
+and CE are unchanged. Next broaden training compositions across geometric cue
+addresses and distinguish role/query facts, using the existing Rust source preparer
+and a prospective disjoint transfer split. Keep training coverage independent of
+diagnostic correctness; avoid coordinate-specific fixes authored from failed rows. Freeze the learning rule before prospectively
 unexposed compositions/paraphrases are evaluated; do not select a model from the
 exposed32 or repeat dose without a causal decision. Keep full all-source choice,
 complete answer/EOS and paired opposite-role questions. Source-separated

@@ -39,8 +39,13 @@ The first attempt stopped before learning because transported AppleDouble files
 violated sealed input membership; only verified metadata companions were removed,
 real input hashes were unchanged, and the retry used a new report root.
 [PR1760](https://github.com/UOR-Foundation/uor-r4/pull/1760) is stacked and unmerged.
-Next inspect changed-bin coverage and payload/terminal/source-continuity attribution
-in the saved result, then freeze the discrete rule for a prospective transfer test.
+Saved-trace review finds the five changed coordinates consumed on36/128 development
+rows but0/32 diagnostic rows, at token0 or any canonical position. Raw diagnostic
+Copy score arrays remain unchanged and CE stays1.1520349773590852; metadata changes
+alone do not imply numerical changes. Next freeze this learning rule and broaden
+training-role/query/literal compositions without tuning to diagnostic labels or
+selecting from the exposed32. Predeclare disjoint untouched transfer compositions,
+then measure actual source choice, continuity and complete answers.
 Do not repeat the same dose or treat the flat exposed diagnostic as family rejection.
 Shared compiler/session files remain untouched.
 
