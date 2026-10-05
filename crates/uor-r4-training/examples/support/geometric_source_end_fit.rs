@@ -62,7 +62,21 @@ pub(super) fn natural_pair_diagnostics(
     let gr = generation["rows"]
         .as_array()
         .ok_or_else(|| invalid("natural generated rows absent"))?;
-    if !matches!(rows.len(), 32 | 128) || cr.len() != rows.len() || gr.len() != rows.len() {
+    let prospective = if rows.len() == 512 {
+        let report = read_json(&panel.join("report.json"))?;
+        report["transfer_profile"] == "supported-prospective-role-diversity/1"
+            && report["split"] == "development"
+            && report["source_policy"]
+                == "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+            && report["cases"] == 512
+            && report["samebank_query_pairs"] == 256
+    } else {
+        false
+    };
+    if (!matches!(rows.len(), 32 | 128) && !prospective)
+        || cr.len() != rows.len()
+        || gr.len() != rows.len()
+    {
         return Err(invalid("natural pair row count differs").into());
     }
     let mut pairs = BTreeMap::<String, Vec<Value>>::new();
@@ -80,13 +94,11 @@ pub(super) fn natural_pair_diagnostics(
             .values()
             .any(|p| p.len() != 2 || p[0]["query_role"] == p[1]["query_role"])
     {
-        return Err(invalid("natural panel requires64 intact query pairs").into());
+        return Err(invalid("natural panel requires intact opposite-role query pairs").into());
     }
-    Ok(json!({"pairs":pairs,"scope":if rows.len()==128 {
-        "all128 bank rows;64query pairs; labels only after native read"
-    } else {
-        "all32 bank rows;16query pairs; labels only after native read"
-    }}))
+    Ok(
+        json!({"pairs":pairs,"scope":format!("all{} bank rows;{}query pairs; labels only after native read", rows.len(), rows.len()/2)}),
+    )
 }
 fn exact_warm_fidelity(donor: &Value, warm: &Value) -> Result<()> {
     if donor != warm {
@@ -1322,6 +1334,49 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn prospective_pair_diagnostics_require_bound_profile_and_preserve_legacy_counts() -> Result<()>
+    {
+        let dir =
+            std::env::temp_dir().join(format!("uor-prospective-pairs-{}", std::process::id()));
+        fs::create_dir(&dir)?;
+        let mut report = json!({"transfer_profile":"supported-prospective-role-diversity/1","split":"development","source_policy":"explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2","cases":512,"samebank_query_pairs":256});
+        let mut rows = Vec::new();
+        for i in 0..512 {
+            rows.push(json!({"id":format!("row-{i}"),"pair_id":format!("pair-{}",i/2),"query_role":if i%2==0 {"job"} else {"where"}}));
+        }
+        write_json(&dir, "context-data.json", &json!({"cases":rows}))?;
+        write_json(&dir, "report.json", &report)?;
+        let predictions = json!({"rows":rows});
+        let accepted = natural_pair_diagnostics(&dir, &predictions, &predictions)?;
+        assert_eq!(accepted["pairs"].as_object().map(|p| p.len()), Some(256));
+        assert!(accepted["scope"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("all512"));
+        for (field, bad) in [
+            ("transfer_profile", json!("legacy")),
+            ("split", json!("fresh")),
+            ("cases", json!(128)),
+            ("samebank_query_pairs", json!(64)),
+            ("source_policy", json!("supplied-answer")),
+        ] {
+            let good = report[field].clone();
+            report[field] = bad;
+            write_json(&dir, "report.json", &report)?;
+            assert!(natural_pair_diagnostics(&dir, &predictions, &predictions).is_err());
+            report[field] = good;
+        }
+        fs::remove_file(dir.join("report.json"))?;
+        for count in [32, 128] {
+            let legacy = json!({"rows":&rows[..count]});
+            write_json(&dir, "context-data.json", &json!({"cases":&rows[..count]}))?;
+            natural_pair_diagnostics(&dir, &legacy, &legacy)?;
+        }
+        fs::remove_file(dir.join("context-data.json"))?;
+        fs::remove_dir(&dir)?;
+        Ok(())
+    }
     #[test]
     fn calibration_rejects_stale_warm_scope_and_preserves_legacy_receipt() -> Result<()> {
         let mut args: Args = serde_json::from_value(
