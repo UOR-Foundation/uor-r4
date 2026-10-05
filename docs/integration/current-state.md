@@ -1,5 +1,13 @@
 # Current UOR-R4 research state
 
+## Exact native score replay finds unused-span training defect — October 5
+
+The [zero-update replay](geometric-head-scores-2026-10-05.md) reproduces7,560 inspected predictions across six fits/five checkpoints. At CP64 familiar-frame/new-value, raw act377/384 and raw role381/384 contrast with final act171/384: failed span capture falls back to Unresolved. Earlier final-action counts are not raw-head error counts. Seventy-one correct-start truncations have negative omitted suffixes, not zero ties. Four-word repetition raw starts48/48 and truncations48/48 refine the earlier final39/48 count; selected checkpoints remain unchanged.
+
+Independent source/frozen-row review reproduces965 span signatures/100 contradictions. Span training and development CE supervise query/NONE branches that serving never uses; conditioning on256 labelled writes removes96 conflicts, leaving4 genuine article-boundary ambiguities. **Next:** explicit conditional write-target span supervision/development selection, write-row mean, all act/role and final false-write controls retained. Never gate training on predicted act or add runtime gold masking. Legacy objective retained; no fresh model result yet. Complete-interval credit and native geometric capture remain subsequent options for residual failure. No geometry retirement or unchanged-objective fit.
+
+Source51be10a0, Linux CPU48,9 library/2 probe/8 curriculum tests plus release and six replays pass; independent8,938,809 saved-arithmetic checks admit7,560 rows, with no native encoder/backward reexecution. Wrapper586.580s/replay workers25.778s, sampledRSS2.959GB. Full103-file202,837,702B return verified and retained;90min zero-update card/cumulative1,277,835,028ms. Metal unavailable/GPU unused, shared session unchanged. Fresh reader remains NOT_RUN; general chat/reasoning/Generate/full history/laptop energy remain unmet.
+
 ## Balanced compiler curriculum yields development memory gains — October 5
 
 The [three-seed paired curriculum](geometric-compiler-curriculum-2026-10-05.md) now crosses frames and arbitrary values with balanced acts and nonwrite controls. Five of six local H4/Q4 heads select trained checkpoints. Product development exact store9/8/10 per12 and all-bank native replies6/5/6 per12 are actual predicted-compilation integration gains. Fresh writes remain0/32 in all six; fresh reader calls0, so reader **NOT_RUN**, not an isolated reader failure. Reference compilation/store pass; reference fresh selected/all-bank replies2/12 remain separate. Original64-row reader training supplied answer-bearing records64/64; later banks still have authored cues/extracted spans. No general chat or geometry-family verdict.
