@@ -1,5 +1,29 @@
 # Current UOR-R4 research state
 
+## Frozen geometric cue-credit audit — October 5 implementation
+
+[PR1766](https://github.com/UOR-Foundation/uor-r4/pull/1766), stacked on PR1762,
+implements the next discriminator at source `aa6c679d`: all512 development
+singleton ordinary answer/EOS gradients at the frozen selected native checkpoint,
+plus one independent full-panel gradient control. Each row/native full loss is
+checked against sealed selected canonical evidence, and saved first-read cue
+metadata must match the actual independently compiled cue before attribution.
+All960 coordinates retain signed/absolute credit, positive/negative magnitudes,
+cancellation, effective row count and maximum-row concentration. Public grouping
+is posthoc; occurrence-candidate heterogeneity is not source-record contrast.
+No updates, proposals, selection, generation or evaluation gradients occur.
+
+Independent exact-head source review, rustfmt and diff checks pass. Scoped
+compile/tests and actual audit are NOT_RUN: advertised5090 stock refused creation
+in canonical EUR-NO and EU-RO; main `uor-pod` is in a bounded stock wait. No pod
+was created by those refusals and no laptop model compute is substituted.
+DeepSeek's tensor-core/softmax investigation remains separate; the existing loss
+is fixed for this causal diagnosis. Full60min work precharge/necessary local
+allowance extension preserves prior ledger charges: cumulative1,354,035,028ms,
+limit1,354,800,028ms. BuildCPU8/RSS8GiB; native auditCPU16/RSS12GiB/600s plus30s
+stop/report64MiB; ownpod10GiB/128MiB storage stopmargin. Live pod admission,
+actual measurements and final checks must be recorded before a verdict.
+
 ## Prospective geometric cue composition — October 5
 
 [PR1762](https://github.com/UOR-Foundation/uor-r4/pull/1762) prepares the opt-in
