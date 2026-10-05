@@ -2175,7 +2175,18 @@ mod tests {
             role: 1,
             event: 2,
         }];
-        let absent = f.execution().read_bank_with_source_end_transport(
+        // The retained occurrence reader requires a Source. This wrapper
+        // preserves its EmptyBank error rather than inventing an absent-source
+        // serving path. The standalone factual-route test covers zero atoms.
+        let old_empty = f.execution().read_bank_with_prefix_transport(
+            &empty,
+            &[5],
+            &[],
+            &f.parent,
+            &cue,
+            &prefix,
+        );
+        let new_empty = f.execution().read_bank_with_source_end_transport(
             &empty,
             &[5],
             &[],
@@ -2183,11 +2194,9 @@ mod tests {
             &cue,
             &prefix,
             &nonzero,
-        )?;
-        assert_eq!(absent.source_end.selected_bank_index, None);
-        assert_eq!(absent.source_end.selected_source_index, None);
-        assert_eq!(absent.source_end.period_q24, vec![0; c.heads]);
-        assert_eq!(absent.actions, absent.prefix_bank.cue_bank.bank.actions);
+        );
+        assert!(old_empty.is_err());
+        assert!(new_empty.is_err());
         let mut foreign = f.parent.clone();
         foreign.metadata_sha256 = "0".repeat(64);
         assert!(f

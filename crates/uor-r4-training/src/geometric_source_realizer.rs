@@ -3327,18 +3327,11 @@ mod tests {
             role: 1,
             event: 19,
         }];
-        let no_route =
-            prepared.loss_bank_source_end(&empty, &[5], &[], 3, &weights, &cue, &prefix, &end)?;
-        assert!(no_route.trace.source_end.selected_source_index.is_none());
-        let no_route_grad = no_route.loss.backward()?;
-        for var in weights.parameters().values() {
-            assert!(no_route_grad
-                .get(var.as_tensor())
-                .ok_or_else(|| invalid("source-end no-route graph absent"))?
-                .to_vec1::<f32>()?
-                .iter()
-                .all(|x| *x == 0.));
-        }
+        // Context-only banks are outside the retained reader's admitted
+        // Source contract; the loss preserves that error without a fake target.
+        assert!(prepared
+            .loss_bank_source_end(&empty, &[5], &[], 3, &weights, &cue, &prefix, &end)
+            .is_err());
         let root = fixture.path.join("source-end-bundle");
         weights.save(&root)?;
         let loaded = SourceEndAngularWeights::load(
