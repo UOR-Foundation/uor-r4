@@ -193,21 +193,28 @@ pub(super) fn run(
         let metrics = causal_metrics(&a.development_panel, development, &canonical, &generation)?;
         let summary =
             discrete::source_summary(&a.development_panel, development, &canonical, integer)?;
+        let metrics_new = metrics.clone();
+        let summary_new = summary.clone();
+        let comparisons = prior.iter().map(|(name,metrics,summary)| {
+            Ok(json!({"prior_arm":name,"causal_comparison":causal_comparison(metrics,&metrics_new)?,
+                "source_changes":discrete::source_changes(summary,&summary_new)?}))
+        }).collect::<Result<Vec<Value>>>()?;
         let outcome = json!({"name":name,"support":support,"native_ce":ce,"native_ce_delta":ce-baseline_ce,
             "coordinates":&ranked[..support],"predicted_linear_ce_delta":ranked[..support].iter().map(|(_,s,g)| f64::from(*s)*g/4.).sum::<f64>(),
             "coefficient_L1_quarter_dose":support,"cue_packed_sha256":sha256_bytes(&packed),
             "exact_independent_coefficient_delta_verified":true,"independent_native_reload":true,
             "causal_outcomes":metrics,"comparison_vs_baseline":causal_comparison(&baseline_metrics,&metrics)?,
-            "source_changes_vs_baseline":discrete::source_changes(&baseline_summary,&summary)?,"frozen_payloads":f.hashes()});
+            "source_changes_vs_baseline":discrete::source_changes(&baseline_summary,&summary)?,"comparisons_vs_all_prior_arms":comparisons,"frozen_payloads":f.hashes()});
         write_json(&root, "canonical.json", &canonical)?;
         write_json(&root, "generation.json", &generation)?;
         write_json(&root, "receipt.json", &outcome)?;
         report_output::seal(&root)?;
         report_output::verify(&root)?;
         if ce < best - 1e-9 {
-            selected = name;
+            selected = name.clone();
             best = ce;
         }
+        prior.push((name.clone(), metrics, summary));
         arms.push(outcome);
         frozen(source, receipts)?;
     }
