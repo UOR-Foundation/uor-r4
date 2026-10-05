@@ -2257,7 +2257,32 @@ impl SavedCompiler {
                     return Ok(table);
                 }
                 let op = self.op_action(source)?;
-                Ok(if statement(&op) { op } else { table })
+                // A DERIVED-ADDRESS table action is NOT overridden by the op model.
+                //
+                // `unless_query` prefers the op's statement when it produces one ("the op
+                // model's statement is used unless the table reads a query"). That is right
+                // in the closed world, where both name the same labels. It is wrong for an
+                // open relation: the op model emits CLOSED labels only (measured), so it
+                // would overwrite an address derived from the turn's own words with a closed
+                // one, and the QUESTION -- whose heads say NONE -- then derives the phrase
+                // address and reads an empty slot.
+                //
+                // THIS GUARD MUST LIVE IN `UnlessQuery`. It was first written into the
+                // TableStatements arm, which sessions never take (they run
+                // op_policy=unless_query), so it was UNREACHED and its "no effect"
+                // measurement was meaningless -- a null from unreached code is evidence of
+                // nothing.
+                let table_derived = matches!(
+                    &table,
+                    CompiledAction::Assert { relation, .. }
+                        | CompiledAction::Correct { relation, .. }
+                        if *relation >= DERIVED_RELATION_ID_BASE
+                );
+                Ok(if statement(&op) && !table_derived {
+                    op
+                } else {
+                    table
+                })
             }
             OpPolicy::UnlessQuery => {
                 let table = self.table_action(source)?;
@@ -2268,7 +2293,32 @@ impl SavedCompiler {
                     return Ok(table);
                 }
                 let op = self.op_action(source)?;
-                Ok(if statement(&op) { op } else { table })
+                // A DERIVED-ADDRESS table action is NOT overridden by the op model.
+                //
+                // `unless_query` prefers the op's statement when it produces one ("the op
+                // model's statement is used unless the table reads a query"). That is right
+                // in the closed world, where both name the same labels. It is wrong for an
+                // open relation: the op model emits CLOSED labels only (measured), so it
+                // would overwrite an address derived from the turn's own words with a closed
+                // one, and the QUESTION -- whose heads say NONE -- then derives the phrase
+                // address and reads an empty slot.
+                //
+                // THIS GUARD MUST LIVE IN `UnlessQuery`. It was first written into the
+                // TableStatements arm, which sessions never take (they run
+                // op_policy=unless_query), so it was UNREACHED and its "no effect"
+                // measurement was meaningless -- a null from unreached code is evidence of
+                // nothing.
+                let table_derived = matches!(
+                    &table,
+                    CompiledAction::Assert { relation, .. }
+                        | CompiledAction::Correct { relation, .. }
+                        if *relation >= DERIVED_RELATION_ID_BASE
+                );
+                Ok(if statement(&op) && !table_derived {
+                    op
+                } else {
+                    table
+                })
             }
         }
     }
