@@ -519,6 +519,42 @@ mod reuse {
         }
         Ok(clip)
     }
+    fn generation_read_budget(base_len: usize, maximum_generation_tokens: usize) -> Result<usize> {
+        let limit = uor_r4_integer::geometric_occurrence_read::MAX_SEQUENCE;
+        if base_len > limit {
+            return Err(
+                invalid("generation bank/query/initial-prefix exceeds native context cap").into(),
+            );
+        }
+        let remaining_decisions = limit
+            .checked_sub(base_len)
+            .and_then(|n| n.checked_add(1))
+            .ok_or_else(|| invalid("generation read-budget arithmetic overflow"))?;
+        Ok(maximum_generation_tokens.min(remaining_decisions))
+    }
+    fn public_generation_base_length(
+        native: &IntegerRealizer,
+        segments: &[SourceBankSegment<'_>],
+        query_length: usize,
+        initial_prefix_length: usize,
+    ) -> Result<usize> {
+        let mut base = query_length
+            .checked_add(initial_prefix_length)
+            .ok_or_else(|| invalid("generation query/prefix length overflow"))?;
+        for segment in segments {
+            let length = match segment {
+                SourceBankSegment::Context { token_ids, .. } => token_ids.len(),
+                SourceBankSegment::Source { frame, .. } => native
+                    .compile_view(frame.token_ids)?
+                    .emitted_token_ids()
+                    .len(),
+            };
+            base = base
+                .checked_add(length)
+                .ok_or_else(|| invalid("generation public bank length overflow"))?;
+        }
+        Ok(base)
+    }
     fn generation_observation(
         n: &IntegerRealizer,
         c: &NativeCueCarrier<'_>,
@@ -550,10 +586,14 @@ mod reuse {
         let mut invariant_reads = 0;
         for e in es {
             let segments = e.segments()?;
+            // Loader rejects initial prefixes; serving begins from the actual empty prefix.
+            let base_len =
+                public_generation_base_length(n, &segments, e.packet.query_ids.len(), 0)?;
+            let read_budget = generation_read_budget(base_len, a.maximum_generation_tokens)?;
             let mut ids = Vec::new();
             let mut actions = Vec::new();
             let mut states = None;
-            for step in 0..a.maximum_generation_tokens {
+            for step in 0..read_budget {
                 deadline(a, start)?;
                 let out = n.read_bank_with_source_end_transport(
                     &segments,
@@ -598,6 +638,7 @@ mod reuse {
                 }
             }
             let eos = ids.last() == Some(&n.binding().eos_token_id());
+            let budget_exhausted = !eos && ids.len() == read_budget;
             let plain = if eos { &ids[..ids.len() - 1] } else { &ids[..] };
             let bytes = tok.decode_bytes(plain);
             let raw = String::from_utf8_lossy(&bytes);
@@ -605,7 +646,7 @@ mod reuse {
             let accepted =
                 eos && String::from_utf8(bytes.clone()).is_ok() && e.answers.accepts(text);
             complete += usize::from(accepted);
-            rows.push(json!({"id":e.packet.id,"generated_ids_including_eos":ids,"eos":eos,"reply_text":text,"accepted_complete_answer":accepted,"carrier_state_packet_once":states,"fixed_input_frozen_signature_checked":true,"tokens":actions}));
+            rows.push(json!({"id":e.packet.id,"generated_ids_including_eos":ids,"public_base_context_tokens":base_len,"read_budget":read_budget,"budget_exhausted":budget_exhausted,"termination":if eos {"eos"} else {"read_budget_exhausted"},"eos":eos,"reply_text":text,"accepted_complete_answer":accepted,"carrier_state_packet_once":states,"fixed_input_frozen_signature_checked":true,"tokens":actions}));
         }
         Ok(
             json!({"cases":es.len(),"accepted_complete":complete,"maximum_generated_tokens":a.maximum_generation_tokens,"canonical_prefixes_used":false,"native_only_parent_and_rebound_sidecars":true,"extra_original_native_invariant_reads":invariant_reads,"rows":rows}),
@@ -1197,6 +1238,17 @@ mod reuse {
     #[cfg(test)]
     mod observation_tests {
         use super::*;
+        #[test]
+        fn generation_budget_reserves_only_actual_prefix_reads() -> Result<()> {
+            assert_eq!(generation_read_budget(98, 32)?, 31);
+            assert_eq!(generation_read_budget(97, 32)?, 32);
+            assert_eq!(generation_read_budget(0, 32)?, 32);
+            assert_eq!(generation_read_budget(128, 32)?, 1);
+            assert_eq!(generation_read_budget(98, 4)?, 4);
+            assert!(generation_read_budget(129, 32).is_err());
+            assert!(generation_read_budget(usize::MAX, 32).is_err());
+            Ok(())
+        }
         #[test]
         fn root_selector_does_not_admit_transition_category_or_heads() {
             for n in [
