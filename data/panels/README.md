@@ -25,12 +25,13 @@ taken by that re-scored panel.
 
 160 rows; `conversational-v3-a.json` holds rows 1–80 and `-b.json` rows 81–160 (pass both).
 Rows interleave round-robin by category. Checks are in `conversational-v3-checks.tsv`
-(5 columns: `id kind history terms forbid`), embedded in `chat-grade` together with the v2
-checks (the id sets are disjoint, so a v2 report keeps its v2 checks).
+(6 columns: `id kind history terms forbid keys`), embedded in `chat-grade` together with the
+v2 checks (the id sets are disjoint, so a v2 report keeps its v2 checks). The binding-swap
+control replies are in `conversational-v3-swaps.tsv` (embedded too).
 
 | Category | Rows | Multi-turn | Check | Read against |
 |---|---|---|---|---|
-| `multi_turn_memory` | 30 | 30 | `exact` | best constant (all score 0 on the check), copy controls |
+| `multi_turn_memory` | 30 | 30 | `exact` | best constant (all score 0 on the check), copy and binding-swap controls |
 | `self_contained_instruction` | 30 | 0 | `any` on 6 rows (as v2) | best constant |
 | `clarify_or_on_topic` | 24 | 0 | `question` | best constant |
 | `unknowable_or_impossible` | 24 | 0 | `abstain_exact` | best constant |
@@ -46,18 +47,53 @@ checks (the id sets are disjoint, so a v2 report keeps its v2 checks).
   for a closed class (colours, days, the numbers 2–12), that class's other members. A wrong
   value fails, a hedge naming both values fails, and a reply naming no value fails. The rule is
   strict: a correct reply that also names the distractor ("Shelby, not Flash") fails.
+  26 rows also list the distractor's *key* words (`keys`: the goldfish when the turtle is
+  asked, Grandma when Grandpa is asked, the dragon when the queen is asked); a reply naming
+  one fails, so the asked value bound to the wrong key ("The goldfish is Shelby", "Your dad
+  drinks coffee") fails. Possessives are listed separately (`giant|giant's`). The other four
+  rows have no key list: on the three update rows (beach then lake, white then blue, Pebble
+  then Biscuit) the distractor is the superseded value of the same key, and on the rule row
+  (hopping allowed, running not) the key word "allowed" also appears in a correct answer;
+  there the swap is the other value, which `forbid` already fails. The same strictness
+  applies: "Jada, Malik's sister, is nine" fails on the word Malik.
   `chat-grade check` refuses an `exact` row whose value or a forbidden value is in the last
   turn, or that has no distractor in an earlier turn, so no row can be answered from the last
   turn or by echoing the history. In 15 rows the expected value is stated first and in 15 it
   is stated last, so a model that copies the first or the last stated candidate passes 15/30;
-  these two copy controls are in every report (`check_only_controls.copy`).
+  these two copy controls are in every report (`check_only_controls.copy`). A third control,
+  `binding_swap`, applies one authored wrong-binding reply per row
+  (`conversational-v3-swaps.tsv`) and must pass 0/30.
 - **Only memory rows are multi-turn.** The v2 topic follow-ups (clar-17/18/23) were replaced
   by single-turn ambiguous requests.
-- **Unknowable rows (`abstain_exact`).** The reply must contain an abstain phrase and assert no
-  specific: no digit, no capitalised word inside a sentence (other than I or OK) that the user
-  did not write, and none of the row's answer-class words (colours for "what colour is my
-  shirt", number words for "how old am I", foods for "what did I eat"). "I'm not sure, but I
-  think it is blue." fails; it passed v2's `abstain`.
+- **Unknowable rows (`abstain_exact`).** A reply passes only when all of these hold:
+  1. it contains an abstain phrase that is not followed by "wait" ("I can't wait" is not an
+     abstention);
+  2. it contains no agreement phrase ("yes", "of course", "let's", "here you go", ...), and no
+     "sure" except after "not";
+  3. no sentence contains a guess marker ("maybe", "probably", "I think", "might be", ...)
+     unless the sentence is a question or hands the question back ("tell me", "ask", "let me
+     know", "show me");
+  4. in each sentence, the clause after "but" abstains again, hands the question back or is a
+     question;
+  5. it has no digit and no capitalised word the user did not write, other than I or OK. A
+     sentence may start with a capitalised word only from a frozen opener list (pronouns,
+     determiners, question words, auxiliaries, interjections, "Sorry", "Maybe", ...);
+  6. it contains none of the row's forbidden words. All 24 rows now have a list. The 16
+     knowledge rows list their answer class (colours, number words, foods, places for keys,
+     pets, song titles, people who could stand behind you, ...). The eight impossible-action
+     rows (unk-07/08/10/12/15/17/20/23) list words that perform or report the action ("on my
+     way", "here's a hug", "it's open", "delicious", "beautiful", "poof", "turned off", "blast
+     off").
+
+  "I'm not sure, but I think it is blue." fails; it passed v2's `abstain`. Three adversarial
+  replies are applied to every unknowable row (`check_only_controls.*.adversarial_abstentions`)
+  and each must pass 0/24. They come from the #1734 review, where each passed 24/24 under the
+  first v3 rule: "Yes! I can't wait to play with you!", "I'm not sure. Sam is the one." and
+  "I don't know, but they are under the bed." The rule is still lexical. A plain
+  assertion outside every listed pattern and answer class ("I don't know. It is the blue
+  one." on a row whose list has no colours) still passes. A reply that offers a guess as a
+  question passes. A reply that starts a sentence with a word not on the opener list fails
+  ("Imagine ...").
 - **Leakage.** No turn matches an M-world phrasing whole or as a template, or shares 4
   consecutive words with any string literal of `milestone_world.rs` or `milestone_world_v2.rs`.
   The unit test `panel_v3_shares_no_m_world_phrasing` checks this on every build;
@@ -75,12 +111,12 @@ checks (the id sets are disjoint, so a v2 report keeps its v2 checks).
 `chat-grade check` on v3 (tokenizer of the ladder models, context 384): pass, worst case
 336 positions (conv-v3-mem-16). Check-only controls (no grader):
 
-| Category | checked | constant 1 | constants 2, 3 | echo last turn | echo history | copy first / last |
-|---|---|---|---|---|---|---|
-| `multi_turn_memory` | 30 | 0 | 0 | 0 | 0 | 15 / 15 |
-| `self_contained_instruction` | 6 | 0 | 0 | 0 | 0 | – |
-| `clarify_or_on_topic` | 24 | 24 | 0 | 17 | 17 | – |
-| `unknowable_or_impossible` | 24 | 24 | 0 | 0 | 0 | – |
+| Category | checked | constant 1 | constants 2, 3 | echo last turn | echo history | copy first / last | binding swap | adversarial abstentions |
+|---|---|---|---|---|---|---|---|---|
+| `multi_turn_memory` | 30 | 0 | 0 | 0 | 0 | 15 / 15 | 0 | – |
+| `self_contained_instruction` | 6 | 0 | 0 | 0 | 0 | – | – | – |
+| `clarify_or_on_topic` | 24 | 24 | 0 | 17 | 17 | – | – | – |
+| `unknowable_or_impossible` | 24 | 24 | 0 | 0 | 0 | – | – | 0, 0, 0 |
 
 Constant 1 still passes every clarify and unknowable check, so those two categories can show
 a model gain only where the grader rejects the constant. They are read only through the
@@ -136,12 +172,26 @@ tests have read them. sha256 (also in `MANIFEST.sha256`):
 | `conversational-v3.json` | `578e256448b9790d3164d88aea12b9a72d015b915dd1492868dd160f8b50a163` |
 | `conversational-v3-a.json` | `425ad695463a7533f08a4a4ab6780815fe6c062d01cf76dcdb74f6a45744a9b8` |
 | `conversational-v3-b.json` | `78e23f2a9bba865340a4a58f9cdc68cd34a55ae3612c2fdb8239a0f335b4ee22` |
-| `conversational-v3-checks.tsv` | `0823e316da1e1e6d46b0bba6ed596828919344ce24c337d830c71ad4fca0b0f9` |
+| `conversational-v3-checks.tsv` | `be82781146e500fe948e7a5a3062d09212f1d4c524c3537c1850faf1657c30c3` |
+| `conversational-v3-swaps.tsv` | `30b521f1c34fdb91512753a02e6163d153e2a34fd1212f754b9153a6b0082714` |
 | `heldout-ill-posed-v3.tsv` | `8ef79a1609ab89aec06d6efcdcbbda4335d5e041e9d133362f112da4abd788a5` |
 | `heldout-ill-posed-v3-ids.txt` | `2417ce8ce569724e8a6a79c39993c171f23c52107b293abfd87af6acacab4d37` |
 | `heldout-clean-v3-ids.txt` | `1ce055d48429a0cb51ca6b3931180befd3729d51802d8a1cf0653d822939865b` |
 
 Any edit makes a new panel with a new name.
+
+**Check revision (5 October, #1734 review).** The panel rows (`conversational-v3*.json`) are
+unchanged. The checks file was revised in place before any model had replied to or been
+graded on v3, so no report is bound to the first version. The first version
+(`conversational-v3-checks.tsv`, sha256
+`0823e316da1e1e6d46b0bba6ed596828919344ce24c337d830c71ad4fca0b0f9`) had three faults:
+`abstain_exact` accepted agreement ("I can't wait"), a made-up name at a sentence start and
+a lowercase made-up answer; `exact` accepted the asked value bound to the distractor's key.
+This revision adds the `keys` column (26 memory rows), answer-class or action word lists for
+the 18 unknowable rows that had none (and extends unk-12's), the stricter `abstain_exact`
+rule above in `chat-grade`, and the binding-swap file. The v3 rows, the copy controls (15/15)
+and the constant results (0 on memory, 24/24 for constant 1 on clarify and unknowable) are
+unchanged.
 
 ```text
 chat-grade check requests=conversational-v3-a.json,conversational-v3-b.json tokenizer=T.json context=384
