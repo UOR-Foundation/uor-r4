@@ -968,6 +968,7 @@ mod reuse {
             || a.bank.source_end_warmstart.is_some()
             || a.bank.cue_calibration_warmstart.is_some()
             || a.bank.cue_quantum_probe.is_some()
+            || a.bank.cue_discrete_fit.is_some()
         {
             return Err(
                 invalid("unsupported legacy overlay/control arguments in dedicated draft").into(),
@@ -1462,6 +1463,11 @@ mod reuse {
             config["bank"]["cue_quantum_probe"] = json!({
                 "coefficient_index":123, "initial_quarters":-1, "preferred_step":-1,
                 "evidence_receipt":"evidence", "evidence_receipt_sha256":"a".repeat(64)
+            });
+            assert!(validate(&serde_json::from_value(config.clone())?).is_err());
+            config["bank"]["cue_quantum_probe"] = Value::Null;
+            config["bank"]["cue_discrete_fit"] = json!({
+                "maximum_trials":16, "maximum_accepted_updates":8
             });
             assert!(validate(&serde_json::from_value(config)?).is_err());
             Ok(())

@@ -1,5 +1,7 @@
 //! Warm cue-only learning through the complete native prefix/endpoint path.
 use super::*;
+#[path = "geometric_cue_discrete.rs"]
+mod discrete;
 use uor_r4_integer::geometric_source_end_transport::{
     NativeSourceEndTransport, SourceEndAngularConfig, SourceEndAngularQ4, SourceEndScoreMode,
 };
@@ -14,6 +16,23 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     }
     if (a.mode == "cue-calibration-quantum-probe") != a.cue_quantum_probe.is_some() {
         return Err(invalid("cue quantum proposal is explicit-probe-only").into());
+    }
+    if (a.mode == "cue-calibration-discrete-fit") != a.cue_discrete_fit.is_some() {
+        return Err(invalid("cue discrete configuration is explicit-discrete-fit-only").into());
+    }
+    if let Some(c) = &a.cue_discrete_fit {
+        if !(1..=16).contains(&c.maximum_trials)
+            || !(1..=8).contains(&c.maximum_accepted_updates)
+            || c.maximum_accepted_updates > c.maximum_trials
+            || a.admission.is_some()
+            || a.admission_manifest_sha256.is_some()
+            || a.fit_authorization.is_some()
+        {
+            return Err(invalid(
+                "cue discrete trial/update/no-legacy-Adam-admission contract differs",
+            )
+            .into());
+        }
     }
     if let Some(q) = &a.cue_quantum_probe {
         if q.coefficient_index != 123
@@ -829,6 +848,24 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
                 .ok_or_else(|| invalid("probe evidence absent"))?,
         );
     }
+    if a.mode == "cue-calibration-discrete-fit" {
+        return discrete::run(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &tok,
+            &weights,
+            &f,
+            &development,
+            &baseline,
+            &parent_gen,
+            &inputs,
+            &seals,
+            &receipts,
+        );
+    }
     let mut projection = source_end_fit::project_storage(&baseline, &parent_gen, a)?;
     // This driver additionally retains both 32-row diagnostic canonical traces,
     // and all 64 recoverable cue shadows; do not reuse endpoint-only accounting.
@@ -1616,6 +1653,44 @@ mod tests {
         let mut absent = old.clone();
         absent["rows"][0]["tokens"][0]["cue_carrier"]["angular_indices"][1][0] = json!(4);
         assert!(quantum_margin_changes(&absent, &absent, &truth, &q, -1).is_err());
+        Ok(())
+    }
+    #[test]
+    fn discrete_learning_config_rejects_wrong_mode_manual_overlay_and_unbounded_run() -> Result<()>
+    {
+        let mut a = valid_args()?;
+        a.mode = "cue-calibration-discrete-fit".into();
+        a.maximum_seconds = 600;
+        a.maximum_report_bytes = 256 * 1024 * 1024;
+        a.cue_discrete_fit = Some(CueDiscreteFit {
+            maximum_trials: 16,
+            maximum_accepted_updates: 8,
+        });
+        validate(&a)?;
+        a.mode = "cue-calibration-fit".into();
+        assert!(validate(&a).is_err());
+        a.mode = "cue-calibration-discrete-fit".into();
+        a.cue_quantum_probe = Some(probe());
+        assert!(validate(&a).is_err());
+        a.cue_quantum_probe = None;
+        a.fit_authorization = Some("legacy-Adam-admission.json".into());
+        assert!(validate(&a).is_err());
+        a.fit_authorization = None;
+        a.cue_discrete_fit
+            .as_mut()
+            .ok_or_else(|| invalid("test discrete config absent"))?
+            .maximum_trials = 17;
+        assert!(validate(&a).is_err());
+        a.cue_discrete_fit = Some(CueDiscreteFit {
+            maximum_trials: 1,
+            maximum_accepted_updates: 2,
+        });
+        assert!(validate(&a).is_err());
+        a.cue_discrete_fit = Some(CueDiscreteFit {
+            maximum_trials: 0,
+            maximum_accepted_updates: 0,
+        });
+        assert!(validate(&a).is_err());
         Ok(())
     }
 }

@@ -1,0 +1,558 @@
+//! Discrete cue learning: ordinary-gradient proposals, actual-native decisions.
+use super::*;
+use uor_r4_integer::geometric_cue_carrier::CueAngularQ4;
+use uor_r4_integer::geometric_potential_q4::unpack_coefficients;
+
+const ACCEPT_EPSILON: f64 = 1e-9;
+
+#[derive(Default)]
+struct HeadRejections {
+    packed_sha256: String,
+    indices: BTreeSet<usize>,
+}
+impl HeadRejections {
+    fn at_head(&mut self, packed: &[u8]) {
+        let head = sha256_bytes(packed);
+        if self.packed_sha256 != head {
+            self.packed_sha256 = head;
+            self.indices.clear();
+        }
+    }
+}
+fn improves(incumbent: f64, proposal: Option<f64>) -> bool {
+    incumbent.is_finite()
+        && proposal.is_some_and(|v| v.is_finite() && v < incumbent - ACCEPT_EPSILON)
+}
+fn next_coordinate(
+    values: &[i8],
+    gradients: &[f32],
+    rejected: &BTreeSet<usize>,
+) -> Result<Option<(usize, i8, f32)>> {
+    if values.len() != gradients.len() || gradients.iter().any(|x| !x.is_finite()) {
+        return Err(invalid("discrete gradient shape/nonfinite contract differs").into());
+    }
+    let mut chosen: Option<(usize, i8, f32)> = None;
+    for (index, (&quarter, &gradient)) in values.iter().zip(gradients).enumerate() {
+        if !(-7..=7).contains(&quarter) {
+            return Err(invalid("discrete incumbent quarter is illegal").into());
+        }
+        if rejected.contains(&index) || gradient == 0. {
+            continue;
+        }
+        let step = if gradient > 0. { -1 } else { 1 };
+        if !quarter
+            .checked_add(step)
+            .is_some_and(|x| (-7..=7).contains(&x))
+        {
+            continue;
+        }
+        // Traversal order supplies the lower-index tie breaker.
+        if chosen.is_none_or(|(_, _, old)| gradient.abs() > old.abs()) {
+            chosen = Some((index, step, gradient));
+        }
+    }
+    Ok(chosen)
+}
+
+// These labels only score already-produced canonical predictions. No generation
+// is fabricated for trials, and this summary never ranks or accepts a proposal.
+fn source_summary(
+    panel: &Path,
+    episodes: &[Episode],
+    canonical: &Value,
+    integer: &IntegerRealizer,
+) -> Result<Value> {
+    let context = read_json(&panel.join("context-data.json"))?;
+    let labels = context["cases"]
+        .as_array()
+        .ok_or_else(|| invalid("discrete truth metadata absent"))?;
+    let rows = canonical["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("discrete canonical rows absent"))?;
+    if labels.len() != episodes.len() || rows.len() != episodes.len() {
+        return Err(invalid("discrete summary count differs").into());
+    }
+    let mut summaries = Vec::new();
+    let mut pairs = BTreeMap::<String, Vec<bool>>::new();
+    let mut source_correct = 0;
+    for ((label, row), episode) in labels.iter().zip(rows).zip(episodes) {
+        if label["id"] != row["id"] || row["id"] != episode.packet.id {
+            return Err(invalid("discrete summary IDs differ").into());
+        }
+        let relation = match label["query_role"].as_str() {
+            Some("job") => 1,
+            Some("where") => 2,
+            _ => return Err(invalid("discrete summary query role invalid").into()),
+        };
+        let expected = episode
+            .packet
+            .segments
+            .iter()
+            .filter_map(|s| match s {
+                Segment::Source {
+                    record,
+                    commit,
+                    relation: r,
+                    ..
+                } if *r == relation => Some(json!({"record":record,"commit":commit})),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if expected.len() != 1 {
+            return Err(invalid("discrete scorer requires unique truthful role source").into());
+        }
+        let tokens = row["tokens"]
+            .as_array()
+            .ok_or_else(|| invalid("discrete summary tokens absent"))?;
+        let first = tokens
+            .first()
+            .ok_or_else(|| invalid("discrete first prediction absent"))?;
+        let actual = match first["source_end"]["selected_bank_index"].as_u64() {
+            Some(i) => {
+                let mapping = first["native"]["candidate_mapping"]
+                    .as_array()
+                    .ok_or_else(|| invalid("discrete native map absent"))?;
+                let entry = mapping
+                    .get(i as usize)
+                    .ok_or_else(|| invalid("discrete selected bank index invalid"))?;
+                if entry["bank_index"] != i {
+                    return Err(invalid("discrete bank ordinal differs").into());
+                }
+                let o = &entry["occurrence"];
+                if !o["record"].is_u64() || !o["commit"].is_u64() {
+                    return Err(invalid("discrete typed source identity absent").into());
+                }
+                json!({"record":o["record"],"commit":o["commit"]})
+            }
+            None => Value::Null,
+        };
+        let correct = actual == expected[0];
+        source_correct += usize::from(correct);
+        let pair = label["pair_id"]
+            .as_str()
+            .ok_or_else(|| invalid("discrete pair ID absent"))?;
+        pairs.entry(pair.into()).or_default().push(correct);
+        let mut payload_sum = 0.;
+        let mut terminal_sum = 0.;
+        let mut payload_positions = 0;
+        let mut terminal_positions = 0;
+        let mut payload_zero = 0;
+        let mut terminal_zero = 0;
+        for token in tokens {
+            let target = token["target_label_only_after_read"]
+                .as_u64()
+                .ok_or_else(|| invalid("discrete target audit absent"))?;
+            let terminal = target == u64::from(integer.binding().period_token_id())
+                || target == u64::from(integer.binding().eos_token_id());
+            if terminal {
+                terminal_positions += 1;
+            } else {
+                payload_positions += 1;
+            }
+            if let Some(v) = token["native_ce"].as_f64().filter(|v| v.is_finite()) {
+                if terminal {
+                    terminal_sum += v;
+                } else {
+                    payload_sum += v;
+                }
+            } else if terminal {
+                terminal_zero += 1;
+            } else {
+                payload_zero += 1;
+            }
+        }
+        summaries.push(json!({"id":row["id"],"pair_id":pair,"query_role":label["query_role"],"expected_source_labels_only":expected[0],"actual_first_canonical_factual_source":actual,"first_canonical_source_correct":correct,"canonical_first_chosen_token_id":first["native"]["actions"]["chosen_token_id"],"native_mean_token_ce":row["native_mean_token_ce"],"payload_target_ce_sum":if payload_zero==0{Some(payload_sum)}else{None},"payload_target_positions":payload_positions,"terminal_target_ce_sum":if terminal_zero==0{Some(terminal_sum)}else{None},"terminal_target_positions":terminal_positions,"payload_zero_support_positions":payload_zero,"terminal_zero_support_positions":terminal_zero}));
+    }
+    if pairs.values().any(|p| p.len() != 2) {
+        return Err(invalid("discrete summary intact-pair width differs").into());
+    }
+    Ok(
+        json!({"rows":summaries,"native_equal_episode_ce":canonical["native_equal_episode_ce"],"source_correct":source_correct,"both_paired_source_correct":pairs.values().filter(|p|p.iter().all(|x|*x)).count(),"own_prefix_generation":"NOT_RUN_FOR_TRIAL; canonical source/CE summary only","scope":"all128 actual native canonical predictions; typed role truth only after read; payload/Period-EOS target CE partition is descriptive, not alternate objective"}),
+    )
+}
+fn source_changes(old: &Value, new: &Value) -> Result<Value> {
+    let a = old["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("discrete old summary absent"))?;
+    let b = new["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("discrete new summary absent"))?;
+    if a.len() != b.len() {
+        return Err(invalid("discrete comparison count differs").into());
+    }
+    let mut gains = Vec::new();
+    let mut harms = Vec::new();
+    let mut pairs = BTreeMap::<String, Vec<(bool, bool)>>::new();
+    for (old, new) in a.iter().zip(b) {
+        if old["id"] != new["id"] {
+            return Err(invalid("discrete source comparison IDs differ").into());
+        }
+        let pair = old["pair_id"]
+            .as_str()
+            .ok_or_else(|| invalid("discrete old pair absent"))?;
+        if new["pair_id"].as_str() != Some(pair) {
+            return Err(invalid("discrete compared pair IDs differ").into());
+        }
+        let parent_correct = old["first_canonical_source_correct"]
+            .as_bool()
+            .ok_or_else(|| invalid("discrete parent source boolean absent"))?;
+        let proposal_correct = new["first_canonical_source_correct"]
+            .as_bool()
+            .ok_or_else(|| invalid("discrete proposal source boolean absent"))?;
+        pairs
+            .entry(pair.into())
+            .or_default()
+            .push((parent_correct, proposal_correct));
+        match (
+            old["first_canonical_source_correct"].as_bool(),
+            new["first_canonical_source_correct"].as_bool(),
+        ) {
+            (Some(false), Some(true)) => gains.push(new["id"].clone()),
+            (Some(true), Some(false)) => harms.push(new["id"].clone()),
+            (Some(_), Some(_)) => {}
+            _ => return Err(invalid("discrete source outcome absent").into()),
+        }
+    }
+    if pairs.values().any(|p| p.len() != 2) {
+        return Err(invalid("discrete source comparison pair width differs").into());
+    }
+    let paired_gains = pairs
+        .iter()
+        .filter(|(_, p)| !p.iter().all(|(a, _)| *a) && p.iter().all(|(_, b)| *b))
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+    let paired_harms = pairs
+        .iter()
+        .filter(|(_, p)| p.iter().all(|(a, _)| *a) && !p.iter().all(|(_, b)| *b))
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+    Ok(
+        json!({"gains":gains,"harms":harms,"both_paired_gains":paired_gains,"both_paired_harms":paired_harms,"parent_source_correct":old["source_correct"],"proposal_source_correct":new["source_correct"],"parent_both_paired_source_correct":old["both_paired_source_correct"],"proposal_both_paired_source_correct":new["both_paired_source_correct"]}),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn run(
+    a: &Args,
+    start: Instant,
+    source: &SourceRealizerWeights,
+    parent: &NativeSourceRealizer,
+    integer: &IntegerRealizer,
+    tok: &ByteBpeTokenizer,
+    initial_weights: &CueAngularWeights,
+    f: &Frozen,
+    development: &[Episode],
+    baseline: &Value,
+    parent_gen: &Value,
+    inputs: &BTreeMap<String, String>,
+    seals: &BTreeSet<PathBuf>,
+    receipts: &Value,
+) -> Result<Value> {
+    let cfg = a
+        .cue_discrete_fit
+        .as_ref()
+        .ok_or_else(|| invalid("discrete configuration absent"))?;
+    let original_receipts = parameter_receipts(&initial_weights.parameters())?;
+    let canonical_bytes = serde_json::to_vec(baseline)?.len();
+    let generation_bytes = serde_json::to_vec(parent_gen)?.len();
+    let projection_bytes = canonical_bytes
+        .saturating_add(generation_bytes)
+        .saturating_mul(5)
+        .div_ceil(2)
+        .saturating_add(16 * 1024 * 1024);
+    if projection_bytes.saturating_add(1024 * 1024) > a.maximum_report_bytes {
+        return Err(invalid("discrete observed-shape storage exceeds admitted cap").into());
+    }
+    let projection = json!({"observed_shape_total_bytes":projection_bytes,"baseline_canonical_bytes":canonical_bytes,"baseline_generation_bytes":generation_bytes,"full_trace_sets":2.5,"proposal_artifacts":"at most16 tiny cue/prefix/end chains plus compact128row CE/source/margin/gradient receipts; no pertrial full canonical/generation","administration_reserve_bytes":16*1024*1024,"configured_report_cap_bytes":a.maximum_report_bytes,"scope":"observed baseline shape projection, not formal size bound; actual writer cap/stop margin authoritative"});
+    write_json(&a.out, "storage-projection.json", &projection)?;
+    let mut current =
+        CueAngularWeights::load(&a.out.join("initial-chain/cue"), parent, &a.native_artifact)?;
+    if parameter_receipts(&current.parameters())? != original_receipts {
+        return Err(invalid("discrete initial shadow reload differs").into());
+    }
+    let mut current_canonical = baseline.clone();
+    let baseline_summary = source_summary(&a.development_panel, development, baseline, integer)?;
+    let mut current_summary = baseline_summary.clone();
+    let mut incumbent_ce = baseline["native_equal_episode_ce"]
+        .as_f64()
+        .filter(|x| x.is_finite())
+        .ok_or_else(|| invalid("discrete finite baseline CE absent"))?;
+    let mut rejected = HeadRejections::default();
+    let mut cached_gradient: Option<(Vec<f32>, Value)> = None;
+    let mut accepted = 0usize;
+    let mut selected_trial = 0usize;
+    let mut trials = Vec::new();
+    let mut gradient_passes = 0usize;
+    let mut stop_reason = "maximum_trials";
+    for trial in 1..=cfg.maximum_trials {
+        deadline(a, start)?;
+        if accepted >= cfg.maximum_accepted_updates {
+            stop_reason = "maximum_accepted_updates";
+            break;
+        }
+        let packed = current.packed_coefficients()?;
+        let count = current.config().coefficient_count()?;
+        rejected.at_head(&packed);
+        if cached_gradient.is_none() {
+            let measured = batch(
+                &(0..128).collect::<Vec<_>>(),
+                development,
+                source,
+                parent,
+                Some(integer),
+                &current,
+                f,
+                false,
+                a,
+                start,
+            )?;
+            let measured_ce = measured.report["native_equal_episode_ce"]
+                .as_f64()
+                .filter(|x| x.is_finite())
+                .ok_or_else(|| invalid("discrete current gradient native CE absent"))?;
+            if (measured_ce - incumbent_ce).abs() > 1e-12 {
+                return Err(
+                    invalid("discrete gradient and actual incumbent objective differ").into(),
+                );
+            }
+            let tensor = measured
+                .gradients
+                .get("cue.coefficients")
+                .ok_or_else(|| invalid("discrete cue gradient missing"))?;
+            let gradient = tensor.flatten_all()?.to_vec1::<f32>()?;
+            let metadata = json!({"pass":gradient_passes+1,"current_cue_packed_sha256":sha256_bytes(&packed),"current_native_equal_episode_ce":incumbent_ce,"gradient_report":measured.report,"gradient_coefficients_f32":gradient,"gradient_scope":"ordinary full128 equalepisode answer+EOS CE; allsource admission; encoder/roots/prefix/end/argmax stopped; no role/source-correctness proposal steering"});
+            gradient_passes += 1;
+            write_json(
+                &a.out,
+                &format!("gradient-{gradient_passes:04}.json"),
+                &metadata,
+            )?;
+            cached_gradient = Some((gradient, metadata));
+        }
+        let (gradient, gradient_receipt) = cached_gradient
+            .as_ref()
+            .ok_or_else(|| invalid("discrete cached gradient absent"))?;
+        if gradient_receipt["current_cue_packed_sha256"] != sha256_bytes(&packed) {
+            return Err(invalid("discrete stale gradient head").into());
+        }
+        let values = unpack_coefficients(count, &packed).map_err(|e| invalid(e.to_string()))?;
+        let Some((index, step, credit)) = next_coordinate(&values, gradient, &rejected.indices)?
+        else {
+            stop_reason = "no_eligible_nonzero_legal_untried_coordinate";
+            break;
+        };
+        // This generic coordinate witness is not a quantum-probe configuration:
+        // its coordinate and sign are solely outputs of the ordinary gradient.
+        let coordinate = CueQuantumProbe {
+            coefficient_index: index,
+            initial_quarters: values[index],
+            preferred_step: step,
+            evidence_receipt: PathBuf::new(),
+            evidence_receipt_sha256: String::new(),
+        };
+        let proposed_packed = quantum_packed(&packed, count, &coordinate, step)?;
+        let proposed_cue = parent.compile_cue_carrier(
+            CueAngularQ4::new(current.config(), &proposed_packed)
+                .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let proposal = CueAngularWeights::from_native(parent, &a.native_artifact, &proposed_cue)?;
+        let root = a.out.join(format!("trial-{trial:04}"));
+        report_output::claim(&root)?;
+        save_chain(&root, &proposal, parent, f)?;
+        let restored = CueAngularWeights::load(&root.join("cue"), parent, &a.native_artifact)?;
+        if parameter_receipts(&proposal.parameters())?
+            != parameter_receipts(&restored.parameters())?
+        {
+            return Err(invalid("discrete proposal source reload differs").into());
+        }
+        let (c, p, e) = load_chain(&root, integer)?;
+        if c.packed_coefficients() != proposed_packed {
+            return Err(invalid("discrete proposal independent packed differs").into());
+        }
+        let proposed_canonical =
+            source_end_fit::canonical(integer, &c, &p, &e, development, a, start)?;
+        let proposal_ce = proposed_canonical["native_equal_episode_ce"]
+            .as_f64()
+            .filter(|x| x.is_finite());
+        let summary = source_summary(
+            &a.development_panel,
+            development,
+            &proposed_canonical,
+            integer,
+        )?;
+        let margins = quantum_margin_changes(
+            &current_canonical,
+            &proposed_canonical,
+            &current_summary,
+            &coordinate,
+            step,
+        )?;
+        let decision = improves(incumbent_ce, proposal_ce);
+        let receipt = json!({"trial":trial,"optimizer_updates":accepted+usize::from(decision),"adam_updates":0,"accepted":decision,"accepted_updates_before":accepted,"accepted_updates_after":accepted+usize::from(decision),"parent_cue_packed_sha256":sha256_bytes(&packed),"proposal_cue_packed_sha256":sha256_bytes(&proposed_packed),"coefficient_index":index,"lane":index/120,"angular_bin":index%120,"initial_quarters":values[index],"step_quarters":step,"gradient_credit":credit,"predicted_ce_delta":f64::from(credit)*f64::from(step)/4.,"actual_parent_ce":incumbent_ce,"actual_proposal_ce":proposal_ce,"realized_ce_delta":proposal_ce.map(|v|v-incumbent_ce),"acceptance":"finite actual full128 native CE < incumbent -1e-9; no source/role correctness gate","source_changes_vs_incumbent":source_changes(&current_summary,&summary)?,"source_changes_vs_baseline":source_changes(&baseline_summary,&summary)?,"gradient_pass":gradient_passes,"all_other_coefficients_unchanged":true,"frozen_payloads":f.hashes(),"independent_native_reload":true,"native_single_address_delta_verified":true,"touched_rows":margins["touched_rows"],"own_prefix_generation":"NOT_RUN_FOR_TRIAL"});
+        write_json(&root, "canonical-summary.json", &summary)?;
+        write_json(&root, "record-margin-changes.json", &margins)?;
+        write_json(&root, "receipt.json", &receipt)?;
+        report_output::seal(&root)?;
+        report_output::verify(&root)?;
+        trials.push(receipt);
+        if decision {
+            incumbent_ce = proposal_ce.ok_or_else(|| invalid("discrete accepted CE absent"))?;
+            current = restored;
+            current_canonical = proposed_canonical;
+            current_summary = summary;
+            accepted += 1;
+            selected_trial = trial;
+            cached_gradient = None;
+            rejected.at_head(&proposed_packed);
+        } else {
+            rejected.indices.insert(index);
+        }
+        frozen(source, receipts)?;
+        write_json(
+            &a.out,
+            "progress.json",
+            &json!({"optimizer_updates":accepted,"adam_updates":0,"trials_completed":trials.len(),"accepted_discrete_updates":accepted,"selected_trial":selected_trial,"current_cue_packed_sha256":sha256_bytes(&current.packed_coefficients()?),"incumbent_native_ce":incumbent_ce,"gradient_passes":gradient_passes,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+        )?;
+    }
+    if accepted >= cfg.maximum_accepted_updates {
+        stop_reason = "maximum_accepted_updates";
+    }
+    write_json(
+        &a.out,
+        "selection-before-fresh.json",
+        &json!({"selected_trial":selected_trial,"accepted_discrete_updates":accepted,"optimizer_updates":accepted,"adam_updates":0,"criterion":"native ordinary full128 CE descent; baseline eligible; fresh never selects","fresh_predictions_before_selection":0,"stop_reason":stop_reason}),
+    )?;
+    let selected_root = if selected_trial == 0 {
+        a.out.join("initial-chain")
+    } else {
+        a.out.join(format!("trial-{selected_trial:04}"))
+    };
+    let (c, p, e) = load_chain(&selected_root, integer)?;
+    let final_canonical = source_end_fit::canonical(integer, &c, &p, &e, development, a, start)?;
+    if final_canonical != current_canonical {
+        return Err(invalid("discrete selected independent canonical differs").into());
+    }
+    let final_generation =
+        source_end_fit::generation(integer, &c, &p, &e, development, tok, a, start)?;
+    write_json(
+        &a.out,
+        "development-selected-canonical.json",
+        &final_canonical,
+    )?;
+    write_json(
+        &a.out,
+        "development-selected-generation.json",
+        &final_generation,
+    )?;
+    let parent_metrics = causal_metrics(&a.development_panel, development, baseline, parent_gen)?;
+    let final_metrics = causal_metrics(
+        &a.development_panel,
+        development,
+        &final_canonical,
+        &final_generation,
+    )?;
+    write_json(
+        &a.out,
+        "development-causal-outcomes.json",
+        &json!({"parent":parent_metrics,"selected":final_metrics,"comparison":causal_comparison(&parent_metrics,&final_metrics)?}),
+    )?;
+    let diagnostic = panel(&a.fresh_panel, 32, integer, tok, a)?;
+    let (bc, bp, be) = load_chain(&a.out.join("initial-chain"), integer)?;
+    let oldcan = source_end_fit::canonical(integer, &bc, &bp, &be, &diagnostic, a, start)?;
+    let oldgen = source_end_fit::generation(integer, &bc, &bp, &be, &diagnostic, tok, a, start)?;
+    let newcan = source_end_fit::canonical(integer, &c, &p, &e, &diagnostic, a, start)?;
+    let newgen = source_end_fit::generation(integer, &c, &p, &e, &diagnostic, tok, a, start)?;
+    write_json(&a.out, "fresh-parent-canonical.json", &oldcan)?;
+    write_json(&a.out, "fresh-selected-canonical.json", &newcan)?;
+    write_json(&a.out, "fresh-parent-generation.json", &oldgen)?;
+    write_json(&a.out, "fresh-selected-generation.json", &newgen)?;
+    let oldmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &oldcan, &oldgen)?;
+    let newmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &newcan, &newgen)?;
+    write_json(
+        &a.out,
+        "fresh-causal-outcomes.json",
+        &json!({"parent":oldmetrics,"selected":newmetrics,"comparison":causal_comparison(&oldmetrics,&newmetrics)?}),
+    )?;
+    if parameter_receipts(&initial_weights.parameters())? != original_receipts {
+        return Err(invalid("discrete original parent cue mutated").into());
+    }
+    frozen(source, receipts)?;
+    immutable(inputs, seals)?;
+    Ok(
+        json!({"schema":"uor-r4.geometric-cue-discrete-fit/1","mode":a.mode,"status":"completed","cases":128,"cue_discrete_fit":cfg,"cue_calibration_warmstart":a.cue_calibration_warmstart,"optimizer_updates":accepted,"adam_updates":0,"proposal_count":trials.len(),"accepted_discrete_updates":accepted,"selected_trial":selected_trial,"selected_native_equal_episode_ce":incumbent_ce,"selected_cue_packed_sha256":sha256_bytes(&current.packed_coefficients()?),"gradient_passes":gradient_passes,"trials":trials,"stop_reason":stop_reason,"input_manifests_sha256":inputs,"frozen_source_receipts":receipts,"frozen_payloads":f.hashes(),"storage_projection":projection,"fresh_predictions_before_selection":0,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib(),"learning_law":"recomputed ordinary full128 gradient; largestabs legal observed nonzero coordinate; deterministic index ties; one negativegradient quarter; actualnative finiteCE descent; rejectedindices scopedto currentpackedhead","claim":"bounded native discrete cue learning; fullbank admission, baseline/final actual ownprefix and exposed diagnostic; no seedconsistency/transfer/generalchat/energy qualification"}),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn coordinate_ordering_respects_legal_boundaries_ties_and_current_rejections() -> Result<()> {
+        let values = [-7, 7, 0, 0, 0];
+        let gradient = [100., -100., 2., -2., 0.];
+        let mut rejected = BTreeSet::new();
+        assert_eq!(
+            next_coordinate(&values, &gradient, &rejected)?,
+            Some((2, -1, 2.))
+        );
+        rejected.insert(2);
+        assert_eq!(
+            next_coordinate(&values, &gradient, &rejected)?,
+            Some((3, 1, -2.))
+        );
+        rejected.insert(3);
+        assert_eq!(next_coordinate(&values, &gradient, &rejected)?, None);
+        assert!(next_coordinate(&values, &[f32::NAN; 5], &rejected).is_err());
+        assert!(next_coordinate(&values, &[1.], &rejected).is_err());
+        assert!(next_coordinate(&[8], &[1.], &BTreeSet::new()).is_err());
+        Ok(())
+    }
+    #[test]
+    fn rejected_coordinate_is_reconsidered_after_a_native_head_change() {
+        let mut head = HeadRejections::default();
+        head.at_head(&[1, 2]);
+        head.indices.insert(123);
+        head.at_head(&[1, 2]);
+        assert!(head.indices.contains(&123));
+        head.at_head(&[1, 3]);
+        assert!(head.indices.is_empty());
+        assert_eq!(head.packed_sha256, sha256_bytes(&[1, 3]));
+    }
+    #[test]
+    fn acceptance_requires_finite_actual_native_loss_descent() {
+        assert!(improves(1., Some(0.99)));
+        assert!(!improves(1., Some(1.)));
+        assert!(!improves(1., Some(1. - 0.5e-9)));
+        assert!(!improves(1., Some(f64::NEG_INFINITY)));
+        assert!(!improves(1., Some(f64::NAN)));
+        assert!(!improves(1., None));
+        assert!(!improves(f64::INFINITY, Some(1.)));
+    }
+    #[test]
+    fn source_only_comparison_does_not_invent_generation_or_gate_loss() -> Result<()> {
+        let old = json!({"source_correct":1,"both_paired_source_correct":0,"rows":[{"id":"job","pair_id":"pair","first_canonical_source_correct":true},{"id":"home","pair_id":"pair","first_canonical_source_correct":false}]});
+        let new = json!({"source_correct":1,"both_paired_source_correct":0,"rows":[{"id":"job","pair_id":"pair","first_canonical_source_correct":false},{"id":"home","pair_id":"pair","first_canonical_source_correct":true}]});
+        let changes = source_changes(&old, &new)?;
+        assert_eq!(changes["gains"], json!(["home"]));
+        assert_eq!(changes["harms"], json!(["job"]));
+        assert_eq!(changes["both_paired_gains"], json!([]));
+        let mut both = old.clone();
+        both["rows"][1]["first_canonical_source_correct"] = json!(true);
+        both["source_correct"] = json!(2);
+        both["both_paired_source_correct"] = json!(1);
+        assert_eq!(
+            source_changes(&both, &new)?["both_paired_harms"],
+            json!(["pair"])
+        );
+        assert_eq!(
+            source_changes(&new, &both)?["both_paired_gains"],
+            json!(["pair"])
+        );
+        // Native CE descent remains the learning law, even with a source loss.
+        assert!(improves(1., Some(0.99)));
+        let mut foreign = new;
+        foreign["rows"][0]["id"] = json!("wrong");
+        assert!(source_changes(&old, &foreign).is_err());
+        Ok(())
+    }
+}

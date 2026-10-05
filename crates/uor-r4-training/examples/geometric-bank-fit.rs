@@ -64,7 +64,10 @@ fn cue_mode(a: &Args) -> bool {
 fn cue_calibration_mode(a: &Args) -> bool {
     matches!(
         a.mode.as_str(),
-        "cue-calibration-broadbatch" | "cue-calibration-fit" | "cue-calibration-quantum-probe"
+        "cue-calibration-broadbatch"
+            | "cue-calibration-fit"
+            | "cue-calibration-quantum-probe"
+            | "cue-calibration-discrete-fit"
     )
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -87,6 +90,12 @@ pub(crate) struct CueQuantumProbe {
     pub(crate) preferred_step: i8,
     pub(crate) evidence_receipt: PathBuf,
     pub(crate) evidence_receipt_sha256: String,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CueDiscreteFit {
+    pub(crate) maximum_trials: usize,
+    pub(crate) maximum_accepted_updates: usize,
 }
 const PREFIX_FIT_CAP: usize = 512 * 1024 * 1024;
 const PREFIX_FAMILIES: &str = "prefix-angular-HxLx120/1";
@@ -155,6 +164,8 @@ pub(crate) struct Args {
     pub(crate) cue_calibration_warmstart: Option<CueCalibrationWarmstart>,
     #[serde(default)]
     pub(crate) cue_quantum_probe: Option<CueQuantumProbe>,
+    #[serde(default)]
+    pub(crate) cue_discrete_fit: Option<CueDiscreteFit>,
     pub(crate) cue_score_mode: Option<CueScoreMode>,
     pub(crate) prefix_score_mode: Option<PrefixScoreMode>,
     pub(crate) source_end_score_mode:
@@ -427,6 +438,7 @@ fn checked_args() -> Result<Args> {
         "cue-calibration-broadbatch",
         "cue-calibration-fit",
         "cue-calibration-quantum-probe",
+        "cue-calibration-discrete-fit",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -440,7 +452,10 @@ fn checked_args() -> Result<Args> {
     .contains(&a.mode.as_str())
         || a.maximum_seconds == 0
         || a.maximum_seconds
-            > if a.mode == "source-end-refine" {
+            > if matches!(
+                a.mode.as_str(),
+                "source-end-refine" | "cue-calibration-discrete-fit"
+            ) {
                 600
             } else if matches!(
                 a.mode.as_str(),
@@ -480,7 +495,10 @@ fn checked_args() -> Result<Args> {
                     | "cue-calibration-broadbatch"
             ) {
                 128 * 1024 * 1024
-            } else if a.mode == "cue-calibration-quantum-probe" {
+            } else if matches!(
+                a.mode.as_str(),
+                "cue-calibration-quantum-probe" | "cue-calibration-discrete-fit"
+            ) {
                 256 * 1024 * 1024
             } else if a.mode == "terminal-fit" {
                 1024 * 1024 * 1024
