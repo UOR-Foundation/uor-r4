@@ -652,7 +652,7 @@ fn eligible(h: &History, native: &NativeSourceRealizer, tok: &ByteBpeTokenizer) 
 /// Fixed prospective design; no native predictions or cue addresses select rows.
 fn diversity_histories(
     all: &[Wire],
-    repeats: &[Wire],
+    _repeats: &[Wire],
     exposed_banks: &BTreeSet<String>,
 ) -> Result<(Vec<History>, Vec<History>)> {
     fn donor(all: &[Wire], role: &str, act: &str, value: &str) -> Result<Wire> {
@@ -669,9 +669,11 @@ fn diversity_histories(
         ("length4", Some(4), 8, 2),
         ("length8", Some(8), 8, 2),
         ("update", Some(4), 4, 1),
-        ("reassert", None, 4, 1),
+        ("reassert", Some(2), 4, 1),
     ] {
-        let source = if stratum == "reassert" { repeats } else { all };
+        // Reassertions are prospectively authored by repeating a retained assert wire.
+        // Ordinary both-role witnesses suffice; original repeated histories are not claimed.
+        let source = all;
         let job_pool = pool(source, "job", "assert", length)?;
         let home_pool = pool(source, "home", "assert", length)?;
         let job = job_pool
@@ -1147,7 +1149,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         } else {
             None
         };
-        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else if diverse {"exact retained donor literal bytes; new role/value bank combinations; balanced literal roles/positions and crossed familiar wording; not retained-original utterance bytes or unseen literals"}else if untouched && split=="fresh" {"fixed generated fresh literal bytes in retained donor frames;original frame witnesses bound;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"transfer_profile":a.transfer_profile,"prospective_diversity_control":diversity_control,"fresh_payload_novelty_claimed":untouched && split=="fresh","transfer_novelty":if untouched && split=="fresh" {json!({"distinct_current_role_value_banks":transfer_banks,"distinct_role_act_literal_histories":transfer_histories,"matched_question_groups":["familiar","novel"],"history_exclusion_covered_roots":history_exposure_roots,"wire_extraction_coverage":wire_exposure_coverage,"familiar_queries_intentionally_overlap":true,"novel_queries":[TRANSFER_JOB_QUERY,TRANSFER_HOME_QUERY],"scope":"exact full-literal, question-string, role/value-bank and role/act/literal-history exclusion;not unseen words or universal pretraining exclusion"})}else{Value::Null},"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
+        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else if diverse {"exact retained donor literal bytes; new role/value bank combinations; balanced literal roles/positions and crossed familiar wording; not retained-original utterance bytes or unseen literals"}else if untouched && split=="fresh" {"fixed generated fresh literal bytes in retained donor frames;original frame witnesses bound;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"transfer_profile":a.transfer_profile,"prospective_reassert_donor_policy":if diverse {Some("ordinary-retained-both-role-two-word-assertion-witnesses/authored-same-value-repeat/1")}else{None},"prospective_diversity_control":diversity_control,"fresh_payload_novelty_claimed":untouched && split=="fresh","transfer_novelty":if untouched && split=="fresh" {json!({"distinct_current_role_value_banks":transfer_banks,"distinct_role_act_literal_histories":transfer_histories,"matched_question_groups":["familiar","novel"],"history_exclusion_covered_roots":history_exposure_roots,"wire_extraction_coverage":wire_exposure_coverage,"familiar_queries_intentionally_overlap":true,"novel_queries":[TRANSFER_JOB_QUERY,TRANSFER_HOME_QUERY],"scope":"exact full-literal, question-string, role/value-bank and role/act/literal-history exclusion;not unseen words or universal pretraining exclusion"})}else{Value::Null},"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
         let rb = serde_json::to_vec_pretty(&receipt)?;
         let eb = serde_json::to_vec_pretty(
             &json!({"rows":eligibility.iter().filter(|x|histories.iter().any(|h|x["history"]==h.id)).collect::<Vec<_>>()}),
@@ -1710,6 +1712,35 @@ mod prospective_diversity_tests {
                 .collect::<Result<BTreeSet<_>>>()?;
             assert!(values.len() <= cap);
         }
+        Ok(())
+    }
+    #[test]
+    fn prospective_reassertions_use_retained_assert_witnesses_without_repeat_corpus() -> Result<()>
+    {
+        let all = donors();
+        let (development, fresh) = diversity_histories(&all, &[], &BTreeSet::new())?;
+        let histories = development
+            .iter()
+            .chain(&fresh)
+            .filter(|h| h.stratum.starts_with("reassert/"));
+        let mut count = 0;
+        for history in histories {
+            assert_eq!(history.turns.len(), 3);
+            let repeated = &history.turns[2];
+            assert_eq!(repeated.act, "assert");
+            assert_eq!(literal(repeated)?.split_whitespace().count(), 2);
+            let original = history.turns[..2]
+                .iter()
+                .find(|w| w.relation == repeated.relation)
+                .ok_or_else(|| invalid("reassert original role absent"))?;
+            assert_eq!(literal(repeated)?, literal(original)?);
+            assert_eq!(repeated.text, original.text);
+            assert!(history.turns[..2]
+                .iter()
+                .any(|w| w.relation != repeated.relation));
+            count += 1;
+        }
+        assert_eq!(count, 40);
         Ok(())
     }
     #[test]
