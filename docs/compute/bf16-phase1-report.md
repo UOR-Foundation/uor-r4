@@ -174,15 +174,19 @@ completed at 4,000 steps, two per GPU, ≈4 min each.
 **Frozen decision: ADOPT bf16** — both axes pass for both seeds. The tabulator's
 complete output is archived with the runs (see below).
 
-**The final source reproduces the gate binary.** After the gate, the branch was
-rebuilt from its final revision and compared against the archived gate binary
+**The delivered revision reproduces the gate binary.** After the gate, the
+branch's head was checked out on the pod (`git checkout -f` of the pushed head,
+clean tree), rebuilt, and compared against the archived gate binary
 (`gate-binary.sha256`, SHA-256
 `8e3889391d34b75bef21e05157e80cf7e55c37d76135782098c0c129f04fe8de`) on the same
 60-step run in both arms: `train_loss`, `grad_norm` and dev NLL are identical to
 the last digit in both (f32 6.87116785844167 / 2.5489016467485293 /
 4.993935182165907; bf16 6.870017512639364 / 2.6023508887764213 /
-4.996839917106195). So the gate's numbers are the numbers of the delivered
-revision.
+4.996839917106195), and the op suite reports 31 passed / 0 failed at the same
+head. So the gate's numbers are the numbers of the delivered revision; the
+only source changes after the gate were test-side (fixtures and tolerances) and
+two public wrappers' dtype validation, and they are covered by this
+reproduction.
 
 **Archived artifacts** (pod volume, `/workspace/uor-r4/bf16-gate/`):
 `bf16-gate-runs.tar.gz` (860 MB, every sealed run root without optimizer
