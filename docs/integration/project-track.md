@@ -1,5 +1,17 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
+## Immediate geometric attention dependency — October 5 endpoint result
+
+Retain [calibrated native endpoints](geometric-endpoint-calibration-2026-10-05.md):
+development complete replies11→23/128,12 gains/no losses, diagnostic1/32 unchanged.
+The reader is frozen; attention is still open.58 remaining payload first-errors
+occur at token0,46 with the wrong factual source. Investigate geometric query/record
+binding next: verify relation/role information survives the candidate representation,
+then distinguish descriptor collision from fixed cue/prefix ranking with matched
+native counterfactuals. Preserve calibrated terminals and inspect later correct→wrong
+source switches separately. No unchanged endpoint dose or traversal-only repair;
+component likelihood/boundary gains do not qualify chat or retire mechanisms.
+
 ## Active programme — grounded conversation and durable memory, October 1
 
 **Owner-adopted direction:** [D19](DECISIONS.md#d19--grounded-conversation-and-durable-memory-first).

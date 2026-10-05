@@ -1,5 +1,27 @@
 # Current UOR-R4 research state
 
+## Endpoint calibration repairs boundaries; geometric binding remains — October 5
+
+The [endpoint calibration](geometric-endpoint-calibration-2026-10-05.md) warm-starts
+record061 checkpoint64 exactly and learns only existing geometric Period/Stop
+tables. At fa8b8137,64updates/B8 select64 by devCE1.045333→0.966181; first packed
+crossing46. Actual complete development replies11→23/128,12 gains/no losses;
+exposed diagnostic remains1/32. Both questions complete in1/64 pairs unchanged.
+Across1,268 matched canonical positions, Copy/cue/prefix/factual source/angles are
+unchanged. No retrieval, transfer, general-chat or full serving qualification.
+
+Independent saved-row review finds80 remaining payload first-errors:58 at token0
+(46 wrong factual source,12 right) and22 later, including five correct→wrong source
+switches. Preserve calibrated64. Next isolate geometric query-conditioned cue/record
+ranking, relation/role information retained in candidate geometry, and frozen
+cue/prefix potentials. Separate initial binding from later continuity; no repeated
+endpoint dose or traversal-only repair. Shared compiler/session untouched.
+
+CPU16/noGPU remaining Linux pod; fit exit0/243.849s. Actual1library+1observation+
+26driver tests and release builds pass. Setup defects are retained separately.
+Sealed artifacts are returned and MD5-verified in iCloud; linked study binds cost
+and source. Protected1748 remains stacked on1745; merges are not established.
+
 ## Record credit complete; geometric endpoint calibration next — October 5
 
 The [record-credit study](geometric-record-credit-2026-10-05.md) implements offline
