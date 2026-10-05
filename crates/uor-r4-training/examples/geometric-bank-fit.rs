@@ -2546,7 +2546,7 @@ fn prefix_checkpoint(
                 .push(json!({"prior_updates":previous,"comparison":compare(&saved,&report)?}));
         }
         write_json(&root, "comparisons.json", &json!(comparisons))?;
-        let receipt = json!({"updates":step,"native_equal_episode_ce":report["native_equal_episode_ce"],"zero_support_positions":report["zero_support_positions"],"prefix_source_parameter_receipts":parameter_receipts(&weights.parameters())?,"prefix_native_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_packed_sha256":sha256_file(&root.join("cue/prefix-q4.bin"))?,"canonical_sha256":sha256_file(&root.join("canonical.json"))?,"frozen_parent_native_binding":integer.artifact_binding(),"native_only_generation_contract":true});
+        let receipt = json!({"updates":step,"native_equal_episode_ce":report["native_equal_episode_ce"],"zero_support_positions":report["zero_support_positions"],"prefix_source_parameter_receipts":parameter_receipts(&weights.parameters())?,"prefix_native_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"prefix_packed_sha256":sha256_file(&root.join("prefix/prefix-q4.bin"))?,"canonical_sha256":sha256_file(&root.join("canonical.json"))?,"frozen_parent_native_binding":integer.artifact_binding(),"native_only_generation_contract":true});
         write_json(&root, "receipt.json", &receipt)?;
         Ok(receipt)
     })();
@@ -3236,7 +3236,7 @@ fn main() {
     let outcome = (|| -> Result<()> {
         let a = checked_args()?;
         report_output::claim(&a.out)?;
-        if readout_mode(&a) || cue_mode(&a) {
+        if readout_mode(&a) || cue_mode(&a) || prefix_mode(&a) {
             fs::write(
                 a.out.join("resource-cap.json"),
                 serde_json::to_vec(&json!({"maximum_report_bytes":a.maximum_report_bytes}))?,
