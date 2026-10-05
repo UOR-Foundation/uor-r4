@@ -1,0 +1,72 @@
+# id	source	note
+heldout-002	screen	constraint template with no task; [forbidden_words] placeholder
+heldout-006	screen	letter salutation only
+heldout-008	0a-29m+0a-96m	0a label ill=1
+heldout-009	screen	letter salutation only
+heldout-012	0a-29m+0a-96m	0a label ill=1
+heldout-013	0a-29m+0a-96m	0a label ill=1
+heldout-014	0a-29m+0a-96m	0a label ill=1
+heldout-015	screen	[city] placeholder
+heldout-019	screen	letter salutation only
+heldout-021	0a-29m+0a-96m	0a label ill=1
+heldout-023	0a-29m+0a-96m	0a label ill=1
+heldout-024	screen	first line of an announcement post; no request
+heldout-030	screen	'Given the text:' with the question missing
+heldout-031	0a-96m	0a label ill=1
+heldout-034	0a-29m+0a-96m	0a label ill=1
+heldout-035	0a-29m+0a-96m	0a label ill=1
+heldout-037	0a-29m+0a-96m	0a label ill=1
+heldout-038	0a-29m+0a-96m	0a label ill=1
+heldout-039	0a-29m	0a label ill=1
+heldout-046	0a-29m+0a-96m	0a label ill=1
+heldout-047	screen	salutation only
+heldout-049	0a-29m+0a-96m	0a label ill=1
+heldout-050	screen	salutation only
+heldout-051	0a-29m+0a-96m	0a label ill=1
+heldout-054	0a-29m+0a-96m	0a label ill=1
+heldout-056	0a-29m+0a-96m	0a label ill=1
+heldout-059	0a-96m	0a label ill=1
+heldout-063	0a-29m+0a-96m	0a label ill=1
+heldout-066	0a-29m+0a-96m	0a label ill=1
+heldout-067	0a-29m+0a-96m	0a label ill=1
+heldout-068	0a-29m+0a-96m	0a label ill=1
+heldout-069	0a-29m	0a label ill=1
+heldout-073	screen	asks to review a description that is not included
+heldout-074	0a-29m	0a label ill=1
+heldout-078	0a-29m+0a-96m	0a label ill=1
+heldout-079	0a-29m+0a-96m	0a label ill=1
+heldout-080	0a-29m+0a-96m	0a label ill=1
+heldout-082	0a-96m	0a label ill=1
+heldout-083	0a-96m	0a label ill=1
+heldout-085	0a-29m+0a-96m	0a label ill=1
+heldout-091	0a-29m+0a-96m	0a label ill=1
+heldout-095	0a-29m+0a-96m	0a label ill=1
+heldout-100	screen	salutation only
+heldout-102	screen	letter salutation only
+heldout-105	0a-29m+0a-96m	0a label ill=1
+heldout-107	0a-29m+0a-96m	0a label ill=1
+heldout-110	0a-29m	0a label ill=1
+heldout-112	0a-29m+0a-96m	0a label ill=1
+heldout-114	0a-29m+0a-96m	0a label ill=1
+heldout-116	screen	a statement fragment from a document; no request
+heldout-118	screen	asks to refine text that is not included
+heldout-127	0a-96m	0a label ill=1
+heldout-129	0a-29m+0a-96m	0a label ill=1
+heldout-131	screen	letter salutation only
+heldout-137	0a-29m+0a-96m	0a label ill=1
+heldout-140	0a-29m+0a-96m	0a label ill=1
+heldout-144	screen	constraint template with no task; [forbidden_words] placeholder
+heldout-147	0a-29m+0a-96m	0a label ill=1
+heldout-154	0a-29m+0a-96m	0a label ill=1
+heldout-156	0a-29m+0a-96m	0a label ill=1
+heldout-162	0a-29m+0a-96m	0a label ill=1
+heldout-163	0a-29m+0a-96m	0a label ill=1
+heldout-166	0a-96m	0a label ill=1
+heldout-179	0a-29m+0a-96m	0a label ill=1
+heldout-181	0a-29m+0a-96m	0a label ill=1
+heldout-182	0a-29m	0a label ill=1
+heldout-189	0a-29m+0a-96m	0a label ill=1
+heldout-190	0a-29m	0a label ill=1
+heldout-191	0a-29m	0a label ill=1
+heldout-196	0a-29m	0a label ill=1
+heldout-199	0a-29m+0a-96m	0a label ill=1
