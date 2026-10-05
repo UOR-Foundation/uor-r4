@@ -74,77 +74,100 @@ stage_build() {
   log "build done"
 }
 
+base_run() {  # base_run ARM SEED
+  local arm=$1 seed=$2
+  local out=$R/base-$arm-s$seed
+  fresh "$out" || return 0
+  log "base $arm seed $seed on GPU $((seed - 1))"
+  CUDA_VISIBLE_DEVICES=$((seed - 1)) RAYON_NUM_THREADS=$THREADS "$GS" train \
+    out="$out" seed="$seed" lr=0.0005 $(precision_arg "$arm") \
+    train="$D/corpora/ts-train/tokens.u16,$D/corpora/td-train/tokens.u16,$D/chat-v0-p2/train/tokens.u16" \
+    train_weights=0.6,0.15,0.25 \
+    valid="$D/corpora/ts-valid/tokens.u16" tokenizer="$T" \
+    arch=geometric width=576 heads=8 layers=10 pattern=rrarrarrar context=384 \
+    read=l2 rotation=true key_shift=false \
+    steps=$BASE_STEPS batch=16 warmup=200 min_lr=0.1 weight_decay=0.1 clip=1.0 \
+    eval_every=5000 eval_windows=64 final_windows=512 \
+    checkpoint_every=10000 max_seconds=21600 \
+    device=cuda tf32=true data_parallel=1 \
+    > "$out.log" 2>&1 || fail "$out"
+}
+
+# The two seeds of an arm run on the two GPUs at once; the arms run in sequence
+# so like-for-like share the pod's clocks.
 stage_base() {
   for arm in "${ARMS[@]}"; do
-    for seed in "${SEEDS[@]}"; do
-      local out=$R/base-$arm-s$seed
-      local gpu=$((seed - 1))
-      fresh "$out" || continue
-      log "base $arm seed $seed on GPU $gpu"
-      CUDA_VISIBLE_DEVICES=$gpu RAYON_NUM_THREADS=$THREADS "$GS" train \
-        out="$out" seed="$seed" lr=0.0005 $(precision_arg "$arm") \
-        train="$D/corpora/ts-train/tokens.u16,$D/corpora/td-train/tokens.u16,$D/chat-v0-p2/train/tokens.u16" \
-        train_weights=0.6,0.15,0.25 \
-        valid="$D/corpora/ts-valid/tokens.u16" tokenizer="$T" \
-        arch=geometric width=576 heads=8 layers=10 pattern=rrarrarrar context=384 \
-        read=l2 rotation=true key_shift=false \
-        steps=$BASE_STEPS batch=16 warmup=200 min_lr=0.1 weight_decay=0.1 clip=1.0 \
-        eval_every=5000 eval_windows=64 final_windows=512 \
-        checkpoint_every=10000 max_seconds=21600 \
-        device=cuda tf32=true data_parallel=1 \
-        > "$out.log" 2>&1 || fail "$out"
-    done
+    base_run "$arm" 1 & local p1=$!
+    base_run "$arm" 2 & local p2=$!
+    wait $p1 || exit 1
+    wait $p2 || exit 1
+    log "base $arm done"
   done
   log "base stage done"
 }
 
+ft_run() {  # ft_run ARM SEED
+  local arm=$1 seed=$2
+  local base=$R/base-$arm-s$seed
+  local out=$R/ft-$arm-s$seed
+  completed "$base" $BASE_STEPS || {
+    echo "base-$arm-s$seed has not completed $BASE_STEPS steps: run the base stage first" >&2
+    exit 1
+  }
+  fresh "$out" || return 0
+  log "ft $arm seed $seed on GPU $((seed - 1))"
+  CUDA_VISIBLE_DEVICES=$((seed - 1)) RAYON_NUM_THREADS=$THREADS "$GS" dialogue-train \
+    out="$out" tokenizer="$T" $(precision_arg "$arm") \
+    train_tokens="$D/ft/mixed-c/tokens.u16" train_mask="$D/ft/mixed-c/response_mask.u8" \
+    train_manifest="$D/ft/mixed-c/manifest.json" \
+    dev_tokens="$D/ft/dev/tokens.u16" dev_mask="$D/ft/dev/response_mask.u8" \
+    dev_manifest="$D/ft/dev/manifest.json" \
+    init="$base/model" \
+    pointer=32 protocol=2 context=384 policy=full_prefix data_seed="$seed" \
+    steps=$FT_STEPS batch=16 lr=0.0003 warmup=100 min_lr=0.1 weight_decay=0.1 clip=1.0 \
+    eval_every=500 checkpoint_every=4000 dev_seed=20260930 dev_per_source=32 \
+    max_seconds=10800 device=cuda tf32=true \
+    > "$out.log" 2>&1 || fail "$out"
+}
+
 stage_ft() {
   for arm in "${ARMS[@]}"; do
-    for seed in "${SEEDS[@]}"; do
-      local base=$R/base-$arm-s$seed
-      local out=$R/ft-$arm-s$seed
-      completed "$base" $BASE_STEPS || {
-        echo "base-$arm-s$seed has not completed $BASE_STEPS steps: run the base stage first" >&2
-        exit 1
-      }
-      fresh "$out" || continue
-      log "ft $arm seed $seed"
-      CUDA_VISIBLE_DEVICES=$((seed - 1)) RAYON_NUM_THREADS=$THREADS "$GS" dialogue-train \
-        out="$out" tokenizer="$T" $(precision_arg "$arm") \
-        train_tokens="$D/ft/mixed-c/tokens.u16" train_mask="$D/ft/mixed-c/response_mask.u8" \
-        train_manifest="$D/ft/mixed-c/manifest.json" \
-        dev_tokens="$D/ft/dev/tokens.u16" dev_mask="$D/ft/dev/response_mask.u8" \
-        dev_manifest="$D/ft/dev/manifest.json" \
-        init="$base/model" \
-        pointer=32 protocol=2 context=384 policy=full_prefix data_seed="$seed" \
-        steps=$FT_STEPS batch=16 lr=0.0003 warmup=100 min_lr=0.1 weight_decay=0.1 clip=1.0 \
-        eval_every=500 checkpoint_every=4000 dev_seed=20260930 dev_per_source=32 \
-        max_seconds=10800 device=cuda tf32=true \
-        > "$out.log" 2>&1 || fail "$out"
-    done
+    ft_run "$arm" 1 & local p1=$!
+    ft_run "$arm" 2 & local p2=$!
+    wait $p1 || exit 1
+    wait $p2 || exit 1
+    log "ft $arm done"
   done
   log "ft stage done"
 }
 
+session_run() {  # session_run ARM SEED
+  local arm=$1 seed=$2
+  local ft=$R/ft-$arm-s$seed
+  local out=$R/session-off-$arm-s$seed
+  completed "$ft" $FT_STEPS || {
+    echo "ft-$arm-s$seed has not completed $FT_STEPS steps: run the ft stage first" >&2
+    exit 1
+  }
+  fresh "$out" || return 0
+  log "session off $arm seed $seed"
+  RAYON_NUM_THREADS=$THREADS "$MWORLD" session \
+    out="$out" world=v2 model_root="$ft" tokenizer="$T" \
+    compiler="$D/sieve/compiler-save-op-v25-rawtable/compiler.json" \
+    trunk="$D/sieve/op-model-v25/model" op_policy=unless_query \
+    log_recall=off max_new_tokens=64 arms=default reload=0 \
+    > "$out.log" 2>&1 || fail "$out"
+}
+
+# The four sessions are CPU-only and independent: all four at once.
 stage_session() {
+  local pids=()
   for arm in "${ARMS[@]}"; do
     for seed in "${SEEDS[@]}"; do
-      local ft=$R/ft-$arm-s$seed
-      local out=$R/session-off-$arm-s$seed
-      completed "$ft" $FT_STEPS || {
-        echo "ft-$arm-s$seed has not completed $FT_STEPS steps: run the ft stage first" >&2
-        exit 1
-      }
-      fresh "$out" || continue
-      log "session off $arm seed $seed"
-      RAYON_NUM_THREADS=$THREADS "$MWORLD" session \
-        out="$out" world=v2 model_root="$ft" tokenizer="$T" \
-        compiler="$D/sieve/compiler-save-op-v25-rawtable/compiler.json" \
-        trunk="$D/sieve/op-model-v25/model" op_policy=unless_query \
-        log_recall=off max_new_tokens=64 arms=default reload=0 \
-        > "$out.log" 2>&1 || fail "$out"
+      session_run "$arm" "$seed" & pids+=($!)
     done
   done
+  for pid in "${pids[@]}"; do wait "$pid" || exit 1; done
   log "session stage done"
 }
 
