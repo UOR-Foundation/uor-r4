@@ -15,7 +15,7 @@ use candle_core::{CpuStorage, CudaDevice, CudaStorage, CustomOp1, Storage};
 use cudarc::driver::{CudaSlice, CudaView};
 
 use super::*;
-use crate::cuda_stack_kernels::cuda::{launch, launch_groups, zeros, Arg};
+use crate::cuda_stack_kernels::cuda::{launch, launch_groups, legacy_read_kernels, zeros, Arg};
 
 type CResult<T> = candle_core::Result<T>;
 type Forward = CResult<(CudaStorage, Shape)>;
@@ -790,7 +790,6 @@ impl FusedRead {
                 ],
             )?;
         }
-        let tiles = self.time.div_ceil(16);
         let geometry = [
             u32_of(self.key, "key")?,
             0,
@@ -800,11 +799,8 @@ impl FusedRead {
             1,
             u32::from(write_excess),
         ];
-        launch_groups(
+        self.launch_tile_inner(
             device,
-            "read_tile_inner",
-            (tiles, tiles, self.batch * self.heads),
-            (16, 16, 1),
             &[
                 Arg::F(query),
                 Arg::F(kv),
@@ -835,6 +831,50 @@ impl FusedRead {
             key_lift,
             excess,
         })
+    }
+
+    /// Launches the causal score kernel: the legacy `read_tile_inner` (16 x 16
+    /// tiles, one output per thread) or `read_tile_inner32` (32 x 32 tiles,
+    /// 2 x 2 outputs per thread); the two are bitwise identical.
+    fn launch_tile_inner(&self, device: &CudaDevice, args: &[Arg<'_>]) -> CResult<()> {
+        let (name, tile) = if legacy_read_kernels() {
+            ("read_tile_inner", 16)
+        } else {
+            ("read_tile_inner32", 32)
+        };
+        let tiles = self.time.div_ceil(tile);
+        launch_groups(
+            device,
+            name,
+            (tiles, tiles, self.batch * self.heads),
+            (16, 16, 1),
+            args,
+        )
+    }
+
+    /// Launches `read_mix`, `read_dq` or `read_dkv`: the legacy kernel with
+    /// one thread per output (`outputs` in all), or its `_tiled` variant over
+    /// (32-column tile of `columns`, 32-row tile, window x head) blocks of
+    /// 32 x 8 threads; the two are bitwise identical.
+    fn launch_read(
+        &self,
+        device: &CudaDevice,
+        name: &str,
+        outputs: usize,
+        columns: usize,
+        args: &[Arg<'_>],
+    ) -> CResult<()> {
+        let groups = self.batch * self.heads;
+        if legacy_read_kernels() || groups > 65_535 {
+            return launch(device, name, outputs, args);
+        }
+        launch_groups(
+            device,
+            &format!("{name}_tiled"),
+            (columns.div_ceil(32), self.time.div_ceil(32), groups),
+            (32, 8, 1),
+            args,
+        )
     }
 
     fn cuda_check(&self) -> CResult<()> {
@@ -878,10 +918,11 @@ impl FusedRead {
         let pass = self.cuda_pass(device, query, kv.slice(..), aux, false)?;
         let total = rows * value;
         let out = zeros::<f32>(device, total)?;
-        launch(
+        self.launch_read(
             device,
             "read_mix",
             total,
+            value,
             &[
                 Arg::f(&pass.probabilities),
                 Arg::F(kv),
@@ -939,7 +980,6 @@ impl FusedRead {
         let dkv = zeros::<f32>(device, kvt.elem_count())?;
         let aux_parts = self.null || self.age || scaled;
         let d_aux = zeros::<f32>(device, a.elem_count())?;
-        let tiles = self.time.div_ceil(16);
         let geometry = [
             u32_of(self.value, "value")?,
             0,
@@ -949,11 +989,8 @@ impl FusedRead {
             0,
             0,
         ];
-        launch_groups(
+        self.launch_tile_inner(
             device,
-            "read_tile_inner",
-            (tiles, tiles, self.batch * self.heads),
-            (16, 16, 1),
             &[
                 Arg::F(dyv.slice(..)),
                 Arg::F(kvv.slice(..)),
@@ -1003,10 +1040,11 @@ impl FusedRead {
                 ],
             )?;
         }
-        launch(
+        self.launch_read(
             device,
             "read_dq",
             q.elem_count(),
+            self.key,
             &[
                 Arg::f(&inner_grad),
                 Arg::F(qv.slice(..)),
@@ -1016,10 +1054,11 @@ impl FusedRead {
                 Arg::Dims(dims),
             ],
         )?;
-        launch(
+        self.launch_read(
             device,
             "read_dkv",
             kvt.elem_count(),
+            self.width(),
             &[
                 Arg::f(&inner_grad),
                 Arg::f(&pass.probabilities),
@@ -1032,25 +1071,37 @@ impl FusedRead {
             ],
         )?;
         if self.age {
-            launch(
-                device,
-                "read_dage",
-                self.heads * self.time,
-                &[Arg::d(&d_scores), Arg::f(&d_aux), Arg::Dims(dims)],
-            )?;
+            let args = [Arg::d(&d_scores), Arg::f(&d_aux), Arg::Dims(dims)];
+            if legacy_read_kernels() {
+                launch(device, "read_dage", self.heads * self.time, &args)?;
+            } else {
+                launch_groups(
+                    device,
+                    "read_dage_unrolled",
+                    ((self.heads * self.time).div_ceil(32), 1, 1),
+                    (32, 1, 1),
+                    &args,
+                )?;
+            }
         }
         if scaled {
-            launch(
-                device,
-                "read_dbeta",
-                2 * self.heads,
-                &[
-                    Arg::d(&row_beta),
-                    Arg::d(&row_offset),
-                    Arg::f(&d_aux),
-                    Arg::Dims(dims),
-                ],
-            )?;
+            let args = [
+                Arg::d(&row_beta),
+                Arg::d(&row_offset),
+                Arg::f(&d_aux),
+                Arg::Dims(dims),
+            ];
+            if legacy_read_kernels() {
+                launch(device, "read_dbeta", 2 * self.heads, &args)?;
+            } else {
+                launch_groups(
+                    device,
+                    "read_dbeta_block",
+                    (2 * self.heads, 1, 1),
+                    (256, 1, 1),
+                    &args,
+                )?;
+            }
         }
         let d_aux = if aux_parts {
             tensor(d_aux, device, aux.shape())

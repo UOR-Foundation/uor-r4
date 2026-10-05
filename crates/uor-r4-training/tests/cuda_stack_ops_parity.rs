@@ -1119,6 +1119,97 @@ fn test_fused_read_general_parity() -> uor_r4_training::Result<()> {
     Ok(())
 }
 
+/// The tiled read kernels (the default) against the legacy per-output
+/// kernels: the forward output and every gradient must be bitwise identical,
+/// since each output sums the same terms in the same order. The shapes cover
+/// partial 32-tiles, a key/value boundary inside a 32-column tile, more than
+/// one tile in every direction, and the CPU reference within tolerance.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_fused_read_tiled_kernels_match_legacy_bitwise() -> uor_r4_training::Result<()> {
+    use uor_r4_training::cuda_stack_kernels::cuda::set_legacy_read_kernels;
+    use uor_r4_training::geometric_stack::{fused_aux_len, ReadScore};
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+    let shapes = [
+        (2usize, 3usize, 13usize, 8usize, 9usize),
+        (1, 2, 37, 40, 24),
+        (2, 2, 70, 64, 64),
+        (1, 1, 1, 4, 4),
+        (1, 2, 97, 16, 48),
+    ];
+    let configs = [
+        (ReadScore::Dot, false, false),
+        (ReadScore::Dot, true, true),
+        (ReadScore::Lorentz, true, true),
+        (ReadScore::Lorentz, false, false),
+        (ReadScore::L2, true, true),
+        (ReadScore::L2, false, false),
+    ];
+    let mut case = 0u64;
+    let mut outcome = Ok(());
+    'cases: for &shape in &shapes {
+        let (batch, heads, time, key, value) = shape;
+        for &(score, null, age) in &configs {
+            case += 1;
+            let seed = 5000 + 31 * case;
+            let q_data = noise(batch * heads * time * key, seed, 0.8);
+            let k_data = noise(batch * heads * time * key, seed + 1, 0.8);
+            let v_data = noise(batch * heads * time * value, seed + 2, 1.0);
+            let aux_len = fused_aux_len(batch, heads, time, score, null, age).max(1);
+            let mut aux_data = noise(aux_len, seed + 3, 0.5);
+            if score.scaled() {
+                let base = aux_len - 2 * heads;
+                for h in 0..heads {
+                    aux_data[base + h] = 0.7 + 0.3 * h as f32;
+                    aux_data[base + heads + h] = 0.2 * h as f32 - 0.1;
+                }
+            }
+            let w_data = noise(batch * heads * time * value, seed + 4, 1.0);
+            let data = [&q_data, &k_data, &v_data, &aux_data, &w_data];
+            set_legacy_read_kernels(Some(true));
+            let legacy = read_run(&cuda_dev, data, shape, score, null, age);
+            set_legacy_read_kernels(Some(false));
+            let tiled = read_run(&cuda_dev, data, shape, score, null, age);
+            set_legacy_read_kernels(None);
+            let (legacy, tiled) = match (legacy, tiled) {
+                (Ok(l), Ok(t)) => (l, t),
+                (Err(e), _) | (_, Err(e)) => {
+                    outcome = Err(e);
+                    break 'cases;
+                }
+            };
+            let cpu = read_run(&cpu_dev, data, shape, score, null, age)?;
+            let label = format!(
+                "FusedRead {score:?} null{null} age{age} b{batch} h{heads} t{time} k{key} v{value}"
+            );
+            for (k, name) in ["out", "dq", "dk", "dv", "d_aux"].iter().enumerate() {
+                let differing = legacy[k]
+                    .iter()
+                    .zip(&tiled[k])
+                    .filter(|(a, b)| a.to_bits() != b.to_bits())
+                    .count();
+                assert_eq!(
+                    differing, 0,
+                    "{label} {name}: {differing} of {} values differ between legacy and tiled kernels",
+                    legacy[k].len()
+                );
+                compare(
+                    &cpu[k],
+                    &tiled[k],
+                    1e-3,
+                    &format!("{label} {name} (tiled vs CPU)"),
+                );
+            }
+            println!("{label}: tiled == legacy bitwise");
+        }
+    }
+    outcome
+}
+
 /// Timing of the training-size read and recurrence, forward plus backward,
 /// on CUDA and CPU. Run explicitly: `--ignored --nocapture`.
 #[cfg(feature = "cuda")]

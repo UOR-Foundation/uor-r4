@@ -941,6 +941,305 @@ extern "C" __global__ void read_dbeta(
 }
 
 // ---------------------------------------------------------------------------
+// 7b. Tiled read kernels (the default; `UOR_CUDA_READ_LEGACY=1` selects the
+// kernels above). Each output accumulates the same f32/f64 terms in the same
+// order with the same operations as its legacy kernel, so the results are
+// bitwise identical; only the thread mapping, shared-memory staging and
+// memory-level parallelism differ.
+// ---------------------------------------------------------------------------
+
+// The read_tile_inner epilogue for one output.
+__device__ __forceinline__ void read_tile_store(
+    float acc, uint t, uint j, uint index, const float* aux,
+    const double* query_lift, const double* key_lift,
+    float* out, double* excess, ReadDims d, Geom geom
+) {
+    uint time = d.time;
+    if (t >= time || j > t) return;
+    u64 slot = ((u64)index * time + t) * time + j;
+    if (geom.mode == 0) {
+        out[slot] = acc;
+        return;
+    }
+    uint head = index % d.heads;
+    float age = d.age_on != 0 ? aux[read_age_offset(d) + (u64)head * time + (t - j)] : 0.0f;
+    float score;
+    if (d.score == 0) {
+        float scale = 1.0f / sqrtf((float)d.key);
+        score = acc * scale + age;
+    } else {
+        double lq = query_lift[(u64)index * time + t];
+        double lk = key_lift[(u64)index * time + j];
+        double e = d.score == 1 ? lq * lk - (double)acc - 1.0 : lq + lk - 2.0 * (double)acc;
+        if (geom.write_excess != 0) {
+            excess[slot] = e;
+        }
+        u64 beta_offset = read_beta_offset(d);
+        double beta = (double)aux[beta_offset + head];
+        double offset = (double)aux[beta_offset + d.heads + head];
+        score = (float)(-beta * (read_distance(d, e) - offset)) + age;
+    }
+    out[slot] = score;
+}
+
+// read_tile_inner over 32 x 32 output tiles: 16 x 16 threads, 2 x 2 outputs
+// per thread (four products per four shared loads instead of one per two).
+// The columns still advance in zero-padded chunks of 16, as the legacy kernel.
+extern "C" __global__ void read_tile_inner32(
+    const float* a, const float* b, const float* aux,
+    const double* query_lift, const double* key_lift,
+    float* out, double* excess, ReadDims d, Geom geom
+) {
+    uint jt = blockIdx.x;
+    uint tt = blockIdx.y;
+    if (jt > tt) return;
+    uint index = blockIdx.z;
+    uint time = d.time;
+    __shared__ float tile_a[32][17];
+    __shared__ float tile_b[32][17];
+    uint lx = threadIdx.x;
+    uint ly = threadIdx.y;
+    float acc00 = 0.0f;
+    float acc01 = 0.0f;
+    float acc10 = 0.0f;
+    float acc11 = 0.0f;
+    for (uint c0 = 0; c0 < geom.length; c0 += 16) {
+        uint c = c0 + lx;
+        for (uint h = 0; h < 2; ++h) {
+            uint r = ly + 16 * h;
+            uint t = tt * 32 + r;
+            uint b_row = jt * 32 + r;
+            tile_a[r][lx] = (t < time && c < geom.length)
+                ? a[((u64)index * time + t) * geom.a_stride + geom.a_offset + c] : 0.0f;
+            tile_b[r][lx] = (b_row < time && c < geom.length)
+                ? b[((u64)index * time + b_row) * geom.b_stride + geom.b_offset + c] : 0.0f;
+        }
+        __syncthreads();
+        #pragma unroll
+        for (uint k = 0; k < 16; ++k) {
+            float a0 = tile_a[ly][k];
+            float a1 = tile_a[ly + 16][k];
+            float b0 = tile_b[lx][k];
+            float b1 = tile_b[lx + 16][k];
+            acc00 += a0 * b0;
+            acc01 += a0 * b1;
+            acc10 += a1 * b0;
+            acc11 += a1 * b1;
+        }
+        __syncthreads();
+    }
+    uint t0 = tt * 32 + ly;
+    uint j0 = jt * 32 + lx;
+    read_tile_store(acc00, t0, j0, index, aux, query_lift, key_lift, out, excess, d, geom);
+    read_tile_store(acc01, t0, j0 + 16, index, aux, query_lift, key_lift, out, excess, d, geom);
+    read_tile_store(acc10, t0 + 16, j0, index, aux, query_lift, key_lift, out, excess, d, geom);
+    read_tile_store(acc11, t0 + 16, j0 + 16, index, aux, query_lift, key_lift, out, excess, d, geom);
+}
+
+// acc[k] += sum_{j <= t} g[index, t, j] x[index, j, x_offset + c] in
+// ascending j (the legacy read_mix/read_dq order) for t = t0 + y + 8k and
+// c = blockIdx.x * 32 + x. Blocks are 32 x 8 threads; g and x tiles of 32
+// are staged in shared memory.
+__device__ __forceinline__ void read_lower_tiles(
+    const float* g, const float* x, uint x_stride, uint x_offset, uint cols,
+    u64 index, uint t0, uint time, float* acc, float (*gs)[33], float (*xs)[33]
+) {
+    uint cx = threadIdx.x;
+    uint ty = threadIdx.y;
+    uint c = blockIdx.x * 32 + cx;
+    uint t_end = min(t0 + 32, time);
+    for (uint j0 = 0; j0 < t_end; j0 += 32) {
+        for (uint r = ty; r < 32; r += 8) {
+            uint t = t0 + r;
+            uint j = j0 + cx;
+            gs[r][cx] = (t < time && j <= t) ? g[((u64)index * time + t) * time + j] : 0.0f;
+            uint jr = j0 + r;
+            xs[r][cx] = (jr < time && c < cols)
+                ? x[((u64)index * time + jr) * x_stride + x_offset + c] : 0.0f;
+        }
+        __syncthreads();
+        uint jn = min(32u, t_end - j0);
+        for (uint jj = 0; jj < jn; ++jj) {
+            float xv = xs[jj][cx];
+            uint j = j0 + jj;
+            #pragma unroll
+            for (uint k = 0; k < 4; ++k) {
+                if (j <= t0 + ty + 8 * k) acc[k] += gs[ty + 8 * k][jj] * xv;
+            }
+        }
+        __syncthreads();
+    }
+}
+
+// read_mix: blocks (value tile, t tile, index) of 32 x 8 threads.
+extern "C" __global__ void read_mix_tiled(
+    const float* probabilities, const float* kv, float* out, ReadDims d
+) {
+    __shared__ float gs[32][33];
+    __shared__ float xs[32][33];
+    u64 index = blockIdx.z;
+    uint t0 = blockIdx.y * 32;
+    uint time = d.time;
+    float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    read_lower_tiles(probabilities, kv, d.key + d.value, d.key, d.value, index, t0, time, acc, gs, xs);
+    uint c = blockIdx.x * 32 + threadIdx.x;
+    if (c >= d.value) return;
+    for (uint k = 0; k < 4; ++k) {
+        uint t = t0 + threadIdx.y + 8 * k;
+        if (t < time) out[((u64)index * time + t) * d.value + c] = acc[k];
+    }
+}
+
+// read_dq: blocks (key tile, t tile, index) of 32 x 8 threads.
+extern "C" __global__ void read_dq_tiled(
+    const float* inner_grad, const float* query, const float* kv, const double* query_self,
+    float* dq, ReadDims d
+) {
+    __shared__ float gs[32][33];
+    __shared__ float xs[32][33];
+    u64 index = blockIdx.z;
+    uint t0 = blockIdx.y * 32;
+    uint time = d.time;
+    float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    read_lower_tiles(inner_grad, kv, d.key + d.value, 0, d.key, index, t0, time, acc, gs, xs);
+    uint c = blockIdx.x * 32 + threadIdx.x;
+    if (c >= d.key) return;
+    for (uint k = 0; k < 4; ++k) {
+        uint t = t0 + threadIdx.y + 8 * k;
+        if (t >= time) continue;
+        u64 row = index * time + t;
+        u64 id = row * d.key + c;
+        float accum = acc[k];
+        if (d.score != 0) {
+            accum += (float)query_self[row] * query[id];
+        }
+        dq[id] = accum;
+    }
+}
+
+// read_dkv: blocks (column tile of key + value, j tile, index) of 32 x 8
+// threads; t advances from the tile's first j in ascending order.
+extern "C" __global__ void read_dkv_tiled(
+    const float* inner_grad, const float* probabilities, const float* query, const float* kv,
+    const float* d_out, const double* key_self, float* dkv, ReadDims d
+) {
+    __shared__ float gk[32][33];
+    __shared__ float gv[32][33];
+    __shared__ float xs[32][33];
+    uint cx = threadIdx.x;
+    uint ty = threadIdx.y;
+    u64 index = blockIdx.z;
+    uint j0 = blockIdx.y * 32;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint c_first = blockIdx.x * 32;
+    uint c = c_first + cx;
+    bool need_k = c_first < d.key;
+    bool need_v = c_first + 32 > d.key;
+    bool is_key = c < d.key;
+    float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    for (uint t0 = j0; t0 < time; t0 += 32) {
+        for (uint r = ty; r < 32; r += 8) {
+            uint t = t0 + r;
+            uint j = j0 + cx;
+            bool inside = t < time && j < time;
+            u64 slot = ((u64)index * time + t) * time + j;
+            if (need_k) gk[r][cx] = inside ? inner_grad[slot] : 0.0f;
+            if (need_v) gv[r][cx] = inside ? probabilities[slot] : 0.0f;
+            float xv = 0.0f;
+            if (t < time) {
+                if (c < d.key) {
+                    xv = query[((u64)index * time + t) * d.key + c];
+                } else if (c < width) {
+                    xv = d_out[((u64)index * time + t) * d.value + (c - d.key)];
+                }
+            }
+            xs[r][cx] = xv;
+        }
+        __syncthreads();
+        uint tn = min(32u, time - t0);
+        for (uint tt = 0; tt < tn; ++tt) {
+            float xv = xs[tt][cx];
+            uint t = t0 + tt;
+            #pragma unroll
+            for (uint k = 0; k < 4; ++k) {
+                uint jj = ty + 8 * k;
+                if (t >= j0 + jj) acc[k] += (is_key ? gk[tt][jj] : gv[tt][jj]) * xv;
+            }
+        }
+        __syncthreads();
+    }
+    if (c >= width) return;
+    for (uint k = 0; k < 4; ++k) {
+        uint j = j0 + ty + 8 * k;
+        if (j >= time) continue;
+        u64 row = index * time + j;
+        u64 id = row * width + c;
+        float accum = acc[k];
+        if (is_key && d.score != 0) {
+            accum += (float)key_self[row] * kv[id];
+        }
+        dkv[id] = accum;
+    }
+}
+
+// read_dage with 32-thread blocks (spread over the SMs) and sixteen loads in
+// flight per thread; the f64 sum runs in the legacy order.
+extern "C" __global__ void read_dage_unrolled(const double* ds, float* d_aux, ReadDims d) {
+    uint id = blockIdx.x * blockDim.x + threadIdx.x;
+    uint time = d.time;
+    if (id >= d.heads * time) return;
+    uint distance = id % time;
+    uint head = id / time;
+    double sum = 0.0;
+    u64 step = (u64)time + 1;
+    for (uint b = 0; b < d.batch; ++b) {
+        u64 index = (u64)b * d.heads + head;
+        const double* p = ds + (index * time + distance) * time;
+        uint count = time - distance;
+        uint i = 0;
+        for (; i + 16 <= count; i += 16) {
+            double v[16];
+            #pragma unroll
+            for (uint k = 0; k < 16; ++k) v[k] = p[(u64)(i + k) * step];
+            #pragma unroll
+            for (uint k = 0; k < 16; ++k) sum += v[k];
+        }
+        for (; i < count; ++i) sum += p[(u64)i * step];
+    }
+    d_aux[read_age_offset(d) + id] = (float)sum;
+}
+
+// read_dbeta with one 256-thread block per output: the block stages the
+// row partials in shared memory and thread 0 sums them in the legacy order.
+extern "C" __global__ void read_dbeta_block(
+    const double* row_beta, const double* row_offset, float* d_aux, ReadDims d
+) {
+    __shared__ double staged[256];
+    uint id = blockIdx.x;
+    if (id >= 2 * d.heads) return;
+    uint head = id % d.heads;
+    const double* source = id < d.heads ? row_beta : row_offset;
+    uint n = d.batch * d.time;
+    double sum = 0.0;
+    for (uint base = 0; base < n; base += 256) {
+        uint i = base + threadIdx.x;
+        if (i < n) {
+            uint b = i / d.time;
+            uint t = i % d.time;
+            staged[threadIdx.x] = source[((u64)b * d.heads + head) * d.time + t];
+        }
+        __syncthreads();
+        if (threadIdx.x == 0) {
+            uint m = min(256u, n - base);
+            for (uint k = 0; k < m; ++k) sum += staged[k];
+        }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) d_aux[read_beta_offset(d) + id] = (float)sum;
+}
+
+// ---------------------------------------------------------------------------
 // 8. AdamW step in place, the CPU `adam_step`'s f32 operations in its order
 // (non-contracting intrinsics, IEEE sqrt and division).
 // ---------------------------------------------------------------------------
@@ -1373,6 +1672,38 @@ extern "C" __global__ void pointer_sum(
             eprintln!("cuda-kernel {name} {} us", started.elapsed().as_micros());
         }
         Ok(())
+    }
+
+    /// The fused read's kernel family: 0 follows `UOR_CUDA_READ_LEGACY`,
+    /// 1 forces the legacy kernels, 2 forces the tiled kernels.
+    static READ_KERNELS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+    /// Whether the fused read launches the legacy per-output kernels instead
+    /// of the tiled ones (bitwise identical results; the tiled kernels are
+    /// the default). `UOR_CUDA_READ_LEGACY=1` selects the legacy kernels
+    /// unless [`set_legacy_read_kernels`] overrides it.
+    pub fn legacy_read_kernels() -> bool {
+        match READ_KERNELS.load(std::sync::atomic::Ordering::Relaxed) {
+            1 => true,
+            2 => false,
+            _ => {
+                static ENV: OnceLock<bool> = OnceLock::new();
+                *ENV.get_or_init(|| {
+                    std::env::var_os("UOR_CUDA_READ_LEGACY").is_some_and(|value| value == "1")
+                })
+            }
+        }
+    }
+
+    /// Overrides the fused read's kernel family process-wide (`None`
+    /// restores the environment's choice); used by the parity tests.
+    pub fn set_legacy_read_kernels(legacy: Option<bool>) {
+        let code = match legacy {
+            None => 0,
+            Some(true) => 1,
+            Some(false) => 2,
+        };
+        READ_KERNELS.store(code, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// `UOR_CUDA_PROFILE=1` synchronizes after each launched kernel and
