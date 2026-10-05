@@ -212,7 +212,7 @@
   "relative_development_diagnostics": {
     "highest_individual_copy_requested_role": 64,
     "highest_individual_copy_current_record": 59,
-    "top_copy_correct_token": 28,
+    "highest_individual_copy_correct_token": 28,
     "joint_first_correct_token": 23,
     "first_stop_errors": 18,
     "first_wrong_copy_errors": 23,
