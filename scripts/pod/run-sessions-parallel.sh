@@ -13,7 +13,7 @@
 #
 # Environment (defaults in brackets):
 #   MWORLD     m-world binary; built with --features cuda for DEVICE=cuda
-#              [/root/evalgpu/target/release/examples/m-world]
+#              [/root/target-evalgpu/release/examples/m-world]
 #   T          tokenizer.json [/root/data/tokenizer.json]
 #   COMPILER   saved compiler [/root/data/sieve/compiler-save-op-v25-rawtable/compiler.json]
 #   TRUNK      op-model trunk [/root/data/sieve/op-model-v25/model]; empty: no trunk=
@@ -38,7 +38,7 @@ if [ $# -lt 1 ]; then
   exit 2
 fi
 
-MWORLD=${MWORLD:-/root/evalgpu/target/release/examples/m-world}
+MWORLD=${MWORLD:-/root/target-evalgpu/release/examples/m-world}
 T=${T:-/root/data/tokenizer.json}
 COMPILER=${COMPILER:-/root/data/sieve/compiler-save-op-v25-rawtable/compiler.json}
 TRUNK=${TRUNK-/root/data/sieve/op-model-v25/model}
