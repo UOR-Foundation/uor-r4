@@ -2871,7 +2871,7 @@ mod tests {
             // not merely to the shared new outer serializer.
             let consumer_path = fixture.path.join(format!("consumer-export-{stage}"));
             current.consumer.save(&consumer_path)?;
-            for name in super::NATIVE_FILES.into_iter().chain(["metadata.json"]) {
+            for name in super::super::NATIVE_FILES.into_iter().chain(["metadata.json"]) {
                 assert_eq!(
                     fs::read(consumer_path.join(name))?,
                     fs::read(path.join("consumer").join(name))?
