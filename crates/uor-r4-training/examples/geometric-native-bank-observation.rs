@@ -94,6 +94,8 @@ mod reuse {
         schedule_sha256: String,
         batch_episodes: usize,
         maximum_fit_seconds: u64,
+        calibration_report_sha256: String,
+        projected_complete_fit_seconds: f64,
     }
     struct FrozenAngular {
         cue_config: CueAngularConfig,
@@ -467,7 +469,7 @@ mod reuse {
                 return Err(invalid("root gradient nonfinite").into());
             }
             sq += v.iter().map(|x| f64::from(*x).powi(2)).sum::<f64>();
-            stats.insert(name,json!({"shape":g.dims(),"elements":v.len(),"finite":true,"nonzero":v.iter().filter(|x|**x!=0.).count(),"l1":v.iter().map(|x|f64::from(x.abs())).sum::<f64>()}));
+            stats.insert(name.clone(),json!({"shape":g.dims(),"elements":v.len(),"finite":true,"nonzero":v.iter().filter(|x|**x!=0.).count(),"l1":v.iter().map(|x|f64::from(x.abs())).sum::<f64>()}));
         }
         Ok(Batch {
             gradients,
@@ -743,6 +745,7 @@ mod reuse {
         if broad && (a.bank.admission.is_some() || a.bank.fit_authorization.is_some()) {
             return Err(invalid("broad mode cannot auto-fit").into());
         }
+        Ok(())
     }
     fn validate_raw_cues(
         root: &Path,
@@ -946,9 +949,10 @@ mod reuse {
         write_json(
             &a.bank.out,
             "frozen-inputs.json",
-            &json!({"schema":a.schema,"host":std::env::consts::OS,"architecture":std::env::consts::ARCH,"executable_sha256":sha256_file(&executable()?.0)?,"executable_lookup":executable()?.1,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"mode":a.bank.mode,"input_sha256":inputs,"frozen_sidecars":f.receipt,"data_scope":a.data_scope,"validated_original_cue_records":raw_cues,"active_families":ROOT_FAMILIES,"learning_seed":a.learning_seed,"learning_schedule":schedule,"learning_schedule_sha256":schedule_sha,"initialization":"same unchanged learned parent;no random root perturbation","updates":if a.bank.mode=="observation-fit"{64}else{0},"fresh_predictions":"NOT_RUN_UNTIL_SELECTION","config_file_sha256":sha256_bytes(&serde_json::to_vec(&json!({"scope":a.data_scope,"bounds":[a.bank.maximum_context_tokens,a.bank.maximum_generation_tokens],"frozen":f.receipt}))?),"runtime_packet_schema":"uor-r4.native-source-bank-probe-input/1","membership_labels_runtime":false}),
+            &json!({"schema":a.schema,"host":std::env::consts::OS,"architecture":std::env::consts::ARCH,"executable_sha256":sha256_file(&executable()?.0)?,"executable_lookup":executable()?.1,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"mode":a.bank.mode,"input_sha256":inputs,"frozen_sidecars":f.receipt,"data_scope":a.data_scope,"validated_original_cue_records":raw_cues,"active_families":ROOT_FAMILIES,"learning_seed":a.learning_seed,"learning_schedule":schedule,"learning_schedule_sha256":schedule_sha,"initialization":"same unchanged learned parent;no random root perturbation","updates":if a.bank.mode=="observation-fit"{64}else{0},"fresh_predictions":"NOT_RUN_UNTIL_SELECTION","configuration_subset_sha256":sha256_bytes(&serde_json::to_vec(&json!({"scope":a.data_scope,"bounds":[a.bank.maximum_context_tokens,a.bank.maximum_generation_tokens],"frozen":f.receipt}))?),"runtime_packet_schema":"uor-r4.native-source-bank-probe-input/1","membership_labels_runtime":false}),
         )?;
         let fit = a.bank.mode == "observation-fit";
+        let initial_evaluation_start = Instant::now();
         let mut stages = if fit {
             vec![checkpoint(&s, &parent, &f, &episodes, &tok, a, start, 0)?]
         } else {
@@ -966,6 +970,7 @@ mod reuse {
                 json!({"step":0,"native_equal_episode_ce":original["native_equal_episode_ce"],"accepted_complete":generation["accepted_complete"],"new_parent":binding,"frozen_payloads":f.receipt,"independent_native_parent":"original bound parent;zero loss fulltrace equality checked before backward"}),
             ]
         };
+        let initial_evaluation_seconds = initial_evaluation_start.elapsed().as_secs_f64();
         let broad = batch_roots(&all, &episodes, &s, &parent, &native, &f, a, start, true)?;
         write_json(&a.bank.out, "broadbatch.json", &broad.report)?;
         let baseline = stages[0]["native_equal_episode_ce"]
@@ -980,6 +985,33 @@ mod reuse {
         {
             return Err(invalid("broad/checkpoint objective differs").into());
         }
+        let full128_gradient_seconds = broad.report["elapsed_seconds"]
+            .as_f64()
+            .ok_or_else(|| invalid("broad time absent"))?;
+        drop(broad); // FULL128 GRADIENT RELEASE precedes first B8 calibration.
+        let calibration_indices = learning_schedule(1001)?[0].clone();
+        let calibration = batch_roots(
+            &calibration_indices,
+            &episodes,
+            &s,
+            &parent,
+            &native,
+            &f,
+            a,
+            start,
+            true,
+        )?;
+        let gradient_bytes = calibration
+            .gradients
+            .values()
+            .map(|g| g.elem_count() * std::mem::size_of::<f32>())
+            .sum::<usize>();
+        let calibration_seconds = calibration.report["elapsed_seconds"]
+            .as_f64()
+            .ok_or_else(|| invalid("B8 calibration time absent"))?;
+        let calibration_receipt = json!({"schema":"uor-r4.native-bank-observation-B8-calibration/1","status":"COMPLETED","updates":0,"gradient_bytes":gradient_bytes,"peak_rss_kib":peak_rss_kib(),"batch":calibration.report,"full128_gradient_seconds":full128_gradient_seconds,"initial_evaluation_seconds":initial_evaluation_seconds,"development_manifest_sha256":a.bank.development_manifest_sha256,"fresh_manifest_sha256":a.bank.fresh_manifest_sha256,"trusted_binding_sha256":trusted,"frozen_sidecars":f.receipt,"active_families":ROOT_FAMILIES,"scope":"fixed prospective B8 cost instrument, not fitted seed;actual final native pipeline"});
+        write_json(&a.bank.out, "B8-calibration.json", &calibration_receipt)?;
+        drop(calibration);
         if fit {
             let ar = a
                 .bank
@@ -1020,14 +1052,51 @@ mod reuse {
             {
                 return Err(invalid("exact observation admission/auth differs").into());
             }
+            let calibration_path = ar.join("B8-calibration.json");
+            let oldcal = read_json(&calibration_path)?;
+            let oldseconds = oldcal["batch"]["elapsed_seconds"]
+                .as_f64()
+                .ok_or_else(|| invalid("admitted B8 seconds absent"))?;
+            let projected_minimum = start.elapsed().as_secs_f64()
+                + 64.
+                    * calibration_seconds
+                        .max(oldseconds)
+                        .max(full128_gradient_seconds / 16.)
+                    * 1.25
+                + 5. * initial_evaluation_seconds * 1.25;
+            if auth.calibration_report_sha256 != sha256_file(&calibration_path)?
+                || oldcal["status"] != "COMPLETED"
+                || oldcal["updates"] != 0
+                || oldcal["development_manifest_sha256"] != a.bank.development_manifest_sha256
+                || oldcal["fresh_manifest_sha256"] != a.bank.fresh_manifest_sha256
+                || oldcal["trusted_binding_sha256"] != trusted
+                || oldcal["frozen_sidecars"] != f.receipt
+                || !oldseconds.is_finite()
+                || oldseconds <= 0.
+                || !auth.projected_complete_fit_seconds.is_finite()
+                || auth.projected_complete_fit_seconds < projected_minimum
+                || auth.projected_complete_fit_seconds > a.bank.maximum_seconds as f64
+            {
+                return Err(invalid(
+                    "exact B8 calibration/full fit cost not admitted;zero optimizer updates",
+                )
+                .into());
+            }
+            write_json(
+                &a.bank.out,
+                "fit-cost-admission.json",
+                &json!({"calibration_report_sha256":auth.calibration_report_sha256,"minimum_measured_projection_seconds":projected_minimum,"declared_complete_projection_seconds":auth.projected_complete_fit_seconds,"maximum_seconds":a.bank.maximum_seconds,"formula":"elapsed admission +64*max(admitted/current B8,full128/16)*1.25 +5*measured initial evaluation*1.25;no descent guarantee","optimizer":{"lr":0.003,"beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.}}),
+            )?;
             let mut opt = AdamW::new(
                 root_params(&s)?.values().cloned().collect(),
                 ParamsAdamW {
                     lr: 0.003,
-                    ..Default::default()
+                    beta1: 0.9,
+                    beta2: 0.999,
+                    eps: 1e-8,
+                    weight_decay: 0.,
                 },
             )?;
-            drop(broad); // Never keep full-panel gradient plus per-update graphs alive.
             for update in 0..64 {
                 deadline(&a.bank, start)?;
                 if frozen_receipts(&s)? != frozen {
