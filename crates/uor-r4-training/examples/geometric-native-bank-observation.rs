@@ -14,6 +14,9 @@
 //! mode:observation-broadbatch|observation-fit; maxcontext128/maxgen32; broad<=300s,
 //! 64MiB; fit<=1200s,512MiB}; frozen_end_bundle and exact metadata/period/stop SHA;
 //! data_scope explicitly selects retained original cues or supported current-role authored cues.
+//! Optional record_credit={context_data,context_data_sha256,weight:1.0} binds sealed
+//! development-only provenance labels; admission/auth must repeat identical config.
+//! Combined token+payload-record objective does not change native-CE checkpoint selection.
 //! Existing cue/prefix SHA fields required. Development128, sealed fresh32 REQUIRED
 //! before fit; this draft never draws data and does not inspect fresh until selection.
 //! Each panel report must bind the matching original/authored cue policy.
@@ -36,7 +39,7 @@ mod reuse {
     use super::output_support;
     use candle_core::{Device, Tensor, Var};
     use candle_nn::{AdamW, Optimizer, ParamsAdamW};
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use serde_json::{json, Value};
     use std::{
         collections::{BTreeMap, BTreeSet},
@@ -56,7 +59,7 @@ mod reuse {
     use uor_r4_tokenizer::ByteBpeTokenizer;
     use uor_r4_training::{
         geometric_occurrence_consumer::source_realizer::{
-            NativeSourceRealizer, SourceRealizerWeights,
+            NativeSourceRealizer, ObservationRecordTarget, SourceRealizerWeights,
         },
         sha256_bytes, sha256_file,
     };
@@ -77,6 +80,138 @@ mod reuse {
         // Full exact source-only input and sidecar manifests, not an expected source winner.
         data_scope: String,
         learning_seed: Option<u64>,
+        #[serde(default)]
+        record_credit: Option<RecordCreditConfig>,
+    }
+    #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+    #[serde(deny_unknown_fields)]
+    struct RecordCreditConfig {
+        context_data: PathBuf,
+        context_data_sha256: String,
+        weight: f64,
+    }
+    fn validate_record_credit_config(config: &RecordCreditConfig) -> Result<()> {
+        if config.weight != 1.0
+            || config.context_data_sha256.len() != 64
+            || !config
+                .context_data_sha256
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(invalid(
+                "record credit requires weight exactly1 and bound context-data SHA256",
+            )
+            .into());
+        }
+        Ok(())
+    }
+    fn record_credit_receipt(a: &ObservationArgs) -> Result<Value> {
+        Ok(serde_json::to_value(&a.record_credit)?)
+    }
+    fn record_relation(role: &str) -> Result<u32> {
+        match role {
+            "job" => Ok(1),
+            "where" => Ok(2),
+            _ => Err(invalid("record-credit query role is not job/where").into()),
+        }
+    }
+    fn record_targets(
+        a: &ObservationArgs,
+        es: &[Episode],
+        native: &IntegerRealizer,
+    ) -> Result<Option<Vec<ObservationRecordTarget>>> {
+        let Some(config) = &a.record_credit else {
+            return Ok(None);
+        };
+        validate_record_credit_config(config)?;
+        let canonical = fs::canonicalize(&config.context_data)?;
+        if canonical != fs::canonicalize(a.bank.development_panel.join("context-data.json"))? {
+            return Err(
+                invalid("record-credit labels must be sealed development context-data").into(),
+            );
+        }
+        report_output::verify(&a.bank.development_panel)?;
+        if sha256_file(&config.context_data)? != config.context_data_sha256 {
+            return Err(invalid("record-credit context-data hash differs").into());
+        }
+        let data = read_json(&config.context_data)?;
+        if data["schema"] != "uor-r4.geometric-bank-context-data/1"
+            || data["split"] != "development"
+            || data["layout_policy"] != NATURAL_PANEL_LAYOUT
+        {
+            return Err(invalid("record-credit context-data scope differs").into());
+        }
+        let rows = data["cases"]
+            .as_array()
+            .ok_or_else(|| invalid("record-credit cases absent"))?;
+        if rows.len() != es.len() {
+            return Err(invalid("record-credit row count differs").into());
+        }
+        let mut used = BTreeSet::new();
+        let mut result = Vec::with_capacity(es.len());
+        for e in es {
+            let matches = rows
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| r["id"] == e.packet.id)
+                .collect::<Vec<_>>();
+            if matches.len() != 1 {
+                return Err(invalid("record-credit ID missing/duplicated").into());
+            }
+            let (ri, row) = matches[0];
+            if !used.insert(ri) {
+                return Err(invalid("record-credit row reused").into());
+            }
+            let relation = record_relation(
+                row["query_role"]
+                    .as_str()
+                    .ok_or_else(|| invalid("record-credit queryrole absent"))?,
+            )?;
+            if row["target_ids_labels_only"] != json!(e.target) {
+                return Err(invalid("record-credit target-token binding differs").into());
+            }
+            let payload = e
+                .target
+                .len()
+                .checked_sub(2)
+                .filter(|n| *n > 0)
+                .ok_or_else(|| invalid("record-credit target has no payload"))?;
+            if e.target[payload] != native.binding().period_token_id()
+                || e.target[payload + 1] != native.binding().eos_token_id()
+            {
+                return Err(invalid("record-credit target terminal suffix differs").into());
+            }
+            let segments = e.segments()?;
+            let expected = segments
+                .iter()
+                .enumerate()
+                .filter_map(|(index, s)| match s {
+                    SourceBankSegment::Source { frame, view, .. }
+                        if frame.metadata.relation == relation =>
+                    {
+                        Some((index, frame, view))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            if expected.len() != 1 {
+                return Err(
+                    invalid("record-credit expected relation not unique in full bank").into(),
+                );
+            }
+            let (index, frame, view) = expected[0];
+            if view.emitted_token_ids() != &e.target[..payload] {
+                return Err(
+                    invalid("record-credit expected-source emitted payload differs").into(),
+                );
+            }
+            result.push(ObservationRecordTarget {
+                source_segment_index: index,
+                record: frame.identity.record,
+                commit: frame.identity.commit,
+            });
+        }
+        Ok(Some(result))
     }
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -96,6 +231,8 @@ mod reuse {
         maximum_fit_seconds: u64,
         calibration_report_sha256: String,
         projected_complete_fit_seconds: f64,
+        #[serde(default)]
+        record_credit: Option<RecordCreditConfig>,
     }
     struct FrozenAngular {
         cue_config: CueAngularConfig,
@@ -359,6 +496,9 @@ mod reuse {
         zero_parity: bool,
     ) -> Result<Batch> {
         let began = Instant::now();
+        let record_labels = record_targets(a, es, frozen)?;
+        let mut record_mean = 0.;
+        let mut record_positions = 0usize;
         let current = s.compile_observation_rebound(parent)?;
         let prepared = s.prepare(&current)?;
         let cue = training_cue(&current, f)?;
@@ -390,6 +530,13 @@ mod reuse {
                 .ok_or_else(|| invalid("episode index outside frozen panel"))?;
             let segments = e.segments()?;
             let mut ce = 0.;
+            let mut record_ce = 0.;
+            let mut record_rows = Vec::new();
+            let payload_len = e
+                .target
+                .len()
+                .checked_sub(2)
+                .ok_or_else(|| invalid("record payload length"))?;
             for (step, &target) in e.target.iter().enumerate() {
                 deadline(&a.bank, start)?;
                 // Label appears only after complete source-only native cue/prefix/end execution.
@@ -438,7 +585,36 @@ mod reuse {
                 }
                 ce += native;
                 positions += 1;
-                let store = (&out.loss * scale(indices.len(), e.target.len())?)?.backward()?;
+                let token_loss = (&out.loss * scale(indices.len(), e.target.len())?)?;
+                let combined = if let Some(labels) = &record_labels {
+                    if step < payload_len {
+                        let label = labels
+                            .get(i)
+                            .ok_or_else(|| invalid("record-credit label index"))?;
+                        // Expected identity is consumed only AFTER complete label-free native read.
+                        let rank = out.record_ranking_loss(label)?;
+                        let scalar = rank.loss.to_scalar::<f32>()?;
+                        if !rank.cross_entropy.is_finite()
+                            || !scalar.is_finite()
+                            || (f64::from(scalar) - rank.cross_entropy).abs()
+                                > 1e-4 + 1e-5 * rank.cross_entropy.abs()
+                        {
+                            return Err(invalid(
+                                "record-credit scalar/offline hard-score ranking CE differs",
+                            )
+                            .into());
+                        }
+                        record_ce += rank.cross_entropy;
+                        record_positions += 1;
+                        record_rows.push(json!({"step":step,"expected_source_segment_index":rank.expected_source_segment_index,"selected_source_segment_index":rank.selected_source_segment_index,"expected_record":label.record,"expected_commit":label.commit,"expected_margin_q24":rank.expected_margin_q24,"record_cross_entropy":rank.cross_entropy,"record_scores":rank.records,"identity_scope":"OFFLINE supervision only;not inference packet"}));
+                        (&token_loss + &(&rank.loss * scale(indices.len(), payload_len)?)?)?
+                    } else {
+                        token_loss
+                    }
+                } else {
+                    token_loss
+                };
+                let store = combined.backward()?;
                 // Shared context forward can build frozen-family graph work. Report it honestly,
                 // but retain/average ONLY root Vars; frozen graphs are discarded per target.
                 for (name, var) in s.parameters() {
@@ -459,7 +635,13 @@ mod reuse {
                 }
             }
             mean += ce / e.target.len() as f64 / indices.len() as f64;
-            rows.push(json!({"id":e.packet.id,"target_steps":e.target.len(),"native_mean_token_ce":ce/e.target.len() as f64}));
+            let mut row = json!({"id":e.packet.id,"target_steps":e.target.len(),"native_mean_token_ce":ce/e.target.len() as f64});
+            if record_labels.is_some() {
+                record_mean += record_ce / payload_len as f64 / indices.len() as f64;
+                row["payload_record_mean_ce"] = json!(record_ce / payload_len as f64);
+                row["record_reads_offline"] = json!(record_rows);
+            }
+            rows.push(row);
         }
         let mut stats = BTreeMap::new();
         let mut sq = 0.;
@@ -471,10 +653,20 @@ mod reuse {
             sq += v.iter().map(|x| f64::from(*x).powi(2)).sum::<f64>();
             stats.insert(name.clone(),json!({"shape":g.dims(),"elements":v.len(),"finite":true,"nonzero":v.iter().filter(|x|**x!=0.).count(),"l1":v.iter().map(|x|f64::from(x.abs())).sum::<f64>()}));
         }
-        Ok(Batch {
+        let mut result = Batch {
             gradients,
             report: json!({"episodes":indices.len(),"episode_indices":indices,"target_positions":positions,"native_equal_episode_ce":mean,"gradient_global_norm":sq.sqrt(),"gradient_families":stats,"connected_frozen_families_discarded":connected_inactive,"carrier_packets_once_per_row":consumed_packets,"rows":rows,"elapsed_seconds":began.elapsed().as_secs_f64(),"active_families":ROOT_FAMILIES,"native_zero_full_trace_parity":zero_parity,"fixed_input_latent_actions_categories_prefix_states_equal_to_original":true,"extra_original_native_invariant_reads":positions,"objective":"equalepisode mean fullanswer+EOS ordinary native globalaliasCE; pertoken detached F32 accumulation; no floor; no source gate","credit_scope":"offline biased finite-choice root surrogate; stopped-gradient SourceEnd source argmax; no descent guarantee"}),
-        })
+        };
+        if record_labels.is_some() {
+            result.report["record_credit"] = record_credit_receipt(a)?;
+            result.report["record_equal_episode_ce"] = json!(record_mean);
+            result.report["combined_equal_episode_loss"] = json!(mean + record_mean);
+            result.report["record_payload_positions"] = json!(record_positions);
+            result.report["objective"]=json!("equalepisode(tokenCE/fullanswer+EOS + weight1*recordCE/payload); no terminal record credit; combined loss is NOT native token CE");
+            result.report["gradient_scope"]=json!("combined token-plus-record loss root gradients; record-only contribution not separately isolated");
+            result.report["record_score_scope"]=json!("per-source maximum summed raw Copy occurrence scores; strictly earliest ties; not token-alias/source aggregate mass; extreme-value dependence on source length");
+        }
+        Ok(result)
     }
     fn apply_roots(
         s: &SourceRealizerWeights,
@@ -740,6 +932,9 @@ mod reuse {
         Ok(receipt)
     }
     fn validate(a: &ObservationArgs) -> Result<()> {
+        if let Some(config) = &a.record_credit {
+            validate_record_credit_config(config)?;
+        }
         let fit = a.bank.mode == "observation-fit";
         let broad = a.bank.mode == "observation-broadbatch";
         if (fit && a.learning_seed.unwrap_or(0) == 0) || (broad && a.learning_seed.is_some()) {
@@ -1001,12 +1196,14 @@ mod reuse {
             &tok,
             &sha256_bytes(&tokenizer),
         )?;
+        let _record_targets = record_targets(a, &episodes, &native)?;
+        let record_binding = record_credit_receipt(a)?;
         let frozen = frozen_receipts(&s)?;
         let all = (0..episodes.len()).collect::<Vec<_>>();
         write_json(
             &a.bank.out,
             "frozen-inputs.json",
-            &json!({"schema":a.schema,"host":std::env::consts::OS,"architecture":std::env::consts::ARCH,"executable_sha256":sha256_file(&executable()?.0)?,"executable_lookup":executable()?.1,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"mode":a.bank.mode,"input_sha256":inputs,"frozen_sidecars":f.receipt,"data_scope":a.data_scope,"validated_cue_records":raw_cues,"active_families":ROOT_FAMILIES,"learning_seed":a.learning_seed,"learning_schedule":schedule,"learning_schedule_sha256":schedule_sha,"initialization":"same unchanged learned parent;no random root perturbation","updates":if a.bank.mode=="observation-fit"{64}else{0},"fresh_predictions":"NOT_RUN_UNTIL_SELECTION","configuration_subset_sha256":sha256_bytes(&serde_json::to_vec(&json!({"scope":a.data_scope,"bounds":[a.bank.maximum_context_tokens,a.bank.maximum_generation_tokens],"frozen":f.receipt}))?),"panel_layout_policy":NATURAL_PANEL_LAYOUT,"development_allbank_rows":128,"development_adjacent_query_pairs":64,"runtime_packet_schema":"uor-r4.native-source-bank-probe-input/1","membership_labels_runtime":false}),
+            &json!({"schema":a.schema,"host":std::env::consts::OS,"architecture":std::env::consts::ARCH,"executable_sha256":sha256_file(&executable()?.0)?,"executable_lookup":executable()?.1,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"mode":a.bank.mode,"input_sha256":inputs,"frozen_sidecars":f.receipt,"data_scope":a.data_scope,"record_credit":record_binding,"validated_cue_records":raw_cues,"active_families":ROOT_FAMILIES,"learning_seed":a.learning_seed,"learning_schedule":schedule,"learning_schedule_sha256":schedule_sha,"initialization":"same unchanged learned parent;no random root perturbation","updates":if a.bank.mode=="observation-fit"{64}else{0},"fresh_predictions":"NOT_RUN_UNTIL_SELECTION","configuration_subset_sha256":sha256_bytes(&serde_json::to_vec(&json!({"scope":a.data_scope,"record_credit":record_binding,"bounds":[a.bank.maximum_context_tokens,a.bank.maximum_generation_tokens],"frozen":f.receipt}))?),"panel_layout_policy":NATURAL_PANEL_LAYOUT,"development_allbank_rows":128,"development_adjacent_query_pairs":64,"runtime_packet_schema":"uor-r4.native-source-bank-probe-input/1","membership_labels_runtime":false}),
         )?;
         let fit = a.bank.mode == "observation-fit";
         let initial_evaluation_start = Instant::now();
@@ -1066,7 +1263,7 @@ mod reuse {
         let calibration_seconds = calibration.report["elapsed_seconds"]
             .as_f64()
             .ok_or_else(|| invalid("B8 calibration time absent"))?;
-        let calibration_receipt = json!({"schema":"uor-r4.native-bank-observation-B8-calibration/1","status":"COMPLETED","updates":0,"gradient_bytes":gradient_bytes,"peak_rss_kib":peak_rss_kib(),"batch":calibration.report,"full128_gradient_seconds":full128_gradient_seconds,"initial_evaluation_seconds":initial_evaluation_seconds,"development_manifest_sha256":a.bank.development_manifest_sha256,"fresh_manifest_sha256":a.bank.fresh_manifest_sha256,"trusted_binding_sha256":trusted,"frozen_sidecars":f.receipt,"active_families":ROOT_FAMILIES,"scope":"fixed prospective B8 cost instrument, not fitted seed;actual final native pipeline"});
+        let calibration_receipt = json!({"schema":"uor-r4.native-bank-observation-B8-calibration/1","status":"COMPLETED","updates":0,"gradient_bytes":gradient_bytes,"peak_rss_kib":peak_rss_kib(),"batch":calibration.report,"full128_gradient_seconds":full128_gradient_seconds,"initial_evaluation_seconds":initial_evaluation_seconds,"development_manifest_sha256":a.bank.development_manifest_sha256,"fresh_manifest_sha256":a.bank.fresh_manifest_sha256,"trusted_binding_sha256":trusted,"record_credit":record_binding,"frozen_sidecars":f.receipt,"active_families":ROOT_FAMILIES,"scope":"fixed prospective B8 cost instrument, not fitted seed;actual final native pipeline"});
         write_json(&a.bank.out, "B8-calibration.json", &calibration_receipt)?;
         drop(calibration);
         if fit {
@@ -1093,6 +1290,8 @@ mod reuse {
                 || auth.fresh_manifest_sha256 != a.bank.fresh_manifest_sha256
                 || auth.trusted_binding_sha256 != trusted
                 || auth.frozen_sidecars_sha256 != f.receipt
+                || serde_json::to_value(&auth.record_credit)? != record_binding
+                || r["record_credit"] != record_binding
                 || auth.active_families != ROOT_FAMILIES
                 || auth.updates != 64
                 || Some(auth.learning_seed) != a.learning_seed
@@ -1126,6 +1325,7 @@ mod reuse {
                 || oldcal["updates"] != 0
                 || oldcal["development_manifest_sha256"] != a.bank.development_manifest_sha256
                 || oldcal["fresh_manifest_sha256"] != a.bank.fresh_manifest_sha256
+                || oldcal["record_credit"] != record_binding
                 || oldcal["trusted_binding_sha256"] != trusted
                 || oldcal["frozen_sidecars"] != f.receipt
                 || !oldseconds.is_finite()
@@ -1248,7 +1448,7 @@ mod reuse {
             }
         }
         Ok(
-            json!({"schema":"uor-r4.native-bank-observation-report/1","status":"COMPLETED","mode":a.bank.mode,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"development_manifest_sha256":a.bank.development_manifest_sha256,"fresh_manifest_sha256":a.bank.fresh_manifest_sha256,"trusted_binding_sha256":trusted,"frozen_sidecars":f.receipt,"active_families":ROOT_FAMILIES,"frozen_parameter_bits_equal":frozen_receipts(&s)?==frozen,"updates":if fit{64}else{0},"broad_gradient_report":"broadbatch.json","zero_fulltrace_parity_executed":true,"selected_step":stages[selected]["step"],"selected_native_ce":best,"peak_rss_kib":peak_rss_kib(),"elapsed_seconds":start.elapsed().as_secs_f64(),"support_floor":false,"supplied_selected_record":false,"fresh_predictions":if fit{"PARENT_AND_SELECTED_ONLY"}else{"NOT_RUN"},"learning_seed":a.learning_seed,"learning_schedule_sha256":schedule_sha,"replication_scope":if fit{"same learned root initialization and frozen encoder;seed changes episode order only;not independent initialization or chat lineages"}else{"zero-update gradient admission is not a fitted seed verdict"},"panel_layout_policy":NATURAL_PANEL_LAYOUT,"development_allbank_rows":128,"development_adjacent_query_pairs":64,"fresh_allbank_rows":32,"fresh_adjacent_query_pairs":16,"optimizer_exposure":if fit{"64 seeded block-balanced B8;4rows fromeach64-bank-row half;two intact querypairs perhalf;4visits/episode"}else{"zero updates;full128 admission only"},"runtime":"unchanged integer full-bank cue/prefix/SourceEnd/globalalias;no sourceF32 generation","claim":"bounded native attention observation learner;general chat and transfer unqualified"}),
+            json!({"schema":"uor-r4.native-bank-observation-report/1","status":"COMPLETED","mode":a.bank.mode,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"development_manifest_sha256":a.bank.development_manifest_sha256,"fresh_manifest_sha256":a.bank.fresh_manifest_sha256,"trusted_binding_sha256":trusted,"frozen_sidecars":f.receipt,"active_families":ROOT_FAMILIES,"frozen_parameter_bits_equal":frozen_receipts(&s)?==frozen,"updates":if fit{64}else{0},"record_credit":record_binding,"training_objective":if a.record_credit.is_some(){"token CE + weight1 offline record-ranking CE; checkpoint selection remains ordinary native token CE"}else{"ordinary native token CE"},"broad_gradient_report":"broadbatch.json","zero_fulltrace_parity_executed":true,"selected_step":stages[selected]["step"],"selected_native_ce":best,"peak_rss_kib":peak_rss_kib(),"elapsed_seconds":start.elapsed().as_secs_f64(),"support_floor":false,"supplied_selected_record":false,"fresh_predictions":if fit{"PARENT_AND_SELECTED_ONLY"}else{"NOT_RUN"},"learning_seed":a.learning_seed,"learning_schedule_sha256":schedule_sha,"replication_scope":if fit{"same learned root initialization and frozen encoder;seed changes episode order only;not independent initialization or chat lineages"}else{"zero-update gradient admission is not a fitted seed verdict"},"panel_layout_policy":NATURAL_PANEL_LAYOUT,"development_allbank_rows":128,"development_adjacent_query_pairs":64,"fresh_allbank_rows":32,"fresh_adjacent_query_pairs":16,"optimizer_exposure":if fit{"64 seeded block-balanced B8;4rows fromeach64-bank-row half;two intact querypairs perhalf;4visits/episode"}else{"zero updates;full128 admission only"},"runtime":"unchanged integer full-bank cue/prefix/SourceEnd/globalalias;no sourceF32 generation","claim":"bounded native attention observation learner;general chat and transfer unqualified"}),
         )
     }
     #[cfg(test)]
@@ -1263,6 +1463,31 @@ mod reuse {
             assert_eq!(generation_read_budget(98, 4)?, 4);
             assert!(generation_read_budget(129, 32).is_err());
             assert!(generation_read_budget(usize::MAX, 32).is_err());
+            Ok(())
+        }
+        #[test]
+        fn record_credit_configuration_rejects_weight_or_hash_changes() -> Result<()> {
+            let config = RecordCreditConfig {
+                context_data: PathBuf::from("context-data.json"),
+                context_data_sha256: "a".repeat(64),
+                weight: 1.,
+            };
+            validate_record_credit_config(&config)?;
+            for weight in [0., 0.5, 2., f64::NAN, f64::INFINITY] {
+                let mut bad = config.clone();
+                bad.weight = weight;
+                assert!(validate_record_credit_config(&bad).is_err());
+            }
+            let mut bad = config.clone();
+            bad.context_data_sha256 = "not-a-hash".into();
+            assert!(validate_record_credit_config(&bad).is_err());
+            assert_eq!(record_relation("job")?, 1);
+            assert_eq!(record_relation("where")?, 2);
+            assert!(record_relation("home").is_err());
+            assert_ne!(
+                serde_json::to_value(Some(config))?,
+                serde_json::to_value(None::<RecordCreditConfig>)?
+            );
             Ok(())
         }
         #[test]
@@ -1351,6 +1576,12 @@ mod reuse {
                 if out.starts_with(&original) || original.starts_with(&out) {
                     return Err(invalid("output intersects admission/authorization").into());
                 }
+            }
+        }
+        if let Some(config) = &a.record_credit {
+            let label = fs::canonicalize(&config.context_data)?;
+            if out.starts_with(&label) || label.starts_with(&out) {
+                return Err(invalid("output intersects record-credit labels").into());
             }
         }
         report_output::claim(&a.bank.out)?; // BEFORE any model load.

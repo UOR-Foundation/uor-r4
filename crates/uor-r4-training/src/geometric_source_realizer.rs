@@ -1797,6 +1797,191 @@ pub struct ObservationBankRealizerLoss {
     pub loss: Tensor,
     pub trace: uor_r4_integer::geometric_source_realizer::SourceEndBankRealizerTrace,
     pub target_probability: f64,
+    // Offline score adjoints only. Native inference has no record-label input.
+    copy_credit: Tensor,
+}
+
+/// Offline supervision identifies an exact bank-local record occurrence/version.
+/// It must be derived from the retained writer/annotation, never token membership.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservationRecordTarget {
+    pub source_segment_index: usize,
+    pub record: u64,
+    pub commit: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ObservationRecordScore {
+    pub source_segment_index: usize,
+    pub record: u64,
+    pub commit: u64,
+    pub best_candidate_index: usize,
+    pub score_q24: i64,
+    pub candidate_count: usize,
+}
+
+pub struct ObservationRecordRankingLoss {
+    pub loss: Tensor,
+    /// Offline CE over max-Copy scores, not native Q31 token-alias CE.
+    pub cross_entropy: f64,
+    pub expected_source_segment_index: usize,
+    pub selected_source_segment_index: usize,
+    pub expected_margin_q24: i64,
+    pub records: Vec<ObservationRecordScore>,
+}
+
+impl ObservationBankRealizerLoss {
+    /// Execute only after the complete target-free native trace exists. The
+    /// grouped maxima preserve factual_copy_route's earliest occurrence ties.
+    /// Equal duplicate aliases do not add probability mass; longer records can
+    /// still offer more opportunities for a high score. No length invariance.
+    pub fn record_ranking_loss(
+        &self,
+        target: &ObservationRecordTarget,
+    ) -> Result<ObservationRecordRankingLoss> {
+        use uor_r4_integer::geometric_source_realizer::BankSegmentTrace;
+        let bank = &self.trace.prefix_bank.cue_bank.bank;
+        let scores = &self.trace.source_end.factual_joint_copy_q24;
+        if scores.len() != bank.candidates.len() || self.copy_credit.dims() != [scores.len()] {
+            return Err(invalid("record ranking score/candidate shape differs"));
+        }
+        let mut groups = BTreeMap::<usize, ObservationRecordScore>::new();
+        for (j, candidate) in bank.candidates.iter().enumerate() {
+            let Some(BankSegmentTrace::Source { record, commit, .. }) =
+                bank.segments.get(candidate.segment_index)
+            else {
+                return Err(invalid("record ranking candidate has no source occurrence"));
+            };
+            if candidate.bank_index != j
+                || candidate.occurrence.record != *record
+                || candidate.occurrence.commit != *commit
+            {
+                return Err(invalid(
+                    "record ranking occurrence/version identity differs",
+                ));
+            }
+            let group = groups
+                .entry(candidate.segment_index)
+                .or_insert(ObservationRecordScore {
+                    source_segment_index: candidate.segment_index,
+                    record: *record,
+                    commit: *commit,
+                    best_candidate_index: j,
+                    score_q24: scores[j],
+                    candidate_count: 0,
+                });
+            group.candidate_count += 1;
+            if scores[j] > group.score_q24 {
+                group.score_q24 = scores[j];
+                group.best_candidate_index = j;
+            }
+        }
+        let records = groups.into_values().collect::<Vec<_>>();
+        let (loss, expected, selected, margin) =
+            record_max_score_loss(&records, &self.copy_credit, target)?;
+        if self.trace.source_end.selected_bank_index != Some(records[selected].best_candidate_index)
+        {
+            return Err(invalid(
+                "record ranking maximum differs from factual native route",
+            ));
+        }
+        // Independent f64 calculation from authoritative native scores; the
+        // driver compares this with the f32 surrogate forward, not itself.
+        let maximum = records[selected].score_q24 as f64;
+        let partition = records
+            .iter()
+            .map(|r| ((r.score_q24 as f64 - maximum) / 16_777_216.).exp())
+            .sum::<f64>();
+        let cross_entropy =
+            partition.ln() - (records[expected].score_q24 as f64 - maximum) / 16_777_216.;
+        if !cross_entropy.is_finite() || cross_entropy < 0. {
+            return Err(invalid("record ranking CE is nonfinite/negative"));
+        }
+        Ok(ObservationRecordRankingLoss {
+            loss,
+            cross_entropy,
+            expected_source_segment_index: records[expected].source_segment_index,
+            selected_source_segment_index: records[selected].source_segment_index,
+            expected_margin_q24: margin,
+            records,
+        })
+    }
+}
+
+fn record_max_score_loss(
+    records: &[ObservationRecordScore],
+    credit: &Tensor,
+    target: &ObservationRecordTarget,
+) -> Result<(Tensor, usize, usize, i64)> {
+    if records.len() < 2 || credit.rank() != 1 {
+        return Err(invalid(
+            "record ranking requires competing source occurrences",
+        ));
+    }
+    if credit.to_vec1::<f32>()?.iter().any(|v| !v.is_finite()) {
+        return Err(invalid("record ranking score adjoint is nonfinite"));
+    }
+    let mut expected = None;
+    let mut segments = BTreeSet::new();
+    let mut selected = 0usize;
+    for (i, record) in records.iter().enumerate() {
+        if !segments.insert(record.source_segment_index)
+            || record.candidate_count == 0
+            || record.best_candidate_index >= credit.elem_count()
+        {
+            return Err(invalid("record ranking source/max candidate is invalid"));
+        }
+        if record.source_segment_index == target.source_segment_index {
+            if record.record != target.record || record.commit != target.commit {
+                return Err(invalid("record ranking supervised version differs"));
+            }
+            expected = Some(i);
+        }
+        if record.score_q24 > records[selected].score_q24
+            || (record.score_q24 == records[selected].score_q24
+                && record.best_candidate_index < records[selected].best_candidate_index)
+        {
+            selected = i;
+        }
+    }
+    let expected = expected.ok_or_else(|| invalid("record ranking supervised source absent"))?;
+    let other_max = records
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != expected)
+        .map(|(_, record)| record.score_q24)
+        .max()
+        .ok_or_else(|| invalid("record ranking other source absent"))?;
+    let margin = records[expected]
+        .score_q24
+        .checked_sub(other_max)
+        .ok_or_else(|| invalid("record ranking margin overflow"))?;
+    let indices = records
+        .iter()
+        .map(|r| {
+            u32::try_from(r.best_candidate_index)
+                .map_err(|_| invalid("record ranking index exceeds u32"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let gathered =
+        credit.index_select(&Tensor::from_vec(indices, records.len(), &Device::Cpu)?, 0)?;
+    // Stable centered hard scores from the authoritative integer Copy trace.
+    // Smooth credit is training-only and retains the existing biased root STE.
+    let maximum = records[selected].score_q24 as f64;
+    let hard = Tensor::from_vec(
+        records
+            .iter()
+            .map(|r| ((r.score_q24 as f64 - maximum) / 16_777_216.) as f32)
+            .collect::<Vec<_>>(),
+        records.len(),
+        &Device::Cpu,
+    )?;
+    let logits = (&hard + (&gathered - gathered.detach())?)?;
+    let loss = candle_nn::ops::log_softmax(&logits, 0)?
+        .i(expected)?
+        .neg()?;
+    Ok((loss, expected, selected, margin))
 }
 
 pub struct CueBankRealizerLoss {
@@ -2129,6 +2314,7 @@ impl PreparedSourceRealizer<'_> {
             loss,
             trace,
             target_probability: probability,
+            copy_credit: credit.narrow(0, 0, count)?,
         })
     }
 
@@ -3030,6 +3216,101 @@ mod tests {
     use uor_r4_integer::geometric_occurrence_read::{FrameMetadata, FrameStatus, SourceIdentity};
     const TOK: &str = r#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5,"Ġ":6,"Ġa":7},"merges":["Ġ a"]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
     static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    fn record_score(segment: usize, candidate: usize, score: i64) -> ObservationRecordScore {
+        ObservationRecordScore {
+            source_segment_index: segment,
+            record: segment as u64 + 10,
+            commit: segment as u64 + 20,
+            best_candidate_index: candidate,
+            score_q24: score,
+            candidate_count: 1,
+        }
+    }
+
+    fn record_target(score: &ObservationRecordScore) -> ObservationRecordTarget {
+        ObservationRecordTarget {
+            source_segment_index: score.source_segment_index,
+            record: score.record,
+            commit: score.commit,
+        }
+    }
+
+    #[test]
+    fn record_ranking_label_swap_reverses_credit_despite_shared_token() -> Result<()> {
+        // Both candidates may emit the same token. Token identity deliberately
+        // cannot select the label; this checks record-score credit, not roots.
+        let scores = [record_score(1, 0, 0), record_score(3, 1, 0)];
+        let credit = Var::from_vec(vec![0f32, 0.], 2, &Device::Cpu)?;
+        let (a, _, selected, margin) =
+            record_max_score_loss(&scores, credit.as_tensor(), &record_target(&scores[0]))?;
+        assert_eq!(selected, 0);
+        assert_eq!(margin, 0);
+        assert!((a.to_scalar::<f32>()? - 2f32.ln()).abs() < 1e-6);
+        let ga = a
+            .backward()?
+            .get(credit.as_tensor())
+            .ok_or_else(|| invalid("record score credit disconnected"))?
+            .to_vec1::<f32>()?;
+        let (b, _, _, _) =
+            record_max_score_loss(&scores, credit.as_tensor(), &record_target(&scores[1]))?;
+        let gb = b
+            .backward()?
+            .get(credit.as_tensor())
+            .ok_or_else(|| invalid("swapped record score credit disconnected"))?
+            .to_vec1::<f32>()?;
+        assert!(ga[0] < 0. && ga[1] > 0.);
+        for (a, b) in ga.iter().zip(&gb) {
+            assert!((a + b).abs() < 1e-6);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn record_ranking_equal_duplicate_alias_does_not_improve_loss() -> Result<()> {
+        let mut scores = [record_score(1, 0, 0), record_score(3, 1, 16_777_216)];
+        let target = record_target(&scores[0]);
+        let a = Tensor::from_vec(vec![0f32, 1.], 2, &Device::Cpu)?;
+        let (before, _, _, _) = record_max_score_loss(&scores, &a, &target)?;
+        scores[1].candidate_count = 2;
+        let duplicate = Var::from_vec(vec![0f32, 1., 1.], 3, &Device::Cpu)?;
+        let (after, _, _, _) = record_max_score_loss(&scores, duplicate.as_tensor(), &target)?;
+        assert_eq!(before.to_scalar::<f32>()?, after.to_scalar::<f32>()?);
+        let g = after
+            .backward()?
+            .get(duplicate.as_tensor())
+            .ok_or_else(|| invalid("duplicated record score credit disconnected"))?
+            .to_vec1::<f32>()?;
+        assert_eq!(g[2], 0.);
+        Ok(())
+    }
+
+    #[test]
+    fn record_ranking_validates_version_shape_and_finite_credit() -> Result<()> {
+        let scores = [record_score(1, 0, 0), record_score(3, 1, 0)];
+        let a = Tensor::from_vec(vec![0f32, 0.], 2, &Device::Cpu)?;
+        let mut target = record_target(&scores[0]);
+        target.commit += 1;
+        assert!(record_max_score_loss(&scores, &a, &target).is_err());
+        target = record_target(&scores[0]);
+        target.source_segment_index = 99;
+        assert!(record_max_score_loss(&scores, &a, &target).is_err());
+        assert!(record_max_score_loss(&scores[..1], &a, &record_target(&scores[0])).is_err());
+        let bad = Tensor::from_vec(vec![f32::NAN, 0.], 2, &Device::Cpu)?;
+        assert!(record_max_score_loss(&scores, &bad, &record_target(&scores[0])).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn record_ranking_ties_preserve_earliest_raw_occurrence() -> Result<()> {
+        let scores = [record_score(3, 1, 0), record_score(1, 0, 0)];
+        let a = Tensor::from_vec(vec![0f32, 0.], 2, &Device::Cpu)?;
+        let (_, expected, selected, _) =
+            record_max_score_loss(&scores, &a, &record_target(&scores[1]))?;
+        assert_eq!(expected, 1);
+        assert_eq!(selected, 1);
+        Ok(())
+    }
     struct Fixture {
         path: std::path::PathBuf,
         weights: SourceRealizerWeights,
@@ -4541,6 +4822,62 @@ mod tests {
             .observation_root_parameters()
             .values()
             .any(|v| gradients.get(v.as_tensor()).is_some()));
+
+        let first = frame(&ids);
+        let mut second = frame(&ids);
+        second.identity.record += 1;
+        second.identity.commit += 1;
+        let competing = [
+            SourceBankSegment::Source {
+                frame: first,
+                view: &view,
+                event: 7,
+            },
+            SourceBankSegment::Source {
+                frame: second,
+                view: &view,
+                event: 8,
+            },
+        ];
+        let target = ObservationRecordTarget {
+            source_segment_index: 1,
+            record: second.identity.record,
+            commit: second.identity.commit,
+        };
+        let factual = native.read_bank_with_source_end_transport(
+            &competing,
+            &[5],
+            &[],
+            &cue,
+            &prefix,
+            &end,
+        )?;
+        let observed =
+            prepared.loss_bank_observation(&competing, &[5], &[], 4, &cue, &prefix, &end)?;
+        assert_eq!(observed.trace, factual);
+        let ranked = observed.record_ranking_loss(&target)?;
+        assert_eq!(ranked.records.len(), 2);
+        assert_eq!(ranked.expected_source_segment_index, 1);
+        assert_eq!(observed.trace, factual);
+        assert!((f64::from(ranked.loss.to_scalar::<f32>()?) - ranked.cross_entropy).abs() < 1e-6);
+        let record_gradients = ranked.loss.backward()?;
+        let mut connected = 0;
+        for (_, var) in fixture.weights.observation_root_parameters() {
+            if let Some(gradient) = record_gradients.get(var.as_tensor()) {
+                assert!(gradient
+                    .flatten_all()?
+                    .to_vec1::<f32>()?
+                    .iter()
+                    .all(|v| v.is_finite()));
+                connected += 1;
+            }
+        }
+        assert!(connected > 0);
+        // Identical payloads can cancel adjoints; connectivity is not a
+        // nonzero-gradient or useful-learning claim for this fixture.
+        for (_, var) in fixture.weights.terminal_parameters() {
+            assert!(record_gradients.get(var.as_tensor()).is_none());
+        }
         Ok(())
     }
     #[test]
