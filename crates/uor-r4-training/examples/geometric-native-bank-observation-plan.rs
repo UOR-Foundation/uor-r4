@@ -89,7 +89,11 @@ fn collect_opened_wires(
                     values.insert(literal(&w)?.to_owned());
                 }
             }
-            for x in o.values() {
+            for (key, x) in o {
+                // Empty template registry entries are reference controls, not facts.
+                if key == "reference_templates_control_only" {
+                    continue;
+                }
                 collect_opened_wires(x, values, queries)?;
             }
         }
@@ -117,7 +121,10 @@ fn opened_wire_counts(v: &Value) -> (usize, usize) {
                     counts.0 += 1;
                 }
             }
-            for x in o.values() {
+            for (key, x) in o {
+                if key == "reference_templates_control_only" {
+                    continue;
+                }
                 let n = opened_wire_counts(x);
                 counts.0 += n.0;
                 counts.1 += n.1;
@@ -1138,7 +1145,7 @@ mod supported_current_role_tests {
     fn exposure_scanner_distinguishes_metadata_from_complete_wires() -> Result<()> {
         let metadata = json!({"act":"assert","relation":"home","text":"I am now {v}.","source_template":"I moved to {v}."});
         let wire = json!({"act":"assert","relation":"home","text":"I currently live in copper cedar.","template":"I currently live in {v}."});
-        let source = json!([metadata, wire]);
+        let source = json!({"rows":[metadata, wire],"reference_templates_control_only":[{"act":"assert","relation":"home","text":"I live in .","template":"I live in {v}."}]});
         let mut values = BTreeSet::new();
         let mut queries = BTreeSet::new();
         collect_opened_wires(&source, &mut values, &mut queries)?;
