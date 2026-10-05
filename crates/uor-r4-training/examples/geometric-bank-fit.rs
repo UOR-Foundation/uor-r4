@@ -88,6 +88,8 @@ struct Args {
     learned_source_weights: Option<PathBuf>,
     learned_native_artifact: Option<PathBuf>,
     learned_trusted_native_binding: Option<PathBuf>,
+    source_end_incumbent_fit: Option<PathBuf>,
+    source_end_incumbent_manifest_sha256: Option<String>,
     source_weights: PathBuf,
     native_artifact: PathBuf,
     trusted_native_binding: PathBuf,
@@ -346,11 +348,14 @@ fn checked_args() -> Result<Args> {
         "terminal-fit",
         "source-end-broadbatch",
         "source-end-fit",
+        "source-end-refine",
     ]
     .contains(&a.mode.as_str())
         || a.maximum_seconds == 0
         || a.maximum_seconds
-            > if matches!(a.mode.as_str(), "terminal-fit" | "source-end-fit") {
+            > if a.mode == "source-end-refine" {
+                600
+            } else if matches!(a.mode.as_str(), "terminal-fit" | "source-end-fit") {
                 900
             } else if a.mode == "fit" {
                 3600
@@ -362,7 +367,9 @@ fn checked_args() -> Result<Args> {
         || a.maximum_context_tokens != 128
         || a.maximum_generation_tokens > 32
         || a.maximum_report_bytes
-            != if a.mode == "source-end-fit" {
+            != if a.mode == "source-end-refine" {
+                768 * 1024 * 1024
+            } else if a.mode == "source-end-fit" {
                 // Observed full-cap projection is 568 MB; retain legacy admission
                 // while permitting the prospectively recorded 640 MiB fit cap.
                 if a.maximum_report_bytes == 640 * 1024 * 1024 {
@@ -416,6 +423,18 @@ fn checked_args() -> Result<Args> {
         && (a.admission.is_some() || a.fit_authorization.is_some())
     {
         return Err(invalid("broadbatch cannot automatically fit").into());
+    }
+    if a.mode == "source-end-refine" {
+        if a.source_end_incumbent_fit.is_none()
+            || a.source_end_incumbent_manifest_sha256.is_none()
+            || a.source_end_score_mode != Some(uor_r4_integer::geometric_source_end_transport::SourceEndScoreMode::DirectedRelative)
+            || a.admission.is_some() || a.admission_manifest_sha256.is_some()
+            || a.fit_authorization.is_some()
+        { return Err(invalid("refinement requires sealed selected64 incumbent, directed mode, and no optimizer admission").into()); }
+    } else if a.source_end_incumbent_fit.is_some()
+        || a.source_end_incumbent_manifest_sha256.is_some()
+    {
+        return Err(invalid("incumbent fit binding is refinement-only").into());
     }
     if source_end_mode(&a) != a.source_end_score_mode.is_some() {
         return Err(invalid("source_end_score_mode required only for source-end modes").into());
@@ -486,6 +505,7 @@ fn checked_args() -> Result<Args> {
     paths.extend(a.learned_trusted_native_binding.iter());
     paths.extend(a.frozen_cue_bundle.iter());
     paths.extend(a.frozen_prefix_bundle.iter());
+    paths.extend(a.source_end_incumbent_fit.iter());
     paths.extend(a.admission.iter());
     paths.extend(a.fit_authorization.iter());
     paths.extend(a.exposed_controls.iter());
