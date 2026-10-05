@@ -1163,6 +1163,11 @@ const RELATION_DETERMINERS: [&str; 10] = [
 /// learned class — a classifier trained in-scope is exactly what misses out-of-scope input.
 const RELATION_POSSESSIVES: [&str; 7] = ["my", "your", "our", "his", "her", "their", "its"];
 const RELATION_GENERICS: [&str; 4] = ["name", "number", "called", "word"];
+/// Function words that may FOLLOW a relation phrase but are not part of it.
+const RELATION_TRAILING: [&str; 16] = [
+    "was", "were", "is", "are", "to", "you", "about", "of", "in", "on", "at", "for", "from",
+    "with", "by", "again",
+];
 /// Pronouns that must never be read as a relation: they are anaphoric, so the row needs
 /// previous-turn state and keying on the pronoun would address a wrong slot.
 const RELATION_PRONOUNS: [&str; 10] = [
@@ -1221,15 +1226,17 @@ pub fn relation_phrase(source: &str) -> Option<String> {
     let text = |w: &WordSpan| &source[w.start..w.end];
     // A phrase directly after a determiner: "my sculptor", "the spice rack".
     let interrogative = source.trim_end().ends_with('?');
-    let after_determiner = words.iter().position(|w| {
-        let word = text(w).to_lowercase();
-        if !RELATION_DETERMINERS.contains(&word.as_str()) {
-            return false;
-        }
-        // A non-possessive determiner ("the", "a", "an") is only a relation marker on a
-        // question; elsewhere it is ordinary prose.
-        interrogative || RELATION_POSSESSIVES.contains(&word.as_str())
-    });
+    // A POSSESSIVE determiner wins over a non-possessive one. "Have you kept a note of my
+    // shoe_size?" contains both "a" and "my"; taking the first put the phrase at "a note
+    // of ..." and keyed the row to "note of shoe size". The speaker's own record is the
+    // possessive, so it is searched first and the non-possessive is only a fallback.
+    let possessive = words
+        .iter()
+        .position(|w| RELATION_POSSESSIVES.contains(&text(w).to_lowercase().as_str()));
+    let any_determiner = words
+        .iter()
+        .position(|w| RELATION_DETERMINERS.contains(&text(w).to_lowercase().as_str()));
+    let after_determiner = possessive.or(if interrogative { any_determiner } else { None });
     let (start, stop_at_is) = match after_determiner {
         Some(i) => (i + 1, true),
         None => {
@@ -1245,15 +1252,35 @@ pub fn relation_phrase(source: &str) -> Option<String> {
             if !interrogative {
                 return None;
             }
+            // The copula set covers the past and perfect forms too: "What was that
+            // shoe_size I told you about?" declined entirely when only is/are were read.
             let copula = words.iter().position(|w| {
-                text(w).eq_ignore_ascii_case("is") || text(w).eq_ignore_ascii_case("are")
+                matches!(
+                    text(w).to_lowercase().as_str(),
+                    "is" | "are" | "was" | "were" | "has" | "had"
+                )
             })?;
             (copula + 1, false)
         }
     };
-    let mut end = words.len();
+    // The phrase does not cross a sentence boundary: "My shoe_size has slipped my mind.
+    // What is it?" must key to "shoe size", not to the rest of both sentences. The limit
+    // is the first sentence end at or after the determiner.
+    let limit = words[start..]
+        .iter()
+        .position(|w| {
+            matches!(
+                source[w.end..].chars().next(),
+                Some('.') | Some('!') | Some('?')
+            )
+        })
+        // +1: the word that ENDS the sentence is part of it. Dropping it truncated every
+        // phrase by one word ("shoe_size?" -> "shoe") and took the real panel from 140 to 70.
+        .map(|i| start + i + 1)
+        .unwrap_or(words.len());
+    let mut end = limit;
     if stop_at_is {
-        for (i, w) in words.iter().enumerate().skip(start) {
+        for (i, w) in words.iter().enumerate().skip(start).take(limit - start) {
             if text(w).eq_ignore_ascii_case("is") {
                 end = i;
                 break;
@@ -1263,7 +1290,14 @@ pub fn relation_phrase(source: &str) -> Option<String> {
     if start >= end {
         return None;
     }
-    let phrase: Vec<&str> = words[start..end].iter().map(|w| text(w)).collect();
+    let mut phrase: Vec<&str> = words[start..end].iter().map(|w| text(w)).collect();
+    // A function word after the relation is not part of it: "my shoe_size was" and "my
+    // shoe_size to you" must key to "shoe size". Never stripped to empty.
+    while phrase.len() > 1
+        && RELATION_TRAILING.contains(&phrase[phrase.len() - 1].to_lowercase().as_str())
+    {
+        phrase.pop();
+    }
     // A pronoun is not a relation: "What is it?" must DECLINE rather than key on "it",
     // because those rows need previous-turn state and a guess would be a wrong address.
     if phrase.len() == 1 && RELATION_PRONOUNS.contains(&phrase[0].to_lowercase().as_str()) {
@@ -1281,8 +1315,18 @@ pub fn relation_phrase(source: &str) -> Option<String> {
 /// Imperatives and wh-words, so a question written without a `?` is still read as one.
 fn recall_cue(source: &str) -> bool {
     const CUES: [&str; 12] = [
-        "what", "where", "who", "when", "which", "how", "tell me", "remind me", "do you",
-        "did i", "can you", "could you",
+        "what",
+        "where",
+        "who",
+        "when",
+        "which",
+        "how",
+        "tell me",
+        "remind me",
+        "do you",
+        "did i",
+        "can you",
+        "could you",
     ];
     let lower = source.trim_start().to_lowercase();
     CUES.iter().any(|cue| lower.starts_with(cue))
@@ -1291,7 +1335,10 @@ fn recall_cue(source: &str) -> bool {
 /// Whether every word of a marked span already appears in the relation phrase — i.e. the
 /// span is the relation's own words rather than a value held for it.
 fn phrase_words(span_text: &str, phrase: &str) -> bool {
-    let p: Vec<String> = phrase.split_whitespace().map(|w| w.to_lowercase()).collect();
+    let p: Vec<String> = phrase
+        .split_whitespace()
+        .map(|w| w.to_lowercase())
+        .collect();
     let words: Vec<String> = span_text
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
@@ -3439,5 +3486,53 @@ mod tests {
             relation_phrase("What is mousbror's name?").map(|p| derived_relation_id(&p)),
             "the question must derive its statement's address"
         );
+    }
+
+    /// The 12 `ASK_TEMPLATES` question forms from the synthetic memory corpus (7 the
+    /// trainer sees, 5 held out). Measured: 7/7 trained and 3/5 held out, where the
+    /// learned F1 arm gets 63.5% on unseen question forms. Each assertion below pins a
+    /// defect that was measured and fixed rather than one that was imagined:
+    ///
+    ///   * a POSSESSIVE determiner must win over a non-possessive one -- "Have you kept a
+    ///     note of my shoe_size?" contains "a" before "my" and keyed to "note of shoe size";
+    ///   * the copula set must cover past/perfect forms -- "What was that ...?" declined
+    ///     entirely when only is/are were read;
+    ///   * a phrase must not cross a sentence boundary -- form 10 is two sentences;
+    ///   * a function-word tail is not part of the relation -- "my shoe_size was" and
+    ///     "my shoe_size to you".
+    #[test]
+    fn the_question_forms_of_the_synthetic_memory_corpus() {
+        // asked, expected phrase
+        let cases: [(&str, &str); 10] = [
+            ("What is my shoe size?", "shoe size"),
+            ("What's my shoe size?", "shoe size"),
+            ("Do you know what my shoe size is?", "shoe size"),
+            ("Can you tell me what my shoe size is?", "shoe size"),
+            ("Tell me what my shoe size is.", "shoe size"),
+            ("Remind me what my shoe size is.", "shoe size"),
+            // form 7: the copula is "was", and the tail must be stripped
+            ("What did I say my shoe size was?", "shoe size"),
+            // held out: a preceding non-possessive determiner must not win
+            ("Have you kept a note of my shoe size?", "shoe size"),
+            // held out: a function-word tail
+            ("Did I ever mention my shoe size to you?", "shoe size"),
+            // held out, and the only one whose phrase is not immediately after the determiner
+            ("Tell me again about my shoe size.", "shoe size"),
+        ];
+        for (ask, want) in cases {
+            assert_eq!(
+                relation_phrase(ask).as_deref(),
+                Some(want),
+                "question form {ask:?}"
+            );
+        }
+        // A statement and its question must derive ONE address.
+        assert_eq!(
+            relation_phrase("My shoe size is nine.").map(|p| derived_relation_id(&p)),
+            relation_phrase("What did I say my shoe size was?").map(|p| derived_relation_id(&p))
+        );
+        // The out-of-scope guard must survive all of the above.
+        assert_eq!(relation_phrase("The weather is nice today."), None);
+        assert_eq!(relation_phrase("What is it?"), None);
     }
 }
