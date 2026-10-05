@@ -8,7 +8,150 @@ the failing heldout rows are ill-posed. A 30M–100M model trained mostly on Tin
 chat data cannot be expected to answer open-domain knowledge requests, so on that panel a
 change in conversation or mechanism barely moves the score.
 
-## Tier C: conversational panel (`conversational-v2*`)
+## Tiered eval v2: panel `conversational-v3*` and the missing-material K split
+
+The #1724 review and the re-score (#1733) found five faults in the first tiered instrument:
+(1) the qwen grader cannot fail a memory reply that recalls the wrong fact; (2) many
+multi-turn rows did not depend on their earlier turn; (3) there was no per-category constant
+control, and the fixed reply "I'm not sure. Can you tell me more about what you mean?" scored
+42/160, ahead of every chat model, mostly on clarify and unknowable rows; (4) several rows
+matched M-world training phrasings; (5) the first K split depended on model outcomes. The
+second version of the instrument answers them with new files. The `conversational-v2*` and
+`heldout-*-ids.txt` files below are unchanged and stay as the record of what the #1733
+re-score used. The panel version is `v3` because the name `conversational-v2` was already
+taken by that re-scored panel.
+
+### Tier C v3 (`conversational-v3*`, ids `conv-v3-*`)
+
+160 rows; `conversational-v3-a.json` holds rows 1–80 and `-b.json` rows 81–160 (pass both).
+Rows interleave round-robin by category. Checks are in `conversational-v3-checks.tsv`
+(5 columns: `id kind history terms forbid`), embedded in `chat-grade` together with the v2
+checks (the id sets are disjoint, so a v2 report keeps its v2 checks).
+
+| Category | Rows | Multi-turn | Check | Read against |
+|---|---|---|---|---|
+| `multi_turn_memory` | 30 | 30 | `exact` | best constant (all score 0 on the check), copy controls |
+| `self_contained_instruction` | 30 | 0 | `any` on 6 rows (as v2) | best constant |
+| `clarify_or_on_topic` | 24 | 0 | `question` | best constant |
+| `unknowable_or_impossible` | 24 | 0 | `abstain_exact` | best constant |
+| `smalltalk_feelings` | 26 | 0 | none | best constant |
+| `story_continuation` | 26 | 0 | none | best constant |
+
+- **Memory rows (all rewritten).** Each conversation states the expected value and at least
+  one value of the same type for another key (a distractor) in earlier user turns; the last
+  turn names only the key. Examples: turtle Shelby / goldfish Flash, ask for the turtle;
+  piano Saturday / swimming Wednesday; four rows are updates (beach then lake). `exact`
+  passes only when the reply contains a spelling of the expected value (words lowercased,
+  punctuation ignored) and none of the forbidden values: the conversation's distractors and,
+  for a closed class (colours, days, the numbers 2–12), that class's other members. A wrong
+  value fails, a hedge naming both values fails, and a reply naming no value fails. The rule is
+  strict: a correct reply that also names the distractor ("Shelby, not Flash") fails.
+  `chat-grade check` refuses an `exact` row whose value or a forbidden value is in the last
+  turn, or that has no distractor in an earlier turn, so no row can be answered from the last
+  turn or by echoing the history. In 15 rows the expected value is stated first and in 15 it
+  is stated last, so a model that copies the first or the last stated candidate passes 15/30;
+  these two copy controls are in every report (`check_only_controls.copy`).
+- **Only memory rows are multi-turn.** The v2 topic follow-ups (clar-17/18/23) were replaced
+  by single-turn ambiguous requests.
+- **Unknowable rows (`abstain_exact`).** The reply must contain an abstain phrase and assert no
+  specific: no digit, no capitalised word inside a sentence (other than I or OK) that the user
+  did not write, and none of the row's answer-class words (colours for "what colour is my
+  shirt", number words for "how old am I", foods for "what did I eat"). "I'm not sure, but I
+  think it is blue." fails; it passed v2's `abstain`.
+- **Leakage.** No turn matches an M-world phrasing whole or as a template, or shares 4
+  consecutive words with any string literal of `milestone_world.rs` or `milestone_world_v2.rs`.
+  The unit test `panel_v3_shares_no_m_world_phrasing` checks this on every build;
+  `chat-grade leak strict=...` (default `strict_n=4`) reports it. The same strict check finds
+  5 leaking rows in v2 (unk-04 "tell me the color of", story-20 "a big red ball", unk-22
+  "What is my favorite song?", talk-24 "Nice to meet you", do-26 "word that means the"); all
+  5 were rewritten in v3. The full corpus check (references at 6 words, corpus lines whole) also
+  finds no v3 leak; four rows share an 8-word run with a corpus line (story-01/24/26, talk-17,
+  TinyStories phrasing, as in v2), reported and not counted.
+- **Reused rows.** Smalltalk, instruction and story rows are v2's, with three rewritten for
+  leakage (talk-24, do-26, story-20); clarify rows are v2's single-turn ones plus three new;
+  unknowable rows are v2's with unk-02/04/14/22 rewritten to avoid the M-world "What is my
+  ...?" frames.
+
+`chat-grade check` on v3 (tokenizer of the ladder models, context 384): pass, worst case
+336 positions (conv-v3-mem-16). Check-only controls (no grader):
+
+| Category | checked | constant 1 | constants 2, 3 | echo last turn | echo history | copy first / last |
+|---|---|---|---|---|---|---|
+| `multi_turn_memory` | 30 | 0 | 0 | 0 | 0 | 15 / 15 |
+| `self_contained_instruction` | 6 | 0 | 0 | 0 | 0 | – |
+| `clarify_or_on_topic` | 24 | 24 | 0 | 17 | 17 | – |
+| `unknowable_or_impossible` | 24 | 24 | 0 | 0 | 0 | – |
+
+Constant 1 still passes every clarify and unknowable check, so those two categories can show
+a model gain only where the grader rejects the constant. They are read only through the
+best-constant comparison below.
+
+### Headline: per category, against the best constant
+
+Every graded report (and `tiers`) now carries `per_tier.<tier>.headline`: for each category,
+the constant reply with the most acceptable rows in that category (ties to the lower index),
+the model's and the constant's acceptable counts, `model_minus_constant`, the discordant rows
+and the two-sided exact McNemar p, and `model_beats_constant` (more model-only rows and
+p < 0.05). For checked rows the same comparison is given for the check alone. The report's
+top-level `headline` lists, per tier, the categories where the model beats its best constant.
+A tier total is never the headline. Choosing the best constant after grading favours the
+constant, so the comparison is conservative for the model. `compare` now also gives the paired
+McNemar per category.
+
+### Tier K by one text-only rule (`heldout-ill-posed-v3*`, `heldout-clean-v3-ids.txt`)
+
+`chat-grade ill-posed requests=heldout-200-a.json,heldout-200-b.json` applies one criterion to
+every heldout-200 request text: **the request refers to material that its text does not
+contain.** The rule is code (`missing_material` in `chat-grade.rs`, unit-tested), reads only
+the text, and never sees a reply, grade or model. It fires on one of: `open_end` (the text ends
+with `:` or `,`; the panel keeps only a turn's first line, so the introduced material is
+absent), `slot` (an unfilled `[placeholder]`), `constraints_only` (every sentence constrains
+"your response" to a query the text does not hold), `deictic` ("the following", "below",
+"this essay", "the passage", "the recipe", "your suggestion", a clause-final "this" in a
+one-sentence request, ...; material not included), `own_material` ("I wrote", "here is", ...;
+material not included) and `variable` (a bare x, y or n with no equation). Material counts as
+included with a quoted span of 3 or more words, or 25 words or 3 sentences after the first
+colon.
+
+Result: 67 ill-posed (open_end 27, deictic 18, constraints_only 12, slot 6, own_material 3,
+variable 1) and 133 clean. `chat-grade` embeds `heldout-ill-posed-v3-ids.txt` as the default
+list. Against the hand-labelled v2 list (90): the 67 are a subset of the 90; the 23 rows
+labelled only in v2 are 21 `fragment` rows that refer to nothing missing (salutations without a
+comma, headlines, list items, quotations such as heldout-047 "Hey Alex!!!! 🚀") and two
+`absent` rows the rule does not see (heldout-112 "has collected data ...", heldout-137 "the
+animal joke series"). Under the one criterion they are clean; K-clean therefore still holds
+some rows a reader may find hard to answer. The K rows of reports graded before this change
+keep their recorded list; `chat-grade tiers` re-tiers them with the v3 list unless
+`ill_posed=heldout-ill-posed-ids.txt` is passed.
+
+### Freeze statement (v3)
+
+`conversational-v3*` and `heldout-*-v3*` were written on 2026-10-05, before any model had
+replied to any v3 request. Only `chat-grade check`, `chat-grade leak` (references and the
+decoded corpora; no model), `chat-grade ill-posed` (heldout-200 request text only) and the unit
+tests have read them. sha256 (also in `MANIFEST.sha256`):
+
+| file | sha256 |
+|---|---|
+| `conversational-v3.json` | `578e256448b9790d3164d88aea12b9a72d015b915dd1492868dd160f8b50a163` |
+| `conversational-v3-a.json` | `425ad695463a7533f08a4a4ab6780815fe6c062d01cf76dcdb74f6a45744a9b8` |
+| `conversational-v3-b.json` | `78e23f2a9bba865340a4a58f9cdc68cd34a55ae3612c2fdb8239a0f335b4ee22` |
+| `conversational-v3-checks.tsv` | `0823e316da1e1e6d46b0bba6ed596828919344ce24c337d830c71ad4fca0b0f9` |
+| `heldout-ill-posed-v3.tsv` | `8ef79a1609ab89aec06d6efcdcbbda4335d5e041e9d133362f112da4abd788a5` |
+| `heldout-ill-posed-v3-ids.txt` | `2417ce8ce569724e8a6a79c39993c171f23c52107b293abfd87af6acacab4d37` |
+| `heldout-clean-v3-ids.txt` | `1ce055d48429a0cb51ca6b3931180befd3729d51802d8a1cf0653d822939865b` |
+
+Any edit makes a new panel with a new name.
+
+```text
+chat-grade check requests=conversational-v3-a.json,conversational-v3-b.json tokenizer=T.json context=384
+chat-grade grade ... requests=conversational-v3-a.json,conversational-v3-b.json   # default constants
+chat-grade ill-posed requests=heldout-200-a.json,heldout-200-b.json expect=data/panels/heldout-ill-posed-v3-ids.txt
+chat-grade leak requests=conversational-v3-a.json,conversational-v3-b.json reference=... \
+  strict=crates/uor-r4-training/src/milestone_world.rs,crates/uor-r4-training/src/milestone_world_v2.rs
+```
+
+## Tier C v2: conversational panel (`conversational-v2*`) -- record, superseded by v3
 
 - **What it is:** 160 requests that need no world knowledge. Each one is answerable from the
   conversation itself or from general conversational sense.
@@ -119,7 +262,7 @@ model had replied to any v1 or v2 request. Only `chat-grade check` and `chat-gra
 `MANIFEST.sha256` and posted on #820 before the first reply run. Any edit makes a new panel with
 a new name.
 
-## Tier K: clean open panel (`heldout-*-ids.txt`)
+## Tier K v2: hand-labelled split (`heldout-ill-posed*.tsv`, `heldout-*-ids.txt`) -- record, superseded by the v3 rule
 
 - **What it is:** the 200 heldout-200 rows, split into K-clean (110) and K-ill-posed (90).
 - **Criterion (one rule, request text only, applied to all 200 rows).** A row is ill-posed when

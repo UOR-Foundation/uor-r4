@@ -20,8 +20,10 @@
 //! chat-grade compare a=REPORT.json b=REPORT.json [tier=all|C|K-clean|...] \
 //!   [ill_posed=IDS.txt] [checks=CHECKS.tsv] [out=NEW_REPORT_ROOT]
 //! chat-grade leak requests=PANEL.json[,MORE.json] reference=FILE[,FILE] \
-//!   [whole_only=FILE[,FILE]] [corpora=DIR[,DIR] tokenizer=T.json] [n=6] [corpus_n=8] \
-//!   [out=NEW_REPORT_ROOT]
+//!   [strict=FILE[,FILE]] [whole_only=FILE[,FILE]] [corpora=DIR[,DIR] tokenizer=T.json] \
+//!   [n=6] [strict_n=4] [corpus_n=8] [out=NEW_REPORT_ROOT]
+//! chat-grade ill-posed requests=PANEL.json[,MORE.json] [expect=IDS.txt] \
+//!   [out_tsv=NEW.tsv out_ids=NEW_IDS.txt out_clean=NEW_CLEAN.txt]
 //! ```
 //!
 //! `grade` and `reply` also take `exclude=IDS.txt` (drop those request ids
@@ -35,21 +37,29 @@
 //! requests that, read alone, refer to material they do not contain),
 //! `stretch` (category `stretch_heldout`) and `everyday` (the everyday-32
 //! categories). Any other category is an error. The ill-posed list defaults to
-//! `data/panels/heldout-ill-posed-ids.txt`, embedded in the executable;
+//! `data/panels/heldout-ill-posed-v3-ids.txt` (written by `ill-posed`, one
+//! text-only rule, [`MISSING_MATERIAL_RULE`]), embedded in the executable;
 //! `ill_posed=` overrides it. Graded reports append `per_tier` (actual,
-//! controls and paired-against-control per tier, and per category within it).
-//! `tiers` recomputes that from an existing report's rows without regrading;
-//! `compare` pairs two graded reports' rows by id within each tier and gives
-//! the two-sided exact McNemar for acceptable, fluent and relevant.
+//! controls and paired-against-control per tier, and per category within it)
+//! and a `headline`: per tier, the categories where the model beats that
+//! category's best constant reply ([`BEST_CONSTANT_RULE`]). A tier total is
+//! never the headline. `tiers` recomputes that from an existing report's rows
+//! without regrading; `compare` pairs two graded reports' rows by id within
+//! each tier and gives the two-sided exact McNemar for acceptable, fluent and
+//! relevant, per tier and per category.
 //!
 //! **Row checks.** The grader judges only whether a reply is fluent and
 //! responds to the user's *last* message, so it cannot tell a recalled fact
 //! from an invented one. A row may carry a frozen deterministic check
-//! (`data/panels/conversational-v2-checks.tsv`, embedded; `checks=`
-//! overrides): `any` (the reply contains one of the listed words or phrases,
-//! e.g. the fact stated in an earlier turn), `abstain` (the reply says it does
-//! not know or cannot) or `question` (the reply asks a question). A checked
-//! row is acceptable only when it is fluent, relevant and passes its check.
+//! (`data/panels/conversational-v2-checks.tsv` and `-v3-checks.tsv`, embedded
+//! together; their ids are disjoint; `checks=` overrides): `any` (the reply
+//! contains one of the listed words or phrases), `abstain` (the reply says it
+//! does not know or cannot), `question` (the reply asks a question), `exact`
+//! (panel v3 memory: the reply names the expected value and no forbidden
+//! value -- a wrong value, both values or no value fails) or `abstain_exact`
+//! (panel v3 unknowable: an abstention that asserts no made-up specific). A
+//! checked row is acceptable only when it is fluent, relevant and passes its
+//! check.
 //!
 //! **Controls.** Each reply is also graded against the next row's
 //! conversation (the derangement: relevance must fall), and each row is
@@ -159,9 +169,10 @@ fn run() -> Result<(), Error> {
         Some("tiers") => tiers(&arguments[1..]),
         Some("compare") => compare(&arguments[1..]),
         Some("leak") => leak(&arguments[1..]),
+        Some("ill-posed") => ill_posed_command(&arguments[1..]),
         _ => Err(
-            "usage: chat-grade extract|grade|reply|grade-replies|check|filter|tiers|compare|leak \
-             key=value..."
+            "usage: chat-grade extract|grade|reply|grade-replies|check|filter|tiers|compare|leak|\
+             ill-posed key=value..."
                 .into(),
         ),
     }
@@ -600,6 +611,31 @@ enum CheckKind {
     Abstain,
     /// The reply contains a question mark.
     Question,
+    /// Exact recall (panel v3 memory rows): the reply contains one of the
+    /// expected value's spellings and none of the row's forbidden values (the
+    /// distractor values stated in the conversation and, for a closed class
+    /// such as colours, days or small numbers, the class's other members). A
+    /// wrong value, a hedge naming both values, or no value fails.
+    Exact(Vec<Vec<String>>),
+    /// Abstention without a fabricated specific (panel v3 unknowable rows):
+    /// the reply contains an abstain phrase and asserts no specific -- no
+    /// digit, no capitalised word inside a sentence that the user did not
+    /// write (a made-up name), and none of the row's forbidden words (the
+    /// answer class of the question, e.g. colours for "what colour is my
+    /// shirt").
+    AbstainExact,
+}
+
+impl CheckKind {
+    fn name(&self) -> &'static str {
+        match self {
+            CheckKind::Any(_) => "any",
+            CheckKind::Abstain => "abstain",
+            CheckKind::Question => "question",
+            CheckKind::Exact(_) => "exact",
+            CheckKind::AbstainExact => "abstain_exact",
+        }
+    }
 }
 
 /// How a multi-turn row's last turn depends on the earlier ones.
@@ -621,22 +657,79 @@ enum History {
 struct RowCheck {
     kind: CheckKind,
     history: History,
+    /// Words or phrases whose presence fails the check (`exact` and
+    /// `abstain_exact` only; empty otherwise).
+    forbid: Vec<Vec<String>>,
+}
+
+/// Whether `reply` contains one of [`ABSTAIN_PHRASES`].
+fn abstains(reply: &[String]) -> bool {
+    ABSTAIN_PHRASES
+        .iter()
+        .any(|p| contains_phrase(reply, &words(p)))
+}
+
+/// Words capitalised anywhere in a sentence that name nothing: the forms of
+/// "I" and "OK".
+const NOT_SPECIFIC: [&str; 6] = ["i", "i'm", "i'll", "i've", "i'd", "ok"];
+
+/// The specifics a reply asserts that its user turns did not supply: digits,
+/// and capitalised words that do not begin a sentence (after the start of the
+/// reply, `.`, `!`, `?`, a newline or an opening quote) and are neither a form
+/// of "I", "OK", nor a word of the user turns (compared lowercased). An empty result
+/// means the reply names no made-up name or number.
+fn fabricated_specifics(users: &[&str], reply: &str) -> Vec<String> {
+    let user_words: BTreeSet<String> = users.iter().flat_map(|u| words(u)).collect();
+    let text = reply.replace('\u{2019}', "'");
+    let mut out = Vec::new();
+    let mut sentence_start = true;
+    let mut current = String::new();
+    let flush = |word: &mut String, start: &mut bool, out: &mut Vec<String>| {
+        let trimmed = word.trim_matches('\'');
+        if !trimmed.is_empty() {
+            let lower = trimmed.to_lowercase();
+            let digit = trimmed.chars().any(|c| c.is_ascii_digit());
+            let capital = trimmed.chars().next().is_some_and(char::is_uppercase);
+            let told = user_words.contains(&lower);
+            if !told && (digit || (capital && !*start && !NOT_SPECIFIC.contains(&lower.as_str()))) {
+                out.push(trimmed.to_owned());
+            }
+            *start = false;
+        }
+        word.clear();
+    };
+    for c in text.chars() {
+        if c.is_alphanumeric() || c == '\'' {
+            current.push(c);
+            continue;
+        }
+        flush(&mut current, &mut sentence_start, &mut out);
+        if matches!(c, '.' | '!' | '?' | '\n' | '"' | '\u{201c}' | ':') {
+            sentence_start = true;
+        }
+    }
+    flush(&mut current, &mut sentence_start, &mut out);
+    out
 }
 
 impl RowCheck {
-    fn passes(&self, reply: &str) -> bool {
+    /// Whether `reply` passes, given the row's user turns (`abstain_exact`
+    /// exempts words the user wrote; the other kinds read the reply only).
+    fn passes(&self, users: &[&str], reply: &str) -> bool {
+        let reply_words = words(reply);
+        let forbidden = self.forbid.iter().any(|t| contains_phrase(&reply_words, t));
         match &self.kind {
-            CheckKind::Any(terms) => {
-                let reply = words(reply);
-                terms.iter().any(|t| contains_phrase(&reply, t))
-            }
-            CheckKind::Abstain => {
-                let reply = words(reply);
-                ABSTAIN_PHRASES
-                    .iter()
-                    .any(|p| contains_phrase(&reply, &words(p)))
-            }
+            CheckKind::Any(terms) => terms.iter().any(|t| contains_phrase(&reply_words, t)),
+            CheckKind::Abstain => abstains(&reply_words),
             CheckKind::Question => reply.contains('?'),
+            CheckKind::Exact(terms) => {
+                !forbidden && terms.iter().any(|t| contains_phrase(&reply_words, t))
+            }
+            CheckKind::AbstainExact => {
+                !forbidden
+                    && abstains(&reply_words)
+                    && fabricated_specifics(users, reply).is_empty()
+            }
         }
     }
 }
@@ -648,15 +741,20 @@ struct Checks {
 }
 
 impl Checks {
-    fn of(&self, id: &str, reply: &str) -> Option<bool> {
-        self.rows.get(id).map(|c| c.passes(reply))
+    /// The check result of `reply` on row `id` (whose user turns are
+    /// `users`), or `None` for an unchecked row.
+    fn of(&self, id: &str, users: &[&str], reply: &str) -> Option<bool> {
+        self.rows.get(id).map(|c| c.passes(users, reply))
     }
 }
 
-/// A checks file: tab-separated `id kind history terms` per line (`#`
-/// comments and blank lines ignored). `kind` is `any`, `abstain` or
-/// `question`; `history` is `none`, `recall`, `derived` or `topic`; `terms`
-/// is `|`-separated words or phrases for `any` and `-` otherwise.
+/// A checks file: tab-separated `id kind history terms [forbid]` per line
+/// (`#` comments and blank lines ignored). `kind` is `any`, `abstain`,
+/// `question`, `exact` or `abstain_exact`; `history` is `none`, `recall`,
+/// `derived` or `topic`; `terms` is `|`-separated words or phrases for `any`
+/// and `exact` and `-` otherwise; `forbid` (default `-`) is `|`-separated
+/// words or phrases that fail an `exact` or `abstain_exact` check and must be
+/// `-` for the other kinds.
 fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
     let mut rows = BTreeMap::new();
     for (number, line) in text.lines().enumerate() {
@@ -664,12 +762,23 @@ fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
             continue;
         }
         let fields: Vec<&str> = line.split('\t').collect();
-        let [id, kind, history, terms] = fields[..] else {
-            return Err(format!(
-                "checks line {}: expected 4 tab-separated fields",
-                number + 1
-            )
-            .into());
+        let (id, kind, history, terms, forbid) = match fields[..] {
+            [id, kind, history, terms] => (id, kind, history, terms, "-"),
+            [id, kind, history, terms, forbid] => (id, kind, history, terms, forbid),
+            _ => {
+                return Err(format!(
+                    "checks line {}: expected 4 or 5 tab-separated fields",
+                    number + 1
+                )
+                .into())
+            }
+        };
+        let term_list = |terms: &str| -> Result<Vec<Vec<String>>, Error> {
+            let terms: Vec<Vec<String>> = terms.split('|').map(words).collect();
+            if terms.iter().any(Vec::is_empty) {
+                return Err(format!("checks line {}: an empty term", number + 1).into());
+            }
+            Ok(terms)
         };
         let history = match history {
             "none" => History::None,
@@ -679,14 +788,10 @@ fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
             other => return Err(format!("checks line {}: history {other}", number + 1).into()),
         };
         let kind = match (kind, terms) {
-            ("any", terms) => {
-                let terms: Vec<Vec<String>> = terms.split('|').map(words).collect();
-                if terms.iter().any(Vec::is_empty) {
-                    return Err(format!("checks line {}: an empty term", number + 1).into());
-                }
-                CheckKind::Any(terms)
-            }
+            ("any", terms) => CheckKind::Any(term_list(terms)?),
+            ("exact", terms) if terms != "-" => CheckKind::Exact(term_list(terms)?),
             ("abstain", "-") => CheckKind::Abstain,
+            ("abstain_exact", "-") => CheckKind::AbstainExact,
             ("question", "-") => CheckKind::Question,
             _ => {
                 return Err(
@@ -694,8 +799,43 @@ fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
                 )
             }
         };
+        let forbid = match (&kind, forbid) {
+            (_, "-") => Vec::new(),
+            (CheckKind::Exact(_) | CheckKind::AbstainExact, forbid) => term_list(forbid)?,
+            _ => {
+                return Err(format!(
+                    "checks line {}: only exact and abstain_exact take forbidden terms",
+                    number + 1
+                )
+                .into())
+            }
+        };
+        if let CheckKind::Exact(terms) = &kind {
+            if forbid.is_empty() {
+                return Err(format!(
+                    "checks line {}: an exact check needs a forbidden (distractor) value",
+                    number + 1
+                )
+                .into());
+            }
+            if let Some(t) = terms.iter().find(|t| forbid.contains(t)) {
+                return Err(format!(
+                    "checks line {}: '{}' is both expected and forbidden",
+                    number + 1,
+                    t.join(" ")
+                )
+                .into());
+            }
+        }
         if rows
-            .insert(id.to_owned(), RowCheck { kind, history })
+            .insert(
+                id.to_owned(),
+                RowCheck {
+                    kind,
+                    history,
+                    forbid,
+                },
+            )
             .is_some()
         {
             return Err(format!("checks repeat {id}").into());
@@ -704,12 +844,45 @@ fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
     Ok(rows)
 }
 
-/// The tier C row checks, embedded so a graded report is bound to them unless
-/// `checks=` overrides.
-const EMBEDDED_CHECKS: &str = include_str!("../../../../data/panels/conversational-v2-checks.tsv");
-const EMBEDDED_CHECKS_PATH: &str = "data/panels/conversational-v2-checks.tsv";
+/// The tier C row checks of each conversational panel, embedded so a graded
+/// report is bound to them unless `checks=` overrides. The panels' ids are
+/// disjoint (`conv-*` in v2, `conv-v3-*` in v3), so the default is their union
+/// and a v2 report keeps its v2 checks.
+const EMBEDDED_CHECKS: [(&str, &str); 2] = [
+    (
+        "data/panels/conversational-v2-checks.tsv",
+        include_str!("../../../../data/panels/conversational-v2-checks.tsv"),
+    ),
+    (
+        "data/panels/conversational-v3-checks.tsv",
+        include_str!("../../../../data/panels/conversational-v3-checks.tsv"),
+    ),
+];
 
-/// `checks=` if given (`checks=none` for no checks), else the embedded file.
+/// The union of the embedded checks files; an id in two files is an error.
+fn embedded_checks() -> Result<Checks, Error> {
+    let mut rows = BTreeMap::new();
+    let mut sources = Vec::new();
+    for (path, text) in EMBEDDED_CHECKS {
+        let file = parse_checks(text)?;
+        sources.push(json!({
+            "embedded": path,
+            "sha256": uor_r4_training::sha256_bytes(text.as_bytes()),
+            "rows": file.len(),
+        }));
+        for (id, check) in file {
+            if rows.insert(id.clone(), check).is_some() {
+                return Err(format!("embedded checks repeat {id}").into());
+            }
+        }
+    }
+    Ok(Checks {
+        source: json!({"embedded": sources, "rows": rows.len()}),
+        rows,
+    })
+}
+
+/// `checks=` if given (`checks=none` for no checks), else the embedded files.
 fn load_checks(args: &Args) -> Result<Checks, Error> {
     match args.0.get("checks").map(String::as_str) {
         Some("none") => Ok(Checks {
@@ -724,35 +897,44 @@ fn load_checks(args: &Args) -> Result<Checks, Error> {
                 rows,
             })
         }
-        None => {
-            let rows = parse_checks(EMBEDDED_CHECKS)?;
-            Ok(Checks {
-                source: json!({
-                    "embedded": EMBEDDED_CHECKS_PATH,
-                    "sha256": uor_r4_training::sha256_bytes(EMBEDDED_CHECKS.as_bytes()),
-                    "rows": rows.len(),
-                }),
-                rows,
-            })
-        }
+        None => embedded_checks(),
     }
 }
+
+const CHECK_RULE: &str = "words are lowercased and split at anything not a letter, digit or \
+     apostrophe; a phrase matches consecutive words. any = the reply contains one listed word or \
+     phrase; abstain = the reply contains one of the abstain phrases; question = the reply \
+     contains '?'; exact = the reply contains one spelling of the expected value and none of the \
+     forbidden values (the conversation's distractor values and, for a closed class, its other \
+     members): a wrong value, both values or no value fails; abstain_exact = the reply contains \
+     an abstain phrase, none of the row's forbidden words, no digit and no capitalised word \
+     inside a sentence (other than I or OK) that is not a word of the user turns";
 
 fn checks_record(checks: &Checks) -> Value {
     json!({
         "source": checks.source,
-        "rule": "any = the reply contains one listed word or phrase (words lowercased, split at \
-                 anything not a letter, digit or apostrophe; a phrase matches consecutive words); \
-                 abstain = the reply contains one of the abstain phrases; question = the reply \
-                 contains '?'",
+        "rule": CHECK_RULE,
         "abstain_phrases": ABSTAIN_PHRASES,
     })
 }
 
+/// The first of `terms` that occurs in one of `texts` (as words), if any.
+fn any_in(terms: &[Vec<String>], texts: &[Vec<String>]) -> Option<String> {
+    terms
+        .iter()
+        .find(|t| texts.iter().any(|e| contains_phrase(e, t)))
+        .map(|t| t.join(" "))
+}
+
 /// Validate checks against loaded requests: a multi-turn row needs a check
 /// whose history is not `none` and a single-turn row history `none`; no `any`
-/// term may occur in the last user turn; a `recall` row needs a term in an
-/// earlier user turn. Returns the ids of checks with no loaded request.
+/// or `exact` term may occur in the last user turn; a `recall` row needs a
+/// term in an earlier user turn. An `exact` row must be a multi-turn recall
+/// row whose forbidden values are absent from the last turn and at least one
+/// of which (a distractor) is stated in an earlier turn, so the row can be
+/// answered neither from its last turn nor by copying its whole history. An
+/// `abstain_exact` row's forbidden words must not occur in its user turns.
+/// Returns the ids of checks with no loaded request.
 fn validate_checks(checks: &Checks, requests: &[Request]) -> Result<Vec<String>, Error> {
     let mut seen = BTreeSet::new();
     for request in requests {
@@ -773,25 +955,18 @@ fn validate_checks(checks: &Checks, requests: &[Request]) -> Result<Vec<String>,
             )
             .into());
         }
-        if let CheckKind::Any(terms) = &check.kind {
-            let last = words(request.user_turns.last().map_or("", String::as_str));
-            if let Some(t) = terms.iter().find(|t| contains_phrase(&last, t)) {
-                return Err(format!(
-                    "row {}: check term '{}' is in the last user turn",
-                    request.id,
-                    t.join(" ")
-                )
-                .into());
-            }
-            if check.history == History::Recall {
-                let earlier: Vec<Vec<String>> = request.user_turns[..request.user_turns.len() - 1]
-                    .iter()
-                    .map(|t| words(t))
-                    .collect();
-                if !terms
-                    .iter()
-                    .any(|t| earlier.iter().any(|e| contains_phrase(e, t)))
-                {
+        let turns: Vec<Vec<String>> = request.user_turns.iter().map(|t| words(t)).collect();
+        let (earlier, last) = turns.split_at(turns.len().saturating_sub(1));
+        match &check.kind {
+            CheckKind::Any(terms) | CheckKind::Exact(terms) => {
+                if let Some(t) = any_in(terms, last) {
+                    return Err(format!(
+                        "row {}: check term '{t}' is in the last user turn",
+                        request.id
+                    )
+                    .into());
+                }
+                if check.history == History::Recall && any_in(terms, earlier).is_none() {
                     return Err(format!(
                         "recall row {}: no check term is in an earlier user turn",
                         request.id
@@ -799,10 +974,43 @@ fn validate_checks(checks: &Checks, requests: &[Request]) -> Result<Vec<String>,
                     .into());
                 }
             }
-        } else if check.history == History::Recall || check.history == History::Topic {
-            return Err(
-                format!("row {}: {:?} needs an any check", request.id, check.history).into(),
-            );
+            CheckKind::AbstainExact => {
+                if let Some(t) = any_in(&check.forbid, &turns) {
+                    return Err(format!(
+                        "row {}: forbidden word '{t}' is in a user turn",
+                        request.id
+                    )
+                    .into());
+                }
+            }
+            CheckKind::Abstain | CheckKind::Question => {
+                if check.history == History::Recall || check.history == History::Topic {
+                    return Err(format!(
+                        "row {}: {:?} needs an any or exact check",
+                        request.id, check.history
+                    )
+                    .into());
+                }
+            }
+        }
+        if matches!(check.kind, CheckKind::Exact(_)) {
+            if check.history != History::Recall {
+                return Err(format!("exact row {} must be a recall row", request.id).into());
+            }
+            if let Some(t) = any_in(&check.forbid, last) {
+                return Err(format!(
+                    "row {}: forbidden value '{t}' is in the last user turn",
+                    request.id
+                )
+                .into());
+            }
+            if any_in(&check.forbid, earlier).is_none() {
+                return Err(format!(
+                    "exact row {}: no distractor value is stated in an earlier turn",
+                    request.id
+                )
+                .into());
+            }
         }
     }
     Ok(checks
@@ -875,12 +1083,39 @@ impl Judging<'_> {
             overall["per_category"].clone(),
         );
         fields.insert("rows".into(), Value::Array(rows));
+        fields.insert("headline".into(), headline_of(&per_tier));
         fields.insert("per_tier".into(), per_tier);
         fields.insert("tiers".into(), tiers_record(self.ill));
         fields.insert("checks".into(), checks_record(self.checks));
         fields.insert("constants".into(), self.constants.record());
         Ok(fields)
     }
+}
+
+/// The report headline: per tier, the categories where the model beats that
+/// category's best constant (see [`BEST_CONSTANT_RULE`]).
+fn headline_of(per_tier: &Value) -> Value {
+    let tiers: serde_json::Map<String, Value> = per_tier
+        .as_object()
+        .map(|tiers| {
+            tiers
+                .iter()
+                .map(|(tier, record)| {
+                    let headline = &record["headline"];
+                    let value = match headline.get("categories_model_beats_best_constant") {
+                        Some(beats) => beats.clone(),
+                        None => headline.clone(),
+                    };
+                    (tier.clone(), value)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    json!({
+        "categories_model_beats_best_constant": tiers,
+        "rule": BEST_CONSTANT_RULE,
+        "detail": "per_tier.<tier>.headline.per_category",
+    })
 }
 
 const CONTROL_RULE: &str = "derangement: each reply graded as the answer to the next request's \
@@ -1293,8 +1528,9 @@ fn grade_replies(arguments: &[String]) -> Result<(), Error> {
 
 /// The ill-posed heldout-200 ids (tier `K-ill-posed`), embedded so a graded
 /// report's tiers are bound to the executable unless `ill_posed=` overrides.
-const EMBEDDED_ILL_POSED: &str = include_str!("../../../../data/panels/heldout-ill-posed-ids.txt");
-const EMBEDDED_ILL_POSED_PATH: &str = "data/panels/heldout-ill-posed-ids.txt";
+const EMBEDDED_ILL_POSED: &str =
+    include_str!("../../../../data/panels/heldout-ill-posed-v3-ids.txt");
+const EMBEDDED_ILL_POSED_PATH: &str = "data/panels/heldout-ill-posed-v3-ids.txt";
 
 const TIER_RULE: &str = "tier from id and category only: C = ids conv-* with a tier C category; \
      K-clean / K-ill-posed = category heldout_first_turn, split by the ill-posed id list; stretch = \
@@ -1480,11 +1716,15 @@ fn check(arguments: &[String]) -> Result<(), Error> {
     let mut worst = (0usize, String::new());
     let mut categories: BTreeMap<&str, usize> = BTreeMap::new();
     let mut history: BTreeMap<String, usize> = BTreeMap::new();
+    let mut kinds: BTreeMap<String, usize> = BTreeMap::new();
     for request in &requests {
         *categories.entry(request.category.as_str()).or_default() += 1;
         if let Some(c) = checks.rows.get(&request.id) {
             *history
                 .entry(format!("{:?}", c.history).to_lowercase())
+                .or_default() += 1;
+            *kinds
+                .entry(format!("{}/{}", request.category, c.kind.name()))
                 .or_default() += 1;
         }
         let mut longest = 1usize;
@@ -1508,6 +1748,7 @@ fn check(arguments: &[String]) -> Result<(), Error> {
             "check_panel": "pass",
             "checks": checks.source,
             "checked_rows_by_history": history,
+            "checked_rows_by_category_and_kind": kinds,
             "checks_without_loaded_request": unmatched_checks,
             "check_only_controls": check_only,
         })
@@ -1515,13 +1756,71 @@ fn check(arguments: &[String]) -> Result<(), Error> {
     Ok(())
 }
 
+/// The copy controls of an `exact` row: the candidate value (an expected or
+/// forbidden term) stated first and the one stated last in the earlier user
+/// turns, as replies. A model that copies a stated value of the right type
+/// without binding it to the asked key passes about half the rows; `None`
+/// for any other row.
+fn copy_replies(check: &RowCheck, users: &[&str]) -> Option<[String; 2]> {
+    let CheckKind::Exact(expected) = &check.kind else {
+        return None;
+    };
+    let earlier = &users[..users.len().saturating_sub(1)];
+    let mut found: Vec<((usize, usize), &Vec<String>)> = Vec::new();
+    for (t, turn) in earlier.iter().enumerate() {
+        let turn = words(turn);
+        for term in expected.iter().chain(&check.forbid) {
+            for (w, window) in turn.windows(term.len()).enumerate() {
+                if window == term.as_slice() {
+                    found.push(((t, w), term));
+                }
+            }
+        }
+    }
+    let first = found.iter().min_by_key(|(at, _)| *at)?.1.join(" ");
+    let last = found.iter().max_by_key(|(at, _)| *at)?.1.join(" ");
+    Some([first, last])
+}
+
+/// Check-only tallies of the copy controls over checked rows.
+#[derive(Default)]
+struct CopyTally {
+    first: CheckTally,
+    last: CheckTally,
+}
+
+impl CopyTally {
+    fn add(&mut self, checks: &Checks, id: &str, users: &[&str]) {
+        let replies = checks
+            .rows
+            .get(id)
+            .and_then(|c| copy_replies(c, users).map(|r| (c, r)));
+        match replies {
+            Some((check, [first, last])) => {
+                self.first.add(Some(check.passes(users, &first)));
+                self.last.add(Some(check.passes(users, &last)));
+            }
+            None => {
+                self.first.add(None);
+                self.last.add(None);
+            }
+        }
+    }
+
+    fn record(&self) -> Value {
+        json!({"copy_first_stated": self.first.record(), "copy_last_stated": self.last.record()})
+    }
+}
+
 /// Per category: how many checked rows each check-only reply passes -- the
-/// last user turn, all user turns joined, and each constant reply. No grader.
+/// last user turn, all user turns joined, the first- and last-stated
+/// candidate values of an exact row, and each constant reply. No grader.
 fn check_only_controls(requests: &[Request], checks: &Checks, constants: &[String]) -> Value {
     #[derive(Default)]
     struct Row {
         echo_last: CheckTally,
         echo_history: CheckTally,
+        copy: CopyTally,
         constants: Vec<CheckTally>,
     }
     let mut per_category: BTreeMap<&str, Row> = BTreeMap::new();
@@ -1530,13 +1829,15 @@ fn check_only_controls(requests: &[Request], checks: &Checks, constants: &[Strin
         entry
             .constants
             .resize_with(constants.len(), CheckTally::default);
-        let last = request.user_turns.last().map_or("", String::as_str);
-        entry.echo_last.add(checks.of(&request.id, last));
+        let users: Vec<&str> = request.user_turns.iter().map(String::as_str).collect();
+        let last = users.last().copied().unwrap_or("");
+        entry.echo_last.add(checks.of(&request.id, &users, last));
         entry
             .echo_history
-            .add(checks.of(&request.id, &request.user_turns.join(" ")));
+            .add(checks.of(&request.id, &users, &users.join(" ")));
+        entry.copy.add(checks, &request.id, &users);
         for (tally, constant) in entry.constants.iter_mut().zip(constants) {
-            tally.add(checks.of(&request.id, constant));
+            tally.add(checks.of(&request.id, &users, constant));
         }
     }
     per_category
@@ -1547,6 +1848,7 @@ fn check_only_controls(requests: &[Request], checks: &Checks, constants: &[Strin
                 json!({
                     "echo_last": r.echo_last.record(),
                     "echo_history": r.echo_history.record(),
+                    "copy": r.copy.record(),
                     "constants": r.constants.iter().map(CheckTally::record).collect::<Vec<_>>(),
                 }),
             )
@@ -1673,18 +1975,40 @@ struct Accumulator {
     control: Tally,
     acceptable: Paired,
     relevant: Paired,
-    /// Per constant reply: its tally and acceptable paired against actual.
-    constants: Vec<(Tally, Paired)>,
+    /// Per constant reply: its tally, acceptable paired against actual, and
+    /// check pass paired against actual (checked rows only).
+    constants: Vec<ConstantControl>,
+    /// Check pass of the actual replies on checked rows, paired with the
+    /// check-only controls below.
     echo_last: CheckTally,
     echo_history: CheckTally,
+    copy: CopyTally,
 }
+
+/// One constant reply's grades over a set of rows, paired with the actual
+/// replies on the same rows.
+#[derive(Default)]
+struct ConstantControl {
+    tally: Tally,
+    /// `actual_only` = the model acceptable and the constant not.
+    acceptable: Paired,
+    /// The same for the check alone (checked rows only; no grader).
+    check: Paired,
+}
+
+const BEST_CONSTANT_RULE: &str = "per category, the constant reply with the most acceptable rows \
+     (ties to the lower index) is that category's best constant; the model's acceptable rows are \
+     paired with it on the same rows (two-sided exact McNemar on the discordant rows). A category \
+     is a headline only when the model is acceptable on more discordant rows than its best \
+     constant with p < 0.05. Choosing the best constant after grading favours the constant, so the \
+     test is conservative for the model. A tier total is never a headline";
 
 impl Accumulator {
     /// Add `view`; `next` is the row whose conversation its derangement
     /// control was graded on (so the control is checked with `next`'s check).
     fn add(&mut self, view: &RowView, next: &RowView, checks: &Checks, constants: &[String]) {
-        let check = checks.of(view.id, view.reply);
-        let control_check = checks.of(next.id, view.reply);
+        let check = checks.of(view.id, &view.users, view.reply);
+        let control_check = checks.of(next.id, &next.users, view.reply);
         let ok = acceptable(&view.grades, check);
         self.actual.add(&view.grades, check);
         self.control.add(&view.control, control_check);
@@ -1696,19 +2020,63 @@ impl Accumulator {
         );
         self.constants
             .resize_with(view.constants.len(), Default::default);
-        for ((tally, paired), (grades, text)) in self
+        for (control, (grades, text)) in self
             .constants
             .iter_mut()
             .zip(view.constants.iter().zip(constants))
         {
-            let constant_check = checks.of(view.id, text);
-            tally.add(grades, constant_check);
-            paired.add(ok, acceptable(grades, constant_check));
+            let constant_check = checks.of(view.id, &view.users, text);
+            control.tally.add(grades, constant_check);
+            control
+                .acceptable
+                .add(ok, acceptable(grades, constant_check));
+            if let (Some(model), Some(constant)) = (check, constant_check) {
+                control.check.add(model, constant);
+            }
         }
-        self.echo_last
-            .add(checks.of(view.id, view.users.last().copied().unwrap_or("")));
+        self.echo_last.add(checks.of(
+            view.id,
+            &view.users,
+            view.users.last().copied().unwrap_or(""),
+        ));
         self.echo_history
-            .add(checks.of(view.id, &view.users.join(" ")));
+            .add(checks.of(view.id, &view.users, &view.users.join(" ")));
+        self.copy.add(checks, view.id, &view.users);
+    }
+
+    /// The best constant of these rows (most acceptable, ties to the lower
+    /// index) and the model paired against it; `None` without constants.
+    fn best_constant(&self, constants: &[String]) -> Option<Value> {
+        let (index, best) = self
+            .constants
+            .iter()
+            .enumerate()
+            .rev()
+            .max_by_key(|(_, c)| c.tally.acceptable)?;
+        let paired = &best.acceptable;
+        let p = mcnemar_exact(paired.actual_only, paired.control_only);
+        let check_rows =
+            best.check.actual_only + best.check.control_only + best.check.both + best.check.neither;
+        Some(json!({
+            "index": index,
+            "reply": constants.get(index),
+            "rows": self.actual.replies,
+            "model_acceptable": self.actual.acceptable,
+            "constant_acceptable": best.tally.acceptable,
+            "model_minus_constant": self.actual.acceptable as i64 - best.tally.acceptable as i64,
+            "model_only": paired.actual_only,
+            "constant_only": paired.control_only,
+            "mcnemar_exact_p": p,
+            "model_beats_constant": paired.actual_only > paired.control_only && p < 0.05,
+            "check_pass": (check_rows > 0).then(|| json!({
+                "checked_rows": check_rows,
+                "model": best.check.actual_only + best.check.both,
+                "constant": best.check.control_only + best.check.both,
+                "model_only": best.check.actual_only,
+                "constant_only": best.check.control_only,
+                "mcnemar_exact_p": mcnemar_exact(best.check.actual_only, best.check.control_only),
+            })),
+        }))
     }
 
     fn record(&self, constants: &[String]) -> Value {
@@ -1721,14 +2089,17 @@ impl Accumulator {
                 "rule": "a reading counts only if the actual replies beat the derangement control \
                          on the same requests with a two-sided exact McNemar p < 0.05",
             },
-            "control_constants": self.constants.iter().zip(constants).map(|((tally, paired), text)| json!({
+            "control_constants": self.constants.iter().zip(constants).map(|(c, text)| json!({
                 "reply": text,
-                "grades": tally.record(),
-                "paired_acceptable": paired.record(),
+                "grades": c.tally.record(),
+                "paired_acceptable": c.acceptable.record(),
+                "paired_check": c.check.record(),
             })).collect::<Vec<_>>(),
+            "best_constant": self.best_constant(constants),
             "check_only_controls": {
                 "echo_last": self.echo_last.record(),
                 "echo_history": self.echo_history.record(),
+                "copy": self.copy.record(),
             },
         })
     }
@@ -1750,7 +2121,32 @@ impl Group {
             .map(|(k, a)| (k.clone(), a.record(constants)))
             .collect();
         record["per_category"] = Value::Object(per_category);
+        record["headline"] = self.headline(constants);
         record
+    }
+
+    /// Per category: the model against that category's best constant, and the
+    /// categories where the model beats it. Never a total.
+    fn headline(&self, constants: &[String]) -> Value {
+        if constants.is_empty() {
+            return json!({"unavailable": "graded without constant controls", "rule": BEST_CONSTANT_RULE});
+        }
+        let mut categories = serde_json::Map::new();
+        let mut beats = Vec::new();
+        for (name, accumulator) in &self.per_category {
+            let Some(best) = accumulator.best_constant(constants) else {
+                continue;
+            };
+            if best["model_beats_constant"] == true {
+                beats.push(name.clone());
+            }
+            categories.insert(name.clone(), best);
+        }
+        json!({
+            "rule": BEST_CONSTANT_RULE,
+            "per_category": categories,
+            "categories_model_beats_best_constant": beats,
+        })
     }
 }
 
@@ -1850,13 +2246,15 @@ fn tiers(arguments: &[String]) -> Result<(), Error> {
     let checks = load_checks(&args)?;
     let (report, sha256) = read_report(&path)?;
     let constants = report_constants(&report)?;
+    let per_tier = tier_summary(judged_rows(&report)?, &ill.ids, &checks, &constants)?;
     let record = json!({
         "schema": "uor-r4.chat-grade-tiers/1",
         "report": {"path": path.display().to_string(), "sha256": sha256, "grader": report["grader"]},
         "tiers": tiers_record(&ill),
         "checks": checks_record(&checks),
         "constants": constants,
-        "per_tier": tier_summary(judged_rows(&report)?, &ill.ids, &checks, &constants)?,
+        "headline": headline_of(&per_tier),
+        "per_tier": per_tier,
     });
     if let Some(out) = args.0.get("out") {
         write_sealed(Path::new(out), "tiers.json", &record)?;
@@ -1874,8 +2272,8 @@ struct Compared {
     relevant: Paired,
     /// Check passes, on checked rows only.
     check: Paired,
-    /// Per category: acceptable in `a`, acceptable in `b`, rows.
-    per_category: BTreeMap<String, [u64; 3]>,
+    /// Per category: acceptable and check pass, paired.
+    per_category: BTreeMap<String, (Paired, Paired)>,
 }
 
 impl Compared {
@@ -1888,13 +2286,12 @@ impl Compared {
             .add(a.0.fluent == Some(true), b.0.fluent == Some(true));
         self.relevant
             .add(a.0.relevant == Some(true), b.0.relevant == Some(true));
+        let entry = self.per_category.entry(category.to_owned()).or_default();
+        entry.0.add(ok_a, ok_b);
         if let (Some(x), Some(y)) = (a.1, b.1) {
             self.check.add(x, y);
+            entry.1.add(x, y);
         }
-        let entry = self.per_category.entry(category.to_owned()).or_default();
-        entry[0] += u64::from(ok_a);
-        entry[1] += u64::from(ok_b);
-        entry[2] += 1;
     }
 
     fn rows(&self) -> u64 {
@@ -1915,7 +2312,11 @@ impl Compared {
         let per_category: BTreeMap<String, Value> = self
             .per_category
             .iter()
-            .map(|(k, [a, b, n])| (k.clone(), json!({"a": a, "b": b, "rows": n})))
+            .map(|(k, (acceptable, check))| {
+                let mut record = pair(acceptable);
+                record["check_pass"] = pair(check);
+                (k.clone(), record)
+            })
             .collect();
         json!({
             "acceptable": pair(&self.acceptable),
@@ -1923,6 +2324,9 @@ impl Compared {
             "relevant": pair(&self.relevant),
             "check_pass": pair(&self.check),
             "per_category_acceptable": per_category,
+            "per_category_rule": "per category, a against b paired by row: acceptable (and \
+                                  check pass on checked rows) with the two-sided exact McNemar; \
+                                  read categories, not the tier total",
         })
     }
 }
@@ -2000,9 +2404,10 @@ fn compare_rows(
                 row_grades(&row["grades"])?,
                 row_grades(&other_row["grades"])?,
             );
+            let users = row_users(row)?;
             let (ca, cb) = (
-                checks.of(id, &last_reply(row)?),
-                checks.of(id, &last_reply(other_row)?),
+                checks.of(id, &users, &last_reply(row)?),
+                checks.of(id, &users, &last_reply(other_row)?),
             );
             tiers
                 .entry(name)
@@ -2073,6 +2478,355 @@ fn compare(arguments: &[String]) -> Result<(), Error> {
         write_sealed(Path::new(out), "compare.json", &record)?;
     }
     println!("{}", serde_json::to_string_pretty(&record)?);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tier K: the text-only missing-material rule.
+
+/// The single criterion of tier K-ill-posed, read from the request text alone
+/// and never from a model's reply or grade.
+const MISSING_MATERIAL_RULE: &str = "a heldout request is ill-posed when its text refers to \
+     material that the text does not contain. The text shows this by one of: open_end (it ends \
+     with ':' or ',', so the material it introduces is absent -- the panel keeps only a turn's \
+     first line); slot (an unfilled [placeholder] that is neither defined in the text nor a label \
+     after ':'); constraints_only (every sentence constrains 'your response' to a query the text \
+     does not hold); deictic (a pointer such as 'the following', 'below', 'this essay', 'the \
+     passage', 'the recipe', 'your suggestion', or a clause-final 'this' in a one-sentence \
+     request, with the material not included); own_material ('I wrote', 'here is', ... with the \
+     material not included); variable (a bare x, y or n with no equation). Material counts as \
+     included when the text holds a quoted span of at least 3 words, or at least 25 words or 3 \
+     sentences after its first ':'. A fragment that refers to nothing missing (a greeting, a \
+     headline) is clean under this rule";
+
+const CONSTRAINT_OPENERS: [&str; 17] = [
+    "your response",
+    "your answer",
+    "the response",
+    "your entire response",
+    "paragraphs are",
+    "there should be",
+    "do not include",
+    "include keywords",
+    "include the keywords",
+    "the keywords are",
+    "answer with",
+    "use the markdown",
+    "highlight at least",
+    "wrap your",
+    "finish your response",
+    "in your response",
+    "your reply",
+];
+const MATERIAL_NOUNS: [&str; 35] = [
+    "text",
+    "passage",
+    "essay",
+    "code",
+    "snippet",
+    "paragraph",
+    "paragraphs",
+    "article",
+    "argument",
+    "bio",
+    "poem",
+    "introduction",
+    "description",
+    "draft",
+    "document",
+    "data",
+    "figures",
+    "table",
+    "recipe",
+    "email",
+    "letter",
+    "query",
+    "question",
+    "message",
+    "report",
+    "excerpt",
+    "story",
+    "list",
+    "sentence",
+    "sentences",
+    "function",
+    "program",
+    "script",
+    "equation",
+    "problem",
+];
+const MATERIAL_DETERMINERS: [&str; 9] = [
+    "this",
+    "these",
+    "the following",
+    "the above",
+    "the attached",
+    "the given",
+    "following",
+    "below",
+    "above",
+];
+/// Definite references that need an antecedent a single turn cannot have.
+const DEFINITE_REFERENCES: [(&str, &[&str]); 3] = [
+    (
+        "the",
+        &[
+            "text",
+            "passage",
+            "essay",
+            "code",
+            "snippet",
+            "recipe",
+            "region",
+            "protagonist",
+            "argument",
+            "article",
+            "poem",
+            "bio",
+            "draft",
+        ],
+    ),
+    (
+        "your",
+        &["suggestion", "suggestions", "supplies", "edit", "draft"],
+    ),
+    ("this", &["particular"]),
+];
+const MATERIAL_POINTERS: [&str; 4] = ["below", "above", "as follows", "the following"];
+const OWN_MATERIAL: [&str; 7] = [
+    "i wrote",
+    "i've written",
+    "i'd written",
+    "i have written",
+    "here's",
+    "here is",
+    "i've got",
+];
+const AFTER_CLAUSE_FINAL_THIS: [&str; 6] = ["but", "and", "so", "please", "for", "to"];
+
+/// The sentences of a text: split after `.`, `!` or `?` followed by
+/// whitespace; pieces without words are dropped.
+fn sentences(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let chars: Vec<(usize, char)> = text.trim().char_indices().collect();
+    let trimmed = text.trim();
+    for (i, &(at, c)) in chars.iter().enumerate() {
+        let next_space = chars.get(i + 1).is_some_and(|(_, n)| n.is_whitespace());
+        if matches!(c, '.' | '!' | '?') && next_space {
+            out.push(&trimmed[start..at + c.len_utf8()]);
+            start = at + c.len_utf8();
+        }
+    }
+    out.push(&trimmed[start..]);
+    out.into_iter()
+        .map(str::trim)
+        .filter(|s| !words(s).is_empty())
+        .collect()
+}
+
+/// Whether the text includes material: a quoted span (straight or curly
+/// quotes) of at least 3 words, or at least 25 words or 3 sentences after its
+/// first colon.
+fn material_included(text: &str) -> bool {
+    for (open, close) in [('"', '"'), ('\u{201c}', '\u{201d}')] {
+        let mut rest = text;
+        while let Some(i) = rest.find(open) {
+            let after = &rest[i + open.len_utf8()..];
+            let Some(j) = after.find(close) else {
+                break;
+            };
+            if words(&after[..j]).len() >= 3 {
+                return true;
+            }
+            rest = &after[j + close.len_utf8()..];
+        }
+    }
+    text.split_once(':')
+        .is_some_and(|(_, after)| words(after).len() >= 25 || sentences(after).len() >= 3)
+}
+
+/// The unfilled `[slot]` placeholders of a text: a bracketed lowercase name
+/// that is not a label right after ':' and is not defined (`[x] are`,
+/// `[x] is`, `[x]:`) elsewhere in the text.
+fn unfilled_slot(text: &str) -> Option<String> {
+    let mut rest = text;
+    let mut offset = 0;
+    while let Some(i) = rest.find('[') {
+        let after = &rest[i + 1..];
+        let Some(j) = after.find(']') else {
+            break;
+        };
+        let name = &after[..j];
+        let start = offset + i;
+        offset = start + 1;
+        rest = &text[offset..];
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+            continue;
+        }
+        let slot = format!("[{name}]");
+        let label = text[..start].trim_end().ends_with(':');
+        let defined = text.match_indices(&slot).any(|(at, _)| {
+            let tail = text[at + slot.len()..].trim_start();
+            tail.starts_with("are") || tail.starts_with("is") || tail.starts_with(':')
+        });
+        if !label && !defined {
+            return Some(slot);
+        }
+    }
+    None
+}
+
+/// The missing-material reason of a request text ([`MISSING_MATERIAL_RULE`]):
+/// the family and the cue that matched, or `None` for a clean request.
+fn missing_material(text: &str) -> Option<(&'static str, String)> {
+    let trimmed = text.trim_end();
+    if let Some(end) = trimmed.chars().last().filter(|c| matches!(c, ':' | ',')) {
+        return Some(("open_end", end.to_string()));
+    }
+    if let Some(slot) = unfilled_slot(text) {
+        return Some(("slot", slot));
+    }
+    let all = sentences(text);
+    if !all.is_empty()
+        && all.iter().all(|s| {
+            let joined = words(s).join(" ");
+            s.trim_start().starts_with('[')
+                || CONSTRAINT_OPENERS.iter().any(|o| joined.starts_with(o))
+        })
+    {
+        return Some(("constraints_only", all[0].to_owned()));
+    }
+    let text_words = words(text);
+    let has = |phrase: &[String]| contains_phrase(&text_words, phrase);
+    if !material_included(text) {
+        for determiner in MATERIAL_DETERMINERS {
+            for noun in MATERIAL_NOUNS {
+                let phrase = words(&format!("{determiner} {noun}"));
+                if has(&phrase) {
+                    return Some(("deictic", phrase.join(" ")));
+                }
+            }
+        }
+        for (determiner, nouns) in DEFINITE_REFERENCES {
+            for noun in nouns {
+                let phrase = words(&format!("{determiner} {noun}"));
+                if has(&phrase) {
+                    return Some(("deictic", phrase.join(" ")));
+                }
+            }
+        }
+        for pointer in MATERIAL_POINTERS {
+            if has(&words(pointer)) {
+                return Some(("deictic", pointer.to_owned()));
+            }
+        }
+        if all.len() == 1 {
+            for (i, word) in text_words.iter().enumerate() {
+                let next = text_words.get(i + 1).map(String::as_str);
+                if word == "this" && next.is_none_or(|n| AFTER_CLAUSE_FINAL_THIS.contains(&n)) {
+                    let cue = next.map_or_else(|| "this".to_owned(), |n| format!("this {n}"));
+                    return Some(("deictic", cue));
+                }
+            }
+        }
+        for own in OWN_MATERIAL {
+            if has(&words(own)) {
+                return Some(("own_material", own.to_owned()));
+            }
+        }
+    }
+    let bare_variable = text
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .any(|t| matches!(t, "x" | "y" | "n"));
+    if bare_variable
+        && !text
+            .chars()
+            .any(|c| c == '=' || c == '^' || c.is_ascii_digit())
+    {
+        return Some(("variable", "x/y/n".to_owned()));
+    }
+    None
+}
+
+/// `ill-posed`: apply [`missing_material`] to every request of the panels
+/// (single-turn only); print the counts, compare with `expect=` (an id list;
+/// any difference is an error) and write the reasons, ill-posed ids and clean
+/// ids to new files when asked.
+fn ill_posed_command(arguments: &[String]) -> Result<(), Error> {
+    let args = Args::parse(
+        arguments,
+        &["requests", "expect", "out_tsv", "out_ids", "out_clean"],
+    )?;
+    let paths = split_paths(&args.required("requests")?);
+    let requests = load_panels(&paths, None)?.0;
+    let outputs: Vec<PathBuf> = ["out_tsv", "out_ids", "out_clean"]
+        .iter()
+        .filter_map(|k| args.0.get(*k).map(PathBuf::from))
+        .collect();
+    if let Some(existing) = outputs.iter().find(|p| p.exists()) {
+        return Err(format!("{} exists", existing.display()).into());
+    }
+    let mut tsv = format!(
+        "# id\treason\tcue -- one text-only criterion ({}) over {} requests\n",
+        "chat-grade ill-posed; rule in data/panels/README.md",
+        requests.len()
+    );
+    let (mut ill, mut clean) = (BTreeSet::new(), BTreeSet::new());
+    let mut families: BTreeMap<&str, usize> = BTreeMap::new();
+    for request in &requests {
+        let [turn] = &request.user_turns[..] else {
+            return Err(format!("{} is not a single-turn request", request.id).into());
+        };
+        match missing_material(turn) {
+            Some((family, cue)) => {
+                *families.entry(family).or_default() += 1;
+                tsv.push_str(&format!("{}\t{family}\t{cue}\n", request.id));
+                ill.insert(request.id.clone());
+            }
+            None => {
+                clean.insert(request.id.clone());
+            }
+        }
+    }
+    let list = |ids: &BTreeSet<String>| ids.iter().map(|i| format!("{i}\n")).collect::<String>();
+    let mismatch = match args.0.get("expect") {
+        Some(path) => {
+            let expected = load_id_list(Path::new(path))?.ids;
+            let missing: Vec<&String> = expected.difference(&ill).collect();
+            let extra: Vec<&String> = ill.difference(&expected).collect();
+            Some(json!({"expected_not_found": missing, "found_not_expected": extra}))
+        }
+        None => None,
+    };
+    for (key, text) in [
+        ("out_tsv", tsv.clone()),
+        ("out_ids", list(&ill)),
+        ("out_clean", list(&clean)),
+    ] {
+        if let Some(path) = args.0.get(key) {
+            fs::write(path, &text)?;
+        }
+    }
+    println!(
+        "{}",
+        json!({
+            "requests": requests.len(), "ill_posed": ill.len(), "clean": clean.len(),
+            "families": families, "rule": MISSING_MATERIAL_RULE, "expect": mismatch,
+            "panels": paths.iter().map(|p| json!({"path": p.display().to_string(), "sha256": sha256_file(p).ok()})).collect::<Vec<_>>(),
+        })
+    );
+    if let Some(m) = &mismatch {
+        if m["expected_not_found"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty())
+            || m["found_not_expected"]
+                .as_array()
+                .is_some_and(|a| !a.is_empty())
+        {
+            return Err("the rule's ill-posed ids differ from expect=".into());
+        }
+    }
     Ok(())
 }
 
@@ -2262,15 +3016,37 @@ fn strip_role(line: &str) -> &str {
 struct TurnLeak {
     exact_references: Vec<Value>,
     longest_reference_run: (usize, Value),
+    /// The first reference sharing at least its file's run threshold.
+    run_leak: Option<Value>,
     corpus_exact: (u64, Option<String>),
     corpus_ngram: (u64, Option<String>),
+}
+
+/// The default shared-run threshold of `strict=` references (the M-world
+/// sources): a panel turn sharing four consecutive words with an M-world
+/// template or phrasing leaks.
+const STRICT_LEAK_N: usize = 4;
+
+/// What a panel turn shares with one reference text: whether it matches the
+/// text whole (a template's placeholders standing for one to four words, and
+/// a template counting only with [`MIN_TEMPLATE_LITERALS`] literal words) and
+/// the longest run of consecutive words they share.
+fn reference_overlap(pattern: &[Option<String>], turn: &[String]) -> (bool, usize) {
+    let literals = pattern.iter().filter(|w| w.is_some()).count();
+    let placeholders = pattern.len() - literals;
+    let whole = literals > 0
+        && (placeholders == 0 || literals >= MIN_TEMPLATE_LITERALS)
+        && template_match(pattern, turn);
+    (whole, longest_shared_run(pattern, turn))
 }
 
 /// `leak`: every user turn of a panel against reference texts (whole-turn or
 /// template matches and the longest shared word run) and the lines of prepared
 /// corpora (whole-turn matches and shared `corpus_n`-grams). A turn leaks when
-/// it matches a reference or corpus line whole, or shares at least `n`
-/// consecutive words with a reference text; corpus n-gram hits are reported.
+/// it matches a reference or corpus line whole, shares at least `n`
+/// consecutive words with a `reference=` text or at least `strict_n`
+/// (default 4) with a `strict=` text (the M-world sources); corpus n-gram hits
+/// are reported.
 fn leak(arguments: &[String]) -> Result<(), Error> {
     let started = Instant::now();
     let args = Args::parse(
@@ -2278,6 +3054,8 @@ fn leak(arguments: &[String]) -> Result<(), Error> {
         &[
             "requests",
             "reference",
+            "strict",
+            "strict_n",
             "whole_only",
             "corpora",
             "tokenizer",
@@ -2289,8 +3067,9 @@ fn leak(arguments: &[String]) -> Result<(), Error> {
     let requests = load_panels(&split_paths(&args.required("requests")?), None)?.0;
     let n: usize = args.number("n", 6)?;
     let corpus_n: usize = args.number("corpus_n", 8)?;
-    if n == 0 || corpus_n == 0 {
-        return Err("n and corpus_n must be positive".into());
+    let strict_n: usize = args.number("strict_n", STRICT_LEAK_N)?;
+    if n == 0 || corpus_n == 0 || strict_n == 0 {
+        return Err("n, strict_n and corpus_n must be positive".into());
     }
     let turns: Vec<Vec<Vec<String>>> = requests
         .iter()
@@ -2302,48 +3081,51 @@ fn leak(arguments: &[String]) -> Result<(), Error> {
         .collect();
     let mut references = Vec::new();
     let reference_paths = split_paths(&args.required("reference")?);
-    let whole_only_paths = args
-        .0
-        .get("whole_only")
-        .map_or_else(Vec::new, |p| split_paths(p));
-    for (path, runs) in reference_paths
+    let optional_paths = |key: &str| args.0.get(key).map_or_else(Vec::new, |p| split_paths(p));
+    let (strict_paths, whole_only_paths) = (optional_paths("strict"), optional_paths("whole_only"));
+    for (path, threshold) in reference_paths
         .iter()
-        .map(|p| (p, true))
-        .chain(whole_only_paths.iter().map(|p| (p, false)))
+        .map(|p| (p, Some(n)))
+        .chain(strict_paths.iter().map(|p| (p, Some(strict_n))))
+        .chain(whole_only_paths.iter().map(|p| (p, None)))
     {
         let texts = reference_texts(path)?;
         let file = path.display().to_string();
         let mut used = 0usize;
         for text in &texts {
             let pattern = pattern(text);
-            let literals = pattern.iter().filter(|w| w.is_some()).count();
-            let placeholders = pattern.len() - literals;
-            if literals == 0 {
+            if pattern.iter().all(Option::is_none) {
                 continue;
             }
             used += 1;
             for (r, row) in turns.iter().enumerate() {
                 for (t, turn) in row.iter().enumerate() {
                     let leak = &mut leaks[r][t];
-                    if (placeholders == 0 || literals >= MIN_TEMPLATE_LITERALS)
-                        && template_match(&pattern, turn)
-                    {
+                    let (whole, run) = reference_overlap(&pattern, turn);
+                    if whole {
                         leak.exact_references
                             .push(json!({"file": file, "text": text}));
                     }
-                    if !runs {
+                    let Some(threshold) = threshold else {
                         continue;
-                    }
-                    let run = longest_shared_run(&pattern, turn);
+                    };
                     if run > leak.longest_reference_run.0 {
                         leak.longest_reference_run = (run, json!({"file": file, "text": text}));
+                    }
+                    if run >= threshold && leak.run_leak.is_none() {
+                        leak.run_leak = Some(json!({
+                            "file": file, "text": text, "words": run, "threshold": threshold,
+                        }));
                     }
                 }
             }
         }
         references.push(json!({
             "path": file, "sha256": sha256_file(path)?, "texts": used,
-            "use": if runs { "whole-turn, template and shared-run" } else { "whole-turn and template only" },
+            "use": match threshold {
+                Some(k) => format!("whole-turn, template and shared runs of {k} words"),
+                None => "whole-turn and template only".to_owned(),
+            },
         }));
     }
     let mut corpora = Vec::new();
@@ -2433,7 +3215,7 @@ fn leak(arguments: &[String]) -> Result<(), Error> {
             .map(|(turn, leak)| {
                 let blocking = !leak.exact_references.is_empty()
                     || leak.corpus_exact.0 > 0
-                    || leak.longest_reference_run.0 >= n;
+                    || leak.run_leak.is_some();
                 row_leaks |= blocking;
                 row_ngram |= leak.corpus_ngram.0 > 0;
                 json!({
@@ -2441,6 +3223,7 @@ fn leak(arguments: &[String]) -> Result<(), Error> {
                     "leaks": blocking,
                     "exact_references": leak.exact_references,
                     "longest_reference_run": {"words": leak.longest_reference_run.0, "reference": leak.longest_reference_run.1},
+                    "run_leak": leak.run_leak,
                     "corpus_exact": {"lines": leak.corpus_exact.0, "example": leak.corpus_exact.1},
                     "corpus_ngram": {"lines": leak.corpus_ngram.0, "example": leak.corpus_ngram.1},
                 })
@@ -2461,11 +3244,11 @@ fn leak(arguments: &[String]) -> Result<(), Error> {
              apostrophe) equal a reference text's or a corpus line's (role label stripped), a \
              {{placeholder}} standing for 1 to 4 words in a template of at least \
              {MIN_TEMPLATE_LITERALS} literal words, or when it shares {n} or more consecutive \
-             words with a reference= text (whole_only= texts take part in whole-turn and template \
-             matches only); corpus lines sharing {corpus_n} consecutive words are \
-             reported, not counted as leaks"
+             words with a reference= text or {strict_n} or more with a strict= text (whole_only= \
+             texts take part in whole-turn and template matches only); corpus lines sharing \
+             {corpus_n} consecutive words are reported, not counted as leaks"
         ),
-        "n": n, "corpus_n": corpus_n,
+        "n": n, "strict_n": strict_n, "corpus_n": corpus_n,
         "requests": requests.len(),
         "references": references,
         "corpora": corpora,
@@ -2560,6 +3343,13 @@ mod tests {
         )
     }
 
+    impl Checks {
+        /// The check of a reply on a row, with no user turns.
+        fn of_reply(&self, id: &str, reply: &str) -> Option<bool> {
+            self.of(id, &[], reply)
+        }
+    }
+
     fn no_checks() -> Checks {
         Checks {
             rows: BTreeMap::new(),
@@ -2574,7 +3364,22 @@ mod tests {
         assert!(ids.contains("heldout-005"));
         assert!(parse_id_list("a\na\n").is_err());
         let embedded = parse_id_list(EMBEDDED_ILL_POSED).unwrap();
-        assert_eq!(embedded.len(), 90);
+        assert_eq!(embedded.len(), 67);
+        // The embedded list is the rule's output, and the clean list is its
+        // complement over the 200 rows.
+        let clean = parse_id_list(include_str!(
+            "../../../../data/panels/heldout-clean-v3-ids.txt"
+        ))
+        .unwrap();
+        assert_eq!(clean.len(), 133);
+        assert!(clean.is_disjoint(&embedded));
+        let reasons = include_str!("../../../../data/panels/heldout-ill-posed-v3.tsv");
+        let listed: BTreeSet<String> = reasons
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .map(|l| l.split('\t').next().unwrap().to_owned())
+            .collect();
+        assert_eq!(listed, embedded);
         assert!(embedded.contains("heldout-008") && !embedded.contains("heldout-000"));
         // One criterion: twins in form share a tier.
         for id in [
@@ -2642,24 +3447,36 @@ mod tests {
         };
         // A recalled fact passes; an invented one fails.
         assert_eq!(
-            checks.of("conv-mem-01", "Your puppy is called Pickle!"),
+            checks.of_reply("conv-mem-01", "Your puppy is called Pickle!"),
             Some(true)
         );
-        assert_eq!(checks.of("conv-mem-01", "Your name is Tom."), Some(false));
-        assert_eq!(checks.of("conv-mem-09", "You have 2 pencils."), Some(true));
         assert_eq!(
-            checks.of("conv-unk-01", "I don\u{2019}t know what you ate."),
-            Some(true)
+            checks.of_reply("conv-mem-01", "Your name is Tom."),
+            Some(false)
         );
-        assert_eq!(checks.of("conv-unk-01", "You ate pancakes."), Some(false));
         assert_eq!(
-            checks.of("conv-clar-01", "Which one do you mean?"),
+            checks.of_reply("conv-mem-09", "You have 2 pencils."),
             Some(true)
         );
-        assert_eq!(checks.of("conv-clar-01", "Sure."), Some(false));
-        assert_eq!(checks.of("conv-do-09", "The dog ran fast."), Some(true));
-        assert_eq!(checks.of("conv-do-09", "The dog ran."), Some(false));
-        assert_eq!(checks.of("conv-talk-01", "anything"), None);
+        assert_eq!(
+            checks.of_reply("conv-unk-01", "I don\u{2019}t know what you ate."),
+            Some(true)
+        );
+        assert_eq!(
+            checks.of_reply("conv-unk-01", "You ate pancakes."),
+            Some(false)
+        );
+        assert_eq!(
+            checks.of_reply("conv-clar-01", "Which one do you mean?"),
+            Some(true)
+        );
+        assert_eq!(checks.of_reply("conv-clar-01", "Sure."), Some(false));
+        assert_eq!(
+            checks.of_reply("conv-do-09", "The dog ran fast."),
+            Some(true)
+        );
+        assert_eq!(checks.of_reply("conv-do-09", "The dog ran."), Some(false));
+        assert_eq!(checks.of_reply("conv-talk-01", "anything"), None);
 
         let turns = |id: &str, t: &[&str]| Request {
             id: id.into(),
@@ -2695,14 +3512,13 @@ mod tests {
         assert!(validate_checks(&checks, &multi_none).is_err());
 
         // The embedded tier C checks parse and cover every memory row.
-        let embedded = parse_checks(EMBEDDED_CHECKS).unwrap();
-        assert_eq!(
-            embedded
-                .keys()
-                .filter(|k| k.starts_with("conv-mem-"))
-                .count(),
-            30
-        );
+        let embedded = embedded_checks().unwrap().rows;
+        for prefix in ["conv-mem-", "conv-v3-mem-"] {
+            assert_eq!(
+                embedded.keys().filter(|k| k.starts_with(prefix)).count(),
+                30
+            );
+        }
     }
 
     #[test]
@@ -2955,5 +3771,407 @@ mod tests {
         // A second claim of the same root is refused before anything is written.
         assert!(write_sealed(&root, "again.json", &json!({})).is_err());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn exact_scorer_needs_the_value_and_no_wrong_value() {
+        let checks = Checks {
+            rows: parse_checks(
+                "m1\texact\trecall\tshelby\tflash\n\
+                 m2\texact\trecall\tnine|9\tfour|4|two|2\n\
+                 m3\texact\trecall\tsunflower|sunflowers\trose|roses\n",
+            )
+            .unwrap(),
+            source: json!("test"),
+        };
+        // The value, normalised for case and punctuation, passes.
+        assert_eq!(checks.of_reply("m1", "SHELBY!"), Some(true));
+        assert_eq!(
+            checks.of_reply("m1", "The turtle is called Shelby."),
+            Some(true)
+        );
+        assert_eq!(checks.of_reply("m2", "Jada is 9."), Some(true));
+        assert_eq!(checks.of_reply("m3", "Sunflowers grow there."), Some(true));
+        // A wrong value fails, a hedge naming both values fails, no value fails.
+        assert_eq!(checks.of_reply("m1", "The turtle is Flash."), Some(false));
+        assert_eq!(checks.of_reply("m1", "Shelby or Flash?"), Some(false));
+        assert_eq!(checks.of_reply("m1", "I like turtles."), Some(false));
+        assert_eq!(
+            checks.of_reply("m2", "She is nine, and he is four."),
+            Some(false)
+        );
+        // Whole words only: "shelbyville" is not the value.
+        assert_eq!(checks.of_reply("m1", "Shelbyville"), Some(false));
+        // An exact check needs a distractor, may not forbid its own value, and
+        // forbidden terms belong to exact and abstain_exact only.
+        assert!(parse_checks("m\texact\trecall\tshelby\n").is_err());
+        assert!(parse_checks("m\texact\trecall\tshelby\t-\n").is_err());
+        assert!(parse_checks("m\texact\trecall\tshelby\tshelby|flash\n").is_err());
+        assert!(parse_checks("m\texact\trecall\t-\tflash\n").is_err());
+        assert!(parse_checks("m\tany\trecall\tshelby\tflash\n").is_err());
+        assert!(parse_checks("m\tquestion\tnone\t-\tx\n").is_err());
+
+        // Validation: the value and every forbidden value absent from the last
+        // turn, the value and a distractor stated earlier.
+        let request = |turns: &[&str]| Request {
+            id: "m1".into(),
+            category: "multi_turn_memory".into(),
+            user_turns: turns.iter().map(|s| (*s).to_owned()).collect(),
+        };
+        let only_m1 = Checks {
+            rows: checks
+                .rows
+                .iter()
+                .filter(|(k, _)| *k == "m1")
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            source: json!("test"),
+        };
+        let good = request(&[
+            "The turtle is Shelby and the fish is Flash.",
+            "Which name did the turtle get?",
+        ]);
+        assert!(validate_checks(&only_m1, &[good]).unwrap().is_empty());
+        for bad in [
+            // No distractor in the conversation: copying the history would pass.
+            request(&["The turtle is Shelby.", "Which name did the turtle get?"]),
+            // The value in the last turn.
+            request(&["The fish is Flash.", "Is the turtle Shelby?"]),
+            // A forbidden value in the last turn.
+            request(&["The turtle is Shelby.", "Is the fish Flash?"]),
+            // Single turn.
+            request(&["The turtle is Shelby and the fish is Flash."]),
+        ] {
+            assert!(validate_checks(&only_m1, &[bad]).is_err());
+        }
+
+        // Copy controls: the first- and last-stated candidate values.
+        let users = [
+            "The turtle is Shelby and the fish is Flash.",
+            "Which name did the turtle get?",
+        ];
+        assert_eq!(
+            copy_replies(&checks.rows["m1"], &users).unwrap(),
+            ["shelby".to_owned(), "flash".to_owned()]
+        );
+        let question = parse_checks("q\tquestion\tnone\t-\n").unwrap();
+        assert!(copy_replies(&question["q"], &users).is_none());
+    }
+
+    #[test]
+    fn abstention_check_refuses_fabricated_specifics() {
+        let users = ["Do you know what color my shirt is right now?"];
+        let rows = parse_checks("u\tabstain_exact\tnone\t-\tred|blue|green\n").unwrap();
+        let passes = |reply: &str| rows["u"].passes(&users, reply);
+        assert!(passes(
+            "I can't see you, so I don't know what color your shirt is."
+        ));
+        assert!(passes(
+            "I'm not sure. Can you tell me more about what you mean?"
+        ));
+        assert!(passes("I don\u{2019}t know. OK, can you tell me?"));
+        // An answer, a hedged guess from the answer class, a made-up name or
+        // a number fails even with an abstain phrase.
+        assert!(!passes("Your shirt is red."));
+        assert!(!passes("I'm not sure, but I think it is blue."));
+        assert!(!passes("I don't know. Maybe Lily knows."));
+        assert!(!passes("I can't see it, but you have 2 shirts."));
+        // A capitalised word at a sentence start, a form of I, or a word the
+        // user wrote is not a specific.
+        assert!(fabricated_specifics(&users, "Sorry. I'm unable to see.").is_empty());
+        assert_eq!(
+            fabricated_specifics(&["Where is Rosa?"], "I don't know where Rosa is, ask Tom."),
+            ["Tom"]
+        );
+        assert_eq!(fabricated_specifics(&[], "She is 7 now"), ["7"]);
+        // The plain abstain check is unchanged.
+        let plain = parse_checks("u\tabstain\tnone\t-\n").unwrap();
+        assert!(plain["u"].passes(&users, "I'm not sure, but I think it is blue."));
+        assert!(parse_checks("u\tabstain_exact\tnone\tx\t-\n").is_err());
+        // Forbidden words may not occur in the row's own turns.
+        let in_turn = Checks {
+            rows: parse_checks("u\tabstain_exact\tnone\t-\tshirt\n").unwrap(),
+            source: json!("test"),
+        };
+        let row = Request {
+            id: "u".into(),
+            category: "unknowable_or_impossible".into(),
+            user_turns: vec![users[0].to_owned()],
+        };
+        assert!(validate_checks(&in_turn, &[row]).is_err());
+    }
+
+    #[test]
+    fn best_constant_per_category_is_the_headline_control() {
+        let mut rows = Vec::new();
+        // clarify: model acceptable on 2 of 10, constant 0 on 9, constant 1 on 0.
+        for i in 0..10 {
+            rows.push(graded(
+                &format!("conv-v3-clar-{i:02}"),
+                "clarify_or_on_topic",
+                &["Is it ready?"],
+                "a reply",
+                if i < 2 { [true, true] } else { [true, false] },
+                [true, false],
+                &[
+                    if i < 9 { [true, true] } else { [true, false] },
+                    [true, false],
+                    [false, false],
+                ],
+            ));
+        }
+        // memory: model acceptable on 8 of 8, every constant on none.
+        for i in 0..8 {
+            rows.push(graded(
+                &format!("conv-v3-mem-{i:02}"),
+                "multi_turn_memory",
+                &["a", "b"],
+                "a reply",
+                [true, true],
+                [true, false],
+                &[[true, false], [true, false], [true, false]],
+            ));
+        }
+        let constants: Vec<String> = DEFAULT_CONSTANTS.iter().map(|c| (*c).to_owned()).collect();
+        let ill = BTreeSet::new();
+        let per_tier = tier_summary(&rows, &ill, &no_checks(), &constants).unwrap();
+        let headline = &per_tier["C"]["headline"];
+        let clarify = &headline["per_category"]["clarify_or_on_topic"];
+        assert_eq!(clarify["index"], 0);
+        assert_eq!(clarify["model_acceptable"], 2);
+        assert_eq!(clarify["constant_acceptable"], 9);
+        assert_eq!(clarify["model_minus_constant"], -7);
+        assert_eq!(clarify["model_beats_constant"], false);
+        let memory = &headline["per_category"]["multi_turn_memory"];
+        // Ties go to the lower index.
+        assert_eq!(memory["index"], 0);
+        assert_eq!(memory["model_minus_constant"], 8);
+        assert_eq!(memory["model_only"], 8);
+        let p = memory["mcnemar_exact_p"].as_f64().unwrap();
+        assert!((p - 2.0 / 256.0).abs() < 1e-12);
+        assert_eq!(memory["model_beats_constant"], true);
+        assert_eq!(
+            headline["categories_model_beats_best_constant"],
+            json!(["multi_turn_memory"])
+        );
+        // The report headline lists the tier's categories, never a total.
+        assert_eq!(
+            headline_of(&per_tier)["categories_model_beats_best_constant"]["C"],
+            json!(["multi_turn_memory"])
+        );
+        // Without constants there is no headline.
+        let bare: Vec<Value> = rows
+            .iter()
+            .map(|r| {
+                let mut r = r.clone();
+                r["constant_grades"] = json!([]);
+                r
+            })
+            .collect();
+        let none = tier_summary(&bare, &ill, &no_checks(), &[]).unwrap();
+        assert!(none["C"]["headline"].get("unavailable").is_some());
+    }
+
+    /// The conversational-v3 panel, parsed from the frozen files.
+    fn panel_v3() -> (Vec<Request>, Vec<Request>, Vec<Request>) {
+        let parse = |text: &str| serde_json::from_str::<Vec<Request>>(text).unwrap();
+        (
+            parse(include_str!(
+                "../../../../data/panels/conversational-v3.json"
+            )),
+            parse(include_str!(
+                "../../../../data/panels/conversational-v3-a.json"
+            )),
+            parse(include_str!(
+                "../../../../data/panels/conversational-v3-b.json"
+            )),
+        )
+    }
+
+    #[test]
+    fn panel_v3_rows_checks_and_check_only_controls() {
+        let (all, a, b) = panel_v3();
+        assert_eq!(all.len(), 160);
+        let joined: Vec<&str> = a.iter().chain(&b).map(|r| r.id.as_str()).collect();
+        let ids: Vec<&str> = all.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(joined, ids);
+        let mut categories: BTreeMap<&str, usize> = BTreeMap::new();
+        for r in &all {
+            assert!(r.id.starts_with("conv-v3-"));
+            assert!(TIER_C_CATEGORIES.contains(&r.category.as_str()));
+            *categories.entry(r.category.as_str()).or_default() += 1;
+            // Only memory rows have earlier turns.
+            assert_eq!(
+                r.user_turns.len() > 1,
+                r.category == "multi_turn_memory",
+                "{}",
+                r.id
+            );
+        }
+        assert_eq!(
+            categories,
+            BTreeMap::from([
+                ("clarify_or_on_topic", 24),
+                ("multi_turn_memory", 30),
+                ("self_contained_instruction", 30),
+                ("smalltalk_feelings", 26),
+                ("story_continuation", 26),
+                ("unknowable_or_impossible", 24),
+            ])
+        );
+        let checks = embedded_checks().unwrap();
+        let unmatched = validate_checks(&checks, &all).unwrap();
+        assert!(unmatched.iter().all(|id| !id.starts_with("conv-v3-")));
+        for r in &all {
+            let kind = checks.rows.get(&r.id).map(|c| c.kind.name());
+            let expected = match r.category.as_str() {
+                "multi_turn_memory" => Some("exact"),
+                "unknowable_or_impossible" => Some("abstain_exact"),
+                "clarify_or_on_topic" => Some("question"),
+                _ => kind,
+            };
+            assert_eq!(kind, expected, "{}", r.id);
+        }
+        // No memory row is answerable by echoing a turn, the whole history or a
+        // constant; copying the first- or last-stated value passes half.
+        let constants: Vec<String> = DEFAULT_CONSTANTS.iter().map(|c| (*c).to_owned()).collect();
+        let controls = check_only_controls(&all, &checks, &constants);
+        let memory = &controls["multi_turn_memory"];
+        assert_eq!(memory["echo_last"]["check_pass"], 0);
+        assert_eq!(memory["echo_history"]["check_pass"], 0);
+        assert_eq!(memory["copy"]["copy_first_stated"]["check_pass"], 15);
+        assert_eq!(memory["copy"]["copy_last_stated"]["check_pass"], 15);
+        for c in 0..3 {
+            assert_eq!(memory["constants"][c]["check_pass"], 0);
+        }
+        // Constant 1 passes every clarify and unknowable check: those
+        // categories are read only against their best constant.
+        assert_eq!(
+            controls["clarify_or_on_topic"]["constants"][0]["check_pass"],
+            24
+        );
+        assert_eq!(
+            controls["unknowable_or_impossible"]["constants"][0]["check_pass"],
+            24
+        );
+        assert_eq!(
+            controls["unknowable_or_impossible"]["echo_last"]["check_pass"],
+            0
+        );
+    }
+
+    /// The string literals of the two M-world sources as leak patterns.
+    fn m_world_patterns() -> Vec<(String, Pattern)> {
+        [
+            include_str!("../milestone_world.rs"),
+            include_str!("../milestone_world_v2.rs"),
+        ]
+        .iter()
+        .flat_map(|source| rust_string_literals(source))
+        .map(|text| {
+            let p = pattern(&text);
+            (text, p)
+        })
+        .filter(|(_, p)| p.iter().any(Option::is_some))
+        .collect()
+    }
+
+    #[test]
+    fn panel_v3_shares_no_m_world_phrasing() {
+        let patterns = m_world_patterns();
+        assert!(patterns.len() > 500);
+        let leaks = |turn: &str| -> Option<String> {
+            let turn = words(turn);
+            patterns.iter().find_map(|(text, p)| {
+                let (whole, run) = reference_overlap(p, &turn);
+                (whole || run >= STRICT_LEAK_N).then(|| text.clone())
+            })
+        };
+        // The check finds M-world phrasings: a template filled in, a question
+        // asked verbatim, and a four-word run inside a longer turn.
+        assert!(leaks("My lucky number is 42.").is_some());
+        assert!(leaks("What is my favorite color?").is_some());
+        assert!(leaks("Hey, can you tell me the capital of Peru today").is_some());
+        assert!(leaks("Grandpa grows tomatoes by the window.").is_none());
+        let (all, _, _) = panel_v3();
+        for r in &all {
+            for turn in &r.user_turns {
+                assert_eq!(leaks(turn), None, "{}: {turn}", r.id);
+            }
+        }
+    }
+
+    #[test]
+    fn missing_material_rule() {
+        let reason = |t: &str| missing_material(t).map(|(family, _)| family);
+        // Material announced and absent.
+        assert_eq!(reason("Dear Dr. Smith,"), Some("open_end"));
+        assert_eq!(
+            reason("Here's the text I'm working with:"),
+            Some("open_end")
+        );
+        // Unfilled slots; a defined slot or a label before material is filled.
+        assert_eq!(reason("What should I see in [city]?"), Some("slot"));
+        assert_eq!(
+            reason("Answer with one of: [options] yes. no. maybe. Is the sky blue?"),
+            None
+        );
+        assert_eq!(
+            reason("Avoid [banned] words. [banned] are: cat, dog. Write about pets."),
+            None
+        );
+        // Constraints with no query.
+        assert_eq!(
+            reason(
+                "Your response should contain at least 3 sentences. Paragraphs are separated \
+                 with ***"
+            ),
+            Some("constraints_only")
+        );
+        assert_eq!(
+            reason("Your response should contain less than 50 words. Explain cloud computing."),
+            None
+        );
+        // Pointers at absent material; included material makes it clean.
+        assert_eq!(
+            reason("What is wrong with the following code snippet?"),
+            Some("deictic")
+        );
+        assert_eq!(reason("Write me an edit to this."), Some("deictic"));
+        assert_eq!(
+            reason("Can you summarize how the protagonist escaped?"),
+            Some("deictic")
+        );
+        assert_eq!(
+            reason("I wrote this but it seems unclear. Can you help?"),
+            Some("own_material")
+        );
+        assert_eq!(
+            reason("I've written a cover letter. Can you review it?"),
+            Some("own_material")
+        );
+        assert_eq!(
+            reason("Please answer the following query: \"What are the benefits of exercise?\""),
+            None
+        );
+        assert_eq!(
+            reason("A painter wants new ideas. What are some ways she can do this?"),
+            None
+        );
+        assert_eq!(reason("How many values does x have?"), Some("variable"));
+        assert_eq!(reason("Find x such that x^2 - 3x = 4."), None);
+        // Clean requests, including fragments that point at nothing.
+        for clean in [
+            "What is the structure of the universe.",
+            "Hey Alex 😊",
+            "Implement a Min heap using Python",
+            "Create a story using only six words.",
+        ] {
+            assert_eq!(reason(clean), None, "{clean}");
+        }
+        assert_eq!(
+            sentences("One. Two! Three? four"),
+            ["One.", "Two!", "Three?", "four"]
+        );
     }
 }
