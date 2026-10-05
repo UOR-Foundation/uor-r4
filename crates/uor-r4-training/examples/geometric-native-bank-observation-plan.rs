@@ -18,6 +18,8 @@ use uor_r4_tokenizer::ByteBpeTokenizer;
 use uor_r4_training::{sha256_bytes, sha256_file};
 #[path = "../../uor-r4-integer/examples/support/source_probe.rs"]
 mod output_support;
+#[path = "support/geometric_role_diversity.rs"]
+mod role_diversity;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn invalid(s: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, s.into())
@@ -68,6 +70,8 @@ enum TransferProfile {
     RetainedComposition,
     #[serde(rename = "supported-untouched-composition/1")]
     SupportedUntouchedComposition,
+    #[serde(rename = "supported-prospective-role-diversity/1")]
+    SupportedProspectiveRoleDiversity,
 }
 const TRANSFER_JOB_QUERY: &str = "What is my job currently?";
 const TRANSFER_HOME_QUERY: &str = "Where do I live currently?";
@@ -334,6 +338,9 @@ fn supported_contract(w: &Wire) -> Result<()> {
     Ok(())
 }
 fn apply_supported_policy(histories: &mut [History]) -> Result<Vec<Value>> {
+    apply_supported_policy_mode(histories, false)
+}
+fn apply_supported_policy_mode(histories: &mut [History], diverse: bool) -> Result<Vec<Value>> {
     let mut origins = Vec::new();
     for (index, history) in histories.iter_mut().enumerate() {
         let mut turns = Vec::new();
@@ -344,7 +351,17 @@ fn apply_supported_policy(histories: &mut [History]) -> Result<Vec<Value>> {
         ] {
             for (ordinal, wire) in packets.iter_mut().enumerate() {
                 let donor = wire.clone();
-                let authored = supported_wire(&donor, index / 2)?;
+                let query_index = if diverse {
+                    history
+                        .stratum
+                        .rsplit("/q")
+                        .next()
+                        .ok_or_else(|| invalid("diversity query index absent"))?
+                        .parse::<usize>()?
+                } else {
+                    index / 2
+                };
+                let authored = supported_wire(&donor, query_index)?;
                 supported_contract(&authored)?;
                 if kind == "turn" && literal(&donor)? != literal(&authored)? {
                     return Err(invalid("supported rewrite changed literal bytes").into());
@@ -632,6 +649,136 @@ fn eligible(h: &History, native: &NativeSourceRealizer, tok: &ByteBpeTokenizer) 
         json!({"history":h.id,"source_views_construction_only":source_views,"targets_labels_only":targets,"native_predictions":"NOT_RUN","model_probability_support":"NOT_RUN;public alphabet membership only"}),
     )
 }
+/// Fixed prospective design; no native predictions or cue addresses select rows.
+fn diversity_histories(
+    all: &[Wire],
+    repeats: &[Wire],
+    exposed_banks: &BTreeSet<String>,
+) -> Result<(Vec<History>, Vec<History>)> {
+    fn donor(all: &[Wire], role: &str, act: &str, value: &str) -> Result<Wire> {
+        all.iter()
+            .find(|w| w.relation == role && w.act == act && literal(w).is_ok_and(|v| v == value))
+            .cloned()
+            .ok_or_else(|| invalid("diversity exact role/action/literal donor absent").into())
+    }
+    let mut development = Vec::new();
+    let mut fresh = Vec::new();
+    let mut used_unordered = BTreeSet::new();
+    for (stratum, length, dev_blocks, fresh_blocks) in [
+        ("length2", Some(2), 8usize, 2usize),
+        ("length4", Some(4), 8, 2),
+        ("length8", Some(8), 8, 2),
+        ("update", Some(4), 4, 1),
+        ("reassert", None, 4, 1),
+    ] {
+        let source = if stratum == "reassert" { repeats } else { all };
+        let job_pool = pool(source, "job", "assert", length)?;
+        let home_pool = pool(source, "home", "assert", length)?;
+        let job = job_pool
+            .iter()
+            .map(literal)
+            .collect::<Result<BTreeSet<_>>>()?;
+        let home = home_pool
+            .iter()
+            .map(literal)
+            .collect::<Result<BTreeSet<_>>>()?;
+        let values = job
+            .intersection(&home)
+            .map(|v| (*v).to_owned())
+            .collect::<Vec<_>>();
+        let mut selected = 0usize;
+        for left in 0..values.len() {
+            for right in left + 1..values.len() {
+                if selected == dev_blocks + fresh_blocks {
+                    break;
+                }
+                let a = &values[left];
+                let b = &values[right];
+                let key = (a.clone(), b.clone());
+                if used_unordered.contains(&key) {
+                    continue;
+                }
+                let mut blocked = false;
+                for (j, h) in [(a, b), (b, a)] {
+                    let current = BTreeMap::from([("job", j.as_str()), ("home", h.as_str())]);
+                    blocked |=
+                        exposed_banks.contains(&sha256_bytes(&serde_json::to_vec(&current)?));
+                }
+                if blocked {
+                    continue;
+                }
+                let output = if selected < dev_blocks {
+                    &mut development
+                } else {
+                    &mut fresh
+                };
+                let block = output.len() / 8;
+                for swapped in [false, true] {
+                    let (jv, hv) = if swapped { (b, a) } else { (a, b) };
+                    let mut j = donor(source, "job", "assert", jv)?;
+                    let mut h = donor(source, "home", "assert", hv)?;
+                    let mut after = Vec::new();
+                    if stratum == "update" {
+                        let role = if swapped { "home" } else { "job" };
+                        let other_role = if role == "job" { "home" } else { "job" };
+                        let others = pool(all, other_role, "assert", Some(2))?
+                            .iter()
+                            .map(|w| literal(w).map(str::to_owned))
+                            .collect::<Result<BTreeSet<_>>>()?;
+                        let mut initials = pool(all, role, "assert", Some(2))?
+                            .into_iter()
+                            .filter(|w| literal(w).is_ok_and(|v| others.contains(v)))
+                            .collect::<Vec<_>>();
+                        let mut keyed_initials = initials
+                            .drain(..)
+                            .map(|w| Ok((literal(&w)?.to_owned(), w)))
+                            .collect::<Result<Vec<_>>>()?;
+                        keyed_initials.sort_by(|a, b| a.0.cmp(&b.0));
+                        initials = keyed_initials.into_iter().map(|(_, w)| w).collect();
+                        let initial = initials
+                            .into_iter()
+                            .find(|w| literal(w).is_ok_and(|v| v != a && v != b))
+                            .ok_or_else(|| {
+                                invalid("diversity distinct initial update donor absent")
+                            })?;
+                        if swapped {
+                            h = initial;
+                        } else {
+                            j = initial;
+                        }
+                        after.push(donor(all, role, "update", a)?);
+                        after.push(if swapped { j.clone() } else { h.clone() });
+                    } else if stratum == "reassert" {
+                        after.push(if swapped { h.clone() } else { j.clone() });
+                    }
+                    for query_index in [block % 6, (block + 3) % 6] {
+                        output.extend(chronologies(
+                            &format!(
+                                "diverse-{stratum}-{selected:02}-swap{}-q{query_index}",
+                                usize::from(swapped)
+                            ),
+                            &format!("{stratum}/q{query_index}"),
+                            j.clone(),
+                            h.clone(),
+                            after.clone(),
+                            qpair(all, query_index)?,
+                        ));
+                    }
+                }
+                used_unordered.insert(key);
+                selected += 1;
+            }
+        }
+        if selected != dev_blocks + fresh_blocks {
+            return Err(invalid(format!("diversity insufficient disjoint donor blocks for {stratum}: {selected}; no adaptive replacement")).into());
+        }
+    }
+    if development.len() != 256 || fresh.len() != 64 {
+        return Err(invalid("diversity fixed512/128 row design differs").into());
+    }
+    Ok((development, fresh))
+}
+
 fn run(a: &Args, t: Instant) -> Result<Value> {
     verify(&a.input_bundle, &a.input_manifest_sha256)?;
     let frozen = read_json(&a.input_bundle.join("frozen-inputs.json"))?;
@@ -705,120 +852,128 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         wire_exposure_coverage.push(json!({"root":e.root,"manifest_sha256":e.manifest_sha256,"recognized_write_wires":wire_counts.0,"recognized_query_wires":wire_counts.1,"literal_query_exclusion_scope":"recognized complete Wire objects; supplemental sealed construction plans bind numerical-only roots;not universal pretraining exclusion"}));
         opened_strings(&source, &mut opened);
     }
+    let diverse = a.transfer_profile == TransferProfile::SupportedProspectiveRoleDiversity;
     let mut development = Vec::new();
-    for length in [2, 4, 8] {
-        for i in 0..8 {
-            let (j, h) = opposite_pair(&all, length, i)?;
+    let mut fresh = Vec::new();
+    if !diverse {
+        for length in [2, 4, 8] {
+            for i in 0..8 {
+                let (j, h) = opposite_pair(&all, length, i)?;
+                development.extend(chronologies(
+                    &format!("words{length}-{i:02}"),
+                    &format!("length{length}/order-pair"),
+                    j,
+                    h,
+                    vec![],
+                    qpair(&all, i)?,
+                ));
+            }
+        }
+        for i in 0..4 {
+            let j = pool(&repeat, "job", "assert", None)?;
+            let h = pool(&repeat, "home", "assert", None)?;
+            let jj = j[i % j.len()].clone();
+            let hh = h[(i + 1) % h.len()].clone();
+            if literal(&jj)? == literal(&hh)? {
+                return Err(invalid("fixed repeat pair role values equal").into());
+            }
             development.extend(chronologies(
-                &format!("words{length}-{i:02}"),
-                &format!("length{length}/order-pair"),
-                j,
-                h,
+                &format!("repeat-{i:02}"),
+                "repetition/order-pair",
+                jj,
+                hh,
                 vec![],
                 qpair(&all, i)?,
             ));
         }
-    }
-    for i in 0..4 {
-        let j = pool(&repeat, "job", "assert", None)?;
-        let h = pool(&repeat, "home", "assert", None)?;
-        let jj = j[i % j.len()].clone();
-        let hh = h[(i + 1) % h.len()].clone();
-        if literal(&jj)? == literal(&hh)? {
-            return Err(invalid("fixed repeat pair role values equal").into());
+        for i in 0..4 {
+            let (j, h) = opposite_pair(&all, 2, i)?;
+            let role = if i % 2 == 0 { "job" } else { "home" };
+            let updates = pool(&all, role, "update", Some(4))?;
+            let u = updates[i % updates.len()].clone();
+            let other = if role == "job" { h.clone() } else { j.clone() };
+            // A real changed-value correction followed by same-value reassert of other role.
+            development.extend(chronologies(
+                &format!("version-{i:02}"),
+                "current-update/same-value-reassert/order-pair",
+                j,
+                h,
+                vec![u, other],
+                qpair(&all, i)?,
+            ));
         }
-        development.extend(chronologies(
-            &format!("repeat-{i:02}"),
-            "repetition/order-pair",
-            jj,
-            hh,
-            vec![],
-            qpair(&all, i)?,
-        ));
-    }
-    for i in 0..4 {
-        let (j, h) = opposite_pair(&all, 2, i)?;
-        let role = if i % 2 == 0 { "job" } else { "home" };
-        let updates = pool(&all, role, "update", Some(4))?;
-        let u = updates[i % updates.len()].clone();
-        let other = if role == "job" { h.clone() } else { j.clone() };
-        // A real changed-value correction followed by same-value reassert of other role.
-        development.extend(chronologies(
-            &format!("version-{i:02}"),
-            "current-update/same-value-reassert/order-pair",
-            j,
-            h,
-            vec![u, other],
-            qpair(&all, i)?,
-        ));
-    }
-    if development.len() != 64 {
-        return Err(invalid("prospective development construction count differs").into());
-    }
-    // Known frames/words, unseen fixed compositions. These constants are authored before
-    // predictions; any public eligibility/exposure failure aborts, never adaptive replacement.
-    let fresh_literals: [(&str, &str, usize); 8] = [
-        ("cedar amber", "meadow copper", 2),
-        ("harbor willow", "orchard violet", 2),
-        (
-            "cedar amber meadow copper",
-            "willow violet orchard harbor",
-            4,
-        ),
-        ("birch silver cedar violet", "meadow copper willow amber", 4),
-        (
-            "cedar amber meadow copper willow violet orchard harbor",
-            "birch silver willow amber meadow cedar copper violet",
-            8,
-        ),
-        (
-            "orchard violet harbor willow cedar amber meadow copper",
-            "willow amber cedar silver birch violet meadow copper",
-            8,
-        ),
-        (
-            "cedar cedar meadow meadow",
-            "willow willow harbor harbor",
-            4,
-        ),
-        (
-            "violet meadow cedar amber",
-            "copper orchard willow harbor",
-            4,
-        ),
-    ];
-    let jf = pool(&train, "job", "assert", None)?;
-    let hf = pool(&train, "home", "assert", None)?;
-    let ju = pool(&train, "job", "update", None)?;
-    let mut fresh = Vec::new();
-    for (i, (jv, hv, _)) in fresh_literals.iter().enumerate() {
-        let j = substituted(&jf[i % jf.len()], jv)?;
-        let h = substituted(&hf[i % hf.len()], hv)?;
-        let after = if i == 7 {
-            vec![
-                substituted(&ju[i % ju.len()], "willow copper meadow amber")?,
-                h.clone(),
-            ]
-        } else {
-            vec![]
-        };
-        fresh.extend(chronologies(
-            &format!("prospective-{i:02}"),
-            if i == 6 {
-                "repetition/order-pair"
-            } else if i == 7 {
-                "current-update/same-value-reassert/order-pair"
+        if development.len() != 64 {
+            return Err(invalid("prospective development construction count differs").into());
+        }
+        // Known frames/words, unseen fixed compositions. These constants are authored before
+        // predictions; any public eligibility/exposure failure aborts, never adaptive replacement.
+        let fresh_literals: [(&str, &str, usize); 8] = [
+            ("cedar amber", "meadow copper", 2),
+            ("harbor willow", "orchard violet", 2),
+            (
+                "cedar amber meadow copper",
+                "willow violet orchard harbor",
+                4,
+            ),
+            ("birch silver cedar violet", "meadow copper willow amber", 4),
+            (
+                "cedar amber meadow copper willow violet orchard harbor",
+                "birch silver willow amber meadow cedar copper violet",
+                8,
+            ),
+            (
+                "orchard violet harbor willow cedar amber meadow copper",
+                "willow amber cedar silver birch violet meadow copper",
+                8,
+            ),
+            (
+                "cedar cedar meadow meadow",
+                "willow willow harbor harbor",
+                4,
+            ),
+            (
+                "violet meadow cedar amber",
+                "copper orchard willow harbor",
+                4,
+            ),
+        ];
+        let jf = pool(&train, "job", "assert", None)?;
+        let hf = pool(&train, "home", "assert", None)?;
+        let ju = pool(&train, "job", "update", None)?;
+        for (i, (jv, hv, _)) in fresh_literals.iter().enumerate() {
+            let j = substituted(&jf[i % jf.len()], jv)?;
+            let h = substituted(&hf[i % hf.len()], hv)?;
+            let after = if i == 7 {
+                vec![
+                    substituted(&ju[i % ju.len()], "willow copper meadow amber")?,
+                    h.clone(),
+                ]
             } else {
-                "new-composition/order-pair"
-            },
-            j,
-            h,
-            after,
-            qpair(&train, i)?,
-        ));
+                vec![]
+            };
+            fresh.extend(chronologies(
+                &format!("prospective-{i:02}"),
+                if i == 6 {
+                    "repetition/order-pair"
+                } else if i == 7 {
+                    "current-update/same-value-reassert/order-pair"
+                } else {
+                    "new-composition/order-pair"
+                },
+                j,
+                h,
+                after,
+                qpair(&train, i)?,
+            ));
+        }
+    }
+    if diverse {
+        (development, fresh) = diversity_histories(&all, &repeat, &exposed_banks)?;
     }
     let untouched = a.transfer_profile == TransferProfile::SupportedUntouchedComposition;
-    if untouched && a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole {
+    if (untouched || diverse)
+        && a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole
+    {
         return Err(
             invalid("untouched profile requires explicit supported-current-role policy").into(),
         );
@@ -833,11 +988,11 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     let (development_origins, fresh_origins) = match a.assertion_query_policy {
         AssertionQueryPolicy::RetainedOriginal => (Vec::new(), Vec::new()),
         AssertionQueryPolicy::SupportedCurrentRole => (
-            apply_supported_policy(&mut development)?,
+            apply_supported_policy_mode(&mut development, diverse)?,
             if untouched {
                 apply_untouched_policy(&mut fresh, &frame_donors)?
             } else {
-                apply_supported_policy(&mut fresh)?
+                apply_supported_policy_mode(&mut fresh, diverse)?
             },
         ),
     };
@@ -877,6 +1032,35 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             return Err(invalid("matched untouched bank/history cardinality differs").into());
         }
     }
+    if diverse {
+        let development_banks = development
+            .iter()
+            .map(semantic_identity)
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .map(|(b, _)| b)
+            .collect::<BTreeSet<_>>();
+        let development_histories = development
+            .iter()
+            .map(semantic_identity)
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .map(|(_, h)| h)
+            .collect::<BTreeSet<_>>();
+        for h in &fresh {
+            let (bank, history) = semantic_identity(h)?;
+            if development_banks.contains(&bank)
+                || exposed_banks.contains(&bank)
+                || development_histories.contains(&history)
+                || exposed_turn_histories.contains(&history)
+            {
+                return Err(invalid(
+                    "diversity complete bank/history partition intersects opened/development",
+                )
+                .into());
+            }
+        }
+    }
     let mut dev_fp = BTreeSet::new();
     for h in &development {
         for fp in semantic_history(h)? {
@@ -888,7 +1072,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     let mut fresh_fp = BTreeSet::new();
     for h in &fresh {
         for w in &h.turns {
-            if opened.contains(&w.text) {
+            if !diverse && opened.contains(&w.text) {
                 return Err(invalid(
                     "fixed prospective original statement already opened;no automatic redraw",
                 )
@@ -942,6 +1126,11 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     ] {
         let plan = json!({"schema":"uor-r4.raw-natural-reader-construction-plan/1","split":split,"source_policy":a.assertion_query_policy.source_policy(),"histories":histories});
         let planbytes = serde_json::to_vec_pretty(&plan)?;
+        let diversity_control = if diverse {
+            Some(role_diversity::validate(&plan)?)
+        } else {
+            None
+        };
         let origins = if split == "development" {
             &development_origins
         } else {
@@ -950,12 +1139,12 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         let origin_bytes = if a.assertion_query_policy == AssertionQueryPolicy::SupportedCurrentRole
         {
             Some(serde_json::to_vec_pretty(
-                &json!({"schema":"uor-r4.supported-current-role-source-origin/1","policy":a.assertion_query_policy,"transfer_profile":a.transfer_profile,"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":origins,"scope":if untouched && split=="fresh" {"fixed generated fresh literals in actual retained donor frames;role/action/chronology preserved;matched familiar and new query forms;novel full literals not novel words"} else {"original donor values/chronology retained;assertion and query frames newly authored;payload novelty not claimed"}}),
+                &json!({"schema":"uor-r4.supported-current-role-source-origin/1","policy":a.assertion_query_policy,"transfer_profile":a.transfer_profile,"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":origins,"scope":if diverse {"exact retained donor literal bytes and role/action witnesses; prospectively rewritten current-role frames; known-literal new bank compositions; both literal roles/order and crossed familiar wording; not unseen literals or words"} else if untouched && split=="fresh" {"fixed generated fresh literals in actual retained donor frames;role/action/chronology preserved;matched familiar and new query forms;novel full literals not novel words"} else {"original donor values/chronology retained;assertion and query frames newly authored;payload novelty not claimed"}}),
             )?)
         } else {
             None
         };
-        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else if untouched && split=="fresh" {"fixed generated fresh literal bytes in retained donor frames;original frame witnesses bound;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"transfer_profile":a.transfer_profile,"fresh_payload_novelty_claimed":untouched && split=="fresh","transfer_novelty":if untouched && split=="fresh" {json!({"distinct_current_role_value_banks":transfer_banks,"distinct_role_act_literal_histories":transfer_histories,"matched_question_groups":["familiar","novel"],"history_exclusion_covered_roots":history_exposure_roots,"wire_extraction_coverage":wire_exposure_coverage,"familiar_queries_intentionally_overlap":true,"novel_queries":[TRANSFER_JOB_QUERY,TRANSFER_HOME_QUERY],"scope":"exact full-literal, question-string, role/value-bank and role/act/literal-history exclusion;not unseen words or universal pretraining exclusion"})}else{Value::Null},"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
+        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else if diverse {"exact retained donor literal bytes; new role/value bank combinations; balanced literal roles/positions and crossed familiar wording; not retained-original utterance bytes or unseen literals"}else if untouched && split=="fresh" {"fixed generated fresh literal bytes in retained donor frames;original frame witnesses bound;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"transfer_profile":a.transfer_profile,"prospective_diversity_control":diversity_control,"fresh_payload_novelty_claimed":untouched && split=="fresh","transfer_novelty":if untouched && split=="fresh" {json!({"distinct_current_role_value_banks":transfer_banks,"distinct_role_act_literal_histories":transfer_histories,"matched_question_groups":["familiar","novel"],"history_exclusion_covered_roots":history_exposure_roots,"wire_extraction_coverage":wire_exposure_coverage,"familiar_queries_intentionally_overlap":true,"novel_queries":[TRANSFER_JOB_QUERY,TRANSFER_HOME_QUERY],"scope":"exact full-literal, question-string, role/value-bank and role/act/literal-history exclusion;not unseen words or universal pretraining exclusion"})}else{Value::Null},"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
         let rb = serde_json::to_vec_pretty(&receipt)?;
         let eb = serde_json::to_vec_pretty(
             &json!({"rows":eligibility.iter().filter(|x|histories.iter().any(|h|x["history"]==h.id)).collect::<Vec<_>>()}),
@@ -980,7 +1169,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         return Err(invalid("public parent binding changed during source authoring").into());
     }
     Ok(
-        json!({"status":"COMPLETED","development_histories":64,"fresh_histories":16,"native_predictions":"NOT_RUN"}),
+        json!({"status":"COMPLETED","development_histories":development.len(),"fresh_histories":fresh.len(),"native_predictions":"NOT_RUN"}),
     )
 }
 fn author(a: Args) -> Result<()> {
@@ -988,6 +1177,8 @@ fn author(a: Args) -> Result<()> {
         return Err(invalid("unknown plan authoring mode").into());
     }
     if a.schema != "uor-r4.native-bank-observation-plan-args/1"
+        || (a.transfer_profile == TransferProfile::SupportedProspectiveRoleDiversity
+            && a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole)
         || a.maximum_seconds == 0
         || a.maximum_seconds > 300
         || a.maximum_report_bytes == 0
@@ -1394,5 +1585,85 @@ mod supported_current_role_tests {
             .as_str()
             .is_some_and(|s| s.contains("not retained original")));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod prospective_diversity_tests {
+    use super::*;
+    fn donors() -> Vec<Wire> {
+        let mut all = Vec::new();
+        for n in [2usize, 4, 8] {
+            for i in 0..10 {
+                let value = (0..n)
+                    .map(|j| format!("v{i}w{j}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                for role in ["job", "home"] {
+                    for act in ["assert", "update"] {
+                        let template = format!("Legacy {role} {act} {{v}}.");
+                        all.push(Wire {
+                            text: template.replace("{v}", &value),
+                            relation: role.into(),
+                            act: act.into(),
+                            template: Some(template),
+                        });
+                    }
+                }
+            }
+        }
+        for role in ["job", "home"] {
+            for i in 0..6 {
+                all.push(Wire {
+                    text: format!("Legacy {role} query{i}?"),
+                    relation: role.into(),
+                    act: "query".into(),
+                    template: None,
+                });
+            }
+        }
+        all
+    }
+    #[test]
+    fn diverse_known_literals_are_role_order_wording_balanced_and_whole_bank_partitioned(
+    ) -> Result<()> {
+        let all = donors();
+        let repeats = pool(&all, "job", "assert", Some(2))?
+            .into_iter()
+            .chain(pool(&all, "home", "assert", Some(2))?)
+            .collect::<Vec<_>>();
+        let (mut dev, mut fresh) = diversity_histories(&all, &repeats, &BTreeSet::new())?;
+        apply_supported_policy_mode(&mut dev, true)?;
+        apply_supported_policy_mode(&mut fresh, true)?;
+        let dp = json!({"split":"development","histories":dev});
+        let fp = json!({"split":"fresh","histories":fresh});
+        let dc = role_diversity::validate(&dp)?;
+        let fc = role_diversity::validate(&fp)?;
+        assert_eq!(dc["rows"], 512);
+        assert_eq!(fc["rows"], 128);
+        assert!(role_diversity::bank_keys(&dp)?.is_disjoint(&role_diversity::bank_keys(&fp)?));
+        let mut missing_order = dp.clone();
+        missing_order["histories"][1] = missing_order["histories"][0].clone();
+        assert!(role_diversity::validate(&missing_order).is_err());
+        let mut correlated_wording = dp.clone();
+        correlated_wording["histories"][0]["queries"] =
+            correlated_wording["histories"][2]["queries"].clone();
+        assert!(role_diversity::validate(&correlated_wording).is_err());
+        let mut relabelled = fp.clone();
+        relabelled["histories"][0]["id"] = json!("different-id");
+        relabelled["histories"][0]["queries"] = fp["histories"][2]["queries"].clone();
+        assert_eq!(
+            role_diversity::bank_keys(&fp)?,
+            role_diversity::bank_keys(&relabelled)?
+        );
+        Ok(())
+    }
+    #[test]
+    fn insufficient_donor_diversity_fails_without_repeating_banks() {
+        let all = donors()
+            .into_iter()
+            .filter(|w| w.act == "query" || literal(w).is_ok_and(|v| v.starts_with("v0")))
+            .collect::<Vec<_>>();
+        assert!(diversity_histories(&all, &all, &BTreeSet::new()).is_err());
     }
 }

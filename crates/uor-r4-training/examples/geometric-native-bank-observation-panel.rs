@@ -11,6 +11,8 @@
 mod compiler;
 #[path = "../../uor-r4-integer/examples/support/source_probe.rs"]
 mod output_support;
+#[path = "support/geometric_role_diversity.rs"]
+mod role_diversity;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
@@ -101,12 +103,15 @@ enum TransferProfile {
     RetainedComposition,
     #[serde(rename = "supported-untouched-composition/1")]
     SupportedUntouchedComposition,
+    #[serde(rename = "supported-prospective-role-diversity/1")]
+    SupportedProspectiveRoleDiversity,
 }
 impl TransferProfile {
     fn name(self) -> &'static str {
         match self {
             Self::RetainedComposition => "retained-composition/1",
             Self::SupportedUntouchedComposition => "supported-untouched-composition/1",
+            Self::SupportedProspectiveRoleDiversity => "supported-prospective-role-diversity/1",
         }
     }
 }
@@ -235,7 +240,10 @@ fn validate_origin_wire_profile(
     if w.act != "query" && exact_literal(&donor)? != exact_literal(w)? {
         return Err(invalid("derived assertion changed literal bytes").into());
     }
-    let admitted = if split == "development" || w.act == "query" {
+    let admitted = if split == "development"
+        || w.act == "query"
+        || profile == TransferProfile::SupportedProspectiveRoleDiversity
+    {
         opened.contains(&donor)
     } else {
         opened.iter().any(|e| {
@@ -632,14 +640,35 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     verify_root(&a.curriculum_root, &a.curriculum_manifest_sha256)?;
     let rawplan = fs::read(a.construction_plan.join("plan.json"))?;
     let plan: Plan = serde_json::from_slice(&rawplan)?;
-    if a.transfer_profile == TransferProfile::SupportedUntouchedComposition
-        && a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole
+    if matches!(
+        a.transfer_profile,
+        TransferProfile::SupportedUntouchedComposition
+            | TransferProfile::SupportedProspectiveRoleDiversity
+    ) && a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole
     {
         return Err(
             invalid("untouched transfer profile requires supported-current-role policy").into(),
         );
     }
-    let histories = if a.split == "development" { 64 } else { 16 };
+    let diverse = a.transfer_profile == TransferProfile::SupportedProspectiveRoleDiversity;
+    let histories = if diverse {
+        if a.split == "development" {
+            256
+        } else {
+            64
+        }
+    } else if a.split == "development" {
+        64
+    } else {
+        16
+    };
+    let diversity_control = if diverse {
+        Some(role_diversity::validate(&serde_json::from_slice::<Value>(
+            &rawplan,
+        )?)?)
+    } else {
+        None
+    };
     if plan.schema != "uor-r4.raw-natural-reader-construction-plan/1"
         || plan.split != a.split
         || plan.source_policy != a.assertion_query_policy.source_policy()
@@ -731,6 +760,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     let mut excluded_fingerprints = BTreeSet::new();
     let mut exposure_receipts = Vec::new();
     let mut exposed_bank_values = BTreeSet::new();
+    let mut exposed_literal_banks = BTreeSet::new();
     for exposed in &a.exposed_roots {
         verify_root(&exposed.root, &exposed.manifest_sha256)?;
         // Explicit known schemas; never silently ignore an unparsed exposure root.
@@ -758,6 +788,9 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         } else if inputs["histories"].is_array() {
             if inputs["schema"] != "uor-r4.raw-natural-reader-construction-plan/1" {
                 return Err(invalid("unknown exposed construction-plan schema").into());
+            }
+            if diverse {
+                exposed_literal_banks.extend(role_diversity::bank_keys(&inputs)?);
             }
             collect_opened_text(&inputs, &mut opened_text);
         } else {
@@ -842,7 +875,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
                 )
                 .into());
             }
-            if a.split == "fresh" && w.act != "query" && opened_text.contains(&w.text) {
+            if !diverse && a.split == "fresh" && w.act != "query" && opened_text.contains(&w.text) {
                 return Err(
                     invalid("fresh original statement already exposed;no relabelling").into(),
                 );
@@ -857,6 +890,16 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
                 return Err(invalid("declared unseen transfer query already exposed").into());
             }
         }
+    }
+    if diverse
+        && a.split == "fresh"
+        && role_diversity::bank_keys(&serde_json::from_slice::<Value>(&rawplan)?)?
+            .iter()
+            .any(|k| exposed_literal_banks.contains(k))
+    {
+        return Err(
+            invalid("diversity fresh bank already opened under another question/order").into(),
+        );
     }
     let reference = compiler::ReferenceRule::new_with_templates(&tokenizer_sha, &alltemplates)?;
     let mut runtime = Vec::new();
@@ -978,7 +1021,10 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             let query = tok.encode(&q.text);
             let packet =
                 json!({"id":id,"segments":segments,"query_ids":query,"actual_prefix_ids":[]});
-            if transfer_shape.is_some()
+            if diverse {
+                role_diversity::validate_all_sources(&packet)?;
+            }
+            if (transfer_shape.is_some() || (diverse && a.split == "fresh"))
                 && numerical_bank_values(&packet)?
                     .is_some_and(|bank| exposed_bank_values.contains(&bank))
             {
@@ -1068,7 +1114,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         return Err(invalid("native input changed during preparation").into());
     }
     Ok(
-        json!({"schema":"uor-r4.native-bank-observation-panel/1","status":"COMPLETED","split":a.split,"cases":histories*2,"samebank_query_pairs":histories,"single_record_episode_count":0,"multi_record_episode_count":histories*2,"query_counts":{"job":histories,"where":histories},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"tokenizer_sha256":tokenizer_sha,"native_parent_manifest_sha256":parent_manifest_sha,"construction_plan_manifest_sha256":a.construction_manifest_sha256,"construction_plan_sha256":sha256_bytes(&rawplan),"curriculum_manifest_sha256":a.curriculum_manifest_sha256,"exposed_roots":exposure_receipts,"semantic_packet_fingerprints":semantic,"assertion_query_policy":a.assertion_query_policy,"transfer_profile":a.transfer_profile,"transfer_shape_control":transfer_shape,"matched_runtime_control":matched_runtime,"source_policy":plan.source_policy,"derived_source_origin_sha256":derived_origin.as_ref().map(|(_,sha)|sha),"source_origin":if transfer_shape.is_some(){"prospectively authored new literal compositions/questions;bound original opened frame donors;not original donor utterance bytes"}else if derived_origin.is_some(){"prospectively authored explicit-current-role utterances;retained donor literal bytes/chronology;not original donor utterance bytes"}else{"retained original assertion/question bytes"},"fresh_payload_novelty_claimed":a.transfer_profile==TransferProfile::SupportedUntouchedComposition && a.split=="fresh","cue_origin_policy":if derived_origin.is_some(){"prospectively-authored-current-role-bytes/bound-byteBPE/2"}else{"original-assertion-bytes/bound-byteBPE/1"},"raw_cue_provenance_sha256":sha256_file(&a.out.join("raw-cue-provenance.json"))?,"inputs_sha256":sha256_file(&a.out.join("inputs.json"))?,"labels_sha256":sha256_file(&a.out.join("labels.json"))?,"context_data_sha256":sha256_file(&a.out.join("context-data.json"))?,"trusted_binding_sha256":a.trusted_binding_sha256,"native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE;source-preparation-only","fresh_scope":if transfer_shape.is_some(){"four predeclared new role/value banks; eight chronological write histories matched across familiar/unseen-order questions; exact declared exposure exclusion; no global pretraining exclusion claim"}else{"separate preauthored prospective histories;exact source/semantic-packet exclusion;no global pretraining exclusion claim"},"elapsed_seconds":t.elapsed().as_secs_f64()}),
+        json!({"schema":"uor-r4.native-bank-observation-panel/1","status":"COMPLETED","split":a.split,"cases":histories*2,"samebank_query_pairs":histories,"single_record_episode_count":0,"multi_record_episode_count":histories*2,"query_counts":{"job":histories,"where":histories},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"tokenizer_sha256":tokenizer_sha,"native_parent_manifest_sha256":parent_manifest_sha,"construction_plan_manifest_sha256":a.construction_manifest_sha256,"construction_plan_sha256":sha256_bytes(&rawplan),"curriculum_manifest_sha256":a.curriculum_manifest_sha256,"exposed_roots":exposure_receipts,"semantic_packet_fingerprints":semantic,"assertion_query_policy":a.assertion_query_policy,"transfer_profile":a.transfer_profile,"transfer_shape_control":transfer_shape,"prospective_diversity_control":diversity_control,"matched_runtime_control":matched_runtime,"source_policy":plan.source_policy,"derived_source_origin_sha256":derived_origin.as_ref().map(|(_,sha)|sha),"source_origin":if diverse {"retained exact donor literal bytes in prospectively authored current-role frames; disjoint bank compositions with familiar questions; no unseen-literal/word/paraphrase claim"}else if transfer_shape.is_some(){"prospectively authored new literal compositions/questions;bound original opened frame donors;not original donor utterance bytes"}else if derived_origin.is_some(){"prospectively authored explicit-current-role utterances;retained donor literal bytes/chronology;not original donor utterance bytes"}else{"retained original assertion/question bytes"},"fresh_payload_novelty_claimed":a.transfer_profile==TransferProfile::SupportedUntouchedComposition && a.split=="fresh","cue_origin_policy":if derived_origin.is_some(){"prospectively-authored-current-role-bytes/bound-byteBPE/2"}else{"original-assertion-bytes/bound-byteBPE/1"},"raw_cue_provenance_sha256":sha256_file(&a.out.join("raw-cue-provenance.json"))?,"inputs_sha256":sha256_file(&a.out.join("inputs.json"))?,"labels_sha256":sha256_file(&a.out.join("labels.json"))?,"context_data_sha256":sha256_file(&a.out.join("context-data.json"))?,"trusted_binding_sha256":a.trusted_binding_sha256,"native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE;source-preparation-only","fresh_scope":if diverse {"prospectively partitioned whole role/value banks across all query/order variants; known full literals and familiar question forms; complete declared exposure exclusions; not unseen words/literals or universal pretraining exclusion"}else if transfer_shape.is_some(){"four predeclared new role/value banks; eight chronological write histories matched across familiar/unseen-order questions; exact declared exposure exclusion; no global pretraining exclusion claim"}else{"separate preauthored prospective histories;exact source/semantic-packet exclusion;no global pretraining exclusion claim"},"elapsed_seconds":t.elapsed().as_secs_f64()}),
     )
 }
 fn main() -> Result<()> {
@@ -1078,6 +1124,8 @@ fn main() -> Result<()> {
     let a: Args = serde_json::from_slice(&fs::read(&path)?)?;
     if a.schema != "uor-r4.native-bank-observation-panel-args/1"
         || !matches!(a.split.as_str(), "development" | "fresh")
+        || (a.transfer_profile == TransferProfile::SupportedProspectiveRoleDiversity
+            && a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole)
         || a.maximum_seconds == 0
         || a.maximum_seconds > 300
         || a.maximum_report_bytes == 0
@@ -1162,6 +1210,23 @@ mod supported_current_role_panel_tests {
         .is_err());
         assert!(validate_origin_wire(&changed, &r, 0, "development", &[donor.clone()]).is_err());
         assert!(validate_origin_wire(&authored, &r, 1, "development", &[donor]).is_err());
+        Ok(())
+    }
+    #[test]
+    fn diverse_fresh_requires_exact_retained_literal_donor_not_just_an_opened_frame() -> Result<()>
+    {
+        let opened = write("I work as old value.", "I work as {v}.");
+        let donor = write("I work as new value.", "I work as {v}.");
+        let authored = write("My current job is new value.", "My current job is {v}.");
+        let r = receipt(&donor, &authored);
+        let profile = TransferProfile::SupportedProspectiveRoleDiversity;
+        assert!(
+            validate_origin_wire_profile(&authored, &r, 0, "fresh", &[opened], profile).is_err()
+        );
+        validate_origin_wire_profile(&authored, &r, 0, "fresh", &[donor.clone()], profile)?;
+        assert!(
+            validate_origin_wire_profile(&authored, &r, 1, "fresh", &[donor], profile).is_err()
+        );
         Ok(())
     }
     #[test]
