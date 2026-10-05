@@ -1,5 +1,72 @@
 # Current UOR-R4 research state
 
+## Frozen geometric cue support comparison — October 5
+
+[PR1767](https://github.com/UOR-Foundation/uor-r4/pull/1767), numerical source
+`e513dd28`, executes two sibling one-quarter proposals at supports1 and8 from the
+same selected trial8. Coordinates are legal-first absolute signed-mean credit
+from the sealed development audit, with deterministic index ties. Baseline stays
+eligible under actual full512 native CE. Each proposal exports/reloads the exact
+960-coefficient delta and frozen prefix/end bytes, and produces canonical and
+actual own-prefix traces. All-source admission/source/loss are fixed;0 new
+gradient passes or Adam updates. Support8 also has8x coefficient L1 dose, so
+coverage and dose are not isolated.
+
+| Development measure | Baseline | Support1 | Support8 |
+| --- | ---: | ---: | ---: |
+| Native CE |0.98608077336532|0.9821585131940203|0.9665787502842376|
+| Source correct /512 |271|272|280|
+| First emitted token /512 |214|214|219|
+| Complete own-prefix /512 |51|53|59|
+| Both-query source /256 |67|67|72|
+| Both-query complete /256 |3|3|4|
+
+Support8 is selected by development CE only. Versus baseline, source has12 gains
+and3 losses, first token6 gains/1 loss, and completion8 gains/0 losses. Versus
+support1, source has11 gains/3 losses, first6 gains/1 loss, completion6 gains/0
+losses. All per-row comparisons and prior arms are retained.
+
+Already-exposed128-row evaluation regresses: CE1.0219290489004553→1.0270479094064013,
+source67→65 (0 gains/2 losses), first62→61 (0/1), complete15→14 (1/2).
+Both-query source13/64 and complete0/64 remain unchanged. This is a bounded
+checkpoint intervention, not a seed/family verdict. Retain support8 as a
+development donor and the trial8 parent; do not promote it as transfer/chat
+progress or extend the unchanged dose.
+
+Actual release checks pass43 fitter+49 observation tests, fmt/build exit0,
+224.573s CPU8, peak owned RSS4,824,039,424B. Actual probe exits0 in60.210s,
+CPU16, sampled peak owned RSS6,754,672,640B, Linux x86_64 `7f3628fce930`, CUDA
+hidden. Wrong-audit-manifest rejection passes. Exact-head source review and
+independent saved-file reconstruction of all coefficient deltas, selection and
+source/first/completion/paired counts pass. These are native pod CPU measurements,
+not Metal/CUDA model parity or D19 session/grading. Executable SHA256
+`ea54aac4ec190354c288876cce6b6facee70a033fb89961ca928f05ba34c0176`;
+config `fe5016a205459af9498e0e9eb5dbff34276c81580110e1a140fe22fe1062b1e1`;
+probe manifest `ac93a3c98c7e09fa92a71691351b31a2229ef7fac758624e2f4453465f86f0f7`;
+selected cue `771864b7581b79a9d7b93137eb5e28e863da1361e04f41c0bf8810e442469781`.
+Canonical durable evidence is under `/workspace/uor-r4/codex/cue-support-probe/`:
+`checks-1`, `probe-1`, `analysis-1`. A durable per-Codex shared Cargo target avoids
+rebuilding the dependency cache; all binary/source identities remain explicit.
+
+**Next:** development-only binding/pair analysis before admitting one isolated
+joint cue overlay. Compare retained shared unary credit with companion-root
+conditioning only when an anchor belongs uniquely to one actual Source record;
+exclude/quantify ambiguous record credit. Fixed companion permutations control
+mechanical cancellation reduction. Prefer within-head ordered pairs and freeze
+one pair from development evidence, not exposed evaluation failures. Existing
+16-Q4 bilinear-to-table machinery is a conditional donor (64KiB per pair);
+zero-overlay parity, frozen reversed-input order, companion-erased and matched
+additive-unary controls are required for an interaction claim. Refit reversed
+bilinear weights would merely transpose the parameterization. No new joint
+mechanism is yet adopted. General attention/chat, full history/compiler/store
+integration and D11/D5 remain open; DeepSeek's softmax/tensor-core work is separate.
+
+Full60min preparation/checks/measurement/review/preservation/delivery precharge
+and necessary allowance extension preserves prior charges: cumulative
+1,357,635,028ms, limit1,358,400,028ms. Native CPU16/RSS12GiB/900s+30stop,
+report1GiB; buildCPU8/RSS8GiB; ownpod10GiB/128MiB margin. Source/transfers,
+builds, model measurement and saved analysis are distinct evidence.
+
 ## Frozen geometric cue-credit audit — October 5 implementation
 
 [PR1766](https://github.com/UOR-Foundation/uor-r4/pull/1766), stacked on PR1762,

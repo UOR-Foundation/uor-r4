@@ -45,19 +45,23 @@ sealed evaluation completion adds zero learning and preserves the failed fit.
 This is one trajectory, not a replicated family verdict. Keep its selected
 chain and all negatives; the evaluation panel is now exposed.
 
-Thirty-six prospective queries consume changed coefficients, and correct-source
-margins improve24/worsen10 without crossing. Next audit per-row signed ordinary
-CE credit at the fixed selected checkpoint, with no training or reselection.
-Measure reinforcement/cancellation at shared lane/bin addresses across roles,
-wordings, value assignments and record order. Low conflict supports testing a
-predeclared compatible multi-address quarter proposal; strong shared-address
-conflict motivates a typed joint or ordered geometric binding intervention.
-Distinct descriptors alone do not prove unary coefficients are expressive
-enough. Neither a longer unchanged greedy fit nor an evaluation-authored feature
-is justified by these results. Full all-source choice, complete answer/EOS,
-paired opposite-role questions and retained regressions remain the instrument.
-Raw-history/compiler/store/emission integration, generated conversation and
-D19/D11/D5 goals remain outstanding.
+The frozen credit audit in [PR1766](https://github.com/UOR-Foundation/uor-r4/pull/1766)
+and sibling supports1/8 comparison in [PR1767](https://github.com/UOR-Foundation/uor-r4/pull/1767)
+now establish that legal geometric updates change native source decisions and
+complete development answers. The wider step regresses the exposed composition
+panel; retain both its development donor and the original parent, without a chat
+promotion or unchanged dose extension. Current state owns exact counters/receipts.
+
+Next perform development-only binding/pair analysis, with uniquely attributable
+Source-record credit and companion-permutation controls, before freezing one
+within-head ordered pair for an isolated joint cue overlay. Reuse the existing
+16-Q4 bilinear-to-table compiler if warranted; do not search twelve fitted models
+or infer representation impossibility from cancellation. Zero-overlay parity,
+frozen reversed-input order, companion erasure and a matched additive arm retain
+causal interpretation. No exposed evaluation labels choose pair/features.
+Full all-source choice, complete answer/EOS, paired opposite-role questions and
+retained row-level harms remain the instrument. Raw-history/compiler/store/emission
+integration, generated conversation and D19/D11/D5 goals remain outstanding.
 
 ## Active programme — grounded conversation and durable memory, October 1
 
