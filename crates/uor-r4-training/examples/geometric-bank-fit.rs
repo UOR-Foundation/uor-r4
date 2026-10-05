@@ -37,6 +37,8 @@ mod output_support;
 use uor_r4_integer::geometric_prefix_transport::{
     NativePrefixTransport, PrefixAngularConfig, PrefixAngularQ4, PrefixScoreMode,
 };
+#[path = "support/geometric_cue_calibration.rs"]
+mod cue_calibration;
 #[path = "support/geometric_natural_raw_cues.rs"]
 mod natural_raw_cues;
 #[path = "support/geometric_source_end_fit.rs"]
@@ -58,6 +60,24 @@ const CUE_FIT_CAP: usize = 128 * 1024 * 1024;
 const CUE_FAMILIES: &str = "cue-angular-HxLx120/1";
 fn cue_mode(a: &Args) -> bool {
     a.mode.starts_with("cue-")
+}
+fn cue_calibration_mode(a: &Args) -> bool {
+    matches!(
+        a.mode.as_str(),
+        "cue-calibration-broadbatch" | "cue-calibration-fit"
+    )
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CueCalibrationWarmstart {
+    pub(crate) initial_cue_bundle: PathBuf,
+    pub(crate) initial_cue_metadata_sha256: String,
+    pub(crate) initial_cue_packed_sha256: String,
+    pub(crate) frozen_end_bundle: PathBuf,
+    pub(crate) frozen_end_metadata_sha256: String,
+    pub(crate) frozen_end_period_packed_sha256: String,
+    pub(crate) frozen_end_stop_packed_sha256: String,
+    pub(crate) data_scope: String,
 }
 const PREFIX_FIT_CAP: usize = 512 * 1024 * 1024;
 const PREFIX_FAMILIES: &str = "prefix-angular-HxLx120/1";
@@ -122,6 +142,8 @@ fn validate_warmstart(a: &Args) -> Result<()> {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Args {
     pub(crate) mode: String,
+    #[serde(default)]
+    pub(crate) cue_calibration_warmstart: Option<CueCalibrationWarmstart>,
     pub(crate) cue_score_mode: Option<CueScoreMode>,
     pub(crate) prefix_score_mode: Option<PrefixScoreMode>,
     pub(crate) source_end_score_mode:
@@ -391,6 +413,8 @@ fn checked_args() -> Result<Args> {
         "readout-fit",
         "cue-broadbatch",
         "cue-fit",
+        "cue-calibration-broadbatch",
+        "cue-calibration-fit",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -408,7 +432,10 @@ fn checked_args() -> Result<Args> {
                 600
             } else if matches!(
                 a.mode.as_str(),
-                "terminal-fit" | "source-end-fit" | "source-end-calibration-fit"
+                "terminal-fit"
+                    | "source-end-fit"
+                    | "source-end-calibration-fit"
+                    | "cue-calibration-fit"
             ) {
                 900
             } else if a.mode == "fit" {
@@ -425,7 +452,7 @@ fn checked_args() -> Result<Args> {
                 768 * 1024 * 1024
             } else if matches!(
                 a.mode.as_str(),
-                "source-end-fit" | "source-end-calibration-fit"
+                "source-end-fit" | "source-end-calibration-fit" | "cue-calibration-fit"
             ) {
                 // Observed full-cap projection is 568 MB; retain legacy admission
                 // while permitting the prospectively recorded 640 MiB fit cap.
@@ -436,7 +463,9 @@ fn checked_args() -> Result<Args> {
                 }
             } else if matches!(
                 a.mode.as_str(),
-                "source-end-broadbatch" | "source-end-calibration-broadbatch"
+                "source-end-broadbatch"
+                    | "source-end-calibration-broadbatch"
+                    | "cue-calibration-broadbatch"
             ) {
                 128 * 1024 * 1024
             } else if a.mode == "terminal-fit" {
@@ -464,11 +493,13 @@ fn checked_args() -> Result<Args> {
         return Err(invalid("mode/resource contract differs").into());
     }
     validate_warmstart(&a)?;
+    cue_calibration::validate(&a)?;
     if matches!(
         a.mode.as_str(),
         "fit"
             | "readout-fit"
             | "cue-fit"
+            | "cue-calibration-fit"
             | "prefix-fit"
             | "terminal-fit"
             | "source-end-fit"
@@ -484,6 +515,7 @@ fn checked_args() -> Result<Args> {
     }
     if (broad_mode(&a)
         || a.mode == "cue-broadbatch"
+        || a.mode == "cue-calibration-broadbatch"
         || a.mode == "prefix-broadbatch"
         || a.mode == "terminal-broadbatch"
         || a.mode == "source-end-broadbatch"
@@ -516,10 +548,11 @@ fn checked_args() -> Result<Args> {
         a.frozen_cue_native_metadata_sha256.is_some(),
         a.frozen_cue_packed_sha256.is_some(),
     ];
-    if ((prefix_mode(&a) || terminal_mode(&a) || source_end_mode(&a))
-        && !prefix_inputs.iter().all(|v| *v))
-        || (!(prefix_mode(&a) || terminal_mode(&a) || source_end_mode(&a))
-            && prefix_inputs.iter().any(|v| *v))
+    if !cue_calibration_mode(&a)
+        && (((prefix_mode(&a) || terminal_mode(&a) || source_end_mode(&a))
+            && !prefix_inputs.iter().all(|v| *v))
+            || (!(prefix_mode(&a) || terminal_mode(&a) || source_end_mode(&a))
+                && prefix_inputs.iter().any(|v| *v)))
     {
         return Err(invalid(
             "prefix mode requires complete explicit frozen cue native binding and mode",
@@ -531,11 +564,12 @@ fn checked_args() -> Result<Args> {
         a.frozen_prefix_native_metadata_sha256.is_some(),
         a.frozen_prefix_packed_sha256.is_some(),
     ];
-    if ((terminal_mode(&a) || source_end_mode(&a))
+    if ((terminal_mode(&a) || source_end_mode(&a) || cue_calibration_mode(&a))
         && (!terminal_inputs.iter().all(|x| *x)
             || a.prefix_score_mode != Some(PrefixScoreMode::DirectedRelative)
             || a.maximum_generation_tokens != 32))
-        || (!(terminal_mode(&a) || source_end_mode(&a)) && terminal_inputs.iter().any(|x| *x))
+        || (!(terminal_mode(&a) || source_end_mode(&a) || cue_calibration_mode(&a))
+            && terminal_inputs.iter().any(|x| *x))
     {
         return Err(invalid(
             "terminal modes require complete frozen directed prefix64 binding and generation32",
@@ -575,6 +609,16 @@ fn checked_args() -> Result<Args> {
     paths.extend(a.frozen_prefix_bundle.iter());
     paths.extend(a.source_end_incumbent_fit.iter());
     paths.extend(a.source_end_warmstart.iter().map(|w| &w.native_bundle));
+    paths.extend(
+        a.cue_calibration_warmstart
+            .iter()
+            .map(|w| &w.initial_cue_bundle),
+    );
+    paths.extend(
+        a.cue_calibration_warmstart
+            .iter()
+            .map(|w| &w.frozen_end_bundle),
+    );
     paths.extend(a.admission.iter());
     paths.extend(a.fit_authorization.iter());
     paths.extend(a.exposed_controls.iter());
@@ -4132,6 +4176,9 @@ fn terminal_run(a: &Args, start: Instant) -> Result<Value> {
 }
 
 fn run(a: &Args, start: Instant) -> Result<Value> {
+    if cue_calibration_mode(a) {
+        return cue_calibration::run(a, start);
+    }
     if source_end_mode(a) {
         return source_end_fit::run(a, start);
     }

@@ -45,6 +45,13 @@ fn pair_diagnostics(
     if !source_end_calibration(a) {
         return factor_pair_report(panel, canonical, generation);
     }
+    natural_pair_diagnostics(panel, canonical, generation)
+}
+pub(super) fn natural_pair_diagnostics(
+    panel: &Path,
+    canonical: &Value,
+    generation: &Value,
+) -> Result<Value> {
     let data = read_json(&panel.join("context-data.json"))?;
     let rows = data["cases"]
         .as_array()
@@ -55,7 +62,7 @@ fn pair_diagnostics(
     let gr = generation["rows"]
         .as_array()
         .ok_or_else(|| invalid("natural generated rows absent"))?;
-    if rows.len() != 128 || cr.len() != 128 || gr.len() != 128 {
+    if !matches!(rows.len(), 32 | 128) || cr.len() != rows.len() || gr.len() != rows.len() {
         return Err(invalid("natural pair row count differs").into());
     }
     let mut pairs = BTreeMap::<String, Vec<Value>>::new();
@@ -68,16 +75,18 @@ fn pair_diagnostics(
             .ok_or_else(|| invalid("natural pair ID absent"))?;
         pairs.entry(id.into()).or_default().push(json!({"id":d["id"],"query_role":d["query_role"],"first_canonical_position":c["tokens"][0],"native_mean_token_ce":c["native_mean_token_ce"],"generated_ids_including_eos":g["generated_ids_including_eos"],"accepted_complete_answer":g["accepted_complete_answer"]}));
     }
-    if pairs.len() != 64
+    if pairs.len() != rows.len() / 2
         || pairs
             .values()
             .any(|p| p.len() != 2 || p[0]["query_role"] == p[1]["query_role"])
     {
         return Err(invalid("natural panel requires64 intact query pairs").into());
     }
-    Ok(
-        json!({"pairs":pairs,"scope":"all128 bank rows;64query pairs; labels only after native read"}),
-    )
+    Ok(json!({"pairs":pairs,"scope":if rows.len()==128 {
+        "all128 bank rows;64query pairs; labels only after native read"
+    } else {
+        "all32 bank rows;16query pairs; labels only after native read"
+    }}))
 }
 fn exact_warm_fidelity(donor: &Value, warm: &Value) -> Result<()> {
     if donor != warm {
@@ -196,7 +205,7 @@ fn zero_fidelity(old: &Value, new: &Value) -> Result<()> {
     }
     Ok(())
 }
-fn canonical(
+pub(super) fn canonical(
     native: &IntegerRealizer,
     cue: &NativeCueCarrier<'_>,
     carrier: &NativePrefixTransport<'_>,
@@ -261,7 +270,7 @@ fn canonical(
         json!({"cases":episodes.len(),"target_positions":count,"native_equal_episode_ce":if zeros.is_empty(){Some(total)}else{None},"zero_support_positions":zeros,"rows":rows,"probability_floor":false,"infinite_native_objective_when_zero":true}),
     )
 }
-fn generation(
+pub(super) fn generation(
     native: &IntegerRealizer,
     cue: &NativeCueCarrier<'_>,
     carrier: &NativePrefixTransport<'_>,
@@ -613,7 +622,7 @@ fn checkpoint(
     report_output::verify(&root)?;
     result
 }
-fn project_storage(canonical: &Value, generation: &Value, a: &Args) -> Result<Value> {
+pub(super) fn project_storage(canonical: &Value, generation: &Value, a: &Args) -> Result<Value> {
     let mut max_token = 0usize;
     for row in generation["rows"]
         .as_array()
