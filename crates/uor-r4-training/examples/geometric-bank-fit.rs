@@ -96,6 +96,15 @@ pub(crate) struct CueQuantumProbe {
 pub(crate) struct CueDiscreteFit {
     pub(crate) maximum_trials: usize,
     pub(crate) maximum_accepted_updates: usize,
+    #[serde(default)]
+    pub(crate) composition_panel: Option<CueCompositionPanel>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CueCompositionPanel {
+    pub(crate) profile: String,
+    pub(crate) development_rows: usize,
+    pub(crate) evaluation_rows: usize,
 }
 const PREFIX_FIT_CAP: usize = 512 * 1024 * 1024;
 const PREFIX_FAMILIES: &str = "prefix-angular-HxLx120/1";
@@ -456,7 +465,14 @@ fn checked_args() -> Result<Args> {
                 a.mode.as_str(),
                 "source-end-refine" | "cue-calibration-discrete-fit"
             ) {
-                600
+                if a.cue_discrete_fit
+                    .as_ref()
+                    .is_some_and(|c| c.composition_panel.is_some())
+                {
+                    900
+                } else {
+                    600
+                }
             } else if matches!(
                 a.mode.as_str(),
                 "terminal-fit"
@@ -499,7 +515,14 @@ fn checked_args() -> Result<Args> {
                 a.mode.as_str(),
                 "cue-calibration-quantum-probe" | "cue-calibration-discrete-fit"
             ) {
-                256 * 1024 * 1024
+                if a.cue_discrete_fit
+                    .as_ref()
+                    .is_some_and(|c| c.composition_panel.is_some())
+                {
+                    1024 * 1024 * 1024
+                } else {
+                    256 * 1024 * 1024
+                }
             } else if a.mode == "terminal-fit" {
                 1024 * 1024 * 1024
             } else if a.mode == "terminal-broadbatch" {

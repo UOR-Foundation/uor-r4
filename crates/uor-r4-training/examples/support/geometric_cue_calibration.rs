@@ -9,6 +9,24 @@ use uor_r4_integer::geometric_source_end_transport::{
 const FAMILIES: &str = "cue-angular-HxLx120-only/full-native-SourceEnd/1";
 const DATA_SCOPE: &str =
     "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2";
+const COMPOSITION_PROFILE: &str = "supported-prospective-role-diversity/1";
+
+fn panel_counts(a: &Args) -> (usize, usize) {
+    a.cue_discrete_fit
+        .as_ref()
+        .and_then(|c| c.composition_panel.as_ref())
+        .map_or((128, 32), |p| (p.development_rows, p.evaluation_rows))
+}
+
+fn composition_report_matches(report: &Value, split: &str, rows: usize) -> bool {
+    report["schema"] == "uor-r4.native-bank-observation-panel/1"
+        && report["status"] == "COMPLETED"
+        && report["transfer_profile"] == COMPOSITION_PROFILE
+        && report["source_policy"] == DATA_SCOPE
+        && report["split"] == split
+        && report["cases"] == rows
+        && report["samebank_query_pairs"] == rows / 2
+}
 
 pub(super) fn validate(a: &Args) -> Result<()> {
     if cue_calibration_mode(a) != a.cue_calibration_warmstart.is_some() {
@@ -21,6 +39,14 @@ pub(super) fn validate(a: &Args) -> Result<()> {
         return Err(invalid("cue discrete configuration is explicit-discrete-fit-only").into());
     }
     if let Some(c) = &a.cue_discrete_fit {
+        if let Some(p) = &c.composition_panel {
+            if p.profile != COMPOSITION_PROFILE
+                || p.development_rows != 512
+                || p.evaluation_rows != 128
+            {
+                return Err(invalid("prospective composition profile/counts differ").into());
+            }
+        }
         if !(1..=16).contains(&c.maximum_trials)
             || !(1..=8).contains(&c.maximum_accepted_updates)
             || c.maximum_accepted_updates > c.maximum_trials
@@ -788,7 +814,30 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     } else {
         None
     };
-    let development = panel(&a.development_panel, 128, &integer, &tok, a)?;
+    let (development_rows, evaluation_rows) = panel_counts(a);
+    if a.cue_discrete_fit
+        .as_ref()
+        .is_some_and(|c| c.composition_panel.is_some())
+        && !composition_report_matches(
+            &read_json(&a.development_panel.join("report.json"))?,
+            "development",
+            development_rows,
+        )
+    {
+        return Err(invalid("prospective development panel report differs").into());
+    }
+    if a.cue_discrete_fit
+        .as_ref()
+        .is_some_and(|c| c.composition_panel.is_some())
+        && !composition_report_matches(
+            &read_json(&a.fresh_panel.join("report.json"))?,
+            "fresh",
+            evaluation_rows,
+        )
+    {
+        return Err(invalid("prospective evaluation panel report differs before learning").into());
+    }
+    let development = panel(&a.development_panel, development_rows, &integer, &tok, a)?;
     let initial = a.out.join("initial-chain");
     report_output::claim(&initial)?;
     save_chain(&initial, &weights, &parent, &f)?;
@@ -1665,6 +1714,7 @@ mod tests {
         a.cue_discrete_fit = Some(CueDiscreteFit {
             maximum_trials: 16,
             maximum_accepted_updates: 8,
+            composition_panel: None,
         });
         validate(&a)?;
         a.mode = "cue-calibration-fit".into();
@@ -1684,13 +1734,54 @@ mod tests {
         a.cue_discrete_fit = Some(CueDiscreteFit {
             maximum_trials: 1,
             maximum_accepted_updates: 2,
+            composition_panel: None,
         });
         assert!(validate(&a).is_err());
         a.cue_discrete_fit = Some(CueDiscreteFit {
             maximum_trials: 0,
             maximum_accepted_updates: 0,
+            composition_panel: None,
         });
         assert!(validate(&a).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn prospective_composition_is_explicit_and_cannot_truncate_to_legacy_counts() -> Result<()> {
+        let mut a = valid_args()?;
+        a.mode = "cue-calibration-discrete-fit".into();
+        a.cue_discrete_fit = Some(CueDiscreteFit {
+            maximum_trials: 16,
+            maximum_accepted_updates: 8,
+            composition_panel: Some(CueCompositionPanel {
+                profile: COMPOSITION_PROFILE.into(),
+                development_rows: 512,
+                evaluation_rows: 128,
+            }),
+        });
+        validate(&a)?;
+        assert_eq!(panel_counts(&a), (512, 128));
+        let report = json!({"schema":"uor-r4.native-bank-observation-panel/1","status":"COMPLETED","transfer_profile":COMPOSITION_PROFILE,"source_policy":DATA_SCOPE,"split":"development","cases":512,"samebank_query_pairs":256});
+        assert!(composition_report_matches(&report, "development", 512));
+        assert!(!composition_report_matches(&report, "fresh", 512));
+        assert!(!composition_report_matches(&report, "development", 128));
+        let mut legacy = report.clone();
+        legacy["transfer_profile"] = json!("supported-untouched-composition/1");
+        assert!(!composition_report_matches(&legacy, "development", 512));
+        a.cue_discrete_fit
+            .as_mut()
+            .ok_or_else(|| invalid("test config absent"))?
+            .composition_panel
+            .as_mut()
+            .ok_or_else(|| invalid("test composition absent"))?
+            .development_rows = 128;
+        assert!(validate(&a).is_err());
+        a.cue_discrete_fit
+            .as_mut()
+            .ok_or_else(|| invalid("test config absent"))?
+            .composition_panel = None;
+        validate(&a)?;
+        assert_eq!(panel_counts(&a), (128, 32));
         Ok(())
     }
 }

@@ -54,6 +54,95 @@ fn next_coordinate(
     Ok(chosen)
 }
 
+// Geometry-only analysis of the first read: no target, role or correctness field
+// is consulted. Evaluation is classified only after model selection freezes.
+fn first_read_tuples(canonical: &Value) -> Result<Vec<(String, Vec<Vec<Option<usize>>>)>> {
+    let mut out = Vec::new();
+    for row in canonical["rows"]
+        .as_array()
+        .ok_or_else(|| invalid("coverage rows absent"))?
+    {
+        let id = row["id"]
+            .as_str()
+            .ok_or_else(|| invalid("coverage ID absent"))?;
+        let lanes = row["tokens"]
+            .as_array()
+            .and_then(|xs| xs.first())
+            .and_then(|t| t["cue_carrier"]["angular_indices"].as_array())
+            .ok_or_else(|| invalid("coverage initial angular indices absent"))?;
+        let width = lanes
+            .first()
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .ok_or_else(|| invalid("coverage candidate width absent"))?;
+        let mut tuples = vec![Vec::new(); width];
+        for lane in lanes {
+            let bins = lane
+                .as_array()
+                .ok_or_else(|| invalid("coverage lane absent"))?;
+            if bins.len() != width {
+                return Err(invalid("coverage lane width differs").into());
+            }
+            for (tuple, bin) in tuples.iter_mut().zip(bins) {
+                tuple.push(if bin.is_null() {
+                    None
+                } else {
+                    Some(usize::try_from(
+                        bin.as_u64()
+                            .filter(|b| *b < 120)
+                            .ok_or_else(|| invalid("coverage angular bin invalid"))?,
+                    )?)
+                });
+            }
+        }
+        tuples.retain(|t| t.iter().any(Option::is_some));
+        if tuples.is_empty() {
+            return Err(invalid("coverage has no observed source geometry").into());
+        }
+        out.push((id.to_owned(), tuples));
+    }
+    Ok(out)
+}
+
+fn coverage_strata(training: &Value, evaluation: &Value) -> Result<Value> {
+    let train = first_read_tuples(training)?;
+    let eval = first_read_tuples(evaluation)?;
+    let mut bins = BTreeSet::new();
+    let mut joint = BTreeSet::new();
+    for (_, tuples) in &train {
+        for tuple in tuples {
+            for (lane, bin) in tuple.iter().enumerate() {
+                if let Some(bin) = bin {
+                    bins.insert((lane, *bin));
+                }
+            }
+            joint.insert(tuple.clone());
+        }
+    }
+    let mut rows = Vec::new();
+    for (id, tuples) in eval {
+        let all_bins_supported = tuples.iter().all(|tuple| {
+            tuple
+                .iter()
+                .enumerate()
+                .all(|(lane, bin)| bin.is_none_or(|b| bins.contains(&(lane, b))))
+        });
+        let all_joint_seen = tuples.iter().all(|tuple| joint.contains(tuple));
+        rows.push(
+            json!({"id":id,"all_source_constituent_bins_supported":all_bins_supported,
+            "all_source_joint_tuples_seen":all_joint_seen,"stratum":if !all_bins_supported {
+                "unsupported-constituent-bin"
+            } else if all_joint_seen { "seen-joint-geometric-tuples" }
+            else { "covered-bins/new-joint-tuple" }}),
+        );
+    }
+    Ok(
+        json!({"training_rows":train.len(),"training_lane_bin_union":bins,
+        "training_distinct_joint_tuples":joint.len(),"evaluation_rows":rows,
+        "scope":"all observed initial-read source tuples; canonical token0 only; no labels/outcomes or filtering; analysis after selection, not a model-selection criterion"}),
+    )
+}
+
 // These labels only score already-produced canonical predictions. No generation
 // is fabricated for trials, and this summary never ranks or accepts a proposal.
 fn source_summary(
@@ -167,7 +256,7 @@ fn source_summary(
         return Err(invalid("discrete summary intact-pair width differs").into());
     }
     Ok(
-        json!({"rows":summaries,"native_equal_episode_ce":canonical["native_equal_episode_ce"],"source_correct":source_correct,"both_paired_source_correct":pairs.values().filter(|p|p.iter().all(|x|*x)).count(),"own_prefix_generation":"NOT_RUN_FOR_TRIAL; canonical source/CE summary only","scope":"all128 actual native canonical predictions; typed role truth only after read; payload/Period-EOS target CE partition is descriptive, not alternate objective"}),
+        json!({"rows":summaries,"native_equal_episode_ce":canonical["native_equal_episode_ce"],"source_correct":source_correct,"both_paired_source_correct":pairs.values().filter(|p|p.iter().all(|x|*x)).count(),"own_prefix_generation":"NOT_RUN_FOR_TRIAL; canonical source/CE summary only","cases":episodes.len(),"scope":"all-panel actual native canonical predictions; typed role truth only after read; payload/Period-EOS target CE partition is descriptive, not alternate objective"}),
     )
 }
 fn source_changes(old: &Value, new: &Value) -> Result<Value> {
@@ -263,7 +352,7 @@ pub(super) fn run(
     if projection_bytes.saturating_add(1024 * 1024) > a.maximum_report_bytes {
         return Err(invalid("discrete observed-shape storage exceeds admitted cap").into());
     }
-    let projection = json!({"observed_shape_total_bytes":projection_bytes,"baseline_canonical_bytes":canonical_bytes,"baseline_generation_bytes":generation_bytes,"full_trace_sets":2.5,"proposal_artifacts":"at most16 tiny cue/prefix/end chains plus compact128row CE/source/margin/gradient receipts; no pertrial full canonical/generation","administration_reserve_bytes":16*1024*1024,"configured_report_cap_bytes":a.maximum_report_bytes,"scope":"observed baseline shape projection, not formal size bound; actual writer cap/stop margin authoritative"});
+    let projection = json!({"observed_shape_total_bytes":projection_bytes,"baseline_canonical_bytes":canonical_bytes,"baseline_generation_bytes":generation_bytes,"full_trace_sets":2.5,"proposal_artifacts":"at most16 tiny cue/prefix/end chains plus compact per-row CE/source/margin/gradient receipts; no pertrial full canonical/generation","administration_reserve_bytes":16*1024*1024,"configured_report_cap_bytes":a.maximum_report_bytes,"scope":"observed baseline shape projection, not formal size bound; actual writer cap/stop margin authoritative"});
     write_json(&a.out, "storage-projection.json", &projection)?;
     let mut current =
         CueAngularWeights::load(&a.out.join("initial-chain/cue"), parent, &a.native_artifact)?;
@@ -295,7 +384,7 @@ pub(super) fn run(
         rejected.at_head(&packed);
         if cached_gradient.is_none() {
             let measured = batch(
-                &(0..128).collect::<Vec<_>>(),
+                &(0..development.len()).collect::<Vec<_>>(),
                 development,
                 source,
                 parent,
@@ -320,7 +409,7 @@ pub(super) fn run(
                 .get("cue.coefficients")
                 .ok_or_else(|| invalid("discrete cue gradient missing"))?;
             let gradient = tensor.flatten_all()?.to_vec1::<f32>()?;
-            let metadata = json!({"pass":gradient_passes+1,"current_cue_packed_sha256":sha256_bytes(&packed),"current_native_equal_episode_ce":incumbent_ce,"gradient_report":measured.report,"gradient_coefficients_f32":gradient,"gradient_scope":"ordinary full128 equalepisode answer+EOS CE; allsource admission; encoder/roots/prefix/end/argmax stopped; no role/source-correctness proposal steering"});
+            let metadata = json!({"pass":gradient_passes+1,"current_cue_packed_sha256":sha256_bytes(&packed),"current_native_equal_episode_ce":incumbent_ce,"gradient_report":measured.report,"gradient_coefficients_f32":gradient,"gradient_scope":"ordinary full-panel equalepisode answer+EOS CE; allsource admission; encoder/roots/prefix/end/argmax stopped; no role/source-correctness proposal steering"});
             gradient_passes += 1;
             write_json(
                 &a.out,
@@ -388,7 +477,7 @@ pub(super) fn run(
             step,
         )?;
         let decision = improves(incumbent_ce, proposal_ce);
-        let receipt = json!({"trial":trial,"optimizer_updates":accepted+usize::from(decision),"adam_updates":0,"accepted":decision,"accepted_updates_before":accepted,"accepted_updates_after":accepted+usize::from(decision),"parent_cue_packed_sha256":sha256_bytes(&packed),"proposal_cue_packed_sha256":sha256_bytes(&proposed_packed),"coefficient_index":index,"lane":index/120,"angular_bin":index%120,"initial_quarters":values[index],"step_quarters":step,"gradient_credit":credit,"predicted_ce_delta":f64::from(credit)*f64::from(step)/4.,"actual_parent_ce":incumbent_ce,"actual_proposal_ce":proposal_ce,"realized_ce_delta":proposal_ce.map(|v|v-incumbent_ce),"acceptance":"finite actual full128 native CE < incumbent -1e-9; no source/role correctness gate","source_changes_vs_incumbent":source_changes(&current_summary,&summary)?,"source_changes_vs_baseline":source_changes(&baseline_summary,&summary)?,"gradient_pass":gradient_passes,"all_other_coefficients_unchanged":true,"frozen_payloads":f.hashes(),"independent_native_reload":true,"native_single_address_delta_verified":true,"touched_rows":margins["touched_rows"],"own_prefix_generation":"NOT_RUN_FOR_TRIAL"});
+        let receipt = json!({"trial":trial,"optimizer_updates":accepted+usize::from(decision),"adam_updates":0,"accepted":decision,"accepted_updates_before":accepted,"accepted_updates_after":accepted+usize::from(decision),"parent_cue_packed_sha256":sha256_bytes(&packed),"proposal_cue_packed_sha256":sha256_bytes(&proposed_packed),"coefficient_index":index,"lane":index/120,"angular_bin":index%120,"initial_quarters":values[index],"step_quarters":step,"gradient_credit":credit,"predicted_ce_delta":f64::from(credit)*f64::from(step)/4.,"actual_parent_ce":incumbent_ce,"actual_proposal_ce":proposal_ce,"realized_ce_delta":proposal_ce.map(|v|v-incumbent_ce),"acceptance":"finite actual full-panel native CE < incumbent -1e-9; no source/role correctness gate","source_changes_vs_incumbent":source_changes(&current_summary,&summary)?,"source_changes_vs_baseline":source_changes(&baseline_summary,&summary)?,"gradient_pass":gradient_passes,"all_other_coefficients_unchanged":true,"frozen_payloads":f.hashes(),"independent_native_reload":true,"native_single_address_delta_verified":true,"touched_rows":margins["touched_rows"],"own_prefix_generation":"NOT_RUN_FOR_TRIAL"});
         write_json(&root, "canonical-summary.json", &summary)?;
         write_json(&root, "record-margin-changes.json", &margins)?;
         write_json(&root, "receipt.json", &receipt)?;
@@ -420,7 +509,7 @@ pub(super) fn run(
     write_json(
         &a.out,
         "selection-before-fresh.json",
-        &json!({"selected_trial":selected_trial,"accepted_discrete_updates":accepted,"optimizer_updates":accepted,"adam_updates":0,"criterion":"native ordinary full128 CE descent; baseline eligible; fresh never selects","fresh_predictions_before_selection":0,"stop_reason":stop_reason}),
+        &json!({"selected_trial":selected_trial,"accepted_discrete_updates":accepted,"optimizer_updates":accepted,"adam_updates":0,"criterion":"native ordinary full-panel CE descent; baseline eligible; fresh never selects","fresh_predictions_before_selection":0,"stop_reason":stop_reason}),
     )?;
     let selected_root = if selected_trial == 0 {
         a.out.join("initial-chain")
@@ -456,7 +545,17 @@ pub(super) fn run(
         "development-causal-outcomes.json",
         &json!({"parent":parent_metrics,"selected":final_metrics,"comparison":causal_comparison(&parent_metrics,&final_metrics)?}),
     )?;
-    let diagnostic = panel(&a.fresh_panel, 32, integer, tok, a)?;
+    let (_, evaluation_rows) = panel_counts(a);
+    if cfg.composition_panel.is_some()
+        && !composition_report_matches(
+            &read_json(&a.fresh_panel.join("report.json"))?,
+            "fresh",
+            evaluation_rows,
+        )
+    {
+        return Err(invalid("prospective evaluation panel report differs").into());
+    }
+    let diagnostic = panel(&a.fresh_panel, evaluation_rows, integer, tok, a)?;
     let (bc, bp, be) = load_chain(&a.out.join("initial-chain"), integer)?;
     let oldcan = source_end_fit::canonical(integer, &bc, &bp, &be, &diagnostic, a, start)?;
     let oldgen = source_end_fit::generation(integer, &bc, &bp, &be, &diagnostic, tok, a, start)?;
@@ -466,6 +565,13 @@ pub(super) fn run(
     write_json(&a.out, "fresh-selected-canonical.json", &newcan)?;
     write_json(&a.out, "fresh-parent-generation.json", &oldgen)?;
     write_json(&a.out, "fresh-selected-generation.json", &newgen)?;
+    if cfg.composition_panel.is_some() {
+        write_json(
+            &a.out,
+            "prospective-first-read-coverage.json",
+            &coverage_strata(baseline, &oldcan)?,
+        )?;
+    }
     let oldmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &oldcan, &oldgen)?;
     let newmetrics = causal_metrics(&a.fresh_panel, &diagnostic, &newcan, &newgen)?;
     write_json(
@@ -479,13 +585,43 @@ pub(super) fn run(
     frozen(source, receipts)?;
     immutable(inputs, seals)?;
     Ok(
-        json!({"schema":"uor-r4.geometric-cue-discrete-fit/1","mode":a.mode,"status":"completed","cases":128,"cue_discrete_fit":cfg,"cue_calibration_warmstart":a.cue_calibration_warmstart,"optimizer_updates":accepted,"adam_updates":0,"proposal_count":trials.len(),"accepted_discrete_updates":accepted,"selected_trial":selected_trial,"selected_native_equal_episode_ce":incumbent_ce,"selected_cue_packed_sha256":sha256_bytes(&current.packed_coefficients()?),"gradient_passes":gradient_passes,"trials":trials,"stop_reason":stop_reason,"input_manifests_sha256":inputs,"frozen_source_receipts":receipts,"frozen_payloads":f.hashes(),"storage_projection":projection,"fresh_predictions_before_selection":0,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib(),"learning_law":"recomputed ordinary full128 gradient; largestabs legal observed nonzero coordinate; deterministic index ties; one negativegradient quarter; actualnative finiteCE descent; rejectedindices scopedto currentpackedhead","claim":"bounded native discrete cue learning; fullbank admission, baseline/final actual ownprefix and exposed diagnostic; no seedconsistency/transfer/generalchat/energy qualification"}),
+        json!({"schema":"uor-r4.geometric-cue-discrete-fit/1","mode":a.mode,"status":"completed","cases":development.len(),"evaluation_cases":evaluation_rows,"cue_discrete_fit":cfg,"cue_calibration_warmstart":a.cue_calibration_warmstart,"optimizer_updates":accepted,"adam_updates":0,"proposal_count":trials.len(),"accepted_discrete_updates":accepted,"selected_trial":selected_trial,"selected_native_equal_episode_ce":incumbent_ce,"selected_cue_packed_sha256":sha256_bytes(&current.packed_coefficients()?),"gradient_passes":gradient_passes,"trials":trials,"stop_reason":stop_reason,"input_manifests_sha256":inputs,"frozen_source_receipts":receipts,"frozen_payloads":f.hashes(),"storage_projection":projection,"fresh_predictions_before_selection":0,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib(),"learning_law":"recomputed ordinary full-panel gradient; largestabs legal observed nonzero coordinate; deterministic index ties; one negativegradient quarter; actualnative finiteCE descent; rejectedindices scopedto currentpackedhead","evaluation_scope":if cfg.composition_panel.is_some(){"prospectively partitioned retained-literal bank compositions; predictions after selection; no unseen-literal/word claim"}else{"exposed diagnostic"},"claim":"bounded native discrete cue learning; fullbank admission and baseline/final actual ownprefix; no seedconsistency/generalchat/energy qualification"}),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn coverage_separates_new_joint_tuples_from_unsupported_bins_without_labels() -> Result<()> {
+        fn trace(id: &str, bins: Value) -> Value {
+            json!({"id":id,"tokens":[{"cue_carrier":{"angular_indices":bins}}]})
+        }
+        let training = json!({"rows":[trace("a",json!([[1,2],[3,4]]))]});
+        let evaluation = json!({"rows":[
+            trace("seen",json!([[1,2],[3,4]])),
+            trace("newjoint",json!([[1,2],[4,3]])),
+            trace("unsupported",json!([[1,9],[3,4]]))]});
+        let result = coverage_strata(&training, &evaluation)?;
+        assert_eq!(
+            result["evaluation_rows"][0]["stratum"],
+            "seen-joint-geometric-tuples"
+        );
+        assert_eq!(
+            result["evaluation_rows"][1]["stratum"],
+            "covered-bins/new-joint-tuple"
+        );
+        assert_eq!(
+            result["evaluation_rows"][2]["stratum"],
+            "unsupported-constituent-bin"
+        );
+        let bad = json!({"rows":[trace("bad",json!([[120],[4]]))]});
+        assert!(coverage_strata(&training, &bad).is_err());
+        let mut targets = evaluation;
+        targets["rows"][0]["target_label_only_after_read"] = json!(999);
+        assert_eq!(coverage_strata(&training, &targets)?, result);
+        Ok(())
+    }
     #[test]
     fn coordinate_ordering_respects_legal_boundaries_ties_and_current_rejections() -> Result<()> {
         let values = [-7, 7, 0, 0, 0];
