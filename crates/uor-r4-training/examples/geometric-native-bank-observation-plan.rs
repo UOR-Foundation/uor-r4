@@ -30,6 +30,8 @@ struct Args {
     mode: Option<String>,
     #[serde(default)]
     assertion_query_policy: AssertionQueryPolicy,
+    #[serde(default)]
+    transfer_profile: TransferProfile,
     input_bundle: PathBuf,
     input_manifest_sha256: String,
     exposed_roots: Vec<BoundRoot>,
@@ -58,6 +60,195 @@ impl AssertionQueryPolicy {
             }
         }
     }
+}
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+enum TransferProfile {
+    #[default]
+    #[serde(rename = "retained-composition/1")]
+    RetainedComposition,
+    #[serde(rename = "supported-untouched-composition/1")]
+    SupportedUntouchedComposition,
+}
+const TRANSFER_JOB_QUERY: &str = "What is my job currently?";
+const TRANSFER_HOME_QUERY: &str = "Where do I live currently?";
+fn collect_opened_wires(
+    v: &Value,
+    values: &mut BTreeSet<String>,
+    queries: &mut BTreeSet<String>,
+) -> Result<()> {
+    match v {
+        Value::Object(o) => {
+            if let Ok(w) = serde_json::from_value::<Wire>(v.clone()) {
+                if w.act == "query" {
+                    queries.insert(w.text);
+                } else if matches!(w.act.as_str(), "assert" | "update") {
+                    values.insert(literal(&w)?.to_owned());
+                }
+            }
+            for x in o.values() {
+                collect_opened_wires(x, values, queries)?;
+            }
+        }
+        Value::Array(xs) => {
+            for x in xs {
+                collect_opened_wires(x, values, queries)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+fn opened_wire_counts(v: &Value) -> (usize, usize) {
+    let mut counts = (0, 0);
+    match v {
+        Value::Object(o) => {
+            if let Ok(w) = serde_json::from_value::<Wire>(v.clone()) {
+                if w.act == "query" {
+                    counts.1 += 1;
+                } else if matches!(w.act.as_str(), "assert" | "update") {
+                    counts.0 += 1;
+                }
+            }
+            for x in o.values() {
+                let n = opened_wire_counts(x);
+                counts.0 += n.0;
+                counts.1 += n.1;
+            }
+        }
+        Value::Array(xs) => {
+            for x in xs {
+                let n = opened_wire_counts(x);
+                counts.0 += n.0;
+                counts.1 += n.1;
+            }
+        }
+        _ => {}
+    }
+    counts
+}
+fn semantic_identity(h: &History) -> Result<(String, String)> {
+    let mut current = BTreeMap::new();
+    let mut turns = Vec::new();
+    for w in &h.turns {
+        let value = literal(w)?;
+        current.insert(w.relation.as_str(), value);
+        turns.push(json!({"role":w.relation,"act":w.act,"literal":value}));
+    }
+    Ok((
+        sha256_bytes(&serde_json::to_vec(&current)?),
+        sha256_bytes(&serde_json::to_vec(&turns)?),
+    ))
+}
+fn untouched_histories(all: &[Wire]) -> Result<(Vec<History>, BTreeMap<String, Vec<Wire>>)> {
+    let jf = pool(all, "job", "assert", None)?;
+    let hf = pool(all, "home", "assert", None)?;
+    let ju = pool(all, "job", "update", None)?;
+    let hu = pool(all, "home", "update", None)?;
+    let fixed = [
+        ("amber willow", "copper cedar", None),
+        (
+            "violet birch amber willow copper cedar harbor orchard",
+            "silver orchard copper birch violet willow amber harbor",
+            None,
+        ),
+        (
+            "violet willow",
+            "copper meadow silver birch",
+            Some(("job", "amber cedar violet willow")),
+        ),
+        (
+            "orchard silver harbor amber",
+            "birch copper",
+            Some(("home", "willow copper birch violet")),
+        ),
+    ];
+    let mut result = Vec::new();
+    let mut frame_donors = BTreeMap::new();
+    for (i, (jv, hv, update)) in fixed.into_iter().enumerate() {
+        let jd = jf[i % jf.len()].clone();
+        let hd = hf[i % hf.len()].clone();
+        let j = substituted(&jd, jv)?;
+        let h = substituted(&hd, hv)?;
+        let mut after = Vec::new();
+        let mut after_donors = Vec::new();
+        if let Some((role, value)) = update {
+            let ud = if role == "job" {
+                ju[i % ju.len()].clone()
+            } else {
+                hu[i % hu.len()].clone()
+            };
+            after.push(substituted(&ud, value)?);
+            after_donors.push(ud);
+            if role == "job" {
+                after.push(h.clone());
+                after_donors.push(hd.clone());
+            } else {
+                after.push(j.clone());
+                after_donors.push(jd.clone());
+            }
+        }
+        for group in ["familiar", "novel"] {
+            let histories = chronologies(
+                &format!("untouched-bank{i:02}-{group}"),
+                &format!("untouched-current-role/{group}/order-pair"),
+                j.clone(),
+                h.clone(),
+                after.clone(),
+                qpair(all, i)?,
+            );
+            for (order, history) in histories.into_iter().enumerate() {
+                let mut donors = if order == 0 {
+                    vec![jd.clone(), hd.clone()]
+                } else {
+                    vec![hd.clone(), jd.clone()]
+                };
+                donors.extend(if order == 0 {
+                    after_donors.clone()
+                } else {
+                    after_donors.iter().rev().cloned().collect()
+                });
+                frame_donors.insert(history.id.clone(), donors);
+                result.push(history);
+            }
+        }
+    }
+    Ok((result, frame_donors))
+}
+fn apply_untouched_policy(
+    histories: &mut [History],
+    donors: &BTreeMap<String, Vec<Wire>>,
+) -> Result<Vec<Value>> {
+    let mut origins = apply_supported_policy(histories)?;
+    for (h, origin) in histories.iter_mut().zip(origins.iter_mut()) {
+        let ds = donors
+            .get(&h.id)
+            .ok_or_else(|| invalid("untouched original frame donors absent"))?;
+        for (receipt, donor) in origin["turns"]
+            .as_array_mut()
+            .ok_or_else(|| invalid("turn origins absent"))?
+            .iter_mut()
+            .zip(ds)
+        {
+            receipt["original_frame_donor_wire"] = serde_json::to_value(donor)?;
+        }
+        for (q, receipt) in h.queries.iter_mut().zip(
+            origin["queries"]
+                .as_array_mut()
+                .ok_or_else(|| invalid("query origins absent"))?,
+        ) {
+            q.text = match (h.stratum.contains("/novel/"), q.relation.as_str()) {
+                (true, "job") => TRANSFER_JOB_QUERY,
+                (true, "home") => TRANSFER_HOME_QUERY,
+                (false, "job") => CURRENT_JOB_QUERIES[0],
+                (false, "home") => CURRENT_HOME_QUERIES[0],
+                _ => return Err(invalid("untouched role absent").into()),
+            }
+            .into();
+            q.template = Some(q.text.clone());
+            receipt["authored_wire"] = serde_json::to_value(q)?;
+        }
+    }
+    Ok(origins)
 }
 const CURRENT_JOB_QUERIES: [&str; 6] = [
     "What is my current job?",
@@ -437,6 +628,13 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     all.extend(dev.clone());
     let mut opened = BTreeSet::new();
     opened_strings(&frozen, &mut opened);
+    let mut opened_values = BTreeSet::new();
+    let mut opened_queries = BTreeSet::new();
+    collect_opened_wires(&frozen, &mut opened_values, &mut opened_queries)?;
+    let mut exposed_banks = BTreeSet::new();
+    let mut exposed_turn_histories = BTreeSet::new();
+    let mut history_exposure_roots = Vec::new();
+    let mut wire_exposure_coverage = Vec::new();
     let mut exposed_history = BTreeSet::new();
     let mut exposed_numerical = BTreeSet::new();
     if a.exposed_roots.is_empty() {
@@ -450,10 +648,14 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             read_json(&e.root.join("frozen-inputs.json"))?
         } else if e.root.join("plan.json").is_file() {
             let v = read_json(&e.root.join("plan.json"))?;
+            history_exposure_roots.push(e.root.clone());
             if let Some(hs) = v["histories"].as_array() {
                 for h in hs {
                     let h: History = serde_json::from_value(h.clone())?;
                     exposed_history.extend(semantic_history(&h)?);
+                    let (bank, history) = semantic_identity(&h)?;
+                    exposed_banks.insert(bank);
+                    exposed_turn_histories.insert(history);
                 }
             }
             v
@@ -461,10 +663,9 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             let v = read_json(&e.root.join("inputs.json"))?;
             exposed_numerical.extend(numerical_packets(&v)?);
             if e.root.join("raw-cue-provenance.json").is_file() {
-                opened_strings(
-                    &read_json(&e.root.join("raw-cue-provenance.json"))?,
-                    &mut opened,
-                );
+                let provenance = read_json(&e.root.join("raw-cue-provenance.json"))?;
+                opened_strings(&provenance, &mut opened);
+                collect_opened_wires(&provenance, &mut opened_values, &mut opened_queries)?;
             }
             v
         } else if e.root.join("raw-cue-provenance.json").is_file() {
@@ -472,6 +673,16 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         } else {
             return Err(invalid("unrecognized opened source bundle;do not silently ignore").into());
         };
+        collect_opened_wires(&source, &mut opened_values, &mut opened_queries)?;
+        let mut wire_counts = opened_wire_counts(&source);
+        if e.root.join("derived-source-origin.json").is_file() {
+            let origin = read_json(&e.root.join("derived-source-origin.json"))?;
+            collect_opened_wires(&origin, &mut opened_values, &mut opened_queries)?;
+            let n = opened_wire_counts(&origin);
+            wire_counts.0 += n.0;
+            wire_counts.1 += n.1;
+        }
+        wire_exposure_coverage.push(json!({"root":e.root,"manifest_sha256":e.manifest_sha256,"recognized_write_wires":wire_counts.0,"recognized_query_wires":wire_counts.1,"literal_query_exclusion_scope":"recognized complete Wire objects; supplemental sealed construction plans bind numerical-only roots;not universal pretraining exclusion"}));
         opened_strings(&source, &mut opened);
     }
     let mut development = Vec::new();
@@ -586,13 +797,66 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             qpair(&train, i)?,
         ));
     }
+    let untouched = a.transfer_profile == TransferProfile::SupportedUntouchedComposition;
+    if untouched && a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole {
+        return Err(
+            invalid("untouched profile requires explicit supported-current-role policy").into(),
+        );
+    }
+    let frame_donors = if untouched {
+        let (hs, ds) = untouched_histories(&train)?;
+        fresh = hs;
+        ds
+    } else {
+        BTreeMap::new()
+    };
     let (development_origins, fresh_origins) = match a.assertion_query_policy {
         AssertionQueryPolicy::RetainedOriginal => (Vec::new(), Vec::new()),
         AssertionQueryPolicy::SupportedCurrentRole => (
             apply_supported_policy(&mut development)?,
-            apply_supported_policy(&mut fresh)?,
+            if untouched {
+                apply_untouched_policy(&mut fresh, &frame_donors)?
+            } else {
+                apply_supported_policy(&mut fresh)?
+            },
         ),
     };
+    let mut transfer_banks = BTreeSet::new();
+    let mut transfer_histories = BTreeSet::new();
+    if untouched {
+        for h in &development {
+            let (bank, history) = semantic_identity(h)?;
+            exposed_banks.insert(bank);
+            exposed_turn_histories.insert(history);
+            for w in &h.turns {
+                opened_values.insert(literal(w)?.to_owned());
+            }
+            for q in &h.queries {
+                opened_queries.insert(q.text.clone());
+            }
+        }
+        for h in &fresh {
+            let (bank, history) = semantic_identity(h)?;
+            if exposed_banks.contains(&bank)
+                || exposed_turn_histories.contains(&history)
+                || h.turns
+                    .iter()
+                    .any(|w| literal(w).is_ok_and(|v| opened_values.contains(v)))
+                || (h.stratum.contains("/novel/")
+                    && h.queries.iter().any(|q| opened_queries.contains(&q.text)))
+            {
+                return Err(invalid(
+                    "fixed untouched value/query/bank/history already exposed;no redraw",
+                )
+                .into());
+            }
+            transfer_banks.insert(bank);
+            transfer_histories.insert(history);
+        }
+        if fresh.len() != 16 || transfer_banks.len() != 4 || transfer_histories.len() != 8 {
+            return Err(invalid("matched untouched bank/history cardinality differs").into());
+        }
+    }
     let mut dev_fp = BTreeSet::new();
     for h in &development {
         for fp in semantic_history(h)? {
@@ -666,12 +930,12 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         let origin_bytes = if a.assertion_query_policy == AssertionQueryPolicy::SupportedCurrentRole
         {
             Some(serde_json::to_vec_pretty(
-                &json!({"schema":"uor-r4.supported-current-role-source-origin/1","policy":a.assertion_query_policy,"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":origins,"scope":"original donor values/chronology retained;assertion and query frames newly authored;payload novelty not claimed"}),
+                &json!({"schema":"uor-r4.supported-current-role-source-origin/1","policy":a.assertion_query_policy,"transfer_profile":a.transfer_profile,"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":origins,"scope":if untouched && split=="fresh" {"fixed generated fresh literals in actual retained donor frames;role/action/chronology preserved;matched familiar and new query forms;novel full literals not novel words"} else {"original donor values/chronology retained;assertion and query frames newly authored;payload novelty not claimed"}}),
             )?)
         } else {
             None
         };
-        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"fresh_payload_novelty_claimed":false,"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
+        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else if untouched && split=="fresh" {"fixed generated fresh literal bytes in retained donor frames;original frame witnesses bound;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"transfer_profile":a.transfer_profile,"fresh_payload_novelty_claimed":untouched && split=="fresh","transfer_novelty":if untouched && split=="fresh" {json!({"distinct_current_role_value_banks":transfer_banks,"distinct_role_act_literal_histories":transfer_histories,"matched_question_groups":["familiar","novel"],"history_exclusion_covered_roots":history_exposure_roots,"wire_extraction_coverage":wire_exposure_coverage,"familiar_queries_intentionally_overlap":true,"novel_queries":[TRANSFER_JOB_QUERY,TRANSFER_HOME_QUERY],"scope":"exact full-literal, question-string, role/value-bank and role/act/literal-history exclusion;not unseen words or universal pretraining exclusion"})}else{Value::Null},"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
         let rb = serde_json::to_vec_pretty(&receipt)?;
         let eb = serde_json::to_vec_pretty(
             &json!({"rows":eligibility.iter().filter(|x|histories.iter().any(|h|x["history"]==h.id)).collect::<Vec<_>>()}),
@@ -862,6 +1126,102 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod supported_current_role_tests {
     use super::*;
+    #[test]
+    fn untouched_profile_preserves_matched_banks_and_binds_actual_frames() -> Result<()> {
+        assert_eq!(
+            TransferProfile::default(),
+            TransferProfile::RetainedComposition
+        );
+        let mut source = Vec::new();
+        for role in ["job", "home"] {
+            for act in ["assert", "update"] {
+                source.push(Wire {
+                    text: "Legacy known label.".into(),
+                    relation: role.into(),
+                    act: act.into(),
+                    template: Some("Legacy {v}.".into()),
+                });
+            }
+            source.push(Wire {
+                text: format!("Legacy {role} question?"),
+                relation: role.into(),
+                act: "query".into(),
+                template: None,
+            });
+        }
+        let (mut histories, donors) = untouched_histories(&source)?;
+        let origins = apply_untouched_policy(&mut histories, &donors)?;
+        assert_eq!(histories.len(), 16);
+        let banks = histories
+            .iter()
+            .map(semantic_identity)
+            .collect::<Result<Vec<_>>>()?;
+        assert_eq!(banks.iter().map(|x| &x.0).collect::<BTreeSet<_>>().len(), 4);
+        assert_eq!(banks.iter().map(|x| &x.1).collect::<BTreeSet<_>>().len(), 8);
+        for block in histories.chunks_exact(4) {
+            for order in 0..2 {
+                assert_eq!(
+                    semantic_identity(&block[order])?,
+                    semantic_identity(&block[order + 2])?
+                );
+                assert_eq!(block[order].queries[0].text, CURRENT_JOB_QUERIES[0]);
+                assert_eq!(block[order + 2].queries[0].text, TRANSFER_JOB_QUERY);
+                assert_eq!(block[order].queries[1].text, CURRENT_HOME_QUERIES[0]);
+                assert_eq!(block[order + 2].queries[1].text, TRANSFER_HOME_QUERY);
+            }
+        }
+        for origin in origins {
+            for receipt in origin["turns"]
+                .as_array()
+                .ok_or_else(|| invalid("origins absent"))?
+            {
+                let retained: Wire =
+                    serde_json::from_value(receipt["original_frame_donor_wire"].clone())?;
+                let derived: Wire =
+                    serde_json::from_value(receipt["donor_construction_wire"].clone())?;
+                let authored: Wire = serde_json::from_value(receipt["authored_wire"].clone())?;
+                assert!(source
+                    .iter()
+                    .any(|w| serde_json::to_value(w).ok() == serde_json::to_value(&retained).ok()));
+                assert_eq!(retained.template, derived.template);
+                assert_eq!(retained.relation, derived.relation);
+                assert_eq!(retained.act, derived.act);
+                assert_eq!(literal(&derived)?, literal(&authored)?);
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn semantic_transfer_identity_ignores_frame_query_but_retains_role_act_order() -> Result<()> {
+        let job = Wire {
+            text: "Old amber willow.".into(),
+            relation: "job".into(),
+            act: "assert".into(),
+            template: Some("Old {v}.".into()),
+        };
+        let home = Wire {
+            text: "Old copper cedar.".into(),
+            relation: "home".into(),
+            act: "assert".into(),
+            template: Some("Old {v}.".into()),
+        };
+        let mut h = History {
+            id: "x".into(),
+            stratum: "test".into(),
+            turns: vec![job, home],
+            queries: vec![],
+        };
+        let before = semantic_identity(&h)?;
+        apply_supported_policy(std::slice::from_mut(&mut h))?;
+        assert_eq!(before, semantic_identity(&h)?);
+        h.turns.reverse();
+        let after = semantic_identity(&h)?;
+        assert_eq!(before.0, after.0);
+        assert_ne!(before.1, after.1);
+        h.turns[0].act = "update".into();
+        assert_ne!(after.1, semantic_identity(&h)?.1);
+        Ok(())
+    }
     #[test]
     fn rejects_unentailed_question_aliases_and_wrong_roles() -> Result<()> {
         for text in [
