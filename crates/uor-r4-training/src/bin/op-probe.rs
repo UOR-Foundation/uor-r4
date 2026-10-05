@@ -59,6 +59,17 @@ fn main() -> Result<(), String> {
             uor_r4_training::milestone_world_v2::open_relation_pool()
         );
         for text in [
+            // PROSE / smalltalk: a false WRITE here is a stored fact nobody asked for.
+            "That sounds interesting.",
+            "I had a good day today.",
+            "The weather is nice today.",
+            "Thanks for your help.",
+            "I like reading books.",
+            "It was quite busy at work.",
+            "My favourite part was the ending.",
+            "The traffic was terrible this morning.",
+            "I think it might rain later.",
+            "She said the food was lovely.",
             // CONDITION 2 counter-cases (Claude): statements ending in "?", questions without
             "Can you remember my vet is Ola?",
             "Did I mention my bank is Monzo?",
