@@ -155,6 +155,11 @@ pub(super) fn run(
         discrete::source_summary(&a.development_panel, development, baseline, integer)?;
     let mut selected = "initial-chain".to_string();
     let mut best = baseline_ce;
+    let mut prior = vec![(
+        "baseline".to_string(),
+        baseline_metrics.clone(),
+        baseline_summary.clone(),
+    )];
     let mut arms =
         vec![json!({"name":"baseline","native_ce":baseline_ce,"causal_outcomes":baseline_metrics})];
     for support in [1usize, 8] {
