@@ -257,6 +257,15 @@ fn evaluate(compiler: &dyn TurnCompiler, rows: &[Example]) -> Result<Value> {
         mut prose,
         mut false_writes,
     ) = (0, 0, 0, 0, 0, 0);
+    let (
+        mut writes,
+        mut write_exact,
+        mut write_act,
+        mut write_relation,
+        mut write_span,
+        mut queries,
+        mut query_exact,
+    ) = (0, 0, 0, 0, 0, 0, 0);
     for e in rows {
         let action = compiler.compile(&e.text)?;
         let (act, relation, span) = action_fields(&action);
@@ -273,6 +282,17 @@ fn evaluate(compiler: &dyn TurnCompiler, rows: &[Example]) -> Result<Value> {
         relation_correct += usize::from(rc);
         span_correct += usize::from(sc);
         exact += usize::from(ac && rc && sc);
+        if matches!(e.act, "assert" | "update") {
+            writes += 1;
+            write_exact += usize::from(ac && rc && sc);
+            write_act += usize::from(ac);
+            write_relation += usize::from(rc);
+            write_span += usize::from(sc);
+        }
+        if e.act == "query" {
+            queries += 1;
+            query_exact += usize::from(ac && rc && sc);
+        }
         if e.act == NONE {
             prose += 1;
             false_writes += usize::from(matches!(
@@ -283,7 +303,7 @@ fn evaluate(compiler: &dyn TurnCompiler, rows: &[Example]) -> Result<Value> {
         records.push(json!({"source":e.text,"gold_act":e.act,"gold_relation":gold_relation,"gold_span":gold_span,"predicted":action,"act_correct":ac,"relation_correct":rc,"span_exact":sc,"complete_exact":ac&&rc&&sc}));
     }
     Ok(
-        json!({"rows":records,"examples":rows.len(),"act_correct":act_correct,"relation_correct":relation_correct,"span_exact":span_correct,"complete_exact":exact,"prose_rows":prose,"prose_false_writes":false_writes}),
+        json!({"rows":records,"examples":rows.len(),"act_correct":act_correct,"relation_correct":relation_correct,"span_exact":span_correct,"complete_exact":exact,"prose_rows":prose,"prose_false_writes":false_writes,"write_rows":writes,"write_complete_exact":write_exact,"write_act_correct":write_act,"write_relation_correct":write_relation,"write_span_exact":write_span,"query_rows":queries,"query_complete_exact":query_exact}),
     )
 }
 fn store_episodes(
@@ -596,7 +616,7 @@ impl ReferenceRule {
             for split in ["training", "development"] {
                 let (_, asserts, updates, qs) = pools(split);
                 for (id, rel) in [(1, "job"), (2, "home")] {
-                    for frame in if update { updates } else { asserts } {
+                    for frame in if update { &updates } else { &asserts } {
                         let frame = frame.replace("{r}", rel);
                         let (prefix, suffix) = frame
                             .split_once("{v}")
@@ -709,6 +729,16 @@ fn audit(
     tokenizer: &ByteBpeTokenizer,
     tokenizer_bytes: &[u8],
 ) -> Result<()> {
+    let parent_report_bytes = fs::read(root.join("report.json"))?;
+    let parent_report: Value = serde_json::from_slice(&parent_report_bytes)?;
+    let parent_manifest_sha = sha256_bytes(&fs::read(root.join(report_output::MANIFEST_FILE))?);
+    let original_inputs: Value =
+        serde_json::from_slice(&fs::read(root.join("frozen-inputs.json"))?)?;
+    if original_inputs["training"] != input_rows(&panel("training"))
+        || original_inputs["development"] != input_rows(&panel("development"))
+    {
+        return Err(fail("audit panels differ from actual fitted inputs").into());
+    }
     let panels = [
         ("training", panel("training")),
         ("development", panel("development")),
@@ -730,6 +760,15 @@ fn audit(
     for step in [0, 16, 32, 48, 64] {
         let bytes = fs::read(root.join(format!("checkpoint-{step:04}/native-compiler.json")))?;
         let sha = sha256_bytes(&bytes);
+        let declared = parent_report["checkpoints"]
+            .as_array()
+            .ok_or_else(|| fail("parent lacks checkpoints"))?
+            .iter()
+            .filter(|c| c["step"] == step)
+            .collect::<Vec<_>>();
+        if declared.len() != 1 || declared[0]["artifact_sha256"] != sha {
+            return Err(fail("saved checkpoint step/hash mismatches parent fit report").into());
+        }
         let compiler = NativeTurnCompiler::load(&bytes, &sha, native, tokenizer, tokenizer_bytes)?;
         let meta: Value = serde_json::from_slice(&bytes)?;
         let mut activation = serde_json::Map::new();
@@ -769,6 +808,10 @@ fn audit(
         }
         results.push(json!({"step":step,"artifact_sha256":sha,"activation":activation,"panels":measurements}));
     }
+    write_json(
+        &a.output.join("checkpoint-measurements.json"),
+        &json!(results),
+    )?;
     let control = ReferenceRule::new(&sha256_bytes(tokenizer_bytes))?;
     let mut control_panels = serde_json::Map::new();
     for (name, rows) in &panels {
@@ -777,7 +820,7 @@ fn audit(
     let control_store = store_episodes(&control, tokenizer, native, "development", a)?;
     write_json(
         &a.output.join("report.json"),
-        &json!({"schema":"native-compiler-zero-update-audit/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"parent_fit":root,"updates":0,"selection_changes":false,"fresh_used_for_design":false,"checkpoint_panels":results,"positive_control":{"label":"exact-template instrumentation control;not a learned language result","identity":control.identity(),"panels":control_panels,"store_reader":control_store},"original_report_erratum":"Fit-1 made zero store writes, reads and native reader calls. Mechanism-available strings in its sealed report did not mean execution; reader NOT_RUN. Original bytes retained.","scope":"candidate bound;one deterministic readout fit on one frozen carrier;not multi-seed architecture verdict"}),
+        &json!({"schema":"native-compiler-zero-update-audit/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"parent_fit":root,"parent_report_sha256":sha256_bytes(&parent_report_bytes),"parent_manifest_sha256":parent_manifest_sha,"checkpoint_step_hashes_matched_parent":true,"fitted_input_rows_exactly_matched":true,"updates":0,"selection_changes":false,"fresh_used_for_design":false,"checkpoint_panels":results,"positive_control":{"label":"exact-template instrumentation control;not a learned language result","identity":control.identity(),"panels":control_panels,"store_reader":control_store},"original_report_erratum":"Fit-1 made zero store writes, reads and native reader calls. Mechanism-available strings in its sealed report did not mean execution; reader NOT_RUN. Original bytes retained.","scope":"candidate bound;one deterministic readout fit on one frozen carrier;not multi-seed architecture verdict"}),
     )?;
     report_output::seal(&a.output)?;
     report_output::verify(&a.output)?;
@@ -845,6 +888,10 @@ mod tests {
     use super::*;
     #[test]
     fn exact_template_control_passes_the_same_action_span_instrument() -> Result<()> {
+        write_json(
+            &a.output.join("checkpoint-measurements.json"),
+            &json!(results),
+        )?;
         let control = ReferenceRule::new(&"0".repeat(64))?;
         for rows in [
             panel("training"),
