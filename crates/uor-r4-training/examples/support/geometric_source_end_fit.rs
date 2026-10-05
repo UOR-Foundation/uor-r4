@@ -19,7 +19,7 @@ fn calibration_report(a: &Args, initial: &str, mut report: Value) -> Result<Valu
         report["batch_schedule"] = json!(if a.mode == "source-end-calibration-fit" {
             "all128bank rows;4rows pereach64row half;two intact querypairs perhalf;4visits/episode;fixed cyclic order"
         } else {
-            "zero-update full128 gradient admission; no optimizer visits"
+            "zero-update full128 gradient admission and actual balanced B8 cost probe; no optimizer visits"
         });
         report["development_adjacent_query_pairs"] = json!(64);
         report["fresh_scope"]=json!("exposed composition diagnostic; no untouched transfer claim; predictions only after development selector freezes");
@@ -307,6 +307,11 @@ fn generation(
         json!({"cases":episodes.len(),"accepted_complete":complete,"maximum_generated_tokens":a.maximum_generation_tokens,"canonical_prefixes_used":false,"native_only_source_end_load":true,"rows":rows}),
     )
 }
+#[derive(Clone, Copy, PartialEq, serde::Serialize)]
+enum BatchGradientPolicy {
+    RequireNonzero,
+    AllowFiniteZero,
+}
 fn batch(
     indices: &[usize],
     episodes: &[Episode],
@@ -314,6 +319,7 @@ fn batch(
     parent: &NativeSourceRealizer,
     weights: &SourceEndAngularWeights,
     integer: Option<&IntegerRealizer>,
+    gradient_policy: BatchGradientPolicy,
     a: &Args,
     start: Instant,
 ) -> Result<Batch> {
@@ -471,12 +477,15 @@ fn batch(
         sq += v.iter().map(|x| f64::from(*x).powi(2)).sum::<f64>();
         stats.insert(name.clone(),json!({"elements":v.len(),"finite":true,"nonzero":v.iter().filter(|x|**x!=0.).count(),"l1":v.iter().map(|x|f64::from(x.abs())).sum::<f64>()}));
     }
-    if gradients.len() != params.len() || (integer.is_some() && sq <= 0.) || !sq.is_finite() {
+    if gradients.len() != params.len()
+        || (gradient_policy == BatchGradientPolicy::RequireNonzero && sq <= 0.)
+        || !sq.is_finite()
+    {
         return Err(invalid("source-end full coefficient gradient absent/zero/nonfinite").into());
     }
     Ok(Batch {
         gradients,
-        report: json!({"episodes":indices.len(),"episode_indices":indices,"target_positions":positions,"native_equal_episode_ce":mean,"gradient_global_norm":sq.sqrt(),"gradient_families":stats,"rows":rows,"angular_visited_bins":visited,"no_route_positions":no_route,"parent_gradient_graph_absent":true,"independent_native_trace_parity":integer.is_some(),"fixed_input_Copy_unchanged":true,"source_end_score_mode":weights.config().mode,"active_families":SOURCE_END_FAMILIES,"elapsed_seconds":began.elapsed().as_secs_f64(),"objective":"equalepisode fullanswer+EOS native alias CE; no support floors","route_adjoint":"frozen factual rawCopy argmax; new endpoint tables only"}),
+        report: json!({"episodes":indices.len(),"episode_indices":indices,"target_positions":positions,"native_equal_episode_ce":mean,"gradient_global_norm":sq.sqrt(),"gradient_nonzero_observed":sq>0.,"gradient_policy":gradient_policy,"gradient_families":stats,"rows":rows,"angular_visited_bins":visited,"no_route_positions":no_route,"parent_gradient_graph_absent":true,"independent_native_trace_parity":integer.is_some(),"fixed_input_Copy_unchanged":true,"source_end_score_mode":weights.config().mode,"active_families":SOURCE_END_FAMILIES,"elapsed_seconds":began.elapsed().as_secs_f64(),"objective":"equalepisode fullanswer+EOS native alias CE; no support floors","route_adjoint":"frozen factual rawCopy argmax; new endpoint tables only"}),
     })
 }
 fn apply(
@@ -998,6 +1007,7 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         a.mode.as_str(),
         "source-end-broadbatch" | "source-end-calibration-broadbatch"
     ) {
+        let preparation_seconds = start.elapsed().as_secs_f64();
         let b = batch(
             &(0..128).collect::<Vec<_>>(),
             &development,
@@ -1005,16 +1015,51 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
             &parent,
             &weights,
             Some(&integer),
+            BatchGradientPolicy::RequireNonzero,
             a,
             start,
-        )?;
-        write_json(&a.out, "broadbatch.json", &b.report)?;
+        )?
+        .report;
+        write_json(&a.out, "broadbatch.json", &b)?;
+        if source_end_calibration(a) {
+            let initial_packed = packed_hashes(&weights)?;
+            let indices = balanced_indices(0);
+            let b8 = batch(
+                &indices,
+                &development,
+                &source,
+                &parent,
+                &weights,
+                Some(&integer),
+                // Cost measurement permits the finite zero gradient that a real
+                // optimizer batch accepts, without dropping native parity.
+                BatchGradientPolicy::AllowFiniteZero,
+                a,
+                start,
+            )?
+            .report;
+            if packed_hashes(&weights)? != initial_packed {
+                return Err(invalid("zero-update B8 changed endpoint packed coefficients").into());
+            }
+            frozen(a, &source, &receipts)?;
+            immutable(&inputs, &sealed)?;
+            let measured = b8["elapsed_seconds"]
+                .as_f64()
+                .filter(|v| v.is_finite() && *v > 0.)
+                .ok_or_else(|| invalid("source-end B8 measured timing absent/nonpositive"))?;
+            let configuration = json!({"mode":a.mode,"source_weights":a.source_weights,"native_artifact":a.native_artifact,"trusted_native_binding":a.trusted_native_binding,"development_panel":a.development_panel,"development_manifest_sha256":a.development_manifest_sha256,"fresh_panel":a.fresh_panel,"fresh_manifest_sha256":a.fresh_manifest_sha256,"source_end_score_mode":mode,"source_end_warmstart":warm_receipt(a)?,"frozen_cue_bundle":cr,"frozen_cue_native_metadata_sha256":a.frozen_cue_native_metadata_sha256,"frozen_cue_packed_sha256":a.frozen_cue_packed_sha256,"frozen_prefix_bundle":pr,"frozen_prefix_native_metadata_sha256":a.frozen_prefix_native_metadata_sha256,"frozen_prefix_packed_sha256":a.frozen_prefix_packed_sha256,"maximum_seconds":a.maximum_seconds,"maximum_context_tokens":a.maximum_context_tokens,"maximum_generation_tokens":a.maximum_generation_tokens,"maximum_report_bytes":a.maximum_report_bytes});
+            write_json(
+                &a.out,
+                "B8-calibration.json",
+                &json!({"schema":"uor-r4.source-end-b8-calibration/1","optimizer_updates":0,"fit_admitted":false,"batch_episodes":BATCH,"episode_indices":indices,"batch_schedule":"first actual balanced fit batch: two intact query pairs from each 64-row half","measurement_configuration_sha256":sha256_bytes(&serde_json::to_vec(&configuration)?),"measurement_configuration":configuration,"trusted_binding_sha256":trusted_sha,"initial_source_end_native_metadata_sha256":initial_sha,"endpoint_packed_unchanged":true,"frozen_parent_source_receipts":receipts,"input_manifests_sha256":inputs,"preparation_seconds":preparation_seconds,"full128_batch_seconds":b["elapsed_seconds"],"measured_b8_seconds":measured,"gradient_nonzero_observed":b8["gradient_nonzero_observed"],"projected_64_batches_plus_reserve_seconds":measured * UPDATES as f64 + 240.,"projection_basis":"actual zero-update B8 backward pass with independent native trace parity, conservatively including parity work omitted by actual fit batches; not full128 timing divided by16; optimizer/checkpoint/evaluation allowance is240seconds and requires separate admission","gradient_report":b8,"elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib()}),
+            )?;
+        }
         frozen(a, &source, &receipts)?;
         immutable(&inputs, &sealed)?;
         return Ok(calibration_report(
             a,
             initial_sha.as_str(),
-            json!({"schema":"uor-r4.geometric-source-end-fit/1","mode":a.mode,"status":"completed","optimizer_updates":0,"cases":128,"source_end_score_mode":mode,"parent_frozen":true,"active_families":SOURCE_END_FAMILIES,"complete_objective_finite":true,"native_equal_episode_ce":baseline["native_equal_episode_ce"],"gradient_report":b.report,"zero_source_end_native_metadata_sha256":initial_sha,"development_manifest_sha256":a.development_manifest_sha256,"fresh_manifest_sha256":a.fresh_manifest_sha256,"trusted_binding_sha256":trusted_sha,"frozen_parent_source_receipts":receipts,"frozen_cue_native_metadata_sha256":a.frozen_cue_native_metadata_sha256,"frozen_cue_packed_sha256":a.frozen_cue_packed_sha256,"frozen_prefix_native_metadata_sha256":a.frozen_prefix_native_metadata_sha256,"frozen_prefix_packed_sha256":a.frozen_prefix_packed_sha256,"input_manifests_sha256":inputs,"storage_projection":storage_projection,"fit_admitted":false,"fresh_predictions":"NOT_RUN","elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib()}),
+            json!({"schema":"uor-r4.geometric-source-end-fit/1","mode":a.mode,"status":"completed","optimizer_updates":0,"cases":128,"source_end_score_mode":mode,"parent_frozen":true,"active_families":SOURCE_END_FAMILIES,"complete_objective_finite":true,"native_equal_episode_ce":baseline["native_equal_episode_ce"],"gradient_report":b,"zero_source_end_native_metadata_sha256":initial_sha,"development_manifest_sha256":a.development_manifest_sha256,"fresh_manifest_sha256":a.fresh_manifest_sha256,"trusted_binding_sha256":trusted_sha,"frozen_parent_source_receipts":receipts,"frozen_cue_native_metadata_sha256":a.frozen_cue_native_metadata_sha256,"frozen_cue_packed_sha256":a.frozen_cue_packed_sha256,"frozen_prefix_native_metadata_sha256":a.frozen_prefix_native_metadata_sha256,"frozen_prefix_packed_sha256":a.frozen_prefix_packed_sha256,"input_manifests_sha256":inputs,"storage_projection":storage_projection,"fit_admitted":false,"fresh_predictions":"NOT_RUN","elapsed_seconds":start.elapsed().as_secs_f64(),"peak_rss_kib_linux":peak_rss_kib()}),
         )?);
     }
     if !matches!(
@@ -1122,6 +1167,7 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
             &parent,
             &weights,
             None,
+            BatchGradientPolicy::AllowFiniteZero,
             a,
             start,
         )?;
@@ -1598,6 +1644,7 @@ fn refine(
         parent,
         &incumbent,
         Some(integer),
+        BatchGradientPolicy::RequireNonzero,
         a,
         start,
     )?;
