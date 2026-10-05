@@ -888,10 +888,6 @@ mod tests {
     use super::*;
     #[test]
     fn exact_template_control_passes_the_same_action_span_instrument() -> Result<()> {
-        write_json(
-            &a.output.join("checkpoint-measurements.json"),
-            &json!(results),
-        )?;
         let control = ReferenceRule::new(&"0".repeat(64))?;
         for rows in [
             panel("training"),
