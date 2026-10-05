@@ -754,7 +754,7 @@ fn diversity_histories(
                     after.push(if swapped { h.clone() } else { j.clone() });
                 }
                 for query_index in [block % 6, (block + 3) % 6] {
-                    output.extend(chronologies(
+                    let mut variants = chronologies(
                         &format!(
                             "diverse-{stratum}-{selected:02}-swap{}-q{query_index}",
                             usize::from(swapped)
@@ -764,7 +764,23 @@ fn diversity_histories(
                         h.clone(),
                         after.clone(),
                         qpair(all, query_index)?,
-                    ));
+                    );
+                    if stratum == "reassert" {
+                        // Cross the retained bank order, not only a discarded initial order.
+                        for history in &mut variants {
+                            let repeated = history
+                                .turns
+                                .first()
+                                .cloned()
+                                .ok_or_else(|| invalid("reassert initial assertion absent"))?;
+                            *history
+                                .turns
+                                .last_mut()
+                                .ok_or_else(|| invalid("reassert final assertion absent"))? =
+                                repeated;
+                        }
+                    }
+                    output.extend(variants);
                 }
             }
             used_unordered.insert(key);
@@ -1741,6 +1757,49 @@ mod prospective_diversity_tests {
             count += 1;
         }
         assert_eq!(count, 40);
+        Ok(())
+    }
+    #[test]
+    fn prospective_crossings_remain_distinct_after_current_bank_projection() -> Result<()> {
+        let all = donors();
+        let (mut dev, mut fresh) = diversity_histories(&all, &[], &BTreeSet::new())?;
+        apply_supported_policy_mode(&mut dev, true)?;
+        apply_supported_policy_mode(&mut fresh, true)?;
+        let mut packets = BTreeSet::new();
+        for history in dev.iter().chain(&fresh) {
+            for fingerprint in semantic_history(history)? {
+                assert!(
+                    packets.insert(fingerprint),
+                    "effective current-bank/query duplicate at {}",
+                    history.id
+                );
+            }
+        }
+        assert_eq!(packets.len(), 640);
+        for stratum in ["reassert/", "update/"] {
+            let pair = dev
+                .iter()
+                .filter(|h| h.stratum.starts_with(stratum))
+                .take(2)
+                .collect::<Vec<_>>();
+            assert_eq!(pair.len(), 2);
+            assert_ne!(semantic_history(pair[0])?, semantic_history(pair[1])?);
+        }
+        let pair = dev
+            .iter()
+            .filter(|h| h.stratum.starts_with("reassert/"))
+            .take(2)
+            .collect::<Vec<_>>();
+        let mut collapsed = pair[1].clone();
+        *collapsed
+            .turns
+            .last_mut()
+            .ok_or_else(|| invalid("fixture trailing write absent"))? = pair[0]
+            .turns
+            .last()
+            .cloned()
+            .ok_or_else(|| invalid("fixture reassert absent"))?;
+        assert_eq!(semantic_history(pair[0])?, semantic_history(&collapsed)?);
         Ok(())
     }
     #[test]
