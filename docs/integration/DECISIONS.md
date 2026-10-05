@@ -940,71 +940,99 @@ missing means the precondition is not met and the rule stays in force.
 Once §2 is recorded complete, **and only then**, these three clauses are suspended:
 
 - `DECISIONS.md:158` (D2) — the near-zero-delta exemption.
-- `DECISIONS.md:192` (D2) — the *negative*-delta exemption. **A mechanism that measurably hurts may
-  lose.**
+- `DECISIONS.md:192` (D2) — the *negative*-delta exemption.
 - `DECISIONS.md:438/443` (D12) — "gates never kill", and the FAIL → "not yet promoted at that scope"
   relabelling.
 
+**What the suspension is FOR — and it is not elimination.** With those clauses in force, a measured
+gap can be answered by re-attributing it to wiring and moving on: D2:192 says *"repair the wiring or
+change the instrument and re-measure"*, and `AGENTS.md` adds that *"a failed experiment does not
+demote the whole architecture."* **The effect is that a gap produces no obligation.** Suspending them
+makes a gap **BINDING**: it must yield a **named missing component and a repair attempt**, recorded,
+rather than being a non-event that quietly defers.
+
 **Purpose, in the owner's words: suspend "until we have something working so we can measure and then
-we build the fix."** The suspension exists to **produce a measurement**, not to end the geometric
-programme. It lapses on report, and §1 continues to govern throughout.
+we build the fix."** The suspension exists to make the measurement **actionable** — it converts a
+null into a repair plan. **It does not, and cannot, retire a geometric option** (§4). It lapses on
+report, and §1 continues to govern throughout.
 
 **Nothing else is suspended.** D11/D5 serving constraints, evidence discipline, ≥3-seed rules,
 resource admission, preservation of negative results and protected delivery all remain in force.
 
-### 4. The measurement the suspension exists to permit
+### 4. The measurement — and the rule that a comparison may NEVER rule out geometry
 
-**One pre-registered contest**, on `mqar-bench`, with the instrument change it requires: `enum
-ArmSpec` currently has a single variant and `arch: StackArch::Geometric` is hardcoded
-(`mqar-bench.rs:449-465, :570`), so the bench has **never** compared the geometric stack to a
-parameter-matched ordinary model — only to non-learned rules.
+**Owner correction, 2026-10-05:** *"comparison ruling out is AWFUL for real research so do not let the
+test claiming a transformer did better rule out the geometric options... we need to make the geometry
+work first, then we can tune it to beat the transformers."*
 
-```
-Arms        geometry ON (Lorentz read, rotation on) vs geometry OFF (Dot/L2, rotation off)
-Matching    equal parameters, equal tokens, equal data, >=3 seeds
-Metric      held-out nats, with the paired difference and its CI
-```
+**A comparison is a DIAGNOSTIC, not a verdict.** The owner's research order is binding:
 
-**Decision rules — total and disjoint.** The completeness critique found the previous rules
-defective: Step 1's promote (≥10) and kill (both ≤15) could **both** fire, and the 16–29 band had
-**no action**. These cannot overlap and none is empty:
+1. **Make the geometry work.** A matched-control comparison is run to find **where** a geometric
+   mechanism is incomplete, not to decide whether it survives.
+2. **Then tune it to beat the transformers.** The competitive question becomes meaningful only once
+   the mechanism functions. Asked earlier, it measures the missing component rather than the ceiling.
+
+**Therefore, explicitly and without exception:**
+
+> **No result from this or any other comparison retires, parks, demotes or deprioritizes a geometric
+> option.** A geometric mechanism that loses a matched-control comparison is **incomplete**, and the
+> correct response is to identify and build the missing component and re-measure — never to eliminate
+> it. Prior art agrees: *"comparisons that pit convolution-free cells against a convolution-equipped
+> Mamba measure the missing convolution, not the recurrence."*
+
+This supersedes the drafting agent's earlier proposal of "a tie is a loss → RETIRED", which was
+**wrong** and would have converted the project's own diagnostic instrument into an elimination
+machine. The owner rejected it.
+
+**The instrument.** One contest on `mqar-bench`, with the change it requires: `enum ArmSpec` has a
+single variant and `arch: StackArch::Geometric` is hardcoded (`mqar-bench.rs:449-465, :570`), so the
+bench has **never** compared the geometric stack to a parameter-matched ordinary model — only to
+non-learned rules. Equal parameters, equal tokens, equal data, **≥3 seeds**.
+
+**The DIAGNOSTIC bands** (replacing the rejected elimination rules):
 
 ```
 d = geometric - matched ordinary control, held-out nats
 
-d <= -0.01                      -> the geometric score mechanism is RETIRED from the critical path
--0.01 < d < +0.01   (a tie)     -> RETIRED: no advantage demonstrated at this scope
-d >= +0.01, p<0.05, >=3 seeds   -> PROMOTED; the effect size becomes the claim
+d >= 0            -> the mechanism WORKS at this scope. Promote it, record the effect, proceed
+                     to the competitive tuning stage.
+d < 0 (a gap)     -> the mechanism is INCOMPLETE. The gap is a LOCALISER, not a verdict.
+                     Required output: the missing component, named, with the evidence that
+                     identifies it, and the next attempt to build it.
+                     RETIREMENT IS NOT AN AVAILABLE OUTCOME.
 ```
 
-**A tie is a loss.** That single change is what makes the contest worth running, and it is the
-narrowest form of the suspension that can produce an answer.
+**What the gap is used for.** A gap localises *where* to look — by split, by cell, by layer, by
+condition — exactly as `first_piece 0.269 / full 0.032 / full|first 0.117` localised the transport
+failure to the read-out rather than the address. **That is the entire purpose of running a
+comparison at this stage.** The output of a losing run is a **repair plan**, never a casualty list.
 
-**Retirement means removal from the critical path and from claim language — not deletion.** Code,
-artifacts and the negative result are preserved. This is D12's "not yet promoted" with one
-difference: it stops counting as a reason to keep building on it.
+### 5. The exit condition — "something working", in the owner's words
 
-### 5. The exit condition
+The owner's purpose for the suspension: *"until we have something working so we can measure and then
+we build the fix."* **The exit is a WORKING GEOMETRIC MECHANISM, not a competitive win.**
 
-The suspension **lapses automatically** when either holds:
+The suspension lapses when either holds:
 
-- a mechanism is promoted under §4, in which case **the no-loss rule resumes and the winning
-  geometric mechanism is carried forward**; or
-- the contest reports a tie or a loss, in which case **the fix is built for the measured defect**
-  rather than another mechanism added on top of it, and the rule resumes with that defect named.
+- **A geometric mechanism works** on the target task — it functions, measurably, on its own terms.
+  **The no-loss rule resumes, the working mechanism is carried forward, and the competitive tuning
+  stage begins**: only now does beating the matched control become the question.
+- **A repair plan is recorded but the fix cannot be built within the bounded window** — then the
+  suspension lapses with the missing component named, the mechanism stays a **live candidate** (D12),
+  and the next attempt is scheduled. **This is a pause, not a retirement.**
 
-**"Something working" is the exit, and it is a measurement, not a policy.** If the contest says the
-geometric score mechanism does not beat a matched ordinary control at this scope, then the finding
-is *that*, recorded at its exact scope — and the geometric programme continues under §1 with a
-defect named instead of a rule suspended.
+**"Something working" is a positive result, and it is the only thing that ends the suspension
+favourably.** If the geometry does not yet work, the answer is to build the missing component — not
+to stop, and not to rule the mechanism out.
 
 ### 6. Consequences
 
 - **D2's escape hatch is narrowed, not removed.** `enabler` and `selector` retain their meaning; what
   changes is that an `enabler` claim now requires the missing component to be **attempted**, and a
   `selector` claim requires its own instrument (decision-flip rate), per D2's existing table.
-- **D12's "never kill" becomes "never kill without a measurement".** A mechanism may still be parked
-  with the owner's OK; it may no longer be *retained against a matched-control result* without one.
+- **D12's "never kill" is unchanged in substance and is now reinforced.** A comparison cannot kill a
+  geometric mechanism: a losing comparison yields a **repair plan**. Parking a mechanism still needs
+  the written root-cause case and the owner's OK, exactly as D12 requires.
 - **`formal_vocabulary.md:99`** — the `E8 = H4 x H4` row's *"architectural load-bearing is assumed;
   held-out advantage remains unproven"* — is now **scheduled for test under §4** rather than standing
   as a permanent exemption. The vocabulary's distinction between structural priority and measured
