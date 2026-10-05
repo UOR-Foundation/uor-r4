@@ -144,7 +144,9 @@ fn main() -> Result<(), String> {
                         ex.push((
                             "ASSERT".into(),
                             relation,
-                            text.get(span.start..span.end).unwrap_or_default().to_string(),
+                            text.get(span.start..span.end)
+                                .unwrap_or_default()
+                                .to_string(),
                         ));
                     }
                 }
@@ -154,7 +156,9 @@ fn main() -> Result<(), String> {
                         ex.push((
                             "CORRECT".into(),
                             relation,
-                            text.get(span.start..span.end).unwrap_or_default().to_string(),
+                            text.get(span.start..span.end)
+                                .unwrap_or_default()
+                                .to_string(),
                         ));
                     }
                 }
