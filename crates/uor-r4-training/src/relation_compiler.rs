@@ -2357,6 +2357,17 @@ impl SavedCompiler {
     /// also unresolved when the heads name no act, or name a statement whose
     /// value the span head does not mark.
     pub fn action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
+        self.action_with_seen(source, &[])
+    }
+
+    /// The action for a turn, given the relation phrases the CONVERSATION has already
+    /// named. See [`relation_phrase_with_seen`]: an already-named relation needs no phrase
+    /// boundary, which is where the reader's errors are.
+    pub fn action_with_seen(
+        &self,
+        source: &str,
+        seen: &[String],
+    ) -> Result<crate::stack_grounded_session::CompiledAction> {
         use crate::stack_grounded_session::CompiledAction;
         let statement = |a: &CompiledAction| {
             matches!(
@@ -2437,6 +2448,14 @@ impl SavedCompiler {
     /// The table's (or combined heads') action for a turn, never the op
     /// model's.
     fn table_action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
+        self.table_action_with_seen(source, &[])
+    }
+
+    fn table_action_with_seen(
+        &self,
+        source: &str,
+        seen: &[String],
+    ) -> Result<crate::stack_grounded_session::CompiledAction> {
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
         let unresolved = |reason: &str| {
             Ok(CompiledAction::Unresolved {
