@@ -1763,7 +1763,12 @@ mod cue_root_credit_draft_tests {
             lanes_per_head: 1,
             mode,
         };
-        let q = AddressLane::new(4, 7, present).map_err(|e| invalid(e.to_string()))?;
+        let q = if present {
+            AddressLane::new(4, 7, true)
+        } else {
+            AddressLane::new(H4Code::IDENTITY.index(), 0, false)
+        }
+        .map_err(|e| invalid(e.to_string()))?;
         let k = AddressLane::new(9, 3, true).map_err(|e| invalid(e.to_string()))?;
         let mut op = CueRootCredit {
             config,
@@ -1842,6 +1847,14 @@ mod cue_root_credit_draft_tests {
             let absent = fixture(mode, false)?;
             assert_eq!(absent.hard, vec![vec![0i64; 3]]);
             let (q, k) = absent.backward(&vec![0f32; 120], &vec![0f32; 120], &[1., 2., 7.])?;
+            assert!(q.iter().chain(&k).all(|&x| x == 0.));
+        }
+        for mode in [CueScoreMode::DirectedRelative, CueScoreMode::CueUnary] {
+            let mut absent_cue = fixture(mode, true)?;
+            absent_cue.cues[0][0] = AddressLane::new(H4Code::IDENTITY.index(), 0, false)
+                .map_err(|e| invalid(e.to_string()))?;
+            absent_cue.hard = vec![vec![0i64; 3]];
+            let (q, k) = absent_cue.backward(&vec![0f32; 120], &vec![0f32; 120], &[1., 2., 7.])?;
             assert!(q.iter().chain(&k).all(|&x| x == 0.));
         }
         let unary = fixture(CueScoreMode::CueUnary, true)?;
