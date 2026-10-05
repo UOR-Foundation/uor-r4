@@ -69,8 +69,12 @@ stage_build() {
   sha256sum "$GS" "$MWORLD" | tee "$R/binaries.sha256"
   ( cd "$REPO" && cargo test --release -p uor-r4-training --features cuda \
       --test cuda_stack_ops_parity 2>&1 | tail -n 3 )
-  ( cd "$REPO" && cargo test --release -p uor-r4-training --features cuda \
-      --test cuda_stack_ops_bf16_parity 2>&1 | tail -n 3 )
+  if [ -f "$REPO/crates/uor-r4-training/tests/cuda_stack_ops_bf16_parity.rs" ]; then
+    ( cd "$REPO" && cargo test --release -p uor-r4-training --features cuda \
+        --test cuda_stack_ops_bf16_parity 2>&1 | tail -n 3 )
+  else
+    log "bf16 parity test not in this checkout yet"
+  fi
   log "build done"
 }
 
