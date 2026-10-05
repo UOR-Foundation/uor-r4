@@ -4,7 +4,7 @@
 //! dialogue-recall-corpus generate out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \
 //!   [panels=data/panels[,DIR...]] [seed=1] (dialogues=N | token_budget=N) \
 //!   [dev_seed=1000003] [dev_dialogues=300] [protocol=2] [context=384] \
-//!   [samples=200] [source_commit=SHA]
+//!   [samples=200] [train_on=answers|all] [source_commit=SHA]
 //! dialogue-recall-corpus leak out=NEW_REPORT_ROOT store=STORE_DIR tokenizer=TOKENIZER.json \
 //!   panels=DIR[,DIR...]
 //! ```
@@ -20,6 +20,19 @@
 //! counts per category, seeds, source commit and SHA-256 of every file. The
 //! root is claimed before anything is written and sealed at the end.
 //!
+//! `train_on=answers` (the default) sets the response mask to 1 only on the
+//! assistant turns that answer a question (content and EOS). Acknowledgements,
+//! suggestions and distractor replies keep their tokens in the context with
+//! mask 0: `dialogue-train` samples a response per mask-1 run
+//! (`dialogue_episodes::EpisodeIndex`) and puts loss only on the sampled
+//! run, so they are neither sampled nor trained. Such stores need the index
+//! that admits an unmasked EOS closing a context-only assistant turn (added
+//! with this generator); an older `dialogue-train` refuses them.
+//! `train_on=all` masks every assistant turn. `generator.json` reports reply
+//! and reply-token counts per kind, trained and context-only.
+//! `panels=` takes a comma-separated list of directories; all of them feed the
+//! filters and the leak report.
+//!
 //! What a dialogue contains (one seeded draw per dialogue, deterministic):
 //!
 //! - Facts stated in user turns (and, in `assistant_stated`, chosen by the
@@ -29,8 +42,8 @@
 //! - 0 to 6 distractor exchanges (small talk and unrelated questions with
 //!   ordinary replies), an optional fact turn from a second relation, and then
 //!   one to three questions. Every question's assistant reply is a scored
-//!   response; so are the acknowledgements and distractor replies (the trainer
-//!   scores every assistant turn).
+//!   response; under `train_on=all` so are the acknowledgements and
+//!   distractor replies. The distractor bank holds about 450 exchanges.
 //! - Question categories: `binding` (ask one of several same-type keys),
 //!   `update` (a later turn corrects one value; the latest value wins, and the
 //!   unchanged key keeps its value), `reverse` (who/which key holds a value),
@@ -1186,10 +1199,308 @@ const FILLERS: &[(&str, &[&str])] = &[
 ];
 
 #[rustfmt::skip]
+// More distractor exchanges: families with one user frame and fitting replies,
+// and single question/answer pairs. `filler_bank` joins them with `FILLERS`.
+
+#[rustfmt::skip]
+const ACTIVITIES: &[&str] = &[
+    "going hiking", "trying pottery", "visiting a museum", "baking bread", "going camping",
+    "learning to juggle", "painting a mural", "going to a concert", "cleaning out the garage",
+    "planting seeds", "going for a bike ride", "watching a documentary", "trying a new café",
+    "writing letters to old friends", "doing a jigsaw puzzle", "visiting the zoo", "going fishing",
+    "building a birdhouse", "practicing yoga", "going ice skating", "having a picnic",
+    "sorting old photos", "learning some magic tricks", "stargazing", "rearranging the furniture",
+    "going bowling", "visiting an aquarium", "making candles", "going to the library",
+    "taking a cooking class", "volunteering at the animal shelter", "repotting my plants",
+    "going kayaking", "watching the sunrise", "playing board games", "making a scrapbook",
+    "going roller skating", "walking along the river", "learning to knit", "visiting a castle",
+];
+const ACTIVITY_USERS: &[&str] = &[
+    "I'm thinking about {x} this weekend.",
+    "I might try {x} later this month.",
+];
+const ACTIVITY_REPLIES: &[&str] = &[
+    "That sounds like a nice way to spend some time.",
+    "Nice plan! I hope you enjoy it.",
+    "That sounds fun. Have a great time.",
+];
+
+#[rustfmt::skip]
+const CHORES: &[&str] = &[
+    "doing the laundry", "washing the dishes", "vacuuming the living room", "mopping the floors",
+    "ironing my shirts", "cleaning the windows", "raking the leaves", "mowing the lawn",
+    "folding the towels", "dusting the shelves", "scrubbing the bathtub", "taking out the recycling",
+    "organizing the pantry", "paying the bills", "answering my emails", "sorting the mail",
+    "wiping down the counters", "changing the bed sheets", "watering the plants",
+    "cleaning out the fridge", "sweeping the porch", "decluttering the hallway", "washing the car",
+    "defrosting the freezer", "fixing a leaky faucet", "replacing a light bulb", "packing for my trip",
+    "unpacking the groceries", "sharpening the knives", "cleaning the oven", "tidying my desk",
+    "filing my paperwork", "shoveling the snow", "polishing my shoes", "oiling the squeaky door",
+];
+const CHORE_REPLIES: &[&str] = &[
+    "Nice work! It feels good to get that done.",
+    "Well done. That's one less thing to worry about.",
+    "Great job. You deserve a break now.",
+];
+
+#[rustfmt::skip]
+const GOOD_FEELINGS: &[&str] = &[
+    "cheerful", "relaxed", "energetic", "grateful", "hopeful", "calm", "content", "inspired",
+    "optimistic", "excited", "refreshed", "confident", "peaceful", "motivated", "upbeat",
+];
+const GOOD_FEELING_REPLIES: &[&str] = &[
+    "That's great to hear! What made you feel that way?",
+    "I'm glad you're feeling {x}. Enjoy it.",
+];
+#[rustfmt::skip]
+const BAD_FEELINGS: &[&str] = &[
+    "anxious", "stressed", "lonely", "overwhelmed", "sad", "frustrated", "restless", "gloomy",
+    "worried", "homesick", "grumpy", "discouraged", "drained", "nervous", "sleepy",
+];
+const BAD_FEELING_REPLIES: &[&str] = &[
+    "I'm sorry you're feeling {x}. Do you want to talk about it?",
+    "That sounds hard. Be gentle with yourself today.",
+];
+
+#[rustfmt::skip]
+const OPPOSITES: &[(&str, &str)] = &[
+    ("hot", "cold"), ("early", "late"), ("empty", "full"), ("quiet", "loud"), ("rough", "smooth"),
+    ("heavy", "light"), ("wide", "narrow"), ("deep", "shallow"), ("generous", "selfish"),
+    ("tall", "short"), ("fast", "slow"), ("wet", "dry"), ("hard", "soft"), ("dark", "bright"),
+    ("clean", "dirty"), ("near", "far"), ("open", "closed"), ("push", "pull"), ("buy", "sell"),
+    ("give", "take"), ("arrive", "depart"), ("begin", "finish"), ("accept", "refuse"),
+    ("increase", "decrease"), ("include", "exclude"), ("inside", "outside"), ("above", "below"),
+    ("borrow", "lend"), ("cheap", "expensive"), ("polite", "rude"), ("strong", "weak"),
+    ("rich", "poor"), ("sharp", "blunt"), ("thick", "thin"), ("sweet", "sour"), ("tight", "loose"),
+    ("noisy", "silent"), ("private", "public"), ("maximum", "minimum"), ("entrance", "exit"),
+    ("success", "failure"), ("victory", "defeat"), ("question", "answer"), ("asleep", "awake"),
+    ("absent", "present"), ("frequent", "rare"), ("careful", "careless"), ("true", "false"),
+    ("wild", "tame"), ("visible", "invisible"),
+];
+
+#[rustfmt::skip]
+const SYNONYMS: &[(&str, &str, &str)] = &[
+    ("big", "large", "huge"), ("small", "tiny", "little"), ("smart", "clever", "bright"),
+    ("angry", "cross", "furious"), ("tired", "sleepy", "weary"), ("funny", "amusing", "hilarious"),
+    ("quick", "fast", "speedy"), ("hard", "difficult", "tough"), ("easy", "simple", "effortless"),
+    ("begin", "start", "commence"), ("end", "finish", "conclude"), ("brave", "bold", "courageous"),
+    ("kind", "gentle", "caring"), ("shy", "timid", "bashful"), ("calm", "peaceful", "serene"),
+    ("strange", "odd", "unusual"), ("rich", "wealthy", "prosperous"), ("loud", "noisy", "booming"),
+    ("quiet", "silent", "hushed"), ("old", "ancient", "aged"), ("new", "fresh", "modern"),
+    ("cold", "chilly", "freezing"), ("hot", "warm", "boiling"), ("wet", "damp", "soaked"),
+    ("dirty", "messy", "grimy"), ("clean", "spotless", "tidy"), ("sad", "unhappy", "gloomy"),
+    ("scared", "afraid", "frightened"), ("important", "vital", "essential"),
+    ("help", "assist", "support"), ("look", "glance", "gaze"), ("walk", "stroll", "wander"),
+    ("talk", "chat", "speak"), ("laugh", "giggle", "chuckle"), ("cry", "weep", "sob"),
+    ("jump", "leap", "bound"), ("think", "ponder", "consider"), ("build", "construct", "assemble"),
+    ("fix", "repair", "mend"), ("tasty", "flavorful", "savory"),
+];
+
+#[rustfmt::skip]
+const SPELL_WORDS: &[&str] = &[
+    "rhythm", "separate", "calendar", "definitely", "February", "library", "restaurant",
+    "government", "environment", "temperature", "vegetable", "accommodate", "occasion",
+    "embarrass", "knowledge", "island", "receipt", "column", "schedule", "mischievous",
+    "pronunciation", "conscience", "tomorrow", "through", "enough", "believe", "weird",
+    "colleague", "guarantee", "foreign", "height", "liaison", "millennium", "parallel",
+    "privilege", "recommend", "rhyme", "souvenir", "tongue", "yacht",
+];
+
+#[rustfmt::skip]
+const CAPITALS: &[(&str, &str)] = &[
+    ("Japan", "Tokyo"), ("France", "Paris"), ("Spain", "Madrid"), ("Italy", "Rome"),
+    ("Germany", "Berlin"), ("Australia", "Canberra"), ("Brazil", "Brasilia"),
+    ("Argentina", "Buenos Aires"), ("India", "New Delhi"), ("China", "Beijing"),
+    ("Russia", "Moscow"), ("Ireland", "Dublin"), ("Sweden", "Stockholm"), ("Finland", "Helsinki"),
+    ("Denmark", "Copenhagen"), ("Poland", "Warsaw"), ("the Netherlands", "Amsterdam"),
+    ("Belgium", "Brussels"), ("Switzerland", "Bern"), ("Turkey", "Ankara"), ("Thailand", "Bangkok"),
+    ("Malaysia", "Kuala Lumpur"), ("Pakistan", "Islamabad"), ("Iran", "Tehran"), ("Iraq", "Baghdad"),
+    ("Saudi Arabia", "Riyadh"), ("Morocco", "Rabat"), ("Nigeria", "Abuja"), ("Chile", "Santiago"),
+    ("Venezuela", "Caracas"), ("Jamaica", "Kingston"), ("Ukraine", "Kyiv"), ("Uganda", "Kampala"),
+    ("Tanzania", "Dodoma"), ("Zambia", "Lusaka"), ("Zimbabwe", "Harare"), ("Laos", "Vientiane"),
+    ("Cambodia", "Phnom Penh"), ("Fiji", "Suva"), ("Samoa", "Apia"), ("Mali", "Bamako"),
+    ("Niger", "Niamey"), ("Sudan", "Khartoum"), ("Algeria", "Algiers"), ("Syria", "Damascus"),
+    ("Afghanistan", "Kabul"), ("Kazakhstan", "Astana"), ("Costa Rica", "San Jose"),
+    ("Honduras", "Tegucigalpa"), ("Serbia", "Belgrade"), ("Albania", "Tirana"), ("Belarus", "Minsk"),
+    ("Cyprus", "Nicosia"), ("Malta", "Valletta"), ("Bahrain", "Manama"), ("Botswana", "Gaborone"),
+    ("Madagascar", "Antananarivo"), ("Mozambique", "Maputo"), ("Angola", "Luanda"),
+];
+
+#[rustfmt::skip]
+const QA: &[(&str, &str)] = &[
+    ("What do bees make?", "Bees make honey and wax."),
+    ("Why do cats purr?", "Cats often purr when they are content, and sometimes to soothe themselves."),
+    ("What is the largest ocean?", "The Pacific Ocean is the largest ocean on Earth."),
+    ("How do birds fly?", "Birds flap their wings to push air down and back, which lifts them and moves them forward."),
+    ("What is the biggest planet?", "Jupiter is the biggest planet in our solar system."),
+    ("What is the closest star to Earth?", "The sun is the closest star to Earth."),
+    ("Why is the ocean salty?", "Rivers carry tiny amounts of minerals into the sea, and they build up over time."),
+    ("What do caterpillars turn into?", "Caterpillars turn into butterflies or moths."),
+    ("How do fish breathe?", "Fish use their gills to take oxygen from the water."),
+    ("What is the hottest planet?", "Venus is the hottest planet because its thick clouds trap heat."),
+    ("Why do we have seasons?", "Earth is tilted, so different parts get more or less sunlight through the year."),
+    ("What makes popcorn pop?", "Water inside each kernel turns to steam and bursts the shell."),
+    ("What is the fastest land animal?", "The cheetah is the fastest land animal."),
+    ("What is the longest river?", "The Nile and the Amazon are usually named as the longest rivers."),
+    ("What is a group of crows called?", "A group of crows is called a murder."),
+    ("How do volcanoes form?", "Volcanoes form where magma from deep underground pushes up through the crust."),
+    ("What is the smallest bone in the body?", "The smallest bone is the stapes, inside the ear."),
+    ("What do koalas eat?", "Koalas eat mostly eucalyptus leaves."),
+    ("Why do zebras have stripes?", "Scientists think the stripes may help keep biting flies away."),
+    ("Why do stars twinkle?", "Starlight bends as it passes through moving air, which makes stars seem to twinkle."),
+    ("How do plants drink water?", "Plants pull water up from their roots through tiny tubes in their stems."),
+    ("What is a glacier?", "A glacier is a huge, slow-moving river of ice."),
+    ("What causes wind?", "Wind is air moving from areas of high pressure to areas of low pressure."),
+    ("Why do we yawn?", "No one is completely sure, but yawning may help cool the brain or signal tiredness."),
+    ("What is the tallest animal?", "The giraffe is the tallest animal."),
+    ("Why do dogs wag their tails?", "Dogs often wag their tails when they are excited or friendly."),
+    ("What is fog?", "Fog is a cloud that forms close to the ground."),
+    ("Why does ice float?", "Ice is less dense than liquid water, so it floats."),
+    ("What is the deepest part of the ocean?", "The Mariana Trench is the deepest known part of the ocean."),
+    ("What do frogs eat?", "Most frogs eat insects, worms and other small creatures."),
+    ("What is the largest desert?", "Antarctica is the largest desert, and the Sahara is the largest hot desert."),
+    ("How fast does light travel?", "Light travels about 300,000 kilometers per second."),
+    ("At what temperature does water boil?", "At sea level, water boils at 100 degrees Celsius."),
+    ("At what temperature does water freeze?", "Water freezes at 0 degrees Celsius."),
+    ("What is a hurricane?", "A hurricane is a powerful storm with strong winds that forms over warm ocean water."),
+    ("How do magnets work?", "Magnets pull on certain metals, like iron, because of a force called magnetism."),
+    ("What is the hardest natural material?", "Diamond is the hardest natural material."),
+    ("What do whales eat?", "Many whales eat tiny animals called krill."),
+    ("Why do camels have humps?", "A camel's hump stores fat, which it can use for energy."),
+    ("How can I sleep better?", "Keep a regular bedtime, avoid screens late at night, and keep your room cool and dark."),
+    ("How do I make friends in a new town?", "Join a club or class you enjoy, and say yes to small invitations."),
+    ("How can I save money on groceries?", "Plan meals for the week, shop with a list, and compare prices per unit."),
+    ("How do I remember names better?", "Repeat the name when you hear it and link it to something about the person."),
+    ("How can I be more productive?", "Pick your most important task first and work on it before checking messages."),
+    ("How do I start journaling?", "Write a few lines each night about what happened and how you felt."),
+    ("How do I keep my plants healthy?", "Give them the right light, water only when the soil is dry, and check for pests."),
+    ("How can I stop procrastinating?", "Break the task into tiny steps and start with one you can finish in a few minutes."),
+    ("How do I calm down before an exam?", "Breathe slowly, remind yourself you have prepared, and focus on one question at a time."),
+    ("How can I drink less soda?", "Swap one soda a day for plain or fizzy water."),
+    ("How do I get better at drawing?", "Draw a little every day and copy simple shapes before trying complex scenes."),
+    ("How can I be a better listener?", "Let the other person finish, ask follow-up questions, and avoid planning your reply while they talk."),
+    ("How do I stay warm in winter?", "Wear layers, keep your hands and feet covered, and drink warm drinks."),
+    ("How can I wake up earlier?", "Move your alarm a little earlier each week and get sunlight soon after waking."),
+    ("How do I write a thank-you note?", "Name the gift or kindness, say how it helped you, and end with a warm wish."),
+    ("How can I improve my handwriting?", "Slow down, hold the pen loosely and practice a few lines each day."),
+    ("How can I reduce stress at work?", "Take short breaks, set clear priorities and talk to someone you trust."),
+    ("How do I stop my glasses from fogging up?", "Make sure your mask fits snugly over your nose, or try an anti-fog wipe."),
+    ("How can I make my room feel cozier?", "Add soft lighting, a few cushions and something you love to look at."),
+    ("How can I learn to cook?", "Start with a few simple recipes you enjoy and cook them until they feel easy."),
+    ("How do I fix a squeaky chair?", "Tighten the screws and add a drop of oil where the parts rub."),
+    ("How can I keep my phone from distracting me?", "Turn off notifications and keep the phone in another room while you work."),
+    ("How can I make a long drive less boring?", "Listen to podcasts or audiobooks and plan short stops to stretch."),
+    ("How do I care for a cast iron pan?", "Dry it right after washing and rub in a thin layer of oil."),
+    ("How can I spend less time on screens?", "Set daily limits and plan offline activities you enjoy."),
+    ("How do I keep cut flowers fresh?", "Trim the stems, change the water every couple of days and keep them out of direct sun."),
+    ("How can I meditate?", "Sit comfortably, close your eyes and gently bring your attention back to your breath whenever it wanders."),
+    ("How do I pack light for a trip?", "Choose clothes that mix and match, and roll them instead of folding."),
+    ("How can I be more patient?", "Notice when you feel rushed, take a breath, and remind yourself that most things can wait a moment."),
+    ("Good morning!", "Good morning! How are you today?"),
+    ("Good evening.", "Good evening! How was your day?"),
+    ("I'm back.", "Welcome back! What would you like to talk about?"),
+    ("That's interesting.", "I think so too."),
+    ("Ha, that's funny.", "I'm glad it made you smile."),
+    ("I'm not sure what to do next.", "Let's think it through together. What are your options?"),
+    ("Can I ask you something?", "Of course. What's on your mind?"),
+    ("I had a strange dream last night.", "Dreams can be so odd. What happened in it?"),
+    ("I think I'm catching a cold.", "I'm sorry. Rest, fluids and warm drinks might help."),
+    ("I just finished a great novel.", "Nice! What did you like about it?"),
+    ("I'm learning to play guitar.", "That's great. Practice a little each day and it will come."),
+    ("It's my favorite time of year.", "What do you love most about it?"),
+    ("The kids are finally asleep.", "That must be a relief. Time to relax a little."),
+    ("I got a compliment today.", "That's lovely. Compliments can really brighten a day."),
+    ("I'm trying to eat healthier.", "Good for you. Small changes add up."),
+    ("I'm so hungry.", "Maybe it's time for a snack or an early meal."),
+    ("I moved my desk next to the window.", "Natural light can make a big difference."),
+    ("My back hurts from sitting too long.", "Try standing up and stretching every half hour."),
+    ("The internet is so slow today.", "That's frustrating. Restarting the router sometimes helps."),
+    ("I'm going to call an old friend later.", "That's nice. Catching up can be really uplifting."),
+    ("Do you have any hobbies?", "I don't have hobbies myself, but I love hearing about yours."),
+    ("Tell me a joke.", "Why did the scarecrow win an award? Because he was outstanding in his field."),
+    ("Tell me another joke.", "Why don't eggs tell jokes? They'd crack each other up."),
+    ("I'm tired of the rain.", "Rainy days can drag. Maybe a warm drink and a good film would help."),
+    ("I passed my driving test!", "Congratulations! That's a big achievement."),
+    ("I got a new job.", "Congratulations! When do you start?"),
+    ("See you later.", "See you! Take care."),
+    ("Thanks, that was helpful.", "You're welcome. I'm glad it helped."),
+    ("I'm learning to sew.", "That's a useful skill. Start with simple straight seams."),
+    ("I just signed up for a pottery workshop.", "How fun! Working with clay can be very relaxing."),
+];
+
+/// Every distractor exchange: `FILLERS` and the families above, the first of
+/// any repeated user turn kept.
+fn filler_bank() -> Vec<(String, Vec<String>)> {
+    let owned = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let mut bank: Vec<(String, Vec<String>)> = FILLERS
+        .iter()
+        .map(|(user, replies)| (user.to_string(), owned(replies)))
+        .collect();
+    let with = |template: &str, x: &str| template.replace("{x}", x);
+    for (i, activity) in ACTIVITIES.iter().enumerate() {
+        let user = with(ACTIVITY_USERS[i % ACTIVITY_USERS.len()], activity);
+        bank.push((cap(&user), owned(ACTIVITY_REPLIES)));
+    }
+    for chore in CHORES {
+        bank.push((format!("I just finished {chore}."), owned(CHORE_REPLIES)));
+    }
+    for (feelings, replies) in [
+        (GOOD_FEELINGS, GOOD_FEELING_REPLIES),
+        (BAD_FEELINGS, BAD_FEELING_REPLIES),
+    ] {
+        for feeling in feelings {
+            bank.push((
+                format!("I'm feeling {feeling} today."),
+                replies.iter().map(|r| with(r, feeling)).collect(),
+            ));
+        }
+    }
+    for (word, opposite) in OPPOSITES {
+        bank.push((
+            format!("What is the opposite of {word}?"),
+            vec![format!("The opposite of {word} is {opposite}.")],
+        ));
+    }
+    for (word, a, b) in SYNONYMS {
+        bank.push((
+            format!("What's another word for {word}?"),
+            vec![format!("You could say {a} or {b}.")],
+        ));
+    }
+    for word in SPELL_WORDS {
+        let letters: Vec<String> = word.to_lowercase().chars().map(String::from).collect();
+        bank.push((
+            format!("How do you spell {word}?"),
+            vec![format!("It is spelled {}.", letters.join("-"))],
+        ));
+    }
+    for (country, capital) in CAPITALS {
+        bank.push((
+            format!("What is the capital of {country}?"),
+            vec![format!("The capital of {country} is {capital}.")],
+        ));
+    }
+    for (user, reply) in QA {
+        bank.push((user.to_string(), vec![reply.to_string()]));
+    }
+    let mut seen = BTreeSet::new();
+    bank.retain(|(user, _)| seen.insert(normalized(user)));
+    bank
+}
+
 const ACKS: &[&str] = &[
-    "Got it.", "Good to know.", "Thanks for telling me.", "Okay, I'll keep that in mind.",
-    "Noted!", "That sounds like fun.", "Nice!", "Sounds good.", "How exciting!", "Okay, thanks.",
-    "That's nice to hear.", "I'll remember that.",
+    "Got it.",
+    "Good to know.",
+    "Thanks for telling me.",
+    "Okay, I'll keep that in mind.",
+    "Noted!",
+    "That sounds like fun.",
+    "Nice!",
+    "Sounds good.",
+    "How exciting!",
+    "Okay, thanks.",
+    "That's nice to hear.",
+    "I'll remember that.",
 ];
 const UPDATE_ACKS: &[&str] = &[
     "Okay, thanks for the update.",
@@ -1425,9 +1736,9 @@ impl World {
         }
 
         let mut fillers = Vec::new();
-        for (user, replies) in FILLERS {
-            if panel.turn_leak(user).is_some() {
-                discard("filler", user);
+        for (user, replies) in filler_bank() {
+            if panel.turn_leak(&user).is_some() {
+                discard("filler", &user);
                 continue;
             }
             let kept: Vec<String> = replies
@@ -1439,12 +1750,12 @@ impl World {
                     }
                     ok
                 })
-                .map(|r| r.to_string())
+                .cloned()
                 .collect();
             if kept.is_empty() {
-                discard("filler", user);
+                discard("filler", &user);
             } else {
-                fillers.push((user.to_string(), kept));
+                fillers.push((user, kept));
             }
         }
         if fillers.len() < 20 {
@@ -1547,6 +1858,9 @@ struct Turn {
     text: String,
     /// A distractor exchange's turn.
     filler: bool,
+    /// What an assistant turn is: `answer`, `acknowledgement`, `suggestion`
+    /// or `distractor` (`user` for user turns).
+    kind: &'static str,
 }
 
 #[derive(Clone, Debug)]
@@ -1839,14 +2153,16 @@ impl<'w> Builder<'w> {
             role: Role::User,
             text,
             filler: false,
+            kind: "user",
         });
     }
 
-    fn assistant(&mut self, text: String) {
+    fn assistant(&mut self, text: String, kind: &'static str) {
         self.turns.push(Turn {
             role: Role::Assistant,
             text,
             filler: false,
+            kind,
         });
     }
 
@@ -1864,11 +2180,13 @@ impl<'w> Builder<'w> {
                 role: Role::User,
                 text: user.clone(),
                 filler: true,
+                kind: "user",
             });
             self.turns.push(Turn {
                 role: Role::Assistant,
                 text: reply,
                 filler: true,
+                kind: "distractor",
             });
             return Ok(());
         }
@@ -1921,9 +2239,9 @@ impl<'w> Builder<'w> {
                 let template = pick(rng, &frame.answer)?;
                 parts.push(fill(template, &fact_slots(fact, frame.spec.art))?);
             }
-            self.assistant(parts.join(" "));
+            self.assistant(parts.join(" "), "acknowledgement");
         } else {
-            self.assistant(pick(rng, ACKS)?.to_string());
+            self.assistant(pick(rng, ACKS)?.to_string(), "acknowledgement");
         }
         Ok(())
     }
@@ -2031,7 +2349,7 @@ impl<'w> Builder<'w> {
             fact.value.clone()
         };
         self.user(question);
-        self.assistant(answer);
+        self.assistant(answer, "answer");
         self.questions.push(Question {
             turn: self.turns.len() - 1,
             category,
@@ -2073,7 +2391,7 @@ impl<'w> Builder<'w> {
         self.note_frame(frame);
         self.keys.push(key);
         self.user(question);
-        self.assistant(answer);
+        self.assistant(answer, "answer");
         self.questions.push(Question {
             turn: self.turns.len() - 1,
             category: Category::Abstain,
@@ -2180,9 +2498,12 @@ fn draw_dialogue(world: &World, rng: &mut Rng) -> Result<Drawn> {
             let frame = &world.frames[primary];
             let slots = pair_slots(&facts[0], &facts[1], frame.spec.art);
             b.user(fill(pick(rng, &frame.suggest_request)?, &slots)?);
-            b.assistant(fill(pick(rng, &frame.suggest_reply)?, &slots)?);
+            b.assistant(
+                fill(pick(rng, &frame.suggest_reply)?, &slots)?,
+                "suggestion",
+            );
             b.user(pick(rng, ACCEPTS)?.to_string());
-            b.assistant(pick(rng, ACCEPT_ACKS)?.to_string());
+            b.assistant(pick(rng, ACCEPT_ACKS)?.to_string(), "acknowledgement");
             b.note_frame(primary);
             for fact in &mut facts {
                 fact.by_assistant = true;
@@ -2232,7 +2553,7 @@ fn draw_dialogue(world: &World, rng: &mut Rng) -> Result<Drawn> {
         let slots = fact_slots(&b.facts[index], spec.art);
         let template = pick(rng, &world.frames[frame_index].update)?;
         b.user(fill(template, &slots)?);
-        b.assistant(pick(rng, UPDATE_ACKS)?.to_string());
+        b.assistant(pick(rng, UPDATE_ACKS)?.to_string(), "acknowledgement");
         updated = Some(index);
     }
 
@@ -2342,6 +2663,19 @@ fn draw_dialogue(world: &World, rng: &mut Rng) -> Result<Drawn> {
     for turn in &dialogue.turns {
         if let Some(reason) = world.panel.turn_leak(&turn.text) {
             return Ok(Drawn::Redraw(reason));
+        }
+    }
+    // A key or value word that coincides with an answer template's own words
+    // ("the school play" against "plays the viola") would make a correct
+    // answer look like it names another key: redraw such a dialogue.
+    for q in &dialogue.questions {
+        let answer = content_stems(&dialogue.turns[q.turn].text);
+        if q.forbid
+            .iter()
+            .chain(&q.forbid_keys)
+            .any(|other| content_stems(other).iter().any(|s| answer.contains(s)))
+        {
+            return Ok(Drawn::Redraw("key_or_value_word_in_answer_template"));
         }
     }
     check_dialogue(&dialogue)?;
@@ -2531,10 +2865,40 @@ struct Tally {
     tokens: usize,
     response_tokens: usize,
     recall_response_tokens: usize,
+    /// (replies, reply tokens incl. EOS) per reply kind, trained (mask 1).
+    trained_replies: BTreeMap<String, (usize, usize)>,
+    /// The same for context-only replies (mask 0).
+    context_replies: BTreeMap<String, (usize, usize)>,
     max_tokens: usize,
 }
 
 impl Tally {
+    fn replies_json(&self) -> Value {
+        let table = |m: &BTreeMap<String, (usize, usize)>| {
+            m.iter()
+                .map(|(k, (n, t))| (k.clone(), json!({"replies": n, "reply_tokens": t})))
+                .collect::<BTreeMap<_, _>>()
+        };
+        let sum = |m: &BTreeMap<String, (usize, usize)>, answers: bool| {
+            m.iter()
+                .filter(|(k, _)| k.starts_with("answer:") == answers)
+                .fold((0, 0), |a, (_, (n, t))| (a.0 + n, a.1 + t))
+        };
+        let (answers, answer_tokens) = sum(&self.trained_replies, true);
+        let (others, other_tokens) = sum(&self.trained_replies, false);
+        let trained = answers + others;
+        json!({
+            "trained": table(&self.trained_replies),
+            "context_only": table(&self.context_replies),
+            "trained_replies": trained,
+            "trained_reply_tokens": answer_tokens + other_tokens,
+            "answer_reply_share_of_trained_replies": answers as f64 / trained.max(1) as f64,
+            "answer_token_share_of_trained_reply_tokens":
+                answer_tokens as f64 / (answer_tokens + other_tokens).max(1) as f64,
+            "note": "dialogue-train samples trained replies (mask-1 runs) uniformly, so the answer reply share is the expected share of this source's sampled episodes that are question answers",
+        })
+    }
+
     fn add(&mut self, d: &Dialogue, panel: &Panel) {
         self.dialogues += 1;
         self.turns += d.turns.len();
@@ -2603,6 +2967,7 @@ impl Tally {
             "tokens": self.tokens,
             "response_tokens": self.response_tokens,
             "recall_answer_tokens": self.recall_response_tokens,
+            "replies": self.replies_json(),
             "tokens_per_dialogue": self.tokens as f64 / self.dialogues.max(1) as f64,
             "max_dialogue_tokens": self.max_tokens,
         })
@@ -2625,6 +2990,40 @@ struct Encoding<'t> {
     version: u8,
     context: usize,
     vocab: u32,
+    /// Mask only the question answers (`true`, `train_on=answers`) or every
+    /// assistant turn (`false`, `train_on=all`).
+    answers_only: bool,
+}
+
+/// Apply `train_on` to an encoded document's response mask: under
+/// `answers_only`, every assistant turn that does not answer a question keeps
+/// its tokens (context) but loses its mask, EOS included. Returns the
+/// per-assistant-turn runs of the original mask, in turn order.
+fn apply_train_on(
+    dialogue: &Dialogue,
+    mask: &mut [u8],
+    answers_only: bool,
+) -> Result<Vec<(usize, usize, usize)>> {
+    let runs = mask_runs(mask);
+    let assistant_turns: Vec<usize> = (0..dialogue.turns.len())
+        .filter(|i| dialogue.turns[*i].role == Role::Assistant)
+        .collect();
+    if runs.len() != assistant_turns.len() {
+        return Err(format!(
+            "{} masked runs for {} assistant turns",
+            runs.len(),
+            assistant_turns.len()
+        ));
+    }
+    let answers: BTreeSet<usize> = dialogue.questions.iter().map(|q| q.turn).collect();
+    let mut out = Vec::with_capacity(runs.len());
+    for (&turn, &(start, end)) in assistant_turns.iter().zip(&runs) {
+        if answers_only && !answers.contains(&turn) {
+            mask[start..end].fill(0);
+        }
+        out.push((turn, start, end));
+    }
+    Ok(out)
 }
 
 /// Generate dialogues until the count or budget; stream tokens and mask; write
@@ -2703,23 +3102,35 @@ fn write_split(world: &World, enc: &Encoding, spec: &SplitSpec) -> Result<Tally>
             .collect::<Result<_>>()?;
         // The masked region of each question's reply must decode to text that
         // holds the expected value: the trainer scores exactly those tokens.
-        let runs = mask_runs(&encoded.response_mask);
-        let assistant_turns: Vec<usize> = (0..dialogue.turns.len())
-            .filter(|i| dialogue.turns[*i].role == Role::Assistant)
+        let mut mask = encoded.response_mask.clone();
+        let runs = apply_train_on(&dialogue, &mut mask, enc.answers_only)?;
+        let category_of: BTreeMap<usize, Category> = dialogue
+            .questions
+            .iter()
+            .map(|q| (q.turn, q.category))
             .collect();
-        if runs.len() != assistant_turns.len() {
-            return Err(format!(
-                "{} masked runs for {} assistant turns",
-                runs.len(),
-                assistant_turns.len()
-            ));
+        for &(turn, start, end) in &runs {
+            let kind = match category_of.get(&turn) {
+                Some(c) => format!("answer:{}", c.name()),
+                None => dialogue.turns[turn].kind.to_owned(),
+            };
+            let trained = mask[start] == 1;
+            let entry = if trained {
+                tally.trained_replies.entry(kind).or_default()
+            } else {
+                tally.context_replies.entry(kind).or_default()
+            };
+            entry.0 += 1;
+            entry.1 += end - start;
         }
         for q in &dialogue.questions {
-            let run = assistant_turns
+            let &(_, start, end) = runs
                 .iter()
-                .position(|t| *t == q.turn)
+                .find(|(turn, _, _)| *turn == q.turn)
                 .ok_or("a question answer is not an assistant turn")?;
-            let (start, end) = runs[run];
+            if mask[start..end].iter().any(|&m| m != 1) {
+                return Err("a question answer is not fully masked".into());
+            }
             tally.recall_response_tokens += end - start;
             if let Some(expect) = &q.expect {
                 let scored: Vec<u32> = encoded.tokens[start..end].to_vec();
@@ -2733,11 +3144,9 @@ fn write_split(world: &World, enc: &Encoding, spec: &SplitSpec) -> Result<Tally>
             }
         }
         writer.write_tokens(&ids).map_err(|e| e.to_string())?;
-        mask_out
-            .write_all(&encoded.response_mask)
-            .map_err(|e| e.to_string())?;
+        mask_out.write_all(&mask).map_err(|e| e.to_string())?;
         tally.tokens += ids.len();
-        tally.response_tokens += encoded.response_mask.iter().filter(|&&m| m == 1).count();
+        tally.response_tokens += mask.iter().filter(|&&m| m == 1).count();
         tally.max_tokens = tally.max_tokens.max(ids.len());
         if tally.dialogues < spec.samples {
             let id = format!("{}-{:07}", spec.name, tally.dialogues);
@@ -2766,6 +3175,7 @@ fn write_split(world: &World, enc: &Encoding, spec: &SplitSpec) -> Result<Tally>
         "template_rule": "<|bos|> then turns joined by a single '\\n' separator (placed before every turn after the first); a turn is '<marker><content>' with markers 'System: ', 'User: ', 'Assistant: '; every assistant turn ends with <|eos|>; a document-terminal <|eos|> is appended only when the final emitted turn is not assistant. Content is \\r\\n/\\r-normalised and trimmed; interior whitespace preserved.",
         "mask_rule": "1 = each token of an assistant turn's response content and its terminating <|eos|>; 0 = <|bos|>, all role markers, turn separators, system/user content, and an unmasked document-terminal <|eos|>.",
         "dialogue_protocol": enc.protocol.schema,
+        "train_on": if enc.answers_only { "answers" } else { "all" },
         "drops": {
             "rows_dropped_no_messages": 0,
             "rows_dropped_empty": 0,
@@ -3007,6 +3417,12 @@ fn generate(args: &[String]) -> Result<()> {
         return Err("context= must be at least 256".into());
     }
     let samples = number(args, "samples", 200)? as usize;
+    let train_on = arg(args, "train_on").unwrap_or("answers").to_owned();
+    let answers_only = match train_on.as_str() {
+        "answers" => true,
+        "all" => false,
+        other => return Err(format!("unknown train_on={other}: answers or all")),
+    };
     let dirs = panel_dirs(args);
     // Validate the inputs before claiming the root.
     let tokenizer = load_tokenizer(&tokenizer_path)?;
@@ -3024,6 +3440,7 @@ fn generate(args: &[String]) -> Result<()> {
         version,
         context,
         vocab,
+        answers_only,
     };
     let train = write_split(
         &world,
@@ -3167,6 +3584,12 @@ fn generate(args: &[String]) -> Result<()> {
         },
         "dialogue_protocol": enc.protocol.schema,
         "context": context,
+        "train_on": train_on,
+        "train_on_rule": if answers_only {
+            "answers: response_mask is 1 only on the assistant turns that answer a recall or abstention question (content and EOS); acknowledgements, suggestions and distractor replies stay in the context with mask 0, so dialogue-train neither samples nor trains them"
+        } else {
+            "all: response_mask is 1 on every assistant turn"
+        },
         "seed": seed,
         "dev_seed": dev_seed,
         "requested": {"dialogues": dialogues, "token_budget": token_budget, "dev_dialogues": dev_dialogues},
@@ -3175,6 +3598,8 @@ fn generate(args: &[String]) -> Result<()> {
         "populations": populations,
         "leak_pass": pass,
         "relations": FRAMES.iter().map(|f| f.id).collect::<Vec<_>>(),
+        "distractor_exchanges": world.fillers.len(),
+        "distractor_replies": world.fillers.iter().map(|(_, r)| r.len()).sum::<usize>(),
         "pool_sizes": world.values.iter().map(|(k, v)| (format!("{k:?}"), v.len())).collect::<BTreeMap<_, _>>(),
         "primary_category_shares": PRIMARY_SHARES.iter().map(|(c, s)| (c.name(), *s)).collect::<BTreeMap<_, _>>(),
         "followup_abstain_probability": FOLLOWUP_ABSTAIN,
@@ -3480,6 +3905,142 @@ mod tests {
             Some("panel_recall_value_word")
         );
         assert_eq!(w.panel.turn_leak("The ferret is named Quill."), None);
+    }
+
+    /// A byte-level tokenizer with the three dialogue specials at ids 0-2
+    /// (GPT-2's byte alphabet), as `stack_dialogue`'s tests build it.
+    fn byte_tokenizer() -> ByteBpeTokenizer {
+        let mut printable: Vec<u32> = (u32::from(b'!')..=u32::from(b'~')).collect();
+        printable.extend(0xA1..=0xAC);
+        printable.extend(0xAE..=0xFF);
+        let mut vocab = serde_json::Map::new();
+        let specials = ["<|bos|>", "<|eos|>", "<|unk|>"];
+        for (id, surface) in specials.iter().enumerate() {
+            vocab.insert((*surface).to_owned(), json!(id));
+        }
+        let mut extra = 0;
+        for byte in 0u32..256 {
+            let ch = if printable.contains(&byte) {
+                char::from_u32(byte)
+            } else {
+                extra += 1;
+                char::from_u32(255 + extra)
+            }
+            .expect("a valid char");
+            vocab.insert(ch.to_string(), json!(byte + 3));
+        }
+        let added: Vec<Value> = specials
+            .iter()
+            .enumerate()
+            .map(|(id, surface)| json!({"id": id, "content": surface}))
+            .collect();
+        ByteBpeTokenizer::from_tokenizer_json_bytes(
+            json!({
+                "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
+                "added_tokens": added,
+                "model": {"type": "BPE", "vocab": vocab, "merges": []},
+            })
+            .to_string()
+            .as_bytes(),
+        )
+        .expect("the byte tokenizer parses")
+    }
+
+    /// Write a split with `write_split` and return the decoded text of every
+    /// reply `dialogue-train` would sample from it (its episode index).
+    fn sampled_replies(world: &World, answers_only: bool, seed: u64, n: usize) -> Vec<String> {
+        let tokenizer = byte_tokenizer();
+        let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).expect("protocol");
+        let vocab = u32::try_from(tokenizer.vocab_size()).expect("vocab");
+        let context = 4096;
+        let enc = Encoding {
+            tokenizer: &tokenizer,
+            protocol,
+            version: 2,
+            context,
+            vocab,
+            answers_only,
+        };
+        let dir = std::env::temp_dir().join(format!(
+            "dialogue-recall-test-{}-{answers_only}-{seed}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let spec = SplitSpec {
+            name: "train",
+            label: "dialogue-recall",
+            seed,
+            dialogues: n,
+            token_budget: 0,
+            samples: 0,
+            dir: &dir,
+        };
+        write_split(world, &enc, &spec).expect("the split is written");
+        let (_, contract) =
+            episode_contract_for(&tokenizer, vocab as usize, context, 2).expect("contract");
+        let split = DialogueSplit::load(
+            &dir.join("tokens.u16"),
+            &dir.join("response_mask.u8"),
+            &dir.join("manifest.json"),
+        )
+        .expect("the split loads as dialogue-train loads it");
+        let index = split.index(contract).expect("the split indexes");
+        let reader = MmapCorpusReader::open(dir.join("tokens.u16")).expect("tokens");
+        let ids = reader.as_slice();
+        let eos = enc.protocol.eos_id;
+        let replies: Vec<String> = index
+            .episodes()
+            .iter()
+            .map(|span| {
+                let text: Vec<u32> = ids[span.response_start..span.response_end]
+                    .iter()
+                    .map(|&t| u32::from(t))
+                    .filter(|&t| t != eos)
+                    .collect();
+                tokenizer.decode(&text).trim().to_owned()
+            })
+            .collect();
+        // Every sampled id is one of these episodes, and each episode trains
+        // only its own reply tokens.
+        let sampled = index.sample_ids(seed, 0, 64).expect("sample");
+        assert!(sampled.iter().all(|&id| id < replies.len()));
+        let _ = fs::remove_dir_all(&dir);
+        replies
+    }
+
+    #[test]
+    fn train_on_answers_leaves_exactly_the_answer_turns_sampleable() {
+        let w = world();
+        let n = 150;
+        let dialogues = draw_many(&w, 29, n);
+        let answers: Vec<String> = dialogues
+            .iter()
+            .flat_map(|d| d.questions.iter().map(|q| d.turns[q.turn].text.clone()))
+            .collect();
+        let every_reply: Vec<String> = dialogues
+            .iter()
+            .flat_map(|d| {
+                d.turns
+                    .iter()
+                    .filter(|t| t.role == Role::Assistant)
+                    .map(|t| t.text.clone())
+            })
+            .collect();
+        assert!(every_reply.len() > 2 * answers.len());
+        assert_eq!(sampled_replies(&w, true, 29, n), answers);
+        assert_eq!(sampled_replies(&w, false, 29, n), every_reply);
+    }
+
+    #[test]
+    fn the_distractor_bank_is_large_and_clean() {
+        let w = world();
+        assert!(w.fillers.len() >= 400, "{}", w.fillers.len());
+        for (user, replies) in &w.fillers {
+            assert!(w.panel.turn_leak(user).is_none(), "{user}");
+            for reply in replies {
+                assert!(w.panel.turn_leak(reply).is_none(), "{reply}");
+            }
+        }
     }
 
     #[test]
