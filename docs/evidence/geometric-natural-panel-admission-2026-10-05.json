@@ -150,7 +150,7 @@
     "source_files_verified": 17004,
     "expanded_lfs_identities_verified": 1824,
     "saved_review_checks": 5352,
-    "saved_review_scope": "root/independent saved-field review;no native/BPE/autodiff/Adam rerun",
+    "saved_review_scope": "saved panel/current-label/provenance/exposure-binding evidence only; reference control and native hard-forward/gradient parity are separate executed Rust receipts",
     "guard_exact_head_execution": "PASS",
     "corrected_guard_focused_tests": 1
   },
