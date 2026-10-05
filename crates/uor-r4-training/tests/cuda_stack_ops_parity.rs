@@ -1606,3 +1606,537 @@ fn test_gradient_square_sum_speed() -> uor_r4_training::Result<()> {
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// bf16 activation storage (`precision=bf16`).
+//
+// Each test runs the same op twice on the same CUDA device: once with f32
+// activation storage (the f32 kernels, already parity-checked against the CPU
+// reference above) and once with bf16 storage (the same CUDA C source compiled
+// with UOR_STORAGE_BF16). The bf16 op's *inputs* are the f32 inputs rounded to
+// bf16 with Candle's `to_dtype(DType::BF16)` (round-to-nearest-even, exactly
+// what the bf16 trunk stores), so the only difference between the two runs is
+// the storage and the conversion the kernels perform.
+//
+// Stated tolerances. Rounding one value to bf16 is at most 2^-9 relative
+// (1.95e-3); a reduction of n such values in f32 keeps that relative error,
+// and the op's own f32/f64 arithmetic is unchanged, so each forward output is
+// within `abs_tol + rel_tol * |f32|` of the f32 result with the per-op
+// tolerances stated at each test below. They are deliberately ~5x the largest
+// observed error on the 4090 so the tests catch a real regression (a wrong
+// conversion, a lost cast, an f32 kernel left on the bf16 path) and not the
+// last bit of rounding.
+
+#[cfg(feature = "cuda")]
+fn assert_bf16_close(
+    reference: &[f32],
+    tested: &[f32],
+    abs_tol: f32,
+    rel_tol: f32,
+    op: &str,
+) -> f32 {
+    assert_eq!(reference.len(), tested.len(), "{op}: length mismatch");
+    let mut worst = 0.0f32;
+    for (i, (&want, &got)) in reference.iter().zip(tested.iter()).enumerate() {
+        assert!(
+            want.is_finite(),
+            "{op} at {i}: f32 value is not finite ({want})"
+        );
+        assert!(
+            got.is_finite(),
+            "{op} at {i}: bf16 value is not finite ({got})"
+        );
+        let diff = (want - got).abs();
+        let bound = abs_tol + rel_tol * want.abs();
+        assert!(
+            diff <= bound,
+            "{op} at {i}: |bf16 - f32| = {diff} > {bound} (f32 {want}, bf16 {got})"
+        );
+        worst = worst.max(diff);
+    }
+    worst
+}
+
+/// The bf16 kernels' f32 -> bf16 rounding is Candle's (`half::bf16`, RNE).
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_storage_rounding_matches_candle() -> uor_r4_training::Result<()> {
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    // Values that exercise the rounding boundary (exact halves of a bf16 step),
+    // the sign, subnormals near zero and a large finite magnitude.
+    let len = 64;
+    let data: Vec<f32> = (0..len)
+        .map(|i| {
+            let step = (i as f32 - 32.0) * 0.5;
+            let base = 2f32.powi(((i as i32 % 9) - 4) * 2);
+            base * (1.0 + step / 256.0)
+        })
+        .collect();
+    let tensor = candle_core::Tensor::from_vec(data.clone(), len, &cuda)?;
+    let candle_round = tensor
+        .to_dtype(candle_core::DType::BF16)?
+        .to_dtype(candle_core::DType::F32)?
+        .to_vec1::<f32>()?;
+    // The kernel's conversion: straight_through copies the bf16 storage it read.
+    let quantized = tensor
+        .to_dtype(candle_core::DType::BF16)?
+        .to_dtype(candle_core::DType::F32)?;
+    let out = uor_r4_training::geometric_stack::straight_through(&tensor, &quantized)?;
+    let kernel = out.to_vec1::<f32>()?;
+    for (i, (a, b)) in candle_round.iter().zip(kernel.iter()).enumerate() {
+        assert_eq!(a, b, "element {i}: candle {a} vs kernel {b}");
+    }
+    println!("bf16 storage rounding matches candle on {len} values");
+    Ok(())
+}
+
+/// StraightThrough: a bf16 copy, so the only error is the input rounding.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_straight_through_parity() -> uor_r4_training::Result<()> {
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let len = 256;
+    let data: Vec<f32> = (0..len).map(|i| (i as f32 * 0.1).sin()).collect();
+    let f32_in = candle_core::Tensor::from_vec(data.clone(), len, &cuda)?;
+    let quantized = f32_in
+        .to_dtype(candle_core::DType::BF16)?
+        .to_dtype(candle_core::DType::F32)?;
+    let f32_out = uor_r4_training::geometric_stack::straight_through(&f32_in, &quantized)?;
+    let bf16_in = f32_in.to_dtype(candle_core::DType::BF16)?;
+    let bf16_out = uor_r4_training::geometric_stack::straight_through(&bf16_in, &bf16_in)?;
+    let worst = assert_bf16_close(
+        &f32_out.to_vec1::<f32>()?,
+        &bf16_out
+            .to_dtype(candle_core::DType::F32)?
+            .to_vec1::<f32>()?,
+        1e-4,
+        2e-3,
+        "StraightThrough bf16",
+    );
+    println!("bf16 StraightThrough max |diff| {worst:e} (tolerance 1e-4 + 2e-3 rel)");
+    Ok(())
+}
+
+/// The quaternion transport scan: bf16 storage, f32 products and norm.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_quaternion_scan_parity() -> uor_r4_training::Result<()> {
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (batch, time, lanes) = (2usize, 12usize, 8usize);
+    let total = batch * time * lanes * 4;
+    let transition: Vec<f32> = (0..total)
+        .map(|i| ((i as f32) * 0.017).cos() * 0.3)
+        .collect();
+    let drive: Vec<f32> = (0..total).map(|i| ((i as f32) * 0.011).sin()).collect();
+    let shape = (batch, time, lanes, 4);
+    let f32_transition = candle_core::Tensor::from_vec(transition, shape, &cuda)?;
+    let f32_drive = candle_core::Tensor::from_vec(drive, shape, &cuda)?;
+    let f32_out = uor_r4_training::geometric_stack::quaternion_scan(&f32_transition, &f32_drive)?;
+    let bf16_out = uor_r4_training::geometric_stack::quaternion_scan(
+        &f32_transition.to_dtype(candle_core::DType::BF16)?,
+        &f32_drive.to_dtype(candle_core::DType::BF16)?,
+    )?;
+    let worst = assert_bf16_close(
+        &f32_out.flatten_all()?.to_vec1::<f32>()?,
+        &bf16_out
+            .to_dtype(candle_core::DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?,
+        2e-3,
+        5e-3,
+        "QuaternionScan bf16",
+    );
+    println!("bf16 QuaternionScan max |diff| {worst:e} (tolerance 2e-3 + 5e-3 rel)");
+    Ok(())
+}
+
+/// The fused read, all three scores: bf16 query/key/value, f32 auxiliary table.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_fused_read_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{fused_aux_len, fused_read, ReadScore};
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (batch, heads, time, key, value) = (2usize, 2usize, 8usize, 6usize, 4usize);
+    let rows = batch * heads * time;
+    let gen = |len: usize, salt: f32| -> Vec<f32> {
+        (0..len)
+            .map(|i| (((i as f32) * 0.031 + salt).sin()) * 0.8)
+            .collect()
+    };
+    let query =
+        candle_core::Tensor::from_vec(gen(rows * key, 0.0), (batch, heads, time, key), &cuda)?;
+    let kv = candle_core::Tensor::from_vec(
+        gen(rows * (key + value), 1.7),
+        (batch, heads, time, key + value),
+        &cuda,
+    )?;
+    for score in [ReadScore::Dot, ReadScore::Lorentz, ReadScore::L2] {
+        let aux_len = fused_aux_len(batch, heads, time, score, true, true).max(1);
+        let aux = candle_core::Tensor::from_vec(gen(aux_len, 3.1), aux_len, &cuda)?;
+        let f32_out = fused_read(&query, &kv, &kv, &aux, score, true, true, false)?;
+        let bf16_out = fused_read(
+            &query.to_dtype(candle_core::DType::BF16)?,
+            &kv.to_dtype(candle_core::DType::BF16)?,
+            &kv.to_dtype(candle_core::DType::BF16)?,
+            &aux,
+            score,
+            true,
+            true,
+            false,
+        )?;
+        // The scores are f64/f32 and the softmax is f32 in both storages; the
+        // queried and mixed values are what the bf16 rounding reaches.
+        let worst = assert_bf16_close(
+            &f32_out.flatten_all()?.to_vec1::<f32>()?,
+            &bf16_out
+                .to_dtype(candle_core::DType::F32)?
+                .flatten_all()?
+                .to_vec1::<f32>()?,
+            1e-3,
+            6e-3,
+            &format!("FusedRead {score:?} bf16"),
+        );
+        println!("bf16 FusedRead {score:?} max |diff| {worst:e} (tolerance 1e-3 + 6e-3 rel)");
+    }
+    Ok(())
+}
+
+/// The recurrence core, both transport groups and both kernel paths.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_recurrence_core_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{
+        cuda_recurrence_kernels, recurrence_core, CudaRecurrenceKernels,
+    };
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (batch, time, width) = (2usize, 16usize, 16usize);
+    let lanes = width / 4;
+    let gen = |len: usize, salt: f32| -> Vec<f32> {
+        (0..len)
+            .map(|i| ((i as f32) * 0.019 + salt).sin() * 0.5)
+            .collect()
+    };
+    let branches = candle_core::Tensor::from_vec(
+        gen(batch * time * 2 * width, 0.0),
+        (batch, time, 2 * width),
+        &cuda,
+    )?;
+    let parameters = candle_core::Tensor::from_vec(
+        gen((5 * width + lanes).max(1), 2.3),
+        5 * width + lanes,
+        &cuda,
+    )?;
+    for rotation in [false, true] {
+        let gate_width = lanes + if rotation { width } else { 0 };
+        let gates = candle_core::Tensor::from_vec(
+            gen(batch * time * gate_width, if rotation { 0.9 } else { 4.2 }),
+            (batch, time, gate_width),
+            &cuda,
+        )?;
+        let f32_out = recurrence_core(
+            &branches,
+            &gates,
+            &parameters,
+            batch,
+            time,
+            width,
+            rotation,
+            None,
+        )?;
+        // Both forward kernel paths: `single` and the default `split`.
+        let split = cuda_recurrence_kernels();
+        let bf16_out = recurrence_core(
+            &branches.to_dtype(candle_core::DType::BF16)?,
+            &gates.to_dtype(candle_core::DType::BF16)?,
+            &parameters,
+            batch,
+            time,
+            width,
+            rotation,
+            None,
+        )?;
+        let worst = assert_bf16_close(
+            &f32_out.flatten_all()?.to_vec1::<f32>()?,
+            &bf16_out
+                .to_dtype(candle_core::DType::F32)?
+                .flatten_all()?
+                .to_vec1::<f32>()?,
+            3e-3,
+            8e-3,
+            &format!("RecurrenceCore rotation={rotation} bf16 ({split:?})"),
+        );
+        println!(
+            "bf16 RecurrenceCore rotation={rotation} ({split:?}) max |diff| {worst:e} (tolerance 3e-3 + 8e-3 rel)"
+        );
+    }
+    println!(
+        "recurrence kernel path in this run: {split:?}",
+        split = cuda_recurrence_kernels()
+    );
+    let _ = CudaRecurrenceKernels::Split;
+    Ok(())
+}
+
+/// Cross-entropy over bf16 logits: the loss is f64 over them.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_cross_entropy_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::logits_cross_entropy;
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (rows, classes) = (24usize, 64usize);
+    let logits: Vec<f32> = (0..rows * classes)
+        .map(|i| ((i as f32) * 0.017).sin() * 3.0)
+        .collect();
+    let targets: Vec<u32> = (0..rows).map(|i| (i * 7 % classes) as u32).collect();
+    let f32_logits = candle_core::Tensor::from_vec(logits, (rows, classes), &cuda)?;
+    let f32_loss = logits_cross_entropy(&f32_logits, &targets, None)?.to_scalar::<f32>()?;
+    let bf16_loss = logits_cross_entropy(
+        &f32_logits.to_dtype(candle_core::DType::BF16)?,
+        &targets,
+        None,
+    )?
+    .to_scalar::<f32>()?;
+    let diff = (f32_loss - bf16_loss).abs();
+    assert!(
+        diff <= 1e-3 + 5e-3 * f32_loss.abs(),
+        "bf16 CrossEntropy loss differs by {diff} (f32 {f32_loss}, bf16 {bf16_loss})"
+    );
+    println!("bf16 CrossEntropy loss f32 {f32_loss} bf16 {bf16_loss} (|diff| {diff:e}, tolerance 1e-3 + 5e-3 rel)");
+    Ok(())
+}
+
+/// The pointer mixture over bf16 logits and side, f32 beta.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_pointer_mixture_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{pointer_mixture_loss, ReadScore};
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (time, rows, vocabulary, dim) = (4usize, 8usize, 32usize, 6usize);
+    let gen = |len: usize, salt: f32| -> Vec<f32> {
+        (0..len)
+            .map(|i| ((i as f32) * 0.023 + salt).cos() * 0.7)
+            .collect()
+    };
+    let logits =
+        candle_core::Tensor::from_vec(gen(rows * vocabulary, 0.0), (rows, vocabulary), &cuda)?;
+    let side =
+        candle_core::Tensor::from_vec(gen(rows * (2 * dim + 1), 1.1), (rows, 2 * dim + 1), &cuda)?;
+    let beta = candle_core::Tensor::from_vec(vec![0.9f32], 1, &cuda)?;
+    let ids: Vec<u32> = (0..rows).map(|i| (i * 3 % vocabulary) as u32).collect();
+    let targets: Vec<u32> = (0..rows)
+        .map(|i| ((i + 1) * 3 % vocabulary) as u32)
+        .collect();
+    for score in [ReadScore::Dot, ReadScore::Lorentz] {
+        let f32_loss =
+            pointer_mixture_loss(&logits, &side, &beta, time, score, &ids, &targets, None)?
+                .to_scalar::<f32>()?;
+        let bf16_loss = pointer_mixture_loss(
+            &logits.to_dtype(candle_core::DType::BF16)?,
+            &side.to_dtype(candle_core::DType::BF16)?,
+            &beta,
+            time,
+            score,
+            &ids,
+            &targets,
+            None,
+        )?
+        .to_scalar::<f32>()?;
+        let diff = (f32_loss - bf16_loss).abs();
+        assert!(
+            diff <= 2e-3 + 1e-2 * f32_loss.abs(),
+            "bf16 PointerMixture {score:?} differs by {diff} (f32 {f32_loss}, bf16 {bf16_loss})"
+        );
+        println!("bf16 PointerMixture {score:?} f32 {f32_loss} bf16 {bf16_loss} (|diff| {diff:e}, tolerance 2e-3 + 1e-2 rel)");
+    }
+    Ok(())
+}
+
+/// A small geometric model: its forward covers RMSNorm, SwiGLU, the read, the
+/// recurrence and the head, so the bf16 trunk's whole active path is compared.
+#[cfg(feature = "cuda")]
+fn bf16_model_config(seed: u64) -> uor_r4_training::geometric_stack::StackConfig {
+    use uor_r4_training::geometric_stack::{ReadScore, RotationGroup, StackArch, StackConfig};
+    StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 64,
+        width: 32,
+        heads: 4,
+        mlp_hidden: 64,
+        context: 16,
+        pattern: "rar".into(),
+        read: ReadScore::L2,
+        rotation: true,
+        rotation_group: RotationGroup::Quaternion,
+        seed,
+        memory: None,
+        select: None,
+        pointer: None,
+    }
+}
+
+/// SplitMix64, so both arms draw exactly the same windows and targets.
+#[cfg(feature = "cuda")]
+struct Bf16Rng(u64);
+
+#[cfg(feature = "cuda")]
+impl Bf16Rng {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    fn batch(&mut self, batch: usize, time: usize, vocabulary: u32) -> (Vec<u32>, Vec<u32>) {
+        let mut ids = Vec::with_capacity(batch * time);
+        for _ in 0..batch * time {
+            ids.push((self.next() % u64::from(vocabulary)) as u32);
+        }
+        let mut targets = ids[1..].to_vec();
+        targets.push((self.next() % u64::from(vocabulary)) as u32);
+        (ids, targets)
+    }
+}
+
+/// The bf16 trunk's forward and loss against the f32 trunk's, same weights.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_model_forward_and_loss_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{Precision, StackModel};
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let config = bf16_model_config(11);
+    let (batch, time) = (2usize, 16usize);
+    let mut rng = Bf16Rng(99);
+    let (ids, targets) = rng.batch(batch, time, config.vocab_size as u32);
+    let mut model = StackModel::new(config, &cuda)?;
+    let f32_logits = model.forward(&ids, batch, time)?;
+    let f32_loss = model
+        .loss(&ids, &targets, batch, time)?
+        .to_scalar::<f32>()?;
+    model.set_precision(Precision::Bf16);
+    let bf16_logits = model.forward(&ids, batch, time)?;
+    let bf16_loss = model
+        .loss(&ids, &targets, batch, time)?
+        .to_scalar::<f32>()?;
+    let worst = assert_bf16_close(
+        &f32_logits.flatten_all()?.to_vec1::<f32>()?,
+        &bf16_logits
+            .to_dtype(candle_core::DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?,
+        5e-2,
+        2e-2,
+        "StackModel logits bf16",
+    );
+    let loss_diff = (f32_loss - bf16_loss).abs();
+    assert!(
+        loss_diff <= 5e-2 + 2e-2 * f32_loss.abs(),
+        "bf16 model loss differs by {loss_diff} (f32 {f32_loss}, bf16 {bf16_loss})"
+    );
+    println!(
+        "bf16 StackModel logits max |diff| {worst:e} (tolerance 5e-2 + 2e-2 rel); loss f32 {f32_loss} bf16 {bf16_loss}"
+    );
+    Ok(())
+}
+
+/// 1,000 bf16 training steps on one model: every loss and gradient norm is
+/// finite, every parameter stays finite, and the loss tracks the f32 arm's on
+/// the same windows.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_bf16_training_1000_steps_is_finite() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{Precision, StackAdamW, StackModel};
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (batch, time, steps, lr) = (4usize, 16usize, 1000usize, 1e-2f64);
+    let vocabulary = bf16_model_config(5).vocab_size as u32;
+    let mut windows = Vec::with_capacity(steps);
+    let mut rng = Bf16Rng(2026);
+    for _ in 0..steps {
+        windows.push(rng.batch(batch, time, vocabulary));
+    }
+    let run = |precision: Precision| -> uor_r4_training::Result<(Vec<f64>, f64)> {
+        let mut model = StackModel::new(bf16_model_config(5), &cuda)?;
+        model.set_precision(precision);
+        let mut optimizer = StackAdamW::new(&model, 0.1, 1.0)?;
+        let mut losses = Vec::with_capacity(steps);
+        let mut worst_norm = 0.0f64;
+        for (step, (ids, targets)) in windows.iter().enumerate() {
+            let loss = model.loss(ids, targets, batch, time)?;
+            let value = f64::from(loss.to_scalar::<f32>()?);
+            assert!(
+                value.is_finite(),
+                "{precision:?} step {step}: loss is not finite ({value})"
+            );
+            let grads = loss.backward()?;
+            let norm = optimizer.update(&model, &grads, lr)?;
+            assert!(
+                norm.is_finite(),
+                "{precision:?} step {step}: gradient norm is not finite ({norm})"
+            );
+            worst_norm = worst_norm.max(norm);
+            losses.push(value);
+        }
+        for (name, variable) in model.variables() {
+            for &value in variable.as_tensor().flatten_all()?.to_vec1::<f32>()?.iter() {
+                assert!(
+                    value.is_finite(),
+                    "{precision:?}: parameter {name} is not finite ({value})"
+                );
+            }
+        }
+        Ok((losses, worst_norm))
+    };
+    let (f32_losses, f32_norm) = run(Precision::F32)?;
+    let (bf16_losses, bf16_norm) = run(Precision::Bf16)?;
+    let first = |l: &[f64]| l[..100].iter().sum::<f64>() / 100.0;
+    let last = |l: &[f64]| l[l.len() - 100..].iter().sum::<f64>() / 100.0;
+    println!(
+        "1000 steps: f32 loss {:.5} -> {:.5} (worst grad norm {f32_norm:.4}); bf16 loss {:.5} -> {:.5} (worst grad norm {bf16_norm:.4})",
+        first(&f32_losses),
+        last(&f32_losses),
+        first(&bf16_losses),
+        last(&bf16_losses),
+    );
+    assert!(
+        last(&bf16_losses) < first(&bf16_losses),
+        "bf16 training did not reduce the loss: {} -> {}",
+        first(&bf16_losses),
+        last(&bf16_losses)
+    );
+    let gap = (last(&f32_losses) - last(&bf16_losses)).abs();
+    assert!(
+        gap <= 0.2,
+        "the bf16 and f32 arms' final losses differ by {gap} (f32 {}, bf16 {})",
+        last(&f32_losses),
+        last(&bf16_losses)
+    );
+    Ok(())
+}

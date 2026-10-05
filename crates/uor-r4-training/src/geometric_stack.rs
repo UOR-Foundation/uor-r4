@@ -11544,11 +11544,15 @@ pub fn recurrence_core_grouped(
             "recurrence_core requires positive dimensions with width divisible by 4",
         ));
     }
-    if branches.dtype() != DType::F32
-        || gates.dtype() != DType::F32
+    // Under `precision=bf16` the branches and gates are bf16 activations; the
+    // taps, bias and decay are f32 parameters.
+    if !matches!(branches.dtype(), DType::F32 | DType::BF16)
+        || gates.dtype() != branches.dtype()
         || parameters.dtype() != DType::F32
     {
-        return Err(invalid("recurrence_core requires F32 tensors"));
+        return Err(invalid(
+            "recurrence_core needs one f32 or bf16 branches/gates dtype and f32 parameters",
+        ));
     }
     let lanes = width / 4;
     let gate_width = lanes + if rotation { 4 * lanes } else { 0 };
@@ -12257,8 +12261,10 @@ pub fn logits_cross_entropy(
     targets: &[u32],
     weights: Option<&[f32]>,
 ) -> Result<Tensor> {
-    if logits.dtype() != DType::F32 {
-        return Err(invalid("logits_cross_entropy requires F32 logits"));
+    // bf16 logits are the bf16 trunk's last matmul output; the loss itself is
+    // f64 over them (see [`Precision`]).
+    if !matches!(logits.dtype(), DType::F32 | DType::BF16) {
+        return Err(invalid("logits_cross_entropy requires f32 or bf16 logits"));
     }
     let (rows, classes) = logits.dims2()?;
     if targets.len() != rows || weights.is_some_and(|w| w.len() != rows) {
@@ -12299,8 +12305,15 @@ pub fn pointer_mixture_loss(
     targets: &[u32],
     weights: Option<&[f32]>,
 ) -> Result<Tensor> {
-    if logits.dtype() != DType::F32 || side.dtype() != DType::F32 || beta.dtype() != DType::F32 {
-        return Err(invalid("pointer_mixture_loss requires F32 inputs"));
+    // bf16 logits and side are the bf16 trunk's; the attention, the mixture
+    // and the loss are f64 internally, and `beta` is an f32 parameter.
+    if !matches!(logits.dtype(), DType::F32 | DType::BF16)
+        || side.dtype() != logits.dtype()
+        || beta.dtype() != DType::F32
+    {
+        return Err(invalid(
+            "pointer_mixture_loss needs one f32 or bf16 logits/side dtype and an f32 beta",
+        ));
     }
     if score == ReadScore::L2 {
         return Err(invalid("a pointer cannot use the L2 score"));

@@ -772,12 +772,18 @@ fn check_bf16_options(
     qat: bool,
     snapped: bool,
     select: bool,
+    memory: bool,
 ) -> Result<()> {
     if !precision.is_bf16() {
         return Ok(());
     }
     if arch != StackArch::Geometric {
         return Err(invalid("precision=bf16 covers the geometric arms only"));
+    }
+    if memory {
+        return Err(invalid(
+            "precision=bf16 has no bf16 product-key memory kernels",
+        ));
     }
     if qat {
         return Err(invalid("precision=bf16 does not run with qat=true"));
@@ -1528,6 +1534,7 @@ fn train_settings(args: &Args) -> Result<Settings> {
         settings.qat,
         settings.transport_snap.is_some(),
         settings.config.select.is_some(),
+        settings.config.memory.is_some(),
     )?;
     if settings.data_parallel == 2
         && (!matches!(settings.device, Device::Cuda(_))
@@ -3892,6 +3899,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         settings.qat,
         settings.transport_snap.is_some(),
         settings.select.is_some(),
+        false,
     )?;
     if settings.steps == 0
         || !(1..=64).contains(&settings.batch)
