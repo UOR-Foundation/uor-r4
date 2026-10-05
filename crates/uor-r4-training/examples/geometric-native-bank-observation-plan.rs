@@ -619,7 +619,12 @@ fn eligible(h: &History, native: &NativeSourceRealizer, tok: &ByteBpeTokenizer) 
                 .any(|x| *x >= native.context_config().vocab_size as u32)
             || answer.iter().any(|x| !alphabet.contains(x))
         {
-            return Err(invalid("fixed source formatter/context/answer+EOS alphabet eligibility failed;no outcome-based replacement").into());
+            return Err(invalid(format!(
+                "fixed source eligibility failed; history={} role={} answer_tokens={} replay_tokens={} query_tokens={} total_tokens={} out_of_vocab={} missing_alphabet={:?};no outcome-based replacement",
+                h.id, q.relation, answer.len(), replay, ids.len(), replay + ids.len() + answer.len(),
+                ids.iter().any(|x| *x >= native.context_config().vocab_size as u32),
+                answer.iter().filter(|x| !alphabet.contains(x)).collect::<Vec<_>>()
+            )).into());
         }
         targets.push(json!({"role":q.relation,"target_tokens_labels_only":answer.len(),"complete_public_replay_budget":replay+ids.len()+answer.len()}));
     }
