@@ -1,5 +1,65 @@
 # Current UOR-R4 research state
 
+## Conditional span repair improves capture; frame and reader transfer remain — October 5
+
+The [six corrected fits](geometric-conditional-span-2026-10-05.md) select trained checkpoints with development writes61/54/46 relative and62/60/57 product per64; product exact store11/12 each, selected replies7/12 and all-bank5/12. Matched familiar-wording/new-value writes48→205/384 and repetition8→65/96 establish bounded capture gains. All30 same-step act/relation arrays remain byte-identical to prior fits. Legacy replay/default and native prediction are unchanged; conditional labelled-write span credit/dev selection with explicit write-row mean is the intervention.
+
+New fresh writes1/1/2 per32 in each arm; fresh store0/12 and native calls0, so learned reader **NOT_RUN**. All8 new fresh questions fail in each head. Fresh decline reasons135/192 write evaluations are NONE act/relation versus6 span fallback; raw fresh scores are unmeasured. Novel-wording/known-value factors have no span fallbacks and only3 emitted boundary failures, but62 exact-span wrong act/role outputs and72 NONE/query outputs. Capture alone cannot address this frame barrier. Exposed old/new fresh rates are not compared.
+
+Reference compilation/store12/12 independently expose reader defects: selected fresh starts12/12 then8 wrong-Copy/3 Period/1 Stop failures; full bank9/12 first-token wrong-record failures with target present,0/12 completed in both modes. These are12 unique cases on one frozen reader, not72 independent trials. Same-input old/new75 traces are identical. Preserve source-progress/end donors and all regressions.
+
+**Next:** native ordered whole-frame/prefix composition with exact-byte capture and same-slot prefix-carrier control; incrementally maintain H4 state, no repeated full-prefix encoding or runtime gold mask. Natural cue/query geometric source-binding credit under actual all-source native loss is an independent reader seam. Conditional interval likelihood remains a narrower continuation option, not the default remedy for rejected queries or wrong-source first tokens. Use existing offline bridge machinery if frozen frame observations cannot learn; no unchanged-head/dose loop or geometry retirement.
+
+Source13d10d22, LinuxCPU48,13 library/10 driver tests+release/six validfitsPASS; independent133,922 saved-artifact checks pass with native/BPE/backward/BLAKE3 exclusions. OriginalP1003 report-cap interruption0.322s is excluded; prospective report512→768MiB enables only missingseed retry. Ten workers511.823s/model36.062s includinginterruption, sampledRSS2.922GB. Same120mincard/cumulative1,285,035,028ms, complete416-file757,758,064B return verified/retained; noGPU/Metalunavailable, sharedsession unchanged. Generalchat/reasoning/fullhistory/laptopenergy remain unqualified.
+
+## Exact native score replay finds unused-span training defect — October 5
+
+The [zero-update replay](geometric-head-scores-2026-10-05.md) reproduces7,560 inspected predictions across six fits/five checkpoints. At CP64 familiar-frame/new-value, raw act377/384 and raw role381/384 contrast with final act171/384: failed span capture falls back to Unresolved. Earlier final-action counts are not raw-head error counts. Seventy-one correct-start truncations have negative omitted suffixes, not zero ties. Four-word repetition raw starts48/48 and truncations48/48 refine the earlier final39/48 count; selected checkpoints remain unchanged.
+
+Independent source/frozen-row review reproduces965 span signatures/100 contradictions. Span training and development CE supervise query/NONE branches that serving never uses; conditioning on256 labelled writes removes96 conflicts, leaving4 genuine article-boundary ambiguities. **Next:** explicit conditional write-target span supervision/development selection, write-row mean, all act/role and final false-write controls retained. Never gate training on predicted act or add runtime gold masking. Legacy objective retained; no fresh model result yet. Complete-interval credit and native geometric capture remain subsequent options for residual failure. No geometry retirement or unchanged-objective fit.
+
+Source51be10a0, Linux CPU48,9 library/2 probe/8 curriculum tests plus release and six replays pass; independent8,938,809 saved-arithmetic checks admit7,560 rows, with no native encoder/backward reexecution. Wrapper586.580s/replay workers25.778s, sampledRSS2.959GB. Full103-file202,837,702B return verified and retained;90min zero-update card/cumulative1,277,835,028ms. Metal unavailable/GPU unused, shared session unchanged. Fresh reader remains NOT_RUN; general chat/reasoning/Generate/full history/laptop energy remain unmet.
+
+## Balanced compiler curriculum yields development memory gains — October 5
+
+The [three-seed paired curriculum](geometric-compiler-curriculum-2026-10-05.md) now crosses frames and arbitrary values with balanced acts and nonwrite controls. Five of six local H4/Q4 heads select trained checkpoints. Product development exact store9/8/10 per12 and all-bank native replies6/5/6 per12 are actual predicted-compilation integration gains. Fresh writes remain0/32 in all six; fresh reader calls0, so reader **NOT_RUN**, not an isolated reader failure. Reference compilation/store pass; reference fresh selected/all-bank replies2/12 remain separate. Original64-row reader training supplied answer-bearing records64/64; later banks still have authored cues/extracted spans. No general chat or geometry-family verdict.
+
+**Next:** before another fit, reproduce existing hard native predictions and decompose act/relation/span contributions on matched frame/value rows. CP64 new-value2/4/8-word writes are0/16 each across all six; repeated4-word starts39/48 versus ends0/48 isolates continuation alongside wrong acts. Native capture reuse is conditional on stable starts; no unchanged-dose fit or gold mask. Eight focused tests/release and six actual fits passed atcc007092; independent463 admission and1,421,046 parameter checks pass with stated native/backward limitations. The original report-cap interruption is excluded; valid retry is a distinct root. Same180mincard, CPU-only pod48, nine workers183.747s, sampledRSS2.18GB; full356-file return retained. Shared session unchanged. Claude a–e request audited before further fit.
+
+## Local H4 compiler learns training; joint transfer stays unresolved — October 5
+
+The [six-run local compiler](geometric-local-compiler-2026-10-05.md) now executes source-only current/predecessor/next-word H4 observations with masked additive Q4 heads. Relative and ordered-product arms each use three actual head seeds on the same frozen carrier. All six select initialized step0 by native development CE: exact writes0/32, actual store answers0/4 and native completions0/4 per development/fresh split. Erroneous query acts do make native calls; this is not an isolated reader-quality verdict. Retained step64 models fit152/152 actions and128/128 training writes, improve crossed new-value writes10–18/64 and new-wording writes26–42/64 over historical Endpoint1/64 and13/64, but joint development writes remain0–2/32. No consistent transport winner; old Endpoint differs in capacity/initialization. Preserve all checkpoints, false writes and boundaries.
+
+**Historical next, executed above:** keep the local mechanism and independently cross the existing153 job/home paraphrases with broader arbitrary values, balancing acts/roles and prospectively freezing unseen conjunctions. Do not reuse the helper unchanged: it cycles the old value pool. No unchanged-dose fit or retroactive step64 selection. Capture-register reuse is conditional on correct acts/starts with measured truncation; natural reader cue learning remains separate. Three integer/seven training/two driver tests, release and touched-file fmt pass; sourceabb20ef7, approved CPU-only Linux build860.733s/model13.421s, peak sampled4.015GB, owned8.0GiB. Full archive returned SHA/set identity; independent saved review and limitations in machine evidence. Same90min card/cumulative1,261,635,028ms. Shared session untouched; general chat, Generate/reasoning/full history and laptop energy remain unmet.
+
+## Native compiler learns training but fails value transfer — October 5
+
+The [native compiler fit and zero-update audit](geometric-native-compiler-2026-10-05.md)
+retain all five checkpoints. Native development CE selects untrained step0;
+its8/44 exact outcomes are only prose abstentions, and all24 integration turns
+decline: no reader calls, so reader **NOT_RUN**. Saved steps32/48/64 nevertheless
+fit152/152 training actions and128/128 writes. Familiar wording/new values gives
+only1/64 exact writes; new wording/familiar values gives11–13/64. This is a bounded
+value/phrasing transfer negative, not a frozen-learning or geometry-family result.
+
+The same-instrument exact-template control passes every compiler row and actual
+store4/4 queries. Eight actual native calls complete selected-record2/4 versus
+all-bank0/4 with original statement cues and natural questions. Compiler transfer
+and consumer deployment-distribution transfer are separate blockers. Original
+64-row training supplied answer-bearing single records; later bank experiments
+retain authored cue/extracted-span assistance, as the [a–e audit](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5989197931)
+records. Preserve sealed originals and their execution-count erratum.
+
+**Historical next, now executed above:** implement target-free ordered local occurrence/predecessor geometry
+for act/relation and nearby source-frame observations for span, reusing existing
+compiler contracts and labelled paraphrases. No unchanged endpoint fit. Keep
+reader cue/query parity as a separate measured learning boundary; do not replace
+natural text with authored gold cues. Require real learning seeds (three for a
+benchmark verdict; two independent chat lineages), a positive control and complete
+source/artifact/run identities before aggregation. Current deterministic carrier
+does not supply those replications. Shared session untouched; coordinate#1552.
+General chat, Generate, reasoning, full history and laptop energy remain unmet.
+
 ## Learned endpoint geometry improves bounded native completion — October 5
 
 The [source-end fit](geometric-source-end-2026-10-05.md) learns1920Q4 Period/Stop cells conditioned on frozen factual Copy occurrence and fullSource-end/actualresponse relative H4 geometry. Directed64 nativeCE0.2771607606→0.2412554844; singles59/64 unchanged, banks30→33/64, development89→92/128 (+3/−0), newfresh3→8/32 (+5/−0), controls2→4/6. Unary89/128 and4/32. Completepairs8→9/32development but0/16fresh. Preserve directed64 as bounded completion donor/research parent, originalprefix64 recovery and every regression. This is not generalchat or improvedSource selection.

@@ -41,6 +41,23 @@ teacher text or a larger model needs a new causal case under the
 
 ### Current geometric attention experiment — October 4
 
+The [native compiler audit](geometric-native-compiler-2026-10-05.md) and
+[six-run local H4 successor](geometric-local-compiler-2026-10-05.md) now execute.
+Local current/predecessor transport and source-frame span observations fit all
+training actions across three actual head seeds per arm, but baseline-inclusive
+native development selection retains initialization in every run. Retain the
+crossed value/wording improvements without selecting an unqualified checkpoint.
+Next independently cross existing paraphrases and arbitrary values across roles,
+frames and acts; freeze unseen conjunctions before learning. No unchanged-dose
+fit, geometry-family retirement or unconditional capture-register replacement.
+An authored compiler control proves the store instrument; original-statement/
+natural-query consumer transfer remains a separate boundary. Preserve actual
+predicted spans/addresses, exact occurrence identity and distinct selected-record
+versus all-bank admission. Three genuine learning seeds precede benchmark
+verdicts; two independent chat lineages precede chat verdicts. Panel draws or
+head seeds on one frozen carrier do not qualify whole-model chat. Current state
+owns exact results and remaining limitations.
+
 The [source-end geometric completion](geometric-source-end-2026-10-05.md) now executes with a bounded directed completion gain and all regressions retained. Current state owns its exact results. Preserve the directed64 research parent and prefix64 recovery; next use prospectively bounded native-accepted refinement of the learned geometric terminal field from measured phase margins, rather than repeating Adam or inventing missing endpoint information. Keep predecessor/value binding for wrong-Source errors and reuse/native-lower the existing learned relation/act/span compiler for the integrated exact-store→native-consumer path. Zero complete fresh query pairs prevents chat promotion; shared-session integration remains coordinated on #1552.
 
 The [dependent-read construction](geometric-dependent-read-2026-10-04.md) and [ordinary-answer learning admission](geometric-dependent-learning-2026-10-04.md) now execute. A selected occurrence's retained value can refine the query before a second read of immutable keys, and final Copy/Period/Stop loss reaches only the action bridge. Identity/causal construction and finite connected credit are distinct from learned usefulness; no fitted feedback candidate is yet qualified.
@@ -1247,3 +1264,9 @@ Preserve every unique parent, negative candidate, opened/fresh split, artifact/s
 
 
 **Standing owner authorization (2026-09-06):** necessary local model/time/storage allowance extensions are already authorized. Record the complete projection, reason, increment and updated cumulative limit before using each extension; retain cumulative charges and the 128 MiB storage stop margin. Do not ask the owner to approve the same class of necessary increase again. This authorizes neither destructive deletion nor paid/external compute, and does not require spending unused allowance.
+
+The October5 [balanced compiler curriculum and a–e audit](geometric-compiler-curriculum-2026-10-05.md) advances actual predicted-store/native-bank development replies across three head seeds per arm. Fresh source compilation remains unresolved and fresh reader is NOT_RUN. The next bounded discriminator is zero-update actual native head-score decomposition on existing matched frame/value rows, before another fit. Keep supplied-record consumption separate from retrieval; reference controls, tokenizer/casing/reply parity, real seed scope and incomplete-run exclusion accompany every next result. Native capture/frame-state reuse remains conditional on measured score causes; no transformer qualification gate or geometry-family retirement is introduced.
+
+**October5 successor:** the [completed native score replay](geometric-head-scores-2026-10-05.md) corrects final-act versus raw-head interpretation and identifies96/100 local span contradictions from unused NONE supervision. Before changing representation, implement explicit write-target-conditioned span learning and development CE, retaining all act/role and actual false-write checks. Preserve the legacy objective, original selected checkpoints and genuine remaining four boundary ambiguities. New fresh rows are frozen before successor fitting; three paired head seeds, actual predicted store/all-bank outputs and separate reader-call accounting remain required. Conditional complete-interval credit and learned geometric capture are constructive successors if residual failures warrant them. This is a learning/serving alignment repair, not runtime oracle masking or a new general-chat result.
+
+**October5 active continuation:** the [completed conditional-span repair](geometric-conditional-span-2026-10-05.md) improves matched new-value capture48→205/384 and repetition8→65/96. Product development exact store11/12 still separates from selected consumption7/12/full-bank5/12. Advance source-only ordered geometric frame/prefix composition with a same-slot prefix-carrier control; retain exact bytes, bounded incremental H4 transport and the successful conditional parent. Unseen wording/query classification is the principal upstream transfer barrier, so capture-only tuning is insufficient. Independently learn actual natural cue/query geometric source binding under full all-source native loss: reference-selected fresh starts correctly but fails later, while full-bank often fails on the first record choice. Preserve both geometry orientations/negatives and progression/end donors; no transformer gate, supplied runtime answer, gold mask or unchanged-dose loop. GroundedSession promotion remains coordinated on#1552; this is not general chat qualification.
