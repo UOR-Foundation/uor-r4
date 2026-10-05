@@ -23,7 +23,7 @@ Transfer seed20261016 was frozen before predictions, without support filtering. 
 
 Source commit: `5eca7aecf951a7ae9d5bf16e228ca1a01474f167`. Executable SHA256: `cdb09a70cfd36856582cc13fa7b20d9e847592f909d01c9e86aeff3977917851`. Exact committed archive verification covered16968 files/1274778317 bytes. Linux CPU-only pod formatting, five focused source-end tests and release build passed in184.874 seconds. The run exited0 in18.284 wrapper seconds, with child peak accounting2703970304 bytes. No GPU was used; Metal tests are unavailable on Linux and not counted.
 
-Independent outcome review is pending at this documentation head. Static adversarial source review approved the two exact numerical files. Report seals establish identity, not correctness. Parent, native encoder, tokenizer, backward and whole-kernel performance are not independently reexecuted by a saved-output audit.
+Independent saved-outcome audit passed205817 checks with zero errors: proposal normalization/dedup, Q4/F32 packing and payload hashes, terminal Q24 gathers, full128/1204 alias CE, strict selection, matched-prefix frozen Copy/carriers and own-prefix greedy/membership checks. The selected proposal changes37 Stop coefficients and zero Period coefficients. All six gains repair missed EOS; wrong-Copy, early-Stop and punctuation failures remain unchanged. Audit script/results are retained at `/root/codex/audits/refinement-outcome-review-1.{py,json}` and in the local research receipts. Static adversarial source review approved the two exact numerical files. Report seals establish identity, not correctness. Parent, native encoder, tokenizer, backward and whole-kernel performance are not independently reexecuted by a saved-output audit.
 
 ## Preservation and next action
 
