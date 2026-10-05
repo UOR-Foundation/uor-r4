@@ -69,6 +69,7 @@ fn cue_calibration_mode(a: &Args) -> bool {
             | "cue-calibration-quantum-probe"
             | "cue-calibration-discrete-fit"
             | "cue-calibration-discrete-complete"
+            | "cue-calibration-credit-audit"
     )
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -106,6 +107,15 @@ pub(crate) struct CueCompositionPanel {
     pub(crate) profile: String,
     pub(crate) development_rows: usize,
     pub(crate) evaluation_rows: usize,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CueCreditAudit {
+    pub(crate) checkpoint_root: PathBuf,
+    pub(crate) checkpoint_manifest_sha256: String,
+    pub(crate) reference_canonical: PathBuf,
+    pub(crate) reference_canonical_sha256: String,
+    pub(crate) composition_panel: CueCompositionPanel,
 }
 const PREFIX_FIT_CAP: usize = 512 * 1024 * 1024;
 const PREFIX_FAMILIES: &str = "prefix-angular-HxLx120/1";
@@ -176,6 +186,8 @@ pub(crate) struct Args {
     pub(crate) cue_quantum_probe: Option<CueQuantumProbe>,
     #[serde(default)]
     pub(crate) cue_discrete_fit: Option<CueDiscreteFit>,
+    #[serde(default)]
+    pub(crate) cue_credit_audit: Option<CueCreditAudit>,
     #[serde(default)]
     pub(crate) cue_discrete_completion_root: Option<PathBuf>,
     #[serde(default)]
@@ -468,6 +480,7 @@ fn checked_args() -> Result<Args> {
         "cue-calibration-quantum-probe",
         "cue-calibration-discrete-fit",
         "cue-calibration-discrete-complete",
+        "cue-calibration-credit-audit",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -501,6 +514,8 @@ fn checked_args() -> Result<Args> {
                     | "cue-calibration-fit"
             ) {
                 900
+            } else if a.mode == "cue-calibration-credit-audit" {
+                600
             } else if a.mode == "fit" {
                 3600
             } else if matches!(a.mode.as_str(), "readout-fit" | "cue-fit" | "prefix-fit") {
@@ -511,7 +526,9 @@ fn checked_args() -> Result<Args> {
         || a.maximum_context_tokens != 128
         || a.maximum_generation_tokens > 32
         || a.maximum_report_bytes
-            != if a.mode == "cue-calibration-discrete-complete" {
+            != if a.mode == "cue-calibration-credit-audit" {
+                64 * 1024 * 1024
+            } else if a.mode == "cue-calibration-discrete-complete" {
                 128 * 1024 * 1024
             } else if a.mode == "source-end-refine" {
                 768 * 1024 * 1024
@@ -687,6 +704,8 @@ fn checked_args() -> Result<Args> {
     paths.extend(a.frozen_prefix_bundle.iter());
     paths.extend(a.source_end_incumbent_fit.iter());
     paths.extend(a.cue_discrete_completion_root.iter());
+    paths.extend(a.cue_credit_audit.iter().map(|c| &c.checkpoint_root));
+    paths.extend(a.cue_credit_audit.iter().map(|c| &c.reference_canonical));
     paths.extend(a.source_end_warmstart.iter().map(|w| &w.native_bundle));
     paths.extend(
         a.cue_calibration_warmstart

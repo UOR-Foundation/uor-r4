@@ -969,6 +969,7 @@ mod reuse {
             || a.bank.cue_calibration_warmstart.is_some()
             || a.bank.cue_quantum_probe.is_some()
             || a.bank.cue_discrete_fit.is_some()
+            || a.bank.cue_credit_audit.is_some()
             || a.bank.cue_discrete_completion_root.is_some()
             || a.bank.cue_discrete_completion_manifest_sha256.is_some()
             || a.bank.cue_discrete_completion_config_sha256.is_some()
@@ -1474,6 +1475,9 @@ mod reuse {
             });
             assert!(validate(&serde_json::from_value(config.clone())?).is_err());
             config["bank"]["cue_discrete_fit"] = Value::Null;
+            config["bank"]["cue_credit_audit"] = json!({"checkpoint_root":"cp","checkpoint_manifest_sha256":"a".repeat(64),"reference_canonical":"reference","reference_canonical_sha256":"b".repeat(64),"composition_panel":{"profile":"supported-prospective-role-diversity/1","development_rows":512,"evaluation_rows":128}});
+            assert!(validate(&serde_json::from_value(config.clone())?).is_err());
+            config["bank"]["cue_credit_audit"] = Value::Null;
             for field in [
                 "cue_discrete_completion_root",
                 "cue_discrete_completion_manifest_sha256",

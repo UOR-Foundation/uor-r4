@@ -1,5 +1,7 @@
 //! Warm cue-only learning through the complete native prefix/endpoint path.
 use super::*;
+#[path = "geometric_cue_credit_audit.rs"]
+mod credit_audit;
 #[path = "geometric_cue_discrete.rs"]
 mod discrete;
 use uor_r4_integer::geometric_source_end_transport::{
@@ -11,11 +13,18 @@ const DATA_SCOPE: &str =
     "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2";
 const COMPOSITION_PROFILE: &str = "supported-prospective-role-diversity/1";
 
-fn panel_counts(a: &Args) -> (usize, usize) {
-    a.cue_discrete_fit
+fn composition_panel(a: &Args) -> Option<&CueCompositionPanel> {
+    a.cue_credit_audit
         .as_ref()
-        .and_then(|c| c.composition_panel.as_ref())
-        .map_or((128, 32), |p| (p.development_rows, p.evaluation_rows))
+        .map(|c| &c.composition_panel)
+        .or_else(|| {
+            a.cue_discrete_fit
+                .as_ref()
+                .and_then(|c| c.composition_panel.as_ref())
+        })
+}
+fn panel_counts(a: &Args) -> (usize, usize) {
+    composition_panel(a).map_or((128, 32), |p| (p.development_rows, p.evaluation_rows))
 }
 
 fn composition_report_matches(report: &Value, split: &str, rows: usize) -> bool {
@@ -52,6 +61,34 @@ pub(super) fn validate(a: &Args) -> Result<()> {
             "completion requires explicit sealed failed root and manifest binding",
         )
         .into());
+    }
+    if (a.mode == "cue-calibration-credit-audit") != a.cue_credit_audit.is_some() {
+        return Err(invalid("credit audit configuration is explicit-audit-only").into());
+    }
+    if let Some(c) = &a.cue_credit_audit {
+        let w = warm(a)?;
+        if c.composition_panel.profile != COMPOSITION_PROFILE
+            || c.composition_panel.development_rows != 512
+            || c.composition_panel.evaluation_rows != 128
+            || c.checkpoint_root.join("cue") != w.initial_cue_bundle
+            || c.checkpoint_root.join("prefix")
+                != *a
+                    .frozen_prefix_bundle
+                    .as_ref()
+                    .ok_or_else(|| invalid("audit prefix absent"))?
+            || c.checkpoint_root.join("source-end") != w.frozen_end_bundle
+            || [&c.checkpoint_manifest_sha256, &c.reference_canonical_sha256]
+                .iter()
+                .any(|s| s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()))
+            || a.admission.is_some()
+            || a.fit_authorization.is_some()
+            || a.admission_manifest_sha256.is_some()
+        {
+            return Err(invalid(
+                "credit audit fixed checkpoint/profile/no-optimizer contract differs",
+            )
+            .into());
+        }
     }
     if let Some(c) = &a.cue_discrete_fit {
         if let Some(p) = &c.composition_panel {
@@ -193,11 +230,7 @@ fn panel(
     {
         return Err(invalid("cue calibration natural source/cue policy differs").into());
     }
-    let rows = if a
-        .cue_discrete_fit
-        .as_ref()
-        .is_some_and(|c| c.composition_panel.is_some())
-    {
+    let rows = if composition_panel(a).is_some() {
         let split = if root == a.development_panel {
             "development"
         } else if root == a.fresh_panel {
@@ -858,9 +891,7 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         None
     };
     let (development_rows, evaluation_rows) = panel_counts(a);
-    if a.cue_discrete_fit
-        .as_ref()
-        .is_some_and(|c| c.composition_panel.is_some())
+    if composition_panel(a).is_some()
         && !composition_report_matches(
             &read_json(&a.development_panel.join("report.json"))?,
             "development",
@@ -869,9 +900,7 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     {
         return Err(invalid("prospective development panel report differs").into());
     }
-    if a.cue_discrete_fit
-        .as_ref()
-        .is_some_and(|c| c.composition_panel.is_some())
+    if composition_panel(a).is_some()
         && !composition_report_matches(
             &read_json(&a.fresh_panel.join("report.json"))?,
             "fresh",
@@ -881,6 +910,21 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         return Err(invalid("prospective evaluation panel report differs before learning").into());
     }
     let development = panel(&a.development_panel, development_rows, &integer, &tok, a)?;
+    if a.cue_credit_audit.is_some() {
+        return credit_audit::run(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &weights,
+            &f,
+            &development,
+            &inputs,
+            &seals,
+            &receipts,
+        );
+    }
     let initial = a.out.join("initial-chain");
     report_output::claim(&initial)?;
     save_chain(&initial, &weights, &parent, &f)?;
@@ -1584,6 +1628,46 @@ mod tests {
         Ok(serde_json::from_value(
             json!({"mode":"cue-calibration-broadbatch","cue_score_mode":"DirectedRelative","prefix_score_mode":"DirectedRelative","source_weights":"s","native_artifact":"n","trusted_native_binding":"b","frozen_prefix_bundle":"p","frozen_prefix_native_metadata_sha256":"f".repeat(64),"frozen_prefix_packed_sha256":"0".repeat(64),"development_panel":"d","development_manifest_sha256":"d","fresh_panel":"f","fresh_manifest_sha256":"f","out":"o","maximum_seconds":300,"maximum_context_tokens":128,"maximum_generation_tokens":32,"maximum_report_bytes":134217728,"cue_calibration_warmstart":{"initial_cue_bundle":"c","initial_cue_metadata_sha256":"a".repeat(64),"initial_cue_packed_sha256":"b".repeat(64),"frozen_end_bundle":"e","frozen_end_metadata_sha256":"c".repeat(64),"frozen_end_period_packed_sha256":"d".repeat(64),"frozen_end_stop_packed_sha256":"e".repeat(64),"data_scope":DATA_SCOPE}}),
         )?)
+    }
+    #[test]
+    fn credit_audit_requires_fixed_checkpoint_and_prospective_loader_profile() -> Result<()> {
+        let mut a = valid_args()?;
+        a.mode = "cue-calibration-credit-audit".into();
+        let checkpoint = PathBuf::from("checkpoint");
+        a.cue_credit_audit = Some(CueCreditAudit {
+            checkpoint_root: checkpoint.clone(),
+            checkpoint_manifest_sha256: "a".repeat(64),
+            reference_canonical: "reference.json".into(),
+            reference_canonical_sha256: "b".repeat(64),
+            composition_panel: CueCompositionPanel {
+                profile: COMPOSITION_PROFILE.into(),
+                development_rows: 512,
+                evaluation_rows: 128,
+            },
+        });
+        let w = a
+            .cue_calibration_warmstart
+            .as_mut()
+            .ok_or_else(|| invalid("test warm absent"))?;
+        w.initial_cue_bundle = checkpoint.join("cue");
+        w.frozen_end_bundle = checkpoint.join("source-end");
+        a.frozen_prefix_bundle = Some(checkpoint.join("prefix"));
+        validate(&a)?;
+        assert_eq!(panel_counts(&a), (512, 128));
+        assert!(composition_panel(&a).is_some());
+        a.mode = "cue-calibration-broadbatch".into();
+        assert!(validate(&a).is_err());
+        a.mode = "cue-calibration-credit-audit".into();
+        a.frozen_prefix_bundle = Some("other-prefix".into());
+        assert!(validate(&a).is_err());
+        a.frozen_prefix_bundle = Some(checkpoint.join("prefix"));
+        a.cue_credit_audit
+            .as_mut()
+            .ok_or_else(|| invalid("test config absent"))?
+            .composition_panel
+            .development_rows = 128;
+        assert!(validate(&a).is_err());
+        Ok(())
     }
     #[test]
     fn explicit_cue_calibration_rejects_frozen_initializer_and_foreign_scope() -> Result<()> {
