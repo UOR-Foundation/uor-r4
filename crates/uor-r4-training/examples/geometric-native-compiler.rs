@@ -19,7 +19,10 @@ use uor_r4_training::{
     geometric_turn_compiler::{fit_examples, FitConfig, NativeTurnCompiler},
     relation_compiler::{Example, NONE},
     sha256_bytes,
-    stack_grounded_session::{CompiledAction, SourceSpan, TurnCompiler},
+    stack_grounded_session::{
+        CompiledAction, CompilerIdentity, GroundedSessionError, RelationLabel, SourceSpan,
+        TurnCompiler,
+    },
     stack_store::{HistoryView, StackStore, Update},
 };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -39,6 +42,7 @@ struct Args {
     cue: PathBuf,
     prefix: PathBuf,
     end: PathBuf,
+    audit_artifacts: Option<PathBuf>,
 }
 fn args() -> Result<Args> {
     let mut flags = BTreeMap::new();
@@ -65,6 +69,7 @@ fn args() -> Result<Args> {
     );
     let (cue, prefix, end) = (get("--cue")?, get("--prefix")?, get("--source-end")?);
     let binding_sha = flags.remove("--binding-sha");
+    let audit_artifacts = flags.remove("--audit-artifacts").map(PathBuf::from);
     if !flags.is_empty() {
         return Err(fail("unknown arguments").into());
     }
@@ -77,6 +82,7 @@ fn args() -> Result<Args> {
         cue,
         prefix,
         end,
+        audit_artifacts,
     })
 }
 fn example(relation: &str, act: &'static str, template: &str, value: &str) -> Example {
@@ -241,7 +247,7 @@ fn action_fields(action: &CompiledAction) -> (&str, Option<u32>, Option<SourceSp
         CompiledAction::Unresolved { .. } => (NONE, None, None),
     }
 }
-fn evaluate(compiler: &NativeTurnCompiler<'_>, rows: &[Example]) -> Result<Value> {
+fn evaluate(compiler: &dyn TurnCompiler, rows: &[Example]) -> Result<Value> {
     let mut records = Vec::new();
     let (
         mut act_correct,
@@ -281,7 +287,7 @@ fn evaluate(compiler: &NativeTurnCompiler<'_>, rows: &[Example]) -> Result<Value
     )
 }
 fn store_episodes(
-    compiler: &NativeTurnCompiler<'_>,
+    compiler: &dyn TurnCompiler,
     tokenizer: &ByteBpeTokenizer,
     native: &NativeSourceRealizer,
     split: &str,
@@ -290,6 +296,7 @@ fn store_episodes(
     let (values, asserts, updates, queries) = pools(split);
     let mut rows = Vec::new();
     let (mut correct, mut queries_total, mut selected_complete, mut bank_complete) = (0, 0, 0, 0);
+    let mut reader_calls = 0;
     for (episode, relation) in ["job", "home"].iter().enumerate() {
         let mut store = StackStore::new(100 + episode as u64, 16)?;
         let mut journal = BTreeMap::<u64, (u64, Vec<u32>)>::new();
@@ -435,6 +442,7 @@ fn store_episodes(
                                 .push(json!({"lane":lane,"status":"no actual admitted records"}));
                             continue;
                         }
+                        reader_calls += 1;
                         let mut output = reader::generate(
                             native,
                             &a.cue,
@@ -485,7 +493,7 @@ fn store_episodes(
         rows.push(json!({"episode":episode,"relation_evaluation_label":relation,"steps":steps,"final_store_history_sha256":store.history_sha256()?}));
     }
     Ok(
-        json!({"episodes":rows,"query_rows":queries_total,"exact_store_answers":correct,"selected_record_complete":selected_complete,"all_bank_complete":bank_complete,"policy":"predicted-address-and-source-span-only;serialize-reload-after-writes;original-statement-cues;gold-used-only-to-score"}),
+        json!({"episodes":rows,"query_rows":queries_total,"native_reader_calls":reader_calls,"exact_store_answers":correct,"selected_record_complete":selected_complete,"all_bank_complete":bank_complete,"policy":"predicted-address-and-source-span-only;serialize-reload-after-writes;original-statement-cues;gold-used-only-to-score"}),
     )
 }
 fn run(a: &Args) -> Result<()> {
@@ -518,6 +526,9 @@ fn run(a: &Args) -> Result<()> {
     let tokenizer_sha = sha256_bytes(&tokenizer_bytes);
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
         .ok_or_else(|| fail("invalid tokenizer"))?;
+    if let Some(root) = &a.audit_artifacts {
+        return audit(a, root, &native, &tokenizer, &tokenizer_bytes);
+    }
     let fit = fit_examples(
         &native,
         &tokenizer,
@@ -562,11 +573,215 @@ fn run(a: &Args) -> Result<()> {
     let fresh_store = store_episodes(&compiler, &tokenizer, &native, "fresh", &a)?;
     write_json(
         &a.output.join("report.json"),
-        &json!({"schema":"geometric-native-compiler-report/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"host":std::env::consts::ARCH,"elapsed_seconds":started.elapsed().as_secs_f64(),"binding_receipt_sha256":binding_sha,"tokenizer_sha256":tokenizer_sha,"binding_trust":if a.binding_sha.is_some(){"explicit-pinned-sha"}else{"caller-supplied-trusted-receipt"},"frozen_inputs_sha256":sha256_bytes(&input_bytes),"selected_step":fit.selected_step,"selected_artifact_sha256":selected_sha,"compiler_identity":compiler.identity(),"checkpoints":fit.checkpoints,"diagnostics":fit.diagnostics,"development":dev,"fresh":fresh_eval,"development_store":dev_store,"fresh_store":fresh_store,"geometric_reader":"actual-selected-record-and-all-bank","native_emission":"own-prefix-native-source-end","claims":"authored native compiler/store/reader episodes;encoder frozen;authored panels;no general prose/reasoning/energy qualification"}),
+        &json!({"schema":"geometric-native-compiler-report/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"host":std::env::consts::ARCH,"elapsed_seconds":started.elapsed().as_secs_f64(),"binding_receipt_sha256":binding_sha,"tokenizer_sha256":tokenizer_sha,"binding_trust":if a.binding_sha.is_some(){"explicit-pinned-sha"}else{"caller-supplied-trusted-receipt"},"frozen_inputs_sha256":sha256_bytes(&input_bytes),"selected_step":fit.selected_step,"selected_artifact_sha256":selected_sha,"compiler_identity":compiler.identity(),"checkpoints":fit.checkpoints,"diagnostics":fit.diagnostics,"development":dev,"fresh":fresh_eval,"development_store":dev_store,"fresh_store":fresh_store,"geometric_reader_available":"selected-record-and-all-bank","native_reader_calls":dev_store["native_reader_calls"].as_u64().unwrap_or(0)+fresh_store["native_reader_calls"].as_u64().unwrap_or(0),"native_emission_status":if dev_store["native_reader_calls"]==0 && fresh_store["native_reader_calls"]==0 {"NOT_RUN"}else{"executed"},"claims":"authored native compiler/store/reader episodes;encoder frozen;authored panels;no general prose/reasoning/energy qualification"}),
     )?;
     report_output::seal(&a.output)?;
     report_output::verify(&a.output)?;
     println!("sealed {}", a.output.display());
+    Ok(())
+}
+
+// Deliberately explicit instrumentation control, not a learned model or serving fallback.
+struct ReferenceRule {
+    identity: CompilerIdentity,
+    bytes: Vec<u8>,
+    writes: Vec<(String, String, u32, bool)>,
+    queries: Vec<(String, u32)>,
+}
+impl ReferenceRule {
+    fn new(tokenizer_sha: &str) -> Result<Self> {
+        let mut writes = Vec::new();
+        let mut queries = Vec::new();
+        for update in [true, false] {
+            for split in ["training", "development"] {
+                let (_, asserts, updates, qs) = pools(split);
+                for (id, rel) in [(1, "job"), (2, "home")] {
+                    for frame in if update { updates } else { asserts } {
+                        let frame = frame.replace("{r}", rel);
+                        let (prefix, suffix) = frame
+                            .split_once("{v}")
+                            .ok_or_else(|| fail("reference frame lacks value"))?;
+                        writes.push((prefix.into(), suffix.into(), id, update));
+                    }
+                    if update {
+                        for q in &qs {
+                            queries.push((q.replace("{r}", rel), id));
+                        }
+                    }
+                }
+            }
+        }
+        let bytes = serde_json::to_vec(
+            &json!({"schema":"authored-exact-template-instrument-control/1","writes":writes,"queries":queries}),
+        )?;
+        let identity = CompilerIdentity {
+            schema: "authored-exact-template-instrument-control/1".into(),
+            artifact_sha256: sha256_bytes(&bytes),
+            tokenizer_sha256: tokenizer_sha.into(),
+            label_schema: "job1-home2".into(),
+            relations: vec![
+                RelationLabel {
+                    id: 1,
+                    name: "job".into(),
+                },
+                RelationLabel {
+                    id: 2,
+                    name: "home".into(),
+                },
+            ],
+            encoder: None,
+        };
+        Ok(Self {
+            identity,
+            bytes,
+            writes,
+            queries,
+        })
+    }
+}
+impl TurnCompiler for ReferenceRule {
+    fn identity(&self) -> &CompilerIdentity {
+        &self.identity
+    }
+    fn artifact_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+    fn compile(&self, source: &str) -> std::result::Result<CompiledAction, GroundedSessionError> {
+        for (q, relation) in &self.queries {
+            if source == q {
+                return Ok(CompiledAction::QueryCurrent {
+                    relation: *relation,
+                });
+            }
+        }
+        for (prefix, suffix, relation, update) in &self.writes {
+            if let Some(value) = source
+                .strip_prefix(prefix)
+                .and_then(|s| s.strip_suffix(suffix))
+            {
+                if !value.is_empty() {
+                    let span = SourceSpan {
+                        start: prefix.len(),
+                        end: source.len() - suffix.len(),
+                    };
+                    return Ok(if *update {
+                        CompiledAction::Correct {
+                            relation: *relation,
+                            span,
+                        }
+                    } else {
+                        CompiledAction::Assert {
+                            relation: *relation,
+                            span,
+                        }
+                    });
+                }
+            }
+        }
+        Ok(CompiledAction::Unresolved {
+            reason: "outside declared exact-template instrument control".into(),
+        })
+    }
+}
+fn panel_cross(phrasing: &str, value_split: &str) -> Vec<Example> {
+    let mut rows = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let (values, _, _, _) = pools(value_split);
+    for e in panel(phrasing) {
+        if e.act == "assert" || e.act == "update" {
+            if let Some(t) = &e.template {
+                if seen.insert((e.relation.clone(), e.act, t.clone())) {
+                    for v in &values {
+                        rows.push(example(&e.relation, e.act, t, v));
+                    }
+                }
+            }
+        } else {
+            rows.push(e);
+        }
+    }
+    rows
+}
+fn audit(
+    a: &Args,
+    root: &Path,
+    native: &NativeSourceRealizer,
+    tokenizer: &ByteBpeTokenizer,
+    tokenizer_bytes: &[u8],
+) -> Result<()> {
+    let panels = [
+        ("training", panel("training")),
+        ("development", panel("development")),
+        (
+            "known_phrasing_new_values",
+            panel_cross("training", "development"),
+        ),
+        (
+            "new_phrasing_known_values",
+            panel_cross("development", "training"),
+        ),
+    ];
+    let frozen = json!(panels
+        .iter()
+        .map(|(name, rows)| json!({"name":name,"rows":input_rows(rows)}))
+        .collect::<Vec<_>>());
+    write_json(&a.output.join("audit-inputs.json"), &frozen)?;
+    let mut results = Vec::new();
+    for step in [0, 16, 32, 48, 64] {
+        let bytes = fs::read(root.join(format!("checkpoint-{step:04}/native-compiler.json")))?;
+        let sha = sha256_bytes(&bytes);
+        let compiler = NativeTurnCompiler::load(&bytes, &sha, native, tokenizer, tokenizer_bytes)?;
+        let meta: Value = serde_json::from_slice(&bytes)?;
+        let mut activation = serde_json::Map::new();
+        for (key, classes, slots) in [
+            (
+                "act_packed",
+                4,
+                meta["lanes"]
+                    .as_u64()
+                    .ok_or_else(|| fail("missing lanes"))? as usize,
+            ),
+            (
+                "relation_packed",
+                3,
+                meta["lanes"]
+                    .as_u64()
+                    .ok_or_else(|| fail("missing lanes"))? as usize,
+            ),
+            (
+                "span_packed",
+                2,
+                3 * meta["lanes"]
+                    .as_u64()
+                    .ok_or_else(|| fail("missing lanes"))? as usize,
+            ),
+        ] {
+            let packed: Vec<u8> = serde_json::from_value(meta[key].clone())?;
+            let coefficients = uor_r4_integer::geometric_potential_q4::unpack_coefficients(
+                classes * (1 + slots * 120),
+                &packed,
+            )?;
+            activation.insert(key.into(),json!({"nonzero":coefficients.iter().filter(|q|**q!=0).count(),"coefficients":coefficients.len()}));
+        }
+        let mut measurements = serde_json::Map::new();
+        for (name, rows) in &panels {
+            measurements.insert((*name).into(), evaluate(&compiler, rows)?);
+        }
+        results.push(json!({"step":step,"artifact_sha256":sha,"activation":activation,"panels":measurements}));
+    }
+    let control = ReferenceRule::new(&sha256_bytes(tokenizer_bytes))?;
+    let mut control_panels = serde_json::Map::new();
+    for (name, rows) in &panels {
+        control_panels.insert((*name).into(), evaluate(&control, rows)?);
+    }
+    let control_store = store_episodes(&control, tokenizer, native, "development", a)?;
+    write_json(
+        &a.output.join("report.json"),
+        &json!({"schema":"native-compiler-zero-update-audit/1","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"parent_fit":root,"updates":0,"selection_changes":false,"fresh_used_for_design":false,"checkpoint_panels":results,"positive_control":{"label":"exact-template instrumentation control;not a learned language result","identity":control.identity(),"panels":control_panels,"store_reader":control_store},"original_report_erratum":"Fit-1 made zero store writes, reads and native reader calls. Mechanism-available strings in its sealed report did not mean execution; reader NOT_RUN. Original bytes retained.","scope":"candidate bound;one deterministic readout fit on one frozen carrier;not multi-seed architecture verdict"}),
+    )?;
+    report_output::seal(&a.output)?;
+    report_output::verify(&a.output)?;
+    println!("sealed zero-update audit {}", a.output.display());
     Ok(())
 }
 
@@ -603,6 +818,13 @@ fn main() -> Result<()> {
             }
         }
     }
+    if let Some(root) = &a.audit_artifacts {
+        report_output::verify(root)?;
+        let root = fs::canonicalize(root)?;
+        if output.starts_with(root) {
+            return Err(fail("audit output beneath sealed artifact").into());
+        }
+    }
     report_output::claim(&a.output)?;
     match run(&a) {
         Ok(()) => Ok(()),
@@ -615,5 +837,25 @@ fn main() -> Result<()> {
             report_output::verify(&a.output)?;
             Err(error)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn exact_template_control_passes_the_same_action_span_instrument() -> Result<()> {
+        let control = ReferenceRule::new(&"0".repeat(64))?;
+        for rows in [
+            panel("training"),
+            panel("development"),
+            panel_cross("training", "development"),
+            panel_cross("development", "training"),
+        ] {
+            let report = evaluate(&control, &rows)?;
+            assert_eq!(report["complete_exact"], json!(rows.len()));
+            assert_eq!(report["prose_false_writes"], json!(0));
+        }
+        Ok(())
     }
 }
