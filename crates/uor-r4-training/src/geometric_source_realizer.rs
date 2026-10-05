@@ -4428,6 +4428,8 @@ mod tests {
     #[test]
     fn observation_rebound_retains_loaded_guard_and_matches_actual_saved_inventory() -> Result<()> {
         let (fixture, frozen, _) = dependent_fixture()?;
+        let zero = fixture.weights.compile_observation_rebound(&frozen)?;
+        assert_eq!(zero.execution_binding()?, frozen.artifact_binding()?);
         let roots = fixture.weights.observation_root_parameters();
         let var = roots
             .get("consumer.context.token_root")
@@ -4539,6 +4541,63 @@ mod tests {
             .observation_root_parameters()
             .values()
             .any(|v| gradients.get(v.as_tensor()).is_some()));
+        Ok(())
+    }
+    #[test]
+    fn observation_root_change_preserves_actual_latent_and_category_replay() -> Result<()> {
+        let (fixture, frozen, _) = dependent_fixture()?;
+        let ids = [4, 4];
+        let view = SourceEmissionCompiler::new(TOK.as_bytes())?.compile(&ids)?;
+        let before = frozen.read(frame(&ids), &view, &[5], &[4])?;
+        let var = fixture
+            .weights
+            .observation_root_parameters()
+            .get("consumer.context.token_root")
+            .cloned()
+            .ok_or_else(|| invalid("fixture root absent"))?;
+        let lanes = frozen.consumer.context.config().heads
+            * frozen.consumer.context.config().lanes_per_head;
+        let mut values = var.flatten_all()?.to_vec1::<f32>()?;
+        // Both ±identity winners receive a negative bias; root3 wins for
+        // either latent polarity without changing recurrence or categories.
+        values[5 * lanes * 120] = -1.75;
+        values[5 * lanes * 120 + 1] = -1.75;
+        values[5 * lanes * 120 + 3] = 1.75;
+        var.set(&Tensor::from_vec(values, var.shape(), &Device::Cpu)?)?;
+        let current = fixture.weights.compile_observation_rebound(&frozen)?;
+        let after = current.read(frame(&ids), &view, &[5], &[4])?;
+        assert_eq!(before.period_context.states, after.period_context.states);
+        assert_eq!(before.period_context.actions, after.period_context.actions);
+        assert_eq!(
+            before.period_context.categories,
+            after.period_context.categories
+        );
+        assert_ne!(
+            before.period_context.raw_roots,
+            after.period_context.raw_roots
+        );
+        let c = frozen.consumer.context.config();
+        let zero = pack_coefficients(&vec![0; c.heads * c.lanes_per_head * 120])
+            .map_err(|e| invalid(e.to_string()))?;
+        let stale = frozen.compile_cue_carrier(
+            CueAngularQ4::new(
+                CueAngularConfig {
+                    heads: c.heads,
+                    lanes_per_head: c.lanes_per_head,
+                    mode: CueScoreMode::DirectedRelative,
+                },
+                &zero,
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let segments = [SourceBankSegment::Source {
+            frame: frame(&ids),
+            view: &view,
+            event: 7,
+        }];
+        assert!(current
+            .read_bank_with_cue_carrier(&segments, &[5], &[4], &stale)
+            .is_err());
         Ok(())
     }
 }
