@@ -24,9 +24,12 @@ POD=$(env1 RUNPOD_POD_ID)
 mkdir -p "$(dirname "$LOG")"
 log() { echo "$(date -u +%FT%TZ) pod=$POD $*" >> "$LOG"; }
 
-api() {  # api METHOD URL -> HTTP status; the Authorization header comes from stdin
+# The pod's own RUNPOD_API_KEY is accepted by the GraphQL API (verified
+# 2026-10-05) but refused by REST v1 (HTTP 403), so both calls use GraphQL.
+gql() {  # gql QUERY -> response body; the Authorization header comes from stdin
   printf 'Authorization: Bearer %s\n' "$(env1 RUNPOD_API_KEY)" |
-    curl -sS -o /dev/null -w '%{http_code}' -X "$1" -H @- --max-time 30 "$2"
+    curl -sS -H @- -H 'Content-Type: application/json' --max-time 30 \
+      -d "{\"query\": \"$1\"}" https://api.runpod.io/graphql
 }
 
 live_lease() {
@@ -59,9 +62,9 @@ case ${1:-} in
   --check)
     [ -n "$POD" ] || { echo "api-FAILED (no RUNPOD_POD_ID)"; exit 1; }
     [ -n "$(env1 RUNPOD_API_KEY)" ] || { echo "api-FAILED (no RUNPOD_API_KEY in the pod environment)"; exit 1; }
-    code=$(api GET "https://rest.runpod.io/v1/pods/$POD")
-    if [ "$code" = 200 ]; then echo api-ok; exit 0; fi
-    echo "api-FAILED (HTTP $code)"; exit 1;;
+    body=$(gql "query { pod(input: {podId: \\\"$POD\\\"}) { id } }" 2>&1)
+    case $body in *"\"id\":\"$POD\""*) echo api-ok; exit 0;; esac
+    echo "api-FAILED ($(echo "$body" | head -c 200))"; exit 1;;
   --loop) ;;
   *) sed -n '2,17p' "$0"; exit 2;;
 esac
@@ -75,9 +78,9 @@ while :; do
     idle=$(( $(date +%s) - $(cat "$SINCE" 2>/dev/null || date +%s) ))
     if [ "$idle" -ge $(( IDLE_MIN * 60 )) ]; then
       log "no live lease and GPUs idle $(( idle / 60 )) min: deleting this pod"
-      code=$(api DELETE "https://rest.runpod.io/v1/pods/$POD")
-      log "delete request HTTP $code"
-      case $code in 2*) sleep 600;; *) sleep 120;; esac
+      body=$(gql "mutation { podTerminate(input: {podId: \\\"$POD\\\"}) }" 2>&1)
+      log "podTerminate response: $(echo "$body" | head -c 200)"
+      case $body in *'"errors"'*|'') sleep 120;; *) sleep 600;; esac
     fi
   fi
   sleep "$INTERVAL"

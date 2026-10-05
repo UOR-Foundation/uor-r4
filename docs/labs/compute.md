@@ -1,48 +1,100 @@
 # Shared GPU pods — one tool, one cadence
 
-Every lab (Claude, Codex/GPT, OpenCode/DeepSeek and any lab that joins later)
-uses the same tool, `scripts/pod/uor-pod`, and the same cadence to see, lease,
-create, share and delete the owner's Runpod GPU pods. The goals: no pod idles,
-no lab is surprised by another's pod, and any lab can take over a pod when
-another lab runs out of tokens. History is on the
-[Compute board #1750](https://github.com/UOR-Foundation/uor-r4/issues/1750);
-the source of truth is the laptop state directory below.
+Every lab session (Claude, Codex/GPT, OpenCode/DeepSeek and any lab that joins
+later; several sessions of one lab may run at once) uses the same tool,
+`scripts/pod/uor-pod`, and the same cadence to see, lease, create, share and
+delete the owner's Runpod GPU pods. The goals: no pod idles, no session is
+surprised by another's pod, and any session can take over a pod whose lease
+expired. The source of truth is the laptop state directory below. The
+[Compute board #1750](https://github.com/UOR-Foundation/uor-r4/issues/1750) is
+a **log for the owner, not a communication channel**: the tool posts one line
+per event; sessions coordinate through leases and the tool's output, and do not
+read or write the board to ask for anything. The rules every session must
+follow without reading this file are inline in [AGENTS.md](../../AGENTS.md)
+("GPU pods") and printed by `uor-pod` with no arguments and at the top of
+`uor-pod status`.
+
+## Identity: lab + session
+
+Every mutating command takes `--lab L --session S` (or `UOR_POD_SESSION=S`).
+Leases are files `leases/<pod>/<lab>-<session>.json`; every ledger line and
+board post carries both. Sessions of the same lab are separate holders: they
+may hold different GPUs on the same or different pods, and one session never
+uses, renews, releases or deletes another session's lease or files (including a
+`/root/KEEP_ALIVE`).
 
 ## The cadence
 
-1. **Look first.** `scripts/pod/uor-pod status` lists every pod (GPUs, $/h,
-   uptime), its leases, per-GPU utilisation and memory over SSH, the reaper,
-   the live RTX 5090/4090 stock in each datacenter, and flags any running pod
-   with **NO LIVE LEASE**. `status --du` adds the shared volume's usage.
-2. **Share before you create.** If a running pod has free GPUs of the type you
-   need, lease them: `uor-pod lease POD --lab L --gpus 0,1 --purpose "…" --hours H [--card URL]`.
-   `up` refuses (exit 3) and prints the free slot when one exists.
-3. **Create only through `up`** when no slot is free:
-   `uor-pod up --lab L --purpose "…" --hours H [--card URL]` (defaults: 2 × RTX 5090).
-   It applies the GPU policy, placement order and caps below, waits for SSH,
-   seeds a non-canonical volume, runs the bootstrap (toolchain, cached
-   binaries + parity, reaper) and writes your lease.
-4. **Renew every ≤ 30 minutes while working:** `uor-pod renew POD --lab L [--hours H]`.
-   A lease is a promise that someone is actively using the GPUs; expiry is
-   automatic release. Renewal is not posted to the board (the ledger has it).
-5. **One job per GPU.** `uor-pod run POD --lab L --gpu K -- CMD…` starts a
-   detached job under `flock /root/gpuK.lock` (a second job on the same GPU
-   queues behind it), with the bootstrap environment, logging to
-   `/workspace/uor-r4/jobs/<lab>/<UTC>-gpuK.log`, ending with an `# exit=N` line.
-   `--gpu 0,1` holds both locks for a data-parallel run.
-6. **Everything durable goes to `/workspace`** (layout below). The container
-   disk (`/root`) dies with the pod.
-7. **Release when done:** `uor-pod release POD --lab L`, then, if nobody else
-   holds a lease, `uor-pod down POD --lab L`. Do not leave a pod for the reaper
-   to find; it is the safety net, not the plan.
-8. **Anyone may reap:** `uor-pod reap` deletes running pods that have no
+1. **Look first.** `scripts/pod/uor-pod status` prints the rules, then every
+   pod (running and stopped; GPUs, $/h, uptime), its leases, each GPU's live
+   utilisation and memory next to the session that leases it, the reaper, any
+   running pod with **NO LIVE LEASE**, every stopped pod as a **CLEANUP** item,
+   stray temporary files, the live RTX 5090/4090 stock per datacenter, and ends
+   with **"Free GPUs you can lease now"**. `status --du` adds volume usage.
+2. **Idle is not free.** A GPU under another session's live lease is shown
+   "leased but idle N min (not free)": only its holder (`release`) or expiry
+   frees it. **Only an EXPIRED lease** (past `expires`, no renewal) may be
+   taken over: `lease` re-probes the pod, refuses if a job still runs on those
+   GPUs, shrinks the expired lease and logs a `takeover`.
+3. **Share before you create.** Lease free GPUs:
+   `uor-pod lease POD --lab L --session S --gpus 0,1 --purpose "…" --hours H [--card URL]`.
+   `up` refuses (exit 3) and prints the free slot when one of the requested
+   type exists. A refused lease prints the free-GPU summary and the spin-up
+   guidance.
+4. **No free GPU → spin up your own pod** within the caps (all running pods of
+   all labs count): `uor-pod up --lab L --session S --purpose "…" --hours H`
+   (defaults: 2 × RTX 5090). It applies the GPU policy, placement order and
+   caps below, waits for SSH, seeds a non-canonical volume, runs the bootstrap
+   (toolchain, cached binaries + parity, reaper) and writes your lease. When the
+   cap is reached it names any free GPUs to lease (exit 4). **Never fall back
+   to the laptop CPU because no GPU is free or the cap is reached; if no GPU is
+   free and the cap is reached, ask the owner or wait for a lease to expire.**
+5. **Renew every ≤ 30 minutes while working:**
+   `uor-pod renew POD --lab L --session S [--hours H]`. A lease is a promise
+   that the session is actively using the GPUs; expiry is automatic release.
+   Renewal is not posted to the board (the ledger has it).
+6. **One job per GPU, on the GPU.** `uor-pod run POD --lab L --session S --gpu K -- CMD…`
+   starts a detached job under `flock /root/gpuK.lock` (a second job on the
+   same GPU queues behind it) with the bootstrap environment, logging to
+   `/workspace/uor-r4/jobs/<lab>/<UTC>-<session>-gpuK.log`, ending with an
+   `# exit=N` line. `--gpu 0,1` holds both locks for a data-parallel run. GPU
+   evaluation uses `device=cuda`.
+7. **Everything durable goes to `/workspace`** (layout below). The container
+   disk (`/root`) dies with the pod. **Do not keep stopped pods as storage.**
+   Anything durable lives on the network volume; a stopped pod whose files are
+   not on the volume is either copied now or accepted as lost (regenerable) and
+   deleted — never left for someone to remember. `uor-pod prune-stopped
+   [--older-than 24h]` lists them; `--yes` deletes those not marked KEEP after
+   you have confirmed nothing unique is on them (owner approval for pods with
+   data).
+8. **Release when done:** `uor-pod release POD --lab L --session S`, then, if
+   no other session holds a lease, `uor-pod down POD --lab L --session S`
+   (refused while another session's lease is live). Do not leave a pod for the
+   reaper to find; it is the safety net, not the plan.
+9. **Anyone may reap:** `uor-pod reap` deletes running pods that have no
    unexpired lease and whose GPUs have been idle ≥ 20 minutes (no compute
    process, ≤ 2 % utilisation, no held GPU lock). It never touches a pod with a
-   live lease and never deletes a pod it cannot probe. Run it at the start of
-   every GPU session.
+   live lease or KEEP mark and never deletes a pod it cannot probe.
 
 `uor-pod log [-n N]` tails the ledger; `uor-pod ssh POD [CMD]` opens a shell;
 `uor-pod gpus` prints the policy table and live stock.
+
+**Pods made outside `up`** are backfilled with
+`uor-pod register POD --lab L --session S --purpose "…" [--gpu 5090] [--keep REASON]`:
+it probes the pod and leases **only the GPUs that are busy now, for 1 hour**
+(the session renews if it is really working); idle GPUs stay free. A stopped pod
+gets no lease. `--keep REASON` (or `uor-pod keep POD --purpose REASON`) marks a
+pod that holds unique data: `down`, `reap` and `prune-stopped` refuse it until
+`uor-pod unkeep POD`.
+
+**Validation/test pods** are created with `up --test` (name prefix
+`uor-test-`); they do not count toward the pod cap (they still count toward
+$/h), free GPUs elsewhere do not block them, and the session that made them
+deletes them as soon as the test ends.
+
+**Lease files are written only by `uor-pod`** (atomic temporary file + rename
+under one lock). Editing them by hand races other sessions; `status` warns about
+stray `*.tmp*` files.
 
 ## GPU policy
 
@@ -95,7 +147,7 @@ warning and bootstrap installs the toolchain and builds cold.
 
 | Hot-set path (under `/workspace`) | What | Size (2026-10-05) |
 | --- | --- | --- |
-| `toolchain/rustup`, `toolchain/cargo` | Rust 1.97.1 + cargo registry cache | ~1.5 GB |
+| `toolchain/rust-1.97.1-x86_64.tar`, `toolchain/cargo-registry.tar` | Rust 1.97.1 (rustup tree) and the cargo registry cache | ~1.5 GB |
 | `bin/<sha>-sm<cap>/` | cached release binaries for the commit being bootstrapped | ~0.1 GB |
 | `uor-r4/data/` | tokenizer, fine-tune stores (`ft-*.tar`), the 100M base being fine-tuned (`geo-100m-*`), paraphrases, step5 inputs (corpora, sieve compiler/trunk, open panels), `MD5SUMS` | 2.6 GB |
 | `toolchain/ollama`, `ollama/` | Ollama binary and qwen2.5:7b (only with `--with-ollama`) | ~5 GB |
@@ -116,7 +168,7 @@ issue. `down` refuses a non-canonical or volume-less pod until you pass
 | `uor-r4/jobs/<lab>/` | `uor-pod run` logs | the lab |
 | `uor-r4/pods/reaper.log` | pod-side reaper log (all pods) | tool |
 | `bin/<sha>-sm<cap>/` | release binaries, `BUILD.json`, `parity.log`, `SHA256SUMS` | tool |
-| `toolchain/` | `rustup/`, `cargo/` (RUSTUP_HOME/CARGO_HOME), `ollama/` | tool |
+| `toolchain/` | `rust-<ver>-x86_64.tar`, `cargo-registry.tar` (unpacked to `/root` by bootstrap), `ollama/` | tool |
 | `ollama/` | Ollama models (`OLLAMA_MODELS`) | tool |
 | `codex-uor-r4-20261004/`, `pearlfortune/` | preserved lab material | its lab |
 
@@ -135,9 +187,14 @@ Never delete another lab's material on the volume; it is the shared archive.
 * **Bootstrap** (`scripts/pod/uor-pod-bootstrap.sh`, run by `up` or
   `uor-pod bootstrap POD`): checks `nvcc` 12.8 (apt install only as a
   fallback), maps the GPU to `CUDA_COMPUTE_CAP` (5090 → 120, 4090/L40S/6000
-  Ada → 89, A100 → 80, H100/H200 → 90), installs Rust 1.97.1 once per volume
-  into `/workspace/toolchain`, and builds only when
-  `/workspace/bin/<sha>-sm<cap>/BUILD.json` is missing:
+  Ada → 89, A100 → 80, H100/H200 → 90), unpacks Rust 1.97.1 from
+  `/workspace/toolchain/rust-1.97.1-x86_64.tar` to the container disk
+  (installing it and writing the archive on the first pod of a volume;
+  compiling with the toolchain directly on the network filesystem was
+  IO-bound, rustc at ~20 % of one core), limits cargo to the pod's CPU quota
+  (`RUNPOD_CPU_COUNT`; `nproc` reports the host), and builds only when
+  `/workspace/bin/<sha>-sm<cap>/BUILD.json` with parity PASS is missing (a
+  cached build whose parity failed is moved to `…failed-<UTC>` and rebuilt):
 
   ```
   CUDA_COMPUTE_CAP=<cap> cargo build --release -p uor-r4-training --features cuda \
@@ -156,44 +213,53 @@ Never delete another lab's material on the volume; it is the shared archive.
 * **Pod-side reaper** (`/root/uor-reaper.sh`, started by bootstrap only on
   pods made by `up`): every minute, if no `/root/leases/*.json` is unexpired
   and the GPUs have been idle ≥ 20 minutes, it deletes its own pod through the
-  Runpod API with the pod's own `RUNPOD_API_KEY` (read from `/proc/1/environ`
-  at use, passed to curl on stdin, never logged). Log:
+  Runpod GraphQL API (`podTerminate`) with the pod's own `RUNPOD_API_KEY` (read
+  from `/proc/1/environ` at use, passed to curl on stdin, never logged; that
+  pod-scoped key is refused by REST v1 with HTTP 403, so the reaper uses
+  GraphQL). Bootstrap runs `uor-reaper.sh --check` and reports `api-ok`. Log:
   `/workspace/uor-r4/pods/reaper.log`. Leases reach the pod as
   `/root/leases/<lab>.json` on every lease/renew; **if a renew cannot reach the
   pod the reaper will not see it** — the tool warns, retry.
 
 ## Leases, state and the board
 
-* A lease is `{lab, pod, gpus, purpose, card, started, expires, renewed, hours}`
-  in `~/.local/share/uor-r4/compute/leases/<pod>/<lab>.json` on the laptop all
-  labs share. Writes take one global `flock` and replace files by rename.
+* A lease is `{lab, session, id, pod, gpus, purpose, card, started, expires, renewed, hours}`
+  in `~/.local/share/uor-r4/compute/leases/<pod>/<lab>-<session>.json` on the
+  laptop all sessions share. Writes take one global `flock` and replace files by rename.
   `ledger.jsonl` (append-only) records every event; `pods.json` caches what the
   API does not say (GPU type, datacenter, volume, whether `up` made it).
-* `up`, `down`, `lease`, `release`, `reap`, volume creation and `up --wait`
-  outcomes post one line to [#1750](https://github.com/UOR-Foundation/uor-r4/issues/1750).
+* `up`, `down`, `lease`, `release`, `takeover`, `reap`, `prune-stopped`,
+  volume creation and `up --wait` outcomes post one log line (owner's view, not
+  a channel) to [#1750](https://github.com/UOR-Foundation/uor-r4/issues/1750).
 * `UOR_POD_DRY_RUN=1` prints every mutation instead of doing it;
   `scripts/pod/tests/uor-pod-dryrun.sh` exercises the logic against fake
   `runpodctl`/`ssh`/`gh`.
 
 ## Caps and what needs the owner
 
-Defaults: **≤ 2 running pods and ≤ $4/h in total**, enforced by `up`.
+Defaults: **≤ 4 running pods and ≤ $8/h in total** (owner decision,
+5 October 2026), enforced by `up`. The cap is the owner's spending rule, not a
+Runpod limit; within it each lab may run its own 2 × 5090 pod ($1.98/h) in
+parallel. All running pods of all labs and sessions count; only `uor-test-`
+validation pods are left out of the pod count (not out of $/h).
 `--owner-approved` overrides a cap or the GPU policy and is only used when the
 owner's decision is cited in the card. The owner decides: raising the caps,
-anything above $4/h, GPU types outside the policy table (and any use of the
+anything above $8/h, GPU types outside the policy table (and any use of the
 forbidden tier), new network volumes beyond `uor-shared-EU-RO-1` and
 `uor-shared-EUR-IS-1`, other providers and community cloud.
 
 ## Takeover
 
-A lease past `expires` with no renewal is **abandoned**. Before reusing or
-deleting its pod, the next lab: checks `uor-pod status` (GPU utilisation,
-compute processes, held GPU locks) and the job logs under
-`/workspace/uor-r4/jobs/<lab>/`; leaves any live job running and leases only
-free GPUs; cites the ledger line (`uor-pod log`) and posts on the owning task
-issue. An abandoned pod with no live job may then be leased (`lease` reuses
-expired slots) or deleted with `down`. Results already on `/workspace` stay
-where they are and keep their owner.
+A lease past `expires` with no renewal is **abandoned**; a lease that is live is
+never taken, however idle its GPUs look. Before reusing or deleting an
+abandoned lease's pod, the next session checks `uor-pod status` (GPU
+utilisation, compute processes, held GPU locks) and the job logs under
+`/workspace/uor-r4/jobs/<lab>/`, leaves any live job running, and cites the
+ledger line (`uor-pod log`) on its own task issue. `lease` performs the probe
+itself and refuses GPUs that still run a job; with no live job it shrinks the
+expired lease and logs a `takeover`. An abandoned pod with no live job may then
+be deleted with `down`. Results already on `/workspace` stay where they are and
+keep their owner.
 
 ## Security
 

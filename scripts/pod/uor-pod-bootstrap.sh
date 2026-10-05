@@ -6,7 +6,7 @@
 #
 # Everything slow is cached on the shared network volume (/workspace) so the
 # second pod of a kind starts in seconds:
-#   /workspace/toolchain/{rustup,cargo}    Rust $RUST_VERSION (RUSTUP_HOME/CARGO_HOME)
+#   /workspace/toolchain/rust-<ver>-x86_64.tar, cargo-registry.tar   Rust, unpacked to /root
 #   /workspace/bin/<sha>-sm<cap>/          release binaries + BUILD.json + parity.log
 #   /workspace/toolchain/ollama, /workspace/ollama   Ollama binary and models (--with-ollama)
 # The build itself runs on the container disk (/root/build); the source is a
@@ -70,36 +70,51 @@ case $GPU_NAME in
 esac
 log "GPU: $GPU_COUNT x $GPU_NAME -> CUDA_COMPUTE_CAP=$CAP"
 
-# ---- Rust toolchain on the volume
-# (an --off-volume pod's /workspace is its own local volume, seeded by `uor-pod seed`)
-export RUSTUP_HOME=/workspace/toolchain/rustup CARGO_HOME=/workspace/toolchain/cargo
+# ---- Rust toolchain: cached on the volume as tarballs, unpacked to the container
+# disk. Compiling straight from the network filesystem (RUSTUP_HOME on
+# /workspace) left rustc IO-bound at ~20 % of one core, so the volume only holds
+# the archives: rust-<ver>-x86_64.tar (rustup + toolchain) and
+# cargo-registry.tar (crate sources, refreshed after each cold build).
+RUST_TAR=/workspace/toolchain/rust-$RUST_VERSION-x86_64.tar
+REG_TAR=/workspace/toolchain/cargo-registry.tar
+export RUSTUP_HOME=/root/.rustup CARGO_HOME=/root/.cargo
 export PATH=$CARGO_HOME/bin:$CUDA/bin:$PATH
 T_RUST=0
 if ! cargo "+$RUST_VERSION" --version >/dev/null 2>&1; then
   t=$(date +%s)
-  log "installing Rust $RUST_VERSION into $RUSTUP_HOME"
-  (
-    flock 7
-    if ! cargo "+$RUST_VERSION" --version >/dev/null 2>&1; then
-      curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" >/dev/null 2>&1
-    fi
-  ) 7>"$(dirname "$RUSTUP_HOME")/.rust-install.lock"
+  if [ -s "$RUST_TAR" ]; then
+    log "unpacking cached Rust $RUST_VERSION from $RUST_TAR"
+    tar -C /root -xf "$RUST_TAR"
+  else
+    log "installing Rust $RUST_VERSION (first pod on this volume) and caching it"
+    curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" >/dev/null 2>&1
+    tar -C /root -cf "$RUST_TAR.tmp.$$" .rustup .cargo/bin .cargo/env && mv -f "$RUST_TAR.tmp.$$" "$RUST_TAR"
+  fi
   T_RUST=$(( $(date +%s) - t ))
 fi
+if [ -s "$REG_TAR" ] && [ ! -d "$CARGO_HOME/registry" ]; then tar -C "$CARGO_HOME" -xf "$REG_TAR"; fi
 RUSTC_VERSION=$(rustc "+$RUST_VERSION" --version)
-log "Rust: $RUSTC_VERSION (cargo home $CARGO_HOME)"
+# the pod's CPU quota, not the host's core count (nproc reports the host)
+JOBS=$(tr '\0' '\n' < /proc/1/environ | sed -n 's/^RUNPOD_CPU_COUNT=//p' | head -1)
+export CARGO_BUILD_JOBS=${JOBS:-$(nproc)}
+log "Rust: $RUSTC_VERSION (local, $CARGO_BUILD_JOBS build jobs)"
 
 # ---- binaries for this commit and compute capability
 BIN=/workspace/bin/$SHA-sm$CAP
 T_BUILD=0 T_PARITY=0 BUILT=0
-if [ -f "$BIN/BUILD.json" ]; then
+cache_ok() { [ -f "$BIN/BUILD.json" ] && grep -q '"parity": "PASS"' "$BIN/BUILD.json"; }
+if cache_ok; then
   log "cache hit: $BIN"
 else
   exec 8>"/workspace/bin/.$SHA-sm$CAP.lock"
   flock 8
-  if [ -f "$BIN/BUILD.json" ]; then
+  if cache_ok; then
     log "cache filled by another pod meanwhile: $BIN"
   else
+    if [ -e "$BIN" ]; then  # a cached build whose parity failed: keep it for inspection, rebuild
+      log "cached build without parity PASS: moving it to $BIN.failed-$(date -u +%Y%m%dT%H%M%SZ)"
+      mv "$BIN" "$BIN.failed-$(date -u +%Y%m%dT%H%M%SZ)"
+    fi
     BUILT=1
     SRC=/root/build/src-$SHA
     if [ ! -d "$SRC/.git" ]; then
@@ -146,6 +161,11 @@ json.dump({
 PY
     mv "$STAGE" "$BIN"
     log "cached $BIN"
+    if tar -C "$CARGO_HOME" -cf "$REG_TAR.tmp.$$" registry git 2>/dev/null; then
+      mv -f "$REG_TAR.tmp.$$" "$REG_TAR"
+    else
+      rm -f "$REG_TAR.tmp.$$"
+    fi
   fi
   exec 8>&-
 fi
@@ -174,7 +194,7 @@ fi
 
 # ---- environment for shells and jobs
 cat > /root/.uor-pod-env <<ENV
-export RUSTUP_HOME=$RUSTUP_HOME CARGO_HOME=$CARGO_HOME
+export RUSTUP_HOME=$RUSTUP_HOME CARGO_HOME=$CARGO_HOME CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS
 export PATH=$CARGO_HOME/bin:$CUDA/bin:/workspace/toolchain/ollama/bin:\$PATH
 export LD_LIBRARY_PATH=$CUDA/lib64\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}
 export CUDA_COMPUTE_CAP=$CAP OLLAMA_MODELS=/workspace/ollama

@@ -7,9 +7,9 @@
 # Keep this list small: it is the working inputs, not the archive. Edit it in a PR
 # when a lab starts depending on a new input; record sizes in docs/labs/compute.md.
 #
-# toolchain (Rust 1.97.1 under rustup + cargo registry cache; Ollama binary)
-toolchain/rustup
-toolchain/cargo
+# toolchain archives (Rust 1.97.1 rustup tree; cargo registry cache; Ollama binary)
+toolchain/rust-1.97.1-x86_64.tar
+toolchain/cargo-registry.tar
 toolchain/ollama ollama
 # shared inputs: tokenizer, fine-tune stores (ft-*), the 100M base model being
 # fine-tuned (geo-100m-*), paraphrases, step5 inputs (corpora, sieve compiler and
