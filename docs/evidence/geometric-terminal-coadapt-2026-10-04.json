@@ -154,7 +154,39 @@
     "local_root": "/Users/casey.allard/uor-r4-local/workspace/research/geometric-bank-fit-20261004/pod-return/terminal-fit-1",
     "extract_note": "local Python lacks filter argument; allmembers prevalidated regular files/directories and safe relative paths"
   },
-  "independent_outcome_review": "PENDING",
+  "independent_outcome_review": {
+    "status": "PASS",
+    "checks": 181029,
+    "errors": [],
+    "report_sha256": "23b41309e7a41a357d76f4a72641b13e9f6b2a61961b33f02d594ff6cbb35228",
+    "auditor_sha256": "1754e8244ad0ad85259adc4a67ecfeca28000e25bf2791af208f5adf94e0b19f",
+    "interpretation": "Native full likelihood improves but complete-answer development regresses1 and fresh remains flat; preserve calibration positive without complete-answer-gain claim. Frozen Copy remains exact at identical prefixes.",
+    "limits": [
+      "Saved rawF32/q4, metadata/payload/source receipts and native recorded score/mass arithmetic; no native/BPE/autodiff/optimizer reexecution.",
+      "BLAKE3 unavailable; manifest sizes/sets checked and root complete remoteSHA verification separately accepted.",
+      "Gradients and per-update raw shadows omitted: finite graph/norm/crossing is executable-reported not independently reconstructed.",
+      "Fresh expanded literal pool is new distribution; only contemporaneous parent/candidate comparison is supported."
+    ],
+    "review_sha256": "b2955605e207de8c9a74ce15a01d5ae587fa41940beaa231123bc14310b6da1e"
+  },
   "scope": "native existing Period/Stop-only calibration; likelihood positive, completion not improved; no generalchat or wholegeometry negative",
-  "next": "retain prefix64 serving research parent and terminal64 as likelihood donor; investigate source-end versus actualresponse H4 relation with same-information unary control, no unchangeddose"
+  "next": "retain prefix64 serving research parent and terminal64 as likelihood donor; investigate source-end versus actualresponse H4 relation with same-information unary control, no unchangeddose",
+  "completion_subsets": {
+    "single": [
+      59,
+      54
+    ],
+    "bank": [
+      30,
+      34
+    ],
+    "complete_bank_pairs": [
+      8,
+      10
+    ],
+    "fresh_complete_pairs": [
+      1,
+      1
+    ]
+  }
 }
