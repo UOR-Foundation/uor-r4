@@ -867,7 +867,7 @@ pub struct ArtifactIdentity {
     pub parent_config_sha256: String,
 }
 impl ArtifactIdentity {
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         for digest in [
             &self.tokenizer_sha256,
             &self.parent_checkpoint_manifest_sha256,

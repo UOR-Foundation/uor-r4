@@ -1,6 +1,7 @@
 //! Opt-in textual cue/query carriers; original bank replay and keys stay intact.
-//! Admission expands packed q4 tables. Numerical scoring uses the existing
-//! directed H4 potential kernel. No semantic metadata or target is consumed.
+//! Admission expands packed q4 angular tables. Numerical scoring uses exact
+//! directed H4 relation lookup and integer addition. No semantic metadata or
+//! target is consumed.
 use crate::{
     geometric_context::NativeContextState,
     geometric_context_q4::{ContextQ4Config, NativeContextQ4},
@@ -331,7 +332,7 @@ impl<'a> NativeCueCarrier<'a> {
             .iter()
             .map(|cue| cue.state.addresses())
             .collect::<Result<Vec<_>>>()?;
-        let mut copy_q24 = vec![vec![0; candidate_segments.len()]; c.heads];
+        let mut copy_q24 = vec![vec![0i64; candidate_segments.len()]; c.heads];
         let mut angular_indices =
             vec![vec![None; candidate_segments.len()]; c.heads * c.lanes_per_head];
         let mut relative_roots = angular_indices.clone();
