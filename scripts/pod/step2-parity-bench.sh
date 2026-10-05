@@ -18,6 +18,10 @@
 #            WARMUP=200 EVAL_EVERY=250 FINAL_SEQUENCES=256 MAX_SECONDS=3600
 #            THREADS=2 CUDA_COMPUTE_CAP=89 SKIP_BUILD=0 REPO=<this checkout>
 #            BIN=<prebuilt mqar-bench> (implies SKIP_BUILD=1)
+#            PATTERNS="rararr rrarra aaaaaa"
+#            ARMS="none:3 f2:3 qk:3 conv:3 identity:2 so4:2 wprev:2 qk_jj:2" (arm:seeds)
+# A calibration run of one job: PATTERNS=rararr ARMS=none:1 K=1 (its root is
+# then reused by the full grid, which skips complete roots).
 set -euo pipefail
 
 : "${TOKENIZER:?set TOKENIZER to the #1017 tokenizer.json}"
@@ -64,7 +68,7 @@ mkdir -p "$OUT_ROOT/runs" "$OUT_ROOT/logs"
   echo "tokenizer_sha256 $got"
   echo "rustc $(rustc -V 2>/dev/null || echo UNAVAILABLE)"
   command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
-  echo "settings K=$K GPUS=$GPUS DEVICE=$DEVICE STEPS=$STEPS BATCH=$BATCH LR=$LR WARMUP=$WARMUP EVAL_EVERY=$EVAL_EVERY FINAL_SEQUENCES=$FINAL_SEQUENCES MAX_SECONDS=$MAX_SECONDS THREADS=$THREADS"
+  echo "settings PATTERNS=${PATTERNS:-default} ARMS=${ARMS:-default} K=$K GPUS=$GPUS DEVICE=$DEVICE STEPS=$STEPS BATCH=$BATCH LR=$LR WARMUP=$WARMUP EVAL_EVERY=$EVAL_EVERY FINAL_SEQUENCES=$FINAL_SEQUENCES MAX_SECONDS=$MAX_SECONDS THREADS=$THREADS"
 } >> "$OUT_ROOT/pod-manifest.txt"
 
 complete() { [ -f "$1/manifest.json" ] && grep -q '"status": "complete"' "$1/report.json" 2>/dev/null; }
@@ -104,8 +108,8 @@ export OUT_ROOT GPUS BIN TOKENIZER DEVICE BATCH STEPS LR WARMUP EVAL_EVERY FINAL
 
 jobs=()
 index=0
-for pattern in rararr rrarra aaaaaa; do
-  for spec in none:3 f2:3 qk:3 conv:3 identity:2 so4:2 wprev:2 qk_jj:2; do
+for pattern in ${PATTERNS:-rararr rrarra aaaaaa}; do
+  for spec in ${ARMS:-none:3 f2:3 qk:3 conv:3 identity:2 so4:2 wprev:2 qk_jj:2}; do
     arm=${spec%:*}
     for seed in $(seq 1 "${spec#*:}"); do
       jobs+=("$index $pattern $arm $seed")
