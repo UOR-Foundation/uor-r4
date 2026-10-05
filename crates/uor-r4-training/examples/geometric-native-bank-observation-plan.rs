@@ -162,8 +162,8 @@ fn untouched_histories(all: &[Wire]) -> Result<(Vec<History>, BTreeMap<String, V
     let fixed = [
         ("amber willow", "copper cedar", None),
         (
-            "violet birch amber willow copper cedar harbor orchard",
-            "silver orchard copper birch violet willow amber harbor",
+            "amber birch silver willow copper cedar harbor silver",
+            "silver cedar copper birch amber willow amber harbor",
             None,
         ),
         (

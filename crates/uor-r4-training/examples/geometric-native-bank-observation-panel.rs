@@ -464,8 +464,8 @@ fn validate_transfer_shape(plan: &Plan) -> Result<Value> {
     let expected = BTreeSet::from([
         ("amber willow", "copper cedar"),
         (
-            "violet birch amber willow copper cedar harbor orchard",
-            "silver orchard copper birch violet willow amber harbor",
+            "amber birch silver willow copper cedar harbor silver",
+            "silver cedar copper birch amber willow amber harbor",
         ),
         ("amber cedar violet willow", "copper meadow silver birch"),
         ("orchard silver harbor amber", "willow copper birch violet"),
@@ -475,8 +475,8 @@ fn validate_transfer_shape(plan: &Plan) -> Result<Value> {
     let initial = [
         ("amber willow", "copper cedar", None),
         (
-            "violet birch amber willow copper cedar harbor orchard",
-            "silver orchard copper birch violet willow amber harbor",
+            "amber birch silver willow copper cedar harbor silver",
+            "silver cedar copper birch amber willow amber harbor",
             None,
         ),
         (
