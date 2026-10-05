@@ -9,7 +9,10 @@
 #   scripts/pod/step5-knowledge.sh STAGE
 #
 # STAGE (run in this order; `all` runs fetch..replies; each stage skips work whose
-# sealed report root already exists and refuses to reuse an unsealed one):
+# sealed report root already exists and refuses to reuse an unsealed one; a sealed
+# base or fine-tune root counts as done only at its full step count (70,609 or
+# 4,000): a root capped by max_seconds is moved aside, never deleted, together
+# with the roots built from it, and the run continues from its checkpoint):
 #   fetch      download Simple English Wikipedia (one parquet file) and check SHA-256
 #   build      build the four tools from this checkout and run their focused tests
 #   data       verify every uploaded input by SHA-256; rebuild the Arm C corpus
@@ -96,6 +99,54 @@ fresh() {  # fresh ROOT -> 0 when the work must run
     exit 1
   fi
   return 0
+}
+
+# A sealed train root counts as done only when it completed its steps. A run
+# capped by max_seconds still seals a model and records stopped_early and
+# completed_steps; it is not the matched-token arm the decision rule was frozen
+# for. Such a root is moved aside (never deleted) and the run continues from its
+# checkpoint in a fresh root with the same name.
+completed() {  # completed ROOT STEPS STRICT -> 0 when report.json shows the full run
+  python3 - "$1/report.json" "$2" "$3" <<'PY'
+import json, sys
+path, steps, strict = sys.argv[1], int(sys.argv[2]), sys.argv[3] == '1'
+try:
+    report = json.load(open(path))
+except (OSError, ValueError):
+    sys.exit(1)
+ok = report.get('completed_steps') == steps and (not strict or report.get('stopped_early') is False)
+sys.exit(0 if ok else 1)
+PY
+}
+
+move_aside() {  # move_aside ROOT TAG -> moves ROOT (and ROOT.log) to ROOT.TAG-<UTC>; prints the new path
+  local aside
+  aside="$1.$2-$(date -u +%Y%m%dT%H%M%SZ)"
+  mv "$1" "$aside"
+  if [ -f "$1.log" ]; then mv "$1.log" "$aside.log"; fi
+  echo "$aside"
+}
+
+RESUME_ARG=()
+fresh_train() {  # fresh_train ROOT STEPS STRICT [DEPENDENT_ROOT...] -> 0 when the work must run; sets RESUME_ARG
+  local root=$1 steps=$2 strict=$3 aside dependent
+  shift 3
+  RESUME_ARG=()
+  if [ -f "$root/manifest.json" ]; then
+    if completed "$root" "$steps" "$strict"; then log "skip $root (sealed, $steps steps)"; return 1; fi
+    aside=$(move_aside "$root" capped)
+    log "capped $root (completed_steps short of $steps or stopped_early): moved to $aside"
+    # Roots built from the capped model are stale: move them aside as well.
+    for dependent in "$@"; do
+      if [ -e "$dependent" ]; then log "stale $dependent: moved to $(move_aside "$dependent" stale)"; fi
+    done
+    if [ -d "$aside/checkpoint" ]; then
+      RESUME_ARG=("resume=$aside/checkpoint")
+      log "continue $root from $aside/checkpoint"
+    fi
+    return 0
+  fi
+  fresh "$root"
 }
 
 stage_fetch() {
@@ -193,12 +244,14 @@ train_streams() {  # train_streams ARM
 stage_base() {
   for seed in "${SEEDS[@]}"; do
     for arm in "${ARMS[@]}"; do
-      local out=$R/base-$arm-s$seed
-      fresh "$out" || continue
-      log "base $arm seed $seed"
+      local key=$arm-s$seed
+      local out=$R/base-$key
+      fresh_train "$out" 70609 1 "$R/ft-C-$key" "$R/eval-knowledge-base-$key" "$R/eval-knowledge-ft-$key" \
+        "$R/session-sieve-$key" "$R/session-off-$key" "$R/replies-$key" "$R/grade-$key" || continue
+      log "base $arm seed $seed ${RESUME_ARG[*]+${RESUME_ARG[*]}}"
       # shellcheck disable=SC2046
       CUDA_VISIBLE_DEVICES=$GPU RAYON_NUM_THREADS=8 "$GS" train \
-        out="$out" seed="$seed" lr=0.0005 \
+        out="$out" seed="$seed" lr=0.0005 ${RESUME_ARG[@]+"${RESUME_ARG[@]}"} \
         $(train_streams "$arm") \
         valid="$D/corpora/ts-valid/tokens.u16" tokenizer="$T" \
         arch=geometric width=576 heads=8 layers=10 pattern=rrarrarrar context=384 \
@@ -216,11 +269,18 @@ stage_base() {
 stage_ft() {
   for seed in "${SEEDS[@]}"; do
     for arm in "${ARMS[@]}"; do
-      local out=$R/ft-C-$arm-s$seed
-      fresh "$out" || continue
-      log "ft Arm C $arm seed $seed"
+      local key=$arm-s$seed
+      local out=$R/ft-C-$key
+      if ! completed "$R/base-$key" 70609 1; then
+        echo "base-$key has not completed 70609 steps: run the base stage first" >&2
+        exit 1
+      fi
+      # A fine-tune is complete at 4,000 steps (the tabulator's criterion).
+      fresh_train "$out" 4000 0 "$R/eval-knowledge-ft-$key" "$R/session-sieve-$key" "$R/session-off-$key" \
+        "$R/replies-$key" "$R/grade-$key" || continue
+      log "ft Arm C $arm seed $seed ${RESUME_ARG[*]+${RESUME_ARG[*]}}"
       CUDA_VISIBLE_DEVICES=$GPU RAYON_NUM_THREADS=8 "$GS" dialogue-train \
-        out="$out" tokenizer="$T" \
+        out="$out" tokenizer="$T" ${RESUME_ARG[@]+"${RESUME_ARG[@]}"} \
         train_tokens="$D/ft/mixed-c/tokens.u16" train_mask="$D/ft/mixed-c/response_mask.u8" \
         train_manifest="$D/ft/mixed-c/manifest.json" \
         dev_tokens="$D/ft/dev/tokens.u16" dev_mask="$D/ft/dev/response_mask.u8" \

@@ -126,19 +126,32 @@ Definitions:
 - `acc(arm, s)` is the number of acceptable rows (fluent and relevant) on the 232-row panel for seed `s`.
 - `d_s = acc(K, s) − acc(A, s)`.
 - `mean_d = (d_1 + d_2) / 2`.
-- `p` is the exact two-sided McNemar over the 464 pooled (request, seed) pairs.
+- `p` is the exact two-sided McNemar over the 464 pooled (request, seed) pairs. This is the decisive test. The per-seed exact McNemar p over each seed's 232 pairs is reported beside it but does not enter the rule (see §7).
+- **Panel criterion:** `d_1 > 0` **and** `d_2 > 0`, `mean_d ≥ 10`, `p < 0.05`, and the clean guard.
 
-The checks, applied in this order:
-1. **Manipulation check.** K's base knowledge held-out NLL is at least 0.10 nats below A's on both seeds. If this fails, the corpus did not reach the model. Check the data path first. The panel is not read.
-2. **Clean guard.** `d_s` on the 143 clean rows is greater than 0 on both seeds.
+The checks and outcomes, applied in this order. The first outcome reached is the decision.
+0. **Completeness (matched tokens).** Every input the rule reads must be present and complete:
+   - all 4 base train reports with `completed_steps = 70609` and `stopped_early = false` (433,821,696 tokens each);
+   - all 4 Arm C fine-tune reports with `completed_steps = 4000`;
+   - base knowledge held-out NLL for all 4 bases;
+   - all 4 panel grade reports;
+   - all 4 sieve-on D19 session reports, each with an Instruction category.
+
+   Otherwise the outcome is **INCOMPLETE** and no verdict is issued. A run stopped by `max_seconds` still seals a model, but it is not the matched-token arm this rule was frozen for. The run script does not treat such a root as done: it moves the root aside (never deletes it), moves aside the roots built from it, and continues the run from its checkpoint in a fresh root.
+1. **Manipulation check.** K's base knowledge held-out NLL is at least 0.10 nats below A's on both seeds. If this fails, the outcome is **INSTRUMENT**: the corpus did not reach the model. Check the data path first. The panel is not read. Missing NLL is INCOMPLETE (step 0), not INSTRUMENT.
+2. **Clean guard** (part of the panel criterion). `d_s` on the 143 clean rows is greater than 0 on both seeds.
 3. **Instruction guard.** The final assessment requires "instruction following not worse". Here that means the pooled D19 Instruction passes (sieve on, 2 × 98 turns) satisfy `K ≥ A − max(3, |A_s1 − A_s2|)`.
 
-| Outcome | Condition | Next action |
-|---|---|---|
-| **PROMOTE** | `mean_d ≥ 10`, `p < 0.05`, clean guard and instruction guard hold | Adopt the knowledge mix for the next base runs. A 96M knowledge base becomes eligible under M4. |
-| **BLOCKED** | panel criterion holds, instruction guard fails | One rebalanced A/B with knowledge weight 0.15, then stop. |
-| **NULL** | `mean_d < 5`, or `d_1` and `d_2` of opposite sign | Kill, per the plan. The plateau is coherence/capacity, and the next lever is capacity per J/token, not data. |
-| **WEAK** | anything else | Record it. No promotion and no repeat at 29M. The knowledge mix becomes an optional arm only if the owner opens a capacity rung. |
+| Order | Outcome | Condition | Next action |
+|---|---|---|---|
+| 0 | **INCOMPLETE** | completeness fails | Complete the missing or capped runs; no verdict. |
+| 1 | **INSTRUMENT** | manipulation check fails | Check the data path; the panel is not read. |
+| 2 | **PROMOTE** | panel criterion (`d_1 > 0`, `d_2 > 0`, `mean_d ≥ 10`, `p < 0.05`, clean guard) and instruction guard hold | Adopt the knowledge mix for the next base runs. A 96M knowledge base becomes eligible under M4. |
+| 3 | **BLOCKED** | panel criterion holds, instruction guard fails | One rebalanced A/B with knowledge weight 0.15, then stop. |
+| 4 | **NULL** | `mean_d < 5`, or `d_1` and `d_2` of opposite sign (`d_1 · d_2 < 0`) | Kill, per the plan. The plateau is coherence/capacity, and the next lever is capacity per J/token, not data. |
+| 5 | **WEAK** | anything else | Record it. No promotion and no repeat at 29M. The knowledge mix becomes an optional arm only if the owner opens a capacity rung. |
+
+Because the panel criterion requires both seed deltas to be positive and `mean_d ≥ 10`, PROMOTE/BLOCKED and NULL cannot both hold. For example, `d = (+22, −1)` fails the panel criterion and is NULL. The order is stated anyway, and the tabulator applies it literally.
 
 - **Reported but not decisive:** ts-valid NLL (the cost of displacing TinyStories), D19 totals with the sieve on and off, sieve-off MQAR, and knowledge NLL after the fine-tune.
 - **No excuse clause:** a null is evidence.
@@ -147,6 +160,7 @@ The checks, applied in this order:
 
 - **Single grader and single judge path.** The panel's grader is qwen2.5:7b (final assessment §6). The clean subset was labelled by one annotator, Claude, with reasons. It was not independently reviewed.
 - **Weak power.** Two seeds per arm. A 10-row effect on 232 rows is near the limit of what the paired test can resolve.
+- **Pooled McNemar is anti-conservative.** It treats the same request under two seeds as independent pairs (464). The two seeds' outcomes on one request are correlated, so the pooled p understates the uncertainty. The tabulator therefore reports each seed's exact McNemar p (232 pairs) beside the pooled one. The decisive test stays the pooled p frozen here, and the both-seeds-positive requirement limits a single-seed effect.
 - **Corpus reach.** Simple Wikipedia covers encyclopaedic facts. It does not cover how-to, coding or advice requests. Some panel K rows (recipes, code, workplace advice) are not addressable by this corpus.
 - **Decontamination scope.** The exclusion is against panel requests, not against reference answers. The panel has no reference answers. An article that answers a panel question without sharing its wording is kept, and is meant to be kept: that is the knowledge the arm supplies.
 - **Untested here.**
