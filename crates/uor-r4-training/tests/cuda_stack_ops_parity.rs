@@ -2321,9 +2321,12 @@ fn test_chunked_recurrence_parity() -> uor_r4_training::Result<()> {
         let w_data = noise(batch * time * width, seed + 3, 1.0);
         let data = [&b_data, &g_data, &p_data, &w_data];
         set_cuda_recurrence_kernels(CudaRecurrenceKernels::Split);
+        let started = Instant::now();
         let reference = recurrence_run(
             &cuda_dev, data, batch, time, width, rotation, group, gate_width,
         )?;
+        let serial = started.elapsed();
+        println!("b{batch} t{time} w{width} rot{rotation} {group:?} serial split: {serial:?}");
         for tile in [1usize, 8, 32] {
             set_recurrence_tile(tile);
             set_cuda_recurrence_kernels(CudaRecurrenceKernels::Chunked);
