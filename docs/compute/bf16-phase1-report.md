@@ -193,7 +193,10 @@ reproduction.
 checkpoints, md5 in `MD5SUMS`), `decision.txt`, `binaries.sha256`,
 `gate-binary-geometric-stack` + `gate-binary.sha256`, `parity-suite.log`
 (31 tests), `timing-29m.log`, `timing-96m-{f32,bf16}.log`,
-`bit-identity-f32-{base,new}.log`, `bf16-phase1-src.tar.gz`.
+`bit-identity-f32-{base,new}.log`, `headcheck-{f32,bf16}.log` (the delivered
+revision's reproduction of the gate binary), `parity-suite.log` (31 tests), and
+`bf16-phase1-src.tar.gz` (a source snapshot taken when the gate ended; the
+delivered revision is the branch head).
 
 
 ## 5. Cost
