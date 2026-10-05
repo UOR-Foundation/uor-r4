@@ -73,39 +73,39 @@ const UPDATES: usize = 64;
 const BATCH: usize = 8;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Args {
-    pub(super) mode: String,
-    pub(super) cue_score_mode: Option<CueScoreMode>,
-    pub(super) prefix_score_mode: Option<PrefixScoreMode>,
-    pub(super) source_end_score_mode:
+pub(crate) struct Args {
+    pub(crate) mode: String,
+    pub(crate) cue_score_mode: Option<CueScoreMode>,
+    pub(crate) prefix_score_mode: Option<PrefixScoreMode>,
+    pub(crate) source_end_score_mode:
         Option<uor_r4_integer::geometric_source_end_transport::SourceEndScoreMode>,
-    pub(super) frozen_cue_bundle: Option<PathBuf>,
-    pub(super) frozen_cue_native_metadata_sha256: Option<String>,
-    pub(super) frozen_cue_packed_sha256: Option<String>,
-    pub(super) frozen_prefix_bundle: Option<PathBuf>,
-    pub(super) frozen_prefix_native_metadata_sha256: Option<String>,
-    pub(super) frozen_prefix_packed_sha256: Option<String>,
-    pub(super) learned_source_weights: Option<PathBuf>,
-    pub(super) learned_native_artifact: Option<PathBuf>,
-    pub(super) learned_trusted_native_binding: Option<PathBuf>,
-    pub(super) source_end_incumbent_fit: Option<PathBuf>,
-    pub(super) source_end_incumbent_manifest_sha256: Option<String>,
-    pub(super) source_weights: PathBuf,
-    pub(super) native_artifact: PathBuf,
-    pub(super) trusted_native_binding: PathBuf,
-    pub(super) development_panel: PathBuf,
-    pub(super) development_manifest_sha256: String,
-    pub(super) fresh_panel: PathBuf,
-    pub(super) fresh_manifest_sha256: String,
-    pub(super) admission: Option<PathBuf>,
-    pub(super) admission_manifest_sha256: Option<String>,
-    pub(super) fit_authorization: Option<PathBuf>,
-    pub(super) exposed_controls: Option<PathBuf>,
-    pub(super) out: PathBuf,
-    pub(super) maximum_seconds: u64,
-    pub(super) maximum_context_tokens: usize,
-    pub(super) maximum_generation_tokens: usize,
-    pub(super) maximum_report_bytes: usize,
+    pub(crate) frozen_cue_bundle: Option<PathBuf>,
+    pub(crate) frozen_cue_native_metadata_sha256: Option<String>,
+    pub(crate) frozen_cue_packed_sha256: Option<String>,
+    pub(crate) frozen_prefix_bundle: Option<PathBuf>,
+    pub(crate) frozen_prefix_native_metadata_sha256: Option<String>,
+    pub(crate) frozen_prefix_packed_sha256: Option<String>,
+    pub(crate) learned_source_weights: Option<PathBuf>,
+    pub(crate) learned_native_artifact: Option<PathBuf>,
+    pub(crate) learned_trusted_native_binding: Option<PathBuf>,
+    pub(crate) source_end_incumbent_fit: Option<PathBuf>,
+    pub(crate) source_end_incumbent_manifest_sha256: Option<String>,
+    pub(crate) source_weights: PathBuf,
+    pub(crate) native_artifact: PathBuf,
+    pub(crate) trusted_native_binding: PathBuf,
+    pub(crate) development_panel: PathBuf,
+    pub(crate) development_manifest_sha256: String,
+    pub(crate) fresh_panel: PathBuf,
+    pub(crate) fresh_manifest_sha256: String,
+    pub(crate) admission: Option<PathBuf>,
+    pub(crate) admission_manifest_sha256: Option<String>,
+    pub(crate) fit_authorization: Option<PathBuf>,
+    pub(crate) exposed_controls: Option<PathBuf>,
+    pub(crate) out: PathBuf,
+    pub(crate) maximum_seconds: u64,
+    pub(crate) maximum_context_tokens: usize,
+    pub(crate) maximum_generation_tokens: usize,
+    pub(crate) maximum_report_bytes: usize,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -132,10 +132,10 @@ struct Inputs {
 }
 #[derive(Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Packet {
-    pub(super) id: String,
+pub(crate) struct Packet {
+    pub(crate) id: String,
     segments: Vec<Segment>,
-    pub(super) query_ids: Vec<u32>,
+    pub(crate) query_ids: Vec<u32>,
     actual_prefix_ids: Vec<u32>,
 }
 #[derive(Deserialize, serde::Serialize)]
@@ -201,13 +201,13 @@ struct Label {
     id: String,
     answers: FrozenAnswers,
 }
-pub(super) fn invalid(s: impl Into<String>) -> io::Error {
+pub(crate) fn invalid(s: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, s.into())
 }
-pub(super) fn read_json(path: &Path) -> Result<Value> {
+pub(crate) fn read_json(path: &Path) -> Result<Value> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
-pub(super) fn parameter_receipts(parameters: &BTreeMap<String, Var>) -> Result<Value> {
+pub(crate) fn parameter_receipts(parameters: &BTreeMap<String, Var>) -> Result<Value> {
     let mut receipts = BTreeMap::new();
     for (name, var) in parameters {
         let values = var.flatten_all()?.to_vec1::<f32>()?;
@@ -219,7 +219,7 @@ pub(super) fn parameter_receipts(parameters: &BTreeMap<String, Var>) -> Result<V
     }
     Ok(serde_json::to_value(receipts)?)
 }
-pub(super) fn peak_rss_kib() -> Option<u64> {
+pub(crate) fn peak_rss_kib() -> Option<u64> {
     fs::read_to_string("/proc/self/status")
         .ok()?
         .lines()
@@ -231,7 +231,7 @@ pub(super) fn peak_rss_kib() -> Option<u64> {
                 .ok()
         })
 }
-pub(super) fn executable() -> Result<(PathBuf, &'static str)> {
+pub(crate) fn executable() -> Result<(PathBuf, &'static str)> {
     match std::env::current_exe() {
         Ok(path) => Ok((path, "current_exe")),
         Err(error) => {
@@ -244,7 +244,7 @@ pub(super) fn executable() -> Result<(PathBuf, &'static str)> {
     }
 }
 
-pub(super) fn directory_bytes(path: &Path) -> Result<usize> {
+pub(crate) fn directory_bytes(path: &Path) -> Result<usize> {
     let mut n = 0usize;
     for e in fs::read_dir(path)? {
         let e = e?;
@@ -262,10 +262,10 @@ pub(super) fn directory_bytes(path: &Path) -> Result<usize> {
     }
     Ok(n)
 }
-pub(super) fn write_json(root: &Path, name: &str, v: &Value) -> Result<()> {
+pub(crate) fn write_json(root: &Path, name: &str, v: &Value) -> Result<()> {
     write_json_limited(root, name, v, REPORT_CAP)
 }
-pub(super) fn write_json_limited(root: &Path, name: &str, v: &Value, cap: usize) -> Result<()> {
+pub(crate) fn write_json_limited(root: &Path, name: &str, v: &Value, cap: usize) -> Result<()> {
     let b = serde_json::to_vec(v)?;
     let p = root.join(name);
     let previous = fs::metadata(&p).map_or(0, |m| m.len() as usize);
@@ -296,7 +296,7 @@ pub(super) fn write_json_limited(root: &Path, name: &str, v: &Value, cap: usize)
     fs::write(p, b)?;
     Ok(())
 }
-pub(super) fn read_capped(path: &Path) -> Result<Vec<u8>> {
+pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>> {
     use std::io::Read;
     let f = fs::File::open(path)?;
     if f.metadata()?.len() > 16 * 1024 * 1024 {
@@ -309,7 +309,7 @@ pub(super) fn read_capped(path: &Path) -> Result<Vec<u8>> {
     }
     Ok(b)
 }
-pub(super) fn nearest_seal(p: &Path) -> Result<PathBuf> {
+pub(crate) fn nearest_seal(p: &Path) -> Result<PathBuf> {
     for a in p.ancestors() {
         if a.join(report_output::MANIFEST_FILE).is_file() {
             return Ok(a.to_path_buf());
@@ -317,7 +317,7 @@ pub(super) fn nearest_seal(p: &Path) -> Result<PathBuf> {
     }
     Err(invalid("required sealed source ancestor absent").into())
 }
-pub(super) fn deadline(a: &Args, start: Instant) -> Result<()> {
+pub(crate) fn deadline(a: &Args, start: Instant) -> Result<()> {
     if start.elapsed().as_secs() >= a.maximum_seconds
         || peak_rss_kib().is_some_and(|n| n > 8 * 1024 * 1024)
     {
@@ -522,14 +522,14 @@ fn checked_args() -> Result<Args> {
     }
     Ok(a)
 }
-pub(super) struct Episode {
-    pub(super) packet: Packet,
-    pub(super) answers: FrozenAnswers,
-    pub(super) target: Vec<u32>,
+pub(crate) struct Episode {
+    pub(crate) packet: Packet,
+    pub(crate) answers: FrozenAnswers,
+    pub(crate) target: Vec<u32>,
     views: Vec<Option<uor_r4_integer::geometric_source_emission_view::SourceEmissionView>>,
 }
 impl Episode {
-    pub(super) fn segments(&self) -> Result<Vec<SourceBankSegment<'_>>> {
+    pub(crate) fn segments(&self) -> Result<Vec<SourceBankSegment<'_>>> {
         self.packet
             .segments
             .iter()
@@ -572,8 +572,8 @@ enum PanelLayout {
     Legacy,
     NaturalAllBank,
 }
-pub(super) const NATURAL_PANEL_LAYOUT: &str = "raw-natural-allbank-pairs/1";
-pub(super) fn load_natural_panel(
+pub(crate) const NATURAL_PANEL_LAYOUT: &str = "raw-natural-allbank-pairs/1";
+pub(crate) fn load_natural_panel(
     root: &Path,
     expected_count: usize,
     native: &IntegerRealizer,
@@ -588,7 +588,7 @@ pub(super) fn load_natural_panel(
         PanelLayout::NaturalAllBank,
     )
 }
-pub(super) fn load_panel(
+pub(crate) fn load_panel(
     root: &Path,
     expected_count: usize,
     native: &IntegerRealizer,
@@ -836,15 +836,15 @@ fn inactive_bits(source: &SourceRealizerWeights, a: &Args) -> Result<Value> {
             .collect(),
     )
 }
-pub(super) fn scale(episodes: usize, tokens: usize) -> Result<f64> {
+pub(crate) fn scale(episodes: usize, tokens: usize) -> Result<f64> {
     if episodes == 0 || tokens == 0 {
         return Err(invalid("empty objective").into());
     }
     Ok(1. / episodes as f64 / tokens as f64)
 }
-pub(super) struct Batch {
-    pub(super) gradients: BTreeMap<String, Tensor>,
-    pub(super) report: Value,
+pub(crate) struct Batch {
+    pub(crate) gradients: BTreeMap<String, Tensor>,
+    pub(crate) report: Value,
 }
 fn batch(
     indices: &[usize],
@@ -1647,7 +1647,7 @@ struct CueAuthorization {
     batch_episodes: usize,
     maximum_fit_seconds: u64,
 }
-pub(super) fn cue_native_load<'a>(
+pub(crate) fn cue_native_load<'a>(
     root: &Path,
     parent: &'a IntegerRealizer,
 ) -> Result<NativeCueCarrier<'a>> {
@@ -2405,7 +2405,7 @@ struct PrefixAuthorization {
     batch_episodes: usize,
     maximum_fit_seconds: u64,
 }
-pub(super) fn prefix_native_load<'a>(
+pub(crate) fn prefix_native_load<'a>(
     root: &Path,
     parent: &'a IntegerRealizer,
     cue: &NativeCueCarrier<'_>,
