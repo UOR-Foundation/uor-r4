@@ -53,7 +53,7 @@ const CUE_FAMILIES: &str = "cue-angular-HxLx120/1";
 fn cue_mode(a: &Args) -> bool {
     a.mode.starts_with("cue-")
 }
-const PREFIX_FIT_CAP: usize = 192 * 1024 * 1024;
+const PREFIX_FIT_CAP: usize = 512 * 1024 * 1024;
 const PREFIX_FAMILIES: &str = "prefix-angular-HxLx120/1";
 fn prefix_mode(a: &Args) -> bool {
     a.mode.starts_with("prefix-")
