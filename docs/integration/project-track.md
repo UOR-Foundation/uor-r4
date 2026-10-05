@@ -21,6 +21,19 @@ operator family throughout the programme.
 
 ### What changes and why
 
+**October 5 record-credit outcome:** the [completed three-order study](geometric-record-credit-2026-10-05.md)
+retains development source learning but finds order-dependent benefit over ordinary
+token credit and sparse complete replies. Advance the measured attention-to-emission
+competition seam: freeze a development-selected reader and warm-start both existing
+geometric Period/Stop tables from its actual packed endpoint payloads. Preserve all
+source/Copy/cue/prefix parameters, require current-parent baseline fidelity, and use
+the natural all-bank panel through an explicit opt-in driver. No new coordinate,
+runtime source gate or transformer is adopted. Complete-response behavior decides
+whether endpoint calibration works; discretization/additive expressivity and generated
+trajectory are distinct possible remaining failures. The exposed32-row diagnostic
+cannot qualify transfer. Compiler/store/reader/emitter integration remains the next
+product dependency after this completion seam, with full D19/D11/D5 goals retained.
+
 **October 5 reader sequencing:** the [supported current-bank reader study](geometric-supported-reader-transfer-2026-10-05.md)
 completes three fixed episode orders on semantically entailed data. Development
 source selection improves, but transfer and complete replies remain unstable.

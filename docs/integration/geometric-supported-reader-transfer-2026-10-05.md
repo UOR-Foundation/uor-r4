@@ -1,5 +1,9 @@
 # Supported geometric reader learning and matched transfer — October 5
 
+The subsequent [record-credit intervention and three-order outcome](geometric-record-credit-2026-10-05.md)
+are complete. This page retains the token-only parent/control study and its original
+decision; the successor owns the current endpoint-calibration action.
+
 ## Question and boundary
 
 Can the existing native geometric reader learn to select and realize an explicitly

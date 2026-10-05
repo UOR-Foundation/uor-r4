@@ -1,5 +1,41 @@
 # Current UOR-R4 research state
 
+## Record credit complete; geometric endpoint calibration next — October 5
+
+The [record-credit study](geometric-record-credit-2026-10-05.md) implements offline
+exact-record ranking credit through the existing observation-root adapters, with
+ordinary token supervision and unchanged label-free native bank access. Three
+64-update/B8 episode orders complete at numerical headdea30c2a with frozen bits,
+five exported/reloaded native checkpoints each, and selection by development
+full-answer/EOS CE. Development first-source correctness is80/79/75 out of128
+versus parent57; complete replies are11/11/10 versus10. Exposed diagnostic source
+correctness is15/17/16 out of32 and complete replies1/2/3. Matched token-only
+comparisons change development source correctness by+4/+6/-3: auxiliary benefit
+is order-dependent, not established superiority or transfer. All candidates and
+case-by-case comparisons against all three earlier candidates are retained.
+
+Saved-trace/source review isolates terminal competition. At524 matched actual
+prefix/same-source steps between token-only061 and record061, terminal raw scores
+are unchanged. Target-terminal probabilities nevertheless regress31/improve11
+times through changed Copy competition. Reached correct-source full eight-lane
+phase tuples distinguish payload/Period/EOS, but do not prove additive Q4
+expressivity. Do not add a nonexistent observation-root→terminal derivative.
+
+**Next:** freeze record061 checkpoint64, prospectively chosen by lowest development
+CE among record-credit orders, and warm-start the existing geometric Period/Stop
+learner from its actual packed endpoint tables. Add opt-in natural-panel loading
+and current-parent baseline identity checks; preserve legacy zero-start contracts.
+Train only the two endpoint tables, then measure complete native replies. Shared
+session/compiler seams remain untouched. This is a completion discriminator, not
+raw-history integration, general prose, chat or final D11/D5 qualification.
+
+CPU48/noGPU on the existing Linux pod; measured fit workers798.967/773.071/712.951s.
+Whole work card110min includes a recorded20min extension; cumulative precharge
+1,321,335,028/limit1,322,100,000ms retains previous costs. Full runs are archived
+in the owned pod `/workspace` and archive/return verification is posted on#820.
+Final integrated-head checks and protected merge receipt belong on the PR; earlier
+numerical-head tests do not substitute for them.
+
 ## Supported geometric reader: three orders complete, source credit next — October 5
 
 The [supported-reader transfer](geometric-supported-reader-transfer-2026-10-05.md)
