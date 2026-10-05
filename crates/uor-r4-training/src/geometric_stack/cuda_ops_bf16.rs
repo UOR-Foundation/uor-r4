@@ -1403,7 +1403,7 @@ impl PointerMixture {
         launch_bf16(
             device,
             "pointer_rows",
-            (32 * rows).max(32),
+            32 * rows,
             &[
                 Arg::B(logits),
                 Arg::B(side),

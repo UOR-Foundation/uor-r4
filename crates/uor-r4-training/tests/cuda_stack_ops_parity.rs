@@ -1657,39 +1657,148 @@ fn assert_bf16_close(
     worst
 }
 
-/// The bf16 kernels' f32 -> bf16 rounding is Candle's (`half::bf16`, RNE).
+/// bf16 storage with bf16-exact inputs: the arithmetic inside the kernels is
+/// the same f32/f64 in both builds, so the only rounding left is the one store
+/// of each output — the bf16 op's result must equal Candle's bf16 rounding of
+/// the f32 op's result, bit for bit. This is the exact oracle for every load
+/// and store conversion in the op's forward path (a wrong or missing
+/// conversion cannot pass it).
+#[cfg(feature = "cuda")]
+fn assert_bf16_rounds_once(
+    f32_out: &candle_core::Tensor,
+    bf16_out: &candle_core::Tensor,
+    op: &str,
+) -> uor_r4_training::Result<()> {
+    let expected = f32_out
+        .to_dtype(candle_core::DType::BF16)?
+        .to_dtype(candle_core::DType::F32)?
+        .flatten_all()?
+        .to_vec1::<f32>()?;
+    let got = bf16_out
+        .to_dtype(candle_core::DType::F32)?
+        .flatten_all()?
+        .to_vec1::<f32>()?;
+    assert_eq!(expected.len(), got.len(), "{op}: length mismatch");
+    for (i, (want, have)) in expected.iter().zip(got.iter()).enumerate() {
+        assert_eq!(
+            want, have,
+            "{op}: element {i} is {have}, not the f32 result {want} rounded once to bf16"
+        );
+    }
+    println!("{op}: bf16 output is the f32 output rounded once ({})", expected.len());
+    Ok(())
+}
+
+/// Values that are exact in bf16 (multiples of 2^-7 within |x| <= 1), so no
+/// input rounding happens and the comparison isolates the kernels' conversions.
+#[cfg(feature = "cuda")]
+fn bf16_exact(len: usize, salt: i32) -> Vec<f32> {
+    (0..len)
+        .map(|i| ((i as i32 * 37 + salt * 101) % 256 - 128) as f32 / 128.0)
+        .collect()
+}
+
 #[cfg(feature = "cuda")]
 #[test]
-fn test_bf16_storage_rounding_matches_candle() -> uor_r4_training::Result<()> {
+fn test_bf16_exact_inputs_round_once() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{
+        fused_aux_len, fused_read, logits_cross_entropy, quaternion_scan, recurrence_core,
+        ReadScore,
+    };
     let cuda = match candle_core::Device::new_cuda(0) {
         Ok(dev) => dev,
         Err(e) => return no_device(e),
     };
-    // Values that exercise the rounding boundary (exact halves of a bf16 step),
-    // the sign, subnormals near zero and a large finite magnitude.
-    let len = 64;
-    let data: Vec<f32> = (0..len)
-        .map(|i| {
-            let step = (i as f32 - 32.0) * 0.5;
-            let base = 2f32.powi(((i as i32 % 9) - 4) * 2);
-            base * (1.0 + step / 256.0)
-        })
-        .collect();
-    let tensor = candle_core::Tensor::from_vec(data.clone(), len, &cuda)?;
-    let candle_round = tensor
-        .to_dtype(candle_core::DType::BF16)?
-        .to_dtype(candle_core::DType::F32)?
-        .to_vec1::<f32>()?;
-    // The kernel's conversion: straight_through copies the bf16 storage it read.
-    let quantized = tensor
-        .to_dtype(candle_core::DType::BF16)?
-        .to_dtype(candle_core::DType::F32)?;
-    let out = uor_r4_training::geometric_stack::straight_through(&tensor, &quantized)?;
-    let kernel = out.to_vec1::<f32>()?;
-    for (i, (a, b)) in candle_round.iter().zip(kernel.iter()).enumerate() {
-        assert_eq!(a, b, "element {i}: candle {a} vs kernel {b}");
-    }
-    println!("bf16 storage rounding matches candle on {len} values");
+    let exact = |values: Vec<f32>, shape: Vec<usize>| -> uor_r4_training::Result<candle_core::Tensor> {
+        Ok(candle_core::Tensor::from_vec(values, shape, &cuda)?)
+    };
+    let as_bf16 =
+        |tensor: &candle_core::Tensor| -> uor_r4_training::Result<candle_core::Tensor> {
+            Ok(tensor.to_dtype(candle_core::DType::BF16)?)
+        };
+
+    // Quaternion scan.
+    let (batch, time, lanes) = (2usize, 6usize, 4usize);
+    let len = batch * time * lanes * 4;
+    let transition = exact(bf16_exact(len, 0), vec![batch, time, lanes, 4])?;
+    let drive = exact(bf16_exact(len, 3), vec![batch, time, lanes, 4])?;
+    let f32_scan = quaternion_scan(&transition, &drive)?;
+    let bf16_scan = quaternion_scan(&as_bf16(&transition)?, &as_bf16(&drive)?)?;
+    assert_bf16_rounds_once(&f32_scan, &bf16_scan, "QuaternionScan")?;
+
+    // Fused read, the gate's L2 score.
+    let (heads, key, value) = (2usize, 4usize, 4usize);
+    let rows = batch * heads * time;
+    let query = exact(bf16_exact(rows * key, 1), vec![batch, heads, time, key])?;
+    let kv = exact(
+        bf16_exact(rows * (key + value), 2),
+        vec![batch, heads, time, key + value],
+    )?;
+    let aux_len = fused_aux_len(batch, heads, time, ReadScore::L2, true, true).max(1);
+    let aux = exact(bf16_exact(aux_len, 4), vec![aux_len])?;
+    let f32_read = fused_read(&query, &kv, &kv, &aux, ReadScore::L2, true, true, false)?;
+    let bf16_read = fused_read(
+        &as_bf16(&query)?,
+        &as_bf16(&kv)?,
+        &as_bf16(&kv)?,
+        &aux,
+        ReadScore::L2,
+        true,
+        true,
+        false,
+    )?;
+    assert_bf16_rounds_once(&f32_read, &bf16_read, "FusedRead L2")?;
+
+    // Recurrence core, quaternion transport (its taps, bias and decay are f32
+    // parameters in both storages).
+    let width = 16usize;
+    let lanes = width / 4;
+    let branches = exact(
+        bf16_exact(batch * time * 2 * width, 5),
+        vec![batch, time, 2 * width],
+    )?;
+    let gates = exact(
+        bf16_exact(batch * time * (lanes + width), 6),
+        vec![batch, time, lanes + width],
+    )?;
+    let parameters = exact(
+        bf16_exact(5 * width + lanes, 7),
+        vec![5 * width + lanes],
+    )?;
+    let f32_core = recurrence_core(
+        &branches,
+        &gates,
+        &parameters,
+        batch,
+        time,
+        width,
+        true,
+        None,
+    )?;
+    let bf16_core = recurrence_core(
+        &as_bf16(&branches)?,
+        &as_bf16(&gates)?,
+        &parameters,
+        batch,
+        time,
+        width,
+        true,
+        None,
+    )?;
+    assert_bf16_rounds_once(&f32_core, &bf16_core, "RecurrenceCore")?;
+
+    // Cross-entropy: the loss is f64 over the logits, so on bf16-exact logits
+    // it must be bit-identical, not merely close.
+    let (ce_rows, classes) = (12usize, 16usize);
+    let logits = exact(bf16_exact(ce_rows * classes, 8), vec![ce_rows, classes])?;
+    let targets: Vec<u32> = (0..ce_rows).map(|i| (i * 3 % classes) as u32).collect();
+    let f32_loss = logits_cross_entropy(&logits, &targets, None)?.to_scalar::<f32>()?;
+    let bf16_loss = logits_cross_entropy(&as_bf16(&logits)?, &targets, None)?.to_scalar::<f32>()?;
+    assert_eq!(
+        f32_loss, bf16_loss,
+        "CrossEntropy on bf16-exact logits must be bit-identical"
+    );
+    println!("CrossEntropy: bit-identical on bf16-exact logits ({f32_loss})");
     Ok(())
 }
 
