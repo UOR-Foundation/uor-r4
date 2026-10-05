@@ -13,16 +13,56 @@ cancellation, effective row count and maximum-row concentration. Public grouping
 is posthoc; occurrence-candidate heterogeneity is not source-record contrast.
 No updates, proposals, selection, generation or evaluation gradients occur.
 
-Independent exact-head source review, rustfmt and diff checks pass. Scoped
-compile/tests and actual audit are NOT_RUN: advertised5090 stock refused creation
-in canonical EUR-NO and EU-RO; main `uor-pod` is in a bounded stock wait. No pod
-was created by those refusals and no laptop model compute is substituted.
-DeepSeek's tensor-core/softmax investigation remains separate; the existing loss
-is fixed for this causal diagnosis. Full60min work precharge/necessary local
-allowance extension preserves prior ledger charges: cumulative1,354,035,028ms,
-limit1,354,800,028ms. BuildCPU8/RSS8GiB; native auditCPU16/RSS12GiB/600s plus30s
-stop/report64MiB; ownpod10GiB/128MiB storage stopmargin. Live pod admission,
-actual measurements and final checks must be recorded before a verdict.
+Independent exact-head source review passes at numerical source `aa6c679d`;
+executed head `ba49e76e` differs only in documentation. Actual Linux x86_64
+release checks pass:42 fitter tests,49 observation tests, rustfmt and release
+build, all exit0 (192.510s, CPU8, peak owned RSS5,049,069,568B).
+The audit completes all512 rows/513 gradient passes with exit0 in352.171s,
+CPU16, peak sampled owned process-group RSS1,553,018,880B. This is native CPU
+backend work on the admitted pod, not CUDA/Metal model evidence or D19 grading.
+Saved native CE0.98608077336532 matches both row average and full batch exactly;
+maximum gradient disagreement is3.430614e-9. Wrong-reference rejection passes.
+Frozen cue/source/prefix/end and input seals pass;0 proposals/updates/evaluation
+predictions. Binary SHA256
+`6b0f988bd60cebea2f4f5327f057f3608b3a23fd1e0f5adacfe821848abc45c2`;
+audit manifest SHA256
+`183465cef3e80167448f6085295f4e88341bf4222a52d92b8de8568a277fe4f6`.
+
+Independent saved-file analysis verifies all512 descriptor metadata and public
+axis partitions.721 coordinates receive nonzero credit;455 receive both signs,
+with magnitude-weighted cancellation0.57993. All721 have a legal quarter move in
+the negative-gradient direction: none is blocked by Q4 saturation. Previously
+changed248/278 have zero cancellation;137/342 have roughly0.51/0.53, and472
+has0.217. The development-gradient top8 support covers204/512 rows with nonzero full-answer credit
+versus36 for top1. Their effective row counts18.5–35.2 and largest-row credit
+fractions3.94–8.46% exclude single-row domination at those coordinates.
+Predicted linear CE benefit is not actual finite-quarter acceptance. Full-answer
+credit can include later-prefix/emission/normalization effects; occurrence
+heterogeneity does not establish typed source-record discrimination. Conflict
+at one checkpoint is not proof of representational impossibility.
+
+**Next causal discriminator:** frozen same-head one-quarter proposals at supports
+{1,8}, selected only from development gradients, with unchanged native CE and
+source/complete-answer regression accounting, and the frozen baseline eligible.
+This changes update coverage rather than repeating the8-update dose. If broader
+support improves the actual native objective and source decisions, retain the
+current representation; if credit predicts improvement without native benefit,
+isolate stopped selection/finite-step credit before changing geometry. If broad
+support improves development yet remains composition-limited, investigate an
+isolated ordered two-lane interaction, reusing the existing16-Q4 bilinear-to-table
+compiler (64KiB per padded128×128 pair), with zero-overlay/reversed-pair and
+matched-unary controls. A composed120-state H4 product alone collapses ordered
+pairs; retain tuple/occurrence distinctions. Pair selection must use development
+evidence. No representation change is adopted by this audit.
+
+DeepSeek owns the tensor-core/softmax investigation; the ordinary loss remains
+fixed here and no shared session/compiler seam changes. Durable receipts and
+reports are on canonical EUR-NO volume `lmd1pfah3y`, under
+`/workspace/uor-r4/codex/cue-credit-audit/{checks-1,audit-1,analysis-1}`.
+Full60min work precharge/necessary local allowance extension preserves prior
+ledger charges: cumulative1,354,035,028ms, limit1,354,800,028ms. BuildCPU8/RSS8GiB;
+auditCPU16/RSS12GiB/600s plus30s stop/report64MiB; ownpod10GiB/128MiB storage
+stopmargin. No general attention/chat or replicated transfer qualification.
 
 ## Prospective geometric cue composition — October 5
 
