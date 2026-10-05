@@ -1,12 +1,100 @@
 # Current UOR-R4 research state
 
-## One native-accepted endpoint refinement — October 5
+## Reader data answerability correction supersedes old fit schedule — October 5
+
+The [semantic audit](geometric-natural-panel-admission-2026-10-05.md) finds origin20/4 and address26/6 development/fresh questions unsupported by residence-only assertions. Exact store/alphabet/context eligibility160/160 and a template-registry control do not prove English entailment. Two completed order fits remain synthetic literal-role pilots; the third was deliberately stopped at30updates and is excluded. No three-order or grounded-chat verdict. Fresh question wording was development-seen.
+
+**Executed:** opt-in supported-current-role source/panel policy retains donor values, updates/reassertions and two competing records while authoring explicit current-job/current-residence statements/questions with derived provenance. At source83d6722f,49 release tests and three release examples pass; construction128/32 passes, and saved review5332 checks passes. Corrected zero-update native parity/finite-root admission passes128rows/1268targets, CE1.138694423, gradientnorm0.00323017046, own-prefix10/128. No corrected fit/fresh prediction. All12 question wordings and all donor histories are already exposed, so the32-row corrected panel is a diagnostic holdout only. **Next:** declare supported-task root learning separately from transfer; freeze an untouched composition/paraphrase panel before a transfer verdict. No runtime selected record, role label or gold mask is added; numerical geometry/learner is unchanged. Current120mincard is amended without resetting cumulative charges; CPU48/noGPU/resource bounds retained. Older dated fit-running entries below are superseded. GroundedSession untouched.
+
+## Natural competing-bank reader admission passes; root learning starts — October 5
+
+The [natural-bank admission](geometric-natural-panel-admission-2026-10-05.md) now executes original assertions/raw questions with both current records admitted through actual reference-compiled Store construction. All 128 episodes/1,268 target positions pass exact native hard-forward parity, CE1.0606013661; the unchanged parent completes9/128 own-prefix answers. All three token/self/neighbor root families have finite nonzero combined Copy-context plus query/cue credit. Opposite-role query descriptors remain distinct; cue-only gradient magnitude is unmeasured. Fresh32 is prospectively sealed and predictions remain NOT_RUN at admission. This establishes a learning connection, not an attention gain.
+
+Source5079 passes three layout tests and release. Guard source6a21 passes the focused public-context generation budget test/release and a new complete zero-update admission: all128 generated outputs, canonical loss and root-gradient family receipts match. Two fresh rows have public base98 and permit31 decisions rather than an invalid32nd read; exhaustion is failure without EOS. The wrong top-level orchestration output path was rejected before model loading and is excluded. Source/LFS verification and old-pod shutdown failures remain infrastructure evidence.
+
+**Next, running:** three prospectively admitted64-update/B8 trajectories vary episode order from the same learned initialization, freeze recurrence/categories/angular donors, and select CP0/16/32/48/64 by baseline-inclusive native answer/EOS CE before parent/selected fresh evaluation. No result is claimed until complete; incomplete runs are excluded. Preserve all checkpoints, per-row regressions and exact binding. Historical single-source preservation and coherent compiler/session binding are required before promotion. CPU48 sequential/noGPU/RSS8GiB, each1200s with1175s projection, report512MiB/new2GiB/owned10GiB/free4GiB+128MiB. Whole120min continuation charge includes analysis/export/review/preservation/delivery; cumulative1,306,635,028ms/limit1,307,400,000ms, prior charges retained. Replacement pod only; shared session untouched.
+
+## Natural reader root-credit implementation passes scoped Rust checks — October 5
+
+The [observation-credit implementation](geometric-natural-reader-observation-2026-10-05.md) connects existing natural cue/query roots to actual full cue/prefix/SourceEnd alias loss, with exact hard native forward and offline finite H4 credit. Root-only optimizer filtering, frozen transition/category/donor guards and honest export rebinding retain existing mechanisms. Two cue tests and four intended realizer tests pass at8e57 (plus two incidental tests);22 driver/reused checks pass at34592. The zero-match initial filter remains NOT_RUN; source/storage/compile failures are retained separately. No natural panel, broad gradient admission, fit or new recall result has run.
+
+**Next:** compile/exercise the drafted Rust natural-panel preparer, prospectively seal original-statement/all-current-record construction, audit reference controls/byteBPE parity/descriptor collisions, then measure actual-parent zero-update full-pipeline gradients and B8 cost before admitting genuine episode-order fits. Compiler frame/capture transfer and coherent updated-reader/compiler binding remain separate obligations. Shared session untouched; no general chat/energy qualification. CPU48/noGPU;30min source/preservation card charged once, cumulative1,294,035,028ms.
+
+## Ordered H4 frame gains are retained; selected fresh transfer remains — October 5
+
+The [six ordered-frame fits](geometric-ordered-frame-2026-10-05.md) learn256/256 training writes each and60–62/64 dev writes atCP64. Matched CP64 new-value206→253/384, new-wording276→346/384 and repetition54→66/96 improve, while whole dev606→531/768 regresses. These repeat rows across three head seeds per arm. Native dev CE selectsCP0 five times andCP64 once; all selected fresh store answers0/12. Preserve component gains, query/nonwrite regressions and all checkpoints; no retroactive selection or geometry retirement.
+
+**Next:** learn task-relevant frame/capture geometry and independently connect natural cue/query observed-root credit to actual full-bank native answer loss. Existing table-only cue/prefix losses omit this address-encoder gradient. Three-root-family, hard-forward H4-credit and honest rebinding drafts remain NOT_COMPILED/NOT_RUN. Admit zero-update parity, retained descriptor distinctions and full final-pipeline finite gradients before a prospective fit. Shared session untouched; compiler/reader binding and chat promotion remain coordinated on#1552.
+
+Source1068cf5f; LinuxCPU48;4 integer/14 library/11 driver tests and release pass; six complete fits/141,472 saved checks. Build847.055s/model25.659s; storage-interrupted compile is not a model negative. Preserve/archive verification allowed only redundant Codex raw cleanup. Whole120min card charged once, cumulative1,292,235,028ms. General chat/reasoning/full history and laptop energy remain unqualified.
+
+## Conditional span repair improves capture; frame and reader transfer remain — October 5
+
+The [six corrected fits](geometric-conditional-span-2026-10-05.md) select trained checkpoints with development writes61/54/46 relative and62/60/57 product per64; product exact store11/12 each, selected replies7/12 and all-bank5/12. Matched familiar-wording/new-value writes48→205/384 and repetition8→65/96 establish bounded capture gains. All30 same-step act/relation arrays remain byte-identical to prior fits. Legacy replay/default and native prediction are unchanged; conditional labelled-write span credit/dev selection with explicit write-row mean is the intervention.
+
+New fresh writes1/1/2 per32 in each arm; fresh store0/12 and native calls0, so learned reader **NOT_RUN**. All8 new fresh questions fail in each head. Fresh decline reasons135/192 write evaluations are NONE act/relation versus6 span fallback; raw fresh scores are unmeasured. Novel-wording/known-value factors have no span fallbacks and only3 emitted boundary failures, but62 exact-span wrong act/role outputs and72 NONE/query outputs. Capture alone cannot address this frame barrier. Exposed old/new fresh rates are not compared.
+
+Reference compilation/store12/12 independently expose reader defects: selected fresh starts12/12 then8 wrong-Copy/3 Period/1 Stop failures; full bank9/12 first-token wrong-record failures with target present,0/12 completed in both modes. These are12 unique cases on one frozen reader, not72 independent trials. Same-input old/new75 traces are identical. Preserve source-progress/end donors and all regressions.
+
+**Historical next, executed above:** native ordered whole-frame/prefix composition with exact-byte capture and same-slot prefix-carrier control; incrementally maintain H4 state, no repeated full-prefix encoding or runtime gold mask. Natural cue/query geometric source-binding credit under actual all-source native loss is an independent reader seam. Conditional interval likelihood remains a narrower continuation option, not the default remedy for rejected queries or wrong-source first tokens. Use existing offline bridge machinery if frozen frame observations cannot learn; no unchanged-head/dose loop or geometry retirement.
+
+Source13d10d22, LinuxCPU48,13 library/10 driver tests+release/six validfitsPASS; independent133,922 saved-artifact checks pass with native/BPE/backward/BLAKE3 exclusions. OriginalP1003 report-cap interruption0.322s is excluded; prospective report512→768MiB enables only missingseed retry. Ten workers511.823s/model36.062s includinginterruption, sampledRSS2.922GB. Same120mincard/cumulative1,285,035,028ms, complete416-file757,758,064B return verified/retained; noGPU/Metalunavailable, sharedsession unchanged. Generalchat/reasoning/fullhistory/laptopenergy remain unqualified.
+
+## Exact native score replay finds unused-span training defect — October 5
+
+The [zero-update replay](geometric-head-scores-2026-10-05.md) reproduces7,560 inspected predictions across six fits/five checkpoints. At CP64 familiar-frame/new-value, raw act377/384 and raw role381/384 contrast with final act171/384: failed span capture falls back to Unresolved. Earlier final-action counts are not raw-head error counts. Seventy-one correct-start truncations have negative omitted suffixes, not zero ties. Four-word repetition raw starts48/48 and truncations48/48 refine the earlier final39/48 count; selected checkpoints remain unchanged.
+
+Independent source/frozen-row review reproduces965 span signatures/100 contradictions. Span training and development CE supervise query/NONE branches that serving never uses; conditioning on256 labelled writes removes96 conflicts, leaving4 genuine article-boundary ambiguities. **Next:** explicit conditional write-target span supervision/development selection, write-row mean, all act/role and final false-write controls retained. Never gate training on predicted act or add runtime gold masking. Legacy objective retained; no fresh model result yet. Complete-interval credit and native geometric capture remain subsequent options for residual failure. No geometry retirement or unchanged-objective fit.
+
+Source51be10a0, Linux CPU48,9 library/2 probe/8 curriculum tests plus release and six replays pass; independent8,938,809 saved-arithmetic checks admit7,560 rows, with no native encoder/backward reexecution. Wrapper586.580s/replay workers25.778s, sampledRSS2.959GB. Full103-file202,837,702B return verified and retained;90min zero-update card/cumulative1,277,835,028ms. Metal unavailable/GPU unused, shared session unchanged. Fresh reader remains NOT_RUN; general chat/reasoning/Generate/full history/laptop energy remain unmet.
+
+## Balanced compiler curriculum yields development memory gains — October 5
+
+The [three-seed paired curriculum](geometric-compiler-curriculum-2026-10-05.md) now crosses frames and arbitrary values with balanced acts and nonwrite controls. Five of six local H4/Q4 heads select trained checkpoints. Product development exact store9/8/10 per12 and all-bank native replies6/5/6 per12 are actual predicted-compilation integration gains. Fresh writes remain0/32 in all six; fresh reader calls0, so reader **NOT_RUN**, not an isolated reader failure. Reference compilation/store pass; reference fresh selected/all-bank replies2/12 remain separate. Original64-row reader training supplied answer-bearing records64/64; later banks still have authored cues/extracted spans. No general chat or geometry-family verdict.
+
+**Next:** before another fit, reproduce existing hard native predictions and decompose act/relation/span contributions on matched frame/value rows. CP64 new-value2/4/8-word writes are0/16 each across all six; repeated4-word starts39/48 versus ends0/48 isolates continuation alongside wrong acts. Native capture reuse is conditional on stable starts; no unchanged-dose fit or gold mask. Eight focused tests/release and six actual fits passed atcc007092; independent463 admission and1,421,046 parameter checks pass with stated native/backward limitations. The original report-cap interruption is excluded; valid retry is a distinct root. Same180mincard, CPU-only pod48, nine workers183.747s, sampledRSS2.18GB; full356-file return retained. Shared session unchanged. Claude a–e request audited before further fit.
+
+## Local H4 compiler learns training; joint transfer stays unresolved — October 5
+
+The [six-run local compiler](geometric-local-compiler-2026-10-05.md) now executes source-only current/predecessor/next-word H4 observations with masked additive Q4 heads. Relative and ordered-product arms each use three actual head seeds on the same frozen carrier. All six select initialized step0 by native development CE: exact writes0/32, actual store answers0/4 and native completions0/4 per development/fresh split. Erroneous query acts do make native calls; this is not an isolated reader-quality verdict. Retained step64 models fit152/152 actions and128/128 training writes, improve crossed new-value writes10–18/64 and new-wording writes26–42/64 over historical Endpoint1/64 and13/64, but joint development writes remain0–2/32. No consistent transport winner; old Endpoint differs in capacity/initialization. Preserve all checkpoints, false writes and boundaries.
+
+**Historical next, executed above:** keep the local mechanism and independently cross the existing153 job/home paraphrases with broader arbitrary values, balancing acts/roles and prospectively freezing unseen conjunctions. Do not reuse the helper unchanged: it cycles the old value pool. No unchanged-dose fit or retroactive step64 selection. Capture-register reuse is conditional on correct acts/starts with measured truncation; natural reader cue learning remains separate. Three integer/seven training/two driver tests, release and touched-file fmt pass; sourceabb20ef7, approved CPU-only Linux build860.733s/model13.421s, peak sampled4.015GB, owned8.0GiB. Full archive returned SHA/set identity; independent saved review and limitations in machine evidence. Same90min card/cumulative1,261,635,028ms. Shared session untouched; general chat, Generate/reasoning/full history and laptop energy remain unmet.
+
+## Native compiler learns training but fails value transfer — October 5
+
+The [native compiler fit and zero-update audit](geometric-native-compiler-2026-10-05.md)
+retain all five checkpoints. Native development CE selects untrained step0;
+its8/44 exact outcomes are only prose abstentions, and all24 integration turns
+decline: no reader calls, so reader **NOT_RUN**. Saved steps32/48/64 nevertheless
+fit152/152 training actions and128/128 writes. Familiar wording/new values gives
+only1/64 exact writes; new wording/familiar values gives11–13/64. This is a bounded
+value/phrasing transfer negative, not a frozen-learning or geometry-family result.
+
+The same-instrument exact-template control passes every compiler row and actual
+store4/4 queries. Eight actual native calls complete selected-record2/4 versus
+all-bank0/4 with original statement cues and natural questions. Compiler transfer
+and consumer deployment-distribution transfer are separate blockers. Original
+64-row training supplied answer-bearing single records; later bank experiments
+retain authored cue/extracted-span assistance, as the [a–e audit](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5989197931)
+records. Preserve sealed originals and their execution-count erratum.
+
+**Historical next, now executed above:** implement target-free ordered local occurrence/predecessor geometry
+for act/relation and nearby source-frame observations for span, reusing existing
+compiler contracts and labelled paraphrases. No unchanged endpoint fit. Keep
+reader cue/query parity as a separate measured learning boundary; do not replace
+natural text with authored gold cues. Require real learning seeds (three for a
+benchmark verdict; two independent chat lineages), a positive control and complete
+source/artifact/run identities before aggregation. Current deterministic carrier
+does not supply those replications. Shared session untouched; coordinate#1552.
+General chat, Generate, reasoning, full history and laptop energy remain unmet.
+
+## Retained historical native-accepted endpoint refinement — October 5
 
 The [bounded discrete round](geometric-source-end-native-refinement-2026-10-05.md) selects `gradient-stop-q2` from six frozen proposals/four unique payloads using actual full128 native global-alias CE:0.2412554844→0.2181241687. Complete development92→96/128 (+4/−0), banks33→37/64, singles59/64 unchanged; newly frozen seed16 transfer7→9/32 (+2/−0). Complete pairs9→10/32 development but0/16 transfer. Retain the selected Stop field and every rejected proposal; no general chat qualification. Rejected own-prefix generation is NOT_RUN under the prospective storage policy.
 
 Numerical source5eca7aec/executablecdb09a70; Linux CPU-only scoped formatting/five tests/release pass, build184.874s and worker18.284s exit0. Static adversarial source review approved; independent saved-outcome audit205817 checks PASS. All six new completions repair missed EOS; selected changes37 Stop coefficients, zero Period. Wrong-Source/early-Stop/punctuation failures unchanged. Verified same-pod `/workspace` archive preserves74 files194596060B; local disk fluctuation below128MiB prevented large downloads. Same charged180min card, new ledger charge0. No GPU/shared-session edits.
 
-**Next:** end this finite calibration round and reuse/native-lower existing learned compiler act/key/span decisions into actual store→native consumer behavior on varied English. Learn consistent and separate frame addresses plus memory/prose discrimination; exposed prose false writes and compiler float scoring remain integration risks. Coordinate #1552 ownership before shared compiler changes. Predecessor geometric binding remains a separate wrong-Source donor. General Generate/chat/reasoning/full-history/laptop energy remain unmet.
+**Historical next (superseded by the active reader plan above):** end this finite calibration round and reuse/native-lower existing learned compiler act/key/span decisions into actual store→native consumer behavior on varied English. Learn consistent and separate frame addresses plus memory/prose discrimination; exposed prose false writes and compiler float scoring remain integration risks. Coordinate #1552 ownership before shared compiler changes. Predecessor geometric binding remains a separate wrong-Source donor. General Generate/chat/reasoning/full-history/laptop energy remain unmet.
 
 ## Learned endpoint geometry improves bounded native completion — October 5
 

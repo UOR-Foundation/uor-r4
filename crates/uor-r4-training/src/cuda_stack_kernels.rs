@@ -585,6 +585,386 @@ extern "C" __global__ void recurrence_param_reduce(
 }
 
 // ---------------------------------------------------------------------------
+// 6b. Recurrence core, split path. The arithmetic of recurrence_core_fwd and
+// recurrence_core_bwd, expression for expression, with every quantity that
+// does not depend on the carried quaternion moved into kernels of one thread
+// per (window, position, lane). Only the 4-float carry stays serial, in
+// scans of one thread per (window, lane) that load a chunk of positions
+// before using them. Each value comes from the same expression and the f64
+// partials are summed in the same order, so the outputs equal the
+// single-kernel path's bit for bit (the CUDA parity tests check this).
+// ---------------------------------------------------------------------------
+#define RECURRENCE_CHUNK 8
+
+// The split kernels must round as the single kernels' machine code does,
+// and the PTX assembler contracts plain f32 multiplies and adds into fused
+// multiply-adds differently in different kernels. So the operations whose
+// contraction matters are spelled with the non-contracting intrinsics, in
+// the order and with the fusions of the single kernels' sm_80 code
+// (`ptxas` of CUDA 12.8; the CUDA parity tests compare the two paths bit
+// for bit at the exact head).
+
+// 1 - lambda^2, fused as both single kernels compute it.
+__device__ __forceinline__ float recurrence_complement(float lambda) {
+    return __fmaf_rn(-lambda, lambda, 1.0f);
+}
+
+// held' = q held + keep c, as recurrence_core_fwd computes it.
+__device__ __forceinline__ float4 recurrence_step(float4 q, float4 h, float4 c, float keep) {
+    float a = __fmul_rn(q.y, h.y);
+    a = __fmaf_rn(q.x, h.x, -a);
+    a = __fmaf_rn(q.z, -h.z, a);
+    a = __fmaf_rn(q.w, -h.w, a);
+    float b = __fmul_rn(q.y, h.x);
+    b = __fmaf_rn(q.x, h.y, b);
+    b = __fmaf_rn(q.z, h.w, b);
+    b = __fmaf_rn(q.w, -h.z, b);
+    float d = __fmul_rn(q.y, h.w);
+    d = __fmaf_rn(q.x, h.z, -d);
+    d = __fmaf_rn(q.z, h.x, d);
+    d = __fmaf_rn(q.w, h.y, d);
+    float e = __fmul_rn(q.y, h.z);
+    e = __fmaf_rn(q.x, h.w, e);
+    e = __fmaf_rn(q.z, -h.y, e);
+    e = __fmaf_rn(q.w, h.x, e);
+    return make_float4(__fmaf_rn(keep, c.x, a), __fmaf_rn(keep, c.y, b),
+                       __fmaf_rn(keep, c.z, d), __fmaf_rn(keep, c.w, e));
+}
+
+// conj(q) h, as recurrence_core_bwd computes the carried adjoint's transport.
+__device__ __forceinline__ float4 recurrence_conj_transport(float4 q, float4 h) {
+    float a = __fmul_rn(h.y, q.y);
+    a = __fmaf_rn(h.x, q.x, a);
+    a = __fmaf_rn(h.z, q.z, a);
+    a = __fmaf_rn(h.w, q.w, a);
+    float b = __fmul_rn(h.x, q.y);
+    b = __fmaf_rn(h.y, q.x, -b);
+    b = __fmaf_rn(-h.w, q.z, b);
+    b = __fmaf_rn(h.z, q.w, b);
+    float d = __fmul_rn(h.w, q.y);
+    d = __fmaf_rn(h.z, q.x, d);
+    d = __fmaf_rn(-h.x, q.z, d);
+    d = __fmaf_rn(-h.y, q.w, d);
+    float e = __fmul_rn(h.z, q.y);
+    e = __fmaf_rn(h.w, q.x, -e);
+    e = __fmaf_rn(h.y, q.z, e);
+    e = __fmaf_rn(-h.x, q.w, e);
+    return make_float4(a, b, d, e);
+}
+
+// total conj(s), as recurrence_core_bwd computes dq.
+__device__ __forceinline__ float4 recurrence_dq(float4 t, float4 s) {
+    float a = __fmul_rn(t.y, s.y);
+    a = __fmaf_rn(t.x, s.x, a);
+    a = __fmaf_rn(t.z, s.z, a);
+    a = __fmaf_rn(t.w, s.w, a);
+    float b = __fmul_rn(t.x, s.y);
+    b = __fmaf_rn(t.y, s.x, -b);
+    b = __fmaf_rn(-t.z, s.w, b);
+    b = __fmaf_rn(t.w, s.z, b);
+    float d = __fmul_rn(t.x, s.z);
+    d = __fmaf_rn(t.y, s.w, -d);
+    d = __fmaf_rn(t.z, s.x, d);
+    d = __fmaf_rn(-t.w, s.y, d);
+    float e = __fmul_rn(t.y, s.z);
+    e = __fmaf_rn(t.x, -s.w, -e);
+    e = __fmaf_rn(t.z, s.y, e);
+    e = __fmaf_rn(t.w, s.x, e);
+    return make_float4(a, b, d, e);
+}
+
+// a . b as y*y first, then x, z and w fused: the single kernels' dot order.
+__device__ __forceinline__ float recurrence_dot(float4 a, float4 b) {
+    float s = __fmul_rn(a.y, b.y);
+    s = __fmaf_rn(a.x, b.x, s);
+    s = __fmaf_rn(a.z, b.z, s);
+    return __fmaf_rn(a.w, b.w, s);
+}
+
+// Per (window, position, lane): the drive c, the transition q = lambda unit
+// and the drive weight keep, as the single-kernel forward computes them.
+extern "C" __global__ void recurrence_prep(
+    const float* __restrict__ branches, const float* __restrict__ gates,
+    const float* __restrict__ params, const float* __restrict__ log_a,
+    float* __restrict__ drive_out, float* __restrict__ q_out, float* __restrict__ keep_out,
+    uint time, uint width, uint lanes, uint gate_width, uint rotation, uint total
+) {
+    u64 id = (u64)blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= (u64)total) return;
+    u64 row = id / lanes;
+    uint lane = (uint)(id % lanes);
+    uint t = (uint)(row % time);
+    uint ch = 4 * lane;
+    u64 two_w = 2 * (u64)width;
+    const float* taps = params;
+    const float* bias = params + 4 * width;
+    float la = log_a[lane];
+    float c[4];
+    for (uint k = 0; k < 4; ++k) {
+        float c_val = bias[ch + k];
+        for (uint shift = 0; shift < 4 && shift <= t; ++shift) {
+            c_val = __fmaf_rn(taps[shift * width + ch + k],
+                              branches[(row - shift) * two_w + ch + k], c_val);
+        }
+        c[k] = c_val;
+    }
+    float4 drive = make_float4(c[0], c[1], c[2], c[3]);
+    u64 base = row * width + ch;
+    st4(drive_out + base, drive);
+
+    u64 gate_row = row * gate_width;
+    float opening = sigmoid_f(gates[gate_row + lane]);
+    float lambda = expf(8.0f * opening * la);
+    float complement = recurrence_complement(lambda);
+    float keep = (complement < 1e-6f) ? 1e-3f : sqrtf(complement);
+    float norm;
+    float4 unit = transport_unit(gates, gate_row, lanes, lane, rotation, &norm);
+    st4(q_out + base, make_float4(__fmul_rn(unit.x, lambda), __fmul_rn(unit.y, lambda),
+                                  __fmul_rn(unit.z, lambda), __fmul_rn(unit.w, lambda)));
+    keep_out[row * lanes + lane] = keep;
+}
+
+// One thread per (window, lane): held_t = q_t held_{t-1} + keep_t c_t.
+extern "C" __global__ void recurrence_scan_fwd(
+    const float* __restrict__ q, const float* __restrict__ drive,
+    const float* __restrict__ keep, float* __restrict__ state_out,
+    uint time, uint width, uint lanes, uint total_lanes
+) {
+    uint lane_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (lane_id >= total_lanes) return;
+    uint b = lane_id / lanes;
+    uint lane = lane_id % lanes;
+    uint ch = 4 * lane;
+    float4 held = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    for (uint t0 = 0; t0 < time; t0 += RECURRENCE_CHUNK) {
+        uint n = min((uint)RECURRENCE_CHUNK, time - t0);
+        float4 qs[RECURRENCE_CHUNK];
+        float4 ds[RECURRENCE_CHUNK];
+        float ks[RECURRENCE_CHUNK];
+#pragma unroll
+        for (uint i = 0; i < RECURRENCE_CHUNK; ++i) {
+            if (i < n) {
+                u64 row = (u64)b * time + t0 + i;
+                u64 base = row * width + ch;
+                qs[i] = ld4(q + base);
+                ds[i] = ld4(drive + base);
+                ks[i] = keep[row * lanes + lane];
+            }
+        }
+#pragma unroll
+        for (uint i = 0; i < RECURRENCE_CHUNK; ++i) {
+            if (i < n) {
+                held = recurrence_step(qs[i], held, ds[i], ks[i]);
+                st4(state_out + ((u64)b * time + t0 + i) * width + ch, held);
+            }
+        }
+    }
+}
+
+// Per element: out = held * gelu(output branch).
+extern "C" __global__ void recurrence_out(
+    const float* __restrict__ state, const float* __restrict__ branches,
+    float* __restrict__ out, uint width, uint total
+) {
+    u64 id = (u64)blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= (u64)total) return;
+    u64 row = id / width;
+    uint c = (uint)(id % width);
+    out[id] = state[id] * gelu_value(branches[row * 2 * (u64)width + width + c]);
+}
+
+// Per (window, position, lane): the output branch's gradient, and
+// gelu(output branch) written into `gelu`.
+extern "C" __global__ void recurrence_bwd_direct(
+    const float* __restrict__ branches, const float* __restrict__ state,
+    const float* __restrict__ d_out, float* __restrict__ d_branches,
+    float* __restrict__ gelu, uint width, uint lanes, uint total
+) {
+    u64 id = (u64)blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= (u64)total) return;
+    u64 row = id / lanes;
+    uint lane = (uint)(id % lanes);
+    uint ch = 4 * lane;
+    u64 base = row * width + ch;
+    u64 branch_row = row * 2 * (u64)width;
+    float4 st = ld4(state + base);
+    float4 dy = ld4(d_out + base);
+    float g[4];
+    for (uint k = 0; k < 4; ++k) {
+        float2 vs = gelu_value_slope(branches[branch_row + width + ch + k]);
+        d_branches[branch_row + width + ch + k] = comp4(dy, k) * comp4(st, k) * vs.y;
+        g[k] = vs.x;
+    }
+    st4(gelu + base, make_float4(g[0], g[1], g[2], g[3]));
+}
+
+// One thread per (window, lane), positions in reverse: the carried adjoint
+// total_t = dy_t gelu_t + conj(q_{t+1}) total_{t+1}, overwriting `gelu`.
+extern "C" __global__ void recurrence_scan_bwd(
+    const float* __restrict__ q, const float* __restrict__ d_out, float* gelu,
+    uint time, uint width, uint lanes, uint total_lanes
+) {
+    uint lane_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (lane_id >= total_lanes) return;
+    uint b = lane_id / lanes;
+    uint lane = lane_id % lanes;
+    uint ch = 4 * lane;
+    float4 held = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    // Chunks cover positions [end - n, end), walked from the last position.
+    for (uint end = time; end > 0;) {
+        uint n = min((uint)RECURRENCE_CHUNK, end);
+        float4 dys[RECURRENCE_CHUNK];
+        float4 gs[RECURRENCE_CHUNK];
+        float4 qs[RECURRENCE_CHUNK];
+#pragma unroll
+        for (uint i = 0; i < RECURRENCE_CHUNK; ++i) {
+            if (i < n) {
+                uint t = end - 1 - i;
+                u64 base = ((u64)b * time + t) * width + ch;
+                dys[i] = ld4(d_out + base);
+                gs[i] = ld4(gelu + base);
+                qs[i] = (t + 1 < time) ? ld4(q + base + width)
+                                       : make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+            }
+        }
+#pragma unroll
+        for (uint i = 0; i < RECURRENCE_CHUNK; ++i) {
+            if (i < n) {
+                uint t = end - 1 - i;
+                float4 dy = dys[i];
+                float4 g = gs[i];
+                float4 total = make_float4(__fmul_rn(g.x, dy.x), __fmul_rn(g.y, dy.y),
+                                           __fmul_rn(g.z, dy.z), __fmul_rn(g.w, dy.w));
+                if (t + 1 < time) {
+                    float4 m = recurrence_conj_transport(qs[i], held);
+                    total = make_float4(__fadd_rn(total.x, m.x), __fadd_rn(total.y, m.y),
+                                        __fadd_rn(total.z, m.z), __fadd_rn(total.w, m.w));
+                }
+                held = total;
+                st4(gelu + ((u64)b * time + t) * width + ch, total);
+            }
+        }
+        end -= n;
+    }
+}
+
+// Per (window, position, lane): every gradient that follows from the carried
+// adjoint `total`. Writes d_gates, dd = keep total and the f32 term of
+// d log a.
+extern "C" __global__ void recurrence_bwd_post(
+    const float* __restrict__ gates, const float* __restrict__ log_a,
+    const float* __restrict__ state, const float* __restrict__ drive,
+    const float* __restrict__ total_in, float* __restrict__ d_gates,
+    float* __restrict__ dd_out, float* __restrict__ log_term,
+    uint time, uint width, uint lanes, uint gate_width, uint rotation, uint total_threads
+) {
+    u64 id = (u64)blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= (u64)total_threads) return;
+    u64 row = id / lanes;
+    uint lane = (uint)(id % lanes);
+    uint t = (uint)(row % time);
+    uint ch = 4 * lane;
+    u64 base = row * width + ch;
+    float la = log_a[lane];
+    u64 gate_row = row * gate_width;
+    float opening = sigmoid_f(gates[gate_row + lane]);
+    float lambda = expf(8.0f * opening * la);
+    float complement = recurrence_complement(lambda);
+    bool clamped = complement < 1e-6f;
+    float keep = clamped ? 1e-3f : sqrtf(complement);
+    float norm;
+    float4 unit = transport_unit(gates, gate_row, lanes, lane, rotation, &norm);
+    float4 total = ld4(total_in + base);
+    float4 c = ld4(drive + base);
+    float d_keep = recurrence_dot(c, total);
+    float4 dd = make_float4(__fmul_rn(keep, total.x), __fmul_rn(keep, total.y),
+                            __fmul_rn(keep, total.z), __fmul_rn(keep, total.w));
+    float4 dq = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    if (t > 0) {
+        dq = recurrence_dq(total, ld4(state + base - width));
+    }
+    float d_lambda = recurrence_dot(dq, unit);
+    if (!clamped) {
+        d_lambda = __fsub_rn(d_lambda, __fdiv_rn(__fmul_rn(lambda, d_keep), keep));
+    }
+    float d_log_lambda = d_lambda * lambda;
+    float d_opening = d_log_lambda * 8.0f * la;
+    log_term[row * lanes + lane] = d_log_lambda * 8.0f * opening;
+    d_gates[gate_row + lane] = d_opening * opening * (1.0f - opening);
+    if (rotation != 0) {
+        float4 du = make_float4(__fmul_rn(lambda, dq.x), __fmul_rn(lambda, dq.y),
+                                __fmul_rn(lambda, dq.z), __fmul_rn(lambda, dq.w));
+        float projection = recurrence_dot(du, unit);
+        u64 r = gate_row + lanes + ch;
+        d_gates[r + 0] = __fdiv_rn(__fmaf_rn(projection, -unit.x, du.x), norm);
+        d_gates[r + 1] = __fdiv_rn(__fmaf_rn(projection, -unit.y, du.y), norm);
+        if (rotation == 2) {
+            // j and k were zeroed before normalization.
+            d_gates[r + 2] = 0.0f;
+            d_gates[r + 3] = 0.0f;
+        } else {
+            d_gates[r + 2] = __fdiv_rn(__fmaf_rn(projection, -unit.z, du.z), norm);
+            d_gates[r + 3] = __fdiv_rn(__fmaf_rn(projection, -unit.w, du.w), norm);
+        }
+    }
+    st4(dd_out + base, dd);
+}
+
+// One thread per (window, channel), positions in reverse: the convolution's
+// input gradient (contributions in the single-kernel order, shift 3 first)
+// and the window's f64 tap, bias and d log a partials in its order.
+extern "C" __global__ void recurrence_bwd_params(
+    const float* __restrict__ branches, const float* __restrict__ params,
+    const float* __restrict__ dd, const float* __restrict__ log_term,
+    float* __restrict__ d_branches, double* __restrict__ partials,
+    uint time, uint width, uint lanes, uint total_channels, uint param_len
+) {
+    uint id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= total_channels) return;
+    uint b = id / width;
+    uint c = id % width;
+    uint lane = c / 4;
+    bool lane_owner = (c % 4) == 0;
+    u64 two_w = 2 * (u64)width;
+    float tap0 = params[c];
+    float tap1 = params[width + c];
+    float tap2 = params[2 * width + c];
+    float tap3 = params[3 * width + c];
+    double d_bias = 0.0;
+    double d_tap0 = 0.0, d_tap1 = 0.0, d_tap2 = 0.0, d_tap3 = 0.0;
+    double d_log_a = 0.0;
+    float dd1 = 0.0f, dd2 = 0.0f, dd3 = 0.0f;
+#pragma unroll 4
+    for (int ti = (int)time - 1; ti >= 0; --ti) {
+        uint t = (uint)ti;
+        u64 row = (u64)b * time + t;
+        float dd0 = dd[row * width + c];
+        d_bias += (double)dd0;
+        d_tap0 += (double)__fmul_rn(dd0, branches[row * two_w + c]);
+        if (t >= 1) d_tap1 += (double)__fmul_rn(dd0, branches[(row - 1) * two_w + c]);
+        if (t >= 2) d_tap2 += (double)__fmul_rn(dd0, branches[(row - 2) * two_w + c]);
+        if (t >= 3) d_tap3 += (double)__fmul_rn(dd0, branches[(row - 3) * two_w + c]);
+        float acc = 0.0f;
+        if (t + 3 < time) acc = __fmaf_rn(tap3, dd3, acc);
+        if (t + 2 < time) acc = __fmaf_rn(tap2, dd2, acc);
+        if (t + 1 < time) acc = __fmaf_rn(tap1, dd1, acc);
+        acc = __fmaf_rn(tap0, dd0, acc);
+        d_branches[row * two_w + c] = acc;
+        if (lane_owner) d_log_a += (double)log_term[row * lanes + lane];
+        dd3 = dd2;
+        dd2 = dd1;
+        dd1 = dd0;
+    }
+    double* p = partials + (u64)b * param_len;
+    p[0 * width + c] = d_tap0;
+    p[1 * width + c] = d_tap1;
+    p[2 * width + c] = d_tap2;
+    p[3 * width + c] = d_tap3;
+    p[4 * width + c] = d_bias;
+    if (lane_owner) p[5 * width + lane] = d_log_a;
+}
+
+// ---------------------------------------------------------------------------
 // 7. General fused read: Dot, Lorentz or L2 score, NoRead slot, age table.
 // Blocks are index = window * heads + head; rows are index * time + t; the
 // square scratch is [index, t, j] with j <= t used.
@@ -940,6 +1320,14 @@ extern "C" __global__ void read_dbeta(
     d_aux[read_beta_offset(d) + id] = (float)sum;
 }
 
+// Diagnostic only (UOR_CUDA_POISON_UNINIT=1): fills a fresh unspecified
+// buffer with all-ones words, a NaN in f32 and f64, so a read of an element
+// no kernel wrote shows up as a nonfinite result.
+extern "C" __global__ void poison_words(uint* dst, uint words) {
+    uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < words) dst[i] = 0xFFFFFFFFu;
+}
+
 // ---------------------------------------------------------------------------
 // 8. AdamW step in place, the CPU `adam_step`'s f32 operations in its order
 // (non-contracting intrinsics, IEEE sqrt and division).
@@ -1204,6 +1592,65 @@ extern "C" __global__ void pointer_sum(
     for (uint i = 0; i < n; ++i) sum += values[i];
     out[0] = (float)(sum / divisor[0]);
 }
+
+// ---------------------------------------------------------------------------
+// 10. Global gradient squared norm, bit-identical to Candle's
+// `x.sqr()?.sum_all()` per tensor and `cat(..).sum_all()` over the tensors.
+// Candle's `fast_sum` runs one block of `width = min(1024, n).next_power_of_two()`
+// threads: thread `t` adds elements t, t + width, ... into a zeroed f32 in
+// index order, then a shared-memory tree halves `width` down to one value.
+// `sq_lanes` computes those per-thread sums for `width` lanes spread over
+// many blocks (the same f32 additions in the same order; `__fmul_rn` and
+// `__fadd_rn` forbid contraction), and `sq_tree` replays the tree, one block
+// per segment of `width` lane sums.
+// ---------------------------------------------------------------------------
+extern "C" __global__ void sq_lanes(
+    const float* x, float* lanes_out, uint n, uint width, uint square
+) {
+    uint lane = blockIdx.x * blockDim.x + threadIdx.x;
+    if (lane >= width) return;
+    float acc = 0.0f;
+    u64 i = lane;
+    u64 stride = width;
+    u64 total = n;
+    // Eight loads in flight, then their additions in index order.
+    while (i + 7 * stride < total) {
+        float v[8];
+#pragma unroll
+        for (int k = 0; k < 8; ++k) v[k] = x[i + (u64)k * stride];
+#pragma unroll
+        for (int k = 0; k < 8; ++k) {
+            float term = square ? __fmul_rn(v[k], v[k]) : v[k];
+            acc = __fadd_rn(acc, term);
+        }
+        i += 8 * stride;
+    }
+    while (i < total) {
+        float value = x[i];
+        float term = square ? __fmul_rn(value, value) : value;
+        acc = __fadd_rn(acc, term);
+        i += stride;
+    }
+    lanes_out[lane] = acc;
+}
+
+// segments[2 * b] = offset of block b's lane sums, segments[2 * b + 1] = its
+// power-of-two width (<= 1024, <= blockDim.x). out[b] = the tree's result.
+extern "C" __global__ void sq_tree(
+    const float* lane_sums, const uint* segments, float* out
+) {
+    __shared__ float shr[1024];
+    uint b = blockIdx.x;
+    uint offset = segments[2 * b];
+    uint width = segments[2 * b + 1];
+    uint t = threadIdx.x;
+    if (t < width) shr[t] = lane_sums[(u64)offset + t];
+    for (uint s = width / 2; s > 0; s >>= 1) {
+        __syncthreads();
+        if (t < s) shr[t] = __fadd_rn(shr[t], shr[t + s]);
+    }
+    if (t == 0) out[b] = shr[0];
+}
 "#;
 
     /// The stack kernels' PTX, compiled once per process by NVRTC.
@@ -1274,6 +1721,51 @@ extern "C" __global__ void pointer_sum(
         T: cudarc::driver::DeviceRepr + cudarc::driver::ValidAsZeroBits,
     {
         device.alloc_zeros::<T>(len.max(1))
+    }
+
+    /// A device buffer of `len` elements (at least one) whose contents are
+    /// unspecified, for an output the following kernels write in full before
+    /// anything reads it: it skips [`zeros`]'s fill. Each call site names the
+    /// kernel that covers the buffer; a buffer a kernel writes only in part
+    /// (or not at all in some configuration) and later reads must stay
+    /// [`zeros`].
+    ///
+    /// `UOR_CUDA_POISON_UNINIT=1` (diagnostic) fills each such buffer with
+    /// NaN words first, so a kernel that leaves an element unwritten and a
+    /// later read of it surface as nonfinite values in the parity tests.
+    pub fn uninit<T>(device: &CudaDevice, len: usize) -> Result<CudaSlice<T>>
+    where
+        T: cudarc::driver::DeviceRepr + cudarc::driver::ValidAsZeroBits,
+    {
+        // SAFETY: `alloc` returns device memory that is not initialized.
+        // The element types used here (f32, f64, u32) have no invalid bit
+        // patterns, so unspecified device bytes are never undefined
+        // behaviour on the host; callers pass only buffers whose every
+        // element their kernels write before any read.
+        let slice = unsafe { device.alloc::<T>(len.max(1)) }?;
+        if poison_uninit() {
+            let words = slice.len() * std::mem::size_of::<T>() / 4;
+            // SAFETY: the view covers `words` whole 4-byte words inside the
+            // allocation (f32, f64 and u32 sizes are multiples of 4), and
+            // any bit pattern is a valid u32.
+            let view = unsafe { slice.transmute::<u32>(words) }
+                .ok_or_else(|| Error::Msg("poison view exceeds its buffer".into()))?;
+            let size = u32::try_from(words)
+                .map_err(|_| Error::Msg("poisoned buffer exceeds u32 words".into()))?;
+            launch(
+                device,
+                "poison_words",
+                words,
+                &[Arg::U(view), Arg::U32(size)],
+            )?;
+        }
+        Ok(slice)
+    }
+
+    /// `UOR_CUDA_POISON_UNINIT=1`: [`uninit`] buffers start as NaN words.
+    fn poison_uninit() -> bool {
+        static POISON: OnceLock<bool> = OnceLock::new();
+        *POISON.get_or_init(|| std::env::var("UOR_CUDA_POISON_UNINIT").is_ok_and(|v| v == "1"))
     }
 
     /// Threads per block of a 1-D launch.

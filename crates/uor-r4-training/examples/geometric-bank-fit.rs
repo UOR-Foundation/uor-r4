@@ -73,39 +73,39 @@ const UPDATES: usize = 64;
 const BATCH: usize = 8;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Args {
-    mode: String,
-    cue_score_mode: Option<CueScoreMode>,
-    prefix_score_mode: Option<PrefixScoreMode>,
-    source_end_score_mode:
+pub(super) struct Args {
+    pub(super) mode: String,
+    pub(super) cue_score_mode: Option<CueScoreMode>,
+    pub(super) prefix_score_mode: Option<PrefixScoreMode>,
+    pub(super) source_end_score_mode:
         Option<uor_r4_integer::geometric_source_end_transport::SourceEndScoreMode>,
-    frozen_cue_bundle: Option<PathBuf>,
-    frozen_cue_native_metadata_sha256: Option<String>,
-    frozen_cue_packed_sha256: Option<String>,
-    frozen_prefix_bundle: Option<PathBuf>,
-    frozen_prefix_native_metadata_sha256: Option<String>,
-    frozen_prefix_packed_sha256: Option<String>,
-    learned_source_weights: Option<PathBuf>,
-    learned_native_artifact: Option<PathBuf>,
-    learned_trusted_native_binding: Option<PathBuf>,
-    source_end_incumbent_fit: Option<PathBuf>,
-    source_end_incumbent_manifest_sha256: Option<String>,
-    source_weights: PathBuf,
-    native_artifact: PathBuf,
-    trusted_native_binding: PathBuf,
-    development_panel: PathBuf,
-    development_manifest_sha256: String,
-    fresh_panel: PathBuf,
-    fresh_manifest_sha256: String,
-    admission: Option<PathBuf>,
-    admission_manifest_sha256: Option<String>,
-    fit_authorization: Option<PathBuf>,
-    exposed_controls: Option<PathBuf>,
-    out: PathBuf,
-    maximum_seconds: u64,
-    maximum_context_tokens: usize,
-    maximum_generation_tokens: usize,
-    maximum_report_bytes: usize,
+    pub(super) frozen_cue_bundle: Option<PathBuf>,
+    pub(super) frozen_cue_native_metadata_sha256: Option<String>,
+    pub(super) frozen_cue_packed_sha256: Option<String>,
+    pub(super) frozen_prefix_bundle: Option<PathBuf>,
+    pub(super) frozen_prefix_native_metadata_sha256: Option<String>,
+    pub(super) frozen_prefix_packed_sha256: Option<String>,
+    pub(super) learned_source_weights: Option<PathBuf>,
+    pub(super) learned_native_artifact: Option<PathBuf>,
+    pub(super) learned_trusted_native_binding: Option<PathBuf>,
+    pub(super) source_end_incumbent_fit: Option<PathBuf>,
+    pub(super) source_end_incumbent_manifest_sha256: Option<String>,
+    pub(super) source_weights: PathBuf,
+    pub(super) native_artifact: PathBuf,
+    pub(super) trusted_native_binding: PathBuf,
+    pub(super) development_panel: PathBuf,
+    pub(super) development_manifest_sha256: String,
+    pub(super) fresh_panel: PathBuf,
+    pub(super) fresh_manifest_sha256: String,
+    pub(super) admission: Option<PathBuf>,
+    pub(super) admission_manifest_sha256: Option<String>,
+    pub(super) fit_authorization: Option<PathBuf>,
+    pub(super) exposed_controls: Option<PathBuf>,
+    pub(super) out: PathBuf,
+    pub(super) maximum_seconds: u64,
+    pub(super) maximum_context_tokens: usize,
+    pub(super) maximum_generation_tokens: usize,
+    pub(super) maximum_report_bytes: usize,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -132,10 +132,10 @@ struct Inputs {
 }
 #[derive(Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
-struct Packet {
-    id: String,
+pub(super) struct Packet {
+    pub(super) id: String,
     segments: Vec<Segment>,
-    query_ids: Vec<u32>,
+    pub(super) query_ids: Vec<u32>,
     actual_prefix_ids: Vec<u32>,
 }
 #[derive(Deserialize, serde::Serialize)]
@@ -201,13 +201,13 @@ struct Label {
     id: String,
     answers: FrozenAnswers,
 }
-fn invalid(s: impl Into<String>) -> io::Error {
+pub(super) fn invalid(s: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, s.into())
 }
-fn read_json(path: &Path) -> Result<Value> {
+pub(super) fn read_json(path: &Path) -> Result<Value> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
-fn parameter_receipts(parameters: &BTreeMap<String, Var>) -> Result<Value> {
+pub(super) fn parameter_receipts(parameters: &BTreeMap<String, Var>) -> Result<Value> {
     let mut receipts = BTreeMap::new();
     for (name, var) in parameters {
         let values = var.flatten_all()?.to_vec1::<f32>()?;
@@ -219,7 +219,7 @@ fn parameter_receipts(parameters: &BTreeMap<String, Var>) -> Result<Value> {
     }
     Ok(serde_json::to_value(receipts)?)
 }
-fn peak_rss_kib() -> Option<u64> {
+pub(super) fn peak_rss_kib() -> Option<u64> {
     fs::read_to_string("/proc/self/status")
         .ok()?
         .lines()
@@ -231,7 +231,7 @@ fn peak_rss_kib() -> Option<u64> {
                 .ok()
         })
 }
-fn executable() -> Result<(PathBuf, &'static str)> {
+pub(super) fn executable() -> Result<(PathBuf, &'static str)> {
     match std::env::current_exe() {
         Ok(path) => Ok((path, "current_exe")),
         Err(error) => {
@@ -244,7 +244,7 @@ fn executable() -> Result<(PathBuf, &'static str)> {
     }
 }
 
-fn directory_bytes(path: &Path) -> Result<usize> {
+pub(super) fn directory_bytes(path: &Path) -> Result<usize> {
     let mut n = 0usize;
     for e in fs::read_dir(path)? {
         let e = e?;
@@ -262,10 +262,10 @@ fn directory_bytes(path: &Path) -> Result<usize> {
     }
     Ok(n)
 }
-fn write_json(root: &Path, name: &str, v: &Value) -> Result<()> {
+pub(super) fn write_json(root: &Path, name: &str, v: &Value) -> Result<()> {
     write_json_limited(root, name, v, REPORT_CAP)
 }
-fn write_json_limited(root: &Path, name: &str, v: &Value, cap: usize) -> Result<()> {
+pub(super) fn write_json_limited(root: &Path, name: &str, v: &Value, cap: usize) -> Result<()> {
     let b = serde_json::to_vec(v)?;
     let p = root.join(name);
     let previous = fs::metadata(&p).map_or(0, |m| m.len() as usize);
@@ -296,7 +296,7 @@ fn write_json_limited(root: &Path, name: &str, v: &Value, cap: usize) -> Result<
     fs::write(p, b)?;
     Ok(())
 }
-fn read_capped(path: &Path) -> Result<Vec<u8>> {
+pub(super) fn read_capped(path: &Path) -> Result<Vec<u8>> {
     use std::io::Read;
     let f = fs::File::open(path)?;
     if f.metadata()?.len() > 16 * 1024 * 1024 {
@@ -309,7 +309,7 @@ fn read_capped(path: &Path) -> Result<Vec<u8>> {
     }
     Ok(b)
 }
-fn nearest_seal(p: &Path) -> Result<PathBuf> {
+pub(super) fn nearest_seal(p: &Path) -> Result<PathBuf> {
     for a in p.ancestors() {
         if a.join(report_output::MANIFEST_FILE).is_file() {
             return Ok(a.to_path_buf());
@@ -317,7 +317,7 @@ fn nearest_seal(p: &Path) -> Result<PathBuf> {
     }
     Err(invalid("required sealed source ancestor absent").into())
 }
-fn deadline(a: &Args, start: Instant) -> Result<()> {
+pub(super) fn deadline(a: &Args, start: Instant) -> Result<()> {
     if start.elapsed().as_secs() >= a.maximum_seconds
         || peak_rss_kib().is_some_and(|n| n > 8 * 1024 * 1024)
     {
@@ -522,14 +522,14 @@ fn checked_args() -> Result<Args> {
     }
     Ok(a)
 }
-struct Episode {
-    packet: Packet,
-    answers: FrozenAnswers,
-    target: Vec<u32>,
+pub(super) struct Episode {
+    pub(super) packet: Packet,
+    pub(super) answers: FrozenAnswers,
+    pub(super) target: Vec<u32>,
     views: Vec<Option<uor_r4_integer::geometric_source_emission_view::SourceEmissionView>>,
 }
 impl Episode {
-    fn segments(&self) -> Result<Vec<SourceBankSegment<'_>>> {
+    pub(super) fn segments(&self) -> Result<Vec<SourceBankSegment<'_>>> {
         self.packet
             .segments
             .iter()
@@ -567,12 +567,50 @@ fn validate_answers(answers: &FrozenAnswers, single_source: bool) -> Result<()> 
     }
     Ok(())
 }
-fn load_panel(
+#[derive(Clone, Copy)]
+enum PanelLayout {
+    Legacy,
+    NaturalAllBank,
+}
+pub(super) const NATURAL_PANEL_LAYOUT: &str = "raw-natural-allbank-pairs/1";
+pub(super) fn load_natural_panel(
+    root: &Path,
+    expected_count: usize,
+    native: &IntegerRealizer,
+    tok: &ByteBpeTokenizer,
+) -> Result<Vec<Episode>> {
+    load_panel_with_layout(
+        root,
+        expected_count,
+        native,
+        tok,
+        true,
+        PanelLayout::NaturalAllBank,
+    )
+}
+pub(super) fn load_panel(
     root: &Path,
     expected_count: usize,
     native: &IntegerRealizer,
     tok: &ByteBpeTokenizer,
     receipt: bool,
+) -> Result<Vec<Episode>> {
+    load_panel_with_layout(
+        root,
+        expected_count,
+        native,
+        tok,
+        receipt,
+        PanelLayout::Legacy,
+    )
+}
+fn load_panel_with_layout(
+    root: &Path,
+    expected_count: usize,
+    native: &IntegerRealizer,
+    tok: &ByteBpeTokenizer,
+    receipt: bool,
+    layout: PanelLayout,
 ) -> Result<Vec<Episode>> {
     report_output::verify(root)?;
     let inputs: Inputs = serde_json::from_slice(&read_capped(&root.join("inputs.json"))?)?;
@@ -664,40 +702,109 @@ fn load_panel(
         if rows.len() != expected_count {
             return Err(invalid("context count differs").into());
         }
-        let mut pairs = BTreeMap::<String, Vec<usize>>::new();
-        for (i, r) in rows.iter().enumerate() {
-            if let Some(pair) = r["pair_id"].as_str() {
-                pairs.entry(pair.into()).or_default().push(i);
+        match layout {
+            PanelLayout::Legacy => {
+                let packets = result.iter().map(|e| &e.packet).collect::<Vec<_>>();
+                validate_legacy_layout(rows, expected_count, &packets)?;
             }
-        }
-        if (expected_count == 128
-            && (pairs.len() != 32 || rows[..64].iter().any(|r| r["kind"] != "single-source")))
-            || (expected_count == 32 && pairs.len() != 16)
-        {
-            return Err(invalid("declared preservation/pair counts differ").into());
-        }
-        for indices in pairs.values() {
-            if indices.len() != 2
-                || !matches!(
-                    (
-                        rows[indices[0]]["query_role"].as_str(),
-                        rows[indices[1]]["query_role"].as_str()
-                    ),
-                    (Some("job"), Some("where")) | (Some("where"), Some("job"))
-                )
-                || (expected_count == 128
-                    && (indices[0] < 64
-                        || indices[1] != indices[0] + 1
-                        || (indices[0] - 64) % 2 != 0))
-                || serde_json::to_value(&result[indices[0]].packet.segments)?
-                    != serde_json::to_value(&result[indices[1]].packet.segments)?
-            {
-                return Err(invalid("same-bank different-query pair differs").into());
+            PanelLayout::NaturalAllBank => {
+                let packets = result.iter().map(|e| &e.packet).collect::<Vec<_>>();
+                validate_natural_layout(&c, expected_count, &packets)?;
             }
         }
     }
     Ok(result)
 }
+fn validate_legacy_layout(
+    rows: &[Value],
+    expected_count: usize,
+    packets: &[&Packet],
+) -> Result<()> {
+    let mut pairs = BTreeMap::<String, Vec<usize>>::new();
+    for (i, r) in rows.iter().enumerate() {
+        if let Some(pair) = r["pair_id"].as_str() {
+            pairs.entry(pair.into()).or_default().push(i);
+        }
+    }
+    if (expected_count == 128
+        && (pairs.len() != 32 || rows[..64].iter().any(|r| r["kind"] != "single-source")))
+        || (expected_count == 32 && pairs.len() != 16)
+    {
+        return Err(invalid("declared preservation/pair counts differ").into());
+    }
+    for indices in pairs.values() {
+        if indices.len() != 2
+            || !matches!(
+                (
+                    rows[indices[0]]["query_role"].as_str(),
+                    rows[indices[1]]["query_role"].as_str()
+                ),
+                (Some("job"), Some("where")) | (Some("where"), Some("job"))
+            )
+            || (expected_count == 128
+                && (indices[0] < 64 || indices[1] != indices[0] + 1 || (indices[0] - 64) % 2 != 0))
+            || serde_json::to_value(&packets[indices[0]].segments)?
+                != serde_json::to_value(&packets[indices[1]].segments)?
+        {
+            return Err(invalid("same-bank different-query pair differs").into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_natural_layout(
+    context: &Value,
+    expected_count: usize,
+    packets: &[&Packet],
+) -> Result<()> {
+    let rows = context["cases"]
+        .as_array()
+        .ok_or_else(|| invalid("natural context cases absent"))?;
+    if context["layout_policy"] != NATURAL_PANEL_LAYOUT
+        || !matches!(expected_count, 128 | 32)
+        || rows.len() != expected_count
+        || packets.len() != expected_count
+        || rows.iter().any(|r| r["kind"] != "bank")
+        || packets.iter().any(|p| {
+            p.segments
+                .iter()
+                .filter(|s| matches!(s, Segment::Source { .. }))
+                .count()
+                != 2
+        })
+    {
+        return Err(invalid("natural all-bank layout/count/two-source policy differs").into());
+    }
+    let mut seen = BTreeSet::new();
+    for i in (0..expected_count).step_by(2) {
+        let pair = rows[i]["pair_id"]
+            .as_str()
+            .filter(|x| !x.is_empty())
+            .ok_or_else(|| invalid("natural pair identity absent"))?;
+        if !seen.insert(pair)
+            || rows[i + 1]["pair_id"].as_str() != Some(pair)
+            || !matches!(
+                (
+                    rows[i]["query_role"].as_str(),
+                    rows[i + 1]["query_role"].as_str()
+                ),
+                (Some("job"), Some("where")) | (Some("where"), Some("job"))
+            )
+            || packets[i].query_ids.is_empty()
+            || packets[i + 1].query_ids.is_empty()
+            || packets[i].query_ids == packets[i + 1].query_ids
+            || serde_json::to_value(&packets[i].segments)?
+                != serde_json::to_value(&packets[i + 1].segments)?
+        {
+            return Err(invalid(
+                "natural adjacent same-bank opposite-role distinct-query pair differs",
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
+
 fn active(name: &str) -> bool {
     name.starts_with("consumer.context.")
         || name.starts_with("consumer.no_read.")
@@ -729,15 +836,15 @@ fn inactive_bits(source: &SourceRealizerWeights, a: &Args) -> Result<Value> {
             .collect(),
     )
 }
-fn scale(episodes: usize, tokens: usize) -> Result<f64> {
+pub(super) fn scale(episodes: usize, tokens: usize) -> Result<f64> {
     if episodes == 0 || tokens == 0 {
         return Err(invalid("empty objective").into());
     }
     Ok(1. / episodes as f64 / tokens as f64)
 }
-struct Batch {
-    gradients: BTreeMap<String, Tensor>,
-    report: Value,
+pub(super) struct Batch {
+    pub(super) gradients: BTreeMap<String, Tensor>,
+    pub(super) report: Value,
 }
 fn batch(
     indices: &[usize],
@@ -1540,7 +1647,10 @@ struct CueAuthorization {
     batch_episodes: usize,
     maximum_fit_seconds: u64,
 }
-fn cue_native_load<'a>(root: &Path, parent: &'a IntegerRealizer) -> Result<NativeCueCarrier<'a>> {
+pub(super) fn cue_native_load<'a>(
+    root: &Path,
+    parent: &'a IntegerRealizer,
+) -> Result<NativeCueCarrier<'a>> {
     let metadata = read_json(&root.join("native-metadata.json"))?;
     let binding: NativeArtifactBinding =
         serde_json::from_value(metadata["parent_artifact"].clone())?;
@@ -2295,7 +2405,7 @@ struct PrefixAuthorization {
     batch_episodes: usize,
     maximum_fit_seconds: u64,
 }
-fn prefix_native_load<'a>(
+pub(super) fn prefix_native_load<'a>(
     root: &Path,
     parent: &'a IntegerRealizer,
     cue: &NativeCueCarrier<'_>,
@@ -4664,5 +4774,81 @@ mod tests {
     fn target_fields_rejected_from_runtime_packets() {
         let s = r#"{"schema":"uor-r4.native-source-bank-probe-input/1","cases":[{"id":"x","segments":[],"query_ids":[1],"actual_prefix_ids":[],"target_ids":[3]}]}"#;
         assert!(serde_json::from_str::<Inputs>(s).is_err());
+    }
+}
+
+#[cfg(test)]
+mod natural_panel_layout_tests {
+    use super::*;
+    fn fixture(count: usize, natural: bool) -> Result<(Value, Vec<Packet>)> {
+        let mut rows = Vec::new();
+        let mut packets = Vec::new();
+        for i in 0..count {
+            let single = !natural && count == 128 && i < 64;
+            rows.push(json!({"kind":if single {"single-source"} else {"bank"},
+                "pair_id":if single {Value::Null} else {json!(format!("pair-{}",i/2))},
+                "query_role":if i%2==0 {"job"} else {"where"}}));
+            packets.push(serde_json::from_value(json!({"id":format!("row-{i}"),
+                "segments":[{"kind":"Source","event":1,"record":1,"commit":1,"scope":"local","entity":[1],"relation":1,"view":0,"original_source_ids":[4]},
+                    {"kind":"Source","event":2,"record":2,"commit":2,"scope":"local","entity":[1],"relation":2,"view":0,"original_source_ids":[5]}],
+                "query_ids":[10+(i%2)],"actual_prefix_ids":[]}))?);
+        }
+        Ok((
+            json!({"layout_policy":NATURAL_PANEL_LAYOUT,"cases":rows}),
+            packets,
+        ))
+    }
+    #[test]
+    fn natural_layout_requires_explicit_policy_and_complete_counts() -> Result<()> {
+        for count in [128, 32] {
+            let (mut c, p) = fixture(count, true)?;
+            let refs = p.iter().collect::<Vec<_>>();
+            validate_natural_layout(&c, count, &refs)?;
+            c["layout_policy"] = json!("legacy");
+            assert!(validate_natural_layout(&c, count, &refs).is_err());
+            c["layout_policy"] = json!(NATURAL_PANEL_LAYOUT);
+            assert!(validate_natural_layout(&c, count - 2, &refs).is_err());
+            c["cases"][0]["kind"] = json!("single-source");
+            assert!(validate_natural_layout(&c, count, &refs).is_err());
+        }
+        Ok(())
+    }
+    #[test]
+    fn natural_pairs_reject_role_query_bank_and_adjacency_changes() -> Result<()> {
+        let (c, mut p) = fixture(32, true)?;
+        p[1].query_ids = p[0].query_ids.clone();
+        assert!(validate_natural_layout(&c, 32, &p.iter().collect::<Vec<_>>()).is_err());
+        p[1].query_ids = vec![11];
+        p[1].segments.reverse();
+        assert!(validate_natural_layout(&c, 32, &p.iter().collect::<Vec<_>>()).is_err());
+        p[1].segments.reverse();
+        for field in ["pair_id", "query_role"] {
+            let mut changed = c.clone();
+            changed["cases"][1][field] = changed["cases"][2][field].clone();
+            assert!(validate_natural_layout(&changed, 32, &p.iter().collect::<Vec<_>>()).is_err());
+        }
+        p[1].segments.pop();
+        assert!(validate_natural_layout(&c, 32, &p.iter().collect::<Vec<_>>()).is_err());
+        Ok(())
+    }
+    #[test]
+    fn legacy_preservation_partition_remains_accepted_and_distinct() -> Result<()> {
+        let (c, p) = fixture(128, false)?;
+        let refs = p.iter().collect::<Vec<_>>();
+        let rows = c["cases"]
+            .as_array()
+            .ok_or_else(|| invalid("test rows absent"))?;
+        validate_legacy_layout(rows, 128, &refs)?;
+        assert!(validate_natural_layout(&c, 128, &refs).is_err());
+        let (n, np) = fixture(128, true)?;
+        assert!(validate_legacy_layout(
+            n["cases"]
+                .as_array()
+                .ok_or_else(|| invalid("test rows absent"))?,
+            128,
+            &np.iter().collect::<Vec<_>>()
+        )
+        .is_err());
+        Ok(())
     }
 }
