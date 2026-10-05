@@ -269,3 +269,86 @@ mod tests {
         Ok(())
     }
 }
+
+/// Circle schedule enumerates every unordered edge once, spreading vertex degrees
+/// within each round instead of creating a lexicographic first-literal hub.
+pub(super) fn round_robin_edges(count: usize) -> Vec<(usize, usize)> {
+    if count < 2 {
+        return Vec::new();
+    }
+    let size = count + count % 2;
+    let mut vertices = (0..size).collect::<Vec<_>>();
+    let mut edges = Vec::new();
+    for _ in 0..size - 1 {
+        for i in 0..size / 2 {
+            let (a, b) = (vertices[i], vertices[size - 1 - i]);
+            if a < count && b < count {
+                edges.push((a.min(b), a.max(b)));
+            }
+        }
+        vertices[1..].rotate_right(1);
+    }
+    edges
+}
+/// Prospective evaluation holds out combinations, not entire full literals.
+/// Reject an insufficient schedule explicitly; never redraw for model scores.
+pub(super) fn validate_literal_coverage(development: &Value, fresh: &Value) -> Result<()> {
+    fn values(plan: &Value) -> Result<BTreeSet<String>> {
+        let mut values = BTreeSet::new();
+        for h in plan["histories"]
+            .as_array()
+            .ok_or_else(|| invalid("coverage histories absent"))?
+        {
+            for w in h["turns"]
+                .as_array()
+                .ok_or_else(|| invalid("coverage turns absent"))?
+            {
+                values.insert(literal(w)?);
+            }
+        }
+        Ok(values)
+    }
+    let training = values(development)?;
+    let evaluation = values(fresh)?;
+    if !evaluation.is_subset(&training) {
+        return Err(invalid("diversity insufficient training full-literal coverage; fresh would confound unseen literals with new combinations; no redraw").into());
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+    #[test]
+    fn round_robin_spreads_first_round_and_exhausts_unique_edges() {
+        for n in [8usize, 10] {
+            let edges = round_robin_edges(n);
+            assert_eq!(edges.len(), n * (n - 1) / 2);
+            assert_eq!(
+                edges.iter().copied().collect::<BTreeSet<_>>().len(),
+                edges.len()
+            );
+            let mut degree = vec![0; n];
+            for (a, b) in &edges[..n / 2] {
+                degree[*a] += 1;
+                degree[*b] += 1;
+            }
+            assert!(degree.iter().all(|d| *d == 1));
+            for (a, b) in &edges[n / 2..n] {
+                degree[*a] += 1;
+                degree[*b] += 1;
+            }
+            assert!(degree.iter().all(|d| *d == 2));
+        }
+        assert_eq!(round_robin_edges(5).len(), 10);
+    }
+    #[test]
+    fn fresh_full_literal_must_have_training_witness() -> Result<()> {
+        let training = json!({"histories":[{"turns":[{"text":"Old amber willow.","template":"Old {v}."},{"text":"Old copper cedar.","template":"Old {v}."}]}]});
+        let fresh = json!({"histories":[{"turns":[{"text":"New copper cedar.","template":"New {v}."},{"text":"New amber willow.","template":"New {v}."}]}]});
+        validate_literal_coverage(&training, &fresh)?;
+        let mut missing = fresh.clone();
+        missing["histories"][0]["turns"][0]["text"] = json!("New previously absent.");
+        assert!(validate_literal_coverage(&training, &missing).is_err());
+        Ok(())
+    }
+}

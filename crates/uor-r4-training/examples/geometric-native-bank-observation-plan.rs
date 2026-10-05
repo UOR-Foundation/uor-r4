@@ -687,87 +687,82 @@ fn diversity_histories(
             .map(|v| (*v).to_owned())
             .collect::<Vec<_>>();
         let mut selected = 0usize;
-        for left in 0..values.len() {
-            for right in left + 1..values.len() {
-                if selected == dev_blocks + fresh_blocks {
-                    break;
-                }
-                let a = &values[left];
-                let b = &values[right];
-                let key = (a.clone(), b.clone());
-                if used_unordered.contains(&key) {
-                    continue;
-                }
-                let mut blocked = false;
-                for (j, h) in [(a, b), (b, a)] {
-                    let current = BTreeMap::from([("job", j.as_str()), ("home", h.as_str())]);
-                    blocked |=
-                        exposed_banks.contains(&sha256_bytes(&serde_json::to_vec(&current)?));
-                }
-                if blocked {
-                    continue;
-                }
-                let output = if selected < dev_blocks {
-                    &mut development
-                } else {
-                    &mut fresh
-                };
-                let block = output.len() / 8;
-                for swapped in [false, true] {
-                    let (jv, hv) = if swapped { (b, a) } else { (a, b) };
-                    let mut j = donor(source, "job", "assert", jv)?;
-                    let mut h = donor(source, "home", "assert", hv)?;
-                    let mut after = Vec::new();
-                    if stratum == "update" {
-                        let role = if swapped { "home" } else { "job" };
-                        let other_role = if role == "job" { "home" } else { "job" };
-                        let others = pool(all, other_role, "assert", Some(2))?
-                            .iter()
-                            .map(|w| literal(w).map(str::to_owned))
-                            .collect::<Result<BTreeSet<_>>>()?;
-                        let mut initials = pool(all, role, "assert", Some(2))?
-                            .into_iter()
-                            .filter(|w| literal(w).is_ok_and(|v| others.contains(v)))
-                            .collect::<Vec<_>>();
-                        let mut keyed_initials = initials
-                            .drain(..)
-                            .map(|w| Ok((literal(&w)?.to_owned(), w)))
-                            .collect::<Result<Vec<_>>>()?;
-                        keyed_initials.sort_by(|a, b| a.0.cmp(&b.0));
-                        initials = keyed_initials.into_iter().map(|(_, w)| w).collect();
-                        let initial = initials
-                            .into_iter()
-                            .find(|w| literal(w).is_ok_and(|v| v != a && v != b))
-                            .ok_or_else(|| {
-                                invalid("diversity distinct initial update donor absent")
-                            })?;
-                        if swapped {
-                            h = initial;
-                        } else {
-                            j = initial;
-                        }
-                        after.push(donor(all, role, "update", a)?);
-                        after.push(if swapped { j.clone() } else { h.clone() });
-                    } else if stratum == "reassert" {
-                        after.push(if swapped { h.clone() } else { j.clone() });
-                    }
-                    for query_index in [block % 6, (block + 3) % 6] {
-                        output.extend(chronologies(
-                            &format!(
-                                "diverse-{stratum}-{selected:02}-swap{}-q{query_index}",
-                                usize::from(swapped)
-                            ),
-                            &format!("{stratum}/q{query_index}"),
-                            j.clone(),
-                            h.clone(),
-                            after.clone(),
-                            qpair(all, query_index)?,
-                        ));
-                    }
-                }
-                used_unordered.insert(key);
-                selected += 1;
+        for (left, right) in role_diversity::round_robin_edges(values.len()) {
+            if selected == dev_blocks + fresh_blocks {
+                break;
             }
+            let a = &values[left];
+            let b = &values[right];
+            let key = (a.clone(), b.clone());
+            if used_unordered.contains(&key) {
+                continue;
+            }
+            let mut blocked = false;
+            for (j, h) in [(a, b), (b, a)] {
+                let current = BTreeMap::from([("job", j.as_str()), ("home", h.as_str())]);
+                blocked |= exposed_banks.contains(&sha256_bytes(&serde_json::to_vec(&current)?));
+            }
+            if blocked {
+                continue;
+            }
+            let output = if selected < dev_blocks {
+                &mut development
+            } else {
+                &mut fresh
+            };
+            let block = output.len() / 8;
+            for swapped in [false, true] {
+                let (jv, hv) = if swapped { (b, a) } else { (a, b) };
+                let mut j = donor(source, "job", "assert", jv)?;
+                let mut h = donor(source, "home", "assert", hv)?;
+                let mut after = Vec::new();
+                if stratum == "update" {
+                    let role = if swapped { "home" } else { "job" };
+                    let other_role = if role == "job" { "home" } else { "job" };
+                    let others = pool(all, other_role, "assert", Some(2))?
+                        .iter()
+                        .map(|w| literal(w).map(str::to_owned))
+                        .collect::<Result<BTreeSet<_>>>()?;
+                    let mut initials = pool(all, role, "assert", Some(2))?
+                        .into_iter()
+                        .filter(|w| literal(w).is_ok_and(|v| others.contains(v)))
+                        .collect::<Vec<_>>();
+                    let mut keyed_initials = initials
+                        .drain(..)
+                        .map(|w| Ok((literal(&w)?.to_owned(), w)))
+                        .collect::<Result<Vec<_>>>()?;
+                    keyed_initials.sort_by(|a, b| a.0.cmp(&b.0));
+                    initials = keyed_initials.into_iter().map(|(_, w)| w).collect();
+                    let initial = initials
+                        .into_iter()
+                        .find(|w| literal(w).is_ok_and(|v| v != a && v != b))
+                        .ok_or_else(|| invalid("diversity distinct initial update donor absent"))?;
+                    if swapped {
+                        h = initial;
+                    } else {
+                        j = initial;
+                    }
+                    after.push(donor(all, role, "update", a)?);
+                    after.push(if swapped { j.clone() } else { h.clone() });
+                } else if stratum == "reassert" {
+                    after.push(if swapped { h.clone() } else { j.clone() });
+                }
+                for query_index in [block % 6, (block + 3) % 6] {
+                    output.extend(chronologies(
+                        &format!(
+                            "diverse-{stratum}-{selected:02}-swap{}-q{query_index}",
+                            usize::from(swapped)
+                        ),
+                        &format!("{stratum}/q{query_index}"),
+                        j.clone(),
+                        h.clone(),
+                        after.clone(),
+                        qpair(all, query_index)?,
+                    ));
+                }
+            }
+            used_unordered.insert(key);
+            selected += 1;
         }
         if selected != dev_blocks + fresh_blocks {
             return Err(invalid(format!("diversity insufficient disjoint donor blocks for {stratum}: {selected}; no adaptive replacement")).into());
@@ -776,6 +771,10 @@ fn diversity_histories(
     if development.len() != 256 || fresh.len() != 64 {
         return Err(invalid("diversity fixed512/128 row design differs").into());
     }
+    role_diversity::validate_literal_coverage(
+        &json!({"histories":development}),
+        &json!({"histories":fresh}),
+    )?;
     Ok((development, fresh))
 }
 
@@ -1631,6 +1630,7 @@ mod prospective_diversity_tests {
         let repeats = pool(&all, "job", "assert", Some(2))?
             .into_iter()
             .chain(pool(&all, "home", "assert", Some(2))?)
+            .filter(|w| literal(w).is_ok_and(|v| !v.starts_with("v8") && !v.starts_with("v9")))
             .collect::<Vec<_>>();
         let (mut dev, mut fresh) = diversity_histories(&all, &repeats, &BTreeSet::new())?;
         apply_supported_policy_mode(&mut dev, true)?;
@@ -1641,6 +1641,20 @@ mod prospective_diversity_tests {
         let fc = role_diversity::validate(&fp)?;
         assert_eq!(dc["rows"], 512);
         assert_eq!(fc["rows"], 128);
+        role_diversity::validate_literal_coverage(&dp, &fp)?;
+        let length2 = json!({"histories":dev.iter().filter(|h|h.stratum.starts_with("length2/")).collect::<Vec<_>>()});
+        let mut degrees = BTreeMap::<String, usize>::new();
+        let unordered = role_diversity::bank_keys(&length2)?
+            .into_iter()
+            .map(|(a, b)| if a < b { (a, b) } else { (b, a) })
+            .collect::<BTreeSet<_>>();
+        for (a, b) in unordered {
+            *degrees.entry(a).or_default() += 1;
+            *degrees.entry(b).or_default() += 1;
+        }
+        assert_eq!(degrees.len(), 10);
+        assert!(degrees.values().all(|n| (1..=2).contains(n)));
+
         assert!(role_diversity::bank_keys(&dp)?.is_disjoint(&role_diversity::bank_keys(&fp)?));
         let mut missing_order = dp.clone();
         missing_order["histories"][1] = missing_order["histories"][0].clone();
