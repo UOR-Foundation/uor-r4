@@ -1882,7 +1882,8 @@ mod tests {
             );
             assert_eq!(
                 added.prefix.candidate_offsets[i],
-                usize::from(candidate.occurrence.token_offset)
+                usize::try_from(candidate.occurrence.token_offset)
+                    .map_err(|e| invalid(e.to_string()))?
             );
             assert_eq!(
                 added.prefix.sources[source].token_ids[added.prefix.candidate_offsets[i]],
