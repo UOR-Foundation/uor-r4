@@ -106,8 +106,21 @@ cache_ok() { [ -f "$BIN/BUILD.json" ] && grep -q '"parity": "PASS"' "$BIN/BUILD.
 if cache_ok; then
   log "cache hit: $BIN"
 else
-  exec 8>"/workspace/bin/.$SHA-sm$CAP.lock"
-  flock 8
+  # The lock only avoids duplicate builds (results land by atomic rename). A
+  # flock on the network volume can outlive a deleted pod, so wait only while
+  # the holder's heartbeat file is fresh.
+  LOCK=/workspace/bin/.$SHA-sm$CAP.lock
+  exec 8>"$LOCK"
+  if ! flock -w 5 8; then
+    held=$(( $(date +%s) - $(stat -c %Y "$LOCK.holder" 2>/dev/null || echo 0) ))
+    if [ "$held" -lt 3600 ]; then
+      log "another pod is building this commit ($(cat "$LOCK.holder" 2>/dev/null)); waiting up to 45 min"
+      flock -w 2700 8 || log "build lock still held; building anyway"
+    else
+      log "stale build lock (no holder heartbeat for ${held}s); building anyway"
+    fi
+  fi
+  echo "$POD $(date -u +%FT%TZ)" > "$LOCK.holder"
   if cache_ok; then
     log "cache filled by another pod meanwhile: $BIN"
   else

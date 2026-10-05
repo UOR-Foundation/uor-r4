@@ -286,3 +286,47 @@ keep their owner.
    Jupyter to the internet to inject keys. Prefer replacing the pod; if a
    running job must be rescued, use `runpodctl send`/`receive` or the Runpod
    web terminal, then append the public key to `/root/.ssh/authorized_keys`.
+5. SSH is often refused for 1–2 minutes after a pod reports ready (keys still
+   being installed). `up` retries for up to 15 minutes and `bootstrap` for 5
+   before declaring failure; do the same by hand. The API's runtime status can
+   also flap to "initializing" on a healthy pod; the tool keeps the last SSH
+   address it saw.
+
+## Remote-command pitfalls
+
+* `pkill -f PATTERN` inside `ssh … 'pkill -f PATTERN; …'` kills the remote
+  shell itself, whose argv contains the pattern: use `pkill -x NAME`, a PID,
+  or a bracketed pattern (`pkill -f 'jupyter[-]lab'`).
+* On the legacy `vishva123/…` image Jupyter is the container's main process:
+  killing it restarts the container (the disk survives, running jobs die). Do
+  not kill it there; use the standard template, which runs no Jupyter.
+* Start remote work detached so it survives the SSH session:
+  `setsid nohup CMD > LOG 2>&1 < /dev/null &` — `uor-pod run` does this.
+* A `flock` on the network volume can outlive a deleted pod. The bootstrap's
+  build lock therefore waits only while the holder's heartbeat file
+  (`…lock.holder`) is fresh; results land by atomic rename either way.
+
+## Validation record (5 October 2026)
+
+Real runs against the account, template `h15vb984sw`, commit `6a918a43`,
+1 × RTX 5090 in EUR-NO-1 on the canonical volume:
+
+| Step | Result |
+| --- | --- |
+| `up` create → SSH with `~/.ssh/uor_compute` (`PUBLIC_KEY`) | 30–51 s on four pods |
+| `nvcc` | 12.8 present in the image (no apt install); no Jupyter process; only port 22 mapped |
+| Cold bootstrap (Rust from the volume archive, shallow fetch, build, parity) | 609 s: fetch 326 s (GitHub fetch of the commit), build 231 s, parity 42 s |
+| Parity `cuda_stack_ops_parity` on sm_120 | PASS, 31 passed, 0 failed, 1 ignored |
+| Warm bootstrap on a new pod (cache hit) | 2 s after SSH; `up` total ≈ 1 min |
+| First-ever Rust install on the volume | 31 s (then archived) |
+| `uor-pod run` | job ran on GPU 0 with `UOR_BIN`, `CUDA_COMPUTE_CAP=120`, log + `# exit=0` on the volume |
+| `release` + `down` | pod deleted |
+| Pod-side reaper (`--check` api-ok; idle limit set to 1 min for the test) | pod deleted itself through GraphQL `podTerminate` 61 s after its lease was released |
+
+Not yet observed: a cold build on a 2 × 5090 pod, the non-canonical volume
+path (EU-RO-1/EUR-IS-1 seeding) and `--allow-off-volume`, which are exercised
+only by the dry-run test. The very first validation pod reported 30 of 31
+parity tests failing with `CUDA_ERROR_NO_DEVICE` while `nvidia-smi` saw the
+GPU; the failed cache is kept as `bin/6a918a43…-sm120.failed-*` and the next
+pod passed. The cause was not identified; a cached build counts only with
+parity PASS.

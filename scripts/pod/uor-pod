@@ -222,8 +222,15 @@ pod_ssh() {  # pod_ssh POD CMD...   (stdin passes through)
   ip=${addr% *}; port=${addr#* }
   ssh -i "$SSH_KEY" -p "$port" "${SSH_OPTS[@]}" "root@$ip" "$@"
 }
-with_timeout() {  # with_timeout SECONDS CMD...
-  if command -v timeout >/dev/null 2>&1; then timeout "$@"; else shift; "$@"; fi
+# SSH is often refused for 1-2 min after a pod reports ready (keys still being
+# installed): retry with backoff before declaring failure.
+wait_ssh() {  # POD SECONDS -> 0 once `ssh true` works
+  local deadline delay=5
+  deadline=$(( $(now_epoch) + $2 ))
+  until pod_ssh "$1" true </dev/null 2>/dev/null; do
+    [ "$(now_epoch)" -lt "$deadline" ] || return 1
+    sleep "$delay"; [ "$delay" -ge 30 ] || delay=$((delay * 2))
+  done
 }
 
 # One read-only probe: GPUs, compute apps, reaper, held GPU locks, unmirrored /root/runs.
@@ -394,7 +401,7 @@ cmd_status() {
     up=$(echo "$p" | jq -r '((.uptimeSeconds // 0) / 3600 * 10 | floor) / 10')
     cache=$(cache_get "$id"); gtype=$(echo "$cache" | jq -r '.gpu // "?"')
     if [ "$st" = RUNNING ]; then
-      n_run=$((n_run + 1)); total=$(jq -n --argjson a "$total" --argjson b "$cost" '$a + $b')
+      n_run=$((n_run + 1)); total=$(jq -n --argjson a "$total" --argjson b "$cost" '($a + $b) * 100 | round / 100')
       case $name in "$TEST_PREFIX"*) ;; *) n_cap=$((n_cap + 1));; esac
     fi
     keep=$(echo "$cache" | jq -r '.keep // empty')
@@ -452,7 +459,7 @@ cmd_status() {
   done
   # stray temporary files (an interrupted write); leases are written only by this tool
   local strays
-  strays=$(find "$STATE" -name '*.tmp.*' -mmin +2 2>/dev/null | head -5)
+  strays=$(find "$STATE" \( -name '*.tmp*' -o -name '*.new' \) -mmin +2 2>/dev/null | head -5)
   [ -z "$strays" ] || echo "WARNING: stray temporary files in the state directory (interrupted writes; leases must be written only by uor-pod): $strays"
   echo "Running: $n_run pod(s) ($n_cap counted toward the cap of $MAX_PODS; $TEST_PREFIX* pods are not), \$$total/h of \$$MAX_RATE/h"
   [ "$stopped" = 0 ] || echo "Stopped pods: $stopped (cleanup items: do not keep stopped pods as storage)"
@@ -574,7 +581,7 @@ up_attempt() {
 
   # 2. caps
   n_run=$(echo "$pods" | jq --arg t "$TEST_PREFIX" '[.[] | select(.desiredStatus == "RUNNING" and ((.name // "") | startswith($t) | not))] | length')
-  rate=$(echo "$pods" | jq '[.[] | select(.desiredStatus == "RUNNING") | .costPerHr // 0] | add // 0')
+  rate=$(echo "$pods" | jq '[.[] | select(.desiredStatus == "RUNNING") | .costPerHr // 0] | (add // 0) * 100 | round / 100')
   if [ "$UP_TEST" != 1 ] && [ $((n_run + 1)) -gt "$MAX_PODS" ] && [ "$OWNER_OK" != 1 ]; then
     lock_release
     local free
@@ -1022,6 +1029,7 @@ do_bootstrap() {  # POD -> copy reaper + bootstrap, mirror leases, run bootstrap
   sha=$(resolve_ref "$REF")
   echo "Bootstrapping $pod at $sha"
   if is_dry; then echo "DRY-RUN: copy uor-pod-bootstrap.sh + uor-reaper.sh to $pod and run bootstrap" >&2; return 0; fi
+  wait_ssh "$pod" 300 || { warn "SSH to $pod still refused after 300 s"; return 1; }
   pod_ssh "$pod" 'mkdir -p /root/leases && cat > /root/uor-reaper.sh && chmod 755 /root/uor-reaper.sh' < "$HERE/uor-reaper.sh" || return 1
   pod_ssh "$pod" 'cat > /root/uor-pod-bootstrap.sh && chmod 755 /root/uor-pod-bootstrap.sh' < "$HERE/uor-pod-bootstrap.sh" || return 1
   for l in "$STATE/leases/$pod"/*.json; do
