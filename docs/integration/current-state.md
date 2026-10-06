@@ -1,5 +1,58 @@
 # Current UOR-R4 research state
 
+## Balanced joint outcome and native prediction diagnosis — October 6, 12:55Z
+
+The matched seed1001 joint fit completes128updates, exit0 in3506.431s
+(model3498.701s), RSS921064KiB, at exact sourcef6136103 and its previously
+recorded binary/config. Initial512 native row hashes match the balanced
+output-only control. Equal-episode CE improves8.223477354→7.917682519, versus
+the control's final7.793083293; both remain0/512 complete own-prefix answers.
+The final context changes9002 packed bytes; every first retained state and
+Copy-score set changes. This is a bounded negative for this joint-learning
+configuration, not a retirement of geometric context or the architecture.
+
+The queued native cross completes exit0 in9.995s, RSS123260KiB, using actual
+auditor sourcea6a407be. Every factual first-pool diagonal matches. All six
+arms remain0/512 correct first tokens. At final Generate, initial context
+has first NLL8.156286; final retained state with initial Copy8.178269;
+initial state with final Copy8.159385; factual final8.181368. The state-only
+swap improves236/worsens276 rows, Copy-only145/367 and full context229/283.
+Thus observed context changes have adverse mean first-decision effects, with
+heterogeneous row gains. Factual final gold has Generate-component rank1 on
+only1/512 rows; the winning token's Copy component alone exceeds full gold
+mass on512/512. Both ranking and competition remain. This is not an
+arbitrary-state impossibility certificate or justification for Copy gating.
+
+Independent saved-evidence review verifies512 rows/3072 cells, all arithmetic,
+checkpoint identities and fit aggregates; full original rows/artifacts and
+BLAKE3 are not independently rehashed. Fit report SHA256
+`752be93f9dcc81951502f584674e7b7a80c89e87413705a892bdb33138229b1e`,
+cross report SHA256
+`c33e534302f6bcf9d507f19ad95175cba6ed39223cdf921cb91fbc39dc833a40`.
+Canonical roots remain under `/workspace/uor-r4/codex/native-geometric-generate/`;
+returned thin joint evidence514926bytes. Complete crossed own-prefix replies
+remain NOT_MEASURED; actual fitted-checkpoint complete replies were measured.
+
+Adversarial review finds an output-path preservation defect in the auditor:
+claiming beneath a sealed fit could modify it before verification failed.
+The executed canonical paths were separate and unaffected. Repair74077eab
+reuses prospective-output/sealed-ancestor and bidirectional overlap admission
+before claim. Independent exact-source review approves; release build and six
+focused tests pass in91.029s, RSS2227128KiB. Scoring is unchanged. This repaired
+binary is not substituted for the actual a6a407be audit identity. Its original
+receipt stays on the canonical volume; it was observed before pod deletion,
+but the subsequent receipt-file download was unavailable.
+
+Next: investigate native finite-choice credit versus the deployed full alias
+objective, retaining both state and Copy competition. Require a final-field,
+factual-Copy optimistic bound before adopting a Copy-field learner; factual
+Copy dominance alone is insufficient. No repeated fit, extra seed/dose,
+normalizer, semantic gate or answer-selected source is admitted by this result.
+Podrezfseimkb2xqv is released/deleted after terminal fit/audit/build at12:54:44Z,
+4502s rental (~$1.238 at$0.99/h); durable artifacts remain on canonical volume.
+The transient NVML monitoring failure is separate from the successful executed
+fit/audit. Foreign stopped pod is untouched. PR#1792 remains unmerged.
+
 ## First-decision checkpoint attribution — October 6, 12:33Z
 
 The native first-token cross auditor is implemented at `a6a407beac3d127aebbdb3493916218fda2f663a`,
