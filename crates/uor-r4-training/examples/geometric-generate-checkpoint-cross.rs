@@ -18,6 +18,8 @@ use uor_r4_integer::{
     h4_tables::H4Code,
 };
 use uor_r4_training::sha256_bytes;
+#[path = "../../uor-r4-integer/examples/support/source_probe.rs"]
+mod output_support;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const MAX_SECONDS: u64 = 90;
 const MAX_REPORT_BYTES: usize = 16 << 20;
@@ -472,6 +474,14 @@ fn audit(fit: &Path, out: &Path, start: Instant) -> Result<()> {
     fs::write(out.join("report.json"), bytes)?;
     Ok(())
 }
+fn admit_output(fit: &Path, out: &Path) -> Result<()> {
+    let prospective = output_support::prospective_output(out)?;
+    let input = fs::canonicalize(fit)?;
+    if prospective.starts_with(&input) || input.starts_with(&prospective) {
+        return Err(bad("output/input overlap"));
+    }
+    Ok(())
+}
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() != 2 {
@@ -484,6 +494,7 @@ fn main() -> Result<()> {
     if !fit.is_dir() {
         return Err(bad("fit root missing"));
     }
+    admit_output(&fit, &out)?;
     report_output::claim(&out)?;
     let result = audit(&fit, &out, Instant::now());
     if let Err(e) = &result {
@@ -502,6 +513,27 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn overlapping_output_rejected_without_mutation() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("checkpoint-cross-overlap-{}", std::process::id()));
+        fs::create_dir(&root)?;
+        let result = (|| {
+            let fit = root.join("fit");
+            fs::create_dir(&fit)?;
+            for out in [root.clone(), fit.clone(), fit.join("missing/attempt")] {
+                assert!(admit_output(&fit, &out).is_err());
+            }
+            assert!(!fit.join("missing").exists());
+            assert!(!fit.join("attempt.json").exists());
+            fs::write(fit.join("manifest.json"), b"{}")?;
+            assert!(admit_output(&fit, &fit.join("missing/attempt")).is_err());
+            assert!(!fit.join("missing").exists());
+            Ok(())
+        })();
+        fs::remove_dir_all(root)?;
+        result
+    }
     const TOK: &str = r#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"b":4},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
     #[test]
     fn alias_competition_survives_surgical_copy_swap() -> Result<()> {
