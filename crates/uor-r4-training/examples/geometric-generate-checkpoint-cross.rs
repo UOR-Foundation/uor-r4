@@ -1846,6 +1846,8 @@ mod source_contrast {
             .ok_or_else(|| bad("source mean numerator overflow"))
     }
     fn query_pair(a: &QueryRow, b: &QueryRow) -> Result<Value> {
+        // A positive difference of differences does not require either
+        // absolute source preference to select its expected Source.
         if a.segments != b.segments
             || a.query == b.query
             || a.selected == b.selected
@@ -1945,9 +1947,9 @@ mod source_contrast {
             }
             deltas.insert(name.into(), Value::Object(d));
         }
-        Ok(
-            json!({"status":"eligible","row_a":a.id,"row_b":b.id,"source_A_segment":a.selected,"source_B_segment":b.selected,"source_A_endpoint_count":sa.len(),"source_B_endpoint_count":sb.len(),"source_A_endpoints":sa.iter().map(|&i|&candidates[i]).collect::<Vec<_>>(),"source_B_endpoints":sb.iter().map(|&i|&candidates[i]).collect::<Vec<_>>(),"arms":arms,"potential_control_effects":deltas,"scope":"all admitted occurrences in each selected physical Source, length-normalized raw source mean; positive difference means query-conditioned relative Source preference; not next-token precision, a source winner, normalized attention, whole joint learning or ownprefix behavior"}),
-        )
+        let mut report = json!({"status":"eligible","row_a":a.id,"row_b":b.id,"query_a_ids":a.query,"query_b_ids":b.query,"reference_role_a":a.role,"reference_role_b":b.role,"source_A_segment":a.selected,"source_B_segment":b.selected,"source_A_endpoint_count":sa.len(),"source_B_endpoint_count":sb.len(),"source_A_endpoints":sa.iter().map(|&i|&candidates[i]).collect::<Vec<_>>(),"source_B_endpoints":sb.iter().map(|&i|&candidates[i]).collect::<Vec<_>>(),"arms":arms,"potential_control_effects":deltas,"query_scope":"query_ids are the actual compiled question/cue input, not an isolated question intervention; final context and Generate fixed across potential controls within each query, while context state may differ between queries","scope":"all admitted occurrences in each selected physical Source, length-normalized raw source mean; positive difference means query/cue-conditioned relative Source preference; not next-token precision, a source winner, normalized attention, whole joint learning or ownprefix behavior"});
+        report["direction_scope"]=json!("a positive difference of differences does not require either absolute source preference to select its expected Source");
+        Ok(report)
     }
     pub fn run(attribution: &Path, reference: &Path, inputs: &Path, out: &Path) -> Result<()> {
         let start = Instant::now();
