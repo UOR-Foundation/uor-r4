@@ -2916,6 +2916,21 @@ fn test_flash_read_parity() -> uor_r4_training::Result<()> {
 #[test]
 #[ignore]
 fn bench_flash_read_forward() -> uor_r4_training::Result<()> {
+    flash_read_bench(384, candle_core::DType::F32)
+}
+
+// The same bench with bf16 q/k/v (aux stays f32), so the bf16 build's
+// kernels (tensor-core flash forward) run; T = 384 and T = 1024.
+#[cfg(feature = "cuda")]
+#[test]
+#[ignore = "timing bench; run on a CUDA host with --ignored --nocapture"]
+fn bench_flash_read_bf16() -> uor_r4_training::Result<()> {
+    flash_read_bench(384, candle_core::DType::BF16)?;
+    flash_read_bench(1024, candle_core::DType::BF16)
+}
+
+#[cfg(feature = "cuda")]
+fn flash_read_bench(time: usize, dtype: candle_core::DType) -> uor_r4_training::Result<()> {
     use std::time::Instant;
     use uor_r4_training::geometric_stack::{
         fused_aux_len, fused_read, set_cuda_read_kernels, CudaReadKernels, ReadScore,
@@ -2924,10 +2939,11 @@ fn bench_flash_read_forward() -> uor_r4_training::Result<()> {
         Ok(dev) => dev,
         Err(e) => return no_device(e),
     };
-    let (batch, heads, time, key, value) = (16usize, 8usize, 384usize, 72usize, 72usize);
+    let (batch, heads, key, value) = (16usize, 8usize, 72usize, 72usize);
     let rows = batch * heads * time;
     let t = |len: usize, seed: u64, w: usize| {
-        candle_core::Tensor::from_vec(noise(len, seed, 0.5), (batch, heads, time, w), &cuda_dev)
+        candle_core::Tensor::from_vec(noise(len, seed, 0.5), (batch, heads, time, w), &cuda_dev)?
+            .to_dtype(dtype)
     };
     let q = t(rows * key, 1, key)?;
     let k = t(rows * key, 2, key)?;
@@ -2956,7 +2972,7 @@ fn bench_flash_read_forward() -> uor_r4_training::Result<()> {
         }
         cuda_dev.synchronize()?;
         let ms = started.elapsed().as_secs_f64() * 1e3 / 200.0;
-        println!("{kernels:?} forward b{batch} h{heads} t{time} k{key} v{value} L2 null+age: {ms:.3} ms/call");
+        println!("{kernels:?} {dtype:?} forward b{batch} h{heads} t{time} k{key} v{value} L2 null+age: {ms:.3} ms/call");
         let (qv, kv, vv) = (
             candle_core::Var::from_tensor(&q)?,
             candle_core::Var::from_tensor(&k)?,
@@ -2987,7 +3003,7 @@ fn bench_flash_read_forward() -> uor_r4_training::Result<()> {
         }
         cuda_dev.synchronize()?;
         let ms = started.elapsed().as_secs_f64() * 1e3 / 200.0;
-        println!("{kernels:?} forward+backward b{batch} h{heads} t{time} k{key} v{value} L2 null+age: {ms:.3} ms/call");
+        println!("{kernels:?} {dtype:?} forward+backward b{batch} h{heads} t{time} k{key} v{value} L2 null+age: {ms:.3} ms/call");
     }
     set_cuda_read_kernels(CudaReadKernels::Fused);
     Ok(())
