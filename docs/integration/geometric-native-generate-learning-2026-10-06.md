@@ -330,3 +330,43 @@ do not qualify arbitrary divergent prefixes or establish full shared-factor
 separability. The narrow Rust replay will verify saved score hashes before using
 gold labels for diagnostic margins; it does not train or supply runtime answers.
 Seed1002/1003 configurations and live binaries remain frozen.
+
+An additional effective-state audit groups canonical Generate-only targets by
+the first two retained lanes, since the six constant token lanes cannot affect
+raw Generate ordering. Initial/output-only has6 conflicting first-position
+groups (12 positions), and186 conflicting groups across2536 canonical
+Generate-only positions (399 positions). Joint128 still has6 conflicting first
+groups and226 across the canonical set (480 positions). Holding these factual
+states and hard codes fixed, even arbitrary ranking per first-two-lane state
+can satisfy at most506/512 first gold labels and2334/2536 initial/output-only
+canonical labels (2295/2536 joint). These are optimistic bounds for raw Generate
+ranking on saved canonical states, not serving-completion bounds or limits on
+future learned states/codes. They demonstrate a real ignored distinction while
+accounting for only a fraction of the observed0/512 failure.
+
+The new `geometric-generate-margin-audit` example at numerical heada84bf2e1
+has an independent exact-head source review. It verifies sealed inputs, native
+checkpoint and row identities, full-vocabulary score SHA replay, canonical/
+generation empty-prefix parity, and exact integer factor sums before diagnostic
+gold indexing. Its pod build and2048-position maximum paired replay are admitted
+within unchanged total wall/rental ceilings (4 CPU threads,6GiB additional host
+RAM,900s build plus60s per arm). Build/arithmetic execution is now complete;
+source review is recorded separately from execution. It does not modify learning
+or runtime prediction. Existing fit binaries remain separate and frozen.
+
+The actual pod release build and2 focused checks exit0. Both paired audits
+complete and seal with exit0 at a84bf2e1, executable SHA256
+`56e17e070a0253171faf715409dcf7945a1be1f5cd1bd257f817168abfa1f382`.
+All2048 first-position full-vocabulary score hashes match the retained native
+traces. Every unary/pair/bias decomposition sums exactly to the authoritative
+integer score, and the six higher lanes/three higher pairs cancel from every
+target/best-Generate margin. At128 updates, output-only has472 targets strictly
+below best Generate and40 ties; joint has495 below and17 ties. Deterministic
+Generate selection finds the gold in21 output-only cases and8 joint cases,
+but all of those lose the final pooled decision to Copy-supported winners.
+Initial505 strict deficits and7 ties select no gold. Mean raw target-minus-best
+Generate margin moves−0.376221→−0.280640 output-only/−0.327515 joint nats.
+This demonstrates a decoder-ranking deficit separately from the remaining
+Copy competition. It supports a matched label-free all-lane initialization
+intervention, subject to the after-step adversarial review; it does not qualify
+prose, attention transfer or chat, and it does not justify changing normalization.
