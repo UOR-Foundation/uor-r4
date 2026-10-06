@@ -14,6 +14,8 @@ mod joint_evaluate;
 mod joint_fit;
 #[path = "geometric_cue_joint_probe.rs"]
 mod joint_probe;
+#[path = "geometric_native_cuda_probe.rs"]
+mod native_cuda_probe;
 #[path = "geometric_cue_source_bound_probe.rs"]
 mod source_bound_probe;
 #[path = "geometric_cue_support_probe.rs"]
@@ -38,6 +40,7 @@ fn composition_panel(a: &Args) -> Option<&CueCompositionPanel> {
         .or(a.cue_coadapt_probe.as_ref())
         .or(a.cue_source_bound_probe.as_ref())
         .or(a.cue_composed_state_probe.as_ref())
+        .or(a.cue_native_cuda_probe.as_ref())
         .or_else(|| {
             a.cue_discrete_fit
                 .as_ref()
@@ -95,6 +98,9 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     if (a.mode == "cue-calibration-joint-fit") != a.cue_joint_fit.is_some() {
         return Err(invalid("joint fit explicit-mode contract differs").into());
     }
+    if (a.mode == "cue-calibration-native-cuda-probe") != a.cue_native_cuda_probe.is_some() {
+        return Err(invalid("native CUDA probe explicit-mode contract differs").into());
+    }
     if (a.mode == "cue-calibration-composed-state-probe") != a.cue_composed_state_probe.is_some() {
         return Err(invalid("composed state probe explicit-mode contract differs").into());
     }
@@ -115,6 +121,7 @@ pub(super) fn validate(a: &Args) -> Result<()> {
         .or(a.cue_coadapt_probe.as_ref())
         .or(a.cue_source_bound_probe.as_ref())
         .or(a.cue_composed_state_probe.as_ref())
+        .or(a.cue_native_cuda_probe.as_ref())
     {
         if c.profile != COMPOSITION_PROFILE
             || c.development_rows != 512
@@ -1087,6 +1094,21 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
             &inputs,
             &seals,
             &receipts,
+        );
+    }
+    if a.cue_native_cuda_probe.is_some() {
+        return native_cuda_probe::run(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &tok,
+            &weights,
+            &f,
+            &development,
+            &inputs,
+            &seals,
         );
     }
     if a.cue_composed_state_probe.is_some() {
@@ -2094,6 +2116,27 @@ mod tests {
         assert!(quantum_margin_changes(&absent, &absent, &truth, &q, -1).is_err());
         Ok(())
     }
+    #[test]
+    fn native_cuda_probe_requires_explicit_full_panel_and_no_fit() -> Result<()> {
+        let mut a = valid_args()?;
+        a.mode = "cue-calibration-native-cuda-probe".into();
+        a.maximum_seconds = 600;
+        a.maximum_report_bytes = 512 * 1024 * 1024;
+        assert!(validate(&a).is_err());
+        a.cue_native_cuda_probe = Some(CueCompositionPanel {
+            profile: COMPOSITION_PROFILE.into(),
+            development_rows: 512,
+            evaluation_rows: 128,
+        });
+        validate(&a)?;
+        a.fit_authorization = Some("forbidden-fit".into());
+        assert!(validate(&a).is_err());
+        a.fit_authorization = None;
+        a.mode = "cue-calibration-composed-state-probe".into();
+        assert!(validate(&a).is_err());
+        Ok(())
+    }
+
     #[test]
     fn composed_state_probe_requires_explicit_panel_and_no_fit() -> Result<()> {
         let mut a = valid_args()?;

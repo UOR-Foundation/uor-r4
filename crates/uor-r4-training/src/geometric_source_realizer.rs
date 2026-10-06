@@ -636,6 +636,48 @@ impl SourceRealizerWeights {
         })
     }
 
+    /// Admit device-resident context Vars with frozen CPU scorer coefficients.
+    /// Native tables remain the exact
+    /// host serving oracle; differentiable learning tensors stay on `device`.
+    pub fn prepare_on_device<'a>(
+        &'a self,
+        native: &'a NativeSourceRealizer,
+        device: &Device,
+    ) -> Result<PreparedSourceRealizer<'a>> {
+        if self
+            .context_state_parameters()
+            .values()
+            .any(|v| !v.device().same_device(device))
+        {
+            return Err(invalid("realizer prepared parameter device differs"));
+        }
+        self.prepare(native)
+    }
+
+    /// Load and validate the original source bytes before staging unchanged Vars
+    /// on the requested learning device. Only nine context families are moved;
+    /// frozen scorer coefficients and native serving tables remain on the host.
+    pub fn load_source_on_device(
+        path: &Path,
+        tokenizer_bytes: &[u8],
+        device: &Device,
+    ) -> Result<Self> {
+        let source = Self::load_source(path, tokenizer_bytes)?;
+        let result = Self {
+            consumer: ConsumerWeights {
+                context: source.consumer.context.to_device(device)?,
+                potential: source.consumer.potential,
+                no_read: source.consumer.no_read,
+            },
+            period: source.period,
+            binding: source.binding,
+            tokenizer_bytes: source.tokenizer_bytes,
+            period_seed: source.period_seed,
+        };
+        result.validate()?;
+        Ok(result)
+    }
+
     pub fn save_source(&self, path: &Path) -> Result<()> {
         self.validate()?;
         fs::create_dir(path)?;
@@ -2565,6 +2607,21 @@ pub struct PreparedSourceRealizer<'a> {
 }
 
 impl PreparedSourceRealizer<'_> {
+    /// Expose an actual prepared context encode for device parity diagnostics.
+    /// No source selection or target enters this offline learning interface.
+    pub fn context_output(
+        &self,
+        ids: &[u32],
+        reset_each_token: bool,
+    ) -> Result<crate::geometric_context::ContextQ4Output> {
+        if ids.is_empty() {
+            return Err(invalid("context diagnostic input is empty"));
+        }
+        self.consumer
+            .context
+            .forward(ids, 1, ids.len(), reset_each_token)
+    }
+
     pub fn loss(
         &self,
         frame: SelectedRecordFrame<'_>,
@@ -2899,6 +2956,15 @@ impl PreparedSourceRealizer<'_> {
         prefix: &NativePrefixTransport<'_>,
         end: &NativeSourceEndTransport<'_>,
     ) -> Result<ComposedStateBankRealizerLoss> {
+        let device = self
+            .source
+            .consumer
+            .context
+            .parameters()
+            .values()
+            .next()
+            .ok_or_else(|| invalid("composed context parameters absent"))?
+            .device();
         let trace = self.native.read_bank_with_source_end_transport(
             segments,
             query,
@@ -2956,7 +3022,7 @@ impl PreparedSourceRealizer<'_> {
                     .map_err(|_| invalid("composed context position exceeds u32"))
             })
             .collect::<Result<Vec<_>>>()?;
-        let index = Tensor::from_vec(positions.clone(), count, &Device::Cpu)?;
+        let index = Tensor::from_vec(positions.clone(), count, device)?;
         let absent = AddressLane::new(H4Code::IDENTITY.index(), 0, false)
             .map_err(|e| invalid(e.to_string()))?;
         let copy = frozen_potential_forward(
@@ -3085,8 +3151,8 @@ impl PreparedSourceRealizer<'_> {
             let period =
                 (period_credit.scores.i((0, h, time - 1))? + endpoint_credit.period.i(h)?)?;
             let stop = (stop_credit.scores.i((0, h, time - 1))? + endpoint_credit.stop.i(h)?)?;
-            let zero_copy = Tensor::zeros(count, candle_core::DType::F32, &Device::Cpu)?;
-            let zero = Tensor::zeros(1, candle_core::DType::F32, &Device::Cpu)?;
+            let zero_copy = Tensor::zeros(count, candle_core::DType::F32, device)?;
+            let zero = Tensor::zeros(1, candle_core::DType::F32, device)?;
             for (name, x) in [
                 (
                     "contextual_copy",
@@ -4193,8 +4259,21 @@ fn marginal_action_loss(
         .len()
         .checked_sub(2)
         .ok_or_else(|| invalid("joint action shape differs"))?;
-    if summed.to_vec1::<f32>()?.iter().any(|x| !x.is_finite()) {
-        return Err(invalid("realizer summed-score surrogate is nonfinite"));
+    if !target_probability.is_finite() || target_probability <= 0. || target_probability > 1. {
+        return Err(invalid("realizer native target probability is invalid"));
+    }
+    if summed.device().is_cpu() {
+        if summed.to_vec1::<f32>()?.iter().any(|x| !x.is_finite()) {
+            return Err(invalid("realizer summed-score surrogate is nonfinite"));
+        }
+    } else if summed.device().is_cuda() {
+        // Device reduction downloads only one finite-status scalar, never the
+        // live score vector. Its synchronization is included in probe timing.
+        if !summed.sqr()?.sum_all()?.to_scalar::<f32>()?.is_finite() {
+            return Err(invalid("CUDA realizer score status is nonfinite"));
+        }
+    } else {
+        return Err(invalid("realizer learning device is unsupported"));
     }
     let hard = Tensor::from_vec(
         actions
@@ -4203,7 +4282,7 @@ fn marginal_action_loss(
             .map(|a| (a.score_q24 as f64 / 16_777_216.) as f32)
             .collect::<Vec<_>>(),
         n + 2,
-        &Device::Cpu,
+        summed.device(),
     )?;
     let joint = (&hard + (summed - summed.detach())?)?;
     let soft = candle_nn::ops::softmax(&joint, 0)?;
@@ -4214,18 +4293,27 @@ fn marginal_action_loss(
             .map(|a| if a.token_id == target { 1f32 } else { 0f32 })
             .collect::<Vec<_>>(),
         n + 2,
-        &Device::Cpu,
+        summed.device(),
     )?;
     let surrogate_probability = (soft * mask)?.sum_all()?;
     // Round the *aggregated integer token mass* once at this floating loss
     // boundary, rather than separately rounding each alias probability.
-    let hard_probability = Tensor::new(target_probability as f32, &Device::Cpu)?;
+    let native_probability_f32 = target_probability as f32;
+    if !native_probability_f32.is_finite() || native_probability_f32 <= 0. {
+        return Err(invalid(
+            "native target probability cannot be represented by loss",
+        ));
+    }
+    let hard_probability = Tensor::new(native_probability_f32, summed.device())?;
     let probability =
         (&hard_probability + (&surrogate_probability - surrogate_probability.detach())?)?;
-    if !probability.to_scalar::<f32>()?.is_finite() || probability.to_scalar::<f32>()? <= 0. {
-        return Err(invalid(
-            "realizer native probability cannot be represented by loss",
-        ));
+    if probability.device().is_cpu() {
+        let value = probability.to_scalar::<f32>()?;
+        if !value.is_finite() || value <= 0. {
+            return Err(invalid(
+                "realizer native probability cannot be represented by loss",
+            ));
+        }
     }
     Ok(probability.log()?.neg()?)
 }
@@ -6836,6 +6924,29 @@ mod tests {
             .is_err());
         Ok(())
     }
+    #[test]
+    fn composed_device_source_cpu_staging_preserves_exact_bits_and_preparation() -> Result<()> {
+        let fixture = Fixture::new_with_lanes(2)?;
+        let saved = fixture.path.join("device-source");
+        fixture.weights.save_source(&saved)?;
+        let staged = SourceRealizerWeights::load_source_on_device(
+            &saved,
+            &fixture.weights.tokenizer_bytes,
+            &Device::Cpu,
+        )?;
+        assert_eq!(
+            parameter_identities(&fixture.weights)?,
+            parameter_identities(&staged)?
+        );
+        let native = fixture.weights.compile(fixture.identity.clone())?;
+        let _prepared = staged.prepare_on_device(&native, &Device::Cpu)?;
+        assert!(staged
+            .context_state_parameters()
+            .values()
+            .all(|v| v.device().same_device(&Device::Cpu)));
+        Ok(())
+    }
+
     #[test]
     fn composed_state_native_alias_parity_and_context_only_credit() -> Result<()> {
         let fixture = Fixture::new_with_lanes(2)?;

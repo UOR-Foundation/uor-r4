@@ -26,6 +26,10 @@
 //! latent adjoints and connected readout logits for declared downstream finite
 //! observation credit. The float tail remains a separate boundary.
 
+#[cfg(feature = "cuda")]
+#[path = "geometric_context_cuda.rs"]
+mod cuda_ops;
+
 use crate::geometric_address::{geometry_digest, AddressCode, GeometricAddressConfig};
 use crate::geometric_event::CompiledEvents;
 use crate::geometric_potential_native::{
@@ -413,6 +417,18 @@ impl ContextWeights {
             .map_err(|e| invalid(e.to_string()))
     }
     pub fn project_shadow_range(&self) -> Result<()> {
+        #[cfg(feature = "cuda")]
+        if self.device().is_cuda() {
+            let pending = self
+                .parameters
+                .values()
+                .map(|v| Ok((v, cuda_ops::clip_q4(v.as_tensor())?)))
+                .collect::<Result<Vec<_>>>()?;
+            for (parameter, value) in pending {
+                parameter.set(&value)?;
+            }
+            return Ok(());
+        }
         let mut pending = Vec::new();
         for parameter in self.parameters.values() {
             let values = parameter.flatten_all()?.to_vec1::<f32>()?;
@@ -427,7 +443,7 @@ impl ContextWeights {
                         .map(|x| x.clamp(-1.75, 1.75))
                         .collect::<Vec<_>>(),
                     parameter.shape(),
-                    &Device::Cpu,
+                    parameter.device(),
                 )?,
             ));
         }
@@ -445,6 +461,11 @@ impl ContextWeights {
         if !self.is_q4() {
             return Ok(value.clone());
         }
+        #[cfg(feature = "cuda")]
+        if value.device().is_cuda() {
+            let hard = cuda_ops::round_q4(value)?;
+            return Ok((&hard + (value - value.detach())?)?);
+        }
         let hard = Tensor::from_vec(
             value
                 .flatten_all()?
@@ -453,7 +474,7 @@ impl ContextWeights {
                 .map(|x| (x * 4.).round() * 0.25)
                 .collect::<Vec<_>>(),
             value.shape(),
-            &Device::Cpu,
+            value.device(),
         )?;
         Ok((&hard + (value - value.detach())?)?)
     }
@@ -491,6 +512,31 @@ impl ContextWeights {
         }
         Ok(Self { config, parameters })
     }
+    /// Clone trainable source variables onto a CPU or CUDA device. Native
+    /// artifact admission/export remains a separately charged host boundary.
+    pub fn to_device(&self, device: &Device) -> Result<Self> {
+        self.validate()?;
+        if !device.is_cpu() && !device.is_cuda() {
+            return Err(invalid("context training supports CPU or CUDA only"));
+        }
+        let parameters = self
+            .parameters
+            .iter()
+            .map(|(name, value)| {
+                Ok((
+                    name.clone(),
+                    Var::from_tensor(&value.as_tensor().to_device(device)?.detach())?,
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        Ok(Self {
+            config: self.config.clone(),
+            parameters,
+        })
+    }
+    pub fn device(&self) -> &Device {
+        self.parameters[TT].device()
+    }
     pub fn config(&self) -> &GeometricContextConfig {
         &self.config
     }
@@ -508,7 +554,8 @@ impl ContextWeights {
             let v = &self.parameters[&name];
             if v.dims() != shape
                 || v.dtype() != DType::F32
-                || !v.device().is_cpu()
+                || (!v.device().is_cpu() && !v.device().is_cuda())
+                || !v.device().same_device(self.device())
                 || v.flatten_all()?
                     .to_vec1::<f32>()?
                     .iter()
@@ -554,7 +601,10 @@ impl ContextWeights {
         validate_ids(&self.config, ids, batch, time)?;
         let (tokens, basis) = self.graph_inputs(detach_token_readouts)?;
         let rows = tokens
-            .index_select(&Tensor::from_vec(ids.to_vec(), ids.len(), &Device::Cpu)?, 0)?
+            .index_select(
+                &Tensor::from_vec(ids.to_vec(), ids.len(), tokens.device())?,
+                0,
+            )?
             .reshape((batch, time, self.config.lanes() * 273))?;
         Ok((rows.contiguous()?, basis))
     }
@@ -876,7 +926,10 @@ impl PreparedContextQ4<'_> {
         }
         let rows = self
             .tokens
-            .index_select(&Tensor::from_vec(ids.to_vec(), ids.len(), &Device::Cpu)?, 0)?
+            .index_select(
+                &Tensor::from_vec(ids.to_vec(), ids.len(), self.tokens.device())?,
+                0,
+            )?
             .reshape((batch, time, self.config.lanes() * 273))?
             .contiguous()?;
         let output = rows.apply_op2(
@@ -1252,6 +1305,16 @@ impl CustomOp2 for ContextOp {
             Shape::from((self.batch, self.time, self.lanes(), PACKED_WIDTH)),
         ))
     }
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        a: &candle_core::CudaStorage,
+        la: &Layout,
+        b: &candle_core::CudaStorage,
+        lb: &Layout,
+    ) -> candle_core::Result<(candle_core::CudaStorage, Shape)> {
+        cuda_ops::context_forward(self, a, la, b, lb)
+    }
     fn bwd(
         &self,
         a: &Tensor,
@@ -1259,6 +1322,10 @@ impl CustomOp2 for ContextOp {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "cuda")]
+        if a.device().is_cuda() {
+            return cuda_ops::context_backward(self, a, b, grad);
+        }
         let (da, db) = self.backward(
             &a.flatten_all()?.to_vec1::<f32>()?,
             &b.flatten_all()?.to_vec1::<f32>()?,
@@ -1362,6 +1429,16 @@ impl CustomOp2 for EmitOp {
             Shape::from((self.batch, self.time, self.lanes * 4)),
         ))
     }
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        a: &candle_core::CudaStorage,
+        la: &Layout,
+        b: &candle_core::CudaStorage,
+        lb: &Layout,
+    ) -> candle_core::Result<(candle_core::CudaStorage, Shape)> {
+        cuda_ops::emit_forward(self, a, la, b, lb)
+    }
     fn bwd(
         &self,
         a: &Tensor,
@@ -1369,6 +1446,10 @@ impl CustomOp2 for EmitOp {
         _out: &Tensor,
         grad: &Tensor,
     ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        #[cfg(feature = "cuda")]
+        if a.device().is_cuda() {
+            return cuda_ops::emit_backward(self, a, b, grad);
+        }
         let (da, db) = self.backward(
             &a.flatten_all()?.to_vec1::<f32>()?,
             &b.flatten_all()?.to_vec1::<f32>()?,

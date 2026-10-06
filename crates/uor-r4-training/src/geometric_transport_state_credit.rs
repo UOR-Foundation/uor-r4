@@ -14,8 +14,11 @@
 //!
 //! ContextQ4Output contains no token IDs or encoder digest. The enclosing caller
 //! must bind its actual token IDs, reset-from-identity replay and current encoder
-//! artifact. This module verifies dimensions and every consumed native root;
-//! matching roots alone is not proof that an arbitrary graph encoded those IDs.
+//! artifact. CPU admission also verifies exact latent tensor values against
+//! native roots. CUDA admission checks shapes/devices and the authoritative
+//! native trace without downloading dynamic tensors; the fresh device producer
+//! and enclosing replay bind live values. Neither path proves arbitrary graphs
+//! encoded the caller's token IDs merely because their roots agree.
 
 use candle_core::{DType, Device, Tensor};
 use uor_r4_integer::{
@@ -82,13 +85,21 @@ fn admit_context(context: &ContextQ4Output, time: usize, heads: usize, lanes: us
         || context.latent_roots.dims() != [1, time, heads, lanes, 4]
         || context.state_logits.dims() != [1, time, heads, lanes, ROOT_COUNT]
         || context.state_logits.dtype() != DType::F32
-        || !context.state_logits.device().is_cpu()
+        || !context
+            .state_logits
+            .device()
+            .same_device(context.latent_roots.device())
         || context.latent_roots.dtype() != DType::F32
-        || !context.latent_roots.device().is_cpu()
+        || (!context.latent_roots.device().is_cpu() && !context.latent_roots.device().is_cuda())
     {
         return Err(invalid(
             "transport state credit local context shape differs",
         ));
+    }
+    // CUDA producer/caller binds the fresh native trace; do not extract live
+    // tensors to host for admission. CPU reference additionally checks values.
+    if !context.latent_roots.device().is_cpu() {
+        return Ok(());
     }
     let choices = context.state_logits.flatten_all()?.to_vec1::<f32>()?;
     if choices.iter().any(|x| !x.is_finite()) {
@@ -113,6 +124,7 @@ fn admit_context(context: &ContextQ4Output, time: usize, heads: usize, lanes: us
 }
 
 struct Endpoint {
+    device: Device,
     roots: Vec<u8>,
     live: Option<Tensor>,
     choices: Option<Tensor>,
@@ -138,6 +150,7 @@ fn response(
     context: Option<&ContextQ4Output>,
     heads: usize,
     lanes: usize,
+    device: &Device,
 ) -> Result<Endpoint> {
     let width = heads * lanes;
     if packet.states.len() != width {
@@ -150,6 +163,7 @@ fn response(
             ));
         }
         return Ok(Endpoint {
+            device: device.clone(),
             roots: packet.states.clone(),
             live: None,
             choices: None,
@@ -161,7 +175,11 @@ fn response(
     if context.trace.states[at] != packet.states {
         return Err(invalid("transport response retained state differs"));
     }
+    if !context.latent_roots.device().same_device(device) {
+        return Err(invalid("transport endpoint device differs"));
+    }
     Ok(Endpoint {
+        device: device.clone(),
         roots: packet.states.clone(),
         live: Some(retained(context, at)?),
         choices: Some(retained_choices(context, at)?),
@@ -259,11 +277,9 @@ fn attach(live: &Option<Tensor>, lane: usize, gradient: [f32; 4]) -> Result<Tens
     };
     let value = live.narrow(0, lane, 1)?.reshape(4)?;
     // Subtract first: every live term is exactly zero in the forward path.
-    Ok(
-        ((value.clone() - value.detach())?
-            * Tensor::from_vec(gradient.to_vec(), 4, &Device::Cpu)?)?
-        .sum_all()?,
-    )
+    Ok(((value.clone() - value.detach())?
+        * Tensor::from_vec(gradient.to_vec(), 4, value.device())?)?
+    .sum_all()?)
 }
 fn attach_choice(
     live: &Option<Tensor>,
@@ -279,7 +295,7 @@ fn attach_choice(
         return Ok(Tensor::new(0f32, &Device::Cpu)?);
     };
     let value = live.narrow(0, lane, 1)?.reshape(ROOT_COUNT)?;
-    let logits = value.to_vec1::<f32>()?;
+
     let mut credit = Vec::with_capacity(ROOT_COUNT);
     for alt in 0..ROOT_COUNT {
         let (q, k) = if response_endpoint {
@@ -295,6 +311,16 @@ fn attach_choice(
     for x in &mut credit {
         *x -= anchor;
     }
+    if value.device().is_cuda() {
+        let utility = Tensor::from_vec(
+            credit.iter().map(|&x| x as f32).collect::<Vec<_>>(),
+            ROOT_COUNT,
+            value.device(),
+        )?;
+        let expected = (candle_nn::ops::softmax(&value, 0)? * utility)?.sum_all()?;
+        return Ok((&expected - expected.detach())?);
+    }
+    let logits = value.to_vec1::<f32>()?;
     let mut gradient = vec![0f64; ROOT_COUNT];
     crate::geometric_context_credit::choice_pullback(&logits, &credit, &mut gradient);
     if gradient
@@ -304,11 +330,9 @@ fn attach_choice(
         return Err(invalid("transport choice adjoint nonfinite"));
     }
     let gradient = gradient.into_iter().map(|x| x as f32).collect::<Vec<_>>();
-    Ok(
-        ((value.clone() - value.detach())?
-            * Tensor::from_vec(gradient, ROOT_COUNT, &Device::Cpu)?)?
-        .sum_all()?,
-    )
+    Ok(((value.clone() - value.detach())?
+        * Tensor::from_vec(gradient, ROOT_COUNT, value.device())?)?
+    .sum_all()?)
 }
 fn endpoint_credit(
     mode: CreditMode,
@@ -321,6 +345,9 @@ fn endpoint_credit(
     source: u8,
     is_response: bool,
 ) -> Result<Tensor> {
+    if endpoint.choices.is_none() && endpoint.live.is_none() {
+        return Ok(Tensor::new(0f32, &endpoint.device)?);
+    }
     match mode {
         CreditMode::FullLocalChoices => attach_choice(
             &endpoint.choices,
@@ -350,7 +377,7 @@ fn score(
     mode: CreditMode,
 ) -> Result<(i64, Tensor)> {
     let mut hard = 0i64;
-    let mut credit = Tensor::new(0f32, &Device::Cpu)?;
+    let mut credit = Tensor::new(0f32, &source.device)?;
     for lane in 0..lanes {
         let global = head * lanes + lane;
         let row = &table[global * ROOT_COUNT..(global + 1) * ROOT_COUNT];
@@ -369,7 +396,7 @@ fn score(
     }
     Ok((
         hard,
-        (Tensor::new((hard as f64 / Q24) as f32, &Device::Cpu)? + credit)?,
+        (Tensor::new((hard as f64 / Q24) as f32, &source.device)? + credit)?,
     ))
 }
 
@@ -444,7 +471,25 @@ fn frozen_prefix_state_forward_mode(
     )
     .map_err(|e| invalid(e.to_string()))?;
     let directed = c.mode == PrefixScoreMode::DirectedRelative;
-    let response = response(&trace.response, response_context, c.heads, c.lanes_per_head)?;
+    let fallback_device = Device::Cpu;
+    let device = sources
+        .first()
+        .map(|s| s.latent_roots.device())
+        .or_else(|| response_context.map(|s| s.latent_roots.device()))
+        .unwrap_or(&fallback_device);
+    if sources
+        .iter()
+        .any(|s| !s.latent_roots.device().same_device(device))
+    {
+        return Err(invalid("transport source graph devices differ"));
+    }
+    let response = response(
+        &trace.response,
+        response_context,
+        c.heads,
+        c.lanes_per_head,
+        device,
+    )?;
     for (packet, context) in trace.sources.iter().zip(sources) {
         admit_context(context, packet.token_ids.len(), c.heads, c.lanes_per_head)?;
         if packet.states_before.len() != packet.token_ids.len()
@@ -489,6 +534,7 @@ fn frozen_prefix_state_forward_mode(
                 Some(retained_choices(&sources[source_index], offset - 1)?)
             };
             let source = Endpoint {
+                device: device.clone(),
                 roots,
                 live,
                 choices,
@@ -525,7 +571,7 @@ fn frozen_prefix_state_forward_mode(
             values.push(value);
         }
         rows.push(if count == 0 {
-            Tensor::zeros(0, DType::F32, &Device::Cpu)?
+            Tensor::zeros(0, DType::F32, device)?
         } else {
             Tensor::stack(&values, 0)?
         });
@@ -607,7 +653,25 @@ fn frozen_source_end_state_forward_mode(
         native.stop_packed_coefficients(),
     )
     .map_err(|e| invalid(e.to_string()))?;
-    let response = response(&trace.response, response_context, c.heads, c.lanes_per_head)?;
+    let fallback_device = Device::Cpu;
+    let device = sources
+        .first()
+        .map(|s| s.latent_roots.device())
+        .or_else(|| response_context.map(|s| s.latent_roots.device()))
+        .unwrap_or(&fallback_device);
+    if sources
+        .iter()
+        .any(|s| !s.latent_roots.device().same_device(device))
+    {
+        return Err(invalid("transport source graph devices differ"));
+    }
+    let response = response(
+        &trace.response,
+        response_context,
+        c.heads,
+        c.lanes_per_head,
+        device,
+    )?;
     for (packet, context) in trace.sources.iter().zip(sources) {
         admit_context(context, packet.token_ids.len(), c.heads, c.lanes_per_head)?;
         if context.trace.states[packet.token_ids.len() - 1] != packet.states {
@@ -626,8 +690,8 @@ fn frozen_source_end_state_forward_mode(
             return Err(invalid("absent source-end branch has nonzero scores"));
         }
         return Ok(SourceEndStateCreditOutput {
-            period: Tensor::zeros(c.heads, DType::F32, &Device::Cpu)?,
-            stop: Tensor::zeros(c.heads, DType::F32, &Device::Cpu)?,
+            period: Tensor::zeros(c.heads, DType::F32, device)?,
+            stop: Tensor::zeros(c.heads, DType::F32, device)?,
             period_q24: trace.period_q24.clone(),
             stop_q24: trace.stop_q24.clone(),
         });
@@ -656,6 +720,7 @@ fn frozen_source_end_state_forward_mode(
         .get(selected)
         .ok_or_else(|| invalid("source-end selected source ordinal absent"))?;
     let source = Endpoint {
+        device: device.clone(),
         roots: packet.states.clone(),
         live: Some(retained(&sources[selected], packet.token_ids.len() - 1)?),
         choices: Some(retained_choices(
@@ -884,11 +949,13 @@ mod tests {
         )?;
         let choices = Var::zeros((1, ROOT_COUNT), DType::F32, &Device::Cpu)?;
         let source = Endpoint {
+            device: Device::Cpu,
             roots: vec![identity],
             live: Some(latent.as_tensor().clone()),
             choices: Some(choices.as_tensor().clone()),
         };
         let response = Endpoint {
+            device: Device::Cpu,
             roots: vec![identity],
             live: None,
             choices: None,
@@ -1316,6 +1383,101 @@ mod tests {
             )
             .is_err());
         }
+        Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "cuda"))]
+mod cuda_transport_parity {
+    use super::*;
+    use candle_core::Var;
+    #[test]
+    fn cuda_full120_transport_credit_matches_cpu_both_endpoints() -> Result<()> {
+        // Explicit CUDA qualification test: missing CUDA returns an error.
+        let device = Device::new_cuda(0)?;
+        let geometry =
+            HistoricalH4Tables::from_bytes(ALGEBRA).map_err(|e| invalid(e.to_string()))?;
+        let table = (0..ROOT_COUNT)
+            .map(|r| (r % 15) as i8 - 7)
+            .collect::<Vec<_>>();
+        let values = (0..ROOT_COUNT)
+            .map(|r| ((r % 13) as f32 - 6.) * 0.09)
+            .collect::<Vec<_>>();
+        for directed in [false, true] {
+            let cpuq = Var::from_vec(values.clone(), (1, ROOT_COUNT), &Device::Cpu)?;
+            let cpuk = Var::from_vec(values.clone(), (1, ROOT_COUNT), &Device::Cpu)?;
+            let gpuq = Var::from_vec(values.clone(), (1, ROOT_COUNT), &device)?;
+            let gpuk = Var::from_vec(values.clone(), (1, ROOT_COUNT), &device)?;
+            let endpoint = |root: u8, variable: &Var, device: &Device| Endpoint {
+                device: device.clone(),
+                roots: vec![root],
+                live: None,
+                choices: Some(variable.as_tensor().clone()),
+            };
+            let (_, cpu) = score(
+                &table,
+                &geometry,
+                directed,
+                &endpoint(20, &cpuq, &Device::Cpu),
+                &endpoint(10, &cpuk, &Device::Cpu),
+                0,
+                1,
+                CreditMode::FullLocalChoices,
+            )?;
+            let (_, gpu) = score(
+                &table,
+                &geometry,
+                directed,
+                &endpoint(20, &gpuq, &device),
+                &endpoint(10, &gpuk, &device),
+                0,
+                1,
+                CreditMode::FullLocalChoices,
+            )?;
+            assert_eq!(cpu.to_scalar::<f32>()?, gpu.to_scalar::<f32>()?);
+            let cg = cpu.backward()?;
+            let gg = gpu.backward()?;
+            for (cv, gv, required) in [(&cpuk, &gpuk, true), (&cpuq, &gpuq, directed)] {
+                if !required {
+                    assert!(cg.get(cv.as_tensor()).is_none());
+                    assert!(gg.get(gv.as_tensor()).is_none());
+                    continue;
+                }
+                let c = cg
+                    .get(cv.as_tensor())
+                    .ok_or_else(|| invalid("CPU transport parity gradient disconnected"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let g = gg
+                    .get(gv.as_tensor())
+                    .ok_or_else(|| invalid("CUDA transport parity gradient disconnected"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                assert_eq!(c.len(), g.len());
+                for (&a, &b) in c.iter().zip(&g) {
+                    assert!(b.is_finite());
+                    assert!((a - b).abs() < 2e-5 + 2e-5 * a.abs());
+                }
+            }
+        }
+        // Constant-identity endpoints never introduce an artificial graph.
+        let fixed = Endpoint {
+            device: device.clone(),
+            roots: vec![1],
+            live: None,
+            choices: None,
+        };
+        let (_, value) = score(
+            &table,
+            &geometry,
+            true,
+            &fixed,
+            &fixed,
+            0,
+            1,
+            CreditMode::FullLocalChoices,
+        )?;
+        assert!(value.device().same_device(&device));
         Ok(())
     }
 }
