@@ -11,9 +11,12 @@ Three matched seeds remain the declared family decision. Seed1002 output-only
 also completes128 updates and exits0: CE8.182738→7.902866, still0/512 with
 all first errors at0 and all32768 hard codes unchanged. Its1024 initial/final row
 SHA256 bindings and native artifact code arrays are audited; this is not a
-second independent inference replay. Joint seed1002 remains live in final
-evaluation; output-only seed1003 starts at08:09:22Z. No complete paired/three-seed
-verdict is available.
+second independent inference replay. Joint seed1002 also completes128 updates
+and exits0 at08:13:50Z: CE8.182738→7.931800,0/512, all first errors at0, unchanged
+hard codes and11953 changed context bytes. Independent review checks both arms
+against all1024 saved rows each and recomputes canonical CE. Both seed1003 fits
+are now live, starting08:09:22Z output-only and08:13:50Z joint. The second paired
+result repeats the first; the declared three-seed verdict remains pending.
 
 All32768 native token prototype codes remain unchanged in both arms. Lane
 diversity stays `[120,35,1,1,1,1,1,1]`. With disjoint pair edges, the six constant

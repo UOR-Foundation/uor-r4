@@ -503,3 +503,17 @@ pair yields a ceiling for that one contrast under the current decoder. Positive
 headroom does not establish encoder reachability or one state defeating every
 competitor simultaneously. Keep hard assignment movement and pooled Copy masses
 separate. This proposal adds no training admission and does not demote geometry.
+
+
+Joint seed1002 subsequently completes and exits0 at08:13:50Z. CE is
+8.182738466966745→7.931800377474702; both stages remain0/512 complete and all
+first errors at0. Hard codes stay identical, while11953 context bytes change.
+Model elapsed3449.313s; wrapper3454.575s, peakRSS930640KiB. Report SHA256
+`25e041032c5d2c1fa1eddf395eceb3e86fa57de886e2d4c39019f38708d434ab`.
+Independent review checks both second-seed arms'1024 row hashes each, first
+canonical/own-prefix native packet equality, prototype arrays and context bytes;
+it recomputes token losses and equal-episode CE from saved mass/denominator
+traces. These are saved-evidence arithmetic checks, not another inference run or
+BLAKE3 validation. The second pair repeats the first pair's behavioral/code
+restriction. Both third seeds are live; balanced admission remains conditional
+on the completed declared results. No estimator, dose or normalizer change follows.
