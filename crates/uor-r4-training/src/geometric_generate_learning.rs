@@ -1075,7 +1075,7 @@ mod tests {
                     .state_conditional_scores_into(
                         &states,
                         lane,
-                        token as u32,
+                        token,
                         &mut counter,
                         &mut GenerateReadCounts::default(),
                     )
