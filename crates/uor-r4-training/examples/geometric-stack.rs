@@ -46,6 +46,8 @@
 //!   [pointer=none|DIM] \
 //!   [pointer_score=dot|lorentz] [pointer_select=none|flock:WINDOW:K|top:K] \
 //!   [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW|ngram:WINDOW|ngram-ranked:WINDOW] \
+//!   [pointer_gate_supervision=0] \
+//!   [read_binding_supervision=0 read_binding_labels=DIR read_binding_source=LABEL [read_binding_layer=L]] \
 //!   [context=256] \
 //!   [policy=full_prefix|role_only|truncated_prefix[:KEEP]] [data_seed=1] [steps=1024] [batch=16] [lr=0.001] [warmup=50] \
 //!   [min_lr=0.1] [weight_decay=0.1] [clip=1.0] [eval_every=128] [dev_seed=1] [dev_per_source=32] \
@@ -107,6 +109,16 @@
 //! lineage record `added_to_init`). A resume must present the same setting.
 //! It has no served representation or integer export yet, so `qat=true`
 //! refuses it and the export modes refuse a model with it.
+//!
+//! `read_lineage=conv8|carrier|rot` (in `dialogue-train`; Step 7a, #820) trains
+//! every geometric read with a key-content lineage
+//! (`StackModel::set_read_lineage`): `conv8` is a learned depthwise causal
+//! convolution of the keys over lags 0..=7, `carrier` the gated decaying key
+//! carrier, `rot` the icosian-snapped quaternion phase binding. All start as the plain read (the added parameters are
+//! function-preserving at step 0), are saved in `config.json` and restored
+//! by every load. From `init=` a model without a lineage gets it added; a
+//! model with another lineage, or with one when none is requested, is
+//! refused. Exclusive with `key_shift`; no served or exported form.
 //!
 //! `transport_snap=icosian` (in `train` and `dialogue-train`, after `init=`
 //! and on a resume alike) trains with every recurrence's unit transport
@@ -248,6 +260,23 @@
 //! (the n tokens before a source equal the query's last n, for the longest
 //! n up to WINDOW with a match; ADR-0003's transition indexes). Each
 //! `pointer_select=`, and `none` clears a saved route.
+//! `pointer_gate_supervision=W` (`dialogue-train`, default 0 = off) adds
+//! copy-gate supervision to the response loss
+//! (`StackModel::gate_supervised_loss`): on a scored target whose id an input
+//! position `0..=t` holds, `W (BCE(g, 1) - log p_copy(target))`; elsewhere
+//! `W BCE(g, 0)`. It needs a pointer over every source and f32 precision.
+//! `read_binding_supervision=W` (`dialogue-train`, default 0 = off; Step 7d)
+//! adds `W * binding` on steps whose batch holds an answer labelled by
+//! `dialogue-recall-corpus binding_labels=1` (`read_binding_labels=DIR`, the
+//! split directory holding `binding_labels.json[l]`, for the training store's
+//! source `read_binding_source=LABEL`, checked by token count and payload
+//! SHA-256): at each input position whose next token is a token of the
+//! answer's expected value, `-log(m + 1e-6)` with `m` the attention mass of the
+//! binding head of read layer `read_binding_layer=` (default the last read
+//! layer) on the expected value's history positions; the binding head is the
+//! head with the most mass on the expected and the forbidden values together
+//! (`StackModel::read_supervised_loss`). Needs `policy=full_prefix`, full
+//! read admission and f32 precision.
 //! Each evaluation reports the pointer's mean gate and hit rate on the scored
 //! targets (`dev_pointer_*` in the curve, `pointer` in the developments). The
 //! pointer has no served representation for training (`qat=true` refuses
@@ -267,7 +296,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use candle_core::Device;
+use candle_core::{DType, Device};
 use serde_json::{json, Value};
 use uor_r4_core::native_geometric::learner::embedding::canonical_h4_roots;
 use uor_r4_core::report_output;
@@ -278,8 +307,8 @@ use uor_r4_training::flock::FlockSelect;
 use uor_r4_training::geometric_stack::{
     average_replica_gradients, logits_cross_entropy, parse_flock_select, parse_pointer_route,
     parse_pointer_select, D11Interim, MapCodec, PointerConfig, PointerSelect, Precision,
-    PrimeRoute, ReadScore, RotationGroup, ServedStatistics, StackAdamW, StackArch, StackConfig,
-    StackModel, TransportSnap, TransportUsage,
+    PrimeRoute, ReadLineage, ReadScore, RotationGroup, ServedStatistics, StackAdamW, StackArch,
+    StackConfig, StackModel, TransportSnap, TransportUsage,
 };
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
@@ -1200,6 +1229,7 @@ fn init_config(args: &Args, directory: &Path) -> Result<StackConfig> {
     let name = |arch: StackArch| match arch {
         StackArch::Geometric => "geometric",
         StackArch::Transformer => "transformer",
+        StackArch::Hybrid => "hybrid",
     };
     let mut saved: Vec<(&str, String)> = vec![
         ("arch", name(config.arch).to_owned()),
@@ -1217,7 +1247,7 @@ fn init_config(args: &Args, directory: &Path) -> Result<StackConfig> {
         (
             match config.arch {
                 StackArch::Transformer => "mlp",
-                StackArch::Geometric => "stack_mlp",
+                StackArch::Geometric | StackArch::Hybrid => "stack_mlp",
             },
             config.mlp_hidden.to_string(),
         ),
@@ -2431,6 +2461,440 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
     finish(&out, result)
 }
 
+/// `seal-root`: seal an already-populated directory with the project's own
+/// `report_output` manifest (BLAKE3 over the complete file set) and verify it.
+/// For analysis roots whose contents were produced outside the Rust modes.
+fn seal_root_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(arguments, &["out"])?;
+    let out = PathBuf::from(args.required("out")?);
+    report_output::seal(&out)?;
+    let unlisted = report_output::verify(&out)?;
+    if !unlisted.is_empty() {
+        return Err(invalid("sealed root still has unlisted files"));
+    }
+    Ok(())
+}
+
+/// `head-probe`: reproduce a frozen dialogue artifact's own served-readout score
+/// on its own fixed development panel, and dump the hidden state at every
+/// scored position for offline head-versus-representation analysis.
+///
+/// The panel is the retained study's (`dialogue_development::select` with the
+/// run's `dev_seed`/`dev_per_source`), the metric is its token-mean response
+/// NLL, and the walk is `stack_dialogue`'s: `FullPrefix` episodes, the response
+/// mask, `trim` to the longest real input. The baseline is `development`, the
+/// artifact's own readout, mixture and all. `softmax_only` re-scores the same
+/// positions through the tied `embedding.weight` head alone, which is the
+/// comparison class an offline fitted head belongs to.
+///
+/// `extra=1` additionally dumps the eligible development responses the panel
+/// did not select, so an offline fit has held-in states that are disjoint from
+/// the panel by response identity and drawn from the same source.
+///
+/// `states.f16` is `rows x width` little-endian f16, row-major, in the dump
+/// order `states.json` records.
+fn head_probe_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &[
+            "model",
+            "tokenizer",
+            "dev_tokens",
+            "dev_mask",
+            "dev_manifest",
+            "out",
+            "dev_seed",
+            "dev_per_source",
+            "protocol",
+            "batch",
+            "extra",
+            "extra_cap",
+            "f32",
+        ],
+    )?;
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let dev_tokens = PathBuf::from(args.required("dev_tokens")?);
+    let dev_mask = PathBuf::from(args.required("dev_mask")?);
+    let dev_manifest = PathBuf::from(args.required("dev_manifest")?);
+    let out = PathBuf::from(args.required("out")?);
+    let dev_seed: u64 = args.number("dev_seed", 20260930)?;
+    let dev_per_source: usize = args.number("dev_per_source", 32)?;
+    let protocol_number: u8 = args.number("protocol", 2)?;
+    let batch: usize = args.number("batch", 16)?;
+    let extra: u64 = args.number("extra", 1)?;
+    let extra_cap: usize = args.number("extra_cap", 0)?;
+    let f32_dump: u64 = args.number("f32", 0)?;
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        let started = Instant::now();
+        let tokenizer = uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(
+            &tokenizer_path,
+        )?)
+        .ok_or_else(|| invalid("unreadable tokenizer.json"))?;
+        let dev_split = DialogueSplit::load(&dev_tokens, &dev_mask, &dev_manifest)?;
+        let vocab = dev_split.vocab_size();
+        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        if model.config.vocab_size != vocab {
+            return Err(invalid(
+                "the model and the development split declare different vocabularies",
+            ));
+        }
+        let (_, dev_contract) =
+            episode_contract_for(&tokenizer, vocab, EPISODE_CONTEXT, protocol_number)?;
+        let index = dev_split.index(dev_contract)?;
+        let panel = dialogue_development::select(&index, dev_seed, dev_per_source)?;
+        let panel_set: std::collections::BTreeSet<usize> = panel.iter().copied().collect();
+
+        // The artifact's own served readout on its own fixed panel.
+        let baseline = development(&model, &index, &panel, batch)?;
+
+        let width = model.config.width;
+        let head = model
+            .variables()
+            .get("embedding.weight")
+            .ok_or_else(|| invalid("the model has no tied embedding head to score with"))?
+            .as_tensor()
+            .clone()
+            .to_dtype(DType::F32)?;
+
+        let mut rows: Vec<f32> = Vec::new();
+        let mut targets: Vec<u32> = Vec::new();
+        let mut response_ids: Vec<u32> = Vec::new();
+        let mut offsets: Vec<u32> = Vec::new();
+        let mut panel_flag: Vec<u8> = Vec::new();
+        let mut panel_raw_nll: Vec<f64> = Vec::new();
+        let mut panel_correct: usize = 0;
+        let mut panel_seen: usize = 0;
+
+        let mut walk = panel.clone();
+        if extra != 0 {
+            let mut rest: Vec<usize> = (0..index.episodes().len())
+                .filter(|id| !panel_set.contains(id))
+                .collect();
+            if extra_cap != 0 && rest.len() > extra_cap {
+                rest.truncate(extra_cap);
+            }
+            walk.extend(rest);
+        }
+        for chunk in walk.chunks(batch) {
+            let episodes = index.materialize(chunk, PrefixPolicy::FullPrefix)?;
+            let trimmed = trim(&episodes);
+            let time = trimmed.time;
+            let hidden = model
+                .hidden(&trimmed.inputs, episodes.batch, time)?
+                .to_dtype(DType::F32)?;
+            let flat = hidden.reshape((episodes.batch * time, width))?;
+            let values = flat.flatten_all()?.to_vec1::<f32>()?;
+            // The panel is walked first, so a chunk is entirely panel or
+            // entirely not; only the panel needs the raw tied-head score.
+            let panel_chunk = episodes
+                .rows
+                .iter()
+                .all(|row| panel_set.contains(&row.response_id));
+            let logits = if panel_chunk {
+                Some(
+                    flat.matmul(&head.t()?)?
+                        .to_dtype(DType::F32)?
+                        .flatten_all()?
+                        .to_vec1::<f32>()?,
+                )
+            } else {
+                None
+            };
+            for (lane, row) in episodes.rows.iter().enumerate() {
+                let start = lane * time;
+                for offset in 0..time {
+                    let at = start + offset;
+                    if trimmed.weights[at] != 1.0 {
+                        continue;
+                    }
+                    rows.extend_from_slice(&values[at * width..(at + 1) * width]);
+                    targets.push(trimmed.targets[at]);
+                    response_ids.push(row.response_id as u32);
+                    offsets.push(offset as u32);
+                    let panel_row = u8::from(panel_set.contains(&row.response_id));
+                    panel_flag.push(panel_row);
+                    if let Some(logits) = &logits {
+                        if panel_row == 1 {
+                            let base = at * vocab;
+                            let line = &logits[base..base + vocab];
+                            let target = trimmed.targets[at] as usize;
+                            // `row_log_sum_exp`, the library's own convention:
+                            // max-subtracted, f32 differences accumulated in f64.
+                            let maximum = line.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                            let total: f64 =
+                                line.iter().map(|&v| f64::from(v - maximum).exp()).sum();
+                            panel_raw_nll
+                                .push(f64::from(maximum) + total.ln() - f64::from(line[target]));
+                            let mut best = 0usize;
+                            let mut best_value = f32::NEG_INFINITY;
+                            for (index, &value) in line.iter().enumerate() {
+                                if value > best_value {
+                                    best_value = value;
+                                    best = index;
+                                }
+                            }
+                            panel_correct += usize::from(best == target);
+                            panel_seen += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        let dump_file = if f32_dump != 0 {
+            let mut bytes = Vec::with_capacity(rows.len() * 4);
+            for value in &rows {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            fs::write(out.join("states.f32"), &bytes)?;
+            "states.f32"
+        } else {
+            let mut bytes = Vec::with_capacity(rows.len() * 2);
+            for value in &rows {
+                bytes.extend_from_slice(&half::f16::from_f32(*value).to_bits().to_le_bytes());
+            }
+            fs::write(out.join("states.f16"), &bytes)?;
+            "states.f16"
+        };
+        let panel_raw_mean =
+            (panel_seen != 0).then(|| panel_raw_nll.iter().sum::<f64>() / panel_seen as f64);
+        let report = json!({
+            "schema": "uor-r4.geometric-stack-head-probe/1",
+            "model": identity(&model_dir.join("model.safetensors"))?,
+            "config": model.config,
+            "tokenizer": identity(&tokenizer_path)?,
+            "development": {
+                "tokens": identity(&dev_tokens)?,
+                "mask": identity(&dev_mask)?,
+                "manifest": identity(&dev_manifest)?,
+                "dev_seed": dev_seed,
+                "dev_per_source": dev_per_source,
+                "protocol": protocol_number,
+                "selection": dialogue_development::SELECTION_ID,
+                "episode_context": EPISODE_CONTEXT,
+            },
+            "panel": panel,
+            "baseline_served_readout": baseline,
+            "softmax_only": {
+                "head": "tied embedding.weight",
+                "positions": panel_seen,
+                "mean_nll": panel_raw_mean,
+                "top1_accuracy": (panel_seen != 0)
+                    .then(|| panel_correct as f64 / panel_seen as f64),
+            },
+            "dump": {
+                "rows": rows.len() / width,
+                "width": width,
+                "panel_rows": panel_flag.iter().filter(|&&flag| flag == 1).count(),
+                "extra_rows": panel_flag.iter().filter(|&&flag| flag == 0).count(),
+                "panel_responses": panel.len(),
+                "extra_responses": walk.len() - panel.len(),
+                "file": dump_file,
+                "encoding": if f32_dump != 0 {
+                    "row-major little-endian f32, one row per scored position"
+                } else {
+                    "row-major little-endian f16, one row per scored position"
+                },
+                "order": "panel responses in panel order, then the remaining eligible responses in episode-ID order; within a response, ascending target offset",
+            },
+            "elapsed_seconds": started.elapsed().as_secs_f64(),
+        });
+        fs::write(
+            out.join("states.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-head-probe-states/1",
+                "rows": rows.len() / width,
+                "width": width,
+                "targets": targets,
+                "response_ids": response_ids,
+                "offsets": offsets,
+                "panel": panel_flag,
+                "panel_raw_nll": panel_raw_nll,
+            }))?,
+        )?;
+        fs::write(out.join("probe.json"), serde_json::to_vec_pretty(&report)?)?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
+/// `hidden-blocks`: score a token file by the retained evaluator's protocol
+/// (consecutive `context`-length blocks, fresh state per block) on an evenly
+/// spaced subset of its blocks, and dump the hidden state at every position.
+///
+/// This is the probe's corpus panel: a panel with real headroom, unlike a
+/// dialogue development panel whose responses are near-ceiling. Blocks are
+/// `floor(blocks / count)` apart, block `i` at `i * blocks / count`, the
+/// project's evenly-spaced rule. Even block ordinals are the held-in half and
+/// odd ordinals the held-out half, so the two halves interleave across the
+/// whole file and are disjoint by block.
+///
+/// `states.f16` is `rows x width` little-endian f16 in dump order, which
+/// `states.json` records as blocks in block-index order and, within a block,
+/// ascending offset.
+fn hidden_blocks_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &["model", "tokens", "out", "blocks", "batch", "tag", "f32"],
+    )?;
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokens_path = PathBuf::from(args.required("tokens")?);
+    let out = PathBuf::from(args.required("out")?);
+    let wanted: usize = args.number("blocks", 64)?;
+    let batch: usize = args.number("batch", 16)?;
+    let f32_dump: u64 = args.number("f32", 0)?;
+    if wanted == 0 || !(1..=64).contains(&batch) {
+        return Err(invalid("blocks must be positive and batch 1..64"));
+    }
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        let started = Instant::now();
+        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let width = model.config.width;
+        let vocab = model.config.vocab_size;
+        let time = model.config.context;
+        let tokens = read_tokens(&tokens_path, vocab)?;
+        let total = (tokens.len() - 1) / time;
+        if total < wanted {
+            return Err(invalid("fewer blocks in the file than blocks="));
+        }
+        let chosen: Vec<usize> = (0..wanted).map(|i| i * total / wanted).collect();
+        let head = model
+            .variables()
+            .get("embedding.weight")
+            .ok_or_else(|| invalid("the model has no tied embedding head to score with"))?
+            .as_tensor()
+            .clone()
+            .to_dtype(DType::F32)?;
+
+        let mut rows: Vec<f32> = Vec::new();
+        let mut targets: Vec<u32> = Vec::new();
+        let mut block_of: Vec<u32> = Vec::new();
+        let mut raw_nll: Vec<f64> = Vec::new();
+        let mut correct: usize = 0;
+        let mut served_nll_sum: f64 = 0.0;
+        let mut served_targets: usize = 0;
+        for group in chosen.chunks(batch) {
+            let mut ids = Vec::with_capacity(group.len() * time);
+            let mut tgts = Vec::with_capacity(group.len() * time);
+            for &block in group {
+                ids.extend_from_slice(&tokens[block * time..(block + 1) * time]);
+                tgts.extend_from_slice(&tokens[block * time + 1..(block + 1) * time + 1]);
+            }
+            // The artifact's own readout on exactly these positions.
+            for value in model.target_nll(&ids, &tgts, group.len(), time)? {
+                served_nll_sum += value;
+                served_targets += 1;
+            }
+            let hidden = model
+                .hidden(&ids, group.len(), time)?
+                .to_dtype(DType::F32)?;
+            let flat = hidden.reshape((group.len() * time, width))?;
+            let values = flat.flatten_all()?.to_vec1::<f32>()?;
+            let logits = flat
+                .matmul(&head.t()?)?
+                .to_dtype(DType::F32)?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            for (lane, &block) in group.iter().enumerate() {
+                for offset in 0..time {
+                    let at = lane * time + offset;
+                    rows.extend_from_slice(&values[at * width..(at + 1) * width]);
+                    let target = tgts[at] as usize;
+                    targets.push(tgts[at]);
+                    block_of.push(block as u32);
+                    let line = &logits[at * vocab..(at + 1) * vocab];
+                    let maximum = line.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                    let total: f64 = line.iter().map(|&v| f64::from(v - maximum).exp()).sum();
+                    raw_nll.push(f64::from(maximum) + total.ln() - f64::from(line[target]));
+                    let mut best = 0usize;
+                    let mut best_value = f32::NEG_INFINITY;
+                    for (index, &value) in line.iter().enumerate() {
+                        if value > best_value {
+                            best_value = value;
+                            best = index;
+                        }
+                    }
+                    correct += usize::from(best == target);
+                }
+            }
+        }
+        let dump_file = if f32_dump != 0 {
+            let mut bytes = Vec::with_capacity(rows.len() * 4);
+            for value in &rows {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            fs::write(out.join("states.f32"), &bytes)?;
+            "states.f32"
+        } else {
+            let mut bytes = Vec::with_capacity(rows.len() * 2);
+            for value in &rows {
+                bytes.extend_from_slice(&half::f16::from_f32(*value).to_bits().to_le_bytes());
+            }
+            fs::write(out.join("states.f16"), &bytes)?;
+            "states.f16"
+        };
+        let positions = targets.len();
+        let held_in: usize = block_of.iter().filter(|&&b| b % 2 == 0).count();
+        let report = json!({
+            "schema": "uor-r4.geometric-stack-hidden-blocks/1",
+            "model": identity(&model_dir.join("model.safetensors"))?,
+            "config": model.config,
+            "tokens": identity(&tokens_path)?,
+            "tag": args.optional("tag"),
+            "panel": {
+                "protocol": "consecutive context-length blocks, fresh state per block, evenly spaced over the file",
+                "blocks_total": total,
+                "blocks_scored": wanted,
+                "block_indices": chosen,
+                "time": time,
+                "positions": positions,
+                "held_in_blocks": "even block ordinals",
+                "held_out_blocks": "odd block ordinals",
+                "held_in_positions": held_in,
+                "held_out_positions": positions - held_in,
+            },
+            "served_readout": {
+                "positions": served_targets,
+                "mean_nll": served_nll_sum / served_targets as f64,
+            },
+            "softmax_only": {
+                "head": "tied embedding.weight",
+                "positions": positions,
+                "mean_nll": raw_nll.iter().sum::<f64>() / positions as f64,
+                "top1_accuracy": correct as f64 / positions as f64,
+            },
+            "dump": {
+                "rows": rows.len() / width,
+                "width": width,
+                "file": dump_file,
+                "encoding": if f32_dump != 0 {
+                    "row-major little-endian f32, one row per scored position"
+                } else {
+                    "row-major little-endian f16, one row per scored position"
+                },
+            },
+            "elapsed_seconds": started.elapsed().as_secs_f64(),
+        });
+        fs::write(
+            out.join("states.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-hidden-blocks-states/1",
+                "rows": rows.len() / width,
+                "width": width,
+                "targets": targets,
+                "blocks": block_of,
+                "raw_nll": raw_nll,
+            }))?,
+        )?;
+        fs::write(out.join("blocks.json"), serde_json::to_vec_pretty(&report)?)?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
 /// The integer serving artifact of a trained model (owner decision D10).
 fn export_mode(arguments: &[String]) -> Result<()> {
     let args = Args::parse(
@@ -2517,6 +2981,11 @@ fn export_mode(arguments: &[String]) -> Result<()> {
             });
         }
         let (bytes, report) = match model.config.arch {
+            StackArch::Hybrid => {
+                return Err(invalid(
+                    "the hybrid read-attribution control has no lookup-table export",
+                ))
+            }
             StackArch::Geometric => export_stack(
                 &model,
                 source.clone(),
@@ -3636,6 +4105,8 @@ struct DialogueSettings {
     transport_snap: Option<TransportSnap>,
     /// `key_shift=`, as `train` takes it.
     key_shift: KeyShift,
+    /// `read_lineage=conv8|carrier` (Step 7a); `None` without it.
+    read_lineage: Option<ReadLineage>,
     /// `select=`, `pointer=`, `pointer_score=`, `pointer_select=` and
     /// `pointer_route=` as given (the A1 read mechanisms and the prime route).
     select: Option<String>,
@@ -3668,6 +4139,19 @@ struct DialogueSettings {
     device: Device,
     /// `precision=f32|bf16` (default f32): the trunk's activation storage.
     precision: Precision,
+    /// `pointer_gate_supervision=W` (default 0, off): copy-gate supervision
+    /// of strength W ([`StackModel::gate_supervised_loss`]).
+    pointer_gate_supervision: f64,
+    /// `read_binding_supervision=W` (default 0, off): read-binding
+    /// supervision of strength W ([`StackModel::read_supervised_loss`]).
+    read_binding_supervision: f64,
+    /// `read_binding_labels=DIR`: the `binding_labels.json[l]` sidecar.
+    read_binding_labels: Option<PathBuf>,
+    /// `read_binding_source=LABEL`: the training store source the labels
+    /// belong to.
+    read_binding_source: Option<String>,
+    /// `read_binding_layer=L` (default: the last read layer).
+    read_binding_layer: Option<usize>,
 }
 
 impl DialogueSettings {
@@ -3678,6 +4162,7 @@ impl DialogueSettings {
             "qat": self.qat, "qat_codec": self.qat.then(|| qat_codec().name().to_owned()),
             "transport_snap": self.transport_snap,
             "key_shift": self.key_shift.name(),
+            "read_lineage": self.read_lineage.map(ReadLineage::name),
             "policy": self.policy, "data_seed": self.data_seed,
             "steps": self.steps, "batch": self.batch, "lr": self.lr, "warmup": self.warmup,
             "min_lr": self.min_lr, "weight_decay": self.weight_decay, "clip": self.clip,
@@ -3705,6 +4190,15 @@ impl DialogueSettings {
         }
         if let Some(route) = &self.pointer_route {
             record["pointer_route"] = json!(route);
+        }
+        if self.pointer_gate_supervision > 0.0 {
+            record["pointer_gate_supervision"] = json!(self.pointer_gate_supervision);
+        }
+        if self.read_binding_supervision > 0.0 {
+            record["read_binding_supervision"] = json!(self.read_binding_supervision);
+            record["read_binding_labels"] = json!(self.read_binding_labels);
+            record["read_binding_source"] = json!(self.read_binding_source);
+            record["read_binding_layer"] = json!(self.read_binding_layer);
         }
         record
     }
@@ -3746,8 +4240,145 @@ impl DialogueSettings {
         if self.key_shift.enabled() {
             lineage["key_shift"] = json!(self.key_shift.name());
         }
+        if let Some(read_lineage) = self.read_lineage {
+            lineage["read_lineage"] = json!(read_lineage.name());
+        }
+        if self.pointer_gate_supervision > 0.0 {
+            lineage["pointer_gate_supervision"] = json!(self.pointer_gate_supervision);
+        }
+        if self.read_binding_supervision > 0.0 {
+            lineage["read_binding_supervision"] = json!({
+                "weight": self.read_binding_supervision,
+                "source": self.read_binding_source,
+                "layer": self.read_binding_layer,
+            });
+        }
         Ok(lineage)
     }
+}
+
+/// `read_lineage=conv8|carrier` (Step 7a), or `None`.
+fn read_lineage_arg(args: &Args) -> Result<Option<ReadLineage>> {
+    match args.optional("read_lineage").as_deref() {
+        None | Some("none") => Ok(None),
+        Some("conv8") => Ok(Some(ReadLineage::LearnedConvWide { taps: 8 })),
+        Some("carrier") => Ok(Some(ReadLineage::KeyCarrier)),
+        Some("rot") => Ok(Some(ReadLineage::KeyPhase { snap: true })),
+        Some("phase_bind") => Ok(Some(ReadLineage::PhaseBinding { snap: true })),
+        Some("phase_bind_free") => Ok(Some(ReadLineage::PhaseBinding { snap: false })),
+        Some(other) => Err(invalid(format!(
+            "invalid read_lineage={other} (none, conv8, carrier, rot, phase_bind or phase_bind_free)"
+        ))),
+    }
+}
+
+/// Give a model just built (`from_init` false) or loaded from `init=` the
+/// requested Step 7a read lineage: added when absent, refused when it
+/// would silently change or drop one.
+fn apply_read_lineage(
+    requested: Option<ReadLineage>,
+    model: &mut StackModel,
+    from_init: bool,
+) -> Result<()> {
+    match (requested, model.read_lineage()) {
+        (None, None) => Ok(()),
+        (Some(want), Some(have)) if want == have && from_init => Ok(()),
+        (Some(want), None) => model.set_read_lineage(Some(want)),
+        _ => Err(invalid(
+            "init='s model and read_lineage= disagree on the read lineage",
+        )),
+    }
+}
+
+/// `read_binding_supervision=W`: finite and nonnegative; above 0 it needs
+/// `read_binding_labels=` and `read_binding_source=`, `policy=full_prefix`,
+/// no `select=` and f32 precision, and excludes copy-gate supervision.
+/// Checked before anything is claimed.
+fn check_read_binding_supervision(s: &DialogueSettings) -> Result<()> {
+    let weight = s.read_binding_supervision;
+    if !(weight.is_finite() && weight >= 0.0) {
+        return Err(invalid(
+            "read_binding_supervision must be finite and nonnegative",
+        ));
+    }
+    if weight == 0.0 {
+        if s.read_binding_labels.is_some()
+            || s.read_binding_source.is_some()
+            || s.read_binding_layer.is_some()
+        {
+            return Err(invalid(
+                "read_binding_labels/source/layer need read_binding_supervision > 0",
+            ));
+        }
+        return Ok(());
+    }
+    if s.read_binding_labels.is_none() || s.read_binding_source.is_none() {
+        return Err(invalid(
+            "read_binding_supervision needs read_binding_labels=DIR and read_binding_source=LABEL",
+        ));
+    }
+    if s.policy != PrefixPolicy::FullPrefix {
+        return Err(invalid("read_binding_supervision needs policy=full_prefix"));
+    }
+    if s.precision.is_bf16() {
+        return Err(invalid("read_binding_supervision needs precision=f32"));
+    }
+    if s.select.as_deref().is_some_and(|v| v != "none") {
+        return Err(invalid(
+            "read_binding_supervision needs full read admission (no select=)",
+        ));
+    }
+    if s.pointer_gate_supervision > 0.0 {
+        return Err(invalid(
+            "read_binding_supervision and pointer_gate_supervision are separate arms",
+        ));
+    }
+    Ok(())
+}
+
+/// `pointer_gate_supervision=W`: finite and nonnegative; above 0 it needs a
+/// pointer head over every source (the run's `pointer=`, or `init=`'s saved
+/// head), no `pointer_select=`/`pointer_route=` and f32 precision. Checked
+/// before anything is claimed.
+fn check_gate_supervision(s: &DialogueSettings) -> Result<()> {
+    let weight = s.pointer_gate_supervision;
+    if !(weight.is_finite() && weight >= 0.0) {
+        return Err(invalid(
+            "pointer_gate_supervision must be finite and nonnegative",
+        ));
+    }
+    if weight == 0.0 {
+        return Ok(());
+    }
+    if s.precision.is_bf16() {
+        return Err(invalid(
+            "precision=bf16 has no bf16 pointer gate supervision kernel; use precision=f32",
+        ));
+    }
+    if s.pointer_select.as_deref().is_some_and(|v| v != "none")
+        || s.pointer_route.as_deref().is_some_and(|v| v != "none")
+    {
+        return Err(invalid(
+            "pointer_gate_supervision needs a pointer over every source (no pointer_select or pointer_route)",
+        ));
+    }
+    let saved = match &s.init {
+        Some(directory) => {
+            serde_json::from_slice::<StackConfig>(&fs::read(directory.join("config.json"))?)?
+                .pointer
+        }
+        None => None,
+    };
+    if saved.is_none() && s.pointer.as_deref().is_none_or(|v| v == "none" || v == "0") {
+        return Err(invalid("pointer_gate_supervision needs a pointer head"));
+    }
+    if saved.is_some_and(|p| p.select.is_some() || p.route.is_some()) && s.pointer_select.is_none()
+    {
+        return Err(invalid(
+            "pointer_gate_supervision needs a pointer over every source; init='s head has a selection or route",
+        ));
+    }
+    Ok(())
 }
 
 /// A model to continue must have learned the same token ids. The run that
@@ -3832,6 +4463,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "qat",
             "transport_snap",
             "key_shift",
+            "read_lineage",
             "select",
             "pointer",
             "pointer_score",
@@ -3840,6 +4472,11 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "protocol",
             "tf32",
             "precision",
+            "pointer_gate_supervision",
+            "read_binding_supervision",
+            "read_binding_labels",
+            "read_binding_source",
+            "read_binding_layer",
         ],
     )?;
     // Validate the A1 options before anything is claimed or loaded.
@@ -3862,6 +4499,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         qat: qat_flag(&args)?,
         transport_snap: transport_snap_arg(&args)?,
         key_shift: key_shift_arg(&args)?,
+        read_lineage: read_lineage_arg(&args)?,
         select: args.optional("select"),
         pointer: args.optional("pointer"),
         pointer_score: args.optional("pointer_score"),
@@ -3891,6 +4529,17 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             Some(other) => return Err(invalid(format!("invalid protocol={other} (1 or 2)"))),
         },
         device: device_arg(&args)?,
+        pointer_gate_supervision: args.number("pointer_gate_supervision", 0.0)?,
+        read_binding_supervision: args.number("read_binding_supervision", 0.0)?,
+        read_binding_labels: args.optional("read_binding_labels").map(PathBuf::from),
+        read_binding_source: args.optional("read_binding_source"),
+        read_binding_layer: args
+            .optional("read_binding_layer")
+            .map(|v| {
+                v.parse::<usize>()
+                    .map_err(|_| invalid(format!("invalid read_binding_layer={v}")))
+            })
+            .transpose()?,
     };
     settings.precision = precision_arg(&args, &settings.device)?;
     check_bf16_options(
@@ -3901,6 +4550,8 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         settings.select.is_some(),
         false,
     )?;
+    check_gate_supervision(&settings)?;
+    check_read_binding_supervision(&settings)?;
     if settings.steps == 0
         || !(1..=64).contains(&settings.batch)
         || settings.eval_every == 0
@@ -4135,6 +4786,38 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
     // the retained study's 256-ID panel, so its scores stay comparable.
     let (protocol, contract) = episode_contract_for(&tokenizer, vocab, config.context, s.protocol)?;
     let train = train_split.index_for(contract, s.policy)?;
+    // Step 7d: read-binding labels and the supervised read layer (by
+    // default the last read layer).
+    let read_binding = if s.read_binding_supervision > 0.0 {
+        let (Some(directory), Some(source)) = (&s.read_binding_labels, &s.read_binding_source)
+        else {
+            return Err(invalid(
+                "read-binding supervision needs its labels and source",
+            ));
+        };
+        let layer = match s.read_binding_layer {
+            Some(layer) => layer,
+            None => (0..config.layers())
+                .rev()
+                .find(|&l| config.pattern.as_bytes()[l] == b'a')
+                .ok_or_else(|| invalid("read_binding_supervision needs a read layer"))?,
+        };
+        if layer >= config.layers() || config.pattern.as_bytes()[layer] != b'a' {
+            return Err(invalid(format!(
+                "read_binding_layer={layer} is not a read layer of the model"
+            )));
+        }
+        Some((
+            uor_r4_training::stack_dialogue::ReadBindingLabels::load(
+                directory,
+                &train_split,
+                source,
+            )?,
+            layer,
+        ))
+    } else {
+        None
+    };
     let (_, dev_contract) = episode_contract_for(&tokenizer, vocab, EPISODE_CONTEXT, s.protocol)?;
     let dev = dev_split.index(dev_contract)?;
     let panel = dialogue_development::select(&dev, s.dev_seed, s.dev_per_source)?;
@@ -4171,11 +4854,13 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                         ));
                     }
                     s.key_shift.apply(&mut model, true)?;
+                    apply_read_lineage(s.read_lineage, &mut model, true)?;
                     model
                 }
                 None => {
                     let mut model = StackModel::new(config.clone(), &device)?;
                     s.key_shift.apply(&mut model, false)?;
+                    apply_read_lineage(s.read_lineage, &mut model, false)?;
                     model
                 }
             };
@@ -4205,6 +4890,11 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                 ));
             }
             s.key_shift.check_resumed(&model)?;
+            if model.read_lineage() != s.read_lineage {
+                return Err(invalid(
+                    "the checkpoint's model and read_lineage= disagree on the read lineage",
+                ));
+            }
             (model, optimizer, progress, Some(state))
         }
     };
@@ -4276,6 +4966,15 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         }
     }
     let (mut window_loss, mut stopped_early) = ((0f64, 0usize), false);
+    // Under copy-gate supervision: the window's sums of the gate BCE, the
+    // pointer NLL and the objective (the mixture's NLL is `window_loss`).
+    let supervision = s.pointer_gate_supervision;
+    let mut window_supervision = [0f64; 3];
+    // Under read-binding supervision: the window's supervised steps, rows,
+    // sums of the binding term, the selected head's bound and competing
+    // masses, and the objective.
+    let mut window_binding = (0usize, 0usize, [0f64; 4]);
+    let mut binding_totals = (0usize, 0usize);
     // The served representation's work inside this process's updates.
     let mut served_in_steps = ServedStatistics::default();
     // This process's updates' seconds.
@@ -4288,14 +4987,82 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         let batch = train.materialize(&ids, s.policy)?;
         let trimmed = trim(&batch);
         let served_before = model.served_statistics()?;
-        let loss = model.weighted_loss(
-            &trimmed.inputs,
-            &trimmed.targets,
-            &trimmed.weights,
-            batch.batch,
-            trimmed.time,
-        )?;
-        let value = f64::from(loss.to_scalar::<f32>()?);
+        let binding_target = match &read_binding {
+            Some((labels, layer)) => labels.target(&batch, trimmed.time, *layer)?,
+            None => None,
+        };
+        let (loss, value) = if let Some(target) = &binding_target {
+            let parts = model.read_supervised_loss(
+                &trimmed.inputs,
+                &trimmed.targets,
+                &trimmed.weights,
+                batch.batch,
+                trimmed.time,
+                target,
+                s.read_binding_supervision,
+            )?;
+            let read =
+                |t: &candle_core::Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+            let rows = parts.bound.len();
+            let terms = [
+                read(&parts.binding)?,
+                parts.bound.iter().map(|&m| f64::from(m)).sum::<f64>() / rows as f64,
+                parts.competing.iter().map(|&m| f64::from(m)).sum::<f64>() / rows as f64,
+                read(&parts.total)?,
+            ];
+            if !terms.iter().all(|t| t.is_finite()) {
+                return Err(invalid(format!(
+                    "nonfinite read-binding loss at step {}",
+                    progress.step
+                )));
+            }
+            window_binding.0 += 1;
+            window_binding.1 += rows;
+            binding_totals.0 += 1;
+            binding_totals.1 += rows;
+            for (sum, term) in window_binding.2.iter_mut().zip(terms) {
+                *sum += term;
+            }
+            let value = read(&parts.language)?;
+            (parts.total, value)
+        } else if supervision > 0.0 {
+            let parts = model.gate_supervised_loss(
+                &trimmed.inputs,
+                &trimmed.targets,
+                &trimmed.weights,
+                batch.batch,
+                trimmed.time,
+                supervision,
+            )?;
+            let read =
+                |t: &candle_core::Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+            let terms = [
+                read(&parts.gate_bce)?,
+                read(&parts.pointer_nll)?,
+                read(&parts.total)?,
+            ];
+            if !terms.iter().all(|t| t.is_finite()) {
+                return Err(invalid(format!(
+                    "nonfinite supervision loss at step {}",
+                    progress.step
+                )));
+            }
+            for (sum, term) in window_supervision.iter_mut().zip(terms) {
+                *sum += term;
+            }
+            let value = read(&parts.mixture)?;
+            (parts.total, value)
+        } else {
+            let loss = model.weighted_loss(
+                &trimmed.inputs,
+                &trimmed.targets,
+                &trimmed.weights,
+                batch.batch,
+                trimmed.time,
+            )?;
+            let value = f64::from(loss.to_scalar::<f32>()?);
+            (loss, value)
+        };
         if !value.is_finite() {
             return Err(invalid(format!("nonfinite loss at step {}", progress.step)));
         }
@@ -4335,6 +5102,31 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                 point["dev_pointer_mean_gate"] = pointer["mean_gate"].clone();
                 point["dev_pointer_hit_rate"] = pointer["pointer_hit_rate"].clone();
                 point["dev_pointer_reachable_rate"] = pointer["target_reachable_rate"].clone();
+                if supervision > 0.0 {
+                    point["dev_gate_bce"] = pointer["gate_bce"].clone();
+                    point["dev_pointer_nll"] = pointer["pointer_nll"].clone();
+                }
+            }
+            // `train_response_nll` stays the mixture's NLL; the objective
+            // adds the weighted supervision terms.
+            if supervision > 0.0 {
+                let n = window_loss.1.max(1) as f64;
+                point["train_gate_bce"] = json!(window_supervision[0] / n);
+                point["train_pointer_nll"] = json!(window_supervision[1] / n);
+                point["train_objective"] = json!(window_supervision[2] / n);
+                window_supervision = [0.0; 3];
+            }
+            // Read-binding supervision: means over the window's supervised
+            // steps (train_response_nll stays the language NLL).
+            if read_binding.is_some() {
+                let n = window_binding.0.max(1) as f64;
+                point["train_binding_steps"] = json!(window_binding.0);
+                point["train_binding_rows"] = json!(window_binding.1);
+                point["train_binding_nll"] = json!(window_binding.2[0] / n);
+                point["train_binding_bound_mass"] = json!(window_binding.2[1] / n);
+                point["train_binding_competing_mass"] = json!(window_binding.2[2] / n);
+                point["train_binding_objective"] = json!(window_binding.2[3] / n);
+                window_binding = (0, 0, [0.0; 4]);
             }
             if let Some((unsnapped, usage)) = &transport {
                 point["dev_unsnapped_response_nll"] = unsnapped["response_mean_nll"].clone();
@@ -4483,6 +5275,18 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
             "pointer_init_seed_source": pointer_added.then_some(seed_source),
             "pointer_parameters": pointer_parameters,
             "final_pointer_diagnostics": final_pointer,
+            "read_binding_supervision": read_binding.as_ref().map(|(labels, layer)| json!({
+                "weight": s.read_binding_supervision,
+                "layer": layer,
+                "labels": labels.record,
+                "supervised_steps_this_process": binding_totals.0,
+                "supervised_rows_this_process": binding_totals.1,
+                "objective": "language NLL (the mixture's) + weight * binding on steps whose batch holds a labelled answer (other steps are the plain objective). binding = mean over the labelled queries of -log(m + 1e-6), m = the attention mass of the binding head of the supervised read layer on the bound value's history positions; the binding head is, per query, the head with the most mass on the bound and competing values together (no gradient through the choice). Queries are the input positions whose next token is a token of the expected value inside a scored answer (dialogue-recall-corpus binding_labels=1). Masses are the read's softmax weights through auxiliary value channels removed before read.out. train_binding_* in the curve are means over the window's supervised steps.",
+            })),
+            "pointer_gate_supervision": (supervision > 0.0).then(|| json!({
+                "weight": supervision,
+                "objective": "mixture NLL + weight * (gate_bce + pointer_nll) over the scored response targets: on a target whose id an input position 0..=t of its window holds, gate_bce = -log g and pointer_nll = -log p_copy(target) (the pointer's mass summed over every position holding the id); on any other target gate_bce = -log(1 - g) and pointer_nll = 0; both are weighted means like the mixture's NLL. train_response_nll in the curve stays the mixture's NLL; train_gate_bce, train_pointer_nll and train_objective are window means.",
+            })),
             "scope": "Flock selection of the reads (sink at position 0, last WINDOW positions and the K best-scoring other sources per read row, by the shared crate::flock selector; unkept sources weigh and receive exactly 0; the NoRead slot stays outside the selection) applies to every read of the model and never to the pointer. The pointer head scores each source of the window with its own score (`pointer_score`: dot, or the fused read's Lorentz form with a learned scale) and softmaxes over the sources its own selection keeps (`pointer_select`: none keeps all, top:1 is the single-source pointer), copies the input tokens at the attended positions, and a gate g = sigmoid(w.h + b) (b starts at -2) mixes that with the ordinary distribution; when no kept source holds a target the mixture is (1 - g) softmax alone, with no floor. `response_mean_nll`, the losses and the greedy replies are the mixture's. `pointer` diagnostics are over the scored dev targets. Neither a flock nor a pointer selection or route has a D11 port; `export` writes a pointer that keeps every source (both integer engines serve its mixture), and `qat=true` refuses a pointer. Offline float training only; not a served or quality result.",
         });
     }
@@ -5070,6 +5874,9 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
   [select=none|flock:WINDOW:K] [pointer=none|DIM] [pointer_score=dot|lorentz] \\
   [pointer_select=none|flock:WINDOW:K|top:K] \\
   [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW|ngram:WINDOW|ngram-ranked:WINDOW] \\
+  [pointer_gate_supervision=0] \\
+  [read_binding_supervision=0 read_binding_labels=DIR read_binding_source=LABEL \\
+   read_binding_layer=L] \\
   [seed=] [context=] [policy=] \\
   [data_seed=] \\
   [steps=] \\
@@ -5113,6 +5920,23 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
                          and ngram-ranked:WINDOW admit by the longest ordered n-let match
                          (n up to WINDOW) instead of any shared atom. Excludes
                          pointer_select=. With init=, replaces the saved head's route.
+  pointer_gate_supervision=W
+                         copy-gate supervision (default 0: off, the run is unchanged). On each
+                         scored target whose id an input position 0..=t holds, adds W (BCE(g, 1)
+                         - log p_copy(target)); on any other scored target W BCE(g, 0). Needs a
+                         pointer over every source (no pointer_select/route) and precision=f32.
+                         The curve adds train_gate_bce / train_pointer_nll / train_objective and
+                         dev_gate_bce / dev_pointer_nll; train_response_nll stays the mixture's.
+  read_binding_supervision=W
+                         read-binding supervision (default 0: off, the run is unchanged; Step 7d).
+                         On steps whose batch holds a labelled answer adds W times the mean over
+                         its value-token queries of -log(m + 1e-6), m the binding head's mass on
+                         the expected value's history positions in read layer read_binding_layer=
+                         (default the last read layer). read_binding_labels=DIR is the split
+                         directory of dialogue-recall-corpus binding_labels=1 and
+                         read_binding_source=LABEL its source label in the training store.
+                         Needs policy=full_prefix, no select= and precision=f32. The curve adds
+                         train_binding_{steps,rows,nll,bound_mass,competing_mass,objective}.
   protocol=1|2           the literal-role dialogue version of both corpora (default 1); 2 puts
                          the space after a role marker into the message (m-world corpus
                          protocol=2), so a reply's first word can be copied from context.
@@ -5207,6 +6031,9 @@ fn main() -> Result<()> {
         "rounding-attribution" => rounding_attribution_mode(rest),
         "lut-sample" => lut_sample_mode(rest),
         "dialogue-train" => dialogue_train_mode(rest),
+        "head-probe" => head_probe_mode(rest),
+        "hidden-blocks" => hidden_blocks_mode(rest),
+        "seal-root" => seal_root_mode(rest),
         "lut-chat" => lut_chat_mode(rest),
         other => Err(invalid(format!("unknown mode {other}"))),
     }
