@@ -256,7 +256,7 @@ impl SourceRealizerWeights {
             .potential
             .parameters()
             .into_iter()
-            .map(|(name, var)| (format!("consumer.potential.{name}"), var))
+            .map(|(name, var)| (format!("consumer.potential.{name}"), var.clone()))
             .collect()
     }
 
