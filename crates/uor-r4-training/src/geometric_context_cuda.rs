@@ -604,10 +604,10 @@ mod tests {
                         })
                         .collect::<Vec<_>>();
                     let state = Tensor::from_vec(state, o.state_logits.shape(), d)?;
-                    Ok(((o.state_logits.mul(&state)?.sum_all()?
+                    Ok((((o.state_logits.mul(&state)?.sum_all()?
                         + o.root_logits.sqr()?.sum_all()?.affine(0.031, 0.)?)?
                         + o.category_logits.sqr()?.sum_all()?.affine(0.071, 0.)?)?
-                        + o.latent_roots.sum_all()?.affine(0.19, 0.)?)
+                        + o.latent_roots.sum_all()?.affine(0.19, 0.)?)?)
                 };
                 let gc = objective(&a, &Device::Cpu)?.backward()?;
                 let gg = objective(&b, &device)?.backward()?;
