@@ -1063,7 +1063,7 @@ fn accumulate_backward(
                 return Err(bad("gradient CPU fallback"));
             }
             if !grad.sqr()?.sum_all()?.to_scalar::<f32>()?.is_finite() {
-                return Err(bad(format!(
+                return Err(bad(&format!(
                     "nonfinite device gradient before accumulation: {name}"
                 )));
             }
