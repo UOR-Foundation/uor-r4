@@ -1,6 +1,6 @@
 //! Offline input-derived answerability reference and prose-label preparation.
 //! The bounded text rule is an authoring control, never an inference mechanism.
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -29,8 +29,9 @@ struct Args {
     input: PathBuf,
     tokenizer: PathBuf,
     out: PathBuf,
+    reference_only: bool,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Packet {
     id: String,
@@ -38,7 +39,7 @@ struct Packet {
     query_ids: Vec<u32>,
     actual_prefix_ids: Vec<u32>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 enum Segment {
     Source {
@@ -132,10 +133,23 @@ fn encoded(tok: &ByteBpeTokenizer, text: &str, binding: &SourceActionBinding) ->
 }
 /// Chooses solely from model input bytes and chronology. No label/context-data
 /// receipt or typed_facts field is accepted by this function.
+#[derive(Clone, Copy)]
+enum ReferenceChronology {
+    HighestEvent,
+    LatestSegment,
+}
 fn reference(
     packet: &Packet,
     tok: &ByteBpeTokenizer,
     binding: &SourceActionBinding,
+) -> Result<Reference> {
+    reference_with_chronology(packet, tok, binding, ReferenceChronology::HighestEvent)
+}
+fn reference_with_chronology(
+    packet: &Packet,
+    tok: &ByteBpeTokenizer,
+    binding: &SourceActionBinding,
+    chronology: ReferenceChronology,
 ) -> Result<Reference> {
     if packet.id.is_empty() || !packet.actual_prefix_ids.is_empty() {
         return Err(invalid("blank ID or supplied answer prefix").into());
@@ -198,12 +212,14 @@ fn reference(
             if role != wanted {
                 continue;
             }
-            if let Some(old) = &best {
-                if old.event == *event {
-                    return Err(invalid("ambiguous equal-event matching Sources").into());
-                }
-                if old.event > *event {
-                    continue;
+            if let ReferenceChronology::HighestEvent = chronology {
+                if let Some(old) = &best {
+                    if old.event == *event {
+                        return Err(invalid("ambiguous equal-event matching Sources").into());
+                    }
+                    if old.event > *event {
+                        continue;
+                    }
                 }
             }
             best = Some(Reference {
@@ -252,8 +268,16 @@ fn write(root: &Path, name: &str, v: &Value) -> Result<()> {
 }
 fn args() -> Result<Args> {
     let mut fields = BTreeMap::new();
+    let mut reference_only = false;
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
+        if k == "--reference-only" {
+            if reference_only {
+                return Err(invalid("duplicate --reference-only").into());
+            }
+            reference_only = true;
+            continue;
+        }
         if !["--input", "--tokenizer", "--out"].contains(&k.as_str()) {
             return Err(invalid("unknown flag").into());
         }
@@ -284,7 +308,127 @@ fn args() -> Result<Args> {
         input,
         tokenizer,
         out,
+        reference_only,
     })
+}
+/// Selection precedes and is independent of all label inspection. This is an
+/// offline authoring control: the returned identity is never a model input.
+fn reference_receipt(
+    packet: &Packet,
+    label: &Value,
+    tok: &ByteBpeTokenizer,
+    binding: &SourceActionBinding,
+    compiler: &SourceEmissionCompiler,
+) -> Result<Value> {
+    // Native chronology is physical segment order; event IDs are opaque and
+    // may repeat or decrease. The retained default author's policy is unchanged.
+    let r = reference_with_chronology(packet, tok, binding, ReferenceChronology::LatestSegment)?;
+    if string(label, "id")? != packet.id {
+        return Err(invalid("reference label row identity mismatch").into());
+    }
+    let answers: FrozenAnswers = serde_json::from_value(field(label, "answers")?.clone())?;
+    answers.validate()?;
+    let prose = format!(" {}", r.role.prose(&r.literal)?);
+    if answers.intent != RecordedValueIntent::Current || !answers.accepts(&prose) {
+        return Err(invalid(format!("{}: input-derived prose fails existing membership; labels cannot select a different Source", packet.id)).into());
+    }
+    let prefix = match r.role {
+        Role::Job => " Your job is ",
+        Role::Where => " You live in ",
+        Role::Other => return Err(invalid("unsupported reference prose role").into()),
+    };
+    let literal_start = prefix.len();
+    let literal_end = literal_start
+        .checked_add(r.literal.len())
+        .ok_or_else(|| invalid("literal byte span overflow"))?;
+    let target = encoded(tok, &prose, binding)?;
+    let mut byte_offset = 0usize;
+    let mut spans = Vec::new();
+    for (position, &id) in target.iter().enumerate() {
+        let bytes = tok.decode_bytes(&[id]);
+        let end = byte_offset
+            .checked_add(bytes.len())
+            .ok_or_else(|| invalid("canonical token byte span overflow"))?;
+        if prose.as_bytes().get(byte_offset..end) != Some(bytes.as_slice()) {
+            return Err(invalid("canonical token byte provenance differs from exact prose").into());
+        }
+        let lo = byte_offset.max(literal_start);
+        let hi = end.min(literal_end);
+        spans.push(json!({"canonical_position":position,"token_id":id,"reply_byte_start":byte_offset,"reply_byte_end":end,"overlaps_literal":lo<hi,"wholly_inside_literal":byte_offset>=literal_start&&end<=literal_end,"literal_byte_start":if lo<hi {Some(lo-literal_start)} else {None},"literal_byte_end":if lo<hi {Some(hi-literal_start)} else {None}}));
+        byte_offset = end;
+    }
+    if byte_offset != prose.len() {
+        return Err(invalid("canonical token byte provenance incomplete").into());
+    }
+    let mut views = Vec::new();
+    for (segment_index, segment) in packet.segments.iter().enumerate() {
+        if let Segment::Source {
+            original_source_ids,
+            ..
+        } = segment
+        {
+            views.push(json!({"segment_index":segment_index,"source_view":compiler.compile(original_source_ids)?}));
+        }
+    }
+    let selected = views
+        .iter()
+        .find(|v| v["segment_index"] == json!(r.segment))
+        .ok_or_else(|| invalid("selected Source view absent"))?;
+    if selected["source_view"]["original_bytes"] != json!(r.literal.as_bytes()) {
+        return Err(invalid("selected Source literal byte binding differs").into());
+    }
+    let mut target_eos = target;
+    target_eos.push(binding.eos_token_id());
+    Ok(
+        json!({"id":packet.id,"serialized_input_packet_sha256":sha256_bytes(&serde_json::to_vec(packet)?),"reference_role":r.role.name(),"reference_source_segment_labels_only":r.segment,"reference_event":r.event,"reference_record":r.record,"reference_commit":r.commit,"reference_literal_labels_only":r.literal,"reference_prose_labels_only":prose,"reply_literal_byte_start":literal_start,"reply_literal_byte_end":literal_end,"canonical_token_byte_provenance_labels_only":spans,"target_ids_labels_only":target_eos,"source_views":views,"existing_prose_membership_pass":true}),
+    )
+}
+fn run_reference_only(a: &Args, start: Instant) -> Result<Value> {
+    report_output::verify(&a.input)?;
+    let tokenizer = read(&a.tokenizer)?;
+    let tok = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer)
+        .ok_or_else(|| invalid("actual tokenizer invalid"))?;
+    let binding = SourceActionBinding::new(&tokenizer)?;
+    let compiler = SourceEmissionCompiler::new(&tokenizer)?;
+    let raw = read(&a.input.join("inputs.json"))?;
+    let raw_labels = read(&a.input.join("labels.json"))?;
+    let inputs: Value = serde_json::from_slice(&raw)?;
+    let labels: Value = serde_json::from_slice(&raw_labels)?;
+    if string(&inputs, "schema")? != "uor-r4.native-source-bank-probe-input/1"
+        || string(&labels, "schema")? != "uor-r4.native-source-bank-labels/1"
+        || string(&labels, "protocol")? != "uor-r4.literal-role-dialogue/2"
+        || field(&labels, "membership_only")? != &json!(true)
+    {
+        return Err(invalid("reference input schema/protocol differs").into());
+    }
+    let packets = array(&inputs, "cases")?;
+    let labels = array(&labels, "cases")?;
+    if packets.is_empty() || packets.len() > 512 || packets.len() != labels.len() {
+        return Err(invalid("reference rows require matching nonempty counts <=512").into());
+    }
+    let mut seen = BTreeSet::new();
+    let mut receipts = Vec::new();
+    for (packet, label) in packets.iter().zip(labels) {
+        if start.elapsed().as_secs() >= 300 {
+            return Err(invalid("reference300second bound").into());
+        }
+        let packet: Packet = serde_json::from_value(packet.clone())?;
+        if !seen.insert(packet.id.clone()) {
+            return Err(invalid("duplicate reference row ID").into());
+        }
+        receipts.push(reference_receipt(
+            &packet, label, &tok, &binding, &compiler,
+        )?);
+    }
+    let identities = json!({"input_manifest_sha256":sha256_file(&a.input.join("manifest.json"))?,"inputs_sha256":sha256_bytes(&raw),"labels_sha256":sha256_bytes(&raw_labels),"tokenizer_sha256":sha256_bytes(&tokenizer)});
+    write(
+        &a.out,
+        "answerability-reference.json",
+        &json!({"schema":"uor-r4.bank-generate-answerability/2","provenance":"fresh derived reference; not restoration of historical reference","selector":"input-only raw query/cue bytes plus exact Source relation and latest matching physical segment; selection before existing prose label validation","runtime_reference":false,"chronology_scope":"native physical segment order; latest matching Source; event/record/commit are preserved opaque provenance, not ordering keys","input_bindings":identities,"cases":receipts}),
+    )?;
+    Ok(
+        json!({"schema":"uor-r4.bank-generate-panel-reference/1","status":"COMPLETED","cases":packets.len(),"reference_only":true,"input_bindings":identities,"derived_not_restored":true,"runtime_reference":false,"inputs_written":false,"labels_reauthored":false,"new_heldout_claim":false,"exposure_scope":"retains original input exposure; reference derivation creates no heldout data","native_predictions":"NOT_RUN","model_training":"NOT_RUN","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+    )
 }
 fn run(a: &Args, start: Instant) -> Result<Value> {
     report_output::verify(&a.input)?;
@@ -452,7 +596,11 @@ fn main() -> Result<()> {
     let a = args()?;
     report_output::claim(&a.out)?;
     let start = Instant::now();
-    let result = run(&a, start);
+    let result = if a.reference_only {
+        run_reference_only(&a, start)
+    } else {
+        run(&a, start)
+    };
     let report = match &result {
         Ok(v) => v.clone(),
         Err(e) => {
@@ -552,6 +700,102 @@ mod tests {
         p.actual_prefix_ids = tok.encode(" Your job is amber.");
         assert!(reference(&p, &tok, &binding).is_err());
         assert!(query_role("What was my previous job?").is_err());
+        Ok(())
+    }
+    fn compiler() -> Result<SourceEmissionCompiler> {
+        // Use the exact same tokenizer fixture bytes, not a separately chosen map.
+        let mut vocab = serde_json::Map::new();
+        for (id, token) in ["<|bos|>", "<|eos|>", "<|unk|>"].iter().enumerate() {
+            vocab.insert((*token).into(), json!(id));
+        }
+        for (offset, byte) in (b'!'..=b'~').enumerate() {
+            vocab.insert(char::from(byte).to_string(), json!(offset + 3));
+        }
+        vocab.insert("Ġ".into(), json!(97));
+        Ok(SourceEmissionCompiler::new(&serde_json::to_vec(
+            &json!({"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":vocab,"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}),
+        )?)?)
+    }
+    fn prose_label(answer: &str) -> Value {
+        json!({"id":"fixture","answers":{"intent":"current","accepted":[answer]}})
+    }
+    #[test]
+    fn reference_only_labels_cannot_steer_source_and_byte_spans_are_exact() -> Result<()> {
+        let (tok, binding) = tokenizer()?;
+        let p = packet(&tok);
+        let c = compiler()?;
+        assert!(
+            reference_receipt(&p, &prose_label(" Your job is amber."), &tok, &binding, &c).is_err()
+        );
+        let receipt = reference_receipt(
+            &p,
+            &prose_label(" Your job is amber amber."),
+            &tok,
+            &binding,
+            &c,
+        )?;
+        assert_eq!(receipt["reference_source_segment_labels_only"], json!(3));
+        assert_eq!(receipt["reply_literal_byte_start"], json!(13));
+        assert_eq!(receipt["reply_literal_byte_end"], json!(24));
+        assert_eq!(
+            receipt["source_views"]
+                .as_array()
+                .ok_or_else(|| invalid("views"))?
+                .len(),
+            3
+        );
+        let spans = array(&receipt, "canonical_token_byte_provenance_labels_only")?;
+        assert_eq!(
+            spans
+                .iter()
+                .filter(|s| s["overlaps_literal"] == json!(true))
+                .count(),
+            11
+        );
+        Ok(())
+    }
+    #[test]
+    fn reference_only_same_value_reassertion_preserves_physical_identity_and_scope() -> Result<()> {
+        let (tok, binding) = tokenizer()?;
+        let mut p = packet(&tok);
+        if let Segment::Context { token_ids, .. } = &mut p.segments[2] {
+            *token_ids = tok.encode("My current job has changed to amber.");
+        }
+        if let Segment::Source {
+            original_source_ids,
+            commit,
+            ..
+        } = &mut p.segments[3]
+        {
+            *original_source_ids = tok.encode("amber");
+            *commit = 10; // Same record AND commit: event/ordinal still distinguish.
+        }
+        let c = compiler()?;
+        let receipt =
+            reference_receipt(&p, &prose_label(" Your job is amber."), &tok, &binding, &c)?;
+        assert_eq!(receipt["reference_source_segment_labels_only"], json!(3));
+        assert_eq!(receipt["reference_event"], json!(50));
+        assert_eq!(receipt["reference_record"], json!(1));
+        assert_eq!(receipt["reference_commit"], json!(10));
+        // Equal/decreasing event IDs are opaque; the last matching physical
+        // occurrence remains selected even when record/commit/value also match.
+        for later_event in [10, 7] {
+            if let Segment::Context { event, .. } = &mut p.segments[2] {
+                *event = later_event;
+            }
+            if let Segment::Source { event, .. } = &mut p.segments[3] {
+                *event = later_event;
+            }
+            let receipt =
+                reference_receipt(&p, &prose_label(" Your job is amber."), &tok, &binding, &c)?;
+            assert_eq!(receipt["reference_source_segment_labels_only"], json!(3));
+            assert_eq!(receipt["reference_event"], json!(later_event));
+            if later_event == 10 {
+                assert!(reference(&p, &tok, &binding).is_err());
+            } else {
+                assert_eq!(reference(&p, &tok, &binding)?.segment, 1);
+            }
+        }
         Ok(())
     }
 }
