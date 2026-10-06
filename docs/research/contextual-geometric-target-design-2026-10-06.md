@@ -154,3 +154,69 @@ controls at matched full-context information. Distinguish packet observation
 from retained signed state and qualify its exact serving operations before
 adoption. This is source-reuse investigation, not an implemented mechanism or
 a proposal to reactivate the old single-source path unchanged.
+
+
+## Adversarial feasibility review before the next intervention
+
+A read-only review of the actual loader and frozen accepted-answer inventory
+finds 512 construction rows but only 48 distinct accepted replies. Their two
+surface families are ` Your job is {literal}.` and ` You live in {literal}.`,
+followed by EOS. Training and development use the same construction inputs and
+labels. The sealed labels SHA256 is
+`84991e0657b5697c0e061eaa3fe86e4a0ec7ce6bc2be8371b62698c6b8126155`;
+inputs SHA256 is
+`b9661606b280884217a64e0a5b643f8324a90390e47ade7241da0889a5f7c86a`.
+Both roles use the same 24 literals, and their target-length distributions
+including EOS match exactly (9–22 tokens). This panel can expose
+source-dependent generation defects; it cannot
+establish broad grammar, semantic learning or general prose. A frozen encoder
+of these replies supplies well-defined supervised targets, but role, surface,
+length and memorization of 48 strings can explain a lower auxiliary loss.
+The plain-span target auditor does not authenticate a student full-bank input.
+Do not turn its 34 authored pair distinctions into a contextual-JEPA verdict.
+
+The historical read-feedback investigation identifies the minimal all-bank
+seam immediately before Generate consumes its retained state. Provisional
+selection must use the highest existing summed raw Copy score, with a declared
+smallest bank-ordinal tie rule. Read the selected candidate's actual causal
+replay state; this state includes preceding bank history and is not a separate
+record-local encoding. Retain record/commit/event, physical segment, emission
+view offset, token ID and causal position in provenance. The bank ordinal,
+record-local offset and causal position are distinct indexes.
+
+A conditional small bridge uses signed directed relation `d = inverse(q)*k`
+and a shared finite action table `B[a] + T[a,d]`, then updates `q' = q*a`.
+All-zero quarter-grid coefficients must choose identity first; numeric-code
+order is not an identity tie rule. A full table has `120*(120+1)*L` coefficients,
+about 7,260 packed four-bit bytes per lane before padding and buffers, and
+requires a 120-action scan per lane. This is additional finite parameter access
+and work. The direct retained-state candidate avoids the historical K2 value
+producer's lossy root/category packet. A common left transport leaves the
+relative relation invariant; a need for absolute source-frame orientation
+would therefore falsify the relation-only parameterization at that scope.
+SpiralCore source anchoring remains a separate candidate, not an assumed gain.
+
+Crucially, a bridge-only fit with the previous final Copy ranker frozen is not a
+valid first-token remedy. For that exact old checkpoint every entry target is
+absent from Copy, and every entry has a competing Copy raw score above the
+Generate upper bound. At this eight-lane/four-edge configuration, thirteen
+signed coefficients in [-7,7], each shifted by 20 into Q24, bound Generate by
+`91/16` nats regardless of retained state. Changing only the state cannot remove
+that barrier. This is a decoder/pool feasibility constraint, not evidence that
+attention geometry failed. The active phase-balanced fit may change Copy
+margins; inspect its terminal native results before choosing the bridge scope.
+
+If a read-to-state intervention is justified, preserve native token/EOS loss,
+actual all-bank information, signed hard-forward behavior and the existing
+common vocabulary pool. Compare identity, predicted read, an identical-capacity
+query/surface bridge and a prospectively specified non-target-informed
+distractor read. Use authenticated source-state interventions to test whether
+prediction follows the source. Extra bridge capacity or uniform Copy suppression
+alone cannot qualify selective attention. Freeze hard occurrence selection when
+isolating consumption and claim no gradient through it; jointly responsive
+potential/context learning is a separate scope when required by pool margins.
+Also retain an identical-capacity extra update without source selection and
+a query-blind bank-read control when testing selective retrieval.
+Hard/relaxed and export/reload parity must cover the actual refined Generate
+state, not only a tensor shape or a training loss. No bridge fit or runtime
+adaptation has been performed by this review.
