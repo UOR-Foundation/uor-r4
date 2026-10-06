@@ -1,5 +1,21 @@
 # Current UOR-R4 research state
 
+## Native Generate update — October 6, mixed result
+
+[Native Generate learning](geometric-native-generate-learning-2026-10-06.md) now
+executes one real B8 CUDA optimizer step and independent integer reload. Both
+native context transitions and decoder coefficients change; hard token prototypes
+do not. Crossed CE is8.3562 initial,8.3011 learned-context-only,7.8782 learned-decoder-only,
+8.1948 joint; exact first-position synthetic targets0/0/4/0 outof8. Context changes
+all16 retained lane states, but joint movement cancels part of decoder benefit.
+This is parameter learning/sensitivity, not useful joint prediction or chat.
+The lr0.2 displacement instrument is not the real-fit rule. Next: target-free
+Generate/Copy over SAME full-bank state, real-tokenizer answerable prose panel,
+paired output-only/joint fits with prospectively reachable native update scales.
+New integrated code and panel are unqualified until actual checks/outputs execute.
+PR1792 is draft and not on main; preserve every endpoint and negative interaction.
+
+
 ## Native CUDA learning backend — October 6
 
 The [executed native CUDA probe](geometric-native-cuda-learning-2026-10-06.md) at
