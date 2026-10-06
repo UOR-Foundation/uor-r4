@@ -23,17 +23,22 @@ establish improved retrieval. The earlier report-cap failure is preserved as an
 instrument failure; fresh attempt 7 completed all 512 rows after the CLI-only
 cap repair.
 
-The next isolated learning intervention balances the same native token loss
-across entry, later Copy-covered, and later Generate-only positions. At
-`b2dfe4df`, both focused weighting tests, the release CUDA build, and both
-zero-update admissions passed. Native hard-pool parity passed independently;
-all initial Source, Generate-source, native, cue and prefix files are byte
-identical to the original fit. The 128-update matched fit will assess the final
-checkpoint as well as the existing selected checkpoint. The actual fit at
-`ef8c0494` is running on the leased RTX 5090; terminal quality evaluation is
-pending. Its two phase checks, one wall-overrun check and release build passed.
-Healthy work continues beyond a self-set estimate under owner direction #1802.
-One seed diagnoses the objective intervention; it does not qualify transfer or chat.
+The matched phase-balanced native-token-loss fit completed at `ef8c0494`:
+128 updates, independently reloaded native final/selected checkpoint 128,
+**0/512 entry and complete replies**, CE 8.223477354 to 5.586792452. Actual
+phase tests (2), wall-overrun test (1), release build and fit exit zero;
+complete wrapper 3,761.374 seconds, peak child RSS 2,239,252 KiB. Independent
+saved-row review authenticates all 1,024 hashes and initial-row equality.
+Entry NLL improves versus original final to 9.376548256 but remains worse than
+initial 8.343483483; later Generate-only NLL is 9.008436689 with 0/2,024
+correct. Covered correct rises to 394/4,128 while covered NLL worsens to
+3.280405259. Every final reply fails at position zero, reaches the cap and
+never EOS. Strict high-clipped entry Copy atoms fall to 541, but all 512
+rows still have Copy maxima above Generate's legal 91/16 bound. Phase weighting
+alone does not solve the pool/entry barrier; no unchanged-dose repeat.
+The sealed fit/config/source/receipt is MD5-verified in iCloud; native original
+roots remain on canonical /workspace. GPU lease released and pod deleted.
+One seed diagnoses this objective intervention, not transfer or chat.
 
 The subsequent architectural candidate is contextual JEPA learning over a
 retained signed geometric state, with SpiralCore anchor-frame transport tested
@@ -59,8 +64,8 @@ and decoder sufficiency are not established. The historical read-feedback
 family suggests an all-bank predicted-read-to-retained-state-to-Generate seam,
 but an unchanged frozen Copy ranker makes that bridge-only fit impossible on the
 old final parent: every entry target is absent from Copy and every competing
-Copy score exceeds Generate's legal 91/16 bound. Inspect the live phase result
-before choosing that intervention. Retain signed source provenance, matched
+Copy score exceeds Generate's legal 91/16 bound. The completed phase result retains that barrier;
+do not launch a frozen-ranker bridge-only fit. Retain signed source provenance, matched
 extra-capacity/query/surface/distractor controls and hard/export parity; no
 bridge is implemented by this review.
 See the [contextual target audit](../research/contextual-geometric-target-design-2026-10-06.md). See the [saved reply diagnosis](../research/joint-potential-reply-diagnosis-2026-10-06.md)

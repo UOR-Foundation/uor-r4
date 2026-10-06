@@ -44,3 +44,75 @@ Same-token exactbytealigned physicalSource margins:208eligiblerows/624positions-
 Opposite-query meanSource contrasts:128bankunits/512nonindependentpairs, everyrowusedtwice. Positivequery difference-of-differences232→225; expectedSource meanpreference QueryA264→258, QueryB250→236; bothcorrect100→86. Differences increase255/decrease257, nozeros;25flippositive/32flipnegative. Frozen cue/prefix andsharedcell contribution differences arezero. Learned nonshared geometry changes query-dependent relative scores, but these mixed directional outcomes do not establish improved source discrimination. Means are not Sourcewinners or tokenprecision; controls isolatepotential effects conditionalonfinalcontext/Generate, not wholejointlearning.
 
 Next isolated correction is opt-in3phase tokenloss weighting, sourceb2dfe4df. Exactsource reviewREADY; actualtests/CUDAadmission pending. JEPA contextualprediction remains a conditional separatelymeasured training auxiliary; its historical standalone-next-token embedding target is not contextualspanprediction.
+
+
+## Completed matched phase-balanced fit and adversarial diagnosis
+
+The single phase-weighting change completed 128 updates and all 512 final
+native own-prefix evaluations at source
+`ef8c04947a209bf54706e23db1f3d1584fc8adfb`, executable SHA256
+`b407e95b8a9222b551691fb082281034af12207f00081327f29beadf6a7a8afa`.
+Selected checkpoint is 128. Actual focused phase tests (2), wall-overrun test
+(1), release build and fit command exit zero. The complete wrapper took
+3,761.374 seconds, fit command 3,651.957 seconds, internal fit 3,647.416
+seconds; peak child RSS was 2,239,252 KiB. The integer fitter sealed and verified
+its output before exiting zero. No healthy run was cancelled at an estimate.
+
+Independent saved-evidence analysis authenticated all 1,024 initial/final row
+SHA references and compared episode IDs with the original fit. All 512 initial
+compact row records match; every empty-prefix canonical packet equals its
+actual generation packet. This review did not rerun native scoring or gradients.
+
+| Outcome | Original final 128 | Phase-balanced final 128 |
+|---|---:|---:|
+| Equal-episode native CE | 5.618457004 | 5.586792452 |
+| Entry mean NLL / 512 | 9.612731276 | 9.376548256 |
+| Entry correct / 512 | 0 | 0 |
+| Later covered mean NLL / 4,128 | 3.220526251 | 3.280405259 |
+| Later covered correct / 4,128 | 357 | 394 |
+| Later Generate-only mean NLL / 2,024 | 9.141762913 | 9.008436689 |
+| Later Generate-only correct / 2,024 | 0 | 0 |
+| Complete own-prefix replies / 512 | 0 | 0 |
+| EOS / 512 | 0 | 0 |
+| Entry rows with Copy above Generate bound | 512 | 512 |
+
+Both final fits first diverge at position zero in every row and reach the
+32-token generation cap. Initial entry NLL was 8.343483483; both final fits
+remain worse. Balanced entry NLL improves versus original final in 337 rows
+and regresses in 175; Generate-only episode NLL improves in 345 and regresses
+in 167. Covered episode NLL improves in 227 and regresses in 285, despite the
+increased covered hard accuracy. Do not conflate accuracy and likelihood.
+
+Among 8,208 entry Copy atoms, strict high clipping falls from 750 to 541,
+exact +8 from 4 to 3, and affected rows from 461 to 373. Every row still has
+unsaturated Copy atoms; 139 balanced rows have no strictly high-clipped atom
+but also fail the Generate-bound comparison. Saturation matters, especially
+for the winning atom's direct true-clamp derivative, but is not proved the sole
+cause. Generate-only target rank is unavailable from these compact saved
+packets: full score vectors were removed and only hashes retained. A replay
+would be required to measure it.
+
+Decision: the loss-allocation pilot answered its causal question and does not
+justify an unchanged-dose repeat. Do not fit a state-only bridge against this
+frozen final Copy ranker: every entry target is absent from Copy and a competitor
+exceeds Generate's legal 91/16 maximum regardless of state. A further learning
+change must address feasible native prediction and source-conditioned geometric
+consumption together. Uniform Copy attenuation alone would not establish
+selective attention. The existing 48-string panel and collision-free saved
+states do not qualify JEPA predictability or semantic organization. Retain the
+all-bank read-to-state enabler, contextual auxiliary and SpiralCore frame options
+with their distinct causal roles; do not combine all three in one first fit.
+
+Report SHA256:
+`41f9faead3928f4279b50af878b6b86ba5b689bebe090fc73ebd8d0650a45de7`.
+Manifest SHA256:
+`070f7846ff9ef55eca895528daae200d303c0e3e4a442aecbd1805b637a47606`.
+Completed root remains on canonical `/workspace/uor-r4/codex/native-geometric-generate/phase-balanced-fit-attempt1`.
+Its report, checkpoints, config, source bundle and execution receipt are
+MD5 round-trip verified at
+`icloud:UOR-R4/results/codex/phase-balanced-completed-cloud-20261006.tar`
+(44,686,848 bytes; MD5 `ae58547af6cbe88854fa2bfe093d9cf8`).
+The local transfer copy was removed through the dedicated Trash after verified
+preservation under owner authorization. GPU lease released and pod
+`5j908ccd585p4s` deleted after terminal work and preservation; other labs' pods
+and files were untouched. No fresh-transfer, general-chat or energy claim.
