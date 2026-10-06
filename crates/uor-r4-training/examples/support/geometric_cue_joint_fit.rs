@@ -193,26 +193,35 @@ pub(super) fn run(
     }
     let baseline_objective = best;
     let baseline = compact(&selected_canonical, &selected_generation, development)?;
+    let baseline_metrics = causal_metrics(
+        &a.development_panel,
+        development,
+        &selected_canonical,
+        &selected_generation,
+    )?;
+    let mut prior_artifacts = vec![(initial.clone(), baseline.clone(), baseline_metrics.clone())];
     let mut selected_compact = baseline.clone();
     // Only baseline/final retain full traces. Candidate chains and compact rows
     // preserve every legal proposal, including rejects, without16 full traces.
     let full_bytes = serde_json::to_vec(&selected_canonical)?.len()
         + serde_json::to_vec(&selected_generation)?.len();
-    let compact_bytes = serde_json::to_vec(&baseline)?.len();
+    let compact_bytes =
+        serde_json::to_vec(&baseline)?.len() + serde_json::to_vec(&baseline_metrics)?.len();
     let projection = (full_bytes as u64)
         .saturating_mul(2)
-        .saturating_add((compact_bytes as u64 + 1024 * 1024).saturating_mul(MAX_TRIALS as u64))
+        .saturating_add((compact_bytes as u64 + 2 * 1024 * 1024).saturating_mul(MAX_TRIALS as u64))
         .saturating_add(128 * 1024 * 1024);
     write_json(
         &a.out,
         "storage-projection.json",
-        &json!({"maximum_trials":MAX_TRIALS,"full_baseline_and_final_bytes":full_bytes*2,"compact_per_trial_observed_bytes":compact_bytes,"projection_with_chain_reserve_and_stop_margin_bytes":projection,"maximum_report_bytes":a.maximum_report_bytes}),
+        &json!({"maximum_trials":MAX_TRIALS,"full_baseline_and_final_bytes":full_bytes*2,"compact_per_trial_observed_bytes":compact_bytes,"projection_with_chain_reserve_and_stop_margin_bytes":projection,"maximum_report_bytes":a.maximum_report_bytes,"maximum_prior_compact_artifacts":MAX_TRIALS+1,"prior_compact_memory_observed_bytes":compact_bytes*(MAX_TRIALS+1),"comparison_reserve_per_trial_bytes":2*1024*1024}),
     )?;
     if projection > a.maximum_report_bytes as u64 {
         return Err(invalid("joint fit projected report cap before learning").into());
     }
     write_json(&initial, "canonical.json", &selected_canonical)?;
     write_json(&initial, "generation.json", &selected_generation)?;
+    write_json(&initial, "causal-metrics.json", &baseline_metrics)?;
     report_output::seal(&initial)?;
     report_output::verify(&initial)?;
     let indices: Vec<_> = (0..512).collect();
@@ -310,15 +319,28 @@ pub(super) fn run(
             source_end_fit::generation(integer, &nc, &np, &ne, development, tok, a, start)?;
         let candidate = objective(&canonical, &generation)?;
         let summary = compact(&canonical, &generation, development)?;
+        let metrics = causal_metrics(&a.development_panel, development, &canonical, &generation)?;
+        let comparisons = prior_artifacts
+            .iter()
+            .map(|(path, rows, prior_metrics)| -> Result<Value> {
+                Ok(
+                    json!({"prior_artifact":path,"complete_comparison":gains(rows,&summary)?,
+                "causal_comparison":causal_comparison(prior_metrics,&metrics)?}),
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
         let accept = improves(best.0, best.1, candidate.0, candidate.1);
-        let rec = json!({"trial":trial,"incumbent_root":selected_root,"incumbent_joint_packed_sha256":sha256_bytes(&packed),"coordinate":index,"signed_quarter_step":step,"gradient_values":gs,"gradient_report":gradient_report,"predicted_local_ce_delta":f64::from(gs[index])*f64::from(step)*0.25,"realized_ce_delta":candidate.1-best.1,"incumbent_complete":best.0,"proposal_complete":candidate.0,"proposal_native_ce":candidate.1,"proposal_objective_finite":candidate.1.is_finite(),"accepted":accept,"comparison_to_incumbent":gains(&selected_compact,&summary)?,"comparison_to_baseline":gains(&baseline,&summary)?,"joint_quarters":next,"joint_packed_sha256":sha256_bytes(&restored.joint_packed_coefficients()?.ok_or_else(|| invalid("joint fit proposal packed absent"))?),"frozen_unary_sha256":sha256_bytes(&unary),"frozen_payloads":f.hashes(),"independent_native_reload":true});
+        let rec = json!({"trial":trial,"incumbent_root":selected_root,"incumbent_joint_packed_sha256":sha256_bytes(&packed),"coordinate":index,"signed_quarter_step":step,"gradient_values":gs,"gradient_report":gradient_report,"predicted_local_ce_delta":f64::from(gs[index])*f64::from(step)*0.25,"realized_ce_delta":candidate.1-best.1,"incumbent_complete":best.0,"proposal_complete":candidate.0,"proposal_native_ce":candidate.1,"proposal_objective_finite":candidate.1.is_finite(),"accepted":accept,"comparison_to_incumbent":gains(&selected_compact,&summary)?,"comparison_to_baseline":gains(&baseline,&summary)?,"comparisons_to_all_prior_artifacts":comparisons,"postprediction_causal_counts":metrics["counts"],"joint_quarters":next,"joint_packed_sha256":sha256_bytes(&restored.joint_packed_coefficients()?.ok_or_else(|| invalid("joint fit proposal packed absent"))?),"frozen_unary_sha256":sha256_bytes(&unary),"frozen_payloads":f.hashes(),"independent_native_reload":true});
         write_json(&root, "rows.json", &summary)?;
+        write_json(&root, "causal-metrics.json", &metrics)?;
         write_json(&root, "receipt.json", &rec)?;
         frozen(source, receipts)?;
         immutable(inputs, seals)?;
         report_output::seal(&root)?;
         report_output::verify(&root)?;
         trials.push(rec);
+        // Rejected artifacts remain comparators at every later trial too.
+        prior_artifacts.push((root.clone(), summary.clone(), metrics));
         if accept {
             accepted += 1;
             current = restored;
