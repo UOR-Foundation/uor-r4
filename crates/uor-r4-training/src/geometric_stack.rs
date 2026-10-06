@@ -2415,12 +2415,16 @@ impl StackModel {
         // span probe they never enter the scores and are removed before
         // `read.out`. Exclusive with the other two blocks (the extraction below
         // relies on that), which is checked here rather than silently mixed.
-        let value = match binding.as_ref().and_then(|binding| binding.weights.as_ref()) {
+        let value = match binding
+            .as_ref()
+            .and_then(|binding| binding.weights.as_ref())
+        {
             None => value,
             Some(dump) => {
-                if binding.as_ref().is_some_and(|binding| {
-                    binding.target.is_some() || binding.probe.is_some()
-                }) {
+                if binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.target.is_some() || binding.probe.is_some())
+                {
                     return Err(invalid(
                         "the read weight dump is exclusive with the binding label and span probe",
                     ));
@@ -2469,7 +2473,10 @@ impl StackModel {
                 .to_dtype(DType::F32)?;
             probe.layers.push((layer, masses));
         }
-        if let Some(dump) = binding.as_mut().and_then(|binding| binding.weights.as_mut()) {
+        if let Some(dump) = binding
+            .as_mut()
+            .and_then(|binding| binding.weights.as_mut())
+        {
             // The identity block is the only auxiliary value block (checked in
             // `read_binding_values`), so it starts at the ordinary width.
             let weights = read.narrow(3, value_width, time)?;
@@ -6893,7 +6900,9 @@ impl StackModel {
             return Err(invalid("read weight rows needs at least one row"));
         }
         if time == 0 || time > self.config.context {
-            return Err(invalid("read weight rows needs one window within the context"));
+            return Err(invalid(
+                "read weight rows needs one window within the context",
+            ));
         }
         let p = self.params()?;
         let x = self.embed_with(&p, ids, batch, time)?;
