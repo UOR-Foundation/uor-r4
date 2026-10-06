@@ -2,16 +2,31 @@
 
 ## Joint geometric scorer learning integration — October 6
 
-Sourcec8de1e0c5a12aff511eefc47e5d6ad31bcfe46ff adds explicit
+Model source `9410c92b9104afa97be96d47a970b8647a346745` adds explicit
 `joint-potential` learning of the existing potential alongside context and
-Generate. Defaults retain frozen potential. Selected all-candidate/head pairs
-use native hard anchoring plus coefficient credit, separately from the existing
-context adjoint. Context-only export still rejects changed potential; the new
-export binds changed bytes and rebinds unchanged cue/prefix numerical payloads.
-Independent source review found and resolved an owned-Var compile defect and a
-missing nonzero scorer-gradient admission. Actual integrated compilation and
-real H2/L4 CUDA admission are RUNNING on RTX4090 podtnsy3jb6wm4wa7, EU-RO-1;
-no optimizer updates or language result are claimed yet.
+Generate. Defaults retain frozen potential. Actual scoped library tests (2),
+example gradient-contract test (1), release build and real H2/L4 CUDA admission
+PASS on Linux x86_64 RTX 4090, EU-RO-1. Admission used eight balanced episodes,
+103 canonical target positions and zero optimizer updates. Independent native
+hard-pool parity passed. Contextual angular/radius/presence and content-presence
+coefficients received finite nonzero device gradients; the structurally absent
+content angular/radius/pair terms remained zero. This is a connected-learning
+result, not attention or language improvement. Initial own-prefix construction
+check remains 0/8 complete.
+
+The portable bundle omitted historical enclosing seals. Admission initially
+refused the inputs before model work. A separate Rust importer at
+`4c24b34423384931bb96d2e28402797c32f444f7` authenticated the portable SHA inventory
+and created a fresh verified import seal without claiming restoration of the
+historical seals or changing model/data bytes. Model executable SHA256
+`cec4dc6b5ed9945aae790f0ca1f1e128e9a4a81c92e6f1d366b2ce8da735e1e3`
+remained unchanged. Final import/build/admission took 110.38 seconds; admission
+itself took 29.42 seconds. Earlier compiler/import failures are retained as
+instrument defects. Evidence is MD5-verified in
+`icloud:UOR-R4/results/codex/joint-potential-validation-preserved.tar`
+(6,432,256 bytes, MD5 `e58c440ab1cf7887a51b0d43943bd147`). Pod
+`tnsy3jb6wm4wa7` was released and deleted after preservation. Source remains on
+open PR #1792; no merge-to-main receipt is claimed.
 
 Archive inspection reauthenticates512 rows:6664 canonical positions include
 4128 source-covered positions spanning78 target IDs and2536 Generate-only

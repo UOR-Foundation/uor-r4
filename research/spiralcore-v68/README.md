@@ -5,6 +5,13 @@ consulted references, not active model components or acceptance evidence for the
 UOR-R4 Geometric Language Model. The original files remain in Downloads; the
 existing v63 reference and Rust adapter remain unchanged.
 
+The [October 6 attention revisit](../../docs/research/spiralcore-attention-revisit-2026-10-06.md)
+adds actual browser observations and two specialist reviews. It identifies
+retained query-centered H4 frame transport as a concrete candidate, with an
+information-matched collision discriminator against the existing scorer.
+Prompt `cat` and `act` produced identical routed waypoints in that observation;
+the geometric action substrate remains distinct from that fixed input encoding.
+
 | Source | Preserved file | SHA256 |
 |---|---|---|
 | SpiralCore v68 HTML | [Spiralcore_Dodecahedron_IP_Schema_v68.html](Spiralcore_Dodecahedron_IP_Schema_v68.html) | `2a45c2e5f46c8c36bf7801da1d1e12ee9e2ed8b3da488ff54c20a6ac6c2ceab0` |
