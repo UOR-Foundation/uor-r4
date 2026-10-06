@@ -14,9 +14,21 @@ SHA256 bindings and native artifact code arrays are audited; this is not a
 second independent inference replay. Joint seed1002 also completes128 updates
 and exits0 at08:13:50Z: CE8.182738→7.931800,0/512, all first errors at0, unchanged
 hard codes and11953 changed context bytes. Independent review checks both arms
-against all1024 saved rows each and recomputes canonical CE. Both seed1003 fits
-are now live, starting08:09:22Z output-only and08:13:50Z joint. The second paired
+against all1024 saved rows each and recomputes canonical CE. Output-only seed1003 is live from08:09:22Z; the joint run now uses attempt3
+from08:27:18Z, with full initial replay matching as detailed below. The second paired
 result repeats the first; the declared three-seed verdict remains pending.
+
+Joint seed1003 attempt1 stops before optimizer1 because its measured4801.907s
+projection exceeds4500s. Attempt2 raises the configured limit but the frozen
+binary rejects it before report claim; both are execution failures with0updates.
+The one-line argument-ceiling repair atc7222d7e has an actual pod release build
+and6 fitter checks PASS. Attempt3 starts08:27:18Z at that source, same model/data/
+seed/optimizer and128updates, with only output path/time limit changed. All512 initial row objects match1698, including6664 canonical/16196 own-prefix
+native packets. Actual firstB8 cost21.940s projects4055.683s below5100; optimization
+has begun. This remains an unfinished seed, not a final quality result.
+Complete6h wall and5.5h rental ceilings remain unchanged. Source review confirms
+both newer optional mechanisms remain disabled in this scientific arm.
+
 
 All32768 native token prototype codes remain unchanged in both arms. Lane
 diversity stays `[120,35,1,1,1,1,1,1]`. With disjoint pair edges, the six constant
@@ -36,6 +48,17 @@ prospective cost. Useful later-seed replies or a changed dominant failure take
 priority over the prepared comparison. New-mode CUDA
 admission/fit remain NOT_RUN. No normalizer
 change or dose increase. PR1792 remains draft/unmerged.
+
+Second-seed native margin replay also completes/seals at existinga84bf2e1:
+all2048 first-position score hashes match. Final output-only471/512 strict
+Generate deficits and41 targets at the maximum;22 of those select the gold
+but lose pooled Copy. Joint has495deficits and17 targets at the maximum;5 of
+those select the gold but lose pooled Copy. Higher6unary/3pair factors
+cancel in every raw margin. This repeats the first-seed ranking diagnosis,
+without qualifying balanced initialization or a model family. The bounded CPU
+audits take9.20/9.93s and exit0; first wrapper attempt127 missing timing utility
+executes no model and is preserved separately. Both live fits remain untouched.
+
 
 ## Delayed geometric prediction credit — October 6
 

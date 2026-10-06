@@ -517,3 +517,73 @@ traces. These are saved-evidence arithmetic checks, not another inference run or
 BLAKE3 validation. The second pair repeats the first pair's behavioral/code
 restriction. Both third seeds are live; balanced admission remains conditional
 on the completed declared results. No estimator, dose or normalizer change follows.
+
+
+## Joint third-seed execution repair
+
+Attempt1 is terminal at08:17:50Z before optimizer1: measured first-B8
+26.682706587s yields4801.90678795s projected complete cost, above4500s. Preserve
+its sealed FAILED report and admission outputs;0 optimizer updates do not count
+as a seed or model-quality negative. Attempt2 uses the same frozen binary and
+changes only out/maximum_seconds to5100, but exits immediately before claim
+because argument validation itself has a4500 ceiling. This retained launch
+failure is an execution mistake in the retry preparation, not a geometry result.
+
+Atc7222d7e the only new Rust delta from2a5bbd09 is argument validation4500→5100.
+Actual source transport verifies17117 committed files. Pod release build87s,
+test build5.24s and6 fitter tests PASS; executable SHA256
+`2c1b6e2768f854ef30a43535b56ced938c772fb8015baefd97bbf631b2cb936a`.
+Independent source review checks the complementary default-off prefix/balanced
+paths against1698: legacy initialization, objective, optimizer and schedule
+remain. Forward replay alone would not prove backward equality. Attempt3 config
+SHA256 `d4160d2ebdbf1247a9f7ed8378b1658f95d3565159fa26fc8581bf5bf3d8bb21`
+differs from original only in exclusive out and maximum_seconds5100; both
+optional flags remain false. Outer timeout5200s. Actual PID12115 starts08:27:18Z
+under the GPU1 lock. Initial512 native score-SHA comparison is pending at this
+record; qualification/completion remains unavailable. Output-only third seed
+continues at frozen1698 without interruption.
+
+The prospective extension keeps overall6h wall ceiling10:30:33Z and5.5h rental
+ceiling approximately10:21Z/$10.89 unchanged. No new pod or paid ceiling is added.
+4-thread/6GiB CPU build ends before the retry; the two fits retain8threads/12GiB
+host per job. Durable artifacts stay canonical /workspace; /root/codex4.0GiB,
+shared target1.5GiB, experiment area2.5GiB at08:29Z; laptop36GiB free.
+
+
+The subsequent full initial comparison passes: all512 complete row objects and
+the entire initial evaluation match original1698 attempt1, including6664
+canonical/16196 own-prefix native packets and score hashes. Independent receipt
+SHA256 `971503e60808daa91002a047f75d935e442e43d42f85c578c2db9f7dbb471a06`.
+First B8 now measures21.940446115s; complete projection4055.682971976s is below
+5100. Optimization has begun (8 completed records at08:32Z). This establishes
+initial execution equivalence/admission, not final improvement or three-seed
+completion. The previously retained partial261-row receipt is not overwritten.
+
+
+## Second-seed native margin discriminator
+
+The existinga84bf2e1 auditor/executable56e17e07 replays both completed seed1002
+artifacts under separately declared CPU4threads/6GiB,60s per arm. Attempt1's
+wrapper references absent `/usr/bin/time` and exits127 before executing the
+auditor; it creates no model report and remains an execution defect. Attempt2
+uses the already available standard-library timer/resource accounting and fresh
+exclusive roots. Both audits complete/seal with exit0 in9.2019/9.9298s, peakRSS
+116188/117068KiB. No build, GPU use, fit or serving change occurs; total wall and
+rental ceilings are unchanged.
+
+All2048 first-position native full-vocabulary score hashes replay exactly. At
+step128 output-only has471 strict target-versus-best-Generate deficits,41ties
+and22 deterministic gold-best cases; joint has495 deficits,17ties and5 gold-best
+cases. Every gold-best case still loses the pooled decision to a Copy-supported
+winner. Higher6 unary/3pair factors cancel in every margin; all hard codes remain
+unchanged. Mean raw target-minus-best margin moves from−0.350341796875 to
+−0.2611083984375 output-only/−0.312744140625 joint nats. This reproduces the
+within-Generate ranking deficit separately from the smaller set of gold-best
+Copy losses, supporting the prepared initializer discriminator conditionally on
+the third-seed outcome. It does not establish mechanism benefit or fresh transfer.
+
+Audit report SHA256 identities are
+`c626fbc97decb6571472677b4147466d6fa732ca52871408f135d11709f9d9e6`
+(output-only) and
+`b959bd2d31d2f7e50596541a2aa08b07c41589b966b69ab46f65494274580708`
+(joint). Inputs bind the exact completed fit report/manifests and1698 executable.
