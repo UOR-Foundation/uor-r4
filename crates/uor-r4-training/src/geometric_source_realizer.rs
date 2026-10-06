@@ -4678,6 +4678,23 @@ mod tests {
             )
             .map_err(|e| invalid(e.to_string()))?,
         )?;
+        // Sidecars retain references to their exact execution parent, so the
+        // independently reloaded CUDA parent needs its own equivalent sidecars.
+        let gpu_cue = gpu_native.compile_cue_carrier(cue.angular_source())?;
+        let gpu_prefix = gpu_native.compile_prefix_transport(
+            &gpu_cue,
+            PrefixAngularQ4::new(
+                PrefixAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 2,
+                    mode: PrefixScoreMode::DirectedRelative,
+                },
+                &vec![0x12; 120],
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        assert_eq!(cue.metadata(), gpu_cue.metadata());
+        assert_eq!(prefix.metadata(), gpu_prefix.metadata());
         let cpu_prepared = fixture.weights.prepare_on_device(&native, &Device::Cpu)?;
         let gpu_prepared = staged.prepare_on_device(&gpu_native, &device)?;
         let cpu_generate = crate::geometric_generate_learning::GenerateLearningWeights::seeded(
@@ -4750,7 +4767,7 @@ mod tests {
         };
         for own in [&[][..], &[4][..]] {
             let cpu = cpu_pool.forward_bank(&segments, &[5], own, &cue, &prefix)?;
-            let gpu = gpu_pool.forward_bank(&segments, &[5], own, &cue, &prefix)?;
+            let gpu = gpu_pool.forward_bank(&segments, &[5], own, &gpu_cue, &gpu_prefix)?;
             assert_eq!(cpu.actions, gpu.actions);
             assert_eq!(cpu.copy_scores_q24, gpu.copy_scores_q24);
             assert_eq!(cpu.generate.scores_q24, gpu.generate.scores_q24);
