@@ -396,8 +396,9 @@ impl NativeGeometricGenerate {
         }
         let mut changed = self.frame(state, counts)?;
         for (code, z) in out.iter_mut().enumerate() {
-            changed[lane] =
-                H4Code::try_from(code as u8).map_err(|e| GenerateError::Artifact(e.to_string()))?;
+            changed[lane] = self
+                .algebra()
+                .inverse_counted(code as u8, &mut counts.algebra)?;
             *z = self.score(&changed[..self.lanes()], token, None, counts)?;
         }
         Ok(())
