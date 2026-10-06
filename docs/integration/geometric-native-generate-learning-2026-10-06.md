@@ -600,10 +600,13 @@ byte-verified on the pod before compilation. Existing paired fits are unchanged.
 The independent decision review retains balanced initialization as the next
 causal control only if the final seed repeats the same ranking blocker. Under
 unchanged legacy codes, raw token contrasts use two unary terms, pair01 and
-bias; with coefficients in [-7,7] and a 1/16-nat unit their absolute contrast
+bias; this fitter exports coefficients in [-7,7] through its strict quarter
+range, so with a 1/16-nat unit their absolute contrast
 is bounded by 3.5 nats. Balanced codes can involve eight unary, four pair and
 bias terms, giving a loose 11.375-nat bound. These are raw score bounds, not
 simultaneously attainable margins or exact bounds on quantized pooled CE.
+The bounds apply to these exported fitter artifacts: generic EnergyTables
+permits [-8,7], so the narrower bound is not a universal kernel restriction.
 The control expands effective discrimination range and state participation;
 its old first pair already uniquely addressed the vocabulary. Report initial
 versus final improvements separately. A useful third-seed result, changed hard
