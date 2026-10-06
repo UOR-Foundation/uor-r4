@@ -218,3 +218,25 @@ ceiling with5.5h ($10.89 maximum at$1.98/h); the complete6h wall and storage
 bounds remain. The scoped prefix CPU build/check reserves four additional CPU
 threads and6GiB host RAM, total20CPU/30GiB while the two fits run, with300s
 check wall. No extra rental or GPU job is added.
+
+
+## Adversarial interpretation and next decision
+
+The120-state carrier removes a real four-coordinate nullspace, but its suffix
+actions and other lanes remain factual. A changed early state can change later
+policy choices; the current local surrogate does not recompute that alternate
+suffix. Native reload and complete replies, rather than nonzero credit, decide
+whether the paired learner helps. If it does not, compare centered carried
+utilities against bounded native120-way suffix replay at actual first-error
+transitions, with all later policies and alias-normalized loss recomputed. Require
+factual replay, then evaluate proposed shared Q4 edits on the complete trajectory
+population. These are conditional next discriminators, not launched extra fits.
+
+Retained [native route fits](geometric-native-route-fit-2026-10-04.md) and
+[cell-crossing witnesses](geometric-native-route-crossing-2026-10-04.md) already
+show why local utilities alone are insufficient: all32 retained crossing witnesses
+improved local loss while worsening full-panel loss. Reuse complete-trajectory
+acceptance mechanics if the new results demonstrate that interference; preserve
+the architecture and negative candidates. A stochastic policy-gradient objective
+is a separate prospective learning choice, not an exact derivative of hard
+argmax serving. The current fits decide the next integration step first.
