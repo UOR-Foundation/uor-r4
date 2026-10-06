@@ -1,5 +1,73 @@
 # Current UOR-R4 research state
 
+## Joint geometric cue learning — October 6 (development candidate)
+
+[PR1772](https://github.com/UOR-Foundation/uor-r4/pull/1772), numerical source
+`85a9e2e6322dda65088bea5af4f9f60d8f4ca897`, executes the fixed-pair joint-only
+fit from the zero overlay/support8 donor. Six accepted quarter updates from16
+proposals select trial12. The16-coefficient family retains the same8B packed
+payload/64KiB compiled table; source, unary, prefix and endpoint parameters remain
+frozen. Ordinary native CE proposes directions; independently reloaded actual
+complete generation selects before CE. No Adam updates or held-out predictions.
+
+| All512 development rows | Baseline | Selected | Gains / losses |
+| --- | ---: | ---: | ---: |
+| Complete own-prefix answers |59|74|18 /3|
+| First factual source correct |280|296|24 /8|
+| First emitted token correct |219|229|16 /6|
+| Both queries' sources correct /256 pairs |72|83|—|
+| Both queries complete /256 pairs |4|7|—|
+| Native equal-episode answer/EOS CE |0.9665787502842376|0.9544226152014282|—|
+
+Selected joint packed SHA256
+`33c6021151e84b27cb222a333303ccff093219e46c661b0ca689bd9b92929254`, quarters
+`[1,0,0,1,0,0,0,0,1,0,0,-1,0,-1,-1,0]`.
+The earlier harmful coordinate14 quarter reproduces59→58 and is rejected.
+At a later incumbent, coordinate14 improves completion and is accepted. Trials7,
+8 and12 accept local CE increases for complete-output gains. This supports the
+new selection law; it does not establish a differentiated rollout gradient.
+
+Independent investigative and adversarial reviews replay all16 proposal/tie/
+legal-quarter/cache/acceptance decisions and recount row outcomes. Every proposal
+compares against all prior artifacts, including rejects. Of18 complete gains,
+5 gain first-source correctness,12 already had correct first sources, and1 still
+has an incorrect first-source diagnostic. All3 remaining complete losses retain
+correct first-source and first-token outcomes. This is mixed routing/continuation
+progress, not solved or consistently bound attention. Retain all harms.
+
+Actual seven scoped release check commands pass:2 integer tests,2 exact joint
+library tests,45 fitter and52 observer tests, formatting and release build.
+Checks344.572s CPU8/RSS4,148,494,336B. Model228.176s CPU16/RSS5,051,830,272B,
+Linux x86_64 host `3170534ffd7a`, CUDA hidden; no CUDA/Metal timing claim.
+Executable SHA256
+`dd407f18f3114df9d6e542c659c2d723e751d510410189ada16cafcfbaa71e82`;
+configuration SHA256
+`12e2f8f71f7f7d7612e3601dee43c5ea8d69723135b217a366584e28b547cb92`.
+The report seal lists465,953,287B/278 files, below its1GiB cap. Actual model
+worker overhead is included separately from internal224.629s. The first launch
+wrapper failed before checks/model; its guard refusal is retained NOT_RUN.
+
+Full immutable evidence lives at
+`/workspace/uor-r4/codex/cue-joint-learning/fit-1`; selected chain `trial-0012`.
+The laptop holds small receipts only, not the complete sealed report root.
+Complete work is precharged120minutes plus the preceding10minute diagnosis once.
+The manual immutable accounting receipt preserves prior totals and the necessary
+owner-authorized extension; the old unmapped legacy receipt remains unreconciled,
+not falsely importer-verified. No blanket ledger repair campaign is required for
+this authorized manual admission. No general-chat, transfer, replicated-family,
+whole-serving or energy qualification is established.
+
+Next freeze trial12, the baseline and fixed evaluation criteria; compare exposed
+continuity, a frozen reversed-order control and a genuinely unexposed supported
+bank-composition panel. Complete generated output is primary, with typed-source
+and paired outcomes separate. Do not refit or tune from evaluation outcomes. A
+flat/negative transfer bounds this candidate, not the geometric family. If later
+results remain limited by terminal source switches, per-source geometric endpoint
+candidates can remove the factual-Copy branch but need explicit action bounds and
+multiplicity controls; a typed committed-source witness is a cheaper diagnostic,
+not a universal single-source latch. Neither is adopted now. DeepSeek owns the
+separate offline softmax/tensor-core seam.
+
 ## Joint cue completion diagnosis — October 6 (saved traces, no fit)
 
 The [matched-prefix diagnosis](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6006734905)
@@ -34,10 +102,10 @@ single bounded fit remains dominated by endpoint tradeoffs, consider endpoint-on
 recalibration at a frozen joint artifact before prefix coadaptation. No new dose,
 pair or seed search is authorized by a local negative alone.
 
-The new fit implementation is in progress and UNCOMPILED/NOT_RUN. A600,000ms
-review precharge record is preserved; the ledger importer refused an existing
-unmapped legacy receipt, so it is not claimed imported or reflected in the derived
-total. Resolve accounting admission before new model compute. DeepSeek owns the
+The subsequent fit is now executed above. The600,000ms review reservation was
+charged once in the preserved manual complete-work receipt alongside the next
+allowance. The importer still refuses an old unmapped legacy receipt; do not
+claim a successful global rebuild. DeepSeek owns the
 separate offline softmax/tensor-core seam.
 
 ## Ordered geometric cue foundation — October 5 (executed, no adoption)
