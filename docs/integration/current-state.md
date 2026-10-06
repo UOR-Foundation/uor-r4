@@ -19,15 +19,21 @@ rehashed in the saved-evidence review; no second CUDA execution is claimed.
 The distinct existing max-gold full-state witness then completes exit0 in6.331s,
 RSS284220KiB, same binary/artifact/factual Copy. It wins53/512 first targets
 versus0parent. Report SHA2562f0755df14dcb5fd42bc3e372cb6fe6f20b46d810e472155d96e90e7919ce8e1.
-These are label-conditioned feasibility witnesses, not learned context states
-or successful replies. Losing459 witnesses are not impossibility certificates.
+Independent review verifies512 saved winner decisions and pool decompositions.
+Only two first-target identities are tested:2997 wins30/256 and617 wins23/256,
+with one identical constructed state per identity. These are label-conditioned
+feasibility witnesses, not learned context states or successful replies.
+Losing459 witnesses are not impossibility certificates.
 The older146-win/328-impossibility result belongs to output-only fields and
 cannot be reused for this final joint artifact.
 
-Next: inspect actual recurrent credit/action margins and shared-parameter
-realizability against the53 feasible states before another fit. Retain the
-separate requirement for a final-joint-field/factual-Copy optimistic bound on
-the unresolved rows; no Copy gate, normalizer or estimator replacement follows.
+Next: check original Copy vectors against the exact1.5625-nat gold-score ceiling.
+If gold is absent from Copy and a non-gold Copy action reaches that ceiling,
+common clipping/monotone native weights plus its positive Generate alias prove
+a fixed-Copy obstruction; the saved global maximum alone cannot certify it.
+Separately inspect actual recurrent credit/action margins and shared-parameter
+realizability against the53 feasible states before another fit. No Copy gate,
+normalizer or estimator replacement follows.
 
 The exact complete checkpoint plus bound inputs/configuration/tokenizer/native
 tables are archived as1128 SHA256-verified members,341267494 source bytes,

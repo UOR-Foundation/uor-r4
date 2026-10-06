@@ -52,8 +52,10 @@ regret; no960 single-lane alternative wins. Minor ordering conflicts do not
 justify replacing the terminal estimator. A distinct full-state max-gold
 witness wins53/512 against factual Copy at the final joint fields. Those states
 establish conditional readout feasibility, not learned context or attention.
-Next inspect recurrent credit, action margins and shared-parameter realizability
-against these successful witnesses before another fit. This is not a full
+Next authenticate original Copy vectors against the final joint absolute gold
+ceiling to distinguish fixed-Copy obstruction from unresolved witness losses.
+Separately inspect recurrent credit, action margins and shared-parameter
+realizability against the successful witnesses before another fit. This is not a full
 context rerun or evidence that recurrence can realize arbitrary states.
 A final-joint-field/factual-Copy bound is still needed for unresolved rows
 before adopting selected existing Copy-field learning. Useful complete actual
