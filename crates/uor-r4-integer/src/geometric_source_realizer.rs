@@ -2375,8 +2375,15 @@ mod tests {
                 assert_eq!(left.source.event, 7 + left.source.source_ordinal as u64);
             }
         }
+        // The occurrence reader admits a context-only bank, but rejects an
+        // entirely empty bank. Preserve that existing admission contract.
+        let context_only = [SourceBankSegment::Context {
+            token_ids: &[5],
+            role: 1,
+            event: 2,
+        }];
         let fallback = f.execution().read_bank_with_source_bound_actions(
-            &[],
+            &context_only,
             &[5],
             &[4],
             &f.parent,
