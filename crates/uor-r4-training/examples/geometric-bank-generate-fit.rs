@@ -12,7 +12,10 @@ use std::{
 };
 use uor_r4_core::{
     answer_oracle::FrozenAnswers,
-    native_geometric::learner::geometric_generate::{GenerateReadCounts, NativeGeometricGenerate},
+    native_geometric::learner::{
+        geometric_generate::{GenerateReadCounts, NativeGeometricGenerate},
+        geometric_read_state_bridge::{BridgeReadCounts, NativeGeometricReadStateBridge},
+    },
     report_output,
 };
 use uor_r4_integer::{
@@ -34,6 +37,7 @@ use uor_r4_training::{
         source_realizer::{NativeSourceRealizer, SourceRealizerWeights},
         ConsumerIdentity,
     },
+    geometric_read_state_bridge::BridgeLearningWeights,
     sha256_bytes, sha256_file,
 };
 #[path = "../../uor-r4-integer/examples/support/source_probe.rs"]
@@ -67,6 +71,10 @@ struct Args {
     balanced_token_geometry: bool,
     #[serde(default)]
     phase_balanced_token_loss: bool,
+    #[serde(default)]
+    read_state_bridge: bool,
+    #[serde(default = "default_bridge_learning_rate")]
+    read_state_bridge_learning_rate: f64,
     updates: usize,
     learning_rate: f64,
     prototype_learning_rate: f64,
@@ -76,6 +84,9 @@ struct Args {
     maximum_seconds: u64,
     maximum_report_bytes: u64,
     out: PathBuf,
+}
+fn default_bridge_learning_rate() -> f64 {
+    0.002
 }
 fn default_backward_chunk() -> usize {
     1
@@ -305,6 +316,9 @@ fn args() -> Result<Args> {
         || a.potential_learning_rate
             .is_some_and(|lr| !lr.is_finite() || lr <= 0. || lr > 0.01)
         || (a.arm != "joint-potential" && a.potential_learning_rate.is_some())
+        || !a.read_state_bridge_learning_rate.is_finite()
+        || a.read_state_bridge_learning_rate <= 0.
+        || a.read_state_bridge_learning_rate > 0.01
         || ![1, 2].contains(&a.token_backward_chunk)
         || a.updates == 0
         || a.updates > 128
@@ -491,9 +505,13 @@ fn prefix_clone(q: &PrefixAngularQ4) -> Result<PrefixAngularQ4> {
 fn parameters(
     source: &SourceRealizerWeights,
     g: &GenerateLearningWeights,
+    bridge: Option<&BridgeLearningWeights>,
     arm: &str,
 ) -> BTreeMap<String, Var> {
     let mut p = g.parameters();
+    if let Some(bridge) = bridge {
+        p.extend(bridge.parameters());
+    }
     if matches!(arm, "joint" | "joint-potential") {
         p.extend(source.context_state_parameters());
     }
@@ -513,9 +531,25 @@ fn compile_learning_source(
         source.compile_context_state_rebound(frozen)?
     })
 }
+// Native serving selects before consulting any target label; strict comparison
+// preserves the first physical occurrence when raw Copy scores tie.
+fn earliest_raw_copy_max(scores: &[i64]) -> Result<usize> {
+    let mut selected = 0;
+    let mut best = *scores
+        .first()
+        .ok_or_else(|| bad("bridge has no Copy candidates"))?;
+    for (i, &score) in scores.iter().enumerate().skip(1) {
+        if score > best {
+            selected = i;
+            best = score;
+        }
+    }
+    Ok(selected)
+}
 fn native_step(
     model: &IntegerRealizer,
     g: &NativeGeometricGenerate,
+    bridge: Option<&NativeGeometricReadStateBridge>,
     pool: &mut NativeVocabularyActions,
     e: &Episode,
     actual: &[u32],
@@ -534,7 +568,7 @@ fn native_step(
             &prefix,
         )?;
         let b = &trace.cue_bank.bank;
-        let codes = b
+        let mut codes = b
             .context
             .states
             .last()
@@ -556,6 +590,34 @@ fn native_step(
                     .ok_or_else(|| bad("Copy score overflow"))?;
             }
         }
+        let bridge_trace = if let Some(bridge) = bridge {
+            let selected = earliest_raw_copy_max(&scores)?;
+            let candidate = &b.candidates[selected];
+            let source = b
+                .context
+                .states
+                .get(candidate.context_position)
+                .ok_or_else(|| bad("bridge selected source state missing"))?
+                .iter()
+                .copied()
+                .map(H4Code::try_from)
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let query = codes.clone();
+            let mut actions = vec![H4Code::IDENTITY; codes.len()];
+            let mut action_scores = vec![0i64; codes.len() * 120];
+            let mut counts = BridgeReadCounts::default();
+            bridge.apply_into(
+                &query,
+                &source,
+                &mut codes,
+                &mut actions,
+                &mut action_scores,
+                &mut counts,
+            )?;
+            json!({"selected_ordinal":selected,"selected_candidate":candidate,"query_state_codes":query.iter().map(|c|c.index()).collect::<Vec<_>>(),"selected_source_state_codes":source.iter().map(|c|c.index()).collect::<Vec<_>>(),"action_codes":actions.iter().map(|c|c.index()).collect::<Vec<_>>(),"action_scores_q24":action_scores,"native_costs":counts,"payload_sha256":bridge.metadata().payload_sha256})
+        } else {
+            Value::Null
+        };
         let mut components = BTreeMap::new();
         for (name, source) in [
             ("cue", &trace.cue_bank.carrier.copy_q24),
@@ -588,12 +650,11 @@ fn native_step(
             })
             .collect::<Result<Vec<_>>>()?;
         components.insert("contextual", contextual);
-        (
-            codes,
-            ids,
-            scores,
-            json!({"copy_components_q24":components,"candidates":b.candidates,"causal_tokens":b.context.tokens,"legacy_terminal_actions_discarded":true}),
-        )
+        let mut provenance = json!({"copy_components_q24":components,"candidates":b.candidates,"causal_tokens":b.context.tokens,"legacy_terminal_actions_discarded":true});
+        if bridge.is_some() {
+            provenance["read_state_bridge"] = bridge_trace;
+        }
+        (codes, ids, scores, provenance)
     } else {
         let ids = e.causal_no_source(actual)?;
         let cfg = model.context_config();
@@ -622,6 +683,7 @@ fn evaluate(
     name: &str,
     model: &IntegerRealizer,
     g: &NativeGeometricGenerate,
+    bridge: Option<&NativeGeometricReadStateBridge>,
     exp: &[u8],
     eps: &[Episode],
     tok: &ByteBpeTokenizer,
@@ -639,7 +701,8 @@ fn evaluate(
         let mut canonical = Vec::new();
         let mut rowce = 0.;
         for (t, &target) in e.target.iter().enumerate() {
-            let mut step = native_step(model, g, &mut pool, e, &e.target[..t], cue, prefix)?;
+            let mut step =
+                native_step(model, g, bridge, &mut pool, e, &e.target[..t], cue, prefix)?;
             let total = step["pool"]["summary"]["total_weight_q31"]
                 .as_u64()
                 .ok_or_else(|| bad("native denominator missing"))?;
@@ -669,7 +732,7 @@ fn evaluate(
         let generation_allowance = 32usize.min(128usize.saturating_sub(e.base_len()));
         for _ in 0..generation_allowance {
             deadline(a, start)?;
-            let mut step = native_step(model, g, &mut pool, e, &ids, cue, prefix)?;
+            let mut step = native_step(model, g, bridge, &mut pool, e, &ids, cue, prefix)?;
             let id = step["pool"]["summary"]["chosen_token_id"]
                 .as_u64()
                 .ok_or_else(|| bad("native chosen ID"))? as u32;
@@ -702,9 +765,15 @@ fn checkpoint(
     source: &SourceRealizerWeights,
     frozen: &NativeSourceRealizer,
     g: &GenerateLearningWeights,
+    bridge: Option<&BridgeLearningWeights>,
     cue: &CueAngularQ4,
     prefix: &PrefixAngularQ4,
-) -> Result<(IntegerRealizer, NativeGeometricGenerate, Value)> {
+) -> Result<(
+    IntegerRealizer,
+    NativeGeometricGenerate,
+    Option<NativeGeometricReadStateBridge>,
+    Value,
+)> {
     let root = a.out.join(format!("checkpoint-{step:04}"));
     let projected_checkpoint = size(&a.source_weights)?
         + size(&a.native_artifact)?
@@ -712,6 +781,14 @@ fn checkpoint(
             .values()
             .map(|v| v.elem_count() as u64 * 4)
             .sum::<u64>()
+        + bridge.map_or(0, |b| {
+            b.parameters()
+                .values()
+                .map(|v| v.elem_count() as u64 * 4)
+                .sum::<u64>()
+                + b.padded_native_coefficient_bytes() as u64
+                + 65_536
+        })
         + 8_388_608;
     if size(&a.out)? + projected_checkpoint > a.maximum_report_bytes - 1_048_576 {
         return Err(bad(
@@ -792,6 +869,47 @@ fn checkpoint(
     if reloaded.to_bytes()? != bytes {
         return Err(bad("Generate independent reload differs"));
     }
+    let (reloaded_bridge, bridge_receipt) = if let Some(bridge) = bridge {
+        let native = bridge.export_native()?;
+        let bytes = native.to_bytes()?;
+        fs::write(root.join("read-state-bridge.bin"), &bytes)?;
+        let reload = NativeGeometricReadStateBridge::from_bytes(
+            &fs::read(root.join("read-state-bridge.bin"))?,
+            integer.binding(),
+        )?;
+        if reload.to_bytes()? != bytes {
+            return Err(bad("bridge independent native reload differs"));
+        }
+        fs::create_dir(root.join("read-state-bridge-source"))?;
+        let mut parameters = BTreeMap::new();
+        for (name, var) in bridge.parameters() {
+            let values = var.flatten_all()?.to_vec1::<f32>()?;
+            if values.iter().any(|v| !v.is_finite()) {
+                return Err(bad("nonfinite bridge master"));
+            }
+            let raw = values
+                .into_iter()
+                .flat_map(f32::to_le_bytes)
+                .collect::<Vec<_>>();
+            fs::write(
+                root.join("read-state-bridge-source")
+                    .join(format!("{name}.f32le")),
+                &raw,
+            )?;
+            parameters.insert(
+                name,
+                json!({"shape":var.dims(),"bytes":raw.len(),"sha256":sha256_bytes(&raw)}),
+            );
+        }
+        let receipt = json!({"enabled":true,"native_sha256":sha256_bytes(&bytes),"metadata":reload.metadata(),"padded_native_coefficient_bytes":bridge.padded_native_coefficient_bytes(),"packed_bytes_changed_from_zero":reload.packed_bias().iter().chain(reload.packed_relative()).filter(|&&b|b!=0).count(),"independent_disk_reload":true,"source_parameters":parameters,"learning_rate":a.read_state_bridge_learning_rate,"selection":"earliest raw all-head Copy maximum; no label input","resume":"NOT_SUPPORTED; Adam moments not exported"});
+        fs::write(
+            root.join("read-state-bridge-source/metadata.json"),
+            serde_json::to_vec_pretty(&receipt)?,
+        )?;
+        (Some(reload), receipt)
+    } else {
+        (None, json!({"enabled":false}))
+    };
     let contextbytes = fs::read(root.join("native/consumer/context-q4.bin"))?;
     let oldcontext = fs::read(a.native_artifact.join("consumer/context-q4.bin"))?;
     if contextbytes.len() != oldcontext.len() {
@@ -815,7 +933,7 @@ fn checkpoint(
     if a.arm != "joint-potential" && potential_changes != 0 {
         return Err(bad("frozen potential payload changed"));
     }
-    let receipt = json!({"step":step,"parent":binding,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":a.arm != "joint-potential","learned_potential_coefficients":a.arm == "joint-potential","potential_packed_bytes_changed_from_donor":potential_changes,"potential_packed_sha256":sha256_bytes(&potential_bytes),"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
+    let receipt = json!({"read_state_bridge":bridge_receipt,"step":step,"parent":binding,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":a.arm != "joint-potential","learned_potential_coefficients":a.arm == "joint-potential","potential_packed_bytes_changed_from_donor":potential_changes,"potential_packed_sha256":sha256_bytes(&potential_bytes),"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
     fs::write(
         root.join("receipt.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -823,7 +941,7 @@ fn checkpoint(
     if size(&a.out)? > a.maximum_report_bytes - 1_048_576 {
         return Err(bad("checkpoint exceeds complete report cap"));
     }
-    Ok((integer, reloaded, receipt))
+    Ok((integer, reloaded, reloaded_bridge, receipt))
 }
 
 const LOSS_PHASE_NAMES: [&str; 3] = ["entry", "later_copy_covered", "later_generate_only"];
@@ -891,6 +1009,7 @@ fn batch(
     source: &SourceRealizerWeights,
     frozen: &NativeSourceRealizer,
     g: &GenerateLearningWeights,
+    bridge: Option<&BridgeLearningWeights>,
     cueq: &CueAngularQ4,
     prefixq: &PrefixAngularQ4,
     exp: &[u8],
@@ -912,22 +1031,33 @@ fn batch(
     let cue = current.compile_cue_carrier(cueq.clone())?;
     let prefix = current.compile_prefix_transport(&cue, prefix_clone(prefixq)?)?;
     let snapshot = g.prepare_native()?;
+    let bridge_snapshot = bridge
+        .map(BridgeLearningWeights::prepare_native)
+        .transpose()?;
     let independent_generate =
         NativeGeometricGenerate::from_bytes(&snapshot.native.to_bytes()?, g.binding())?;
+    let independent_bridge = bridge_snapshot
+        .as_ref()
+        .map(|b| NativeGeometricReadStateBridge::from_bytes(&b.native.to_bytes()?, g.binding()))
+        .transpose()?;
     let mut independent_pool = NativeVocabularyActions::new(g.binding().clone(), exp)?;
     let staged = begun.elapsed().as_secs_f64();
     let mut learner = PreparedBankGenerate::new(&prepared, g, &snapshot, exp)?
         .with_prefix_temporal_utility(a.prefix_temporal_utility);
+    if let (Some(weights), Some(snapshot)) = (bridge, bridge_snapshot.as_ref()) {
+        learner = learner.with_read_state_bridge(weights, snapshot)?;
+    }
     let params = parameters(
         source,
         g,
+        bridge,
         if a.arm == "joint-potential" {
             "joint-potential"
         } else {
             "joint"
         },
     );
-    let active = parameters(source, g, &a.arm);
+    let active = parameters(source, g, bridge, &a.arm);
     let mut sums = BTreeMap::<String, Tensor>::new();
     let mut nativece = 0.;
     let mut weighted_native_objective = 0.;
@@ -940,6 +1070,7 @@ fn batch(
     let mut pending: Option<Tensor> = None;
     let mut pending_count = 0usize;
     let mut backward_calls = 0usize;
+    let mut bridge_receipts = Vec::new();
     let mut first_context_receipts = Vec::new();
     let mut first_context_backward_seconds = 0.;
     for &index in indices {
@@ -969,12 +1100,34 @@ fn batch(
                 let expected = native_step(
                     model,
                     &independent_generate,
+                    independent_bridge.as_ref(),
                     &mut independent_pool,
                     e,
                     &e.target[..t],
                     cueq,
                     prefixq,
                 )?;
+                if let Some((ordinal, result)) = &out.read_state_bridge {
+                    let native_bridge = &expected["source_provenance"]["read_state_bridge"];
+                    if native_bridge["selected_ordinal"] != json!(ordinal)
+                        || native_bridge["action_codes"]
+                            != json!(result
+                                .action_codes
+                                .iter()
+                                .map(|c| c.index())
+                                .collect::<Vec<_>>())
+                        || native_bridge["action_scores_q24"] != json!(result.action_scores_q24)
+                        || native_bridge["native_costs"] != serde_json::to_value(result.counts)?
+                    {
+                        return Err(bad("bridge independent selected occurrence/action/score/cost parity differs"));
+                    }
+                    // Zero initialization is an exact native escape from the
+                    // added route: factual identity transport preserves original
+                    // query codes, so Generate scores and the Copy pool agree.
+                    if expected["retained_state_codes"] != native_bridge["query_state_codes"] {
+                        return Err(bad("zero bridge did not preserve pre-bridge query state"));
+                    }
+                }
                 if expected["pool"]["summary"] != serde_json::to_value(&out.actions.summary)?
                     || expected["copy_token_ids"] != json!(out.copy_token_ids)
                     || expected["copy_raw_scores_q24"] != json!(out.copy_scores_q24)
@@ -991,6 +1144,18 @@ fn batch(
                         "actual initial CPU integer / CUDA composed hard-pool parity differs",
                     ));
                 }
+            }
+            if let Some((ordinal, result)) = &out.read_state_bridge {
+                let identity = result
+                    .action_codes
+                    .iter()
+                    .all(|c| *c == uor_r4_integer::h4_tables::H4Code::IDENTITY);
+                if independent.is_some() && !identity {
+                    return Err(bad("zero bridge initial admission changed native state"));
+                }
+                bridge_receipts.push(json!({"episode_id":e.packet.id,"position":t,"selected_ordinal":ordinal,"action_codes":result.action_codes.iter().map(|c|c.index()).collect::<Vec<_>>(),"native_costs":result.counts,"selector_native_alternative_evaluations":out.copy_token_ids.len(),"selector_native_alternative_counts_per_evaluation":result.counts,"cost_scope":"factual native apply plus declared equal-shape alternative applies; GPU adjoint/index staging not counted by native reads","identity_actions":identity,"validation_scalar_reads":result.validation_scalar_reads,"credit_scope":result.credit_scope}));
+            } else if bridge.is_some() && e.has_source() {
+                return Err(bad("source bank omitted enabled bridge"));
             }
             // Bind stable membership to ACTUAL target-free forward admission,
             // not raw Context IDs or a selected-record/label-derived candidate set.
@@ -1036,8 +1201,9 @@ fn batch(
             device.synchronize()?;
             forwardseconds += f.elapsed().as_secs_f64();
             // Auxiliary admission measurement only: preserve the same native
-            // pool/loss forward but stop Copy's adjoint, isolating Generate's
-            // retained120-state route into actual context parameters. It never
+            // pool/loss forward but stop direct Copy emission's adjoint. With
+            // the bridge enabled, Generate still depends on Copy selector scores:
+            // those potential/context paths are intentionally retained. It never
             // supplies optimizer gradients or changes the fitted objective.
             if a.mode == "admission"
                 && backward_chunk == 1
@@ -1077,7 +1243,14 @@ fn batch(
                 device.synchronize()?;
                 let seconds = diagnostic_start.elapsed().as_secs_f64();
                 first_context_backward_seconds += seconds;
-                first_context_receipts.push(json!({"id":e.packet.id,"position":0,"gold_absent_copy":true,"generate_only_context_families":context_families,"auxiliary_backward_seconds":seconds}));
+                let mut receipt = json!({"id":e.packet.id,"position":0,"gold_absent_copy":true,"auxiliary_backward_seconds":seconds,"direct_copy_emission_adjoint_detached":true,"bridge_selector_copy_score_adjoint_retained":bridge.is_some()});
+                let family_key = if bridge.is_some() {
+                    "generate_branch_including_selector_context_families"
+                } else {
+                    "generate_only_context_families"
+                };
+                receipt[family_key] = json!(context_families);
+                first_context_receipts.push(receipt);
             }
             pending = Some(match pending.take() {
                 Some(previous) => (&previous + &scaled)?,
@@ -1141,8 +1314,8 @@ fn batch(
     {
         return Err(bad("decoder credit disconnected"));
     }
-    let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":"absent-Copy first canonical positions only; same fullpool forward and declared episode/phase loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective"});
-    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"native_weighted_training_objective":weighted_native_objective,"loss_phase_names":LOSS_PHASE_NAMES,"loss_phase_positions":phase_positions,"loss_phase_weighted_native_contributions":phase_weighted_native_loss,"episode_loss_phase_counts":episode_phase_counts,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; declared per-token episode/phase weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":if bridge.is_some() { "absent-Copy first canonical positions; direct Copy emission adjoint detached only in auxiliary backward; Generate branch retains bridge selector Copy-score potential/context paths plus hard120 carrier credit; same native pool and loss weights; no per-root utility measurement or optimizer use" } else { "absent-Copy first canonical positions only; same fullpool forward and declared episode/phase loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective" }});
+    let report = json!({"read_state_bridge":a.read_state_bridge,"bridge_master_download_bytes":bridge_snapshot.as_ref().map_or(0,|b|b.downloaded_master_bytes),"bridge_padded_native_coefficient_bytes":bridge.map_or(0,|b|b.padded_native_coefficient_bytes()),"bridge_forward_receipts":bridge_receipts,"bridge_zero_escape_native_state_verified":independent.is_some() && bridge.is_some(),"bridge_selector_credit_scope":"local detached native occurrence alternatives; factual bridge coefficient/state credit; no derivative of hard argmax and no runtime label","episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"native_weighted_training_objective":weighted_native_objective,"loss_phase_names":LOSS_PHASE_NAMES,"loss_phase_positions":phase_positions,"loss_phase_weighted_native_contributions":phase_weighted_native_loss,"episode_loss_phase_counts":episode_phase_counts,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; declared per-token episode/phase weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }
@@ -1441,7 +1614,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(
         a,
         "input-admission.json",
-        &json!({"input_sha256":inputs,"input_manifests":before,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":integer.binding().vocab_size(),"lanes":lanes,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
+        &json!({"input_sha256":inputs,"input_manifests":before,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":integer.binding().vocab_size(),"lanes":lanes,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
     )?;
     write(
         a,
@@ -1458,6 +1631,19 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     } else {
         GenerateLearningWeights::seeded(integer.binding().clone(), lanes, a.seed, &device)?
     };
+    let bridge = if a.read_state_bridge {
+        Some(BridgeLearningWeights::zeroed(
+            integer.binding(),
+            lanes,
+            &device,
+        )?)
+    } else {
+        None
+    };
+    let bridge_parameters = bridge
+        .as_ref()
+        .map(BridgeLearningWeights::parameters)
+        .unwrap_or_default();
     let gparams = generate.parameters();
     let (prototype, coefficients): (BTreeMap<_, _>, BTreeMap<_, _>) = gparams
         .clone()
@@ -1465,6 +1651,11 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         .partition(|(n, _)| n == "generate.prototype_choices");
     let context = source.context_state_parameters();
     let potential = source.potential_parameters();
+    let bridge_margins = if a.read_state_bridge {
+        Some(quarter_margins(&bridge_parameters)?)
+    } else {
+        None
+    };
     let coeffmargins = quarter_margins(&coefficients)?;
     let contextmargins = quarter_margins(&context)?;
     let potentialmargins = if a.arm == "joint-potential" {
@@ -1475,7 +1666,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(
         a,
         "optimizer-design.json",
-        &json!({"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"initialization_scope":"label-free tokenID geometry only; same energy seed/pairgraph/coefficient margins/prototype gap; no semantic-distance claim","generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"potential_lr":a.potential_learning_rate,"potential_initial_quarter_margins":potentialmargins,"potential_optimizer_active":a.arm == "joint-potential","potential_possible_nonzero_families_on_absent_content":["context_unary","context_radius","context_presence","content_presence"],"potential_structurally_zero_families_on_absent_content":["content_unary","content_radius","pair"],"potential_presence_scope":"content_presence cell0 is a shared baseline; context_presence uses authentic categorical endpoint cells; source-covered Copy retention required","beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
+        &json!({"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"bridge_optimizer_active":a.read_state_bridge,"bridge_initial_quarter_margins":bridge_margins,"bridge_initialization":"zero coefficients; identity-first native action ties preserve query exactly","initialization_scope":"label-free tokenID geometry only; same energy seed/pairgraph/coefficient margins/prototype gap; no semantic-distance claim","generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"potential_lr":a.potential_learning_rate,"potential_initial_quarter_margins":potentialmargins,"potential_optimizer_active":a.arm == "joint-potential","potential_possible_nonzero_families_on_absent_content":["context_unary","context_radius","context_presence","content_presence"],"potential_structurally_zero_families_on_absent_content":["content_unary","content_radius","pair"],"potential_presence_scope":"content_presence cell0 is a shared baseline; context_presence uses authentic categorical endpoint cells; source-covered Copy retention required","beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
     )?;
     let first = a
         .admission_episode_indices
@@ -1504,6 +1695,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         &source,
         &frozen,
         &generate,
+        bridge.as_ref(),
         &cue,
         &prefix,
         &exp,
@@ -1532,6 +1724,21 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
             ));
         }
     }
+    if a.read_state_bridge {
+        let families = admission["gradient_families"]
+            .as_object()
+            .ok_or_else(|| bad("bridge admission inventory absent"))?;
+        if !families.iter().any(|(name, r)| {
+            name.starts_with("read_state_bridge.")
+                && r["connected"] == true
+                && r["optimizer_active"] == true
+                && r["l2"].as_f64().is_some_and(|x| x.is_finite() && x > 0.)
+        }) {
+            return Err(bad(
+                "zero bridge admission has no finite nonzero coefficient credit",
+            ));
+        }
+    }
     write(a, "first-b8-admission.json", &admission)?;
     if a.mode == "admission" && a.token_backward_chunk == 2 {
         let (reference_grads, reference) = batch(
@@ -1539,6 +1746,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
             &source,
             &frozen,
             &generate,
+            bridge.as_ref(),
             &cue,
             &prefix,
             &exp,
@@ -1569,13 +1777,22 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         }
     }
     drop(admission_grads);
-    let (base_native, base_gen, base_receipt) =
-        checkpoint(a, 0, &source, &frozen, &generate, &cue, &prefix)?;
+    let (base_native, base_gen, base_bridge, base_receipt) = checkpoint(
+        a,
+        0,
+        &source,
+        &frozen,
+        &generate,
+        bridge.as_ref(),
+        &cue,
+        &prefix,
+    )?;
     let baseline = evaluate(
         a,
         "development-0000",
         &base_native,
         &base_gen,
+        base_bridge.as_ref(),
         &exp,
         if a.mode == "admission" {
             &dev[..dev.len().min(8)]
@@ -1674,6 +1891,11 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         } else {
             None
         };
+        let mut bridge_optimizer = if a.read_state_bridge {
+            Some(adam(&bridge_parameters, a.read_state_bridge_learning_rate)?)
+        } else {
+            None
+        };
         for update in 0..a.updates {
             deadline(a, start)?;
             let indices = (0..8)
@@ -1684,6 +1906,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
                 &source,
                 &frozen,
                 &generate,
+                bridge.as_ref(),
                 &cue,
                 &prefix,
                 &exp,
@@ -1717,18 +1940,32 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
                 apply(o, &potential, &grads, &denominator)?;
                 source.project_potential_range()?;
             }
+            if let (Some(optimizer), Some(weights)) = (bridge_optimizer.as_mut(), bridge.as_ref()) {
+                apply(optimizer, &bridge_parameters, &grads, &denominator)?;
+                weights.project_coefficients()?;
+            }
             generate.project_shadow_range()?;
             device.synchronize()?;
             updates.push(json!({"step":update+1,"before_update_batch":receipt}));
             write(a, "updates.json", &json!(updates))?;
             let step = update + 1;
             if step == a.updates {
-                let (n, g, c) = checkpoint(a, step, &source, &frozen, &generate, &cue, &prefix)?;
+                let (n, g, native_bridge, c) = checkpoint(
+                    a,
+                    step,
+                    &source,
+                    &frozen,
+                    &generate,
+                    bridge.as_ref(),
+                    &cue,
+                    &prefix,
+                )?;
                 let e = evaluate(
                     a,
                     &format!("development-{step:04}"),
                     &n,
                     &g,
+                    native_bridge.as_ref(),
                     &exp,
                     &dev,
                     &tok,
@@ -1770,11 +2007,20 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         let n = IntegerRealizer::load_native(&cp.join("native"), &b)?;
         let g =
             NativeGeometricGenerate::from_bytes(&fs::read(cp.join("generate.bin"))?, n.binding())?;
+        let native_bridge = if a.read_state_bridge {
+            Some(NativeGeometricReadStateBridge::from_bytes(
+                &fs::read(cp.join("read-state-bridge.bin"))?,
+                n.binding(),
+            )?)
+        } else {
+            None
+        };
         let selectedfresh = evaluate(
             a,
             "fresh-selected",
             &n,
             &g,
+            native_bridge.as_ref(),
             &exp,
             &fresh,
             &tok,
@@ -1790,6 +2036,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
                 "fresh-parent",
                 &base_native,
                 &base_gen,
+                base_bridge.as_ref(),
                 &exp,
                 &fresh,
                 &tok,
@@ -1807,7 +2054,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         }
     }
     Ok(
-        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"wall_time_estimate_seconds":a.maximum_seconds,"wall_time_estimate_exceeded":start.elapsed().as_secs_f64()>=a.maximum_seconds as f64,"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
+        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"wall_time_estimate_seconds":a.maximum_seconds,"wall_time_estimate_exceeded":start.elapsed().as_secs_f64()>=a.maximum_seconds as f64,"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
     )
 }
 fn main() -> Result<()> {
@@ -1829,6 +2076,14 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bridge_raw_read_selects_first_physical_occurrence_without_token_aliasing() -> Result<()> {
+        assert_eq!(earliest_raw_copy_max(&[4, 4, 3])?, 0);
+        assert_eq!(earliest_raw_copy_max(&[-9, -4, -4])?, 1);
+        assert_eq!(earliest_raw_copy_max(&[i64::MIN, i64::MAX])?, 1);
+        assert!(earliest_raw_copy_max(&[]).is_err());
+        Ok(())
+    }
     #[test]
     fn wall_estimate_overrun_continues_and_preserves_first_receipt() -> Result<()> {
         let nonce = std::time::SystemTime::now()
