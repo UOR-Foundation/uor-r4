@@ -1,5 +1,32 @@
 # Current UOR-R4 research state
 
+## Native selected-read state transport: implementation — October 6
+
+The next causal change is an opt-in all-bank hard read followed by signed-H4
+transport into the state consumed by Generate. The core and offline learning
+wrapper are written, and the bank composition now authenticates occurrence
+provenance, selects from checked native i64 scores with first-ordinal ties,
+and applies the bridge. Zero coefficients choose identity. The native bridge
+uses integer/table operations; its padded coefficient payload is 7,740 bytes
+per lane. No-source and default bank paths bypass it.
+
+Offline selection credit enumerates detached native alternative poststates and
+uses centered contrasts against the factual selected poststate. It supplies
+local decoder-state sensitivity, not exact candidate-loss differences or an
+oracle. Only the factual bridge receives bridge/query/source adjoints. The
+source-associated state includes preceding bank history. Alternative enumeration
+is additional offline work, not the claimed selected-bridge serving cost.
+
+Independent source review found no arithmetic/adjoint integration blocker;
+focused signed-state, identity/export, zero-init parameter escape, selector
+isolation and nonfinal source-position checks are authored. Compilation,
+CUDA execution, actual-bank admission, and learning are **NOT_RUN** for this
+change. The fitter integration is in progress. Work card: #820
+issuecomment-6023927047. The prior 0/512 result remains unchanged; this is an
+implementation enabler, not an attention or language result. Do not fit against
+the impossible frozen final Copy ceiling. Admit at the matched initial parent,
+then keep the common emission potential responsive in any declared future fit.
+
 ## Joint potential fit: entry failure isolated — October 6
 
 The source-bound 128-update construction fit at `b2e18d5c` completed on
