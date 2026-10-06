@@ -4902,13 +4902,13 @@ mod tests {
     fn optional_joint_cue_roundtrip_full_native_loss_and_frozen_families() -> Result<()> {
         let fixture = Fixture::new_with_lanes(2)?;
         let category = &fixture.weights.consumer.context.parameters()["token_category"];
-        let mut values = vec![0.; category.elem_count()];
+        let mut values = vec![0f32; category.elem_count()];
         for row in values.chunks_exact_mut(33) {
             row[1] = 1.75;
         }
         category.set(&Tensor::from_vec(values, category.shape(), &Device::Cpu)?)?;
         let root = &fixture.weights.consumer.context.parameters()["token_root"];
-        let mut values = vec![0.; root.elem_count()];
+        let mut values = vec![0f32; root.elem_count()];
         for token in 0..8 {
             for lane in 0..2 {
                 values[(token * 2 + lane) * 120 + 1] = 1.75;
