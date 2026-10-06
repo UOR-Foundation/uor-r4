@@ -587,3 +587,25 @@ Audit report SHA256 identities are
 (output-only) and
 `b959bd2d31d2f7e50596541a2aa08b07c41589b966b69ab46f65494274580708`
 (joint). Inputs bind the exact completed fit report/manifests and1698 executable.
+
+## Balanced CUDA adjoint check and decision review
+
+Test-only commit e22838048ecbda401cb732045a442abbe5991b21 adds the
+141-token/eight-lane CPU/CUDA comparison on actual hard state choices, using
+signed nonuniform token adjoints. Source review approves its parameter shapes,
+primary API and nonzero lane/edge checks. Execution is pending; source presence
+is not CUDA parity or useful learning. The exact committed source archive is
+byte-verified on the pod before compilation. Existing paired fits are unchanged.
+
+The independent decision review retains balanced initialization as the next
+causal control only if the final seed repeats the same ranking blocker. Under
+unchanged legacy codes, raw token contrasts use two unary terms, pair01 and
+bias; with coefficients in [-7,7] and a 1/16-nat unit their absolute contrast
+is bounded by 3.5 nats. Balanced codes can involve eight unary, four pair and
+bias terms, giving a loose 11.375-nat bound. These are raw score bounds, not
+simultaneously attainable margins or exact bounds on quantized pooled CE.
+The control expands effective discrimination range and state participation;
+its old first pair already uniquely addressed the vocabulary. Report initial
+versus final improvements separately. A useful third-seed result, changed hard
+codes, or broadly correct Generate ranking would change the next action before
+another fit. No new semantic metric or serving operation is introduced.
