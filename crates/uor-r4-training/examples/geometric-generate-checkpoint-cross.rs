@@ -1509,8 +1509,643 @@ mod potential_attribution {
     }
 }
 
+// Post-forward identity attribution only. No model, normalizer or runtime
+// source selector is invoked by this mode.
+mod source_contrast {
+    use super::*;
+    use serde::{Deserialize, Serialize};
+    use uor_r4_integer::geometric_source_emission_view::SourceEmissionCompiler;
+
+    const ARMS: [&str; 4] = ["P0", "P1", "P1_restore_shared0", "P0_take_shared0"];
+    // Keep the reference author's typed serialization order, not JSON map order.
+    #[derive(Deserialize, Serialize)]
+    #[serde(deny_unknown_fields)]
+    struct Packet {
+        id: String,
+        segments: Vec<Segment>,
+        query_ids: Vec<u32>,
+        actual_prefix_ids: Vec<u32>,
+    }
+    #[derive(Deserialize, Serialize)]
+    #[serde(tag = "kind", deny_unknown_fields)]
+    enum Segment {
+        Source {
+            event: u64,
+            record: u64,
+            commit: u64,
+            scope: String,
+            entity: Vec<u32>,
+            relation: u32,
+            view: u32,
+            original_source_ids: Vec<u32>,
+        },
+        Context {
+            event: u64,
+            role: u32,
+            token_ids: Vec<u32>,
+        },
+    }
+    fn checked_difference(a: i64, b: i64) -> Result<i64> {
+        a.checked_sub(b)
+            .ok_or_else(|| bad("source margin overflow"))
+    }
+    fn margins(packet: &Value, selected: usize, wrong: usize) -> Result<Value> {
+        let raw = ints(&packet["copy_raw_scores_q24"])?;
+        let mut result = serde_json::Map::new();
+        result.insert(
+            "total".into(),
+            json!(checked_difference(raw[selected], raw[wrong])?),
+        );
+        for name in ["contextual", "cue", "prefix"] {
+            let values = ints(&packet["copy_components_q24"][name])?;
+            result.insert(
+                name.into(),
+                json!(checked_difference(values[selected], values[wrong])?),
+            );
+        }
+        Ok(Value::Object(result))
+    }
+    fn candidate_view<'a>(
+        candidate: &Value,
+        input: &Packet,
+        views: &'a [Value],
+    ) -> Result<&'a Value> {
+        let segment = usize::try_from(uint(candidate, "segment_index")?)?;
+        let (event, record, commit) = match input.segments.get(segment) {
+            Some(Segment::Source {
+                event,
+                record,
+                commit,
+                ..
+            }) => (*event, *record, *commit),
+            _ => return Err(bad("candidate is not a physical Source")),
+        };
+        if uint(candidate, "event")? != event
+            || uint(&candidate["occurrence"], "record")? != record
+            || uint(&candidate["occurrence"], "commit")? != commit
+        {
+            return Err(bad("candidate physical provenance mismatch"));
+        }
+        views
+            .iter()
+            .find(|v| v["segment_index"] == json!(segment))
+            .map(|v| &v["source_view"])
+            .ok_or_else(|| bad("candidate source view absent"))
+    }
+    fn candidate_span<'a>(candidate: &Value, view: &'a Value) -> Result<&'a Value> {
+        let offset = usize::try_from(uint(&candidate["occurrence"], "token_offset")?)?;
+        let token = uint(&candidate["occurrence"], "token_id")?;
+        if array(view, "emitted_token_ids")?
+            .get(offset)
+            .and_then(Value::as_u64)
+            != Some(token)
+        {
+            return Err(bad("candidate token/emission offset mismatch"));
+        }
+        let span = array(view, "provenance")?
+            .get(offset)
+            .ok_or_else(|| bad("candidate byte provenance absent"))?;
+        if uint(span, "emitted_token_offset")? != offset as u64 {
+            return Err(bad("candidate provenance offset differs"));
+        }
+        Ok(span)
+    }
+    fn validate_packet(packet: &Value, input: &Packet, views: &[Value]) -> Result<()> {
+        let candidates = array(&packet["source_provenance"], "candidates")?;
+        let ids = ints(&packet["copy_token_ids"])?;
+        let raw = ints(&packet["copy_raw_scores_q24"])?;
+        let parts =
+            ["contextual", "cue", "prefix"].map(|k| ints(&packet["copy_components_q24"][k]));
+        let [context, cue, prefix] = parts;
+        let (context, cue, prefix) = (context?, cue?, prefix?);
+        let expected_count = views.iter().try_fold(0usize, |n, v| {
+            Ok::<_, Box<dyn std::error::Error>>(
+                n.checked_add(array(&v["source_view"], "emitted_token_ids")?.len())
+                    .ok_or_else(|| bad("candidate count overflow"))?,
+            )
+        })?;
+        if [ids.len(), raw.len(), context.len(), cue.len(), prefix.len()]
+            .iter()
+            .any(|&n| n != candidates.len())
+        {
+            return Err(bad("source contrast arrays differ"));
+        }
+        if candidates.len() != expected_count {
+            return Err(bad(
+                "source contrast requires complete admitted emission occurrences",
+            ));
+        }
+        let mut causal = Vec::<u64>::new();
+        let mut segment_starts = Vec::new();
+        for (segment_index, segment) in input.segments.iter().enumerate() {
+            segment_starts.push(causal.len());
+            match segment {
+                Segment::Context { token_ids, .. } => {
+                    causal.extend(token_ids.iter().copied().map(u64::from))
+                }
+                Segment::Source { .. } => {
+                    let view = views
+                        .iter()
+                        .find(|v| v["segment_index"] == json!(segment_index))
+                        .ok_or_else(|| bad("physical Source emission view absent"))?;
+                    for token in array(&view["source_view"], "emitted_token_ids")? {
+                        causal.push(
+                            token
+                                .as_u64()
+                                .ok_or_else(|| bad("invalid emitted source token"))?,
+                        );
+                    }
+                }
+            }
+        }
+        causal.extend(input.query_ids.iter().copied().map(u64::from));
+        for token in array(packet, "actual_prefix_ids")? {
+            causal.push(
+                token
+                    .as_u64()
+                    .ok_or_else(|| bad("invalid actual prefix token"))?,
+            );
+        }
+        if packet["source_provenance"]["causal_tokens"] != json!(causal) {
+            return Err(bad(
+                "full causal Source/Context/query/prefix chronology differs",
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        for (i, c) in candidates.iter().enumerate() {
+            if uint(c, "bank_index")? != i as u64
+                || uint(&c["occurrence"], "token_id")? != u64::try_from(ids[i])?
+                || !seen.insert((
+                    uint(c, "segment_index")?,
+                    uint(&c["occurrence"], "token_offset")?,
+                ))
+                || context[i]
+                    .checked_add(cue[i])
+                    .and_then(|s| s.checked_add(prefix[i]))
+                    != Some(raw[i])
+            {
+                return Err(bad("source candidate/component identity mismatch"));
+            }
+            let view = candidate_view(c, input, views)?;
+            candidate_span(c, view)?;
+            let at = usize::try_from(uint(c, "context_position")?)?;
+            let segment = usize::try_from(uint(c, "segment_index")?)?;
+            let offset = usize::try_from(uint(&c["occurrence"], "token_offset")?)?;
+            let expected_at = segment_starts
+                .get(segment)
+                .ok_or_else(|| bad("candidate segment start absent"))?
+                .checked_add(offset)
+                .ok_or_else(|| bad("candidate context position overflow"))?;
+            if at != expected_at || causal.get(at).copied() != Some(u64::try_from(ids[i])?) {
+                return Err(bad("candidate causal position mismatch"));
+            }
+        }
+        Ok(())
+    }
+    fn matched_packet(a: &Value, b: &Value) -> Result<()> {
+        for key in [
+            "source_provenance",
+            "actual_prefix_ids",
+            "copy_token_ids",
+            "retained_state_codes",
+            "generate_raw_scores_sha256",
+        ] {
+            if a.get(key).is_none() || a[key] != b[key] {
+                return Err(bad("fixed control candidate/context/Generate differs"));
+            }
+        }
+        Ok(())
+    }
+    fn literal_pairs(
+        packet: &Value,
+        input: &Packet,
+        receipt: &Value,
+        position: usize,
+    ) -> Result<Value> {
+        let spans = array(receipt, "canonical_token_byte_provenance_labels_only")?;
+        let Some(target) = spans.get(position) else {
+            return Ok(json!({"status":"eos_or_no_literal_span","pairs":[]}));
+        };
+        if uint(target, "canonical_position")? != position as u64 {
+            return Err(bad("canonical span position differs"));
+        }
+        let literal_start = uint(receipt, "reply_literal_byte_start").ok();
+        let protocol_seam = target["overlaps_literal"] == true
+            && target["literal_byte_start"] == 0
+            && literal_start.is_some_and(|start| {
+                uint(target, "reply_byte_start")
+                    .ok()
+                    .and_then(|s| s.checked_add(1))
+                    == Some(start)
+            })
+            && uint(target, "reply_byte_end")
+                .ok()
+                .zip(uint(receipt, "reply_literal_byte_end").ok())
+                .is_some_and(|(end, literal_end)| end <= literal_end)
+            && literal_start
+                .and_then(|s| usize::try_from(s).ok())
+                .and_then(|s| s.checked_sub(1))
+                .and_then(|s| {
+                    receipt["reference_prose_labels_only"]
+                        .as_str()
+                        .and_then(|p| p.as_bytes().get(s))
+                })
+                .copied()
+                == Some(b' ');
+        if target["wholly_inside_literal"] != true && !protocol_seam {
+            return Ok(
+                json!({"status":if target["overlaps_literal"] == true {"seam_overlap"} else {"outside_literal"},"pairs":[]}),
+            );
+        }
+        let views = array(receipt, "source_views")?;
+        let candidates = array(&packet["source_provenance"], "candidates")?;
+        let segment = uint(receipt, "reference_source_segment_labels_only")?;
+        let token = uint(target, "token_id")?;
+        let lo = uint(target, "literal_byte_start")?;
+        let hi = uint(target, "literal_byte_end")?;
+        if lo >= hi {
+            return Err(bad("empty literal token byte interval"));
+        }
+        let mut selected = Vec::new();
+        let mut wrong = Vec::new();
+        for (i, c) in candidates.iter().enumerate() {
+            if uint(&c["occurrence"], "token_id")? != token {
+                continue;
+            }
+            let p = candidate_span(c, candidate_view(c, input, views)?)?;
+            let start = uint(p, "source_byte_start")?;
+            let end = uint(p, "source_byte_end")?;
+            let separator = p["includes_protocol_separator"] == true;
+            let valid_separator = separator
+                && start == 0
+                && uint(p, "emitted_byte_start")? == 0
+                && uint(p, "emitted_byte_end")?
+                    == end
+                        .checked_add(1)
+                        .ok_or_else(|| bad("separator span overflow"))?
+                && array(candidate_view(c, input, views)?, "rendered_bytes")?
+                    .first()
+                    .and_then(Value::as_u64)
+                    == Some(u64::from(b' '));
+            if start >= end || (separator && !valid_separator) {
+                continue;
+            }
+            if uint(c, "segment_index")? == segment {
+                if start == lo && end == hi && separator == protocol_seam {
+                    selected.push(i);
+                }
+            } else {
+                wrong.push(i);
+            }
+        }
+        let pairs = selected.iter().flat_map(|&s|wrong.iter().map(move |&w|json!({"selected_index":s,"wrong_index":w,"selected":candidates[s],"wrong":candidates[w]}))).collect::<Vec<_>>();
+        Ok(
+            json!({"status":if selected.is_empty(){"no_exact_emission_byte_alignment"}else if wrong.is_empty(){"no_same_token_wrong_source"}else{"eligible"},"alignment":if protocol_seam {"exact_literal_plus_one_protocol_space"}else{"exact_wholly_literal"},"token_id":token,"literal_byte_start":lo,"literal_byte_end":hi,"selected_occurrences":selected.len(),"wrong_occurrences":wrong.len(),"pairs":pairs}),
+        )
+    }
+    pub fn run(attribution: &Path, reference: &Path, inputs: &Path, out: &Path) -> Result<()> {
+        let start = Instant::now();
+        for root in [attribution, reference, inputs] {
+            report_output::verify(root)?;
+        }
+        let attr = read(&attribution.join("report.json"))?;
+        let refs = read(&reference.join("answerability-reference.json"))?;
+        let raw = fs::read(inputs.join("inputs.json"))?;
+        let values: Value = serde_json::from_slice(&raw)?;
+        let tokenizer = fs::read(inputs.join("tokenizer.json"))?;
+        if attr["schema"] != "uor-r4.geometric-potential-attribution/1"
+            || attr["status"] != "COMPLETED"
+            || attr["P1_all_canonical_and_ownprefix_diagonals_verified"] != true
+            || refs["schema"] != "uor-r4.bank-generate-answerability/2"
+            || refs["runtime_reference"] != false
+            || values["schema"] != "uor-r4.native-source-bank-probe-input/1"
+            || attr["bound_development_inputs_sha256"] != sha256_bytes(&raw)
+        {
+            return Err(bad("source contrast schema/input binding differs"));
+        }
+        for (key, path) in [
+            ("input_manifest_sha256", "manifest.json"),
+            ("inputs_sha256", "inputs.json"),
+            ("labels_sha256", "labels.json"),
+            ("tokenizer_sha256", "tokenizer.json"),
+        ] {
+            if refs["input_bindings"][key] != sha256_bytes(&fs::read(inputs.join(path))?) {
+                return Err(bad("source reference input identity differs"));
+            }
+        }
+        let compiler = SourceEmissionCompiler::new(&tokenizer)?;
+        let cases = array(&values, "cases")?;
+        let receipts = array(&refs, "cases")?;
+        let rows = array(&attr, "rows")?;
+        if cases.is_empty()
+            || cases.len() > 512
+            || cases.len() != receipts.len()
+            || cases.len() != rows.len()
+        {
+            return Err(bad("source contrast row count differs"));
+        }
+        let mut seen = BTreeSet::new();
+        let mut outputs = Vec::new();
+        let mut row_refs = Vec::new();
+        let mut bytes_written = 0usize;
+        for (index, ((input, receipt), rowref)) in cases.iter().zip(receipts).zip(rows).enumerate()
+        {
+            deadline(start)?;
+            let packet: Packet = serde_json::from_value(input.clone())?;
+            if packet.id.is_empty()
+                || !seen.insert(packet.id.clone())
+                || receipt["id"] != packet.id
+                || rowref["id"] != packet.id
+                || !packet.actual_prefix_ids.is_empty()
+                || receipt["serialized_input_packet_sha256"]
+                    != sha256_bytes(&serde_json::to_vec(&packet)?)
+            {
+                return Err(bad("source reference per-row identity differs"));
+            }
+            let views = array(receipt, "source_views")?;
+            let mut compiled = Vec::new();
+            for (segment_index, s) in packet.segments.iter().enumerate() {
+                if let Segment::Source {
+                    original_source_ids,
+                    ..
+                } = s
+                {
+                    compiled.push(json!({"segment_index":segment_index,"source_view":compiler.compile(original_source_ids)?}));
+                }
+            }
+            if views != &compiled {
+                return Err(bad("independently recompiled Source views differ"));
+            }
+            let selected_segment =
+                usize::try_from(uint(receipt, "reference_source_segment_labels_only")?)?;
+            match packet.segments.get(selected_segment) {
+                Some(Segment::Source {
+                    event,
+                    record,
+                    commit,
+                    ..
+                }) if receipt["reference_event"] == *event
+                    && receipt["reference_record"] == *record
+                    && receipt["reference_commit"] == *commit => {}
+                _ => return Err(bad("selected physical Source reference differs")),
+            }
+            let file = relative(
+                attribution,
+                rowref["row_file"]
+                    .as_str()
+                    .ok_or_else(|| bad("missing attribution row path"))?,
+            )?;
+            let rawrow = fs::read(file)?;
+            if rowref["row_sha256"] != sha256_bytes(&rawrow) {
+                return Err(bad("attribution row SHA differs"));
+            }
+            let row: Value = serde_json::from_slice(&rawrow)?;
+            if row["id"] != packet.id || row["arms"].as_object().map(|o| o.len()) != Some(4) {
+                return Err(bad("attribution arm/row identity differs"));
+            }
+            let baseline = array(&row["arms"][ARMS[0]], "canonical")?;
+            let targets = ints(&receipt["target_ids_labels_only"])?;
+            if baseline.len() != targets.len() {
+                return Err(bad("canonical reference length differs"));
+            }
+            let mut positions = Vec::new();
+            for t in 0..baseline.len() {
+                let first = &baseline[t]["native"];
+                for arm in ARMS {
+                    let canonical = array(&row["arms"][arm], "canonical")?;
+                    if canonical.len() != baseline.len() {
+                        return Err(bad("canonical arm length differs"));
+                    }
+                    let p = &canonical[t]["native"];
+                    validate_packet(p, &packet, views)?;
+                    matched_packet(first, p)?;
+                    if p["actual_prefix_ids"] != json!(&targets[..t])
+                        || canonical[t]["stats_labels_only"]["target_label_only"] != targets[t]
+                    {
+                        return Err(bad("matched control candidates/canonical prefix differ"));
+                    }
+                }
+                let mut eligibility = literal_pairs(first, &packet, receipt, t)?;
+                let mut measured = Vec::new();
+                for pair in array(&eligibility, "pairs")? {
+                    let s = usize::try_from(uint(pair, "selected_index")?)?;
+                    let w = usize::try_from(uint(pair, "wrong_index")?)?;
+                    let mut m = serde_json::Map::new();
+                    for arm in ARMS {
+                        m.insert(
+                            arm.into(),
+                            margins(&row["arms"][arm]["canonical"][t]["native"], s, w)?,
+                        );
+                    }
+                    let mut delta = serde_json::Map::new();
+                    for (name, a, b) in [
+                        ("P1_minus_P0", "P1", "P0"),
+                        ("P1_minus_restore_shared0", "P1", "P1_restore_shared0"),
+                        ("take_shared0_minus_P0", "P0_take_shared0", "P0"),
+                    ] {
+                        let mut components = serde_json::Map::new();
+                        for component in ["total", "contextual", "cue", "prefix"] {
+                            components.insert(
+                                component.into(),
+                                json!(checked_difference(
+                                    m[a][component]
+                                        .as_i64()
+                                        .ok_or_else(|| bad("margin absent"))?,
+                                    m[b][component]
+                                        .as_i64()
+                                        .ok_or_else(|| bad("margin absent"))?
+                                )?),
+                            );
+                        }
+                        delta.insert(name.into(), Value::Object(components));
+                    }
+                    // These controls only move a shared cell. Raw pair
+                    // preference must remain invariant even if clipping later
+                    // changes normalized action probabilities.
+                    for component in ["total", "contextual", "cue", "prefix"] {
+                        if delta["P1_minus_restore_shared0"][component] != 0
+                            || delta["take_shared0_minus_P0"][component] != 0
+                        {
+                            return Err(bad(
+                                "shared-cell control changes a source raw component margin",
+                            ));
+                        }
+                    }
+                    for component in ["cue", "prefix"] {
+                        if delta["P1_minus_P0"][component] != 0 {
+                            return Err(bad("frozen cue/prefix source margins differ"));
+                        }
+                    }
+                    measured.push(json!({"physical_pair":pair,"raw_score_margins_q24":m,"control_margin_differences_q24":delta}));
+                }
+                eligibility["pairs"] = json!(measured);
+                positions.push(json!({"canonical_position":t,"contrast":eligibility}));
+            }
+            let result = json!({"id":packet.id,"reference_source_segment_labels_only":selected_segment,"positions":positions,"ownprefix_after_divergence":"NOT_MEASURED; canonical literal labels are not diverged-prefix truth"});
+            let name = format!("source-contrast-row-{index:04}.json");
+            let serialized = serde_json::to_vec_pretty(&result)?;
+            bytes_written = bytes_written
+                .checked_add(serialized.len())
+                .ok_or_else(|| bad("report byte overflow"))?;
+            if bytes_written + (1 << 20) > MAX_REPORT_BYTES {
+                return Err(bad("source contrast report byte ceiling"));
+            }
+            fs::write(out.join(&name), &serialized)?;
+            row_refs.push(
+                json!({"id":packet.id,"row_file":name,"row_sha256":sha256_bytes(&serialized)}),
+            );
+            let mut statuses = std::collections::BTreeMap::<String, usize>::new();
+            for p in &positions {
+                let status = p["contrast"]["status"]
+                    .as_str()
+                    .ok_or_else(|| bad("contrast status absent"))?;
+                *statuses.entry(status.into()).or_default() += 1;
+            }
+            outputs.push(json!({"id":packet.id,"position_status_counts":statuses,"same_value_provenance_scope":"raw occurrence scores observable; answer-token loss does not identify equal-value sources"}));
+        }
+        for root in [attribution, reference, inputs] {
+            report_output::verify(root)?;
+        }
+        fs::write(
+            out.join("report.json"),
+            serde_json::to_vec_pretty(
+                &json!({"schema":"uor-r4.geometric-source-contrast/1","status":"COMPLETED","model_reruns":0,"normalization_reconstructed":false,"source_reference_runtime":false,"scope":"exact literal byte-aligned selected physical Source versus other physical Source occurrences with identical token ID; fixed candidate pairs across four saved controls; raw score and component margins only","control_scope":"P1 minus P0 is the potential coefficient effect conditional on fixed final context and Generate, not whole joint learning; shared-cell raw margins must be invariant; clipping/unsaturation effects are not source preference","limitations":"no same-token distractor is ineligible, not a success; answer loss cannot identify equal-value source provenance; no same-relation version or generalization claim; no query-pair or diverged-prefix attribution","attribution_report_sha256":sha256_bytes(&fs::read(attribution.join("report.json"))?),"attribution_manifest_sha256":sha256_bytes(&fs::read(attribution.join("manifest.json"))?),"reference_sha256":sha256_bytes(&fs::read(reference.join("answerability-reference.json"))?),"reference_manifest_sha256":sha256_bytes(&fs::read(reference.join("manifest.json"))?),"inputs_manifest_sha256":sha256_bytes(&fs::read(inputs.join("manifest.json"))?),"input_bindings":refs["input_bindings"],"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"rows":row_refs,"eligibility_summary":outputs,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+            )?,
+        )?;
+        Ok(())
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        fn fixture() -> Result<(Packet, Value, Value)> {
+            let input: Packet = serde_json::from_value(
+                json!({"id":"x","segments":[{"kind":"Source","event":4,"record":8,"commit":9,"scope":"s","entity":[1],"relation":0,"view":0,"original_source_ids":[7]},{"kind":"Source","event":3,"record":10,"commit":11,"scope":"s","entity":[1],"relation":1,"view":0,"original_source_ids":[7]}],"query_ids":[1],"actual_prefix_ids":[]}),
+            )?;
+            let span = json!({"emitted_token_offset":0,"source_byte_start":0,"source_byte_end":3,"includes_protocol_separator":false});
+            let view = json!({"emitted_token_ids":[7],"provenance":[span]});
+            let receipt = json!({"reference_source_segment_labels_only":0,"source_views":[{"segment_index":0,"source_view":view},{"segment_index":1,"source_view":view}],"canonical_token_byte_provenance_labels_only":[{"canonical_position":0,"token_id":7,"wholly_inside_literal":true,"overlaps_literal":true,"literal_byte_start":0,"literal_byte_end":3}]});
+            let p = json!({"actual_prefix_ids":[],"retained_state_codes":[1],"generate_raw_scores_sha256":"g","copy_token_ids":[7,7],"copy_raw_scores_q24":[12,8],"copy_components_q24":{"contextual":[10,6],"cue":[1,1],"prefix":[1,1]},"source_provenance":{"causal_tokens":[7,7,1],"candidates":[{"bank_index":0,"context_position":0,"event":4,"segment_index":0,"occurrence":{"record":8,"commit":9,"token_offset":0,"token_id":7}},{"bank_index":1,"context_position":1,"event":3,"segment_index":1,"occurrence":{"record":10,"commit":11,"token_offset":0,"token_id":7}}]}});
+            Ok((input, receipt, p))
+        }
+        #[test]
+        fn source_raw_margin_is_invariant_to_uniform_shift() -> Result<()> {
+            let (_, _, p) = fixture()?;
+            let mut shifted = p.clone();
+            shifted["copy_raw_scores_q24"] = json!([-88, -92]);
+            shifted["copy_components_q24"]["contextual"] = json!([-90, -94]);
+            assert_eq!(margins(&p, 0, 1)?, margins(&shifted, 0, 1)?);
+            Ok(())
+        }
+        #[test]
+        fn physical_identity_byte_alignment_and_seams_are_distinct() -> Result<()> {
+            let (input, mut r, mut p) = fixture()?;
+            validate_packet(&p, &input, array(&r, "source_views")?)?;
+            assert_eq!(literal_pairs(&p, &input, &r, 0)?["status"], "eligible");
+            r["canonical_token_byte_provenance_labels_only"][0]["literal_byte_end"] = json!(2);
+            assert_eq!(
+                literal_pairs(&p, &input, &r, 0)?["status"],
+                "no_exact_emission_byte_alignment"
+            );
+            r["canonical_token_byte_provenance_labels_only"][0]["wholly_inside_literal"] =
+                json!(false);
+            assert_eq!(literal_pairs(&p, &input, &r, 0)?["status"], "seam_overlap");
+            p["source_provenance"]["candidates"][0]["segment_index"] = json!(1);
+            assert!(validate_packet(&p, &input, array(&r, "source_views")?).is_err());
+            Ok(())
+        }
+        #[test]
+        fn one_protocol_space_requires_exact_rendered_provenance() -> Result<()> {
+            let (input, mut r, p) = fixture()?;
+            r["reply_literal_byte_start"] = json!(1);
+            r["reply_literal_byte_end"] = json!(4);
+            r["reference_prose_labels_only"] = json!(" abc");
+            r["canonical_token_byte_provenance_labels_only"][0]["wholly_inside_literal"] =
+                json!(false);
+            r["canonical_token_byte_provenance_labels_only"][0]["reply_byte_start"] = json!(0);
+            r["canonical_token_byte_provenance_labels_only"][0]["reply_byte_end"] = json!(4);
+            for view in r["source_views"]
+                .as_array_mut()
+                .ok_or_else(|| bad("fixture views absent"))?
+            {
+                view["source_view"]["rendered_bytes"] = json!([32, 97, 98, 99]);
+                view["source_view"]["provenance"][0]["includes_protocol_separator"] = json!(true);
+                view["source_view"]["provenance"][0]["emitted_byte_start"] = json!(0);
+                view["source_view"]["provenance"][0]["emitted_byte_end"] = json!(4);
+            }
+            assert_eq!(literal_pairs(&p, &input, &r, 0)?["status"], "eligible");
+            assert_eq!(
+                literal_pairs(&p, &input, &r, 0)?["alignment"],
+                "exact_literal_plus_one_protocol_space"
+            );
+            r["source_views"][0]["source_view"]["provenance"][0]["emitted_byte_end"] = json!(3);
+            assert_eq!(
+                literal_pairs(&p, &input, &r, 0)?["status"],
+                "no_exact_emission_byte_alignment"
+            );
+            Ok(())
+        }
+        #[test]
+        fn identical_tokens_cannot_swap_physical_context_positions() -> Result<()> {
+            let (input, r, mut p) = fixture()?;
+            validate_packet(&p, &input, array(&r, "source_views")?)?;
+            p["source_provenance"]["candidates"][0]["context_position"] = json!(1);
+            p["source_provenance"]["candidates"][1]["context_position"] = json!(0);
+            assert!(validate_packet(&p, &input, array(&r, "source_views")?).is_err());
+            let (_, _, mut p) = fixture()?;
+            p["source_provenance"]["causal_tokens"] = json!([7, 7, 2]);
+            assert!(validate_packet(&p, &input, array(&r, "source_views")?).is_err());
+            Ok(())
+        }
+        #[test]
+        fn matched_control_rejects_candidate_or_context_change() -> Result<()> {
+            let (_, _, p) = fixture()?;
+            let mut other = p.clone();
+            other["source_provenance"]["candidates"][0]["event"] = json!(5);
+            assert!(matched_packet(&p, &other).is_err());
+            other = p.clone();
+            other["retained_state_codes"] = json!([2]);
+            assert!(matched_packet(&p, &other).is_err());
+            Ok(())
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.first().is_some_and(|a| a == "--source-contrast") {
+        if args.len() != 5 {
+            return Err(bad(
+                "usage: --source-contrast ATTRIBUTION_ROOT REFERENCE_ROOT INPUT_ROOT OUTPUT",
+            ));
+        }
+        let attr = PathBuf::from(&args[1]);
+        let reference = PathBuf::from(&args[2]);
+        let inputs = PathBuf::from(&args[3]);
+        let out = PathBuf::from(&args[4]);
+        for root in [&attr, &reference, &inputs] {
+            admit_output(root, &out)?;
+        }
+        let prospective = output_support::prospective_output(&out)?;
+        if prospective
+            .ancestors()
+            .any(|p| p.join("manifest.json").is_file())
+        {
+            return Err(bad("source contrast output inside an existing sealed root"));
+        }
+        report_output::claim(&out)?;
+        let result = source_contrast::run(&attr, &reference, &inputs, &out);
+        if let Err(error) = &result {
+            fs::write(
+                out.join("failure.json"),
+                serde_json::to_vec_pretty(
+                    &json!({"status":"FAILED","error":error.to_string(),"scope":"offline source attribution instrument failure; not a model verdict"}),
+                )?,
+            )?;
+        }
+        report_output::seal(&out)?;
+        report_output::verify(&out)?;
+        return result;
+    }
     if args.first().is_some_and(|a| a == "--potential-attribution") {
         if args.len() != 6 {
             return Err(bad("usage: --potential-attribution FIT_ROOT BOUND_DEV_INPUTS OUTPUT MAX_SECONDS MAX_REPORT_BYTES"));
