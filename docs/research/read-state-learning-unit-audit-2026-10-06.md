@@ -71,7 +71,7 @@ across common frames rather than introducing an arbitrary absolute-state map.
 
 ## Next decision
 
-Proceed with the prepared matched joint fit from the feasible initial parent.
+The prepared matched joint fit has now completed; its outcome and next discriminator are recorded below. The original prospective contract was to proceed from the feasible initial parent.
 Keep the existing rates and objective; inspect exported coefficient changes,
 observed discrete actions, source choices and actual replies. A future negative
 must distinguish native discretization, read ranking, transport utility and
@@ -103,3 +103,63 @@ order and public token budget, with independently authored expected answers.
 If output remains blocked by Copy scores above Generate's attainable bound,
 retain the bridge result and address read-versus-emission competition; do not
 repeat the same fit or retire geometry from that negative.
+
+
+## Completed matched fit and compiler discriminator — October 6
+
+Numerical fit source `a5e132b3203d019c7501db7225480567cd20cd9a`, executable
+`c6181567450a9040e36a68f20ad611e824f9db1e7ce18a7d480e8323eeff08b4`,
+configuration `d09b1c267a7b89a16423d14481cea4b09a88a3980f6ca39130add0abec2bae57`.
+Linux x86_64 / RTX 5090; exit zero; 128 updates; 3198.631 seconds.
+Initial native rows equal the retained phase-balanced control at all 512 cases
+and 6664 canonical positions. Complete and entry-correct replies remained
+0/512. Equal-episode CE fell 8.223477→5.579788; later Copy-covered correct
+positions rose 41/4128→350/4128, while later Generate-only positions remained
+0/2024. Entry NLL worsened 8.343483→9.285469. These are open construction
+measurements on 128 correlated banks, 48 replies and two frames, one seed;
+not fresh transfer or chat qualification.
+
+The final artifact has eight nonzero bias coefficients and zero relative
+coefficients. Identity-action bias is -1 and every other score is zero;
+strict ties select code zero, quaternion [-1,0,0,0]. Thus its exact bridge
+function is `F(q,k)=-q`, independent of relative key. This statement concerns
+the bridge, not the complete contextual model. Both retained continuous
+families have nonzero gradients on every update. All 115200 relative masters
+are nonzero, but their absolute maximum is 0.103839, below the original
+0.125 export threshold. Continuous learning was not disconnected.
+
+The fixed gain-four discriminator (both families, no fit/labels/sweep/clip)
+ran at `49660e7536858b645353b604c3e5926367f8d998`; build and four focused
+CPU tests passed. Probe executable SHA256
+`aef67f4c1920fa080054c55bd1992720e5b8996521d7c0297c2c3aa16ad031ba`;
+its embedded source ID is the unambiguous short `49660e75`. Original master
+re-export reproduced the parent bytes exactly; derived export was independently
+reloaded, and actual native apply evaluated all 120 relative codes × eight
+lanes. Derived artifact SHA256
+`0b6fda2ce6d7ac5adb32a381736684a5a3b37467c2cd3bf67f01c5e558c7b6c4`.
+Relative nonzero coefficients became 19702; all eight lanes became key-dependent.
+Master-winner agreement improved 0/960→305/960. All master winners were unique,
+but none had gap greater than the 1/8 protection bound; zero bound violations
+therefore establishes no protected-winner coverage. Gain-four is a different
+compiler policy, not parity with the hard forward used during training.
+
+Next: compile the finite master action map `h(d)=argmax(B+T)` directly, retaining
+identity-first strict ties, into the existing bounded signed-H4 operator.
+Exhaustively verify all 960 master/native choices and preserve both earlier
+artifacts. This is a proposed categorical compiler discriminator, not an
+executed result. No scale sweep or unchanged fit follows. Utility requires
+fixed-checkpoint native factual/identity/alternative-key comparisons. Independently,
+all 512 final entry Copy maxima exceed Generate's attainable 91/16 score, so
+changing the bridge alone cannot fix the entry token at this frozen scorer.
+Read-versus-emission competition remains a separate causal training problem.
+
+The newer fitter at `4e660c15` also passed CUDA zero-update admission: all eight
+initial native row files are byte-identical to the original admission and all
+non-timing objective/gradient fields match. The only additional non-timing
+result is an eight-row context-credit diagnostic. This is bounded numerical
+admission, not full-fit parity or a speedup measurement.
+
+Work cards and artifacts: #820 comments 6024955480 and 6026525985;
+`/workspace/uor-r4/codex/native-geometric-generate/read-state-bridge-joint-fit-attempt2`
+and `export-probe-gain4-attempt1`. Preserve sealed attempts and their masters;
+no mechanism family is retired by these results.

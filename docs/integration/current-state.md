@@ -1,5 +1,23 @@
 # Current UOR-R4 research state
 
+## Selected-read bridge fit: export erased conditional actions — October 6
+
+The matched 128-update joint fit completed on the RTX 5090 (exit zero), but
+complete and entry-correct replies remained 0/512. The final native bridge
+collapsed to a key-independent antipodal action. Retained continuous relative
+masters learned nonzero values below the exporter threshold. A single fixed
+gain-four recompilation restored key dependence in all eight lanes, but only
+305/960 continuous action choices survived rounding (parent: 0/960).
+This diagnoses loss at compilation; it does not qualify attention or language.
+All final entry Copy maxima also exceed Generate's legal maximum, leaving a
+separate emission-competition blocker. Preserve the fit and both exports.
+
+The next compiler discriminator is direct compilation of the learned finite
+relative-action map, with exhaustive master/native equality, followed by
+frozen native utility interventions if equality is established. Do not repeat
+an unchanged fit or select scales against answer labels. Detailed identities,
+measurements and limitations are in the [learning-unit audit](../research/read-state-learning-unit-audit-2026-10-06.md#completed-matched-fit-and-compiler-discriminator--october-6).
+
 ## Native selected-read state transport: CUDA admission — October 6
 
 The next causal change is an opt-in all-bank hard read followed by signed-H4
