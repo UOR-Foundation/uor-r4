@@ -30,10 +30,19 @@ uses frozen potential input credit. The ordinary source-realizer learner already
 combines potential coefficient credit and frozen context credit at identical
 native scores, but its potential coefficient CustomOp is CPU-only.
 
-Next implementation prerequisite is an opt-in CUDA selected-pair coefficient
-adjoint for the EXISTING geometric potential, with native hard-score anchoring
-and no new parameters/serving behavior. Actual compile/parity remain NOT_RUN
-until this source change is complete. Before any fit, attribute fixed
+The selected-pair CUDA coefficient adjoint for the EXISTING geometric potential
+now compiles and passes at source054387b791a960bf38be5b6747856f5d6b49a13e,
+on Linux x86_64 RTX5090 podxyh8m9ao3nlz6l (EU-RO-1). Five focused CPU tests
+pass; the explicitly invoked CUDA test passes (not merely ignored). All seven
+coefficient families match the CPU reference within declared F32 tolerance,
+with native hard-score anchoring and no new parameters/serving behavior.
+Build/check commands take222.187s, child peakRSS3690456KiB. Test executable
+SHA256a2d9689c6ab7d9e38f3842c086fedc99d77e5a8adca2aa5c8033e8ee9f3c6f3a.
+Exact-source independent review finds no arithmetic blocker. Fixed endpoints
+receive coefficient credit; native hard anchoring and packing still execute on
+the host. This is a component check, not a fit or language result. Integrating
+the fitter requires finite CUDA gradient admission before optimizer/export.
+Before any fit, attribute fixed
 contextual/cue/prefix contributions and check legal potential range, then
 integrate an explicit context+potential+Generate arm with honest export/rebind.
 Existing context-only export must retain its freeze contract. Source-covered

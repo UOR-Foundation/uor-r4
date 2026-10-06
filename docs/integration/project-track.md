@@ -55,9 +55,10 @@ establish conditional readout feasibility, not learned context or attention.
 Original-vector inspection now certifies424/512 fixed-Copy obstructions under
 the final joint gold ceiling;53 successful witnesses and35 uncertified losses
 remain. Current joint learning optimizes context+Generate while every Copy
-scorer coefficient stays frozen. Next enable CUDA coefficient credit for the
-existing geometric potential, verify native parity, attribute scorer components
-and potential range, then integrate explicit context+potential+Generate learning
+scorer coefficient stays frozen. CUDA selected-pair coefficient credit for the
+existing geometric potential now passes five CPU tests and the explicit CUDA
+parity test at source054387b7. This does not update a model. Next attribute scorer
+components and potential range, then integrate explicit context+potential+Generate learning
 with honest export/rebind before fitting. Keep cue/prefix frozen in the first
 causal change only if their contributions permit this family's correction.
 Preserve source-covered Copy behavior as well as ordinary Generate outcomes.
