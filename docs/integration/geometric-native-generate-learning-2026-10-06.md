@@ -408,3 +408,59 @@ repair, not a model negative or a claimed GPU pass. CUDA admission,
 balanced fit and any predictive improvement are NOT_RUN. Existing six frozen
 runs continue. The next fit is a matched output-only comparison after their
 complete decision and full prospective cost admission.
+
+
+## Prospective comparison and conditional code-learning direction
+
+The three balanced output-only configurations are prepared on the canonical
+volume, not admitted or run. Independent review loads each actual configuration
+and its frozen seed1001/1002/1003 parent: after normalizing the absent default-false
+prefix flag, only `balanced_token_geometry=true` and the exclusive output path
+differ. Seed, data, donor, optimizer,128 updates, B8, chunk1 and all other fields
+are identical. The admission configuration additionally changes mode to
+`admission`, maximum seconds to300 and output path. Configuration equality does
+not rehash data or establish CUDA parity. Receipt SHA256:
+`9f6d4e995b9d449140bd07e83cfb02e0be817553b2fcdbdbad3bf96d5e9cacef`.
+
+The completed paired seeds determine the next action. If later seeds produce
+useful complete replies, retain those candidates and prioritize transfer before
+changing their learning rule. If higher token lanes become variable, re-audit the
+actual native margins rather than extending the seed1001 cancellation finding.
+If Generate ranking becomes broadly correct but pooled Copy still wins, diagnose
+that witnessed competition first. Continued sparse-code ranking failure supports
+the matched balanced initialization comparison. Report initial-to-final changes
+alongside final-to-final differences because initialization changes score
+statistics. Complete emitted-prefix answers remain the primary endpoint; these
+exposed512 rows are not fresh transfer evidence.
+
+A focused source and primary-literature review identifies native discrete
+coordinate proposals with actual loss-based acceptance as a conditional next
+code-learning discriminator. This is a design proposal, not an implemented
+optimizer. Existing `code_conditional_scores_into` returns120 scores for one
+token/lane with other operands factual; it does not return120 whole-pool losses.
+A shared token-code change alters denominators at every position, including
+positions where that token is not gold. Acceptance must use the authoritative
+full-vocabulary Copy+Generate reducer on a fixed comparison set. A changed pool
+maximum also prevents assuming integer exponential weights merely rescale.
+Include the current code, retain it on ties, and accept only an actual decrease.
+Exhaustive120-way evaluation gives a coordinate minimum on that fixed objective;
+a small proposal set guarantees only accepted decrease. Neither implies transfer
+or global convergence. Accepted code ownership must survive the next shadow
+export without an implicit gap-reset heuristic.
+
+[AQLM](https://arxiv.org/abs/2401.06118) provides a methodological precedent for
+alternating discrete assignments and continuous optimization; its transformer
+reconstruction objective and serving implementation are not adopted. Alternatives
+include loss-augmented argmax estimators, as studied in
+[Direct Optimization through argmax](https://arxiv.org/abs/1806.02867), and
+conditional expected-loss gradients with categorical enumeration, motivated by
+[Rao-Blackwellized stochastic gradients](https://proceedings.mlr.press/v97/liu19c.html).
+The former introduces a surrogate/perturbation choice; the latter optimizes a
+conditional expectation that need not survive deterministic export. Neither is
+justified before observing useful actual native code alternatives. If no improving
+coordinate exists, investigate coupled state/code or factor capacity rather than
+assuming the estimator is the cause. Fixed H4 roots, integer serving and the
+prediction objective remain the architectural constraints.
+
+No new fit, code-update optimizer, gap tuning or normalization change is admitted
+by this review. All six frozen fits keep their original source and schedules.
