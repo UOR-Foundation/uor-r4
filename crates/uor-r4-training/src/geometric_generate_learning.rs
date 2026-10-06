@@ -501,6 +501,112 @@ impl GenerateLearningWeights {
         self.forward_prepared_state_input(prepared, state, state_choices, true)
     }
 
+    /// Frozen factual-state diagnostic: only selected Q4 field coefficients
+    /// receive credit. Snapshot choice cache preparation remains paid, but no
+    /// state/prototype utility branch is constructed or attached here.
+    /// CUDA snapshot freshness is the caller's responsibility.
+    pub fn forward_prepared_coefficients_only(
+        &self,
+        prepared: &PreparedGenerateLearning,
+        state: &[H4Code],
+    ) -> Result<GenerateLearningOutput> {
+        self.validate_shapes()?;
+        let native = &prepared.native;
+        let cache = &prepared.cache;
+        if native.lanes() != self.lanes
+            || native.vocab_size() != self.vocab_size()
+            || native.metadata().score_shift != SCORE_SHIFT
+            || native.energy().edges() != self.edges
+            || native.metadata().tokenizer_sha256 != self.binding.tokenizer_sha256()
+            || state.len() != self.lanes
+            || !cache.relative.device().same_device(self.device())
+            || native.metadata().payload_sha256 != cache.payload_sha256
+        {
+            return Err(invalid(
+                "Generate coefficient-only snapshot/state binding differs",
+            ));
+        }
+        if self.device().is_cpu()
+            && self
+                .export_native()?
+                .to_bytes()
+                .map_err(|e| invalid(e.to_string()))?
+                != native.to_bytes().map_err(|e| invalid(e.to_string()))?
+        {
+            return Err(invalid("Generate coefficient-only payload is stale"));
+        }
+        let v = self.vocab_size();
+        let mut counts = GenerateReadCounts::default();
+        let mut hard = vec![0i64; v];
+        native
+            .score_into(state, &mut hard, &mut counts)
+            .map_err(|e| invalid(e.to_string()))?;
+        let unary = (q4_shadow_ste(self.unary.as_tensor())? * QUARTER_TO_NATS)?;
+        let pair = if self.edges.is_empty() {
+            self.pair.as_tensor().clone()
+        } else {
+            (q4_shadow_ste(self.pair.as_tensor())? * QUARTER_TO_NATS)?
+        };
+        let mut coefficient = (q4_shadow_ste(self.bias.as_tensor())? * QUARTER_TO_NATS)?;
+        let mut factual = Vec::with_capacity(self.lanes);
+        for lane in 0..self.lanes {
+            let ids = cache
+                .relative
+                .narrow(0, usize::from(state[lane].index()), 1)?
+                .reshape(ROOT_COUNT)?
+                .index_select(&cache.prototypes[lane], 0)?;
+            coefficient = (&coefficient
+                + unary
+                    .narrow(0, lane, 1)?
+                    .reshape(ROOT_COUNT)?
+                    .index_select(&ids, 0)?)?;
+            factual.push(ids);
+        }
+        for (edge, endpoints) in self.edges.iter().enumerate() {
+            let ids = pair_device_indices(
+                &factual[usize::from(endpoints.left)],
+                &factual[usize::from(endpoints.right)],
+                &cache.index_multiplier,
+            )?;
+            coefficient = (&coefficient
+                + pair
+                    .narrow(0, edge, 1)?
+                    .reshape(ROOT_COUNT * ROOT_COUNT)?
+                    .index_select(&ids, 0)?)?;
+        }
+        let anchor = Tensor::from_vec(
+            hard.iter()
+                .map(|&x| (x as f64 / Q24) as f32)
+                .collect::<Vec<_>>(),
+            v,
+            self.device(),
+        )?;
+        let raw_scores = (&anchor + (&coefficient - coefficient.detach())?)?;
+        let clipped_scores = raw_scores.clamp(-8f32, 8f32)?;
+        Ok(GenerateLearningOutput {
+            raw_scores,
+            clipped_scores,
+            scores_q24: hard,
+            native_counts: counts,
+            costs: GenerateLearningCosts {
+                vocabulary_rows: v,
+                lanes: self.lanes,
+                ordered_pairs: self.edges.len(),
+                conditional_choice_rows: 0,
+                staged_index_bytes: 0,
+                staged_hard_score_bytes: 4 * v,
+                export_master_download_bytes: prepared.downloaded_master_bytes,
+                max_conditional_utility_elements: 0,
+                loss_status_scalars: 2,
+                snapshot_staged_index_bytes: cache.staged_bytes,
+                snapshot_device_index_bytes: cache.device_index_bytes,
+                per_position_device_index_elements: v * (self.lanes + self.edges.len()),
+                snapshot_choice_probability_bytes: 4 * v * self.lanes * ROOT_COUNT,
+                generate_only_loss_staged_bytes_upper: 16 * v + 4,
+            },
+        })
+    }
+
     fn forward_prepared_state_input(
         &self,
         prepared: &PreparedGenerateLearning,
@@ -1300,6 +1406,75 @@ mod tests {
             );
         }
         Ok(())
+    }
+    fn coefficients_only_loss_parity(device: &Device) -> Result<()> {
+        use uor_r4_integer::geometric_vocabulary_actions::NativeVocabularyActions;
+        let weights =
+            GenerateLearningWeights::seeded_balanced_token_geometry(binding()?, 4, 19, device)?;
+        let snapshot = weights.prepare_native()?;
+        let states = [code(4)?, code(13)?, code(29)?, code(47)?];
+        let mut values = vec![0f32; 4 * ROOT_COUNT];
+        for (lane, state) in states.iter().enumerate() {
+            values[lane * ROOT_COUNT + usize::from(state.index())] = 1.;
+        }
+        let choices = Var::from_tensor(&Tensor::from_vec(values, (4, ROOT_COUNT), device)?)?;
+        let full =
+            weights.forward_prepared_state_choices(&snapshot, &states, choices.as_tensor())?;
+        let field = weights.forward_prepared_coefficients_only(&snapshot, &states)?;
+        assert_eq!(full.scores_q24, field.scores_q24);
+        assert_eq!(
+            full.raw_scores.to_vec1::<f32>()?,
+            field.raw_scores.to_vec1::<f32>()?
+        );
+        assert_eq!(field.costs.conditional_choice_rows, 0);
+        assert_eq!(field.costs.max_conditional_utility_elements, 0);
+        // Same offline canonical exp formula used by the native consumer;
+        // public pool constructor authenticates bytes before any loss.
+        let exp = (0..uor_r4_integer::geometric_read::EXP_TABLE_LEN)
+            .flat_map(|i| {
+                (((-(i as f64) / 256.).exp() * (1u64 << 31) as f64).round() as u32).to_le_bytes()
+            })
+            .collect::<Vec<_>>();
+        let mut pool =
+            NativeVocabularyActions::new(binding()?, &exp).map_err(|e| invalid(e.to_string()))?;
+        let trace = pool
+            .reduce_trace(&field.scores_q24, &[4, 4, 5], &[0, -(1 << 24), 0])
+            .map_err(|e| invalid(e.to_string()))?;
+        let copy = Tensor::from_vec(vec![0f32, -1., 0.], 3, device)?;
+        let lf = vocabulary_marginal_loss(&trace, &full.raw_scores, Some(&copy), 4)?;
+        let lc = vocabulary_marginal_loss(&trace, &field.raw_scores, Some(&copy), 4)?;
+        assert_eq!(lf.to_scalar::<f32>()?, lc.to_scalar::<f32>()?);
+        let gf = lf.backward()?;
+        let gc = lc.backward()?;
+        for (name, var) in weights.parameters() {
+            if name == "generate.prototype_choices" {
+                assert!(
+                    gc.get(var.as_tensor()).is_none(),
+                    "coefficient-only prototype credit"
+                );
+            } else {
+                let a = grad(&gf, var.as_tensor())?;
+                let b = grad(&gc, var.as_tensor())?;
+                assert!(a.iter().any(|x| x.abs() > 1e-7), "{name} disconnected");
+                for (x, y) in a.iter().zip(b) {
+                    assert!((*x - y).abs() <= 2e-6 + 2e-5 * x.abs(), "{name}: {x} {y}");
+                }
+            }
+        }
+        assert!(
+            gc.get(choices.as_tensor()).is_none(),
+            "coefficient-only state credit"
+        );
+        Ok(())
+    }
+    #[test]
+    fn coefficients_only_native_pool_loss_matches_full_selected_fields() -> Result<()> {
+        coefficients_only_loss_parity(&Device::Cpu)
+    }
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn coefficients_only_cuda_native_pool_loss_matches_full_selected_fields() -> Result<()> {
+        coefficients_only_loss_parity(&Device::new_cuda(0)?)
     }
     #[test]
     fn generate_learning_cached_u32_indices_match_uncached_scores_and_all_gradients() -> Result<()>

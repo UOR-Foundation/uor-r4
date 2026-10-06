@@ -130,6 +130,7 @@ fn probe(
     out: &Path,
     start: Instant,
     state_ceiling: bool,
+    field_credit: bool,
 ) -> Result<()> {
     report_output::verify(fit)?;
     deadline(start)?;
@@ -194,7 +195,7 @@ fn probe(
         &initial_binding,
     )?;
     if initial_binding != binding
-        || (!state_ceiling
+        || (!(state_ceiling || field_credit)
             && (initial.prototypes() != model.prototypes()
                 || uint(&stage["evaluation"], "complete")? != 0))
     {
@@ -207,6 +208,24 @@ fn probe(
     let oracle_rows = arr(&oracles, "cases")?;
     if refs.len() != 512 || oracle_rows.len() != refs.len() {
         return Err(bad("requires bound full512 construction panel"));
+    }
+    if field_credit {
+        #[cfg(feature = "cuda")]
+        return field_credit_audit(
+            fit,
+            out,
+            start,
+            stage,
+            refs,
+            oracle_rows,
+            &model,
+            &mut pool,
+            &config_bytes,
+        );
+        #[cfg(not(feature = "cuda"))]
+        return Err(bad(
+            "field-credit requires a CUDA build and device; no CPU fallback",
+        ));
     }
     if state_ceiling {
         return state_ceiling_audit(
@@ -570,11 +589,350 @@ fn state_ceiling_audit(
     Ok(())
 }
 
+#[cfg(feature = "cuda")]
+fn field_credit_audit(
+    fit: &Path,
+    out: &Path,
+    start: Instant,
+    stage: &Value,
+    refs: &[Value],
+    oracles: &[Value],
+    model: &NativeGeometricGenerate,
+    pool: &mut NativeVocabularyActions,
+    config_bytes: &[u8],
+) -> Result<()> {
+    use candle_core::{Device, Tensor};
+    use uor_r4_training::geometric_generate_learning::{
+        vocabulary_marginal_loss, GenerateLearningWeights,
+    };
+    let device = Device::new_cuda(0)?;
+    let cp = fit.join("checkpoint-0128");
+    let g = GenerateLearningWeights::from_native(pool.binding().clone(), model, &device)?;
+    let metadata_bytes = fs::read(cp.join("generate-source/metadata.json"))?;
+    let metadata: Value = serde_json::from_slice(&metadata_bytes)?;
+    if metadata["tokenizer_sha256"].as_str() != Some(g.binding().tokenizer_sha256()) {
+        return Err(bad("field master tokenizer differs"));
+    }
+    let params = g.parameters();
+    let mut coefficient_masters = BTreeMap::<String, Vec<f32>>::new();
+    if metadata["parameters"].as_object().map(|v| v.len()) != Some(params.len()) {
+        return Err(bad("field master inventory differs"));
+    }
+    for (name, var) in &params {
+        let raw = fs::read(cp.join("generate-source").join(format!("{name}.f32le")))?;
+        let m = &metadata["parameters"][name];
+        if raw.len() != var.elem_count() * 4
+            || m["bytes"].as_u64() != Some(raw.len() as u64)
+            || m["sha256"].as_str() != Some(sha256_bytes(&raw).as_str())
+            || m["shape"] != json!(var.dims())
+        {
+            return Err(bad("source master hash/shape differs"));
+        }
+        let values = raw
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect::<Vec<_>>();
+        if values.iter().any(|v| !v.is_finite()) {
+            return Err(bad("nonfinite source master"));
+        }
+        if name != "generate.prototype_choices" {
+            coefficient_masters.insert(name.clone(), values.clone());
+        }
+        var.set(&Tensor::from_vec(values, var.shape(), &device)?)?;
+    }
+    if g.export_native()?.to_bytes()? != model.to_bytes()? {
+        return Err(bad("restored master native export differs from parent"));
+    }
+    let prepared = g.prepare_native()?;
+    let names = ["generate.unary", "generate.pair", "generate.bias"];
+    // Keep all live adjoints and phase accumulation on CUDA. Only completed
+    // aggregate field vectors are downloaded for the offline diagnostic.
+    let mut sums: Vec<BTreeMap<String, Tensor>> = (0..4)
+        .map(|_| {
+            names
+                .iter()
+                .map(|name| {
+                    Ok((
+                        (*name).to_owned(),
+                        Tensor::zeros(params[*name].shape(), candle_core::DType::F32, &device)?,
+                    ))
+                })
+                .collect::<candle_core::Result<BTreeMap<String, Tensor>>>()
+        })
+        .collect::<candle_core::Result<Vec<_>>>()?;
+    let mut counts = [0usize; 3];
+    let mut phase_ce = [0f64; 3];
+    let mut episode_weight = [0f64; 3];
+    let mut actual_packet_parity = [false; 3];
+    for (reference, oracle) in refs.iter().zip(oracles) {
+        if start.elapsed().as_secs() >= 900 {
+            return Err(bad("field credit 900-second ceiling"));
+        }
+        let row = load_row(fit, reference)?;
+        let canonical = arr(&row, "canonical")?;
+        let labels = ints(&row["canonical_target_ids_labels_only"])?;
+        if row["id"] != oracle["id"]
+            || row["canonical_target_ids_labels_only"] != oracle["canonical_ids_labels_only"]
+            || canonical.is_empty()
+            || canonical.len() != labels.len()
+            || labels.len() > 128
+        {
+            return Err(bad("field credit oracle/target identity differs"));
+        }
+        let weight = 1. / refs.len() as f64 / labels.len() as f64;
+        for (t, position) in canonical.iter().enumerate() {
+            if start.elapsed().as_secs() >= 900 {
+                return Err(bad("field credit 900-second ceiling"));
+            }
+            if position["target_label_only"].as_i64() != Some(labels[t])
+                || ints(&position["native"]["actual_prefix_ids"])? != labels[..t]
+            {
+                return Err(bad("field credit canonical prefix/label mismatch"));
+            }
+            let (s, gen, ids, copy) = replay(&position["native"], model, pool)?;
+            let trace = pool.reduce_trace(&gen, &ids, &copy)?;
+            let target = u32::try_from(labels[t])?;
+            let phase = if t == 0 {
+                0
+            } else if ids.contains(&target) {
+                1
+            } else {
+                2
+            };
+            let generated = g.forward_prepared_coefficients_only(&prepared, &s)?;
+            if generated.scores_q24 != gen {
+                return Err(bad("restored graph native scores differ"));
+            }
+            let copy_graph = Tensor::from_vec(
+                copy.iter()
+                    .map(|&v| (v as f64 / 16_777_216.) as f32)
+                    .collect::<Vec<_>>(),
+                copy.len(),
+                &device,
+            )?;
+            let native_mass = trace
+                .token_masses
+                .iter()
+                .find(|m| m.token_id == target)
+                .ok_or_else(|| bad("gold mass absent"))?
+                .weight_q31;
+            if uint(position, "native_target_mass")? != native_mass
+                || uint(position, "native_denominator")? != trace.summary.total_weight_q31
+            {
+                return Err(bad("saved target/denominator differs"));
+            }
+            phase_ce[phase] += loss(native_mass, trace.summary.total_weight_q31)? * weight;
+            episode_weight[phase] += weight;
+            let l =
+                vocabulary_marginal_loss(&trace, &generated.raw_scores, Some(&copy_graph), target)?
+                    .affine(weight, 0.)?;
+            let grads = l.backward()?;
+            if !actual_packet_parity[phase] {
+                let mut onehot = vec![0f32; model.lanes() * 120];
+                for (lane, code) in s.iter().enumerate() {
+                    onehot[lane * 120 + usize::from(code.index())] = 1.;
+                }
+                let full = g.forward_prepared_state_choices(
+                    &prepared,
+                    &s,
+                    &Tensor::from_vec(onehot, (model.lanes(), 120), &device)?,
+                )?;
+                if full.scores_q24 != generated.scores_q24 {
+                    return Err(bad("actual packet full/coeff-only hard scores differ"));
+                }
+                let full_loss =
+                    vocabulary_marginal_loss(&trace, &full.raw_scores, Some(&copy_graph), target)?
+                        .affine(weight, 0.)?;
+                if full_loss.to_scalar::<f32>()? != l.to_scalar::<f32>()? {
+                    return Err(bad("actual packet full/coeff-only loss differs"));
+                }
+                let full_grads = full_loss.backward()?;
+                for name in names {
+                    let old = grads
+                        .get(params[name].as_tensor())
+                        .ok_or_else(|| bad("coefficient parity gradient absent"))?;
+                    let other = full_grads
+                        .get(params[name].as_tensor())
+                        .ok_or_else(|| bad("full parity gradient absent"))?;
+                    let error = (old - other)?.abs()?.max_all()?.to_scalar::<f32>()?;
+                    if !error.is_finite() || error > 1e-6 {
+                        return Err(bad(
+                            "actual packet coefficient adjoints exceed1e-6 parity envelope",
+                        ));
+                    }
+                }
+                actual_packet_parity[phase] = true;
+            }
+            if grads
+                .get(params["generate.prototype_choices"].as_tensor())
+                .is_some()
+            {
+                return Err(bad("coefficient replay unexpectedly credits prototypes"));
+            }
+            for name in names {
+                let grad = grads
+                    .get(params[name].as_tensor())
+                    .ok_or_else(|| bad("field adjoint disconnected"))?;
+                if !grad.device().is_cuda() {
+                    return Err(bad("field adjoint CPU fallback"));
+                }
+                for group in [phase, 3] {
+                    let next = if let Some(old) = sums[group].get(name) {
+                        (old + grad)?.detach()
+                    } else {
+                        grad.detach()
+                    };
+                    sums[group].insert(name.into(), next);
+                }
+            }
+            counts[phase] += 1;
+        }
+    }
+    device.synchronize()?;
+    let mut families = BTreeMap::new();
+    let mut aggregate_download_bytes = 0usize;
+    for name in names {
+        let vectors = sums
+            .iter()
+            .map(|m| m[name].flatten_all()?.to_vec1::<f32>())
+            .collect::<candle_core::Result<Vec<_>>>()?;
+        if vectors.iter().flatten().any(|v| !v.is_finite()) {
+            return Err(bad("nonfinite phase adjoints"));
+        }
+        aggregate_download_bytes += vectors.iter().map(|v| v.len() * 4).sum::<usize>();
+        let body = vectors[1]
+            .iter()
+            .zip(&vectors[2])
+            .map(|(&a, &b)| f64::from(a) + f64::from(b))
+            .collect::<Vec<_>>();
+        let first = vectors[0].iter().map(|&v| f64::from(v)).collect::<Vec<_>>();
+        let dot = first.iter().zip(&body).map(|(a, b)| a * b).sum::<f64>();
+        let nf = first.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let nb = body.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let opposite = first
+            .iter()
+            .zip(&body)
+            .filter(|(a, b)| **a * **b < 0.)
+            .count();
+        let body_overrides_opposed_first = first
+            .iter()
+            .zip(&body)
+            .filter(|(a, b)| **a * **b < 0. && b.abs() > a.abs())
+            .count();
+        let first_dot_total = first
+            .iter()
+            .zip(&vectors[3])
+            .map(|(a, &b)| a * f64::from(b))
+            .sum::<f64>();
+        let first_wants_raise_body_wants_lower = first
+            .iter()
+            .zip(&body)
+            .filter(|(a, b)| **a < 0. && **b > 0.)
+            .count();
+        let masters = &coefficient_masters[name];
+        let quantum_margins = masters
+            .iter()
+            .map(|&v| 0.125f64 - (f64::from(v) - f64::from((v * 4.).round() * 0.25)).abs())
+            .collect::<Vec<_>>();
+        let min_quantum_margin = quantum_margins
+            .iter()
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+        let saturated = masters.iter().filter(|v| v.abs() == 1.75).count();
+        let descent_outward =
+            |v: f32, grad: f64| (v == 1.75 && grad < 0.) || (v == -1.75 && grad > 0.);
+        let outward_first = masters
+            .iter()
+            .zip(&first)
+            .filter(|(v, g)| descent_outward(**v, **g))
+            .count();
+        let outward_body = masters
+            .iter()
+            .zip(&body)
+            .filter(|(v, g)| descent_outward(**v, **g))
+            .count();
+        let outward_total = masters
+            .iter()
+            .zip(&vectors[3])
+            .filter(|(v, g)| descent_outward(**v, f64::from(**g)))
+            .count();
+        let projected_first_dot_total = masters
+            .iter()
+            .zip(&first)
+            .zip(&vectors[3])
+            .map(|((&v, &a), &b)| {
+                if descent_outward(v, f64::from(b)) {
+                    0.
+                } else {
+                    a * f64::from(b)
+                }
+            })
+            .sum::<f64>();
+        let directed_boundary = |grad: &[f64]| {
+            let mut distances = Vec::new();
+            let mut projection_terminal = 0usize;
+            let mut zero = 0usize;
+            for (&v, &g) in masters.iter().zip(grad) {
+                if g == 0. {
+                    zero += 1;
+                    continue;
+                }
+                let code = f64::from((v * 4.).round() * 0.25);
+                if (g < 0. && code == 1.75) || (g > 0. && code == -1.75) {
+                    projection_terminal += 1;
+                    continue;
+                }
+                let boundary = if g < 0. { code + 0.125 } else { code - 0.125 };
+                distances.push((boundary - f64::from(v)).abs());
+            }
+            distances.sort_by(f64::total_cmp);
+            json!({"supported_nonzero_entries":distances.len(),"zero_gradient_entries":zero,"no_next_code_in_descent_direction":projection_terminal,"minimum_distance":distances.first(),"median_distance":distances.get(distances.len()/2),"scope":"distance to quarter-round boundary, not measured native crossing or Adam step; tie crossing convention remains exporter-owned"})
+        };
+        let first_boundary = directed_boundary(&first);
+        let body_boundary = directed_boundary(&body);
+
+        let residual = first
+            .iter()
+            .zip(&body)
+            .zip(&vectors[3])
+            .map(|((a, b), &c)| (a + b - f64::from(c)).abs())
+            .fold(0., f64::max);
+        let scale = vectors[3].iter().map(|v| v.abs() as f64).fold(0., f64::max);
+        if residual > 1e-5 + 1e-4 * scale {
+            return Err(bad(
+                "phase adjoint reconstruction exceeds F32 accumulation envelope",
+            ));
+        }
+        for (i, v) in vectors.iter().enumerate() {
+            let bytes = v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<_>>();
+            fs::write(out.join(format!("{name}.phase-{i}.f32le")), &bytes)?;
+        }
+        families.insert(name, json!({"elements":first.len(),"first_l2":nf,"body_l2":nb,"first_dot_body":dot,"cosine":if nf>0.&&nb>0.{Some(dot/nf/nb)}else{None},"opposite_sign_entries":opposite,"body_overrides_opposed_first_entries":body_overrides_opposed_first,"first_wants_raise_body_wants_lower_entries":first_wants_raise_body_wants_lower,"first_dot_total_gradient":first_dot_total,"infinitesimal_first_loss_change_under_unclipped_total_gradient":-first_dot_total,"direction_scope":"unpreconditioned infinitesimal negative-gradient direction only; not Adam/no measured update","minimum_master_distance_to_quarter_round_boundary":min_quantum_margin,"master_projection_saturated_entries":saturated,"outward_descent_at_projection_endpoint":{"first":outward_first,"body":outward_body,"total":outward_total},"infinitesimal_first_loss_change_under_projected_total_gradient":-projected_first_dot_total,"first_descent_quarter_boundary":first_boundary,"body_descent_quarter_boundary":body_boundary,"max_phase_reconstruction_absolute_error":residual,"total_gradient_max_absolute":scale,"binary_phases":["first","body-Copy-present","body-Copy-absent","all"]}));
+    }
+    let total_ce = phase_ce.iter().sum::<f64>();
+    let expected = stage["evaluation"]["native_equal_episode_ce"]
+        .as_f64()
+        .ok_or_else(|| bad("parent CE absent"))?;
+    if (total_ce - expected).abs() > 1e-10 {
+        return Err(bad("phase native objective does not reconstruct parent"));
+    }
+    report_output::verify(fit)?;
+    fs::write(
+        out.join("report.json"),
+        serde_json::to_vec_pretty(
+            &json!({"schema":"uor-r4.geometric-generate-field-credit/1","status":"COMPLETED","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"input_report_sha256":sha256_bytes(&fs::read(fit.join("report.json"))?),"input_manifest_sha256":sha256_bytes(&fs::read(fit.join("manifest.json"))?),"source_master_metadata_sha256":sha256_bytes(&metadata_bytes),"config_sha256":sha256_bytes(config_bytes),"input_generate_sha256":stage["checkpoint"]["generate_sha256"],"device":"cuda:0","updates":0,"episodes":refs.len(),"positions_by_phase":counts,"actual_checkpoint_full_vs_coefficients_only_adjoint_parity_by_phase":actual_packet_parity,"native_ce_contribution_by_phase":phase_ce,"objective_weight_by_phase":episode_weight,"families":families,"aggregate_adjoint_download_bytes":aggregate_download_bytes,"elapsed_seconds":start.elapsed().as_secs_f64(),"scope":"selected Generate coefficient adjoints of existing anchored native marginal loss at restored source masters; frozen factual states/prototypes/Copy; no recurrence or prototype credit, optimizer resume, training, curriculum adoption or generated-reply claim","decision":"opposing adjoints are local source-gradient evidence, not proof that a reweighted fit improves native complete replies"}),
+        )?,
+    )?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    if args.len() != 3 && !(args.len() == 4 && args[3] == "--state-ceiling") {
+    if args.len() != 3
+        && !(args.len() == 4 && (args[3] == "--state-ceiling" || args[3] == "--field-credit"))
+    {
         return Err(bad(
-            "usage: geometric-generate-code-probe FIT_ROOT FIT_CONFIG REPORT_OUTPUT [--state-ceiling]",
+            "usage: geometric-generate-code-probe FIT_ROOT FIT_CONFIG REPORT_OUTPUT [--state-ceiling|--field-credit]",
         ));
     }
     let fit = PathBuf::from(&args[0]);
@@ -582,6 +940,10 @@ fn main() -> Result<()> {
     let out = PathBuf::from(&args[2]);
     if !fit.is_dir() || !config.is_file() {
         return Err(bad("fit/config absent"));
+    }
+    #[cfg(not(feature = "cuda"))]
+    if args.len() == 4 && args[3] == "--field-credit" {
+        return Err(bad("field-credit requires a CUDA build; no CPU fallback"));
     }
     let prospective = output_support::prospective_output(&out)?;
     for input in [&fit, &config] {
@@ -597,7 +959,14 @@ fn main() -> Result<()> {
         }
     }
     report_output::claim(&out)?;
-    let result = probe(&fit, &config, &out, Instant::now(), args.len() == 4);
+    let result = probe(
+        &fit,
+        &config,
+        &out,
+        Instant::now(),
+        args.len() == 4 && args[3] == "--state-ceiling",
+        args.len() == 4 && args[3] == "--field-credit",
+    );
     if let Err(e) = &result {
         fs::write(
             out.join("failure.json"),
