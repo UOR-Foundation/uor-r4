@@ -593,9 +593,12 @@ Audit report SHA256 identities are
 Test-only commit e22838048ecbda401cb732045a442abbe5991b21 adds the
 141-token/eight-lane CPU/CUDA comparison on actual hard state choices, using
 signed nonuniform token adjoints. Source review approves its parameter shapes,
-primary API and nonzero lane/edge checks. Execution is pending; source presence
-is not CUDA parity or useful learning. The exact committed source archive is
-byte-verified on the pod before compilation. Existing paired fits are unchanged.
+primary API and nonzero lane/edge checks. The exact committed source archive is byte-verified on the pod (17,117 files),
+and its CUDA library test executable compiles successfully in 102 seconds.
+Binary SHA256 is 214b8ee2d88f03191ffc3a9ca023fadecba6fe83ddfea0f8428d235f24501c60.
+The single comparison is queued through uor-pod behind the GPU0 fit lock at
+08:58:45Z; GPU execution remains NOT_RUN. Compilation and queue admission are
+not CUDA parity or useful learning. Existing paired fits are unchanged.
 
 The independent decision review retains balanced initialization as the next
 causal control only if the final seed repeats the same ranking blocker. Under

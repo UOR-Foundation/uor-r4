@@ -2,6 +2,12 @@
 
 ## First native Generate fit pair — October 6
 
+Balanced initialization CUDA-adjoint comparison is source-reviewed at e2283804
+and its exact-source test executable compiles successfully on the pod (102s).
+The one zero-update test is queued behind the live GPU0 fit lock; CUDA parity
+is NOT_RUN. The prepared balanced fit remains unadmitted pending the full
+third paired result, actual comparison and bank admission/cost decision.
+
 At frozen `1698aa79`, both seed1001 arms complete128 updates and exit0 with
 sealed reports and independently reloaded native artifacts. Output-only native
 equal-episode CE improves8.185317→7.903411; joint improves to7.928527. Both
