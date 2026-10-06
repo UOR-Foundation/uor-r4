@@ -1095,26 +1095,61 @@ fn batch(
     bridge_control: Option<BridgeAdmissionControl>,
 ) -> Result<(BTreeMap<String, Tensor>, Value)> {
     let begun = Instant::now();
+    let stage = Instant::now();
     let current = compile_learning_source(source, frozen, &a.arm)?;
+    device.synchronize()?;
+    let source_rebound_seconds = stage.elapsed().as_secs_f64();
+    let stage = Instant::now();
     let prepared = if a.arm == "joint-potential" {
         source.prepare_context_potential_on_device(&current, device)?
     } else {
         source.prepare_on_device(&current, device)?
     };
+    device.synchronize()?;
+    let source_device_preparation_seconds = stage.elapsed().as_secs_f64();
+    let stage = Instant::now();
     let cue = current.compile_cue_carrier(cueq.clone())?;
     let prefix = current.compile_prefix_transport(&cue, prefix_clone(prefixq)?)?;
+    device.synchronize()?;
+    let cue_prefix_seconds = stage.elapsed().as_secs_f64();
+    let stage = Instant::now();
     let snapshot = g.prepare_native()?;
+    device.synchronize()?;
+    let generate_native_preparation_seconds = stage.elapsed().as_secs_f64();
+    let stage = Instant::now();
     let bridge_snapshot = bridge
         .map(BridgeLearningWeights::prepare_native)
         .transpose()?;
-    let independent_generate =
-        NativeGeometricGenerate::from_bytes(&snapshot.native.to_bytes()?, g.binding())?;
-    let independent_bridge = bridge_snapshot
-        .as_ref()
-        .map(|b| NativeGeometricReadStateBridge::from_bytes(&b.native.to_bytes()?, g.binding()))
-        .transpose()?;
-    let mut independent_pool = NativeVocabularyActions::new(g.binding().clone(), exp)?;
+    device.synchronize()?;
+    let bridge_native_preparation_seconds = stage.elapsed().as_secs_f64();
+    let stage = Instant::now();
+    // Keep independent admission intact without allocating diagnostic-only
+    // native reloads and vocabulary state for ordinary optimizer batches.
+    let mut independent_diagnostics = if independent.is_some() {
+        let generate =
+            NativeGeometricGenerate::from_bytes(&snapshot.native.to_bytes()?, g.binding())?;
+        let bridge = bridge_snapshot
+            .as_ref()
+            .map(|b| NativeGeometricReadStateBridge::from_bytes(&b.native.to_bytes()?, g.binding()))
+            .transpose()?;
+        let pool = NativeVocabularyActions::new(g.binding().clone(), exp)?;
+        Some((generate, bridge, pool))
+    } else {
+        None
+    };
+    device.synchronize()?;
+    let independent_diagnostics_seconds = stage.elapsed().as_secs_f64();
     let staged = begun.elapsed().as_secs_f64();
+    let staging_subtimings = json!({
+        "source_rebound_seconds": source_rebound_seconds,
+        "source_device_preparation_seconds": source_device_preparation_seconds,
+        "cue_prefix_seconds": cue_prefix_seconds,
+        "generate_native_preparation_seconds": generate_native_preparation_seconds,
+        "bridge_native_preparation_seconds": bridge_native_preparation_seconds,
+        "independent_diagnostics_seconds": independent_diagnostics_seconds,
+        "independent_diagnostics_constructed": independent_diagnostics.is_some(),
+        "scope": "host wall elapsed with learning device synchronized at each stage endpoint; includes download, validation, compilation, device work and synchronization overhead; not isolated GPU kernel time; first stage may include preceding pending device work",
+    });
     let mut learner = PreparedBankGenerate::new(&prepared, g, &snapshot, exp)?
         .with_prefix_temporal_utility(a.prefix_temporal_utility);
     if let (Some(weights), Some(snapshot)) = (bridge, bridge_snapshot.as_ref()) {
@@ -1174,11 +1209,15 @@ fn batch(
             };
             let mut distinct_candidate_source_states = Value::Null;
             if let Some(model) = independent {
+                let (independent_generate, independent_bridge, independent_pool) =
+                    independent_diagnostics
+                        .as_mut()
+                        .ok_or_else(|| bad("independent admission diagnostics missing"))?;
                 let expected = native_step(
                     model,
-                    &independent_generate,
+                    independent_generate,
                     independent_bridge.as_ref(),
-                    &mut independent_pool,
+                    independent_pool,
                     e,
                     &e.target[..t],
                     cueq,
@@ -1405,7 +1444,7 @@ fn batch(
         return Err(bad("decoder credit disconnected"));
     }
     let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":if bridge.is_some() && selector_credit_enabled { "absent-Copy first canonical positions; direct Copy emission adjoint detached only in auxiliary backward; Generate branch retains bridge selector Copy-score potential/context paths plus hard120 carrier credit; same native pool and loss weights; no per-root utility measurement or optimizer use" } else if bridge.is_some() { "absent-Copy first canonical positions; direct Copy emission detached in auxiliary backward and selector credit disabled; factual bridge/Generate hard120 carrier credit retained; same native pool and loss weights; no optimizer use" } else { "absent-Copy first canonical positions only; same fullpool forward and declared episode/phase loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective" }});
-    let report = json!({"read_state_bridge":a.read_state_bridge,"bridge_master_download_bytes":bridge_snapshot.as_ref().map_or(0,|b|b.downloaded_master_bytes),"bridge_padded_native_coefficient_bytes":bridge.map_or(0,|b|b.padded_native_coefficient_bytes()),"bridge_forward_receipts":bridge_receipts,"native_forward_packets_sha256":sha256_bytes(&serde_json::to_vec(&native_forward_packets)?),"bridge_zero_escape_native_state_verified":independent.is_some() && bridge.is_some() && bridge_control.is_none(),"bridge_control_selected_source_state_verified":independent.is_some() && bridge_control.is_some_and(|c|c.expect_selected_source_state),"bridge_selector_credit_enabled":bridge.is_some() && bridge_control.map_or(true,|c|c.selector_credit),"bridge_selector_credit_scope":if bridge.is_none() {"NOT_APPLICABLE_NO_BRIDGE"} else if bridge_control.is_some_and(|c|!c.selector_credit) {"selector-adjoint-disabled; factual bridge/Generate and direct emission credit remain"} else {"local detached native occurrence alternatives; factual bridge coefficient/state credit; no derivative of hard argmax and no runtime label"},"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"native_weighted_training_objective":weighted_native_objective,"loss_phase_names":LOSS_PHASE_NAMES,"loss_phase_positions":phase_positions,"loss_phase_weighted_native_contributions":phase_weighted_native_loss,"episode_loss_phase_counts":episode_phase_counts,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; declared per-token episode/phase weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let report = json!({"read_state_bridge":a.read_state_bridge,"bridge_master_download_bytes":bridge_snapshot.as_ref().map_or(0,|b|b.downloaded_master_bytes),"bridge_padded_native_coefficient_bytes":bridge.map_or(0,|b|b.padded_native_coefficient_bytes()),"bridge_forward_receipts":bridge_receipts,"native_forward_packets_sha256":sha256_bytes(&serde_json::to_vec(&native_forward_packets)?),"bridge_zero_escape_native_state_verified":independent.is_some() && bridge.is_some() && bridge_control.is_none(),"bridge_control_selected_source_state_verified":independent.is_some() && bridge_control.is_some_and(|c|c.expect_selected_source_state),"bridge_selector_credit_enabled":bridge.is_some() && bridge_control.map_or(true,|c|c.selector_credit),"bridge_selector_credit_scope":if bridge.is_none() {"NOT_APPLICABLE_NO_BRIDGE"} else if bridge_control.is_some_and(|c|!c.selector_credit) {"selector-adjoint-disabled; factual bridge/Generate and direct emission credit remain"} else {"local detached native occurrence alternatives; factual bridge coefficient/state credit; no derivative of hard argmax and no runtime label"},"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"native_weighted_training_objective":weighted_native_objective,"loss_phase_names":LOSS_PHASE_NAMES,"loss_phase_positions":phase_positions,"loss_phase_weighted_native_contributions":phase_weighted_native_loss,"episode_loss_phase_counts":episode_phase_counts,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"staging_native_snapshot_subtimings":staging_subtimings,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; declared per-token episode/phase weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }
