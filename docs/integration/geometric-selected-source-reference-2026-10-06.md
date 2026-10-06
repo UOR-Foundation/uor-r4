@@ -55,5 +55,33 @@ missing historical seal. Existing fit and four-control native predictions
 remain separate evidence; these checks establish instrument consistency,
 not retrieval or language success.
 
+The optional `--source-contrast` mode in the existing checkpoint-cross example
+joins these references to sealed four-control predictions after inference. It
+checks exact physical occurrence positions, byte alignment, score components
+and unchanged context/Generate across controls. It reports raw same-token
+selected-versus-other-source margins; shared Copy offsets must cancel in every
+component. P1 minus P0 isolates potential coefficients conditional on the final
+context, not the complete joint-learning effect. Other seams, no aligned Source
+occurrence and no same-token rival are explicit ineligibility statuses.
+
+At source `ecddf3391c6023facc880d277e6ea6046769a660`, all 13 release example tests
+passed on the same pod (0 failed, 0 ignored), including five source-contrast
+checks. Compile plus tests took 120.323 seconds on two CPU threads with no GPU;
+peak child RSS was 2,093,884 KiB. The live control executable remained unchanged:
+`3467a5b1afb9d0d2012a598616623ae5ca15dcaa1dfa495edcb84fa2d1404fd2`.
+Full execution over completed model controls remains pending.
+
+The authenticated reference inventory contains 4,064 positions overlapping the
+literal; 624 have their token present in the other Source, across 208 of 512
+rows. The remaining 304 rows cannot support a same-token rival comparison.
+These counts are token-overlap metadata, not exact byte-alignment eligibility
+or a model result. A complementary paired-question analysis is therefore being
+implemented: hold the exact bank and candidate endpoint sets fixed, use the
+empty response prefix, and compare length-normalized raw Source score margins
+across opposite requested sources. Exact rational differences remove uniform
+Copy offsets. This measures question/cue-dependent source-score preference,
+not next-token success, normalized attention or generalization. Its validation
+and actual results remain pending separately from the tested first mode.
+
 References [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) and
 [PR #1792](https://github.com/UOR-Foundation/uor-r4/pull/1792).
