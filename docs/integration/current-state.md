@@ -1,5 +1,24 @@
 # Current UOR-R4 research state
 
+## First native Generate fit pair — October 6
+
+At frozen `1698aa79`, both seed1001 arms complete128 updates and exit0 with
+sealed reports and independently reloaded native artifacts. Output-only native
+equal-episode CE improves8.185317→7.903411; joint improves to7.928527. Both
+remain0/512 complete answers, with every first error at position0. The direct
+generation schema confirms that all512 first targets are absent from Copy.
+Three matched seeds remain the declared family decision; seed1002 is running.
+
+All32768 native token prototype codes remain unchanged in both arms. Lane
+diversity stays `[120,35,1,1,1,1,1,1]`. With disjoint pair edges, the six constant
+lanes cancel from generated-token raw score differences, although they affect
+Generate/Copy calibration and earlier recurrence. This is a measured decoder
+restriction, not an identity collision or a geometric-family rejection. Native
+first-position Copy scores stay below5.6875 nats and no actions clip, excluding
+the proposed upper-score barrier on those factual positions. Next: exact native
+score-SHA replay and target/winner factor decomposition before selecting a
+label-free all-lane initialization control. No normalizer change or dose increase.
+
 ## Delayed geometric prediction credit — October 6
 
 Native120-state interventions reproduce a missing temporal learning path: a fixed

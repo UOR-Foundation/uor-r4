@@ -280,3 +280,53 @@ A nonlinear residual alone does not justify a new fit. Preserving readout
 coefficient adjoints while replacing only the selected input-state credit is a
 prospective estimator decomposition, with double-credit and shared-packet risks.
 This inquiry remains separate from fully recomputing later recurrence controllers.
+
+## Seed1001: learning without first-token success
+
+Both frozen1698aa79 fits complete128 updates, seal their reports and exit0.
+Source/executable/data identities match across the pair; executable SHA256 is
+`abc4b4453c7b326c408cb65e11df0b46b7bb8d6e4a72f6d73e678a8ec764b393`.
+Output-only elapsed3384.095s, joint3538.719s. Native equal-episode CE is initially
+8.185317103, then7.903411290 output-only and7.928527014 joint. Complete answers
+remain0/512 in each arm. All first errors occur at position0, and the corrected
+direct-schema audit confirms all512 first gold tokens are Generate-only. An
+initial diagnostic mistakenly looked for a nested `native` field in generation
+steps; its family classification is superseded by the direct-field audit.
+
+Token-weighted canonical CE partitions (distinct from equal-episode selection):
+
+| Gold family | Positions | Initial | Output-only128 | Joint128 |
+|---|---:|---:|---:|---:|
+| First Generate-only |512|8.330277|8.081684|8.208213|
+| Later Generate-only |2024|8.325012|8.071992|8.208251|
+| Copy-supported |4128|8.084647|7.779896|7.729049|
+
+Thus improvement is not confined to Copy, but joint movement attenuates Generate
+improvement while improving Copy-supported likelihood more. This is one seed,
+not the final three-seed decision or generalization evidence.
+
+Native exported prototypes and source-master argmax agree at both endpoints.
+All32768 hard codes remain unchanged, with per-lane distinct-code counts
+`[120,35,1,1,1,1,1,1]`. Minimum prototype shadow margin falls2→0.313015 in
+output-only and2→0.441180 in joint; medians are1.327134 and1.655980. Shadow
+movement is real, but it has not changed token geometry. Joint changes13072
+packed context bytes; output-only changes0.
+
+The seeded base120 arrangement and disjoint pair graph imply exact cancellation
+of lanes2–7 from any raw generated-token score difference while codes remain
+constant. Those lanes may influence recurrence and Generate/Copy calibration,
+but cannot directly distinguish output tokens in this decoder. Distinct full
+token tuples do not remove that restriction. An independent source/mathematical
+review recommends exact native target-versus-winner factor replay before a
+matched, label-free all-lane initialization intervention. No semantic metric,
+gate or normalizer change follows from this finding.
+
+Two alternatives were investigated and rejected as current canonical causes:
+2536 Generate-required positions contain no same-state/different-target
+conflicts within or across rows; first-position Copy maxima are3.842009 initial/
+output-only and4.266907 joint, below both the8-nat clip ceiling and5.6875-nat
+strict decoder theoretical ceiling. No first-position action clips. These audits
+do not qualify arbitrary divergent prefixes or establish full shared-factor
+separability. The narrow Rust replay will verify saved score hashes before using
+gold labels for diagnostic margins; it does not train or supply runtime answers.
+Seed1002/1003 configurations and live binaries remain frozen.
