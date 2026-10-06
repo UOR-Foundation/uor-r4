@@ -7,6 +7,7 @@
 //!   [batch=8] [steps=1800] [lr=0.001] [warmup=100] [min_lr=0.1] [weight_decay=0.1] [clip=1.0] \
 //!   [eval_every=100] [curve_sequences=8] [final_sequences=64] [seed=1] [max_seconds=1200] \
 //!   [probe_steps=0,600,final|none] [probe_sequences=16] [save_model=false|true] \
+//!   [dump_scores=false|true] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
@@ -21,6 +22,14 @@
 //! `mqar_bench_step2/decide.rs`. `lineage` selects the key/query lineage arm
 //! (`StackModel::set_read_key_shift` for `f2`, `StackModel::set_read_lineage`
 //! for the research-only controls); `key_shift=true` is kept as `lineage=f2`.
+//!
+//! `dump_scores=1` is a TEMPORARY T2 diagnostic: after the final evaluation it
+//! writes the read's own softmax weight rows on the held-out set (every read
+//! layer and head, at each item's first-content predicting position) into
+//! `dump_scores/` under the report root, plus the gold source index, the
+//! item's landmarks and the model's argmax there. It trains nothing, changes
+//! no parameter and moves no tally; the default (`dump_scores=0`) path writes
+//! no such file.
 //!
 //! Each sequence is a fixed-length window of filler tokens holding
 //! `pairs_per_bucket` key-value pairs per distance bucket. A pair writes its
@@ -60,8 +69,8 @@ use uor_r4_core::report_output;
 #[cfg(test)]
 use uor_r4_training::geometric_stack::quaternion_j_left;
 use uor_r4_training::geometric_stack::{
-    ReadBinding, ReadBindingTarget, ReadLineage, ReadScore, RotationGroup, StackAdamW, StackArch,
-    StackConfig, StackModel,
+    parse_pointer_route, PointerConfig, PrimeRoute, ReadBinding, ReadBindingTarget, ReadLineage,
+    ReadScore, RotationGroup, StackAdamW, StackArch, StackConfig, StackModel,
 };
 use uor_r4_training::{Result, TrainingError};
 
@@ -364,6 +373,18 @@ trait ContextArm {
     ) -> Result<Vec<f32>> {
         Err(invalid("this arm has no read heads to probe"))
     }
+    /// TEMPORARY (T2 `dump_scores=1`): the read's full softmax weight rows at
+    /// declared `(batch, query)` positions, per read layer, and the logits of
+    /// the same forward (see `StackModel::read_weight_rows`). Observation only.
+    fn read_weight_rows(
+        &self,
+        _ids: &[u32],
+        _batch: usize,
+        _time: usize,
+        _rows: &[(usize, usize)],
+    ) -> Result<(Vec<(usize, Tensor)>, Tensor)> {
+        Err(invalid("this arm has no read weight rows"))
+    }
 }
 
 /// Initial values of the reads' learned per-distance age bias.
@@ -593,6 +614,15 @@ impl ArmSpec {
             ArmSpec::Stack { age, lineage, .. } => {
                 let config = self.stack_config(common)?;
                 let mut model = StackModel::new(config.clone(), device)?;
+                // The pointer needs BOTH a head and a route: StackConfig carries a
+                // PointerConfig (the head), the route is installed on the model. Both are off
+                // unless `pointer=` is given, which is what every prior run did -- so the
+                // geometric `ngram` successor route (longest ordered n-let match) has never
+                // been exercised here. This is D20 section 2 condition 3 in its exact form.
+                if let Some(route) = common.pointer.clone() {
+                    model.add_pointer(PointerConfig::new(config.width), common.seed)?;
+                    model.set_pointer_route(Some(route))?;
+                }
                 if *age != AgeInit::Default {
                     for (name, var) in model.variables() {
                         if !name.ends_with(".read.age") {
@@ -746,6 +776,16 @@ impl ContextArm for StackArm {
             .flatten_all()?
             .to_device(&Device::Cpu)?
             .to_vec1::<f32>()?)
+    }
+
+    fn read_weight_rows(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        rows: &[(usize, usize)],
+    ) -> Result<(Vec<(usize, Tensor)>, Tensor)> {
+        self.model.read_weight_rows(ids, batch, time, rows)
     }
 }
 
@@ -1054,10 +1094,18 @@ struct Common {
     curve_sequences: usize,
     final_sequences: usize,
     seed: u64,
+    /// The pointer route, from `pointer=<spec>` (`none`, `prime:<w>`, `prime-ranked:<w>`,
+    /// `ngram:<w>`, `ngram-ranked:<w>`). DEFAULTS TO `None`, which is what every prior run
+    /// used -- the arm was hardcoded and the geometric `ngram` successor route (admission by
+    /// the longest ordered n-let match) has therefore NEVER been exercised on this bench.
+    /// That is D20 section 2 condition 3 ("wiring verified reached") in its exact form.
+    pointer: Option<PrimeRoute>,
     max_seconds: f64,
     /// Steps at which the read probe runs (0 = before training).
     probe_steps: Vec<usize>,
     probe_sequences: usize,
+    /// TEMPORARY (T2): dump the read's weight rows on the held-out set.
+    dump_scores: bool,
 }
 
 impl Common {
@@ -1082,6 +1130,7 @@ impl Common {
             "final_sequences": self.final_sequences, "seed": self.seed,
             "max_seconds": self.max_seconds,
             "probe_steps": self.probe_steps, "probe_sequences": self.probe_sequences,
+            "dump_scores": self.dump_scores,
         })
     }
 }
@@ -1132,9 +1181,20 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
         curve_sequences: args.parsed("curve_sequences", 8usize)?,
         final_sequences: args.parsed("final_sequences", if fact_layout { 256 } else { 64usize })?,
         seed: args.parsed("seed", 1u64)?,
+        pointer: match args.take("pointer") {
+            None => None,
+            Some(text) => parse_pointer_route(&text)?,
+        },
         max_seconds: args.parsed("max_seconds", 1200f64)?,
         probe_steps: Vec::new(),
         probe_sequences: args.parsed("probe_sequences", 16usize)?,
+        // TEMPORARY (T2): `dump_scores=1` writes the read's own weight rows on
+        // the held-out set into the report root; the default path is unchanged.
+        dump_scores: match args.take("dump_scores").as_deref() {
+            None | Some("0") | Some("false") => false,
+            Some("1") | Some("true") => true,
+            Some(other) => return Err(invalid(format!("invalid dump_scores={other}"))),
+        },
     };
     let mut common = common;
     let probe_text = args
@@ -1653,9 +1713,14 @@ mod tests {
             curve_sequences: 1,
             final_sequences: 2,
             seed: 3,
+            // `pointer` and `dump_scores` complete the literal; the test target
+            // did not compile without them (test-only; `pointer` was already
+            // missing on origin/main).
+            pointer: None,
             max_seconds: 60.0,
             probe_steps: vec![0],
             probe_sequences: 2,
+            dump_scores: false,
         };
         let spec = ArmSpec::Stack {
             pattern: "rar".into(),

@@ -46,6 +46,7 @@
 //!   [pointer=none|DIM] \
 //!   [pointer_score=dot|lorentz] [pointer_select=none|flock:WINDOW:K|top:K] \
 //!   [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW|ngram:WINDOW|ngram-ranked:WINDOW] \
+//!   [pointer_gate_supervision=0] \
 //!   [context=256] \
 //!   [policy=full_prefix|role_only|truncated_prefix[:KEEP]] [data_seed=1] [steps=1024] [batch=16] [lr=0.001] [warmup=50] \
 //!   [min_lr=0.1] [weight_decay=0.1] [clip=1.0] [eval_every=128] [dev_seed=1] [dev_per_source=32] \
@@ -248,6 +249,11 @@
 //! (the n tokens before a source equal the query's last n, for the longest
 //! n up to WINDOW with a match; ADR-0003's transition indexes). Each
 //! `pointer_select=`, and `none` clears a saved route.
+//! `pointer_gate_supervision=W` (`dialogue-train`, default 0 = off) adds
+//! copy-gate supervision to the response loss
+//! (`StackModel::gate_supervised_loss`): on a scored target whose id an input
+//! position `0..=t` holds, `W (BCE(g, 1) - log p_copy(target))`; elsewhere
+//! `W BCE(g, 0)`. It needs a pointer over every source and f32 precision.
 //! Each evaluation reports the pointer's mean gate and hit rate on the scored
 //! targets (`dev_pointer_*` in the curve, `pointer` in the developments). The
 //! pointer has no served representation for training (`qat=true` refuses
@@ -267,7 +273,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use candle_core::Device;
+use candle_core::{DType, Device};
 use serde_json::{json, Value};
 use uor_r4_core::native_geometric::learner::embedding::canonical_h4_roots;
 use uor_r4_core::report_output;
@@ -277,9 +283,9 @@ use uor_r4_training::dialogue_episodes::{EpisodeIndex, PrefixPolicy, EPISODE_CON
 use uor_r4_training::flock::FlockSelect;
 use uor_r4_training::geometric_stack::{
     average_replica_gradients, logits_cross_entropy, parse_flock_select, parse_pointer_route,
-    parse_pointer_select, D11Interim, MapCodec, PointerConfig, PointerSelect, PrimeRoute,
-    ReadScore, RotationGroup, ServedStatistics, StackAdamW, StackArch, StackConfig, StackModel,
-    TransportSnap, TransportUsage,
+    parse_pointer_select, D11Interim, MapCodec, PointerConfig, PointerSelect, Precision,
+    PrimeRoute, ReadScore, RotationGroup, ServedStatistics, StackAdamW, StackArch, StackConfig,
+    StackModel, TransportSnap, TransportUsage,
 };
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
@@ -718,6 +724,8 @@ struct Settings {
     /// `device=cpu|metal|cuda` (default cpu). A Metal or CUDA run needs the
     /// `metal` or `cuda` feature; ops without a GPU kernel run on host copies.
     device: Device,
+    /// `precision=f32|bf16` (default f32): the trunk's activation storage.
+    precision: Precision,
     /// `data_parallel=1|2` (default 1). 2: CUDA only; each step splits the
     /// batch into equal halves on GPUs 0 and 1, averages the replicas'
     /// gradients on GPU 0, updates there and copies the weights to GPU 1.
@@ -746,6 +754,57 @@ fn device_arg(args: &Args) -> Result<Device> {
 /// Whether CUDA f32 matmuls may use TF32 in this process (`tf32=`).
 fn tf32_enabled() -> bool {
     candle_core::cuda::gemm_reduced_precision_f32()
+}
+
+/// `precision=f32|bf16` (default f32): the activation storage of the trunk.
+/// `bf16` needs `device=cuda`: its matmuls are Candle's CUDA bf16 GEMMs (f32
+/// accumulation on tensor cores) and its custom kernels come from the bf16
+/// module of the CUDA stack kernels. Evaluation and saved models stay f32.
+fn precision_arg(args: &Args, device: &Device) -> Result<Precision> {
+    let precision = match args.optional("precision") {
+        None => Precision::F32,
+        Some(name) => Precision::parse(&name)?,
+    };
+    if precision.is_bf16() && !matches!(device, Device::Cuda(_)) {
+        return Err(invalid("precision=bf16 needs device=cuda"));
+    }
+    Ok(precision)
+}
+
+/// Refuses the options a bf16 run does not cover, before any work starts.
+fn check_bf16_options(
+    precision: Precision,
+    arch: StackArch,
+    qat: bool,
+    snapped: bool,
+    select: bool,
+    memory: bool,
+) -> Result<()> {
+    if !precision.is_bf16() {
+        return Ok(());
+    }
+    if arch != StackArch::Geometric {
+        return Err(invalid("precision=bf16 covers the geometric arms only"));
+    }
+    if memory {
+        return Err(invalid(
+            "precision=bf16 has no bf16 product-key memory kernels",
+        ));
+    }
+    if qat {
+        return Err(invalid("precision=bf16 does not run with qat=true"));
+    }
+    if snapped {
+        return Err(invalid(
+            "precision=bf16 has no bf16 recurrence kernel for transport_snap=",
+        ));
+    }
+    if select {
+        return Err(invalid(
+            "precision=bf16 has no bf16 read kernel for a flock selection",
+        ));
+    }
+    Ok(())
 }
 
 /// The served representation of `qat=true`.
@@ -1085,6 +1144,7 @@ impl Settings {
             "clip": self.clip, "eval_every": self.eval_every, "eval_windows": self.eval_windows,
             "final_windows": self.final_windows, "checkpoint_every": self.checkpoint_every,
             "sample_tokens": self.sample_tokens,
+            "precision": self.precision.name(),
         })
     }
 
@@ -1440,7 +1500,7 @@ fn train_settings(args: &Args) -> Result<Settings> {
     {
         return Err(invalid("one positive train weight per training stream"));
     }
-    let settings = Settings {
+    let mut settings = Settings {
         train,
         train_weights,
         valid: PathBuf::from(args.required("valid")?),
@@ -1467,11 +1527,21 @@ fn train_settings(args: &Args) -> Result<Settings> {
         max_seconds: args.number("max_seconds", f64::INFINITY)?,
         sample_tokens: args.number("sample_tokens", 128)?,
         device: device_arg(args)?,
+        precision: Precision::F32,
         data_parallel: args.number("data_parallel", 1)?,
     };
+    settings.precision = precision_arg(args, &settings.device)?;
     if !(1..=2).contains(&settings.data_parallel) {
         return Err(invalid("data_parallel must be 1 or 2"));
     }
+    check_bf16_options(
+        settings.precision,
+        settings.config.arch,
+        settings.qat,
+        settings.transport_snap.is_some(),
+        settings.config.select.is_some(),
+        settings.config.memory.is_some(),
+    )?;
     if settings.data_parallel == 2
         && (!matches!(settings.device, Device::Cuda(_))
             || settings.batch % 2 != 0
@@ -1654,7 +1724,9 @@ fn in_both_modes<T>(
     model: &mut StackModel,
     f: impl Fn(&StackModel) -> Result<T>,
 ) -> Result<(T, Option<T>)> {
-    let current = f(model)?;
+    // Evaluation scores in f32 whatever the run's precision is: the dev and
+    // final NLL measure the trained weights, not the bf16 storage.
+    let current = model.scored_in_f32(|model| f(model))?;
     let float = match model.served_codec() {
         Some(_) => Some(model.with_float_forward(&f)?),
         None => None,
@@ -1685,8 +1757,9 @@ fn evaluate_transport(
     let Some(snap) = model.transport_snap() else {
         return Ok(None);
     };
-    let unsnapped =
-        model.with_unsnapped_transport(|model| evaluate(model, valid, lens, windows))?;
+    let unsnapped = model.scored_in_f32(|model| {
+        model.with_unsnapped_transport(|model| evaluate(model, valid, lens, windows))
+    })?;
     let time = model.config.context;
     let stride = (valid.len() - time - 1) / windows;
     let starts: Vec<usize> = (0..windows).map(|window| window * stride).collect();
@@ -1973,14 +2046,16 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
             (model, optimizer, progress, Some(state))
         }
     };
+    model.set_precision(settings.precision);
     let parameters = model.parameter_count();
     let active_parameters = model.config.active_parameter_count()?;
     eprintln!(
-        "{:?} pattern {} read {:?} rotation {}: {parameters} parameters ({active_parameters} read per token), mlp {}",
+        "{:?} pattern {} read {:?} rotation {} precision {}: {parameters} parameters ({active_parameters} read per token), mlp {}",
         model.config.arch,
         model.config.pattern,
         model.config.read,
         model.config.rotation,
+        settings.precision.name(),
         model.config.mlp_hidden
     );
     if settings.qat {
@@ -1992,6 +2067,7 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
     // (after init= or a resume alike).
     let replica = if settings.data_parallel == 2 {
         let mut replica = StackModel::new(model.config.clone(), &Device::new_cuda(1)?)?;
+        replica.set_precision(settings.precision);
         replica.set_read_key_shift(model.read_key_shift())?;
         replica.copy_variables_from(&model)?;
         eprintln!(
@@ -2159,17 +2235,20 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
         let _ = fs::remove_dir_all(out.join("checkpoint"));
     }
     let sample_record = if settings.sample_tokens > 0 {
-        samples(
-            &model,
-            &valid,
-            decoder.as_ref(),
-            3,
-            64,
-            settings.sample_tokens,
-            0.8,
-            40,
-            settings.config.seed,
-        )?
+        // Sampling reads the model like evaluation does: in f32.
+        model.scored_in_f32(|model| {
+            samples(
+                model,
+                &valid,
+                decoder.as_ref(),
+                3,
+                64,
+                settings.sample_tokens,
+                0.8,
+                40,
+                settings.config.seed,
+            )
+        })?
     } else {
         Value::Null
     };
@@ -2353,6 +2432,443 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
                 "block_nll": block_nll,
             }))?,
         )?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
+/// `seal-root`: seal an already-populated directory with the project's own
+/// `report_output` manifest (BLAKE3 over the complete file set) and verify it.
+/// For analysis roots whose contents were produced outside the Rust modes.
+fn seal_root_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(arguments, &["out"])?;
+    let out = PathBuf::from(args.required("out")?);
+    report_output::seal(&out)?;
+    let unlisted = report_output::verify(&out)?;
+    if !unlisted.is_empty() {
+        return Err(invalid("sealed root still has unlisted files"));
+    }
+    Ok(())
+}
+
+/// `head-probe`: reproduce a frozen dialogue artifact's own served-readout score
+/// on its own fixed development panel, and dump the hidden state at every
+/// scored position for offline head-versus-representation analysis.
+///
+/// The panel is the retained study's (`dialogue_development::select` with the
+/// run's `dev_seed`/`dev_per_source`), the metric is its token-mean response
+/// NLL, and the walk is `stack_dialogue`'s: `FullPrefix` episodes, the response
+/// mask, `trim` to the longest real input. The baseline is `development`, the
+/// artifact's own readout, mixture and all. `softmax_only` re-scores the same
+/// positions through the tied `embedding.weight` head alone, which is the
+/// comparison class an offline fitted head belongs to.
+///
+/// `extra=1` additionally dumps the eligible development responses the panel
+/// did not select, so an offline fit has held-in states that are disjoint from
+/// the panel by response identity and drawn from the same source.
+///
+/// `states.f16` is `rows x width` little-endian f16, row-major, in the dump
+/// order `states.json` records.
+fn head_probe_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &[
+            "model",
+            "tokenizer",
+            "dev_tokens",
+            "dev_mask",
+            "dev_manifest",
+            "out",
+            "dev_seed",
+            "dev_per_source",
+            "protocol",
+            "batch",
+            "extra",
+            "extra_cap",
+            "f32",
+        ],
+    )?;
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokenizer_path = PathBuf::from(args.required("tokenizer")?);
+    let dev_tokens = PathBuf::from(args.required("dev_tokens")?);
+    let dev_mask = PathBuf::from(args.required("dev_mask")?);
+    let dev_manifest = PathBuf::from(args.required("dev_manifest")?);
+    let out = PathBuf::from(args.required("out")?);
+    let dev_seed: u64 = args.number("dev_seed", 20260930)?;
+    let dev_per_source: usize = args.number("dev_per_source", 32)?;
+    let protocol_number: u8 = args.number("protocol", 2)?;
+    let batch: usize = args.number("batch", 16)?;
+    let extra: u64 = args.number("extra", 1)?;
+    let extra_cap: usize = args.number("extra_cap", 0)?;
+    let f32_dump: u64 = args.number("f32", 0)?;
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        let started = Instant::now();
+        let tokenizer = uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(
+            &fs::read(&tokenizer_path)?,
+        )
+        .ok_or_else(|| invalid("unreadable tokenizer.json"))?;
+        let dev_split = DialogueSplit::load(&dev_tokens, &dev_mask, &dev_manifest)?;
+        let vocab = dev_split.vocab_size();
+        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        if model.config.vocab_size != vocab {
+            return Err(invalid(
+                "the model and the development split declare different vocabularies",
+            ));
+        }
+        let (_, dev_contract) =
+            episode_contract_for(&tokenizer, vocab, EPISODE_CONTEXT, protocol_number)?;
+        let index = dev_split.index(dev_contract)?;
+        let panel = dialogue_development::select(&index, dev_seed, dev_per_source)?;
+        let panel_set: std::collections::BTreeSet<usize> = panel.iter().copied().collect();
+
+        // The artifact's own served readout on its own fixed panel.
+        let baseline = development(&model, &index, &panel, batch)?;
+
+        let width = model.config.width;
+        let head = model
+            .variables()
+            .get("embedding.weight")
+            .ok_or_else(|| invalid("the model has no tied embedding head to score with"))?
+            .as_tensor()
+            .clone()
+            .to_dtype(DType::F32)?;
+
+        let mut rows: Vec<f32> = Vec::new();
+        let mut targets: Vec<u32> = Vec::new();
+        let mut response_ids: Vec<u32> = Vec::new();
+        let mut offsets: Vec<u32> = Vec::new();
+        let mut panel_flag: Vec<u8> = Vec::new();
+        let mut panel_raw_nll: Vec<f64> = Vec::new();
+        let mut panel_correct: usize = 0;
+        let mut panel_seen: usize = 0;
+
+        let mut walk = panel.clone();
+        if extra != 0 {
+            let mut rest: Vec<usize> = (0..index.episodes().len())
+                .filter(|id| !panel_set.contains(id))
+                .collect();
+            if extra_cap != 0 && rest.len() > extra_cap {
+                rest.truncate(extra_cap);
+            }
+            walk.extend(rest);
+        }
+        for chunk in walk.chunks(batch) {
+            let episodes = index.materialize(chunk, PrefixPolicy::FullPrefix)?;
+            let trimmed = trim(&episodes);
+            let time = trimmed.time;
+            let hidden = model
+                .hidden(&trimmed.inputs, episodes.batch, time)?
+                .to_dtype(DType::F32)?;
+            let flat = hidden.reshape((episodes.batch * time, width))?;
+            let values = flat.flatten_all()?.to_vec1::<f32>()?;
+            // The panel is walked first, so a chunk is entirely panel or
+            // entirely not; only the panel needs the raw tied-head score.
+            let panel_chunk = episodes
+                .rows
+                .iter()
+                .all(|row| panel_set.contains(&row.response_id));
+            let logits = if panel_chunk {
+                Some(
+                    flat.matmul(&head.t()?)?
+                        .to_dtype(DType::F32)?
+                        .flatten_all()?
+                        .to_vec1::<f32>()?,
+                )
+            } else {
+                None
+            };
+            for (lane, row) in episodes.rows.iter().enumerate() {
+                let start = lane * time;
+                for offset in 0..time {
+                    let at = start + offset;
+                    if trimmed.weights[at] != 1.0 {
+                        continue;
+                    }
+                    rows.extend_from_slice(&values[at * width..(at + 1) * width]);
+                    targets.push(trimmed.targets[at]);
+                    response_ids.push(row.response_id as u32);
+                    offsets.push(offset as u32);
+                    let panel_row = u8::from(panel_set.contains(&row.response_id));
+                    panel_flag.push(panel_row);
+                    if let Some(logits) = &logits {
+                        if panel_row == 1 {
+                            let base = at * vocab;
+                            let line = &logits[base..base + vocab];
+                            let target = trimmed.targets[at] as usize;
+                            // `row_log_sum_exp`, the library's own convention:
+                            // max-subtracted, f32 differences accumulated in f64.
+                            let maximum = line.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                            let total: f64 = line
+                                .iter()
+                                .map(|&v| f64::from(v - maximum).exp())
+                                .sum();
+                            panel_raw_nll
+                                .push(f64::from(maximum) + total.ln() - f64::from(line[target]));
+                            let mut best = 0usize;
+                            let mut best_value = f32::NEG_INFINITY;
+                            for (index, &value) in line.iter().enumerate() {
+                                if value > best_value {
+                                    best_value = value;
+                                    best = index;
+                                }
+                            }
+                            panel_correct += usize::from(best == target);
+                            panel_seen += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        let dump_file = if f32_dump != 0 {
+            let mut bytes = Vec::with_capacity(rows.len() * 4);
+            for value in &rows {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            fs::write(out.join("states.f32"), &bytes)?;
+            "states.f32"
+        } else {
+            let mut bytes = Vec::with_capacity(rows.len() * 2);
+            for value in &rows {
+                bytes.extend_from_slice(&half::f16::from_f32(*value).to_bits().to_le_bytes());
+            }
+            fs::write(out.join("states.f16"), &bytes)?;
+            "states.f16"
+        };
+        let panel_raw_mean =
+            (panel_seen != 0).then(|| panel_raw_nll.iter().sum::<f64>() / panel_seen as f64);
+        let report = json!({
+            "schema": "uor-r4.geometric-stack-head-probe/1",
+            "model": identity(&model_dir.join("model.safetensors"))?,
+            "config": model.config,
+            "tokenizer": identity(&tokenizer_path)?,
+            "development": {
+                "tokens": identity(&dev_tokens)?,
+                "mask": identity(&dev_mask)?,
+                "manifest": identity(&dev_manifest)?,
+                "dev_seed": dev_seed,
+                "dev_per_source": dev_per_source,
+                "protocol": protocol_number,
+                "selection": dialogue_development::SELECTION_ID,
+                "episode_context": EPISODE_CONTEXT,
+            },
+            "panel": panel,
+            "baseline_served_readout": baseline,
+            "softmax_only": {
+                "head": "tied embedding.weight",
+                "positions": panel_seen,
+                "mean_nll": panel_raw_mean,
+                "top1_accuracy": (panel_seen != 0)
+                    .then(|| panel_correct as f64 / panel_seen as f64),
+            },
+            "dump": {
+                "rows": rows.len() / width,
+                "width": width,
+                "panel_rows": panel_flag.iter().filter(|&&flag| flag == 1).count(),
+                "extra_rows": panel_flag.iter().filter(|&&flag| flag == 0).count(),
+                "panel_responses": panel.len(),
+                "extra_responses": walk.len() - panel.len(),
+                "file": dump_file,
+                "encoding": if f32_dump != 0 {
+                    "row-major little-endian f32, one row per scored position"
+                } else {
+                    "row-major little-endian f16, one row per scored position"
+                },
+                "order": "panel responses in panel order, then the remaining eligible responses in episode-ID order; within a response, ascending target offset",
+            },
+            "elapsed_seconds": started.elapsed().as_secs_f64(),
+        });
+        fs::write(
+            out.join("states.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-head-probe-states/1",
+                "rows": rows.len() / width,
+                "width": width,
+                "targets": targets,
+                "response_ids": response_ids,
+                "offsets": offsets,
+                "panel": panel_flag,
+                "panel_raw_nll": panel_raw_nll,
+            }))?,
+        )?;
+        fs::write(out.join("probe.json"), serde_json::to_vec_pretty(&report)?)?;
+        Ok(())
+    })();
+    finish(&out, result)
+}
+
+/// `hidden-blocks`: score a token file by the retained evaluator's protocol
+/// (consecutive `context`-length blocks, fresh state per block) on an evenly
+/// spaced subset of its blocks, and dump the hidden state at every position.
+///
+/// This is the probe's corpus panel: a panel with real headroom, unlike a
+/// dialogue development panel whose responses are near-ceiling. Blocks are
+/// `floor(blocks / count)` apart, block `i` at `i * blocks / count`, the
+/// project's evenly-spaced rule. Even block ordinals are the held-in half and
+/// odd ordinals the held-out half, so the two halves interleave across the
+/// whole file and are disjoint by block.
+///
+/// `states.f16` is `rows x width` little-endian f16 in dump order, which
+/// `states.json` records as blocks in block-index order and, within a block,
+/// ascending offset.
+fn hidden_blocks_mode(arguments: &[String]) -> Result<()> {
+    let args = Args::parse(
+        arguments,
+        &["model", "tokens", "out", "blocks", "batch", "tag", "f32"],
+    )?;
+    let model_dir = PathBuf::from(args.required("model")?);
+    let tokens_path = PathBuf::from(args.required("tokens")?);
+    let out = PathBuf::from(args.required("out")?);
+    let wanted: usize = args.number("blocks", 64)?;
+    let batch: usize = args.number("batch", 16)?;
+    let f32_dump: u64 = args.number("f32", 0)?;
+    if wanted == 0 || !(1..=64).contains(&batch) {
+        return Err(invalid("blocks must be positive and batch 1..64"));
+    }
+    report_output::claim(&out)?;
+    let result = (|| -> Result<()> {
+        let started = Instant::now();
+        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let width = model.config.width;
+        let vocab = model.config.vocab_size;
+        let time = model.config.context;
+        let tokens = read_tokens(&tokens_path, vocab)?;
+        let total = (tokens.len() - 1) / time;
+        if total < wanted {
+            return Err(invalid("fewer blocks in the file than blocks="));
+        }
+        let chosen: Vec<usize> = (0..wanted).map(|i| i * total / wanted).collect();
+        let head = model
+            .variables()
+            .get("embedding.weight")
+            .ok_or_else(|| invalid("the model has no tied embedding head to score with"))?
+            .as_tensor()
+            .clone()
+            .to_dtype(DType::F32)?;
+
+        let mut rows: Vec<f32> = Vec::new();
+        let mut targets: Vec<u32> = Vec::new();
+        let mut block_of: Vec<u32> = Vec::new();
+        let mut raw_nll: Vec<f64> = Vec::new();
+        let mut correct: usize = 0;
+        let mut served_nll_sum: f64 = 0.0;
+        let mut served_targets: usize = 0;
+        for group in chosen.chunks(batch) {
+            let mut ids = Vec::with_capacity(group.len() * time);
+            let mut tgts = Vec::with_capacity(group.len() * time);
+            for &block in group {
+                ids.extend_from_slice(&tokens[block * time..(block + 1) * time]);
+                tgts.extend_from_slice(&tokens[block * time + 1..(block + 1) * time + 1]);
+            }
+            // The artifact's own readout on exactly these positions.
+            for value in model.target_nll(&ids, &tgts, group.len(), time)? {
+                served_nll_sum += value;
+                served_targets += 1;
+            }
+            let hidden = model
+                .hidden(&ids, group.len(), time)?
+                .to_dtype(DType::F32)?;
+            let flat = hidden.reshape((group.len() * time, width))?;
+            let values = flat.flatten_all()?.to_vec1::<f32>()?;
+            let logits = flat
+                .matmul(&head.t()?)?
+                .to_dtype(DType::F32)?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            for (lane, &block) in group.iter().enumerate() {
+                for offset in 0..time {
+                    let at = lane * time + offset;
+                    rows.extend_from_slice(&values[at * width..(at + 1) * width]);
+                    let target = tgts[at] as usize;
+                    targets.push(tgts[at]);
+                    block_of.push(block as u32);
+                    let line = &logits[at * vocab..(at + 1) * vocab];
+                    let maximum = line.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                    let total: f64 =
+                        line.iter().map(|&v| f64::from(v - maximum).exp()).sum();
+                    raw_nll.push(f64::from(maximum) + total.ln() - f64::from(line[target]));
+                    let mut best = 0usize;
+                    let mut best_value = f32::NEG_INFINITY;
+                    for (index, &value) in line.iter().enumerate() {
+                        if value > best_value {
+                            best_value = value;
+                            best = index;
+                        }
+                    }
+                    correct += usize::from(best == target);
+                }
+            }
+        }
+        let dump_file = if f32_dump != 0 {
+            let mut bytes = Vec::with_capacity(rows.len() * 4);
+            for value in &rows {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            fs::write(out.join("states.f32"), &bytes)?;
+            "states.f32"
+        } else {
+            let mut bytes = Vec::with_capacity(rows.len() * 2);
+            for value in &rows {
+                bytes.extend_from_slice(&half::f16::from_f32(*value).to_bits().to_le_bytes());
+            }
+            fs::write(out.join("states.f16"), &bytes)?;
+            "states.f16"
+        };
+        let positions = targets.len();
+        let held_in: usize = block_of.iter().filter(|&&b| b % 2 == 0).count();
+        let report = json!({
+            "schema": "uor-r4.geometric-stack-hidden-blocks/1",
+            "model": identity(&model_dir.join("model.safetensors"))?,
+            "config": model.config,
+            "tokens": identity(&tokens_path)?,
+            "tag": args.optional("tag"),
+            "panel": {
+                "protocol": "consecutive context-length blocks, fresh state per block, evenly spaced over the file",
+                "blocks_total": total,
+                "blocks_scored": wanted,
+                "block_indices": chosen,
+                "time": time,
+                "positions": positions,
+                "held_in_blocks": "even block ordinals",
+                "held_out_blocks": "odd block ordinals",
+                "held_in_positions": held_in,
+                "held_out_positions": positions - held_in,
+            },
+            "served_readout": {
+                "positions": served_targets,
+                "mean_nll": served_nll_sum / served_targets as f64,
+            },
+            "softmax_only": {
+                "head": "tied embedding.weight",
+                "positions": positions,
+                "mean_nll": raw_nll.iter().sum::<f64>() / positions as f64,
+                "top1_accuracy": correct as f64 / positions as f64,
+            },
+            "dump": {
+                "rows": rows.len() / width,
+                "width": width,
+                "file": dump_file,
+                "encoding": if f32_dump != 0 {
+                    "row-major little-endian f32, one row per scored position"
+                } else {
+                    "row-major little-endian f16, one row per scored position"
+                },
+            },
+            "elapsed_seconds": started.elapsed().as_secs_f64(),
+        });
+        fs::write(
+            out.join("states.json"),
+            serde_json::to_vec_pretty(&json!({
+                "schema": "uor-r4.geometric-stack-hidden-blocks-states/1",
+                "rows": rows.len() / width,
+                "width": width,
+                "targets": targets,
+                "blocks": block_of,
+                "raw_nll": raw_nll,
+            }))?,
+        )?;
+        fs::write(out.join("blocks.json"), serde_json::to_vec_pretty(&report)?)?;
         Ok(())
     })();
     finish(&out, result)
@@ -3593,6 +4109,11 @@ struct DialogueSettings {
     /// `device=cpu|metal|cuda` (default cpu). A Metal or CUDA run needs the
     /// `metal` or `cuda` feature; ops without a GPU kernel run on host copies.
     device: Device,
+    /// `precision=f32|bf16` (default f32): the trunk's activation storage.
+    precision: Precision,
+    /// `pointer_gate_supervision=W` (default 0, off): copy-gate supervision
+    /// of strength W ([`StackModel::gate_supervised_loss`]).
+    pointer_gate_supervision: f64,
 }
 
 impl DialogueSettings {
@@ -3609,6 +4130,7 @@ impl DialogueSettings {
             "eval_every": self.eval_every, "dev_seed": self.dev_seed,
             "dev_per_source": self.dev_per_source, "checkpoint_every": self.checkpoint_every,
             "requests": self.requests, "max_new_tokens": self.max_new_tokens,
+            "precision": self.precision.name(),
         });
         if self.protocol != 1 {
             record["protocol"] = json!(self.protocol);
@@ -3629,6 +4151,9 @@ impl DialogueSettings {
         }
         if let Some(route) = &self.pointer_route {
             record["pointer_route"] = json!(route);
+        }
+        if self.pointer_gate_supervision > 0.0 {
+            record["pointer_gate_supervision"] = json!(self.pointer_gate_supervision);
         }
         record
     }
@@ -3670,8 +4195,56 @@ impl DialogueSettings {
         if self.key_shift.enabled() {
             lineage["key_shift"] = json!(self.key_shift.name());
         }
+        if self.pointer_gate_supervision > 0.0 {
+            lineage["pointer_gate_supervision"] = json!(self.pointer_gate_supervision);
+        }
         Ok(lineage)
     }
+}
+
+/// `pointer_gate_supervision=W`: finite and nonnegative; above 0 it needs a
+/// pointer head over every source (the run's `pointer=`, or `init=`'s saved
+/// head), no `pointer_select=`/`pointer_route=` and f32 precision. Checked
+/// before anything is claimed.
+fn check_gate_supervision(s: &DialogueSettings) -> Result<()> {
+    let weight = s.pointer_gate_supervision;
+    if !(weight.is_finite() && weight >= 0.0) {
+        return Err(invalid(
+            "pointer_gate_supervision must be finite and nonnegative",
+        ));
+    }
+    if weight == 0.0 {
+        return Ok(());
+    }
+    if s.precision.is_bf16() {
+        return Err(invalid(
+            "precision=bf16 has no bf16 pointer gate supervision kernel; use precision=f32",
+        ));
+    }
+    if s.pointer_select.as_deref().is_some_and(|v| v != "none")
+        || s.pointer_route.as_deref().is_some_and(|v| v != "none")
+    {
+        return Err(invalid(
+            "pointer_gate_supervision needs a pointer over every source (no pointer_select or pointer_route)",
+        ));
+    }
+    let saved = match &s.init {
+        Some(directory) => {
+            serde_json::from_slice::<StackConfig>(&fs::read(directory.join("config.json"))?)?
+                .pointer
+        }
+        None => None,
+    };
+    if saved.is_none() && s.pointer.as_deref().is_none_or(|v| v == "none" || v == "0") {
+        return Err(invalid("pointer_gate_supervision needs a pointer head"));
+    }
+    if saved.is_some_and(|p| p.select.is_some() || p.route.is_some()) && s.pointer_select.is_none()
+    {
+        return Err(invalid(
+            "pointer_gate_supervision needs a pointer over every source; init='s head has a selection or route",
+        ));
+    }
+    Ok(())
 }
 
 /// A model to continue must have learned the same token ids. The run that
@@ -3763,13 +4336,15 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "pointer_route",
             "protocol",
             "tf32",
+            "precision",
+            "pointer_gate_supervision",
         ],
     )?;
     // Validate the A1 options before anything is claimed or loaded.
     select_arg(&args)?;
     let pointer_requested = pointer_args(&args)?;
     let path = |key: &str| -> Result<PathBuf> { Ok(PathBuf::from(args.required(key)?)) };
-    let settings = DialogueSettings {
+    let mut settings = DialogueSettings {
         tokenizer: path("tokenizer")?,
         train: [
             path("train_tokens")?,
@@ -3791,6 +4366,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         pointer_select: args.optional("pointer_select"),
         pointer_route: args.optional("pointer_route"),
         policy: PrefixPolicy::parse(args.optional("policy").as_deref())?,
+        precision: Precision::F32,
         data_seed: args.number("data_seed", 1)?,
         steps: args.number("steps", 1024)?,
         batch: args.number("batch", 16)?,
@@ -3813,7 +4389,18 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             Some(other) => return Err(invalid(format!("invalid protocol={other} (1 or 2)"))),
         },
         device: device_arg(&args)?,
+        pointer_gate_supervision: args.number("pointer_gate_supervision", 0.0)?,
     };
+    settings.precision = precision_arg(&args, &settings.device)?;
+    check_bf16_options(
+        settings.precision,
+        StackArch::Geometric,
+        settings.qat,
+        settings.transport_snap.is_some(),
+        settings.select.is_some(),
+        false,
+    )?;
+    check_gate_supervision(&settings)?;
     if settings.steps == 0
         || !(1..=64).contains(&settings.batch)
         || settings.eval_every == 0
@@ -4001,7 +4588,9 @@ fn panel_transport(
     let Some(usage) = panel_transport_usage(model, dev, panel)? else {
         return Ok(None);
     };
-    let unsnapped = model.with_unsnapped_transport(|model| development(model, dev, panel, 16))?;
+    let unsnapped = model.scored_in_f32(|model| {
+        model.with_unsnapped_transport(|model| development(model, dev, panel, 16))
+    })?;
     Ok(Some((unsnapped, usage)))
 }
 
@@ -4119,16 +4708,18 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
             (model, optimizer, progress, Some(state))
         }
     };
+    model.set_precision(s.precision);
     // After `init=` or a resume alike: the requested settings replace any mode the load restored.
     if s.qat {
         model.set_served_representation(Some(qat_codec()))?;
     }
     model.set_transport_snap(s.transport_snap)?;
     eprintln!(
-        "{:?} pattern {} read {:?}: {} parameters; {} training and {} development responses",
+        "{:?} pattern {} read {:?} precision {}: {} parameters; {} training and {} development responses",
         model.config.arch,
         model.config.pattern,
         model.config.read,
+        s.precision.name(),
         model.parameter_count(),
         train.episodes().len(),
         panel.len(),
@@ -4185,6 +4776,10 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         }
     }
     let (mut window_loss, mut stopped_early) = ((0f64, 0usize), false);
+    // Under copy-gate supervision: the window's sums of the gate BCE, the
+    // pointer NLL and the objective (the mixture's NLL is `window_loss`).
+    let supervision = s.pointer_gate_supervision;
+    let mut window_supervision = [0f64; 3];
     // The served representation's work inside this process's updates.
     let mut served_in_steps = ServedStatistics::default();
     // This process's updates' seconds.
@@ -4197,14 +4792,44 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
         let batch = train.materialize(&ids, s.policy)?;
         let trimmed = trim(&batch);
         let served_before = model.served_statistics()?;
-        let loss = model.weighted_loss(
-            &trimmed.inputs,
-            &trimmed.targets,
-            &trimmed.weights,
-            batch.batch,
-            trimmed.time,
-        )?;
-        let value = f64::from(loss.to_scalar::<f32>()?);
+        let (loss, value) = if supervision > 0.0 {
+            let parts = model.gate_supervised_loss(
+                &trimmed.inputs,
+                &trimmed.targets,
+                &trimmed.weights,
+                batch.batch,
+                trimmed.time,
+                supervision,
+            )?;
+            let read =
+                |t: &candle_core::Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+            let terms = [
+                read(&parts.gate_bce)?,
+                read(&parts.pointer_nll)?,
+                read(&parts.total)?,
+            ];
+            if !terms.iter().all(|t| t.is_finite()) {
+                return Err(invalid(format!(
+                    "nonfinite supervision loss at step {}",
+                    progress.step
+                )));
+            }
+            for (sum, term) in window_supervision.iter_mut().zip(terms) {
+                *sum += term;
+            }
+            let value = read(&parts.mixture)?;
+            (parts.total, value)
+        } else {
+            let loss = model.weighted_loss(
+                &trimmed.inputs,
+                &trimmed.targets,
+                &trimmed.weights,
+                batch.batch,
+                trimmed.time,
+            )?;
+            let value = f64::from(loss.to_scalar::<f32>()?);
+            (loss, value)
+        };
         if !value.is_finite() {
             return Err(invalid(format!("nonfinite loss at step {}", progress.step)));
         }
@@ -4244,6 +4869,19 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                 point["dev_pointer_mean_gate"] = pointer["mean_gate"].clone();
                 point["dev_pointer_hit_rate"] = pointer["pointer_hit_rate"].clone();
                 point["dev_pointer_reachable_rate"] = pointer["target_reachable_rate"].clone();
+                if supervision > 0.0 {
+                    point["dev_gate_bce"] = pointer["gate_bce"].clone();
+                    point["dev_pointer_nll"] = pointer["pointer_nll"].clone();
+                }
+            }
+            // `train_response_nll` stays the mixture's NLL; the objective
+            // adds the weighted supervision terms.
+            if supervision > 0.0 {
+                let n = window_loss.1.max(1) as f64;
+                point["train_gate_bce"] = json!(window_supervision[0] / n);
+                point["train_pointer_nll"] = json!(window_supervision[1] / n);
+                point["train_objective"] = json!(window_supervision[2] / n);
+                window_supervision = [0.0; 3];
             }
             if let Some((unsnapped, usage)) = &transport {
                 point["dev_unsnapped_response_nll"] = unsnapped["response_mean_nll"].clone();
@@ -4392,6 +5030,10 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
             "pointer_init_seed_source": pointer_added.then_some(seed_source),
             "pointer_parameters": pointer_parameters,
             "final_pointer_diagnostics": final_pointer,
+            "pointer_gate_supervision": (supervision > 0.0).then(|| json!({
+                "weight": supervision,
+                "objective": "mixture NLL + weight * (gate_bce + pointer_nll) over the scored response targets: on a target whose id an input position 0..=t of its window holds, gate_bce = -log g and pointer_nll = -log p_copy(target) (the pointer's mass summed over every position holding the id); on any other target gate_bce = -log(1 - g) and pointer_nll = 0; both are weighted means like the mixture's NLL. train_response_nll in the curve stays the mixture's NLL; train_gate_bce, train_pointer_nll and train_objective are window means.",
+            })),
             "scope": "Flock selection of the reads (sink at position 0, last WINDOW positions and the K best-scoring other sources per read row, by the shared crate::flock selector; unkept sources weigh and receive exactly 0; the NoRead slot stays outside the selection) applies to every read of the model and never to the pointer. The pointer head scores each source of the window with its own score (`pointer_score`: dot, or the fused read's Lorentz form with a learned scale) and softmaxes over the sources its own selection keeps (`pointer_select`: none keeps all, top:1 is the single-source pointer), copies the input tokens at the attended positions, and a gate g = sigmoid(w.h + b) (b starts at -2) mixes that with the ordinary distribution; when no kept source holds a target the mixture is (1 - g) softmax alone, with no floor. `response_mean_nll`, the losses and the greedy replies are the mixture's. `pointer` diagnostics are over the scored dev targets. Neither a flock nor a pointer selection or route has a D11 port; `export` writes a pointer that keeps every source (both integer engines serve its mixture), and `qat=true` refuses a pointer. Offline float training only; not a served or quality result.",
         });
     }
@@ -4979,6 +5621,7 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
   [select=none|flock:WINDOW:K] [pointer=none|DIM] [pointer_score=dot|lorentz] \\
   [pointer_select=none|flock:WINDOW:K|top:K] \\
   [pointer_route=none|prime:WINDOW|prime-ranked:WINDOW|ngram:WINDOW|ngram-ranked:WINDOW] \\
+  [pointer_gate_supervision=0] \\
   [seed=] [context=] [policy=] \\
   [data_seed=] \\
   [steps=] \\
@@ -5022,6 +5665,13 @@ geometric-stack dialogue-train out=NEW_REPORT_ROOT tokenizer=TOKENIZER.json \\
                          and ngram-ranked:WINDOW admit by the longest ordered n-let match
                          (n up to WINDOW) instead of any shared atom. Excludes
                          pointer_select=. With init=, replaces the saved head's route.
+  pointer_gate_supervision=W
+                         copy-gate supervision (default 0: off, the run is unchanged). On each
+                         scored target whose id an input position 0..=t holds, adds W (BCE(g, 1)
+                         - log p_copy(target)); on any other scored target W BCE(g, 0). Needs a
+                         pointer over every source (no pointer_select/route) and precision=f32.
+                         The curve adds train_gate_bce / train_pointer_nll / train_objective and
+                         dev_gate_bce / dev_pointer_nll; train_response_nll stays the mixture's.
   protocol=1|2           the literal-role dialogue version of both corpora (default 1); 2 puts
                          the space after a role marker into the message (m-world corpus
                          protocol=2), so a reply's first word can be copied from context.
@@ -5096,6 +5746,7 @@ fn main() -> Result<()> {
                     "key_shift",
                     "data_parallel",
                     "tf32",
+                    "precision",
                 ],
             )?;
             let settings = train_settings(&args)?;
@@ -5115,6 +5766,9 @@ fn main() -> Result<()> {
         "rounding-attribution" => rounding_attribution_mode(rest),
         "lut-sample" => lut_sample_mode(rest),
         "dialogue-train" => dialogue_train_mode(rest),
+        "head-probe" => head_probe_mode(rest),
+        "hidden-blocks" => hidden_blocks_mode(rest),
+        "seal-root" => seal_root_mode(rest),
         "lut-chat" => lut_chat_mode(rest),
         other => Err(invalid(format!("unknown mode {other}"))),
     }

@@ -132,6 +132,8 @@ use uor_r4_integer::geometric_span::SpanAction;
 
 #[cfg(feature = "cuda")]
 mod cuda_ops;
+#[cfg(feature = "cuda")]
+mod cuda_ops_bf16;
 
 /// Lower bound on `z - 1` in the Lorentz score. Below it the distance is
 /// clamped and carries no gradient.
@@ -156,6 +158,62 @@ const INITIAL_LORENTZ_OFFSET: f64 = 2.5;
 pub enum StackArch {
     Geometric,
     Transformer,
+}
+
+/// The storage of a model's activations, chosen per run by `precision=`.
+///
+/// [`Precision::F32`] is the default and the behaviour of every run before the
+/// option existed: all activations, matmul operands and custom kernels work in
+/// f32. [`Precision::Bf16`] keeps the trunk's activations (and the operands of
+/// every matrix product, so cuBLAS runs the tensor-core bf16 GEMM with f32
+/// accumulation) in bf16, while the parameters, the Adam moments, the
+/// optimiser and every precision-sensitive internal quantity stay f32: see
+/// [`StackModel::precision`] for the exact list. Saved models are f32 in both
+/// modes: the precision is a run option, not part of the artifact.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Precision {
+    /// Every activation and kernel in f32 (default).
+    #[default]
+    F32,
+    /// Activations and matmul operands in bf16, accumulated in f32.
+    Bf16,
+}
+
+impl Precision {
+    /// `precision=` on the command line.
+    pub fn parse(name: &str) -> Result<Self> {
+        match name {
+            "f32" => Ok(Precision::F32),
+            "bf16" => Ok(Precision::Bf16),
+            other => Err(invalid(format!("precision must be f32|bf16, got {other}"))),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Precision::F32 => "f32",
+            Precision::Bf16 => "bf16",
+        }
+    }
+
+    /// Whether the activations are bf16.
+    pub fn is_bf16(self) -> bool {
+        self == Precision::Bf16
+    }
+
+    /// The dtype of this precision's activations.
+    pub fn activation_dtype(self) -> DType {
+        match self {
+            Precision::F32 => DType::F32,
+            Precision::Bf16 => DType::BF16,
+        }
+    }
+
+    /// The dtype of a parameter or moment (f32 in both precisions).
+    pub fn parameter_dtype(self) -> DType {
+        DType::F32
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -478,9 +536,55 @@ pub struct StackBindingLoss {
     pub masses: Tensor,
 }
 
+/// A pointer model's response loss with copy-gate supervision
+/// ([`StackModel::gate_supervised_loss`]): `total = mixture + weight *
+/// (gate_bce + pointer_nll)`, each part a scalar weighted mean over the scored
+/// targets (the response weights), the parts sharing one op so the backward
+/// runs once.
+pub struct GateSupervisedLoss {
+    /// The objective the update descends.
+    pub total: Tensor,
+    /// The mixture's response NLL, as [`StackModel::weighted_loss`] gives it.
+    pub mixture: Tensor,
+    /// `BCE(g_t, [target held by a source 0..=t])`.
+    pub gate_bce: Tensor,
+    /// `-log p_copy(target)` on rows whose target a source holds, 0 elsewhere.
+    pub pointer_nll: Tensor,
+}
+
 struct BindingCapture<'a> {
-    target: &'a ReadBindingTarget,
+    /// The exact-source label of one layer/head, if any.
+    target: Option<&'a ReadBindingTarget>,
     masses: Option<Tensor>,
+    /// The diagnostic span probe ([`StackModel::read_span_probe`]), if any.
+    probe: Option<SpanProbeCapture<'a>>,
+    /// The diagnostic read weight dump ([`StackModel::read_weight_rows`]), if
+    /// any. Exclusive with `target` and `probe`: it is the only auxiliary value
+    /// block then, so its channels start at the ordinary value width.
+    weights: Option<WeightDumpCapture>,
+}
+
+/// Every read layer's full softmax weight row at declared `(batch, query)`
+/// rows ([`StackModel::read_weight_rows`]). Like the binding label and the span
+/// probe each source position is an auxiliary value channel (here the identity
+/// over sources) sharing the read's exact scores, admission and NoRead
+/// normalization; the channels are removed before `read.out`.
+struct WeightDumpCapture {
+    /// The `(batch, query)` rows to keep, in the given order.
+    rows: Vec<(usize, usize)>,
+    /// `(layer, weights [rows, heads, time])` in layer order.
+    layers: Vec<(usize, Tensor)>,
+}
+
+/// Every geometric read layer's per-head attention mass on declared source
+/// sets at one query of a single window. Like the binding label, each set is
+/// an auxiliary value channel sharing the read's exact scores, admission and
+/// NoRead normalization; the channels are removed before `read.out`.
+struct SpanProbeCapture<'a> {
+    spans: &'a [Vec<usize>],
+    query: usize,
+    /// `(layer, [heads, spans] masses)` in layer order.
+    layers: Vec<(usize, Tensor)>,
 }
 
 /// Refuse a flock the reads cannot evaluate. The selection itself is the shared
@@ -1380,6 +1484,25 @@ fn geometric_span_shapes(config: &StackConfig) -> BTreeMap<String, Vec<usize>> {
 
 pub struct StackModel {
     pub config: StackConfig,
+    /// Activation storage of this model's trunk. `F32` unless a run asked for
+    /// `precision=bf16`. In bf16 the activations between ops, the operands of
+    /// every matrix product and the activation arguments of the custom kernels
+    /// are bf16; these stay f32 (see [`Self::precision_note`]):
+    ///
+    /// - every parameter (`Var`) and its gradient, the Adam moments and the
+    ///   whole optimiser step;
+    /// - the RMSNorm statistics (`f64`), every read score, probability, lift,
+    ///   excess and distance, the cross-entropy's log-sum-exp and loss, the
+    ///   recurrence's carried state, drive, transition and `keep`, the
+    ///   pointer's attention scratch, and the global gradient squared norm;
+    /// - the unit-quaternion transport norm: the transition quaternion is
+    ///   read from bf16 storage and normalized and applied in f32;
+    /// - the head's logits are bf16 (the last matmul), but the loss and its
+    ///   log-sum-exp are f64 and evaluation runs in f32.
+    ///
+    /// A model saved from a bf16 run is f32: saving writes the master weights,
+    /// and the D11 export path never sees this flag.
+    precision: Precision,
     variables: BTreeMap<String, Var>,
     device: Device,
     /// The served representation the forward pass reads, if set
@@ -1500,6 +1623,7 @@ impl StackModel {
             config,
             variables,
             device: device.clone(),
+            precision: Precision::F32,
             served: None,
             transport: None,
             read_identity_carry: false,
@@ -1746,18 +1870,81 @@ impl StackModel {
         self.rms_norm(input, &ones)
     }
 
+    /// The activation storage of this model's trunk ([`Precision`]).
+    pub fn precision(&self) -> Precision {
+        self.precision
+    }
+
+    /// Sets the activation storage of the trunk. A run sets it once from
+    /// `precision=`; evaluation sets it back to f32, so a dev or final NLL
+    /// never includes the storage rounding a bf16 training step works with.
+    pub fn set_precision(&mut self, precision: Precision) {
+        self.precision = precision;
+    }
+
+    /// Runs `scored` with the trunk in f32 whatever this model's precision is,
+    /// and restores the precision afterwards (evaluation: the dev and final
+    /// NLL of a bf16 run must measure the trained weights, not the storage).
+    pub fn scored_in_f32<T>(
+        &mut self,
+        scored: impl FnOnce(&mut StackModel) -> Result<T>,
+    ) -> Result<T> {
+        let precision = self.precision;
+        self.precision = Precision::F32;
+        let result = scored(self);
+        self.precision = precision;
+        result
+    }
+
     /// `input @ weight^T` over the last dimension, as one matrix product.
-    fn linear(input: &Tensor, weight: &Tensor) -> Result<Tensor> {
+    ///
+    /// Under `precision=bf16` both operands are rounded to bf16 first, so this
+    /// is Candle's CUDA bf16 GEMM: `CUDA_R_16BF` inputs with
+    /// `CUBLAS_COMPUTE_32F` (f32 accumulation) on `CUBLAS_GEMM_DEFAULT_TENSOR_OP`,
+    /// producing a bf16 activation. The weight's gradient flows back through
+    /// its cast, so the master weight and the gradient that reaches it stay
+    /// f32.
+    fn linear(&self, input: &Tensor, weight: &Tensor) -> Result<Tensor> {
         let dims = input.dims().to_vec();
         let (rows, features) = (
             dims[..dims.len() - 1].iter().product::<usize>(),
             dims[dims.len() - 1],
         );
-        let output = input.reshape((rows, features))?.matmul(&weight.t()?)?;
+        let output = if self.precision.is_bf16() {
+            input
+                .to_dtype(DType::BF16)?
+                .reshape((rows, features))?
+                .matmul(&weight.to_dtype(DType::BF16)?.t()?)?
+        } else {
+            input.reshape((rows, features))?.matmul(&weight.t()?)?
+        };
         let mut shape = dims;
         let last = shape.len() - 1;
         shape[last] = weight.dim(0)?;
         Ok(output.reshape(shape)?)
+    }
+
+    /// A parameter read into the trunk's activation dtype: bf16 under
+    /// `precision=bf16` (the gradient still accumulates in f32 through the
+    /// cast), the parameter itself in f32. For a learned parameter the forward
+    /// consumes (the recurrence's gate bias), never for a master weight that
+    /// must keep f32 precision.
+    fn activation_parameter(&self, tensor: &Tensor) -> Result<Tensor> {
+        if self.precision.is_bf16() {
+            Ok(tensor.to_dtype(DType::BF16)?)
+        } else {
+            Ok(tensor.clone())
+        }
+    }
+
+    /// A trunk tensor in the activation dtype. The embedding lookup reads the
+    /// f32 master table and this is where the trunk becomes bf16.
+    fn cast_activation(&self, tensor: Tensor) -> Result<Tensor> {
+        if self.precision.is_bf16() {
+            Ok(tensor.to_dtype(DType::BF16)?)
+        } else {
+            Ok(tensor)
+        }
     }
 
     fn mlp(
@@ -1777,11 +1964,11 @@ impl StackModel {
         {
             return self.memory(p, layer, &u, memory);
         }
-        let gate = Self::linear(&u, p.layer(layer, "mlp.gate.weight")?)?;
-        let up = Self::linear(&u, p.layer(layer, "mlp.up.weight")?)?;
+        let gate = self.linear(&u, p.layer(layer, "mlp.gate.weight")?)?;
+        let up = self.linear(&u, p.layer(layer, "mlp.up.weight")?)?;
         let mixed = gate.contiguous()?.apply_op2(&up.contiguous()?, SwiGlu)?;
         tap(capture, StackSite::Down(layer), || Ok(mixed.clone()))?;
-        Self::linear(&mixed, p.layer(layer, "mlp.down.weight")?)
+        self.linear(&mixed, p.layer(layer, "mlp.down.weight")?)
     }
 
     /// The product-key memory in place of `layer`'s MLP, on the normalized
@@ -1794,7 +1981,8 @@ impl StackModel {
         memory: &MemoryConfig,
     ) -> Result<Tensor> {
         let (batch, time, width) = u.dims3()?;
-        let query = Self::linear(u, p.layer(layer, "memory.query.weight")?)?
+        let query = self
+            .linear(u, p.layer(layer, "memory.query.weight")?)?
             .reshape((batch * time, memory.heads * memory.key_dim))?;
         let keys = p.layer(layer, "memory.keys")?.flatten_all()?;
         // Fixed codebook keys carry no gradient, so they never move.
@@ -1842,7 +2030,7 @@ impl StackModel {
         let u = self.norm(p, x, &layer_name(layer, "attn_norm.weight"))?;
         let project = |part: &str| -> Result<Tensor> {
             self.heads(
-                &Self::linear(&u, p.layer(layer, &format!("attn.{part}.weight"))?)?,
+                &self.linear(&u, p.layer(layer, &format!("attn.{part}.weight"))?)?,
                 batch,
                 time,
             )
@@ -1862,7 +2050,7 @@ impl StackModel {
         )?;
         let merged = self.merge_heads(&read, batch, time)?;
         tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
-        Self::linear(&merged, p.layer(layer, "attn.o.weight")?)
+        self.linear(&merged, p.layer(layer, "attn.o.weight")?)
     }
 
     fn geometric_read(
@@ -1914,7 +2102,7 @@ impl StackModel {
             }
             let input = if part == "value" { &u } else { &identity };
             let mut projected =
-                Self::linear(input, p.layer(layer, &format!("read.{part}.weight"))?)?;
+                self.linear(input, p.layer(layer, &format!("read.{part}.weight"))?)?;
             if part == "key" && self.read_key_shift {
                 projected = previous_key_channel(&projected)?;
             }
@@ -1923,7 +2111,7 @@ impl StackModel {
             }
             if part != "value" {
                 if let Some(identity) = &latched {
-                    projected = projected.add(&Self::linear(
+                    projected = projected.add(&self.linear(
                         identity,
                         p.layer(layer, &format!("read.{part}_identity.weight"))?,
                     )?)?;
@@ -1932,7 +2120,11 @@ impl StackModel {
             self.heads(&projected, batch, time)
         };
         let (query, key, value) = (project("query")?, project("key")?, project("value")?);
-        let null = Self::linear(&u, p.layer(layer, "read.null.weight")?)?
+        // The NoRead bias is a parameter and the read's auxiliary table is
+        // f32 in both precisions (see [`Precision`]).
+        let null = self
+            .linear(&u, p.layer(layer, "read.null.weight")?)?
+            .to_dtype(DType::F32)?
             .broadcast_add(p.layer(layer, "read.null.bias")?)?
             .transpose(1, 2)?
             .flatten_all()?;
@@ -1977,8 +2169,8 @@ impl StackModel {
         // so neither the teacher mask nor its mass enters the residual stream.
         let target = binding
             .as_ref()
-            .filter(|binding| binding.target.layer == layer)
-            .map(|binding| binding.target);
+            .and_then(|binding| binding.target)
+            .filter(|target| target.layer == layer);
         let value_width = value.dim(3)?;
         let value = match target {
             None => value,
@@ -1990,6 +2182,60 @@ impl StackModel {
                     }
                 }
                 let mask = Tensor::from_vec(mask, (batch, heads, time, 1), &self.device)?;
+                Tensor::cat(&[&value, &mask], 3)?
+            }
+        };
+        // The span probe's channels: one per source set, the same set in every
+        // head. Like the label mask they never enter the scores.
+        let value = match binding.as_ref().and_then(|binding| binding.probe.as_ref()) {
+            None => value,
+            Some(probe) => {
+                let sets = probe.spans.len();
+                let mut mask = vec![0.0f32; batch * heads * time * sets];
+                for b in 0..batch {
+                    for h in 0..heads {
+                        for (s, span) in probe.spans.iter().enumerate() {
+                            for &source in span {
+                                mask[((b * heads + h) * time + source) * sets + s] = 1.0;
+                            }
+                        }
+                    }
+                }
+                let mask = Tensor::from_vec(mask, (batch, heads, time, sets), &self.device)?
+                    .to_dtype(value.dtype())?;
+                Tensor::cat(&[&value, &mask], 3)?
+            }
+        };
+        // The read weight dump's channels: the identity over source positions,
+        // the same in every head. Output channel `j` of row `t` is then exactly
+        // the read's softmax weight on source `j`. Like the label mask and the
+        // span probe they never enter the scores and are removed before
+        // `read.out`. Exclusive with the other two blocks (the extraction below
+        // relies on that), which is checked here rather than silently mixed.
+        let value = match binding.as_ref().and_then(|binding| binding.weights.as_ref()) {
+            None => value,
+            Some(dump) => {
+                if binding.as_ref().is_some_and(|binding| {
+                    binding.target.is_some() || binding.probe.is_some()
+                }) {
+                    return Err(invalid(
+                        "the read weight dump is exclusive with the binding label and span probe",
+                    ));
+                }
+                if dump.rows.iter().any(|&(b, q)| b >= batch || q >= time) {
+                    return Err(invalid("a read weight dump row is outside the window"));
+                }
+                let sets = time;
+                let mut mask = vec![0.0f32; batch * heads * time * sets];
+                for b in 0..batch {
+                    for h in 0..heads {
+                        for source in 0..time {
+                            mask[((b * heads + h) * time + source) * sets + source] = 1.0;
+                        }
+                    }
+                }
+                let mask = Tensor::from_vec(mask, (batch, heads, time, sets), &self.device)?
+                    .to_dtype(value.dtype())?;
                 Tensor::cat(&[&value, &mask], 3)?
             }
         };
@@ -2008,8 +2254,35 @@ impl StackModel {
         let (batch, heads, time, _) = read.dims4()?;
         let target = binding
             .as_ref()
-            .filter(|binding| binding.target.layer == layer)
-            .map(|binding| binding.target);
+            .and_then(|binding| binding.target)
+            .filter(|target| target.layer == layer);
+        if let Some(probe) = binding.as_mut().and_then(|binding| binding.probe.as_mut()) {
+            // Batch item 0 (the probe is single-window), every head, the query.
+            let masses = read
+                .narrow(3, value_width, probe.spans.len())?
+                .get(0)?
+                .narrow(1, probe.query, 1)?
+                .squeeze(1)?
+                .to_dtype(DType::F32)?;
+            probe.layers.push((layer, masses));
+        }
+        if let Some(dump) = binding.as_mut().and_then(|binding| binding.weights.as_mut()) {
+            // The identity block is the only auxiliary value block (checked in
+            // `read_binding_values`), so it starts at the ordinary width.
+            let weights = read.narrow(3, value_width, time)?;
+            let mut kept = Vec::with_capacity(dump.rows.len());
+            for &(b, query) in &dump.rows {
+                kept.push(
+                    weights
+                        .get(b)?
+                        .narrow(1, query, 1)?
+                        .squeeze(1)?
+                        .to_dtype(DType::F32)?,
+                );
+            }
+            let rows = Tensor::stack(&kept, 0)?;
+            dump.layers.push((layer, rows));
+        }
         let read = if let Some(target) = target {
             let indices: Vec<u32> = target
                 .rows
@@ -2026,11 +2299,11 @@ impl StackModel {
             }
             read.narrow(3, 0, value_width)?
         } else {
-            read.clone()
+            read.narrow(3, 0, value_width)?
         };
         let merged = self.merge_heads(&read, batch, time)?;
         tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
-        Self::linear(&merged, p.layer(layer, "read.out.weight")?)
+        self.linear(&merged, p.layer(layer, "read.out.weight")?)
     }
 
     fn read_identity_input(&self, normalized: &Tensor) -> Result<Tensor> {
@@ -2369,12 +2642,12 @@ impl StackModel {
                     .as_ref()
                     .ok_or_else(|| invalid("the random SO(4) lineage map is missing"))?;
                 let previous = causal_shift(&projected, 1)?;
-                Ok(projected.add(&Self::linear(&previous, rotation)?)?)
+                Ok(projected.add(&self.linear(&previous, rotation)?)?)
             }
             ("key", ReadLineage::LearnedPrev { .. }) => {
                 let map = p.layer(layer, READ_LINEAGE_PREV)?;
                 let previous = causal_shift(&projected, 1)?;
-                Ok(projected.add(&Self::linear(&previous, map)?)?)
+                Ok(projected.add(&self.linear(&previous, map)?)?)
             }
             ("key", ReadLineage::LearnedConv { .. }) => {
                 let weight = p.layer(layer, READ_LINEAGE_CONV)?;
@@ -2482,10 +2755,9 @@ impl StackModel {
             Tensor::cat(&[&zero, &u.narrow(1, 0, time - 1)?], 1)?
         };
         let input = Tensor::cat(&[u, &previous], 2)?;
-        Ok(
-            Self::linear(&input, p.layer(layer, "read.span_control.weight")?)?
-                .broadcast_add(p.layer(layer, "read.span_control.bias")?)?,
-        )
+        Ok(self
+            .linear(&input, p.layer(layer, "read.span_control.weight")?)?
+            .broadcast_add(p.layer(layer, "read.span_control.bias")?)?)
     }
 
     /// Actual learned controller logits [batch,time,4], ordered as HOLD,
@@ -2546,7 +2818,7 @@ impl StackModel {
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Replay the same saved reader with exported static token actions and
@@ -2562,7 +2834,7 @@ impl StackModel {
         let (hidden, _) =
             self.hidden_geometric_span_native(ids, batch, time, compiled, None, None)?;
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Observe exact source probabilities from that same native-producer read.
@@ -2594,7 +2866,7 @@ impl StackModel {
         let (hidden, _) =
             self.hidden_geometric_span_native(ids, batch, time, span, None, Some(potential))?;
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Source labels observe the same native-potential reader; they do not
@@ -2677,8 +2949,10 @@ impl StackModel {
         }
         let tokens = self.embed_with(&p, ids, batch, time)?;
         let mut binding = target.map(|target| BindingCapture {
-            target,
+            target: Some(target),
             masses: None,
+            probe: None,
+            weights: None,
         });
         let x = self.layer_range_with_source(
             &p,
@@ -2828,7 +3102,7 @@ impl StackModel {
             )?
         };
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Execute the native integer event controller and exact span register.
@@ -2858,7 +3132,7 @@ impl StackModel {
             Some(potential),
         )?;
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     pub fn read_binding_masses_geometric_event_native(
@@ -3000,7 +3274,7 @@ impl StackModel {
             Some(ContextInput::Training(&output.context)),
         )?;
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Offline joint answer-credit path with actual geometric retained-state
@@ -3093,7 +3367,7 @@ impl StackModel {
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     pub fn read_binding_masses_geometric_context(
@@ -3151,7 +3425,7 @@ impl StackModel {
             Some(ContextInput::Native(&ctx.codes)),
         )?;
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Native geometric scores, age, normalization and weighted payload
@@ -3184,7 +3458,7 @@ impl StackModel {
             None,
         )?;
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Capture the raw native reduction trace from the SAME predictive pass.
@@ -3218,7 +3492,7 @@ impl StackModel {
             None,
         )?;
         let p = self.params()?;
-        let logits = hidden.matmul(&p.head()?.t()?)?;
+        let logits = self.linear(&hidden, p.head()?)?;
         let trace = trace
             .into_inner()
             .ok_or_else(|| invalid("native weighted read trace was not evaluated"))?;
@@ -3541,7 +3815,7 @@ impl StackModel {
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Offline event/age input credit through the SAME native retained reader.
@@ -3667,7 +3941,7 @@ impl StackModel {
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok((hidden.matmul(&p.head()?.t()?)?, output))
+        Ok((self.linear(&hidden, p.head()?)?, output))
     }
 
     /// Native geometric composition and wide integer per-head weighted read.
@@ -4021,7 +4295,7 @@ impl StackModel {
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        let logits = hidden.matmul(&p.head()?.t()?)?;
+        let logits = self.linear(&hidden, p.head()?)?;
         Ok((logits, ctx, scores, values, null))
     }
 
@@ -4337,7 +4611,7 @@ impl StackModel {
             },
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        let logits = hidden.matmul(&p.head()?.t()?)?;
+        let logits = self.linear(&hidden, p.head()?)?;
         if let Some(CompositionMode::FrozenValues { output, .. }) = composition {
             let mut sink = output
                 .try_borrow_mut()
@@ -4395,7 +4669,7 @@ impl StackModel {
             }),
         )?;
         let p = self.params()?;
-        let logits = hidden.matmul(&p.head()?.t()?)?;
+        let logits = self.linear(&hidden, p.head()?)?;
         Ok((
             logits,
             read_trace
@@ -4535,7 +4809,7 @@ impl StackModel {
             Some(ContextInput::Native(&codes)),
         )?;
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Hard learned float producer through the same integer scorer, solely to
@@ -4637,8 +4911,10 @@ impl StackModel {
         }
         let tokens = self.embed_with(&p, ids, batch, time)?;
         let mut binding = target.map(|target| BindingCapture {
-            target,
+            target: Some(target),
             masses: None,
+            probe: None,
+            weights: None,
         });
         let x = self.layer_range_with_source(
             &p,
@@ -4961,7 +5237,11 @@ impl StackModel {
         scores = scores
             .broadcast_add(&age)?
             .broadcast_add(&Tensor::from_vec(mask, (1, 1, time, time), &self.device)?)?;
-        let null = Self::linear(&u, p.layer(layer, "read.null.weight")?)?
+        // The NoRead bias is a parameter and the read's auxiliary table is
+        // f32 in both precisions (see [`Precision`]).
+        let null = self
+            .linear(&u, p.layer(layer, "read.null.weight")?)?
+            .to_dtype(DType::F32)?
             .broadcast_add(p.layer(layer, "read.null.bias")?)?
             .transpose(1, 2)?
             .unsqueeze(3)?;
@@ -4993,7 +5273,7 @@ impl StackModel {
                 .values
         } else {
             self.heads(
-                &Self::linear(&u, p.layer(layer, "read.value.weight")?)?,
+                &self.linear(&u, p.layer(layer, "read.value.weight")?)?,
                 batch,
                 time,
             )?
@@ -5324,7 +5604,7 @@ impl StackModel {
             NoReadSource::LegacyFloat => {
                 let u = u.ok_or_else(|| invalid("legacy NoRead normalized input missing"))?;
                 Some(
-                    Self::linear(u, p.layer(layer, "read.null.weight")?)?
+                    self.linear(u, p.layer(layer, "read.null.weight")?)?
                         .broadcast_add(p.layer(layer, "read.null.bias")?)?
                         .transpose(1, 2)?,
                 )
@@ -5338,7 +5618,7 @@ impl StackModel {
             None
         } else {
             Some(self.heads(
-                &Self::linear(
+                &self.linear(
                     u.ok_or_else(|| invalid("legacy value normalized input missing"))?,
                     p.layer(layer, "read.value.weight")?,
                 )?,
@@ -5441,8 +5721,8 @@ impl StackModel {
         };
         let target = binding
             .as_ref()
-            .filter(|binding| binding.target.layer == layer)
-            .map(|binding| binding.target);
+            .and_then(|binding| binding.target)
+            .filter(|target| target.layer == layer);
         let read = if let Some(target) = target {
             // Labels observe raw normalized occurrence mass only AFTER the
             // predictive reduction. This channel is removed before read.out.
@@ -5478,10 +5758,9 @@ impl StackModel {
             Tensor::cat(&[&zero, &u.narrow(1, 0, time - 1)?], 1)?
         };
         let gate_input = Tensor::cat(&[u, &previous], 2)?;
-        Ok(
-            Self::linear(&gate_input, p.layer(layer, "read.identity_gate.weight")?)?
-                .broadcast_add(p.layer(layer, "read.identity_gate.bias")?)?,
-        )
+        Ok(self
+            .linear(&gate_input, p.layer(layer, "read.identity_gate.weight")?)?
+            .broadcast_add(p.layer(layer, "read.identity_gate.bias")?)?)
     }
 
     fn read_latch_inputs(
@@ -5609,7 +5888,7 @@ impl StackModel {
         let (batch, time, width) = x.dims3()?;
         tap(capture, StackSite::Recurrence(layer), || self.unit_norm(x))?;
         let u = self.norm(p, x, &layer_name(layer, "rec_norm.weight"))?;
-        let branches = Self::linear(&u, p.layer(layer, "rec.in.weight")?)?;
+        let branches = self.linear(&u, p.layer(layer, "rec.in.weight")?)?;
         let gates = self.recurrence_gates(p, layer, &u)?;
         let parameters = Tensor::cat(
             &[
@@ -5636,15 +5915,17 @@ impl StackModel {
             StackSite::RecurrenceOut(layer),
             || Ok(core.clone()),
         )?;
-        Self::linear(&core, p.layer(layer, "rec.out.weight")?)
+        self.linear(&core, p.layer(layer, "rec.out.weight")?)
     }
 
     /// A recurrence's gates [batch, time, lanes (+ width with rotation)] from
     /// its normalized input `u`: the decay-gate logits, then the raw rotation
     /// quaternions.
     fn recurrence_gates(&self, p: &Params<'_>, layer: usize, u: &Tensor) -> Result<Tensor> {
-        Ok(Self::linear(u, p.layer(layer, "rec.gate.weight")?)?
-            .broadcast_add(p.layer(layer, "rec.gate.bias")?)?)
+        let bias = self.activation_parameter(p.layer(layer, "rec.gate.bias")?)?;
+        Ok(self
+            .linear(u, p.layer(layer, "rec.gate.weight")?)?
+            .broadcast_add(&bias)?)
     }
 
     /// Logits [batch * time, vocabulary] for a batch of windows. Positions see
@@ -5652,7 +5933,7 @@ impl StackModel {
     pub fn forward(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
         let p = self.params()?;
         let hidden = self.hidden_hooked(&p, ids, batch, time, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Raw vocabulary logits with every learned read latch's gate replaced by
@@ -5682,7 +5963,7 @@ impl StackModel {
             LatchGates::Hard,
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Actual gained read input for the fixed single-read `rra` diagnostic.
@@ -5764,7 +6045,7 @@ impl StackModel {
             LatchGates::Replay(prior),
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Observes exact-source mass under the same numerical replay as its
@@ -5834,7 +6115,7 @@ impl StackModel {
             LatchGates::Projections(query, key),
         )?;
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// Observe source mass with the same supplied projections as the forward.
@@ -5951,9 +6232,11 @@ impl StackModel {
         }
         let embedding = p.get("embedding.weight")?;
         let index = Tensor::from_vec(ids.to_vec(), batch * time, &self.device)?;
-        Ok(embedding
-            .index_select(&index, 0)?
-            .reshape((batch, time, self.config.width))?)
+        let tokens =
+            embedding
+                .index_select(&index, 0)?
+                .reshape((batch, time, self.config.width))?;
+        self.cast_activation(tokens)
     }
 
     /// The final normalized states [batch * time, width] from a first-layer
@@ -5974,7 +6257,7 @@ impl StackModel {
     /// (in served mode, the served head).
     pub fn head(&self, hidden: &Tensor) -> Result<Tensor> {
         let p = self.params()?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// The residual stream [batch, time, width] after running `layers` on
@@ -6105,7 +6388,8 @@ impl StackModel {
             ],
             0,
         )?;
-        Ok(hidden.matmul(&weight.t()?)?.broadcast_add(&bias)?)
+        let bias = self.activation_parameter(&bias)?;
+        Ok(self.linear(hidden, &weight)?.broadcast_add(&bias)?)
     }
 
     /// The pointer's Lorentz scale `exp(pointer.log_beta)` as a one-element
@@ -6136,9 +6420,12 @@ impl StackModel {
     ) -> Result<Tensor> {
         let p = self.params()?;
         let hidden = self.hidden_hooked(&p, ids, batch, time, &mut None)?;
-        self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time)
+        self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time, false)
     }
 
+    /// The mixture op of a pointer model; with `supervise`, its three-part
+    /// output ([`PointerMixture::supervise`]).
+    #[allow(clippy::too_many_arguments)]
     fn pointer_loss_from_hidden(
         &self,
         p: &Params<'_>,
@@ -6147,12 +6434,13 @@ impl StackModel {
         targets: &[u32],
         weights: Option<&[f32]>,
         time: usize,
+        supervise: bool,
     ) -> Result<Tensor> {
         let pointer = self
             .config
             .pointer
             .ok_or_else(|| invalid("the model has no pointer head"))?;
-        let logits = hidden.matmul(&p.head()?.t()?)?;
+        let logits = self.linear(&hidden, p.head()?)?;
         let side = self.pointer_side(p, hidden)?;
         let beta = self.pointer_beta(p)?;
         Ok(logits.contiguous()?.apply_op3(
@@ -6168,6 +6456,7 @@ impl StackModel {
                 keys: self.pointer_route_keys(ids),
                 targets: targets.to_vec(),
                 weights: weights.map(<[f32]>::to_vec),
+                supervise,
             },
         )?)
     }
@@ -6271,8 +6560,10 @@ impl StackModel {
         self.validate_binding(batch, time, target)?;
         let x = self.embed_with(p, ids, batch, time)?;
         let mut binding = Some(BindingCapture {
-            target,
+            target: Some(target),
             masses: None,
+            probe: None,
+            weights: None,
         });
         let x = self.layer_range_with_source(
             p,
@@ -6318,6 +6609,200 @@ impl StackModel {
     ) -> Result<Tensor> {
         let p = self.params()?;
         Ok(self.hidden_with_binding(&p, ids, batch, time, binding)?.1)
+    }
+
+    /// TEMPORARY DIAGNOSTIC (T2, `mqar-bench` `dump_scores=1`): every geometric
+    /// read layer's full softmax weight row at declared `(batch, query)`
+    /// positions.
+    ///
+    /// The second returned value is the ordinary logits `[batch * time,
+    /// vocabulary]` of the same forward, so a caller can check that observing
+    /// the weights changed nothing. Each `(layer, [rows, heads, time])` entry
+    /// holds, at `[r, h, j]`, the read weight of head `h` on source `j <=
+    /// query_r` (`0` for `j > query_r`), normalized exactly as the ordinary
+    /// read normalizes it: over the admitted sources and the learned NoRead
+    /// slot, so `sum_j weights[r, h, j] = 1 - NoRead(t)` and the argmax over
+    /// `j` (with the NoRead slot) is the argmax of the read's score vector
+    /// (the softmax is strictly monotone). The weights come from an auxiliary
+    /// identity value block sharing the read's exact scores, admission, age
+    /// and normalization; it is removed before `read.out`, so no hidden state,
+    /// logit or parameter changes.
+    ///
+    /// The forward is [`Self::forward`]'s exact path (the plain fused read, no
+    /// geometric address, span, event or integer reducer); it refuses a model
+    /// that has one, and a model with no read layer at all.
+    pub fn read_weight_rows(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        rows: &[(usize, usize)],
+    ) -> Result<(Vec<(usize, Tensor)>, Tensor)> {
+        if self.config.arch != StackArch::Geometric {
+            return Err(invalid("read weight rows need the geometric stack"));
+        }
+        if self.geometric_address.is_some() || self.geometric_span.is_some() {
+            return Err(invalid(
+                "read weight rows observe the plain fused read only (no geometric address or span)",
+            ));
+        }
+        if rows.is_empty() {
+            return Err(invalid("read weight rows needs at least one row"));
+        }
+        if time == 0 || time > self.config.context {
+            return Err(invalid("read weight rows needs one window within the context"));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let mut binding = Some(BindingCapture {
+            target: None,
+            masses: None,
+            probe: None,
+            weights: Some(WeightDumpCapture {
+                rows: rows.to_vec(),
+                layers: Vec::new(),
+            }),
+        });
+        let x = self.layer_range_with_source(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            LatchGates::Soft,
+            ReadSource::default(),
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        let layers = binding
+            .and_then(|binding| binding.weights)
+            .map(|dump| dump.layers)
+            .unwrap_or_default();
+        if layers.is_empty() {
+            return Err(invalid("the stack has no read layer to dump weights from"));
+        }
+        let logits = self.linear(&hidden, p.head()?)?;
+        Ok((layers, logits))
+    }
+
+    /// Diagnostic of the next token after `ids` (one window, batch 1): every
+    /// geometric read layer's per-head attention mass, at the last position,
+    /// on each of `spans` (sets of window positions), and the output
+    /// distributions there. The forward is the ordinary one ([`Self::next_scores`]):
+    /// the span channels are auxiliary values sharing the read's exact scores,
+    /// age bias, admission and NoRead normalization, removed before
+    /// `read.out`, so they never change the hidden states or logits. A set's
+    /// mass is `sum_{j in set} a_j` with NoRead in the denominator; a set of
+    /// every position `0..=t` gives the read's total source mass (one minus
+    /// the NoRead mass). Geometric addressing and span production have their
+    /// own read paths and are refused.
+    pub fn read_span_probe(&self, ids: &[u32], spans: &[Vec<usize>]) -> Result<SpanProbe> {
+        let time = ids.len();
+        if time == 0 || time > self.config.context {
+            return Err(invalid(
+                "read span probe needs one window within the context",
+            ));
+        }
+        if self.config.arch != StackArch::Geometric {
+            return Err(invalid("read span probe needs the geometric stack"));
+        }
+        if self.geometric_address.is_some() || self.geometric_span.is_some() {
+            return Err(invalid(
+                "read span probe observes the plain fused read only (no geometric address or span)",
+            ));
+        }
+        if spans.is_empty() || spans.iter().flatten().any(|&source| source >= time) {
+            return Err(invalid(
+                "read span probe needs at least one set of in-window positions",
+            ));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, 1, time)?;
+        let mut binding = Some(BindingCapture {
+            target: None,
+            masses: None,
+            probe: Some(SpanProbeCapture {
+                spans,
+                query: time - 1,
+                layers: Vec::new(),
+            }),
+            weights: None,
+        });
+        let x = self.layer_range_bound(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            LatchGates::Soft,
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?.detach();
+        let reads = binding
+            .and_then(|binding| binding.probe)
+            .map(|probe| probe.layers)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(layer, masses)| -> Result<ReadSpanMasses> {
+                Ok(ReadSpanMasses {
+                    layer,
+                    heads: masses
+                        .to_vec2::<f32>()?
+                        .into_iter()
+                        .map(|row| row.into_iter().map(f64::from).collect())
+                        .collect(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let logits: Vec<f64> = hidden
+            .narrow(0, time - 1, 1)?
+            .to_dtype(DType::F32)?
+            .matmul(&p.head()?.t()?)?
+            .flatten_all()?
+            .to_vec1::<f32>()?
+            .into_iter()
+            .map(f64::from)
+            .collect();
+        let maximum = logits.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let total: f64 = logits.iter().map(|&z| (z - maximum).exp()).sum();
+        let generator: Vec<f64> = logits
+            .iter()
+            .map(|&z| (z - maximum).exp() / total)
+            .collect();
+        let Some(pointer) = self.config.pointer else {
+            return Ok(SpanProbe {
+                reads,
+                mixture: generator.clone(),
+                generator,
+                pointer: None,
+            });
+        };
+        let side = self
+            .pointer_side(&p, &hidden)?
+            .to_dtype(DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let rule = PointerRule {
+            dim: pointer.dim,
+            score: pointer.score,
+            select: pointer.select,
+            beta: one_value(&self.pointer_beta(&p)?)?,
+            route: pointer.route,
+        };
+        let keys = self.pointer_route_keys(ids);
+        let attention =
+            pointer_attention(&side, 0, time - 1, &rule, keys.as_deref().unwrap_or(ids))?;
+        let gate = sigmoid_f64(f64::from(
+            side[(time - 1) * (2 * pointer.dim + 1) + 2 * pointer.dim],
+        ));
+        let mut mixture: Vec<f64> = generator.iter().map(|&q| (1.0 - gate) * q).collect();
+        for (&a, &id) in attention.iter().zip(ids) {
+            mixture[id as usize] += gate * a;
+        }
+        Ok(SpanProbe {
+            reads,
+            generator,
+            mixture,
+            pointer: Some(PointerProbe { gate, attention }),
+        })
     }
 
     /// The existing exact-source observer under the explicit last-token span
@@ -6412,9 +6897,9 @@ impl StackModel {
             ));
         }
         let language = if self.config.pointer.is_some() {
-            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time)?
+            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time, false)?
         } else {
-            hidden.matmul(&p.head()?.t()?)?.apply_op1(CrossEntropy {
+            self.linear(&hidden, p.head()?)?.apply_op1(CrossEntropy {
                 targets: targets.to_vec(),
                 weights: weights.map(<[f32]>::to_vec),
             })?
@@ -6487,6 +6972,67 @@ impl StackModel {
         })?)
     }
 
+    /// [`Self::weighted_loss`] of a pointer model with copy-gate supervision
+    /// of strength `weight > 0`: on each scored target whose id a source
+    /// `0..=t` of its window holds (the soft pointer's whole reachable range;
+    /// causal, since a position's sources are its own and earlier inputs),
+    /// `weight * (BCE(g_t, 1) - log p_copy(target))`, the pointer's NLL summed
+    /// over every position holding that id; on a scored target no source
+    /// holds, `weight * BCE(g_t, 0)`. Both are weighted means over the scored
+    /// targets, as the mixture's NLL is. Refused without a pointer head, with
+    /// a pointer selection or route, and under `precision=bf16` (no bf16
+    /// kernel). [`Self::weighted_loss`] is unchanged by its existence.
+    pub fn gate_supervised_loss(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        batch: usize,
+        time: usize,
+        weight: f64,
+    ) -> Result<GateSupervisedLoss> {
+        if !(weight.is_finite() && weight > 0.0) {
+            return Err(invalid(
+                "pointer gate supervision needs a finite positive weight",
+            ));
+        }
+        let pointer = self
+            .config
+            .pointer
+            .ok_or_else(|| invalid("pointer gate supervision needs a pointer head"))?;
+        if pointer.select.is_some() || pointer.route.is_some() {
+            return Err(invalid(
+                "pointer gate supervision needs a pointer over every source (no selection or route)",
+            ));
+        }
+        if self.precision.is_bf16() {
+            return Err(invalid(
+                "precision=bf16 has no bf16 pointer gate supervision kernel; use precision=f32",
+            ));
+        }
+        if targets.len() != ids.len() || weights.len() != ids.len() {
+            return Err(invalid("one target and one weight per input id"));
+        }
+        if targets
+            .iter()
+            .any(|&id| id as usize >= self.config.vocab_size)
+        {
+            return Err(invalid("target id outside the vocabulary"));
+        }
+        if weights.iter().any(|w| !w.is_finite() || *w < 0.0)
+            || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+        {
+            return Err(invalid(
+                "loss weights must be finite, nonnegative and not all zero",
+            ));
+        }
+        let p = self.params()?;
+        let hidden = self.hidden_hooked(&p, ids, batch, time, &mut None)?;
+        let parts =
+            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, Some(weights), time, true)?;
+        gate_supervised_parts(&parts, weight)
+    }
+
     /// Per-target negative log-likelihoods (nats), without a backward graph.
     /// For a pointer model, the mixture's.
     pub fn target_nll(
@@ -6530,7 +7076,7 @@ impl StackModel {
         let hidden = self
             .hidden_hooked(&p, ids, batch, time, &mut None)?
             .detach();
-        let logits = hidden.matmul(&p.head()?.t()?)?;
+        let logits = self.linear(&hidden, p.head()?)?;
         let side = self.pointer_side(&p, &hidden)?;
         let beta = one_value(&self.pointer_beta(&p)?)?;
         let (logits, side) = (
@@ -6548,6 +7094,7 @@ impl StackModel {
             keys: self.pointer_route_keys(ids),
             targets: targets.to_vec(),
             weights: weights.map(<[f32]>::to_vec),
+            supervise: false,
         };
         let rows: Vec<(f64, Option<PointerRowStats>)> = (0..ids.len())
             .into_par_iter()
@@ -6605,6 +7152,7 @@ impl StackModel {
         let hidden = self.hidden_hooked(&p, ids, 1, time, &mut None)?.detach();
         let logits = hidden
             .narrow(0, time - 1, 1)?
+            .to_dtype(DType::F32)?
             .matmul(&p.head()?.t()?)?
             .flatten_all()?
             .to_vec1::<f32>()?;
@@ -6665,7 +7213,7 @@ impl StackModel {
                 dims, self.config.vocab_size, self.config.width
             )));
         }
-        let hidden = self.hidden(ids, batch, time)?;
+        let hidden = self.hidden(ids, batch, time)?.to_dtype(DType::F32)?;
         let logits = hidden.matmul(&head.t()?)?.detach();
         row_nll(&logits, targets)
     }
@@ -7196,6 +7744,7 @@ impl StackModel {
             config,
             variables,
             device: device.clone(),
+            precision: Precision::F32,
             served: None,
             transport: None,
             read_identity_carry: false,
@@ -7295,7 +7844,7 @@ impl StackModel {
             x = x.add(&self.mlp(&p, layer, &x, &mut None)?)?;
         }
         let hidden = self.finish_hooked(&p, x, &mut None)?;
-        Ok(hidden.matmul(&p.head()?.t()?)?)
+        Ok(self.linear(&hidden, p.head()?)?)
     }
 
     /// The recurrence mixer composed from Candle operations: the reference
@@ -7310,7 +7859,7 @@ impl StackModel {
         let (batch, time, width) = x.dims3()?;
         let lanes = width / 4;
         let u = self.norm(p, x, &layer_name(layer, "rec_norm.weight"))?;
-        let branches = Self::linear(&u, p.layer(layer, "rec.in.weight")?)?;
+        let branches = self.linear(&u, p.layer(layer, "rec.in.weight")?)?;
         let input = branches.narrow(2, 0, width)?;
         let gate = branches.narrow(2, width, width)?;
         // Width-4 causal depthwise convolution over time.
@@ -7333,7 +7882,8 @@ impl StackModel {
             };
             convolved = convolved.add(&shifted.broadcast_mul(&weights.get(shift)?)?)?;
         }
-        let gates = Self::linear(&u, p.layer(layer, "rec.gate.weight")?)?
+        let gates = self
+            .linear(&u, p.layer(layer, "rec.gate.weight")?)?
             .broadcast_add(p.layer(layer, "rec.gate.bias")?)?;
         let opening = candle_nn::ops::sigmoid(&gates.narrow(2, 0, lanes)?)?;
         // log a = -softplus(-decay) keeps a in (0, 1); log lambda = c r log a.
@@ -7385,7 +7935,7 @@ impl StackModel {
             .broadcast_mul(&keep)?;
         let state = quaternion_scan(&transition.contiguous()?, &drive.contiguous()?)?
             .reshape((batch, time, width))?;
-        Self::linear(
+        self.linear(
             &state.mul(&gate.gelu()?)?,
             p.layer(layer, "rec.out.weight")?,
         )
@@ -8288,8 +8838,14 @@ impl CustomOp2 for StraightThrough {
 
 /// Straight-through estimator: forward is `quantized`, backward gradient flows to `continuous`.
 pub fn straight_through(continuous: &Tensor, quantized: &Tensor) -> Result<Tensor> {
-    if continuous.dtype() != DType::F32 || quantized.dtype() != DType::F32 {
-        return Err(invalid("straight_through requires F32 tensors"));
+    // Under `precision=bf16` both sides are bf16 activations; the op copies
+    // the served value's storage either way.
+    if !matches!(continuous.dtype(), DType::F32 | DType::BF16)
+        || quantized.dtype() != continuous.dtype()
+    {
+        return Err(invalid(
+            "straight_through needs one f32 or bf16 dtype on both sides",
+        ));
     }
     if continuous.shape() != quantized.shape() {
         return Err(invalid("straight-through inputs must have one shape"));
@@ -9362,8 +9918,14 @@ fn previous_key_channel(key: &Tensor) -> Result<Tensor> {
 
 /// Runs the quaternion transport recurrence over whole windows.
 pub fn quaternion_scan(transition: &Tensor, drive: &Tensor) -> Result<Tensor> {
-    if transition.dtype() != DType::F32 || drive.dtype() != DType::F32 {
-        return Err(invalid("quaternion_scan requires F32 tensors"));
+    // The scan reads bf16 storage and multiplies in f32 under
+    // `precision=bf16` (see [`Precision`]).
+    if !matches!(transition.dtype(), DType::F32 | DType::BF16)
+        || drive.dtype() != transition.dtype()
+    {
+        return Err(invalid(
+            "quaternion_scan needs one f32 or bf16 dtype on both inputs",
+        ));
     }
     let (batch, time, lanes, four) = transition.dims4()?;
     if four != 4 || drive.shape() != transition.shape() {
@@ -11290,12 +11852,18 @@ pub fn fused_read_selected(
     rope: bool,
     select: Option<FlockSelect>,
 ) -> Result<Tensor> {
-    if query.dtype() != DType::F32
-        || key.dtype() != DType::F32
-        || value.dtype() != DType::F32
+    // Under `precision=bf16` the query, key and value are bf16 (the fused-read
+    // CUDA kernels of the bf16 module read that storage and score in f32); the
+    // auxiliary table (NoRead bias, age table, `log_beta`, `offset`) is a
+    // parameter table and stays f32.
+    if !matches!(query.dtype(), DType::F32 | DType::BF16)
+        || key.dtype() != query.dtype()
+        || value.dtype() != query.dtype()
         || aux.dtype() != DType::F32
     {
-        return Err(invalid("fused_read requires F32 tensors"));
+        return Err(invalid(
+            "fused_read needs one f32 or bf16 query/key/value dtype and an f32 auxiliary table",
+        ));
     }
     if let Some(select) = &select {
         validate_flock(select)?;
@@ -11382,11 +11950,15 @@ pub fn recurrence_core_grouped(
             "recurrence_core requires positive dimensions with width divisible by 4",
         ));
     }
-    if branches.dtype() != DType::F32
-        || gates.dtype() != DType::F32
+    // Under `precision=bf16` the branches and gates are bf16 activations; the
+    // taps, bias and decay are f32 parameters.
+    if !matches!(branches.dtype(), DType::F32 | DType::BF16)
+        || gates.dtype() != branches.dtype()
         || parameters.dtype() != DType::F32
     {
-        return Err(invalid("recurrence_core requires F32 tensors"));
+        return Err(invalid(
+            "recurrence_core needs one f32 or bf16 branches/gates dtype and f32 parameters",
+        ));
     }
     let lanes = width / 4;
     let gate_width = lanes + if rotation { 4 * lanes } else { 0 };
@@ -12095,8 +12667,10 @@ pub fn logits_cross_entropy(
     targets: &[u32],
     weights: Option<&[f32]>,
 ) -> Result<Tensor> {
-    if logits.dtype() != DType::F32 {
-        return Err(invalid("logits_cross_entropy requires F32 logits"));
+    // bf16 logits are the bf16 trunk's last matmul output; the loss itself is
+    // f64 over them (see [`Precision`]).
+    if !matches!(logits.dtype(), DType::F32 | DType::BF16) {
+        return Err(invalid("logits_cross_entropy requires f32 or bf16 logits"));
     }
     let (rows, classes) = logits.dims2()?;
     if targets.len() != rows || weights.is_some_and(|w| w.len() != rows) {
@@ -12137,8 +12711,15 @@ pub fn pointer_mixture_loss(
     targets: &[u32],
     weights: Option<&[f32]>,
 ) -> Result<Tensor> {
-    if logits.dtype() != DType::F32 || side.dtype() != DType::F32 || beta.dtype() != DType::F32 {
-        return Err(invalid("pointer_mixture_loss requires F32 inputs"));
+    // bf16 logits and side are the bf16 trunk's; the attention, the mixture
+    // and the loss are f64 internally, and `beta` is an f32 parameter.
+    if !matches!(logits.dtype(), DType::F32 | DType::BF16)
+        || side.dtype() != logits.dtype()
+        || beta.dtype() != DType::F32
+    {
+        return Err(invalid(
+            "pointer_mixture_loss needs one f32 or bf16 logits/side dtype and an f32 beta",
+        ));
     }
     if score == ReadScore::L2 {
         return Err(invalid("a pointer cannot use the L2 score"));
@@ -12173,8 +12754,88 @@ pub fn pointer_mixture_loss(
             keys: None,
             targets: targets.to_vec(),
             weights: weights.map(<[f32]>::to_vec),
+            supervise: false,
         },
     )?)
+}
+
+/// [`pointer_mixture_loss`] with copy-gate supervision of strength `weight`
+/// ([`StackModel::gate_supervised_loss`]), for device parity checks: f32
+/// logits and side only (there is no bf16 supervision kernel).
+#[allow(clippy::too_many_arguments)]
+pub fn pointer_mixture_loss_supervised(
+    logits: &Tensor,
+    side: &Tensor,
+    beta: &Tensor,
+    time: usize,
+    score: ReadScore,
+    ids: &[u32],
+    targets: &[u32],
+    weights: Option<&[f32]>,
+    weight: f64,
+) -> Result<GateSupervisedLoss> {
+    if logits.dtype() != DType::F32 || side.dtype() != DType::F32 || beta.dtype() != DType::F32 {
+        return Err(invalid(
+            "pointer gate supervision runs on f32 logits and side",
+        ));
+    }
+    if !(weight.is_finite() && weight > 0.0) {
+        return Err(invalid(
+            "pointer gate supervision needs a finite positive weight",
+        ));
+    }
+    if score == ReadScore::L2 {
+        return Err(invalid("a pointer cannot use the L2 score"));
+    }
+    let (rows, vocabulary) = logits.dims2()?;
+    let (side_rows, width) = side.dims2()?;
+    if side_rows != rows || width < 3 || width % 2 == 0 {
+        return Err(invalid("pointer side rows must be [rows, 2 dim + 1]"));
+    }
+    if targets.iter().any(|&t| t as usize >= vocabulary) {
+        return Err(invalid("target outside the logit classes"));
+    }
+    if let Some(weights) = weights {
+        if weights.iter().any(|w| !w.is_finite() || *w < 0.0)
+            || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+        {
+            return Err(invalid(
+                "loss weights must be finite, nonnegative and not all zero",
+            ));
+        }
+    }
+    let parts = logits.contiguous()?.apply_op3(
+        &side.contiguous()?,
+        &beta.contiguous()?,
+        PointerMixture {
+            time,
+            dim: (width - 1) / 2,
+            score,
+            select: None,
+            route: None,
+            ids: ids.to_vec(),
+            keys: None,
+            targets: targets.to_vec(),
+            weights: weights.map(<[f32]>::to_vec),
+            supervise: true,
+        },
+    )?;
+    gate_supervised_parts(&parts, weight)
+}
+
+/// Split the supervised op's `[mixture, gate_bce, pointer_nll]` and form
+/// `total = mixture + weight * (gate_bce + pointer_nll)`.
+fn gate_supervised_parts(parts: &Tensor, weight: f64) -> Result<GateSupervisedLoss> {
+    let mixture = parts.get(0)?;
+    let gate_bce = parts.get(1)?;
+    let pointer_nll = parts.get(2)?;
+    let total = (&mixture + ((&gate_bce + &pointer_nll)? * weight)?)?;
+    Ok(GateSupervisedLoss {
+        total,
+        mixture,
+        gate_bce,
+        pointer_nll,
+    })
 }
 
 /// Fused CrossEntropy loss: mean cross entropy of logits vs target class indices.
@@ -12386,6 +13047,28 @@ struct MixtureRow {
     copy_share: f64,
     /// Log-sum-exp of the logits row.
     lse: f64,
+    /// The gate logit `w_g . h_t + b_g`.
+    logit: f64,
+    /// Whether any source `0..=t` holds the target id (its attention aside).
+    present: bool,
+}
+
+impl MixtureRow {
+    /// The copy-gate supervision terms of the row ([`PointerMixture::supervise`]):
+    /// `(BCE(g, present), -log p_copy(target) if present else 0)`. A present
+    /// target whose copy mass underflowed to 0 gets no pointer term.
+    fn supervision(&self) -> (f64, f64) {
+        if self.present {
+            let pointer = if self.copy > 0.0 {
+                -self.copy.ln()
+            } else {
+                0.0
+            };
+            (softplus(-self.logit), pointer)
+        } else {
+            (softplus(self.logit), 0.0)
+        }
+    }
 }
 
 /// The mixture loss of a batch of windows: for a scored target `y_t`,
@@ -12409,9 +13092,29 @@ struct PointerMixture {
     keys: Option<Vec<u32>>,
     targets: Vec<u32>,
     weights: Option<Vec<f32>>,
+    /// Copy-gate supervision ([`StackModel::gate_supervised_loss`]): the op
+    /// then outputs `[mixture, gate_bce, pointer_nll]` (each a weighted mean
+    /// over the scored rows) instead of the mixture's scalar. On a row whose
+    /// target id is held by a source `0..=t` (the soft pointer's whole
+    /// reachable range), `gate_bce = -log g` and `pointer_nll = -log
+    /// p_copy(target)`; on a row whose target no source holds, `gate_bce =
+    /// -log(1 - g)` and `pointer_nll = 0`. The caller weights the two terms.
+    /// Refused with a selection or a route. `false` is the unsupervised op,
+    /// bit for bit.
+    supervise: bool,
 }
 
 impl PointerMixture {
+    /// One output for the mixture's scalar, three under supervision.
+    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+    fn output_len(&self) -> usize {
+        if self.supervise {
+            3
+        } else {
+            1
+        }
+    }
+
     fn weight(&self, row: usize) -> f64 {
         self.weights.as_ref().map_or(1.0, |w| f64::from(w[row]))
     }
@@ -12465,6 +13168,7 @@ impl PointerMixture {
         };
         let high = generate.max(copied);
         let log_mixture = high + ((generate - high).exp() + (copied - high).exp()).ln();
+        let present = self.ids[first..=first + t].contains(&target);
         Ok(MixtureRow {
             attention,
             copy,
@@ -12473,6 +13177,8 @@ impl PointerMixture {
             generate_share: (generate - log_mixture).exp(),
             copy_share: (copied - log_mixture).exp(),
             lse,
+            logit,
+            present,
         })
     }
 
@@ -12492,6 +13198,9 @@ impl PointerMixture {
             || !rows.is_multiple_of(self.time)
         {
             candle_core::bail!("pointer mixture inputs disagree in shape");
+        }
+        if self.supervise && (self.select.is_some() || self.route.is_some()) {
+            candle_core::bail!("pointer gate supervision needs a pointer over every source");
         }
         Ok((rows, vocabulary))
     }
@@ -12521,6 +13230,31 @@ impl CustomOp3 for PointerMixture {
             .first()
             .map(|&value| f64::from(value))
             .ok_or_else(|| candle_core::Error::msg("pointer mixture needs its scale"))?;
+        if self.supervise {
+            let terms: Vec<[f64; 3]> = (0..rows)
+                .into_par_iter()
+                .map(|n| -> candle_core::Result<[f64; 3]> {
+                    if self.weight(n) == 0.0 {
+                        return Ok([0.0; 3]);
+                    }
+                    let row = self.evaluate(
+                        &logits[n * vocabulary..(n + 1) * vocabulary],
+                        side,
+                        beta,
+                        n,
+                    )?;
+                    let (gate, pointer) = row.supervision();
+                    let w = self.weight(n);
+                    Ok([-w * row.log_mixture, w * gate, w * pointer])
+                })
+                .collect::<candle_core::Result<_>>()?;
+            let total = self.total();
+            let mean = |k: usize| (terms.iter().map(|row| row[k]).sum::<f64>() / total) as f32;
+            return Ok((
+                CpuStorage::F32(vec![mean(0), mean(1), mean(2)]),
+                Shape::from(3),
+            ));
+        }
         // Each row's loss in row order, summed in that order: the mean does
         // not depend on how the threads split the rows.
         let losses: Vec<f64> = (0..rows)
@@ -12593,7 +13327,18 @@ impl CustomOp3 for PointerMixture {
             .first()
             .map(|&value| f64::from(value))
             .ok_or_else(|| candle_core::Error::msg("pointer mixture needs its scale"))?;
-        let grad = f64::from(grad.to_scalar::<f32>()?);
+        // The upstream gradient of each output: the mixture's alone, or under
+        // supervision also the gate-BCE and pointer-NLL terms'.
+        let (grad, grad_gate, grad_pointer) = if self.supervise {
+            match grad.flatten_all()?.to_vec1::<f32>()?.as_slice() {
+                &[mixture, gate, pointer] => {
+                    (f64::from(mixture), f64::from(gate), f64::from(pointer))
+                }
+                _ => candle_core::bail!("supervised pointer mixture expects three gradients"),
+            }
+        } else {
+            (f64::from(grad.to_scalar::<f32>()?), 0.0, 0.0)
+        };
         let total = self.total();
         let mut d_logits = vec![0f32; rows * vocabulary];
         let mut d_side = vec![0f32; rows * stride];
@@ -12625,9 +13370,21 @@ impl CustomOp3 for PointerMixture {
                     d_z[target as usize] -= k as f32;
                     // d NLL / d gate logit = share_generate g - share_copy (1 - g),
                     // which is `g` when no source holds the target.
-                    d_row[2 * dim] = (c
-                        * (row.generate_share * row.gate - row.copy_share * (1.0 - row.gate)))
-                        as f32;
+                    let mut d_gate =
+                        c * (row.generate_share * row.gate - row.copy_share * (1.0 - row.gate));
+                    // Supervision: d BCE(g, present) / d logit = g - present.
+                    if self.supervise {
+                        let c_gate = grad_gate * self.weight(n) / total;
+                        d_gate += c_gate * (row.gate - if row.present { 1.0 } else { 0.0 });
+                    }
+                    d_row[2 * dim] = d_gate as f32;
+                    // The per-source coefficient: the mixture's c share_copy,
+                    // plus on a supervised present row the pointer NLL's (its
+                    // d / d score_j has the same form with share 1).
+                    let mut k_source = c * row.copy_share;
+                    if self.supervise && row.present {
+                        k_source += grad_pointer * self.weight(n) / total;
+                    }
                     // d loss / d score_j = -(g / mixture) a_j (m_j - p_copy).
                     // g / mixture overflows once the mixture is below about
                     // exp(-709.78), so the product is taken through the copy
@@ -12653,9 +13410,9 @@ impl CustomOp3 for PointerMixture {
                             continue;
                         }
                         let d_source = if self.ids[first + j] == target {
-                            -c * row.copy_share * (a / row.copy) * (1.0 - row.copy)
+                            -k_source * (a / row.copy) * (1.0 - row.copy)
                         } else {
-                            c * row.copy_share * a
+                            k_source * a
                         };
                         let key = pointer_key(&s, dim, first + j);
                         if lorentz {
@@ -12731,6 +13488,34 @@ impl CustomOp3 for PointerMixture {
             )?),
         ))
     }
+}
+
+/// One geometric read layer's attention masses from [`StackModel::read_span_probe`]:
+/// `heads[h][s]` is head `h`'s mass on source set `s` at the probed query.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadSpanMasses {
+    pub layer: usize,
+    pub heads: Vec<Vec<f64>>,
+}
+
+/// The pointer head at the probed query: its gate `g` and its attention over
+/// the window's positions `0..=t`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PointerProbe {
+    pub gate: f64,
+    pub attention: Vec<f64>,
+}
+
+/// [`StackModel::read_span_probe`]'s observation of the next token: read
+/// masses per layer and head, the generator's softmax, the pointer (if any)
+/// and the distribution greedy decoding ranks (the mixture `(1 - g)
+/// softmax(z) + g p_copy` for a pointer model, else the softmax).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpanProbe {
+    pub reads: Vec<ReadSpanMasses>,
+    pub generator: Vec<f64>,
+    pub mixture: Vec<f64>,
+    pub pointer: Option<PointerProbe>,
 }
 
 /// What the pointer head did at one scored position.
@@ -16507,18 +17292,15 @@ mod tests {
         )?
         .flatten_all()?
         .to_vec1::<f32>()?;
-        let null = StackModel::linear(&u, p.layer(2, "read.null.weight")?)?
+        let null = model
+            .linear(&u, p.layer(2, "read.null.weight")?)?
             .broadcast_add(p.layer(2, "read.null.bias")?)?
             .transpose(1, 2)?
             .flatten_all()?
             .to_vec1::<f32>()?;
         let ages = p.layer(2, "read.age")?.flatten_all()?.to_vec1::<f32>()?;
         let value = model
-            .heads(
-                &StackModel::linear(&u, p.layer(2, "read.value.weight")?)?,
-                1,
-                8,
-            )?
+            .heads(&model.linear(&u, p.layer(2, "read.value.weight")?)?, 1, 8)?
             .flatten_all()?
             .to_vec1::<f32>()?;
         let (heads, time, width) = (2, 8, 8);
@@ -16549,7 +17331,7 @@ mod tests {
             }
         }
         let reference = Tensor::from_vec(reference, (1, heads, time, width), &cpu())?;
-        let reference = StackModel::linear(
+        let reference = model.linear(
             &model.merge_heads(&reference, 1, time)?,
             p.layer(2, "read.out.weight")?,
         )?;
@@ -17033,14 +17815,12 @@ mod tests {
                 .read_latch_inputs(&p, 2, &u, mode, LatchGates::Hard)?
                 .0;
             let project = |part: &str| -> Result<Tensor> {
-                Ok(
-                    StackModel::linear(&u, p.layer(2, &format!("read.{part}.weight"))?)?.add(
-                        &StackModel::linear(
-                            &prior,
-                            p.layer(2, &format!("read.{part}_identity.weight"))?,
-                        )?,
-                    )?,
-                )
+                Ok(model
+                    .linear(&u, p.layer(2, &format!("read.{part}.weight"))?)?
+                    .add(
+                        &model
+                            .linear(&prior, p.layer(2, &format!("read.{part}_identity.weight"))?)?,
+                    )?)
             };
             let query = project("query")?;
             let key = project("key")?;
@@ -17206,19 +17986,19 @@ mod tests {
                     }
                 }
                 let project = |part: &str| -> Result<Tensor> {
-                    let current =
-                        StackModel::linear(&u, p.layer(1, &format!("read.{part}.weight"))?)?;
+                    let current = model.linear(&u, p.layer(1, &format!("read.{part}.weight"))?)?;
                     let result = if part == "value" {
                         current
                     } else {
-                        current.add(&StackModel::linear(
+                        current.add(&model.linear(
                             &identity,
                             p.layer(1, &format!("read.{part}_identity.weight"))?,
                         )?)?
                     };
                     model.heads(&result, 2, 8)
                 };
-                let null = StackModel::linear(&u, p.layer(1, "read.null.weight")?)?
+                let null = model
+                    .linear(&u, p.layer(1, "read.null.weight")?)?
                     .broadcast_add(p.layer(1, "read.null.bias")?)?
                     .transpose(1, 2)?
                     .flatten_all()?;
@@ -17239,7 +18019,7 @@ mod tests {
                     false,
                     None,
                 )?;
-                let want = StackModel::linear(
+                let want = model.linear(
                     &model.merge_heads(&read, 2, 8)?,
                     p.layer(1, "read.out.weight")?,
                 )?;
@@ -17365,12 +18145,13 @@ mod tests {
                 ],
                 1,
             )?;
-            let expected = StackModel::linear(
-                &Tensor::cat(&[&u, &previous], 2)?,
-                p.layer(1, "read.identity_gate.weight")?,
-            )?
-            .broadcast_add(p.layer(1, "read.identity_gate.bias")?)?
-            .squeeze(2)?;
+            let expected = model
+                .linear(
+                    &Tensor::cat(&[&u, &previous], 2)?,
+                    p.layer(1, "read.identity_gate.weight")?,
+                )?
+                .broadcast_add(p.layer(1, "read.identity_gate.bias")?)?
+                .squeeze(2)?;
             assert_eq!(bits(&logits)?, bits(&expected)?);
             let actual_gates = model
                 .read_latch_inputs(&p, 1, &u, mode, LatchGates::Soft)?
@@ -17560,7 +18341,7 @@ mod tests {
             );
             let project = |input: &Tensor, part: &str| -> Result<Tensor> {
                 model.heads(
-                    &StackModel::linear(input, p.layer(1, &format!("read.{part}.weight"))?)?,
+                    &model.linear(input, p.layer(1, &format!("read.{part}.weight"))?)?,
                     2,
                     8,
                 )
@@ -17570,7 +18351,8 @@ mod tests {
             let query = project(&shifted, "query")?;
             let key = project(&shifted, "key")?;
             let value = project(&u, "value")?;
-            let null = StackModel::linear(&u, p.layer(1, "read.null.weight")?)?
+            let null = model
+                .linear(&u, p.layer(1, "read.null.weight")?)?
                 .broadcast_add(p.layer(1, "read.null.bias")?)?
                 .transpose(1, 2)?
                 .flatten_all()?;
@@ -17591,7 +18373,7 @@ mod tests {
                 false,
                 None,
             )?;
-            let reference = StackModel::linear(
+            let reference = model.linear(
                 &model.merge_heads(&reference, 2, 8)?,
                 p.layer(1, "read.out.weight")?,
             )?;
@@ -18102,6 +18884,79 @@ mod tests {
             let after = objective()?.to_scalar::<f32>()?;
             assert!(after < before, "{read:?}: binding step {before} -> {after}");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn read_span_probe_matches_binding_masses_and_next_scores() -> Result<()> {
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "rara", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        let ids = [3u32, 7, 9, 7, 5, 6, 2, 7];
+        let time = ids.len();
+        let spans = vec![vec![1, 3], vec![5], (0..time).collect::<Vec<_>>()];
+        for pointer in [false, true] {
+            if pointer {
+                model.add_pointer(PointerConfig::new(4), 11)?;
+            }
+            let probe = model.read_span_probe(&ids, &spans)?;
+            assert_eq!(
+                probe.reads.iter().map(|r| r.layer).collect::<Vec<_>>(),
+                vec![1, 3]
+            );
+            for read in &probe.reads {
+                assert_eq!(read.heads.len(), model.config.heads);
+                for (head, masses) in read.heads.iter().enumerate() {
+                    let label = |sources: Vec<usize>| -> Result<f64> {
+                        let target = ReadBindingTarget {
+                            layer: read.layer,
+                            head,
+                            rows: vec![ReadBinding {
+                                batch: 0,
+                                query: time - 1,
+                                sources,
+                            }],
+                        };
+                        Ok(f64::from(
+                            model
+                                .read_binding_masses(&ids, 1, time, &target)?
+                                .to_vec1::<f32>()?[0],
+                        ))
+                    };
+                    // Sets before the query equal the exact-source label's mass.
+                    for set in 0..2 {
+                        assert!((masses[set] - label(spans[set].clone())?).abs() < 1e-6);
+                    }
+                    // The full set adds the query's own mass; NoRead keeps it below one.
+                    let past = label((0..time - 1).collect())?;
+                    assert!(masses[2] > past - 1e-6 && masses[2] < 1.0);
+                    assert!((masses[0] + masses[1]) <= masses[2] + 1e-6);
+                }
+            }
+            // The observed distribution is exactly what greedy decoding ranks.
+            // (next_scores: raw logits without a pointer, the log mixture with one.)
+            let mut scores: Vec<f64> = model
+                .next_scores(&ids)?
+                .into_iter()
+                .map(f64::from)
+                .collect();
+            if !pointer {
+                let lse = scores.iter().map(|z| z.exp()).sum::<f64>().ln();
+                scores.iter_mut().for_each(|z| *z -= lse);
+            }
+            for (got, want) in probe.mixture.iter().zip(&scores) {
+                assert!((got.max(f64::MIN_POSITIVE).ln() - want).abs() < 1e-4);
+            }
+            assert_eq!(probe.pointer.is_some(), pointer);
+            if let Some(head) = &probe.pointer {
+                assert_eq!(head.attention.len(), time);
+                assert!((head.attention.iter().sum::<f64>() - 1.0).abs() < 1e-9);
+                assert!(head.gate > 0.0 && head.gate < 1.0);
+            }
+        }
+        assert!(model.read_span_probe(&ids, &[vec![time]]).is_err());
+        assert!(model.read_span_probe(&ids, &[]).is_err());
         Ok(())
     }
 
@@ -18772,7 +19627,8 @@ mod tests {
         let norm = |x: &Tensor, gain: &Tensor| -> Result<Tensor> {
             Ok(x.contiguous()?.apply_op2(&gain.contiguous()?, RmsNorm)?)
         };
-        let linear = StackModel::linear;
+        let linear =
+            |input: &Tensor, weight: &Tensor| -> Result<Tensor> { model.linear(input, weight) };
         let split = |x: &Tensor| -> Result<Tensor> {
             Ok(x.reshape((batch, time, c.heads, c.head_width()))?
                 .transpose(1, 2)?
@@ -21840,6 +22696,341 @@ mod tests {
         Ok(())
     }
 
+    /// A supervision test case: one window pair over a small alphabet so some
+    /// targets recur in context and others (token `vocabulary - 1`) never do,
+    /// with a zero-weight row.
+    fn supervision_case(
+        score: ReadScore,
+        seed: u64,
+    ) -> (
+        usize,
+        usize,
+        usize,
+        Vec<u32>,
+        Vec<u32>,
+        Vec<f32>,
+        Vec<f32>,
+        Vec<f32>,
+        f32,
+    ) {
+        let (time, dim, vocabulary) = (6usize, 3usize, 7usize);
+        let rows = 2 * time;
+        let ids: Vec<u32> = (0..rows as u32).map(|i| (i * 5 + 1) % 4).collect();
+        let mut targets: Vec<u32> = (0..rows as u32).map(|i| (i * 3 + 2) % 4).collect();
+        targets[1] = (vocabulary - 1) as u32;
+        targets[time + 2] = (vocabulary - 1) as u32;
+        let mut weights: Vec<f32> = (0..rows).map(|i| 1.0 + (i % 3) as f32).collect();
+        weights[4] = 0.0;
+        let mut rng = Initializer(900 + seed);
+        let logits: Vec<f32> = (0..rows * vocabulary)
+            .map(|_| (rng.normal() * 1.5) as f32)
+            .collect();
+        let side: Vec<f32> = (0..rows * (2 * dim + 1))
+            .map(|_| (rng.normal() * 0.8) as f32)
+            .collect();
+        let beta = if score == ReadScore::Lorentz {
+            0.7
+        } else {
+            0.0
+        };
+        (
+            time, dim, vocabulary, ids, targets, weights, logits, side, beta,
+        )
+    }
+
+    /// The supervised objective `mixture + weight (gate_bce + pointer_nll)`
+    /// by plain f64 formulas, independent of the op: the softmax attention
+    /// over sources `0..=t`, `p = (1 - g) softmax(z)[y] + g p_copy(y)`, and on
+    /// a row whose target a source holds `-log g - log p_copy`, elsewhere
+    /// `-log(1 - g)`; weighted means over the rows.
+    #[allow(clippy::too_many_arguments)]
+    fn reference_supervised(
+        (time, dim, vocabulary): (usize, usize, usize),
+        score: ReadScore,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        logits: &[f64],
+        side: &[f64],
+        beta: f64,
+        weight: f64,
+    ) -> [f64; 4] {
+        let stride = 2 * dim + 1;
+        let rows = ids.len();
+        let total: f64 = weights.iter().map(|&w| f64::from(w)).sum();
+        let mut sums = [0.0f64; 3];
+        for n in 0..rows {
+            let w = f64::from(weights[n]);
+            if w == 0.0 {
+                continue;
+            }
+            let (first, t) = (n - n % time, n % time);
+            let q = &side[n * stride..n * stride + dim];
+            let scores: Vec<f64> = (0..=t)
+                .map(|j| {
+                    let k = &side[(first + j) * stride + dim..(first + j) * stride + 2 * dim];
+                    let inner: f64 = q.iter().zip(k).map(|(a, b)| a * b).sum();
+                    match score {
+                        ReadScore::Lorentz => {
+                            let lift =
+                                |x: &[f64]| (1.0 + x.iter().map(|v| v * v).sum::<f64>()).sqrt();
+                            let e = lift(q) * lift(k) - inner - 1.0;
+                            -beta * (1.0 + e).acosh()
+                        }
+                        _ => inner / (dim as f64).sqrt(),
+                    }
+                })
+                .collect();
+            let high = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let exps: Vec<f64> = scores.iter().map(|s| (s - high).exp()).collect();
+            let sum: f64 = exps.iter().sum();
+            let y = targets[n];
+            let copy: f64 = (0..=t)
+                .filter(|&j| ids[first + j] == y)
+                .map(|j| exps[j] / sum)
+                .sum();
+            let present = (0..=t).any(|j| ids[first + j] == y);
+            let z = &logits[n * vocabulary..(n + 1) * vocabulary];
+            let zmax = z.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let zsum: f64 = z.iter().map(|v| (v - zmax).exp()).sum();
+            let soft = (z[y as usize] - zmax).exp() / zsum;
+            let g = 1.0 / (1.0 + (-side[n * stride + 2 * dim]).exp());
+            sums[0] -= w * ((1.0 - g) * soft + g * copy).ln();
+            if present {
+                sums[1] -= w * g.ln();
+                sums[2] -= w * copy.ln();
+            } else {
+                sums[1] -= w * (1.0 - g).ln();
+            }
+        }
+        let [m, gb, pn] = sums.map(|v| v / total);
+        [m, gb, pn, m + weight * (gb + pn)]
+    }
+
+    #[test]
+    fn gate_supervision_matches_the_reference_and_its_finite_differences() -> Result<()> {
+        let weight = 0.7;
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let (time, dim, vocabulary, ids, targets, weights, logits, side, beta) =
+                supervision_case(score, 1);
+            let rows = ids.len();
+            let stride = 2 * dim + 1;
+            // The case has both kinds of scored row.
+            let present = |n: usize| ids[n - n % time..=n].contains(&targets[n]);
+            assert!((0..rows).any(|n| weights[n] > 0.0 && present(n)));
+            assert!((0..rows).any(|n| weights[n] > 0.0 && !present(n)));
+            let z = Var::from_vec(logits.clone(), (rows, vocabulary), &cpu())?;
+            let s = Var::from_vec(side.clone(), (rows, stride), &cpu())?;
+            let b = Var::from_vec(vec![beta], 1, &cpu())?;
+            let parts = pointer_mixture_loss_supervised(
+                z.as_tensor(),
+                s.as_tensor(),
+                b.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+                weight,
+            )?;
+            let to64 = |v: &[f32]| v.iter().map(|&x| f64::from(x)).collect::<Vec<f64>>();
+            let reference = |l: &[f64], sd: &[f64], bt: f64| {
+                reference_supervised(
+                    (time, dim, vocabulary),
+                    score,
+                    &ids,
+                    &targets,
+                    &weights,
+                    l,
+                    sd,
+                    bt,
+                    weight,
+                )
+            };
+            let want = reference(&to64(&logits), &to64(&side), f64::from(beta));
+            for (name, got, want) in [
+                ("mixture", &parts.mixture, want[0]),
+                ("gate_bce", &parts.gate_bce, want[1]),
+                ("pointer_nll", &parts.pointer_nll, want[2]),
+                ("total", &parts.total, want[3]),
+            ] {
+                let got = f64::from(got.to_scalar::<f32>()?);
+                assert!(
+                    (got - want).abs() < 1e-5 * want.abs().max(1.0),
+                    "{score:?} {name}: {got} against {want}"
+                );
+            }
+            // The mixture part is the unsupervised op's loss bit for bit.
+            let plain = pointer_mixture_loss(
+                z.as_tensor(),
+                s.as_tensor(),
+                b.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+            )?;
+            assert_eq!(
+                plain.to_scalar::<f32>()?.to_bits(),
+                parts.mixture.to_scalar::<f32>()?.to_bits()
+            );
+            // Every logit, side and scale gradient of the total against central
+            // differences of the f64 reference.
+            let grads = parts.total.backward()?;
+            let h = 1e-4;
+            let check =
+                |analytic: Vec<f32>, base: Vec<f64>, at: &dyn Fn(&[f64]) -> f64, what: &str| {
+                    let mut numeric = Vec::with_capacity(base.len());
+                    for i in 0..base.len() {
+                        let (mut plus, mut minus) = (base.clone(), base.clone());
+                        plus[i] += h;
+                        minus[i] -= h;
+                        numeric.push((at(&plus) - at(&minus)) / (2.0 * h));
+                    }
+                    let scale = numeric.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+                    assert!(scale > 0.0, "{score:?} {what}: no effect");
+                    for (i, (&a, &n)) in analytic.iter().zip(&numeric).enumerate() {
+                        assert!(
+                            (f64::from(a) - n).abs() < 2e-4 * scale + 2e-6,
+                            "{score:?} {what}[{i}]: analytic {a} against numeric {n}"
+                        );
+                    }
+                };
+            let grad = |var: &Var| -> Result<Vec<f32>> {
+                Ok(grads
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?)
+            };
+            let (l64, s64, b64) = (to64(&logits), to64(&side), f64::from(beta));
+            check(
+                grad(&z)?,
+                l64.clone(),
+                &|l| reference(l, &s64, b64)[3],
+                "d_logits",
+            );
+            check(
+                grad(&s)?,
+                s64.clone(),
+                &|sd| reference(&l64, sd, b64)[3],
+                "d_side",
+            );
+            if score == ReadScore::Lorentz {
+                check(
+                    grad(&b)?,
+                    vec![b64],
+                    &|bt| reference(&l64, &s64, bt[0])[3],
+                    "d_beta",
+                );
+            }
+            // The zero-weight row's query and gate get no gradient (its key
+            // still does, from the later rows that read it).
+            let d_side = grad(&s)?;
+            assert!(d_side[4 * stride..4 * stride + dim]
+                .iter()
+                .all(|&v| v == 0.0));
+            assert_eq!(d_side[4 * stride + 2 * dim], 0.0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gate_supervision_without_its_terms_is_the_unsupervised_gradient() -> Result<()> {
+        // Backpropagating only the mixture part (upstream gradients 1, 0, 0)
+        // gives the unsupervised op's gradients exactly.
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let (time, dim, vocabulary, ids, targets, weights, logits, side, beta) =
+                supervision_case(score, 2);
+            let rows = ids.len();
+            let make = || -> Result<(Var, Var, Var)> {
+                Ok((
+                    Var::from_vec(logits.clone(), (rows, vocabulary), &cpu())?,
+                    Var::from_vec(side.clone(), (rows, 2 * dim + 1), &cpu())?,
+                    Var::from_vec(vec![beta], 1, &cpu())?,
+                ))
+            };
+            let (z1, s1, b1) = make()?;
+            let plain = pointer_mixture_loss(
+                z1.as_tensor(),
+                s1.as_tensor(),
+                b1.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+            )?;
+            let g1 = plain.backward()?;
+            let (z2, s2, b2) = make()?;
+            let parts = pointer_mixture_loss_supervised(
+                z2.as_tensor(),
+                s2.as_tensor(),
+                b2.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+                1.0,
+            )?;
+            let g2 = parts.mixture.backward()?;
+            for (a, b) in [(&z1, &z2), (&s1, &s2), (&b1, &b2)] {
+                let x = g1
+                    .get(a.as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let y = g2
+                    .get(b.as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                assert_eq!(x, y, "{score:?}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gate_supervision_is_refused_where_it_is_not_defined() -> Result<()> {
+        let (ids, targets, weights) = pointer_batch();
+        // No pointer head.
+        let plain = StackModel::new(
+            tiny(StackArch::Geometric, "ar", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        assert!(plain
+            .gate_supervised_loss(&ids, &targets, &weights, 2, 12, 0.5)
+            .is_err());
+        // A selection, a nonpositive or nonfinite weight.
+        let selected = pointer_model(ReadScore::Dot, Some(PointerSelect::TopK(2)), 0)?;
+        assert!(selected
+            .gate_supervised_loss(&ids, &targets, &weights, 2, 12, 0.5)
+            .is_err());
+        let mut model = pointer_model(ReadScore::Dot, None, 0)?;
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(model
+                .gate_supervised_loss(&ids, &targets, &weights, 2, 12, bad)
+                .is_err());
+        }
+        // bf16 has no supervision kernel.
+        model.set_precision(Precision::Bf16);
+        assert!(model
+            .gate_supervised_loss(&ids, &targets, &weights, 2, 12, 0.5)
+            .is_err());
+        model.set_precision(Precision::F32);
+        // The model method's mixture part is weighted_loss bit for bit.
+        let parts = model.gate_supervised_loss(&ids, &targets, &weights, 2, 12, 2.0)?;
+        let mixture = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+        assert_eq!(
+            parts.mixture.to_scalar::<f32>()?.to_bits(),
+            mixture.to_scalar::<f32>()?.to_bits()
+        );
+        Ok(())
+    }
+
     #[test]
     fn a_row_without_copy_mass_is_exactly_the_generated_probability() -> Result<()> {
         // A vocabulary of 4, one window of 3 positions and a pointer of width 2.
@@ -21865,6 +23056,7 @@ mod tests {
             keys: None,
             targets: targets.clone(),
             weights: None,
+            supervise: false,
         };
         let g = 1.0 / (1.0 + (-f64::from(gate_logit)).exp());
         let lse = 3.0f64.ln();
@@ -21942,6 +23134,7 @@ mod tests {
                 keys: None,
                 targets: targets.clone(),
                 weights: None,
+                supervise: false,
             };
             let logits = Var::from_vec(logit_rows.clone(), (time, vocabulary), &cpu())?;
             let side = Var::from_vec(side_values.clone(), (time, stride), &cpu())?;
@@ -21998,6 +23191,7 @@ mod tests {
             keys: None,
             targets: targets.clone(),
             weights: None,
+            supervise: false,
         };
         let row = op().evaluate(&[0.0; 4], &side_values, 1.0, 1)?;
         assert!(
