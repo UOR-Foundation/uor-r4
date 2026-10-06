@@ -257,3 +257,26 @@ allows900s, with prospective total check wall1500s; it changes no overall6h
 wall, rental or storage ceiling. All17116 source archive files match the cached
 source tree after restoring its research files and applying the four changed
 code files. Live fits keep their separate frozen binary.
+
+
+## Observation-credit inquiry: avoid an equivalent reroute
+
+A subsequent source/mathematical review corrects the earlier narrow migration
+suggestion: lifting an existing readout state derivativev4 into120 values
+`U(r)=dot(v4,root(r))` does not recover higher harmonics. Right quaternion
+multiplication by a fixed H4 action preserves this linear function family. The
+q4 context already uses finite-choice ambient Hamilton credit, without the older
+tangent projection. An equivalent carrier reroute is therefore not justified as
+a new information-recovery mechanism. No such arm is implemented or launched.
+
+The substantive candidate is a conditional native-observation intervention.
+Changing retained lanej can alter its own observation and the preceding lane's
+neighbor-dependent observation. Recompute both packed root/category/absence
+choices, shared endpoint identity and all affected candidate aliases before
+scoring utility. At actual Copy failures, compare that120-state native utility
+with the current lifted readout derivative, require factual replay, and determine
+whether omitted or reversed directions improve actual target probability/margin.
+A nonlinear residual alone does not justify a new fit. Preserving readout
+coefficient adjoints while replacing only the selected input-state credit is a
+prospective estimator decomposition, with double-credit and shared-packet risks.
+This inquiry remains separate from fully recomputing later recurrence controllers.
