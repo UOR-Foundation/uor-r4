@@ -33,12 +33,18 @@ win146/512 first targets versus0parent. A joined saved-record audit certifies
 so a context-state-only repair cannot solve those rows with factual Copy fixed.
 The remaining38 losing max-gold witnesses are not impossibility verdicts.
 The next learning diagnosis must consider shared-field and context coadaptation,
-with complete-reply usefulness retained as the primary goal. Measure phase-separated first-position/body coefficient adjoints at the exact
-parent before selecting a new curriculum or coupled update. First positions
-receive8.24% of equal-episode objective weight;4,128/6,664 total targets are in
-Copy. Those counts do not prove gradient conflict. If opposing credit is
-measured, a matched offline episode-start weighting control becomes justified; no
-runtime oracle, semantic gate or score rescaling is adopted by this result.
+with complete-reply usefulness retained as the primary goal. The completed phase-separated CUDA audit finds locally favorable first-position
+credit under the total field gradient in every coefficient family, with no
+projection saturation. First NLL improved alongside both body phases. This does
+not justify a new curriculum or score rescaling. The next causal control is the
+existing joint learner with the same balanced initial geometry, donor, seed and
+128-update dose as the completed output-only control. Earlier joint fits used
+the restricted token bank. Admission must separately measure absent-Copy first
+position credit through the full120 context carrier, native forward parity and
+complete cost. Actual first-token and complete own-prefix replies decide whether
+to freeze for source/order transfer; changed context bytes or CE alone do not.
+A single seed is exploratory, not a multi-seed capability verdict. No runtime
+oracle, semantic gate or new normalizer follows from this result.
 
 The discriminator compares existing-record state/pool reachability.
 For first gold tokens absent from Copy, compare the bounded Generate score

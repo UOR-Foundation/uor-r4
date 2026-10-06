@@ -808,3 +808,50 @@ Q4 envelope remains permissive. The other38 losing witnesses need separate
 margin/alias interpretation. This directs the next learning diagnosis toward
 field/context coadaptation and first-position versus body credit, preserving
 the full native prediction objective and runtime contract.
+
+
+## Executed phase-separated coefficient audit — 11:20Z
+
+The training-only coefficient replay restores all four source-master families
+from the exact balanced checkpoint and requires its native export to match the
+parent. It retains factual H4 states/prototypes and Copy scores, uses the existing
+anchored native marginal loss, and accumulates unary/pair/bias gradients on CUDA.
+Full/coefficient-only adjoints agree for one real packet in each phase. No source
+parameter changes, optimizer resume or recurrence/prototype credit are measured.
+
+At c462007d, release build and six CPU checks pass; the CUDA coefficient parity
+test passes separately. The actual audit completes512 episodes/6664 positions,
+exit0,61.617s wrapper time,487600KiB host RSS. Its three native CE contributions
+sum to7.793083292970683; downloaded aggregate gradients total1002496bytes.
+Report SHA256 `b7dd7164b3015aff694668bcf61ff7813d99219615fb2ad3a9c276b0e236b724`.
+
+| Family | First/body cosine | First loss change along projected total descent |
+|---|---:|---:|
+| Unary | +0.0293663 | −1.09617e−5 |
+| Pair | −0.00970363 | −3.41825e−6 |
+| Bias | −0.00252502 | −2.10406e−4 |
+
+These are infinitesimal unpreconditioned surrogate directions, not actual Adam
+or discrete native steps. No master is reported saturated or points outward at a
+projection endpoint. Independent exported-vector review exactly reproduces
+norms/dots/cosines/conflict counts and reconstruction; source-master projection
+metrics are report-only in that review. Manifest inventory/sizes match; independent
+local BLAKE3 remains unverified. All phases improved scalar NLL during the fit,
+including first8.341838→7.901714. Local opposite entries do not establish aggregate
+first suppression and do not justify reweighting.
+
+The next causal control couples balanced token geometry to the existing learned
+context. Unlike the three legacy joint fits, all eight token lanes participate.
+Use the same initial donor/seed1001,128 updates/B8, rates and unchanged full-pool
+objective as balanced output-only; do not resume its final checkpoint. Admission
+must expose actual absent-Copy first→context credit separately from Copy-denominator
+credit, preserve initial native parity and report complete cost. A single-seed
+control is exploratory. Actual correct first tokens and complete replies matter;
+more CE-only improvement does not justify another unchanged fit.
+
+Logs, aggregate files and execution wrappers are durable on the canonical network
+volume. A failed wrapper transfer/launch performs no model work and claims no
+report root. The corrected launch runs the exact binary. The diagnostic pod is
+released/deleted with no live jobs or other lease:1206s ledger uptime at$0.99/h.
+No runtime score scale, semantic gate, answer-selected record or curriculum is
+adopted; general language and whole-path serving remain unqualified.

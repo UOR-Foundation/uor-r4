@@ -781,6 +781,8 @@ fn batch(
     let mut pending: Option<Tensor> = None;
     let mut pending_count = 0usize;
     let mut backward_calls = 0usize;
+    let mut first_context_receipts = Vec::new();
+    let mut first_context_backward_seconds = 0.;
     for &index in indices {
         let e = &eps[index];
         for (t, &target) in e.target.iter().enumerate() {
@@ -841,6 +843,50 @@ fn batch(
             let scaled = loss.affine(1. / e.target.len() as f64 / indices.len() as f64, 0.)?;
             device.synchronize()?;
             forwardseconds += f.elapsed().as_secs_f64();
+            // Auxiliary admission measurement only: preserve the same native
+            // pool/loss forward but stop Copy's adjoint, isolating Generate's
+            // retained120-state route into actual context parameters. It never
+            // supplies optimizer gradients or changes the fitted objective.
+            if a.mode == "admission"
+                && backward_chunk == 1
+                && t == 0
+                && !out.copy_token_ids.contains(&target)
+            {
+                let diagnostic_start = Instant::now();
+                let stopped_copy = out.copy.as_ref().map(|c| c.copy_raw.detach());
+                let diagnostic =
+                    uor_r4_training::geometric_generate_learning::vocabulary_marginal_loss(
+                        &out.actions,
+                        &out.generate.raw_scores,
+                        stopped_copy.as_ref(),
+                        target,
+                    )?
+                    .affine(1. / e.target.len() as f64 / indices.len() as f64, 0.)?;
+                let diagnostic_grads = diagnostic.backward()?;
+                let mut context_families = BTreeMap::new();
+                for (name, variable) in &params {
+                    if !name.starts_with("consumer.context.") {
+                        continue;
+                    }
+                    let entry = if let Some(gradient) = diagnostic_grads.get(variable.as_tensor()) {
+                        if !gradient.device().same_device(device) {
+                            return Err(bad("first Generate context diagnostic CPU fallback"));
+                        }
+                        let l2 = gradient.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?;
+                        if !l2.is_finite() {
+                            return Err(bad("nonfinite first Generate context diagnostic"));
+                        }
+                        json!({"connected":true,"l2":l2,"elements":variable.elem_count(),"device":if device.is_cuda(){"CUDA"}else{"CPU"}})
+                    } else {
+                        json!({"connected":false,"l2":0.,"elements":variable.elem_count()})
+                    };
+                    context_families.insert(name.clone(), entry);
+                }
+                device.synchronize()?;
+                let seconds = diagnostic_start.elapsed().as_secs_f64();
+                first_context_backward_seconds += seconds;
+                first_context_receipts.push(json!({"id":e.packet.id,"position":0,"gold_absent_copy":true,"generate_only_context_families":context_families,"auxiliary_backward_seconds":seconds}));
+            }
             pending = Some(match pending.take() {
                 Some(previous) => (&previous + &scaled)?,
                 None => scaled,
@@ -848,12 +894,23 @@ fn batch(
             pending_count += 1;
             if pending_count == backward_chunk {
                 let b = Instant::now();
-                accumulate_backward(
+                let measured_first = a.mode == "admission"
+                    && backward_chunk == 1
+                    && t == 0
+                    && !out.copy_token_ids.contains(&target);
+                let combined_context = accumulate_backward(
                     pending.take().ok_or_else(|| bad("missing chunk loss"))?,
                     &params,
                     &mut sums,
                     device,
+                    measured_first,
                 )?;
+                if let Some(context) = combined_context {
+                    let row = first_context_receipts
+                        .last_mut()
+                        .ok_or_else(|| bad("missing first diagnostic row"))?;
+                    row["whole_pool_context_families"] = context;
+                }
                 device.synchronize()?;
                 backwardseconds += b.elapsed().as_secs_f64();
                 backward_calls += 1;
@@ -864,7 +921,7 @@ fn batch(
     }
     if let Some(loss) = pending.take() {
         let b = Instant::now();
-        accumulate_backward(loss, &params, &mut sums, device)?;
+        accumulate_backward(loss, &params, &mut sums, device, false)?;
         device.synchronize()?;
         backwardseconds += b.elapsed().as_secs_f64();
         backward_calls += 1;
@@ -892,7 +949,8 @@ fn batch(
     {
         return Err(bad("decoder credit disconnected"));
     }
-    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":"absent-Copy first canonical positions only; same fullpool forward/teacher loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective"});
+    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }
@@ -903,9 +961,26 @@ fn accumulate_backward(
     params: &BTreeMap<String, Var>,
     sums: &mut BTreeMap<String, Tensor>,
     device: &Device,
-) -> Result<()> {
+    measure_context: bool,
+) -> Result<Option<Value>> {
     let grads = loss.backward()?;
+    let mut measured = BTreeMap::new();
     for (name, var) in params {
+        if measure_context && name.starts_with("consumer.context.") {
+            let entry = if let Some(gradient) = grads.get(var.as_tensor()) {
+                if !gradient.device().same_device(device) {
+                    return Err(bad("first whole-pool context diagnostic CPU fallback"));
+                }
+                let l2 = gradient.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?;
+                if !l2.is_finite() {
+                    return Err(bad("nonfinite whole-pool first context diagnostic"));
+                }
+                json!({"connected":true,"l2":l2,"elements":var.elem_count(),"device":if device.is_cuda(){"CUDA"}else{"CPU"}})
+            } else {
+                json!({"connected":false,"l2":0.,"elements":var.elem_count()})
+            };
+            measured.insert(name.clone(), entry);
+        }
         if let Some(grad) = grads.get(var.as_tensor()) {
             if !grad.device().same_device(device) {
                 return Err(bad("gradient CPU fallback"));
@@ -917,7 +992,11 @@ fn accumulate_backward(
             sums.insert(name.clone(), next);
         }
     }
-    Ok(())
+    Ok(if measure_context {
+        Some(json!(measured))
+    } else {
+        None
+    })
 }
 fn chunk_gradient_parity(
     reference: &BTreeMap<String, Tensor>,
@@ -1499,6 +1578,38 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn first_context_receipt_filters_decoder_and_preserves_accumulation() -> Result<()> {
+        let context = Var::new(2f32, &Device::Cpu)?;
+        let decoder = Var::new(3f32, &Device::Cpu)?;
+        let absent = Var::new(1f32, &Device::Cpu)?;
+        let params = BTreeMap::from([
+            ("consumer.context.token_transition".into(), context.clone()),
+            ("consumer.context.self_root".into(), absent),
+            ("generate.unary".into(), decoder.clone()),
+        ]);
+        let loss = (context.as_tensor().sqr()? + decoder.as_tensor().sqr()?)?;
+        let mut measured = BTreeMap::new();
+        let receipt =
+            accumulate_backward(loss.clone(), &params, &mut measured, &Device::Cpu, true)?
+                .ok_or_else(|| bad("missing diagnostic"))?;
+        let mut plain = BTreeMap::new();
+        assert!(accumulate_backward(loss, &params, &mut plain, &Device::Cpu, false)?.is_none());
+        assert_eq!(
+            receipt
+                .as_object()
+                .ok_or_else(|| bad("receipt object"))?
+                .len(),
+            2
+        );
+        assert_eq!(receipt["consumer.context.token_transition"]["l2"], 4.);
+        assert_eq!(receipt["consumer.context.self_root"]["connected"], false);
+        assert!(receipt.get("generate.unary").is_none());
+        for (name, g) in measured {
+            assert_eq!(g.to_scalar::<f32>()?, plain[&name].to_scalar::<f32>()?);
+        }
+        Ok(())
+    }
+    #[test]
     fn weighted_chunk2_shared_graph_matches_chunk1_vjp() -> Result<()> {
         let v = Var::new(0.7f32, &Device::Cpu)?;
         let shared = v.as_tensor().sqr()?;
@@ -1510,7 +1621,7 @@ mod tests {
         ];
         let mut reference = BTreeMap::new();
         for loss in &losses {
-            accumulate_backward(loss.clone(), &params, &mut reference, &Device::Cpu)?;
+            accumulate_backward(loss.clone(), &params, &mut reference, &Device::Cpu, false)?;
         }
         let mut chunked = BTreeMap::new();
         accumulate_backward(
@@ -1518,8 +1629,15 @@ mod tests {
             &params,
             &mut chunked,
             &Device::Cpu,
+            false,
         )?;
-        accumulate_backward(losses[2].clone(), &params, &mut chunked, &Device::Cpu)?;
+        accumulate_backward(
+            losses[2].clone(),
+            &params,
+            &mut chunked,
+            &Device::Cpu,
+            false,
+        )?;
         assert_eq!(
             chunk_gradient_parity(&reference, &chunked)?["status"],
             "PASS"

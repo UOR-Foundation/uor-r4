@@ -1,5 +1,44 @@
 # Current UOR-R4 research state
 
+## Phase-separated Generate field audit — October 6, 11:20Z
+
+Exact source `c462007dea671132259b5375e35373d57d4d25bc`, binary SHA256
+`ed04d7fc456ff5fbffbe09d5d3cb811cb9031c9ff3be5ba9381719a345bf9327`.
+Release build, CPU coefficient parity and five driver tests pass; CUDA coefficient
+parity passes one test. The CUDA zero-update audit restores the balanced final
+source masters and checks full/coefficient-only loss and gradient parity for one
+actual packet in each phase. It completes exit0 in61.617s, RSS487600KiB;
+512 first,4128 Copy-present body and2024 Copy-absent body positions reconstruct
+native CE7.793083292970683. Report SHA256
+`b7dd7164b3015aff694668bcf61ff7813d99219615fb2ad3a9c276b0e236b724`.
+
+First/body gradient cosine is unary+0.02937, pair−0.00970, bias−0.00253.
+Every family has positive first·total gradient; projected total descent remains
+locally favorable to first loss, with zero reported saturated/outward masters.
+Independent aggregate-vector review reproduces norms, dots, conflicts and phase
+reconstruction exactly; projection saturation is not independently recalculated,
+and local manifest BLAKE3 is unverified. The instrument verifies its sealed parent.
+First NLL also improves8.341838→7.901714 during the fit; both body phases improve.
+This weakens aggregate body-suppression as the next repair hypothesis. It does
+not measure an Adam step, native quarter-cell crossing or useful generation.
+
+Next: matched balanced joint seed1001 from the same initial donor, with the
+existing full120 context utility carrier and original whole objective. Keep dose,
+rates, pool, vocabulary, data and prefix-temporal option fixed. First admission
+separates first-position Generate→context credit from whole pooled credit without
+changing fit loss. Correct first tokens/complete replies lead to frozen transfer;
+CE/state-only change leads to a coupled native intervention diagnosis. Further
+unchanged fits and curriculum changes remain unadmitted.
+
+Canonical evidence lives under
+`/workspace/uor-r4/codex/native-geometric-generate/field-credit-balanced-seed1001-attempt1`.
+A failed wrapper upload/launch exits2 before model execution; corrected launch
+uses the unchanged exact binary. Build/checks316.369s, CUDA test2.27s runtime.
+Podlhfof249g575kt released/deleted after all jobs end at11:22:42Z;
+ledger uptime1206s at$0.99/h (~$0.332). Durable evidence3.6GiB,
+shared target1.6GiB, reconstructible own root546MiB; foreign stopped pod preserved.
+PR#1792 remains unmerged; whole-path D11, general chat and reasoning unqualified.
+
 ## Native Generate paired fits and balanced control — October 6
 
 All six legacy fits complete128updates across three paired seeds. Every fit
