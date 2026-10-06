@@ -36,12 +36,14 @@ use crate::{
 
 pub const CREDIT_SCOPE:&str="same-actual-fullbank-context;retained-H4-onehot120-Generate;full120-temporal-utility-factual-action-carry-and-one-choice-pullback;frozen-native-allsource-Copy-context/cue/prefix-credit-legacy-ambient4;one-common-clipped-fullvocab-token-alias-marginal;no-old-terminals-or-bonus;all-Copy-occurrences-scored-without-selected-winner;local-finite-choice-surrogate-not-global-posterior/3";
 pub const NO_SOURCE_CREDIT_SCOPE:&str="actual-causal-history-context;retained-H4-onehot120-Generate;full120-temporal-utility-factual-action-carry-and-one-choice-pullback;full-legal-vocabulary;zero-Copy-occurrences;no-fabricated-source-or-initial-token;local-finite-choice-surrogate-not-global-posterior/2";
+pub const PREFIX_TEMPORAL_CREDIT_SCOPE: &str = "same-actual-fullbank-context;Generate-and-exact-prefix-Copy-table-full120-temporal-utility;one-context-choice-pullback;contextual-readout/cue-Copy-credit-legacy-ambient4;all-source-occurrences-no-selected-winner;local-conditional-surrogate-not-global-posterior/4";
 
 pub struct PreparedBankGenerate<'a, 'source> {
     realizer: &'a PreparedSourceRealizer<'source>,
     generate: &'a GenerateLearningWeights,
     prepared_generate: &'a PreparedGenerateLearning,
     pool: NativeVocabularyActions,
+    prefix_temporal_utility: bool,
 }
 
 /// Target-free result. All native scores and the complete legal action pool
@@ -93,7 +95,15 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
             generate,
             prepared_generate,
             pool,
+            prefix_temporal_utility: false,
         })
+    }
+
+    /// Opt into exact prefix table utility on the full retained-state carrier.
+    /// Native forward scores are unchanged; cue/readout credit remains legacy.
+    pub fn with_prefix_temporal_utility(mut self, enabled: bool) -> Self {
+        self.prefix_temporal_utility = enabled;
+        self
     }
 
     /// Query/prefix/context are causal state inputs, never source candidates.
@@ -107,13 +117,19 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
         cue: &NativeCueCarrier<'_>,
         prefix: &NativePrefixTransport<'_>,
     ) -> Result<BankGenerateOutput> {
-        let copy = self.realizer.forward_bank_composed_copy(
-            segments,
-            query,
-            actual_prefix,
-            cue,
-            prefix,
-        )?;
+        let copy = if self.prefix_temporal_utility {
+            self.realizer
+                .forward_bank_composed_copy_with_prefix_utility(
+                    segments,
+                    query,
+                    actual_prefix,
+                    cue,
+                    prefix,
+                )?
+        } else {
+            self.realizer
+                .forward_bank_composed_copy(segments, query, actual_prefix, cue, prefix)?
+        };
         let bank = &copy.trace.cue_bank.bank;
         let time = copy.context.trace.time;
         if copy.context.trace.batch != 1
@@ -181,7 +197,11 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
             final_state_codes: states,
             copy_token_ids: ids,
             copy_scores_q24: scores,
-            credit_scope: CREDIT_SCOPE,
+            credit_scope: if self.prefix_temporal_utility {
+                PREFIX_TEMPORAL_CREDIT_SCOPE
+            } else {
+                CREDIT_SCOPE
+            },
         })
     }
 

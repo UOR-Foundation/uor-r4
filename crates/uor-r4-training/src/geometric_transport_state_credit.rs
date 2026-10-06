@@ -8,7 +8,10 @@
 //! Earlier recurrent state propagation still uses its declared four-coordinate
 //! approximation. A separately named least-squares ambient control is retained;
 //! it projects 120 scores to four coordinates and can discard higher harmonics.
-//! Neither path changes the training normalizer.
+//! An explicit opt-in temporal-utility path attaches the same exact120 tables
+//! directly to retained hard state_choices; ContextOp owns its single pullback
+//! and full120 factual-action carry. Existing APIs keep their old default.
+//! None of these paths changes the training normalizer.
 //! Frozen coefficients and the factual selected-source branch have no gradient.
 //! Empty local prefixes use constant IDENTITY and receive no fabricated credit.
 //!
@@ -36,10 +39,12 @@ use uor_r4_integer::{
 use crate::{geometric_context::ContextQ4Output, invalid, sha256_bytes, Result};
 
 pub const SURROGATE: &str = "frozen-prefix-end-Q4-tables;actual-retained-POSTSTATE-choice-logits120;full-local-conditional120-exact-table-counterfactuals;existing-choice-pullback;other-endpoint-and-prior-state-factual;earlier-recurrence-ambient4-remains;subtraction-first-zero-forward;no-observed-root-substitution;identity-empty-no-credit;factual-selected-source-stop-gradient;nat-units/2";
+pub const TEMPORAL_UTILITY_SURROGATE: &str = "opt-in-frozen-prefix-Q4;actual-hard-retained-state-onehot120;full120-exact-conditional-utility;context-owned-single-action-pullback-and-temporal-carry;no-local-softmax;subtraction-first-zero-forward;identity-empty-no-credit;nat-units/1";
 pub const LS_CONTROL_SURROGATE: &str = "frozen-prefix-end-Q4-tables;120-counterfactuals-projected-to-four-coordinate-least-squares;higher-harmonic-nullspace;explicit-control-not-primary/1";
 #[derive(Clone, Copy)]
 enum CreditMode {
     FullLocalChoices,
+    FullTemporalUtilities,
     AmbientLeastSquaresControl,
 }
 const Q24: f64 = 16_777_216.;
@@ -123,6 +128,49 @@ fn admit_context(context: &ContextQ4Output, time: usize, heads: usize, lanes: us
     Ok(())
 }
 
+fn admit_temporal_choices(context: &ContextQ4Output, mode: CreditMode) -> Result<()> {
+    if !matches!(mode, CreditMode::FullTemporalUtilities) {
+        return Ok(());
+    }
+    let trace = &context.trace;
+    let shape = [1, trace.time, trace.heads, trace.lanes_per_head, ROOT_COUNT];
+    if context.state_choices.dims() != shape
+        || context.state_choices.dtype() != DType::F32
+        || !context
+            .state_choices
+            .device()
+            .same_device(context.latent_roots.device())
+    {
+        return Err(invalid(
+            "transport temporal state utility channel shape/device differs",
+        ));
+    }
+    if context.state_choices.device().is_cpu() {
+        let values = context.state_choices.flatten_all()?.to_vec1::<f32>()?;
+        let width = trace.heads * trace.lanes_per_head;
+        for (time, roots) in trace.states.iter().enumerate() {
+            for (lane, &selected) in roots.iter().enumerate() {
+                code(selected)?;
+                for state in 0..ROOT_COUNT {
+                    let expected = if state == usize::from(selected) {
+                        1f32
+                    } else {
+                        0f32
+                    };
+                    if values[(time * width + lane) * ROOT_COUNT + state].to_bits()
+                        != expected.to_bits()
+                    {
+                        return Err(invalid(
+                            "transport temporal onehot differs from native retained state",
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 struct Endpoint {
     device: Device,
     roots: Vec<u8>,
@@ -137,10 +185,18 @@ fn retained(context: &ContextQ4Output, time_index: usize) -> Result<Tensor> {
         .reshape((width, 4))?
         .contiguous()?)
 }
-fn retained_choices(context: &ContextQ4Output, time_index: usize) -> Result<Tensor> {
+fn retained_choices(
+    context: &ContextQ4Output,
+    time_index: usize,
+    mode: CreditMode,
+) -> Result<Tensor> {
     let width = context.trace.heads * context.trace.lanes_per_head;
-    Ok(context
-        .state_logits
+    let choices = if matches!(mode, CreditMode::FullTemporalUtilities) {
+        &context.state_choices
+    } else {
+        &context.state_logits
+    };
+    Ok(choices
         .narrow(1, time_index, 1)?
         .reshape((width, ROOT_COUNT))?
         .contiguous()?)
@@ -151,6 +207,7 @@ fn response(
     heads: usize,
     lanes: usize,
     device: &Device,
+    mode: CreditMode,
 ) -> Result<Endpoint> {
     let width = heads * lanes;
     if packet.states.len() != width {
@@ -171,6 +228,7 @@ fn response(
     }
     let context = context.ok_or_else(|| invalid("nonempty transport response graph absent"))?;
     admit_context(context, packet.token_ids.len(), heads, lanes)?;
+    admit_temporal_choices(context, mode)?;
     let at = packet.token_ids.len() - 1;
     if context.trace.states[at] != packet.states {
         return Err(invalid("transport response retained state differs"));
@@ -182,7 +240,7 @@ fn response(
         device: device.clone(),
         roots: packet.states.clone(),
         live: Some(retained(context, at)?),
-        choices: Some(retained_choices(context, at)?),
+        choices: Some(retained_choices(context, at, mode)?),
     })
 }
 
@@ -290,6 +348,7 @@ fn attach_choice(
     response: u8,
     source: u8,
     response_endpoint: bool,
+    temporal: bool,
 ) -> Result<Tensor> {
     let Some(live) = live else {
         return Ok(Tensor::new(0f32, &Device::Cpu)?);
@@ -310,6 +369,14 @@ fn attach_choice(
     let anchor = credit[0];
     for x in &mut credit {
         *x -= anchor;
+    }
+    if temporal {
+        let utility = Tensor::from_vec(
+            credit.iter().map(|&x| x as f32).collect::<Vec<_>>(),
+            ROOT_COUNT,
+            value.device(),
+        )?;
+        return Ok(((value.clone() - value.detach())? * utility)?.sum_all()?);
     }
     if value.device().is_cuda() {
         let utility = Tensor::from_vec(
@@ -349,7 +416,7 @@ fn endpoint_credit(
         return Ok(Tensor::new(0f32, &endpoint.device)?);
     }
     match mode {
-        CreditMode::FullLocalChoices => attach_choice(
+        CreditMode::FullLocalChoices | CreditMode::FullTemporalUtilities => attach_choice(
             &endpoint.choices,
             lane,
             table,
@@ -358,6 +425,7 @@ fn endpoint_credit(
             response,
             source,
             is_response,
+            matches!(mode, CreditMode::FullTemporalUtilities),
         ),
         CreditMode::AmbientLeastSquaresControl => attach(
             &endpoint.live,
@@ -414,6 +482,24 @@ pub fn frozen_prefix_state_forward(
         sources,
         response_context,
         CreditMode::FullLocalChoices,
+    )
+}
+
+/// Explicit opt-in full120 temporal utility input credit. Native forward is unchanged.
+/// Utilities attach to hard retained state_choices; ContextOp owns the single
+/// choice pullback and temporal carry. No local-logit credit is also attached.
+pub fn frozen_prefix_state_forward_temporal_utility(
+    native: &NativePrefixTransport<'_>,
+    trace: &PrefixTransportTrace,
+    sources: &[ContextQ4Output],
+    response_context: Option<&ContextQ4Output>,
+) -> Result<PrefixStateCreditOutput> {
+    frozen_prefix_state_forward_mode(
+        native,
+        trace,
+        sources,
+        response_context,
+        CreditMode::FullTemporalUtilities,
     )
 }
 
@@ -489,9 +575,11 @@ fn frozen_prefix_state_forward_mode(
         c.heads,
         c.lanes_per_head,
         device,
+        mode,
     )?;
     for (packet, context) in trace.sources.iter().zip(sources) {
         admit_context(context, packet.token_ids.len(), c.heads, c.lanes_per_head)?;
+        admit_temporal_choices(context, mode)?;
         if packet.states_before.len() != packet.token_ids.len()
             || packet.states_before.iter().any(|r| r.len() != width)
         {
@@ -531,7 +619,7 @@ fn frozen_prefix_state_forward_mode(
             let choices = if offset == 0 {
                 None
             } else {
-                Some(retained_choices(&sources[source_index], offset - 1)?)
+                Some(retained_choices(&sources[source_index], offset - 1, mode)?)
             };
             let source = Endpoint {
                 device: device.clone(),
@@ -671,9 +759,11 @@ fn frozen_source_end_state_forward_mode(
         c.heads,
         c.lanes_per_head,
         device,
+        mode,
     )?;
     for (packet, context) in trace.sources.iter().zip(sources) {
         admit_context(context, packet.token_ids.len(), c.heads, c.lanes_per_head)?;
+        admit_temporal_choices(context, mode)?;
         if context.trace.states[packet.token_ids.len() - 1] != packet.states {
             return Err(invalid("source-end full retained source state differs"));
         }
@@ -726,6 +816,7 @@ fn frozen_source_end_state_forward_mode(
         choices: Some(retained_choices(
             &sources[selected],
             packet.token_ids.len() - 1,
+            mode,
         )?),
     };
     let directed = c.mode == SourceEndScoreMode::DirectedRelative;
@@ -915,6 +1006,180 @@ mod tests {
     }
     fn norm(values: &[f32]) -> f32 {
         values.iter().map(|v| v.abs()).sum()
+    }
+
+    fn temporal_prefix_actual_context(device: &Device, reset: bool) -> Result<Vec<f32>> {
+        use crate::geometric_context::ContextWeights;
+        let cpu = ContextWeights::new(4, 4, 1, 241)?.into_q4()?;
+        for variable in cpu.parameters().values() {
+            variable.set(&Tensor::zeros(variable.shape(), DType::F32, &Device::Cpu)?)?;
+        }
+        let transition = &cpu.parameters()["token_transition"];
+        let mut values = vec![0f32; 4 * ROOT_COUNT];
+        for token in 1..4 {
+            values[token * ROOT_COUNT + 1] = 1.;
+        }
+        transition.set(&Tensor::from_vec(values, transition.shape(), &Device::Cpu)?)?;
+        let codec = NativeContextQ4::new(
+            ContextQ4Config {
+                vocab_size: 4,
+                heads: 1,
+                lanes_per_head: 1,
+            },
+            &cpu.packed_coefficients()?,
+        )
+        .map_err(|e| invalid(e.to_string()))?;
+        let geometry =
+            HistoricalH4Tables::from_bytes(ALGEBRA).map_err(|e| invalid(e.to_string()))?;
+        let (_, _, parent) = components()?;
+        let cue = NativeCueCarrier::compile(
+            parent.clone(),
+            &codec,
+            &geometry,
+            CueAngularQ4::new(
+                CueAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 1,
+                    mode: CueScoreMode::DirectedRelative,
+                },
+                &vec![0; 60],
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )
+        .map_err(|e| invalid(e.to_string()))?;
+        // Even utility has zero four-coordinate moment but nonzero120 content.
+        let table = (0..ROOT_COUNT)
+            .map(|r| basis(r as u8).map(|v| if v[1].abs() > 0.75 { 4i8 } else { 0i8 }))
+            .collect::<Result<Vec<_>>>()?;
+        let native = NativePrefixTransport::compile(
+            parent,
+            &codec,
+            &geometry,
+            cue.metadata().clone(),
+            PrefixAngularQ4::new(
+                PrefixAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 1,
+                    mode: PrefixScoreMode::DirectedRelative,
+                },
+                &pack_coefficients(&table).map_err(|e| invalid(e.to_string()))?,
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )
+        .map_err(|e| invalid(e.to_string()))?;
+        let weights = cpu.to_device(device)?;
+        let source = weights.forward_q4(&[2, 3], 1, 2, false)?;
+        let response = weights.forward_q4(&[0, 1], 1, 2, reset)?;
+        let mut trace = prefix_trace(
+            &native,
+            &geometry,
+            true,
+            response.trace.states[1][0],
+            source.trace.states[0][0],
+            false,
+        )?;
+        trace.response.token_ids = vec![0, 1];
+        trace.sources[0].token_ids = vec![2, 3];
+        let sources = [source];
+        let old = frozen_prefix_state_forward(&native, &trace, &sources, Some(&response))?;
+        let new = frozen_prefix_state_forward_temporal_utility(
+            &native,
+            &trace,
+            &sources,
+            Some(&response),
+        )?;
+        assert_eq!(old.scores_q24, new.scores_q24);
+        assert_eq!(new.scores_q24, trace.copy_q24);
+        assert_eq!(old.scores.to_vec2::<f32>()?, new.scores.to_vec2::<f32>()?);
+        let variable = &weights.parameters()["token_transition"];
+        let gradients = new.scores.narrow(1, 1, 1)?.sum_all()?.backward()?;
+        let actual = gradients
+            .get(variable.as_tensor())
+            .ok_or_else(|| invalid("temporal prefix transition gradient absent"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        if reset {
+            assert!(actual[..ROOT_COUNT].iter().all(|&v| v == 0.));
+        } else {
+            assert!(norm(&actual[..ROOT_COUNT]) > 1e-3);
+            let roots = (0..ROOT_COUNT)
+                .map(|r| basis(r as u8))
+                .collect::<Result<Vec<_>>>()?;
+            for axis in 0..4 {
+                let moment = (0..ROOT_COUNT)
+                    .map(|r| f64::from(actual[r]) * roots[r][axis])
+                    .sum::<f64>();
+                assert!(
+                    moment.abs() < 1e-6,
+                    "even utility moment axis {axis}: {moment}"
+                );
+            }
+            let gradients = old.scores.narrow(1, 1, 1)?.sum_all()?.backward()?;
+            let legacy = gradients
+                .get(variable.as_tensor())
+                .ok_or_else(|| invalid("local prefix transition gradient absent"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            assert!(legacy[..ROOT_COUNT].iter().all(|&v| v == 0.));
+        }
+        assert!(norm(&actual[ROOT_COUNT..2 * ROOT_COUNT]) > 1e-3);
+        // Offset1 excludes the following Source token; it receives no credit.
+        assert!(actual[3 * ROOT_COUNT..].iter().all(|&v| v == 0.));
+        let mut empty_trace = prefix_trace(
+            &native,
+            &geometry,
+            true,
+            H4Code::IDENTITY.index(),
+            sources[0].trace.states[0][0],
+            true,
+        )?;
+        empty_trace.sources[0].token_ids = vec![2, 3];
+        let empty =
+            frozen_prefix_state_forward_temporal_utility(&native, &empty_trace, &sources, None)?;
+        assert_eq!(empty.scores_q24, empty_trace.copy_q24);
+        let empty_gradients = empty.scores.narrow(1, 1, 1)?.sum_all()?.backward()?;
+        let empty_values = empty_gradients
+            .get(variable.as_tensor())
+            .ok_or_else(|| invalid("empty-prefix source gradient absent"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert!(empty_values[..2 * ROOT_COUNT].iter().all(|&v| v == 0.));
+        assert!(empty_values[3 * ROOT_COUNT..].iter().all(|&v| v == 0.));
+        Ok(actual)
+    }
+
+    #[test]
+    fn prefix_temporal_utility_actual_context_preserves_native_and_carries_even_history(
+    ) -> Result<()> {
+        temporal_prefix_actual_context(&Device::Cpu, false)?;
+        temporal_prefix_actual_context(&Device::Cpu, true)?;
+        let (_, mut malformed) = live(&[1, 1])?;
+        assert!(admit_temporal_choices(&malformed, CreditMode::FullTemporalUtilities).is_err());
+        // Existing controls deliberately do not require the opt-in channel.
+        admit_temporal_choices(&malformed, CreditMode::FullLocalChoices)?;
+        let mut onehot = vec![0f32; 2 * ROOT_COUNT];
+        onehot[1] = 1.;
+        onehot[ROOT_COUNT + 1] = 1.;
+        malformed.state_choices = Tensor::from_vec(onehot, (1, 2, 1, 1, ROOT_COUNT), &Device::Cpu)?;
+        admit_temporal_choices(&malformed, CreditMode::FullTemporalUtilities)?;
+        malformed.state_choices = Tensor::zeros((1, 2, 1, 1, 119), DType::F32, &Device::Cpu)?;
+        assert!(admit_temporal_choices(&malformed, CreditMode::FullTemporalUtilities).is_err());
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn prefix_temporal_utility_actual_context_cuda_parity_requires_gpu() -> Result<()> {
+        // No skip-as-PASS: invoking this CUDA test requires a real device.
+        let device = Device::new_cuda(0)?;
+        for reset in [false, true] {
+            let cpu = temporal_prefix_actual_context(&Device::Cpu, reset)?;
+            let cuda = temporal_prefix_actual_context(&device, reset)?;
+            for (a, b) in cpu.iter().zip(cuda) {
+                assert!((a - b).abs() < 1e-5, "CPU {a}, CUDA {b}");
+            }
+        }
+        Ok(())
     }
 
     #[test]

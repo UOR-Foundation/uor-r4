@@ -61,6 +61,8 @@ struct Args {
     admission_episode_indices: Option<Vec<usize>>,
     #[serde(default = "default_backward_chunk")]
     token_backward_chunk: usize,
+    #[serde(default)]
+    prefix_temporal_utility: bool,
     updates: usize,
     learning_rate: f64,
     prototype_learning_rate: f64,
@@ -765,7 +767,8 @@ fn batch(
         NativeGeometricGenerate::from_bytes(&snapshot.native.to_bytes()?, g.binding())?;
     let mut independent_pool = NativeVocabularyActions::new(g.binding().clone(), exp)?;
     let staged = begun.elapsed().as_secs_f64();
-    let mut learner = PreparedBankGenerate::new(&prepared, g, &snapshot, exp)?;
+    let mut learner = PreparedBankGenerate::new(&prepared, g, &snapshot, exp)?
+        .with_prefix_temporal_utility(a.prefix_temporal_utility);
     let params = parameters(source, g, "joint");
     let active = parameters(source, g, &a.arm);
     let mut sums = BTreeMap::<String, Tensor>::new();
@@ -887,7 +890,7 @@ fn batch(
     {
         return Err(bad("decoder credit disconnected"));
     }
-    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":uor_r4_training::geometric_bank_generate::CREDIT_SCOPE,"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }

@@ -2967,8 +2967,8 @@ impl PreparedSourceRealizer<'_> {
     }
 
     /// Complete current native cue/prefix/end forward with context-state credit.
-    /// Coefficients/algebra are frozen. Actual hard source routing is stopped;
-    /// every consumed continuous state packet is replayed from its authentic
+    /// Coefficients/algebra are frozen. All native source occurrences are scored;
+    /// every consumed state packet is replayed from its authentic
     /// token/reset input before fixed-operator adjoints enter the alias loss.
     fn assemble_bank_composed_copy(
         &self,
@@ -2978,6 +2978,7 @@ impl PreparedSourceRealizer<'_> {
         cue: &NativeCueCarrier<'_>,
         prefix: &NativePrefixTransport<'_>,
         trace: &uor_r4_integer::geometric_source_realizer::PrefixBankRealizerTrace,
+        prefix_temporal_utility: bool,
     ) -> Result<ComposedCopyAssembly> {
         let device = self.source.consumer.context.device();
         let bank = &trace.cue_bank.bank;
@@ -3089,8 +3090,16 @@ impl PreparedSourceRealizer<'_> {
                     .forward(actual_prefix, 1, actual_prefix.len(), false)?,
             )
         };
-        let prefix_credit =
-            frozen_prefix_state_forward(prefix, transport, &sources, response.as_ref())?;
+        let prefix_credit = if prefix_temporal_utility {
+            crate::geometric_transport_state_credit::frozen_prefix_state_forward_temporal_utility(
+                prefix,
+                transport,
+                &sources,
+                response.as_ref(),
+            )?
+        } else {
+            frozen_prefix_state_forward(prefix, transport, &sources, response.as_ref())?
+        };
         if prefix_credit.scores_q24 != transport.copy_q24 {
             return Err(invalid("composed prefix hard scores differ"));
         }
@@ -3141,6 +3150,45 @@ impl PreparedSourceRealizer<'_> {
         cue: &NativeCueCarrier<'_>,
         prefix: &NativePrefixTransport<'_>,
     ) -> Result<ComposedCopyBankOutput> {
+        self.forward_bank_composed_copy_with_credit(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            false,
+        )
+    }
+
+    /// Opt-in retained-state utility carrier; every native candidate and score
+    /// remains the same as the legacy control. No target enters either forward.
+    pub fn forward_bank_composed_copy_with_prefix_utility(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+    ) -> Result<ComposedCopyBankOutput> {
+        self.forward_bank_composed_copy_with_credit(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            true,
+        )
+    }
+
+    fn forward_bank_composed_copy_with_credit(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        prefix_temporal_utility: bool,
+    ) -> Result<ComposedCopyBankOutput> {
         let trace = self.native.read_bank_with_prefix_transport(
             segments,
             query,
@@ -3148,8 +3196,15 @@ impl PreparedSourceRealizer<'_> {
             cue,
             prefix,
         )?;
-        let assembled =
-            self.assemble_bank_composed_copy(segments, query, actual_prefix, cue, prefix, &trace)?;
+        let assembled = self.assemble_bank_composed_copy(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            &trace,
+            prefix_temporal_utility,
+        )?;
         // Bind the factual forward to the native integer sum once. Summing
         // separately converted components can round differently, while the
         // vocabulary loss requires exact raw-score parity.
@@ -3241,6 +3296,7 @@ impl PreparedSourceRealizer<'_> {
             cue,
             prefix,
             &trace.prefix_bank,
+            false,
         )?;
         let ComposedCopyAssembly {
             context,
