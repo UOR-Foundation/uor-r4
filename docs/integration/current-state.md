@@ -20,8 +20,10 @@ score-SHA replay now passes2048 first positions at a84bf2e1;2 focused checks pas
 Output-only472/512 and joint495/512 gold targets remain strictly below best
 Generate; deterministic gold-best21/8 still lose pooled Copy. Independent review
 traverses all2048 rows and verifies factor/mass arithmetic. Next: prepare a
-default-off label-free balanced all-lane initialization control, then admit its
-matched output-only comparison after the current six runs finish. No normalizer
+default-off label-free balanced all-lane initialization control (implemented at
+2a5bbd09; actual release build and16 CPU checks PASS), then admit its
+matched output-only comparison after the current six runs finish. New-mode CUDA
+admission/fit remain NOT_RUN. No normalizer
 change or dose increase. PR1792 remains draft/unmerged.
 
 ## Delayed geometric prediction credit — October 6

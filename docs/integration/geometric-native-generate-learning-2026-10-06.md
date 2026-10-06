@@ -396,7 +396,15 @@ exported artifacts contain the actual codes. The first pair already carried
 token distinctions rather than adding identity information. Its different
 initial score distribution must also be reported before attributing benefits.
 Independent exact-head source review finds no blocker. Release compilation and
-focused legacy/export/balance checks are running on the pod; CUDA admission,
+focused legacy/export/balance checks pass on the pod (10 library +6 fitter CPU
+checks). Release build88s, library test build119s, fitter test build5.38s;
+fitter binary SHA256
+`9b303c7aa1acce254697ebb09b9b5e5f4a0b511a0ea34b470a19e5734d00645e`.
+The first CPU-filter attempt accidentally includes an existing CUDA parity test:
+10 CPU checks pass, that test returns CUDA_ERROR_NO_DEVICE because GPUs were
+deliberately hidden, and the attempt exits101. Retained attempt2 excludes that
+explicit GPU test, executes10+6 checks and exits0. This is an instrument scope
+repair, not a model negative or a claimed GPU pass. CUDA admission,
 balanced fit and any predictive improvement are NOT_RUN. Existing six frozen
 runs continue. The next fit is a matched output-only comparison after their
 complete decision and full prospective cost admission.
