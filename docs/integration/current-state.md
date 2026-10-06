@@ -1,5 +1,41 @@
 # Current UOR-R4 research state
 
+## Joint geometric scorer learning integration — October 6
+
+Sourcec8de1e0c5a12aff511eefc47e5d6ad31bcfe46ff adds explicit
+`joint-potential` learning of the existing potential alongside context and
+Generate. Defaults retain frozen potential. Selected all-candidate/head pairs
+use native hard anchoring plus coefficient credit, separately from the existing
+context adjoint. Context-only export still rejects changed potential; the new
+export binds changed bytes and rebinds unchanged cue/prefix numerical payloads.
+Independent source review found and resolved an owned-Var compile defect and a
+missing nonzero scorer-gradient admission. Actual integrated compilation and
+real H2/L4 CUDA admission are RUNNING on RTX4090 podtnsy3jb6wm4wa7, EU-RO-1;
+no optimizer updates or language result are claimed yet.
+
+Archive inspection reauthenticates512 rows:6664 canonical positions include
+4128 source-covered positions spanning78 target IDs and2536 Generate-only
+positions. All512 first positions are Generate-only and use only two targets.
+The old final joint artifact gets253/4128 source-covered and4/2536 Generate-only
+teacher-forced tokens correct, with0/512 complete own-prefix replies. These are
+construction-panel diagnostics, not generalization. Saved native packets now
+attribute exact contextual/cue/prefix scores; labels never enter forward routing.
+
+Range inspection of the bound donor sidecars shows cue+prefix at most5.5 nats
+plus one Q24 rounding unit. Existing legal contextual presence coefficients can
+supply a uniform-28-nat offset, clearing the fixed-Copy certificate; this is only
+a range witness and is not adopted as the mechanism. Active coefficient families
+on absent-content banks are contextual angular/radius/presence and content
+presence cell0; content angular/radius/pair are structurally zero. A shared
+presence offset cannot rank source occurrences. After admitted fitting, hold
+context/Generate fixed and compare donor/learned potential, learned potential
+with shared content-presence cells restored, and donor potential with only those
+cells learned. Retain exact aliases, cue/prefix scores and occurrence provenance.
+Source-covered retention, correct-source/distractor contrasts and actual
+own-prefix gains must accompany first-token gains before attention progress.
+The existing checkpoint-cross instrument remains strict; it needs an explicit
+changed-potential attribution path before measuring this arm.
+
 ## Exact fixed-Copy obstruction and missing joint scorer learning — October 6
 
 Root and independent inspection of the portable original joint128 rows agree:
