@@ -1,15 +1,15 @@
 //! Target-free composition of actual full-bank Copy and native Generate.
 //!
 //! Both branches consume the same authentic causal ContextQ4Output. Generate
-//! reads its final retained H4 state and full120 POSTSTATE logits, never observed
+//! reads its final retained H4 state and explicit full120 state-utility channel, never observed
 //! address roots. All source candidates retain occurrence order/provenance.
 //! Only the new Copy+Generate pool supplies emission mass; old Period/Stop
 //! reductions retained in the Copy preparation trace are discarded diagnostics
 //! and real computational overhead, not extra action mass or a hidden bonus.
 //!
-//! Frozen Copy operators route through their factual native choices. Their
-//! existing stopped-route/local-choice and earlier four-coordinate recurrence
-//! limitations remain. This API establishes integration, not learned language,
+//! Frozen Copy operators score every source occurrence. Their legacy local
+//! state-logit/earlier four-coordinate credit remains; Generate instead uses
+//! full120 temporal utility. This API establishes integration, not learned language,
 //! geometric advantage, energy savings or durable memory consumption.
 
 use candle_core::{DType, Tensor};
@@ -34,8 +34,8 @@ use crate::{
     invalid, Result,
 };
 
-pub const CREDIT_SCOPE:&str="same-actual-fullbank-context;final-retained-H4+full120-POSTSTATE-Generate;frozen-native-allsource-Copy-context/cue/prefix-credit;one-common-clipped-fullvocab-token-alias-marginal;no-old-terminals-or-bonus;all-Copy-occurrences-scored-without-selected-winner;earlier-recurrence-ambient4-remains/2";
-pub const NO_SOURCE_CREDIT_SCOPE:&str="actual-causal-history-context;final-retained-H4+full120-POSTSTATE-Generate;full-legal-vocabulary;zero-Copy-occurrences;no-fabricated-source-or-initial-token;earlier-recurrence-ambient4-remains/1";
+pub const CREDIT_SCOPE:&str="same-actual-fullbank-context;retained-H4-onehot120-Generate;full120-temporal-utility-factual-action-carry-and-one-choice-pullback;frozen-native-allsource-Copy-context/cue/prefix-credit-legacy-ambient4;one-common-clipped-fullvocab-token-alias-marginal;no-old-terminals-or-bonus;all-Copy-occurrences-scored-without-selected-winner;local-finite-choice-surrogate-not-global-posterior/3";
+pub const NO_SOURCE_CREDIT_SCOPE:&str="actual-causal-history-context;retained-H4-onehot120-Generate;full120-temporal-utility-factual-action-carry-and-one-choice-pullback;full-legal-vocabulary;zero-Copy-occurrences;no-fabricated-source-or-initial-token;local-finite-choice-surrogate-not-global-posterior/2";
 
 pub struct PreparedBankGenerate<'a, 'source> {
     realizer: &'a PreparedSourceRealizer<'source>,
