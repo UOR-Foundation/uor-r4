@@ -596,9 +596,11 @@ signed nonuniform token adjoints. Source review approves its parameter shapes,
 primary API and nonzero lane/edge checks. The exact committed source archive is byte-verified on the pod (17,117 files),
 and its CUDA library test executable compiles successfully in 102 seconds.
 Binary SHA256 is 214b8ee2d88f03191ffc3a9ca023fadecba6fe83ddfea0f8428d235f24501c60.
-The single comparison is queued through uor-pod behind the GPU0 fit lock at
-08:58:45Z; GPU execution remains NOT_RUN. Compilation and queue admission are
-not CUDA parity or useful learning. Existing paired fits are unchanged.
+The single comparison executes after GPU0 releases its fit lock: CUDA test
+PASS at09:06:40Z,1/1 explicit test in1.30s (wrapper2s). This closes the scoped
+balanced eight-lane adjoint risk, not learning qualification. The integrated
+zero-update B8 admission starts09:07:15Z on the same leased GPU. Existing paired
+fits are unchanged.
 
 The independent decision review retains balanced initialization as the next
 causal control only if the final seed repeats the same ranking blocker. Under
@@ -615,3 +617,16 @@ its old first pair already uniquely addressed the vocabulary. Report initial
 versus final improvements separately. A useful third-seed result, changed hard
 codes, or broadly correct Generate ranking would change the next action before
 another fit. No new semantic metric or serving operation is introduced.
+
+## Third output-only result
+
+Frozen1698 seed1003 completes128updates and exits0 at09:06:38Z. Native CE
+improves8.187637336898169→7.907142607091688; complete replies remain0/512,
+all first errors0 and first gold tokens Generate-only. Independent review
+checks1024 saved-row SHA bindings, recomputes6664 canonical positions perstage,
+and verifies unchanged hard codes/diversity and output-only context bytes.
+Report SHA256 e23fcc9d09d261b0b2760fe36530d2c1c0fa2de69385c3a1ab94c72b72940ace.
+This is saved-evidence/artifact review, not another inference or BLAKE3 run.
+Wrapper3435.6876s/RSS921796KiB; third joint remains unfinished. The three
+output-only seeds replicate the restriction but the paired family verdict
+remains pending.

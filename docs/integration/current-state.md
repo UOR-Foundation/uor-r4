@@ -2,11 +2,16 @@
 
 ## First native Generate fit pair — October 6
 
-Balanced initialization CUDA-adjoint comparison is source-reviewed at e2283804
-and its exact-source test executable compiles successfully on the pod (102s).
-The one zero-update test is queued behind the live GPU0 fit lock; CUDA parity
-is NOT_RUN. The prepared balanced fit remains unadmitted pending the full
-third paired result, actual comparison and bank admission/cost decision.
+Balanced initialization CUDA-adjoint comparison passes on actual CUDA at
+e2283804 (one explicit test, exact Q24/raw forward and all parameter/state
+adjoints within declared tolerance). Exact-source build takes102s; test1.30s,
+wrapper2s. Integrated zero-update B8 admission runs on GPU0 from09:07:15Z;
+no balanced fit is admitted yet. Output-only seed1003 finishes128updates and
+exits0 at09:06:38Z: CE8.187637→7.907143,0/512 complete, all first errors0,
+all hard codes unchanged. Independent saved-evidence review covers1024 row
+hashes and6664 canonical positions per stage; it does not rerun inference or
+BLAKE3 verification. Three output-only arms now replicate the restriction;
+final joint seed1003 remains live for the full paired verdict.
 
 At frozen `1698aa79`, both seed1001 arms complete128 updates and exit0 with
 sealed reports and independently reloaded native artifacts. Output-only native
@@ -20,7 +25,7 @@ SHA256 bindings and native artifact code arrays are audited; this is not a
 second independent inference replay. Joint seed1002 also completes128 updates
 and exits0 at08:13:50Z: CE8.182738→7.931800,0/512, all first errors at0, unchanged
 hard codes and11953 changed context bytes. Independent review checks both arms
-against all1024 saved rows each and recomputes canonical CE. Output-only seed1003 is live from08:09:22Z; the joint run now uses attempt3
+against all1024 saved rows each and recomputes canonical CE. Output-only seed1003 completes as recorded above; the joint run uses attempt3
 from08:27:18Z, with full initial replay matching as detailed below. The second paired
 result repeats the first; the declared three-seed verdict remains pending.
 
