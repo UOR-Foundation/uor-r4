@@ -9,7 +9,7 @@
 //! Raw-score ranking is an explicit tail-limited diagnostic, not the serving rule.
 use crate::geometric_read::{EXP_STEP_LOG2, EXP_TAIL_Q24};
 use crate::geometric_source_actions::{SourceActionBinding, MAX_SOURCE_TOKENS};
-use crate::geometric_source_realizer::canonical_exp;
+use crate::geometric_source_realizer::{canonical_exp, sha256_bytes};
 use crate::stack::kernels::stack_exp_neg;
 use serde::Serialize;
 use std::fmt;
@@ -26,6 +26,9 @@ pub enum VocabularyActionError {
     ScoreShape,
     OutputShape,
     InvalidCopyToken(u32),
+    InvalidGenerateToken(u32),
+    InvalidTargetToken(u32),
+    CacheBindingMismatch,
     Overflow,
     NonpositiveWeight,
 }
@@ -90,11 +93,44 @@ pub struct VocabularyActionTrace {
     pub actions: Vec<VocabularyActionMass>,
     pub token_masses: Vec<VocabularyTokenMass>,
 }
+/// Offline fixed-position single-Generate-atom cache. Fields are opaque and
+/// only an admitted reducer can prepare one; there is no mass/reference loader.
+/// Owned input scores are the immutable incumbent across candidate evaluations.
+/// Construction allocates; this is not a serving-path allocation claim.
+pub struct GenerateSubstitutionCache {
+    tokenizer_sha256: String,
+    exp_sha256: String,
+    generate_q24: Vec<i64>,
+    copy_ids: Vec<u32>,
+    copy_q24: Vec<i64>,
+    selected: usize,
+    gold: usize,
+    old_weight_q31: u64,
+    maximum_excluding_selected: i64,
+    baseline: GenerateSubstitutionMass,
+}
+
+/// Exact served masses only: raw diagnostics and winner fields are deliberately
+/// absent because their reference can change even on the clipped fast path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct GenerateSubstitutionMass {
+    pub total_weight_q31: u64,
+    pub target_weight_q31: u64,
+    pub used_full_reduction: bool,
+    pub reference_q24: i64,
+}
+impl GenerateSubstitutionCache {
+    pub fn incumbent_mass(&self) -> GenerateSubstitutionMass {
+        self.baseline
+    }
+}
+
 pub struct NativeVocabularyActions {
     binding: SourceActionBinding,
     legal_ids: Box<[u32]>,
     legal_mask: Box<[bool]>,
     exp: Box<[u32]>,
+    exp_sha256: String,
     raw_masses: Box<[u64]>,
     generate_masses: Box<[u64]>,
     trace_weights: Box<[u64]>,
@@ -135,11 +171,16 @@ impl NativeVocabularyActions {
             return Err(VocabularyActionError::NonpositiveWeight);
         }
         let capacity = legal_ids.len() + MAX_SOURCE_TOKENS;
+        // Admission-only identity, never re-hashed in the numerical reducer or
+        // per-candidate path. Public constructor authenticates canonical bytes.
+        let exp_bytes = exp.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>();
+        let exp_sha256 = sha256_bytes(&exp_bytes);
         Ok(Self {
             binding,
             legal_ids: legal_ids.into_boxed_slice(),
             legal_mask: legal_mask.into_boxed_slice(),
             exp: exp.into_boxed_slice(),
+            exp_sha256,
             raw_masses: vec![0; vocab].into_boxed_slice(),
             generate_masses: vec![0; vocab].into_boxed_slice(),
             trace_weights: vec![0; capacity].into_boxed_slice(),
@@ -212,6 +253,153 @@ impl NativeVocabularyActions {
             token_masses,
         )
     }
+    /// Prepare an offline exact substitution cache from owned factual scores.
+    /// All admission, baseline masses and reference are recomputed here.
+    pub fn prepare_generate_substitution(
+        &mut self,
+        gen: Vec<i64>,
+        copy_ids: Vec<u32>,
+        copy_scores: Vec<i64>,
+        selected_token: u32,
+        gold_token: u32,
+    ) -> Result<GenerateSubstitutionCache> {
+        if !self
+            .legal_mask
+            .get(selected_token as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            return Err(VocabularyActionError::InvalidGenerateToken(selected_token));
+        }
+        if !self
+            .legal_mask
+            .get(gold_token as usize)
+            .copied()
+            .unwrap_or(false)
+        {
+            return Err(VocabularyActionError::InvalidTargetToken(gold_token));
+        }
+        let count = self.action_count(copy_ids.len())?;
+        let selected_offset = self
+            .legal_ids
+            .iter()
+            .position(|&id| id == selected_token)
+            .ok_or(VocabularyActionError::InvalidGenerateToken(selected_token))?;
+        // Scratch belongs to the admitted reducer, not every position cache.
+        let mut weights = std::mem::take(&mut self.trace_weights);
+        let mut masses = std::mem::take(&mut self.trace_masses);
+        let result = self.reduce_into(
+            &gen,
+            &copy_ids,
+            &copy_scores,
+            &mut weights[..count],
+            &mut masses,
+        );
+        let old_weight = weights[selected_offset];
+        let target_weight = masses[gold_token as usize];
+        self.trace_weights = weights;
+        self.trace_masses = masses;
+        let summary = result?;
+        let maximum_excluding_selected = self
+            .legal_ids
+            .iter()
+            .filter(|&&id| id != selected_token)
+            .map(|&id| gen[id as usize].clamp(-SCORE_CLIP_Q24, SCORE_CLIP_Q24))
+            .chain(
+                copy_scores
+                    .iter()
+                    .map(|&s| s.clamp(-SCORE_CLIP_Q24, SCORE_CLIP_Q24)),
+            )
+            .max()
+            .ok_or(VocabularyActionError::MissingLegalTerminal)?;
+        Ok(GenerateSubstitutionCache {
+            tokenizer_sha256: self.binding.tokenizer_sha256().to_owned(),
+            exp_sha256: self.exp_sha256.clone(),
+            selected: selected_token as usize,
+            gold: gold_token as usize,
+            old_weight_q31: old_weight,
+            maximum_excluding_selected,
+            baseline: GenerateSubstitutionMass {
+                total_weight_q31: summary.total_weight_q31,
+                target_weight_q31: target_weight,
+                reference_q24: summary.max_score_q24,
+                used_full_reduction: false,
+            },
+            generate_q24: gen,
+            copy_ids,
+            copy_q24: copy_scores,
+        })
+    }
+
+    /// Evaluate one candidate against the unchanged cache incumbent. Every
+    /// position remains mandatory; target absence does not prune denominators.
+    /// Changed clipped reference invokes the existing authoritative reducer.
+    pub fn evaluate_generate_substitution(
+        &mut self,
+        cache: &mut GenerateSubstitutionCache,
+        new_raw_score_q24: i64,
+    ) -> Result<GenerateSubstitutionMass> {
+        if cache.tokenizer_sha256 != self.binding.tokenizer_sha256()
+            || cache.exp_sha256 != self.exp_sha256
+        {
+            return Err(VocabularyActionError::CacheBindingMismatch);
+        }
+        let clipped = new_raw_score_q24.clamp(-SCORE_CLIP_Q24, SCORE_CLIP_Q24);
+        let reference = cache.maximum_excluding_selected.max(clipped);
+        if reference == cache.baseline.reference_q24 {
+            let gap = reference
+                .checked_sub(clipped)
+                .ok_or(VocabularyActionError::Overflow)?;
+            let weight = stack_exp_neg(gap, -24, &self.exp, EXP_STEP_LOG2);
+            if weight == 0 {
+                return Err(VocabularyActionError::NonpositiveWeight);
+            }
+            let replace = |value: u64| {
+                value
+                    .checked_sub(cache.old_weight_q31)
+                    .and_then(|v| v.checked_add(weight))
+                    .ok_or(VocabularyActionError::Overflow)
+            };
+            let total = replace(cache.baseline.total_weight_q31)?;
+            let target = if cache.selected == cache.gold {
+                replace(cache.baseline.target_weight_q31)?
+            } else {
+                cache.baseline.target_weight_q31
+            };
+            return Ok(GenerateSubstitutionMass {
+                total_weight_q31: total,
+                target_weight_q31: target,
+                reference_q24: reference,
+                used_full_reduction: false,
+            });
+        }
+        let count = self.action_count(cache.copy_ids.len())?;
+        let mut weights = std::mem::take(&mut self.trace_weights);
+        let mut masses = std::mem::take(&mut self.trace_masses);
+        let old = cache.generate_q24[cache.selected];
+        cache.generate_q24[cache.selected] = new_raw_score_q24;
+        let result = self.reduce_into(
+            &cache.generate_q24,
+            &cache.copy_ids,
+            &cache.copy_q24,
+            &mut weights[..count],
+            &mut masses,
+        );
+        let target = masses[cache.gold];
+        // Restore input and scratch even on an error. A candidate never
+        // advances the incumbent or owns a full-vocabulary scratch allocation.
+        cache.generate_q24[cache.selected] = old;
+        self.trace_weights = weights;
+        self.trace_masses = masses;
+        let summary = result?;
+        Ok(GenerateSubstitutionMass {
+            total_weight_q31: summary.total_weight_q31,
+            target_weight_q31: target,
+            reference_q24: summary.max_score_q24,
+            used_full_reduction: true,
+        })
+    }
+
     fn reduce_validated(
         &mut self,
         gen: &[i64],
@@ -442,6 +630,169 @@ mod tests {
             table,
         )?)
     }
+    #[test]
+    fn cached_single_generate_substitution_matches_full_reducer_all_references_and_aliases(
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let candidates = [
+            i64::MIN,
+            -SCORE_CLIP_Q24 - 1,
+            -SCORE_CLIP_Q24,
+            -(3 << 24),
+            -65_537,
+            -65_536,
+            -1,
+            0,
+            1,
+            65_535,
+            65_536,
+            65_537,
+            2 << 24,
+            5 << 24,
+            SCORE_CLIP_Q24,
+            SCORE_CLIP_Q24 + 1,
+            i64::MAX,
+        ];
+        let scenarios = [
+            // Non-gold atom: every denominator changes, gold Copy duplicates stay.
+            (4, 5, -(1 << 24), vec![5, 5, 4], vec![0, -(2 << 24), 0], 0),
+            // Gold atom and multiple Copy aliases, including tied maximum.
+            (5, 5, 5 << 24, vec![5, 5], vec![5 << 24, -(2 << 24)], 0),
+            // Unique maximum drops or is raised, requiring full reduction.
+            (4, 5, 5 << 24, vec![5, 5], vec![0, 1 << 24], 0),
+            // Raw reference changes but clipped reference8 remains tied.
+            (4, 4, i64::MAX, vec![4, 5], vec![i64::MAX, 0], 0),
+            // Sole clipped maximum can disappear entirely.
+            (4, 4, i64::MAX, vec![], vec![], 0),
+            // All low-clipped atoms, low tie retained or candidate raises it.
+            (
+                4,
+                5,
+                i64::MIN,
+                vec![5, 5],
+                vec![i64::MIN, i64::MIN],
+                i64::MIN,
+            ),
+        ];
+        let mut saw_fast = false;
+        let mut saw_full = false;
+        for (selected, gold, old, copy_ids, copy_scores, other) in scenarios {
+            let mut reducer = fixture(12, false)?;
+            let mut full = fixture(12, false)?;
+            let mut gen = vec![other; 12];
+            gen[selected as usize] = old;
+            let mut cache = reducer.prepare_generate_substitution(
+                gen.clone(),
+                copy_ids.clone(),
+                copy_scores.clone(),
+                selected,
+                gold,
+            )?;
+            let baseline = cache.incumbent_mass();
+            let excluding = gen
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != selected as usize)
+                .map(|(_, &s)| s.clamp(-SCORE_CLIP_Q24, SCORE_CLIP_Q24))
+                .chain(
+                    copy_scores
+                        .iter()
+                        .map(|&s| s.clamp(-SCORE_CLIP_Q24, SCORE_CLIP_Q24)),
+                )
+                .max()
+                .ok_or("no reference")?;
+            for candidate in candidates {
+                let actual = reducer.evaluate_generate_substitution(&mut cache, candidate)?;
+                let mut changed = gen.clone();
+                changed[selected as usize] = candidate;
+                let trace = full.reduce_trace(&changed, &copy_ids, &copy_scores)?;
+                let target = trace
+                    .token_masses
+                    .iter()
+                    .find(|m| m.token_id == gold)
+                    .ok_or("missing target")?;
+                assert_eq!(actual.total_weight_q31, trace.summary.total_weight_q31);
+                assert_eq!(actual.target_weight_q31, target.weight_q31);
+                assert_eq!(actual.reference_q24, trace.summary.max_score_q24);
+                assert_eq!(
+                    actual.used_full_reduction,
+                    excluding.max(candidate.clamp(-SCORE_CLIP_Q24, SCORE_CLIP_Q24))
+                        != baseline.reference_q24
+                );
+                saw_full |= actual.used_full_reduction;
+                saw_fast |= !actual.used_full_reduction;
+                assert_eq!(cache.incumbent_mass(), baseline);
+                assert_eq!(cache.generate_q24, gen);
+                // Interleaved fallback/fast calls cannot advance the incumbent.
+                let replay = reducer.evaluate_generate_substitution(&mut cache, old)?;
+                assert_eq!(replay, baseline);
+            }
+        }
+        assert!(saw_fast && saw_full);
+        Ok(())
+    }
+
+    #[test]
+    fn substitution_cache_rejects_sparse_tokens_shapes_and_foreign_admission(
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let mut reducer = fixture(12, true)?;
+        assert!(matches!(
+            reducer.prepare_generate_substitution(vec![0; 12], vec![], vec![], 7, 5),
+            Err(VocabularyActionError::InvalidGenerateToken(7))
+        ));
+        assert!(matches!(
+            reducer.prepare_generate_substitution(vec![0; 12], vec![], vec![], 4, 7),
+            Err(VocabularyActionError::InvalidTargetToken(7))
+        ));
+        assert!(matches!(
+            reducer.prepare_generate_substitution(vec![0; 12], vec![], vec![], 12, 5),
+            Err(VocabularyActionError::InvalidGenerateToken(12))
+        ));
+        assert!(matches!(
+            reducer.prepare_generate_substitution(vec![0; 11], vec![], vec![], 4, 5),
+            Err(VocabularyActionError::ScoreShape)
+        ));
+        assert!(matches!(
+            reducer.prepare_generate_substitution(vec![0; 12], vec![7], vec![0], 4, 5),
+            Err(VocabularyActionError::InvalidCopyToken(7))
+        ));
+        assert!(matches!(
+            reducer.prepare_generate_substitution(vec![0; 12], vec![5], vec![], 4, 5),
+            Err(VocabularyActionError::ScoreShape)
+        ));
+        assert!(matches!(
+            reducer.prepare_generate_substitution(vec![0; 12], vec![5; 129], vec![0; 129], 4, 5),
+            Err(VocabularyActionError::CopyCount(129))
+        ));
+        let mut gen = vec![0; 12];
+        gen[7] = i64::MAX; // Hole cannot own maximum.
+        let mut cache = reducer.prepare_generate_substitution(gen, vec![5, 5], vec![0, 0], 4, 5)?;
+        assert_eq!(cache.incumbent_mass().reference_q24, 0);
+        let mut foreign = fixture(12, false)?;
+        assert_eq!(
+            foreign.evaluate_generate_substitution(&mut cache, 0),
+            Err(VocabularyActionError::CacheBindingMismatch)
+        );
+        // Canonical public constructors fix one table. The private arithmetic
+        // fixture also checks table identity defensively rather than trusting it.
+        let altered = reducer
+            .exp
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| if i == 0 { v } else { v / 2 })
+            .collect();
+        let mut foreign = NativeVocabularyActions::from_admitted(binding(12, true)?, altered)?;
+        assert_eq!(
+            foreign.evaluate_generate_substitution(&mut cache, 0),
+            Err(VocabularyActionError::CacheBindingMismatch)
+        );
+        let baseline = cache.incumbent_mass();
+        assert_eq!(
+            reducer.evaluate_generate_substitution(&mut cache, 0)?,
+            baseline
+        );
+        Ok(())
+    }
+
     #[test]
     fn full4096_zero_copy_and_extreme_scores_retain_positive_mass(
     ) -> std::result::Result<(), Box<dyn std::error::Error>> {
