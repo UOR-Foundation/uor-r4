@@ -163,9 +163,11 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
         }
         let causal_token_ids = bank.context.tokens.clone();
         let (states, logits) = final_retained_state(&copy.context, self.generate.lanes())?;
-        let generated = self
-            .generate
-            .forward_prepared(self.prepared_generate, &states, &logits)?;
+        let generated = self.generate.forward_prepared_state_choices(
+            self.prepared_generate,
+            &states,
+            &logits,
+        )?;
         let actions = self
             .pool
             .reduce_trace(&generated.scores_q24, &ids, &scores)
@@ -198,9 +200,11 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
         }
         let context = self.realizer.context_output(causal_ids, false)?;
         let (states, logits) = final_retained_state(&context, self.generate.lanes())?;
-        let generated = self
-            .generate
-            .forward_prepared(self.prepared_generate, &states, &logits)?;
+        let generated = self.generate.forward_prepared_state_choices(
+            self.prepared_generate,
+            &states,
+            &logits,
+        )?;
         let actions = self
             .pool
             .reduce_trace(&generated.scores_q24, &[], &[])
@@ -250,11 +254,11 @@ fn final_retained_state(context: &ContextQ4Output, lanes: usize) -> Result<(Vec<
         || width != lanes
         || t.states.len() != t.time
         || t.states.iter().any(|s| s.len() != width)
-        || context.state_logits.dims() != [1, t.time, t.heads, t.lanes_per_head, ROOT_COUNT]
+        || context.state_choices.dims() != [1, t.time, t.heads, t.lanes_per_head, ROOT_COUNT]
         || context.latent_roots.dims() != [1, t.time, t.heads, t.lanes_per_head, 4]
-        || context.state_logits.dtype() != DType::F32
+        || context.state_choices.dtype() != DType::F32
         || !context
-            .state_logits
+            .state_choices
             .device()
             .same_device(context.latent_roots.device())
     {
@@ -270,7 +274,7 @@ fn final_retained_state(context: &ContextQ4Output, lanes: usize) -> Result<(Vec<
         .map(|r| H4Code::try_from(*r).map_err(|e| invalid(e.to_string())))
         .collect::<Result<Vec<_>>>()?;
     let logits = context
-        .state_logits
+        .state_choices
         .narrow(1, t.time - 1, 1)?
         .reshape((width, ROOT_COUNT))?
         .contiguous()?;
@@ -297,6 +301,7 @@ mod tests {
             .collect::<Vec<_>>();
         let context = ContextQ4Output {
             state_logits: choices.as_tensor().clone(),
+            state_choices: choices.as_tensor().clone(),
             latent_roots: Tensor::from_vec(latent, (1, 2, 2, 2, 4), &Device::Cpu)?,
             root_logits: Tensor::zeros((1, 2, 2, 2, ROOT_COUNT), DType::F32, &Device::Cpu)?,
             category_logits: Tensor::zeros((1, 2, 2, 2, 33), DType::F32, &Device::Cpu)?,

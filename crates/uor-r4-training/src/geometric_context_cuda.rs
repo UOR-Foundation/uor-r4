@@ -324,6 +324,13 @@ pub(super) fn context_backward(
     let future = zeros::<f64>(d, op.batch * op.lanes() * 4)?;
     let direct = zeros::<f64>(d, op.batch * op.lanes() * 4)?;
     let choice = zeros::<f64>(d, count)?;
+    // Distinct full120 temporal utilities; the legacy ambient4 future remains
+    // untouched by this channel, preventing duplicate recurrence credit.
+    let future_utility = zeros::<f64>(d, count)?;
+    let utility_now = zeros::<f64>(d, count)?;
+    let utility_choice = zeros::<f64>(d, count)?;
+    let utility_con = zeros::<f64>(d, count * 8)?;
+    let utility_basis = zeros::<f64>(d, op.batch * op.lanes() * 4)?;
     for t in (0..op.time).rev() {
         launch(
             d,
@@ -354,11 +361,15 @@ pub(super) fn context_backward(
                 Arg::F(basis.slice(..)),
                 Arg::F(up.slice(..)),
                 Arg::D(q.as_view()),
+                Arg::U(group.as_view()),
                 Arg::U(trace.as_view()),
                 Arg::D(con.as_view()),
                 Arg::D(future.as_view()),
                 Arg::D(direct.as_view()),
                 Arg::D(choice.as_view()),
+                Arg::D(future_utility.as_view()),
+                Arg::D(utility_now.as_view()),
+                Arg::D(utility_choice.as_view()),
                 Arg::N(size(op.time)?),
                 Arg::N(size(t)?),
                 Arg::N(size(op.lanes())?),
@@ -379,9 +390,11 @@ pub(super) fn context_backward(
                 Arg::U(group.as_view()),
                 Arg::U(trace.as_view()),
                 Arg::D(choice.as_view()),
+                Arg::D(utility_choice.as_view()),
                 Arg::D(dr.as_view()),
                 Arg::D(db.as_view()),
                 Arg::D(con.as_view()),
+                Arg::D(utility_con.as_view()),
                 Arg::N(size(op.time)?),
                 Arg::N(size(t)?),
                 Arg::N(size(op.lanes())?),
@@ -401,6 +414,35 @@ pub(super) fn context_backward(
                 Arg::N(size(op.lanes())?),
                 Arg::N(size(op.lanes_per_head)?),
                 Arg::N(size(op.batch * op.lanes() * 4)?),
+            ],
+        )?;
+        launch(
+            d,
+            "old_utility_basis",
+            op.batch * op.lanes() * 4,
+            &[
+                Arg::D(utility_con.as_view()),
+                Arg::D(utility_basis.as_view()),
+                Arg::N(size(op.lanes())?),
+                Arg::N(size(op.lanes_per_head)?),
+                Arg::N(size(op.batch * op.lanes() * 4)?),
+            ],
+        )?;
+        launch(
+            d,
+            "old_utility_credit",
+            count,
+            &[
+                Arg::D(utility_now.as_view()),
+                Arg::D(utility_basis.as_view()),
+                Arg::D(q.as_view()),
+                Arg::U(group.as_view()),
+                Arg::U(trace.as_view()),
+                Arg::D(future_utility.as_view()),
+                Arg::N(size(op.time)?),
+                Arg::N(size(t)?),
+                Arg::N(size(op.lanes())?),
+                Arg::N(size(count)?),
             ],
         )?;
     }
@@ -587,6 +629,7 @@ mod tests {
 
                 for (x, y) in [
                     (&a.state_logits, &b.state_logits),
+                    (&a.state_choices, &b.state_choices),
                     (&a.root_logits, &b.root_logits),
                     (&a.category_logits, &b.category_logits),
                     (&a.latent_roots, &b.latent_roots),
@@ -620,6 +663,122 @@ mod tests {
                         .ok_or_else(|| invalid(format!("CUDA missing gradient {name}")))?;
                     assert!(y.device().is_cuda());
                     close(x, y, 2e-4, 2e-5)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    /// Final even-harmonic utility must reach the earlier token through the
+    /// full120 factual-action permutation, including cross-lane score factors.
+    /// The reset control cuts that temporal path without changing local credit.
+    #[test]
+    fn native_context_cuda_two_token_choice_utility_carry_parity() -> Result<()> {
+        let cuda = Device::new_cuda(0)?;
+        for lanes in [1, 2] {
+            for reset in [false, true] {
+                let mut first = [1; 8];
+                first[0] = 3;
+                if lanes == 2 {
+                    first[1] = 7;
+                }
+                let old = if reset { [1; 8] } else { first };
+                let mut actions = [1; 8];
+                actions[0] = 7;
+                if lanes == 2 {
+                    actions[1] = 9;
+                }
+                let mut post = [1; 8];
+                for lane in 0..lanes {
+                    post[lane] = group_table().product
+                        [usize::from(old[lane]) * ROW_STRIDE + usize::from(actions[lane])];
+                }
+                let op = ContextOp {
+                    batch: 1,
+                    time: 2,
+                    heads: 1,
+                    lanes_per_head: lanes,
+                    reset,
+                    finite_choice: true,
+                    native_steps: Some(Arc::new(vec![
+                        Step {
+                            old: [1; 8],
+                            new: first,
+                            actions: first,
+                        },
+                        Step {
+                            old,
+                            new: post,
+                            actions,
+                        },
+                    ])),
+                };
+                let rows = (0..2 * lanes * 273)
+                    .map(|i| ((i * 7 % 9) as i32 - 4) as f32 * 0.25)
+                    .collect::<Vec<_>>();
+                let basis = (0..lanes * 273 * 4 * if lanes > 1 { 2 } else { 1 })
+                    .map(|i| ((i * 11 % 3) as i32 - 1) as f32 * 0.25)
+                    .collect::<Vec<_>>();
+                let cr = Var::from_vec(rows.clone(), (1, 2, lanes * 273), &Device::Cpu)?;
+                let cb = Var::from_vec(basis.clone(), basis.len(), &Device::Cpu)?;
+                let gr = Var::from_vec(rows, (1, 2, lanes * 273), &cuda)?;
+                let gb = Var::from_vec(basis.clone(), basis.len(), &cuda)?;
+                let make_op = || ContextOp {
+                    batch: op.batch,
+                    time: op.time,
+                    heads: op.heads,
+                    lanes_per_head: op.lanes_per_head,
+                    reset: op.reset,
+                    finite_choice: op.finite_choice,
+                    native_steps: op.native_steps.clone(),
+                };
+                let cp = cr.apply_op2(cb.as_tensor(), make_op())?;
+                let gp = gr.apply_op2(gb.as_tensor(), make_op())?;
+                close(&cp, &gp, 0., 0.)?;
+                let mut upstream = vec![0f32; 2 * lanes * PACKED_WIDTH];
+                for lane in 0..lanes {
+                    for root in 0..120 {
+                        let q = q4_roots()[root];
+                        upstream[(lanes + lane) * PACKED_WIDTH + STATE_CHOICE_OFFSET + root] =
+                            ((lane + 1) as f64 * (q[0] * q[0] - q[1] * q[1])) as f32;
+                    }
+                }
+                let cu = Tensor::from_vec(upstream.clone(), cp.shape(), &Device::Cpu)?;
+                let gu = Tensor::from_vec(upstream, gp.shape(), &cuda)?;
+                let cg = cp.mul(&cu)?.sum_all()?.backward()?;
+                let gg = gp.mul(&gu)?.sum_all()?.backward()?;
+                let dx = cg
+                    .get(&cr)
+                    .ok_or_else(|| invalid("CPU choice token gradient"))?;
+                let dg = gg
+                    .get(&gr)
+                    .ok_or_else(|| invalid("CUDA choice token gradient"))?;
+                close(dx, dg, 2e-5, 2e-5)?;
+                close(
+                    cg.get(&cb)
+                        .ok_or_else(|| invalid("CPU choice basis gradient"))?,
+                    gg.get(&gb)
+                        .ok_or_else(|| invalid("CUDA choice basis gradient"))?,
+                    2e-5,
+                    2e-5,
+                )?;
+                let early = dx.narrow(1, 0, 1)?.sqr()?.sum_all()?.to_scalar::<f32>()?;
+                let gpu_early = dg.narrow(1, 0, 1)?.sqr()?.sum_all()?.to_scalar::<f32>()?;
+                if reset {
+                    assert_eq!(early, 0.);
+                    assert_eq!(gpu_early, 0.);
+                } else {
+                    assert!(early > 0.);
+                    assert!(gpu_early > 0.);
+                }
+                // The new forward is genuinely hardonehot, not an extra softmax.
+                let onehot = gp
+                    .narrow(3, STATE_CHOICE_OFFSET, 120)?
+                    .to_device(&Device::Cpu)?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                for row in onehot.chunks_exact(120) {
+                    assert_eq!(row.iter().filter(|&&v| v == 1.).count(), 1);
+                    assert!(row.iter().all(|&v| v == 0. || v == 1.));
                 }
             }
         }

@@ -911,6 +911,12 @@ mod tests {
                     &Device::Cpu,
                 )?,
                 latent_roots: latent.as_tensor().clone(),
+                // Legacy observation fixture does not consume retained choices.
+                state_choices: Tensor::zeros(
+                    (d.batch, d.time, d.heads, d.lanes, 120),
+                    DType::F32,
+                    &Device::Cpu,
+                )?,
                 root_logits: r.as_tensor().clone(),
                 category_logits: c.as_tensor().clone(),
                 trace,

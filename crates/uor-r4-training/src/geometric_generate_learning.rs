@@ -448,6 +448,29 @@ impl GenerateLearningWeights {
         state: &[H4Code],
         state_logits: &Tensor,
     ) -> Result<GenerateLearningOutput> {
+        self.forward_prepared_state_input(prepared, state, state_logits, false)
+    }
+
+    /// Explicit finite-state utility channel from the same causal context op.
+    /// Its factual value is a retained-state onehot; its adjoint is a120-state
+    /// utility, not already-softmaxed transition-score credit. This replaces
+    /// the old state-logit attachment rather than adding duplicate credit.
+    pub fn forward_prepared_state_choices(
+        &self,
+        prepared: &PreparedGenerateLearning,
+        state: &[H4Code],
+        state_choices: &Tensor,
+    ) -> Result<GenerateLearningOutput> {
+        self.forward_prepared_state_input(prepared, state, state_choices, true)
+    }
+
+    fn forward_prepared_state_input(
+        &self,
+        prepared: &PreparedGenerateLearning,
+        state: &[H4Code],
+        state_logits: &Tensor,
+        explicit_choices: bool,
+    ) -> Result<GenerateLearningOutput> {
         self.validate_shapes()?;
         let native = &prepared.native;
         let cache = &prepared.cache;
@@ -532,7 +555,25 @@ impl GenerateLearningWeights {
                     .index_select(&ids, 0)?)?;
             device_index_elements += v;
         }
-        let state_probability = candle_nn::ops::softmax(state_logits, 1)?;
+        let state_probability = if explicit_choices {
+            if self.device().is_cpu() {
+                let actual = state_logits.flatten_all()?.to_vec1::<f32>()?;
+                if actual.iter().enumerate().any(|(i, &v)| {
+                    v != if i % ROOT_COUNT == usize::from(state[i / ROOT_COUNT].index()) {
+                        1.
+                    } else {
+                        0.
+                    }
+                }) {
+                    return Err(invalid(
+                        "Generate retained state-choice onehot differs from factual state",
+                    ));
+                }
+            }
+            state_logits.clone()
+        } else {
+            candle_nn::ops::softmax(state_logits, 1)?
+        };
         let ud = u.detach();
         let pd = p.detach();
         let mut input = Tensor::zeros(v, DType::F32, self.device())?;
@@ -996,6 +1037,65 @@ mod tests {
             .ok_or_else(|| invalid("Generate test missing gradient"))?
             .flatten_all()?
             .to_vec1::<f32>()?)
+    }
+    #[test]
+    fn generate_explicit_state_utility_preserves_native_and_separate_parameter_credit() -> Result<()>
+    {
+        let w = GenerateLearningWeights::seeded(binding()?, 2, 1, &Device::Cpu)?;
+        let snapshot = w.prepare_native()?;
+        let states = [code(4)?, code(5)?];
+        let mut onehot = vec![0f32; 2 * ROOT_COUNT];
+        for (lane, state) in states.iter().enumerate() {
+            onehot[lane * ROOT_COUNT + usize::from(state.index())] = 1.;
+        }
+        let choices = Var::from_tensor(&Tensor::from_vec(onehot, (2, ROOT_COUNT), &Device::Cpu)?)?;
+        let logits = Var::zeros((2, ROOT_COUNT), DType::F32, &Device::Cpu)?;
+        let old = w.forward_prepared(&snapshot, &states, logits.as_tensor())?;
+        let new = w.forward_prepared_state_choices(&snapshot, &states, choices.as_tensor())?;
+        assert_eq!(old.scores_q24, new.scores_q24);
+        assert_eq!(
+            old.raw_scores.to_vec1::<f32>()?,
+            new.raw_scores.to_vec1::<f32>()?
+        );
+        let old_grad = old.raw_scores.sum_all()?.backward()?;
+        let new_grad = new.raw_scores.sum_all()?.backward()?;
+        assert!(new_grad.get(logits.as_tensor()).is_none());
+        for (_, var) in w.parameters() {
+            let a = grad(&old_grad, var.as_tensor())?;
+            let b = grad(&new_grad, var.as_tensor())?;
+            assert!(a.iter().zip(b).all(|(&a, b)| (a - b).abs() < 1e-6));
+        }
+        let utility = grad(&new_grad, choices.as_tensor())?;
+        for lane in 0..2 {
+            let mut expected = [0f64; ROOT_COUNT];
+            for token in 0..w.vocab_size() {
+                let mut counter = [0i64; ROOT_COUNT];
+                snapshot
+                    .native
+                    .state_conditional_scores_into(
+                        &states,
+                        lane,
+                        token as u32,
+                        &mut counter,
+                        &mut GenerateReadCounts::default(),
+                    )
+                    .map_err(|e| invalid(e.to_string()))?;
+                for (u, score) in expected.iter_mut().zip(counter) {
+                    *u += score as f64 / Q24;
+                }
+            }
+            let e_mean = expected.iter().sum::<f64>() / ROOT_COUNT as f64;
+            let actual = &utility[lane * ROOT_COUNT..(lane + 1) * ROOT_COUNT];
+            let a_mean = actual.iter().map(|&x| f64::from(x)).sum::<f64>() / ROOT_COUNT as f64;
+            assert!(actual
+                .iter()
+                .zip(expected)
+                .all(|(&a, e)| ((f64::from(a) - a_mean) - (e - e_mean)).abs() < 1e-6));
+        }
+        assert!(w
+            .forward_prepared_state_choices(&snapshot, &states, logits.as_tensor())
+            .is_err());
+        Ok(())
     }
     #[test]
     fn generate_learning_hard_forward_export_and_selected_coefficient_credit() -> Result<()> {

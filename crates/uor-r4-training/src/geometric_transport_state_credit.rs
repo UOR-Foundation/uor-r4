@@ -820,6 +820,8 @@ mod tests {
         let output = ContextQ4Output {
             latent_roots: latent,
             state_logits: variable.as_tensor().clone(),
+            // This fixture consumes only the legacy logit-credit interface.
+            state_choices: Tensor::zeros((1, time, 1, 1, ROOT_COUNT), DType::F32, &Device::Cpu)?,
             root_logits: Tensor::zeros((1, time, 1, 1, 120), DType::F32, &Device::Cpu)?,
             category_logits: Tensor::zeros((1, time, 1, 1, 33), DType::F32, &Device::Cpu)?,
             trace: NativeContextTrace {
