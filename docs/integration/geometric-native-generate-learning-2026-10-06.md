@@ -92,8 +92,9 @@ rejection from differing floating-point summation order while preserving gradien
 
 ## Next experiment and reachability correction
 
-The real donor is recorded as1024 tokens, two heads ×four lanes; admission must
-read its actual configuration. Use all-source raw input packets and a new sealed
+Live artifact inspection corrects an earlier parameter-count inference: the real
+donor has4096 tokens and two heads ×four lanes. Its consumer metadata, not an
+inferred parameter count or synthetic configuration, owns these dimensions. Use all-source raw input packets and a new sealed
 prose-label panel with an independent input-derived answerability reference.
 Ordinary response words must have Generate support outside Source spans. Reusing
 exposed development inputs does not create held-out data. No serving parser or

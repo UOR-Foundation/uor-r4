@@ -688,7 +688,7 @@ fn checkpoint(
     fs::write(
         root.join("generate-source/metadata.json"),
         serde_json::to_vec_pretty(
-            &json!({"parameters":shadows,"tokenizer_sha256":native.binding().tokenizer_sha256(),"protocol":native.binding().protocol(),"seed":a.seed,"lanes":8,"scope":"offline source masters; excluded from serving"}),
+            &json!({"parameters":shadows,"tokenizer_sha256":native.binding().tokenizer_sha256(),"protocol":native.binding().protocol(),"seed":a.seed,"lanes":g.lanes(),"scope":"offline source masters; excluded from serving"}),
         )?,
     )?;
     let readcue = cue_payload(&root.join("cue"))?;
@@ -1015,10 +1015,15 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     let tokenizerbytes = fs::read(a.native_artifact.join("tokenizer.json"))?;
     let tok = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizerbytes)
         .ok_or_else(|| bad("ByteBPE tokenizer unavailable"))?;
-    if integer.binding().vocab_size() != 1024
-        || integer.context_config().heads * integer.context_config().lanes_per_head != 8
-    {
-        return Err(bad("actual donor must be V1024/eight lanes"));
+    let lanes = integer
+        .context_config()
+        .heads
+        .checked_mul(integer.context_config().lanes_per_head)
+        .ok_or_else(|| bad("donor lane width overflow"))?;
+    if integer.binding().vocab_size() > 4096 || !(1..=8).contains(&lanes) {
+        return Err(bad(
+            "actual donor exceeds native decoder vocabulary/lane envelope",
+        ));
     }
     let exp = fs::read(&a.canonical_exp)?;
     let public = NativeVocabularyActions::new(integer.binding().clone(), &exp)?;
@@ -1071,14 +1076,15 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(
         a,
         "input-admission.json",
-        &json!({"input_sha256":inputs,"input_manifests":before,"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":1024,"lanes":8,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
+        &json!({"input_sha256":inputs,"input_manifests":before,"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":integer.binding().vocab_size(),"lanes":lanes,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
     )?;
     write(
         a,
         "frozen-development-answer-oracles.json",
         &json!({"rule":"input FrozenAnswers used exactly; canonical first accepted bytes plus EOS; no runtime formatting or trimming","cases":dev.iter().map(|e|json!({"id":e.packet.id,"answers":e.answers,"canonical_ids_labels_only":e.target})).collect::<Vec<_>>()}),
     )?;
-    let generate = GenerateLearningWeights::seeded(integer.binding().clone(), 8, a.seed, &device)?;
+    let generate =
+        GenerateLearningWeights::seeded(integer.binding().clone(), lanes, a.seed, &device)?;
     let gparams = generate.parameters();
     let (prototype, coefficients): (BTreeMap<_, _>, BTreeMap<_, _>) = gparams
         .clone()
