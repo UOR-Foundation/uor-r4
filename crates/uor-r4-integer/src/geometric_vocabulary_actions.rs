@@ -396,8 +396,19 @@ mod tests {
         sparse: bool,
     ) -> std::result::Result<SourceActionBinding, Box<dyn std::error::Error>> {
         let mut map = serde_json::Map::new();
+        let mut added = vec![
+            serde_json::json!({"id":0,"content":"<|bos|>"}),
+            serde_json::json!({"id":1,"content":"<|eos|>"}),
+            serde_json::json!({"id":2,"content":"<|unk|>"}),
+        ];
         for i in 0..vocab {
             if sparse && i == 7 {
+                continue;
+            }
+            if sparse && i > 7 {
+                // The BPE model vocabulary itself must be dense; sparse IDs
+                // arise from added tokens beyond that model vocabulary.
+                added.push(serde_json::json!({"id":i,"content":format!("x{i}")}));
                 continue;
             }
             let name = match i {
@@ -410,7 +421,7 @@ mod tests {
             map.insert(name, serde_json::json!(i));
         }
         let bytes = serde_json::to_vec(
-            &serde_json::json!({"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":map,"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}),
+            &serde_json::json!({"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":map,"merges":[]},"added_tokens":added}),
         )?;
         Ok(SourceActionBinding::new(&bytes)?)
     }
