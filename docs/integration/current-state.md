@@ -1,6 +1,6 @@
 # Current UOR-R4 research state
 
-## Native selected-read state transport: implementation — October 6
+## Native selected-read state transport: CUDA admission — October 6
 
 The next causal change is an opt-in all-bank hard read followed by signed-H4
 transport into the state consumed by Generate. The core and offline learning
@@ -22,21 +22,46 @@ focused signed-state, identity/export, zero-init parameter escape, selector
 isolation and nonfinal source-position checks executed at `d6abb7bc` on Linux
 x86_64 pod CPUs: core 2/2, learning wrapper 2/2, bank 3/3 and release fitter
 check all exit zero, 527 command-wall seconds. The fitter is wired through
-native replay, optimizer snapshots and checkpoint export/reload. CUDA execution,
-actual-bank admission and learning remain **NOT_RUN**. Receipts are preserved at
+native replay, optimizer snapshots and checkpoint export/reload. At `a5e132b3`,
+changed bank tests (3), selector-difference helper (1), CUDA fitter build and CUDA
+test compilation passed on Linux x86_64, 397 command-wall seconds. The actual
+bridge CUDA parity test subsequently passed 1/1 with no skips on a leased
+RTX 5090. Original CPU receipts are preserved at
 `icloud:UOR-R4/results/codex/read-state-checks-d6abb7bc-receipts.tar`, MD5
 `e5c9f3084e7c20bd7ad9305877ec0e54`, with remote originals retained.
 
 Admission-only controls now declare `T[a,d]=7` iff `a=d`, giving exact
 `q'=selected source state`, and compare selector-adjoint enabled/disabled B8
 passes with identical native forwards. Gradient differences are computed on
-the device before clipping/optimization. These new diagnostics are source
-reviewed but **NOT_RUN**; they are not learned artifacts or a language result.
+the device before clipping/optimization. These diagnostics completed at
+`a5e132b3`, exit zero, zero optimizer updates, 79.865 seconds on Linux x86_64 RTX 5090. Enabled/disabled
+native-forward hashes and CE are identical. Selector gradient differences have
+L2 0.063403 for contextual radius and 0.064087 for contextual unary preferences;
+the common content-presence shift has residual 2.107e-8, while all Generate and
+factual bridge differences are exactly zero. The identity-initialized bridge
+also receives nonzero bias/relative gradients (L2 0.001083/0.001112). This
+establishes local prediction-derived selector credit under the declared
+alternative-state diagnostic, not learned attention. Baseline own-prefix
+completion is 0/8, construction-only; no fresh evaluation or fit ran. The
+Rust report seal/verify passed, and independent archive inspection verified
+all eight row SHA256s plus the 52-file manifest inventory and sizes. Report
+SHA256 is `3e97f1372e98c1555fe1c986dc18252620be5f7eed7c2af21b80044f80a29507`.
+The complete attempt/configuration and GPU logs are preserved in
+`icloud:UOR-R4/results/codex/read-state-admission-a5e132b3-archive.tar`,
+MD5 `83b7685a4c2898b9ff3496a88ef3e39a` (verified round-trip). Canonical
+network-volume originals remain. The temporary fifth pod was released/deleted
+after 547 seconds (estimated compute charge $0.15; not a billing receipt).
 Work card: #820
 issuecomment-6023927047. The prior 0/512 result remains unchanged; this is an
 implementation enabler, not an attention or language result. Do not fit against
 the impossible frozen final Copy ceiling. Admit at the matched initial parent,
 then keep the common emission potential responsive in any declared future fit.
+The next causal experiment is one matched joint bridge fit from feasible
+checkpoint 0, with the retained phase-balanced fit as its comparison. Inspect
+discrete coefficient crossings, nonidentity actions, physical-source selection,
+first-token correctness and complete replies; gradient norms alone do not
+establish a useful native action. Identity/query-surface/query-blind controls
+remain necessary before a geometric attention claim.
 
 ## Joint potential fit: entry failure isolated — October 6
 
