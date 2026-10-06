@@ -9,9 +9,14 @@ wrapper2s. Integrated zero-update B8 admission completes at09:07:47Z (31.054s wr
 23.2822s B8): full native pool parity across103 positions, all13 gradient
 families connected/finite/positive,0updates; initial-only quality0/8.
 The prospective card explicitly revises scheduling: one balanced output-only
-seed1001 fit starts09:13:32Z on GPU0, PID13171, immutable c722 fitter,
-matched128updates/frozen context/data/LRs. Its full512baseline and complete
-cost gate precede optimizer1. Further balanced seeds remain NOT_ADMITTED.
+seed1001 attempt1 starts09:13:32Z, but terminates beforeoptimizer1 at09:17:25Z:
+actual B8 28.157s projects5024.419s above4500. Preserve its full512initial
+rows/sealed failure and232.292s cost; this is not a mechanism negative.
+Attempt2 starts09:19:05Z onGPU0, PID13319, same immutable c722 fitter,
+seed/data/donor/LRs/128updates; only output path and max4500→5100 change
+(outer5200). Complete initial evaluation/cost gate still precedes optimizer1.
+No additional rental extension; latest-start estimate drifts5s but actual
+5200s end10:45:45Z leaves5m15s before10:51Z rental endpoint. Further balanced seeds remain NOT_ADMITTED.
 Owner standing run authorization supports the recorded rental5.5→6h
 extension (+$0.99 maximum) and completewall6→6.5h; new rental endpoint10:51Z,
 wall11:00:33Z. This is a recorded extension, not unchanged limits. Output-only seed1003 finishes128updates and

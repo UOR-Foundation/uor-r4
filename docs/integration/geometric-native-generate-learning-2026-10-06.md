@@ -657,3 +657,19 @@ configSHA0b111b8525cf53b371d8242f8c0df5802e34deb13372476e8911e3cf1089daba.
 Same128updates/B8/donor/frozencontext/LRs/objective, balancedinitialization
 alone changed; prefixutilityfalse. Nativefull512initialevaluation and an actual
 complete-cost gate precede optimizer1. No learned result yet.
+
+## Balanced first-fit cost gate and retained retry
+
+Attempt1 terminates09:17:25Z/exit1 beforeoptimizer1: measuredB8 28.157146825s
+projects5024.41946449s, exceeding4500. All512initial rows are retained in its
+sealed FAILED report. Wrapper232.2915846s/RSS829868KiB. This is admission
+timing evidence, not a balanced-model negative.
+
+Prospective retry card uses alreadycompiled c722 support for5100; fresh
+attempt2 changes only out andmaximum_seconds4500→5100, outer5200, unchanged
+seed/donor/data/128updates/LRs/geometry. Starts09:19:05Z/PID13319. Config SHA256
+0b2b232af95350bfb470eb3e167cfc7a5481dc77ba4a0275544df5ff4153a498.
+The latest-start estimate09:19:00Z drifts5s; actual outerend10:45:45Z still
+leaves5m15s before the unchanged10:51Z rental ceiling. No additional paid
+extension and no automatic third retry. Full initial replay/cost admission
+remain pending.
