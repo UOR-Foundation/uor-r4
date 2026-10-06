@@ -1,5 +1,36 @@
 # Current UOR-R4 research state
 
+## Finite native H4 utility instrument — October 6, implementation validated
+
+The opt-in `--state-utility` mode is implemented in the existing Rust code probe
+at495ca9876a021ae95609d035ddc5ae79ee3af4f9; exact-source adversarial review approves,
+including rejection of a target present in Copy. It obtains the actual CUDA
+state-Var adjoint through the existing Generate forward/alias loss, then compares
+it with120 native lane0 changes at each of the eight predeclared first positions.
+All other states, fields/prototypes and factual Copy scores remain fixed.
+Native export, authentic first packets and factual score/pool/mass replay are
+required. This isolates Generate state credit; no optimizer or context rerun
+occurs. A local score utility can differ from exact finite native loss; whether
+that difference explains this model's failure remains unmeasured.
+
+The exact release build and six focused CPU tests pass on Linuxx86_64
+podlj16su2obv14uj:153.512s build+13.331s tests, total167.000s, RSS3608784KiB.
+Binary SHA256`2e754c1520cd1a0a7dd05ca0256998130d02e3d16ee0a6aa1b09603a00021306`.
+These are compilation/arithmetic checks, not an executed CUDA utility audit.
+The canonical data centre had no5090 stock; the compute tool chose the existing
+EU-RO-1 fallback volume, which had our cached target/toolchain but not the exact
+completed joint artifact. The scientific comparison is NOT_RUN; no substitute
+checkpoint, incomplete input or model-quality verdict is used.
+
+The compressed4,785,639-byte binary is independently SHA256-verified after
+download. Binary, logs and receipt are archived through cloud-store with
+verified MD5`bf24fe2396c4436989043351621bec56`, object
+`icloud:UOR-R4/results/codex/state-utility-build-preserved.tar` (4,801,024bytes).
+Source remains pushed on PR#1792, unmerged. No additional fit or estimator
+replacement follows from a successful build. Next: run this already-built
+instrument against the exact canonical joint checkpoint when accessible;
+use its native improvement/regret/order results to choose the learning change.
+
 ## Balanced joint outcome and native prediction diagnosis — October 6, 12:55Z
 
 The matched seed1001 joint fit completes128updates, exit0 in3506.431s
