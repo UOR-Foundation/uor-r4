@@ -119,3 +119,38 @@ Reports remain at `/workspace/uor-r4/codex/native-geometric-generate/`
 Report SHA256 values are respectively
 `a6488d53a9e96658f61135183ae13de3fb65e8fdd5d0ae896824f6ebdc9645cb`
 and `5ab47bebbd35b0e53877340ab7e14261ebbc9c3bb03d6bc3dbe52f1e612107d1`.
+
+
+## Student information path and explicit read-to-state candidate
+
+A source audit confirms that current Generate is not query-only. Native bank
+preparation advances one context state through all ordered segment token IDs,
+then query and actual generated prefix. Training replays that same sequence and
+verifies the native trace. Generate consumes the final retained states of this
+full-bank replay. An independently encoded query is used for cue credit, not
+as the sole Generate context. Source-view value tokens are therefore causally
+available, although physical record/version metadata is not automatically a
+separate token-state feature.
+
+A future JEPA student must attach to this actual full-bank state. The generic
+plain-span encoder used by the target audit is suitable for offline target
+extraction, not a substitute query-only student. A nonce-containing reply target
+is not intrinsically impossible here: the value already entered the bank
+sequence. Preservation and correct recovery remain learning questions.
+
+Copy and Generate meet in the common vocabulary pool, but Copy does not first
+produce a read-result update to Generate's retained state. The historical
+`geometric_read_feedback.rs` family chooses a provisional occurrence from actual
+stage-one scores and bridges a packet into a later contextual calculation.
+It is a separate single-source two-stage path with a selected-frame admission
+boundary and retained negative evidence; it is not the current full-bank model.
+
+If the phase-loss result leaves source-dependent generation weak, a substantive
+candidate is an internal all-bank read followed by a learned retained-state
+update, potentially using the source as a SpiralCore anchor. The occurrence
+must come from the model's actual admitted-candidate scores; no answer record
+is supplied. Compare predicted-read, frozen/no-feedback and distractor-packet
+controls at matched full-context information. Distinguish packet observation
+from retained signed state and qualify its exact serving operations before
+adoption. This is source-reuse investigation, not an implemented mechanism or
+a proposal to reactivate the old single-source path unchanged.
