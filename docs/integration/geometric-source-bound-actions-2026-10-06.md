@@ -27,6 +27,16 @@ alone does not qualify adoption: the primary complete-answer count remains below
 legacy. Retain every arm and row tradeoff. This development-only comparison is
 neither fresh transfer evidence nor a general attention/chat result.
 
+Independent saved-output reviews recount every arm and tradeoff. Legacy canonical
+and generation reports are byte-identical to the prior donor. All5128 canonical
+Copy-score vectors are identical across arms, and20512 terminal cue offsets equal
+the authentic source cue. First-source correctness is296/512 in all arms; first
+emitted-token correctness is229/204/207. Shared versus legacy changes169 rollout
+rows,168 first divergences from payload to terminal and1 from terminal to payload.
+This supports a phase/action-space interpretation, not improved source finding.
+The reviewers recommend holding further selector/terminal patches while locating
+the existing learned geometric state→prediction bridge requested by the owner.
+
 ## Mechanism and limits
 
 The bounded layout admits at most128 Copy occurrences and128 Source records,
