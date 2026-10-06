@@ -1,0 +1,496 @@
+{
+  "report": {
+    "active_families": [
+      "consumer.context.neighbor_category",
+      "consumer.context.neighbor_root",
+      "consumer.context.neighbor_transition",
+      "consumer.context.self_category",
+      "consumer.context.self_root",
+      "consumer.context.self_transition",
+      "consumer.context.token_category",
+      "consumer.context.token_root",
+      "consumer.context.token_transition"
+    ],
+    "baseline_complete": 74,
+    "baseline_native_ce": 0.9544226152014282,
+    "context_state_gradient_report_sha256": "a7eec602be33fd2d782063a12351f40846076b6e0c44eb8b573d5c4b6e65bd0f",
+    "development_rows": 512,
+    "elapsed_seconds": 23.762635498,
+    "executable_lookup": "current_exe",
+    "executable_sha256": "2874a3391dfed8483a7a2018c4517e0ac46ecdc47d0df98b720cc3d1800df7f6",
+    "fresh_predictions_count": 0,
+    "gradient_positions": 12,
+    "gradient_rows": 4,
+    "host_arch": "x86_64",
+    "host_os": "linux",
+    "independent_reload_manifest_sha256": "d9b21c0c6620cfc221380d7328d8796a9830905bcda1002273a76d1fbfe7b62b",
+    "input_files_sha256": {
+      "/workspace/uor-r4/codex/cue-composition/panel-development-3/manifest.json": "2d7d45c366b702a6fb0f607e53f0022b976f7d1d6816bc65b8542406a21c1aeb",
+      "/workspace/uor-r4/codex/cue-composition/panel-fresh-3/manifest.json": "33e1da8521993cdb9b53d1b913e9a951fb982457fd8af37acf43bf3207577c17",
+      "/workspace/uor-r4/codex/cue-composition/results/geometric-endpoint-calibration-20261005/selected-reader-preparation-1/trusted-native-binding.json": "c3ab556038d22dfcf90f19358cddaff1c61dd3703eeeacddb802fb8e79975083",
+      "/workspace/uor-r4/codex/cue-composition/results/geometric-supported-reader-transfer-20261005/record-credit-fit-order-202610061/checkpoint-0064/manifest.json": "0ce0ee4c12dc41248302c828740d75eff722cc504307a75e45a390c54465c204",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/cue/cue-q4.bin": "771864b7581b79a9d7b93137eb5e28e863da1361e04f41c0bf8810e442469781",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/cue/native-metadata.json": "ac740665ff6c29f3ab990104f1fcad47c615acf5b1adf8c4dd93799cf7a5cf10",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/manifest.json": "d4a0d51dd72ec679ff2aee6bd37ff5094fb74f0df145f3e55a5df9c3fa518d27",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/prefix/native-metadata.json": "3de7f2ec57116c051b761db4813fd2078c9f4311275249a5e4e6e4348c7e7ece",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/prefix/prefix-q4.bin": "8d2d2cdf307e08ac0d4021d91b38c9718ceeeb5b17c16344f2330fe27d36e6ee",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/source-end/native-metadata.json": "65b9ce49779835f5136fd74bee8f8d8951e0d32353890cdeca4ab52e840f538a",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/source-end/source-end-period-q4.bin": "574a20353c97c9b74bb8a99c1287f16a1cc1c45373866afbf280d4742d2c6804",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/source-end/source-end-stop-q4.bin": "3683e02fff3b0f83fcd9d21076efdda4c72835eccdc714fd44742b77ffd8b339"
+    },
+    "mode": "cue-calibration-composed-state-probe",
+    "original_source_parameters": {
+      "consumer.context.neighbor_category": {
+        "elements": 1056,
+        "f32_le_bits_sha256": "8daccc16ef3d40e999ce3156ece268d385a91f47ac125b5b3d5e19b9d86c03ab",
+        "shape": [
+          2,
+          4,
+          33,
+          4
+        ]
+      },
+      "consumer.context.neighbor_root": {
+        "elements": 3840,
+        "f32_le_bits_sha256": "85d11ab23858e95058976dad875fbb689b5d3a4d79fca7563c138154cecbca9d",
+        "shape": [
+          2,
+          4,
+          120,
+          4
+        ]
+      },
+      "consumer.context.neighbor_transition": {
+        "elements": 3840,
+        "f32_le_bits_sha256": "11461c961477be25d581d13512e20b2045d276507617428e5bc3ae5ec0d7f7de",
+        "shape": [
+          2,
+          4,
+          120,
+          4
+        ]
+      },
+      "consumer.context.self_category": {
+        "elements": 1056,
+        "f32_le_bits_sha256": "e969d124fa5e46e24cc6f43a6e740fc7852bdc01931193b10ca00f6dae2441e2",
+        "shape": [
+          2,
+          4,
+          33,
+          4
+        ]
+      },
+      "consumer.context.self_root": {
+        "elements": 3840,
+        "f32_le_bits_sha256": "950ba6d061d87153b2c5fb823bbc7298ac6ce9b172194de6b81a003b2816e42b",
+        "shape": [
+          2,
+          4,
+          120,
+          4
+        ]
+      },
+      "consumer.context.self_transition": {
+        "elements": 3840,
+        "f32_le_bits_sha256": "7322d884f8d4b9fe1b07b28423a750a433ab50baa951ebec35945e50938b71bc",
+        "shape": [
+          2,
+          4,
+          120,
+          4
+        ]
+      },
+      "consumer.context.token_category": {
+        "elements": 1081344,
+        "f32_le_bits_sha256": "13feed475d671ad1ff3deb51d933a9725ccb51cba237a06e8217f2fcaba01b02",
+        "shape": [
+          4096,
+          2,
+          4,
+          33
+        ]
+      },
+      "consumer.context.token_root": {
+        "elements": 3932160,
+        "f32_le_bits_sha256": "753d08de9fccff0d49e4a3d8013b48fd09cbb962ae6b8006782d4b743b941f59",
+        "shape": [
+          4096,
+          2,
+          4,
+          120
+        ]
+      },
+      "consumer.context.token_transition": {
+        "elements": 3932160,
+        "f32_le_bits_sha256": "bc1ba260e250fd6e3c3d299e78142b8a85a15fdad6dcb94f8eced9086ea54e54",
+        "shape": [
+          4096,
+          2,
+          4,
+          120
+        ]
+      },
+      "consumer.no_read.coefficients": {
+        "elements": 8866,
+        "f32_le_bits_sha256": "cc82f7b8956425a787f6f890740a632a84291826b2649a772dc5b28d53f91ae0",
+        "shape": [
+          2,
+          4433
+        ]
+      },
+      "consumer.potential.content_presence": {
+        "elements": 32,
+        "f32_le_bits_sha256": "b7332575640eed063a8deedce1dd03ab466f3ce5b5af3a8f114956bf4e2ff363",
+        "shape": [
+          2,
+          4,
+          4
+        ]
+      },
+      "consumer.potential.content_radius": {
+        "elements": 8192,
+        "f32_le_bits_sha256": "bc2ab90c006aaeb17685f25db143fd937adf9bffaa166aecd63105f09184eca7",
+        "shape": [
+          2,
+          4,
+          32,
+          32
+        ]
+      },
+      "consumer.potential.content_unary": {
+        "elements": 32,
+        "f32_le_bits_sha256": "01c77fc9c5f2ec1164f52f3684f99a41e717ae4da5d467503061bf7f0cd9116a",
+        "shape": [
+          2,
+          4,
+          4
+        ]
+      },
+      "consumer.potential.context_presence": {
+        "elements": 32,
+        "f32_le_bits_sha256": "a592e98f5b6e565908ab546c94ec47bdde5cea728c406cd0c9e9a699329eab57",
+        "shape": [
+          2,
+          4,
+          4
+        ]
+      },
+      "consumer.potential.context_radius": {
+        "elements": 8192,
+        "f32_le_bits_sha256": "be1e94875df03093e2c7a907cc730e99d5fe58b300d8104f10a522cae2c07ddc",
+        "shape": [
+          2,
+          4,
+          32,
+          32
+        ]
+      },
+      "consumer.potential.context_unary": {
+        "elements": 32,
+        "f32_le_bits_sha256": "7c90625a7249489deee8200b61ab20e11fa97baf8dce692bff312e93cbc173aa",
+        "shape": [
+          2,
+          4,
+          4
+        ]
+      },
+      "consumer.potential.pair": {
+        "elements": 128,
+        "f32_le_bits_sha256": "e7347bffe14e2b4f1210d6b9eaa3303dff7e195aaa5737248237b5c9a5cf2f73",
+        "shape": [
+          2,
+          4,
+          4,
+          4
+        ]
+      },
+      "period.coefficients": {
+        "elements": 8866,
+        "f32_le_bits_sha256": "cd755d845f5e75cabf14a8661e13fde485a4af968008d95ed6eac3eb1d66530a",
+        "shape": [
+          2,
+          4433
+        ]
+      }
+    },
+    "schema": "uor-r4.composed-geometric-state-credit-probe/1",
+    "scope": "connected composed attention prediction into existing geometric state; fixed scorer coefficients; stopped factual source route; Copy/Period/Stop support; no fit, general Generate, gradient correctness for argmax, or language improvement claim",
+    "selection": "NONE",
+    "source_commit": "ee438488a49d3058f5788c85774129ccda1d30a2",
+    "status": "COMPLETED",
+    "updates": 0
+  },
+  "receipt": {
+    "head": "ee438488a49d3058f5788c85774129ccda1d30a2",
+    "host": "a8a39bd6b467 Linux x86_64",
+    "command": [
+      "/workspace/uor-r4/codex/shared-target/release/examples/geometric-bank-fit",
+      "/workspace/uor-r4/codex/composed-state-credit/probe-config-1.json"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 27.427086570300162,
+    "peak_own_process_group_rss_bytes": 2448154624,
+    "maximum_observed_combined_codex_logical_bytes": 9833556208,
+    "threads": 16,
+    "gpu": false,
+    "stop": null,
+    "binary_sha256": "2874a3391dfed8483a7a2018c4517e0ac46ecdc47d0df98b720cc3d1800df7f6",
+    "config_sha256": "b7304c2265b79b7940fcfc6d48d16d9fdea65b48b7ab29004c81ce11880f6d27",
+    "status": "PASS"
+  },
+  "checks": {
+    "head": "ee438488a49d3058f5788c85774129ccda1d30a2",
+    "status": "PASS",
+    "stop": null,
+    "commands": [
+      {
+        "command": [
+          "rustfmt",
+          "--edition",
+          "2021",
+          "--config",
+          "skip_children=true",
+          "--check",
+          "crates/uor-r4-training/examples/geometric-bank-fit.rs",
+          "crates/uor-r4-training/examples/support/geometric_composed_state_credit_probe.rs",
+          "crates/uor-r4-training/examples/support/geometric_cue_calibration.rs",
+          "crates/uor-r4-training/src/geometric_context.rs",
+          "crates/uor-r4-training/src/geometric_context_credit.rs",
+          "crates/uor-r4-training/src/geometric_source_realizer.rs",
+          "crates/uor-r4-training/src/geometric_transport_state_credit.rs",
+          "crates/uor-r4-training/src/lib.rs"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 2.002910357899964
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--lib",
+          "geometric_context",
+          "--",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 212.2313416316174
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--lib",
+          "geometric_transport_state_credit",
+          "--",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 2.003422903828323
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--lib",
+          "composed_state_",
+          "--",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 2.003470404073596
+      },
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--example",
+          "geometric-bank-fit",
+          "--",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 68.07066369475797
+      },
+      {
+        "command": [
+          "cargo",
+          "build",
+          "--offline",
+          "--release",
+          "-p",
+          "uor-r4-training",
+          "--example",
+          "geometric-bank-fit",
+          "--example",
+          "geometric-native-bank-observation"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 18.017964729107916
+      }
+    ],
+    "host": "a8a39bd6b467 Linux x86_64",
+    "threads": 8,
+    "gpu": false,
+    "elapsed_seconds": 304.33233436895534,
+    "peak_own_process_group_rss_bytes": 4144193536,
+    "source_reconstruction": "git archive exact committed head; changed path SHA256 verified"
+  },
+  "gradient_positions": 12,
+  "gradient_families": {
+    "consumer.context.neighbor_category": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.01021794224789459,
+      "l2_max": 0.3414874557230733
+    },
+    "consumer.context.neighbor_root": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.0012566026543721933,
+      "l2_max": 0.06369469711381118
+    },
+    "consumer.context.neighbor_transition": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.012725197496555225,
+      "l2_max": 2.1028279327236388
+    },
+    "consumer.context.self_category": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.010245298815025995,
+      "l2_max": 0.3385473897191235
+    },
+    "consumer.context.self_root": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.0012381297506329498,
+      "l2_max": 0.07246256706083821
+    },
+    "consumer.context.self_transition": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.013409955449954263,
+      "l2_max": 2.2073651961112155
+    },
+    "consumer.context.token_category": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.01018534150125208,
+      "l2_max": 0.33778810947519883
+    },
+    "consumer.context.token_root": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.0011822411073522312,
+      "l2_max": 0.06487759986607528
+    },
+    "consumer.context.token_transition": {
+      "connected_positions": 12,
+      "nonzero_positions": 12,
+      "l2_min": 0.01216372554436125,
+      "l2_max": 1.5524780890018717
+    }
+  },
+  "isolated_component_summary": [
+    {
+      "id": "development-diverse-length2-00-swap0-q0-forward-job",
+      "step": 0,
+      "components": {
+        "contextual_copy": {
+          "connected_families": 9,
+          "nonzero_families": 9
+        },
+        "cue_copy": {
+          "connected_families": 9,
+          "nonzero_families": 9
+        },
+        "parent_period": {
+          "connected_families": 9,
+          "nonzero_families": 6
+        },
+        "parent_stop": {
+          "connected_families": 9,
+          "nonzero_families": 6
+        },
+        "prefix_copy": {
+          "connected_families": 9,
+          "nonzero_families": 3
+        },
+        "source_end_period": {
+          "connected_families": 9,
+          "nonzero_families": 3
+        },
+        "source_end_stop": {
+          "connected_families": 9,
+          "nonzero_families": 3
+        }
+      }
+    },
+    {
+      "id": "development-diverse-length2-00-swap0-q0-forward-job",
+      "step": 7,
+      "components": {
+        "contextual_copy": {
+          "connected_families": 9,
+          "nonzero_families": 9
+        },
+        "cue_copy": {
+          "connected_families": 9,
+          "nonzero_families": 9
+        },
+        "parent_period": {
+          "connected_families": 9,
+          "nonzero_families": 6
+        },
+        "parent_stop": {
+          "connected_families": 9,
+          "nonzero_families": 6
+        },
+        "prefix_copy": {
+          "connected_families": 9,
+          "nonzero_families": 3
+        },
+        "source_end_period": {
+          "connected_families": 9,
+          "nonzero_families": 3
+        },
+        "source_end_stop": {
+          "connected_families": 9,
+          "nonzero_families": 3
+        }
+      }
+    }
+  ],
+  "reload_actual_ownprefix_parity": true,
+  "reload_rows": 4,
+  "baseline_replay": {
+    "baseline-canonical.json": {
+      "new_sha256": "a1d4188b6a018cd0527f48844504d359397891b74aea2fe77d79ca2d09307109",
+      "old_sha256": "a1d4188b6a018cd0527f48844504d359397891b74aea2fe77d79ca2d09307109",
+      "byte_equal": true
+    },
+    "baseline-generation.json": {
+      "new_sha256": "8b484f6ed35d67524a049d659c1e7e6fba6c018af1e12b6b2293b874b460fdc0",
+      "old_sha256": "8b484f6ed35d67524a049d659c1e7e6fba6c018af1e12b6b2293b874b460fdc0",
+      "byte_equal": true
+    }
+  },
+  "scope": "zero updates; sampled canonical gradient positions; actual own-prefix reload4; full512 baseline replay; no learned improvement or Generate"
+}

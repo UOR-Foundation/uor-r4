@@ -1,5 +1,22 @@
 # Current UOR-R4 research state
 
+## Composed state-credit connection — October 6
+
+The [executed composed-state probe](geometric-composed-state-credit-2026-10-06.md)
+at `ee438488` reaches all9 geometric state families with finite nonzero credit at
+all12 sampled canonical positions. The full120 local choice interface preserves
+a table mode erased by the old4D projection. Native hard-trace parity, actual
+independent-reload generation4/4, byte-identical full512 baseline74 complete,
+and85 focused tests pass. Zero updates; no learned improvement or general Generate.
+Earlier recurrence remains approximate and selected source route stopped.
+Owner compute correction: port the actual CPU-only native learner to device-resident
+CUDA before another fit; the D19 CUDA backend does not cover this path. Finished
+pod6waqxs8dbpj0dt was released/deleted; reports/binary remain on canonical/workspace.
+General token prediction still needs a jointly learned geometric vocabulary decoder,
+with target-free full vocabulary and actual emitted-token feedback. See the record
+for both reviewed decoder hypotheses and explicit cost/capacity limits.
+
+
 ## Source-bound actions: useful contrast, legacy retained — October 6
 
 [PR1778](https://github.com/UOR-Foundation/uor-r4/pull/1778), numerical head

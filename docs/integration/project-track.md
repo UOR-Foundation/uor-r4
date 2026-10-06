@@ -1,5 +1,22 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
+## Predictive geometry and native CUDA learning — October 6
+
+[Composed predictive state credit](geometric-composed-state-credit-2026-10-06.md)
+is now executed: all9 state families receive nonzero credit at12 sampled positions,
+with unchanged native baseline and independent export/reload output. This admits
+the learning connection, not a prediction improvement. Before the next fit, adapt
+the actual native learner's custom forward/backward operators to CUDA; adding a
+device flag or using the separate D19 backend is insufficient. Do not rent idle
+GPUs to repeat CPU-only fits. Keep normalizer work with DeepSeek.
+The next predictive capability remains ordinary-token Generate jointly trained
+with geometric recurrence and attention, admitting the complete fixed vocabulary
+without supplied-answer records or authored semantic slots. Use shared H4 token-code
+potentials as the geometric hypothesis and direct token/root Q4 tables as a capacity
+control. Require absent-source next tokens, actual own-prefix continuations and
+independent integer reload; connected gradients alone are not success.
+
+
 ## Immediate geometric attention dependency — October 6 source-bound result
 
 The [source-bound action probe](geometric-source-bound-actions-2026-10-06.md)
