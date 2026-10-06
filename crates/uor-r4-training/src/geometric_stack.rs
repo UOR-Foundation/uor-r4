@@ -20022,8 +20022,8 @@ mod tests {
             assert_eq!(diff, 0.0, "snap {snap}");
             assert_eq!(logits.to_vec2::<f32>()?, plain.to_vec2::<f32>()?);
         }
-        // Refused: a head width that is not whole four-channel blocks, and a
-        // geometric address (the branch lives in the ordinary read only).
+        // Refused: a head width that is not whole four-channel blocks. (The
+        // geometric-address refusals in both orders are not covered here.)
         let mut odd = phase_binding_config();
         odd.width = 24;
         let mut model = StackModel::new(odd, &cpu())?;
@@ -20071,6 +20071,36 @@ mod tests {
             }
         }
         assert!(moved > 0.1, "{moved}");
+        Ok(())
+    }
+
+    #[test]
+    fn phase_binding_trace_is_the_decay_weighted_average_of_the_past() -> Result<()> {
+        // Identity phases and unit gates over time 5, two heads: r_t is
+        // sum_{j<t} a_h^(t-1-j) v_j / sum_{j<t} a_h^(t-1-j), a_h = 1 - 2^-(2+h).
+        let dev = cpu();
+        let (time, heads) = (5usize, 2usize);
+        let one = [1f32, 0.0, 0.0, 0.0];
+        let phases: Vec<f32> = (0..time * heads).flat_map(|_| one).collect();
+        let phase = Tensor::from_vec(phases, (1, time, heads, 1, 4), &dev)?;
+        let values: Vec<f32> = (0..time * heads)
+            .flat_map(|i| [(i / heads) as f32 + 1.0, 0.0, 0.0, 0.0])
+            .collect();
+        let value = Tensor::from_vec(values, (1, time, heads, 1, 4), &dev)?;
+        let gate = Tensor::ones((1, time, heads), DType::F32, &dev)?;
+        let r = phase_bind_unbind(&phase, &phase, &value, &gate)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for h in 0..heads {
+            let a = 1.0 - (-(2.0 + h as f64)).exp2();
+            for t in 1..time {
+                let weights: Vec<f64> = (0..t).map(|j| a.powi((t - 1 - j) as i32)).collect();
+                let want = (0..t).map(|j| weights[j] * (j as f64 + 1.0)).sum::<f64>()
+                    / weights.iter().sum::<f64>();
+                let got = f64::from(r[(t * heads + h) * 4]);
+                assert!((got - want).abs() < 1e-5, "head {h} t {t}: {got} vs {want}");
+            }
+        }
         Ok(())
     }
 
