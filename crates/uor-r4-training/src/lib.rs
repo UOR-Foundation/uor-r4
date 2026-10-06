@@ -37,6 +37,7 @@ pub mod flock_transport;
 pub mod geometric_address;
 pub mod geometric_age_source;
 pub mod geometric_attention_native;
+pub mod geometric_bank_generate;
 pub mod geometric_composition;
 pub mod geometric_composition_native;
 pub mod geometric_context;
