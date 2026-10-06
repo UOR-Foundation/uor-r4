@@ -1272,6 +1272,221 @@ mod tests {
         assert_eq!(grad(&g, clip.as_tensor())?, vec![0., 1., 0.]);
         Ok(())
     }
+    #[test]
+    fn generate_learning_asymmetric_pair_credit_matches_core_conditional_oracle() -> Result<()> {
+        let b = binding()?;
+        let v = b.vocab_size();
+        let mut energy = EnergyTables::zeroed(2, vec![LanePair { left: 0, right: 1 }])
+            .map_err(|e| invalid(e.to_string()))?;
+        for left in 0..ROOT_COUNT {
+            for right in 0..ROOT_COUNT {
+                energy
+                    .set_pair(
+                        0,
+                        left as u8,
+                        right as u8,
+                        ((3 * left + 7 * right) % 15) as i8 - 7,
+                    )
+                    .map_err(|e| invalid(e.to_string()))?;
+            }
+        }
+        assert_ne!(
+            energy
+                .get_pair(0, 2, 7)
+                .map_err(|e| invalid(e.to_string()))?,
+            energy
+                .get_pair(0, 7, 2)
+                .map_err(|e| invalid(e.to_string()))?
+        );
+        let prototypes = (0..v)
+            .flat_map(|t| [(t + 1) as u8, ((3 * t + 5) % ROOT_COUNT) as u8])
+            .collect::<Vec<_>>();
+        let native =
+            NativeGeometricGenerate::compile(&b, 2, &prototypes, &vec![0; v.div_ceil(2)], energy)
+                .map_err(|e| invalid(e.to_string()))?;
+        let w = GenerateLearningWeights::from_native(b, &native, &Device::Cpu)?;
+        let prepared = w.prepare_native()?;
+        let state = [code(4)?, code(13)?];
+        let token = 4usize;
+        let state_values = (0..2 * ROOT_COUNT)
+            .map(|i| ((i % 11) as f32 - 5.) * 0.125)
+            .collect::<Vec<_>>();
+        let z = Var::from_vec(state_values.clone(), (2, ROOT_COUNT), &Device::Cpu)?;
+        let output = w.forward_prepared(&prepared, &state, z.as_tensor())?;
+        let g = output
+            .raw_scores
+            .narrow(0, token, 1)?
+            .sum_all()?
+            .backward()?;
+        let actual_state = grad(&g, z.as_tensor())?;
+        let actual_code = grad(&g, w.prototype_choices.as_tensor())?;
+        let code_logits = w.prototype_choices.flatten_all()?.to_vec1::<f32>()?;
+        let expected = |logits: &[f32], scores: &[i64; ROOT_COUNT]| {
+            let maximum = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let unnormalized = logits
+                .iter()
+                .map(|x| (f64::from(*x) - f64::from(maximum)).exp())
+                .collect::<Vec<_>>();
+            let total = unnormalized.iter().sum::<f64>();
+            let probabilities = unnormalized.iter().map(|p| p / total).collect::<Vec<_>>();
+            let utilities = scores.map(|s| s as f64 / Q24);
+            let mean = probabilities
+                .iter()
+                .zip(utilities)
+                .map(|(p, u)| p * u)
+                .sum::<f64>();
+            probabilities
+                .into_iter()
+                .zip(utilities)
+                .map(|(p, u)| p * (u - mean))
+                .collect::<Vec<_>>()
+        };
+        for lane in 0..2 {
+            let mut state_scores = [0i64; ROOT_COUNT];
+            let mut code_scores = [0i64; ROOT_COUNT];
+            native
+                .state_conditional_scores_into(
+                    &state,
+                    lane,
+                    token,
+                    &mut state_scores,
+                    &mut GenerateReadCounts::default(),
+                )
+                .map_err(|e| invalid(e.to_string()))?;
+            native
+                .code_conditional_scores_into(
+                    &state,
+                    lane,
+                    token,
+                    &mut code_scores,
+                    &mut GenerateReadCounts::default(),
+                )
+                .map_err(|e| invalid(e.to_string()))?;
+            let se = expected(
+                &state_values[lane * ROOT_COUNT..(lane + 1) * ROOT_COUNT],
+                &state_scores,
+            );
+            let offset = (token * 2 + lane) * ROOT_COUNT;
+            let ce = expected(&code_logits[offset..offset + ROOT_COUNT], &code_scores);
+            assert!(se.iter().any(|x| x.abs() > 1e-5));
+            assert!(ce.iter().any(|x| x.abs() > 1e-5));
+            for r in 0..ROOT_COUNT {
+                assert!(
+                    (f64::from(actual_state[lane * ROOT_COUNT + r]) - se[r]).abs() < 2e-6,
+                    "state lane{lane} root{r}"
+                );
+                assert!(
+                    (f64::from(actual_code[offset + r]) - ce[r]).abs() < 2e-6,
+                    "code lane{lane} root{r}"
+                );
+            }
+        }
+        for t in 0..v {
+            if t != token {
+                assert!(actual_code[t * 2 * ROOT_COUNT..(t + 1) * 2 * ROOT_COUNT]
+                    .iter()
+                    .all(|x| *x == 0.));
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn generate_learning_multiple_copy_aliases_share_one_marginal_gradient() -> Result<()> {
+        use uor_r4_integer::geometric_vocabulary_actions::{
+            VocabularyActionMass, VocabularyReduction, VocabularyTokenMass,
+        };
+        let b = binding()?;
+        let v = b.vocab_size();
+        let one = 1u64 << 31;
+        let copy_ids = [4u32, 4, 5];
+        let count = v + copy_ids.len();
+        let denominator = one * count as u64;
+        let mut actions = (0..v)
+            .map(|i| VocabularyActionMass {
+                action: VocabularyAction::Generate { token_id: i as u32 },
+                action_offset: i,
+                token_id: i as u32,
+                raw_score_q24: 0,
+                score_q24: 0,
+                weight_q31: one,
+            })
+            .collect::<Vec<_>>();
+        for (offset, &token_id) in copy_ids.iter().enumerate() {
+            actions.push(VocabularyActionMass {
+                action: VocabularyAction::Copy {
+                    source_offset: offset,
+                },
+                action_offset: v + offset,
+                token_id,
+                raw_score_q24: 0,
+                score_q24: 0,
+                weight_q31: one,
+            });
+        }
+        let masses = (0..v)
+            .map(|t| {
+                let copies = copy_ids.iter().filter(|id| **id == t as u32).count() as u64;
+                VocabularyTokenMass {
+                    token_id: t as u32,
+                    weight_q31: one * (1 + copies),
+                    generate_weight_q31: one,
+                    copy_weight_q31: one * copies,
+                }
+            })
+            .collect();
+        // All raw scores zero is the exact canonical-table case, including the
+        // distractor and both same-target occurrences; no approximate weights.
+        let trace = VocabularyActionTrace {
+            policy: uor_r4_integer::geometric_vocabulary_actions::POLICY,
+            tokenizer_sha256: b.tokenizer_sha256().into(),
+            period_token_id: b.period_token_id(),
+            eos_token_id: b.eos_token_id(),
+            actions,
+            token_masses: masses,
+            summary: VocabularyReduction {
+                legal_generate_actions: v,
+                copy_actions: 3,
+                max_score_q24: 0,
+                total_weight_q31: denominator,
+                chosen_token_id: 4,
+                chosen_weight_q31: 3 * one,
+                generate_weight_q31: v as u64 * one,
+                copy_weight_q31: 3 * one,
+                chosen_generate_weight_q31: one,
+                chosen_copy_weight_q31: 2 * one,
+                clipped_low_actions: 0,
+                clipped_high_actions: 0,
+                raw_max_score_q24: 0,
+                raw_total_weight_q31: denominator,
+                raw_chosen_token_id: 4,
+                raw_chosen_weight_q31: 3 * one,
+                chosen_raw_mass_rank: 1,
+                raw_chosen_clipped_mass_rank: 1,
+                token_winner_changed_by_clip: false,
+            },
+        };
+        let generate = Var::zeros(v, DType::F32, &Device::Cpu)?;
+        let copy = Var::zeros(3, DType::F32, &Device::Cpu)?;
+        let loss =
+            vocabulary_marginal_loss(&trace, generate.as_tensor(), Some(copy.as_tensor()), 4)?;
+        assert!((f64::from(loss.to_scalar::<f32>()?) + (3. / count as f64).ln()).abs() < 1e-6);
+        let g = loss.backward()?;
+        for (t, actual) in grad(&g, generate.as_tensor())?.into_iter().enumerate() {
+            let expected = 1. / count as f64 - if t == 4 { 1. / 3. } else { 0. };
+            assert!(
+                (f64::from(actual) - expected).abs() < 1e-6,
+                "Generate token{t}"
+            );
+        }
+        for (i, actual) in grad(&g, copy.as_tensor())?.into_iter().enumerate() {
+            let expected = 1. / count as f64 - if copy_ids[i] == 4 { 1. / 3. } else { 0. };
+            assert!(
+                (f64::from(actual) - expected).abs() < 1e-6,
+                "Copy occurrence{i}"
+            );
+        }
+        Ok(())
+    }
     #[cfg(feature = "cuda")]
     #[test]
     fn generate_learning_cuda_explicit_hard_and_full_choice_gradient_parity() -> Result<()> {
