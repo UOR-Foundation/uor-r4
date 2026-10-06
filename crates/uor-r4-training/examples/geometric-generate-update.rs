@@ -1,6 +1,7 @@
 //! CUDA-only one-update admission for joint H4 context and native vocabulary
 //! prediction. Fixed synthetic next-symbol rows are an execution instrument,
 //! not conversation data or learned language qualification.
+#![recursion_limit = "256"]
 use candle_core::{Device, Tensor, Var};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW};
 use serde_json::{json, Value};
