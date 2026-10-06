@@ -77,6 +77,7 @@ fn cue_calibration_mode(a: &Args) -> bool {
             | "cue-calibration-joint-probe"
             | "cue-calibration-joint-fit"
             | "cue-calibration-joint-evaluate"
+            | "cue-calibration-coadapt-probe"
     )
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -210,6 +211,8 @@ pub(crate) struct Args {
     pub(crate) cue_joint_fit: Option<CueCompositionPanel>,
     #[serde(default)]
     pub(crate) cue_joint_evaluate: Option<CueCompositionPanel>,
+    #[serde(default)]
+    pub(crate) cue_coadapt_probe: Option<CueCompositionPanel>,
     #[serde(default)]
     pub(crate) cue_discrete_completion_root: Option<PathBuf>,
     #[serde(default)]
@@ -507,6 +510,7 @@ fn checked_args() -> Result<Args> {
         "cue-calibration-joint-probe",
         "cue-calibration-joint-fit",
         "cue-calibration-joint-evaluate",
+        "cue-calibration-coadapt-probe",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -546,6 +550,7 @@ fn checked_args() -> Result<Args> {
                     | "cue-calibration-joint-probe"
                     | "cue-calibration-joint-fit"
                     | "cue-calibration-joint-evaluate"
+                    | "cue-calibration-coadapt-probe"
             ) {
                 900
             } else if a.mode == "cue-calibration-credit-audit" {
@@ -566,6 +571,7 @@ fn checked_args() -> Result<Args> {
                     | "cue-calibration-joint-probe"
                     | "cue-calibration-joint-fit"
                     | "cue-calibration-joint-evaluate"
+                    | "cue-calibration-coadapt-probe"
             ) {
                 1024 * 1024 * 1024
             } else if a.mode == "cue-calibration-credit-audit" {

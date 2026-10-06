@@ -1,5 +1,7 @@
 //! Warm cue-only learning through the complete native prefix/endpoint path.
 use super::*;
+#[path = "geometric_cue_coadapt_probe.rs"]
+mod coadapt_probe;
 #[path = "geometric_cue_credit_audit.rs"]
 mod credit_audit;
 #[path = "geometric_cue_discrete.rs"]
@@ -29,6 +31,7 @@ fn composition_panel(a: &Args) -> Option<&CueCompositionPanel> {
         .or(a.cue_joint_probe.as_ref())
         .or(a.cue_joint_fit.as_ref())
         .or(a.cue_joint_evaluate.as_ref())
+        .or(a.cue_coadapt_probe.as_ref())
         .or_else(|| {
             a.cue_discrete_fit
                 .as_ref()
@@ -86,6 +89,9 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     if (a.mode == "cue-calibration-joint-fit") != a.cue_joint_fit.is_some() {
         return Err(invalid("joint fit explicit-mode contract differs").into());
     }
+    if (a.mode == "cue-calibration-coadapt-probe") != a.cue_coadapt_probe.is_some() {
+        return Err(invalid("coadapt probe explicit-mode contract differs").into());
+    }
     if (a.mode == "cue-calibration-joint-evaluate") != a.cue_joint_evaluate.is_some() {
         return Err(invalid("joint evaluation explicit-mode contract differs").into());
     }
@@ -94,6 +100,7 @@ pub(super) fn validate(a: &Args) -> Result<()> {
         .as_ref()
         .or(a.cue_joint_fit.as_ref())
         .or(a.cue_joint_evaluate.as_ref())
+        .or(a.cue_coadapt_probe.as_ref())
     {
         if c.profile != COMPOSITION_PROFILE
             || c.development_rows != 512
@@ -1003,6 +1010,22 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         return Err(invalid("prospective evaluation panel report differs before learning").into());
     }
     let development = panel(&a.development_panel, development_rows, &integer, &tok, a)?;
+    if a.cue_coadapt_probe.is_some() {
+        return coadapt_probe::run(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &tok,
+            &weights,
+            &f,
+            &development,
+            &inputs,
+            &seals,
+            &receipts,
+        );
+    }
     if a.cue_joint_evaluate.is_some() {
         return joint_evaluate::run(
             a,

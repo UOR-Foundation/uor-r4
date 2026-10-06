@@ -13,7 +13,11 @@ fn improves(old_complete: usize, old_ce: f64, complete: usize, ce: f64) -> bool 
         && ce.is_finite()
         && (complete > old_complete || (complete == old_complete && ce < old_ce - EPSILON))
 }
-fn coordinate(q: &[i8], g: &[f32], rejected: &BTreeSet<usize>) -> Result<Option<(usize, i8)>> {
+pub(super) fn coordinate(
+    q: &[i8],
+    g: &[f32],
+    rejected: &BTreeSet<usize>,
+) -> Result<Option<(usize, i8)>> {
     if q.len() != 16 || g.len() != 16 || g.iter().any(|x| !x.is_finite()) {
         return Err(invalid("joint fit gradient/quarter shape or finite contract differs").into());
     }
@@ -32,7 +36,7 @@ fn coordinate(q: &[i8], g: &[f32], rejected: &BTreeSet<usize>) -> Result<Option<
     }
     Ok(best)
 }
-fn objective(canonical: &Value, generation: &Value) -> Result<(usize, f64)> {
+pub(super) fn objective(canonical: &Value, generation: &Value) -> Result<(usize, f64)> {
     let ce = if canonical["native_equal_episode_ce"].is_null()
         && canonical["zero_support_positions"]
             .as_array()
@@ -61,7 +65,7 @@ fn objective(canonical: &Value, generation: &Value) -> Result<(usize, f64)> {
     }
     Ok((complete, ce))
 }
-fn compact(c: &Value, g: &Value, episodes: &[Episode]) -> Result<Value> {
+pub(super) fn compact(c: &Value, g: &Value, episodes: &[Episode]) -> Result<Value> {
     let cs = c["rows"]
         .as_array()
         .ok_or_else(|| invalid("joint fit canonical rows absent"))?;
@@ -95,7 +99,7 @@ fn compact(c: &Value, g: &Value, episodes: &[Episode]) -> Result<Value> {
         json!({"rows":rows,"scope":"postprediction labels only; no source-answer admission or gradient filtering"}),
     )
 }
-fn gains(old: &Value, new: &Value) -> Result<Value> {
+pub(super) fn gains(old: &Value, new: &Value) -> Result<Value> {
     let old = old["rows"]
         .as_array()
         .ok_or_else(|| invalid("joint fit old compact rows absent"))?;
