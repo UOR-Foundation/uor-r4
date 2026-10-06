@@ -42,7 +42,7 @@ gradient, this gives the same positive row factor
 There is no asymmetric factor-four loss conversion.
 
 Emission clipping removes score credit strictly outside the clip interval.
-The separate read selector uses unbounded raw Copy scores in nats. Its
+The separate read selector uses unclipped raw Copy scores in nats. Its
 distribution can therefore be sharper than the emission distribution, and
 selector credit is invariant to a common shift. These properties can matter
 when diagnosing Copy saturation. They are not newly discovered implementation
