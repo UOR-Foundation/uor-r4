@@ -295,7 +295,7 @@ fn args() -> Result<Args> {
         || a.prototype_learning_rate <= 0.
         || a.prototype_learning_rate > 0.02
         || a.maximum_seconds == 0
-        || a.maximum_seconds > 4500
+        || a.maximum_seconds > 5100
         || a.maximum_report_bytes < 64 << 20
         || a.maximum_report_bytes > 512 << 20
     {
