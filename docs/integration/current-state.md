@@ -9,8 +9,14 @@ The [Generate repair](geometric-native-generate-learning-2026-10-06.md) retains
 full120 utility through exact H4 action/state permutations on CPU/CUDA.33 focused
 checks pass at `f6973e0a`, including actual GPU parity and no doubled Generate
 parameter credit. Native forward/artifacts remain fixed; this is a local surrogate,
-not a global posterior. Copy credit remains legacy. Next: real-bank CUDA/native
-admission, then measured complete-cost admission for paired128-update fits.
+not a global posterior. Repaired real-bank CUDA admission passes103 positions
+with unchanged native outputs; paired128-update fits passed complete-cost gates
+and are live at frozen1698aa79 (three seeds queued per arm). An opt-in prefix
+Copy path at92587b03 carries its exact120-state utilities through the same
+channel; defaultfalse preserves these fits. Its actual-context CPU check is in
+progress and CUDA parity waits for a free GPU. Cue/contextual-readout Copy remains
+legacy. Next: complete native own-prefix answers and paired-seed review, then
+choose integration or a bounded exact suffix replay discriminator.
 PR1792 is still draft/unmerged; no language result from these checks.
 
 ## Native Generate update — October 6, mixed result

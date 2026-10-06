@@ -26,9 +26,9 @@ not a global recurrent posterior or a derivative of argmax.
 
 Generate replaces its old state-softmax attachment with this utility channel.
 Factual coefficient and token-prototype gradients remain separate. Native forward
-scores, state transitions and artifact formats are unchanged. Existing Copy
-consumers still use their legacy logit/four-coordinate credit; the repair does not
-yet qualify their temporal learning.
+scores, state transitions and artifact formats are unchanged. The default Copy
+consumers still use legacy credit. An opt-in prefix Copy path is described below;
+contextual-readout and cue Copy credit remain legacy and unqualified.
 
 At `f6973e0a6b0eedcd1e4ee92b743e59c53303de64`,33 focused checks pass on the
 leased5090 pod:23 context checks,9 Generate checks and1 bank-binding check. Actual
@@ -58,7 +58,7 @@ reports retain clipping and raw-versus-clipped winner changes. The preallocated
 numerical reducer is distinct from its allocating diagnostic trace.
 
 The new target-free bank adapter consumes the final retained H4 state and full120
-POSTSTATE logits from the same full-bank causal context consumed by Copy. Query
+hard retained-state choices from the same full-bank causal context consumed by Copy. Query
 and emitted prefixes are state inputs, not Copy candidates. An explicit ordinary
 continuation path encodes actual causal IDs with zero Copy candidates; no Source
 record or initial token is fabricated. Legacy terminal reductions remain discarded
@@ -191,3 +191,30 @@ local new≤32MiB, pod new≤6GiB and Codex area/cache≤16GiB,128MiB stop margi
 The initial failed standard bootstrap used host quota30 build threads; subsequent
 own commands use8. Actual build/model/rental charges and remaining work must be
 reported separately; precharge is not executed model time.
+
+
+## Opt-in prefix Copy temporal utility
+
+At source `92587b03a48a826523cb1b273a86644b51d3a375`, the prefix transport can
+attach its existing exact centered120-state conditional table utilities directly
+to actual retained choices. This replaces its local-logit attachment. The context
+operator owns the one choice pullback and temporal carry; no second softmax or
+extra semantic feature is introduced. Candidate offsetj still consumes poststate
+j−1, offset0 uses constant identity, and an empty response supplies no invented
+context. Other endpoints and lanes remain factual.
+
+The bank adapter and fitter expose `prefix_temporal_utility`, defaultfalse, with
+an explicit report scope. The live paired fits use frozen source1698aa79 and the
+old setting. Source review found no remaining blocker after correcting a stale
+report label. Compilation and actual-context CPU checks are pending; actual CUDA
+parity waits for a free GPU. This is not yet a prediction improvement.
+
+The real-data paired fits completed their full512 initial evaluations and passed
+prospective cost gates:4080.868s output-only and4165.737s joint against4500s per
+arm. Each runs128updates with B8; seeds1001,1002,1003 are sequential per GPU.
+Completion and actual generated replies remain required before a family verdict.
+The prospective temporal-fit resource extension supersedes the original2h rental
+ceiling with5.5h ($10.89 maximum at$1.98/h); the complete6h wall and storage
+bounds remain. The scoped prefix CPU build/check reserves four additional CPU
+threads and6GiB host RAM, total20CPU/30GiB while the two fits run, with300s
+check wall. No extra rental or GPU job is added.
