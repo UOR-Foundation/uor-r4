@@ -1358,6 +1358,404 @@ extern "C" __global__ void read_flash_fwd(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Flash read backward: no T x T buffer. Each block recomputes its 16 x 16
+// score tiles; per row it uses the max, total and D = sum_j p_j dp_j, which
+// equals dO . out because the NoRead slot carries a zero value.
+// read_flash_bwd_query (per query tile) writes those row statistics, dq,
+// the NoRead gradient and the per-row beta/offset and per-tile age partials;
+// read_flash_bwd_key (per key tile) writes dk and dv; read_flash_bwd_reduce
+// sums the partials in a fixed order. No atomics: the result is
+// deterministic.
+// ---------------------------------------------------------------------------
+#define FLASH_GRAD_CHUNK 128
+#define FLASH_KV_CHUNK 160
+
+__device__ __forceinline__ double half_warp_sum_d(double v) {
+    for (int o = 8; o > 0; o >>= 1) v += __shfl_xor_sync(0xffffffffu, v, o);
+    return v;
+}
+
+// sum_c a[c] b'[c] over `length` columns, where thread (ly, lx) supplies row
+// ly of each 16-row tile (`a_row`, `b_row`) and receives (a row ly, b row lx),
+// in the same tile order as read_flash_fwd. Every thread of the block calls it.
+__device__ __forceinline__ float flash_tile_dot(
+    const act_t* a_row, bool a_ok, const act_t* b_row, bool b_ok, uint length,
+    float (*tile_a)[17], float (*tile_b)[17], uint lx, uint ly
+) {
+    float acc = 0.0f;
+    for (uint c0 = 0; c0 < length; c0 += 16) {
+        uint c = c0 + lx;
+        tile_a[ly][lx] = (a_ok && c < length) ? act_to_f(a_row[c]) : 0.0f;
+        tile_b[ly][lx] = (b_ok && c < length) ? act_to_f(b_row[c]) : 0.0f;
+        __syncthreads();
+        for (uint k = 0; k < 16; ++k) acc += tile_a[ly][k] * tile_b[lx][k];
+        __syncthreads();
+    }
+    return acc;
+}
+
+// The read score of a valid (t, j) from its inner product, as read_flash_fwd;
+// for Lorentz/L2 also the excess and the clamped distance.
+__device__ __forceinline__ float flash_score(
+    ReadDims d, const float* aux, uint head, uint t, uint j, float acc,
+    double lq, double lk, double beta, double offset, double* excess, double* distance
+) {
+    float age = d.age_on != 0 ? aux[read_age_offset(d) + (u64)head * d.time + (t - j)] : 0.0f;
+    if (d.score == 0) {
+        float scale = 1.0f / sqrtf((float)d.key);
+        return acc * scale + age;
+    }
+    double e = d.score == 1 ? lq * lk - (double)acc - 1.0 : lq + lk - 2.0 * (double)acc;
+    double dist = read_distance(d, e);
+    *excess = e;
+    *distance = dist;
+    return (float)(-beta * (dist - offset)) + age;
+}
+
+// The inner-product gradient of one score from its f64 ds, as
+// read_row_grad_warp, with the query and key self coefficients.
+__device__ __forceinline__ float flash_inner_grad(
+    ReadDims d, double ds, double e, double distance, double beta, double lq, double lk,
+    double* self_q, double* self_k
+) {
+    *self_q = 0.0;
+    *self_k = 0.0;
+    if (d.score == 0) return (float)(ds * (1.0 / sqrt((double)d.key)));
+    if (d.score == 1) {
+        if (e > LORENTZ_MIN_EXCESS) {
+            double de = -beta * ds / sqrt(e * (e + 2.0));
+            *self_q = de * lk / lq;
+            *self_k = de * lq / lk;
+            return (float)(-de);
+        }
+        return 0.0f;
+    }
+    if (e > L2_MIN_SQUARED) {
+        double ds_ds = -beta * ds / (2.0 * distance);
+        *self_q = 2.0 * ds_ds;
+        *self_k = 2.0 * ds_ds;
+        return (float)(-2.0 * ds_ds);
+    }
+    return 0.0f;
+}
+
+// Per (16-row query tile, index). rowstat is [rows, 3] = (max, total, D);
+// age_part is [index, tiles, time] (entry delta written by tile tt for
+// delta <= 16 tt + 15).
+extern "C" __global__ void read_flash_bwd_query(
+    const act_t* query, const act_t* kv, const act_t* d_out, const float* aux,
+    const double* query_lift, const double* key_lift, double* rowstat, act_t* dq,
+    float* d_aux, double* row_beta, double* row_offset, double* age_part, ReadDims d
+) {
+    uint tt = blockIdx.x;
+    uint tiles = gridDim.x;
+    uint index = blockIdx.z;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint head = index % d.heads;
+    uint lx = threadIdx.x;
+    uint ly = threadIdx.y;
+    uint tid = ly * 16 + lx;
+    uint t = tt * 16 + ly;
+    bool row_ok = t < time;
+    u64 row = (u64)index * time + t;
+    __shared__ float tile_a[16][17];
+    __shared__ float tile_b[16][17];
+    __shared__ float grads[16][17];
+    __shared__ double ds_tile[16][17];
+    __shared__ double age_carry[16];
+    __shared__ float tile_k[16][FLASH_GRAD_CHUNK];
+    const act_t* q_row = query + row * d.key;
+    const act_t* g_row = d_out + row * d.value;
+    float null_score = (d.null_on != 0 && row_ok) ? aux[row] : neg_inf();
+    double lq = 0.0;
+    double beta = 0.0;
+    double offset = 0.0;
+    if (d.score != 0) {
+        if (row_ok) lq = query_lift[row];
+        u64 beta_offset = read_beta_offset(d);
+        beta = (double)aux[beta_offset + head];
+        offset = (double)aux[beta_offset + d.heads + head];
+    }
+    // Pass 1: the online max and total, and the unnormalised D in f64.
+    float maximum = null_score;
+    float total = d.null_on != 0 ? 1.0f : 0.0f;
+    double weighted = 0.0;
+    for (uint jt = 0; jt <= tt; ++jt) {
+        uint j = jt * 16 + lx;
+        uint b_row = jt * 16 + ly;
+        const act_t* k_row = kv + ((u64)index * time + b_row) * width;
+        float acc = flash_tile_dot(q_row, row_ok, k_row, b_row < time, d.key, tile_a, tile_b, lx, ly);
+        float dpv = flash_tile_dot(g_row, row_ok, k_row + d.key, b_row < time, d.value, tile_a, tile_b, lx, ly);
+        float score = 0.0f;
+        if (row_ok) {
+            if (j > t) {
+                score = neg_inf();
+            } else {
+                double lk = d.score != 0 ? key_lift[(u64)index * time + j] : 0.0;
+                double e = 0.0;
+                double dist = 0.0;
+                score = flash_score(d, aux, head, t, j, acc, lq, lk, beta, offset, &e, &dist);
+            }
+        }
+        float next = fmaxf(maximum, half_warp_max(score));
+        float p = expf(score - next);
+        float rescale = expf(maximum - next);
+        total = total * rescale + half_warp_sum(p);
+        weighted = weighted * (double)rescale + half_warp_sum_d((double)p * (double)dpv);
+        maximum = next;
+    }
+    float inverse = 1.0f / total;
+    double row_dot = weighted / (double)total;
+    if (row_ok && lx == 0) {
+        rowstat[row * 3] = (double)maximum;
+        rowstat[row * 3 + 1] = (double)total;
+        rowstat[row * 3 + 2] = row_dot;
+        if (d.null_on != 0) {
+            float null_p = expf(null_score - maximum) * inverse;
+            d_aux[row] = (float)(-(double)null_p * row_dot);
+        }
+    }
+    // Pass 2, per key-column chunk: ds, the inner gradients and dq; on the
+    // first chunk also the beta/offset row partials and the age diagonals.
+    for (uint c0 = 0; c0 < d.key; c0 += FLASH_GRAD_CHUNK) {
+        bool first = c0 == 0;
+        float acc_q[FLASH_GRAD_CHUNK / 16];
+        #pragma unroll
+        for (uint i = 0; i < FLASH_GRAD_CHUNK / 16; ++i) acc_q[i] = 0.0f;
+        double self_q = 0.0;
+        double d_beta = 0.0;
+        double d_offset = 0.0;
+        if (tid < 16) age_carry[tid] = 0.0;
+        for (uint jt = 0; jt <= tt; ++jt) {
+            uint j = jt * 16 + lx;
+            uint b_row = jt * 16 + ly;
+            const act_t* k_row = kv + ((u64)index * time + b_row) * width;
+            float acc = flash_tile_dot(q_row, row_ok, k_row, b_row < time, d.key, tile_a, tile_b, lx, ly);
+            float dpv = flash_tile_dot(g_row, row_ok, k_row + d.key, b_row < time, d.value, tile_a, tile_b, lx, ly);
+            float ig = 0.0f;
+            double ds = 0.0;
+            if (row_ok && j <= t) {
+                double lk = d.score != 0 ? key_lift[(u64)index * time + j] : 0.0;
+                double e = 0.0;
+                double dist = 0.0;
+                float score = flash_score(d, aux, head, t, j, acc, lq, lk, beta, offset, &e, &dist);
+                float p = expf(score - maximum) * inverse;
+                ds = (double)p * ((double)dpv - row_dot);
+                double sq = 0.0;
+                double sk = 0.0;
+                ig = flash_inner_grad(d, ds, e, dist, beta, lq, lk, &sq, &sk);
+                self_q += sq;
+                if (d.score != 0) {
+                    d_beta -= ds * (dist - offset);
+                    d_offset += ds * beta;
+                }
+            }
+            grads[ly][lx] = ig;
+            ds_tile[ly][lx] = ds;
+            for (uint e = tid; e < 16 * FLASH_GRAD_CHUNK; e += 256) {
+                uint jj = e / FLASH_GRAD_CHUNK;
+                uint c = e % FLASH_GRAD_CHUNK;
+                uint key_row = jt * 16 + jj;
+                tile_k[jj][c] = (key_row < time && c0 + c < d.key)
+                    ? act_to_f(kv[((u64)index * time + key_row) * width + c0 + c]) : 0.0f;
+            }
+            __syncthreads();
+            #pragma unroll
+            for (uint i = 0; i < FLASH_GRAD_CHUNK / 16; ++i) {
+                float s = 0.0f;
+                for (uint jj = 0; jj < 16; ++jj) s += grads[ly][jj] * tile_k[jj][lx + 16 * i];
+                acc_q[i] += s;
+            }
+            // Diagonal delta = 16 (tt - jt) + (ly - lx); delta_local in
+            // [-15, 15] by thread tid < 31. The negative ones carry into the
+            // next tile's block of 16 distances.
+            double diag = 0.0;
+            int local = (int)tid - 15;
+            if (first && d.age_on != 0 && tid < 31) {
+                for (uint y = 0; y < 16; ++y) {
+                    int x = (int)y - local;
+                    if (x >= 0 && x < 16) diag += ds_tile[y][x];
+                }
+                if (local >= 0) {
+                    uint delta = 16 * (tt - jt) + (uint)local;
+                    if (delta < time) {
+                        age_part[((u64)index * tiles + tt) * time + delta]
+                            = diag + age_carry[local];
+                    }
+                }
+            }
+            __syncthreads();
+            if (first && d.age_on != 0 && tid < 15) age_carry[16 + local] = diag;
+        }
+        double sq = half_warp_sum_d(self_q);
+        if (row_ok) {
+            #pragma unroll
+            for (uint i = 0; i < FLASH_GRAD_CHUNK / 16; ++i) {
+                uint c = c0 + lx + 16 * i;
+                if (c < d.key) {
+                    float v = acc_q[i];
+                    if (d.score != 0) v += (float)sq * act_to_f(q_row[c]);
+                    dq[row * d.key + c] = act_from_f(v);
+                }
+            }
+        }
+        if (first && d.score != 0) {
+            double db = half_warp_sum_d(d_beta);
+            double doff = half_warp_sum_d(d_offset);
+            if (row_ok && lx == 0) {
+                row_beta[row] = db;
+                row_offset[row] = doff;
+            }
+        }
+        __syncthreads();
+    }
+}
+
+// Per (16-key tile, index): dk = sum_{t >= j} g q (+ the key self term) and
+// dv = sum_{t >= j} p dO, over the combined key/value columns in chunks.
+extern "C" __global__ void read_flash_bwd_key(
+    const act_t* query, const act_t* kv, const act_t* d_out, const float* aux,
+    const double* query_lift, const double* key_lift, const double* rowstat, act_t* dkv,
+    ReadDims d
+) {
+    uint jtile = blockIdx.x;
+    uint tiles = gridDim.x;
+    uint index = blockIdx.z;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint head = index % d.heads;
+    uint lx = threadIdx.x;
+    uint ly = threadIdx.y;
+    uint tid = ly * 16 + lx;
+    uint j = jtile * 16 + lx;
+    uint b_row = jtile * 16 + ly;
+    const act_t* k_row = kv + ((u64)index * time + b_row) * width;
+    __shared__ float tile_a[16][17];
+    __shared__ float tile_b[16][17];
+    __shared__ float grads[16][17];
+    __shared__ float probs[16][17];
+    __shared__ double self_tile[16][17];
+    __shared__ float tile_x[16][FLASH_KV_CHUNK];
+    double beta = 0.0;
+    double offset = 0.0;
+    double lk = 0.0;
+    if (d.score != 0) {
+        u64 beta_offset = read_beta_offset(d);
+        beta = (double)aux[beta_offset + head];
+        offset = (double)aux[beta_offset + d.heads + head];
+        if (j < time) lk = key_lift[(u64)index * time + j];
+    }
+    for (uint c0 = 0; c0 < width; c0 += FLASH_KV_CHUNK) {
+        float acc_kv[FLASH_KV_CHUNK / 16];
+        #pragma unroll
+        for (uint i = 0; i < FLASH_KV_CHUNK / 16; ++i) acc_kv[i] = 0.0f;
+        double key_self = 0.0;
+        for (uint tt = jtile; tt < tiles; ++tt) {
+            uint t = tt * 16 + ly;
+            bool row_ok = t < time;
+            u64 row = (u64)index * time + t;
+            const act_t* q_row = query + row * d.key;
+            const act_t* g_row = d_out + row * d.value;
+            float acc = flash_tile_dot(q_row, row_ok, k_row, b_row < time, d.key, tile_a, tile_b, lx, ly);
+            float dpv = flash_tile_dot(g_row, row_ok, k_row + d.key, b_row < time, d.value, tile_a, tile_b, lx, ly);
+            float ig = 0.0f;
+            float p = 0.0f;
+            double sk = 0.0;
+            if (row_ok && j <= t) {
+                double lq = d.score != 0 ? query_lift[row] : 0.0;
+                double e = 0.0;
+                double dist = 0.0;
+                float score = flash_score(d, aux, head, t, j, acc, lq, lk, beta, offset, &e, &dist);
+                float maximum = (float)rowstat[row * 3];
+                float inverse = 1.0f / (float)rowstat[row * 3 + 1];
+                p = expf(score - maximum) * inverse;
+                double ds = (double)p * ((double)dpv - rowstat[row * 3 + 2]);
+                double sq = 0.0;
+                ig = flash_inner_grad(d, ds, e, dist, beta, lq, lk, &sq, &sk);
+            }
+            grads[ly][lx] = ig;
+            probs[ly][lx] = p;
+            self_tile[ly][lx] = sk;
+            for (uint e = tid; e < 16 * FLASH_KV_CHUNK; e += 256) {
+                uint tl = e / FLASH_KV_CHUNK;
+                uint c = c0 + e % FLASH_KV_CHUNK;
+                uint q_t = tt * 16 + tl;
+                float x = 0.0f;
+                if (q_t < time && c < width) {
+                    u64 q_r = (u64)index * time + q_t;
+                    x = c < d.key ? act_to_f(query[q_r * d.key + c])
+                                  : act_to_f(d_out[q_r * d.value + (c - d.key)]);
+                }
+                tile_x[tl][e % FLASH_KV_CHUNK] = x;
+            }
+            __syncthreads();
+            // Thread (ly, lx) owns key row ly and columns lx + 16 i.
+            #pragma unroll
+            for (uint i = 0; i < FLASH_KV_CHUNK / 16; ++i) {
+                uint c = c0 + lx + 16 * i;
+                float s = 0.0f;
+                if (c < d.key) {
+                    for (uint tl = 0; tl < 16; ++tl) s += grads[tl][ly] * tile_x[tl][lx + 16 * i];
+                } else {
+                    for (uint tl = 0; tl < 16; ++tl) s += probs[tl][ly] * tile_x[tl][lx + 16 * i];
+                }
+                acc_kv[i] += s;
+            }
+            for (uint tl = 0; tl < 16; ++tl) key_self += self_tile[tl][ly];
+            __syncthreads();
+        }
+        if (b_row < time) {
+            #pragma unroll
+            for (uint i = 0; i < FLASH_KV_CHUNK / 16; ++i) {
+                uint c = c0 + lx + 16 * i;
+                if (c < width) {
+                    float v = acc_kv[i];
+                    if (c < d.key && d.score != 0) v += (float)key_self * act_to_f(k_row[c]);
+                    dkv[((u64)index * time + b_row) * width + c] = act_from_f(v);
+                }
+            }
+        }
+    }
+}
+
+// Ordered sums of the partials: ids [0, heads * time) the age table (when
+// on), then [heads * time, + 2 heads) beta and offset (Lorentz/L2).
+extern "C" __global__ void read_flash_bwd_reduce(
+    const double* age_part, const double* row_beta, const double* row_offset, float* d_aux,
+    ReadDims d
+) {
+    uint id = blockIdx.x * blockDim.x + threadIdx.x;
+    uint time = d.time;
+    uint tiles = (time + 15) / 16;
+    uint age_len = d.heads * time;
+    if (id < age_len) {
+        if (d.age_on == 0) return;
+        uint delta = id % time;
+        uint head = id / time;
+        double sum = 0.0;
+        for (uint b = 0; b < d.batch; ++b) {
+            u64 index = (u64)b * d.heads + head;
+            for (uint tt = delta / 16; tt < tiles; ++tt) {
+                sum += age_part[(index * tiles + tt) * time + delta];
+            }
+        }
+        d_aux[read_age_offset(d) + id] = (float)sum;
+        return;
+    }
+    uint k = id - age_len;
+    if (d.score == 0 || k >= 2 * d.heads) return;
+    uint head = k % d.heads;
+    const double* source = k < d.heads ? row_beta : row_offset;
+    double sum = 0.0;
+    for (uint b = 0; b < d.batch; ++b) {
+        u64 index = (u64)b * d.heads + head;
+        for (uint t = 0; t < time; ++t) sum += source[index * time + t];
+    }
+    d_aux[read_beta_offset(d) + k] = (float)sum;
+}
+
 // Per row, one warp: the softmax backward in f64 as the CPU. Writes
 // ds = p (dp - <p, dp>) (f64), the inner-product gradients (f32), the NoRead
 // logit gradient (into d_aux), and for Lorentz/L2 the query self coefficient
