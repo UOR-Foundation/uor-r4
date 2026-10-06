@@ -73,6 +73,27 @@ rows do not retire geometry or select a permanent frozen-state architecture.
 
 ## Necessary checks and retained faults
 
+The real-data CUDA admission subsequently completed at source
+`e5acf3c87bcfdaabd2ea711856676e062ea274ef`, executable SHA256
+`26a5587e64562bdba3b7f8afca1787e9c4f3bcb9a5f3037575b35a0aa05e137f`.
+It processed84 prediction positions across8 conversations in12.85s of learning
+work (19.21s complete admission), with finite nonzero gradients for all9 context
+and4 Generate groups. Independently reloaded native artifacts and the checked
+integer action pool passed. This was zero optimizer updates, and its eight-row
+quality subset does not establish a fit or full512-panel result. The sealed report
+is on the canonical pod volume at
+`/workspace/uor-r4/codex/native-geometric-generate/real-b8-admission-seed1001-attempt2`.
+The actual donor is4096 tokens with2 heads and4 lanes per head; dimensions now
+come from authenticated consumer metadata. The earlier1024 inference was wrong
+and caused an admission rejection before model work, not a model negative.
+
+A source-input-selected cost probe at indices128,129,256,257,384,385,448,449
+covers paired opposite queries for length4, length8, update and reassert histories.
+This changes only the zero-update cost sample, not the sequential B8 fit schedule.
+It is representative coverage, not a worst-case bound: sampled raw causal lengths
+are44–78 tokens, versus93 at the panel maximum. Full-panel evaluation and optimizer
+reserves remain necessary before admitting the128-update paired experiment.
+
 Core4 focused tests execute at `7d3329b6`: exact frame/all-pair consistency,
 full120 conditional replacement and independent artifact reload/tamper admission.
 The later sparse-fixture correction changes no core numerics. At `0ad43b00`, pool5
@@ -80,8 +101,10 @@ and decoder8 tests execute, including actual CUDA parity, cached/reference gradi
 asymmetric pair adjoints, multiple Copy aliases, stale snapshot refusal and exact
 raw-score binding. At `e5a52280`, target-free Copy parity1 and driver admission2
 execute, followed by the actual CUDA update. The crossed audit tests/build/run
-execute at `74443d4d`. New integrated bank/panel checks are pending and must not be
-counted as passing from source review.
+execute at `74443d4d`. Integrated bank/source-free tests subsequently passed at
+`92b05273`, the source-realizer integration at `974b47ac`, and all512 input-only
+panel positive controls at `013a5d6d`. Those checks establish instrument support
+and answerability, not learned conversation.
 
 Retained execution defects include the inverse-frame type/assignment repair,
 missing timing utility, offline dependency availability, invalid sparse BPE fixture,
