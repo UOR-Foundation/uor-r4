@@ -1,5 +1,43 @@
 # Current UOR-R4 research state
 
+## Balanced joint learning — October 6, 12:06Z, RUNNING
+
+Exact source `f6136103f8c696ea1f0bcf70d6e830e2b0d3cefe` passes its release
+build and all seven focused fitter tests. The zero-update CUDA first-position
+admission exits0 in32.901s: eight absent-Copy first targets send nonzero
+Generate-only credit into the three context transition families. The six
+observation families have zero isolated Generate credit; whole-pool credit is
+separate. All103 initial positions match independent native hard-pool scoring.
+Eight auxiliary diagnostic backwards take0.300558s and do not change fit loss,
+accumulation or optimizer.
+
+The matched balanced joint fit is RUNNING on canonical pod `rezfseimkb2xqv`,
+seed1001, same initial donor/geometry,128updates/B8/rates/objective and disabled
+prefix-temporal option as the completed output-only control. Binary SHA256
+`6b4ba129d1d18926cae7909439b54c83c9db880be3915f832db3ecb474b640bc`, config SHA256
+`3858920a3422ca817e8a468d6ed7ac879a75975b055e76f63d514a6b51a4df8a`.
+All512 initial native saved-row SHA256s match the output-only control. Actual
+B8 cost23.046s passes the predeclared gate. No final predictions or completed
+fit verdict are available yet. Paid endpoint13:29:27Z, source5100s/outer5200s;
+renewal stays within that endpoint. Durable output:
+`/workspace/uor-r4/codex/native-geometric-generate/fit-joint-seed1001-balanced-attempt1`.
+[Work card](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6015654200).
+
+A read-only mechanism review finds that the existing flat alias-pool objective
+already asks geometry to lower competing Copy scores at absent-Copy positions.
+Correct source ranking alone need not make an ordinary Generate token win:
+Copy aliases accumulate, while contextual Copy potential/cue/prefix fields
+remain frozen in this joint arm. This is a conditional explanation, not a
+measured cause. Do not add a gate or a new normalizer. A first-token native
+2×2 initial/final context and Generate attribution is being implemented;
+require authentic empty-prefix packets and exact diagonal replay. Crossed
+complete replies require their own emitted-prefix trajectories and cannot be
+inferred from saved later states. Only persistent final Copy obstruction would
+justify testing coefficient learning for the existing shared Copy potential.
+[Discriminator card](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6015901068).
+PR#1792 is ready for review and unmerged; no main delivery, general chat or
+whole-path D11 qualification is claimed.
+
 ## Phase-separated Generate field audit — October 6, 11:20Z
 
 Exact source `c462007dea671132259b5375e35373d57d4d25bc`, binary SHA256
