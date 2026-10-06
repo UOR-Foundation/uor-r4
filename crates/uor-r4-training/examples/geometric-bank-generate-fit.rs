@@ -65,6 +65,8 @@ struct Args {
     prefix_temporal_utility: bool,
     #[serde(default)]
     balanced_token_geometry: bool,
+    #[serde(default)]
+    phase_balanced_token_loss: bool,
     updates: usize,
     learning_rate: f64,
     prototype_learning_rate: f64,
@@ -797,7 +799,7 @@ fn checkpoint(
     if a.arm != "joint-potential" && potential_changes != 0 {
         return Err(bad("frozen potential payload changed"));
     }
-    let receipt = json!({"step":step,"parent":binding,"balanced_token_geometry":a.balanced_token_geometry,"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":a.arm != "joint-potential","learned_potential_coefficients":a.arm == "joint-potential","potential_packed_bytes_changed_from_donor":potential_changes,"potential_packed_sha256":sha256_bytes(&potential_bytes),"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
+    let receipt = json!({"step":step,"parent":binding,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":a.arm != "joint-potential","learned_potential_coefficients":a.arm == "joint-potential","potential_packed_bytes_changed_from_donor":potential_changes,"potential_packed_sha256":sha256_bytes(&potential_bytes),"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
     fs::write(
         root.join("receipt.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -806,6 +808,66 @@ fn checkpoint(
         return Err(bad("checkpoint exceeds complete report cap"));
     }
     Ok((integer, reloaded, receipt))
+}
+
+const LOSS_PHASE_NAMES: [&str; 3] = ["entry", "later_copy_covered", "later_generate_only"];
+fn loss_weight_policy(enabled: bool) -> &'static str {
+    if enabled {
+        "equal-nonempty-phases-per-episode/1;entry-position0;later-exact-allsource-token-membership;empty-phase-zero;remaining-phases-equal;no-runtime-gate"
+    } else {
+        "legacy-equal-episode-token-mean/1"
+    }
+}
+struct EpisodeLossWeights {
+    counts: [usize; 3],
+    phases: Vec<usize>,
+    weights: Vec<f64>,
+}
+/// Offline label weighting only, called after actual target-free action admission.
+/// Candidate membership does not imply correct-source identity or force Copy.
+fn episode_loss_weights(
+    target: &[u32],
+    admitted_copy_ids: &BTreeSet<u32>,
+    batch_episodes: usize,
+    balanced: bool,
+) -> Result<EpisodeLossWeights> {
+    if target.is_empty() || batch_episodes == 0 {
+        return Err(bad("loss weighting requires nonempty episode and batch"));
+    }
+    let phases = target
+        .iter()
+        .enumerate()
+        .map(|(t, id)| {
+            if t == 0 {
+                0
+            } else if admitted_copy_ids.contains(id) {
+                1
+            } else {
+                2
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut counts = [0usize; 3];
+    for &phase in &phases {
+        counts[phase] += 1;
+    }
+    let nonempty = counts.iter().filter(|&&n| n != 0).count();
+    let weights = phases
+        .iter()
+        .map(|&phase| {
+            if balanced {
+                1. / nonempty as f64 / counts[phase] as f64 / batch_episodes as f64
+            } else {
+                // Keep exact prior floating arithmetic and operation order.
+                1. / target.len() as f64 / batch_episodes as f64
+            }
+        })
+        .collect();
+    Ok(EpisodeLossWeights {
+        counts,
+        phases,
+        weights,
+    })
 }
 
 fn batch(
@@ -852,6 +914,10 @@ fn batch(
     let active = parameters(source, g, &a.arm);
     let mut sums = BTreeMap::<String, Tensor>::new();
     let mut nativece = 0.;
+    let mut weighted_native_objective = 0.;
+    let mut phase_positions = [0usize; 3];
+    let mut phase_weighted_native_loss = [0f64; 3];
+    let mut episode_phase_counts = Vec::new();
     let mut positions = 0;
     let mut backwardseconds = 0.;
     let mut forwardseconds = 0.;
@@ -862,6 +928,13 @@ fn batch(
     let mut first_context_backward_seconds = 0.;
     for &index in indices {
         let e = &eps[index];
+        let compiled_copy_union = e
+            .views
+            .iter()
+            .flatten()
+            .flat_map(|view| view.emitted_token_ids().iter().copied())
+            .collect::<BTreeSet<_>>();
+        let mut episode_weights: Option<EpisodeLossWeights> = None;
         for (t, &target) in e.target.iter().enumerate() {
             deadline(a, start)?;
             let f = Instant::now();
@@ -903,7 +976,30 @@ fn batch(
                     ));
                 }
             }
-            // No target exists in either forward API; it first enters here.
+            // Bind stable membership to ACTUAL target-free forward admission,
+            // not raw Context IDs or a selected-record/label-derived candidate set.
+            let actual_copy_union = out.copy_token_ids.iter().copied().collect::<BTreeSet<_>>();
+            if actual_copy_union != compiled_copy_union {
+                return Err(bad(
+                    "phase weighting actual Copy admission differs from compiled all-source union",
+                ));
+            }
+            if episode_weights.is_none() {
+                let plan = episode_loss_weights(
+                    &e.target,
+                    &actual_copy_union,
+                    indices.len(),
+                    a.phase_balanced_token_loss,
+                )?;
+                episode_phase_counts.push(json!({"id":e.packet.id,"counts":plan.counts,"nonempty_phases":plan.counts.iter().filter(|&&n| n!=0).count(),"episode_total_weight":plan.weights.iter().sum::<f64>()}));
+                episode_weights = Some(plan);
+            }
+            let plan = episode_weights
+                .as_ref()
+                .ok_or_else(|| bad("episode weight plan absent"))?;
+            let weight = plan.weights[t];
+            let phase = plan.phases[t];
+            // Targets enter loss/weighting only after native action construction.
             let loss = out.loss(target)?;
             let mass = out
                 .actions
@@ -917,7 +1013,10 @@ fn batch(
                 return Err(bad("invalid native objective"));
             }
             nativece += nll / e.target.len() as f64 / indices.len() as f64;
-            let scaled = loss.affine(1. / e.target.len() as f64 / indices.len() as f64, 0.)?;
+            weighted_native_objective += nll * weight;
+            phase_positions[phase] += 1;
+            phase_weighted_native_loss[phase] += nll * weight;
+            let scaled = loss.affine(weight, 0.)?;
             device.synchronize()?;
             forwardseconds += f.elapsed().as_secs_f64();
             // Auxiliary admission measurement only: preserve the same native
@@ -938,7 +1037,7 @@ fn batch(
                         stopped_copy.as_ref(),
                         target,
                     )?
-                    .affine(1. / e.target.len() as f64 / indices.len() as f64, 0.)?;
+                    .affine(weight, 0.)?;
                 let diagnostic_grads = diagnostic.backward()?;
                 let mut context_families = BTreeMap::new();
                 for (name, variable) in &params {
@@ -1026,8 +1125,8 @@ fn batch(
     {
         return Err(bad("decoder credit disconnected"));
     }
-    let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":"absent-Copy first canonical positions only; same fullpool forward/teacher loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective"});
-    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":"absent-Copy first canonical positions only; same fullpool forward and declared episode/phase loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective"});
+    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"native_weighted_training_objective":weighted_native_objective,"loss_phase_names":LOSS_PHASE_NAMES,"loss_phase_positions":phase_positions,"loss_phase_weighted_native_contributions":phase_weighted_native_loss,"episode_loss_phase_counts":episode_phase_counts,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; declared per-token episode/phase weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }
@@ -1326,7 +1425,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(
         a,
         "input-admission.json",
-        &json!({"input_sha256":inputs,"input_manifests":before,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":integer.binding().vocab_size(),"lanes":lanes,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
+        &json!({"input_sha256":inputs,"input_manifests":before,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":integer.binding().vocab_size(),"lanes":lanes,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
     )?;
     write(
         a,
@@ -1360,7 +1459,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(
         a,
         "optimizer-design.json",
-        &json!({"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"initialization_scope":"label-free tokenID geometry only; same energy seed/pairgraph/coefficient margins/prototype gap; no semantic-distance claim","generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"potential_lr":a.potential_learning_rate,"potential_initial_quarter_margins":potentialmargins,"potential_optimizer_active":a.arm == "joint-potential","potential_possible_nonzero_families_on_absent_content":["context_unary","context_radius","context_presence","content_presence"],"potential_structurally_zero_families_on_absent_content":["content_unary","content_radius","pair"],"potential_presence_scope":"content_presence cell0 is a shared baseline; context_presence uses authentic categorical endpoint cells; source-covered Copy retention required","beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
+        &json!({"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"initialization_scope":"label-free tokenID geometry only; same energy seed/pairgraph/coefficient margins/prototype gap; no semantic-distance claim","generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"potential_lr":a.potential_learning_rate,"potential_initial_quarter_margins":potentialmargins,"potential_optimizer_active":a.arm == "joint-potential","potential_possible_nonzero_families_on_absent_content":["context_unary","context_radius","context_presence","content_presence"],"potential_structurally_zero_families_on_absent_content":["content_unary","content_radius","pair"],"potential_presence_scope":"content_presence cell0 is a shared baseline; context_presence uses authentic categorical endpoint cells; source-covered Copy retention required","beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
     )?;
     let first = a
         .admission_episode_indices
@@ -1692,7 +1791,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         }
     }
     Ok(
-        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
+        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
     )
 }
 fn main() -> Result<()> {
@@ -1837,5 +1936,45 @@ mod tests {
             views: vec![None],
         };
         assert_eq!(e.causal_no_source(&[8]).unwrap(), vec![4, 5, 6, 8]);
+    }
+    #[test]
+    fn phase_weights_partition_and_normalize_with_exact_legacy_default() -> Result<()> {
+        let copy = BTreeSet::from([4, 5]);
+        let target = [4, 4, 5, 7, 7, 1];
+        let p = episode_loss_weights(&target, &copy, 8, true)?;
+        assert_eq!(p.counts, [1, 2, 3]);
+        assert_eq!(p.phases, [0, 1, 1, 2, 2, 2]);
+        for phase in 0..3 {
+            let weight = p
+                .weights
+                .iter()
+                .zip(&p.phases)
+                .filter(|(_, k)| **k == phase)
+                .map(|(w, _)| *w)
+                .sum::<f64>();
+            assert!((weight - 1. / 24.).abs() < 1e-15);
+        }
+        assert!((p.weights.iter().sum::<f64>() - 1. / 8.).abs() < 1e-15);
+        let old = episode_loss_weights(&target, &copy, 8, false)?;
+        for w in old.weights {
+            assert_eq!(w.to_bits(), (1. / target.len() as f64 / 8f64).to_bits());
+        }
+        Ok(())
+    }
+    #[test]
+    fn phase_weights_empty_strata_singleton_and_no_source_are_explicit() -> Result<()> {
+        for (target, copy, expected) in [
+            (vec![4], BTreeSet::from([4]), [1, 0, 0]),
+            (vec![4, 4, 5], BTreeSet::from([4, 5]), [1, 2, 0]),
+            (vec![7, 7, 1], BTreeSet::new(), [1, 0, 2]),
+        ] {
+            let p = episode_loss_weights(&target, &copy, 2, true)?;
+            assert_eq!(p.counts, expected);
+            assert!(p.weights.iter().all(|w| w.is_finite() && *w > 0.));
+            assert!((p.weights.iter().sum::<f64>() - 0.5).abs() < 1e-15);
+        }
+        assert!(episode_loss_weights(&[], &BTreeSet::new(), 1, true).is_err());
+        assert!(episode_loss_weights(&[1], &BTreeSet::new(), 0, true).is_err());
+        Ok(())
     }
 }
