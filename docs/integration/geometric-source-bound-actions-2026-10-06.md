@@ -106,3 +106,14 @@ continuations requiring a token absent from the copied context, so a pure copy
 mechanism cannot pass the integrated predictive task. Expert source/history reviews
 must determine the concrete existing seam before a new fit. DeepSeek's training
 normalizer remains independently owned. No new integrated-learning run is claimed.
+
+Independent integrated-learning review confirms the earlier `loss_bank` already
+connects token prediction to recurrent context/root/category families and Copy/
+terminal potentials; do not claim no learning exists. It predates the present
+composed cue/prefix/end reader. First concrete seam is joint-cue credit into the
+actual independently encoded query and cue states via existing `ContextWeights`.
+A complete composed loss must also account for prefix/end latent-state paths;
+a partial gradient adapter alone is not end-to-end qualification. Audit the
+existing ordinary-token native readout before adopting a Generate integration.
+The proposed integration and source-specific review are preserved alongside the
+outcome receipts; no new implementation or learning run has occurred.
