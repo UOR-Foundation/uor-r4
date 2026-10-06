@@ -57,6 +57,8 @@ struct Args {
     development_labels: PathBuf,
     fresh_inputs: Option<PathBuf>,
     fresh_labels: Option<PathBuf>,
+    // A source-input-selected cost probe only; never changes the fit schedule.
+    admission_episode_indices: Option<Vec<usize>>,
     updates: usize,
     learning_rate: f64,
     prototype_learning_rate: f64,
@@ -1098,7 +1100,28 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         "optimizer-design.json",
         &json!({"generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
     )?;
-    let first = (0..8).collect::<Vec<_>>();
+    let first = a
+        .admission_episode_indices
+        .clone()
+        .unwrap_or_else(|| (0..8).collect());
+    if first.len() != 8
+        || first.iter().any(|i| *i >= train.len())
+        || first
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != 8
+    {
+        return Err(bad(
+            "admission cost sample must name eight distinct training indices",
+        ));
+    }
+    write(
+        a,
+        "admission-cost-sample.json",
+        &json!({"indices":first,"ids":first.iter().map(|i|&train[*i].packet.id).collect::<Vec<_>>(),"scope":"cost probe only; fixed sequential B8 fit schedule unchanged; admission quality subset remains first eight development rows"}),
+    )?;
     let (_, admission) = batch(
         a,
         &source,
