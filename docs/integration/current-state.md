@@ -22,7 +22,11 @@ different from the phase-credit audit's answer-length-weighted first subset.
 Report SHA256`249c2f911900a9718758aa4b8325055a474f10ecdc9e73bdad8ddd887251ab51`;
 canonical root`/workspace/uor-r4/codex/native-geometric-generate/checkpoint-cross-balanced-control-attempt1`.
 Returned compressed evidence is224281bytes and its report SHA is checked.
-Independent source/wrapper review approves; saved-result review is pending.
+Independent source/wrapper review approves. Independent saved-result review
+checks512 unique rows/3072 cells, recomputes every arm aggregate and verifies
+zero mediator differences; final Generate improves first NLL on512/512 rows.
+It does not rehash omitted original rows/native files, rerun scoring or verify
+BLAKE3 seals.
 This validates an attribution instrument, not a model improvement.
 
 The matched balanced joint fit remains RUNNING at sourcef6136103. Its audit is
