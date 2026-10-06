@@ -74,7 +74,7 @@ fn ptx() -> Result<&'static str> {
     }
 }
 const SOURCE: &str = r#"
-#include <math.h>
+// NVRTC supplies device math builtins without host system headers.
 // Explicit rounding prevents a CUDA fused multiply-add changing score ties.
 __device__ double plus(double a,double b){return __dadd_rn(a,b);}
 __device__ double mul(double a,double b){return __dmul_rn(a,b);}
