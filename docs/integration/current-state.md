@@ -1,5 +1,46 @@
 # Current UOR-R4 research state
 
+## Exact fixed-Copy obstruction and missing joint scorer learning — October 6
+
+Root and independent inspection of the portable original joint128 rows agree:
+424/512 are unwinnable by any Generate state with the final Generate fields and
+recorded Copy scores held fixed. All512 original row SHA256 hashes, first
+canonical/actual-generation Copy vectors and provenance match; gold is absent
+from Copy on512/512. Every certifying non-gold Copy token has a legal Generate
+alias. The absolute gold upper bound is26214400 Q24 (1.5625 nats). A Copy action
+at or above that bound has at least gold's weight under every common maximum;
+its positive Generate alias makes its token mass strictly greater. Canonical
+exp bytes SHA25679485d6e63cc28f5e01d98c5d73abe021db33fa7fef368142ae6592d06b4817f
+are authenticated and non-increasing; served gap16 has positive weight242.
+The full table's later zero tail is outside the clipped serving interval; an
+initial overly broad positivity inspection failed and was corrected, with no
+model-quality verdict. The bound itself retains the previously executed exact
+disjoint-factor assertion, not an independent model enumeration in this review.
+
+Counts: gold2997 has213/256 certificates and30 successful witnesses; gold617
+has211/256 certificates and23 successful witnesses. Of88 uncertified rows,
+53 have a successful max-gold witness and35 remain unresolved. These are scoped
+fixed-field/fixed-Copy certificates, not geometry-family impossibility or a
+claim that changing context cannot change Copy.
+
+Source inspection identifies the missing learning seam: the current joint fit
+optimizes nine context families plus Generate coefficients/prototypes, while
+all potential, cue and prefix Copy coefficients remain frozen. Composed Copy
+uses frozen potential input credit. The ordinary source-realizer learner already
+combines potential coefficient credit and frozen context credit at identical
+native scores, but its potential coefficient CustomOp is CPU-only.
+
+Next implementation prerequisite is an opt-in CUDA selected-pair coefficient
+adjoint for the EXISTING geometric potential, with native hard-score anchoring
+and no new parameters/serving behavior. Actual compile/parity remain NOT_RUN
+until this source change is complete. Before any fit, attribute fixed
+contextual/cue/prefix contributions and check legal potential range, then
+integrate an explicit context+potential+Generate arm with honest export/rebind.
+Existing context-only export must retain its freeze contract. Source-covered
+Copy outcomes must remain visible alongside absent-Copy Generate positions;
+uniform suppression does not qualify attention. No gate, normalizer change or
+terminal estimator replacement is adopted.
+
 ## Joint finite-state credit and full-state feasibility — October 6, 13:45Z
 
 The previously NOT_RUN state-utility audit now completes on canonical-volume

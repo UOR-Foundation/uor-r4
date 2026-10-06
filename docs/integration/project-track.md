@@ -52,10 +52,17 @@ regret; no960 single-lane alternative wins. Minor ordering conflicts do not
 justify replacing the terminal estimator. A distinct full-state max-gold
 witness wins53/512 against factual Copy at the final joint fields. Those states
 establish conditional readout feasibility, not learned context or attention.
-Next authenticate original Copy vectors against the final joint absolute gold
-ceiling to distinguish fixed-Copy obstruction from unresolved witness losses.
+Original-vector inspection now certifies424/512 fixed-Copy obstructions under
+the final joint gold ceiling;53 successful witnesses and35 uncertified losses
+remain. Current joint learning optimizes context+Generate while every Copy
+scorer coefficient stays frozen. Next enable CUDA coefficient credit for the
+existing geometric potential, verify native parity, attribute scorer components
+and potential range, then integrate explicit context+potential+Generate learning
+with honest export/rebind before fitting. Keep cue/prefix frozen in the first
+causal change only if their contributions permit this family's correction.
+Preserve source-covered Copy behavior as well as ordinary Generate outcomes.
 Separately inspect recurrent credit, action margins and shared-parameter
-realizability against the successful witnesses before another fit. This is not a full
+realizability against successful witnesses. This is not a full
 context rerun or evidence that recurrence can realize arbitrary states.
 A final-joint-field/factual-Copy bound is still needed for unresolved rows
 before adopting selected existing Copy-field learning. Useful complete actual
