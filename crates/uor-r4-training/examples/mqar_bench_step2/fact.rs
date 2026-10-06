@@ -62,6 +62,8 @@ const BARE_PREFIX: &str = "? It's";
 const CONJ_WORDS: [&str; 4] = [" and", ",", " while", "."];
 /// The longest copula gap `gaps=` accepts (Step 7a extends Step 2's 3).
 const MAX_GAP: usize = 16;
+/// `pair=1`: whole-window placement draws before a window is refused.
+const PAIR_WINDOW_ATTEMPTS: usize = 64;
 /// The longest n-let of the reference rule's backoff.
 pub(super) const RULE_MAX_N: usize = 4;
 const FACT_TRAIN_DOMAIN: u64 = 0x6661_6374_74;
@@ -527,18 +529,27 @@ fn generate_fact(
     }
     let mut used = vec![false; context];
     if task.pair {
-        place_pairs(
-            rng,
-            task,
-            context,
-            buckets,
-            &key_pieces,
-            &mut items,
-            &mut tokens,
-            &mut used,
-        )?;
-        items.sort_by_key(|item| item.query_start);
-        return Ok(FactSequence { tokens, items });
+        // A crowded window can leave no room for a late sentence; the whole
+        // placement is then drawn again (the rng moves on). A window placed
+        // at the first try is unchanged by this retry.
+        for _ in 0..PAIR_WINDOW_ATTEMPTS {
+            let (mut tokens, mut items, mut used) = (tokens.clone(), items.clone(), used.clone());
+            let placed = place_pairs(
+                rng,
+                task,
+                context,
+                buckets,
+                &key_pieces,
+                &mut items,
+                &mut tokens,
+                &mut used,
+            );
+            if placed.is_ok() {
+                items.sort_by_key(|item| item.query_start);
+                return Ok(FactSequence { tokens, items });
+            }
+        }
+        return Err(invalid("could not place the fact pairs of a window"));
     }
     for item in &mut items {
         let middle: Vec<u32> = match item.form {
@@ -1716,6 +1727,15 @@ pub(super) mod tests {
             }
         }
         assert_eq!(gaps.len(), 8, "every gap occurs");
+        // A pilot's worth of training windows places without a refusal (the
+        // first pilot attempt hit a crowded window at about step 2,500).
+        for seed in 1..=3 {
+            for index in 0..20_000 {
+                let mut rng = Rng::new(seed, FACT_TRAIN_DOMAIN, index);
+                generate_fact(&mut rng, &task, SERVED_CONTEXT, &buckets, 2, Pairing::Train)
+                    .expect("every pair window places");
+            }
+        }
     }
 
     #[test]
