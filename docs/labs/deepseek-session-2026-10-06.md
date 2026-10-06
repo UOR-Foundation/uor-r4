@@ -240,3 +240,111 @@ overlap a live claim — Codex held `.../examples/geometric-generate-update.rs`,
 - **The runner test suite has pre-existing flakes**: 3 of 6 unmodified-baseline runs failed identically in
   `unknown_monitor_preserves_paths_child_and_charge_until_stopped_reconciliation` and
   `cancel_finalizes_a_running_job`.
+- **Hold the training schedule fixed when comparing two mechanisms.** Six interpretive claims made in this
+  session moved the same direction once the schedule was controlled — every one of them had attributed to a
+  mechanism something the annealing schedule was doing:
+
+  | claim | as filed | schedule-controlled |
+  |---|---|---|
+  | attribution of the effect to the geometric read | "definitive" | retracted (n=1) |
+  | the working rate band | "narrow window" | an octave (2e-4 → 3e-4) |
+  | lr=1e-4 behaviour | "below threshold at any schedule" | constant 1e-4 solves at 0.9605 |
+  | the geometric read's distinctive property | "reliability" (var ratio ~2.4e5) | mostly the anneal |
+  | the recurrence layers | "carry nothing" | retracted |
+  | the hybrid's bimodality | a property of attention reads | mostly the anneal (var 0.2530 → 2.51e-3) |
+
+  The final schedule-controlled head-to-head — same `pattern=rrarra`, same lr=3e-4, same `min_lr=1.0`
+  constant schedule, three sealed seeds each — puts the geometric read at **0.9862** against the
+  attention-read hybrid's **0.9149**: a **+0.071** capability edge and **22.6×** greater stability, both
+  roughly an order of magnitude smaller than the annealed comparison implied. **Six for six in one
+  direction is a bias, not six coincidences.** The remedy is procedural rather than attitudinal: vary only
+  the mechanism, and fix the schedule — a rule that would have caught all six at the point of the claim
+  instead of five rounds later.
+- **An instrument's absence from `main` does not mean the experiment cannot run.** The D20 §2
+  parameter-matched control was not on `main` (`mlp=matched` and `parameter_match` returned zero hits), and a
+  conclusion was drawn from that — "the 2e-4 control test is still unrun" — when a prebuilt binary at
+  `~/.cache/uor-r4-d20control/release/examples/mqar-bench` had been able to run it the whole time. Two
+  rounds were lost to reasoning about runnability instead of checking it. The same failure produced a
+  symbol-level "audit" that reported a present instrument (`read_firing`; on `main` it is
+  `best_head_mean_weight_on_key`/`_on_value`) as missing, and an ancestry check that labelled all 23
+  `deepseek/*` branches unmerged because squash-merging rewrites the commit so a merged tip is never an
+  ancestor. **They fail in both directions.** Check the actual path; it costs one command.
+- **A cross-rate comparison is a silent error with unpredictable size.** The D20 §2 verdict paired the
+  geometric arm at lr=3e-4 with the control at lr=1e-3; running the control at 3e-4 moved the margin from
+  +0.7458 to +0.7455 — a 0.04% error. The same mistake on the lr=1e-4 claim moved a gap from −0.078 to
+  −0.056 — **40%**. Nothing distinguished them in advance. Measure the comparator at the rate in question.
+
+# Addendum 2 — 2026-10-06, D20 §2 measurement campaign (later session)
+
+Everything below is sealed evidence on #820. 90 sealed roots under `~/uor-r4-local/mqar-bench/`.
+Same panel throughout: `pattern=rrarra` (reference **1,370,008** parameters), `context=512`, `batch=8`,
+1800 steps, 460,800 supervised queries, all `stopped_early_at_max_seconds FALSE`.
+
+## 11. The D20 §2 verdict, on same-rate and replicated evidence
+
+| lr | geometric | C6 control (mlp=matched) | margin |
+|---|---|---|---|
+| **3e-4** | 0.9980 / 1.0000 / 0.9995 → **0.9992** | 0.2637 / 0.2456 / 0.2520 → **0.2537** | **+0.7455** |
+| **2e-4** | 0.9985 / 0.9746 / 0.9712 → **0.9814** | 0.2534 / 0.2378 / 0.2451 → **0.2454** | **+0.7360** |
+
+**The verdict was originally stated across rates** (geometric@3e-4 vs control@1e-3). Running the control
+at the verdict's own rate moves the margin by **0.0003**. D20 §2 condition 1 is satisfied with a
+same-rate comparator, and the result replicates at a second rate.
+
+## 12. The rate governs the geometric read and barely touches attention
+
+| lr | geometric | hybrid (ordinary attention reads) | C6 control |
+|---|---|---|---|
+| 1e-4 | 0.1753 | 0.2285 | 0.2310 |
+| 2e-4 | **0.9814** | — | 0.2454 |
+| 3e-4 | **0.9992** | 0.5714 *(annealed)* | 0.2537 |
+| 1e-3 | 0.6689 *(var 0.3283)* | 0.0091 | 0.2534 |
+| 1e-4 CONSTANT | **0.9605** | — | — |
+| 3e-4 CONSTANT | **0.9862** | **0.9149** | — |
+
+**Both edges have different causes.** The floor is a **schedule** effect: at 1e-4 the annealed arm never
+acquires (0.1753, probes flat at 1.2–1.4× uniform), while the **constant** 1e-4 arm solves at **0.9605** —
+`min_lr=0.1` decays the rate to 1e-5 across the acquisition threshold mid-run. The ceiling is a **rate**
+effect: at 1e-3 the read acquires to 3.8× uniform by step 100 and decays to 1.3× by 200, **and constancy
+does not save it**.
+
+**The control is near-flat** — 0.2310 → 0.2454 → 0.2537 → 0.2534 across two orders of magnitude, a 0.023
+spread — against the geometric arm's 0.175 → 0.981 → 0.999 → lottery. **The capability crossover sits
+inside the same factor-of-two window as the schedule floor.**
+
+## 13. The geometric read's edge, schedule-controlled
+
+The only comparison in which the schedule is not a free variable — same `pattern`, same lr=3e-4, same
+`min_lr=1.0` constant schedule, three sealed seeds each:
+
+| arm @ 3e-4 constant | mean | variance |
+|---|---|---|
+| **geometric** (fused read) | **0.9862** | 1.11e-4 |
+| **hybrid** (attention reads) | **0.9149** | 2.51e-3 |
+
+**+0.0713 capability, 22.6× stability.** Compare the annealed framing this replaced: a capability
+comparison implicitly reading 0.9992 against 0.5714, and a variance ratio of ~240,000×. **Both effects are
+real; both are about an order of magnitude smaller once the schedule is fixed.**
+
+## 14. `arm=hybrid` — the read-attribution control (PR #1798, in `main`)
+
+`StackArch::Hybrid`: `pattern`'s `r` layers run the quaternion recurrence unchanged, every `a` layer runs
+ordinary causal attention. One enum variant, five match arms, three parser lines — at exactly the three
+sites `cargo check` reports as non-exhaustive. Additive; nothing retired.
+
+`probe_steps>none` is rejected for the hybrid with `read binding needs a declared geometric read layer and
+head`, which is **correct** — the binding requires a geometric read and a hybrid has none by construction.
+
+## 15. Reproduction notes
+
+- **The parameter-matched control is now on `main`** (PR **#1806**). Carried from `5a37b981` by
+  `cherry-pick -x` with authorship preserved; all three conflicts resolved as **union**, plus two
+  `StackArch::Hybrid` label arms because the branch predates #1798. Verified after relocation: **0.2529**
+  sealed against the original's 0.2529 (3-seed mean 0.2534) — so D20 §2 condition 1 is runnable from trunk.
+  **Three cherry-pick attempts were aborted before this one**, on a diagnosis that was wrong twice: the
+  hunk-2 conflict is *not* semantic. `main` defines `stage0_tally_dump`/`stage0_sieve`; the branch defines
+  `read_firing`/`context_reachability` — different functions added at the same line. One `grep -nE '^fn '`
+  on both files would have shown it. That is the third time this session a symbol mismatch was read as an
+  architectural question.
+- **The firing counter IS on `main`** — as `best_head_mean_weight_on_key` / `_on_value` with
+  `uniform_weight_reference`, not as `read_firing`.
