@@ -220,3 +220,34 @@ a query-blind bank-read control when testing selective retrieval.
 Hard/relaxed and export/reload parity must cover the actual refined Generate
 state, not only a tensor shape or a training loss. No bridge fit or runtime
 adaptation has been performed by this review.
+
+
+### Executed conditional state-collision audit
+
+Independent read-only analysis authenticated all 1,024 saved initial/final
+row SHA256 references of completed `joint-potential-fit-attempt6`. At both
+checkpoints, all 512 entry states are distinct ordered eight-lane retained
+signed tuples; no same-state group requires conflicting next-token labels or
+accepted full answers. The first token intersecting literal byte provenance
+also has 512 distinct states at both checkpoints and no conflicting groups.
+This token is at canonical position 3 or 4: in 472 rows it crosses the leading
+space/literal seam, and in 40 it lies wholly within literal bytes. It is not
+silently relabelled the first wholly-literal token. There are two entry labels,
+17 literal-entry labels and 48 full accepted replies.
+
+The reference SHA256 is
+`fe5e4a6f8c4e4d1277d8ab81ffcf1f28eb5de129846fb20e740469c142cce609`;
+its input/label/tokenizer bindings match the actual panel. All eight lanes and
+the full-bank/query context are retained, with no truncation or query-only
+replacement. The successful read-only aggregation took 8.10 seconds, using
+single-thread processes with a 1 GiB address-space cap. An earlier profiling
+attempt lacked `/usr/bin/time`; removing that optional profiler repaired the
+instrument without changing the analysis. No model/build/optimizer/GPU work
+or source artifact writes occurred.
+
+Decision: this construction panel shows no deterministic state-only interface
+ambiguity at those two positions. It does not prove semantic geometry, teacher
+predictability, low-capacity decoder sufficiency or transfer. Unique states may
+still be arbitrary identifiers. The result argues against adding checkpoints
+or declaring contextual information erased without a new counterexample;
+learning, output-field access and pool feasibility remain actual questions.
