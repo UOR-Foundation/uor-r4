@@ -1014,7 +1014,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     let integer = IntegerRealizer::load_native(&a.native_artifact, &expected)?;
     let tokenizerbytes = fs::read(a.native_artifact.join("tokenizer.json"))?;
     let tok = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizerbytes)
-        .map_err(|e| bad(&e.to_string()))?;
+        .ok_or_else(|| bad("ByteBPE tokenizer unavailable"))?;
     if integer.binding().vocab_size() != 1024
         || integer.context_config().heads * integer.context_config().lanes_per_head != 8
     {
@@ -1038,7 +1038,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     let cue = cue_payload(&a.cue_bundle)?;
     let prefix = prefix_payload(&a.prefix_bundle)?;
     let nativecue = integer.compile_cue_carrier(cue.clone())?;
-    let nativeprefix = integer.compile_prefix_transport(&nativecue, prefix_clone(prefix)?)?;
+    let nativeprefix = integer.compile_prefix_transport(&nativecue, prefix_clone(&prefix)?)?;
     if serde_json::to_value(nativecue.metadata())?
         != read(&a.cue_bundle.join("native-metadata.json"))?
         || serde_json::to_value(nativeprefix.metadata())?
