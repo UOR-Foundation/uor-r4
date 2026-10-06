@@ -59,7 +59,7 @@ fn main() -> Result<()> {
     }
     let old = PathBuf::from(&args[0]);
     let original = fs::canonicalize(&args[1])?;
-    let out = output_support::prospective_output(&args[2])?;
+    let out = output_support::prospective_output(Path::new(&args[2]))?;
     if out.starts_with(&original) || original.starts_with(&out) {
         return Err(bad("import/input overlap"));
     }
