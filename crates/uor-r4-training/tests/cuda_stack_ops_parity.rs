@@ -1462,6 +1462,149 @@ fn test_pointer_mixture_parity() -> uor_r4_training::Result<()> {
     Ok(())
 }
 
+/// The copy-gate-supervised pointer mixture (`pointer_gate_supervision`):
+/// its three parts and the gradients of `upstream * total` on one device.
+#[cfg(feature = "cuda")]
+#[allow(clippy::too_many_arguments)]
+fn supervised_pointer_run(
+    device: &candle_core::Device,
+    logits: &[f32],
+    side: &[f32],
+    beta: f32,
+    shape: (usize, usize, usize),
+    score: uor_r4_training::geometric_stack::ReadScore,
+    ids: &[u32],
+    targets: &[u32],
+    weights: Option<&[f32]>,
+    weight: f64,
+) -> uor_r4_training::Result<Vec<Vec<f32>>> {
+    let (rows, vocab, stride) = shape;
+    let z = candle_core::Var::from_tensor(&candle_core::Tensor::from_vec(
+        logits.to_vec(),
+        (rows, vocab),
+        device,
+    )?)?;
+    let s = candle_core::Var::from_tensor(&candle_core::Tensor::from_vec(
+        side.to_vec(),
+        (rows, stride),
+        device,
+    )?)?;
+    let b =
+        candle_core::Var::from_tensor(&candle_core::Tensor::from_vec(vec![beta], (1,), device)?)?;
+    let time = rows / 2;
+    let parts = uor_r4_training::geometric_stack::pointer_mixture_loss_supervised(
+        z.as_tensor(),
+        s.as_tensor(),
+        b.as_tensor(),
+        time,
+        score,
+        ids,
+        targets,
+        weights,
+        weight,
+    )?;
+    let grads = (&parts.total * 1.3)?.backward()?;
+    let mut results = vec![
+        values(&parts.mixture)?,
+        values(&parts.gate_bce)?,
+        values(&parts.pointer_nll)?,
+        values(&parts.total)?,
+    ];
+    for var in [&z, &s, &b] {
+        results.push(values(grads.get(var.as_tensor()).expect("gradient"))?);
+    }
+    Ok(results)
+}
+
+/// Copy-gate supervision on CUDA against the CPU op: the mixture, gate-BCE,
+/// pointer-NLL and total values and the logit, side and scale gradients of
+/// the total, Dot and Lorentz, unweighted and weighted (with a zero-weight
+/// row), with rows whose target no source holds. The mixture part also
+/// equals the unsupervised CUDA loss bit for bit.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_supervised_pointer_mixture_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::ReadScore;
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+    let shapes = [(7usize, 4usize, 37usize), (40, 19, 300), (1, 3, 6)];
+    let mut case = 0u64;
+    for &(time, dim, vocab) in &shapes {
+        let rows = 2 * time;
+        let stride = 2 * dim + 1;
+        let ids: Vec<u32> = (0..rows).map(|n| ((n * 7 + n / 3) % 5) as u32).collect();
+        let mut targets: Vec<u32> = (0..rows).map(|n| ids[(n + 1).min(rows - 1)]).collect();
+        targets[0] = (vocab - 1) as u32;
+        if rows > 3 {
+            targets[3] = (vocab - 1) as u32;
+        }
+        let mut weights = noise(rows, 91 + time as u64, 1.0)
+            .iter()
+            .map(|v| v.abs() + 0.1)
+            .collect::<Vec<f32>>();
+        weights[rows - 1] = 0.0;
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            for weighted in [false, true] {
+                case += 1;
+                let seed = 7000 + 31 * case;
+                let logits = noise(rows * vocab, seed, 3.0);
+                let side = noise(rows * stride, seed + 1, 1.2);
+                let beta = 0.8f32;
+                let w = weighted.then_some(weights.as_slice());
+                let shape = (rows, vocab, stride);
+                let run = |device| {
+                    supervised_pointer_run(
+                        device, &logits, &side, beta, shape, score, &ids, &targets, w, 0.6,
+                    )
+                };
+                let (cpu, cuda) = (run(&cpu_dev)?, run(&cuda_dev)?);
+                let label =
+                    format!("Supervised {score:?} weighted{weighted} t{time} d{dim} v{vocab}");
+                for (k, name) in ["mixture", "gate_bce", "pointer_nll", "total"]
+                    .iter()
+                    .enumerate()
+                {
+                    compare(&cpu[k], &cuda[k], 1e-5, &format!("{label} {name}"));
+                }
+                compare(&cpu[4], &cuda[4], 1e-4, &format!("{label} d_logits"));
+                let column = |all: &[f32], range: std::ops::Range<usize>| -> Vec<f32> {
+                    all.chunks(stride)
+                        .flat_map(|row| row[range.clone()].to_vec())
+                        .collect()
+                };
+                for (name, range) in [
+                    ("d_query", 0..dim),
+                    ("d_key", dim..2 * dim),
+                    ("d_gate", 2 * dim..stride),
+                ] {
+                    compare(
+                        &column(&cpu[5], range.clone()),
+                        &column(&cuda[5], range),
+                        1e-4,
+                        &format!("{label} {name}"),
+                    );
+                }
+                if score == ReadScore::Lorentz {
+                    compare(&cpu[6], &cuda[6], 1e-4, &format!("{label} d_beta"));
+                }
+                // The CUDA mixture part is the unsupervised CUDA loss bit for bit.
+                let plain = pointer_run(
+                    &cuda_dev, &logits, &side, beta, shape, score, &ids, &targets, w,
+                )?;
+                assert_eq!(
+                    plain[0][0].to_bits(),
+                    cuda[0][0].to_bits(),
+                    "{label}: mixture part differs from the unsupervised loss"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Global gradient squared norm: the multi-block CUDA kernels against Candle's
 // single-block `sqr().sum_all()` + `cat().sum_all()` (must be bit-identical)
@@ -1735,7 +1878,10 @@ fn test_bf16_exact_inputs_round_once() -> uor_r4_training::Result<()> {
     let (keys, values) = (4usize, 3usize);
     let query = exact(bf16_exact(rows * key, 1), vec![batch, heads, time, key])?;
     let key_tensor = exact(bf16_exact(rows * keys, 2), vec![batch, heads, time, keys])?;
-    let value_tensor = exact(bf16_exact(rows * values, 9), vec![batch, heads, time, values])?;
+    let value_tensor = exact(
+        bf16_exact(rows * values, 9),
+        vec![batch, heads, time, values],
+    )?;
     let aux_len = fused_aux_len(batch, heads, time, ReadScore::L2, true, true).max(1);
     let aux = exact(bf16_exact(aux_len, 4), vec![aux_len])?;
     let f32_read = fused_read(
@@ -1899,16 +2045,10 @@ fn test_bf16_fused_read_parity() -> uor_r4_training::Result<()> {
     };
     let query =
         candle_core::Tensor::from_vec(gen(rows * key, 0.0), (batch, heads, time, key), &cuda)?;
-    let keys = candle_core::Tensor::from_vec(
-        gen(rows * key, 1.7),
-        (batch, heads, time, key),
-        &cuda,
-    )?;
-    let values = candle_core::Tensor::from_vec(
-        gen(rows * value, 2.4),
-        (batch, heads, time, value),
-        &cuda,
-    )?;
+    let keys =
+        candle_core::Tensor::from_vec(gen(rows * key, 1.7), (batch, heads, time, key), &cuda)?;
+    let values =
+        candle_core::Tensor::from_vec(gen(rows * value, 2.4), (batch, heads, time, value), &cuda)?;
     for score in [ReadScore::Dot, ReadScore::Lorentz, ReadScore::L2] {
         let aux_len = fused_aux_len(batch, heads, time, score, true, true).max(1);
         let aux = candle_core::Tensor::from_vec(gen(aux_len, 3.1), aux_len, &cuda)?;
@@ -2265,5 +2405,606 @@ fn test_bf16_training_1000_steps_is_finite() -> uor_r4_training::Result<()> {
         last(&f32_losses),
         last(&bf16_losses)
     );
+    Ok(())
+}
+
+/// Step 7a key-content lineages (`conv8`, the key carrier): a model with the
+/// lineage moved off its initialisation gives the same loss, logits and
+/// lineage-parameter gradients on CPU and CUDA (saved on CPU, loaded on each).
+#[cfg(feature = "cuda")]
+#[test]
+fn test_step7a_read_lineage_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{
+        ReadLineage, ReadScore, StackArch, StackConfig, StackModel,
+    };
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(device) => device,
+        Err(e) => return no_device(e),
+    };
+    let cpu = candle_core::Device::Cpu;
+    let config = StackConfig {
+        arch: StackArch::Geometric,
+        vocab_size: 97,
+        width: 64,
+        heads: 4,
+        mlp_hidden: 96,
+        context: 48,
+        pattern: "rara".into(),
+        read: ReadScore::L2,
+        rotation: true,
+        rotation_group: Default::default(),
+        seed: 3,
+        memory: None,
+        select: None,
+        pointer: None,
+    };
+    let (batch, time) = (2usize, 48usize);
+    let ids: Vec<u32> = (0..batch * time)
+        .map(|i| ((i * 31 + 7) % 97) as u32)
+        .collect();
+    let targets: Vec<u32> = (0..batch * time)
+        .map(|i| ((i * 17 + 3) % 97) as u32)
+        .collect();
+    for (index, lineage) in [
+        ReadLineage::LearnedConvWide { taps: 8 },
+        ReadLineage::KeyCarrier,
+        ReadLineage::KeyPhase { snap: false },
+        ReadLineage::KeyPhase { snap: true },
+        ReadLineage::PhaseBinding { snap: false },
+        ReadLineage::PhaseBinding { snap: true },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut model = StackModel::new(config.clone(), &cpu)?;
+        model.set_read_lineage(Some(lineage))?;
+        for (n, (name, var)) in model.variables().iter().enumerate() {
+            if name.contains(".read.lineage_") {
+                let moved = var.as_tensor().add(&candle_core::Tensor::from_vec(
+                    noise(var.elem_count(), 100 + n as u64, 0.3),
+                    var.shape(),
+                    &cpu,
+                )?)?;
+                var.set(&moved)?;
+            }
+        }
+        let dir = std::env::temp_dir().join(format!(
+            "cuda-step7a-lineage-{index}-{}",
+            std::process::id()
+        ));
+        model.save(&dir)?;
+        let mut runs = Vec::new();
+        for device in [&cpu, &cuda] {
+            let model = StackModel::load(&dir, device)?;
+            assert_eq!(model.read_lineage(), Some(lineage));
+            let loss = model.loss(&ids, &targets, batch, time)?;
+            let grads = loss.backward()?;
+            let mut lineage_grads = Vec::new();
+            for (name, var) in model.variables() {
+                if name.contains(".read.lineage_") {
+                    let grad = grads.get(var.as_tensor()).expect("lineage gradient");
+                    lineage_grads.push((name.clone(), values(grad)?));
+                }
+            }
+            let logits = values(&model.forward(&ids, batch, time)?)?;
+            runs.push((values(&loss)?, logits, lineage_grads));
+        }
+        std::fs::remove_dir_all(&dir)?;
+        let name = lineage.name();
+        compare(&runs[0].0, &runs[1].0, 1e-4, &format!("{name} loss"));
+        compare(&runs[0].1, &runs[1].1, 1e-3, &format!("{name} logits"));
+        assert_eq!(runs[0].2.len(), runs[1].2.len());
+        for ((n0, g0), (n1, g1)) in runs[0].2.iter().zip(&runs[1].2) {
+            assert_eq!(n0, n1);
+            compare(g0, g1, 1e-3, &format!("{name} grad {n0}"));
+        }
+    }
+    Ok(())
+}
+
+/// Step 7d read-binding supervision: the same model (saved on the CPU, loaded
+/// on CUDA) gives the same language, binding and total losses, the same
+/// selected heads and masses, and the same gradient of the total, for the L2,
+/// Lorentz and Dot reads with and without a pointer head. The CUDA language
+/// part equals the unsupervised CUDA loss bit for bit.
+#[cfg(feature = "cuda")]
+#[test]
+fn test_read_supervision_parity() -> uor_r4_training::Result<()> {
+    use uor_r4_training::geometric_stack::{
+        PointerConfig, ReadScore, ReadSupervisionGroup, ReadSupervisionRow, ReadSupervisionTarget,
+        StackModel,
+    };
+    let cuda = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (batch, time) = (2usize, 16usize);
+    let mut rng = Bf16Rng(707);
+    let (ids, targets) = rng.batch(batch, time, 64);
+    let weights: Vec<f32> = (0..batch * time)
+        .map(|n| if n % time >= 9 { 1.0 } else { 0.0 })
+        .collect();
+    let target = ReadSupervisionTarget {
+        layer: 1,
+        groups: vec![
+            ReadSupervisionGroup {
+                batch: 0,
+                bound: vec![2, 3],
+                competing: vec![5, 6],
+            },
+            ReadSupervisionGroup {
+                batch: 0,
+                bound: vec![7],
+                competing: vec![],
+            },
+            ReadSupervisionGroup {
+                batch: 1,
+                bound: vec![1, 8],
+                competing: vec![4],
+            },
+        ],
+        rows: vec![
+            ReadSupervisionRow { group: 0, query: 9 },
+            ReadSupervisionRow {
+                group: 0,
+                query: 10,
+            },
+            ReadSupervisionRow {
+                group: 1,
+                query: 12,
+            },
+            ReadSupervisionRow {
+                group: 2,
+                query: 11,
+            },
+            ReadSupervisionRow {
+                group: 2,
+                query: 15,
+            },
+        ],
+    };
+    let dir = std::env::temp_dir().join(format!("read-supervision-parity-{}", std::process::id()));
+    for read in [ReadScore::L2, ReadScore::Lorentz, ReadScore::Dot] {
+        for pointer in [false, true] {
+            let label = format!("ReadSupervision {read:?} pointer={pointer}");
+            let mut config = bf16_model_config(21);
+            config.read = read;
+            if pointer {
+                config.pointer = Some(PointerConfig::new(8));
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+            StackModel::new(config, &candle_core::Device::Cpu)?.save(&dir)?;
+            type Run = (Vec<f32>, Vec<f32>, Vec<f32>, Vec<usize>, Vec<f32>, f32);
+            let run = |device: &candle_core::Device| -> uor_r4_training::Result<Run> {
+                let model = StackModel::load(&dir, device)?;
+                let parts = model
+                    .read_supervised_loss(&ids, &targets, &weights, batch, time, &target, 0.7)?;
+                let scalars = vec![
+                    parts.language.to_scalar::<f32>()?,
+                    parts.binding.to_scalar::<f32>()?,
+                    parts.total.to_scalar::<f32>()?,
+                ];
+                let grads = parts.total.backward()?;
+                let mut gradient = Vec::new();
+                for var in model.variables().values() {
+                    if let Some(g) = grads.get(var) {
+                        gradient.extend(values(g)?);
+                    }
+                }
+                let plain = model
+                    .weighted_loss(&ids, &targets, &weights, batch, time)?
+                    .to_scalar::<f32>()?;
+                Ok((
+                    scalars,
+                    parts.bound,
+                    parts.competing,
+                    parts.heads,
+                    gradient,
+                    plain,
+                ))
+            };
+            let cpu = run(&candle_core::Device::Cpu)?;
+            let gpu = run(&cuda)?;
+            compare(
+                &cpu.0,
+                &gpu.0,
+                1e-5,
+                &format!("{label} language/binding/total"),
+            );
+            compare(&cpu.1, &gpu.1, 1e-4, &format!("{label} bound masses"));
+            compare(&cpu.2, &gpu.2, 1e-4, &format!("{label} competing masses"));
+            assert_eq!(cpu.3, gpu.3, "{label}: selected heads differ");
+            compare(&cpu.4, &gpu.4, 1e-3, &format!("{label} total gradient"));
+            assert_eq!(
+                gpu.0[0].to_bits(),
+                gpu.5.to_bits(),
+                "{label}: CUDA language part differs from the unsupervised loss"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    Ok(())
+}
+
+/// The flash-style read forward (online softmax, no T x T buffer) against the
+/// fused forward and the CPU reference, f32 and bf16 storage, with the
+/// general configurations plus long rows and odd value widths; then the whole
+/// forward and backward with the flash forward selected against the fused
+/// one (the backward is shared).
+#[cfg(feature = "cuda")]
+#[test]
+fn test_flash_read_forward_parity() -> uor_r4_training::Result<()> {
+    use candle_core::DType;
+    use uor_r4_training::geometric_stack::{
+        fused_aux_len, fused_read, set_cuda_read_kernels, CudaReadKernels, ReadScore,
+    };
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+    let shapes = [
+        (2usize, 3usize, 13usize, 8usize, 9usize),
+        (1, 2, 37, 16, 16),
+        (2, 4, 5, 4, 5),
+        (1, 1, 1, 4, 4),
+        (1, 2, 129, 16, 64),
+        (1, 2, 384, 16, 64),
+        (1, 1, 384, 8, 37),
+        (1, 1, 129, 8, 200),
+    ];
+    let configs = [
+        (ReadScore::Dot, false, false),
+        (ReadScore::Dot, true, true),
+        (ReadScore::Lorentz, true, true),
+        (ReadScore::Lorentz, false, false),
+        (ReadScore::Lorentz, true, false),
+        (ReadScore::L2, true, true),
+        (ReadScore::L2, false, false),
+    ];
+    let forward = |device: &candle_core::Device,
+                   dtype: DType,
+                   data: [&Vec<f32>; 4],
+                   shape: (usize, usize, usize, usize, usize),
+                   score: ReadScore,
+                   null: bool,
+                   age: bool|
+     -> uor_r4_training::Result<Vec<f32>> {
+        let (batch, heads, time, key, value) = shape;
+        let t = |d: &Vec<f32>, w: usize| {
+            candle_core::Tensor::from_vec(d.clone(), (batch, heads, time, w), device)?
+                .to_dtype(dtype)
+        };
+        let aux = candle_core::Tensor::from_vec(data[3].clone(), data[3].len(), device)?;
+        let out = fused_read(
+            &t(data[0], key)?,
+            &t(data[1], key)?,
+            &t(data[2], value)?,
+            &aux,
+            score,
+            null,
+            age,
+            false,
+        )?;
+        Ok(out.to_dtype(DType::F32)?.flatten_all()?.to_vec1::<f32>()?)
+    };
+    let check = |reference: &[f32], got: &[f32], ulp: f32, name: &str| -> f32 {
+        assert_eq!(reference.len(), got.len(), "{name} length");
+        let mut worst = 0.0f32;
+        for (i, (&r, &g)) in reference.iter().zip(got).enumerate() {
+            let diff = (r - g).abs();
+            assert!(
+                diff <= 1e-4 + (1e-3 + ulp) * r.abs(),
+                "{name} [{i}]: reference {r} flash {g}"
+            );
+            worst = worst.max(diff);
+        }
+        worst
+    };
+    let mut case = 0u64;
+    for &shape in &shapes {
+        let (batch, heads, time, key, value) = shape;
+        for &(score, null, age) in &configs {
+            case += 1;
+            let seed = 5000 + 17 * case;
+            let q_data = noise(batch * heads * time * key, seed, 0.8);
+            let k_data = noise(batch * heads * time * key, seed + 1, 0.8);
+            let v_data = noise(batch * heads * time * value, seed + 2, 1.0);
+            let aux_len = fused_aux_len(batch, heads, time, score, null, age).max(1);
+            let mut aux_data = noise(aux_len, seed + 3, 0.5);
+            if score.scaled() {
+                let base = aux_len - 2 * heads;
+                for h in 0..heads {
+                    aux_data[base + h] = 0.7 + 0.3 * h as f32;
+                    aux_data[base + heads + h] = 0.2 * h as f32 - 0.1;
+                }
+            }
+            let data = [&q_data, &k_data, &v_data, &aux_data];
+            let name = format!(
+                "flash {score:?} null{null} age{age} b{batch} h{heads} t{time} k{key} v{value}"
+            );
+            let cpu = forward(&cpu_dev, DType::F32, data, shape, score, null, age)?;
+            for dtype in [DType::F32, DType::BF16] {
+                set_cuda_read_kernels(CudaReadKernels::Fused);
+                let fused = forward(&cuda_dev, dtype, data, shape, score, null, age)?;
+                set_cuda_read_kernels(CudaReadKernels::Flash);
+                let flash = forward(&cuda_dev, dtype, data, shape, score, null, age)?;
+                // bf16 output rounds once; a sum on a rounding boundary may
+                // land one bf16 step (at most 2^-7 relative) from the fused one.
+                let ulp = if dtype == DType::BF16 {
+                    1.0 / 128.0
+                } else {
+                    0.0
+                };
+                let worst = check(&fused, &flash, ulp, &format!("{name} {dtype:?} vs fused"));
+                if dtype == DType::F32 {
+                    let cpu_worst = check(&cpu, &flash, 0.0, &format!("{name} vs CPU"));
+                    println!("{name} f32: |flash-fused| {worst:e} |flash-cpu| {cpu_worst:e}");
+                } else {
+                    println!("{name} bf16: |flash-fused| {worst:e}");
+                }
+            }
+            if time <= 129 {
+                let w_data = noise(batch * heads * time * value, seed + 4, 1.0);
+                let run_data = [&q_data, &k_data, &v_data, &aux_data, &w_data];
+                set_cuda_read_kernels(CudaReadKernels::Fused);
+                let fused = read_run(&cuda_dev, run_data, shape, score, null, age)?;
+                set_cuda_read_kernels(CudaReadKernels::Flash);
+                let flash = read_run(&cuda_dev, run_data, shape, score, null, age)?;
+                for (k, part) in ["out", "dq", "dk", "dv", "d_aux"].iter().enumerate() {
+                    compare(
+                        &fused[k],
+                        &flash[k],
+                        1e-3,
+                        &format!("{name} fwd+bwd {part}"),
+                    );
+                }
+            }
+        }
+    }
+    set_cuda_read_kernels(CudaReadKernels::Fused);
+    Ok(())
+}
+
+/// The flash read backward (selector Flash) against the fused backward:
+/// dq, dk, dv and the auxiliary gradient element by element, f32 and bf16
+/// storage, general configurations plus long rows and an odd value width;
+/// and two flash runs give bit-identical results (no atomics).
+#[cfg(feature = "cuda")]
+#[test]
+fn test_flash_read_parity() -> uor_r4_training::Result<()> {
+    use candle_core::{DType, Tensor, Var};
+    use uor_r4_training::geometric_stack::{
+        fused_aux_len, fused_read, set_cuda_read_kernels, CudaReadKernels, ReadScore,
+    };
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let shapes = [
+        (2usize, 3usize, 13usize, 8usize, 9usize),
+        (1, 2, 37, 16, 16),
+        (2, 4, 5, 4, 5),
+        (1, 1, 1, 4, 4),
+        (1, 2, 129, 16, 64),
+        (1, 1, 384, 8, 37),
+    ];
+    let configs = [
+        (ReadScore::Dot, false, false),
+        (ReadScore::Dot, true, true),
+        (ReadScore::Lorentz, true, true),
+        (ReadScore::Lorentz, false, false),
+        (ReadScore::Lorentz, true, false),
+        (ReadScore::L2, true, true),
+        (ReadScore::L2, false, false),
+    ];
+    // [out, dq, dk, dv, d_aux] of sum(out * w), the read in `dtype` storage.
+    let run = |dtype: DType,
+               data: [&Vec<f32>; 5],
+               shape: (usize, usize, usize, usize, usize),
+               score: ReadScore,
+               null: bool,
+               age: bool|
+     -> uor_r4_training::Result<Vec<Vec<f32>>> {
+        let (batch, heads, time, key, value) = shape;
+        let var = |d: &Vec<f32>, w: usize| {
+            Var::from_tensor(&Tensor::from_vec(
+                d.clone(),
+                (batch, heads, time, w),
+                &cuda_dev,
+            )?)
+        };
+        let (q, k, v) = (var(data[0], key)?, var(data[1], key)?, var(data[2], value)?);
+        let a = Var::from_tensor(&Tensor::from_vec(
+            data[3].clone(),
+            data[3].len(),
+            &cuda_dev,
+        )?)?;
+        let w = Tensor::from_vec(data[4].clone(), (batch, heads, time, value), &cuda_dev)?
+            .to_dtype(dtype)?;
+        let out = fused_read(
+            &q.as_tensor().to_dtype(dtype)?,
+            &k.as_tensor().to_dtype(dtype)?,
+            &v.as_tensor().to_dtype(dtype)?,
+            a.as_tensor(),
+            score,
+            null,
+            age,
+            false,
+        )?;
+        let grads = out.mul(&w)?.to_dtype(DType::F32)?.sum_all()?.backward()?;
+        let mut results = vec![out.to_dtype(DType::F32)?.flatten_all()?.to_vec1::<f32>()?];
+        for var in [&q, &k, &v, &a] {
+            let g = grads.get(var.as_tensor()).expect("gradient");
+            results.push(g.to_dtype(DType::F32)?.flatten_all()?.to_vec1::<f32>()?);
+        }
+        Ok(results)
+    };
+    let check = |reference: &[f32], got: &[f32], ulp: f32, name: &str| -> f32 {
+        assert_eq!(reference.len(), got.len(), "{name} length");
+        let mut worst = 0.0f32;
+        for (i, (&r, &g)) in reference.iter().zip(got).enumerate() {
+            let diff = (r - g).abs();
+            assert!(
+                g.is_finite() && diff <= 1e-4 + (1e-3 + ulp) * r.abs(),
+                "{name} [{i}]: fused {r} flash {g}"
+            );
+            worst = worst.max(diff);
+        }
+        worst
+    };
+    let mut case = 0u64;
+    for &shape in &shapes {
+        let (batch, heads, time, key, value) = shape;
+        for &(score, null, age) in &configs {
+            case += 1;
+            let seed = 9000 + 23 * case;
+            let q_data = noise(batch * heads * time * key, seed, 0.8);
+            let k_data = noise(batch * heads * time * key, seed + 1, 0.8);
+            let v_data = noise(batch * heads * time * value, seed + 2, 1.0);
+            let aux_len = fused_aux_len(batch, heads, time, score, null, age).max(1);
+            let mut aux_data = noise(aux_len, seed + 3, 0.5);
+            if score.scaled() {
+                let base = aux_len - 2 * heads;
+                for h in 0..heads {
+                    aux_data[base + h] = 0.7 + 0.3 * h as f32;
+                    aux_data[base + heads + h] = 0.2 * h as f32 - 0.1;
+                }
+            }
+            let w_data = noise(batch * heads * time * value, seed + 4, 1.0);
+            let data = [&q_data, &k_data, &v_data, &aux_data, &w_data];
+            let name = format!(
+                "flash bwd {score:?} null{null} age{age} b{batch} h{heads} t{time} k{key} v{value}"
+            );
+            for dtype in [DType::F32, DType::BF16] {
+                set_cuda_read_kernels(CudaReadKernels::Fused);
+                let fused = run(dtype, data, shape, score, null, age)?;
+                set_cuda_read_kernels(CudaReadKernels::Flash);
+                let flash = run(dtype, data, shape, score, null, age)?;
+                let again = run(dtype, data, shape, score, null, age)?;
+                let ulp = if dtype == DType::BF16 {
+                    1.0 / 128.0
+                } else {
+                    0.0
+                };
+                let mut line = format!("{name} {dtype:?}:");
+                for (k, part) in ["out", "dq", "dk", "dv", "d_aux"].iter().enumerate() {
+                    let worst = check(
+                        &fused[k],
+                        &flash[k],
+                        ulp,
+                        &format!("{name} {dtype:?} {part}"),
+                    );
+                    let same = flash[k]
+                        .iter()
+                        .zip(&again[k])
+                        .all(|(x, y)| x.to_bits() == y.to_bits());
+                    assert!(same, "{name} {dtype:?} {part}: flash is not deterministic");
+                    line.push_str(&format!(" {part} {worst:.2e}"));
+                }
+                println!("{line}");
+            }
+        }
+    }
+    set_cuda_read_kernels(CudaReadKernels::Fused);
+    Ok(())
+}
+
+/// Forward and forward+backward timing of the fused and flash reads at training size.
+/// Run explicitly: `bench_flash_read_forward --ignored --nocapture`.
+#[cfg(feature = "cuda")]
+#[test]
+#[ignore]
+fn bench_flash_read_forward() -> uor_r4_training::Result<()> {
+    flash_read_bench(384, candle_core::DType::F32)
+}
+
+// The same bench with bf16 q/k/v (aux stays f32), so the bf16 build's
+// kernels (tensor-core flash forward) run; T = 384 and T = 1024.
+#[cfg(feature = "cuda")]
+#[test]
+#[ignore = "timing bench; run on a CUDA host with --ignored --nocapture"]
+fn bench_flash_read_bf16() -> uor_r4_training::Result<()> {
+    flash_read_bench(384, candle_core::DType::BF16)?;
+    flash_read_bench(1024, candle_core::DType::BF16)
+}
+
+#[cfg(feature = "cuda")]
+fn flash_read_bench(time: usize, dtype: candle_core::DType) -> uor_r4_training::Result<()> {
+    use std::time::Instant;
+    use uor_r4_training::geometric_stack::{
+        fused_aux_len, fused_read, set_cuda_read_kernels, CudaReadKernels, ReadScore,
+    };
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (batch, heads, key, value) = (16usize, 8usize, 72usize, 72usize);
+    let rows = batch * heads * time;
+    let t = |len: usize, seed: u64, w: usize| {
+        candle_core::Tensor::from_vec(noise(len, seed, 0.5), (batch, heads, time, w), &cuda_dev)?
+            .to_dtype(dtype)
+    };
+    let q = t(rows * key, 1, key)?;
+    let k = t(rows * key, 2, key)?;
+    let v = t(rows * value, 3, value)?;
+    let mut aux = noise(
+        fused_aux_len(batch, heads, time, ReadScore::L2, true, true),
+        4,
+        0.5,
+    );
+    let n = aux.len();
+    for h in 0..heads {
+        aux[n - 2 * heads + h] = 1.0;
+        aux[n - heads + h] = 0.0;
+    }
+    let aux = candle_core::Tensor::from_vec(aux, n, &cuda_dev)?;
+    for kernels in [CudaReadKernels::Fused, CudaReadKernels::Flash] {
+        set_cuda_read_kernels(kernels);
+        let run = || fused_read(&q, &k, &v, &aux, ReadScore::L2, true, true, false);
+        for _ in 0..5 {
+            run()?;
+        }
+        cuda_dev.synchronize()?;
+        let started = Instant::now();
+        for _ in 0..200 {
+            run()?;
+        }
+        cuda_dev.synchronize()?;
+        let ms = started.elapsed().as_secs_f64() * 1e3 / 200.0;
+        println!("{kernels:?} {dtype:?} forward b{batch} h{heads} t{time} k{key} v{value} L2 null+age: {ms:.3} ms/call");
+        let (qv, kv, vv) = (
+            candle_core::Var::from_tensor(&q)?,
+            candle_core::Var::from_tensor(&k)?,
+            candle_core::Var::from_tensor(&v)?,
+        );
+        let w = t(rows * value, 5, value)?;
+        let run_both = || -> uor_r4_training::Result<()> {
+            let out = fused_read(
+                qv.as_tensor(),
+                kv.as_tensor(),
+                vv.as_tensor(),
+                &aux,
+                ReadScore::L2,
+                true,
+                true,
+                false,
+            )?;
+            out.mul(&w)?.sum_all()?.backward()?;
+            Ok(())
+        };
+        for _ in 0..5 {
+            run_both()?;
+        }
+        cuda_dev.synchronize()?;
+        let started = Instant::now();
+        for _ in 0..200 {
+            run_both()?;
+        }
+        cuda_dev.synchronize()?;
+        let ms = started.elapsed().as_secs_f64() * 1e3 / 200.0;
+        println!("{kernels:?} {dtype:?} forward+backward b{batch} h{heads} t{time} k{key} v{value} L2 null+age: {ms:.3} ms/call");
+    }
+    set_cuda_read_kernels(CudaReadKernels::Fused);
     Ok(())
 }

@@ -158,6 +158,10 @@ const INITIAL_LORENTZ_OFFSET: f64 = 2.5;
 pub enum StackArch {
     Geometric,
     Transformer,
+    /// Recurrence layers from `pattern=` with **ordinary attention** reads: the
+    /// attribution control that separates the geometric read from the recurrent
+    /// stack (`pattern` letters `r` and `a` are honoured; `a` layers run attention).
+    Hybrid,
 }
 
 /// The storage of a model's activations, chosen per run by `precision=`.
@@ -303,6 +307,54 @@ pub fn set_cuda_recurrence_kernels(kernels: CudaRecurrenceKernels) {
         CudaRecurrenceKernels::Single => 2,
     };
     CUDA_RECURRENCE_KERNELS.store(code, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The CUDA kernels of the fused read's forward (a training-speed choice;
+/// the backward is the same either way and recomputes its own pass).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CudaReadKernels {
+    /// Scores into a T x T buffer, a softmax per row, then the value mix.
+    /// The default.
+    Fused,
+    /// One flash-style kernel per (query tile, window, head) with an online
+    /// softmax and no T x T buffer. Selected for a whole process with
+    /// `UOR_R4_CUDA_READ=flash`.
+    Flash,
+}
+
+/// 0: not yet read from the environment, 1: fused, 2: flash.
+static CUDA_READ_KERNELS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// The CUDA read forward kernels in use: the last [`set_cuda_read_kernels`]
+/// choice, else `UOR_R4_CUDA_READ` (`flash` or `fused`), else
+/// [`CudaReadKernels::Fused`].
+pub fn cuda_read_kernels() -> CudaReadKernels {
+    use std::sync::atomic::Ordering;
+    let mut code = CUDA_READ_KERNELS.load(Ordering::Relaxed);
+    if code == 0 {
+        code = match std::env::var("UOR_R4_CUDA_READ").as_deref() {
+            Ok("flash") => 2,
+            _ => 1,
+        };
+        // Keep an explicit choice made concurrently.
+        let _ = CUDA_READ_KERNELS.compare_exchange(0, code, Ordering::Relaxed, Ordering::Relaxed);
+        code = CUDA_READ_KERNELS.load(Ordering::Relaxed);
+    }
+    if code == 2 {
+        CudaReadKernels::Flash
+    } else {
+        CudaReadKernels::Fused
+    }
+}
+
+/// Selects the CUDA read forward kernels for the whole process (tests
+/// compare the two paths with it).
+pub fn set_cuda_read_kernels(kernels: CudaReadKernels) {
+    let code = match kernels {
+        CudaReadKernels::Fused => 1,
+        CudaReadKernels::Flash => 2,
+    };
+    CUDA_READ_KERNELS.store(code, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Matched identity-input mechanisms for geometric reads. Both use the same
@@ -536,9 +588,179 @@ pub struct StackBindingLoss {
     pub masses: Tensor,
 }
 
+/// A pointer model's response loss with copy-gate supervision
+/// ([`StackModel::gate_supervised_loss`]): `total = mixture + weight *
+/// (gate_bce + pointer_nll)`, each part a scalar weighted mean over the scored
+/// targets (the response weights), the parts sharing one op so the backward
+/// runs once.
+pub struct GateSupervisedLoss {
+    /// The objective the update descends.
+    pub total: Tensor,
+    /// The mixture's response NLL, as [`StackModel::weighted_loss`] gives it.
+    pub mixture: Tensor,
+    /// `BCE(g_t, [target held by a source 0..=t])`.
+    pub gate_bce: Tensor,
+    /// `-log p_copy(target)` on rows whose target a source holds, 0 elsewhere.
+    pub pointer_nll: Tensor,
+}
+
+/// One bound value's source sets in one batch item of a read-binding
+/// supervision label ([`ReadSupervisionTarget`]). `bound` holds the window
+/// positions of the value the answer must name; `competing` the positions of
+/// the other stated values that answer must not name (may be empty). Both are
+/// sorted, unique and disjoint.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadSupervisionGroup {
+    pub batch: usize,
+    pub bound: Vec<usize>,
+    pub competing: Vec<usize>,
+}
+
+/// One supervised query: the input position `query` of a batch item whose
+/// next token is a token of the group's bound value. Every source of the
+/// group is strictly earlier than `query`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadSupervisionRow {
+    pub group: usize,
+    pub query: usize,
+}
+
+/// Read-binding supervision labels for one geometric read layer (Step 7d,
+/// #820): many queries per batch item, every head observed. Like
+/// [`ReadBindingTarget`] the source sets are auxiliary value channels sharing
+/// the read's exact scores, admission, age and NoRead normalization and are
+/// removed before `read.out`; the labels never alter a hidden state or logit.
+/// Teacher-only; never a model or checkpoint field.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadSupervisionTarget {
+    pub layer: usize,
+    pub groups: Vec<ReadSupervisionGroup>,
+    pub rows: Vec<ReadSupervisionRow>,
+}
+
+/// The floor inside `-log(mass + floor)` of read-binding supervision: a mass
+/// that underflows to 0 costs `-log(1e-6)` instead of an infinite loss.
+pub const READ_SUPERVISION_FLOOR: f64 = 1e-6;
+
+/// [`StackModel::read_supervised_loss`]'s parts, one forward graph:
+/// `total = language + weight * binding`.
+pub struct ReadSupervisedLoss {
+    /// The objective the update descends.
+    pub total: Tensor,
+    /// The response NLL exactly as [`StackModel::weighted_loss`] gives it.
+    pub language: Tensor,
+    /// Mean over the rows of `-log(m + READ_SUPERVISION_FLOOR)`, `m` the
+    /// selected head's mass on the bound value.
+    pub binding: Tensor,
+    /// Per row: the selected (binding) head's mass on the bound value.
+    pub bound: Vec<f32>,
+    /// Per row: the selected head's mass on the competing values.
+    pub competing: Vec<f32>,
+    /// Per row: the selected head (most mass on bound + competing, lowest
+    /// index on a tie; chosen without gradient).
+    pub heads: Vec<usize>,
+}
+
+/// The read-binding supervision capture: the label and, per row and head,
+/// the masses on the bound and on the competing sets.
+struct SupervisionCapture<'a> {
+    target: &'a ReadSupervisionTarget,
+    /// `(bound [rows, heads], competing [rows, heads])`.
+    masses: Option<(Tensor, Tensor)>,
+}
+
 struct BindingCapture<'a> {
-    target: &'a ReadBindingTarget,
+    /// The exact-source label of one layer/head, if any.
+    target: Option<&'a ReadBindingTarget>,
+    /// Read-binding supervision labels of one layer, if any. Exclusive with
+    /// `target`, `probe` and `weights`.
+    supervision: Option<SupervisionCapture<'a>>,
     masses: Option<Tensor>,
+    /// The diagnostic span probe ([`StackModel::read_span_probe`]), if any.
+    probe: Option<SpanProbeCapture<'a>>,
+    /// The diagnostic read weight dump ([`StackModel::read_weight_rows`]), if
+    /// any. Exclusive with `target` and `probe`: it is the only auxiliary value
+    /// block then, so its channels start at the ordinary value width.
+    weights: Option<WeightDumpCapture>,
+    /// The diagnostic query/key dump ([`StackModel::read_qk_rows`]), if any.
+    /// Unlike `weights` this adds no value channel at all: it only clones
+    /// tensors the forward has already computed, so it cannot change a score,
+    /// a weight, a hidden state or a logit.
+    qk: Option<ReadQkCapture>,
+}
+
+/// Every read layer's exact per-position query/key inputs to the fused read
+/// ([`StackModel::read_qk_rows`]): the projections the score function is
+/// applied to, together with the read's fused auxiliary vector.
+///
+/// This is the accessor the Stage-0 qualification named as missing. Without
+/// the query/key vectors no score outside the three the config enum can
+/// already name (`dot`, `lorentz`, `l2`) can be evaluated on the frozen
+/// vectors, and in particular cosine cannot: for every one of those three the
+/// score is a function of `q.k`, `|q|^2` and `|k|^2` alone, so a single dump of
+/// `(q, k, aux)` is exactly enough to evaluate any score of that family, or a
+/// normalised one such as `q.k / (|q| |k|)` that is not in it.
+struct ReadQkCapture {
+    /// `(layer, the layer's frozen read inputs)` in layer order.
+    layers: Vec<(usize, ReadQkLayer)>,
+}
+
+/// One read layer's frozen score inputs, exactly as the fused read receives
+/// them (no copy is re-derived from the parameters, so the dump cannot drift
+/// from the forward by a re-implementation).
+pub struct ReadQkLayer {
+    /// `[batch, heads, time, head_width]`: the read's query projection.
+    pub query: Tensor,
+    /// `[batch, heads, time, head_width]`: the read's key projection.
+    pub key: Tensor,
+    /// The fused read's auxiliary vector, the same tensor
+    /// [`fused_read_selected`] is called with. [`fused_aux_len`] is its only
+    /// authority; with both optional blocks present its layout is
+    /// `batch*heads*time` NoRead logits in `(batch, head, time)` order, then
+    /// `heads*time` age biases in `(head, time)` order, then, only when the
+    /// score is scaled, the heads' `read.log_beta` exponentials and the heads'
+    /// `read.offset` offsets (`2 * heads` more).
+    pub aux: Tensor,
+}
+
+/// Every read layer's full softmax weight row at declared `(batch, query)`
+/// rows ([`StackModel::read_weight_rows`]). Like the binding label and the span
+/// probe each source position is an auxiliary value channel (here the identity
+/// over sources) sharing the read's exact scores, admission and NoRead
+/// normalization; the channels are removed before `read.out`.
+struct WeightDumpCapture {
+    /// The `(batch, query)` rows to keep, in the given order.
+    rows: Vec<(usize, usize)>,
+    /// `(layer, weights [rows, heads, time])` in layer order.
+    layers: Vec<(usize, Tensor)>,
+}
+
+/// Every geometric read layer's per-head attention mass on declared source
+/// sets at one query of a single window. Like the binding label, each set is
+/// an auxiliary value channel sharing the read's exact scores, admission and
+/// NoRead normalization; the channels are removed before `read.out`.
+struct SpanProbeCapture<'a> {
+    spans: &'a [Vec<usize>],
+    query: usize,
+    /// `(layer, [heads, spans] masses)` in layer order.
+    layers: Vec<(usize, Tensor)>,
+}
+
+/// Each supervision group's channel slot within its batch item (groups of one
+/// item take slots 0, 1, ... in label order) and the largest slot count.
+fn supervision_slots(target: &ReadSupervisionTarget) -> (Vec<usize>, usize) {
+    let mut used: BTreeMap<usize, usize> = BTreeMap::new();
+    let slots: Vec<usize> = target
+        .groups
+        .iter()
+        .map(|group| {
+            let next = used.entry(group.batch).or_insert(0);
+            *next += 1;
+            *next - 1
+        })
+        .collect();
+    let width = used.values().copied().max().unwrap_or(0);
+    (slots, width)
 }
 
 /// Refuse a flock the reads cannot evaluate. The selection itself is the shared
@@ -1155,6 +1377,13 @@ impl StackConfig {
                     ));
                 }
             }
+            StackArch::Hybrid => {
+                if self.pattern.chars().any(|c| c != 'a' && c != 'r') {
+                    return Err(invalid(
+                        "hybrid pattern letters are r (recurrence) or a (attention read)",
+                    ));
+                }
+            }
         }
         if let Some(memory) = &self.memory {
             memory.validate(self.layers())?;
@@ -1227,6 +1456,23 @@ impl StackConfig {
             }
             match (self.arch, self.layer_kind(layer)) {
                 (StackArch::Transformer, _) => {
+                    shapes.insert(name("attn_norm.weight"), vec![d]);
+                    for part in ["q", "k", "v", "o"] {
+                        shapes.insert(name(&format!("attn.{part}.weight")), vec![d, d]);
+                    }
+                }
+                (StackArch::Hybrid, 'r') => {
+                    let gates = lanes + self.rotation_rows();
+                    shapes.insert(name("rec_norm.weight"), vec![d]);
+                    shapes.insert(name("rec.in.weight"), vec![2 * d, d]);
+                    shapes.insert(name("rec.conv.weight"), vec![CONVOLUTION_WIDTH, d]);
+                    shapes.insert(name("rec.conv.bias"), vec![d]);
+                    shapes.insert(name("rec.gate.weight"), vec![gates, d]);
+                    shapes.insert(name("rec.gate.bias"), vec![gates]);
+                    shapes.insert(name("rec.decay"), vec![lanes]);
+                    shapes.insert(name("rec.out.weight"), vec![d, d]);
+                }
+                (StackArch::Hybrid, _) => {
                     shapes.insert(name("attn_norm.weight"), vec![d]);
                     for part in ["q", "k", "v", "o"] {
                         shapes.insert(name(&format!("attn.{part}.weight")), vec![d, d]);
@@ -2061,7 +2307,8 @@ impl StackModel {
                 projected = previous_key_channel(&projected)?;
             }
             if let Some(lineage) = self.read_lineage {
-                projected = self.read_lineage_projection(p, layer, lineage, part, projected)?;
+                projected =
+                    self.read_lineage_projection(p, layer, lineage, part, input, projected)?;
             }
             if part != "value" {
                 if let Some(identity) = &latched {
@@ -2095,6 +2342,27 @@ impl StackModel {
         if aux.dim(0)? != fused_aux_len(batch, heads, time, self.config.read, true, true) {
             return Err(invalid("fused read auxiliary layout differs"));
         }
+        // The query/key dump ([`StackModel::read_qk_rows`]) clones the exact
+        // tensors the fused read is about to score with, after the layout check
+        // above, so its `aux` is the one `fused_read_selected` receives. It adds
+        // no value channel, no parameter and no arithmetic: nothing downstream
+        // of this point can observe it.
+        if let Some(dump) = binding.as_mut().and_then(|binding| binding.qk.as_mut()) {
+            dump.layers.push((
+                layer,
+                ReadQkLayer {
+                    query: query.clone(),
+                    key: key.clone(),
+                    aux: aux.clone(),
+                },
+            ));
+        }
+        let bound = match self.read_lineage {
+            Some(ReadLineage::PhaseBinding { snap }) => {
+                Some(self.phase_binding_read(p, layer, &u, &identity, &value, snap)?)
+            }
+            _ => None,
+        };
         let (value, value_width) = self.read_binding_values(value, layer, binding)?;
         let read = fused_read_selected(
             &query,
@@ -2107,7 +2375,86 @@ impl StackModel {
             false,
             self.config.select,
         )?;
-        self.finish_geometric_read(p, layer, &read, value_width, capture, binding)
+        self.finish_geometric_read(p, layer, &read, value_width, capture, binding, bound)
+    }
+
+    /// One phase of [`ReadLineage::PhaseBinding`] (`map` and `bias` the key's
+    /// or the query's): `[batch, time, heads, blocks, 4]` unit quaternions of
+    /// the read identity input, in f32.
+    fn phase_binding_phase(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        identity: &Tensor,
+        (map, bias): (&str, &str),
+        snap: bool,
+    ) -> Result<Tensor> {
+        let (batch, time, _) = identity.dims3()?;
+        let heads = self.config.heads;
+        let head_width = self.config.head_width();
+        if !head_width.is_multiple_of(4) {
+            return Err(invalid(
+                "phase binding needs whole heads of four-channel blocks",
+            ));
+        }
+        let raw = self
+            .linear(identity, p.layer(layer, map)?)?
+            .to_dtype(DType::F32)?
+            .broadcast_add(&p.layer(layer, bias)?.to_dtype(DType::F32)?)?
+            .reshape((batch, time, heads, head_width / 4, 4))?;
+        unit_phase(&raw, snap)
+    }
+
+    /// [`ReadLineage::PhaseBinding`]'s term `mix (.) r` of one read layer,
+    /// `[batch, time, width]` in f32, from the read input `u`, its identity
+    /// input and the value heads `[batch, heads, time, head_width]`.
+    fn phase_binding_read(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        u: &Tensor,
+        identity: &Tensor,
+        value: &Tensor,
+        snap: bool,
+    ) -> Result<Tensor> {
+        let (batch, heads, time, head_width) = value.dims4()?;
+        let key_phase = self.phase_binding_phase(
+            p,
+            layer,
+            identity,
+            (READ_LINEAGE_BIND_KEY, READ_LINEAGE_BIND_KEY_BIAS),
+            snap,
+        )?;
+        let query_phase = self.phase_binding_phase(
+            p,
+            layer,
+            identity,
+            (READ_LINEAGE_BIND_QUERY, READ_LINEAGE_BIND_QUERY_BIAS),
+            snap,
+        )?;
+        // g_j = sigmoid(G u_j + b), one per head: [batch, time, heads].
+        let logit = self
+            .linear(u, p.layer(layer, READ_LINEAGE_BIND_GATE)?)?
+            .to_dtype(DType::F32)?
+            .broadcast_add(
+                &p.layer(layer, READ_LINEAGE_BIND_GATE_BIAS)?
+                    .to_dtype(DType::F32)?,
+            )?;
+        let gate = (logit.neg()?.exp()? + 1.0)?.recip()?;
+        let value = value.to_dtype(DType::F32)?.transpose(1, 2)?.reshape((
+            batch,
+            time,
+            heads,
+            head_width / 4,
+            4,
+        ))?;
+        let unbound = phase_bind_unbind(&key_phase, &query_phase, &value, &gate)?;
+        let mix = p
+            .layer(layer, READ_LINEAGE_BIND_MIX)?
+            .to_dtype(DType::F32)?;
+        Ok(unbound
+            .reshape((batch, time, heads * head_width))?
+            .broadcast_mul(&mix)?)
     }
 
     /// The label mask is an auxiliary value channel, never a score input.
@@ -2123,8 +2470,8 @@ impl StackModel {
         // so neither the teacher mask nor its mass enters the residual stream.
         let target = binding
             .as_ref()
-            .filter(|binding| binding.target.layer == layer)
-            .map(|binding| binding.target);
+            .and_then(|binding| binding.target)
+            .filter(|target| target.layer == layer);
         let value_width = value.dim(3)?;
         let value = match target {
             None => value,
@@ -2139,6 +2486,100 @@ impl StackModel {
                 Tensor::cat(&[&value, &mask], 3)?
             }
         };
+        // Read-binding supervision: two channels per group slot of a batch
+        // item (bound, competing), the same sets in every head. Exclusive with
+        // the other auxiliary blocks, so they start at the ordinary width.
+        let value = match binding
+            .as_ref()
+            .and_then(|binding| binding.supervision.as_ref())
+            .filter(|supervision| supervision.target.layer == layer)
+        {
+            None => value,
+            Some(supervision) => {
+                if binding.as_ref().is_some_and(|binding| {
+                    binding.target.is_some() || binding.probe.is_some() || binding.weights.is_some()
+                }) {
+                    return Err(invalid(
+                        "read-binding supervision is exclusive with the other read labels and probes",
+                    ));
+                }
+                let (slots, width) = supervision_slots(supervision.target);
+                let channels = 2 * width;
+                let mut mask = vec![0.0f32; batch * heads * time * channels];
+                for (group, &slot) in supervision.target.groups.iter().zip(&slots) {
+                    for (offset, set) in [(0, &group.bound), (1, &group.competing)] {
+                        for &source in set {
+                            for h in 0..heads {
+                                mask[((group.batch * heads + h) * time + source) * channels
+                                    + 2 * slot
+                                    + offset] = 1.0;
+                            }
+                        }
+                    }
+                }
+                let mask = Tensor::from_vec(mask, (batch, heads, time, channels), &self.device)?
+                    .to_dtype(value.dtype())?;
+                Tensor::cat(&[&value, &mask], 3)?
+            }
+        };
+        // The span probe's channels: one per source set, the same set in every
+        // head. Like the label mask they never enter the scores.
+        let value = match binding.as_ref().and_then(|binding| binding.probe.as_ref()) {
+            None => value,
+            Some(probe) => {
+                let sets = probe.spans.len();
+                let mut mask = vec![0.0f32; batch * heads * time * sets];
+                for b in 0..batch {
+                    for h in 0..heads {
+                        for (s, span) in probe.spans.iter().enumerate() {
+                            for &source in span {
+                                mask[((b * heads + h) * time + source) * sets + s] = 1.0;
+                            }
+                        }
+                    }
+                }
+                let mask = Tensor::from_vec(mask, (batch, heads, time, sets), &self.device)?
+                    .to_dtype(value.dtype())?;
+                Tensor::cat(&[&value, &mask], 3)?
+            }
+        };
+        // The read weight dump's channels: the identity over source positions,
+        // the same in every head. Output channel `j` of row `t` is then exactly
+        // the read's softmax weight on source `j`. Like the label mask and the
+        // span probe they never enter the scores and are removed before
+        // `read.out`. Exclusive with the other two blocks (the extraction below
+        // relies on that), which is checked here rather than silently mixed.
+        let value = match binding
+            .as_ref()
+            .and_then(|binding| binding.weights.as_ref())
+        {
+            None => value,
+            Some(dump) => {
+                if binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.target.is_some() || binding.probe.is_some())
+                {
+                    return Err(invalid(
+                        "the read weight dump is exclusive with the binding label and span probe",
+                    ));
+                }
+                if dump.rows.iter().any(|&(b, q)| b >= batch || q >= time) {
+                    return Err(invalid("a read weight dump row is outside the window"));
+                }
+                let sets = time;
+                let mut mask = vec![0.0f32; batch * heads * time * sets];
+                for b in 0..batch {
+                    for h in 0..heads {
+                        for source in 0..time {
+                            mask[((b * heads + h) * time + source) * sets + source] = 1.0;
+                        }
+                    }
+                }
+                let mask = Tensor::from_vec(mask, (batch, heads, time, sets), &self.device)?
+                    .to_dtype(value.dtype())?;
+                Tensor::cat(&[&value, &mask], 3)?
+            }
+        };
         Ok((value, value_width))
     }
 
@@ -2150,12 +2591,75 @@ impl StackModel {
         value_width: usize,
         capture: &mut Capture<'_>,
         binding: &mut Option<BindingCapture<'_>>,
+        bound: Option<Tensor>,
     ) -> Result<Tensor> {
         let (batch, heads, time, _) = read.dims4()?;
         let target = binding
             .as_ref()
-            .filter(|binding| binding.target.layer == layer)
-            .map(|binding| binding.target);
+            .and_then(|binding| binding.target)
+            .filter(|target| target.layer == layer);
+        if let Some(probe) = binding.as_mut().and_then(|binding| binding.probe.as_mut()) {
+            // Batch item 0 (the probe is single-window), every head, the query.
+            let masses = read
+                .narrow(3, value_width, probe.spans.len())?
+                .get(0)?
+                .narrow(1, probe.query, 1)?
+                .squeeze(1)?
+                .to_dtype(DType::F32)?;
+            probe.layers.push((layer, masses));
+        }
+        if let Some(dump) = binding
+            .as_mut()
+            .and_then(|binding| binding.weights.as_mut())
+        {
+            // The identity block is the only auxiliary value block (checked in
+            // `read_binding_values`), so it starts at the ordinary width.
+            let weights = read.narrow(3, value_width, time)?;
+            let mut kept = Vec::with_capacity(dump.rows.len());
+            for &(b, query) in &dump.rows {
+                kept.push(
+                    weights
+                        .get(b)?
+                        .narrow(1, query, 1)?
+                        .squeeze(1)?
+                        .to_dtype(DType::F32)?,
+                );
+            }
+            let rows = Tensor::stack(&kept, 0)?;
+            dump.layers.push((layer, rows));
+        }
+        if let Some(supervision) = binding
+            .as_mut()
+            .and_then(|binding| binding.supervision.as_mut())
+            .filter(|supervision| supervision.target.layer == layer)
+        {
+            let (slots, slot_width) = supervision_slots(supervision.target);
+            let channels = 2 * slot_width;
+            let total = value_width + channels;
+            let rows = &supervision.target.rows;
+            let mut bound = Vec::with_capacity(rows.len() * heads);
+            let mut competing = Vec::with_capacity(rows.len() * heads);
+            for row in rows {
+                let group = &supervision.target.groups[row.group];
+                for h in 0..heads {
+                    let base = ((group.batch * heads + h) * time + row.query) * total
+                        + value_width
+                        + 2 * slots[row.group];
+                    bound.push(base as u32);
+                    competing.push((base + 1) as u32);
+                }
+            }
+            let flat = read.flatten_all()?;
+            let gather = |indices: Vec<u32>| -> Result<Tensor> {
+                let n = indices.len();
+                let indices = Tensor::from_vec(indices, n, &self.device)?;
+                Ok(flat
+                    .index_select(&indices, 0)?
+                    .to_dtype(DType::F32)?
+                    .reshape((rows.len(), heads))?)
+            };
+            supervision.masses = Some((gather(bound)?, gather(competing)?));
+        }
         let read = if let Some(target) = target {
             let indices: Vec<u32> = target
                 .rows
@@ -2172,9 +2676,13 @@ impl StackModel {
             }
             read.narrow(3, 0, value_width)?
         } else {
-            read.clone()
+            read.narrow(3, 0, value_width)?
         };
-        let merged = self.merge_heads(&read, batch, time)?;
+        let mut merged = self.merge_heads(&read, batch, time)?;
+        if let Some(bound) = bound {
+            // ReadLineage::PhaseBinding's `mix (.) r` (f32).
+            merged = merged.add(&bound.to_dtype(merged.dtype())?)?;
+        }
         tap(capture, StackSite::ReadOut(layer), || Ok(merged.clone()))?;
         self.linear(&merged, p.layer(layer, "read.out.weight")?)
     }
@@ -2298,6 +2806,11 @@ impl StackModel {
     /// This first implementation is an offline CPU float-training prototype.
     pub fn set_geometric_address(&mut self, config: GeometricAddressConfig) -> Result<()> {
         self.validate_geometric_address(&config)?;
+        if matches!(self.read_lineage, Some(ReadLineage::PhaseBinding { .. })) {
+            return Err(invalid(
+                "phase binding lives in the ordinary read and has no geometric-address form",
+            ));
+        }
         if let Some(existing) = &self.geometric_address {
             return if existing == &config {
                 Ok(())
@@ -2463,6 +2976,88 @@ impl StackModel {
                     );
                 }
             }
+            Some(ReadLineage::LearnedConvWide { taps }) => {
+                if !(2..=MAX_CONV_TAPS).contains(&taps) {
+                    return Err(invalid(format!(
+                        "a wide read conv needs 2..={MAX_CONV_TAPS} taps"
+                    )));
+                }
+                for &layer in &read_layers {
+                    let values: Vec<f32> = (0..width * taps)
+                        .map(|index| if index % taps == 0 { 1.0 } else { 0.0 })
+                        .collect();
+                    self.variables.insert(
+                        layer_name(layer, READ_LINEAGE_CONV_WIDE),
+                        Var::from_vec(values, (width, taps), &self.device)?,
+                    );
+                }
+            }
+            Some(ReadLineage::KeyCarrier) => {
+                if !width.is_multiple_of(self.config.heads) {
+                    return Err(invalid("the key carrier needs whole heads"));
+                }
+                for (name, shape) in read_lineage_shapes(&self.config, ReadLineage::KeyCarrier) {
+                    self.variables
+                        .insert(name, Var::zeros(shape, DType::F32, &self.device)?);
+                }
+            }
+            Some(lineage @ ReadLineage::KeyPhase { .. }) => {
+                let head_width = self.config.head_width();
+                if !width.is_multiple_of(self.config.heads) || !head_width.is_multiple_of(4) {
+                    return Err(invalid(
+                        "the key phase needs whole heads of four-channel blocks",
+                    ));
+                }
+                for (name, shape) in read_lineage_shapes(&self.config, lineage) {
+                    let var = if shape.len() == 1 {
+                        // Bias (1, 0, 0, 0) per head: the identity phase.
+                        let values: Vec<f32> = (0..shape[0])
+                            .map(|i| if i % 4 == 0 { 1.0 } else { 0.0 })
+                            .collect();
+                        Var::from_vec(values, shape, &self.device)?
+                    } else {
+                        Var::zeros(shape, DType::F32, &self.device)?
+                    };
+                    self.variables.insert(name, var);
+                }
+            }
+            Some(lineage @ ReadLineage::PhaseBinding { .. }) => {
+                let head_width = self.config.head_width();
+                if !width.is_multiple_of(self.config.heads) || !head_width.is_multiple_of(4) {
+                    return Err(invalid(
+                        "phase binding needs whole heads of four-channel blocks",
+                    ));
+                }
+                let std = 1.0 / (width as f64).sqrt();
+                let mut streams: BTreeMap<usize, Initializer> = BTreeMap::new();
+                for (name, shape) in read_lineage_shapes(&self.config, lineage) {
+                    let layer = name
+                        .split('.')
+                        .nth(1)
+                        .and_then(|index| index.parse::<usize>().ok())
+                        .ok_or_else(|| invalid("a phase binding variable has no layer"))?;
+                    let rng = streams.entry(layer).or_insert_with(|| {
+                        Initializer(
+                            self.config.seed
+                                ^ PHASE_BIND_SEED_MIX
+                                ^ (layer as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15),
+                        )
+                    });
+                    let count: usize = shape.iter().product();
+                    let values: Vec<f32> = if name.ends_with("_map") {
+                        (0..count).map(|_| (rng.normal() * std) as f32).collect()
+                    } else if name.ends_with(".key_bias") || name.ends_with(".query_bias") {
+                        // (1, 0, 0, 0) per block: the identity phase.
+                        (0..count)
+                            .map(|i| if i % 4 == 0 { 1.0 } else { 0.0 })
+                            .collect()
+                    } else {
+                        vec![0.0; count]
+                    };
+                    self.variables
+                        .insert(name, Var::from_vec(values, shape, &self.device)?);
+                }
+            }
             Some(ReadLineage::RandomSo4 { seed }) => {
                 let blocks = random_so4_blocks(width / 4, seed);
                 let mut matrix = vec![0f32; width * width];
@@ -2495,9 +3090,62 @@ impl StackModel {
         layer: usize,
         lineage: ReadLineage,
         part: &str,
+        input: &Tensor,
         projected: Tensor,
     ) -> Result<Tensor> {
         match (part, lineage) {
+            ("key", ReadLineage::LearnedConvWide { taps }) => {
+                let weight = p
+                    .layer(layer, READ_LINEAGE_CONV_WIDE)?
+                    .to_dtype(projected.dtype())?;
+                let mut mixed = projected.broadcast_mul(&weight.narrow(1, 0, 1)?.squeeze(1)?)?;
+                for lag in 1..taps {
+                    let tap = weight.narrow(1, lag, 1)?.squeeze(1)?;
+                    mixed = mixed.add(&causal_shift(&projected, lag)?.broadcast_mul(&tap)?)?;
+                }
+                Ok(mixed)
+            }
+            (part @ ("query" | "key"), ReadLineage::KeyPhase { snap }) => {
+                let (map, bias) = if part == "key" {
+                    (READ_LINEAGE_PHASE_KEY, READ_LINEAGE_PHASE_KEY_BIAS)
+                } else {
+                    (READ_LINEAGE_PHASE_QUERY, READ_LINEAGE_PHASE_QUERY_BIAS)
+                };
+                let (batch, time, width) = projected.dims3()?;
+                let heads = self.config.heads;
+                let raw = self
+                    .linear(input, p.layer(layer, map)?)?
+                    .to_dtype(DType::F32)?
+                    .broadcast_add(p.layer(layer, bias)?)?
+                    .reshape((batch, time, heads, 1, 4))?;
+                let phase = unit_phase(&raw, snap)?.to_dtype(projected.dtype())?;
+                let blocks = projected.reshape((batch, time, heads, width / heads / 4, 4))?;
+                Ok(left_multiply_blocks(&phase, &blocks)?.reshape((batch, time, width))?)
+            }
+            ("key", ReadLineage::KeyCarrier) => {
+                let (batch, time, width) = projected.dims3()?;
+                let heads = self.config.heads;
+                let dtype = projected.dtype();
+                // g_j = sigmoid(G u_j + b), one per head: [batch, time, heads].
+                let logit = self
+                    .linear(input, p.layer(layer, READ_LINEAGE_CARRIER_GATE)?)?
+                    .to_dtype(DType::F32)?
+                    .broadcast_add(p.layer(layer, READ_LINEAGE_CARRIER_BIAS)?)?;
+                let gate = (logit.neg()?.exp()? + 1.0)?.recip()?.to_dtype(dtype)?;
+                let written = projected
+                    .reshape((batch, time, heads, width / heads))?
+                    .broadcast_mul(&gate.unsqueeze(3)?)?
+                    .transpose(1, 2)?
+                    .contiguous()?;
+                let decay = carrier_decay(heads, time, dtype, projected.device())?;
+                let carried = decay
+                    .unsqueeze(0)?
+                    .broadcast_matmul(&written)?
+                    .transpose(1, 2)?
+                    .reshape((batch, time, width))?;
+                let mix = p.layer(layer, READ_LINEAGE_CARRIER_MIX)?.to_dtype(dtype)?;
+                Ok(projected.add(&carried.broadcast_mul(&mix)?)?)
+            }
             ("query", ReadLineage::QueryKeyJ) => {
                 let previous = causal_shift(&projected, 1)?;
                 Ok(projected.add(&quaternion_j_inv_left(&previous)?)?)
@@ -2822,8 +3470,12 @@ impl StackModel {
         }
         let tokens = self.embed_with(&p, ids, batch, time)?;
         let mut binding = target.map(|target| BindingCapture {
-            target,
+            supervision: None,
+            target: Some(target),
             masses: None,
+            probe: None,
+            weights: None,
+            qk: None,
         });
         let x = self.layer_range_with_source(
             &p,
@@ -4782,8 +5434,12 @@ impl StackModel {
         }
         let tokens = self.embed_with(&p, ids, batch, time)?;
         let mut binding = target.map(|target| BindingCapture {
-            target,
+            supervision: None,
+            target: Some(target),
             masses: None,
+            probe: None,
+            weights: None,
+            qk: None,
         });
         let x = self.layer_range_with_source(
             &p,
@@ -5156,7 +5812,7 @@ impl StackModel {
             2,
         )?;
         let read = candle_nn::ops::softmax(&scores, 3)?.matmul(&value)?;
-        self.finish_geometric_read(p, layer, &read, value_width, capture, binding)
+        self.finish_geometric_read(p, layer, &read, value_width, capture, binding, None)
     }
 
     /// Offline saved-model bridge: only the weighted geometric reduction is
@@ -5467,7 +6123,15 @@ impl StackModel {
             let zero = Tensor::zeros((batch, heads, 1, values.dim(3)?), DType::F32, &self.device)?;
             let values = Tensor::cat(&[&zero, &values], 2)?;
             let read = candle_nn::ops::softmax(&joined, 3)?.matmul(&values)?;
-            return self.finish_geometric_read(p, layer, &read, value_width, capture, binding);
+            return self.finish_geometric_read(
+                p,
+                layer,
+                &read,
+                value_width,
+                capture,
+                binding,
+                None,
+            );
         }
         let null = match source.no_read {
             NoReadSource::LegacyFloat => {
@@ -5590,8 +6254,8 @@ impl StackModel {
         };
         let target = binding
             .as_ref()
-            .filter(|binding| binding.target.layer == layer)
-            .map(|binding| binding.target);
+            .and_then(|binding| binding.target)
+            .filter(|target| target.layer == layer);
         let read = if let Some(target) = target {
             // Labels observe raw normalized occurrence mass only AFTER the
             // predictive reduction. This channel is removed before read.out.
@@ -5615,7 +6279,7 @@ impl StackModel {
             }
             *sink = Some(output.trace);
         }
-        self.finish_geometric_read(p, layer, &read, value_width, capture, binding)
+        self.finish_geometric_read(p, layer, &read, value_width, capture, binding, None)
     }
 
     fn read_latch_gate_logits(&self, p: &Params<'_>, layer: usize, u: &Tensor) -> Result<Tensor> {
@@ -6200,6 +6864,8 @@ impl StackModel {
         for layer in layers {
             let mixed = match (self.config.arch, self.config.layer_kind(layer)) {
                 (StackArch::Transformer, _) => self.attention(p, layer, &x, capture)?,
+                (StackArch::Hybrid, 'r') => self.recurrence(p, layer, &x, capture)?,
+                (StackArch::Hybrid, _) => self.attention(p, layer, &x, capture)?,
                 (StackArch::Geometric, 'r') => self.recurrence(p, layer, &x, capture)?,
                 (StackArch::Geometric, _) => {
                     if let Some((site, residual)) = source.integer_residual {
@@ -6289,9 +6955,12 @@ impl StackModel {
     ) -> Result<Tensor> {
         let p = self.params()?;
         let hidden = self.hidden_hooked(&p, ids, batch, time, &mut None)?;
-        self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time)
+        self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time, false)
     }
 
+    /// The mixture op of a pointer model; with `supervise`, its three-part
+    /// output ([`PointerMixture::supervise`]).
+    #[allow(clippy::too_many_arguments)]
     fn pointer_loss_from_hidden(
         &self,
         p: &Params<'_>,
@@ -6300,6 +6969,7 @@ impl StackModel {
         targets: &[u32],
         weights: Option<&[f32]>,
         time: usize,
+        supervise: bool,
     ) -> Result<Tensor> {
         let pointer = self
             .config
@@ -6321,6 +6991,7 @@ impl StackModel {
                 keys: self.pointer_route_keys(ids),
                 targets: targets.to_vec(),
                 weights: weights.map(<[f32]>::to_vec),
+                supervise,
             },
         )?)
     }
@@ -6424,8 +7095,12 @@ impl StackModel {
         self.validate_binding(batch, time, target)?;
         let x = self.embed_with(p, ids, batch, time)?;
         let mut binding = Some(BindingCapture {
-            target,
+            supervision: None,
+            target: Some(target),
             masses: None,
+            probe: None,
+            weights: None,
+            qk: None,
         });
         let x = self.layer_range_with_source(
             p,
@@ -6471,6 +7146,366 @@ impl StackModel {
     ) -> Result<Tensor> {
         let p = self.params()?;
         Ok(self.hidden_with_binding(&p, ids, batch, time, binding)?.1)
+    }
+
+    /// TEMPORARY DIAGNOSTIC (T2, `mqar-bench` `dump_scores=1`): every geometric
+    /// read layer's full softmax weight row at declared `(batch, query)`
+    /// positions.
+    ///
+    /// The second returned value is the ordinary logits `[batch * time,
+    /// vocabulary]` of the same forward, so a caller can check that observing
+    /// the weights changed nothing. Each `(layer, [rows, heads, time])` entry
+    /// holds, at `[r, h, j]`, the read weight of head `h` on source `j <=
+    /// query_r` (`0` for `j > query_r`), normalized exactly as the ordinary
+    /// read normalizes it: over the admitted sources and the learned NoRead
+    /// slot, so `sum_j weights[r, h, j] = 1 - NoRead(t)` and the argmax over
+    /// `j` (with the NoRead slot) is the argmax of the read's score vector
+    /// (the softmax is strictly monotone). The weights come from an auxiliary
+    /// identity value block sharing the read's exact scores, admission, age
+    /// and normalization; it is removed before `read.out`, so no hidden state,
+    /// logit or parameter changes.
+    ///
+    /// The forward is [`Self::forward`]'s exact path (the plain fused read, no
+    /// geometric address, span, event or integer reducer); it refuses a model
+    /// that has one, and a model with no read layer at all.
+    pub fn read_weight_rows(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+        rows: &[(usize, usize)],
+    ) -> Result<(Vec<(usize, Tensor)>, Tensor)> {
+        if self.config.arch != StackArch::Geometric {
+            return Err(invalid("read weight rows need the geometric stack"));
+        }
+        if self.geometric_address.is_some() || self.geometric_span.is_some() {
+            return Err(invalid(
+                "read weight rows observe the plain fused read only (no geometric address or span)",
+            ));
+        }
+        if rows.is_empty() {
+            return Err(invalid("read weight rows needs at least one row"));
+        }
+        if time == 0 || time > self.config.context {
+            return Err(invalid(
+                "read weight rows needs one window within the context",
+            ));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let mut binding = Some(BindingCapture {
+            supervision: None,
+            target: None,
+            masses: None,
+            probe: None,
+            weights: Some(WeightDumpCapture {
+                rows: rows.to_vec(),
+                layers: Vec::new(),
+            }),
+            qk: None,
+        });
+        let x = self.layer_range_with_source(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            LatchGates::Soft,
+            ReadSource::default(),
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        let layers = binding
+            .and_then(|binding| binding.weights)
+            .map(|dump| dump.layers)
+            .unwrap_or_default();
+        if layers.is_empty() {
+            return Err(invalid("the stack has no read layer to dump weights from"));
+        }
+        let logits = self.linear(&hidden, p.head()?)?;
+        Ok((layers, logits))
+    }
+
+    /// DIAGNOSTIC (Stage-0 follow-up): every geometric read layer's frozen
+    /// query/key projections and fused auxiliary vector, so an offline readout
+    /// can evaluate a score function the model does not itself implement on the
+    /// same vectors the model scored with.
+    ///
+    /// The returned [`ReadQkLayer`]s are the *inputs* of the same
+    /// [`fused_read_selected`] call the ordinary forward makes: they are cloned
+    /// after the auxiliary layout is validated and before any score is
+    /// computed, so the dump cannot diverge from the forward by a
+    /// re-implementation of the projections. The second returned value is the
+    /// ordinary logits `[batch * time, vocabulary]` of that same forward, so a
+    /// caller can check that attaching the dump changed nothing.
+    ///
+    /// No score, weight, hidden state, logit or parameter is modified: the
+    /// capture adds no value channel and no arithmetic. This is observation
+    /// only and is not a serving path. Like [`Self::read_weight_rows`] it
+    /// observes the plain fused read and refuses a model whose read is produced
+    /// by geometric addressing or span production.
+    pub fn read_qk_rows(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> Result<(Vec<(usize, ReadQkLayer)>, Tensor)> {
+        if self.config.arch != StackArch::Geometric {
+            return Err(invalid("read query/key rows need the geometric stack"));
+        }
+        if self.geometric_address.is_some() || self.geometric_span.is_some() {
+            return Err(invalid(
+                "read query/key rows observe the plain fused read only (no geometric address or span)",
+            ));
+        }
+        if time == 0 || time > self.config.context {
+            return Err(invalid(
+                "read query/key rows needs one window within the context",
+            ));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let mut binding = Some(BindingCapture {
+            target: None,
+            masses: None,
+            probe: None,
+            weights: None,
+            qk: Some(ReadQkCapture { layers: Vec::new() }),
+            supervision: None,
+        });
+        let x = self.layer_range_with_source(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            LatchGates::Soft,
+            ReadSource::default(),
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        let layers = binding
+            .and_then(|binding| binding.qk)
+            .map(|dump| dump.layers)
+            .unwrap_or_default();
+        if layers.is_empty() {
+            return Err(invalid(
+                "the stack has no read layer to dump query/key rows from",
+            ));
+        }
+        let logits = self.linear(&hidden, p.head()?)?;
+        Ok((layers, logits))
+    }
+
+    /// Diagnostic of the next token after `ids` (one window, batch 1): every
+    /// geometric read layer's per-head attention mass, at the last position,
+    /// on each of `spans` (sets of window positions), and the output
+    /// distributions there. The forward is the ordinary one ([`Self::next_scores`]):
+    /// the span channels are auxiliary values sharing the read's exact scores,
+    /// age bias, admission and NoRead normalization, removed before
+    /// `read.out`, so they never change the hidden states or logits. A set's
+    /// mass is `sum_{j in set} a_j` with NoRead in the denominator; a set of
+    /// every position `0..=t` gives the read's total source mass (one minus
+    /// the NoRead mass). Geometric addressing and span production have their
+    /// own read paths and are refused.
+    pub fn read_span_probe(&self, ids: &[u32], spans: &[Vec<usize>]) -> Result<SpanProbe> {
+        let time = ids.len();
+        if time == 0 || time > self.config.context {
+            return Err(invalid(
+                "read span probe needs one window within the context",
+            ));
+        }
+        if self.config.arch != StackArch::Geometric {
+            return Err(invalid("read span probe needs the geometric stack"));
+        }
+        if self.geometric_address.is_some() || self.geometric_span.is_some() {
+            return Err(invalid(
+                "read span probe observes the plain fused read only (no geometric address or span)",
+            ));
+        }
+        if spans.is_empty() || spans.iter().flatten().any(|&source| source >= time) {
+            return Err(invalid(
+                "read span probe needs at least one set of in-window positions",
+            ));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, 1, time)?;
+        let mut binding = Some(BindingCapture {
+            supervision: None,
+            target: None,
+            masses: None,
+            probe: Some(SpanProbeCapture {
+                spans,
+                query: time - 1,
+                layers: Vec::new(),
+            }),
+            weights: None,
+            qk: None,
+        });
+        let x = self.layer_range_bound(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            LatchGates::Soft,
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?.detach();
+        let reads = binding
+            .and_then(|binding| binding.probe)
+            .map(|probe| probe.layers)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(layer, masses)| -> Result<ReadSpanMasses> {
+                Ok(ReadSpanMasses {
+                    layer,
+                    heads: masses
+                        .to_vec2::<f32>()?
+                        .into_iter()
+                        .map(|row| row.into_iter().map(f64::from).collect())
+                        .collect(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let logits: Vec<f64> = hidden
+            .narrow(0, time - 1, 1)?
+            .to_dtype(DType::F32)?
+            .matmul(&p.head()?.t()?)?
+            .flatten_all()?
+            .to_vec1::<f32>()?
+            .into_iter()
+            .map(f64::from)
+            .collect();
+        let maximum = logits.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let total: f64 = logits.iter().map(|&z| (z - maximum).exp()).sum();
+        let generator: Vec<f64> = logits
+            .iter()
+            .map(|&z| (z - maximum).exp() / total)
+            .collect();
+        let Some(pointer) = self.config.pointer else {
+            return Ok(SpanProbe {
+                reads,
+                mixture: generator.clone(),
+                generator,
+                pointer: None,
+            });
+        };
+        let side = self
+            .pointer_side(&p, &hidden)?
+            .to_dtype(DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let rule = PointerRule {
+            dim: pointer.dim,
+            score: pointer.score,
+            select: pointer.select,
+            beta: one_value(&self.pointer_beta(&p)?)?,
+            route: pointer.route,
+        };
+        let keys = self.pointer_route_keys(ids);
+        let attention =
+            pointer_attention(&side, 0, time - 1, &rule, keys.as_deref().unwrap_or(ids))?;
+        let gate = sigmoid_f64(f64::from(
+            side[(time - 1) * (2 * pointer.dim + 1) + 2 * pointer.dim],
+        ));
+        let mut mixture: Vec<f64> = generator.iter().map(|&q| (1.0 - gate) * q).collect();
+        for (&a, &id) in attention.iter().zip(ids) {
+            mixture[id as usize] += gate * a;
+        }
+        Ok(SpanProbe {
+            reads,
+            generator,
+            mixture,
+            pointer: Some(PointerProbe { gate, attention }),
+        })
+    }
+
+    /// Diagnostic of one geometric read layer's score inputs over one window
+    /// (batch 1): the per-head queries and keys after every projection the
+    /// ordinary read applies (identity carry and the F2 previous-key channel
+    /// included), the NoRead logits, the age table over the window's distances
+    /// and, for the scaled scores, `beta = exp(log_beta)` and `offset`.
+    /// [`ReadQueryKey::row`] recomputes a row's scores and softmax weights from
+    /// them exactly as the fused read does. Nothing is changed: the forward is
+    /// the ordinary one up to `layer`. Refused where the read has another
+    /// score path (geometric address or span, identity latch, lineage, a flock
+    /// selection) or `layer` is not a read layer.
+    pub fn read_query_key(&self, ids: &[u32], layer: usize) -> Result<ReadQueryKey> {
+        let time = ids.len();
+        if time == 0 || time > self.config.context {
+            return Err(invalid(
+                "read query/key probe needs one window within the context",
+            ));
+        }
+        if self.config.arch != StackArch::Geometric
+            || layer >= self.config.layers()
+            || self.config.layer_kind(layer) == 'r'
+        {
+            return Err(invalid("read query/key probe needs a geometric read layer"));
+        }
+        if self.geometric_address.is_some()
+            || self.geometric_span.is_some()
+            || self.read_identity_latch.is_some()
+            || self.config.select.is_some()
+        {
+            return Err(invalid(
+                "read query/key probe observes the plain fused read only (no address, span, latch or flock)",
+            ));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, 1, time)?;
+        let x = self.layer_range_bound(&p, x, 0..layer, &mut None, &mut None, LatchGates::Soft)?;
+        let u = self.norm(&p, &x, &layer_name(layer, "read_norm.weight"))?;
+        let identity = self.read_identity_input(&u)?;
+        let mut query = self.linear(&identity, p.layer(layer, "read.query.weight")?)?;
+        let mut key = self.linear(&identity, p.layer(layer, "read.key.weight")?)?;
+        if self.read_key_shift {
+            key = previous_key_channel(&key)?;
+        }
+        if let Some(lineage) = self.read_lineage {
+            query = self.read_lineage_projection(&p, layer, lineage, "query", &identity, query)?;
+            key = self.read_lineage_projection(&p, layer, lineage, "key", &identity, key)?;
+        }
+        let rows = |t: Tensor| -> Result<Vec<Vec<Vec<f32>>>> {
+            Ok(self
+                .heads(&t, 1, time)?
+                .get(0)?
+                .to_dtype(DType::F32)?
+                .to_vec3::<f32>()?)
+        };
+        let null = self
+            .linear(&u, p.layer(layer, "read.null.weight")?)?
+            .to_dtype(DType::F32)?
+            .broadcast_add(p.layer(layer, "read.null.bias")?)?
+            .get(0)?
+            .t()?
+            .contiguous()?
+            .to_vec2::<f32>()?;
+        let age = p
+            .layer(layer, "read.age")?
+            .narrow(1, 0, time)?
+            .to_vec2::<f32>()?;
+        let (beta, offset) = if self.config.read.scaled() {
+            (
+                p.layer(layer, "read.log_beta")?
+                    .exp()?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?,
+                p.layer(layer, "read.offset")?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?,
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        Ok(ReadQueryKey {
+            layer,
+            score: self.config.read,
+            query: rows(query)?,
+            key: rows(key)?,
+            null,
+            age,
+            beta,
+            offset,
+        })
     }
 
     /// The existing exact-source observer under the explicit last-token span
@@ -6565,7 +7600,7 @@ impl StackModel {
             ));
         }
         let language = if self.config.pointer.is_some() {
-            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time)?
+            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, weights, time, false)?
         } else {
             self.linear(&hidden, p.head()?)?.apply_op1(CrossEntropy {
                 targets: targets.to_vec(),
@@ -6640,6 +7675,264 @@ impl StackModel {
         })?)
     }
 
+    /// [`Self::weighted_loss`] of a pointer model with copy-gate supervision
+    /// of strength `weight > 0`: on each scored target whose id a source
+    /// `0..=t` of its window holds (the soft pointer's whole reachable range;
+    /// causal, since a position's sources are its own and earlier inputs),
+    /// `weight * (BCE(g_t, 1) - log p_copy(target))`, the pointer's NLL summed
+    /// over every position holding that id; on a scored target no source
+    /// holds, `weight * BCE(g_t, 0)`. Both are weighted means over the scored
+    /// targets, as the mixture's NLL is. Refused without a pointer head, with
+    /// a pointer selection or route, and under `precision=bf16` (no bf16
+    /// kernel). [`Self::weighted_loss`] is unchanged by its existence.
+    pub fn gate_supervised_loss(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        batch: usize,
+        time: usize,
+        weight: f64,
+    ) -> Result<GateSupervisedLoss> {
+        if !(weight.is_finite() && weight > 0.0) {
+            return Err(invalid(
+                "pointer gate supervision needs a finite positive weight",
+            ));
+        }
+        let pointer = self
+            .config
+            .pointer
+            .ok_or_else(|| invalid("pointer gate supervision needs a pointer head"))?;
+        if pointer.select.is_some() || pointer.route.is_some() {
+            return Err(invalid(
+                "pointer gate supervision needs a pointer over every source (no selection or route)",
+            ));
+        }
+        if self.precision.is_bf16() {
+            return Err(invalid(
+                "precision=bf16 has no bf16 pointer gate supervision kernel; use precision=f32",
+            ));
+        }
+        if targets.len() != ids.len() || weights.len() != ids.len() {
+            return Err(invalid("one target and one weight per input id"));
+        }
+        if targets
+            .iter()
+            .any(|&id| id as usize >= self.config.vocab_size)
+        {
+            return Err(invalid("target id outside the vocabulary"));
+        }
+        if weights.iter().any(|w| !w.is_finite() || *w < 0.0)
+            || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+        {
+            return Err(invalid(
+                "loss weights must be finite, nonnegative and not all zero",
+            ));
+        }
+        let p = self.params()?;
+        let hidden = self.hidden_hooked(&p, ids, batch, time, &mut None)?;
+        let parts =
+            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, Some(weights), time, true)?;
+        gate_supervised_parts(&parts, weight)
+    }
+
+    /// [`Self::weighted_loss`] plus read-binding supervision of strength
+    /// `weight > 0` (Step 7d, #820): at each labelled query of `target`'s read
+    /// layer, the binding head is the head with the most attention mass on the
+    /// row's bound and competing values together (chosen without gradient,
+    /// lowest index on a tie; the probe's binding-head rule), and the row
+    /// costs `-log(m + READ_SUPERVISION_FLOOR)`, `m` that head's mass on the
+    /// bound value's positions. `binding` is the mean over rows and `total =
+    /// language + weight * binding`. Masses are the read's own softmax
+    /// weights (age, admission and NoRead included) through auxiliary value
+    /// channels removed before `read.out`, so `language` equals
+    /// [`Self::weighted_loss`] and no hidden state changes. Needs the plain
+    /// fused read with full admission (no flock, geometric address or span)
+    /// and f32 precision.
+    pub fn read_supervised_loss(
+        &self,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        batch: usize,
+        time: usize,
+        target: &ReadSupervisionTarget,
+        weight: f64,
+    ) -> Result<ReadSupervisedLoss> {
+        if !(weight.is_finite() && weight > 0.0) {
+            return Err(invalid(
+                "read-binding supervision needs a finite positive weight",
+            ));
+        }
+        if self.precision.is_bf16() {
+            return Err(invalid(
+                "read-binding supervision is f32 only; use precision=f32",
+            ));
+        }
+        if targets.len() != ids.len() || weights.len() != ids.len() {
+            return Err(invalid("one target and one weight per input id"));
+        }
+        if targets
+            .iter()
+            .any(|&id| id as usize >= self.config.vocab_size)
+        {
+            return Err(invalid("target id outside the vocabulary"));
+        }
+        if weights.iter().any(|w| !w.is_finite() || *w < 0.0)
+            || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+        {
+            return Err(invalid(
+                "loss weights must be finite, nonnegative and not all zero",
+            ));
+        }
+        self.validate_supervision(batch, time, target)?;
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, batch, time)?;
+        let mut binding = Some(BindingCapture {
+            supervision: Some(SupervisionCapture {
+                target,
+                masses: None,
+            }),
+            qk: None,
+            target: None,
+            masses: None,
+            probe: None,
+            weights: None,
+        });
+        let x = self.layer_range_bound(
+            &p,
+            x,
+            0..self.config.layers(),
+            &mut None,
+            &mut binding,
+            LatchGates::Soft,
+        )?;
+        let hidden = self.finish_hooked(&p, x, &mut None)?;
+        let (bound, competing) = binding
+            .and_then(|binding| binding.supervision)
+            .and_then(|supervision| supervision.masses)
+            .ok_or_else(|| invalid("the supervised read layer was not evaluated"))?;
+        let language = if self.config.pointer.is_some() {
+            self.pointer_loss_from_hidden(&p, &hidden, ids, targets, Some(weights), time, false)?
+        } else {
+            self.linear(&hidden, p.head()?)?.apply_op1(CrossEntropy {
+                targets: targets.to_vec(),
+                weights: Some(weights.to_vec()),
+            })?
+        };
+        let heads = self.config.heads;
+        let bound_rows = bound.detach().to_vec2::<f32>()?;
+        let competing_rows = competing.detach().to_vec2::<f32>()?;
+        let mut chosen = Vec::with_capacity(bound_rows.len());
+        for (b, c) in bound_rows.iter().zip(&competing_rows) {
+            let mut best = 0;
+            for h in 1..heads {
+                if b[h] + c[h] > b[best] + c[best] {
+                    best = h;
+                }
+            }
+            chosen.push(best);
+        }
+        let indices: Vec<u32> = chosen
+            .iter()
+            .enumerate()
+            .map(|(r, &h)| (r * heads + h) as u32)
+            .collect();
+        let n = indices.len();
+        let indices = Tensor::from_vec(indices, n, &self.device)?;
+        let selected = bound.flatten_all()?.index_select(&indices, 0)?;
+        let binding = selected
+            .affine(1.0, READ_SUPERVISION_FLOOR)?
+            .log()?
+            .mean_all()?
+            .neg()?;
+        let total = language.add(&binding.affine(weight, 0.0)?)?;
+        Ok(ReadSupervisedLoss {
+            total,
+            language,
+            binding,
+            bound: chosen
+                .iter()
+                .zip(&bound_rows)
+                .map(|(&h, row)| row[h])
+                .collect(),
+            competing: chosen
+                .iter()
+                .zip(&competing_rows)
+                .map(|(&h, row)| row[h])
+                .collect(),
+            heads: chosen,
+        })
+    }
+
+    /// Check a read-binding supervision label against the model and window.
+    fn validate_supervision(
+        &self,
+        batch: usize,
+        time: usize,
+        target: &ReadSupervisionTarget,
+    ) -> Result<()> {
+        if batch == 0 || time == 0 || time > self.config.context {
+            return Err(invalid(
+                "read-binding supervision needs a nonempty window within the context",
+            ));
+        }
+        if self.config.arch != StackArch::Geometric
+            || target.layer >= self.config.layers()
+            || self.config.layer_kind(target.layer) != 'a'
+        {
+            return Err(invalid(
+                "read-binding supervision needs a declared geometric read layer",
+            ));
+        }
+        if self.config.select.is_some()
+            || self.geometric_address.is_some()
+            || self.geometric_span.is_some()
+        {
+            return Err(invalid(
+                "read-binding supervision needs the plain fused read with full admission",
+            ));
+        }
+        if target.rows.is_empty() {
+            return Err(invalid("read-binding supervision needs at least one row"));
+        }
+        for group in &target.groups {
+            let sorted = |set: &[usize]| set.windows(2).all(|w| w[0] < w[1]);
+            if group.batch >= batch
+                || group.bound.is_empty()
+                || !sorted(&group.bound)
+                || !sorted(&group.competing)
+                || group
+                    .competing
+                    .iter()
+                    .any(|s| group.bound.binary_search(s).is_ok())
+            {
+                return Err(invalid(
+                    "a read-binding group needs a batch item, a nonempty bound set and sorted disjoint sets",
+                ));
+            }
+        }
+        for row in &target.rows {
+            let group = target
+                .groups
+                .get(row.group)
+                .ok_or_else(|| invalid("a read-binding row names no group"))?;
+            let last = group
+                .bound
+                .iter()
+                .chain(&group.competing)
+                .max()
+                .copied()
+                .unwrap_or(0);
+            if row.query >= time || last >= row.query {
+                return Err(invalid(
+                    "a read-binding row's query must be in the window and after every source",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Per-target negative log-likelihoods (nats), without a backward graph.
     /// For a pointer model, the mixture's.
     pub fn target_nll(
@@ -6701,6 +7994,7 @@ impl StackModel {
             keys: self.pointer_route_keys(ids),
             targets: targets.to_vec(),
             weights: weights.map(<[f32]>::to_vec),
+            supervise: false,
         };
         let rows: Vec<(f64, Option<PointerRowStats>)> = (0..ids.len())
             .into_par_iter()
@@ -6841,7 +8135,7 @@ impl StackModel {
     /// and pins its digest in config.json; a default save removes stale carry
     /// metadata and retains the legacy config byte format.
     pub fn save(&self, directory: &Path) -> Result<()> {
-        if let Some(lineage) = self.read_lineage {
+        if let Some(lineage) = self.read_lineage.filter(|lineage| !lineage.saveable()) {
             return Err(invalid(format!(
                 "the research-only read lineage {} has no saved form",
                 lineage.name()
@@ -7003,6 +8297,13 @@ impl StackModel {
             // Only when set, so every model without it keeps its exact bytes.
             let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
             with_field[READ_KEY_SHIFT_FIELD] = serde_json::Value::Bool(true);
+            config = serde_json::to_vec_pretty(&with_field)?;
+        }
+        if let Some(lineage) = self.read_lineage {
+            // Only the saveable Step 7a arms reach here; only when set, so
+            // every other model keeps its exact bytes.
+            let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
+            with_field[READ_LINEAGE_FIELD] = serde_json::to_value(lineage)?;
             config = serde_json::to_vec_pretty(&with_field)?;
         }
         fs::write(directory.join("config.json"), config)?;
@@ -7333,6 +8634,10 @@ impl StackModel {
             }
             shapes.extend(geometric_span_shapes(&config));
         }
+        let read_lineage = Self::saved_read_lineage(directory)?;
+        if let Some(lineage) = read_lineage {
+            shapes.extend(read_lineage_shapes(&config, lineage));
+        }
         if tensors.len() != shapes.len() {
             return Err(invalid("saved stack tensors differ from the configuration"));
         }
@@ -7365,7 +8670,43 @@ impl StackModel {
         model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
         model.set_read_identity_carry(Self::saved_read_identity_carry(directory)?)?;
         model.set_read_key_shift(Self::saved_read_key_shift(directory)?)?;
+        if let Some(lineage) = read_lineage {
+            // Its variables were loaded above; set_read_lineage would
+            // re-initialise them, so the checks it makes are repeated here.
+            if model.read_key_shift
+                || model.read_identity_latch.is_some()
+                || model.geometric_address.is_some()
+                || !model.config.pattern.contains('a')
+            {
+                return Err(invalid(
+                    "a saved read lineage needs a plain geometric read without the key shift",
+                ));
+            }
+            model.read_lineage = Some(lineage);
+        }
         Ok(model)
+    }
+
+    /// The saved Step 7a read lineage of `directory` (`config.json` field
+    /// [`READ_LINEAGE_FIELD`]), if any. Absent means none; a lineage that is
+    /// not [`ReadLineage::saveable`] or a conv outside its tap range is refused.
+    pub fn saved_read_lineage(directory: &Path) -> Result<Option<ReadLineage>> {
+        let config: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
+        let Some(field) = config.get(READ_LINEAGE_FIELD) else {
+            return Ok(None);
+        };
+        let lineage: ReadLineage = serde_json::from_value(field.clone())?;
+        let taps_ok = match lineage {
+            ReadLineage::LearnedConvWide { taps } => (2..=MAX_CONV_TAPS).contains(&taps),
+            _ => true,
+        };
+        if !lineage.saveable() || !taps_ok {
+            return Err(invalid(format!(
+                "config.json's {READ_LINEAGE_FIELD} is not a saveable read lineage"
+            )));
+        }
+        Ok(Some(lineage))
     }
 }
 
@@ -9430,7 +10771,49 @@ pub enum ReadLineage {
     LearnedConv { init_lag1: bool },
     /// Keys `k_t + W k_{t-1}`, learned; `W` starts at the identity or zero.
     LearnedPrev { init_identity: bool },
+    /// Step 7a `conv8` (#820): keys `sum_{i<taps} w_i (.) k_{t-i}`, a learned
+    /// depthwise causal convolution over `taps` lags (2..=[`MAX_CONV_TAPS`]);
+    /// `w_0 = 1` and the other taps 0 at the start, so a model with it added
+    /// computes the plain read, bit for bit, until it trains. Saveable.
+    LearnedConvWide { taps: usize },
+    /// Step 7a binding carrier (#820): keys `k_t + v (.) c_t` with the
+    /// strictly causal per-head carrier `c_t = sum_{j<t} a_h^(t-1-j) g_j k_j`,
+    /// a learned per-head salience gate `g_j = sigmoid(G u_j + b)` on the read
+    /// input and the fixed decay `a_h = 1 - 2^-(1 + h mod 4)` (time constants
+    /// 2 to 16 tokens). `v`, `G` and `b` start at 0, so a model with it added
+    /// computes the plain read, bit for bit, until it trains. Saveable.
+    KeyCarrier,
+    /// Step 7a `rot` (#820, owner amendment): multiplicative quaternion phase
+    /// binding. A learned map of the read input gives each position and head
+    /// a unit quaternion phase, one map for keys (`P_t`) and one for queries
+    /// (`P_q`); every four-channel block of the head's key is left-multiplied
+    /// by `P_t` and of its query by `P_q`, so a query matches a key only as
+    /// far as their phases agree (`<P_q q, P_t k> = <q, conj(P_q) P_t k>`).
+    /// With `snap` the phases are straight-through snapped to the nearest of
+    /// the 120 unit icosians (2I) for an exact D11 group action. Maps start
+    /// at 0 with bias `(1, 0, 0, 0)`: the identity phase, so a model with it
+    /// added computes the plain read until it trains. Saveable.
+    KeyPhase { snap: bool },
+    /// Holographic phase binding (#820): a strictly causal bound trace beside
+    /// the ordinary read. Every position `j`, head `h` and four-channel block
+    /// writes `w_j = g_j (P_j v_j)`, its value block `v_j` left-multiplied by
+    /// a unit quaternion key phase `P_j` (a learned map of the read identity
+    /// input) and scaled by a learned per-head gate `g_j = sigmoid(G u_j + b)`
+    /// on the read input. The trace `S_t` is the row-normalised decay average
+    /// of `w_j` over `j < t` with `a_h = 1 - 2^-s_h`,
+    /// `s_h = `[`Self::phase_bind_shift`]`(h)` (time constants 4 to 512
+    /// tokens), and the read unbinds it with its query phase:
+    /// `r_t = conj(Q_t) S_t`, added to the merged heads as `mix (.) r_t`
+    /// before `read.out`. For unit `Q_t = P_j` the term of `j` is returned
+    /// exactly. With `snap` the phases are straight-through snapped to the
+    /// nearest of the 120 unit icosians. `mix` starts at 0, so a model with
+    /// it added computes the plain read, bit for bit, until it trains.
+    /// Saveable.
+    PhaseBinding { snap: bool },
 }
+
+/// The largest `taps` of [`ReadLineage::LearnedConvWide`].
+pub const MAX_CONV_TAPS: usize = 32;
 
 impl ReadLineage {
     /// A short stable name for reports.
@@ -9442,14 +10825,247 @@ impl ReadLineage {
             ReadLineage::RandomSo4 { .. } => "so4",
             ReadLineage::LearnedConv { .. } => "conv",
             ReadLineage::LearnedPrev { .. } => "wprev",
+            ReadLineage::LearnedConvWide { taps: 8 } => "conv8",
+            ReadLineage::LearnedConvWide { .. } => "conv_wide",
+            ReadLineage::KeyCarrier => "carrier",
+            ReadLineage::KeyPhase { snap: true } => "rot",
+            ReadLineage::KeyPhase { snap: false } => "rot_free",
+            ReadLineage::PhaseBinding { snap: true } => "phase_bind",
+            ReadLineage::PhaseBinding { snap: false } => "phase_bind_free",
         }
     }
+
+    /// Whether [`StackModel::save`] records it (`config.json` field
+    /// [`READ_LINEAGE_FIELD`]) and [`StackModel::load`] restores it: only the
+    /// Step 7a key-content arms.
+    pub fn saveable(self) -> bool {
+        matches!(
+            self,
+            ReadLineage::LearnedConvWide { .. }
+                | ReadLineage::KeyCarrier
+                | ReadLineage::KeyPhase { .. }
+                | ReadLineage::PhaseBinding { .. }
+        )
+    }
+
+    /// The decay exponent `s_h` of [`ReadLineage::KeyCarrier`]'s head `h`:
+    /// `a_h = 1 - 2^-s_h`.
+    pub fn carrier_shift(head: usize) -> u32 {
+        1 + (head % 4) as u32
+    }
+
+    /// The decay exponent `s_h` of [`ReadLineage::PhaseBinding`]'s head `h`:
+    /// `a_h = 1 - 2^-s_h`, `s_h = 2 + h mod 8`.
+    pub fn phase_bind_shift(head: usize) -> u32 {
+        2 + (head % 8) as u32
+    }
+}
+
+/// `config.json` field of a saved Step 7a read lineage ([`ReadLineage::saveable`]);
+/// written only when one is set.
+pub const READ_LINEAGE_FIELD: &str = "read_lineage";
+
+/// The variables of a lineage on `config`'s read layers, with their shapes.
+fn read_lineage_shapes(config: &StackConfig, lineage: ReadLineage) -> Vec<(String, Vec<usize>)> {
+    let read_layers: Vec<usize> = (0..config.layers())
+        .filter(|&layer| config.pattern.as_bytes()[layer] == b'a')
+        .collect();
+    let width = config.width;
+    let mut out = Vec::new();
+    for layer in read_layers {
+        match lineage {
+            ReadLineage::LearnedConv { .. } => {
+                out.push((layer_name(layer, READ_LINEAGE_CONV), vec![width, 4]))
+            }
+            ReadLineage::LearnedPrev { .. } => {
+                out.push((layer_name(layer, READ_LINEAGE_PREV), vec![width, width]))
+            }
+            ReadLineage::LearnedConvWide { taps } => {
+                out.push((layer_name(layer, READ_LINEAGE_CONV_WIDE), vec![width, taps]))
+            }
+            ReadLineage::KeyCarrier => {
+                out.push((
+                    layer_name(layer, READ_LINEAGE_CARRIER_GATE),
+                    vec![config.heads, width],
+                ));
+                out.push((
+                    layer_name(layer, READ_LINEAGE_CARRIER_BIAS),
+                    vec![config.heads],
+                ));
+                out.push((layer_name(layer, READ_LINEAGE_CARRIER_MIX), vec![width]));
+            }
+            ReadLineage::KeyPhase { .. } => {
+                for name in [READ_LINEAGE_PHASE_KEY, READ_LINEAGE_PHASE_QUERY] {
+                    out.push((layer_name(layer, name), vec![4 * config.heads, width]));
+                }
+                for name in [READ_LINEAGE_PHASE_KEY_BIAS, READ_LINEAGE_PHASE_QUERY_BIAS] {
+                    out.push((layer_name(layer, name), vec![4 * config.heads]));
+                }
+            }
+            ReadLineage::PhaseBinding { .. } => {
+                // One phase per head and four-channel block.
+                let phases = 4 * config.heads * (config.head_width() / 4);
+                for name in [READ_LINEAGE_BIND_KEY, READ_LINEAGE_BIND_QUERY] {
+                    out.push((layer_name(layer, name), vec![phases, width]));
+                }
+                for name in [READ_LINEAGE_BIND_KEY_BIAS, READ_LINEAGE_BIND_QUERY_BIAS] {
+                    out.push((layer_name(layer, name), vec![phases]));
+                }
+                out.push((
+                    layer_name(layer, READ_LINEAGE_BIND_GATE),
+                    vec![config.heads, width],
+                ));
+                out.push((
+                    layer_name(layer, READ_LINEAGE_BIND_GATE_BIAS),
+                    vec![config.heads],
+                ));
+                out.push((layer_name(layer, READ_LINEAGE_BIND_MIX), vec![width]));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// [`ReadLineage::KeyPhase`]'s unit phases from their raw 4-vectors (last
+/// dimension 4): `raw / |raw|`, and with `snap` the nearest unit icosian of
+/// 2I in the forward pass with the normalised vector's gradient
+/// (straight-through).
+fn unit_phase(raw: &Tensor, snap: bool) -> Result<Tensor> {
+    let norm = raw
+        .sqr()?
+        .sum_keepdim(raw.rank() - 1)?
+        .affine(1.0, 1e-12)?
+        .sqrt()?;
+    let unit = raw.broadcast_div(&norm)?;
+    if !snap {
+        return Ok(unit);
+    }
+    let shape = unit.shape().clone();
+    let values = unit.flatten_all()?.to_vec1::<f32>()?;
+    let roots = icosian_roots();
+    let mut snapped = Vec::with_capacity(values.len());
+    for q in values.chunks_exact(4) {
+        snapped.extend_from_slice(&roots[nearest_root([q[0], q[1], q[2], q[3]], roots)]);
+    }
+    let snapped = Tensor::from_vec(snapped, shape, unit.device())?;
+    straight_through(&unit, &snapped)
+}
+
+/// Left Hamilton product `p x` of every four-channel block `x` (last
+/// dimension 4) with the broadcast phase `p` (last dimension 4).
+fn left_multiply_blocks(p: &Tensor, x: &Tensor) -> Result<Tensor> {
+    let axis = x.rank() - 1;
+    let pc: Vec<Tensor> = (0..4)
+        .map(|i| p.narrow(axis, i, 1))
+        .collect::<candle_core::Result<_>>()?;
+    let xc: Vec<Tensor> = (0..4)
+        .map(|i| x.narrow(axis, i, 1))
+        .collect::<candle_core::Result<_>>()?;
+    let m = |a: usize, b: usize| pc[a].broadcast_mul(&xc[b]);
+    let w = m(0, 0)?.sub(&m(1, 1)?)?.sub(&m(2, 2)?)?.sub(&m(3, 3)?)?;
+    let i = m(0, 1)?.add(&m(1, 0)?)?.add(&m(2, 3)?)?.sub(&m(3, 2)?)?;
+    let j = m(0, 2)?.sub(&m(1, 3)?)?.add(&m(2, 0)?)?.add(&m(3, 1)?)?;
+    let k = m(0, 3)?.add(&m(1, 2)?)?.sub(&m(2, 1)?)?.add(&m(3, 0)?)?;
+    Ok(Tensor::cat(&[&w, &i, &j, &k], axis)?)
+}
+
+/// [`ReadLineage::KeyCarrier`]'s decay matrices `[heads, time, time]`:
+/// `a_h^(t-1-j)` for `j < t`, else 0.
+fn carrier_decay(heads: usize, time: usize, dtype: DType, device: &Device) -> Result<Tensor> {
+    let mut values = vec![0f32; heads * time * time];
+    for h in 0..heads {
+        let a = 1.0 - (-f64::from(ReadLineage::carrier_shift(h))).exp2();
+        for t in 0..time {
+            let mut power = 1.0f64;
+            for j in (0..t).rev() {
+                values[(h * time + t) * time + j] = power as f32;
+                power *= a;
+            }
+        }
+    }
+    Ok(Tensor::from_vec(values, (heads, time, time), device)?.to_dtype(dtype)?)
+}
+
+/// Quaternion conjugate `(w, -x, -y, -z)` of every four-channel block (last
+/// dimension 4).
+fn quaternion_conj(q: &Tensor) -> Result<Tensor> {
+    let axis = q.rank() - 1;
+    let part = |i: usize| q.narrow(axis, i, 1);
+    Ok(Tensor::cat(
+        &[
+            &part(0)?,
+            &part(1)?.neg()?,
+            &part(2)?.neg()?,
+            &part(3)?.neg()?,
+        ],
+        axis,
+    )?)
+}
+
+/// [`ReadLineage::PhaseBinding`]'s row-normalised decay matrices
+/// `[heads, time, time]`: `a_h^(t-1-j) / sum_{i<t} a_h^(t-1-i)` for `j < t`,
+/// else 0 (row 0 is all zero).
+fn phase_bind_decay(heads: usize, time: usize, device: &Device) -> Result<Tensor> {
+    let mut values = vec![0f32; heads * time * time];
+    for h in 0..heads {
+        let a = 1.0 - (-f64::from(ReadLineage::phase_bind_shift(h))).exp2();
+        for t in 1..time {
+            let total: f64 = (0..t).map(|age| a.powi(age as i32)).sum();
+            for j in 0..t {
+                values[(h * time + t) * time + j] = (a.powi((t - 1 - j) as i32) / total) as f32;
+            }
+        }
+    }
+    Ok(Tensor::from_vec(values, (heads, time, time), device)?)
+}
+
+/// [`ReadLineage::PhaseBinding`]'s bind, trace and unbind, in f32. The key
+/// and query phases (unit quaternions) and the value are
+/// `[batch, time, heads, blocks, 4]`, the gate `[batch, time, heads]`; the
+/// result `r_t = conj(Q_t) S_t` has the value's shape, with
+/// `S_t = sum_{j<t} a_h^(t-1-j) g_j (P_j v_j) / sum_{j<t} a_h^(t-1-j)`.
+fn phase_bind_unbind(
+    key_phase: &Tensor,
+    query_phase: &Tensor,
+    value: &Tensor,
+    gate: &Tensor,
+) -> Result<Tensor> {
+    let (batch, time, heads, blocks, _) = value.dims5()?;
+    let written = left_multiply_blocks(key_phase, value)?
+        .broadcast_mul(&gate.unsqueeze(3)?.unsqueeze(4)?)?
+        .reshape((batch, time, heads, 4 * blocks))?
+        .transpose(1, 2)?
+        .contiguous()?;
+    let trace = phase_bind_decay(heads, time, value.device())?
+        .unsqueeze(0)?
+        .broadcast_matmul(&written)?
+        .transpose(1, 2)?
+        .reshape((batch, time, heads, blocks, 4))?;
+    left_multiply_blocks(&quaternion_conj(query_phase)?, &trace)
 }
 
 /// Variable names of the learned read lineages ([`ReadLineage`]).
 const READ_LINEAGE_PREFIX: &str = ".read.lineage_";
 const READ_LINEAGE_CONV: &str = "read.lineage_conv.weight";
 const READ_LINEAGE_PREV: &str = "read.lineage_prev";
+const READ_LINEAGE_CONV_WIDE: &str = "read.lineage_wide.conv.weight";
+const READ_LINEAGE_CARRIER_GATE: &str = "read.lineage_carrier.gate";
+const READ_LINEAGE_CARRIER_BIAS: &str = "read.lineage_carrier.gate_bias";
+const READ_LINEAGE_CARRIER_MIX: &str = "read.lineage_carrier.mix";
+const READ_LINEAGE_PHASE_KEY: &str = "read.lineage_phase.key_map";
+const READ_LINEAGE_PHASE_KEY_BIAS: &str = "read.lineage_phase.key_bias";
+const READ_LINEAGE_PHASE_QUERY: &str = "read.lineage_phase.query_map";
+const READ_LINEAGE_PHASE_QUERY_BIAS: &str = "read.lineage_phase.query_bias";
+const READ_LINEAGE_BIND_KEY: &str = "read.lineage_bind.key_map";
+const READ_LINEAGE_BIND_KEY_BIAS: &str = "read.lineage_bind.key_bias";
+const READ_LINEAGE_BIND_QUERY: &str = "read.lineage_bind.query_map";
+const READ_LINEAGE_BIND_QUERY_BIAS: &str = "read.lineage_bind.query_bias";
+const READ_LINEAGE_BIND_GATE: &str = "read.lineage_bind.gate";
+const READ_LINEAGE_BIND_GATE_BIAS: &str = "read.lineage_bind.gate_bias";
+const READ_LINEAGE_BIND_MIX: &str = "read.lineage_bind.mix";
+/// Mixed into the seed of [`ReadLineage::PhaseBinding`]'s map initializer.
+const PHASE_BIND_SEED_MIX: u64 = 0x5048_4153_4542_4E44;
 
 /// Left multiplication by `j^{-1} = -j`: `(a, b, c, d) -> (c, -d, -a, b)`
 /// per four-channel lane, the inverse (and transpose) of
@@ -12360,8 +13976,88 @@ pub fn pointer_mixture_loss(
             keys: None,
             targets: targets.to_vec(),
             weights: weights.map(<[f32]>::to_vec),
+            supervise: false,
         },
     )?)
+}
+
+/// [`pointer_mixture_loss`] with copy-gate supervision of strength `weight`
+/// ([`StackModel::gate_supervised_loss`]), for device parity checks: f32
+/// logits and side only (there is no bf16 supervision kernel).
+#[allow(clippy::too_many_arguments)]
+pub fn pointer_mixture_loss_supervised(
+    logits: &Tensor,
+    side: &Tensor,
+    beta: &Tensor,
+    time: usize,
+    score: ReadScore,
+    ids: &[u32],
+    targets: &[u32],
+    weights: Option<&[f32]>,
+    weight: f64,
+) -> Result<GateSupervisedLoss> {
+    if logits.dtype() != DType::F32 || side.dtype() != DType::F32 || beta.dtype() != DType::F32 {
+        return Err(invalid(
+            "pointer gate supervision runs on f32 logits and side",
+        ));
+    }
+    if !(weight.is_finite() && weight > 0.0) {
+        return Err(invalid(
+            "pointer gate supervision needs a finite positive weight",
+        ));
+    }
+    if score == ReadScore::L2 {
+        return Err(invalid("a pointer cannot use the L2 score"));
+    }
+    let (rows, vocabulary) = logits.dims2()?;
+    let (side_rows, width) = side.dims2()?;
+    if side_rows != rows || width < 3 || width % 2 == 0 {
+        return Err(invalid("pointer side rows must be [rows, 2 dim + 1]"));
+    }
+    if targets.iter().any(|&t| t as usize >= vocabulary) {
+        return Err(invalid("target outside the logit classes"));
+    }
+    if let Some(weights) = weights {
+        if weights.iter().any(|w| !w.is_finite() || *w < 0.0)
+            || weights.iter().map(|&w| f64::from(w)).sum::<f64>() <= 0.0
+        {
+            return Err(invalid(
+                "loss weights must be finite, nonnegative and not all zero",
+            ));
+        }
+    }
+    let parts = logits.contiguous()?.apply_op3(
+        &side.contiguous()?,
+        &beta.contiguous()?,
+        PointerMixture {
+            time,
+            dim: (width - 1) / 2,
+            score,
+            select: None,
+            route: None,
+            ids: ids.to_vec(),
+            keys: None,
+            targets: targets.to_vec(),
+            weights: weights.map(<[f32]>::to_vec),
+            supervise: true,
+        },
+    )?;
+    gate_supervised_parts(&parts, weight)
+}
+
+/// Split the supervised op's `[mixture, gate_bce, pointer_nll]` and form
+/// `total = mixture + weight * (gate_bce + pointer_nll)`.
+fn gate_supervised_parts(parts: &Tensor, weight: f64) -> Result<GateSupervisedLoss> {
+    let mixture = parts.get(0)?;
+    let gate_bce = parts.get(1)?;
+    let pointer_nll = parts.get(2)?;
+    let total = (&mixture + ((&gate_bce + &pointer_nll)? * weight)?)?;
+    Ok(GateSupervisedLoss {
+        total,
+        mixture,
+        gate_bce,
+        pointer_nll,
+    })
 }
 
 /// Fused CrossEntropy loss: mean cross entropy of logits vs target class indices.
@@ -12573,6 +14269,28 @@ struct MixtureRow {
     copy_share: f64,
     /// Log-sum-exp of the logits row.
     lse: f64,
+    /// The gate logit `w_g . h_t + b_g`.
+    logit: f64,
+    /// Whether any source `0..=t` holds the target id (its attention aside).
+    present: bool,
+}
+
+impl MixtureRow {
+    /// The copy-gate supervision terms of the row ([`PointerMixture::supervise`]):
+    /// `(BCE(g, present), -log p_copy(target) if present else 0)`. A present
+    /// target whose copy mass underflowed to 0 gets no pointer term.
+    fn supervision(&self) -> (f64, f64) {
+        if self.present {
+            let pointer = if self.copy > 0.0 {
+                -self.copy.ln()
+            } else {
+                0.0
+            };
+            (softplus(-self.logit), pointer)
+        } else {
+            (softplus(self.logit), 0.0)
+        }
+    }
 }
 
 /// The mixture loss of a batch of windows: for a scored target `y_t`,
@@ -12596,9 +14314,29 @@ struct PointerMixture {
     keys: Option<Vec<u32>>,
     targets: Vec<u32>,
     weights: Option<Vec<f32>>,
+    /// Copy-gate supervision ([`StackModel::gate_supervised_loss`]): the op
+    /// then outputs `[mixture, gate_bce, pointer_nll]` (each a weighted mean
+    /// over the scored rows) instead of the mixture's scalar. On a row whose
+    /// target id is held by a source `0..=t` (the soft pointer's whole
+    /// reachable range), `gate_bce = -log g` and `pointer_nll = -log
+    /// p_copy(target)`; on a row whose target no source holds, `gate_bce =
+    /// -log(1 - g)` and `pointer_nll = 0`. The caller weights the two terms.
+    /// Refused with a selection or a route. `false` is the unsupervised op,
+    /// bit for bit.
+    supervise: bool,
 }
 
 impl PointerMixture {
+    /// One output for the mixture's scalar, three under supervision.
+    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+    fn output_len(&self) -> usize {
+        if self.supervise {
+            3
+        } else {
+            1
+        }
+    }
+
     fn weight(&self, row: usize) -> f64 {
         self.weights.as_ref().map_or(1.0, |w| f64::from(w[row]))
     }
@@ -12652,6 +14390,7 @@ impl PointerMixture {
         };
         let high = generate.max(copied);
         let log_mixture = high + ((generate - high).exp() + (copied - high).exp()).ln();
+        let present = self.ids[first..=first + t].contains(&target);
         Ok(MixtureRow {
             attention,
             copy,
@@ -12660,6 +14399,8 @@ impl PointerMixture {
             generate_share: (generate - log_mixture).exp(),
             copy_share: (copied - log_mixture).exp(),
             lse,
+            logit,
+            present,
         })
     }
 
@@ -12679,6 +14420,9 @@ impl PointerMixture {
             || !rows.is_multiple_of(self.time)
         {
             candle_core::bail!("pointer mixture inputs disagree in shape");
+        }
+        if self.supervise && (self.select.is_some() || self.route.is_some()) {
+            candle_core::bail!("pointer gate supervision needs a pointer over every source");
         }
         Ok((rows, vocabulary))
     }
@@ -12708,6 +14452,31 @@ impl CustomOp3 for PointerMixture {
             .first()
             .map(|&value| f64::from(value))
             .ok_or_else(|| candle_core::Error::msg("pointer mixture needs its scale"))?;
+        if self.supervise {
+            let terms: Vec<[f64; 3]> = (0..rows)
+                .into_par_iter()
+                .map(|n| -> candle_core::Result<[f64; 3]> {
+                    if self.weight(n) == 0.0 {
+                        return Ok([0.0; 3]);
+                    }
+                    let row = self.evaluate(
+                        &logits[n * vocabulary..(n + 1) * vocabulary],
+                        side,
+                        beta,
+                        n,
+                    )?;
+                    let (gate, pointer) = row.supervision();
+                    let w = self.weight(n);
+                    Ok([-w * row.log_mixture, w * gate, w * pointer])
+                })
+                .collect::<candle_core::Result<_>>()?;
+            let total = self.total();
+            let mean = |k: usize| (terms.iter().map(|row| row[k]).sum::<f64>() / total) as f32;
+            return Ok((
+                CpuStorage::F32(vec![mean(0), mean(1), mean(2)]),
+                Shape::from(3),
+            ));
+        }
         // Each row's loss in row order, summed in that order: the mean does
         // not depend on how the threads split the rows.
         let losses: Vec<f64> = (0..rows)
@@ -12780,7 +14549,18 @@ impl CustomOp3 for PointerMixture {
             .first()
             .map(|&value| f64::from(value))
             .ok_or_else(|| candle_core::Error::msg("pointer mixture needs its scale"))?;
-        let grad = f64::from(grad.to_scalar::<f32>()?);
+        // The upstream gradient of each output: the mixture's alone, or under
+        // supervision also the gate-BCE and pointer-NLL terms'.
+        let (grad, grad_gate, grad_pointer) = if self.supervise {
+            match grad.flatten_all()?.to_vec1::<f32>()?.as_slice() {
+                &[mixture, gate, pointer] => {
+                    (f64::from(mixture), f64::from(gate), f64::from(pointer))
+                }
+                _ => candle_core::bail!("supervised pointer mixture expects three gradients"),
+            }
+        } else {
+            (f64::from(grad.to_scalar::<f32>()?), 0.0, 0.0)
+        };
         let total = self.total();
         let mut d_logits = vec![0f32; rows * vocabulary];
         let mut d_side = vec![0f32; rows * stride];
@@ -12812,9 +14592,21 @@ impl CustomOp3 for PointerMixture {
                     d_z[target as usize] -= k as f32;
                     // d NLL / d gate logit = share_generate g - share_copy (1 - g),
                     // which is `g` when no source holds the target.
-                    d_row[2 * dim] = (c
-                        * (row.generate_share * row.gate - row.copy_share * (1.0 - row.gate)))
-                        as f32;
+                    let mut d_gate =
+                        c * (row.generate_share * row.gate - row.copy_share * (1.0 - row.gate));
+                    // Supervision: d BCE(g, present) / d logit = g - present.
+                    if self.supervise {
+                        let c_gate = grad_gate * self.weight(n) / total;
+                        d_gate += c_gate * (row.gate - if row.present { 1.0 } else { 0.0 });
+                    }
+                    d_row[2 * dim] = d_gate as f32;
+                    // The per-source coefficient: the mixture's c share_copy,
+                    // plus on a supervised present row the pointer NLL's (its
+                    // d / d score_j has the same form with share 1).
+                    let mut k_source = c * row.copy_share;
+                    if self.supervise && row.present {
+                        k_source += grad_pointer * self.weight(n) / total;
+                    }
                     // d loss / d score_j = -(g / mixture) a_j (m_j - p_copy).
                     // g / mixture overflows once the mixture is below about
                     // exp(-709.78), so the product is taken through the copy
@@ -12840,9 +14632,9 @@ impl CustomOp3 for PointerMixture {
                             continue;
                         }
                         let d_source = if self.ids[first + j] == target {
-                            -c * row.copy_share * (a / row.copy) * (1.0 - row.copy)
+                            -k_source * (a / row.copy) * (1.0 - row.copy)
                         } else {
-                            c * row.copy_share * a
+                            k_source * a
                         };
                         let key = pointer_key(&s, dim, first + j);
                         if lorentz {
@@ -12918,6 +14710,116 @@ impl CustomOp3 for PointerMixture {
             )?),
         ))
     }
+}
+
+/// One geometric read layer's attention masses from [`StackModel::read_span_probe`]:
+/// `heads[h][s]` is head `h`'s mass on source set `s` at the probed query.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadSpanMasses {
+    pub layer: usize,
+    pub heads: Vec<Vec<f64>>,
+}
+
+/// One geometric read layer's score inputs over a window
+/// ([`StackModel::read_query_key`]): `query[h][t]` and `key[h][j]` per head
+/// and position, `null[h][t]` the NoRead logit, `age[h][d]` the age bias at
+/// distance `d`, and per head `beta`/`offset` for the scaled scores (empty for
+/// Dot).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadQueryKey {
+    pub layer: usize,
+    pub score: ReadScore,
+    pub query: Vec<Vec<Vec<f32>>>,
+    pub key: Vec<Vec<Vec<f32>>>,
+    pub null: Vec<Vec<f32>>,
+    pub age: Vec<Vec<f32>>,
+    pub beta: Vec<f32>,
+    pub offset: Vec<f32>,
+}
+
+/// One read row's scores, recomputed by [`ReadQueryKey::row`]: for each source
+/// `j <= t` the content term, the age term and their sum (the fused read's
+/// score, rounded to f32 as it is), the softmax weight with NoRead in the
+/// denominator, and the NoRead weight.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadRowScores {
+    pub content: Vec<f64>,
+    pub age: Vec<f64>,
+    pub total: Vec<f64>,
+    pub weight: Vec<f64>,
+    pub no_read: f64,
+}
+
+impl ReadQueryKey {
+    /// Head `head`'s row at query position `t`, by the fused read's own rule:
+    /// `q.k / sqrt(width)` (Dot), `-beta (|q - k| - offset)` (L2, squared
+    /// distance clamped below), `-beta (arcosh(z) - offset)` (Lorentz), each
+    /// plus `age[t - j]`, softmax over `0..=t` and the NoRead logit.
+    pub fn row(&self, head: usize, t: usize) -> Result<ReadRowScores> {
+        let query = self
+            .query
+            .get(head)
+            .and_then(|rows| rows.get(t))
+            .ok_or_else(|| invalid("read row outside the probed window"))?;
+        let width = query.len();
+        let square = |row: &[f32]| f64::from(dot(row, row));
+        let mut content = Vec::with_capacity(t + 1);
+        let mut age = Vec::with_capacity(t + 1);
+        let mut total = Vec::with_capacity(t + 1);
+        for j in 0..=t {
+            let key = &self.key[head][j];
+            let inner = dot(query, key);
+            let c = match self.score {
+                ReadScore::Dot => f64::from(inner * (1.0 / (width as f32).sqrt())),
+                ReadScore::L2 => {
+                    let s = square(query) + square(key) - 2.0 * f64::from(inner);
+                    -f64::from(self.beta[head]) * (l2_distance(s) - f64::from(self.offset[head]))
+                }
+                ReadScore::Lorentz => {
+                    let lift = |row: &[f32]| (1.0 + square(row)).sqrt();
+                    let e = lift(query) * lift(key) - f64::from(inner) - 1.0;
+                    -f64::from(self.beta[head])
+                        * (lorentz_distance(e) - f64::from(self.offset[head]))
+                }
+            };
+            let a = f64::from(self.age[head][t - j]);
+            content.push(c);
+            age.push(a);
+            total.push(f64::from((c as f32) + self.age[head][t - j]));
+        }
+        let null = f64::from(self.null[head][t]);
+        let maximum = total.iter().copied().fold(null, f64::max);
+        let null_weight = (null - maximum).exp();
+        let exps: Vec<f64> = total.iter().map(|&s| (s - maximum).exp()).collect();
+        let sum = null_weight + exps.iter().sum::<f64>();
+        Ok(ReadRowScores {
+            content,
+            age,
+            total,
+            weight: exps.iter().map(|&e| e / sum).collect(),
+            no_read: null_weight / sum,
+        })
+    }
+}
+
+/// The pointer head at the probed query: its gate `g` and its attention over
+/// the window's positions `0..=t`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PointerProbe {
+    pub gate: f64,
+    pub attention: Vec<f64>,
+}
+
+/// [`StackModel::read_span_probe`]'s observation of the next token: read
+/// masses per layer and head, the generator's softmax, the pointer (if any)
+/// and the distribution greedy decoding ranks (the mixture `(1 - g)
+/// softmax(z) + g p_copy` for a pointer model, else the softmax).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpanProbe {
+    pub reads: Vec<ReadSpanMasses>,
+    pub generator: Vec<f64>,
+    pub mixture: Vec<f64>,
+    pub pointer: Option<PointerProbe>,
 }
 
 /// What the pointer head did at one scored position.
@@ -18130,6 +20032,450 @@ mod tests {
         Ok(())
     }
 
+    fn phase_binding_config() -> StackConfig {
+        let mut config = tiny(StackArch::Geometric, "rara", ReadScore::L2, true);
+        config.vocab_size = 97;
+        config.width = 64;
+        config.heads = 4;
+        config.context = 48;
+        config
+    }
+
+    fn phase_binding_ids(time: usize) -> Vec<u32> {
+        (0..time).map(|i| ((i * 31 + 7) % 97) as u32).collect()
+    }
+
+    /// Move every phase binding variable (mix included) off its start.
+    fn perturb_phase_binding(model: &StackModel) -> Result<()> {
+        let mut rng = Initializer(23);
+        for (name, var) in model.variables() {
+            if name.contains(".read.lineage_bind.") {
+                var.set(&var.as_tensor().add(&random(&mut rng, var.dims(), 0.3))?)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn phase_binding_starts_as_the_plain_read() -> Result<()> {
+        let config = phase_binding_config();
+        let ids = phase_binding_ids(24);
+        let time = ids.len();
+        let plain = StackModel::new(config.clone(), &cpu())?.forward(&ids, 1, time)?;
+        for snap in [true, false] {
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_lineage(Some(ReadLineage::PhaseBinding { snap }))?;
+            let logits = model.forward(&ids, 1, time)?;
+            let diff = logits.sub(&plain)?.abs()?.max_all()?.to_scalar::<f32>()?;
+            assert_eq!(diff, 0.0, "snap {snap}");
+            assert_eq!(logits.to_vec2::<f32>()?, plain.to_vec2::<f32>()?);
+        }
+        // Refused: a head width that is not whole four-channel blocks. (The
+        // geometric-address refusals in both orders are not covered here.)
+        let mut odd = phase_binding_config();
+        odd.width = 24;
+        let mut model = StackModel::new(odd, &cpu())?;
+        assert!(model
+            .set_read_lineage(Some(ReadLineage::PhaseBinding { snap: true }))
+            .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn phase_binding_retrieves_the_bound_value_exactly() -> Result<()> {
+        let dev = cpu();
+        // batch 1, time 2, heads 1, blocks 2.
+        let p = [0.5f32, 0.5, -0.5, 0.5];
+        let v0 = [0.3f32, -1.2, 0.7, 2.0, 1.5, 0.1, -0.4, 0.9];
+        let v1 = [9.0f32, -7.0, 5.0, 3.0, -2.0, 4.0, 6.0, -8.0];
+        let other = [0.6f32, 0.0, 0.8, 0.0];
+        let blocks = |rows: Vec<f32>| Tensor::from_vec(rows, (1, 2, 1, 2, 4), &dev);
+        let key_phase = blocks([p, p, other, other].concat())?;
+        let value = blocks([v0.as_slice(), v1.as_slice()].concat())?;
+        let gate = Tensor::from_vec(vec![0.75f32, 0.2], (1, 2, 1), &dev)?;
+        let row = |r: &Tensor, t: usize| -> Result<Vec<f32>> {
+            Ok(r.narrow(1, t, 1)?.flatten_all()?.to_vec1::<f32>()?)
+        };
+        // Q_1 = P: r_1 = g_0 v_0; r_0 = 0 (nothing before position 0).
+        let query_phase = blocks([other, other, p, p].concat())?;
+        let r = phase_bind_unbind(&key_phase, &query_phase, &value, &gate)?;
+        assert!(row(&r, 0)?.iter().all(|&x| x == 0.0));
+        let read = row(&r, 1)?;
+        for (got, want) in read.iter().zip(v0.iter().map(|x| 0.75 * x)) {
+            assert!((got - want).abs() < 1e-5, "{got} vs {want}");
+        }
+        // Q_1 = i P (90 degrees from P): a rotation of g_0 v_0, same norms.
+        let i = Tensor::from_vec(vec![0f32, 1.0, 0.0, 0.0], (1, 1, 1, 1, 4), &dev)?;
+        let turned = left_multiply_blocks(&i, &blocks([p, p, p, p].concat())?)?;
+        let r = phase_bind_unbind(&key_phase, &turned, &value, &gate)?;
+        let rotated = row(&r, 1)?;
+        let mut moved = 0f32;
+        for b in 0..2 {
+            let norm = |x: &[f32]| x.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let want = norm(&v0[4 * b..4 * b + 4]) * 0.75;
+            assert!((norm(&rotated[4 * b..4 * b + 4]) - want).abs() < 1e-5);
+            for c in 4 * b..4 * b + 4 {
+                moved = moved.max((rotated[c] - read[c]).abs());
+            }
+        }
+        assert!(moved > 0.1, "{moved}");
+        Ok(())
+    }
+
+    #[test]
+    fn phase_binding_trace_is_the_decay_weighted_average_of_the_past() -> Result<()> {
+        // Identity phases and unit gates over time 5, two heads: r_t is
+        // sum_{j<t} a_h^(t-1-j) v_j / sum_{j<t} a_h^(t-1-j), a_h = 1 - 2^-(2+h).
+        let dev = cpu();
+        let (time, heads) = (5usize, 2usize);
+        let one = [1f32, 0.0, 0.0, 0.0];
+        let phases: Vec<f32> = (0..time * heads).flat_map(|_| one).collect();
+        let phase = Tensor::from_vec(phases, (1, time, heads, 1, 4), &dev)?;
+        let values: Vec<f32> = (0..time * heads)
+            .flat_map(|i| [(i / heads) as f32 + 1.0, 0.0, 0.0, 0.0])
+            .collect();
+        let value = Tensor::from_vec(values, (1, time, heads, 1, 4), &dev)?;
+        let gate = Tensor::ones((1, time, heads), DType::F32, &dev)?;
+        let r = phase_bind_unbind(&phase, &phase, &value, &gate)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for h in 0..heads {
+            let a = 1.0 - (-(2.0 + h as f64)).exp2();
+            for t in 1..time {
+                let weights: Vec<f64> = (0..t).map(|j| a.powi((t - 1 - j) as i32)).collect();
+                let want = (0..t).map(|j| weights[j] * (j as f64 + 1.0)).sum::<f64>()
+                    / weights.iter().sum::<f64>();
+                let got = f64::from(r[(t * heads + h) * 4]);
+                assert!((got - want).abs() < 1e-5, "head {h} t {t}: {got} vs {want}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn phase_binding_is_causal() -> Result<()> {
+        let config = phase_binding_config();
+        let ids = phase_binding_ids(24);
+        let time = ids.len();
+        let plain = StackModel::new(config.clone(), &cpu())?
+            .forward(&ids, 1, time)?
+            .to_vec2::<f32>()?;
+        for snap in [true, false] {
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_lineage(Some(ReadLineage::PhaseBinding { snap }))?;
+            perturb_phase_binding(&model)?;
+            let rows = model.forward(&ids, 1, time)?.to_vec2::<f32>()?;
+            assert_ne!(
+                rows[time - 1],
+                plain[time - 1],
+                "snap {snap}: the branch is live"
+            );
+            let at = 12;
+            let mut changed = ids.clone();
+            changed[at] = (changed[at] + 40) % 97;
+            let after = model.forward(&changed, 1, time)?.to_vec2::<f32>()?;
+            for t in 0..at {
+                assert_eq!(after[t], rows[t], "snap {snap} row {t}");
+            }
+            assert_ne!(after[time - 1], rows[time - 1]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn phase_binding_saves_loads_and_trains() -> Result<()> {
+        let config = phase_binding_config();
+        let ids = phase_binding_ids(24);
+        let targets: Vec<u32> = ids.iter().map(|&id| (id * 17 + 3) % 97).collect();
+        let time = ids.len();
+        for snap in [true, false] {
+            let lineage = ReadLineage::PhaseBinding { snap };
+            assert!(lineage.saveable());
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            let plain_count = model.parameter_count();
+            model.set_read_lineage(Some(lineage))?;
+            perturb_phase_binding(&model)?;
+            let rows = model.forward(&ids, 1, time)?.to_vec2::<f32>()?;
+            let dir = std::env::temp_dir().join(format!(
+                "stack-phase-bind-{}-{}",
+                lineage.name(),
+                std::process::id()
+            ));
+            model.save(&dir)?;
+            assert_eq!(StackModel::saved_read_lineage(&dir)?, Some(lineage));
+            let loaded = StackModel::load(&dir, &cpu())?;
+            fs::remove_dir_all(&dir)?;
+            assert_eq!(loaded.read_lineage(), Some(lineage));
+            assert_eq!(loaded.forward(&ids, 1, time)?.to_vec2::<f32>()?, rows);
+            let grads = model.loss(&ids, &targets, 1, time)?.backward()?;
+            let bound: Vec<(&String, &Var)> = model
+                .variables()
+                .iter()
+                .filter(|(name, _)| name.contains(".read.lineage_bind."))
+                .collect();
+            assert_eq!(bound.len(), 14, "seven per read layer");
+            for suffix in [".key_map", ".query_map", ".gate", ".mix"] {
+                for (name, var) in bound.iter().filter(|(name, _)| name.ends_with(suffix)) {
+                    let grad = grads
+                        .get(var.as_tensor())
+                        .ok_or_else(|| invalid(format!("{name} has no gradient")))?;
+                    assert!(
+                        grad.sqr()?.sum_all()?.to_scalar::<f32>()? > 0.0,
+                        "snap {snap} {name}"
+                    );
+                }
+            }
+            model.set_read_lineage(None)?;
+            assert_eq!(model.parameter_count(), plain_count);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn phase_binding_snaps_phases_to_unit_icosians() -> Result<()> {
+        let config = phase_binding_config();
+        let mut rng = Initializer(5);
+        let input = random(&mut rng, &[1, 6, config.width], 1.0);
+        let roots = icosian_roots();
+        for snap in [true, false] {
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_lineage(Some(ReadLineage::PhaseBinding { snap }))?;
+            perturb_phase_binding(&model)?;
+            let p = model.params()?;
+            let mut off_root = 0usize;
+            for layer in [1, 3] {
+                for part in [
+                    (READ_LINEAGE_BIND_KEY, READ_LINEAGE_BIND_KEY_BIAS),
+                    (READ_LINEAGE_BIND_QUERY, READ_LINEAGE_BIND_QUERY_BIAS),
+                ] {
+                    let phase = model.phase_binding_phase(&p, layer, &input, part, snap)?;
+                    assert_eq!(phase.dims(), &[1, 6, 4, 4, 4]);
+                    for q in phase.flatten_all()?.to_vec1::<f32>()?.chunks_exact(4) {
+                        let norm = q.iter().map(|x| x * x).sum::<f32>().sqrt();
+                        assert!((norm - 1.0).abs() < 1e-6, "{norm}");
+                        let distance = roots
+                            .iter()
+                            .map(|root| (0..4).map(|c| (root[c] - q[c]).abs()).fold(0f32, f32::max))
+                            .fold(f32::INFINITY, f32::min);
+                        if snap {
+                            assert!(distance < 1e-6, "{q:?}");
+                        } else if distance > 1e-3 {
+                            off_root += 1;
+                        }
+                    }
+                }
+            }
+            assert_eq!(off_root > 0, !snap);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn step7a_key_arms_start_plain_learn_save_and_stay_causal() -> Result<()> {
+        let config = tiny(StackArch::Geometric, "rara", ReadScore::L2, true);
+        let ids = [1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let time = ids.len();
+        let plain_model = StackModel::new(config.clone(), &cpu())?;
+        let plain = plain_model.forward(&ids, 1, time)?.to_vec2::<f32>()?;
+        let targets = [2u32, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        for lineage in [
+            ReadLineage::LearnedConvWide { taps: 8 },
+            ReadLineage::KeyCarrier,
+            ReadLineage::KeyPhase { snap: true },
+            ReadLineage::KeyPhase { snap: false },
+        ] {
+            assert!(lineage.saveable());
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_lineage(Some(lineage))?;
+            // Added, it computes the plain read bit for bit.
+            assert_eq!(model.forward(&ids, 1, time)?.to_vec2::<f32>()?, plain);
+            // Moved off its initialisation, it changes the read.
+            let mut rng = Initializer(17);
+            for (name, var) in model.variables() {
+                if name.contains(READ_LINEAGE_PREFIX) {
+                    var.set(&var.as_tensor().add(&random(&mut rng, var.dims(), 0.3))?)?;
+                }
+            }
+            let rows = model.forward(&ids, 1, time)?.to_vec2::<f32>()?;
+            assert_ne!(rows[time - 1], plain[time - 1], "{lineage:?}");
+            // Causal: a later token changes no earlier row.
+            let mut changed = ids;
+            changed[time - 1] = 30;
+            let after = model.forward(&changed, 1, time)?.to_vec2::<f32>()?;
+            for t in 0..time - 1 {
+                assert_eq!(after[t], rows[t], "{lineage:?} row {t}");
+            }
+            // Every lineage variable is learned, and its gradient is right.
+            let grads = model.loss(&ids, &targets, 1, time)?.backward()?;
+            let vars: Vec<Var> = model
+                .variables()
+                .iter()
+                .filter(|(name, _)| name.contains(READ_LINEAGE_PREFIX))
+                .map(|(_, var)| var.clone())
+                .collect();
+            assert_eq!(
+                vars.len(),
+                match lineage {
+                    ReadLineage::KeyCarrier => 6,
+                    ReadLineage::KeyPhase { .. } => 8,
+                    _ => 2,
+                }
+            );
+            for var in &vars {
+                let grad = grads.get(var.as_tensor()).expect("lineage gradient");
+                assert!(grad.sqr()?.sum_all()?.to_scalar::<f32>()? > 0.0);
+            }
+            // A snapped phase is piecewise constant: its straight-through
+            // gradient is not the finite difference, by design. The free
+            // phase's model-level directional derivative is below the f32
+            // finite difference's resolution here; its parts are checked in
+            // `step7a_phase_binding_preserves_norms_and_shared_phase_scores`.
+            if !matches!(lineage, ReadLineage::KeyPhase { .. }) {
+                check_gradient(&vars, || model.loss(&ids, &targets, 1, time), 2e-2)?;
+            }
+            // Saved and loaded, bit for bit; the field names it.
+            let dir = std::env::temp_dir().join(format!(
+                "stack-step7a-{}-{}",
+                lineage.name(),
+                std::process::id()
+            ));
+            model.save(&dir)?;
+            assert_eq!(StackModel::saved_read_lineage(&dir)?, Some(lineage));
+            let loaded = StackModel::load(&dir, &cpu())?;
+            assert_eq!(loaded.read_lineage(), Some(lineage));
+            assert_eq!(loaded.forward(&ids, 1, time)?.to_vec2::<f32>()?, rows);
+            fs::remove_dir_all(&dir)?;
+            // Exclusive with the key shift; no served form.
+            assert!(model.set_read_key_shift(true).is_err());
+            model.set_read_lineage(None)?;
+            assert_eq!(model.parameter_count(), plain_model.parameter_count());
+        }
+        let mut model = StackModel::new(config.clone(), &cpu())?;
+        for taps in [0, 1, MAX_CONV_TAPS + 1] {
+            assert!(model
+                .set_read_lineage(Some(ReadLineage::LearnedConvWide { taps }))
+                .is_err());
+        }
+        // A plain save keeps its exact config bytes (no lineage field).
+        let dir = std::env::temp_dir().join(format!("stack-step7a-plain-{}", std::process::id()));
+        model.save(&dir)?;
+        assert_eq!(StackModel::saved_read_lineage(&dir)?, None);
+        let text = fs::read_to_string(dir.join("config.json"))?;
+        assert!(!text.contains(READ_LINEAGE_FIELD));
+        fs::remove_dir_all(&dir)?;
+        // A research-only lineage is still refused by save.
+        model.set_read_lineage(Some(ReadLineage::LearnedConv { init_lag1: true }))?;
+        assert!(model.save(&dir).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn step7a_phase_binding_preserves_norms_and_shared_phase_scores() -> Result<()> {
+        let mut rng = Initializer(31);
+        let x = random(&mut rng, &[3, 5, 4], 1.0);
+        let y = random(&mut rng, &[3, 5, 4], 1.0);
+        let raw = random(&mut rng, &[3, 1, 4], 1.0);
+        for snap in [false, true] {
+            let p = unit_phase(&raw, snap)?;
+            let norms = p.sqr()?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            assert!(norms.iter().all(|n| (n - 1.0).abs() < 1e-5));
+            let px = left_multiply_blocks(&p, &x)?;
+            let py = left_multiply_blocks(&p, &y)?;
+            // Norm-preserving block by block.
+            let n0 = x.sqr()?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            let n1 = px.sqr()?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            for (a, b) in n0.iter().zip(&n1) {
+                assert!((a - b).abs() < 1e-4 * a.max(1.0));
+            }
+            // A shared phase leaves every inner product unchanged.
+            let d0 = (&x * &y)?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            let d1 = (&px * &py)?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            for (a, b) in d0.iter().zip(&d1) {
+                assert!((a - b).abs() < 1e-4, "{a} vs {b}");
+            }
+            // The Hamilton product agrees with the scalar reference.
+            let pv = p.flatten_all()?.to_vec1::<f32>()?;
+            let xv = x.flatten_all()?.to_vec1::<f32>()?;
+            let pxv = px.flatten_all()?.to_vec1::<f32>()?;
+            for r in 0..3 {
+                for b in 0..5 {
+                    let o = (r * 5 + b) * 4;
+                    let want = quaternion_product(
+                        [pv[r * 4], pv[r * 4 + 1], pv[r * 4 + 2], pv[r * 4 + 3]],
+                        [xv[o], xv[o + 1], xv[o + 2], xv[o + 3]],
+                    );
+                    for c in 0..4 {
+                        assert!((want[c] - pxv[o + c]).abs() < 1e-5);
+                    }
+                }
+            }
+        }
+        // A snapped phase is a unit icosian.
+        let p = unit_phase(&raw, true)?.flatten_all()?.to_vec1::<f32>()?;
+        for q in p.chunks_exact(4) {
+            assert!(icosian_roots()
+                .iter()
+                .any(|r| r == &[q[0], q[1], q[2], q[3]]));
+        }
+        // A different phase changes the match.
+        let other = unit_phase(&random(&mut rng, &[3, 1, 4], 1.0), false)?;
+        let p = unit_phase(&raw, false)?;
+        let d0 = (&x * &y)?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+        let d2 = (&left_multiply_blocks(&p, &x)? * &left_multiply_blocks(&other, &y)?)?
+            .sum(2)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert!(d0.iter().zip(&d2).any(|(a, b)| (a - b).abs() > 1e-3));
+        // The free phase's gradient (normalisation and Hamilton product).
+        let raw_var = Var::from_tensor(&raw)?;
+        let weight = random(&mut rng, &[3, 5, 4], 1.0);
+        let loss = || -> Result<Tensor> {
+            Ok(
+                left_multiply_blocks(&unit_phase(raw_var.as_tensor(), false)?, &x)?
+                    .mul(&weight)?
+                    .sum_all()?,
+            )
+        };
+        check_gradient(std::slice::from_ref(&raw_var), loss, 1e-2)?;
+        Ok(())
+    }
+
+    #[test]
+    fn step7a_key_arms_reach_their_declared_window() -> Result<()> {
+        // A first-layer read sees per-position keys, so the lineage alone
+        // decides which earlier tokens a key depends on.
+        let config = tiny(StackArch::Geometric, "aa", ReadScore::L2, true);
+        let ids = [1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let time = ids.len();
+        for (lineage, reach) in [
+            (ReadLineage::LearnedConvWide { taps: 3 }, Some(3usize)),
+            (ReadLineage::KeyCarrier, None),
+            (ReadLineage::KeyPhase { snap: false }, Some(1)),
+        ] {
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_lineage(Some(lineage))?;
+            let mut rng = Initializer(23);
+            for (name, var) in model.variables() {
+                if name.contains(READ_LINEAGE_PREFIX) {
+                    var.set(&var.as_tensor().add(&random(&mut rng, var.dims(), 0.5))?)?;
+                }
+            }
+            let base = model.read_query_key(&ids, 0)?;
+            let mut changed = ids;
+            changed[2] = 30;
+            let after = model.read_query_key(&changed, 0)?;
+            for t in 0..time {
+                let moved = (0..config.heads).any(|h| base.key[h][t] != after.key[h][t]);
+                let expect = match reach {
+                    Some(taps) => (2..2 + taps).contains(&t),
+                    None => t >= 2,
+                };
+                assert_eq!(moved, expect, "{lineage:?} key {t}");
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn the_qk_lineage_turns_the_query_and_the_key_shift_alone_does_not() -> Result<()> {
         // QK differs from F2 only through the query channel.
@@ -18285,6 +20631,332 @@ mod tests {
             }
             let after = objective()?.to_scalar::<f32>()?;
             assert!(after < before, "{read:?}: binding step {before} -> {after}");
+        }
+        Ok(())
+    }
+
+    /// Step 7d labels: two groups in batch item 0 (one with no competing
+    /// value), one in item 1, several queries each.
+    fn supervision_target(layer: usize) -> ReadSupervisionTarget {
+        ReadSupervisionTarget {
+            layer,
+            groups: vec![
+                ReadSupervisionGroup {
+                    batch: 0,
+                    bound: vec![1, 2],
+                    competing: vec![4],
+                },
+                ReadSupervisionGroup {
+                    batch: 0,
+                    bound: vec![3],
+                    competing: vec![],
+                },
+                ReadSupervisionGroup {
+                    batch: 1,
+                    bound: vec![0, 5],
+                    competing: vec![2, 3],
+                },
+            ],
+            rows: vec![
+                ReadSupervisionRow { group: 0, query: 5 },
+                ReadSupervisionRow { group: 0, query: 6 },
+                ReadSupervisionRow { group: 1, query: 7 },
+                ReadSupervisionRow { group: 2, query: 6 },
+                ReadSupervisionRow { group: 2, query: 7 },
+            ],
+        }
+    }
+
+    #[test]
+    fn read_supervision_leaves_language_unchanged_and_reads_the_probe_masses() -> Result<()> {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 7 + 3) % 37).collect();
+        let targets: Vec<u32> = ids.iter().map(|&id| (id + 1) % 37).collect();
+        let weights: Vec<f32> = (0..16)
+            .map(|i| if i % 3 == 0 { 0.0 } else { 1.0 })
+            .collect();
+        let labels = supervision_target(2);
+        for read in [ReadScore::Dot, ReadScore::Lorentz, ReadScore::L2] {
+            for pointer in [false, true] {
+                let mut config = tiny(StackArch::Geometric, "rra", read, true);
+                if pointer {
+                    config.pointer = Some(PointerConfig::new(4));
+                }
+                let model = StackModel::new(config, &cpu())?;
+                let ordinary = model.weighted_loss(&ids, &targets, &weights, 2, 8)?;
+                let joint =
+                    model.read_supervised_loss(&ids, &targets, &weights, 2, 8, &labels, 0.5)?;
+                let label = format!("{read:?} pointer={pointer}");
+                assert_eq!(
+                    ordinary.to_scalar::<f32>()?.to_bits(),
+                    joint.language.to_scalar::<f32>()?.to_bits(),
+                    "{label}"
+                );
+                let expected_total =
+                    joint.language.to_scalar::<f32>()? + 0.5 * joint.binding.to_scalar::<f32>()?;
+                assert!((joint.total.to_scalar::<f32>()? - expected_total).abs() < 1e-5);
+                let expected = ordinary.backward()?;
+                let got = joint.language.backward()?;
+                for (name, var) in model.variables() {
+                    match (expected.get(var), got.get(var)) {
+                        (Some(a), Some(b)) => {
+                            assert!(max_abs_gap(a, b)? < 1e-6, "{label} {name}")
+                        }
+                        (None, None) => (),
+                        _ => {
+                            return Err(invalid(format!(
+                                "supervision changed language gradient reachability: {name}"
+                            )))
+                        }
+                    }
+                }
+                // Each row's masses are the span probe's on the row's prefix
+                // window (the stack is causal), and the selected head is the
+                // argmax of bound + competing.
+                let mut binding = 0.0f64;
+                for (r, row) in labels.rows.iter().enumerate() {
+                    let group = &labels.groups[row.group];
+                    let window = &ids[group.batch * 8..group.batch * 8 + row.query + 1];
+                    let probe = model
+                        .read_span_probe(window, &[group.bound.clone(), group.competing.clone()])?;
+                    let heads = &probe
+                        .reads
+                        .iter()
+                        .find(|m| m.layer == 2)
+                        .ok_or_else(|| invalid("no layer 2 probe"))?
+                        .heads;
+                    let mut best = 0;
+                    for h in 1..heads.len() {
+                        if heads[h][0] + heads[h][1] > heads[best][0] + heads[best][1] {
+                            best = h;
+                        }
+                    }
+                    assert_eq!(joint.heads[r], best, "{label} row {r}");
+                    assert!(
+                        (f64::from(joint.bound[r]) - heads[best][0]).abs() < 1e-5,
+                        "{label} row {r}: {} vs {}",
+                        joint.bound[r],
+                        heads[best][0]
+                    );
+                    assert!((f64::from(joint.competing[r]) - heads[best][1]).abs() < 1e-5);
+                    binding -= (heads[best][0] + READ_SUPERVISION_FLOOR).ln();
+                }
+                binding /= labels.rows.len() as f64;
+                assert!(
+                    (f64::from(joint.binding.to_scalar::<f32>()?) - binding).abs() < 1e-4,
+                    "{label}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_supervision_gradient_matches_finite_differences_and_raises_the_bound_mass() -> Result<()>
+    {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        let weights = vec![1.0f32; 16];
+        let labels = supervision_target(2);
+        for read in [ReadScore::Dot, ReadScore::Lorentz, ReadScore::L2] {
+            let model = StackModel::new(tiny(StackArch::Geometric, "rra", read, true), &cpu())?;
+            let objective = || -> Result<Tensor> {
+                Ok(model
+                    .read_supervised_loss(&ids, &ids, &weights, 2, 8, &labels, 1.0)?
+                    .binding)
+            };
+            let loss = objective()?;
+            let before = loss.to_scalar::<f32>()?;
+            let grads = loss.backward()?;
+            let mut names = vec![
+                "embedding.weight",
+                "layers.01.rec.in.weight",
+                "layers.02.read.query.weight",
+                "layers.02.read.key.weight",
+                "layers.02.read.age",
+                "layers.02.read.null.weight",
+            ];
+            if read.scaled() {
+                names.extend(["layers.02.read.log_beta", "layers.02.read.offset"]);
+            }
+            for name in &names {
+                let grad = grads
+                    .get(&model.variables()[*name])
+                    .ok_or_else(|| invalid(format!("missing supervision gradient {name}")))?;
+                let size = grad.abs()?.max_all()?.to_scalar::<f32>()?;
+                assert!(size.is_finite() && size > 0.0, "{read:?} {name}: {size}");
+            }
+            // The teacher mask never trains the value or output projection.
+            for name in ["layers.02.read.value.weight", "layers.02.read.out.weight"] {
+                if let Some(grad) = grads.get(&model.variables()[name]) {
+                    assert_eq!(grad.abs()?.max_all()?.to_scalar::<f32>()?, 0.0, "{name}");
+                }
+            }
+            let vars: Vec<Var> = names
+                .iter()
+                .map(|name| model.variables()[*name].clone())
+                .collect();
+            check_gradient(&vars, objective, 2e-2)?;
+            for var in model.variables().values() {
+                if let Some(grad) = grads.get(var) {
+                    var.set(&var.as_tensor().sub(&grad.affine(0.05, 0.0)?)?)?;
+                }
+            }
+            let after = objective()?.to_scalar::<f32>()?;
+            assert!(
+                after < before,
+                "{read:?}: supervision step {before} -> {after}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_supervision_refuses_bad_labels_and_weights() -> Result<()> {
+        let ids: Vec<u32> = (0..16).map(|i| (i * 5 + 1) % 37).collect();
+        let weights = vec![1.0f32; 16];
+        let model = StackModel::new(
+            tiny(StackArch::Geometric, "rra", ReadScore::Dot, true),
+            &cpu(),
+        )?;
+        let good = supervision_target(2);
+        let run = |target: &ReadSupervisionTarget, weight: f64| {
+            model.read_supervised_loss(&ids, &ids, &weights, 2, 8, target, weight)
+        };
+        assert!(run(&good, 0.3).is_ok());
+        for weight in [0.0, -1.0, f64::NAN] {
+            assert!(run(&good, weight).is_err(), "weight {weight}");
+        }
+        let mut wrong_layer = good.clone();
+        wrong_layer.layer = 1;
+        let mut noncausal = good.clone();
+        noncausal.rows[0].query = 4;
+        let mut empty = good.clone();
+        empty.groups[1].bound.clear();
+        let mut overlap = good.clone();
+        overlap.groups[0].competing = vec![2];
+        let mut outside = good.clone();
+        outside.groups[2].batch = 2;
+        let mut no_rows = good.clone();
+        no_rows.rows.clear();
+        for (name, target) in [
+            ("layer", wrong_layer),
+            ("noncausal", noncausal),
+            ("empty", empty),
+            ("overlap", overlap),
+            ("outside", outside),
+            ("no rows", no_rows),
+        ] {
+            assert!(run(&target, 0.3).is_err(), "{name}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_span_probe_matches_binding_masses_and_next_scores() -> Result<()> {
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "rara", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        let ids = [3u32, 7, 9, 7, 5, 6, 2, 7];
+        let time = ids.len();
+        let spans = vec![vec![1, 3], vec![5], (0..time).collect::<Vec<_>>()];
+        for pointer in [false, true] {
+            if pointer {
+                model.add_pointer(PointerConfig::new(4), 11)?;
+            }
+            let probe = model.read_span_probe(&ids, &spans)?;
+            assert_eq!(
+                probe.reads.iter().map(|r| r.layer).collect::<Vec<_>>(),
+                vec![1, 3]
+            );
+            for read in &probe.reads {
+                assert_eq!(read.heads.len(), model.config.heads);
+                for (head, masses) in read.heads.iter().enumerate() {
+                    let label = |sources: Vec<usize>| -> Result<f64> {
+                        let target = ReadBindingTarget {
+                            layer: read.layer,
+                            head,
+                            rows: vec![ReadBinding {
+                                batch: 0,
+                                query: time - 1,
+                                sources,
+                            }],
+                        };
+                        Ok(f64::from(
+                            model
+                                .read_binding_masses(&ids, 1, time, &target)?
+                                .to_vec1::<f32>()?[0],
+                        ))
+                    };
+                    // Sets before the query equal the exact-source label's mass.
+                    for set in 0..2 {
+                        assert!((masses[set] - label(spans[set].clone())?).abs() < 1e-6);
+                    }
+                    // The full set adds the query's own mass; NoRead keeps it below one.
+                    let past = label((0..time - 1).collect())?;
+                    assert!(masses[2] > past - 1e-6 && masses[2] < 1.0);
+                    assert!((masses[0] + masses[1]) <= masses[2] + 1e-6);
+                }
+            }
+            // The observed distribution is exactly what greedy decoding ranks.
+            // (next_scores: raw logits without a pointer, the log mixture with one.)
+            let mut scores: Vec<f64> = model
+                .next_scores(&ids)?
+                .into_iter()
+                .map(f64::from)
+                .collect();
+            if !pointer {
+                let lse = scores.iter().map(|z| z.exp()).sum::<f64>().ln();
+                scores.iter_mut().for_each(|z| *z -= lse);
+            }
+            for (got, want) in probe.mixture.iter().zip(&scores) {
+                assert!((got.max(f64::MIN_POSITIVE).ln() - want).abs() < 1e-4);
+            }
+            assert_eq!(probe.pointer.is_some(), pointer);
+            if let Some(head) = &probe.pointer {
+                assert_eq!(head.attention.len(), time);
+                assert!((head.attention.iter().sum::<f64>() - 1.0).abs() < 1e-9);
+                assert!(head.gate > 0.0 && head.gate < 1.0);
+            }
+        }
+        assert!(model.read_span_probe(&ids, &[vec![time]]).is_err());
+        assert!(model.read_span_probe(&ids, &[]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn read_query_key_recomputes_the_fused_read_weights() -> Result<()> {
+        let ids = [3u32, 7, 9, 7, 5, 6, 2, 7];
+        let time = ids.len();
+        let spans: Vec<Vec<usize>> = (0..time).map(|j| vec![j]).collect();
+        for score in [ReadScore::L2, ReadScore::Lorentz, ReadScore::Dot] {
+            for shift in [false, true] {
+                let mut model =
+                    StackModel::new(tiny(StackArch::Geometric, "rara", score, true), &cpu())?;
+                if shift {
+                    model.set_read_key_shift(true)?;
+                }
+                let probe = model.read_span_probe(&ids, &spans)?;
+                for read in &probe.reads {
+                    let qk = model.read_query_key(&ids, read.layer)?;
+                    assert_eq!(qk.layer, read.layer);
+                    for (head, masses) in read.heads.iter().enumerate() {
+                        let row = qk.row(head, time - 1)?;
+                        let total: f64 = row.weight.iter().sum::<f64>() + row.no_read;
+                        assert!((total - 1.0).abs() < 1e-9);
+                        for j in 0..time {
+                            assert!(
+                                (row.weight[j] - masses[j]).abs() < 1e-5,
+                                "{score:?} shift={shift} layer {} head {head} source {j}: {} vs {}",
+                                read.layer,
+                                row.weight[j],
+                                masses[j]
+                            );
+                        }
+                    }
+                }
+                assert!(model.read_query_key(&ids, 0).is_err());
+                assert!(model.read_query_key(&[], 1).is_err());
+            }
         }
         Ok(())
     }
@@ -22025,6 +24697,341 @@ mod tests {
         Ok(())
     }
 
+    /// A supervision test case: one window pair over a small alphabet so some
+    /// targets recur in context and others (token `vocabulary - 1`) never do,
+    /// with a zero-weight row.
+    fn supervision_case(
+        score: ReadScore,
+        seed: u64,
+    ) -> (
+        usize,
+        usize,
+        usize,
+        Vec<u32>,
+        Vec<u32>,
+        Vec<f32>,
+        Vec<f32>,
+        Vec<f32>,
+        f32,
+    ) {
+        let (time, dim, vocabulary) = (6usize, 3usize, 7usize);
+        let rows = 2 * time;
+        let ids: Vec<u32> = (0..rows as u32).map(|i| (i * 5 + 1) % 4).collect();
+        let mut targets: Vec<u32> = (0..rows as u32).map(|i| (i * 3 + 2) % 4).collect();
+        targets[1] = (vocabulary - 1) as u32;
+        targets[time + 2] = (vocabulary - 1) as u32;
+        let mut weights: Vec<f32> = (0..rows).map(|i| 1.0 + (i % 3) as f32).collect();
+        weights[4] = 0.0;
+        let mut rng = Initializer(900 + seed);
+        let logits: Vec<f32> = (0..rows * vocabulary)
+            .map(|_| (rng.normal() * 1.5) as f32)
+            .collect();
+        let side: Vec<f32> = (0..rows * (2 * dim + 1))
+            .map(|_| (rng.normal() * 0.8) as f32)
+            .collect();
+        let beta = if score == ReadScore::Lorentz {
+            0.7
+        } else {
+            0.0
+        };
+        (
+            time, dim, vocabulary, ids, targets, weights, logits, side, beta,
+        )
+    }
+
+    /// The supervised objective `mixture + weight (gate_bce + pointer_nll)`
+    /// by plain f64 formulas, independent of the op: the softmax attention
+    /// over sources `0..=t`, `p = (1 - g) softmax(z)[y] + g p_copy(y)`, and on
+    /// a row whose target a source holds `-log g - log p_copy`, elsewhere
+    /// `-log(1 - g)`; weighted means over the rows.
+    #[allow(clippy::too_many_arguments)]
+    fn reference_supervised(
+        (time, dim, vocabulary): (usize, usize, usize),
+        score: ReadScore,
+        ids: &[u32],
+        targets: &[u32],
+        weights: &[f32],
+        logits: &[f64],
+        side: &[f64],
+        beta: f64,
+        weight: f64,
+    ) -> [f64; 4] {
+        let stride = 2 * dim + 1;
+        let rows = ids.len();
+        let total: f64 = weights.iter().map(|&w| f64::from(w)).sum();
+        let mut sums = [0.0f64; 3];
+        for n in 0..rows {
+            let w = f64::from(weights[n]);
+            if w == 0.0 {
+                continue;
+            }
+            let (first, t) = (n - n % time, n % time);
+            let q = &side[n * stride..n * stride + dim];
+            let scores: Vec<f64> = (0..=t)
+                .map(|j| {
+                    let k = &side[(first + j) * stride + dim..(first + j) * stride + 2 * dim];
+                    let inner: f64 = q.iter().zip(k).map(|(a, b)| a * b).sum();
+                    match score {
+                        ReadScore::Lorentz => {
+                            let lift =
+                                |x: &[f64]| (1.0 + x.iter().map(|v| v * v).sum::<f64>()).sqrt();
+                            let e = lift(q) * lift(k) - inner - 1.0;
+                            -beta * (1.0 + e).acosh()
+                        }
+                        _ => inner / (dim as f64).sqrt(),
+                    }
+                })
+                .collect();
+            let high = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let exps: Vec<f64> = scores.iter().map(|s| (s - high).exp()).collect();
+            let sum: f64 = exps.iter().sum();
+            let y = targets[n];
+            let copy: f64 = (0..=t)
+                .filter(|&j| ids[first + j] == y)
+                .map(|j| exps[j] / sum)
+                .sum();
+            let present = (0..=t).any(|j| ids[first + j] == y);
+            let z = &logits[n * vocabulary..(n + 1) * vocabulary];
+            let zmax = z.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let zsum: f64 = z.iter().map(|v| (v - zmax).exp()).sum();
+            let soft = (z[y as usize] - zmax).exp() / zsum;
+            let g = 1.0 / (1.0 + (-side[n * stride + 2 * dim]).exp());
+            sums[0] -= w * ((1.0 - g) * soft + g * copy).ln();
+            if present {
+                sums[1] -= w * g.ln();
+                sums[2] -= w * copy.ln();
+            } else {
+                sums[1] -= w * (1.0 - g).ln();
+            }
+        }
+        let [m, gb, pn] = sums.map(|v| v / total);
+        [m, gb, pn, m + weight * (gb + pn)]
+    }
+
+    #[test]
+    fn gate_supervision_matches_the_reference_and_its_finite_differences() -> Result<()> {
+        let weight = 0.7;
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let (time, dim, vocabulary, ids, targets, weights, logits, side, beta) =
+                supervision_case(score, 1);
+            let rows = ids.len();
+            let stride = 2 * dim + 1;
+            // The case has both kinds of scored row.
+            let present = |n: usize| ids[n - n % time..=n].contains(&targets[n]);
+            assert!((0..rows).any(|n| weights[n] > 0.0 && present(n)));
+            assert!((0..rows).any(|n| weights[n] > 0.0 && !present(n)));
+            let z = Var::from_vec(logits.clone(), (rows, vocabulary), &cpu())?;
+            let s = Var::from_vec(side.clone(), (rows, stride), &cpu())?;
+            let b = Var::from_vec(vec![beta], 1, &cpu())?;
+            let parts = pointer_mixture_loss_supervised(
+                z.as_tensor(),
+                s.as_tensor(),
+                b.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+                weight,
+            )?;
+            let to64 = |v: &[f32]| v.iter().map(|&x| f64::from(x)).collect::<Vec<f64>>();
+            let reference = |l: &[f64], sd: &[f64], bt: f64| {
+                reference_supervised(
+                    (time, dim, vocabulary),
+                    score,
+                    &ids,
+                    &targets,
+                    &weights,
+                    l,
+                    sd,
+                    bt,
+                    weight,
+                )
+            };
+            let want = reference(&to64(&logits), &to64(&side), f64::from(beta));
+            for (name, got, want) in [
+                ("mixture", &parts.mixture, want[0]),
+                ("gate_bce", &parts.gate_bce, want[1]),
+                ("pointer_nll", &parts.pointer_nll, want[2]),
+                ("total", &parts.total, want[3]),
+            ] {
+                let got = f64::from(got.to_scalar::<f32>()?);
+                assert!(
+                    (got - want).abs() < 1e-5 * want.abs().max(1.0),
+                    "{score:?} {name}: {got} against {want}"
+                );
+            }
+            // The mixture part is the unsupervised op's loss bit for bit.
+            let plain = pointer_mixture_loss(
+                z.as_tensor(),
+                s.as_tensor(),
+                b.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+            )?;
+            assert_eq!(
+                plain.to_scalar::<f32>()?.to_bits(),
+                parts.mixture.to_scalar::<f32>()?.to_bits()
+            );
+            // Every logit, side and scale gradient of the total against central
+            // differences of the f64 reference.
+            let grads = parts.total.backward()?;
+            let h = 1e-4;
+            let check =
+                |analytic: Vec<f32>, base: Vec<f64>, at: &dyn Fn(&[f64]) -> f64, what: &str| {
+                    let mut numeric = Vec::with_capacity(base.len());
+                    for i in 0..base.len() {
+                        let (mut plus, mut minus) = (base.clone(), base.clone());
+                        plus[i] += h;
+                        minus[i] -= h;
+                        numeric.push((at(&plus) - at(&minus)) / (2.0 * h));
+                    }
+                    let scale = numeric.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+                    assert!(scale > 0.0, "{score:?} {what}: no effect");
+                    for (i, (&a, &n)) in analytic.iter().zip(&numeric).enumerate() {
+                        assert!(
+                            (f64::from(a) - n).abs() < 2e-4 * scale + 2e-6,
+                            "{score:?} {what}[{i}]: analytic {a} against numeric {n}"
+                        );
+                    }
+                };
+            let grad = |var: &Var| -> Result<Vec<f32>> {
+                Ok(grads
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?)
+            };
+            let (l64, s64, b64) = (to64(&logits), to64(&side), f64::from(beta));
+            check(
+                grad(&z)?,
+                l64.clone(),
+                &|l| reference(l, &s64, b64)[3],
+                "d_logits",
+            );
+            check(
+                grad(&s)?,
+                s64.clone(),
+                &|sd| reference(&l64, sd, b64)[3],
+                "d_side",
+            );
+            if score == ReadScore::Lorentz {
+                check(
+                    grad(&b)?,
+                    vec![b64],
+                    &|bt| reference(&l64, &s64, bt[0])[3],
+                    "d_beta",
+                );
+            }
+            // The zero-weight row's query and gate get no gradient (its key
+            // still does, from the later rows that read it).
+            let d_side = grad(&s)?;
+            assert!(d_side[4 * stride..4 * stride + dim]
+                .iter()
+                .all(|&v| v == 0.0));
+            assert_eq!(d_side[4 * stride + 2 * dim], 0.0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gate_supervision_without_its_terms_is_the_unsupervised_gradient() -> Result<()> {
+        // Backpropagating only the mixture part (upstream gradients 1, 0, 0)
+        // gives the unsupervised op's gradients exactly.
+        for score in [ReadScore::Dot, ReadScore::Lorentz] {
+            let (time, dim, vocabulary, ids, targets, weights, logits, side, beta) =
+                supervision_case(score, 2);
+            let rows = ids.len();
+            let make = || -> Result<(Var, Var, Var)> {
+                Ok((
+                    Var::from_vec(logits.clone(), (rows, vocabulary), &cpu())?,
+                    Var::from_vec(side.clone(), (rows, 2 * dim + 1), &cpu())?,
+                    Var::from_vec(vec![beta], 1, &cpu())?,
+                ))
+            };
+            let (z1, s1, b1) = make()?;
+            let plain = pointer_mixture_loss(
+                z1.as_tensor(),
+                s1.as_tensor(),
+                b1.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+            )?;
+            let g1 = plain.backward()?;
+            let (z2, s2, b2) = make()?;
+            let parts = pointer_mixture_loss_supervised(
+                z2.as_tensor(),
+                s2.as_tensor(),
+                b2.as_tensor(),
+                time,
+                score,
+                &ids,
+                &targets,
+                Some(&weights),
+                1.0,
+            )?;
+            let g2 = parts.mixture.backward()?;
+            for (a, b) in [(&z1, &z2), (&s1, &s2), (&b1, &b2)] {
+                let x = g1
+                    .get(a.as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                let y = g2
+                    .get(b.as_tensor())
+                    .ok_or_else(|| invalid("missing gradient"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?;
+                assert_eq!(x, y, "{score:?}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gate_supervision_is_refused_where_it_is_not_defined() -> Result<()> {
+        let (ids, targets, weights) = pointer_batch();
+        // No pointer head.
+        let plain = StackModel::new(
+            tiny(StackArch::Geometric, "ar", ReadScore::Lorentz, true),
+            &cpu(),
+        )?;
+        assert!(plain
+            .gate_supervised_loss(&ids, &targets, &weights, 2, 12, 0.5)
+            .is_err());
+        // A selection, a nonpositive or nonfinite weight.
+        let selected = pointer_model(ReadScore::Dot, Some(PointerSelect::TopK(2)), 0)?;
+        assert!(selected
+            .gate_supervised_loss(&ids, &targets, &weights, 2, 12, 0.5)
+            .is_err());
+        let mut model = pointer_model(ReadScore::Dot, None, 0)?;
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(model
+                .gate_supervised_loss(&ids, &targets, &weights, 2, 12, bad)
+                .is_err());
+        }
+        // bf16 has no supervision kernel.
+        model.set_precision(Precision::Bf16);
+        assert!(model
+            .gate_supervised_loss(&ids, &targets, &weights, 2, 12, 0.5)
+            .is_err());
+        model.set_precision(Precision::F32);
+        // The model method's mixture part is weighted_loss bit for bit.
+        let parts = model.gate_supervised_loss(&ids, &targets, &weights, 2, 12, 2.0)?;
+        let mixture = model.weighted_loss(&ids, &targets, &weights, 2, 12)?;
+        assert_eq!(
+            parts.mixture.to_scalar::<f32>()?.to_bits(),
+            mixture.to_scalar::<f32>()?.to_bits()
+        );
+        Ok(())
+    }
+
     #[test]
     fn a_row_without_copy_mass_is_exactly_the_generated_probability() -> Result<()> {
         // A vocabulary of 4, one window of 3 positions and a pointer of width 2.
@@ -22050,6 +25057,7 @@ mod tests {
             keys: None,
             targets: targets.clone(),
             weights: None,
+            supervise: false,
         };
         let g = 1.0 / (1.0 + (-f64::from(gate_logit)).exp());
         let lse = 3.0f64.ln();
@@ -22127,6 +25135,7 @@ mod tests {
                 keys: None,
                 targets: targets.clone(),
                 weights: None,
+                supervise: false,
             };
             let logits = Var::from_vec(logit_rows.clone(), (time, vocabulary), &cpu())?;
             let side = Var::from_vec(side_values.clone(), (time, stride), &cpu())?;
@@ -22183,6 +25192,7 @@ mod tests {
             keys: None,
             targets: targets.clone(),
             weights: None,
+            supervise: false,
         };
         let row = op().evaluate(&[0.0; 4], &side_values, 1.0, 1)?;
         assert!(
