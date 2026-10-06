@@ -1830,6 +1830,46 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn wall_estimate_overrun_continues_and_preserves_first_receipt() -> Result<()> {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| bad("test clock predates epoch"))?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-wall-estimate-test-{}-{nonce}",
+            std::process::id()
+        ));
+        let a: Args = serde_json::from_value(json!({
+            "mode":"admission", "arm":"joint-potential", "seed":1,
+            "source_weights":".", "native_artifact":".", "trusted_binding":".",
+            "cue_bundle":".", "prefix_bundle":".", "canonical_exp":".",
+            "training_inputs":".", "training_labels":".",
+            "development_inputs":".", "development_labels":".",
+            "updates":0, "learning_rate":0.003, "prototype_learning_rate":0.01,
+            "context_learning_rate":0.002, "maximum_seconds":1,
+            "maximum_report_bytes":2_097_152, "out":root
+        }))?;
+        report_output::claim(&a.out)?;
+        let start = Instant::now()
+            .checked_sub(std::time::Duration::from_secs(2))
+            .ok_or_else(|| bad("test Instant cannot subtract two seconds"))?;
+        deadline(&a, start)?;
+        let path = a.out.join("wall-estimate-overrun.json");
+        let first = fs::read(&path)?;
+        let receipt: Value = serde_json::from_slice(&first)?;
+        assert_eq!(receipt["declared_estimate_seconds"], json!(1));
+        assert!(
+            receipt["first_observed_elapsed_seconds"]
+                .as_f64()
+                .ok_or_else(|| bad("overrun elapsed absent"))?
+                >= 2.
+        );
+        deadline(&a, start)?;
+        assert_eq!(fs::read(&path)?, first);
+        fs::remove_dir_all(&a.out)?;
+        Ok(())
+    }
+    #[test]
     fn accumulated_nonfinite_credit_is_rejected_before_optimizer_input() -> Result<()> {
         let var = Var::new(1f32, &Device::Cpu)?;
         let params = BTreeMap::from([(
