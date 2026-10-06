@@ -28,7 +28,9 @@ use crate::{
         vocabulary_marginal_loss, GenerateLearningOutput, GenerateLearningWeights,
         PreparedGenerateLearning,
     },
-    geometric_source_realizer::{ComposedCopyBankOutput, PreparedSourceRealizer},
+    geometric_occurrence_consumer::source_realizer::{
+        ComposedCopyBankOutput, PreparedSourceRealizer,
+    },
     invalid, Result,
 };
 

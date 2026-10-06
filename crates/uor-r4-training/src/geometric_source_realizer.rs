@@ -7263,7 +7263,7 @@ mod tests {
             assert!(no_source.loss(5)?.to_scalar::<f32>()?.is_finite());
             assert!(unified.forward_no_source(&[]).is_err());
             let loaded = uor_r4_core::native_geometric::learner::geometric_generate::NativeGeometricGenerate::from_bytes(
-                &snapshot.native.to_bytes()?, fixture.weights.binding(),
+                &snapshot.native.to_bytes().map_err(|e| invalid(e.to_string()))?, fixture.weights.binding(),
             ).map_err(|e| invalid(e.to_string()))?;
             let mut reloaded_scores = vec![0; fixture.weights.binding().vocab_size()];
             loaded.score_into(&joint.final_state_codes, &mut reloaded_scores,
