@@ -2305,6 +2305,8 @@ fn test_step7a_read_lineage_parity() -> uor_r4_training::Result<()> {
     for (index, lineage) in [
         ReadLineage::LearnedConvWide { taps: 8 },
         ReadLineage::KeyCarrier,
+        ReadLineage::KeyPhase { snap: false },
+        ReadLineage::KeyPhase { snap: true },
     ]
     .into_iter()
     .enumerate()

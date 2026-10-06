@@ -108,11 +108,11 @@
 //! It has no served representation or integer export yet, so `qat=true`
 //! refuses it and the export modes refuse a model with it.
 //!
-//! `read_lineage=conv8|carrier` (in `dialogue-train`; Step 7a, #820) trains
+//! `read_lineage=conv8|carrier|rot` (in `dialogue-train`; Step 7a, #820) trains
 //! every geometric read with a key-content lineage
 //! (`StackModel::set_read_lineage`): `conv8` is a learned depthwise causal
 //! convolution of the keys over lags 0..=7, `carrier` the gated decaying key
-//! carrier. Both start as the plain read (the added parameters are
+//! carrier, `rot` the icosian-snapped quaternion phase binding. All start as the plain read (the added parameters are
 //! function-preserving at step 0), are saved in `config.json` and restored
 //! by every load. From `init=` a model without a lineage gets it added; a
 //! model with another lineage, or with one when none is requested, is
@@ -3772,8 +3772,9 @@ fn read_lineage_arg(args: &Args) -> Result<Option<ReadLineage>> {
         None | Some("none") => Ok(None),
         Some("conv8") => Ok(Some(ReadLineage::LearnedConvWide { taps: 8 })),
         Some("carrier") => Ok(Some(ReadLineage::KeyCarrier)),
+        Some("rot") => Ok(Some(ReadLineage::KeyPhase { snap: true })),
         Some(other) => Err(invalid(format!(
-            "invalid read_lineage={other} (none, conv8 or carrier)"
+            "invalid read_lineage={other} (none, conv8, carrier or rot)"
         ))),
     }
 }

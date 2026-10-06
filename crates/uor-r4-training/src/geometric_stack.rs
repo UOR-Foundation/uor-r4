@@ -2607,6 +2607,26 @@ impl StackModel {
                         .insert(name, Var::zeros(shape, DType::F32, &self.device)?);
                 }
             }
+            Some(lineage @ ReadLineage::KeyPhase { .. }) => {
+                let head_width = self.config.head_width();
+                if !width.is_multiple_of(self.config.heads) || !head_width.is_multiple_of(4) {
+                    return Err(invalid(
+                        "the key phase needs whole heads of four-channel blocks",
+                    ));
+                }
+                for (name, shape) in read_lineage_shapes(&self.config, lineage) {
+                    let var = if shape.len() == 1 {
+                        // Bias (1, 0, 0, 0) per head: the identity phase.
+                        let values: Vec<f32> = (0..shape[0])
+                            .map(|i| if i % 4 == 0 { 1.0 } else { 0.0 })
+                            .collect();
+                        Var::from_vec(values, shape, &self.device)?
+                    } else {
+                        Var::zeros(shape, DType::F32, &self.device)?
+                    };
+                    self.variables.insert(name, var);
+                }
+            }
             Some(ReadLineage::RandomSo4 { seed }) => {
                 let blocks = random_so4_blocks(width / 4, seed);
                 let mut matrix = vec![0f32; width * width];
@@ -2653,6 +2673,23 @@ impl StackModel {
                     mixed = mixed.add(&causal_shift(&projected, lag)?.broadcast_mul(&tap)?)?;
                 }
                 Ok(mixed)
+            }
+            (part @ ("query" | "key"), ReadLineage::KeyPhase { snap }) => {
+                let (map, bias) = if part == "key" {
+                    (READ_LINEAGE_PHASE_KEY, READ_LINEAGE_PHASE_KEY_BIAS)
+                } else {
+                    (READ_LINEAGE_PHASE_QUERY, READ_LINEAGE_PHASE_QUERY_BIAS)
+                };
+                let (batch, time, width) = projected.dims3()?;
+                let heads = self.config.heads;
+                let raw = self
+                    .linear(input, p.layer(layer, map)?)?
+                    .to_dtype(DType::F32)?
+                    .broadcast_add(p.layer(layer, bias)?)?
+                    .reshape((batch, time, heads, 1, 4))?;
+                let phase = unit_phase(&raw, snap)?.to_dtype(projected.dtype())?;
+                let blocks = projected.reshape((batch, time, heads, width / heads / 4, 4))?;
+                Ok(left_multiply_blocks(&phase, &blocks)?.reshape((batch, time, width))?)
             }
             ("key", ReadLineage::KeyCarrier) => {
                 let (batch, time, width) = projected.dims3()?;
@@ -9961,6 +9998,17 @@ pub enum ReadLineage {
     /// 2 to 16 tokens). `v`, `G` and `b` start at 0, so a model with it added
     /// computes the plain read, bit for bit, until it trains. Saveable.
     KeyCarrier,
+    /// Step 7a `rot` (#820, owner amendment): multiplicative quaternion phase
+    /// binding. A learned map of the read input gives each position and head
+    /// a unit quaternion phase, one map for keys (`P_t`) and one for queries
+    /// (`P_q`); every four-channel block of the head's key is left-multiplied
+    /// by `P_t` and of its query by `P_q`, so a query matches a key only as
+    /// far as their phases agree (`<P_q q, P_t k> = <q, conj(P_q) P_t k>`).
+    /// With `snap` the phases are straight-through snapped to the nearest of
+    /// the 120 unit icosians (2I) for an exact D11 group action. Maps start
+    /// at 0 with bias `(1, 0, 0, 0)`: the identity phase, so a model with it
+    /// added computes the plain read until it trains. Saveable.
+    KeyPhase { snap: bool },
 }
 
 /// The largest `taps` of [`ReadLineage::LearnedConvWide`].
@@ -9979,6 +10027,8 @@ impl ReadLineage {
             ReadLineage::LearnedConvWide { taps: 8 } => "conv8",
             ReadLineage::LearnedConvWide { .. } => "conv_wide",
             ReadLineage::KeyCarrier => "carrier",
+            ReadLineage::KeyPhase { snap: true } => "rot",
+            ReadLineage::KeyPhase { snap: false } => "rot_free",
         }
     }
 
@@ -9988,7 +10038,9 @@ impl ReadLineage {
     pub fn saveable(self) -> bool {
         matches!(
             self,
-            ReadLineage::LearnedConvWide { .. } | ReadLineage::KeyCarrier
+            ReadLineage::LearnedConvWide { .. }
+                | ReadLineage::KeyCarrier
+                | ReadLineage::KeyPhase { .. }
         )
     }
 
@@ -10032,10 +10084,61 @@ fn read_lineage_shapes(config: &StackConfig, lineage: ReadLineage) -> Vec<(Strin
                 ));
                 out.push((layer_name(layer, READ_LINEAGE_CARRIER_MIX), vec![width]));
             }
+            ReadLineage::KeyPhase { .. } => {
+                for name in [READ_LINEAGE_PHASE_KEY, READ_LINEAGE_PHASE_QUERY] {
+                    out.push((layer_name(layer, name), vec![4 * config.heads, width]));
+                }
+                for name in [READ_LINEAGE_PHASE_KEY_BIAS, READ_LINEAGE_PHASE_QUERY_BIAS] {
+                    out.push((layer_name(layer, name), vec![4 * config.heads]));
+                }
+            }
             _ => {}
         }
     }
     out
+}
+
+/// [`ReadLineage::KeyPhase`]'s unit phases from their raw 4-vectors (last
+/// dimension 4): `raw / |raw|`, and with `snap` the nearest unit icosian of
+/// 2I in the forward pass with the normalised vector's gradient
+/// (straight-through).
+fn unit_phase(raw: &Tensor, snap: bool) -> Result<Tensor> {
+    let norm = raw
+        .sqr()?
+        .sum_keepdim(raw.rank() - 1)?
+        .affine(1.0, 1e-12)?
+        .sqrt()?;
+    let unit = raw.broadcast_div(&norm)?;
+    if !snap {
+        return Ok(unit);
+    }
+    let shape = unit.shape().clone();
+    let values = unit.flatten_all()?.to_vec1::<f32>()?;
+    let roots = icosian_roots();
+    let mut snapped = Vec::with_capacity(values.len());
+    for q in values.chunks_exact(4) {
+        snapped.extend_from_slice(&roots[nearest_root([q[0], q[1], q[2], q[3]], roots)]);
+    }
+    let snapped = Tensor::from_vec(snapped, shape, unit.device())?;
+    straight_through(&unit, &snapped)
+}
+
+/// Left Hamilton product `p x` of every four-channel block `x` (last
+/// dimension 4) with the broadcast phase `p` (last dimension 4).
+fn left_multiply_blocks(p: &Tensor, x: &Tensor) -> Result<Tensor> {
+    let axis = x.rank() - 1;
+    let pc: Vec<Tensor> = (0..4)
+        .map(|i| p.narrow(axis, i, 1))
+        .collect::<candle_core::Result<_>>()?;
+    let xc: Vec<Tensor> = (0..4)
+        .map(|i| x.narrow(axis, i, 1))
+        .collect::<candle_core::Result<_>>()?;
+    let m = |a: usize, b: usize| pc[a].broadcast_mul(&xc[b]);
+    let w = m(0, 0)?.sub(&m(1, 1)?)?.sub(&m(2, 2)?)?.sub(&m(3, 3)?)?;
+    let i = m(0, 1)?.add(&m(1, 0)?)?.add(&m(2, 3)?)?.sub(&m(3, 2)?)?;
+    let j = m(0, 2)?.sub(&m(1, 3)?)?.add(&m(2, 0)?)?.add(&m(3, 1)?)?;
+    let k = m(0, 3)?.add(&m(1, 2)?)?.sub(&m(2, 1)?)?.add(&m(3, 0)?)?;
+    Ok(Tensor::cat(&[&w, &i, &j, &k], axis)?)
 }
 
 /// [`ReadLineage::KeyCarrier`]'s decay matrices `[heads, time, time]`:
@@ -10063,6 +10166,10 @@ const READ_LINEAGE_CONV_WIDE: &str = "read.lineage_wide.conv.weight";
 const READ_LINEAGE_CARRIER_GATE: &str = "read.lineage_carrier.gate";
 const READ_LINEAGE_CARRIER_BIAS: &str = "read.lineage_carrier.gate_bias";
 const READ_LINEAGE_CARRIER_MIX: &str = "read.lineage_carrier.mix";
+const READ_LINEAGE_PHASE_KEY: &str = "read.lineage_phase.key_map";
+const READ_LINEAGE_PHASE_KEY_BIAS: &str = "read.lineage_phase.key_bias";
+const READ_LINEAGE_PHASE_QUERY: &str = "read.lineage_phase.query_map";
+const READ_LINEAGE_PHASE_QUERY_BIAS: &str = "read.lineage_phase.query_bias";
 
 /// Left multiplication by `j^{-1} = -j`: `(a, b, c, d) -> (c, -d, -a, b)`
 /// per four-channel lane, the inverse (and transpose) of
@@ -18864,6 +18971,8 @@ mod tests {
         for lineage in [
             ReadLineage::LearnedConvWide { taps: 8 },
             ReadLineage::KeyCarrier,
+            ReadLineage::KeyPhase { snap: true },
+            ReadLineage::KeyPhase { snap: false },
         ] {
             assert!(lineage.saveable());
             let mut model = StackModel::new(config.clone(), &cpu())?;
@@ -18896,17 +19005,24 @@ mod tests {
                 .collect();
             assert_eq!(
                 vars.len(),
-                if lineage == ReadLineage::KeyCarrier {
-                    6
-                } else {
-                    2
+                match lineage {
+                    ReadLineage::KeyCarrier => 6,
+                    ReadLineage::KeyPhase { .. } => 8,
+                    _ => 2,
                 }
             );
             for var in &vars {
                 let grad = grads.get(var.as_tensor()).expect("lineage gradient");
                 assert!(grad.sqr()?.sum_all()?.to_scalar::<f32>()? > 0.0);
             }
-            check_gradient(&vars, || model.loss(&ids, &targets, 1, time), 2e-2)?;
+            // A snapped phase is piecewise constant: its straight-through
+            // gradient is not the finite difference, by design. The free
+            // phase's model-level directional derivative is below the f32
+            // finite difference's resolution here; its parts are checked in
+            // `step7a_phase_binding_preserves_norms_and_shared_phase_scores`.
+            if !matches!(lineage, ReadLineage::KeyPhase { .. }) {
+                check_gradient(&vars, || model.loss(&ids, &targets, 1, time), 2e-2)?;
+            }
             // Saved and loaded, bit for bit; the field names it.
             let dir = std::env::temp_dir().join(format!(
                 "stack-step7a-{}-{}",
@@ -18944,6 +19060,77 @@ mod tests {
     }
 
     #[test]
+    fn step7a_phase_binding_preserves_norms_and_shared_phase_scores() -> Result<()> {
+        let mut rng = Initializer(31);
+        let x = random(&mut rng, &[3, 5, 4], 1.0);
+        let y = random(&mut rng, &[3, 5, 4], 1.0);
+        let raw = random(&mut rng, &[3, 1, 4], 1.0);
+        for snap in [false, true] {
+            let p = unit_phase(&raw, snap)?;
+            let norms = p.sqr()?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            assert!(norms.iter().all(|n| (n - 1.0).abs() < 1e-5));
+            let px = left_multiply_blocks(&p, &x)?;
+            let py = left_multiply_blocks(&p, &y)?;
+            // Norm-preserving block by block.
+            let n0 = x.sqr()?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            let n1 = px.sqr()?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            for (a, b) in n0.iter().zip(&n1) {
+                assert!((a - b).abs() < 1e-4 * a.max(1.0));
+            }
+            // A shared phase leaves every inner product unchanged.
+            let d0 = (&x * &y)?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            let d1 = (&px * &py)?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+            for (a, b) in d0.iter().zip(&d1) {
+                assert!((a - b).abs() < 1e-4, "{a} vs {b}");
+            }
+            // The Hamilton product agrees with the scalar reference.
+            let pv = p.flatten_all()?.to_vec1::<f32>()?;
+            let xv = x.flatten_all()?.to_vec1::<f32>()?;
+            let pxv = px.flatten_all()?.to_vec1::<f32>()?;
+            for r in 0..3 {
+                for b in 0..5 {
+                    let o = (r * 5 + b) * 4;
+                    let want = quaternion_product(
+                        [pv[r * 4], pv[r * 4 + 1], pv[r * 4 + 2], pv[r * 4 + 3]],
+                        [xv[o], xv[o + 1], xv[o + 2], xv[o + 3]],
+                    );
+                    for c in 0..4 {
+                        assert!((want[c] - pxv[o + c]).abs() < 1e-5);
+                    }
+                }
+            }
+        }
+        // A snapped phase is a unit icosian.
+        let p = unit_phase(&raw, true)?.flatten_all()?.to_vec1::<f32>()?;
+        for q in p.chunks_exact(4) {
+            assert!(icosian_roots()
+                .iter()
+                .any(|r| r == &[q[0], q[1], q[2], q[3]]));
+        }
+        // A different phase changes the match.
+        let other = unit_phase(&random(&mut rng, &[3, 1, 4], 1.0), false)?;
+        let p = unit_phase(&raw, false)?;
+        let d0 = (&x * &y)?.sum(2)?.flatten_all()?.to_vec1::<f32>()?;
+        let d2 = (&left_multiply_blocks(&p, &x)? * &left_multiply_blocks(&other, &y)?)?
+            .sum(2)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert!(d0.iter().zip(&d2).any(|(a, b)| (a - b).abs() > 1e-3));
+        // The free phase's gradient (normalisation and Hamilton product).
+        let raw_var = Var::from_tensor(&raw)?;
+        let weight = random(&mut rng, &[3, 5, 4], 1.0);
+        let loss = || -> Result<Tensor> {
+            Ok(
+                left_multiply_blocks(&unit_phase(raw_var.as_tensor(), false)?, &x)?
+                    .mul(&weight)?
+                    .sum_all()?,
+            )
+        };
+        check_gradient(std::slice::from_ref(&raw_var), loss, 1e-2)?;
+        Ok(())
+    }
+
+    #[test]
     fn step7a_key_arms_reach_their_declared_window() -> Result<()> {
         // A first-layer read sees per-position keys, so the lineage alone
         // decides which earlier tokens a key depends on.
@@ -18953,6 +19140,7 @@ mod tests {
         for (lineage, reach) in [
             (ReadLineage::LearnedConvWide { taps: 3 }, Some(3usize)),
             (ReadLineage::KeyCarrier, None),
+            (ReadLineage::KeyPhase { snap: false }, Some(1)),
         ] {
             let mut model = StackModel::new(config.clone(), &cpu())?;
             model.set_read_lineage(Some(lineage))?;
