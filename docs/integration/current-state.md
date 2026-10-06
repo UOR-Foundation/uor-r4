@@ -68,14 +68,15 @@ full120 utility through exact H4 action/state permutations on CPU/CUDA.33 focuse
 checks pass at `f6973e0a`, including actual GPU parity and no doubled Generate
 parameter credit. Native forward/artifacts remain fixed; this is a local surrogate,
 not a global posterior. Repaired real-bank CUDA admission passes103 positions
-with unchanged native outputs; paired128-update fits passed complete-cost gates
-and are live at frozen1698aa79 (three seeds queued per arm). An opt-in prefix
+with unchanged native outputs; paired128-update fits are now complete across three seeds per arm, as recorded
+above. The first two pairs use frozen1698aa79; the final joint retry usesc722
+with only the execution-ceiling repair and matched initial native outputs. An opt-in prefix
 Copy path at92587b03 carries its exact120-state utilities through the same
 channel; defaultfalse preserves these fits. Its actual-context CPU regression and11 relevant preserved/driver checks pass
 (12 total) on the Linux pod; CUDA parity and enabled-bank admission wait for a
 free GPU. Cue/contextual-readout Copy remains
-legacy. Next: complete native own-prefix answers and paired-seed review, then
-choose integration or a bounded exact suffix replay discriminator.
+legacy. Next: finish the balanced decoder control recorded above and use actual native
+code alternatives or independent transfer according to its measured result.
 PR1792 is still draft/unmerged; no language result from these checks.
 
 ## Native Generate update — October 6, mixed result
