@@ -75,13 +75,26 @@ The authenticated reference inventory contains 4,064 positions overlapping the
 literal; 624 have their token present in the other Source, across 208 of 512
 rows. The remaining 304 rows cannot support a same-token rival comparison.
 These counts are token-overlap metadata, not exact byte-alignment eligibility
-or a model result. A complementary paired-question analysis is therefore being
-implemented: hold the exact bank and candidate endpoint sets fixed, use the
-empty response prefix, and compare length-normalized raw Source score margins
-across opposite requested sources. Exact rational differences remove uniform
-Copy offsets. This measures question/cue-dependent source-score preference,
-not next-token success, normalized attention or generalization. Its validation
-and actual results remain pending separately from the tested first mode.
+or a model result. The complementary paired-question analysis holds the exact bank and candidate
+endpoint sets fixed, uses the empty response prefix, and compares
+length-normalized raw Source score margins across opposite requested sources.
+Exact rational differences remove uniform Copy offsets. The real inputs have
+128 full typed banks with four distinct questions each (two phrasings per
+requested Source), so the implementation enumerates all opposite-source pairs
+and reports each bank as the analysis unit. Several contrasts share rows and
+are not independent samples. Expected coverage is 512 contrasts across 128
+banks; actual score-based eligibility remains pending execution. This measures
+question/cue-dependent source-score preference, not correct absolute Source
+winners, next-token success, normalized attention or generalization.
+
+At source `f4d3946fa520c87cddf916086eb8e82c7df974e6`, the corrected example
+passed all 16 release tests (0 failed, 0 ignored), including the four-question
+grouping test. Compile plus tests took 124.125 seconds on the pod CPU with
+two threads, no GPU, and peak child RSS of 2,101,464 KiB. The original control
+executable remained unchanged. The earlier two-row-only traversal was an
+instrument shape defect, not model-negative evidence; its passing focused
+tests are retained at source `33cc6092`. Full derived execution remains
+pending the live fit and four controls.
 
 References [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) and
 [PR #1792](https://github.com/UOR-Foundation/uor-r4/pull/1792).
