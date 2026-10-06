@@ -1803,6 +1803,152 @@ mod source_contrast {
             json!({"status":if selected.is_empty(){"no_exact_emission_byte_alignment"}else if wrong.is_empty(){"no_same_token_wrong_source"}else{"eligible"},"alignment":if protocol_seam {"exact_literal_plus_one_protocol_space"}else{"exact_wholly_literal"},"token_id":token,"literal_byte_start":lo,"literal_byte_end":hi,"selected_occurrences":selected.len(),"wrong_occurrences":wrong.len(),"pairs":pairs}),
         )
     }
+    struct QueryRow {
+        id: String,
+        segments: Vec<u8>,
+        query: Vec<u32>,
+        selected: usize,
+        role: String,
+        packets: Vec<Value>,
+    }
+    const COMPONENTS: [&str; 4] = ["total", "contextual", "cue", "prefix"];
+    fn source_mean_numerator(
+        packet: &Value,
+        a: &[usize],
+        b: &[usize],
+        component: &str,
+    ) -> Result<i128> {
+        if a.is_empty() || b.is_empty() {
+            return Err(bad("empty physical source endpoint set"));
+        }
+        let scores = if component == "total" {
+            ints(&packet["copy_raw_scores_q24"])?
+        } else {
+            ints(&packet["copy_components_q24"][component])?
+        };
+        let sum = |indices: &[usize]| -> Result<i128> {
+            indices.iter().try_fold(0i128, |s, &i| {
+                s.checked_add(i128::from(
+                    *scores
+                        .get(i)
+                        .ok_or_else(|| bad("source endpoint index absent"))?,
+                ))
+                .ok_or_else(|| bad("source sum overflow"))
+            })
+        };
+        let left = sum(a)?
+            .checked_mul(i128::try_from(b.len())?)
+            .ok_or_else(|| bad("source mean product overflow"))?;
+        let right = sum(b)?
+            .checked_mul(i128::try_from(a.len())?)
+            .ok_or_else(|| bad("source mean product overflow"))?;
+        left.checked_sub(right)
+            .ok_or_else(|| bad("source mean numerator overflow"))
+    }
+    fn query_pair(a: &QueryRow, b: &QueryRow) -> Result<Value> {
+        if a.segments != b.segments
+            || a.query == b.query
+            || a.selected == b.selected
+            || a.role == b.role
+        {
+            return Err(bad("same-bank opposite-query pair identity differs"));
+        }
+        let first = a
+            .packets
+            .first()
+            .ok_or_else(|| bad("query first packet absent"))?;
+        let candidates = array(&first["source_provenance"], "candidates")?;
+        let mut sa = Vec::new();
+        let mut sb = Vec::new();
+        for (i, c) in candidates.iter().enumerate() {
+            let segment = usize::try_from(uint(c, "segment_index")?)?;
+            if segment == a.selected {
+                sa.push(i);
+            } else if segment == b.selected {
+                sb.push(i);
+            }
+        }
+        if sa.is_empty() || sb.is_empty() {
+            return Ok(json!({"status":"empty_source_endpoint_set","row_a":a.id,"row_b":b.id}));
+        }
+        let denominator = sa
+            .len()
+            .checked_mul(sb.len())
+            .ok_or_else(|| bad("source mean denominator overflow"))?;
+        let mut values = std::collections::BTreeMap::<String, [i128; 4]>::new();
+        let mut query_means = std::collections::BTreeMap::<String, [[i128; 4]; 2]>::new();
+        let mut arms = serde_json::Map::new();
+        for (arm_index, arm) in ARMS.iter().enumerate() {
+            let pa = a
+                .packets
+                .get(arm_index)
+                .ok_or_else(|| bad("query arm absent"))?;
+            let pb = b
+                .packets
+                .get(arm_index)
+                .ok_or_else(|| bad("query arm absent"))?;
+            for p in [pa, pb] {
+                if !array(p, "actual_prefix_ids")?.is_empty()
+                    || array(&p["source_provenance"], "candidates")? != candidates
+                {
+                    return Err(bad(
+                        "query contrast must use empty prefix and identical physical candidates",
+                    ));
+                }
+            }
+            let mut difference = [0i128; 4];
+            let mut means = [[0i128; 4]; 2];
+            let mut details = serde_json::Map::new();
+            for (i, component) in COMPONENTS.iter().enumerate() {
+                let na = source_mean_numerator(pa, &sa, &sb, component)?;
+                let nb = source_mean_numerator(pb, &sa, &sb, component)?;
+                means[0][i] = na;
+                means[1][i] = nb;
+                difference[i] = na
+                    .checked_sub(nb)
+                    .ok_or_else(|| bad("query difference numerator overflow"))?;
+                details.insert((*component).into(),json!({"query_a_mean_A_minus_B_numerator_q24":na.to_string(),"query_b_mean_A_minus_B_numerator_q24":nb.to_string(),"difference_of_differences_numerator_q24":difference[i].to_string(),"denominator":denominator,"direction":difference[i].signum().to_string()}));
+            }
+            values.insert((*arm).into(), difference);
+            query_means.insert((*arm).into(), means);
+            arms.insert((*arm).into(), Value::Object(details));
+        }
+        let mut deltas = serde_json::Map::new();
+        for (name, pa, pb) in [
+            ("P1_minus_P0", "P1", "P0"),
+            ("P1_minus_restore_shared0", "P1", "P1_restore_shared0"),
+            ("take_shared0_minus_P0", "P0_take_shared0", "P0"),
+        ] {
+            let mut d = serde_json::Map::new();
+            for (i, component) in COMPONENTS.iter().enumerate() {
+                let n = values[pa][i]
+                    .checked_sub(values[pb][i])
+                    .ok_or_else(|| bad("query control numerator overflow"))?;
+                if (name != "P1_minus_P0" || matches!(*component, "cue" | "prefix")) && n != 0 {
+                    return Err(bad(
+                        "query source contrast frozen/shared component invariant differs",
+                    ));
+                }
+                if name != "P1_minus_P0" || matches!(*component, "cue" | "prefix") {
+                    for query_index in 0..2 {
+                        if query_means[pa][query_index][i] != query_means[pb][query_index][i] {
+                            return Err(bad(
+                                "individual query source margin frozen/shared invariant differs",
+                            ));
+                        }
+                    }
+                }
+                d.insert(
+                    (*component).into(),
+                    json!({"numerator_q24":n.to_string(),"denominator":denominator}),
+                );
+            }
+            deltas.insert(name.into(), Value::Object(d));
+        }
+        Ok(
+            json!({"status":"eligible","row_a":a.id,"row_b":b.id,"source_A_segment":a.selected,"source_B_segment":b.selected,"source_A_endpoint_count":sa.len(),"source_B_endpoint_count":sb.len(),"source_A_endpoints":sa.iter().map(|&i|&candidates[i]).collect::<Vec<_>>(),"source_B_endpoints":sb.iter().map(|&i|&candidates[i]).collect::<Vec<_>>(),"arms":arms,"potential_control_effects":deltas,"scope":"all admitted occurrences in each selected physical Source, length-normalized raw source mean; positive difference means query-conditioned relative Source preference; not next-token precision, a source winner, normalized attention, whole joint learning or ownprefix behavior"}),
+        )
+    }
     pub fn run(attribution: &Path, reference: &Path, inputs: &Path, out: &Path) -> Result<()> {
         let start = Instant::now();
         for root in [attribution, reference, inputs] {
@@ -1848,6 +1994,7 @@ mod source_contrast {
         let mut outputs = Vec::new();
         let mut row_refs = Vec::new();
         let mut bytes_written = 0usize;
+        let mut query_groups = std::collections::BTreeMap::<String, Vec<QueryRow>>::new();
         for (index, ((input, receipt), rowref)) in cases.iter().zip(receipts).zip(rows).enumerate()
         {
             deadline(start)?;
@@ -2002,14 +2149,58 @@ mod source_contrast {
                 *statuses.entry(status.into()).or_default() += 1;
             }
             outputs.push(json!({"id":packet.id,"position_status_counts":statuses,"same_value_provenance_scope":"raw occurrence scores observable; answer-token loss does not identify equal-value sources"}));
+            let segments = serde_json::to_vec(&packet.segments)?;
+            let packets=ARMS.iter().map(|arm| {
+                let p=&row["arms"][*arm]["canonical"][0]["native"];
+                json!({"actual_prefix_ids":p["actual_prefix_ids"],"copy_raw_scores_q24":p["copy_raw_scores_q24"],"copy_components_q24":p["copy_components_q24"],"source_provenance":{"candidates":p["source_provenance"]["candidates"]}})
+            }).collect();
+            query_groups
+                .entry(sha256_bytes(&segments))
+                .or_default()
+                .push(QueryRow {
+                    id: packet.id,
+                    segments,
+                    query: packet.query_ids,
+                    selected: selected_segment,
+                    role: receipt["reference_role"]
+                        .as_str()
+                        .ok_or_else(|| bad("reference role absent"))?
+                        .into(),
+                    packets,
+                });
         }
+        let mut query_pairs = Vec::new();
+        for (bank, group) in query_groups {
+            deadline(start)?;
+            let pair = if group.len() != 2 {
+                json!({"status":"bank_does_not_have_exactly_two_rows","bank_sha256":bank,"rows":group.iter().map(|r|&r.id).collect::<Vec<_>>()})
+            } else if group[0].query == group[1].query
+                || group[0].selected == group[1].selected
+                || group[0].role == group[1].role
+            {
+                json!({"status":"no_opposite_query_reference_pair","bank_sha256":bank,"rows":group.iter().map(|r|&r.id).collect::<Vec<_>>()})
+            } else {
+                query_pair(&group[0], &group[1])?
+            };
+            query_pairs.push(pair);
+        }
+        let query_bytes = serde_json::to_vec_pretty(
+            &json!({"schema":"uor-r4.geometric-source-query-contrast/1","numerator_encoding":"signed exact i128 decimal strings; all ratios share count_A*count_B denominator; no floating normalization","prefix":"empty first canonical prefix only","ownprefix":"NOT_MEASURED","pairs":query_pairs}),
+        )?;
+        bytes_written = bytes_written
+            .checked_add(query_bytes.len())
+            .ok_or_else(|| bad("query report byte overflow"))?;
+        if bytes_written + (1 << 20) > MAX_REPORT_BYTES {
+            return Err(bad("source/query contrast report byte ceiling"));
+        }
+        fs::write(out.join("query-pair-contrasts.json"), &query_bytes)?;
         for root in [attribution, reference, inputs] {
             report_output::verify(root)?;
         }
         fs::write(
             out.join("report.json"),
             serde_json::to_vec_pretty(
-                &json!({"schema":"uor-r4.geometric-source-contrast/1","status":"COMPLETED","model_reruns":0,"normalization_reconstructed":false,"source_reference_runtime":false,"scope":"exact literal byte-aligned selected physical Source versus other physical Source occurrences with identical token ID; fixed candidate pairs across four saved controls; raw score and component margins only","control_scope":"P1 minus P0 is the potential coefficient effect conditional on fixed final context and Generate, not whole joint learning; shared-cell raw margins must be invariant; clipping/unsaturation effects are not source preference","limitations":"no same-token distractor is ineligible, not a success; answer loss cannot identify equal-value source provenance; no same-relation version or generalization claim; no query-pair or diverged-prefix attribution","attribution_report_sha256":sha256_bytes(&fs::read(attribution.join("report.json"))?),"attribution_manifest_sha256":sha256_bytes(&fs::read(attribution.join("manifest.json"))?),"reference_sha256":sha256_bytes(&fs::read(reference.join("answerability-reference.json"))?),"reference_manifest_sha256":sha256_bytes(&fs::read(reference.join("manifest.json"))?),"inputs_manifest_sha256":sha256_bytes(&fs::read(inputs.join("manifest.json"))?),"input_bindings":refs["input_bindings"],"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"rows":row_refs,"eligibility_summary":outputs,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+                &json!({"schema":"uor-r4.geometric-source-contrast/1","status":"COMPLETED","model_reruns":0,"normalization_reconstructed":false,"source_reference_runtime":false,"scope":"exact literal byte-aligned selected physical Source versus other physical Source occurrences with identical token ID; fixed candidate pairs across four saved controls; complementary empty-prefix opposite-query source mean differences; raw score and component margins only","control_scope":"P1 minus P0 is the potential coefficient effect conditional on fixed final context and Generate, not whole joint learning; shared-cell raw margins must be invariant; clipping/unsaturation effects are not source preference","limitations":"no same-token distractor is ineligible, not a success; answer loss cannot identify equal-value source provenance; no same-relation version or generalization claim; source means are not next-token precision or complete attention; no diverged-prefix attribution","query_pair_file":"query-pair-contrasts.json","query_pair_file_sha256":sha256_bytes(&query_bytes),"query_pair_eligible":query_pairs.iter().filter(|p|p["status"]=="eligible").count(),"query_pair_groups":query_pairs.len(),"attribution_report_sha256":sha256_bytes(&fs::read(attribution.join("report.json"))?),"attribution_manifest_sha256":sha256_bytes(&fs::read(attribution.join("manifest.json"))?),"reference_sha256":sha256_bytes(&fs::read(reference.join("answerability-reference.json"))?),"reference_manifest_sha256":sha256_bytes(&fs::read(reference.join("manifest.json"))?),"inputs_manifest_sha256":sha256_bytes(&fs::read(inputs.join("manifest.json"))?),"input_bindings":refs["input_bindings"],"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"rows":row_refs,"eligibility_summary":outputs,"elapsed_seconds":start.elapsed().as_secs_f64()}),
             )?,
         )?;
         Ok(())
@@ -2105,6 +2296,53 @@ mod source_contrast {
             other = p.clone();
             other["retained_state_codes"] = json!([2]);
             assert!(matched_packet(&p, &other).is_err());
+            Ok(())
+        }
+        #[test]
+        fn source_mean_uses_counts_and_cancels_uniform_offset() -> Result<()> {
+            let a = json!({"copy_raw_scores_q24":[12,8,0]});
+            let b = json!({"copy_raw_scores_q24":[112,108,100]});
+            assert_eq!(source_mean_numerator(&a, &[0, 1], &[2], "total")?, 20);
+            assert_eq!(
+                source_mean_numerator(&a, &[0, 1], &[2], "total")?,
+                source_mean_numerator(&b, &[0, 1], &[2], "total")?
+            );
+            let large = json!({"copy_raw_scores_q24":[i64::MAX,i64::MAX,-i64::MAX]});
+            assert_eq!(
+                source_mean_numerator(&large, &[0, 1], &[2], "total")?,
+                4 * i128::from(i64::MAX)
+            );
+            Ok(())
+        }
+        #[test]
+        fn opposite_queries_preserve_source_orientation_and_inventory() -> Result<()> {
+            let (_, _, p) = fixture()?;
+            let mut opposite = p.clone();
+            opposite["copy_raw_scores_q24"] = json!([8, 12]);
+            opposite["copy_components_q24"]["contextual"] = json!([6, 10]);
+            let a = QueryRow {
+                id: "a".into(),
+                segments: vec![1],
+                query: vec![1],
+                selected: 0,
+                role: "job".into(),
+                packets: vec![p; 4],
+            };
+            let mut b = QueryRow {
+                id: "b".into(),
+                segments: vec![1],
+                query: vec![2],
+                selected: 1,
+                role: "where".into(),
+                packets: vec![opposite; 4],
+            };
+            let result = query_pair(&a, &b)?;
+            assert_eq!(
+                result["arms"]["P1"]["total"]["difference_of_differences_numerator_q24"],
+                "8"
+            );
+            b.packets[0]["source_provenance"]["candidates"][0]["event"] = json!(999);
+            assert!(query_pair(&a, &b).is_err());
             Ok(())
         }
     }
