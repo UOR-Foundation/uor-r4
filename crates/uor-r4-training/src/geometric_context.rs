@@ -208,6 +208,46 @@ impl GeometricContextConfig {
         out
     }
 }
+/// Offline shared quarter-grid STE. CUDA uses the validated device kernel;
+/// source/export admission is still separate from the learning graph.
+pub(crate) fn q4_shadow_ste(value: &Tensor) -> Result<Tensor> {
+    #[cfg(feature = "cuda")]
+    if value.device().is_cuda() {
+        let hard = cuda_ops::round_q4(value)?;
+        return Ok((&hard + (value - value.detach())?)?);
+    }
+    let raw = value.flatten_all()?.to_vec1::<f32>()?;
+    if raw.iter().any(|x| !x.is_finite() || x.abs() > 1.75) {
+        return Err(invalid("quarter-grid shadow outside finite strict range"));
+    }
+    let hard = Tensor::from_vec(
+        raw.into_iter()
+            .map(|x| (x * 4.).round() * 0.25)
+            .collect::<Vec<_>>(),
+        value.shape(),
+        value.device(),
+    )?;
+    Ok((&hard + (value - value.detach())?)?)
+}
+/// Offline projection of a master tensor. It never downloads live CUDA values.
+pub(crate) fn q4_project_tensor(value: &Tensor) -> Result<Tensor> {
+    #[cfg(feature = "cuda")]
+    if value.device().is_cuda() {
+        return Ok(cuda_ops::clip_q4(value)?);
+    }
+    let raw = value.flatten_all()?.to_vec1::<f32>()?;
+    if raw.iter().any(|x| !x.is_finite()) {
+        return Err(invalid("nonfinite quarter-grid master"));
+    }
+    Ok(Tensor::from_vec(
+        raw.into_iter()
+            .map(|x| x.clamp(-1.75, 1.75))
+            .collect::<Vec<_>>(),
+        value.shape(),
+        value.device(),
+    )?)
+}
+
 fn roots() -> &'static [[f64; 4]; 120] {
     static R: OnceLock<[[f64; 4]; 120]> = OnceLock::new();
     R.get_or_init(|| std::array::from_fn(|i| canonical_h4_roots()[i].to_array()))
