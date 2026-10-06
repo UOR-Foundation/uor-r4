@@ -312,8 +312,7 @@ pub fn cuda_recurrence_kernels() -> CudaRecurrenceKernels {
 pub const RECURRENCE_TILE: usize = 32;
 
 /// 0: not yet read from the environment, else the tile length in rows.
-static RECURRENCE_TILE_LEN: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+static RECURRENCE_TILE_LEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// The chunked recurrence's tile length: the last [`set_recurrence_tile`]
 /// choice, else `UOR_R4_RECURRENCE_TILE`, else [`RECURRENCE_TILE`].

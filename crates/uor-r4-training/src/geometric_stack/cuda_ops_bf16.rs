@@ -665,15 +665,7 @@ impl RecurrenceCore {
         // The same time-parallel carry as the f32 path: its buffers are f32 in
         // both modules (recurrence_prep did the storage conversion).
         super::cuda_ops::time_parallel_states(
-            device,
-            self.batch,
-            time,
-            width,
-            lanes,
-            &q,
-            &drive,
-            &keep,
-            &state,
+            device, self.batch, time, width, lanes, &q, &drive, &keep, &state,
         )?;
         Ok(SplitStates {
             drive,

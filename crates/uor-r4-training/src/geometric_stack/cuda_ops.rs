@@ -1097,7 +1097,6 @@ pub(super) fn time_parallel_states(
 /// (window, lane) threads over every multiprocessor.
 const SCAN_GROUP: usize = 32;
 
-
 /// Threads per block of the per-(window, channel) parameter sweep.
 const PARAMS_GROUP: usize = 64;
 
