@@ -206,8 +206,12 @@ context. Other endpoints and lanes remain factual.
 The bank adapter and fitter expose `prefix_temporal_utility`, defaultfalse, with
 an explicit report scope. The live paired fits use frozen source1698aa79 and the
 old setting. Source review found no remaining blocker after correcting a stale
-report label. Compilation and actual-context CPU checks are pending; actual CUDA
-parity waits for a free GPU. This is not yet a prediction improvement.
+report label. The library/fitter compile and12 focused CPU checks pass on the Linux pod:
+1 actual-context temporal regression,5 legacy transport controls,6 fitter tests.
+The new regression preserves native scores while carrying even-harmonic credit
+to an earlier transition, cuts credit at reset and future source positions, and
+retains empty-response identity. Actual CUDA parity and enabled-bank admission
+wait for a free GPU. This is not yet a prediction improvement.
 
 The real-data paired fits completed their full512 initial evaluations and passed
 prospective cost gates:4080.868s output-only and4165.737s joint against4500s per
@@ -240,3 +244,16 @@ acceptance mechanics if the new results demonstrate that interference; preserve
 the architecture and negative candidates. A stochastic policy-gradient objective
 is a separate prospective learning choice, not an exact derivative of hard
 argmax serving. The current fits decide the next integration step first.
+
+
+Prefix validation receipt: library test SHA256
+`00fe97f7c02ad6331fea8b4e942f5196f94241ede3276c5c9b2095e20a790881`,
+fitter test SHA256
+`1ad691d80a149c30da209c0c3c3bbd43fcb5f006a02b018f0002b7d7eb85a48a`.
+Final release build466s, regression0.01s, exit0. An initial incomplete-source
+manifest attempt exits101; two300s compile limits exit124. All are retained
+in separate logs and are not mechanism results. The empirically corrected retry
+allows900s, with prospective total check wall1500s; it changes no overall6h
+wall, rental or storage ceiling. All17116 source archive files match the cached
+source tree after restoring its research files and applying the four changed
+code files. Live fits keep their separate frozen binary.
