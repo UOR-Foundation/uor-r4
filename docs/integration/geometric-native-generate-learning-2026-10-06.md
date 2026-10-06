@@ -723,3 +723,31 @@ The full8state collision audit does not prove separability by shared factors.
 Max-event reference metadata is not automatically a native semantic input;
 visiblepanelcues support the bounded task, not arbitrarytimestampreasoning.
 No new data regeneration or modelcompute accompanies this source review.
+
+
+### Saved categorical shadow movement — October 6, 09:43Z
+
+A retained-master byte inspection on the Linux pod uses one CPU, no GPU and no
+new model execution (3.470s measured; 60s inspection ceiling). All32768 prototype
+shadow rows change in each of the six completed legacy fits, but all exported
+argmax codes remain unchanged. Initial winner gaps are2. Final minimum gaps for
+output-only seeds1001/1002/1003 are0.313015/0.175694/0.284946; joint minima are
+0.441180/0.277536/0.504910. Most rows reduce the incumbent gap in every fit.
+The receipt retains exact initial/final source-master SHA256 identities at
+`/workspace/uor-r4/codex/native-geometric-generate/reviews-20261006T0940-attempt1/native-shadow-gap-audit.json`.
+
+Independent review verifies both metadata/master SHA256 bindings, all row
+statistics and native exported argmax agreement (6.696s,47060KiB RSS). Initial
+masters are exactly selectedlogit2 with119 alternatives0. Review SHA256:
+`0167187554bbdcc19eab0b6984d5fd75f322ebfcd6f1012a7719612d46db668a`.
+This is evidence of source-parameter movement without hard-code changes, not
+zero learning. It neither establishes that any alternative improves native
+loss nor justifies more dose. The conditional next discriminator starts with
+one predeclared failed first-target token/lane coordinate, all120 native
+substitutions and the complete equal-episode alias-pool objective, including
+nongold denominators. Compare actual finite alternatives with the declared
+surrogate before naming a transport defect. A negative unilateral scan is a
+local result, not a context-capacity impossibility. An accepted hard alternative
+requires independent native reload/replay and explicit ownership against later
+shadow export. No hard-search optimizer has been adopted; balanced fit remains
+live and determines whether this diagnostic is needed.
