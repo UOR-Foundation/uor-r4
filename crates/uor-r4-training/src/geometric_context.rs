@@ -66,7 +66,8 @@ const SURROGATE:&str="latent-new-root-tangent;hard-hamilton;120-softmax-expected
 /// Full ambient latent-state credit is a declared biased discrete-choice
 /// surrogate, not a derivative of the exact argmax or a native runtime change.
 pub const FINITE_CHOICE_SURROGATE:&str="latent-new-root-full-adjoint;hard-hamilton-direct-full;120-softmax-expected-action-root-T1-full;all-old-state-score-credit;emitted-root-tangent-softmax120;physical-radius-local-neighbor-softmax;absence-answer-stop/1";
-const PACKED_WIDTH: usize = 157;
+const STATE_LOGITS_OFFSET: usize = 157;
+const PACKED_WIDTH: usize = STATE_LOGITS_OFFSET + 120;
 const LATENT_OFFSET: usize = 153;
 const INITIALIZATION:&str="xorshift64-seed;uniform[-.02,.02];transition-identity+.05;category17+1;nonzero-readout-bases/1";
 const CATEGORY_RULE:&str="0=absent(root1,bin0);1..32=present(bin=category-1,radius=2^(bin-16));physical-nearest-midpoint-lower-clipped[-16,15]/1";
@@ -318,6 +319,10 @@ pub struct ContextWeights {
 /// Native choices are authoritative. The logits are differentiable q4 factor
 /// scores for the declared backward probabilities, not alternate hard selectors.
 pub struct ContextQ4Output {
+    /// Offline transition logits mapped by the factual old-state/action group
+    /// product into120 retained POST-state choices. Not observed-root logits.
+    /// This exposes local full-choice credit; old-state input credit remains4D.
+    pub state_logits: Tensor,
     pub latent_roots: Tensor,
     pub root_logits: Tensor,
     pub category_logits: Tensor,
@@ -325,6 +330,8 @@ pub struct ContextQ4Output {
 }
 
 pub struct ContextOutput {
+    /// Offline post-state-choice transition logits, shaped [B,T,H,L,120].
+    pub state_logits: Tensor,
     pub root_logits: Tensor,
     pub category_logits: Tensor,
     pub context: Tensor,
@@ -625,6 +632,16 @@ impl ContextWeights {
             },
         )?;
         Ok(ContextOutput {
+            state_logits: packed
+                .narrow(3, STATE_LOGITS_OFFSET, 120)?
+                .contiguous()?
+                .reshape((
+                    batch,
+                    time,
+                    self.config.heads,
+                    self.config.lanes_per_head,
+                    120,
+                ))?,
             root_logits: roots.reshape(vec![
                 batch,
                 time,
@@ -718,6 +735,16 @@ impl ContextWeights {
             },
         )?;
         Ok(ContextQ4Output {
+            state_logits: output
+                .narrow(3, STATE_LOGITS_OFFSET, 120)?
+                .contiguous()?
+                .reshape((
+                    batch,
+                    time,
+                    self.config.heads,
+                    self.config.lanes_per_head,
+                    120,
+                ))?,
             root_logits: output.narrow(3, 0, 120)?.contiguous()?.reshape((
                 batch,
                 time,
@@ -865,6 +892,16 @@ impl PreparedContextQ4<'_> {
             },
         )?;
         Ok(ContextQ4Output {
+            state_logits: output
+                .narrow(3, STATE_LOGITS_OFFSET, 120)?
+                .contiguous()?
+                .reshape((
+                    batch,
+                    time,
+                    self.config.heads,
+                    self.config.lanes_per_head,
+                    120,
+                ))?,
             root_logits: output.narrow(3, 0, 120)?.contiguous()?.reshape((
                 batch,
                 time,
@@ -1022,6 +1059,16 @@ impl ContextOp {
                     output.extend(self.scores::<120>(row, basis, &state, lane, 1));
                     output.extend(self.scores::<33>(row, basis, &state, lane, 2));
                     output.extend(self.root(state[lane]));
+                    // Each factual old root induces a permutation of all120
+                    // action choices into retained post-state codes.
+                    let action_scores = self.scores::<120>(row, basis, &old, lane, 0);
+                    let mut state_scores = [0.; 120];
+                    for (action, score) in action_scores.iter().enumerate() {
+                        let post =
+                            group_table().product[usize::from(old[lane]) * ROW_STRIDE + action];
+                        state_scores[usize::from(post)] = *score;
+                    }
+                    output.extend(state_scores);
                 }
                 trace.push(Step {
                     old,
@@ -1117,6 +1164,34 @@ impl ContextOp {
                     }
                 }
                 let mut old_gradient = [[0.; 4]; 8];
+                // The downstream consumer already differentiates its declared
+                // expectation over state logits. Inject those score adjoints
+                // directly; applying another softmax here would double it.
+                for lane in 0..n {
+                    for action in 0..120 {
+                        let post = group_table().product
+                            [usize::from(step.old[lane]) * ROW_STRIDE + action];
+                        let g = f64::from(
+                            upstream[(at * n + lane) * PACKED_WIDTH
+                                + STATE_LOGITS_OFFSET
+                                + usize::from(post)],
+                        );
+                        if g != 0. {
+                            self.score_pullback(
+                                at,
+                                0,
+                                lane,
+                                action,
+                                g,
+                                &step.old,
+                                basis,
+                                &mut dr,
+                                &mut db,
+                                &mut old_gradient,
+                            );
+                        }
+                    }
+                }
                 for lane in 0..n {
                     let g = if self.finite_choice {
                         future[lane]
@@ -3072,6 +3147,116 @@ mod tests {
                 );
             }
         }
+        Ok(())
+    }
+    #[test]
+    fn context_post_state_logits_permute_actions_and_pull_back_scores_once() -> Result<()> {
+        let old = 3u8;
+        let action = 7u8;
+        let post = group_table().product[usize::from(old) * ROW_STRIDE + usize::from(action)];
+        let mut old_second = [1; 8];
+        old_second[0] = old;
+        let mut new_second = [1; 8];
+        new_second[0] = post;
+        let mut actions_second = [1; 8];
+        actions_second[0] = action;
+        let op = ContextOp {
+            batch: 1,
+            time: 2,
+            heads: 1,
+            lanes_per_head: 1,
+            reset: false,
+            finite_choice: true,
+            native_steps: Some(Arc::new(vec![
+                Step {
+                    old: [1; 8],
+                    new: old_second,
+                    actions: old_second,
+                },
+                Step {
+                    old: old_second,
+                    new: new_second,
+                    actions: actions_second,
+                },
+            ])),
+        };
+        let mut rows = vec![0f32; 2 * 273];
+        for a in 0..120 {
+            rows[273 + a] = a as f32;
+        }
+        let basis = vec![0f32; 273 * 4];
+        let (_, output) = op.forward(&rows, &basis)?;
+        assert_eq!(output.len(), 2 * PACKED_WIDTH);
+        for a in 0..120 {
+            let z = group_table().product[usize::from(old) * ROW_STRIDE + a];
+            assert_eq!(
+                output[PACKED_WIDTH + STATE_LOGITS_OFFSET + usize::from(z)],
+                a as f32
+            );
+        }
+        // Native selected post-state remains authoritative despite arbitrary
+        // offline action logits: the new exposed choices never reselect it.
+        assert_eq!(
+            &output[PACKED_WIDTH + LATENT_OFFSET..PACKED_WIDTH + LATENT_OFFSET + 4],
+            &op.root(post).map(|x| x as f32)
+        );
+        let mut upstream = vec![0f32; 2 * PACKED_WIDTH];
+        upstream[PACKED_WIDTH + STATE_LOGITS_OFFSET + usize::from(post)] = 2.;
+        let (dr, db) = op.backward(&rows, &basis, &upstream)?;
+        assert_eq!(dr[273 + usize::from(action)], 2.);
+        assert_eq!(dr.iter().sum::<f32>(), 2.);
+        assert!(dr[..273].iter().all(|&x| x == 0.));
+        let at = op.basis_offset(0, false) + usize::from(action) * 4;
+        assert_eq!(&db[at..at + 4], &op.root(old).map(|x| (2. * x) as f32));
+        let weights = ContextWeights::new_finite_choice(2, 4, 1, 73)?;
+        assert_eq!(
+            weights.forward(&[0, 1], 1, 2, false)?.state_logits.dims(),
+            [1, 2, 1, 1, 120]
+        );
+        Ok(())
+    }
+    #[test]
+    fn context_post_state_even_table_credit_survives_four_coordinate_nullspace() -> Result<()> {
+        let op = ContextOp {
+            batch: 1,
+            time: 1,
+            heads: 1,
+            lanes_per_head: 1,
+            reset: false,
+            finite_choice: true,
+            native_steps: Some(Arc::new(vec![Step {
+                old: [1; 8],
+                new: [1; 8],
+                actions: [1; 8],
+            }])),
+        };
+        let values = (0..120)
+            .map(|r| {
+                let x = op.root(r as u8);
+                (7. * x[0] * x[1]).round()
+            })
+            .collect::<Vec<_>>();
+        assert!(values.iter().any(|&x| x != 0.));
+        assert_eq!(values[1], 0.);
+        let mean = values.iter().sum::<f64>() / 120.;
+        let score_credit = values.iter().map(|v| (v - mean) / 120.).collect::<Vec<_>>();
+        let mut ambient = [0f64; 4];
+        for (r, &g) in score_credit.iter().enumerate() {
+            for (a, x) in op.root(r as u8).iter().enumerate() {
+                ambient[a] += g * x;
+            }
+        }
+        assert!(ambient.iter().all(|x| x.abs() < 1e-12));
+        let mut upstream = vec![0f32; PACKED_WIDTH];
+        for (z, &g) in score_credit.iter().enumerate() {
+            upstream[STATE_LOGITS_OFFSET + z] = g as f32;
+        }
+        let (dr, _) = op.backward(&vec![0f32; 273], &vec![0f32; 273 * 4], &upstream)?;
+        assert!(dr[..120].iter().any(|x| x.abs() > 1e-6));
+        for z in 0..120 {
+            assert_eq!(dr[z], score_credit[z] as f32);
+        }
+        assert!(dr[120..].iter().all(|&x| x == 0.));
         Ok(())
     }
     #[test]

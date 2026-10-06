@@ -177,7 +177,7 @@ fn probabilities(values: &[f32]) -> Vec<f64> {
     }
     p
 }
-fn choice_pullback(logits: &[f32], credit: &[f64], out: &mut [f64]) {
+pub(crate) fn choice_pullback(logits: &[f32], credit: &[f64], out: &mut [f64]) {
     let p = probabilities(logits);
     let mean: f64 = p.iter().zip(credit).map(|(p, g)| p * g).sum();
     for ((out, p), g) in out.iter_mut().zip(p).zip(credit) {
@@ -866,6 +866,12 @@ mod tests {
         };
         Ok((
             ContextQ4Output {
+                // These legacy observed-input fixtures do not consume hidden-state scores.
+                state_logits: Tensor::zeros(
+                    (d.batch, d.time, d.heads, d.lanes, 120),
+                    DType::F32,
+                    &Device::Cpu,
+                )?,
                 latent_roots: latent.as_tensor().clone(),
                 root_logits: r.as_tensor().clone(),
                 category_logits: c.as_tensor().clone(),
@@ -1873,6 +1879,535 @@ mod cue_root_credit_draft_tests {
             q.apply_op2(&k, tied)?.to_vec2::<f32>()?,
             vec![vec![0.75, 0.75, 0.]]
         );
+        Ok(())
+    }
+}
+
+/// Full observed-state credit from the frozen native cue scorer. Root120 and
+/// category33 are finite-choice first-order surrogates with other lanes held to
+/// their factual packets. Hard output remains exact native unary plus ordered
+/// joint Q24; coefficient tensors are never trainable here.
+/// Final packets and dimensions are checked here. ContextQ4Output does not
+/// carry input token IDs: the caller binds each actual local token sequence and
+/// reset-from-identity encoding to the frozen context artifact before this call.
+pub fn frozen_cue_state_forward(
+    config: CueAngularConfig,
+    packed: &[u8],
+    joint: Option<&uor_r4_integer::geometric_cue_carrier::CueJointQ4>,
+    carrier: &CueCarrierTrace,
+    query: &ContextQ4Output,
+    cues: &[ContextQ4Output],
+) -> Result<CueRootCreditOutput> {
+    use sha2::{Digest, Sha256};
+    if config != carrier.metadata.potential
+        || hex::encode(Sha256::digest(packed)) != carrier.metadata.potential_packed_sha256
+        || cues.len() != carrier.cues.len()
+        || query.trace.heads != config.heads
+        || query.trace.lanes_per_head != config.lanes_per_head
+    {
+        return Err(invalid(
+            "cue state credit artifact/config/encoding binding differs",
+        ));
+    }
+    validate_cue_state_joint_payload(joint, &carrier.metadata.joint)?;
+    let q = cue_final_state_logits(query, &carrier.query)?;
+    let mut local = Vec::with_capacity(cues.len());
+    for (context, packet) in cues.iter().zip(&carrier.cues) {
+        if context.trace.heads != config.heads
+            || context.trace.lanes_per_head != config.lanes_per_head
+        {
+            return Err(invalid("cue state local encoder dimensions differ"));
+        }
+        local.push(cue_final_state_logits(context, &packet.state)?);
+    }
+    let k = if local.is_empty() {
+        Tensor::zeros(
+            (0, config.heads * config.lanes_per_head, 153),
+            DType::F32,
+            &Device::Cpu,
+        )?
+    } else {
+        Tensor::stack(&local, 0)?.contiguous()?
+    };
+    let op = CueStateCredit::new(config, packed, joint, carrier)?;
+    let scores_q24 = op.base.hard.clone();
+    let scores = q.apply_op2(&k, op)?;
+    Ok(CueRootCreditOutput { scores, scores_q24 })
+}
+fn cue_final_state_logits(context: &ContextQ4Output, packet: &CarrierState) -> Result<Tensor> {
+    let roots = cue_final_roots(context, packet)?;
+    let (d, _) = admit(context)?;
+    let categories = context
+        .category_logits
+        .narrow(1, d.time - 1, 1)?
+        .reshape((d.width(), 33))?;
+    Ok(Tensor::cat(&[&roots, &categories], 1)?.contiguous()?)
+}
+
+struct CueStateCredit {
+    base: CueRootCredit,
+    query_raw: Vec<u8>,
+    cues_raw: Vec<Vec<u8>>,
+    joint: Option<(
+        uor_r4_integer::geometric_cue_carrier::CueJointConfig,
+        Vec<i32>,
+    )>,
+}
+impl CueStateCredit {
+    fn new(
+        config: CueAngularConfig,
+        packed: &[u8],
+        joint: Option<&uor_r4_integer::geometric_cue_carrier::CueJointQ4>,
+        trace: &CueCarrierTrace,
+    ) -> Result<Self> {
+        let coefficients = geometric_potential_q4::unpack_coefficients(
+            config
+                .coefficient_count()
+                .map_err(|e| invalid(e.to_string()))?,
+            packed,
+        )
+        .map_err(|e| invalid(e.to_string()))?;
+        let addresses = |p: &CarrierState| {
+            p.codes
+                .iter()
+                .map(|c| {
+                    AddressLane::new(c.root, c.radius_bin, c.present)
+                        .map_err(|e| invalid(e.to_string()))
+                })
+                .collect::<Result<Vec<_>>>()
+        };
+        let query = addresses(&trace.query)?;
+        let cues = trace
+            .cues
+            .iter()
+            .map(|p| addresses(&p.state))
+            .collect::<Result<Vec<_>>>()?;
+        let width = config.heads * config.lanes_per_head;
+        if query.len() != width
+            || trace.query.raw_roots.len() != width
+            || cues.iter().any(|s| s.len() != width)
+            || trace.cues.iter().any(|s| s.state.raw_roots.len() != width)
+            || trace
+                .candidate_cue_indices
+                .iter()
+                .flatten()
+                .any(|&s| s >= cues.len())
+        {
+            return Err(invalid("cue state native packet shape differs"));
+        }
+        for r in trace
+            .query
+            .raw_roots
+            .iter()
+            .chain(trace.cues.iter().flat_map(|s| s.state.raw_roots.iter()))
+        {
+            code(*r)?;
+        }
+        let algebra =
+            HistoricalH4Tables::from_bytes(ALGEBRA).map_err(|e| invalid(e.to_string()))?;
+        let base = CueRootCredit {
+            config,
+            coefficients,
+            algebra,
+            query,
+            cues,
+            candidate_cues: trace.candidate_cue_indices.clone(),
+            hard: trace.copy_q24.clone(),
+        };
+        let joint = joint
+            .map(|j| {
+                let c = j.config();
+                if config.mode != CueScoreMode::DirectedRelative
+                    || c.head >= config.heads
+                    || c.left_lane >= config.lanes_per_head
+                    || c.right_lane >= config.lanes_per_head
+                {
+                    return Err(invalid("cue state joint lanes/mode differ"));
+                }
+                let t = geometric_potential_q4::compile_ordered_pair_q4(j.packed_coefficients())
+                    .map_err(|e| invalid(e.to_string()))?;
+                Ok((c, t))
+            })
+            .transpose()?;
+        let op = Self {
+            base,
+            query_raw: trace.query.raw_roots.clone(),
+            cues_raw: trace
+                .cues
+                .iter()
+                .map(|s| s.state.raw_roots.clone())
+                .collect(),
+            joint,
+        };
+        if op.base.hard.len() != config.heads
+            || op
+                .base
+                .hard
+                .iter()
+                .any(|v| v.len() != op.base.candidate_cues.len())
+        {
+            return Err(invalid("cue state hard score shape differs"));
+        }
+        for h in 0..config.heads {
+            for (i, s) in op.base.candidate_cues.iter().enumerate() {
+                let exact = if let Some(s) = s {
+                    op.score(h, &op.base.query, &op.base.cues[*s])?
+                } else {
+                    0
+                };
+                if exact != op.base.hard[h][i] {
+                    return Err(invalid("cue state full native hard Q24 differs"));
+                }
+            }
+        }
+        Ok(op)
+    }
+    fn score(&self, h: usize, q: &[AddressLane], k: &[AddressLane]) -> Result<i64> {
+        let mut total = 0i64;
+        for l in 0..self.base.config.lanes_per_head {
+            let at = h * self.base.config.lanes_per_head + l;
+            total = total
+                .checked_add(self.base.score(at, q[at], k[at])?)
+                .ok_or_else(|| invalid("cue state unary sum overflow"))?;
+        }
+        if let Some((c, t)) = &self.joint {
+            if c.head == h {
+                let left = h * self.base.config.lanes_per_head + c.left_lane;
+                let right = h * self.base.config.lanes_per_head + c.right_lane;
+                if q[left].present()
+                    && k[left].present()
+                    && q[right].present()
+                    && k[right].present()
+                {
+                    let a = self
+                        .base
+                        .algebra
+                        .relative(code(q[left].root())?, code(k[left].root())?)
+                        .index();
+                    let b = self
+                        .base
+                        .algebra
+                        .relative(code(q[right].root())?, code(k[right].root())?)
+                        .index();
+                    total = total
+                        .checked_add(i64::from(t[(usize::from(a) << 7) + usize::from(b)]))
+                        .ok_or_else(|| invalid("cue state joint sum overflow"))?;
+                }
+            }
+        }
+        Ok(total)
+    }
+    fn backward(&self, q: &[f32], k: &[f32], g: &[f32]) -> Result<(Vec<f32>, Vec<f32>)> {
+        let width = self.base.query.len();
+        let n = self.base.candidate_cues.len();
+        if q.len() != width * 153
+            || k.len() != self.base.cues.len() * width * 153
+            || g.len() != self.base.config.heads * n
+            || q.iter().chain(k).chain(g).any(|x| !x.is_finite())
+        {
+            return Err(invalid("cue state adjoint shape/nonfinite"));
+        }
+        let mut qc = vec![0f64; q.len()];
+        let mut kc = vec![0f64; k.len()];
+        // Alias upstream credit is summed once for each authentic cue/head.
+        let mut upstream = vec![0f64; self.base.config.heads * self.base.cues.len()];
+        for h in 0..self.base.config.heads {
+            for (i, s) in self.base.candidate_cues.iter().enumerate() {
+                if let Some(s) = s {
+                    upstream[h * self.base.cues.len() + s] += f64::from(g[h * n + i]);
+                }
+            }
+        }
+        for h in 0..self.base.config.heads {
+            for s in 0..self.base.cues.len() {
+                let adj = upstream[h * self.base.cues.len() + s];
+                if adj == 0. {
+                    continue;
+                }
+                for l in 0..self.base.config.lanes_per_head {
+                    let lane = h * self.base.config.lanes_per_head + l;
+                    for family in 0..2 {
+                        let (start, classes) = if family == 0 { (0, 120) } else { (120, 33) };
+                        for a in 0..classes {
+                            let mut qq = self.base.query.clone();
+                            let mut kk = self.base.cues[s].clone();
+                            if family == 0 {
+                                // Absent packets have canonical root1/bin0;
+                                // root-only alternatives cannot reactivate them.
+                                if qq[lane].present() {
+                                    qq[lane] =
+                                        AddressLane::new(a as u8, qq[lane].radius_bin(), true)
+                                            .map_err(|e| invalid(e.to_string()))?;
+                                }
+                                if kk[lane].present() {
+                                    kk[lane] =
+                                        AddressLane::new(a as u8, kk[lane].radius_bin(), true)
+                                            .map_err(|e| invalid(e.to_string()))?;
+                                }
+                            } else {
+                                qq[lane] = observation(self.query_raw[lane], a)?;
+                                kk[lane] = observation(self.cues_raw[s][lane], a)?;
+                            }
+                            qc[lane * 153 + start + a] +=
+                                adj * self.score(h, &qq, &self.base.cues[s])? as f64 / Q24;
+                            kc[(s * width + lane) * 153 + start + a] +=
+                                adj * self.score(h, &self.base.query, &kk)? as f64 / Q24;
+                        }
+                    }
+                }
+            }
+        }
+        let pull = |logits: &[f32], credit: &mut [f64]| {
+            let mut out = vec![0f64; logits.len()];
+            for at in (0..logits.len()).step_by(153) {
+                for (start, classes) in [(0, 120), (120, 33)] {
+                    let row = &mut credit[at + start..at + start + classes];
+                    let anchor = row[0];
+                    for x in row.iter_mut() {
+                        *x -= anchor;
+                    }
+                    choice_pullback(
+                        &logits[at + start..at + start + classes],
+                        row,
+                        &mut out[at + start..at + start + classes],
+                    );
+                }
+            }
+            out
+        };
+        Ok((checked(pull(q, &mut qc))?, checked(pull(k, &mut kc))?))
+    }
+}
+impl CustomOp2 for CueStateCredit {
+    fn name(&self) -> &'static str {
+        "frozen-cue-native-root120-category33-state-credit"
+    }
+    fn cpu_fwd(
+        &self,
+        a: &CpuStorage,
+        la: &Layout,
+        b: &CpuStorage,
+        lb: &Layout,
+    ) -> candle_core::Result<(CpuStorage, Shape)> {
+        let q = contiguous(a, la)?;
+        let k = contiguous(b, lb)?;
+        if q.len() != self.base.query.len() * 153
+            || k.len() != self.base.cues.len() * self.base.query.len() * 153
+            || q.iter().chain(k).any(|x| !x.is_finite())
+        {
+            candle_core::bail!("cue state forward input differs");
+        }
+        Ok((
+            CpuStorage::F32(
+                self.base
+                    .hard
+                    .iter()
+                    .flatten()
+                    .map(|&x| (x as f64 / Q24) as f32)
+                    .collect(),
+            ),
+            Shape::from((self.base.config.heads, self.base.candidate_cues.len())),
+        ))
+    }
+    fn bwd(
+        &self,
+        a: &Tensor,
+        b: &Tensor,
+        _: &Tensor,
+        g: &Tensor,
+    ) -> candle_core::Result<(Option<Tensor>, Option<Tensor>)> {
+        let (dq, dk) = self
+            .backward(
+                &a.flatten_all()?.to_vec1::<f32>()?,
+                &b.flatten_all()?.to_vec1::<f32>()?,
+                &g.flatten_all()?.to_vec1::<f32>()?,
+            )
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        Ok((
+            Some(Tensor::from_vec(dq, a.shape(), a.device())?),
+            Some(Tensor::from_vec(dk, b.shape(), b.device())?),
+        ))
+    }
+}
+
+fn validate_cue_state_joint_payload(
+    joint: Option<&uor_r4_integer::geometric_cue_carrier::CueJointQ4>,
+    expected: &Option<uor_r4_integer::geometric_cue_carrier::CueJointMetadata>,
+) -> Result<()> {
+    if &joint.map(|j| j.metadata()) != expected {
+        return Err(invalid("cue state joint payload/metadata differs"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod cue_state_credit_tests {
+    use super::*;
+    use uor_r4_integer::geometric_cue_carrier::{CueJointConfig, CueJointQ4};
+    fn fixture(
+        joint_enabled: bool,
+        query_absent: bool,
+        cue_absent: bool,
+    ) -> Result<CueStateCredit> {
+        let qraw = vec![4, 7];
+        let kraw = vec![9, 13];
+        let q = qraw
+            .iter()
+            .map(|&r| observation(r, if query_absent { 0 } else { 4 }))
+            .collect::<Result<Vec<_>>>()?;
+        let k = kraw
+            .iter()
+            .map(|&r| observation(r, if cue_absent { 0 } else { 3 }))
+            .collect::<Result<Vec<_>>>()?;
+        let c = CueJointConfig {
+            head: 0,
+            left_lane: 0,
+            right_lane: 1,
+        };
+        let quarters = (0..16).map(|i| (i % 15) as i8 - 7).collect::<Vec<_>>();
+        let packed = geometric_potential_q4::pack_coefficients(&quarters)
+            .map_err(|e| invalid(e.to_string()))?;
+        let jt = geometric_potential_q4::compile_ordered_pair_q4(&packed)
+            .map_err(|e| invalid(e.to_string()))?;
+        let mut op = CueStateCredit {
+            base: CueRootCredit {
+                config: CueAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 2,
+                    mode: CueScoreMode::DirectedRelative,
+                },
+                coefficients: vec![0; 240],
+                algebra: HistoricalH4Tables::from_bytes(ALGEBRA)
+                    .map_err(|e| invalid(e.to_string()))?,
+                query: q,
+                cues: vec![k],
+                candidate_cues: vec![Some(0), Some(0), None],
+                hard: vec![vec![0; 3]],
+            },
+            query_raw: qraw,
+            cues_raw: vec![kraw],
+            joint: if joint_enabled { Some((c, jt)) } else { None },
+        };
+        let v = op.score(0, &op.base.query, &op.base.cues[0])?;
+        op.base.hard[0] = vec![v, v, 0];
+        Ok(op)
+    }
+    #[test]
+    fn cue_state_joint_ordered_lanes_query_cue_credit_and_exact_forward() -> Result<()> {
+        let op = fixture(true, false, false)?;
+        let q = Tensor::zeros((2, 153), DType::F32, &Device::Cpu)?;
+        let k = Tensor::zeros((1, 2, 153), DType::F32, &Device::Cpu)?;
+        let hard = op.base.hard.clone();
+        let (dq, dk) = op.backward(&vec![0.; 306], &vec![0.; 306], &[1., 0., 0.])?;
+        for lane in 0..2 {
+            assert!(dq[lane * 153..lane * 153 + 120]
+                .iter()
+                .any(|x| x.abs() > 1e-8));
+            assert!(dk[lane * 153..lane * 153 + 120]
+                .iter()
+                .any(|x| x.abs() > 1e-8));
+        }
+        let a = op
+            .base
+            .algebra
+            .relative(
+                code(op.base.query[0].root())?,
+                code(op.base.cues[0][0].root())?,
+            )
+            .index();
+        let b = op
+            .base
+            .algebra
+            .relative(
+                code(op.base.query[1].root())?,
+                code(op.base.cues[0][1].root())?,
+            )
+            .index();
+        let (_, table) = op
+            .joint
+            .as_ref()
+            .ok_or_else(|| invalid("fixture joint absent"))?;
+        assert_eq!(
+            hard[0][0],
+            i64::from(table[(usize::from(a) << 7) + usize::from(b)])
+        );
+        assert_eq!(
+            q.apply_op2(&k, op)?.to_vec2::<f32>()?,
+            vec![hard[0]
+                .iter()
+                .map(|&x| (x as f64 / Q24) as f32)
+                .collect::<Vec<_>>()]
+        );
+        Ok(())
+    }
+    #[test]
+    fn cue_state_category_absence_reactivation_uses_raw_roots() -> Result<()> {
+        // One absent lane leaves the other joint lane factual/present so the
+        // single-category counterfactual can reveal its causal influence.
+        for query_side in [true, false] {
+            let mut op = fixture(true, false, false)?;
+            if query_side {
+                op.base.query[0] = observation(op.query_raw[0], 0)?;
+            } else {
+                op.base.cues[0][0] = observation(op.cues_raw[0][0], 0)?;
+            }
+            let (dq, dk) = op.backward(&vec![0.; 306], &vec![0.; 306], &[1., 0., 0.])?;
+            let credit = if query_side { &dq } else { &dk };
+            assert!(credit[120..153].iter().any(|x| x.abs() > 1e-8));
+            let mut restored_q = op.base.query.clone();
+            let mut restored_k = op.base.cues[0].clone();
+            if query_side {
+                restored_q[0] = observation(op.query_raw[0], 1)?;
+            } else {
+                restored_k[0] = observation(op.cues_raw[0][0], 1)?;
+            }
+            let factual_present = fixture(true, false, false)?;
+            assert_eq!(
+                op.score(0, &restored_q, &restored_k)?,
+                factual_present.score(
+                    0,
+                    &factual_present.base.query,
+                    &factual_present.base.cues[0]
+                )?
+            );
+        }
+        // Both lanes absent require a simultaneous intervention; this declared
+        // first-order conditional surrogate correctly has no joint-only credit.
+        let op = fixture(true, true, false)?;
+        let (dq, dk) = op.backward(&vec![0.; 306], &vec![0.; 306], &[1., 0., 0.])?;
+        assert!(dq.iter().chain(&dk).all(|&x| x == 0.));
+        Ok(())
+    }
+    #[test]
+    fn cue_state_aliases_sum_before_pullback_and_unary_query_zero() -> Result<()> {
+        let op = fixture(true, false, false)?;
+        let (a, b) = op.backward(&vec![0.; 306], &vec![0.; 306], &[1., 2., 7.])?;
+        let (x, y) = op.backward(&vec![0.; 306], &vec![0.; 306], &[3., 0., 0.])?;
+        assert_eq!(a, x);
+        assert_eq!(b, y);
+        let mut unary = fixture(false, false, false)?;
+        unary.base.config.mode = CueScoreMode::CueUnary;
+        unary.base.coefficients = (0..240).map(|i| (i % 15) as i8 - 7).collect();
+        let (q, k) = unary.backward(&vec![0.; 306], &vec![0.; 306], &[1., 0., 0.])?;
+        for lane in 0..2 {
+            assert!(q[lane * 153..lane * 153 + 120].iter().all(|&x| x == 0.));
+        }
+        assert!(k.iter().any(|&x| x != 0.));
+        Ok(())
+    }
+    #[test]
+    fn cue_state_joint_payload_binding_rejects_mismatch() -> Result<()> {
+        let c = CueJointConfig {
+            head: 0,
+            left_lane: 0,
+            right_lane: 1,
+        };
+        let a = CueJointQ4::new(c, vec![0; 8]).map_err(|e| invalid(e.to_string()))?;
+        let b = CueJointQ4::new(c, vec![0x11; 8]).map_err(|e| invalid(e.to_string()))?;
+        validate_cue_state_joint_payload(Some(&a), &Some(a.metadata()))?;
+        assert!(validate_cue_state_joint_payload(Some(&b), &Some(a.metadata())).is_err());
+        assert!(validate_cue_state_joint_payload(None, &Some(a.metadata())).is_err());
+        assert!(validate_cue_state_joint_payload(Some(&a), &None).is_err());
         Ok(())
     }
 }
