@@ -15,9 +15,14 @@ lanes cancel from generated-token raw score differences, although they affect
 Generate/Copy calibration and earlier recurrence. This is a measured decoder
 restriction, not an identity collision or a geometric-family rejection. Native
 first-position Copy scores stay below5.6875 nats and no actions clip, excluding
-the proposed upper-score barrier on those factual positions. Next: exact native
-score-SHA replay and target/winner factor decomposition before selecting a
-label-free all-lane initialization control. No normalizer change or dose increase.
+the proposed upper-score barrier on those factual positions. The exact native
+score-SHA replay now passes2048 first positions at a84bf2e1;2 focused checks pass.
+Output-only472/512 and joint495/512 gold targets remain strictly below best
+Generate; deterministic gold-best21/8 still lose pooled Copy. Independent review
+traverses all2048 rows and verifies factor/mass arithmetic. Next: prepare a
+default-off label-free balanced all-lane initialization control, then admit its
+matched output-only comparison after the current six runs finish. No normalizer
+change or dose increase. PR1792 remains draft/unmerged.
 
 ## Delayed geometric prediction credit — October 6
 

@@ -63,6 +63,8 @@ struct Args {
     token_backward_chunk: usize,
     #[serde(default)]
     prefix_temporal_utility: bool,
+    #[serde(default)]
+    balanced_token_geometry: bool,
     updates: usize,
     learning_rate: f64,
     prototype_learning_rate: f64,
@@ -730,7 +732,7 @@ fn checkpoint(
         .zip(&oldcontext)
         .filter(|(a, b)| a != b)
         .count();
-    let receipt = json!({"step":step,"parent":binding,"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":true,"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
+    let receipt = json!({"step":step,"parent":binding,"balanced_token_geometry":a.balanced_token_geometry,"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":true,"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
     fs::write(
         root.join("receipt.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -890,7 +892,7 @@ fn batch(
     {
         return Err(bad("decoder credit disconnected"));
     }
-    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }
@@ -1156,15 +1158,23 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(
         a,
         "input-admission.json",
-        &json!({"input_sha256":inputs,"input_manifests":before,"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":integer.binding().vocab_size(),"lanes":lanes,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
+        &json!({"input_sha256":inputs,"input_manifests":before,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"training_cases":train.len(),"development_cases":dev.len(),"prospective_evaluation_supplied_not_loaded":a.fresh_inputs.is_some(),"training_no_source_cases":train.iter().filter(|e|!e.has_source()).count(),"public_legal_ids":legal.len(),"vocab":integer.binding().vocab_size(),"lanes":lanes,"source_parent":expected,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"development_scope":"open construction panel; source overlap allowed and reported; not independent generalization","data_quality_scope":"schema/public-alphabet/causal-context/canonical-roundtrip admission; panel's independent answerability receipt remains required; renamed labels alone are not untouched data"}),
     )?;
     write(
         a,
         "frozen-development-answer-oracles.json",
         &json!({"rule":"input FrozenAnswers used exactly; canonical first accepted bytes plus EOS; no runtime formatting or trimming","cases":dev.iter().map(|e|json!({"id":e.packet.id,"answers":e.answers,"canonical_ids_labels_only":e.target})).collect::<Vec<_>>()}),
     )?;
-    let generate =
-        GenerateLearningWeights::seeded(integer.binding().clone(), lanes, a.seed, &device)?;
+    let generate = if a.balanced_token_geometry {
+        GenerateLearningWeights::seeded_balanced_token_geometry(
+            integer.binding().clone(),
+            lanes,
+            a.seed,
+            &device,
+        )?
+    } else {
+        GenerateLearningWeights::seeded(integer.binding().clone(), lanes, a.seed, &device)?
+    };
     let gparams = generate.parameters();
     let (prototype, coefficients): (BTreeMap<_, _>, BTreeMap<_, _>) = gparams
         .clone()
@@ -1176,7 +1186,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(
         a,
         "optimizer-design.json",
-        &json!({"generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
+        &json!({"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"initialization_scope":"label-free tokenID geometry only; same energy seed/pairgraph/coefficient margins/prototype gap; no semantic-distance claim","generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
     )?;
     let first = a
         .admission_episode_indices
@@ -1454,7 +1464,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         }
     }
     Ok(
-        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
+        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
     )
 }
 fn main() -> Result<()> {

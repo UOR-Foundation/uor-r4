@@ -146,6 +146,26 @@ fn choice_digest(values: &[f32]) -> String {
     hex::encode(hash.finalize())
 }
 
+fn initial_token_geometry(vocab: usize, lanes: usize, seed: u64, balanced: bool) -> Vec<u8> {
+    let mut prototypes = Vec::with_capacity(vocab * lanes);
+    for token in 0..vocab {
+        let mut digits = token;
+        for lane in 0..lanes {
+            // Preserve the existing seed/lane offset exactly, including its
+            // host usize seed cast; this remains an offline initializer.
+            let offset = ((seed as usize % ROOT_COUNT) + lane * 17) % ROOT_COUNT;
+            let value = if balanced {
+                token % ROOT_COUNT + lane * (token / ROOT_COUNT)
+            } else {
+                digits % ROOT_COUNT
+            };
+            prototypes.push(((value + offset) % ROOT_COUNT) as u8);
+            digits /= ROOT_COUNT;
+        }
+    }
+    prototypes
+}
+
 impl GenerateLearningWeights {
     /// Seeded nonzero shared potentials and distinct base-120 tuples where
     /// cardinality permits. Arbitrary initialization has no semantic claim.
@@ -154,6 +174,31 @@ impl GenerateLearningWeights {
         lanes: usize,
         seed: u64,
         device: &Device,
+    ) -> Result<Self> {
+        Self::seeded_geometry(binding, lanes, seed, device, false)
+    }
+
+    /// Default-off label-free balanced token geometry. For t=a+120b,
+    /// lane j receives (a+j*b+the existing seed/lane offset) mod120.
+    /// Every disjoint adjacent pair has determinant1 and distinguishes all
+    /// admitted token IDs up to4096. This is initialization, not semantics.
+    /// Energy draw order, pair graph, coefficient margins and prototype gap
+    /// are exactly the same as seeded().
+    pub fn seeded_balanced_token_geometry(
+        binding: SourceActionBinding,
+        lanes: usize,
+        seed: u64,
+        device: &Device,
+    ) -> Result<Self> {
+        Self::seeded_geometry(binding, lanes, seed, device, true)
+    }
+
+    fn seeded_geometry(
+        binding: SourceActionBinding,
+        lanes: usize,
+        seed: u64,
+        device: &Device,
+        balanced: bool,
     ) -> Result<Self> {
         device_admit(device)?;
         if !(1..=MAX_LANES).contains(&lanes) || !(1..=4096).contains(&binding.vocab_size()) {
@@ -194,15 +239,7 @@ impl GenerateLearningWeights {
             }
         }
         let v = binding.vocab_size();
-        let mut prototypes = Vec::with_capacity(v * lanes);
-        for token in 0..v {
-            let mut digits = token;
-            for l in 0..lanes {
-                let offset = ((seed as usize % ROOT_COUNT) + l * 17) % ROOT_COUNT;
-                prototypes.push(((digits % ROOT_COUNT + offset) % ROOT_COUNT) as u8);
-                digits /= ROOT_COUNT;
-            }
-        }
+        let prototypes = initial_token_geometry(v, lanes, seed, balanced);
         let native = NativeGeometricGenerate::compile(
             &binding,
             lanes,
@@ -1038,6 +1075,128 @@ mod tests {
             .flatten_all()?
             .to_vec1::<f32>()?)
     }
+    #[test]
+    fn legacy_seed_route_and_balanced_energy_gap_remain_identical() -> Result<()> {
+        for lanes in [1, 3, 8] {
+            for seed in [0, 19, u64::MAX] {
+                let binding = binding()?;
+                let old =
+                    GenerateLearningWeights::seeded(binding.clone(), lanes, seed, &Device::Cpu)?;
+                let balanced = GenerateLearningWeights::seeded_balanced_token_geometry(
+                    binding.clone(),
+                    lanes,
+                    seed,
+                    &Device::Cpu,
+                )?;
+                let native = old.export_native()?;
+                let new = balanced.export_native()?;
+                // Independent copy of the original seeded digit assignment.
+                let mut original = Vec::new();
+                for token in 0..binding.vocab_size() {
+                    let mut digits = token;
+                    for lane in 0..lanes {
+                        let offset = ((seed as usize % ROOT_COUNT) + lane * 17) % ROOT_COUNT;
+                        original.push(((digits % ROOT_COUNT + offset) % ROOT_COUNT) as u8);
+                        digits /= ROOT_COUNT;
+                    }
+                }
+                let reference = NativeGeometricGenerate::compile(
+                    &binding,
+                    lanes,
+                    &original,
+                    native.packed_biases(),
+                    native.energy().clone(),
+                )
+                .map_err(|e| invalid(e.to_string()))?;
+                assert_eq!(
+                    native.to_bytes().map_err(|e| invalid(e.to_string()))?,
+                    reference.to_bytes().map_err(|e| invalid(e.to_string()))?
+                );
+                assert_eq!(
+                    serde_json::to_vec(native.energy())?,
+                    serde_json::to_vec(new.energy())?
+                );
+                assert_eq!(native.packed_biases(), new.packed_biases());
+                assert_eq!(new.energy().edges().len(), lanes / 2);
+                for logits in [
+                    old.prototype_choices.flatten_all()?.to_vec1::<f32>()?,
+                    balanced.prototype_choices.flatten_all()?.to_vec1::<f32>()?,
+                ] {
+                    for row in logits.chunks_exact(ROOT_COUNT) {
+                        assert_eq!(row.iter().filter(|&&v| v == 2.).count(), 1);
+                        assert_eq!(row.iter().filter(|&&v| v == 0.).count(), ROOT_COUNT - 1);
+                    }
+                }
+                assert_eq!(
+                    new.prototypes(),
+                    initial_token_geometry(binding.vocab_size(), lanes, seed, true)
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn balanced_all_eight_lanes_full4096_pair_identity_and_marginals() -> Result<()> {
+        use std::collections::BTreeSet;
+        let mut tokenizer: serde_json::Value = serde_json::from_str(TOK)?;
+        let vocab = tokenizer["model"]["vocab"]
+            .as_object_mut()
+            .ok_or_else(|| invalid("test tokenizer vocab absent"))?;
+        for token in 8..4096 {
+            vocab.insert(format!("token{token:04}"), serde_json::json!(token));
+        }
+        let binding = SourceActionBinding::new(&serde_json::to_vec(&tokenizer)?)
+            .map_err(|e| invalid(e.to_string()))?;
+        assert_eq!(binding.vocab_size(), 4096);
+        let weights =
+            GenerateLearningWeights::seeded_balanced_token_geometry(binding, 8, 71, &Device::Cpu)?;
+        let native = weights.export_native()?;
+        let rows = native.prototypes().chunks_exact(8).collect::<Vec<_>>();
+        assert_eq!(
+            rows.iter()
+                .map(|r| r.to_vec())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            4096
+        );
+        for pair in native.energy().edges() {
+            let distinct = rows
+                .iter()
+                .map(|r| (r[usize::from(pair.left)], r[usize::from(pair.right)]))
+                .collect::<BTreeSet<_>>();
+            assert_eq!(distinct.len(), 4096);
+            assert_eq!(pair.right - pair.left, 1);
+        }
+        for lane in 0..8 {
+            let mut count = [0usize; ROOT_COUNT];
+            for row in &rows {
+                count[usize::from(row[lane])] += 1;
+            }
+            assert!(count.iter().all(|&n| n == 34 || n == 35));
+            assert_eq!(count.iter().filter(|&&n| n == 35).count(), 16);
+            assert_eq!(count.iter().sum::<usize>(), 4096);
+        }
+        // The same assignment admits smaller/odd lane counts; uniqueness is
+        // capacity-qualified (one lane has only120 codes).
+        for lanes in [1, 2, 3, 5, 7] {
+            let codes = initial_token_geometry(4096, lanes, 71, true);
+            assert_eq!(codes.len(), 4096 * lanes);
+            assert!(codes.iter().all(|&r| usize::from(r) < ROOT_COUNT));
+            if lanes >= 2 {
+                assert_eq!(
+                    codes
+                        .chunks_exact(lanes)
+                        .map(|r| (r[0], r[1]))
+                        .collect::<BTreeSet<_>>()
+                        .len(),
+                    4096
+                );
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn generate_explicit_state_utility_preserves_native_and_separate_parameter_credit() -> Result<()>
     {
