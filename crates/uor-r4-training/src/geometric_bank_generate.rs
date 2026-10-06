@@ -48,6 +48,7 @@ pub struct PreparedBankGenerate<'a, 'source> {
     pool: NativeVocabularyActions,
     prefix_temporal_utility: bool,
     read_state_bridge: Option<(&'a BridgeLearningWeights, &'a PreparedBridgeLearning)>,
+    read_selector_credit: bool,
 }
 
 /// Target-free result. All native scores and the complete legal action pool
@@ -103,6 +104,7 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
             pool,
             prefix_temporal_utility: false,
             read_state_bridge: None,
+            read_selector_credit: true,
         })
     }
 
@@ -131,6 +133,14 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
         }
         self.read_state_bridge = Some((weights, prepared));
         Ok(self)
+    }
+
+    /// Offline adjoint control only. Native selection, transport and scores are
+    /// identical with either setting; disabling it removes only selector credit.
+    /// Factual bridge/Generate and direct emission-pool adjoints remain.
+    pub fn with_read_selector_credit(mut self, enabled: bool) -> Self {
+        self.read_selector_credit = enabled;
+        self
     }
 
     /// Query/prefix/context are causal state inputs, never source candidates.
@@ -269,12 +279,16 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
                     .map_err(|e| invalid(e.to_string()))?;
                 alternatives.push(post);
             }
-            logits = add_selector_credit(
-                &bridge.state_choices,
-                &copy.copy_raw,
-                &alternatives,
-                selected,
-            )?;
+            logits = if self.read_selector_credit {
+                add_selector_credit(
+                    &bridge.state_choices,
+                    &copy.copy_raw,
+                    &alternatives,
+                    selected,
+                )?
+            } else {
+                bridge.state_choices.clone()
+            };
             states = bridge.post_state_codes.clone();
             Some((selected, bridge))
         } else {
@@ -299,7 +313,9 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
             copy_token_ids: ids,
             copy_scores_q24: scores,
             read_state_bridge,
-            credit_scope: if self.read_state_bridge.is_some() {
+            credit_scope: if self.read_state_bridge.is_some() && !self.read_selector_credit {
+                "hard-native-allbank-occurrence-read;signed-H4-selected-source-state-transport;selector-adjoint-disabled;factual-bridge-and-emission-pool-credit/1"
+            } else if self.read_state_bridge.is_some() {
                 "hard-native-allbank-occurrence-read;signed-H4-selected-source-state-transport;detached-contrast-poststate-selector-credit;local-decoder-state-sensitivity-not-candidate-loss/1"
             } else if self.prefix_temporal_utility {
                 PREFIX_TEMPORAL_CREDIT_SCOPE

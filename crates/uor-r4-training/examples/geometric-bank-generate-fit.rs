@@ -602,6 +602,15 @@ fn native_step(
                 .copied()
                 .map(H4Code::try_from)
                 .collect::<std::result::Result<Vec<_>, _>>()?;
+            let mut distinct_source_states = BTreeSet::new();
+            for candidate in &b.candidates {
+                let state = b
+                    .context
+                    .states
+                    .get(candidate.context_position)
+                    .ok_or_else(|| bad("alternative source state missing"))?;
+                distinct_source_states.insert(state.clone());
+            }
             let query = codes.clone();
             let mut actions = vec![H4Code::IDENTITY; codes.len()];
             let mut action_scores = vec![0i64; codes.len() * 120];
@@ -614,7 +623,7 @@ fn native_step(
                 &mut action_scores,
                 &mut counts,
             )?;
-            json!({"selected_ordinal":selected,"selected_candidate":candidate,"query_state_codes":query.iter().map(|c|c.index()).collect::<Vec<_>>(),"selected_source_state_codes":source.iter().map(|c|c.index()).collect::<Vec<_>>(),"action_codes":actions.iter().map(|c|c.index()).collect::<Vec<_>>(),"action_scores_q24":action_scores,"native_costs":counts,"payload_sha256":bridge.metadata().payload_sha256})
+            json!({"distinct_candidate_source_states":distinct_source_states.len(),"selected_ordinal":selected,"selected_candidate":candidate,"query_state_codes":query.iter().map(|c|c.index()).collect::<Vec<_>>(),"selected_source_state_codes":source.iter().map(|c|c.index()).collect::<Vec<_>>(),"action_codes":actions.iter().map(|c|c.index()).collect::<Vec<_>>(),"action_scores_q24":action_scores,"native_costs":counts,"payload_sha256":bridge.metadata().payload_sha256})
         } else {
             Value::Null
         };
@@ -1004,6 +1013,69 @@ fn episode_loss_weights(
     })
 }
 
+#[derive(Clone, Copy)]
+struct BridgeAdmissionControl {
+    expect_selected_source_state: bool,
+    selector_credit: bool,
+}
+// A declared algebraic positive control, not a trained checkpoint. Every lane
+// uniquely chooses a=d, hence q*(inverse(q)*k)=k in the authenticated H4 frame.
+fn source_identity_bridge(
+    binding: &uor_r4_integer::geometric_source_actions::SourceActionBinding,
+    lanes: usize,
+    device: &Device,
+) -> Result<BridgeLearningWeights> {
+    let bias = vec![0u8; lanes * 60];
+    let mut relative = vec![0u8; lanes * 120 * 64];
+    for lane in 0..lanes {
+        for action in 0..120 {
+            let at = (lane * 120 + action) * 128 + action;
+            relative[at >> 1] |= 7 << if at & 1 == 0 { 0 } else { 4 };
+        }
+    }
+    let native = NativeGeometricReadStateBridge::compile(binding, lanes, &bias, &relative)?;
+    let weights = BridgeLearningWeights::from_native(&native, binding, device)?;
+    if weights.export_native()?.to_bytes()? != native.to_bytes()? {
+        return Err(bad("positive-control bridge native export differs"));
+    }
+    Ok(weights)
+}
+fn selector_gradient_contributions(
+    enabled: &BTreeMap<String, Tensor>,
+    disabled: &BTreeMap<String, Tensor>,
+    device: &Device,
+) -> Result<Value> {
+    if enabled.keys().ne(disabled.keys()) {
+        return Err(bad("selector control gradient connectivity differs"));
+    }
+    let mut families = BTreeMap::new();
+    let mut selector_nonzero_potential = false;
+    for (name, on) in enabled {
+        let off = &disabled[name];
+        if on.shape() != off.shape()
+            || !on.device().same_device(device)
+            || !off.device().same_device(device)
+        {
+            return Err(bad("selector control gradient shape/device differs"));
+        }
+        let delta = (on - off)?.detach();
+        let on_l2 = on.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?;
+        let off_l2 = off.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?;
+        let delta_l2 = delta.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?;
+        let delta_max = delta.abs()?.max_all()?.to_scalar::<f32>()?;
+        if [on_l2, off_l2, delta_l2, delta_max]
+            .iter()
+            .any(|x| !x.is_finite())
+        {
+            return Err(bad("nonfinite selector control device reduction"));
+        }
+        selector_nonzero_potential |= name.starts_with("consumer.potential.") && delta_max > 0.;
+        families.insert(name.clone(),json!({"selector_enabled_l2":on_l2,"selector_disabled_l2":off_l2,"selector_delta_l2":delta_l2,"selector_delta_max_abs":delta_max,"selector_delta_nonzero":delta_max>0.,"elements":on.elem_count(),"device":if device.is_cuda(){"CUDA"}else{"CPU"},"off_scope":if name.starts_with("consumer.potential."){"direct Copy emission coefficient credit"}else{"factual bridge/Generate and direct emission credit; not pool-only"}}));
+    }
+    Ok(
+        json!({"families":families,"selector_nonzero_potential":selector_nonzero_potential,"status":if selector_nonzero_potential{"NONZERO_SELECTOR_POTENTIAL_CREDIT"}else{"NO_SELECTOR_ESCAPE_AT_CONTROL"},"decoder_utility_scope":"positive selector delta witnesses nonconstant decoder utility projected onto occurrence alternatives; a zero aggregate does not distinguish constant utility from cancellation or scorer null directions","scope":"same exact native forward; device subtraction enabled-minus-disabled isolates selector-score adjoint contribution; scalar reductions only; no optimizer use or learned-language claim"}),
+    )
+}
 fn batch(
     a: &Args,
     source: &SourceRealizerWeights,
@@ -1020,6 +1092,7 @@ fn batch(
     independent: Option<&IntegerRealizer>,
     backward_chunk: usize,
     retain_inactive: bool,
+    bridge_control: Option<BridgeAdmissionControl>,
 ) -> Result<(BTreeMap<String, Tensor>, Value)> {
     let begun = Instant::now();
     let current = compile_learning_source(source, frozen, &a.arm)?;
@@ -1047,6 +1120,8 @@ fn batch(
     if let (Some(weights), Some(snapshot)) = (bridge, bridge_snapshot.as_ref()) {
         learner = learner.with_read_state_bridge(weights, snapshot)?;
     }
+    let selector_credit_enabled = bridge_control.map_or(true, |c| c.selector_credit);
+    learner = learner.with_read_selector_credit(selector_credit_enabled);
     let params = parameters(
         source,
         g,
@@ -1070,6 +1145,7 @@ fn batch(
     let mut pending: Option<Tensor> = None;
     let mut pending_count = 0usize;
     let mut backward_calls = 0usize;
+    let mut native_forward_packets = Vec::new();
     let mut bridge_receipts = Vec::new();
     let mut first_context_receipts = Vec::new();
     let mut first_context_backward_seconds = 0.;
@@ -1096,6 +1172,7 @@ fn batch(
             } else {
                 learner.forward_no_source(&e.causal_no_source(&e.target[..t])?)?
             };
+            let mut distinct_candidate_source_states = Value::Null;
             if let Some(model) = independent {
                 let expected = native_step(
                     model,
@@ -1109,6 +1186,8 @@ fn batch(
                 )?;
                 if let Some((ordinal, result)) = &out.read_state_bridge {
                     let native_bridge = &expected["source_provenance"]["read_state_bridge"];
+                    distinct_candidate_source_states =
+                        native_bridge["distinct_candidate_source_states"].clone();
                     if native_bridge["selected_ordinal"] != json!(ordinal)
                         || native_bridge["action_codes"]
                             != json!(result
@@ -1124,8 +1203,14 @@ fn batch(
                     // Zero initialization is an exact native escape from the
                     // added route: factual identity transport preserves original
                     // query codes, so Generate scores and the Copy pool agree.
-                    if expected["retained_state_codes"] != native_bridge["query_state_codes"] {
-                        return Err(bad("zero bridge did not preserve pre-bridge query state"));
+                    let reference_state =
+                        if bridge_control.is_some_and(|c| c.expect_selected_source_state) {
+                            &native_bridge["selected_source_state_codes"]
+                        } else {
+                            &native_bridge["query_state_codes"]
+                        };
+                    if &expected["retained_state_codes"] != reference_state {
+                        return Err(bad("bridge admission did not preserve declared identity/selected-source state"));
                     }
                 }
                 if expected["pool"]["summary"] != serde_json::to_value(&out.actions.summary)?
@@ -1150,12 +1235,15 @@ fn batch(
                     .action_codes
                     .iter()
                     .all(|c| *c == uor_r4_integer::h4_tables::H4Code::IDENTITY);
-                if independent.is_some() && !identity {
+                if independent.is_some() && bridge_control.is_none() && !identity {
                     return Err(bad("zero bridge initial admission changed native state"));
                 }
-                bridge_receipts.push(json!({"episode_id":e.packet.id,"position":t,"selected_ordinal":ordinal,"action_codes":result.action_codes.iter().map(|c|c.index()).collect::<Vec<_>>(),"native_costs":result.counts,"selector_native_alternative_evaluations":out.copy_token_ids.len(),"selector_native_alternative_counts_per_evaluation":result.counts,"cost_scope":"factual native apply plus declared equal-shape alternative applies; GPU adjoint/index staging not counted by native reads","identity_actions":identity,"validation_scalar_reads":result.validation_scalar_reads,"credit_scope":result.credit_scope}));
+                bridge_receipts.push(json!({"episode_id":e.packet.id,"position":t,"selected_ordinal":ordinal,"action_codes":result.action_codes.iter().map(|c|c.index()).collect::<Vec<_>>(),"distinct_candidate_source_states":distinct_candidate_source_states,"native_costs":result.counts,"selector_native_alternative_evaluations":out.copy_token_ids.len(),"selector_native_alternative_counts_per_evaluation":result.counts,"cost_scope":"factual native apply plus declared equal-shape alternative applies; GPU adjoint/index staging not counted by native reads","identity_actions":identity,"validation_scalar_reads":result.validation_scalar_reads,"credit_scope":result.credit_scope}));
             } else if bridge.is_some() && e.has_source() {
                 return Err(bad("source bank omitted enabled bridge"));
+            }
+            if bridge_control.is_some() {
+                native_forward_packets.push(json!({"episode_id":e.packet.id,"position":t,"actual_prefix_ids":&e.target[..t],"copy_ids":out.copy_token_ids,"copy_scores_sha256":sha256_bytes(&serde_json::to_vec(&out.copy_scores_q24)?),"generate_scores_sha256":sha256_bytes(&serde_json::to_vec(&out.generate.scores_q24)?),"pool_summary":out.actions.summary,"poststate":out.final_state_codes.iter().map(|c|c.index()).collect::<Vec<_>>(),"bridge_selected_actions":out.read_state_bridge.as_ref().map(|(j,b)|json!({"ordinal":j,"actions":b.action_codes.iter().map(|c|c.index()).collect::<Vec<_>>()}))}));
             }
             // Bind stable membership to ACTUAL target-free forward admission,
             // not raw Context IDs or a selected-record/label-derived candidate set.
@@ -1243,9 +1331,11 @@ fn batch(
                 device.synchronize()?;
                 let seconds = diagnostic_start.elapsed().as_secs_f64();
                 first_context_backward_seconds += seconds;
-                let mut receipt = json!({"id":e.packet.id,"position":0,"gold_absent_copy":true,"auxiliary_backward_seconds":seconds,"direct_copy_emission_adjoint_detached":true,"bridge_selector_copy_score_adjoint_retained":bridge.is_some()});
-                let family_key = if bridge.is_some() {
+                let mut receipt = json!({"id":e.packet.id,"position":0,"gold_absent_copy":true,"auxiliary_backward_seconds":seconds,"direct_copy_emission_adjoint_detached":true,"bridge_selector_copy_score_adjoint_retained":bridge.is_some() && selector_credit_enabled});
+                let family_key = if bridge.is_some() && selector_credit_enabled {
                     "generate_branch_including_selector_context_families"
+                } else if bridge.is_some() {
+                    "generate_branch_without_selector_context_families"
                 } else {
                     "generate_only_context_families"
                 };
@@ -1314,8 +1404,8 @@ fn batch(
     {
         return Err(bad("decoder credit disconnected"));
     }
-    let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":if bridge.is_some() { "absent-Copy first canonical positions; direct Copy emission adjoint detached only in auxiliary backward; Generate branch retains bridge selector Copy-score potential/context paths plus hard120 carrier credit; same native pool and loss weights; no per-root utility measurement or optimizer use" } else { "absent-Copy first canonical positions only; same fullpool forward and declared episode/phase loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective" }});
-    let report = json!({"read_state_bridge":a.read_state_bridge,"bridge_master_download_bytes":bridge_snapshot.as_ref().map_or(0,|b|b.downloaded_master_bytes),"bridge_padded_native_coefficient_bytes":bridge.map_or(0,|b|b.padded_native_coefficient_bytes()),"bridge_forward_receipts":bridge_receipts,"bridge_zero_escape_native_state_verified":independent.is_some() && bridge.is_some(),"bridge_selector_credit_scope":"local detached native occurrence alternatives; factual bridge coefficient/state credit; no derivative of hard argmax and no runtime label","episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"native_weighted_training_objective":weighted_native_objective,"loss_phase_names":LOSS_PHASE_NAMES,"loss_phase_positions":phase_positions,"loss_phase_weighted_native_contributions":phase_weighted_native_loss,"episode_loss_phase_counts":episode_phase_counts,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; declared per-token episode/phase weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":if bridge.is_some() && selector_credit_enabled { "absent-Copy first canonical positions; direct Copy emission adjoint detached only in auxiliary backward; Generate branch retains bridge selector Copy-score potential/context paths plus hard120 carrier credit; same native pool and loss weights; no per-root utility measurement or optimizer use" } else if bridge.is_some() { "absent-Copy first canonical positions; direct Copy emission detached in auxiliary backward and selector credit disabled; factual bridge/Generate hard120 carrier credit retained; same native pool and loss weights; no optimizer use" } else { "absent-Copy first canonical positions only; same fullpool forward and declared episode/phase loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective" }});
+    let report = json!({"read_state_bridge":a.read_state_bridge,"bridge_master_download_bytes":bridge_snapshot.as_ref().map_or(0,|b|b.downloaded_master_bytes),"bridge_padded_native_coefficient_bytes":bridge.map_or(0,|b|b.padded_native_coefficient_bytes()),"bridge_forward_receipts":bridge_receipts,"native_forward_packets_sha256":sha256_bytes(&serde_json::to_vec(&native_forward_packets)?),"bridge_zero_escape_native_state_verified":independent.is_some() && bridge.is_some() && bridge_control.is_none(),"bridge_control_selected_source_state_verified":independent.is_some() && bridge_control.is_some_and(|c|c.expect_selected_source_state),"bridge_selector_credit_enabled":bridge.is_some() && bridge_control.map_or(true,|c|c.selector_credit),"bridge_selector_credit_scope":if bridge.is_none() {"NOT_APPLICABLE_NO_BRIDGE"} else if bridge_control.is_some_and(|c|!c.selector_credit) {"selector-adjoint-disabled; factual bridge/Generate and direct emission credit remain"} else {"local detached native occurrence alternatives; factual bridge coefficient/state credit; no derivative of hard argmax and no runtime label"},"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"native_weighted_training_objective":weighted_native_objective,"loss_phase_names":LOSS_PHASE_NAMES,"loss_phase_positions":phase_positions,"loss_phase_weighted_native_contributions":phase_weighted_native_loss,"episode_loss_phase_counts":episode_phase_counts,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"read_state_bridge_enabled":a.read_state_bridge,"read_state_bridge_learning_rate":a.read_state_bridge_learning_rate,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; declared per-token episode/phase weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }
@@ -1706,6 +1796,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         Some(&integer),
         a.token_backward_chunk,
         true,
+        None,
     )?;
     if a.arm == "joint-potential" {
         let families = admission["gradient_families"]
@@ -1740,6 +1831,66 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         }
     }
     write(a, "first-b8-admission.json", &admission)?;
+    if a.mode == "admission" && a.read_state_bridge {
+        write(
+            a,
+            "bridge-control-projection.json",
+            &json!({"additional_passes":2,"representative_b8_indices":first,"measured_original_b8_seconds":admission["elapsed_seconds"],"additional_projected_seconds":admission["elapsed_seconds"].as_f64().ok_or_else(||bad("admission timing absent"))?*2.5,"policy":"estimated two same B8 forward/backward passes plus25percent reserve; healthy work not killed at estimate; no fit or optimizer updates","positive_control":"bias zero; strict native T[a,d]=7 iff a=d, else0; poststate equals selected source retained state","native_padded_bytes":lanes*7740}),
+        )?;
+        let control_bridge = source_identity_bridge(integer.binding(), lanes, &device)?;
+        let mut results = Vec::new();
+        let mut gradients = Vec::new();
+        for selector_credit in [true, false] {
+            let (grad, report) = batch(
+                a,
+                &source,
+                &frozen,
+                &generate,
+                Some(&control_bridge),
+                &cue,
+                &prefix,
+                &exp,
+                &train,
+                &first,
+                &device,
+                start,
+                Some(&integer),
+                a.token_backward_chunk,
+                true,
+                Some(BridgeAdmissionControl {
+                    expect_selected_source_state: true,
+                    selector_credit,
+                }),
+            )?;
+            if !report["bridge_forward_receipts"]
+                .as_array()
+                .ok_or_else(|| bad("positive-control bridge receipts absent"))?
+                .iter()
+                .any(|r| r["identity_actions"] == false)
+            {
+                return Err(bad("actual positive-control bank has no nonidentity action; discriminator unavailable"));
+            }
+            results.push(report);
+            gradients.push(grad);
+        }
+        if results[0]["native_forward_packets_sha256"]
+            != results[1]["native_forward_packets_sha256"]
+            || results[0]["native_equal_episode_ce"] != results[1]["native_equal_episode_ce"]
+            || results[0]["native_weighted_training_objective"]
+                != results[1]["native_weighted_training_objective"]
+        {
+            return Err(bad(
+                "selector diagnostic changed actual native bank forward",
+            ));
+        }
+        let contributions = selector_gradient_contributions(&gradients[0], &gradients[1], &device)?;
+        write(
+            a,
+            "bridge-controlled-bank-admission.json",
+            &json!({"selector_enabled":results[0],"selector_disabled":results[1],"contributions":contributions,"controlled_bridge_native_sha256":control_bridge.payload_sha256()?,"initial_fit_bridge_unchanged":true,"updates":0,"scope":"declared algebraic actual-bank positive control only; no training benefit/attention/language result"}),
+        )?;
+    }
+
     if a.mode == "admission" && a.token_backward_chunk == 2 {
         let (reference_grads, reference) = batch(
             a,
@@ -1757,6 +1908,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
             Some(&integer),
             1,
             true,
+            None,
         )?;
         if admission["native_equal_episode_ce"] != reference["native_equal_episode_ce"]
             || admission["target_positions"] != reference["target_positions"]
@@ -1917,6 +2069,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
                 None,
                 a.token_backward_chunk,
                 false,
+                None,
             )?;
             let squares = grads
                 .values()
@@ -2076,6 +2229,26 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn selector_gradient_difference_reports_zero_without_claiming_escape() -> Result<()> {
+        let name = "consumer.potential.context_presence".to_owned();
+        let tensor = Tensor::from_vec(vec![1f32, -1.], 2, &Device::Cpu)?;
+        let on = BTreeMap::from([(name.clone(), tensor.clone())]);
+        let off = BTreeMap::from([(name.clone(), tensor)]);
+        let equal = selector_gradient_contributions(&on, &off, &Device::Cpu)?;
+        assert_eq!(equal["status"], json!("NO_SELECTOR_ESCAPE_AT_CONTROL"));
+        assert_eq!(equal["families"][&name]["selector_delta_l2"], json!(0.));
+        let changed = BTreeMap::from([(
+            name.clone(),
+            Tensor::from_vec(vec![2f32, -2.], 2, &Device::Cpu)?,
+        )]);
+        let result = selector_gradient_contributions(&changed, &off, &Device::Cpu)?;
+        assert_eq!(result["status"], json!("NONZERO_SELECTOR_POTENTIAL_CREDIT"));
+        assert!(result["families"][&name]["selector_delta_l2"]
+            .as_f64()
+            .is_some_and(|x| x > 1.4 && x < 1.5));
+        Ok(())
+    }
     #[test]
     fn bridge_raw_read_selects_first_physical_occurrence_without_token_aliasing() -> Result<()> {
         assert_eq!(earliest_raw_copy_max(&[4, 4, 3])?, 0);

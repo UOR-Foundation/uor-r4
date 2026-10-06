@@ -19,9 +19,20 @@ is additional offline work, not the claimed selected-bridge serving cost.
 
 Independent source review found no arithmetic/adjoint integration blocker;
 focused signed-state, identity/export, zero-init parameter escape, selector
-isolation and nonfinal source-position checks are authored. Compilation,
-CUDA execution, actual-bank admission, and learning are **NOT_RUN** for this
-change. The fitter integration is in progress. Work card: #820
+isolation and nonfinal source-position checks executed at `d6abb7bc` on Linux
+x86_64 pod CPUs: core 2/2, learning wrapper 2/2, bank 3/3 and release fitter
+check all exit zero, 527 command-wall seconds. The fitter is wired through
+native replay, optimizer snapshots and checkpoint export/reload. CUDA execution,
+actual-bank admission and learning remain **NOT_RUN**. Receipts are preserved at
+`icloud:UOR-R4/results/codex/read-state-checks-d6abb7bc-receipts.tar`, MD5
+`e5c9f3084e7c20bd7ad9305877ec0e54`, with remote originals retained.
+
+Admission-only controls now declare `T[a,d]=7` iff `a=d`, giving exact
+`q'=selected source state`, and compare selector-adjoint enabled/disabled B8
+passes with identical native forwards. Gradient differences are computed on
+the device before clipping/optimization. These new diagnostics are source
+reviewed but **NOT_RUN**; they are not learned artifacts or a language result.
+Work card: #820
 issuecomment-6023927047. The prior 0/512 result remains unchanged; this is an
 implementation enabler, not an attention or language result. Do not fit against
 the impossible frozen final Copy ceiling. Admit at the matched initial parent,
