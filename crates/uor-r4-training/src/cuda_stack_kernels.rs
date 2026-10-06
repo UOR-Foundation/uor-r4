@@ -1800,6 +1800,7 @@ extern "C" __global__ void read_flash_bwd_query(
     }
 }
 
+#ifndef UOR_STORAGE_BF16
 // Per (16-key tile, index): dk = sum_{t >= j} g q (+ the key self term) and
 // dv = sum_{t >= j} p dO, over the combined key/value columns in chunks.
 extern "C" __global__ void read_flash_bwd_key(
@@ -1906,6 +1907,228 @@ extern "C" __global__ void read_flash_bwd_key(
         }
     }
 }
+#else
+// bf16 storage: the same dk/dv on tensor cores (bf16 16x16x16 WMMA, f32
+// accumulation). The block keeps its 16-key tile and walks query blocks of
+// FLASH_TCB_ROWS rows from t = 16 jtile. Warps 0-3 compute S = Q K^T and
+// warps 4-7 dP = dO V^T, one 16 x 16 tile each; the score transform, p and
+// ds = p (dP - D) then run per element exactly as the scalar kernel, from the
+// same row statistics. The weights P and IG (the inner-product gradient) are
+// split into bf16 hi + lo (about 16 mantissa bits, as read_flash_fwd), and
+// each warp accumulates FLASH_TCB_FRAGS 16-column slices of dv += P^T dO and
+// dk += IG^T Q (two MMAs per operand). Key and value columns are each padded
+// to a multiple of 16 so no slice straddles the two. The key self term is
+// summed in f64 per thread and reduced in a fixed order. No atomics.
+#define FLASH_TCB_ROWS 64
+#define FLASH_TCB_KCHUNK 64
+#define FLASH_TCB_XCOLS 128
+#define FLASH_TCB_FRAGS 2
+
+extern "C" __global__ void read_flash_bwd_key(
+    const act_t* query, const act_t* kv, const act_t* d_out, const float* aux,
+    const double* query_lift, const double* key_lift, const double* rowstat, act_t* dkv,
+    ReadDims d
+) {
+    using namespace nvcuda;
+    uint jtile = blockIdx.x;
+    uint index = blockIdx.z;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint head = index % d.heads;
+    uint lx = threadIdx.x;
+    uint ly = threadIdx.y;
+    uint tid = ly * 16 + lx;
+    uint warp = tid >> 5;
+    uint j = jtile * 16 + lx;
+    uint kp = (d.key + 15) / 16 * 16;
+    uint vp = (d.value + 15) / 16 * 16;
+    uint cols = kp + vp;
+    uint inner = max(d.key, d.value);
+    const act_t* base = kv + (u64)index * time * width;
+    // Staging, reused: Q | dO | K | V chunks; then the X = [Q | dO] columns;
+    // then the f32 dk/dv slices.
+    __shared__ __align__(32) act_t stage[2 * FLASH_TCB_ROWS * FLASH_TCB_KCHUNK + 32 * FLASH_TCB_KCHUNK];
+    __shared__ __align__(32) float sd_s[2 * FLASH_TCB_ROWS * 16];
+    __shared__ __align__(32) act_t w_s[4 * FLASH_TCB_ROWS * 16];
+    __shared__ double red[16][17];
+    __shared__ double self_k[16];
+    act_t* q_s = stage;
+    act_t* g_s = q_s + FLASH_TCB_ROWS * FLASH_TCB_KCHUNK;
+    act_t* k_s = g_s + FLASH_TCB_ROWS * FLASH_TCB_KCHUNK;
+    act_t* v_s = k_s + 16 * FLASH_TCB_KCHUNK;
+    float* out_s = reinterpret_cast<float*>(stage);
+    float* s_s = sd_s;
+    float* dp_s = sd_s + FLASH_TCB_ROWS * 16;
+    act_t* p_hi = w_s;
+    act_t* p_lo = p_hi + FLASH_TCB_ROWS * 16;
+    act_t* g_hi = p_lo + FLASH_TCB_ROWS * 16;
+    act_t* g_lo = g_hi + FLASH_TCB_ROWS * 16;
+    double beta = 0.0;
+    double offset = 0.0;
+    double lk = 0.0;
+    if (d.score != 0) {
+        u64 beta_offset = read_beta_offset(d);
+        beta = (double)aux[beta_offset + head];
+        offset = (double)aux[beta_offset + d.heads + head];
+        if (j < time) lk = key_lift[(u64)index * time + j];
+    }
+    for (uint c0 = 0; c0 < cols; c0 += FLASH_TCB_FRAGS * FLASH_TCB_XCOLS) {
+        wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_f[FLASH_TCB_FRAGS];
+        #pragma unroll
+        for (uint f = 0; f < FLASH_TCB_FRAGS; ++f) wmma::fill_fragment(acc_f[f], 0.0f);
+        double key_self = 0.0;
+        for (uint tq0 = jtile * 16; tq0 < time; tq0 += FLASH_TCB_ROWS) {
+            // S (warps 0-3) and dP (warps 4-7), one 16-row query tile each.
+            uint sub = warp & 3;
+            bool is_dp = warp >= 4;
+            bool sub_ok = tq0 + sub * 16 < time;
+            wmma::fragment<wmma::accumulator, 16, 16, 16, float> s_frag;
+            wmma::fill_fragment(s_frag, 0.0f);
+            for (uint i0 = 0; i0 < inner; i0 += FLASH_TCB_KCHUNK) {
+                uint kw = d.key > i0 ? min(d.key - i0, (uint)FLASH_TCB_KCHUNK) : 0;
+                uint vw = d.value > i0 ? min(d.value - i0, (uint)FLASH_TCB_KCHUNK) : 0;
+                for (uint e = tid; e < FLASH_TCB_ROWS * FLASH_TCB_KCHUNK; e += 256) {
+                    uint r = e / FLASH_TCB_KCHUNK;
+                    uint c = e % FLASH_TCB_KCHUNK;
+                    uint qt = tq0 + r;
+                    bool ok = qt < time;
+                    u64 qr = (u64)index * time + qt;
+                    q_s[e] = (ok && c < kw) ? query[qr * d.key + i0 + c] : (act_t)0;
+                    g_s[e] = (ok && c < vw) ? d_out[qr * d.value + i0 + c] : (act_t)0;
+                }
+                for (uint e = tid; e < 16 * FLASH_TCB_KCHUNK; e += 256) {
+                    uint r = e / FLASH_TCB_KCHUNK;
+                    uint c = e % FLASH_TCB_KCHUNK;
+                    uint kr = jtile * 16 + r;
+                    bool ok = kr < time;
+                    k_s[e] = (ok && c < kw) ? base[(u64)kr * width + i0 + c] : (act_t)0;
+                    v_s[e] = (ok && c < vw) ? base[(u64)kr * width + d.key + i0 + c] : (act_t)0;
+                }
+                __syncthreads();
+                uint cw = is_dp ? vw : kw;
+                if (sub_ok) {
+                    const __nv_bfloat16* a_b = reinterpret_cast<const __nv_bfloat16*>(
+                        (is_dp ? g_s : q_s) + sub * 16 * FLASH_TCB_KCHUNK);
+                    const __nv_bfloat16* b_b = reinterpret_cast<const __nv_bfloat16*>(is_dp ? v_s : k_s);
+                    for (uint s = 0; s * 16 < cw; ++s) {
+                        wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
+                        wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::col_major> b;
+                        wmma::load_matrix_sync(a, a_b + s * 16, FLASH_TCB_KCHUNK);
+                        wmma::load_matrix_sync(b, b_b + s * 16, FLASH_TCB_KCHUNK);
+                        wmma::mma_sync(s_frag, a, b, s_frag);
+                    }
+                }
+                __syncthreads();
+            }
+            wmma::store_matrix_sync((is_dp ? dp_s : s_s) + sub * 256, s_frag, 16, wmma::mem_row_major);
+            __syncthreads();
+            // Thread (ly, lx) owns key column lx and query rows ly + 16 i.
+            #pragma unroll
+            for (uint i = 0; i < FLASH_TCB_ROWS / 16; ++i) {
+                uint r = ly + 16 * i;
+                uint t = tq0 + r;
+                float ig = 0.0f;
+                float p = 0.0f;
+                if (t < time && j <= t) {
+                    u64 row = (u64)index * time + t;
+                    double lq = d.score != 0 ? query_lift[row] : 0.0;
+                    double e = 0.0;
+                    double dist = 0.0;
+                    float score = flash_score(d, aux, head, t, j, s_s[r * 16 + lx], lq, lk, beta, offset, &e, &dist);
+                    float maximum = (float)rowstat[row * 3];
+                    float inverse = 1.0f / (float)rowstat[row * 3 + 1];
+                    p = expf(score - maximum) * inverse;
+                    double ds = (double)p * ((double)dp_s[r * 16 + lx] - rowstat[row * 3 + 2]);
+                    double sq = 0.0;
+                    double sk = 0.0;
+                    ig = flash_inner_grad(d, ds, e, dist, beta, lq, lk, &sq, &sk);
+                    key_self += sk;
+                }
+                act_t ph = act_from_f(p);
+                act_t gh = act_from_f(ig);
+                p_hi[r * 16 + lx] = ph;
+                p_lo[r * 16 + lx] = act_from_f(p - act_to_f(ph));
+                g_hi[r * 16 + lx] = gh;
+                g_lo[r * 16 + lx] = act_from_f(ig - act_to_f(gh));
+            }
+            // dk/dv: for each fragment group stage X columns, then MMA.
+            #pragma unroll
+            for (uint f = 0; f < FLASH_TCB_FRAGS; ++f) {
+                uint x0 = c0 + f * FLASH_TCB_XCOLS;
+                __syncthreads();
+                for (uint e = tid; e < FLASH_TCB_ROWS * FLASH_TCB_XCOLS; e += 256) {
+                    uint r = e / FLASH_TCB_XCOLS;
+                    uint vc = x0 + e % FLASH_TCB_XCOLS;
+                    uint qt = tq0 + r;
+                    act_t x = (act_t)0;
+                    if (qt < time) {
+                        u64 qr = (u64)index * time + qt;
+                        if (vc < kp) {
+                            if (vc < d.key) x = query[qr * d.key + vc];
+                        } else if (vc - kp < d.value) {
+                            x = d_out[qr * d.value + (vc - kp)];
+                        }
+                    }
+                    stage[e] = x;
+                }
+                __syncthreads();
+                uint vc0 = x0 + warp * 16;
+                if (vc0 < cols) {
+                    bool key_slice = vc0 < kp;
+                    const __nv_bfloat16* hi_b = reinterpret_cast<const __nv_bfloat16*>(key_slice ? g_hi : p_hi);
+                    const __nv_bfloat16* lo_b = reinterpret_cast<const __nv_bfloat16*>(key_slice ? g_lo : p_lo);
+                    const __nv_bfloat16* x_b = reinterpret_cast<const __nv_bfloat16*>(stage);
+                    for (uint s = 0; s < FLASH_TCB_ROWS / 16 && tq0 + s * 16 < time; ++s) {
+                        wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::col_major> a;
+                        wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> b;
+                        wmma::load_matrix_sync(b, x_b + s * 16 * FLASH_TCB_XCOLS + warp * 16, FLASH_TCB_XCOLS);
+                        wmma::load_matrix_sync(a, hi_b + s * 256, 16);
+                        wmma::mma_sync(acc_f[f], a, b, acc_f[f]);
+                        wmma::load_matrix_sync(a, lo_b + s * 256, 16);
+                        wmma::mma_sync(acc_f[f], a, b, acc_f[f]);
+                    }
+                }
+            }
+            // Every S/dP/weight/X read completes before the next block writes.
+            __syncthreads();
+        }
+        red[ly][lx] = key_self;
+        __syncthreads();
+        if (ly == 0) {
+            double total = 0.0;
+            for (uint r = 0; r < 16; ++r) total += red[r][lx];
+            self_k[lx] = total;
+        }
+        #pragma unroll
+        for (uint f = 0; f < FLASH_TCB_FRAGS; ++f) {
+            wmma::store_matrix_sync(out_s + f * 16 * FLASH_TCB_XCOLS + warp * 16, acc_f[f],
+                                    FLASH_TCB_XCOLS, wmma::mem_row_major);
+        }
+        __syncthreads();
+        for (uint e = tid; e < FLASH_TCB_FRAGS * 16 * FLASH_TCB_XCOLS; e += 256) {
+            uint f = e / (16 * FLASH_TCB_XCOLS);
+            uint rem = e % (16 * FLASH_TCB_XCOLS);
+            uint kr = rem / FLASH_TCB_XCOLS;
+            uint vc = c0 + f * FLASH_TCB_XCOLS + rem % FLASH_TCB_XCOLS;
+            uint key_row = jtile * 16 + kr;
+            if (key_row >= time || vc >= cols) continue;
+            uint c;
+            if (vc < kp) {
+                if (vc >= d.key) continue;
+                c = vc;
+            } else {
+                if (vc - kp >= d.value) continue;
+                c = d.key + (vc - kp);
+            }
+            u64 kv_row = (u64)index * time + key_row;
+            float v = out_s[e];
+            if (c < d.key && d.score != 0) v += (float)self_k[kr] * act_to_f(kv[kv_row * width + c]);
+            dkv[kv_row * width + c] = act_from_f(v);
+        }
+        __syncthreads();
+    }
+}
+#endif
 
 // Ordered sums of the partials: ids [0, heads * time) the age table (when
 // on), then [heads * time, + 2 heads) beta and offset (Lorentz/L2).
