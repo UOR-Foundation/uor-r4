@@ -2,6 +2,16 @@
 
 ## Immediate geometric attention dependency — October 5 cue result
 
+The [four-arm sensitivity](https://github.com/UOR-Foundation/uor-r4/pull/1777)
+leaves unary completion74/512 unchanged and reduces joint/combined completion
+to70. Do not start a larger coadaptation fit from this result. Saved paths expose
+routing-phase coupling:3 losses keep the same source but cue shifts Copy across
+unchanged terminals. Next test shared geometric cue offsets for each source's
+typed Copy/Period/Stop actions, with legacy and alias-expansion controls, explicit
+bounds and provenance. Raw contrast cancellation is arithmetic; generated benefit
+and independent source-prior normalization are not established. Current state
+owns exact evidence and all negative arms.
+
 The frozen joint-cue transfer in [PR1775](https://github.com/UOR-Foundation/uor-r4/pull/1775)
 now leaves complete fresh replies20/128 unchanged (3 gains/3 losses), with first
 source68→67. Retain the development donor; do not repeat its fit or retire the

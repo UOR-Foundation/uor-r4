@@ -1,5 +1,59 @@
 # Current UOR-R4 research state
 
+## Unary/joint sensitivity and routing-phase coupling — October 6
+
+[PR1777](https://github.com/UOR-Foundation/uor-r4/pull/1777), numerical head
+`6a234ffbf9b614e07bd31e2a4a6ee800b3686951`, executes four fixed development-only
+arms at selected trial12. Separate identical anchored native losses supply
+unary/joint partial surrogate gradients; their scalar objectives are not summed.
+Each family independently proposes its largest legal quarter, lower-index ties.
+All arms start from the same donor, export/reload independently and retain every
+prior-arm comparison. No optimizer, selection, adoption or heldout predictions.
+
+| Development512 | Baseline | Unary935 −quarter | Joint2 −quarter | Both |
+| --- | ---: | ---: | ---: | ---: |
+| Complete replies |74|74|70|70|
+| First factual source |296|295|296|295|
+| Both paired sources /256 |83|83|86|86|
+| Both paired complete /256 |7|7|7|7|
+| Native CE |0.9544226152|0.9558346258|0.9513687195|0.9518923123|
+
+Unary gains1 complete reply/loses1; joint gains1/loses5; combined gains2/loses6.
+Completion second difference is zero at every row. Small CE interaction is
+only descriptive. Unary surrogate predicts a decrease but actual CE increases.
+This does not justify a larger coadaptation fit or retire either cue family.
+Independent source and outcome reviews verify packed deltas, frozen payloads,
+counts and baseline replay. Retain the74-reply donor and all negative arms.
+
+Saved first-divergence review finds3 same-source Copy/terminal crossings with
+unchanged endpoint scores,1 token-alias competition despite the correct raw
+Copy maximum, and1 initial source flip among the5 joint losses. Current cue
+changes Copy relevance without changing that source's Period/Stop relevance.
+A shared source cue across Copy/Period/Stop cancels in within-source raw score
+contrasts. Applying the observed cue perturbation to the corresponding terminal
+restores the3 original margins arithmetically; no generated counterfactual has
+been run. Next test an opt-in source-bound action layout, separating shared-cue
+propagation, all-source endpoint scoring and terminal alias expansion. Preserve
+legacy control. Flat global normalization still couples source mass to length,
+phase spectra and aliases; this is not a normalized independent source prior.
+A bounded layout and postprediction terminal provenance are required. Existing
+root record-credit learning has mixed retained results and is not rediscovered
+as a solved mechanism. DeepSeek retains softmax/tensorcore ownership.
+
+Checks: formatting,48 fitter tests and fitter/observer release builds PASS,
+212.328s CPU8/RSS4,761,841,664B. Actual probe72.872s CPU16,
+RSS3,260,166,144B, Linux x86_64 host54c9c82b187d, CUDA hidden, exit0/no stop.
+Executable SHA256
+`29218de82f3f5d1546328572ca9b60ec86aa8df9e27170fb56f73aeab9d4cc4a`;
+config SHA256
+`5cc2230a47c919ddb7f72cd45070dd1c1e3d8eecfa2c0bf21b1c716ecdbe8547`.
+Sealed report `/workspace/uor-r4/codex/cue-coadapt-probe/probe-1`, manifest
+`a1889ea4b5c37e126fa10beba870e61a65713e3c46c90493e6af83763f669464`.
+Complete costs remain in the existing continuation reservation. Necessary own
+storage ceiling10→12GiB was recorded before use,128MiB stop margin retained;
+observed final allocated workspace9,856,326,144B plus root1,480,916,992B before
+small final preservation. Stacked PR remains unmerged; no language qualification.
+
 ## Frozen joint-cue transfer — October 6 (candidate retained, no transfer gain)
 
 [PR1775](https://github.com/UOR-Foundation/uor-r4/pull/1775), numerical source
