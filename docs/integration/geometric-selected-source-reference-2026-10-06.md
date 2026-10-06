@@ -2,7 +2,9 @@
 
 The geometric potential attribution records every admitted occurrence and its
 raw score, but target-token membership alone cannot identify the correct record.
-The preserved 512-row prose panel lacks its historical answerability receipt.
+The portable 512-row prose bundle omitted its historical answerability receipt;
+the canonical network-volume copy retains it. That receipt was recovered and
+cross-checked against the fresh input-derived reference.
 The opt-in `--reference-only` mode in `geometric-bank-generate-panel` derives a
 fresh evaluation reference from the authenticated inputs instead of inventing
 historical provenance or supplying a selected record to inference.
@@ -37,11 +39,21 @@ same-value reassertion tests protect provenance only and do not establish that
 answer-token loss learns occurrence identity. Exposure remains unchanged and no
 held-out claim follows from deriving this receipt.
 
-Validation is pending at authoring. Focused checks cover answer-label steering,
-byte intervals, repeated-value physical occurrences, opaque events and legacy
-default preservation. The actual 512-row derivation must also pass before this
-reference can support post-forward source-score contrasts. Existing fit and
-four-control native predictions remain separate evidence.
+Actual validation passed on pod `5j908ccd585p4s` (Linux x86_64), at source
+`22d3e05e3766ac6fe966e237b26df63407019a99`: the release example tests,
+release build and fresh 512-row reference derivation all returned exit zero.
+The complete check took 363.895 seconds, used two CPU threads and no GPU,
+and reported peak child RSS of 3,324,200 KiB. Focused checks cover answer-label
+steering, byte intervals, repeated-value physical occurrences, opaque events
+and legacy default preservation. All 512 rows agreed with the recovered
+canonical receipt on the eight identity/target fields. Its SHA256 is
+`54489a02b0b49fe17efc99c514667bac553628b9dee8eea564a3c49a0bfbf594`.
+The checked executable SHA256 is
+`03987d98bf97cc9ac5f81c1986ee81d3bce9538353bc31a0da0dc47e3da2b8ab`.
+The fresh derived reference is independent evidence, not restoration of a
+missing historical seal. Existing fit and four-control native predictions
+remain separate evidence; these checks establish instrument consistency,
+not retrieval or language success.
 
 References [#820](https://github.com/UOR-Foundation/uor-r4/issues/820) and
 [PR #1792](https://github.com/UOR-Foundation/uor-r4/pull/1792).
