@@ -12,8 +12,10 @@ ordered pair fields and token biases. Scores use the exact historical H4 frame.
 Full120 conditional utilities carry local state/code credit, including table modes
 that the older four-coordinate projection erased. The factual score is the native
 integer score; offline Rust/CUDA supplies its differentiable adjoints. The earlier
-recurrence still uses its four-coordinate approximation, and factual source-route
-selection remains stopped. Those limitations have not been solved by this decoder.
+recurrence still uses its four-coordinate approximation. The current bank adapter
+scores every Copy occurrence; the stopped selected-winner route belongs to the
+older endpoint Period/Stop branch, which this vocabulary pool does not consume.
+Differentiating that older route would not repair this path's temporal credit.
 
 All legal fixed-tokenizer tokens are admitted by Generate, including EOS once.
 Copy occurrence aliases join Generate through one positive native table-weight

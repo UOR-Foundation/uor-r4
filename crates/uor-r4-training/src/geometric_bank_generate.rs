@@ -34,7 +34,7 @@ use crate::{
     invalid, Result,
 };
 
-pub const CREDIT_SCOPE:&str="same-actual-fullbank-context;final-retained-H4+full120-POSTSTATE-Generate;frozen-native-allsource-Copy-context/cue/prefix-credit;one-common-clipped-fullvocab-token-alias-marginal;no-old-terminals-or-bonus;factual-route-stopped;earlier-recurrence-ambient4-remains/1";
+pub const CREDIT_SCOPE:&str="same-actual-fullbank-context;final-retained-H4+full120-POSTSTATE-Generate;frozen-native-allsource-Copy-context/cue/prefix-credit;one-common-clipped-fullvocab-token-alias-marginal;no-old-terminals-or-bonus;all-Copy-occurrences-scored-without-selected-winner;earlier-recurrence-ambient4-remains/2";
 pub const NO_SOURCE_CREDIT_SCOPE:&str="actual-causal-history-context;final-retained-H4+full120-POSTSTATE-Generate;full-legal-vocabulary;zero-Copy-occurrences;no-fabricated-source-or-initial-token;earlier-recurrence-ambient4-remains/1";
 
 pub struct PreparedBankGenerate<'a, 'source> {
