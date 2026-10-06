@@ -13,21 +13,32 @@ improved from 8.116878 to 3.220526, and later Generate-only NLL worsened from
 8.375239 to 9.141763. The aggregate improvement therefore does not establish
 usable replies or learned correct-source selection.
 
-Checkpoint 128 changed 1,652 packed potential bytes, including 1,644 outside
-content-presence. This excludes a shared-cell-only parameter-change explanation,
-but functional source discrimination remains unmeasured. Four-control attempt 6
-hit its 512-MiB report cap after 163 rows; its failed sealed output is preserved.
-An independently reviewed CLI-only report-cap repair at `638b8f12` permits a
-fresh 3-GiB/1,500-second attempt without changing the control computation.
-Actual build and full attribution are pending; no retry result is claimed.
+Checkpoint 128 changed 1,652 packed potential bytes. The completed four-control
+study at `638b8f12` shows that the shared presence shift alone can produce
+Copy-only replies, but restoring the original shared cell does not repair the
+learned nonshared potential. All four arms remain 0/512 complete. Physical-source
+query contrasts are mixed: both expected-source mean preferences are correct in
+100/512 original contrasts versus 86/512 learned contrasts. This does not
+establish improved retrieval. The earlier report-cap failure is preserved as an
+instrument failure; fresh attempt 7 completed all 512 rows after the CLI-only
+cap repair.
 
-The next learning candidate is an opt-in balance of the existing native token
-loss across entry, later Copy-covered, and later Generate-only positions.
-Adversarial source/gradient review and actual controls precede adoption; no new
-training run is authorized by this note alone. See the
-[saved reply diagnosis](../research/joint-potential-reply-diagnosis-2026-10-06.md)
-for identities, phase counts, interpretation limits and falsifiers. These are
-one-seed construction results, not held-out conversation or general prose.
+The next isolated learning intervention balances the same native token loss
+across entry, later Copy-covered, and later Generate-only positions. At
+`b2dfe4df`, both focused weighting tests, the release CUDA build, and both
+zero-update admissions passed. Native hard-pool parity passed independently;
+all initial Source, Generate-source, native, cue and prefix files are byte
+identical to the original fit. The 128-update matched fit will assess the final
+checkpoint as well as the existing selected checkpoint. One seed diagnoses the
+objective intervention; it does not qualify transfer or chat.
+
+The subsequent architectural candidate is contextual JEPA learning over a
+retained signed geometric state, with SpiralCore anchor-frame transport tested
+separately. It reuses the full-120 state-credit carrier and exact H4 tables,
+retains the token/EOS objective, and excludes future target information from
+runtime. Neither contextual JEPA nor the retained-frame operator is implemented
+or measured yet. See the [saved reply diagnosis](../research/joint-potential-reply-diagnosis-2026-10-06.md)
+and [SpiralCore assessment](../research/spiralcore-attention-revisit-2026-10-06.md).
 
 ## Joint geometric scorer learning integration — October 6
 

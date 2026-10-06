@@ -128,3 +128,31 @@ candidates, task, loss and budget; current signed-relative-H4 scorer as control;
 source swaps, role reversals, distractors and unseen pairings as discriminators.
 Measure selected occurrence and actual emitted replies separately. A frame
 that merely lowers all Copy scores is not evidence of geometric attention.
+
+
+## Owner-approved continuation: contextual prediction and retained frames
+
+The October 6 continuation keeps this architectural candidate active while
+first isolating the demonstrated token-objective imbalance. The original joint
+fit improved source-covered teacher-forced tokens while every actual reply
+failed at its first token. That defect is being tested with phase-balanced
+weights on the unchanged native probability loss, rather than combining it
+with a new representation.
+
+Next, reuse the existing full-120 context-state credit for a contextual JEPA
+auxiliary: a causal student prefix predicts a withheld-span representation
+computed offline by a declared frozen native target encoder. Retain the native
+token/EOS objective. A frozen target does not guarantee informative geometry;
+measure target occupancy and distinctions for order, names, versions and
+negation, with shuffled-target and token-loss-only controls. Future span data
+must never enter the student causal forward or runtime candidate admission.
+
+Test SpiralCore's anchor-frame two-sided transport separately against the
+existing signed-relative-H4 operator. Preserve the frame and fiber/orientation;
+a shared rotation is an isometry and cannot by itself create semantic
+separation. Require a causally available frame or learned transport to expose
+an actual missing distinction. Use exact H4 composition/inverse tables at
+serving, not continuous Wigner matrices or floating-point harmonic evaluation.
+Any training-only predictor is omitted from the serving artifact; any predictor
+needed at runtime must satisfy D11 before adoption. This is a proposed learning
+and operator experiment, not a completed JEPA language model.
