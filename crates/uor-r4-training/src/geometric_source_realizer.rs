@@ -2556,6 +2556,25 @@ fn record_max_score_loss(
     Ok((loss, expected, selected, margin))
 }
 
+/// Target-free raw all-source Copy logits and their SAME full causal state
+/// graph. Shape [candidate]; native final scores remain Q24 in trace. Components
+/// are isolated score adjoints, not independently normalized losses to sum.
+pub struct ComposedCopyBankOutput {
+    pub trace: uor_r4_integer::geometric_source_realizer::PrefixBankRealizerTrace,
+    pub copy_raw: Tensor,
+    pub context: crate::geometric_context::ContextQ4Output,
+    pub state_credit_components: BTreeMap<&'static str, Tensor>,
+}
+struct ComposedCopyAssembly {
+    context: crate::geometric_context::ContextQ4Output,
+    sources: Vec<crate::geometric_context::ContextQ4Output>,
+    response: Option<crate::geometric_context::ContextQ4Output>,
+    contextual_copy: Tensor,
+    cue_copy: Tensor,
+    prefix_copy: Tensor,
+    copy_raw: Tensor,
+}
+
 pub struct ComposedStateBankRealizerLoss {
     pub loss: Tensor,
     pub trace: uor_r4_integer::geometric_source_realizer::SourceEndBankRealizerTrace,
@@ -2946,51 +2965,19 @@ impl PreparedSourceRealizer<'_> {
     /// Coefficients/algebra are frozen. Actual hard source routing is stopped;
     /// every consumed continuous state packet is replayed from its authentic
     /// token/reset input before fixed-operator adjoints enter the alias loss.
-    pub fn loss_bank_composed_state(
+    fn assemble_bank_composed_copy(
         &self,
         segments: &[SourceBankSegment<'_>],
         query: &[u32],
         actual_prefix: &[u32],
-        target: u32,
         cue: &NativeCueCarrier<'_>,
         prefix: &NativePrefixTransport<'_>,
-        end: &NativeSourceEndTransport<'_>,
-    ) -> Result<ComposedStateBankRealizerLoss> {
-        let device = self
-            .source
-            .consumer
-            .context
-            .parameters()
-            .values()
-            .next()
-            .ok_or_else(|| invalid("composed context parameters absent"))?
-            .device();
-        let trace = self.native.read_bank_with_source_end_transport(
-            segments,
-            query,
-            actual_prefix,
-            cue,
-            prefix,
-            end,
-        )?;
-        if target as usize >= self.source.binding.vocab_size() {
-            return Err(invalid("composed target out of vocabulary"));
-        }
-        let actions = &trace.actions;
-        let mass = actions
-            .token_masses
-            .iter()
-            .find(|m| m.token_id == target)
-            .map_or(0, |m| m.weight_q31);
-        if mass == 0 || actions.total_weight_q31 == 0 || mass > actions.total_weight_q31 {
-            return Err(invalid(
-                "composed native target zero/invalid support; no floor",
-            ));
-        }
-        let probability = mass as f64 / actions.total_weight_q31 as f64;
-        let bank = &trace.prefix_bank.cue_bank.bank;
-        let carrier = &trace.prefix_bank.cue_bank.carrier;
-        let transport = &trace.prefix_bank.prefix;
+        trace: &uor_r4_integer::geometric_source_realizer::PrefixBankRealizerTrace,
+    ) -> Result<ComposedCopyAssembly> {
+        let device = self.source.consumer.context.device();
+        let bank = &trace.cue_bank.bank;
+        let carrier = &trace.cue_bank.carrier;
+        let transport = &trace.prefix;
         let ids = &bank.context.tokens;
         let time = ids.len();
         let c = self.source.consumer.config();
@@ -2999,7 +2986,6 @@ impl PreparedSourceRealizer<'_> {
         if time == 0
             || query.is_empty()
             || count == 0
-            || actions.actions.len() != count + 2
             || bank.heads.len() != c.heads
             || carrier.query.token_ids != query
             || transport.response.token_ids != actual_prefix
@@ -3103,6 +3089,168 @@ impl PreparedSourceRealizer<'_> {
         if prefix_credit.scores_q24 != transport.copy_q24 {
             return Err(invalid("composed prefix hard scores differ"));
         }
+        let mut contextual_heads = Vec::with_capacity(c.heads);
+        let mut copy_heads = Vec::with_capacity(c.heads);
+        for h in 0..c.heads {
+            let at = h * time + time - 1;
+            if bank.heads[h].scores_q24.len() != count {
+                return Err(invalid("composed Copy head shape differs"));
+            }
+            for (j, &position) in positions.iter().enumerate() {
+                let score = copy.scores_q24[at * time + position as usize]
+                    .checked_add(cue_credit.scores_q24[h][j])
+                    .and_then(|x| x.checked_add(prefix_credit.scores_q24[h][j]))
+                    .ok_or_else(|| invalid("composed Copy score overflow"))?;
+                if score != bank.heads[h].scores_q24[j] {
+                    return Err(invalid("composed complete native Copy scores differ"));
+                }
+            }
+            let contextual = copy.scores.i((0, h, time - 1))?.index_select(&index, 0)?;
+            let raw = (&contextual + cue_credit.scores.i(h)?)?;
+            copy_heads.push((&raw + prefix_credit.scores.i(h)?)?);
+            contextual_heads.push(contextual);
+        }
+        Ok(ComposedCopyAssembly {
+            context,
+            sources,
+            response,
+            contextual_copy: Tensor::stack(&contextual_heads, 0)?,
+            cue_copy: cue_credit.scores,
+            prefix_copy: prefix_credit.scores,
+            copy_raw: Tensor::stack(&copy_heads, 0)?.sum(0)?,
+        })
+    }
+
+    /// Target-free all-source Copy assembly for a full vocabulary action pool.
+    /// The returned context is the exact same causal encode consumed by Copy.
+    /// Query and own-prefix are state inputs, never admitted source candidates.
+    /// Native legacy reductions retained in the trace are diagnostic overhead;
+    /// their Period/Stop masses do not enter copy_raw or its three adjoints.
+    /// Empty candidate banks retain their existing rejection: ordinary no-source
+    /// continuation uses context_output with its explicit causal token sequence.
+    pub fn forward_bank_composed_copy(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+    ) -> Result<ComposedCopyBankOutput> {
+        let trace = self.native.read_bank_with_prefix_transport(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+        )?;
+        let assembled =
+            self.assemble_bank_composed_copy(segments, query, actual_prefix, cue, prefix, &trace)?;
+        // Bind the factual forward to the native integer sum once. Summing
+        // separately converted components can round differently, while the
+        // vocabulary loss requires exact raw-score parity.
+        let hard_copy: Vec<f32> = (0..trace.cue_bank.bank.candidates.len())
+            .map(|j| {
+                let sum = trace
+                    .cue_bank
+                    .bank
+                    .heads
+                    .iter()
+                    .try_fold(0i64, |sum, head| {
+                        sum.checked_add(head.scores_q24[j])
+                            .ok_or_else(|| invalid("composed summed Copy score overflow"))
+                    })?;
+                Ok((sum as f64 / (1u64 << 24) as f64) as f32)
+            })
+            .collect::<Result<_>>()?;
+        let hard_copy = Tensor::from_vec(
+            hard_copy,
+            assembled.copy_raw.shape(),
+            assembled.copy_raw.device(),
+        )?;
+        let copy_raw = (&hard_copy + (&assembled.copy_raw - assembled.copy_raw.detach())?)?;
+        let state_credit_components = [
+            ("contextual_copy", assembled.contextual_copy.sum(0)?),
+            ("cue_copy", assembled.cue_copy.sum(0)?),
+            ("prefix_copy", assembled.prefix_copy.sum(0)?),
+        ]
+        .into_iter()
+        .collect();
+        Ok(ComposedCopyBankOutput {
+            trace,
+            copy_raw,
+            context: assembled.context,
+            state_credit_components,
+        })
+    }
+
+    pub fn loss_bank_composed_state(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        target: u32,
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        end: &NativeSourceEndTransport<'_>,
+    ) -> Result<ComposedStateBankRealizerLoss> {
+        let device = self
+            .source
+            .consumer
+            .context
+            .parameters()
+            .values()
+            .next()
+            .ok_or_else(|| invalid("composed context parameters absent"))?
+            .device();
+        let trace = self.native.read_bank_with_source_end_transport(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            end,
+        )?;
+        if target as usize >= self.source.binding.vocab_size() {
+            return Err(invalid("composed target out of vocabulary"));
+        }
+        let actions = &trace.actions;
+        let mass = actions
+            .token_masses
+            .iter()
+            .find(|m| m.token_id == target)
+            .map_or(0, |m| m.weight_q31);
+        if mass == 0 || actions.total_weight_q31 == 0 || mass > actions.total_weight_q31 {
+            return Err(invalid(
+                "composed native target zero/invalid support; no floor",
+            ));
+        }
+        let probability = mass as f64 / actions.total_weight_q31 as f64;
+        let bank = &trace.prefix_bank.cue_bank.bank;
+        if actions.actions.len() != bank.candidates.len() + 2 {
+            return Err(invalid("composed native action shape differs"));
+        }
+        let assembled = self.assemble_bank_composed_copy(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            &trace.prefix_bank,
+        )?;
+        let ComposedCopyAssembly {
+            context,
+            sources,
+            response,
+            contextual_copy,
+            cue_copy,
+            prefix_copy,
+            ..
+        } = assembled;
+        let ids = &bank.context.tokens;
+        let time = ids.len();
+        let c = self.source.consumer.config();
+        let width = c.heads * c.lanes_per_head;
+        let count = bank.candidates.len();
         let endpoint_credit =
             frozen_source_end_state_forward(end, &trace.source_end, &sources, response.as_ref())?;
         if endpoint_credit.period_q24 != trace.source_end.period_q24
@@ -3123,16 +3271,8 @@ impl PreparedSourceRealizer<'_> {
             if bank.heads[h].scores_q24.len() != count || actions.head_scores.len() != c.heads {
                 return Err(invalid("composed final head shape differs"));
             }
-            for (j, &position) in positions.iter().enumerate() {
-                let score = copy.scores_q24[at * time + position as usize]
-                    .checked_add(cue_credit.scores_q24[h][j])
-                    .and_then(|x| x.checked_add(prefix_credit.scores_q24[h][j]))
-                    .ok_or_else(|| invalid("composed Copy score overflow"))?;
-                if score != bank.heads[h].scores_q24[j]
-                    || score != actions.head_scores[h].copy_q24[j]
-                {
-                    return Err(invalid("composed complete native Copy scores differ"));
-                }
+            if actions.head_scores[h].copy_q24 != bank.heads[h].scores_q24 {
+                return Err(invalid("composed complete native Copy scores differ"));
             }
             if period_credit.scores_q24[at] != bank.period_q24[h]
                 || stop_credit.scores_q24[at] != bank.heads[h].no_read_q24
@@ -3145,9 +3285,8 @@ impl PreparedSourceRealizer<'_> {
                     "composed complete native Period/Stop scores differ",
                 ));
             }
-            let copies = (copy.scores.i((0, h, time - 1))?.index_select(&index, 0)?
-                + cue_credit.scores.i(h)?)?;
-            let copies = (&copies + prefix_credit.scores.i(h)?)?;
+            let copies = (contextual_copy.i(h)? + cue_copy.i(h)?)?;
+            let copies = (&copies + prefix_copy.i(h)?)?;
             let period =
                 (period_credit.scores.i((0, h, time - 1))? + endpoint_credit.period.i(h)?)?;
             let stop = (stop_credit.scores.i((0, h, time - 1))? + endpoint_credit.stop.i(h)?)?;
@@ -3156,22 +3295,15 @@ impl PreparedSourceRealizer<'_> {
             for (name, x) in [
                 (
                     "contextual_copy",
-                    Tensor::cat(
-                        &[
-                            copy.scores.i((0, h, time - 1))?.index_select(&index, 0)?,
-                            zero.clone(),
-                            zero.clone(),
-                        ],
-                        0,
-                    )?,
+                    Tensor::cat(&[contextual_copy.i(h)?, zero.clone(), zero.clone()], 0)?,
                 ),
                 (
                     "cue_copy",
-                    Tensor::cat(&[cue_credit.scores.i(h)?, zero.clone(), zero.clone()], 0)?,
+                    Tensor::cat(&[cue_copy.i(h)?, zero.clone(), zero.clone()], 0)?,
                 ),
                 (
                     "prefix_copy",
-                    Tensor::cat(&[prefix_credit.scores.i(h)?, zero.clone(), zero.clone()], 0)?,
+                    Tensor::cat(&[prefix_copy.i(h)?, zero.clone(), zero.clone()], 0)?,
                 ),
                 (
                     "source_end_period",
@@ -7048,6 +7180,31 @@ mod tests {
                 &prefix,
                 &end,
             )?;
+            let copy_only =
+                prepared.forward_bank_composed_copy(&segments, &[5], own, &cue, &prefix)?;
+            assert_eq!(copy_only.trace, factual.prefix_bank);
+            assert!(context_replay_matches(
+                &factual.prefix_bank.cue_bank.bank.context,
+                &copy_only.context.trace
+            ));
+            let count = factual.prefix_bank.cue_bank.bank.candidates.len();
+            assert_eq!(copy_only.copy_raw.dims(), [count]);
+            let raw = copy_only.copy_raw.to_vec1::<f32>()?;
+            for (j, &score) in raw.iter().enumerate() {
+                let expected = factual
+                    .prefix_bank
+                    .cue_bank
+                    .bank
+                    .heads
+                    .iter()
+                    .map(|h| h.scores_q24[j])
+                    .sum::<i64>();
+                assert_eq!(score, (expected as f64 / 16_777_216.) as f32);
+            }
+            assert_eq!(copy_only.state_credit_components.len(), 3);
+            assert!(prepared
+                .forward_bank_composed_copy(&segments, &[], own, &cue, &prefix)
+                .is_err());
             for target in [4, 3, 1] {
                 let out = prepared.loss_bank_composed_state(
                     &segments,
@@ -7059,6 +7216,16 @@ mod tests {
                     &end,
                 )?;
                 assert_eq!(out.trace, factual);
+                for (name, component) in &copy_only.state_credit_components {
+                    assert_eq!(
+                        component.to_vec1::<f32>()?,
+                        out.state_credit_components
+                            .get(name)
+                            .ok_or_else(|| invalid("legacy Copy component absent"))?
+                            .narrow(0, 0, count)?
+                            .to_vec1::<f32>()?
+                    );
+                }
                 assert!(
                     (f64::from(out.loss.to_scalar::<f32>()?) + out.target_probability.ln()).abs()
                         < 1e-5
