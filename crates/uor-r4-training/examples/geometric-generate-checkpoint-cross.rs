@@ -1951,6 +1951,60 @@ mod source_contrast {
         report["direction_scope"]=json!("a positive difference of differences does not require either absolute source preference to select its expected Source");
         Ok(report)
     }
+    fn query_group(bank: &str, group: &[QueryRow]) -> Result<(Value, Vec<Value>)> {
+        let first = group.first().ok_or_else(|| bad("empty query bank group"))?;
+        if sha256_bytes(&first.segments) != bank
+            || group.iter().any(|r| r.segments != first.segments)
+        {
+            return Err(bad("query bank digest/exact typed segments differ"));
+        }
+        let mut pairs = Vec::new();
+        let mut same_query = 0usize;
+        let mut same_source = 0usize;
+        let mut same_role = 0usize;
+        let mut unobservable = 0usize;
+        let mut total = 0usize;
+        let mut uses = std::collections::BTreeMap::<String, usize>::new();
+        for row in group {
+            uses.insert(row.id.clone(), 0);
+        }
+        for i in 0..group.len() {
+            for j in i + 1..group.len() {
+                total += 1;
+                let (a, b) = (&group[i], &group[j]);
+                if a.query == b.query {
+                    same_query += 1;
+                    continue;
+                }
+                if a.selected == b.selected {
+                    same_source += 1;
+                    continue;
+                }
+                if a.role == b.role {
+                    same_role += 1;
+                    continue;
+                }
+                let mut pair = query_pair(a, b)?;
+                pair["bank_sha256"] = json!(bank);
+                if pair["status"] == "eligible" {
+                    *uses
+                        .get_mut(&a.id)
+                        .ok_or_else(|| bad("bank row use absent"))? += 1;
+                    *uses
+                        .get_mut(&b.id)
+                        .ok_or_else(|| bad("bank row use absent"))? += 1;
+                } else {
+                    unobservable += 1;
+                }
+                pairs.push(pair);
+            }
+        }
+        let eligible = pairs.iter().filter(|p| p["status"] == "eligible").count();
+        Ok((
+            json!({"bank_sha256":bank,"row_count":group.len(),"rows":group.iter().map(|r|&r.id).collect::<Vec<_>>(),"total_unordered_pair_count":total,"eligible_pair_count":eligible,"skipped_same_query_count":same_query,"skipped_same_physical_source_count":same_source,"skipped_same_role_count":same_role,"unobservable_endpoint_pair_count":unobservable,"eligible_contrast_uses_per_row":uses,"skip_count_scope":"mutually exclusive: same query, then same physical source, then same role","unit":"one bank; multiple contrasts share rows and are not independent samples"}),
+            pairs,
+        ))
+    }
     pub fn run(attribution: &Path, reference: &Path, inputs: &Path, out: &Path) -> Result<()> {
         let start = Instant::now();
         for root in [attribution, reference, inputs] {
@@ -2172,22 +2226,15 @@ mod source_contrast {
                 });
         }
         let mut query_pairs = Vec::new();
+        let mut bank_summaries = Vec::new();
         for (bank, group) in query_groups {
             deadline(start)?;
-            let pair = if group.len() != 2 {
-                json!({"status":"bank_does_not_have_exactly_two_rows","bank_sha256":bank,"rows":group.iter().map(|r|&r.id).collect::<Vec<_>>()})
-            } else if group[0].query == group[1].query
-                || group[0].selected == group[1].selected
-                || group[0].role == group[1].role
-            {
-                json!({"status":"no_opposite_query_reference_pair","bank_sha256":bank,"rows":group.iter().map(|r|&r.id).collect::<Vec<_>>()})
-            } else {
-                query_pair(&group[0], &group[1])?
-            };
-            query_pairs.push(pair);
+            let (summary, pairs) = query_group(&bank, &group)?;
+            bank_summaries.push(summary);
+            query_pairs.extend(pairs);
         }
         let query_bytes = serde_json::to_vec_pretty(
-            &json!({"schema":"uor-r4.geometric-source-query-contrast/1","numerator_encoding":"signed exact i128 decimal strings; all ratios share count_A*count_B denominator; no floating normalization","prefix":"empty first canonical prefix only","ownprefix":"NOT_MEASURED","pairs":query_pairs}),
+            &json!({"schema":"uor-r4.geometric-source-query-contrast/1","numerator_encoding":"signed exact i128 decimal strings; all ratios share count_A*count_B denominator; no floating normalization","prefix":"empty first canonical prefix only","ownprefix":"NOT_MEASURED","analysis_unit":"bank; all unordered distinct-query opposite-Source/role pairs enumerated; contrasts sharing rows are not independent samples","bank_group_count":bank_summaries.len(),"row_count":cases.len(),"eligible_pair_count":query_pairs.iter().filter(|p|p["status"]=="eligible").count(),"banks":bank_summaries,"pairs":query_pairs}),
         )?;
         bytes_written = bytes_written
             .checked_add(query_bytes.len())
@@ -2202,7 +2249,7 @@ mod source_contrast {
         fs::write(
             out.join("report.json"),
             serde_json::to_vec_pretty(
-                &json!({"schema":"uor-r4.geometric-source-contrast/1","status":"COMPLETED","model_reruns":0,"normalization_reconstructed":false,"source_reference_runtime":false,"scope":"exact literal byte-aligned selected physical Source versus other physical Source occurrences with identical token ID; fixed candidate pairs across four saved controls; complementary empty-prefix opposite-query source mean differences; raw score and component margins only","control_scope":"P1 minus P0 is the potential coefficient effect conditional on fixed final context and Generate, not whole joint learning; shared-cell raw margins must be invariant; clipping/unsaturation effects are not source preference","limitations":"no same-token distractor is ineligible, not a success; answer loss cannot identify equal-value source provenance; no same-relation version or generalization claim; source means are not next-token precision or complete attention; no diverged-prefix attribution","query_pair_file":"query-pair-contrasts.json","query_pair_file_sha256":sha256_bytes(&query_bytes),"query_pair_eligible":query_pairs.iter().filter(|p|p["status"]=="eligible").count(),"query_pair_groups":query_pairs.len(),"attribution_report_sha256":sha256_bytes(&fs::read(attribution.join("report.json"))?),"attribution_manifest_sha256":sha256_bytes(&fs::read(attribution.join("manifest.json"))?),"reference_sha256":sha256_bytes(&fs::read(reference.join("answerability-reference.json"))?),"reference_manifest_sha256":sha256_bytes(&fs::read(reference.join("manifest.json"))?),"inputs_manifest_sha256":sha256_bytes(&fs::read(inputs.join("manifest.json"))?),"input_bindings":refs["input_bindings"],"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"rows":row_refs,"eligibility_summary":outputs,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+                &json!({"schema":"uor-r4.geometric-source-contrast/1","status":"COMPLETED","model_reruns":0,"normalization_reconstructed":false,"source_reference_runtime":false,"scope":"exact literal byte-aligned selected physical Source versus other physical Source occurrences with identical token ID; fixed candidate pairs across four saved controls; complementary empty-prefix opposite-query source mean differences; raw score and component margins only","control_scope":"P1 minus P0 is the potential coefficient effect conditional on fixed final context and Generate, not whole joint learning; shared-cell raw margins must be invariant; clipping/unsaturation effects are not source preference","limitations":"no same-token distractor is ineligible, not a success; answer loss cannot identify equal-value source provenance; no same-relation version or generalization claim; source means are not next-token precision or complete attention; no diverged-prefix attribution","query_pair_file":"query-pair-contrasts.json","query_pair_file_sha256":sha256_bytes(&query_bytes),"query_pair_eligible":query_pairs.iter().filter(|p|p["status"]=="eligible").count(),"query_pair_groups":bank_summaries.len(),"attribution_report_sha256":sha256_bytes(&fs::read(attribution.join("report.json"))?),"attribution_manifest_sha256":sha256_bytes(&fs::read(attribution.join("manifest.json"))?),"reference_sha256":sha256_bytes(&fs::read(reference.join("answerability-reference.json"))?),"reference_manifest_sha256":sha256_bytes(&fs::read(reference.join("manifest.json"))?),"inputs_manifest_sha256":sha256_bytes(&fs::read(inputs.join("manifest.json"))?),"input_bindings":refs["input_bindings"],"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"rows":row_refs,"eligibility_summary":outputs,"elapsed_seconds":start.elapsed().as_secs_f64()}),
             )?,
         )?;
         Ok(())
@@ -2314,6 +2361,32 @@ mod source_contrast {
                 source_mean_numerator(&large, &[0, 1], &[2], "total")?,
                 4 * i128::from(i64::MAX)
             );
+            Ok(())
+        }
+        #[test]
+        fn four_query_bank_enumerates_four_opposite_pairs_and_two_same_source() -> Result<()> {
+            let (_, _, p) = fixture()?;
+            let segments = vec![1];
+            let mut group = Vec::new();
+            for (i, source) in [0, 1, 0, 1].into_iter().enumerate() {
+                group.push(QueryRow {
+                    id: format!("row{i}"),
+                    segments: segments.clone(),
+                    query: vec![i as u32 + 1],
+                    selected: source,
+                    role: if source == 0 { "job" } else { "where" }.into(),
+                    packets: vec![p.clone(); 4],
+                });
+            }
+            let (summary, pairs) = query_group(&sha256_bytes(&segments), &group)?;
+            assert_eq!(summary["total_unordered_pair_count"], 6);
+            assert_eq!(summary["eligible_pair_count"], 4);
+            assert_eq!(summary["skipped_same_physical_source_count"], 2);
+            assert_eq!(summary["skipped_same_query_count"], 0);
+            assert_eq!(pairs.len(), 4);
+            for row in group {
+                assert_eq!(summary["eligible_contrast_uses_per_row"][row.id], 2);
+            }
             Ok(())
         }
         #[test]
