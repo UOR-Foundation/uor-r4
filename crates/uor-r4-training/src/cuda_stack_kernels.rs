@@ -1627,6 +1627,7 @@ __device__ __forceinline__ float flash_inner_grad(
     return 0.0f;
 }
 
+#ifndef UOR_STORAGE_BF16
 // Per (16-row query tile, index). rowstat is [rows, 3] = (max, total, D);
 // age_part is [index, tiles, time] (entry delta written by tile tt for
 // delta <= 16 tt + 15).
@@ -1799,6 +1800,7 @@ extern "C" __global__ void read_flash_bwd_query(
         __syncthreads();
     }
 }
+#endif
 
 #ifndef UOR_STORAGE_BF16
 // Per (16-key tile, index): dk = sum_{t >= j} g q (+ the key self term) and
@@ -2124,6 +2126,290 @@ extern "C" __global__ void read_flash_bwd_key(
             float v = out_s[e];
             if (c < d.key && d.score != 0) v += (float)self_k[kr] * act_to_f(kv[kv_row * width + c]);
             dkv[kv_row * width + c] = act_from_f(v);
+        }
+        __syncthreads();
+    }
+}
+
+// S = Q K^T (warps 0-3) and dP = dO V^T (warps 4-7) of the 16-row query tile
+// at tq against the `ntile` 16-key tiles from jb, into s_s / dp_s laid out
+// [tile][16 rows][16 keys]. The same staging and k-step order as
+// read_flash_bwd_key, so both kernels see the same f32 scores.
+__device__ __forceinline__ void flash_tcq_scores(
+    const act_t* query, const act_t* base, const act_t* d_out, ReadDims d, uint index,
+    uint tq, uint jb, uint ntile, act_t* stage, float* s_s, float* dp_s, uint tid
+) {
+    using namespace nvcuda;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint inner = max(d.key, d.value);
+    uint warp = tid >> 5;
+    uint sub = warp & 3;
+    bool is_dp = warp >= 4;
+    act_t* q_s = stage;
+    act_t* g_s = q_s + 16 * FLASH_TCB_KCHUNK;
+    act_t* k_s = g_s + 16 * FLASH_TCB_KCHUNK;
+    act_t* v_s = k_s + FLASH_TCB_ROWS * FLASH_TCB_KCHUNK;
+    wmma::fragment<wmma::accumulator, 16, 16, 16, float> s_frag;
+    wmma::fill_fragment(s_frag, 0.0f);
+    for (uint i0 = 0; i0 < inner; i0 += FLASH_TCB_KCHUNK) {
+        uint kw = d.key > i0 ? min(d.key - i0, (uint)FLASH_TCB_KCHUNK) : 0;
+        uint vw = d.value > i0 ? min(d.value - i0, (uint)FLASH_TCB_KCHUNK) : 0;
+        for (uint e = tid; e < 16 * FLASH_TCB_KCHUNK; e += 256) {
+            uint r = e / FLASH_TCB_KCHUNK;
+            uint c = e % FLASH_TCB_KCHUNK;
+            uint qt = tq + r;
+            bool ok = qt < time;
+            u64 qr = (u64)index * time + qt;
+            q_s[e] = (ok && c < kw) ? query[qr * d.key + i0 + c] : (act_t)0;
+            g_s[e] = (ok && c < vw) ? d_out[qr * d.value + i0 + c] : (act_t)0;
+        }
+        for (uint e = tid; e < FLASH_TCB_ROWS * FLASH_TCB_KCHUNK; e += 256) {
+            uint r = e / FLASH_TCB_KCHUNK;
+            uint c = e % FLASH_TCB_KCHUNK;
+            uint kr = jb + r;
+            bool ok = kr < time && r < ntile * 16;
+            k_s[e] = (ok && c < kw) ? base[(u64)kr * width + i0 + c] : (act_t)0;
+            v_s[e] = (ok && c < vw) ? base[(u64)kr * width + d.key + i0 + c] : (act_t)0;
+        }
+        __syncthreads();
+        uint cw = is_dp ? vw : kw;
+        if (sub < ntile) {
+            const __nv_bfloat16* a_b = reinterpret_cast<const __nv_bfloat16*>(is_dp ? g_s : q_s);
+            const __nv_bfloat16* b_b = reinterpret_cast<const __nv_bfloat16*>(
+                (is_dp ? v_s : k_s) + sub * 16 * FLASH_TCB_KCHUNK);
+            for (uint s = 0; s * 16 < cw; ++s) {
+                wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
+                wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::col_major> b;
+                wmma::load_matrix_sync(a, a_b + s * 16, FLASH_TCB_KCHUNK);
+                wmma::load_matrix_sync(b, b_b + s * 16, FLASH_TCB_KCHUNK);
+                wmma::mma_sync(s_frag, a, b, s_frag);
+            }
+        }
+        __syncthreads();
+    }
+    wmma::store_matrix_sync((is_dp ? dp_s : s_s) + sub * 256, s_frag, 16, wmma::mem_row_major);
+    __syncthreads();
+}
+
+// bf16 storage: read_flash_bwd_query on tensor cores. The block keeps its
+// 16-row query tile and walks key blocks of FLASH_TCB_ROWS keys (four 16-key
+// tiles, j <= t only) through flash_tcq_scores. Thread (ly, lx) owns query
+// row ly and key lx of each tile, so the online max/total, the f64 D, the
+// NoRead gradient, ds, the query self term, the beta/offset row partials and
+// the age diagonals follow the scalar kernel tile by tile in the same order.
+// dq += IG K runs on tensor cores with IG split into bf16 hi + lo; each warp
+// owns FLASH_TCB_FRAGS 16-column slices of the key columns. No atomics.
+extern "C" __global__ void read_flash_bwd_query(
+    const act_t* query, const act_t* kv, const act_t* d_out, const float* aux,
+    const double* query_lift, const double* key_lift, double* rowstat, act_t* dq,
+    float* d_aux, double* row_beta, double* row_offset, double* age_part, ReadDims d
+) {
+    using namespace nvcuda;
+    uint tt = blockIdx.x;
+    uint tiles = gridDim.x;
+    uint index = blockIdx.z;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint head = index % d.heads;
+    uint lx = threadIdx.x;
+    uint ly = threadIdx.y;
+    uint tid = ly * 16 + lx;
+    uint warp = tid >> 5;
+    uint t = tt * 16 + ly;
+    bool row_ok = t < time;
+    u64 row = (u64)index * time + t;
+    uint kp = (d.key + 15) / 16 * 16;
+    const act_t* base = kv + (u64)index * time * width;
+    // Staging, reused: Q | dO | K | V chunks; then the K columns of dq;
+    // then the f32 dq slices.
+    __shared__ __align__(32) act_t stage[32 * FLASH_TCB_KCHUNK + 2 * FLASH_TCB_ROWS * FLASH_TCB_KCHUNK];
+    __shared__ __align__(32) float sd_s[2 * FLASH_TCB_ROWS * 16];
+    __shared__ __align__(32) act_t w_s[2 * 16 * FLASH_TCB_ROWS];
+    __shared__ double ds_s[FLASH_TCB_ROWS / 16][16][17];
+    __shared__ double age_carry[16];
+    __shared__ double self_sh[16];
+    float* s_s = sd_s;
+    float* dp_s = sd_s + FLASH_TCB_ROWS * 16;
+    act_t* g_hi = w_s;
+    act_t* g_lo = w_s + 16 * FLASH_TCB_ROWS;
+    float* out_s = reinterpret_cast<float*>(stage);
+    float null_score = (d.null_on != 0 && row_ok) ? aux[row] : neg_inf();
+    double lq = 0.0;
+    double beta = 0.0;
+    double offset = 0.0;
+    if (d.score != 0) {
+        if (row_ok) lq = query_lift[row];
+        u64 beta_offset = read_beta_offset(d);
+        beta = (double)aux[beta_offset + head];
+        offset = (double)aux[beta_offset + d.heads + head];
+    }
+    // Pass 1: the online max and total, and the unnormalised D in f64.
+    float maximum = null_score;
+    float total = d.null_on != 0 ? 1.0f : 0.0f;
+    double weighted = 0.0;
+    for (uint jb = 0; jb <= tt * 16; jb += FLASH_TCB_ROWS) {
+        uint ntile = min((uint)(FLASH_TCB_ROWS / 16), tt - jb / 16 + 1);
+        flash_tcq_scores(query, base, d_out, d, index, tt * 16, jb, ntile, stage, s_s, dp_s, tid);
+        for (uint i = 0; i < ntile; ++i) {
+            uint j = jb + 16 * i + lx;
+            float acc = s_s[i * 256 + ly * 16 + lx];
+            float dpv = dp_s[i * 256 + ly * 16 + lx];
+            float score = 0.0f;
+            if (row_ok) {
+                if (j > t) {
+                    score = neg_inf();
+                } else {
+                    double lk = d.score != 0 ? key_lift[(u64)index * time + j] : 0.0;
+                    double e = 0.0;
+                    double dist = 0.0;
+                    score = flash_score(d, aux, head, t, j, acc, lq, lk, beta, offset, &e, &dist);
+                }
+            }
+            float next = fmaxf(maximum, half_warp_max(score));
+            float p = expf(score - next);
+            float rescale = expf(maximum - next);
+            total = total * rescale + half_warp_sum(p);
+            weighted = weighted * (double)rescale + half_warp_sum_d((double)p * (double)dpv);
+            maximum = next;
+        }
+    }
+    float inverse = 1.0f / total;
+    double row_dot = weighted / (double)total;
+    if (row_ok && lx == 0) {
+        rowstat[row * 3] = (double)maximum;
+        rowstat[row * 3 + 1] = (double)total;
+        rowstat[row * 3 + 2] = row_dot;
+        if (d.null_on != 0) {
+            float null_p = expf(null_score - maximum) * inverse;
+            d_aux[row] = (float)(-(double)null_p * row_dot);
+        }
+    }
+    // Pass 2, per key-column chunk: ds, the inner gradients and dq; on the
+    // first chunk also the beta/offset row partials and the age diagonals.
+    for (uint c0 = 0; c0 < kp; c0 += FLASH_TCB_FRAGS * FLASH_TCB_XCOLS) {
+        bool first = c0 == 0;
+        wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_f[FLASH_TCB_FRAGS];
+        #pragma unroll
+        for (uint f = 0; f < FLASH_TCB_FRAGS; ++f) wmma::fill_fragment(acc_f[f], 0.0f);
+        double self_q = 0.0;
+        double d_beta = 0.0;
+        double d_offset = 0.0;
+        if (tid < 16) age_carry[tid] = 0.0;
+        for (uint jb = 0; jb <= tt * 16; jb += FLASH_TCB_ROWS) {
+            uint ntile = min((uint)(FLASH_TCB_ROWS / 16), tt - jb / 16 + 1);
+            flash_tcq_scores(query, base, d_out, d, index, tt * 16, jb, ntile, stage, s_s, dp_s, tid);
+            #pragma unroll
+            for (uint i = 0; i < FLASH_TCB_ROWS / 16; ++i) {
+                uint j = jb + 16 * i + lx;
+                float ig = 0.0f;
+                double ds = 0.0;
+                if (i < ntile && row_ok && j <= t) {
+                    double lk = d.score != 0 ? key_lift[(u64)index * time + j] : 0.0;
+                    double e = 0.0;
+                    double dist = 0.0;
+                    float score = flash_score(
+                        d, aux, head, t, j, s_s[i * 256 + ly * 16 + lx], lq, lk, beta, offset, &e, &dist);
+                    float p = expf(score - maximum) * inverse;
+                    ds = (double)p * ((double)dp_s[i * 256 + ly * 16 + lx] - row_dot);
+                    double sq = 0.0;
+                    double sk = 0.0;
+                    ig = flash_inner_grad(d, ds, e, dist, beta, lq, lk, &sq, &sk);
+                    self_q += sq;
+                    if (d.score != 0) {
+                        d_beta -= ds * (dist - offset);
+                        d_offset += ds * beta;
+                    }
+                }
+                act_t gh = act_from_f(ig);
+                g_hi[ly * FLASH_TCB_ROWS + i * 16 + lx] = gh;
+                g_lo[ly * FLASH_TCB_ROWS + i * 16 + lx] = act_from_f(ig - act_to_f(gh));
+                ds_s[i][ly][lx] = ds;
+            }
+            __syncthreads();
+            // Diagonal delta = 16 (tt - jt) + (ly - lx), per tile in jt order
+            // as the scalar kernel, with the same carry.
+            if (first && d.age_on != 0) {
+                for (uint i = 0; i < ntile; ++i) {
+                    uint jt = jb / 16 + i;
+                    double diag = 0.0;
+                    int local = (int)tid - 15;
+                    if (tid < 31) {
+                        for (uint y = 0; y < 16; ++y) {
+                            int x = (int)y - local;
+                            if (x >= 0 && x < 16) diag += ds_s[i][y][x];
+                        }
+                        if (local >= 0) {
+                            uint delta = 16 * (tt - jt) + (uint)local;
+                            if (delta < time) {
+                                age_part[((u64)index * tiles + tt) * time + delta]
+                                    = diag + age_carry[local];
+                            }
+                        }
+                    }
+                    __syncthreads();
+                    if (tid < 15) age_carry[16 + local] = diag;
+                    __syncthreads();
+                }
+            }
+            // dq += IG K: stage the K columns of this key block, then MMA.
+            #pragma unroll
+            for (uint f = 0; f < FLASH_TCB_FRAGS; ++f) {
+                uint x0 = c0 + f * FLASH_TCB_XCOLS;
+                __syncthreads();
+                for (uint e = tid; e < FLASH_TCB_ROWS * FLASH_TCB_XCOLS; e += 256) {
+                    uint r = e / FLASH_TCB_XCOLS;
+                    uint c = x0 + e % FLASH_TCB_XCOLS;
+                    uint kr = jb + r;
+                    stage[e] = (kr < time && r < ntile * 16 && c < d.key)
+                        ? base[(u64)kr * width + c] : (act_t)0;
+                }
+                __syncthreads();
+                if (x0 + warp * 16 < kp) {
+                    const __nv_bfloat16* hi_b = reinterpret_cast<const __nv_bfloat16*>(g_hi);
+                    const __nv_bfloat16* lo_b = reinterpret_cast<const __nv_bfloat16*>(g_lo);
+                    const __nv_bfloat16* x_b = reinterpret_cast<const __nv_bfloat16*>(stage);
+                    for (uint s = 0; s < ntile; ++s) {
+                        wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
+                        wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> b;
+                        wmma::load_matrix_sync(b, x_b + s * 16 * FLASH_TCB_XCOLS + warp * 16, FLASH_TCB_XCOLS);
+                        wmma::load_matrix_sync(a, hi_b + s * 16, FLASH_TCB_ROWS);
+                        wmma::mma_sync(acc_f[f], a, b, acc_f[f]);
+                        wmma::load_matrix_sync(a, lo_b + s * 16, FLASH_TCB_ROWS);
+                        wmma::mma_sync(acc_f[f], a, b, acc_f[f]);
+                    }
+                }
+            }
+            // Every weight/K read completes before the next block stages.
+            __syncthreads();
+        }
+        double sq = half_warp_sum_d(self_q);
+        if (lx == 0) self_sh[ly] = sq;
+        if (first && d.score != 0) {
+            double db = half_warp_sum_d(d_beta);
+            double doff = half_warp_sum_d(d_offset);
+            if (row_ok && lx == 0) {
+                row_beta[row] = db;
+                row_offset[row] = doff;
+            }
+        }
+        #pragma unroll
+        for (uint f = 0; f < FLASH_TCB_FRAGS; ++f) {
+            wmma::store_matrix_sync(out_s + f * 16 * FLASH_TCB_XCOLS + warp * 16, acc_f[f],
+                                    FLASH_TCB_XCOLS, wmma::mem_row_major);
+        }
+        __syncthreads();
+        for (uint e = tid; e < FLASH_TCB_FRAGS * 16 * FLASH_TCB_XCOLS; e += 256) {
+            uint f = e / (16 * FLASH_TCB_XCOLS);
+            uint rem = e % (16 * FLASH_TCB_XCOLS);
+            uint r = rem / FLASH_TCB_XCOLS;
+            uint c = c0 + f * FLASH_TCB_XCOLS + rem % FLASH_TCB_XCOLS;
+            uint qt = tt * 16 + r;
+            if (qt >= time || c >= d.key) continue;
+            u64 q_row = (u64)index * time + qt;
+            float v = out_s[e];
+            if (d.score != 0) v += (float)self_sh[r] * act_to_f(query[q_row * d.key + c]);
+            dq[q_row * d.key + c] = act_from_f(v);
         }
         __syncthreads();
     }
