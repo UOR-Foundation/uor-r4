@@ -751,3 +751,30 @@ local result, not a context-capacity impossibility. An accepted hard alternative
 requires independent native reload/replay and explicit ownership against later
 shadow export. No hard-search optimizer has been adopted; balanced fit remains
 live and determines whether this diagnostic is needed.
+
+## Completed balanced control and native coordinate probe — 10:20–10:22Z
+
+Balanced seed1001 completes128 updates: canonical CE8.223477354426969 to
+7.793083292970683,0/512 complete replies, all first errors0, zero32768 hard-code
+changes and zero frozen-context byte changes. Compared with legacy output-only
+seed1001,449/512 row losses improve. Report SHA256 is
+`0515391b5d5ed1433db6255e76b0b034d4d37bdbdd9a57c3bb440e148d7e81ec`.
+Independent saved-record review recomputes CE within6e-15 host arithmetic and
+checks row hashes, context/prototype bindings and manifest sizes/file sets.
+It does not rerun inference/tokenization or BLAKE3 verification.
+
+The exact native artifact probe at365c8603 completes in16.472s wrapper time,
+RSS284788KiB, exit0. It evaluates120 alternatives for token2997/lane0 on all6664
+canonical positions, preserving every Copy alias and nongold denominator.
+Incumbent38 is uniquely best: CE7.793083292970683; next45 gives
+7.7945301468243215. The independently reloaded candidate is byte-identical to
+checkpoint0128 (SHA2569ad06aadbe33201c904b1ef5c8793b38e89edabca2a5488b46b9963a61d75723).
+First teacher-forced correctness remains0/512. Independent review verifies
+parent bindings and byte identity, not a second executable run.
+
+These are exposed-development negatives, not fresh transfer or geometry-family
+verdicts. No accepted-code optimizer or further coordinate is justified by this
+result. Next inspect existing-record score/state reachability before another
+fit; only measured reachability motivates a separately controlled coupled
+code/field intervention. All outputs remain under canonical
+`/workspace/uor-r4/codex/native-geometric-generate/`; GPU lease released.

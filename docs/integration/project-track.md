@@ -11,15 +11,13 @@ learning changes context bytes and all generated sequences, helping some rows
 but worsening mean CE in every seed. Retain that adverse interaction; it does
 not establish a geometry-family failure or justify repeating the same dose.
 
-The immediate intervention is one matched, label-free balanced token-code
-initialization across all eight existing lanes. Six legacy token-constant lanes
-cancel from Generate ranking, so their activation changes effective factor
-participation without adding runtime operators or semantic features. The new
-mode passes explicit eight-lane CUDA adjoint parity and actual native bank
-admission. Its seed1001 output-only fit is active; all512 initial rows match the
-retained cost-refused attempt, and the retry passes complete-cost admission
-before optimizer1. Further seeds are not admitted by this result. Current state
-owns exact source, artifacts, processes, cost limits and results.
+The matched label-free balanced initialization activates all eight existing
+lanes. Its completed128-update seed1001 fit improves CE8.223477→7.793083,
+but remains0/512 complete replies and changes no hard token code. The exact
+native probe then evaluates all120 token2997/lane0 codes against the complete
+alias-pool objective; incumbent38 is uniquely best. This provides no accepted
+code update and no basis for another identical dose or automatic coordinate.
+Current state owns exact artifacts, execution costs and retained failures.
 
 The [panel answerability review](geometric-native-generate-learning-2026-10-06.md)
 finds no selected-answer handoff or actual token-label contradiction: input-only
@@ -29,19 +27,21 @@ this is not fresh transfer. Full eight-state uniqueness does not prove separatio
 by shared unary/disjoint-pair fields. Learned ordinary reply generation remains
 unqualified until complete actual own-prefix answers work.
 
-Next decisions follow actual native behavior:
+The next causal discriminator is existing-record state/pool reachability.
+For first gold tokens absent from Copy, compare the bounded Generate score
+ceiling with competing Copy alias masses, then inspect fixed-field state
+capacity. This distinguishes score competition that geometry cannot overcome
+under the current contract from inadequate learned state or coupled variables.
+A permissive upper bound is not evidence that a usable state is attainable.
 
-- If the balanced learner produces useful complete replies, retain it and freeze
-  independent source/order transfer before claiming generalization; distinguish
-  initialization gains from fitted gains and then revisit joint context learning.
-- If hard codes remain static and prediction fails, test native conditional code
-  alternatives against the entire declared alias-pool objective. Reuse retained
-  SharedCore hard-loss incumbent/rollback/replay learning rather than treating
-  categorical learning as absent. Its historical byte-tree objective is not the
-  current decoder. Every nongold denominator position still matters; only actual
-  improving alternatives justify adapting an accepted-code optimizer.
-- If no useful alternatives appear, investigate coupled representation/factor
-  capacity; do not change dose, normalize away the failure or add semantic gates.
+If structurally blocked rows exist, repair the implicated score/pool mechanism within the native serving
+contract, with matched controls and shared ownership coordination, before further
+fitting. If reachability remains
+possible, predeclare a small coupled code/field diagnostic with field-only and
+incumbent controls. A unilateral negative does not establish a gradient defect,
+a family failure or the need for semantic gates. Retained SharedCore exact-loss
+accept/rollback/replay remains a reusable pattern; its historical task objective
+is not adopted. Useful complete replies must precede frozen source/order transfer.
 
 [Composed state credit](geometric-composed-state-credit-2026-10-06.md) and the
 [resident native CUDA learner](geometric-native-cuda-learning-2026-10-06.md)

@@ -30,16 +30,15 @@ inside Generate; pooled Copy competition is secondary for the remaining cases.
 No first-position clipping explains those failures. This is a decoder restriction,
 not an identity collision or geometric-family verdict.
 
-One matched balanced output-only seed1001 is active on GPU0/PID13319 from
-09:19:05Z. It preserves seed/donor/frozencontext/data/LRs/128updates, with
-label-free all-eight-lane token initialization and prefixutilityfalse. Actual
-CUDA adjoint comparison passes1/1 at e2283804; integrated zero-update admission
-passes native pool parity across103 positions with13 connected positive finite
-families. First fit attempt1 fails timing beforeoptimizer1 and is retained.
-Attempt2 changes only out and4500→5100 model limit (outer5200), same c722 binary.
-All512 initial rows match attempt1, including6664 canonical/16355 own-prefix
-packets. Actual B8 24.341469343s projects4424.48772131s below5100 before
-optimizer1; optimization is underway, no completed quality result.
+The matched balanced output-only seed1001 completes128 updates, exit0 at
+10:20:25Z (wrapper3680.194s, model3675.459s, RSS919704KiB). Canonical
+CE improves8.2234773544→7.7930832930, below legacy output-only seed1001 on
+449/512 rows. All eight token lanes participate, but all32768 hard prototypes
+and frozen context bytes remain unchanged. Complete own-prefix replies remain
+0/512 and every first error remains0. Independent review checks all1024 saved
+row hashes,6664 canonical positions perstage, manifest file sets/sizes and
+prototype/context bindings; it does not rerun inference or BLAKE3 verification.
+The cost-refused attempt1 remains execution evidence, not another completed seed.
 
 Recorded rental5.5→6h extension costs at most+$0.99 ($11.88total); complete
 wall6→6.5h. Rental endpoint10:51Z/wall11:00:33Z remain unchanged by retry.
@@ -68,10 +67,24 @@ pass (235.174s,3590668KiB peak child RSS); binary SHA256
 `61cb2b9e945cbccc0b6a9d5b182784cffc5e222f8dd2086ba951d19df2a47439`.
 An earlier0.492s source-verifier attempt rejected an expanded LFS payload before
 Cargo; repaired admission binds1824 expanded objects to their commit pointers
-and verifies17118files/1279818104bytes. No model probe has run. Conditional card
-[#820](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6013940163)
-permits one240s native artifact probe only if balanced static-code failure remains.
-This is an offline instrument, not an optimizer adoption or prediction result.
+and verifies17118files/1279818104bytes. The conditional
+[#820 card](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6013940163)
+then executes the native artifact probe: exit0,16.472s wrapper,16.358s model,
+RSS284788KiB. Token2997/lane0 incumbent38 is uniquely best of all120 alternatives
+on the complete512-episode/6664-position objective. CE remains7.7930832930;
+best alternative45 gives7.7945301468. First teacher-forced correctness remains
+0/512. Independent review verifies parent report/manifest/config hashes and
+candidate/checkpoint byte identity; it does not independently rerun inference.
+
+This rules out a useful unilateral move at this coordinate and frozen field,
+not categorical learning or geometry in general. Do not adopt a hard-code
+optimizer on this negative or launch another coordinate automatically. Next,
+audit existing-record state/pool reachability: compare absent-Copy gold Generate
+score ceilings with competing Copy alias masses, then shared-field/state
+constraints. A coupled code/field diagnostic requires a separately justified
+card after that audit. No additional fit is admitted. GPU lease is released;
+durable evidence remains on the canonical network volume. PR1792 remains draft
+and unmerged; general chat and whole-path D11 remain unqualified.
 
 ## Delayed geometric prediction credit — October 6
 
@@ -90,8 +103,8 @@ Copy path at92587b03 carries its exact120-state utilities through the same
 channel; defaultfalse preserves these fits. Its actual-context CPU regression and11 relevant preserved/driver checks pass
 (12 total) on the Linux pod; CUDA parity and enabled-bank admission wait for a
 free GPU. Cue/contextual-readout Copy remains
-legacy. Next: finish the balanced decoder control recorded above and use actual native
-code alternatives or independent transfer according to its measured result.
+legacy. Next: use the completed balanced fit and negative native-code probe
+above to diagnose state/pool reachability before another learning intervention.
 PR1792 is still draft/unmerged; no language result from these checks.
 
 ## Native Generate update — October 6, mixed result
