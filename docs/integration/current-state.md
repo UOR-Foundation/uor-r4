@@ -86,6 +86,31 @@ card after that audit. No additional fit is admitted. GPU lease is released;
 durable evidence remains on the canonical network volume. PR1792 remains draft
 and unmerged; general chat and whole-path D11 remain unqualified.
 
+The subsequent exact state-ceiling diagnostic at2f18ff52 executes on the Linux
+pod: release build and5 focused tests pass,92.553s/RSS2225592KiB. Actual audit
+exit0 takes7.733s/RSS64368KiB, external120s limit (source guard240s). It finds
+shared factor maximum24, relative tuple `[1,8,0,15,9,67,1,4]`, and constructs
+exact legal H4 witnesses from each gold prototype. Every gold score equals the
+computed current-field maximum; all vocabulary competitors and factual Copy
+scores remain in the native pool. First-token witnesses win146/512 versus
+parent0: token2997 wins78/256 and617 wins68/256. Independent review recomputes
+fields and H4 relations for all512 witnesses and checks bindings/saved arithmetic,
+not a second native reducer run. Report SHA256
+`2f8afec02c784497eb06e105cbbde83365df66985e248783072294ccaa24d240`.
+
+Existing-record audits also find zero Copy atoms above the universal Generate
+ceiling and512distinct full retained states, with both first gold tokens absent
+Copy in all rows. Those permissive bounds and state uniqueness do not establish
+learned separability. The146 winning witnesses establish readout feasibility
+with arbitrary gold-conditioned state and frozen factual Copy, not learned
+attention, an attainable recurrent trajectory or improved replies. The366 losing
+max-gold witnesses do not alone prove impossibility. A separate joined audit
+certifies319/512 rows have a nongold Copy atom above the exact current-field
+gold maximum26,214,400Q24 (1.5625nats for both gold IDs). Those rows cannot win
+by changing Generate state or prototypes alone while field and factual Copy
+stay fixed. The remaining47 losing witnesses lack that single-atom certificate;
+a lower gold score may improve margin there. No oracle state is introduced at runtime; no model is updated.
+
 ## Delayed geometric prediction credit — October 6
 
 Native120-state interventions reproduce a missing temporal learning path: a fixed

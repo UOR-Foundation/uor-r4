@@ -778,3 +778,32 @@ result. Next inspect existing-record score/state reachability before another
 fit; only measured reachability motivates a separately controlled coupled
 code/field intervention. All outputs remain under canonical
 `/workspace/uor-r4/codex/native-geometric-generate/`; GPU lease released.
+
+## Exact current-field H4 state witness — 10:39Z
+
+The optional `--state-ceiling` mode at2f18ff52 maximizes each disjoint unary/pair
+block over120² relative states and maps the resulting tuple to a legal H4 state
+using prototype times inverse-relative. Actual native scoring attains the exact
+maximum and evaluates every Generate competitor with factual Copy frozen.
+Release build plus5 focused checks pass; actual audit exit0 takes7.733s and
+64368KiB, under120s external ceiling. Shared factor maximum24 gives146/512
+first-token wins (2997:78/256;617:68/256), versus0parent. Report SHA256
+`2f8afec02c784497eb06e105cbbde83365df66985e248783072294ccaa24d240`.
+
+Independent review verifies field maxima, group witness relations, source/model/
+config bindings and saved pool arithmetic; it does not rerun the reducer. This
+is a gold-conditioned oracle diagnostic, not learned attention or runtime oracle
+adoption. Winning states prove conditional readout feasibility; losing absolute
+score maximizers do not prove no winning state exists. Universal-cap Copy
+competition and exact full-state collisions were absent in separate saved-row
+audits. The actual fitted field is much more restrictive than its Q4 envelope;
+its frozen-state limits and learning objective remain the next causal seams.
+
+Joined frozen-field audit certifies at least319/512 first targets have a nongold
+Copy atom above the exact gold ceiling26,214,400Q24 (1.5625nats). Changing
+Generate state/prototypes alone cannot solve these with field/bias/factual Copy
+fixed. Their failure is narrower than a geometric capacity limit: the universal
+Q4 envelope remains permissive. The other47 losing witnesses need separate
+margin/alias interpretation. This directs the next learning diagnosis toward
+field/context coadaptation and first-position versus body credit, preserving
+the full native prediction objective and runtime contract.

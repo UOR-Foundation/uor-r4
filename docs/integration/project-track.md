@@ -27,7 +27,17 @@ this is not fresh transfer. Full eight-state uniqueness does not prove separatio
 by shared unary/disjoint-pair fields. Learned ordinary reply generation remains
 unqualified until complete actual own-prefix answers work.
 
-The next causal discriminator is existing-record state/pool reachability.
+The state/pool discriminator now executes: exact current-field H4 witnesses
+win146/512 first targets versus0parent. A joined saved-record audit certifies
+319/512 have a nongold Copy atom above the exact current-field gold ceiling,
+so a context-state-only repair cannot solve those rows with factual Copy fixed.
+The remaining47 losing max-gold witnesses are not impossibility verdicts.
+The next learning diagnosis must consider shared-field and context coadaptation,
+with complete-reply usefulness retained as the primary goal. Audit first-position
+versus body credit before selecting a new curriculum or coupled update; no
+runtime oracle, semantic gate or score rescaling is adopted by this result.
+
+The discriminator compares existing-record state/pool reachability.
 For first gold tokens absent from Copy, compare the bounded Generate score
 ceiling with competing Copy alias masses, then inspect fixed-field state
 capacity. This distinguishes score competition that geometry cannot overcome
