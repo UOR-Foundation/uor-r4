@@ -6974,6 +6974,7 @@ impl StackModel {
             probe: None,
             weights: None,
             qk: Some(ReadQkCapture { layers: Vec::new() }),
+            supervision: None,
         });
         let x = self.layer_range_with_source(
             &p,
@@ -7406,6 +7407,7 @@ impl StackModel {
                 target,
                 masses: None,
             }),
+            qk: None,
             target: None,
             masses: None,
             probe: None,
