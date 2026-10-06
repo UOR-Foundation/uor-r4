@@ -7,11 +7,17 @@ use std::{
 };
 use uor_r4_core::report_output;
 use uor_r4_training::sha256_file;
+#[path = "../../uor-r4-integer/examples/support/source_probe.rs"]
+mod output_support;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn bad(s: &str) -> Box<dyn std::error::Error> {
     io::Error::new(io::ErrorKind::InvalidData, s).into()
 }
 fn copy_bound(src: &Path, dst: &Path, original: &Path, bound: &Value) -> Result<()> {
+    let canonical = fs::canonicalize(src)?;
+    if !canonical.starts_with(original) || canonical != src {
+        return Err(bad("noncanonical or escaped source path refused"));
+    }
     let meta = fs::symlink_metadata(src)?;
     if meta.file_type().is_symlink() {
         return Err(bad("symlink input refused"));
@@ -53,7 +59,7 @@ fn main() -> Result<()> {
     }
     let old = PathBuf::from(&args[0]);
     let original = fs::canonicalize(&args[1])?;
-    let out = PathBuf::from(&args[2]);
+    let out = output_support::prospective_output(&args[2])?;
     if out.starts_with(&original) || original.starts_with(&out) {
         return Err(bad("import/input overlap"));
     }
