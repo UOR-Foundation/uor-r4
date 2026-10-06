@@ -1366,9 +1366,11 @@ extern "C" __global__ void read_flash_fwd(
 // warp computes one 16 x 16 tile of S = Q K^T (the bf16 products are exact in
 // f32, so only the summation order differs from read_tile_inner), the score
 // transform and online softmax stay in f32/f64 exactly as above, and each
-// warp then accumulates one 16-column slice of P V with P rounded to bf16
-// (the only added rounding; the normaliser sums the same rounded weights).
-// K and V are zero padded to multiples of 16 in shared memory.
+// warp then accumulates one 16-column slice of P V. P is split into two bf16
+// terms, P = hi + lo (two MMAs against the same V tile), which carries about
+// 16 mantissa bits, so P V matches the f32 sum to f32 summation-order error.
+// K and V are zero padded to multiples of 16 in shared memory; one shared
+// f32 tile holds S, then the hi/lo weights, then the P V slices.
 #define FLASH_TC_KEYS 128
 #define FLASH_TC_KCHUNK 64
 
@@ -1392,10 +1394,12 @@ extern "C" __global__ void read_flash_fwd(
     __shared__ __align__(32) act_t q_s[16 * FLASH_TC_KCHUNK];
     __shared__ __align__(32) act_t kv_s[FLASH_TC_KEYS * FLASH_VALUE_CHUNK];
     __shared__ __align__(32) float s_s[16 * FLASH_TC_KEYS];
-    __shared__ __align__(32) act_t p_s[16 * FLASH_TC_KEYS];
     const __nv_bfloat16* q_b = reinterpret_cast<const __nv_bfloat16*>(q_s);
     const __nv_bfloat16* kv_b = reinterpret_cast<const __nv_bfloat16*>(kv_s);
-    const __nv_bfloat16* p_b = reinterpret_cast<const __nv_bfloat16*>(p_s);
+    act_t* p_hi = reinterpret_cast<act_t*>(s_s);
+    act_t* p_lo = p_hi + 16 * FLASH_TC_KEYS;
+    const __nv_bfloat16* hi_b = reinterpret_cast<const __nv_bfloat16*>(p_hi);
+    const __nv_bfloat16* lo_b = reinterpret_cast<const __nv_bfloat16*>(p_lo);
     const act_t* base = kv + (u64)index * time * width;
     float null_score = (d.null_on != 0 && row_ok) ? aux[row] : neg_inf();
     double lq = 0.0;
@@ -1487,11 +1491,15 @@ extern "C" __global__ void read_flash_fwd(
             // maximum is finite from the first block on.
             float next = fmaxf(maximum, half_warp_max(block_max));
             float psum = 0.0f;
+            // Every S read above completes before the weights overwrite it.
+            __syncthreads();
             #pragma unroll
             for (uint i = 0; i < FLASH_TC_KEYS / 16; ++i) {
-                act_t p = act_from_f(expf(sc[i] - next));
-                psum += act_to_f(p);
-                p_s[ly * FLASH_TC_KEYS + lx + 16 * i] = p;
+                float p = expf(sc[i] - next);
+                psum += p;
+                act_t hi = act_from_f(p);
+                p_hi[ly * FLASH_TC_KEYS + lx + 16 * i] = hi;
+                p_lo[ly * FLASH_TC_KEYS + lx + 16 * i] = act_from_f(p - act_to_f(hi));
             }
             float rescale = expf(maximum - next);
             total = total * rescale + half_warp_sum(psum);
@@ -1499,16 +1507,23 @@ extern "C" __global__ void read_flash_fwd(
             #pragma unroll
             for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) acc_out[i] *= rescale;
             __syncthreads();
-            if (v0 + warp * 16 < d.value) {
-                wmma::fragment<wmma::accumulator, 16, 16, 16, float> o_frag;
-                wmma::fill_fragment(o_frag, 0.0f);
+            bool warp_values = v0 + warp * 16 < d.value;
+            wmma::fragment<wmma::accumulator, 16, 16, 16, float> o_frag;
+            wmma::fill_fragment(o_frag, 0.0f);
+            if (warp_values) {
                 for (uint s = 0; s * 16 < live; ++s) {
                     wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
                     wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> b;
-                    wmma::load_matrix_sync(a, p_b + s * 16, FLASH_TC_KEYS);
                     wmma::load_matrix_sync(b, kv_b + s * 16 * FLASH_VALUE_CHUNK + warp * 16, FLASH_VALUE_CHUNK);
+                    wmma::load_matrix_sync(a, hi_b + s * 16, FLASH_TC_KEYS);
+                    wmma::mma_sync(o_frag, a, b, o_frag);
+                    wmma::load_matrix_sync(a, lo_b + s * 16, FLASH_TC_KEYS);
                     wmma::mma_sync(o_frag, a, b, o_frag);
                 }
+            }
+            // Every weight load completes before the slices overwrite them.
+            __syncthreads();
+            if (warp_values) {
                 wmma::store_matrix_sync(s_s + warp * 16, o_frag, FLASH_TC_KEYS, wmma::mem_row_major);
             }
             __syncthreads();
