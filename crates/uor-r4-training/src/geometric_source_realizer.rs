@@ -7219,7 +7219,10 @@ mod tests {
                 &prepared, &generate, &snapshot, &exp,
             )?;
             let joint = unified.forward_bank(&segments, &[5], own, &cue, &prefix)?;
-            assert_eq!(joint.copy_token_ids, vec![4, 4]);
+            // The emission compiler preserves the leading-space token identity:
+            // the original [a,a] becomes [space-a,a], not two raw a aliases.
+            assert_eq!(joint.copy_token_ids, view.emitted_token_ids());
+            assert_eq!(joint.copy_token_ids, vec![7, 4]);
             assert_eq!(
                 joint.context()?.trace.states,
                 copy_only.context.trace.states
