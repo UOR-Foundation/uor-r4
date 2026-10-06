@@ -59,6 +59,8 @@ struct Args {
     fresh_labels: Option<PathBuf>,
     // A source-input-selected cost probe only; never changes the fit schedule.
     admission_episode_indices: Option<Vec<usize>>,
+    #[serde(default = "default_backward_chunk")]
+    token_backward_chunk: usize,
     updates: usize,
     learning_rate: f64,
     prototype_learning_rate: f64,
@@ -66,6 +68,9 @@ struct Args {
     maximum_seconds: u64,
     maximum_report_bytes: u64,
     out: PathBuf,
+}
+fn default_backward_chunk() -> usize {
+    1
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -272,6 +277,7 @@ fn args() -> Result<Args> {
     }
     if !["admission", "fit"].contains(&a.mode.as_str())
         || !["output-only", "joint"].contains(&a.arm.as_str())
+        || ![1, 2].contains(&a.token_backward_chunk)
         || a.updates == 0
         || a.updates > 128
         || (a.mode == "fit" && a.updates != 128)
@@ -746,6 +752,8 @@ fn batch(
     device: &Device,
     start: Instant,
     independent: Option<&IntegerRealizer>,
+    backward_chunk: usize,
+    retain_inactive: bool,
 ) -> Result<(BTreeMap<String, Tensor>, Value)> {
     let begun = Instant::now();
     let current = source.compile_context_state_rebound(frozen)?;
@@ -765,6 +773,9 @@ fn batch(
     let mut positions = 0;
     let mut backwardseconds = 0.;
     let mut forwardseconds = 0.;
+    let mut pending: Option<Tensor> = None;
+    let mut pending_count = 0usize;
+    let mut backward_calls = 0usize;
     for &index in indices {
         let e = &eps[index];
         for (t, &target) in e.target.iter().enumerate() {
@@ -825,25 +836,33 @@ fn batch(
             let scaled = loss.affine(1. / e.target.len() as f64 / indices.len() as f64, 0.)?;
             device.synchronize()?;
             forwardseconds += f.elapsed().as_secs_f64();
-            let b = Instant::now();
-            let grads = scaled.backward()?;
-            device.synchronize()?;
-            backwardseconds += b.elapsed().as_secs_f64();
-            for (name, var) in &params {
-                if let Some(grad) = grads.get(var.as_tensor()) {
-                    if !grad.device().same_device(device) {
-                        return Err(bad("gradient CPU fallback"));
-                    }
-                    let next = if let Some(old) = sums.get(name) {
-                        old.add(grad)?.detach()
-                    } else {
-                        grad.detach()
-                    };
-                    sums.insert(name.clone(), next);
-                }
+            pending = Some(match pending.take() {
+                Some(previous) => (&previous + &scaled)?,
+                None => scaled,
+            });
+            pending_count += 1;
+            if pending_count == backward_chunk {
+                let b = Instant::now();
+                accumulate_backward(
+                    pending.take().ok_or_else(|| bad("missing chunk loss"))?,
+                    &params,
+                    &mut sums,
+                    device,
+                )?;
+                device.synchronize()?;
+                backwardseconds += b.elapsed().as_secs_f64();
+                backward_calls += 1;
+                pending_count = 0;
             }
             positions += 1;
         }
+    }
+    if let Some(loss) = pending.take() {
+        let b = Instant::now();
+        accumulate_backward(loss, &params, &mut sums, device)?;
+        device.synchronize()?;
+        backwardseconds += b.elapsed().as_secs_f64();
+        backward_calls += 1;
     }
     let mut family = BTreeMap::new();
     let mut norm2 = 0.;
@@ -868,9 +887,65 @@ fn batch(
     {
         return Err(bad("decoder credit disconnected"));
     }
-    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":uor_r4_training::geometric_bank_generate::CREDIT_SCOPE,"gradient_accumulation":"stream per-token backward; detached device F32 sums scaled equal-episode mean; filter before global clip; no host dynamic adjoints","updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
-    sums.retain(|name, _| active.contains_key(name));
+    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":uor_r4_training::geometric_bank_generate::CREDIT_SCOPE,"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    if !retain_inactive {
+        sums.retain(|name, _| active.contains_key(name));
+    }
     Ok((sums, report))
+}
+fn accumulate_backward(
+    loss: Tensor,
+    params: &BTreeMap<String, Var>,
+    sums: &mut BTreeMap<String, Tensor>,
+    device: &Device,
+) -> Result<()> {
+    let grads = loss.backward()?;
+    for (name, var) in params {
+        if let Some(grad) = grads.get(var.as_tensor()) {
+            if !grad.device().same_device(device) {
+                return Err(bad("gradient CPU fallback"));
+            }
+            let next = match sums.get(name) {
+                Some(old) => old.add(grad)?.detach(),
+                None => grad.detach(),
+            };
+            sums.insert(name.clone(), next);
+        }
+    }
+    Ok(())
+}
+fn chunk_gradient_parity(
+    reference: &BTreeMap<String, Tensor>,
+    candidate: &BTreeMap<String, Tensor>,
+) -> Result<Value> {
+    if reference.keys().ne(candidate.keys()) {
+        return Err(bad("chunk gradient connectivity differs"));
+    }
+    let mut families = BTreeMap::new();
+    let mut passed = true;
+    for (name, r) in reference {
+        let c = &candidate[name];
+        if r.shape() != c.shape() || !r.device().same_device(c.device()) {
+            return Err(bad("chunk gradient shape/device differs"));
+        }
+        let delta = (c - r)?.abs()?;
+        let max_abs = delta.max_all()?.to_scalar::<f32>()?;
+        let max_rel = delta
+            .broadcast_div(&r.abs()?.clamp(1e-6f32, f32::MAX)?)?
+            .max_all()?
+            .to_scalar::<f32>()?;
+        let envelope = r.abs()?.affine(2e-3, 2e-5)?;
+        let ratio = delta
+            .broadcast_div(&envelope)?
+            .max_all()?
+            .to_scalar::<f32>()?;
+        let finite = max_abs.is_finite() && max_rel.is_finite() && ratio.is_finite();
+        passed &= finite && ratio <= 1.;
+        families.insert(name.clone(), json!({"max_absolute_difference":max_abs,"max_relative_difference_floor1e6":max_rel,"maximum_envelope_ratio":ratio,"finite":finite}));
+    }
+    Ok(
+        json!({"status":if passed { "PASS" } else { "FAIL" },"families":families,"criterion":"elementwise abs(delta)<=2e-5+2e-3*abs(reference); maxrel denominator floor1e-6; f32 summation order may differ","device_reductions_only":true,"host_full_adjoints":false}),
+    )
 }
 fn apply(
     optimizer: &mut AdamW,
@@ -1122,7 +1197,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         "admission-cost-sample.json",
         &json!({"indices":first,"ids":first.iter().map(|i|&train[*i].packet.id).collect::<Vec<_>>(),"scope":"cost probe only; fixed sequential B8 fit schedule unchanged; admission quality subset remains first eight development rows"}),
     )?;
-    let (_, admission) = batch(
+    let (admission_grads, admission) = batch(
         a,
         &source,
         &frozen,
@@ -1135,8 +1210,46 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         &device,
         start,
         Some(&integer),
+        a.token_backward_chunk,
+        true,
     )?;
     write(a, "first-b8-admission.json", &admission)?;
+    if a.mode == "admission" && a.token_backward_chunk == 2 {
+        let (reference_grads, reference) = batch(
+            a,
+            &source,
+            &frozen,
+            &generate,
+            &cue,
+            &prefix,
+            &exp,
+            &train,
+            &first,
+            &device,
+            start,
+            Some(&integer),
+            1,
+            true,
+        )?;
+        if admission["native_equal_episode_ce"] != reference["native_equal_episode_ce"]
+            || admission["target_positions"] != reference["target_positions"]
+        {
+            return Err(bad("chunk native objective differs"));
+        }
+        write(a, "chunk1-reference-admission.json", &reference)?;
+        let parity = chunk_gradient_parity(&reference_grads, &admission_grads)?;
+        write(
+            a,
+            "token-backward-chunk-parity.json",
+            &json!({"parity":parity,"chunk2":admission,"chunk1":reference,"scope":"same parameters/data/indices, zero updates; both arms independently verify every native hard pool; no changed training dose; peak GPU memory measured externally"}),
+        )?;
+        if parity["status"] != "PASS" {
+            return Err(bad(
+                "token backward chunk gradient parity exceeded declared envelope",
+            ));
+        }
+    }
+    drop(admission_grads);
     let (base_native, base_gen, base_receipt) =
         checkpoint(a, 0, &source, &frozen, &generate, &cue, &prefix)?;
     let baseline = evaluate(
@@ -1215,8 +1328,20 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
                 .map(|i| (update * 8 + i) % train.len())
                 .collect::<Vec<_>>();
             let (grads, receipt) = batch(
-                a, &source, &frozen, &generate, &cue, &prefix, &exp, &train, &indices, &device,
-                start, None,
+                a,
+                &source,
+                &frozen,
+                &generate,
+                &cue,
+                &prefix,
+                &exp,
+                &train,
+                &indices,
+                &device,
+                start,
+                None,
+                a.token_backward_chunk,
+                false,
             )?;
             let squares = grads
                 .values()
@@ -1348,6 +1473,48 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn chunk_gradient_parity_rejects_changed_gradient() -> Result<()> {
+        let reference =
+            BTreeMap::from([("x".to_owned(), Tensor::new(&[0.01f32, 0.02], &Device::Cpu)?)]);
+        let changed =
+            BTreeMap::from([("x".to_owned(), Tensor::new(&[0.01f32, 0.04], &Device::Cpu)?)]);
+        assert_eq!(
+            chunk_gradient_parity(&reference, &changed)?["status"],
+            "FAIL"
+        );
+        Ok(())
+    }
+    #[test]
+    fn weighted_chunk2_shared_graph_matches_chunk1_vjp() -> Result<()> {
+        let v = Var::new(0.7f32, &Device::Cpu)?;
+        let shared = v.as_tensor().sqr()?;
+        let params = BTreeMap::from([("shared".to_owned(), v)]);
+        let losses = [
+            shared.affine(1. / 6., 0.)?,
+            shared.sqr()?.affine(1. / 8., 0.)?,
+            shared.affine(1. / 10., 0.)?,
+        ];
+        let mut reference = BTreeMap::new();
+        for loss in &losses {
+            accumulate_backward(loss.clone(), &params, &mut reference, &Device::Cpu)?;
+        }
+        let mut chunked = BTreeMap::new();
+        accumulate_backward(
+            (&losses[0] + &losses[1])?,
+            &params,
+            &mut chunked,
+            &Device::Cpu,
+        )?;
+        accumulate_backward(losses[2].clone(), &params, &mut chunked, &Device::Cpu)?;
+        assert_eq!(
+            chunk_gradient_parity(&reference, &chunked)?["status"],
+            "PASS"
+        );
+        let expected = 2. * 0.7 * (1. / 6. + 1. / 10.) + 4. * 0.7f32.powi(3) / 8.;
+        assert!((chunked["shared"].to_scalar::<f32>()? - expected).abs() < 1e-6);
+        Ok(())
+    }
     #[test]
     fn complete_answer_primary_over_ce() {
         let old = json!({"complete":1,"native_equal_episode_ce":1.});
