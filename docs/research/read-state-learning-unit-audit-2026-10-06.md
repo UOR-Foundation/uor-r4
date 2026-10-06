@@ -77,3 +77,29 @@ observed discrete actions, source choices and actual replies. A future negative
 must distinguish native discretization, read ranking, transport utility and
 emission competition rather than treating source-unit speculation as measured
 mechanism failure. Work card: #820 issuecomment-6024955480.
+
+Inspect the final trained checkpoint as well as the selected checkpoint, so
+baseline selection cannot hide the trained candidate's changes. Join saved
+rows by case identity and retain regressions. Entry correctness, complete
+own-prefix replies, EOS and first-error phase precede aggregate likelihood.
+Separate Copy-covered from Generate-only target positions using the actual
+native candidate inventory after forward. Group opposite questions by their
+authenticated physical bank; repeated questions are not independent banks.
+
+Nonidentity actions alone can be a learned constant rotation. If actual native
+crossings make attribution consequential, use a fixed-checkpoint mediator
+contrast: factual bridge, identity bridge, and learned bridge with the highest
+raw-scoring occurrence from a different physical Source (earliest ties).
+Choose the alternate without consulting labels. Hold query state, Copy atoms
+and scores, aliases and Generate parameters fixed; score labels only afterward.
+This contrasts use of the source-state channel with decoder adaptation or
+uniform Copy suppression. The key is an accumulated contextual state, so key
+sensitivity does not establish exclusive encoding of the selected record.
+This conditional diagnostic is not a contextual fact-swap or chat result.
+
+If useful source-channel consumption is established, the next substantive
+grounding test changes literal facts while preserving question, source roles,
+order and public token budget, with independently authored expected answers.
+If output remains blocked by Copy scores above Generate's attainable bound,
+retain the bridge result and address read-versus-emission competition; do not
+repeat the same fit or retire geometry from that negative.
