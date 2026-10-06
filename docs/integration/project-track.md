@@ -12,7 +12,8 @@ Compare output-only/joint on the full exposed construction panel before prospect
 unopened transfer. Native coefficient and prototype threshold reachability must be
 checked before a bounded fit; tiny rates that mathematically lock geometry cannot
 answer the learning question. Actual complete emitted-prefix replies remain primary.
-The new bank fit is pending compile/execution; connected gradients, discrete byte
+The bank fitter compiles and real CUDA admission executes; actual optimizer fits
+remain pending measured complete-cost admission. Connected gradients, discrete byte
 changes and a passed authoring control do not qualify chat or attention.
 
 [Composed predictive state credit](geometric-composed-state-credit-2026-10-06.md)

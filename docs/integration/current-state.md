@@ -12,7 +12,13 @@ This is parameter learning/sensitivity, not useful joint prediction or chat.
 The lr0.2 displacement instrument is not the real-fit rule. Next: target-free
 Generate/Copy over SAME full-bank state, real-tokenizer answerable prose panel,
 paired output-only/joint fits with prospectively reachable native update scales.
-New integrated code and panel are unqualified until actual checks/outputs execute.
+The integrated bank/source-free checks and512 input-derived panel positive controls
+have now executed. Real zero-update CUDA admissions cover short facts (84 positions,
+12.85s) and paired longer/update/reassert histories (103 positions,21.24s); all13
+parameter groups receive finite nonzero device credit with native hard-pool parity.
+This establishes the learning instrument, not trained replies. Next admit the
+paired128-update fit from measured complete costs; review two-token backward
+accumulation against the original gradient before using it to reduce overhead.
 PR1792 is draft and not on main; preserve every endpoint and negative interaction.
 
 
