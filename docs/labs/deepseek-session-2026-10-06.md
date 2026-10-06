@@ -1,0 +1,242 @@
+# DeepSeek lab session record — 2026-10-05/06
+
+Lab: `opencode-deepseek-20260930` · adapter: OpenCode desktop, MANUAL client, **no heartbeat automation**
+Base: `origin/main` @ `2b21c9a3` · Owner-directed work on the addressed-attention emission path and the
+representation/head question.
+
+Recorded under **D20** (#1747): findings below are **localisers that name a missing component**. No
+mechanism is retired by this document, and no near-zero delta is treated as a verdict.
+
+## 1. Merged instruments (measurement-only; production serving unchanged)
+
+| PR | what it added | status |
+|---|---|---|
+| #1759 | mqar-bench logs held-out `first-content` and its count | merged |
+| #1761 | `uor-pod` accepts hand-written lease timestamps | merged |
+| #1763 | Phase 2b frozen read A/B gate | merged |
+| #1769 | mqar-bench `dump_scores=1` T2 instrumentation | merged |
+| #1770 | addressed-attention dispatch harness | merged |
+| #1773 | arithmetic reachability probe + arithmetic oracle | merged |
+| #1774 | emission-context + arith-fit instruments | merged |
+| #1780 | head-vs-representation probe | merged |
+
+All are measurement-only. Every report root is sealed and archived to
+`icloud:UOR-R4/results/deepseek/` with MD5 verification.
+
+## 2. What was measured, as localisers
+
+**2a. The engine computes exactly and cannot emit it.**
+On a 32-example canonical-decimal arithmetic split, with forced read and forced operator, the operator
+produced the exactly correct value **80/80**; the engine emitted that byte **0/80**. The value *is* wired
+into the emission input byte-wise (`engine.rs:228-238` → `objects.rs:132-134` → `inputs.rs:120`, bits
+792..800). The context is a **1024→9 LUT cascade** (`circuit.rs:5`), and at frozen init it erases the
+digit: a sweep over the digit's byte field with all other bits fixed yields **2–4 distinct contexts,
+never 256**, and is **constant in 3 of 9** examples.
+
+*Named missing component:* the cascade is not trained to route bits 792..800. **Not** a wiring gap.
+
+**2b. The proposed fix was refuted before it was built.**
+A council concluded the wiring forces digit collisions (ceiling 8/10) and recommended structural
+emission addressing. A Python-only replay of `Topology::seeded` at `WIRING_SEED=0x973`, verified
+against an independent forward-Fisher-Yates rebuild (**1380/1380 gate pins agree**), measured
+**10/10 separable digits** — and 10/10 at every seed sampled (1024 census, 40 hand-picked, 400 random).
+The minimal separating projection is **2 context bits**. Seed-shopping and structural addressing are
+therefore unsupported by this evidence.
+
+*Named missing component:* the failure is **downstream** — the learned 257-way readout and/or the fit —
+not in the topology. The decisive unmeasured quantity is the **unforced** emission path.
+
+**2c. The STE hypothesis was falsified, and the method was not an STE.**
+An opt-in relaxation (`ste.rs`, 568 lines, purely additive) moved the discrete surface **8.5× more**
+than the score-function fit (606 of 5520 LUT signs, 147/345 gates, vs 71), so "gradient cannot reach
+the discrete tables" is **false**. It still produced a NULL: distinct fit contexts collapsed **18 → 1**
+by update 250, and the relaxed gradient decayed **3.69e-5 → 2.46e-43** with `soft_loss == hard_ce` from
+u1000. A subsequent audit found the implementation computes the objective from `soft_forward` and
+differentiates it analytically — **there was no hard-forward/soft-backward pair**, so "the STE signal
+dies" was vacuous. Default path proven byte-identical; suite 50 → 60 passed with only new tests.
+
+*Named missing component:* the **objective** (a collapse attractor) and a genuine gradient-preserving
+straight-through derivative — not reachability of the discrete tables.
+
+**2d. The prediction head is not the binding defect on the current artifact.**
+On `chat-100m2-C` (sha256 `3d20344c…`), the served head **is the tied embedding** — dense 4096×1024,
+rank 1024/1024. Held-out: a plain linear softmax recovers **98.8%** and a **zero-parameter 1-NN**
+recovers **93.3%** of served accuracy. Rank: **1025 nonzero singular values, not 9**; the participation
+ratio lands at 9.05 but is a **coincidence of the statistic** — the direct control (truncate to rank 9)
+costs **6.10 bits and 52 points**. The recorded baseline reproduced to **3.2e-8**.
+
+*Named missing component:* none identified here. This is a **negative result that closes a work class**
+— do not fund geometry/routing/typed operators at the prediction step on this evidence.
+
+**2e. Two premise corrections found by reading source before running.**
+The 9-parameter `OUTPUT_MIX` sign walk (`shared_core.rs:47-48`) is **not** the served head — the file
+states "No retained-model dispatch uses it"; it is the schema-/1 fallback. A council had cited it as
+"the defect is the architecture". Separately, the `P − A = 0.5423`-bit measurement was **not**
+reproduced: its artifact is not on local disk.
+
+## 3. Operational incidents (programme-level — #820)
+
+**3a. Coordination silently expired.** `coord status` showed the DeepSeek lab heartbeat at
+**~Oct 1** against a live sequence of 896. The lab record says why: adapter *"no heartbeat automation"*,
+and `coord.rs:492` expires stale labs. A heartbeat was applied this session (sequence 896 → 897,
+commit `a678328f`). **The failure is structural and will recur when a session ends.**
+
+**3b. `coord` STORE is `coord.git`, not the runner directory.** Passing the runner dir yields
+`invalid lab-runner input: git config: ` — which reads as a missing-identity error and is not one.
+`git config user.name/user.email` were unset; both are now set to the owner's identity.
+
+**3c. `host-policy.json` carried dead hardware.** It declared `/Volumes/UOR-Workspace` (60 GiB reserve)
+and `/Volumes/X10 Pro` (120 GiB) — both superseded when the drive failed and the workflow moved to
+iCloud. Only `internal` remains; backed up to `host-policy.json.bak-20261006`.
+
+**3d. Admission was held and said so.** `admissions-held.json` recorded
+`volume internal free bytes 27382095872 below required 43083890688` — i.e. **25.5 GiB against a 40 GiB
+reserve**. The declared reserve is **40.00 GiB** (`host-policy.json`), matching the `warning` line of
+`agent-execution-policy.json`'s storage watermarks (internal target 60 / warning 40 / stop 25). The
+machine now measures **46.51 GiB**, above the reserve; **the hold file is stale and not re-evaluated.**
+
+**3e. A "lost" artifact was catalogued, not lost.** The `olx-form-2` artifact behind `P − A` is indexed
+in iCloud as a 1.12 GB object (md5 `2a065c04…`) under lab `workspace-2026-10-01` — the migration off the
+failed drive. A probe followed a symlink to dead hardware and declared a clean blocker.
+
+**3f. iCloud placeholders read as an empty mirror.** `du -sh` reports 4.0K for the iCloud tree because
+files are **dataless placeholders** (`blocks=0`, full logical size). Archives are durable; local disk
+is not consumed. Do not read this as data loss.
+
+**3g. Local policy drifts from repo policy with nothing checking it.** The local `host-policy.json`
+(mtime 2026-09-30) only partially reflects `agent-execution-policy.json` in main. **A CI guard comparing
+declared watermarks against the local policy would prevent a class of silent divergence.**
+
+## 4. D20 §2 compliance state (honest)
+
+| # | precondition | state |
+|---|---|---|
+| 1 | parameter- and compute-matched ordinary control per mechanism | **NOT MET** for the geometric read — `mqar-bench`'s `ArmSpec` has only the Stack variant with the architecture hardcoded, so the read has never been compared to a matched ordinary attention model |
+| 2 | ≥3 seeds per result | **NOT MET** for the read; met for the arithmetic/emission measurements where seeds were varied |
+| 3 | wiring verified reached (firing counter) | **MET** for addressed_attention — `Work::selected_operations` is the firing counter and returned a number (`0` at baseline, `9` with digit spans) |
+| 4 | written root-cause case naming what would change the answer | **PARTLY MET** — see §5 |
+| 5 | novel geometric candidates invented and tested | **NOT MET** — no new geometric candidate was invented this session |
+
+**§2 is not satisfied, so §3 suspension does not apply. No mechanism may be retired.**
+
+## 5. What would change the answer (D20 §2 condition 4)
+
+- **Unforced emission path** (`CompiledPolicy` argmax rows, no forcing): unmeasured, needs a build. This
+  is the single decisive number for §2b.
+- **`SampledPolicy::set_target` does not force the symbol** (`policy.rs:235`; the target only feeds CE,
+  the draw is `categorical(logits, legal, key)` at `:307`). Any forced-emission harness needs a
+  harness-local `Policy` wrapper.
+- **Read vs parameter-matched ordinary control** (§2 condition 1) and **≥3 seeds** (§2 condition 2).
+- **A contrastive/ranking objective reaching the query/key encoders** — a read-only score function that
+  is monotone in distance cannot be reordered by training the read's own parameters; every increasing
+  reparameterisation preserves the argmax.
+
+## 6. Next dependencies
+
+1. Run the unforced emission measurement (needs a build).
+2. Run the read against a parameter- and compute-matched ordinary control at ≥3 seeds.
+3. Automate the lab heartbeat, or make expiry visible — otherwise coordination lapses again.
+4. Add the local-vs-repo policy watermark guard.
+
+---
+
+# Addendum — 2026-10-06, later session (rounds 8–12)
+
+The **Next dependencies** above are now discharged or superseded. This addendum records the outcome
+so the earlier sections are not read as current.
+
+## 7. The coordination deadlock was real, and it is fixed
+
+**Symptom.** Every `Claim` from every lab was refused:
+`invalid lab-runner input: shared policy changed or comparison incomplete; hold admissions and perform
+reviewed policy migration`.
+
+**Cause — a closed dependency cycle.**
+1. `Action::Claim` calls `require_current_policy` (`coord.rs:1398-1401`), which validates
+   `compare/<store pin>...main` via `validate_policy_comparison` (`:226-250`). The store was pinned at
+   `ba266ad4` (#1529), **215 commits behind main** — `files=300` *and* a modified `AGENTS.md`, either of
+   which trips the guard.
+2. The remedy, `Action::AdoptPolicy`, refuses while any attempt is non-finalized (`:425`).
+3. Exactly one was: **`opencode-b0-flock-g1a2-20260930-g2`** — reserved against `/Volumes/UOR-Workspace`,
+   **the volume destroyed with the drive**, cancelled in the queue and never started.
+4. Finalizing it required `owned()` (`:344-362`) — a live, unexpired, same-session claim — and claiming
+   required the policy guard to pass.
+
+**Fixing it.** `Action::Abandon` was added (PR **#1791**, `coord.rs` +548/−51): it finalizes a `reserved`
+attempt whose exit evidence **positively proves `never_started`**, requires **the reserving session**, and
+deliberately does **not** call `owned()` — that omission is the fix. `FinishAttempt` is unchanged for live
+work, proven by a regression test. Applied as commit `7bc2af58`. Preconditions then read: **0 live claims,
+0 non-finalized attempts.**
+
+The owner then authorised the pointer repair (`e6a40b71`), moving the store to **`e445ee946573`** — PR
+#1758's squash-merge commit, verified to pass the guard (`ahead`, 49 files, no guarded files). **No policy
+content changed.** Note `86bec270` (D20 itself) **fails** the guard, because `AGENTS.md` changed after it:
+the target is the newest guarded-**file** commit, not the newest decision.
+
+Getting a claim through took four more rejections, each a real requirement: the `work_card` must be
+literally `sha256:<64-hex>`; **ownership paths must have no trailing slash**; and the scope must not
+overlap a live claim — Codex held `.../examples/geometric-generate-update.rs`, so claiming the whole
+`examples` **directory** collided. Narrowed to `mqar-bench.rs`; claim granted (seq 907).
+
+## 8. Three more runner/host defects found and fixed
+
+- **A storage WARNING was acting as the hard admission gate** (#1787). The repo declares
+  `internal: target 60 | warning 40 | stop 25 GiB`; the local `host-policy.json` had set
+  `reserve_bytes = 40` — the *warning* — as the hard gate. It blocked the very cleanup needed to get back
+  above the goal. Reserve corrected to the stop level (25 GiB); the checker now **warns** at 40 and
+  **gates** at 25. This is the general rule: a goal to maintain must not block.
+- **`admissions-held.json` had no removal path** (8+ writes, zero removals; contrast
+  `admission-blocked.json`, cleared at `daemon.rs:1028`). A transient condition therefore latched the
+  daemon off permanently — live at 39.89 GiB against 40.12 GiB. Fixed by PR **#1793**: holds are classified
+  `Terminal | Recheckable` **in the data**, all 13 `host::hold` sites explicitly classified (one flagged
+  AMBIGUOUS rather than guessed), and a recheckable hold re-runs the *same* predicate and clears itself.
+  **That change alone would not have released the live record** — it predates the `kind` field and so reads
+  back Terminal by design. The manual clear was necessary.
+- **An orphan audit** (#1790) now reports DONE evidence that `coord` never learned about. It found three
+  of thirteen unreconciled, **two absent from `coord` entirely** and **one belonging to another lab** —
+  the same failure mode without the consequence, which is why it had gone unnoticed.
+
+## 9. Measurement results
+
+- **The matched ordinary control now exists.** `ArmSpec` had a single `Stack` variant with
+  `arch: StackArch::Geometric` hardcoded, so **the geometric read had never been compared to a
+  parameter-matched ordinary attention model** (D20 §2 condition 1). That is now implemented and built
+  (`arm=transformer`, `mlp=matched`, `read_firing`, `context_reachability`), preserved on
+  `deepseek/d20-control` after its authoring agent stopped without reporting.
+  Matching is **a number, not an assertion**: reference `rrarra` = **1,370,008**; C6 (layers=6, mlp=395) =
+  1,370,496 (**+0.036%**) but carries **+19.9%/+36.0% per-token MACs**; C2 (layers=2, mlp=1527) =
+  1,369,984 (**−0.0018%**) with the access term exactly matching. **Neither is a clean control** and each
+  carries a stated residual.
+- **The norm-entanglement escape closes** (PR #1794). On **identical frozen q/k**, cosine **0.0143** vs dot
+  **0.0137** = **1.04×** against a 5× bar. Verdict **PARTIAL**, not "not-recoverable" — the pre-registered
+  clauses disagreed and both readings were reported rather than the flattering one.
+- **Stage-0's frozen-swap was valid only at layer 0.** Swapping `config.read` re-runs the forward, so q/k
+  at layers ≥1 are not the vectors A1 scored (offline-vs-library max abs diff 1.85e-07 at layer 0 but
+  **0.197–0.919 at layers 1–5**). **This qualifies how Stage-0's A2b result may be cited.**
+- **The headline reframing.** A1's 0.0595 is dominated by the **learned per-distance age bias** — a
+  positional prior. With age zeroed, **every** score family collapses to a flat 1.2–1.7% across
+  d16..d400; with age restored, every family jumps **7.5–13.5× at d16 only**, and **at long range A1 is
+  worse than dot or cosine**. The surviving signal was a **recency effect**, not content identity.
+- **Named missing component: content identity in the read's query/key projections.** The candidate set
+  **contains** the answer (exact-identity sieve = **1.0000** on the same rows/positions/candidates) and no
+  score function over these vectors finds it. The read has a usable **positional** selector and **no
+  measurable content selector at any distance**.
+
+## 10. Process findings worth carrying
+
+- **An agent's report about shared state is a hypothesis, not a fact.** Four claims were checked and found
+  wrong: `dump_scores=1` "never implemented" (it is, at `mqar_bench_step2/fact.rs:836`, producing 56 MB);
+  an artifact "physically absent" (catalogued in iCloud); an admission hold "ACTIVE again" (it was an
+  archived file, and the gate was 25 GiB not 40); and a runtime file reported as an empty iCloud mirror
+  (dataless placeholders report `du` 4.0K with `blocks=0`).
+- **Subagents are not addressable after dispatch** — `send_message` fails for them. Two agents duplicated
+  the same 12-run matrix because one concluded a slow agent had died. Prefer `spawn_teammate` when a reply
+  path is needed.
+- **Verify the tree, not the PR badge.** #1770 merged while two of its three commits were still arriving;
+  only `git cat-file -e origin/main:<path>` caught it.
+- **Gate a destructive step on its own check.** A stale-hold clear was attempted once with the precondition
+  printing `not cleared` and the file moved anyway (restored immediately). The second attempt ran the check
+  as a separate script and moved the file only inside the passing branch.
+- **The runner test suite has pre-existing flakes**: 3 of 6 unmodified-baseline runs failed identically in
+  `unknown_monitor_preserves_paths_child_and_charge_until_stopped_reconciliation` and
+  `cancel_finalizes_a_running_job`.
