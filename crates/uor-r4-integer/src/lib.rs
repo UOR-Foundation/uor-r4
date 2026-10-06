@@ -30,6 +30,7 @@ pub mod geometric_prefix_transport;
 pub mod geometric_read;
 pub mod geometric_read_feedback;
 pub mod geometric_source_actions;
+pub mod geometric_source_bound_actions;
 pub mod geometric_source_emission_view;
 pub mod geometric_source_end_transport;
 pub mod geometric_source_realizer;

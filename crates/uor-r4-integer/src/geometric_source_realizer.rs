@@ -3,7 +3,7 @@
 //! Trusted receipt loading is separate from offline float-source equivalence.
 use crate::{
     geometric_context_q4::{ContextQ4Config, NativeContextQ4},
-    geometric_cue_carrier::{CueAngularQ4, CueCarrierTrace, NativeCueCarrier},
+    geometric_cue_carrier::{CueAngularQ4, CueCarrierCosts, CueCarrierTrace, NativeCueCarrier},
     geometric_no_read::{NativeGeometricNoRead, NoReadConfig},
     geometric_occurrence_read::{
         NativeOccurrenceReader, OccurrenceBankSegment, OccurrenceComponents, OccurrenceRead,
@@ -18,9 +18,13 @@ use crate::{
     geometric_source_actions::{
         ActionHeadScores, ActionTrace, NativeSourceActions, SourceActionBinding,
     },
+    geometric_source_bound_actions::{
+        NativeSourceBoundActions, SourceBoundAction, SourceBoundActionCandidate,
+        SourceBoundActionTrace, SourceBoundProvenance,
+    },
     geometric_source_emission_view::{SourceEmissionCompiler, SourceEmissionView},
     geometric_source_end_transport::{
-        NativeSourceEndTransport, SourceEndAngularQ4, SourceEndTransportTrace,
+        NativeSourceEndTransport, SourceEndAllTrace, SourceEndAngularQ4, SourceEndTransportTrace,
     },
     h4_tables::{H4Code, HistoricalH4Tables, ROOT_COUNT},
 };
@@ -346,6 +350,27 @@ pub struct SourceEndBankRealizerTrace {
     pub source_end: SourceEndTransportTrace,
     pub actions: ActionTrace,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SourceBoundCueMode {
+    NoTerminalCue,
+    SharedCue,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SourceBoundBankRealizerTrace {
+    pub mode: SourceBoundCueMode,
+    pub prefix_bank: PrefixBankRealizerTrace,
+    pub source_end: Option<SourceEndAllTrace>,
+    pub actions: Option<SourceBoundActionTrace>,
+    pub fallback_actions: Option<ActionTrace>,
+    pub fallback_reason: Option<&'static str>,
+    /// Source ordinal, then head. Empty sources use authentic geometric cues.
+    pub source_cue_q24: Vec<Vec<i64>>,
+    pub additional_cue_costs: CueCarrierCosts,
+    /// The prefix-bank legacy final action normalization is retained as evidence
+    /// but discarded by the typed action path. Per-head occurrence reductions
+    /// remain in the original bank cost and are not included in this count.
+    pub discarded_legacy_action_reductions: usize,
+}
 
 pub struct RealizerExecution<'a> {
     pub context: &'a NativeContextQ4,
@@ -472,6 +497,181 @@ impl<'a> RealizerExecution<'a> {
             prefix_bank,
             source_end,
             actions,
+        })
+    }
+
+    pub fn read_bank_with_source_bound_actions(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        parent: &NativeArtifactBinding,
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        end: &NativeSourceEndTransport<'_>,
+        mode: SourceBoundCueMode,
+    ) -> Result<SourceBoundBankRealizerTrace> {
+        end.validate_execution(
+            parent,
+            self.context,
+            self.geometry,
+            cue.metadata(),
+            prefix.metadata(),
+        )?;
+        let prefix_bank = self.read_bank_with_prefix_transport(
+            segments,
+            query,
+            actual_prefix,
+            parent,
+            cue,
+            prefix,
+        )?;
+        let bank = &prefix_bank.cue_bank.bank;
+        if bank.candidates.is_empty() {
+            // With no factual Copy route, legacy endpoint adjustments are zero.
+            // The already computed two-terminal trace is the explicit fallback.
+            let fallback_actions = Some(bank.actions.clone());
+            return Ok(SourceBoundBankRealizerTrace {
+                mode,
+                prefix_bank,
+                source_end: None,
+                actions: None,
+                fallback_actions,
+                fallback_reason: Some("no-copy-candidates;legacy-global-Period-Stop"),
+                source_cue_q24: Vec::new(),
+                additional_cue_costs: CueCarrierCosts::default(),
+                discarded_legacy_action_reductions: 0,
+            });
+        }
+        let source_end = end.prepare_all(&prefix_bank.prefix, &bank.heads)?;
+        let mut provenances = Vec::with_capacity(source_end.all_scores.len());
+        let mut source_cue_q24 = Vec::with_capacity(source_end.all_scores.len());
+        let mut additional_cue_costs = CueCarrierCosts::default();
+        for score in &source_end.all_scores {
+            let Some(BankSegmentTrace::Source {
+                event,
+                record,
+                commit,
+                ..
+            }) = bank.segments.get(score.source_segment_index)
+            else {
+                return Err(invalid(
+                    "source-bound endpoint physical segment is not Source",
+                ));
+            };
+            if score.source_ordinal != provenances.len() {
+                return Err(invalid("source-bound endpoint ordinal differs"));
+            }
+            provenances.push(SourceBoundProvenance {
+                source_ordinal: score.source_ordinal,
+                source_segment_index: score.source_segment_index,
+                record: *record,
+                commit: *commit,
+                event: *event,
+            });
+            let (scores, costs) =
+                cue.score_source_cue(&prefix_bank.cue_bank.carrier, score.source_segment_index)?;
+            additional_cue_costs.extra_potential_table_reads += costs.extra_potential_table_reads;
+            additional_cue_costs.extra_geometry_relative_reads +=
+                costs.extra_geometry_relative_reads;
+            additional_cue_costs.logical_sidecar_payload_bytes +=
+                costs.logical_sidecar_payload_bytes;
+            source_cue_q24.push(scores);
+        }
+        let mut candidates = Vec::with_capacity(bank.candidates.len() + provenances.len() * 2);
+        let mut head_scores = vec![Vec::with_capacity(candidates.capacity()); bank.heads.len()];
+        for (index, candidate) in bank.candidates.iter().enumerate() {
+            let source_ordinal = *prefix_bank
+                .prefix
+                .candidate_source_indices
+                .get(index)
+                .ok_or_else(|| invalid("source-bound Copy source ordinal absent"))?;
+            let provenance = provenances
+                .get(source_ordinal)
+                .ok_or_else(|| invalid("source-bound Copy source absent"))?;
+            if candidate.bank_index != index
+                || candidate.segment_index != provenance.source_segment_index
+                || candidate.event != provenance.event
+                || candidate.occurrence.record != provenance.record
+                || candidate.occurrence.commit != provenance.commit
+            {
+                return Err(invalid("source-bound Copy occurrence provenance differs"));
+            }
+            let source_offset = *prefix_bank
+                .prefix
+                .candidate_offsets
+                .get(index)
+                .ok_or_else(|| invalid("source-bound Copy offset absent"))?;
+            candidates.push(SourceBoundActionCandidate {
+                action: SourceBoundAction::Copy {
+                    bank_index: index,
+                    source_offset,
+                },
+                source: provenance.clone(),
+                token_id: candidate.occurrence.token_id,
+            });
+            for h in 0..bank.heads.len() {
+                if prefix_bank.cue_bank.carrier.copy_q24[h][index]
+                    != source_cue_q24[source_ordinal][h]
+                {
+                    return Err(invalid("source-bound direct cue differs from Copy cue"));
+                }
+                head_scores[h].push(bank.heads[h].scores_q24[index]);
+            }
+        }
+        for (source_ordinal, provenance) in provenances.iter().enumerate() {
+            let endpoint = &source_end.all_scores[source_ordinal];
+            for (action, token_id, scores) in [
+                (
+                    SourceBoundAction::Period,
+                    self.binding.period_token_id(),
+                    &endpoint.period_q24,
+                ),
+                (
+                    SourceBoundAction::Stop,
+                    self.binding.eos_token_id(),
+                    &endpoint.stop_q24,
+                ),
+            ] {
+                let is_period = matches!(action, SourceBoundAction::Period);
+                candidates.push(SourceBoundActionCandidate {
+                    action,
+                    source: provenance.clone(),
+                    token_id,
+                });
+                for h in 0..bank.heads.len() {
+                    let global = if is_period {
+                        bank.period_q24[h]
+                    } else {
+                        bank.heads[h].no_read_q24
+                    };
+                    let common = if mode == SourceBoundCueMode::SharedCue {
+                        source_cue_q24[source_ordinal][h]
+                    } else {
+                        0
+                    };
+                    let total = global
+                        .checked_add(scores[h])
+                        .and_then(|value| value.checked_add(common))
+                        .ok_or_else(|| invalid("source-bound terminal score overflow"))?;
+                    head_scores[h].push(total);
+                }
+            }
+        }
+        let borrowed = head_scores.iter().map(Vec::as_slice).collect::<Vec<_>>();
+        let actions =
+            NativeSourceBoundActions::new(self.binding.clone(), bank.heads.len(), self.exp)?
+                .reduce(&candidates, &borrowed)?;
+        Ok(SourceBoundBankRealizerTrace {
+            mode,
+            prefix_bank,
+            source_end: Some(source_end),
+            actions: Some(actions),
+            fallback_actions: None,
+            fallback_reason: None,
+            source_cue_q24,
+            additional_cue_costs,
+            discarded_legacy_action_reductions: 1,
         })
     }
 
@@ -1462,6 +1662,37 @@ impl NativeSourceRealizer {
             end,
         )
     }
+    pub fn read_bank_with_source_bound_actions(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        end: &NativeSourceEndTransport<'_>,
+        mode: SourceBoundCueMode,
+    ) -> Result<SourceBoundBankRealizerTrace> {
+        RealizerExecution {
+            context: &self.context,
+            potential_tables: &self.potential_tables,
+            no_read: &self.no_read,
+            geometry: &self.geometry,
+            exp: &self.exp,
+            period: &self.period,
+            binding: &self.binding,
+        }
+        .read_bank_with_source_bound_actions(
+            segments,
+            query,
+            actual_prefix,
+            &self.artifact_binding,
+            cue,
+            prefix,
+            end,
+            mode,
+        )
+    }
+
     pub fn compile_prefix_transport(
         &self,
         cue: &NativeCueCarrier<'_>,
@@ -1929,6 +2160,238 @@ mod tests {
                 .map_err(|e| invalid(e.to_string()))?,
         )
     }
+    #[test]
+    fn source_bound_nonzero_end_scores_follow_each_source_not_selected_route() -> Result<()> {
+        use crate::geometric_prefix_transport::PrefixScoreMode;
+        use crate::geometric_source_end_transport::{SourceEndAngularConfig, SourceEndScoreMode};
+        let f = ActionFixture::new()?;
+        let ids = [4, 5];
+        let view = f.compiler.compile(&ids)?;
+        let other_ids = [4];
+        let other_view = f.compiler.compile(&other_ids)?;
+        let segments = [
+            SourceBankSegment::Context {
+                token_ids: &[5],
+                role: 1,
+                event: 2,
+            },
+            SourceBankSegment::Source {
+                frame: ActionFixture::frame(&ids),
+                view: &view,
+                event: 7,
+            },
+            SourceBankSegment::Source {
+                frame: ActionFixture::frame(&other_ids),
+                view: &other_view,
+                event: 8,
+            },
+        ];
+        let cue = NativeCueCarrier::compile(
+            f.parent.clone(),
+            &f.context,
+            &f.geometry,
+            cue_potential(f.context.config(), true)?,
+        )?;
+        let prefix = NativePrefixTransport::compile(
+            f.parent.clone(),
+            &f.context,
+            &f.geometry,
+            cue.metadata().clone(),
+            prefix_potential(f.context.config(), PrefixScoreMode::DirectedRelative, true)?,
+        )?;
+        let c = f.context.config();
+        let config = SourceEndAngularConfig {
+            heads: c.heads,
+            lanes_per_head: c.lanes_per_head,
+            mode: SourceEndScoreMode::DirectedRelative,
+        };
+        let zero = vec![0; config.coefficient_count()? / 2];
+        let end = NativeSourceEndTransport::compile(
+            f.parent.clone(),
+            &f.context,
+            &f.geometry,
+            cue.metadata().clone(),
+            prefix.metadata().clone(),
+            SourceEndAngularQ4::new(config, &zero, &zero)?,
+        )?;
+        let bank = f.execution().read_bank_with_prefix_transport(
+            &segments,
+            &[5],
+            &[4],
+            &f.parent,
+            &cue,
+            &prefix,
+        )?;
+        let zero_all = end.prepare_all(&bank.prefix, &bank.cue_bank.bank.heads)?;
+        let root0 = zero_all.all_scores[0].angular_indices[0];
+        let root1 = zero_all.all_scores[1].angular_indices[0];
+        assert_ne!(root0, root1, "fixture requires distinct endpoint roots");
+        let mut period_q = vec![0; config.coefficient_count()?];
+        let mut stop_q = period_q.clone();
+        period_q[usize::from(root0)] = 3;
+        period_q[usize::from(root1)] = -2;
+        stop_q[usize::from(root0)] = -1;
+        stop_q[usize::from(root1)] = 4;
+        let packed_period = crate::geometric_potential_q4::pack_coefficients(&period_q)
+            .map_err(|e| invalid(e.to_string()))?;
+        let packed_stop = crate::geometric_potential_q4::pack_coefficients(&stop_q)
+            .map_err(|e| invalid(e.to_string()))?;
+        let nonzero = NativeSourceEndTransport::compile(
+            f.parent.clone(),
+            &f.context,
+            &f.geometry,
+            cue.metadata().clone(),
+            prefix.metadata().clone(),
+            SourceEndAngularQ4::new(config, &packed_period, &packed_stop)?,
+        )?;
+        let all = nonzero.prepare_all(&bank.prefix, &bank.cue_bank.bank.heads)?;
+        assert_eq!(all.all_scores[0].period_q24[0], 3 << 22);
+        assert_eq!(all.all_scores[1].period_q24[0], -2 << 22);
+        assert_eq!(all.all_scores[0].stop_q24[0], -1 << 22);
+        assert_eq!(all.all_scores[1].stop_q24[0], 4 << 22);
+        for source in 0..2 {
+            // Force only the diagnostic raw-Copy winner in this arithmetic test.
+            // No runtime target, label or routing mask is introduced.
+            let mut heads = bank.cue_bank.bank.heads.clone();
+            for head in &mut heads {
+                head.scores_q24.fill(0);
+                for (index, ordinal) in bank.prefix.candidate_source_indices.iter().enumerate() {
+                    if *ordinal == source {
+                        head.scores_q24[index] = 1;
+                    }
+                }
+            }
+            let selected = nonzero.prepare(&bank.prefix, &heads)?;
+            assert_eq!(selected.selected_source_index, Some(source));
+            assert_eq!(selected.period_q24, all.all_scores[source].period_q24);
+            assert_eq!(selected.stop_q24, all.all_scores[source].stop_q24);
+            assert_eq!(
+                nonzero.prepare_all(&bank.prefix, &heads)?.all_scores,
+                all.all_scores
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn source_bound_all_sources_share_cue_preserve_copy_and_empty_fallback() -> Result<()> {
+        use crate::geometric_prefix_transport::PrefixScoreMode;
+        use crate::geometric_source_end_transport::{SourceEndAngularConfig, SourceEndScoreMode};
+        let f = ActionFixture::new()?;
+        let ids = [4, 5];
+        let view = f.compiler.compile(&ids)?;
+        let segments = [
+            SourceBankSegment::Context {
+                token_ids: &[5],
+                role: 1,
+                event: 2,
+            },
+            SourceBankSegment::Source {
+                frame: ActionFixture::frame(&ids),
+                view: &view,
+                event: 7,
+            },
+            SourceBankSegment::Source {
+                frame: ActionFixture::frame(&ids),
+                view: &view,
+                event: 8,
+            },
+        ];
+        let cue = NativeCueCarrier::compile(
+            f.parent.clone(),
+            &f.context,
+            &f.geometry,
+            cue_potential(f.context.config(), true)?,
+        )?;
+        let prefix = NativePrefixTransport::compile(
+            f.parent.clone(),
+            &f.context,
+            &f.geometry,
+            cue.metadata().clone(),
+            prefix_potential(f.context.config(), PrefixScoreMode::DirectedRelative, true)?,
+        )?;
+        let c = f.context.config();
+        let config = SourceEndAngularConfig {
+            heads: c.heads,
+            lanes_per_head: c.lanes_per_head,
+            mode: SourceEndScoreMode::DirectedRelative,
+        };
+        let zero = vec![0; config.coefficient_count()? / 2];
+        let end = NativeSourceEndTransport::compile(
+            f.parent.clone(),
+            &f.context,
+            &f.geometry,
+            cue.metadata().clone(),
+            prefix.metadata().clone(),
+            SourceEndAngularQ4::new(config, &zero, &zero)?,
+        )?;
+        let no_cue = f.execution().read_bank_with_source_bound_actions(
+            &segments,
+            &[5],
+            &[4],
+            &f.parent,
+            &cue,
+            &prefix,
+            &end,
+            SourceBoundCueMode::NoTerminalCue,
+        )?;
+        let shared = f.execution().read_bank_with_source_bound_actions(
+            &segments,
+            &[5],
+            &[4],
+            &f.parent,
+            &cue,
+            &prefix,
+            &end,
+            SourceBoundCueMode::SharedCue,
+        )?;
+        assert_eq!(no_cue.prefix_bank, shared.prefix_bank);
+        let a = no_cue
+            .actions
+            .as_ref()
+            .ok_or_else(|| invalid("fixture typed actions absent"))?;
+        let b = shared
+            .actions
+            .as_ref()
+            .ok_or_else(|| invalid("fixture typed actions absent"))?;
+        assert_eq!(a.actions.len(), 8);
+        for (left, right) in a.actions.iter().zip(&b.actions) {
+            assert_eq!(left.source, right.source);
+            assert_eq!(left.action, right.action);
+            assert_eq!(left.token_id, right.token_id);
+            if matches!(left.action, SourceBoundAction::Copy { .. }) {
+                assert_eq!(left.score_q24, right.score_q24);
+            } else {
+                let delta: i64 = shared.source_cue_q24[left.source.source_ordinal]
+                    .iter()
+                    .sum();
+                assert_eq!(right.score_q24 - left.score_q24, delta);
+                assert_eq!(
+                    left.source.source_segment_index,
+                    left.source.source_ordinal + 1
+                );
+                assert_eq!(left.source.event, 7 + left.source.source_ordinal as u64);
+            }
+        }
+        let fallback = f.execution().read_bank_with_source_bound_actions(
+            &[],
+            &[5],
+            &[4],
+            &f.parent,
+            &cue,
+            &prefix,
+            &end,
+            SourceBoundCueMode::SharedCue,
+        )?;
+        assert!(fallback.actions.is_none());
+        assert!(fallback.fallback_actions.is_some());
+        assert_eq!(
+            fallback.fallback_reason,
+            Some("no-copy-candidates;legacy-global-Period-Stop")
+        );
+        Ok(())
+    }
+
     #[test]
     fn source_end_zero_full_parity_last_token_and_bank_source_binding() -> Result<()> {
         use crate::geometric_prefix_transport::PrefixScoreMode;

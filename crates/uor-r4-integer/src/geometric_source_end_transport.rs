@@ -135,6 +135,24 @@ pub struct SourceEndTransportTrace {
     pub stop_q24: Vec<i64>,
     pub costs: SourceEndCosts,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SourceEndAllScore {
+    pub source_ordinal: usize,
+    pub source_segment_index: usize,
+    pub angular_indices: Vec<u8>,
+    pub relative_roots: Vec<u8>,
+    pub period_q24: Vec<i64>,
+    pub stop_q24: Vec<i64>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SourceEndAllTrace {
+    /// Reused preparation includes the legacy selected-source diagnostic score.
+    /// This diagnostic never selects or modifies the all-source scores.
+    pub legacy_preparation: SourceEndTransportTrace,
+    pub all_scores: Vec<SourceEndAllScore>,
+    /// Complete cost, including the discarded selected-source score above.
+    pub costs: SourceEndCosts,
+}
 pub struct NativeSourceEndTransport<'a> {
     context: &'a NativeContextQ4,
     geometry: &'a HistoricalH4Tables,
@@ -244,6 +262,69 @@ impl<'a> NativeSourceEndTransport<'a> {
         }
         Ok(())
     }
+    pub(crate) fn prepare_all(
+        &self,
+        prefix: &PrefixTransportTrace,
+        heads: &[HeadTrace],
+    ) -> Result<SourceEndAllTrace> {
+        let legacy_preparation = self.prepare(prefix, heads)?;
+        let c = self.context.config();
+        let width = c.heads * c.lanes_per_head;
+        let mut costs = legacy_preparation.costs.clone();
+        let mut all_scores = Vec::with_capacity(legacy_preparation.sources.len());
+        for (source_ordinal, source) in legacy_preparation.sources.iter().enumerate() {
+            if source.states.len() != width || prefix.response.states.len() != width {
+                return Err(error("all-source endpoint retained state shape differs"));
+            }
+            let mut score = SourceEndAllScore {
+                source_ordinal,
+                source_segment_index: source.source_segment_index,
+                angular_indices: vec![0; width],
+                relative_roots: vec![0; width],
+                period_q24: vec![0; c.heads],
+                stop_q24: vec![0; c.heads],
+            };
+            for h in 0..c.heads {
+                for lane in 0..c.lanes_per_head {
+                    let global = h * c.lanes_per_head + lane;
+                    let response = H4Code::try_from(prefix.response.states[global])
+                        .map_err(|e| error(e.to_string()))?;
+                    let root = H4Code::try_from(source.states[global])
+                        .map_err(|e| error(e.to_string()))?;
+                    let relative = self.geometry.relative(response, root).index();
+                    let index = match self.potential.config.mode {
+                        SourceEndScoreMode::DirectedRelative => relative,
+                        SourceEndScoreMode::SourceEndUnary => root.index(),
+                    };
+                    score.angular_indices[global] = index;
+                    score.relative_roots[global] = relative;
+                    score.period_q24[h] = score.period_q24[h]
+                        .checked_add(i64::from(
+                            self.potential.period_tables[h][lane][usize::from(index)],
+                        ))
+                        .ok_or_else(|| error("all-source Period score overflow"))?;
+                    score.stop_q24[h] = score.stop_q24[h]
+                        .checked_add(i64::from(
+                            self.potential.stop_tables[h][lane][usize::from(index)],
+                        ))
+                        .ok_or_else(|| error("all-source Stop score overflow"))?;
+                    costs.extra_geometry_relative_operations += 1;
+                    costs.extra_angular_table_reads += 2;
+                }
+            }
+            costs.logical_sidecar_payload_bytes +=
+                width * 2 + c.heads * 16 + 2 * std::mem::size_of::<usize>();
+            costs.preparation_vec_containers += 4;
+            all_scores.push(score);
+        }
+        costs.preparation_vec_containers += 1;
+        Ok(SourceEndAllTrace {
+            legacy_preparation,
+            all_scores,
+            costs,
+        })
+    }
+
     pub(crate) fn prepare(
         &self,
         prefix: &PrefixTransportTrace,

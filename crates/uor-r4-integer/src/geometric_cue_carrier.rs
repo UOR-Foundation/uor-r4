@@ -384,6 +384,76 @@ impl<'a> NativeCueCarrier<'a> {
                 .collect(),
         })
     }
+    /// Target-free source score, including sources without Copy occurrences.
+    /// The legacy per-occurrence preparation remains unchanged.
+    pub(crate) fn score_source_cue(
+        &self,
+        trace: &CueCarrierTrace,
+        source_segment_index: usize,
+    ) -> Result<(Vec<i64>, CueCarrierCosts)> {
+        if trace.metadata != self.metadata {
+            return Err(error("source cue trace metadata differs"));
+        }
+        let c = self.context.config();
+        let mut scores = vec![0i64; c.heads];
+        let mut costs = CueCarrierCosts {
+            logical_sidecar_payload_bytes: c.heads * 8,
+            ..Default::default()
+        };
+        let matches = trace
+            .cues
+            .iter()
+            .filter(|s| s.source_segment_index == source_segment_index)
+            .collect::<Vec<_>>();
+        if matches.len() > 1 {
+            return Err(error("source cue segment appears more than once"));
+        }
+        let Some(cue) = matches.first() else {
+            return Ok((scores, costs));
+        };
+        let query = trace.query.addresses()?;
+        let source = cue.state.addresses()?;
+        let width = c.heads * c.lanes_per_head;
+        if query.len() != width || source.len() != width {
+            return Err(error("source cue code shape differs"));
+        }
+        let mut relative = vec![None; width];
+        for (h, score) in scores.iter_mut().enumerate() {
+            for lane in 0..c.lanes_per_head {
+                let global = h * c.lanes_per_head + lane;
+                let (value, bin, root) = self.potential.contribution(
+                    h,
+                    lane,
+                    query[global],
+                    source[global],
+                    self.geometry,
+                )?;
+                *score = score
+                    .checked_add(value)
+                    .ok_or_else(|| error("source cue angular sum overflow"))?;
+                relative[global] = root;
+                if bin.is_some() {
+                    costs.extra_potential_table_reads += 1;
+                    costs.extra_geometry_relative_reads += 1;
+                }
+            }
+        }
+        if let Some(joint) = self.joint() {
+            let jc = joint.config();
+            let left = jc.head * c.lanes_per_head + jc.left_lane;
+            let right = jc.head * c.lanes_per_head + jc.right_lane;
+            if let Some(value) = joint.contribution(relative[left], relative[right])? {
+                scores[jc.head] = scores[jc.head]
+                    .checked_add(value)
+                    .ok_or_else(|| error("source cue joint sum overflow"))?;
+                costs.extra_potential_table_reads += 1;
+            }
+        }
+        costs.logical_sidecar_payload_bytes =
+            scores.len() * 8 + relative.len() * std::mem::size_of::<Option<u8>>();
+        Ok((scores, costs))
+    }
+
     pub(crate) fn prepare(
         &self,
         segments: &[OccurrenceBankSegment<'_>],

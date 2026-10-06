@@ -12,6 +12,8 @@ mod joint_evaluate;
 mod joint_fit;
 #[path = "geometric_cue_joint_probe.rs"]
 mod joint_probe;
+#[path = "geometric_cue_source_bound_probe.rs"]
+mod source_bound_probe;
 #[path = "geometric_cue_support_probe.rs"]
 mod support_probe;
 use uor_r4_integer::geometric_source_end_transport::{
@@ -32,6 +34,7 @@ fn composition_panel(a: &Args) -> Option<&CueCompositionPanel> {
         .or(a.cue_joint_fit.as_ref())
         .or(a.cue_joint_evaluate.as_ref())
         .or(a.cue_coadapt_probe.as_ref())
+        .or(a.cue_source_bound_probe.as_ref())
         .or_else(|| {
             a.cue_discrete_fit
                 .as_ref()
@@ -89,6 +92,9 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     if (a.mode == "cue-calibration-joint-fit") != a.cue_joint_fit.is_some() {
         return Err(invalid("joint fit explicit-mode contract differs").into());
     }
+    if (a.mode == "cue-calibration-source-bound-probe") != a.cue_source_bound_probe.is_some() {
+        return Err(invalid("source-bound probe explicit-mode contract differs").into());
+    }
     if (a.mode == "cue-calibration-coadapt-probe") != a.cue_coadapt_probe.is_some() {
         return Err(invalid("coadapt probe explicit-mode contract differs").into());
     }
@@ -101,6 +107,7 @@ pub(super) fn validate(a: &Args) -> Result<()> {
         .or(a.cue_joint_fit.as_ref())
         .or(a.cue_joint_evaluate.as_ref())
         .or(a.cue_coadapt_probe.as_ref())
+        .or(a.cue_source_bound_probe.as_ref())
     {
         if c.profile != COMPOSITION_PROFILE
             || c.development_rows != 512
@@ -914,6 +921,55 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
     let bytes = fs::read(a.native_artifact.join("tokenizer.json"))?;
     let tok = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
         .ok_or_else(|| invalid("cue calibration ByteBPE absent"))?;
+    if a.mode == "cue-calibration-source-bound-probe" {
+        let (dc, ec) = panel_counts(a);
+        if !composition_report_matches(
+            &read_json(&a.development_panel.join("report.json"))?,
+            "development",
+            dc,
+        ) || !composition_report_matches(
+            &read_json(&a.fresh_panel.join("report.json"))?,
+            "fresh",
+            ec,
+        ) {
+            return Err(invalid("source-bound probe composition panel admission differs").into());
+        }
+        let development = panel(&a.development_panel, dc, &integer, &tok, a)?;
+        let cue = cue_native_load(&w.initial_cue_bundle, &integer)?;
+        let prefix = prefix_native_load(pr, &integer, &cue)?;
+        if Some(cue.metadata().potential.mode) != a.cue_score_mode
+            || Some(prefix.metadata().potential.mode) != a.prefix_score_mode
+        {
+            return Err(invalid("source-bound probe donor modes differ").into());
+        }
+        let metadata = read_json(&w.frozen_end_bundle.join("native-metadata.json"))?;
+        let end = integer.compile_source_end_transport(
+            &cue,
+            &prefix,
+            SourceEndAngularQ4::new(
+                serde_json::from_value(metadata["potential"].clone())?,
+                &fs::read(w.frozen_end_bundle.join("source-end-period-q4.bin"))?,
+                &fs::read(w.frozen_end_bundle.join("source-end-stop-q4.bin"))?,
+            )?,
+        )?;
+        if end.metadata().potential.mode != SourceEndScoreMode::DirectedRelative
+            || serde_json::to_value(end.metadata())? != metadata
+        {
+            return Err(invalid("source-bound probe native endpoint metadata differs").into());
+        }
+        return source_bound_probe::run(
+            a,
+            start,
+            &integer,
+            &tok,
+            &cue,
+            &prefix,
+            &end,
+            &development,
+            &inputs,
+            &seals,
+        );
+    }
     let source = SourceRealizerWeights::load_source(&a.source_weights, &bytes)?;
     let identity: ConsumerIdentity = serde_json::from_value(
         read_json(&a.native_artifact.join("metadata.json"))?["identity"].clone(),

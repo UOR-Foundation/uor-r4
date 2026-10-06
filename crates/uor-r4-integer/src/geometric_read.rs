@@ -30,6 +30,8 @@ use std::fmt;
 use crate::stack::kernels::{stack_div_u128, stack_exp_neg, stack_mix_row};
 
 pub const MAX_CONTEXT: usize = 256;
+/// Private source-bound action capacity; this does not extend causal context.
+pub(crate) const MAX_ACTION_OCCURRENCE_ROWS: usize = 383;
 pub const MAX_VALUE_WIDTH: usize = 64;
 pub const SCORE_FRACTIONAL_BITS: u32 = 24;
 pub const VALUE_FRACTIONAL_BITS: u32 = 16;
@@ -44,6 +46,7 @@ pub const EXP_TAIL_Q24: i64 = ((EXP_TABLE_LEN - 1) as i64) << 16;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReadError {
     InvalidContext(usize),
+    InvalidActionContext(usize),
     InvalidValueWidth(usize),
     TableLength {
         actual: usize,
@@ -86,6 +89,10 @@ impl fmt::Display for ReadError {
             Self::InvalidContext(n) => {
                 write!(f, "geometric read context {n} is outside 1..={MAX_CONTEXT}")
             }
+            Self::InvalidActionContext(n) => write!(
+                f,
+                "geometric action rows {n} are outside 1..={MAX_ACTION_OCCURRENCE_ROWS}"
+            ),
             Self::InvalidValueWidth(n) => write!(
                 f,
                 "geometric read value width {n} is outside 1..={MAX_VALUE_WIDTH}"
@@ -172,6 +179,19 @@ impl NativeGeometricRead {
         if !(1..=MAX_CONTEXT).contains(&max_context) {
             return Err(ReadError::InvalidContext(max_context));
         }
+        Self::new_admitted(max_context, value_width, exp_table)
+    }
+
+    /// Reuse the exact numerical kernel for typed actions, with one declared
+    /// real action in the null slot. Public context admission stays at 256.
+    pub(crate) fn new_action_normalizer(max_context: usize, exp_table: &[u32]) -> ReadResult<Self> {
+        if !(1..=MAX_ACTION_OCCURRENCE_ROWS).contains(&max_context) {
+            return Err(ReadError::InvalidActionContext(max_context));
+        }
+        Self::new_admitted(max_context, 1, exp_table)
+    }
+
+    fn new_admitted(max_context: usize, value_width: usize, exp_table: &[u32]) -> ReadResult<Self> {
         if !(1..=MAX_VALUE_WIDTH).contains(&value_width) {
             return Err(ReadError::InvalidValueWidth(value_width));
         }
@@ -309,8 +329,9 @@ impl NativeGeometricRead {
             self.weights[index] = weight;
             total += weight;
         }
-        // 1 <= total/2^31 <=257. Each signed coordinate sum has magnitude
-        // <=256*2^31*2^31=2^70, well inside i128. NoRead contributes no value.
+        // At most 383 rows plus null: total <=384*2^31. Each signed
+        // coordinate sum has magnitude <=383*2^31*2^31 <2^71, well
+        // inside i128. NoRead contributes no value. Public context stays256.
         self.mix.fill(0);
         let mut from = 0;
         for &weight in &self.weights[..count] {
