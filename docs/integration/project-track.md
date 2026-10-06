@@ -29,12 +29,15 @@ unqualified until complete actual own-prefix answers work.
 
 The state/pool discriminator now executes: exact current-field H4 witnesses
 win146/512 first targets versus0parent. A joined saved-record audit certifies
-319/512 have a nongold Copy atom above the exact current-field gold ceiling,
+328/512 cannot win under the exact current-field gold ceiling and Copy aliases,
 so a context-state-only repair cannot solve those rows with factual Copy fixed.
-The remaining47 losing max-gold witnesses are not impossibility verdicts.
+The remaining38 losing max-gold witnesses are not impossibility verdicts.
 The next learning diagnosis must consider shared-field and context coadaptation,
-with complete-reply usefulness retained as the primary goal. Audit first-position
-versus body credit before selecting a new curriculum or coupled update; no
+with complete-reply usefulness retained as the primary goal. Measure phase-separated first-position/body coefficient adjoints at the exact
+parent before selecting a new curriculum or coupled update. First positions
+receive8.24% of equal-episode objective weight;4,128/6,664 total targets are in
+Copy. Those counts do not prove gradient conflict. If opposing credit is
+measured, a matched offline episode-start weighting control becomes justified; no
 runtime oracle, semantic gate or score rescaling is adopted by this result.
 
 The discriminator compares existing-record state/pool reachability.

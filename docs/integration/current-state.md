@@ -105,10 +105,13 @@ learned separability. The146 winning witnesses establish readout feasibility
 with arbitrary gold-conditioned state and frozen factual Copy, not learned
 attention, an attainable recurrent trajectory or improved replies. The366 losing
 max-gold witnesses do not alone prove impossibility. A separate joined audit
-certifies319/512 rows have a nongold Copy atom above the exact current-field
-gold maximum26,214,400Q24 (1.5625nats for both gold IDs). Those rows cannot win
+certifies328/512 rows cannot win with field/bias and factual Copy fixed:
+318 have a Copy atom above the exact current-field gold maximum26,214,400Q24
+(1.5625nats for both gold IDs), one has an equal Copy atom plus its positive
+Generate mass, and nine have strict alias-only certificates across all possible
+native reference levels. Those rows cannot win
 by changing Generate state or prototypes alone while field and factual Copy
-stay fixed. The remaining47 losing witnesses lack that single-atom certificate;
+stay fixed. The remaining38 losing witnesses lack these Copy-only certificates;
 a lower gold score may improve margin there. No oracle state is introduced at runtime; no model is updated.
 
 ## Delayed geometric prediction credit — October 6

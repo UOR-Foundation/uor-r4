@@ -799,11 +799,12 @@ competition and exact full-state collisions were absent in separate saved-row
 audits. The actual fitted field is much more restrictive than its Q4 envelope;
 its frozen-state limits and learning objective remain the next causal seams.
 
-Joined frozen-field audit certifies at least319/512 first targets have a nongold
-Copy atom above the exact gold ceiling26,214,400Q24 (1.5625nats). Changing
+Joined frozen-field audit certifies328/512 first targets cannot beat frozen Copy under the exact
+gold ceiling26,214,400Q24 (1.5625nats):318 higher Copy atoms, one equal
+atom with extra Generate mass and nine additional exact alias certificates. Changing
 Generate state/prototypes alone cannot solve these with field/bias/factual Copy
 fixed. Their failure is narrower than a geometric capacity limit: the universal
-Q4 envelope remains permissive. The other47 losing witnesses need separate
+Q4 envelope remains permissive. The other38 losing witnesses need separate
 margin/alias interpretation. This directs the next learning diagnosis toward
 field/context coadaptation and first-position versus body credit, preserving
 the full native prediction objective and runtime contract.
