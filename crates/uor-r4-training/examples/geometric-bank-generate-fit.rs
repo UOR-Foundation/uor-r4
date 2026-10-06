@@ -1,5 +1,7 @@
 //! Real-panel CUDA Copy+Generate learning. No supplied selected record; labels
 //! enter only after target-free native scores. Admission never starts a fit.
+#![recursion_limit = "256"]
+
 use candle_core::{Device, Tensor, Var};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW};
 use serde::Deserialize;
