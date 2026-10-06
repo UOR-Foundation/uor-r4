@@ -2730,9 +2730,9 @@ fn test_flash_read_forward_parity() -> uor_r4_training::Result<()> {
                 set_cuda_read_kernels(CudaReadKernels::Flash);
                 let flash = forward(&cuda_dev, dtype, data, shape, score, null, age)?;
                 // bf16 output rounds once; a sum on a rounding boundary may
-                // land one bf16 step (2^-8 relative) from the fused one.
+                // land one bf16 step (at most 2^-7 relative) from the fused one.
                 let ulp = if dtype == DType::BF16 {
-                    1.0 / 256.0
+                    1.0 / 128.0
                 } else {
                     0.0
                 };
