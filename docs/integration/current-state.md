@@ -7,7 +7,13 @@ sealed reports and independently reloaded native artifacts. Output-only native
 equal-episode CE improves8.185317→7.903411; joint improves to7.928527. Both
 remain0/512 complete answers, with every first error at position0. The direct
 generation schema confirms that all512 first targets are absent from Copy.
-Three matched seeds remain the declared family decision; seed1002 is running.
+Three matched seeds remain the declared family decision. Seed1002 output-only
+also completes128 updates and exits0: CE8.182738→7.902866, still0/512 with
+all first errors at0 and all32768 hard codes unchanged. Its1024 initial/final row
+SHA256 bindings and native artifact code arrays are audited; this is not a
+second independent inference replay. Joint seed1002 remains live in final
+evaluation; output-only seed1003 starts at08:09:22Z. No complete paired/three-seed
+verdict is available.
 
 All32768 native token prototype codes remain unchanged in both arms. Lane
 diversity stays `[120,35,1,1,1,1,1,1]`. With disjoint pair edges, the six constant
@@ -21,8 +27,10 @@ Output-only472/512 and joint495/512 gold targets remain strictly below best
 Generate; deterministic gold-best21/8 still lose pooled Copy. Independent review
 traverses all2048 rows and verifies factor/mass arithmetic. Next: prepare a
 default-off label-free balanced all-lane initialization control (implemented at
-2a5bbd09; actual release build and16 CPU checks PASS), then admit its
-matched output-only comparison after the current six runs finish. New-mode CUDA
+2a5bbd09; actual release build and16 CPU checks PASS), then decide whether to
+admit its matched output-only comparison from the completed paired results and
+prospective cost. Useful later-seed replies or a changed dominant failure take
+priority over the prepared comparison. New-mode CUDA
 admission/fit remain NOT_RUN. No normalizer
 change or dose increase. PR1792 remains draft/unmerged.
 

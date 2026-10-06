@@ -464,3 +464,42 @@ prediction objective remain the architectural constraints.
 
 No new fit, code-update optimizer, gap tuning or normalization change is admitted
 by this review. All six frozen fits keep their original source and schedules.
+
+
+## Second-seed output-only result and decoder capacity scope
+
+Seed1002 output-only completes128 updates at frozen1698aa79, exits0 at
+08:09:22Z and seals. Equal-episode CE8.182738466966745→7.902866435314282;
+complete answers remain0/512 and every first error remains0. All first gold
+labels are Generate-only. The1024 initial/final rowfile SHA256 bindings are
+checked, and exported native prototype arrays have0 changed entries and the
+same `[120,35,1,1,1,1,1,1]` diversity. Context is unchanged as specified for this
+arm. Model elapsed3339.198s; wrapper3343.891s, peakRSS924456KiB. Report SHA256
+`7bf24632735be165f77a9f65362786eb6e6d8e7907212ac02a72555152890661`.
+This JSON/artifact consistency audit does not independently rerun inference or
+BLAKE3 seal verification. Joint seed1002 is not yet terminal at this observation;
+output-only seed1003 has started. No paired or three-seed verdict follows yet.
+
+Source-only mathematical review clarifies the actual Generate capacity. Its
+unary120 and pair120×120 Q4 entries are independently learned lookup potentials,
+not four-coordinate linear/bilinear root expansions. The score is
+`(bias_t + sum U_j(s_j^-1 p_j(t)) + sum P_jk(s_j^-1 p_j(t),s_k^-1 p_k(t)))/16`.
+For balanced prototypes each adjacent pair is injective over4096 token IDs at
+one fixed retained state; an unrestricted pair table could assign distinct scores
+there, within its bounds. Across states the same table is translated and shared;
+that fixed-state witness is not arbitrary context/token expressivity or training
+success. Balancing removes the old token-constant cancellation, but actual table
+invariance or cancellation may still prevent a particular contrast from using a
+lane.
+
+The surviving low-order restriction is additive separation across disjoint lane
+pairs. Raw token margins have zero mixed rectangular differences across two
+separate pair blocks. This statement does not apply to pooled Copy+Generate
+probabilities and does not prohibit recurrence from encoding higher-order history
+in a lane. A frozen native discriminator, if needed after the current results,
+can use120-way state conditionals to measure actual gold-versus-fixed-competitor
+sensitivity. If unilateral scans are flat, exact120² enumeration per disjoint
+pair yields a ceiling for that one contrast under the current decoder. Positive
+headroom does not establish encoder reachability or one state defeating every
+competitor simultaneously. Keep hard assignment movement and pooled Copy masses
+separate. This proposal adds no training admission and does not demote geometry.
