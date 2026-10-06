@@ -1,0 +1,25 @@
+# Native geometric learning on CUDA — October 6
+
+The Rust `geometric-bank-fit` learning graph now executes geometric context and composed prediction credit on CUDA. Numerical source `1d52e3f51abddcd68c79ffce950d9cb0ea9684da` passes 91 scoped release tests with the CUDA feature and required-device execution: context/credit32, transport6, composed/rebind2, driver51. The three new context kernel checks cover full120 forward/backward parity, batch and lane variants, causality/reset, direct score adjoints, emission absence and Q4 rounding. Linux cannot run Metal checks; none are counted.
+
+The actual sealed probe uses the retained checkpoint0064 and unchanged512/128 panel identities. All9 context families have finite nonzero gradients at all12 fixed positions on the first4 development rows. CPU/CUDA hard traces match; sampled direct context outputs agree; actual independent integer reload replies match4/4. The largest sampled gradient absolute difference is `1.126900315284729e-7`, within the declared elementwise and aggregate tolerances. Independent thin-artifact review recounts91 tests and108 combined positive family receipts; it does not independently replay the omitted reload reply files or full BLAKE3 seal. Two scalar comparisons differ by one F32 ULP and pass the predeclared native-loss tolerance. Zero optimizer updates, zero fresh predictions and no model selection occur. The full512 baseline was not rerun; its prior byte-verified result is retained.
+
+## What runs on the GPU
+
+Prepared context parameter/index tensors and Q4 rounding remain on the learning device. Native conditional forward scores and reverse-time gradients cover all120 H4 choices. Frozen potential/NoRead/cue and prefix/end credit use device tensor operations with gradients resident on CUDA. The native integer oracle, admission, frozen utility preparation and export remain host work. This changes offline learning execution; it does not introduce floating-point serving or a transformer. The normalizer is unchanged and DeepSeek's work is untouched.
+
+The default historical fit modes have **not** yet been switched to CUDA. The new `cue-calibration-native-cuda-probe` is an explicit no-fallback backend validation mode. Its success admits the next device-selected optimizer/fit integration; it does not claim that every existing training mode is accelerated.
+
+## Measured cost and limits
+
+On one deliberately selected RTX4090, the12 matched composed passes total CPU1.007229598s versus synchronized CUDA0.840652756s: about1.20x. Backward alone totals CPU0.958888924s versus CUDA0.500298717s: about1.92x. These include the current host oracle, constant staging and scalar finite-status synchronization, and exclude evidence-gradient downloads/comparison and export. Three additional synchronized CUDA passes take0.0532–0.0545s each. CUDA forward including host preparation is slower than CPU forward on this small sample; faster backward produces the1.20x combined gain. This is a sampled-path measurement, not full-fit throughput, energy savings or a5090 comparison.
+
+The actual probe completes in15.147s externally /14.003s reported, peak hostRSS1,104,539,648B. Initial source/native admission2.066s, host export/reload3.504s. Final scoped checks/build take151.394s, largest measured hostRSS3,298,496,512B. Failed runner, cache, Rust API and NVRTC bring-up attempts remain preserved separately and are not geometry negatives. Explicit4090 was used after5090 allocation failed; no A100-family GPU was adopted.
+
+[Execution evidence](../evidence/geometric-native-cuda-learning-2026-10-06.json) binds source, binary, configuration, input hashes, checks and timings. Durable reports, executable, source archive and failed attempts are retained under `/workspace/uor-r4/codex/native-cuda-learning/`; noncanonical output must be copied to the canonical volume before pod deletion.
+
+## Next integrated step
+
+Integrate the jointly learned native vocabulary Generate operator with an explicit CUDA context/decoder fit, rather than porting the old cue/terminal-only optimizers. Keep trainable tensors and AdamW on CUDA; after every update, invalidate the prepared graph, recompile the integer context and rebind sidecar identities before preparing the next step. Measure utility staging and a real first batch. Verify one small actual update and its exported integer replay before a larger fit. Do not infer training speed from backward timing, silently run a requested CUDA fit on CPU, reuse a stale prepared graph after an update, or resume the retired cue-only loop.
+
+The predictive dependency is still a jointly learned full-vocabulary geometric Generate operator with actual emitted-token feedback. Copy/Period/Stop cannot establish ordinary-token prediction. Preserve the shared H4-code hypothesis, richer token/root Q4 capacity control, output-only versus joint-state comparison and absent-source continuations described in the [composed-state record](geometric-composed-state-credit-2026-10-06.md). Earlier recurrence remains approximate and source selection stopped; this backend does not resolve those mathematical boundaries.

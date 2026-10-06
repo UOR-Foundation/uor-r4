@@ -1,0 +1,357 @@
+{
+  "schema": "uor-r4.native-cuda-learning-evidence/1",
+  "numerical_head": "1d52e3f51abddcd68c79ffce950d9cb0ea9684da",
+  "pod": "hae7aux68l9e78",
+  "gpu": "RTX4090",
+  "compute_capability": 89,
+  "host": "Linux x86_64",
+  "binary_sha256": "b2572d2feb058416d052dbefae28d013b4cba1bf80d58bb243248727e83cdcd9",
+  "config_sha256": "059eb377d6480924561ee2af2a9b8f74ae3218805f2b3635d12c5152a9132912",
+  "scoped_tests": {
+    "context": 32,
+    "transport": 6,
+    "composed": 2,
+    "example": 51,
+    "total": 91,
+    "cuda_feature": true,
+    "required_cuda": true,
+    "exit_codes": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "report": {
+    "active_families": [
+      "consumer.context.neighbor_category",
+      "consumer.context.neighbor_root",
+      "consumer.context.neighbor_transition",
+      "consumer.context.self_category",
+      "consumer.context.self_root",
+      "consumer.context.self_transition",
+      "consumer.context.token_category",
+      "consumer.context.token_root",
+      "consumer.context.token_transition"
+    ],
+    "actual_reload_ownprefix_rows": 4,
+    "cpu_fallback": false,
+    "cpu_reference_explicit": true,
+    "development_rows": 512,
+    "elapsed_seconds": 14.003307888,
+    "executable_lookup": "current_exe",
+    "executable_sha256": "b2572d2feb058416d052dbefae28d013b4cba1bf80d58bb243248727e83cdcd9",
+    "final_source_hash_download_seconds": 0.037050512,
+    "fresh_predictions_count": 0,
+    "full512_baseline_reexecution": "NOT_RUN; reuse retained byte-verified composed-state probe",
+    "gradient_positions": 12,
+    "gradient_rows": 4,
+    "host_arch": "x86_64",
+    "host_export_and_actual_reload_seconds": 3.5043010690000003,
+    "host_os": "linux",
+    "input_files_sha256": {
+      "/workspace/uor-r4/codex/cue-composition/panel-development-3/manifest.json": "2d7d45c366b702a6fb0f607e53f0022b976f7d1d6816bc65b8542406a21c1aeb",
+      "/workspace/uor-r4/codex/cue-composition/panel-fresh-3/manifest.json": "33e1da8521993cdb9b53d1b913e9a951fb982457fd8af37acf43bf3207577c17",
+      "/workspace/uor-r4/codex/cue-composition/results/geometric-endpoint-calibration-20261005/selected-reader-preparation-1/trusted-native-binding.json": "c3ab556038d22dfcf90f19358cddaff1c61dd3703eeeacddb802fb8e79975083",
+      "/workspace/uor-r4/codex/cue-composition/results/geometric-supported-reader-transfer-20261005/record-credit-fit-order-202610061/checkpoint-0064/manifest.json": "0ce0ee4c12dc41248302c828740d75eff722cc504307a75e45a390c54465c204",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/cue/cue-q4.bin": "771864b7581b79a9d7b93137eb5e28e863da1361e04f41c0bf8810e442469781",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/cue/native-metadata.json": "ac740665ff6c29f3ab990104f1fcad47c615acf5b1adf8c4dd93799cf7a5cf10",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/manifest.json": "d4a0d51dd72ec679ff2aee6bd37ff5094fb74f0df145f3e55a5df9c3fa518d27",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/prefix/native-metadata.json": "3de7f2ec57116c051b761db4813fd2078c9f4311275249a5e4e6e4348c7e7ece",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/prefix/prefix-q4.bin": "8d2d2cdf307e08ac0d4021d91b38c9718ceeeb5b17c16344f2330fe27d36e6ee",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/source-end/native-metadata.json": "65b9ce49779835f5136fd74bee8f8d8951e0d32353890cdeca4ab52e840f538a",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/source-end/source-end-period-q4.bin": "574a20353c97c9b74bb8a99c1287f16a1cc1c45373866afbf280d4742d2c6804",
+      "/workspace/uor-r4/codex/cue-joint-learning/fit-1/trial-0012/source-end/source-end-stop-q4.bin": "3683e02fff3b0f83fcd9d21076efdda4c72835eccdc714fd44742b77ffd8b339"
+    },
+    "learning_device": "CUDA:0",
+    "mode": "cue-calibration-native-cuda-probe",
+    "schema": "uor-r4.native-geometric-cuda-learning-probe/1",
+    "scope": "CUDA context-only composed learning graph with frozen host scorer parameters and native oracle; local120 conditional adjoints, earlier4D recurrence, stopped source route; zero updates, no Generate or acceleration claim",
+    "selection": "NONE",
+    "source_commit": "1d52e3f51abddcd68c79ffce950d9cb0ea9684da",
+    "source_staging_and_native_admission_seconds": 2.065615963,
+    "state_credit_report_sha256": "1a821bca78d89ac3409b6a900bc61c2733472dec7f5b0890d0d87db1b99c4ecd",
+    "status": "COMPLETED",
+    "updates": 0
+  },
+  "matched_timings": {
+    "rows": 12,
+    "cpu_matched_total_seconds": 1.007229598,
+    "cuda_matched_total_seconds": 0.840652756,
+    "matched_ratio": 1.1981517824227532,
+    "cpu_backward_total": 0.958888924,
+    "cuda_backward_total": 0.500298717,
+    "backward_ratio": 1.9166327864078854,
+    "max_abs_gradient_error": 1.126900315284729e-07,
+    "scope": "12 fixed canonical positions, single4090 and explicit samepod CPU8 reference; includes current host oracle/staging/finite sync, excludes gradient comparison and export; no fit throughput claim"
+  },
+  "files_sha256": {
+    "probe.sh": "fdf5f64a3881b78ce3f7997e7e11348b70ac61102a872dd4aca00f10048f09dc",
+    "example.log": "c6d9e831aaeca85b66ff17fbc77a294d4b3d97db3bc37daf873f04959bafb581",
+    "composed.log": "fa93693f4460e106ababc145e95497a418f19f7ec6d3a6814516871d5f18c1a3",
+    "context.log": "07b82cd5b61060cfdc76c7f6f461992c9229ac8c9db0e0424a6ebdfd4dde4b27",
+    "timing-summary.json": "7fce7e1bdf4b8f02ef1d93cde7108886c6d7d7e09ad8ad5efbf34ca92ccdaf0d",
+    "transport.log": "f33fa1baef6bfffa964731682127c90dbb12bbf07a30f28f2b5660988874fd5d",
+    "binary.sha256": "6af6a1b0ae5e61c523d333af61f9a4fd830263db5ede50daaf32810eff305292",
+    "time-command.py": "6e86a088e7f9a1349798b415606a9a9825e251aeea32842542a21180527339d6",
+    "checks.sh": "1b4f61363549c595e45ffbd0e7ee019d5e72a79c4ab6a130a2db8c2f146f5a4d",
+    "checks-status.txt": "e7b7787fec309b2a23af15a52961713fee743e6229844e1718b8bd08b3d41e3c",
+    "build.log": "e761ae1454c5d1fefaca7d9cfa108dd1fac90a29c719a0bd4eaf88e651f5338c",
+    "probe-1/report.json": "8f586acaaa5589cc52ede79a84bc9a48bbcfd35cec4272f23040e70e727757a4",
+    "probe-1/cpu-cuda-state-credit.json": "1a821bca78d89ac3409b6a900bc61c2733472dec7f5b0890d0d87db1b99c4ecd",
+    "probe-1/manifest.json": "d6dac2cc59d7e4af5118602c4294cb7bdf578dafb610047aab4abf02b4ebb27b"
+  },
+  "limitations": [
+    "zero updates; probe mode only, fit modes not yet device-selected",
+    "earlier recurrence4D approximation, stopped source selection retained",
+    "no new Generate, chat or fresh evaluation",
+    "sampled workload timings, not full-fit throughput or energy"
+  ],
+  "independent_outcome_review": {
+    "schema": "uor-r4.native-cuda-independent-outcome-review/1",
+    "verdict": "PASS",
+    "errors": [],
+    "source": "1d52e3f51abddcd68c79ffce950d9cb0ea9684da",
+    "executable_sha256": "b2572d2feb058416d052dbefae28d013b4cba1bf80d58bb243248727e83cdcd9",
+    "input_sha256": {
+      "probe-1/report.json": "8f586acaaa5589cc52ede79a84bc9a48bbcfd35cec4272f23040e70e727757a4",
+      "probe-1/cpu-cuda-state-credit.json": "1a821bca78d89ac3409b6a900bc61c2733472dec7f5b0890d0d87db1b99c4ecd",
+      "timing-summary.json": "7fce7e1bdf4b8f02ef1d93cde7108886c6d7d7e09ad8ad5efbf34ca92ccdaf0d",
+      "probe-1/manifest.json": "d6dac2cc59d7e4af5118602c4294cb7bdf578dafb610047aab4abf02b4ebb27b"
+    },
+    "scoped_tests": {
+      "context": 32,
+      "transport": 6,
+      "composed": 2,
+      "example": 51
+    },
+    "combined_family_receipts": 108,
+    "isolated_family_receipts": 126,
+    "direct_packets": 8,
+    "direct_field_receipts": 32,
+    "direct_all_fields_max_error": 0.0,
+    "combined_max_abs_gradient_error": 1.126900315284729e-07,
+    "isolated_max_abs_gradient_error": 3.1315721571445465e-08,
+    "measured_seconds": {
+      "cpu_forward": 0.048340674,
+      "cuda_forward_including_host": 0.340354039,
+      "cpu_backward": 0.958888924,
+      "cuda_backward_synced": 0.500298717,
+      "matched_composed_ratio": 1.1981517824227537,
+      "backward_ratio": 1.9166327864078854,
+      "cuda_forward_cpu_forward_ratio": 7.040738385236416,
+      "repeat_composed_median": 0.053284083,
+      "repeat_backward_median": 0.03166317
+    },
+    "interpretation": [
+      "All108 combined family receipts have positive finite CPU/CUDA gradients with declared elementwise/L2 parity; direct8 packets/32 outputfields have zero observed discrepancy, including bit-exact retained latent basis.",
+      "Reported1.198 composed and1.917 backward ratios recompute from the12 same-row CPU/CUDA recorded forwards/backwards. These exclude gradient download/comparison, staging/export and isolated-component audit costs; they are neither fit-throughput nor energy/laptop claims. CUDA forward including host work is slower than CPU here, offset by faster backward.",
+      "Source supports actual four-row independent reload parity; thin local report declares4 and manifest binds generation/receipt files, but those raw reload files are absent from this thin subset. This reviewer did not independently recount replies or verify full manifest BLAKE3. Root preservation/full verification remains separate.",
+      "Zero optimizer updates: CUDA Adam/clip/accumulation/checkpoint-selection fit plumbing has not been exercised. Earlier4D recurrence and stopped route remain; no general Generate result."
+    ],
+    "next_required": "Implement a context-only GPU fit path reusing current composed loss and device-resident Adam/gradient accumulation/global clipping/q4 projection. Avoid existing CPU to_vec gradient accumulator. Prepare one current native snapshot per optimizer update and reuse it across B8 local encodes, not repack9M Vars per example. Measure actual B8 forward/backward+optimizer+native-rebind/export resource cost before admitted fit. Complete own-prefix answer count is primary, native CE tie-only; use unchanged frozen coefficient payloads, prospective fresh after selection. Stage/snapshot/host oracle costs may dominate; first optimize repeated frozen utility staging or relevant final-query gathers if measurement justifies, without changing loss or rerunning selector doses.",
+    "review_scope": "saved local artifacts/arithmetic/source contract; no native/autodiff/optimizer/model/pod rerun",
+    "loss_checks": [
+      {
+        "index": 0,
+        "step": 0,
+        "native_nll": 0.6345539087935662,
+        "cpu_loss": 0.6345539093017578,
+        "cuda_loss": 0.6345539093017578,
+        "cpu_native_error": 5.081915999127773e-10,
+        "cuda_native_error": 5.081915999127773e-10,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 3.269107817587132e-06,
+        "pass": true
+      },
+      {
+        "index": 0,
+        "step": 6,
+        "native_nll": 0.910328891621859,
+        "cpu_loss": 0.9103289246559143,
+        "cuda_loss": 0.9103289246559143,
+        "cpu_native_error": 3.303405526899894e-08,
+        "cuda_native_error": 3.303405526899894e-08,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 3.820657783243718e-06,
+        "pass": true
+      },
+      {
+        "index": 0,
+        "step": 7,
+        "native_nll": 0.5369951049282924,
+        "cpu_loss": 0.5369951128959656,
+        "cuda_loss": 0.5369951128959656,
+        "cpu_native_error": 7.967673187891933e-09,
+        "cuda_native_error": 7.967673187891933e-09,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 3.0739902098565846e-06,
+        "pass": true
+      },
+      {
+        "index": 1,
+        "step": 0,
+        "native_nll": 1.1004381875627525,
+        "cpu_loss": 1.1004382371902466,
+        "cuda_loss": 1.100438117980957,
+        "cpu_native_error": 4.962749411419054e-08,
+        "cuda_native_error": 6.958179543659071e-08,
+        "cpu_cuda_difference": 1.1920928955078125e-07,
+        "native_guard_limit": 4.200876375125505e-06,
+        "pass": true
+      },
+      {
+        "index": 1,
+        "step": 5,
+        "native_nll": 0.9574748748395805,
+        "cpu_loss": 0.9574748873710632,
+        "cuda_loss": 0.957474946975708,
+        "cpu_native_error": 1.2531482740385513e-08,
+        "cuda_native_error": 7.213612751577614e-08,
+        "cpu_cuda_difference": 5.960464477539063e-08,
+        "native_guard_limit": 3.914949749679161e-06,
+        "pass": true
+      },
+      {
+        "index": 1,
+        "step": 6,
+        "native_nll": 0.1569410054862168,
+        "cpu_loss": 0.1569409817457199,
+        "cuda_loss": 0.1569409817457199,
+        "cpu_native_error": 2.3740496901680785e-08,
+        "cuda_native_error": 2.3740496901680785e-08,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 2.3138820109724334e-06,
+        "pass": true
+      },
+      {
+        "index": 2,
+        "step": 0,
+        "native_nll": 0.2116406956220146,
+        "cpu_loss": 0.21164068579673767,
+        "cuda_loss": 0.21164068579673767,
+        "cpu_native_error": 9.82527692539037e-09,
+        "cuda_native_error": 9.82527692539037e-09,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 2.4232813912440294e-06,
+        "pass": true
+      },
+      {
+        "index": 2,
+        "step": 6,
+        "native_nll": 0.17004873212914212,
+        "cpu_loss": 0.17004874348640442,
+        "cuda_loss": 0.17004874348640442,
+        "cpu_native_error": 1.135726229728462e-08,
+        "cuda_native_error": 1.135726229728462e-08,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 2.3400974642582844e-06,
+        "pass": true
+      },
+      {
+        "index": 2,
+        "step": 7,
+        "native_nll": 2.0411245425198605,
+        "cpu_loss": 2.0411245822906494,
+        "cuda_loss": 2.0411245822906494,
+        "cpu_native_error": 3.977078888439678e-08,
+        "cuda_native_error": 3.977078888439678e-08,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 6.082249085039721e-06,
+        "pass": true
+      },
+      {
+        "index": 3,
+        "step": 0,
+        "native_nll": 1.146210176443673,
+        "cpu_loss": 1.1462101936340332,
+        "cuda_loss": 1.1462101936340332,
+        "cpu_native_error": 1.7190360246388536e-08,
+        "cuda_native_error": 1.7190360246388536e-08,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 4.292420352887346e-06,
+        "pass": true
+      },
+      {
+        "index": 3,
+        "step": 5,
+        "native_nll": 0.8318434459325033,
+        "cpu_loss": 0.8318434357643127,
+        "cuda_loss": 0.8318434357643127,
+        "cpu_native_error": 1.016819051180562e-08,
+        "cuda_native_error": 1.016819051180562e-08,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 3.6636868918650063e-06,
+        "pass": true
+      },
+      {
+        "index": 3,
+        "step": 6,
+        "native_nll": 0.026556674798227972,
+        "cpu_loss": 0.026556676253676414,
+        "cuda_loss": 0.026556676253676414,
+        "cpu_native_error": 1.4554484423223712e-09,
+        "cuda_native_error": 1.4554484423223712e-09,
+        "cpu_cuda_difference": 0.0,
+        "native_guard_limit": 2.053113349596456e-06,
+        "pass": true
+      }
+    ],
+    "prior_review": {
+      "path": "independent-cuda-outcome-review-1.json",
+      "sha256": "6fed814203c63b394c5162f22b1550b38843a94a349ad8a19991e4f677d1c82a",
+      "status": "preserved; reviewer exact scalar equality assumption was stricter than declared source guard; two F32 differences, not numerical model defects"
+    },
+    "loss_scope": "Native traces are exact by saved probe receipts; CPU/CUDA floating training losses use declared 2e-6*(1+abs(native_nll)) guard, not bitwise scalar equality. Maximum CPU/CUDA difference is one F32 ULP (1.1920928955078125e-7)."
+  },
+  "next_step_review": {
+    "schema": "uor-r4.next-step-source-assessment/1",
+    "reviewer": "codex/source_bound_action_design",
+    "head": "1d52e3f51abddcd68c79ffce950d9cb0ea9684da",
+    "files_sha256": {
+      "crates/uor-r4-training/examples/support/geometric_native_cuda_probe.rs": "89cde25e74a7e319b837f0854c3c710e311662a39f383b870ebccff333695201",
+      "crates/uor-r4-training/examples/support/geometric_cue_calibration.rs": "06b84c013565f81e8c2392bdad36cd3b232659e8449708774475d557095db2a6",
+      "crates/uor-r4-training/examples/geometric-bank-fit.rs": "539984f5aaf96be0259ab2747136f9480f63d27c80ba7a552b8988f180f04508",
+      "crates/uor-r4-training/src/geometric_source_realizer.rs": "5986f6e8ba664579bf73c49ce41ffd4384f49297455d18f6df055fe584fcb7f4",
+      "crates/uor-r4-training/src/geometric_context.rs": "57515f465f5147326f7731ac74379200ad9ad3287cfbe13a249769892e0d1715"
+    },
+    "execution": "READ_ONLY; reported91tests/12rows/timing are supplied by root, not rerun or independently recounted here",
+    "current_boundary": "Dedicated cue-calibration-native-cuda-probe performs zero updates. Production historical fit loops still load CPU SourceRealizerWeights and optimize cue/endpoint families; they are not ported to joint CUDA context learning. Current load_source_on_device/prepare_on_device plus loss_bank_composed_state are reusable device plumbing, not a completed fit command.",
+    "minimal_needed_paths": [
+      {
+        "path": "crates/uor-r4-training/examples/geometric-bank-fit.rs",
+        "change": "Explicit learning_device cpu|cuda for a new composed context/Generate fit mode, validated before claim; report device/cuda feature/hardware. Do not imply legacy fit modes are silently ported."
+      },
+      {
+        "path": "crates/uor-r4-training/examples/support/geometric_cue_calibration.rs",
+        "change": "Use load_source_on_device and prepare_on_device only for newly admitted context learning; optimize context_state_parameters ninefamily allowlist (plus newly declared Generate tables), not existing cue-fit weights. Separate CPU reference from CUDA required path."
+      },
+      {
+        "path": "crates/uor-r4-training/src/geometric_source_realizer.rs",
+        "change": "After every optimizer update and GPU shadow clipping, discard PreparedSourceRealizer and PreparedContextQ4, compile_context_state_rebound against frozen original, and recompile numerically unchanged cue/prefix/end payloads with new actual native identity. Construct fresh prepared graph from current Vars before next batch. Do not reuse previous native metadata/steps/tensor rows after parameter.set."
+      },
+      {
+        "path": "crates/uor-r4-training/examples/support/geometric_cue_calibration.rs",
+        "change": "Reuse actual AdamW/recovery/checkpoint/export-selection structure but new measured schedule and actual target-free composed loss. Seven component_losses are diagnostics, not objective to sum. Optimizer states stay onGPU; any norm/error scalar synchronization is explicit, no gradient-vector fallback."
+      },
+      {
+        "path": "crates/uor-r4-training/src/geometric_source_realizer.rs",
+        "change": "Use save_context_state_rebound for sealed checkpoints and actual independent integer reload predictions. Retain initial parent and negative candidates; report shadow changes versus actual packed-quarter crossing separately."
+      }
+    ],
+    "important_risks": [
+      "Prepared graph tensors and native hard trace represent a parameter snapshot; mutable Vars alone do not make old prepared context current",
+      "Frozen numeric coefficients need metadata rebind after native context changes; inherited old metadata cannot masquerade as new parent",
+      "Existing actual91checks/12gradient rows qualify CUDA local numerical path only; no optimizer, updated model, speedup or useful-chat claim follows",
+      "Thin timings are not actual B8 full fit: GPU backward ~0.03s can coexist with host oracle/native packing/constant utility staging dominating composed step. Measure first actual training batch and checkpoint before projecting run; do not extrapolate GPU-only time",
+      "Utility caching must key exact payload, dimensions, native token/root/category trace and identity. After update native states may change; retaining wrong cached utilities silently applies wrong adjoints",
+      "Current Copy/Period/Stop objective gives zero support to absent-source vocabulary. CUDA cannot solve this output-support obstruction",
+      "Current full120 conditional derivative still holds route/opposite endpoint factual and earlier recurrence propagates through4D; model improvement must be measured, not inferred from nonzero adjoints"
+    ],
+    "recommended_next": "Integrate native full-vocabulary Generate readout and explicit composed CUDA fit in the same next learning deliverable. Common device/optimizer/rebind plumbing is necessary implementation inside that deliverable; do not spend another isolated cycle porting historical cue/terminal-only fits. If immediate attention-only update is needed first, scope one newly admitted context-fit lane honestly and use actual fresh native prediction metrics; never call all fit modes CUDA-ready.",
+    "causal_design": "Compare identical Generate initialization/exposure output-only frozen-context arm versus joint existing-context-plus-Generate arm, keep full target-free tokenizer candidate admission, require absent-source target tokens and actual emitted-prefix feedback. Current memory Copy remains typed and can alias by exact tokenID. Development native CE and actual independently reloaded ownprefix outputs decide before separate held-out construction draw.",
+    "state_goal_connection": "The general Generate channel closes missing support for prose while joint state learning uses the geometry to predict those tokens. Porting old coefficient-only terminalfits improves compute plumbing but does not repair that mechanism gap.",
+    "claim_for_delivery_docs": "CUDA composed context forward/backward and zero-update probe are implemented and numerically checked at exact head. Historical fit modes remain CPU; no CUDA model fit or learning improvement has yet been measured."
+  }
+}

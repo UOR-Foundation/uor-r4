@@ -6,8 +6,10 @@
 is now executed: all9 state families receive nonzero credit at12 sampled positions,
 with unchanged native baseline and independent export/reload output. This admits
 the learning connection, not a prediction improvement. Before the next fit, adapt
-the actual native learner's custom forward/backward operators to CUDA; adding a
-device flag or using the separate D19 backend is insufficient. Do not rent idle
+the actual native learner's fit/optimizer to the [validated CUDA backend](geometric-native-cuda-learning-2026-10-06.md).
+Its forward/backward parity is now measured; the historical fit modes still need
+device selection and resident-step integration. Adding a device flag or using the
+separate D19 backend is insufficient. Do not rent idle
 GPUs to repeat CPU-only fits. Keep normalizer work with DeepSeek.
 The next predictive capability remains ordinary-token Generate jointly trained
 with geometric recurrence and attention, admitting the complete fixed vocabulary

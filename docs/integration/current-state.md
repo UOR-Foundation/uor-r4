@@ -1,5 +1,16 @@
 # Current UOR-R4 research state
 
+## Native CUDA learning backend — October 6
+
+The [executed native CUDA probe](geometric-native-cuda-learning-2026-10-06.md) at
+`1d52e3f5` passes91 focused CUDA-feature tests and actual CPU/CUDA composed parity:
+all9 families nonzero at12 positions, native traces match and reload replies4/4.
+On one4090, sampled matched composed time improves1.20x and backward1.92x.
+Zero updates/fresh predictions; historical fit modes still need explicit device
+selection and optimizer integration. Next: jointly learned native vocabulary Generate
+with a resident CUDA context/decoder fit and one-update export/reload check.
+Normalizer unchanged; earlier4D recurrence and stopped source routing remain.
+
 ## Composed state-credit connection — October 6
 
 The [executed composed-state probe](geometric-composed-state-credit-2026-10-06.md)
