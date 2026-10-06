@@ -2477,11 +2477,11 @@ fn main() -> Result<()> {
         if seconds == 0
             || seconds > 5100
             || bytes < 64 << 20
-            || bytes > 512 << 20
+            || bytes > 2 << 30
             || !fit.is_dir()
             || !dev.is_file()
         {
-            return Err(bad("potential attribution declared resource/input bounds"));
+            return Err(bad("potential attribution requires 1..5100 seconds, 64 MiB..2 GiB report bytes, existing fit directory and development input file"));
         }
         admit_output(&fit, &out)?;
         let prospective = output_support::prospective_output(&out)?;
