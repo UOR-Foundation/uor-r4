@@ -56,9 +56,13 @@ The executed [joint foundation](current-state.md#ordered-geometric-cue-foundatio
 now validates zero-overlay replay, separate artifact binding, joint-only native
 credit and a forward-sensitive integer interaction. Its one quarter improves
 native CE and first tokens but loses one net complete answer; it is retained
-sensitivity evidence, not adoption. Next inspect those completion harms and run
-one bounded joint-only learning experiment with useful-output guards before any
-new-composition transfer verdict. DeepSeek's offline softmax/tensor-core work
+sensitivity evidence, not adoption. The matched-prefix diagnosis now separates wrong-source binding, premature
+Period with unchanged source, and source-switch terminal collapse. Next run one
+bounded joint-only learning experiment: CE gradients propose legal quarters,
+independently reloaded complete native generation selects before CE, and the
+baseline stays eligible. Preserve paired harms without a per-row veto. This is
+discrete trajectory-selected learning, not differentiated rollout credit; keep
+new-composition transfer separate after selection. DeepSeek's offline softmax/tensor-core work
 owns a separate training seam.
 
 The development-only binding analysis now motivates freezing ordered lanes5,7

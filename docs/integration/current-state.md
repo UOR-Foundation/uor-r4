@@ -1,5 +1,45 @@
 # Current UOR-R4 research state
 
+## Joint cue completion diagnosis — October 6 (saved traces, no fit)
+
+The [matched-prefix diagnosis](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6006734905)
+inspects all three lost complete replies from the foundation. Both investigative
+and adversarial reviews independently verify identical actual prefixes at each
+first divergent emission. Generation input hashes match the foundation receipts;
+extract SHA256 `bfd462b289a1719ba719b422816670258cc5605a3d7f738a64fb411e5074132f`.
+
+| Case | First divergence | Measured cause |
+| --- | ---: | --- |
+| length2-04 forward-home | 0 | Correct Copy margin +611,941 to -36,115 Q24; wrong-source switch. |
+| length4-02 reverse-job | 4 | Same correct source/end geometry; Copy drops 1,696,632 Q24 across unchanged Period. |
+| update-00 forward-home | 6 | Source switches record3 to4; summed Period correction +67,108,864 to -4,194,304 Q24. |
+
+The third confirms a hard source-selection branch consequence omitted by local
+joint credit. The second is a Copy-versus-Period balance loss without a branch
+switch. None requires an unfamiliar generated prefix to explain the first error.
+This does not establish defective prefix geometry or invalidate joint learning.
+Saved JSON extraction took4.792s, CPU2, RSS442,654,720B on the shared Linux pod;
+no new model execution, build, fit or evaluation predictions were performed.
+The small local receipt is not a full sealed report root.
+
+Next implement one fixed-pair joint-only discrete fit: at most16 gradient-proposed
+legal quarter trials and8 accepted updates, all512 development rows, frozen unary,
+source encoder/bank, prefix and endpoint payloads. Select independently reloaded
+actual complete generation first, then finite canonical CE; baseline remains
+eligible and all per-row gains/losses remain. Higher completion may trade CE;
+report both. This is discrete trajectory-selected learning, not differentiated
+rollout credit. A strict complete-answer gain is needed for a useful development
+output claim; fresh transfer and replicated verdicts remain separate. If this
+single bounded fit remains dominated by endpoint tradeoffs, consider endpoint-only
+recalibration at a frozen joint artifact before prefix coadaptation. No new dose,
+pair or seed search is authorized by a local negative alone.
+
+The new fit implementation is in progress and UNCOMPILED/NOT_RUN. A600,000ms
+review precharge record is preserved; the ledger importer refused an existing
+unmapped legacy receipt, so it is not claimed imported or reflected in the derived
+total. Resolve accounting admission before new model compute. DeepSeek owns the
+separate offline softmax/tensor-core seam.
+
 ## Ordered geometric cue foundation — October 5 (executed, no adoption)
 
 [PR1768](https://github.com/UOR-Foundation/uor-r4/pull/1768), numerical source

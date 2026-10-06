@@ -5,7 +5,7 @@ use uor_r4_integer::geometric_cue_carrier::CueJointConfig;
 
 // Only declared receipt differences are ignored. All numerical/state fields,
 // routes, occurrence identities, native masses and generated tokens remain.
-fn numerical(mut report: Value) -> Result<Value> {
+pub(super) fn numerical(mut report: Value) -> Result<Value> {
     let rows = report["rows"]
         .as_array_mut()
         .ok_or_else(|| invalid("joint rows absent"))?;

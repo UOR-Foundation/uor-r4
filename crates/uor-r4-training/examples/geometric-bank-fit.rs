@@ -75,6 +75,7 @@ fn cue_calibration_mode(a: &Args) -> bool {
             | "cue-calibration-credit-audit"
             | "cue-calibration-support-probe"
             | "cue-calibration-joint-probe"
+            | "cue-calibration-joint-fit"
     )
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -204,6 +205,8 @@ pub(crate) struct Args {
     pub(crate) cue_support_probe: Option<CueSupportProbe>,
     #[serde(default)]
     pub(crate) cue_joint_probe: Option<CueCompositionPanel>,
+    #[serde(default)]
+    pub(crate) cue_joint_fit: Option<CueCompositionPanel>,
     #[serde(default)]
     pub(crate) cue_discrete_completion_root: Option<PathBuf>,
     #[serde(default)]
@@ -499,6 +502,7 @@ fn checked_args() -> Result<Args> {
         "cue-calibration-credit-audit",
         "cue-calibration-support-probe",
         "cue-calibration-joint-probe",
+        "cue-calibration-joint-fit",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -534,7 +538,9 @@ fn checked_args() -> Result<Args> {
                 900
             } else if matches!(
                 a.mode.as_str(),
-                "cue-calibration-support-probe" | "cue-calibration-joint-probe"
+                "cue-calibration-support-probe"
+                    | "cue-calibration-joint-probe"
+                    | "cue-calibration-joint-fit"
             ) {
                 900
             } else if a.mode == "cue-calibration-credit-audit" {
@@ -551,7 +557,9 @@ fn checked_args() -> Result<Args> {
         || a.maximum_report_bytes
             != if matches!(
                 a.mode.as_str(),
-                "cue-calibration-support-probe" | "cue-calibration-joint-probe"
+                "cue-calibration-support-probe"
+                    | "cue-calibration-joint-probe"
+                    | "cue-calibration-joint-fit"
             ) {
                 1024 * 1024 * 1024
             } else if a.mode == "cue-calibration-credit-audit" {
