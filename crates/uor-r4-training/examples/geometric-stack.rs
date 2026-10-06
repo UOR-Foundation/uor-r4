@@ -108,6 +108,16 @@
 //! It has no served representation or integer export yet, so `qat=true`
 //! refuses it and the export modes refuse a model with it.
 //!
+//! `read_lineage=conv8|carrier` (in `dialogue-train`; Step 7a, #820) trains
+//! every geometric read with a key-content lineage
+//! (`StackModel::set_read_lineage`): `conv8` is a learned depthwise causal
+//! convolution of the keys over lags 0..=7, `carrier` the gated decaying key
+//! carrier. Both start as the plain read (the added parameters are
+//! function-preserving at step 0), are saved in `config.json` and restored
+//! by every load. From `init=` a model without a lineage gets it added; a
+//! model with another lineage, or with one when none is requested, is
+//! refused. Exclusive with `key_shift`; no served or exported form.
+//!
 //! `transport_snap=icosian` (in `train` and `dialogue-train`, after `init=`
 //! and on a resume alike) trains with every recurrence's unit transport
 //! quaternion snapped to the nearest of the 120 unit icosians of 2I before
@@ -278,8 +288,8 @@ use uor_r4_training::flock::FlockSelect;
 use uor_r4_training::geometric_stack::{
     average_replica_gradients, logits_cross_entropy, parse_flock_select, parse_pointer_route,
     parse_pointer_select, D11Interim, MapCodec, PointerConfig, PointerSelect, Precision,
-    PrimeRoute, ReadScore, RotationGroup, ServedStatistics, StackAdamW, StackArch, StackConfig,
-    StackModel, TransportSnap, TransportUsage,
+    PrimeRoute, ReadLineage, ReadScore, RotationGroup, ServedStatistics, StackAdamW, StackArch,
+    StackConfig, StackModel, TransportSnap, TransportUsage,
 };
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
@@ -3636,6 +3646,8 @@ struct DialogueSettings {
     transport_snap: Option<TransportSnap>,
     /// `key_shift=`, as `train` takes it.
     key_shift: KeyShift,
+    /// `read_lineage=conv8|carrier` (Step 7a); `None` without it.
+    read_lineage: Option<ReadLineage>,
     /// `select=`, `pointer=`, `pointer_score=`, `pointer_select=` and
     /// `pointer_route=` as given (the A1 read mechanisms and the prime route).
     select: Option<String>,
@@ -3678,6 +3690,7 @@ impl DialogueSettings {
             "qat": self.qat, "qat_codec": self.qat.then(|| qat_codec().name().to_owned()),
             "transport_snap": self.transport_snap,
             "key_shift": self.key_shift.name(),
+            "read_lineage": self.read_lineage.map(ReadLineage::name),
             "policy": self.policy, "data_seed": self.data_seed,
             "steps": self.steps, "batch": self.batch, "lr": self.lr, "warmup": self.warmup,
             "min_lr": self.min_lr, "weight_decay": self.weight_decay, "clip": self.clip,
@@ -3746,7 +3759,40 @@ impl DialogueSettings {
         if self.key_shift.enabled() {
             lineage["key_shift"] = json!(self.key_shift.name());
         }
+        if let Some(read_lineage) = self.read_lineage {
+            lineage["read_lineage"] = json!(read_lineage.name());
+        }
         Ok(lineage)
+    }
+}
+
+/// `read_lineage=conv8|carrier` (Step 7a), or `None`.
+fn read_lineage_arg(args: &Args) -> Result<Option<ReadLineage>> {
+    match args.optional("read_lineage").as_deref() {
+        None | Some("none") => Ok(None),
+        Some("conv8") => Ok(Some(ReadLineage::LearnedConvWide { taps: 8 })),
+        Some("carrier") => Ok(Some(ReadLineage::KeyCarrier)),
+        Some(other) => Err(invalid(format!(
+            "invalid read_lineage={other} (none, conv8 or carrier)"
+        ))),
+    }
+}
+
+/// Give a model just built (`from_init` false) or loaded from `init=` the
+/// requested Step 7a read lineage: added when absent, refused when it
+/// would silently change or drop one.
+fn apply_read_lineage(
+    requested: Option<ReadLineage>,
+    model: &mut StackModel,
+    from_init: bool,
+) -> Result<()> {
+    match (requested, model.read_lineage()) {
+        (None, None) => Ok(()),
+        (Some(want), Some(have)) if want == have && from_init => Ok(()),
+        (Some(want), None) => model.set_read_lineage(Some(want)),
+        _ => Err(invalid(
+            "init='s model and read_lineage= disagree on the read lineage",
+        )),
     }
 }
 
@@ -3832,6 +3878,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "qat",
             "transport_snap",
             "key_shift",
+            "read_lineage",
             "select",
             "pointer",
             "pointer_score",
@@ -3862,6 +3909,7 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
         qat: qat_flag(&args)?,
         transport_snap: transport_snap_arg(&args)?,
         key_shift: key_shift_arg(&args)?,
+        read_lineage: read_lineage_arg(&args)?,
         select: args.optional("select"),
         pointer: args.optional("pointer"),
         pointer_score: args.optional("pointer_score"),
@@ -4171,11 +4219,13 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                         ));
                     }
                     s.key_shift.apply(&mut model, true)?;
+                    apply_read_lineage(s.read_lineage, &mut model, true)?;
                     model
                 }
                 None => {
                     let mut model = StackModel::new(config.clone(), &device)?;
                     s.key_shift.apply(&mut model, false)?;
+                    apply_read_lineage(s.read_lineage, &mut model, false)?;
                     model
                 }
             };
@@ -4205,6 +4255,11 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                 ));
             }
             s.key_shift.check_resumed(&model)?;
+            if model.read_lineage() != s.read_lineage {
+                return Err(invalid(
+                    "the checkpoint's model and read_lineage= disagree on the read lineage",
+                ));
+            }
             (model, optimizer, progress, Some(state))
         }
     };

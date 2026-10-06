@@ -2091,7 +2091,8 @@ impl StackModel {
                 projected = previous_key_channel(&projected)?;
             }
             if let Some(lineage) = self.read_lineage {
-                projected = self.read_lineage_projection(p, layer, lineage, part, projected)?;
+                projected =
+                    self.read_lineage_projection(p, layer, lineage, part, input, projected)?;
             }
             if part != "value" {
                 if let Some(identity) = &latched {
@@ -2581,6 +2582,31 @@ impl StackModel {
                     );
                 }
             }
+            Some(ReadLineage::LearnedConvWide { taps }) => {
+                if !(2..=MAX_CONV_TAPS).contains(&taps) {
+                    return Err(invalid(format!(
+                        "a wide read conv needs 2..={MAX_CONV_TAPS} taps"
+                    )));
+                }
+                for &layer in &read_layers {
+                    let values: Vec<f32> = (0..width * taps)
+                        .map(|index| if index % taps == 0 { 1.0 } else { 0.0 })
+                        .collect();
+                    self.variables.insert(
+                        layer_name(layer, READ_LINEAGE_CONV_WIDE),
+                        Var::from_vec(values, (width, taps), &self.device)?,
+                    );
+                }
+            }
+            Some(ReadLineage::KeyCarrier) => {
+                if !width.is_multiple_of(self.config.heads) {
+                    return Err(invalid("the key carrier needs whole heads"));
+                }
+                for (name, shape) in read_lineage_shapes(&self.config, ReadLineage::KeyCarrier) {
+                    self.variables
+                        .insert(name, Var::zeros(shape, DType::F32, &self.device)?);
+                }
+            }
             Some(ReadLineage::RandomSo4 { seed }) => {
                 let blocks = random_so4_blocks(width / 4, seed);
                 let mut matrix = vec![0f32; width * width];
@@ -2613,9 +2639,45 @@ impl StackModel {
         layer: usize,
         lineage: ReadLineage,
         part: &str,
+        input: &Tensor,
         projected: Tensor,
     ) -> Result<Tensor> {
         match (part, lineage) {
+            ("key", ReadLineage::LearnedConvWide { taps }) => {
+                let weight = p
+                    .layer(layer, READ_LINEAGE_CONV_WIDE)?
+                    .to_dtype(projected.dtype())?;
+                let mut mixed = projected.broadcast_mul(&weight.narrow(1, 0, 1)?.squeeze(1)?)?;
+                for lag in 1..taps {
+                    let tap = weight.narrow(1, lag, 1)?.squeeze(1)?;
+                    mixed = mixed.add(&causal_shift(&projected, lag)?.broadcast_mul(&tap)?)?;
+                }
+                Ok(mixed)
+            }
+            ("key", ReadLineage::KeyCarrier) => {
+                let (batch, time, width) = projected.dims3()?;
+                let heads = self.config.heads;
+                let dtype = projected.dtype();
+                // g_j = sigmoid(G u_j + b), one per head: [batch, time, heads].
+                let logit = self
+                    .linear(input, p.layer(layer, READ_LINEAGE_CARRIER_GATE)?)?
+                    .to_dtype(DType::F32)?
+                    .broadcast_add(p.layer(layer, READ_LINEAGE_CARRIER_BIAS)?)?;
+                let gate = (logit.neg()?.exp()? + 1.0)?.recip()?.to_dtype(dtype)?;
+                let written = projected
+                    .reshape((batch, time, heads, width / heads))?
+                    .broadcast_mul(&gate.unsqueeze(3)?)?
+                    .transpose(1, 2)?
+                    .contiguous()?;
+                let decay = carrier_decay(heads, time, dtype, projected.device())?;
+                let carried = decay
+                    .unsqueeze(0)?
+                    .broadcast_matmul(&written)?
+                    .transpose(1, 2)?
+                    .reshape((batch, time, width))?;
+                let mix = p.layer(layer, READ_LINEAGE_CARRIER_MIX)?.to_dtype(dtype)?;
+                Ok(projected.add(&carried.broadcast_mul(&mix)?)?)
+            }
             ("query", ReadLineage::QueryKeyJ) => {
                 let previous = causal_shift(&projected, 1)?;
                 Ok(projected.add(&quaternion_j_inv_left(&previous)?)?)
@@ -6819,11 +6881,10 @@ impl StackModel {
         if self.geometric_address.is_some()
             || self.geometric_span.is_some()
             || self.read_identity_latch.is_some()
-            || self.read_lineage.is_some()
             || self.config.select.is_some()
         {
             return Err(invalid(
-                "read query/key probe observes the plain fused read only (no address, span, latch, lineage or flock)",
+                "read query/key probe observes the plain fused read only (no address, span, latch or flock)",
             ));
         }
         let p = self.params()?;
@@ -6831,10 +6892,14 @@ impl StackModel {
         let x = self.layer_range_bound(&p, x, 0..layer, &mut None, &mut None, LatchGates::Soft)?;
         let u = self.norm(&p, &x, &layer_name(layer, "read_norm.weight"))?;
         let identity = self.read_identity_input(&u)?;
-        let query = self.linear(&identity, p.layer(layer, "read.query.weight")?)?;
+        let mut query = self.linear(&identity, p.layer(layer, "read.query.weight")?)?;
         let mut key = self.linear(&identity, p.layer(layer, "read.key.weight")?)?;
         if self.read_key_shift {
             key = previous_key_channel(&key)?;
+        }
+        if let Some(lineage) = self.read_lineage {
+            query = self.read_lineage_projection(&p, layer, lineage, "query", &identity, query)?;
+            key = self.read_lineage_projection(&p, layer, lineage, "key", &identity, key)?;
         }
         let rows = |t: Tensor| -> Result<Vec<Vec<Vec<f32>>>> {
             Ok(self
@@ -7248,7 +7313,7 @@ impl StackModel {
     /// and pins its digest in config.json; a default save removes stale carry
     /// metadata and retains the legacy config byte format.
     pub fn save(&self, directory: &Path) -> Result<()> {
-        if let Some(lineage) = self.read_lineage {
+        if let Some(lineage) = self.read_lineage.filter(|lineage| !lineage.saveable()) {
             return Err(invalid(format!(
                 "the research-only read lineage {} has no saved form",
                 lineage.name()
@@ -7410,6 +7475,13 @@ impl StackModel {
             // Only when set, so every model without it keeps its exact bytes.
             let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
             with_field[READ_KEY_SHIFT_FIELD] = serde_json::Value::Bool(true);
+            config = serde_json::to_vec_pretty(&with_field)?;
+        }
+        if let Some(lineage) = self.read_lineage {
+            // Only the saveable Step 7a arms reach here; only when set, so
+            // every other model keeps its exact bytes.
+            let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
+            with_field[READ_LINEAGE_FIELD] = serde_json::to_value(lineage)?;
             config = serde_json::to_vec_pretty(&with_field)?;
         }
         fs::write(directory.join("config.json"), config)?;
@@ -7740,6 +7812,10 @@ impl StackModel {
             }
             shapes.extend(geometric_span_shapes(&config));
         }
+        let read_lineage = Self::saved_read_lineage(directory)?;
+        if let Some(lineage) = read_lineage {
+            shapes.extend(read_lineage_shapes(&config, lineage));
+        }
         if tensors.len() != shapes.len() {
             return Err(invalid("saved stack tensors differ from the configuration"));
         }
@@ -7772,7 +7848,43 @@ impl StackModel {
         model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
         model.set_read_identity_carry(Self::saved_read_identity_carry(directory)?)?;
         model.set_read_key_shift(Self::saved_read_key_shift(directory)?)?;
+        if let Some(lineage) = read_lineage {
+            // Its variables were loaded above; set_read_lineage would
+            // re-initialise them, so the checks it makes are repeated here.
+            if model.read_key_shift
+                || model.read_identity_latch.is_some()
+                || model.geometric_address.is_some()
+                || !model.config.pattern.contains('a')
+            {
+                return Err(invalid(
+                    "a saved read lineage needs a plain geometric read without the key shift",
+                ));
+            }
+            model.read_lineage = Some(lineage);
+        }
         Ok(model)
+    }
+
+    /// The saved Step 7a read lineage of `directory` (`config.json` field
+    /// [`READ_LINEAGE_FIELD`]), if any. Absent means none; a lineage that is
+    /// not [`ReadLineage::saveable`] or a conv outside its tap range is refused.
+    pub fn saved_read_lineage(directory: &Path) -> Result<Option<ReadLineage>> {
+        let config: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
+        let Some(field) = config.get(READ_LINEAGE_FIELD) else {
+            return Ok(None);
+        };
+        let lineage: ReadLineage = serde_json::from_value(field.clone())?;
+        let taps_ok = match lineage {
+            ReadLineage::LearnedConvWide { taps } => (2..=MAX_CONV_TAPS).contains(&taps),
+            _ => true,
+        };
+        if !lineage.saveable() || !taps_ok {
+            return Err(invalid(format!(
+                "config.json's {READ_LINEAGE_FIELD} is not a saveable read lineage"
+            )));
+        }
+        Ok(Some(lineage))
     }
 }
 
@@ -9837,7 +9949,22 @@ pub enum ReadLineage {
     LearnedConv { init_lag1: bool },
     /// Keys `k_t + W k_{t-1}`, learned; `W` starts at the identity or zero.
     LearnedPrev { init_identity: bool },
+    /// Step 7a `conv8` (#820): keys `sum_{i<taps} w_i (.) k_{t-i}`, a learned
+    /// depthwise causal convolution over `taps` lags (2..=[`MAX_CONV_TAPS`]);
+    /// `w_0 = 1` and the other taps 0 at the start, so a model with it added
+    /// computes the plain read, bit for bit, until it trains. Saveable.
+    LearnedConvWide { taps: usize },
+    /// Step 7a binding carrier (#820): keys `k_t + v (.) c_t` with the
+    /// strictly causal per-head carrier `c_t = sum_{j<t} a_h^(t-1-j) g_j k_j`,
+    /// a learned per-head salience gate `g_j = sigmoid(G u_j + b)` on the read
+    /// input and the fixed decay `a_h = 1 - 2^-(1 + h mod 4)` (time constants
+    /// 2 to 16 tokens). `v`, `G` and `b` start at 0, so a model with it added
+    /// computes the plain read, bit for bit, until it trains. Saveable.
+    KeyCarrier,
 }
+
+/// The largest `taps` of [`ReadLineage::LearnedConvWide`].
+pub const MAX_CONV_TAPS: usize = 32;
 
 impl ReadLineage {
     /// A short stable name for reports.
@@ -9849,14 +9976,93 @@ impl ReadLineage {
             ReadLineage::RandomSo4 { .. } => "so4",
             ReadLineage::LearnedConv { .. } => "conv",
             ReadLineage::LearnedPrev { .. } => "wprev",
+            ReadLineage::LearnedConvWide { taps: 8 } => "conv8",
+            ReadLineage::LearnedConvWide { .. } => "conv_wide",
+            ReadLineage::KeyCarrier => "carrier",
         }
     }
+
+    /// Whether [`StackModel::save`] records it (`config.json` field
+    /// [`READ_LINEAGE_FIELD`]) and [`StackModel::load`] restores it: only the
+    /// Step 7a key-content arms.
+    pub fn saveable(self) -> bool {
+        matches!(
+            self,
+            ReadLineage::LearnedConvWide { .. } | ReadLineage::KeyCarrier
+        )
+    }
+
+    /// The decay exponent `s_h` of [`ReadLineage::KeyCarrier`]'s head `h`:
+    /// `a_h = 1 - 2^-s_h`.
+    pub fn carrier_shift(head: usize) -> u32 {
+        1 + (head % 4) as u32
+    }
+}
+
+/// `config.json` field of a saved Step 7a read lineage ([`ReadLineage::saveable`]);
+/// written only when one is set.
+pub const READ_LINEAGE_FIELD: &str = "read_lineage";
+
+/// The variables of a lineage on `config`'s read layers, with their shapes.
+fn read_lineage_shapes(config: &StackConfig, lineage: ReadLineage) -> Vec<(String, Vec<usize>)> {
+    let read_layers: Vec<usize> = (0..config.layers())
+        .filter(|&layer| config.pattern.as_bytes()[layer] == b'a')
+        .collect();
+    let width = config.width;
+    let mut out = Vec::new();
+    for layer in read_layers {
+        match lineage {
+            ReadLineage::LearnedConv { .. } => {
+                out.push((layer_name(layer, READ_LINEAGE_CONV), vec![width, 4]))
+            }
+            ReadLineage::LearnedPrev { .. } => {
+                out.push((layer_name(layer, READ_LINEAGE_PREV), vec![width, width]))
+            }
+            ReadLineage::LearnedConvWide { taps } => {
+                out.push((layer_name(layer, READ_LINEAGE_CONV_WIDE), vec![width, taps]))
+            }
+            ReadLineage::KeyCarrier => {
+                out.push((
+                    layer_name(layer, READ_LINEAGE_CARRIER_GATE),
+                    vec![config.heads, width],
+                ));
+                out.push((
+                    layer_name(layer, READ_LINEAGE_CARRIER_BIAS),
+                    vec![config.heads],
+                ));
+                out.push((layer_name(layer, READ_LINEAGE_CARRIER_MIX), vec![width]));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// [`ReadLineage::KeyCarrier`]'s decay matrices `[heads, time, time]`:
+/// `a_h^(t-1-j)` for `j < t`, else 0.
+fn carrier_decay(heads: usize, time: usize, dtype: DType, device: &Device) -> Result<Tensor> {
+    let mut values = vec![0f32; heads * time * time];
+    for h in 0..heads {
+        let a = 1.0 - (-f64::from(ReadLineage::carrier_shift(h))).exp2();
+        for t in 0..time {
+            let mut power = 1.0f64;
+            for j in (0..t).rev() {
+                values[(h * time + t) * time + j] = power as f32;
+                power *= a;
+            }
+        }
+    }
+    Ok(Tensor::from_vec(values, (heads, time, time), device)?.to_dtype(dtype)?)
 }
 
 /// Variable names of the learned read lineages ([`ReadLineage`]).
 const READ_LINEAGE_PREFIX: &str = ".read.lineage_";
 const READ_LINEAGE_CONV: &str = "read.lineage_conv.weight";
 const READ_LINEAGE_PREV: &str = "read.lineage_prev";
+const READ_LINEAGE_CONV_WIDE: &str = "read.lineage_wide.conv.weight";
+const READ_LINEAGE_CARRIER_GATE: &str = "read.lineage_carrier.gate";
+const READ_LINEAGE_CARRIER_BIAS: &str = "read.lineage_carrier.gate_bias";
+const READ_LINEAGE_CARRIER_MIX: &str = "read.lineage_carrier.mix";
 
 /// Left multiplication by `j^{-1} = -j`: `(a, b, c, d) -> (c, -d, -a, b)`
 /// per four-channel lane, the inverse (and transpose) of
@@ -18644,6 +18850,131 @@ mod tests {
         assert!(recurrent
             .set_read_lineage(Some(ReadLineage::QueryKeyJ))
             .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn step7a_key_arms_start_plain_learn_save_and_stay_causal() -> Result<()> {
+        let config = tiny(StackArch::Geometric, "rara", ReadScore::L2, true);
+        let ids = [1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let time = ids.len();
+        let plain_model = StackModel::new(config.clone(), &cpu())?;
+        let plain = plain_model.forward(&ids, 1, time)?.to_vec2::<f32>()?;
+        let targets = [2u32, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        for lineage in [
+            ReadLineage::LearnedConvWide { taps: 8 },
+            ReadLineage::KeyCarrier,
+        ] {
+            assert!(lineage.saveable());
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_lineage(Some(lineage))?;
+            // Added, it computes the plain read bit for bit.
+            assert_eq!(model.forward(&ids, 1, time)?.to_vec2::<f32>()?, plain);
+            // Moved off its initialisation, it changes the read.
+            let mut rng = Initializer(17);
+            for (name, var) in model.variables() {
+                if name.contains(READ_LINEAGE_PREFIX) {
+                    var.set(&var.as_tensor().add(&random(&mut rng, var.dims(), 0.3))?)?;
+                }
+            }
+            let rows = model.forward(&ids, 1, time)?.to_vec2::<f32>()?;
+            assert_ne!(rows[time - 1], plain[time - 1], "{lineage:?}");
+            // Causal: a later token changes no earlier row.
+            let mut changed = ids;
+            changed[time - 1] = 30;
+            let after = model.forward(&changed, 1, time)?.to_vec2::<f32>()?;
+            for t in 0..time - 1 {
+                assert_eq!(after[t], rows[t], "{lineage:?} row {t}");
+            }
+            // Every lineage variable is learned, and its gradient is right.
+            let grads = model.loss(&ids, &targets, 1, time)?.backward()?;
+            let vars: Vec<Var> = model
+                .variables()
+                .iter()
+                .filter(|(name, _)| name.contains(READ_LINEAGE_PREFIX))
+                .map(|(_, var)| var.clone())
+                .collect();
+            assert_eq!(
+                vars.len(),
+                if lineage == ReadLineage::KeyCarrier {
+                    6
+                } else {
+                    2
+                }
+            );
+            for var in &vars {
+                let grad = grads.get(var.as_tensor()).expect("lineage gradient");
+                assert!(grad.sqr()?.sum_all()?.to_scalar::<f32>()? > 0.0);
+            }
+            check_gradient(&vars, || model.loss(&ids, &targets, 1, time), 2e-2)?;
+            // Saved and loaded, bit for bit; the field names it.
+            let dir = std::env::temp_dir().join(format!(
+                "stack-step7a-{}-{}",
+                lineage.name(),
+                std::process::id()
+            ));
+            model.save(&dir)?;
+            assert_eq!(StackModel::saved_read_lineage(&dir)?, Some(lineage));
+            let loaded = StackModel::load(&dir, &cpu())?;
+            assert_eq!(loaded.read_lineage(), Some(lineage));
+            assert_eq!(loaded.forward(&ids, 1, time)?.to_vec2::<f32>()?, rows);
+            fs::remove_dir_all(&dir)?;
+            // Exclusive with the key shift; no served form.
+            assert!(model.set_read_key_shift(true).is_err());
+            model.set_read_lineage(None)?;
+            assert_eq!(model.parameter_count(), plain_model.parameter_count());
+        }
+        let mut model = StackModel::new(config.clone(), &cpu())?;
+        for taps in [0, 1, MAX_CONV_TAPS + 1] {
+            assert!(model
+                .set_read_lineage(Some(ReadLineage::LearnedConvWide { taps }))
+                .is_err());
+        }
+        // A plain save keeps its exact config bytes (no lineage field).
+        let dir = std::env::temp_dir().join(format!("stack-step7a-plain-{}", std::process::id()));
+        model.save(&dir)?;
+        assert_eq!(StackModel::saved_read_lineage(&dir)?, None);
+        let text = fs::read_to_string(dir.join("config.json"))?;
+        assert!(!text.contains(READ_LINEAGE_FIELD));
+        fs::remove_dir_all(&dir)?;
+        // A research-only lineage is still refused by save.
+        model.set_read_lineage(Some(ReadLineage::LearnedConv { init_lag1: true }))?;
+        assert!(model.save(&dir).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn step7a_key_arms_reach_their_declared_window() -> Result<()> {
+        // A first-layer read sees per-position keys, so the lineage alone
+        // decides which earlier tokens a key depends on.
+        let config = tiny(StackArch::Geometric, "aa", ReadScore::L2, true);
+        let ids = [1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let time = ids.len();
+        for (lineage, reach) in [
+            (ReadLineage::LearnedConvWide { taps: 3 }, Some(3usize)),
+            (ReadLineage::KeyCarrier, None),
+        ] {
+            let mut model = StackModel::new(config.clone(), &cpu())?;
+            model.set_read_lineage(Some(lineage))?;
+            let mut rng = Initializer(23);
+            for (name, var) in model.variables() {
+                if name.contains(READ_LINEAGE_PREFIX) {
+                    var.set(&var.as_tensor().add(&random(&mut rng, var.dims(), 0.5))?)?;
+                }
+            }
+            let base = model.read_query_key(&ids, 0)?;
+            let mut changed = ids;
+            changed[2] = 30;
+            let after = model.read_query_key(&changed, 0)?;
+            for t in 0..time {
+                let moved = (0..config.heads).any(|h| base.key[h][t] != after.key[h][t]);
+                let expect = match reach {
+                    Some(taps) => (2..2 + taps).contains(&t),
+                    None => t >= 2,
+                };
+                assert_eq!(moved, expect, "{lineage:?} key {t}");
+            }
+        }
         Ok(())
     }
 
