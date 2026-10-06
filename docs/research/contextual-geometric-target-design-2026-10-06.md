@@ -1,9 +1,52 @@
 # Contextual geometric prediction: target audit before adoption
 
 This is a proposed training auxiliary, not a completed JEPA language model.
-The immediate experiment remains the matched phase-balanced native token loss.
+The immediate experiment is the matched joint read-state bridge fit with
+phase-balanced native token loss; it starts from the feasible initial parent.
 The owner approved keeping contextual JEPA, signed spinor/H4 state and
 SpiralCore retained-frame transport active as the next architectural candidates.
+
+## Historical learning exists; the new contextual seam remains
+
+The exported Rust [JEPA trainer](../../crates/uor-r4-core/src/native_geometric/learner/jepa_trainer.rs)
+already implements token cross-entropy, geometric prediction, Adam and discrete
+export. Its actual target is the next token's S2 embedding plus fiber phase,
+using the older floating-point predictor/training path. This is not the current
+full-bank withheld-answer target objective. Do not interpret the latter's
+unimplemented status as absence of JEPA learning throughout the repository.
+
+Reuse its dual-objective and fiber-retention lessons alongside the current
+signed120 state-choice carrier, selector contrasts and bridge. The missing
+connection is authenticated offline reply-span target construction, detached
+signed targets, and a shared finite prediction loss attached to the actual
+read-refined state carrier. Do not duplicate the bank compiler or learner.
+An auxiliary changes the utility attributed through an existing connection;
+it does not establish a previously missing gradient path.
+
+The original full-bank query carrier already consumes source values, so a
+predictor may bypass the selected read. A frozen target also permits memorizing
+the 48 replies or two question forms. Paired/shuffled controls must therefore
+preserve role/query-form and length strata, and any claimed source-channel gain
+needs identity/key intervention and changed-fact predictions. These are
+conditional next decisions after the current fit, not a new fit authorization.
+
+The current finite bridge can implement exact source transfer with `h(d)=d`
+and fixed relative conjugation with `h(d)=u d u^-1`. The algebraic source-transfer
+control has executed; useful learned transfer remains unestablished. SpiralCore
+anchor-dependent conditioning is a distinct candidate only when an actual
+missing distinction justifies it. More frames do not recover erased information.
+
+External primary sources support retaining predictive objectives and output
+measurement together, without qualifying this native mechanism:
+[LLM-JEPA](https://arxiv.org/html/2509.14252v2) studies embedding objectives in
+existing dense LLM families; its results do not establish transformerless
+serving. [Meta's V-JEPA trainer](https://github.com/facebookresearch/jepa/blob/main/app/vjepa/train.py)
+uses a detached target, momentum target updates and variance regularization.
+Those are training design alternatives; the first proposed native target is
+fixed. The [ER-JEPA preprint](https://arxiv.org/abs/2609.36952), submitted
+September 29, 2026, argues that alignment alone does not ensure stable accurate
+prediction and adds replay supervision. This is an author-reported result,
+not reproduced native evidence or an adopted replay mechanism.
 
 ## Existing learning carrier and target construction
 
