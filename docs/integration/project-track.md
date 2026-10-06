@@ -2,6 +2,19 @@
 
 ## Predictive geometry and native CUDA learning — October 6
 
+[Native Generate](geometric-native-generate-learning-2026-10-06.md) now executes
+a real CUDA optimizer step with independent integer reload. Both context and
+decoder coefficients change, but the joint synthetic endpoint loses four exact
+targets versus the decoder-only cross; retain this adverse interaction. The next
+integrated path uses Generate and Copy from the SAME full-bank state, real-tokenizer
+ordinary reply words and a separately authored input-derived answerability control.
+Compare output-only/joint on the full exposed construction panel before prospectively
+unopened transfer. Native coefficient and prototype threshold reachability must be
+checked before a bounded fit; tiny rates that mathematically lock geometry cannot
+answer the learning question. Actual complete emitted-prefix replies remain primary.
+The new bank fit is pending compile/execution; connected gradients, discrete byte
+changes and a passed authoring control do not qualify chat or attention.
+
 [Composed predictive state credit](geometric-composed-state-credit-2026-10-06.md)
 is now executed: all9 state families receive nonzero credit at12 sampled positions,
 with unchanged native baseline and independent export/reload output. This admits
