@@ -359,10 +359,8 @@ pub enum SourceBoundCueMode {
 pub struct SourceBoundBankRealizerTrace {
     pub mode: SourceBoundCueMode,
     pub prefix_bank: PrefixBankRealizerTrace,
-    pub source_end: Option<SourceEndAllTrace>,
-    pub actions: Option<SourceBoundActionTrace>,
-    pub fallback_actions: Option<ActionTrace>,
-    pub fallback_reason: Option<&'static str>,
+    pub source_end: SourceEndAllTrace,
+    pub actions: SourceBoundActionTrace,
     /// Source ordinal, then head. Empty sources use authentic geometric cues.
     pub source_cue_q24: Vec<Vec<i64>>,
     pub additional_cue_costs: CueCarrierCosts,
@@ -527,21 +525,10 @@ impl<'a> RealizerExecution<'a> {
             prefix,
         )?;
         let bank = &prefix_bank.cue_bank.bank;
+        // Public source-view and occurrence admission require nonempty Source
+        // data; preserve rejection rather than inventing a fallback action.
         if bank.candidates.is_empty() {
-            // With no factual Copy route, legacy endpoint adjustments are zero.
-            // The already computed two-terminal trace is the explicit fallback.
-            let fallback_actions = Some(bank.actions.clone());
-            return Ok(SourceBoundBankRealizerTrace {
-                mode,
-                prefix_bank,
-                source_end: None,
-                actions: None,
-                fallback_actions,
-                fallback_reason: Some("no-copy-candidates;legacy-global-Period-Stop"),
-                source_cue_q24: Vec::new(),
-                additional_cue_costs: CueCarrierCosts::default(),
-                discarded_legacy_action_reductions: 0,
-            });
+            return Err(invalid("source-bound bank requires Copy occurrences"));
         }
         let source_end = end.prepare_all(&prefix_bank.prefix, &bank.heads)?;
         let mut provenances = Vec::with_capacity(source_end.all_scores.len());
@@ -665,10 +652,8 @@ impl<'a> RealizerExecution<'a> {
         Ok(SourceBoundBankRealizerTrace {
             mode,
             prefix_bank,
-            source_end: Some(source_end),
-            actions: Some(actions),
-            fallback_actions: None,
-            fallback_reason: None,
+            source_end,
+            actions,
             source_cue_q24,
             additional_cue_costs,
             discarded_legacy_action_reductions: 1,
@@ -2274,7 +2259,7 @@ mod tests {
     }
 
     #[test]
-    fn source_bound_all_sources_share_cue_preserve_copy_and_empty_fallback() -> Result<()> {
+    fn source_bound_all_sources_share_cue_preserve_copy_and_source_admission() -> Result<()> {
         use crate::geometric_prefix_transport::PrefixScoreMode;
         use crate::geometric_source_end_transport::{SourceEndAngularConfig, SourceEndScoreMode};
         let f = ActionFixture::new()?;
@@ -2346,14 +2331,8 @@ mod tests {
             SourceBoundCueMode::SharedCue,
         )?;
         assert_eq!(no_cue.prefix_bank, shared.prefix_bank);
-        let a = no_cue
-            .actions
-            .as_ref()
-            .ok_or_else(|| invalid("fixture typed actions absent"))?;
-        let b = shared
-            .actions
-            .as_ref()
-            .ok_or_else(|| invalid("fixture typed actions absent"))?;
+        let a = &no_cue.actions;
+        let b = &shared.actions;
         // Emission views include their compiled leading-space token.
         // Count derived Copy occurrences, not original store token IDs.
         assert_eq!(a.actions.len(), view.emitted_token_ids().len() * 2 + 4);
@@ -2375,29 +2354,28 @@ mod tests {
                 assert_eq!(left.source.event, 7 + left.source.source_ordinal as u64);
             }
         }
-        // The occurrence reader admits a context-only bank, but rejects an
-        // entirely empty bank. Preserve that existing admission contract.
+        // The occurrence reader requires at least one nonempty Source.
+        // Preserve its rejection for context-only and completely empty banks.
         let context_only = [SourceBankSegment::Context {
             token_ids: &[5],
             role: 1,
             event: 2,
         }];
-        let fallback = f.execution().read_bank_with_source_bound_actions(
-            &context_only,
-            &[5],
-            &[4],
-            &f.parent,
-            &cue,
-            &prefix,
-            &end,
-            SourceBoundCueMode::SharedCue,
-        )?;
-        assert!(fallback.actions.is_none());
-        assert!(fallback.fallback_actions.is_some());
-        assert_eq!(
-            fallback.fallback_reason,
-            Some("no-copy-candidates;legacy-global-Period-Stop")
-        );
+        for absent in [&context_only[..], &[][..]] {
+            assert!(f
+                .execution()
+                .read_bank_with_source_bound_actions(
+                    absent,
+                    &[5],
+                    &[4],
+                    &f.parent,
+                    &cue,
+                    &prefix,
+                    &end,
+                    SourceBoundCueMode::SharedCue,
+                )
+                .is_err());
+        }
         Ok(())
     }
 

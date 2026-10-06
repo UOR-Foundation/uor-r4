@@ -61,18 +61,12 @@ fn read(
         mode,
     )?;
     let mut v = compact(&out.prefix_bank.cue_bank.bank)?;
-    let actions = if let Some(a) = &out.actions {
-        serde_json::to_value(a)?
-    } else if let Some(a) = &out.fallback_actions {
-        serde_json::to_value(a)?
-    } else {
-        return Err(invalid("source-bound read has no authoritative actions").into());
-    };
+    let actions = serde_json::to_value(&out.actions)?;
     v["actions"] = actions;
     Ok(
         json!({"native":v,"cue_carrier":out.prefix_bank.cue_bank.carrier,
         "prefix_transport":out.prefix_bank.prefix,"source_end":out.source_end,
-        "source_bound_mode":out.mode,"fallback_reason":out.fallback_reason,
+        "source_bound_mode":out.mode,
         "source_cue_q24":out.source_cue_q24,"additional_cue_costs":out.additional_cue_costs,
         "discarded_legacy_action_reductions":out.discarded_legacy_action_reductions}),
     )
