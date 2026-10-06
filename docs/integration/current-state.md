@@ -1,5 +1,34 @@
 # Current UOR-R4 research state
 
+## Joint potential fit: entry failure isolated — October 6
+
+The source-bound 128-update construction fit at `b2e18d5c` completed on
+Linux x86_64 RTX 5090 (seed 1001, 512 episodes, batch 8). Complete actual
+own-prefix answers remained **0/512**, while native equal-episode CE fell
+from 8.223477 to 5.618457. Independent inspection verified all 1,024 saved
+initial/final row hashes. Every generated answer first fails at position zero;
+initial and final empty-prefix canonical/generation packets agree exactly.
+First-token NLL worsened from 8.343483 to 9.612731, later Copy-covered NLL
+improved from 8.116878 to 3.220526, and later Generate-only NLL worsened from
+8.375239 to 9.141763. The aggregate improvement therefore does not establish
+usable replies or learned correct-source selection.
+
+Checkpoint 128 changed 1,652 packed potential bytes, including 1,644 outside
+content-presence. This excludes a shared-cell-only parameter-change explanation,
+but functional source discrimination remains unmeasured. Four-control attempt 6
+hit its 512-MiB report cap after 163 rows; its failed sealed output is preserved.
+An independently reviewed CLI-only report-cap repair at `638b8f12` permits a
+fresh 3-GiB/1,500-second attempt without changing the control computation.
+Actual build and full attribution are pending; no retry result is claimed.
+
+The next learning candidate is an opt-in balance of the existing native token
+loss across entry, later Copy-covered, and later Generate-only positions.
+Adversarial source/gradient review and actual controls precede adoption; no new
+training run is authorized by this note alone. See the
+[saved reply diagnosis](../research/joint-potential-reply-diagnosis-2026-10-06.md)
+for identities, phase counts, interpretation limits and falsifiers. These are
+one-seed construction results, not held-out conversation or general prose.
+
 ## Joint geometric scorer learning integration — October 6
 
 Model source `9410c92b9104afa97be96d47a970b8647a346745` adds explicit
