@@ -4610,6 +4610,217 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn composed_cuda_reloaded_source_full_bank_native_and_adjoint_parity() -> Result<()> {
+        // An explicitly requested CUDA instrument fails when no GPU is present.
+        let device = Device::new_cuda(0)?;
+        let fixture = Fixture::new_with_lanes(2)?;
+        for (name, var) in fixture.weights.parameters() {
+            let mut values = vec![0.; var.elem_count()];
+            if context_state_parameter(&name) {
+                for (i, x) in values.iter_mut().enumerate() {
+                    *x = (i % 3) as f32 * 0.25 - 0.25;
+                }
+                if name == "consumer.context.token_category" {
+                    for row in values.chunks_exact_mut(33) {
+                        row.fill(0.);
+                        row[17] = 1.5;
+                    }
+                }
+            }
+            var.set(&Tensor::from_vec(values, var.shape(), &Device::Cpu)?)?;
+        }
+        let source_root = fixture.path.join("cuda-bank-source");
+        let native_root = fixture.path.join("cuda-bank-native");
+        fixture.weights.save_source(&source_root)?;
+        fixture
+            .weights
+            .compile(fixture.identity.clone())?
+            .save(&native_root)?;
+        let staged =
+            SourceRealizerWeights::load_source_on_device(&source_root, TOK.as_bytes(), &device)?;
+        assert_eq!(
+            parameter_identities(&fixture.weights)?,
+            parameter_identities(&staged)?
+        );
+        assert!(staged
+            .context_state_parameters()
+            .values()
+            .all(|v| v.device().same_device(&device)));
+        assert!(staged
+            .potential_parameters()
+            .values()
+            .all(|v| v.device().is_cpu()));
+        let native = NativeSourceRealizer::load(&native_root, &fixture.weights, &fixture.identity)?;
+        let gpu_native = NativeSourceRealizer::load(&native_root, &staged, &fixture.identity)?;
+        assert_eq!(native.artifact_binding()?, gpu_native.artifact_binding()?);
+        let cue = native.compile_cue_carrier(
+            CueAngularQ4::new(
+                CueAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 2,
+                    mode: CueScoreMode::DirectedRelative,
+                },
+                &vec![0x12; 120],
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let prefix = native.compile_prefix_transport(
+            &cue,
+            PrefixAngularQ4::new(
+                PrefixAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 2,
+                    mode: PrefixScoreMode::DirectedRelative,
+                },
+                &vec![0x12; 120],
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let cpu_prepared = fixture.weights.prepare_on_device(&native, &Device::Cpu)?;
+        let gpu_prepared = staged.prepare_on_device(&gpu_native, &device)?;
+        let cpu_generate = crate::geometric_generate_learning::GenerateLearningWeights::seeded(
+            fixture.weights.binding().clone(),
+            2,
+            1001,
+            &Device::Cpu,
+        )?;
+        let gpu_generate = crate::geometric_generate_learning::GenerateLearningWeights::seeded(
+            staged.binding().clone(),
+            2,
+            1001,
+            &device,
+        )?;
+        let cpu_snapshot = cpu_generate.prepare_native()?;
+        let gpu_snapshot = gpu_generate.prepare_native()?;
+        assert_eq!(
+            cpu_snapshot
+                .native
+                .to_bytes()
+                .map_err(|e| invalid(e.to_string()))?,
+            gpu_snapshot
+                .native
+                .to_bytes()
+                .map_err(|e| invalid(e.to_string()))?
+        );
+        let exp = fs::read(native_root.join("consumer/exp-q31.bin"))?;
+        let mut cpu_pool = crate::geometric_bank_generate::PreparedBankGenerate::new(
+            &cpu_prepared,
+            &cpu_generate,
+            &cpu_snapshot,
+            &exp,
+        )?;
+        let mut gpu_pool = crate::geometric_bank_generate::PreparedBankGenerate::new(
+            &gpu_prepared,
+            &gpu_generate,
+            &gpu_snapshot,
+            &exp,
+        )?;
+        let ids = [4, 4];
+        let view = SourceEmissionCompiler::new(TOK.as_bytes())?.compile(&ids)?;
+        let segments = [
+            SourceBankSegment::Context {
+                token_ids: &[5],
+                role: 1,
+                event: 7,
+            },
+            SourceBankSegment::Source {
+                frame: frame(&ids),
+                view: &view,
+                event: 7,
+            },
+        ];
+        let compare = |cpu: &Tensor, gpu: &Tensor| -> Result<bool> {
+            assert_eq!(cpu.dims(), gpu.dims());
+            assert!(cpu.device().is_cpu());
+            assert!(gpu.device().same_device(&device));
+            let left = cpu.flatten_all()?.to_vec1::<f32>()?;
+            let right = gpu.flatten_all()?.to_vec1::<f32>()?;
+            let mut nonzero = false;
+            for (&a, &b) in left.iter().zip(&right) {
+                if !a.is_finite() || !b.is_finite() || (a - b).abs() > 2e-4 + 2e-5 * a.abs() {
+                    return Err(invalid(format!(
+                        "composed CUDA adjoint differs: CPU {a}, GPU {b}"
+                    )));
+                }
+                nonzero |= a.abs() > 1e-8;
+            }
+            Ok(nonzero)
+        };
+        for own in [&[][..], &[4][..]] {
+            let cpu = cpu_pool.forward_bank(&segments, &[5], own, &cue, &prefix)?;
+            let gpu = gpu_pool.forward_bank(&segments, &[5], own, &cue, &prefix)?;
+            assert_eq!(cpu.actions, gpu.actions);
+            assert_eq!(cpu.copy_scores_q24, gpu.copy_scores_q24);
+            assert_eq!(cpu.generate.scores_q24, gpu.generate.scores_q24);
+            assert_eq!(cpu.final_state_codes, gpu.final_state_codes);
+            assert_eq!(cpu.copy_token_ids, gpu.copy_token_ids);
+            assert_eq!(cpu.context()?.trace.states, gpu.context()?.trace.states);
+            assert!(gpu.context()?.state_choices.device().same_device(&device));
+            for target in [5, 4] {
+                // absent-Copy Generate and source-covered alias.
+                let cpu_loss = cpu.loss(target)?;
+                let gpu_loss = gpu.loss(target)?;
+                assert_eq!(
+                    cpu_loss.to_scalar::<f32>()?.to_bits(),
+                    gpu_loss.to_scalar::<f32>()?.to_bits()
+                );
+                let cpu_grads = cpu_loss.backward()?;
+                let gpu_grads = gpu_loss.backward()?;
+                let mut context_nonzero = false;
+                for (name, cv) in fixture.weights.context_state_parameters() {
+                    let gv = &staged.context_state_parameters()[&name];
+                    let cg = cpu_grads
+                        .get(cv.as_tensor())
+                        .ok_or_else(|| invalid(format!("CPU context adjoint absent: {name}")))?;
+                    let gg = gpu_grads
+                        .get(gv.as_tensor())
+                        .ok_or_else(|| invalid(format!("CUDA context adjoint absent: {name}")))?;
+                    context_nonzero |= compare(cg, gg)?;
+                }
+                assert!(
+                    context_nonzero,
+                    "full-bank context path must have nonzero credit"
+                );
+                for source in [&fixture.weights, &staged] {
+                    let grads = if source.consumer.context.device().is_cpu() {
+                        &cpu_grads
+                    } else {
+                        &gpu_grads
+                    };
+                    for (name, var) in source.parameters() {
+                        if !context_state_parameter(&name) {
+                            assert!(
+                                grads.get(var.as_tensor()).is_none(),
+                                "frozen source family gained credit: {name}"
+                            );
+                        }
+                    }
+                }
+                let mut generate_nonzero = false;
+                for (name, cv) in cpu_generate.parameters() {
+                    if cv.elem_count() == 0 {
+                        continue;
+                    }
+                    let gv = &gpu_generate.parameters()[&name];
+                    let cg = cpu_grads
+                        .get(cv.as_tensor())
+                        .ok_or_else(|| invalid(format!("CPU Generate adjoint absent: {name}")))?;
+                    let gg = gpu_grads
+                        .get(gv.as_tensor())
+                        .ok_or_else(|| invalid(format!("CUDA Generate adjoint absent: {name}")))?;
+                    generate_nonzero |= compare(cg, gg)?;
+                }
+                assert!(
+                    generate_nonzero,
+                    "full-bank Generate path must have nonzero credit"
+                );
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn composed_device_source_cpu_staging_preserves_exact_bits_and_preparation() -> Result<()> {
         let fixture = Fixture::new_with_lanes(2)?;
