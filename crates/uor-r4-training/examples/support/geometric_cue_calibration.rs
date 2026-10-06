@@ -4,6 +4,8 @@ use super::*;
 mod credit_audit;
 #[path = "geometric_cue_discrete.rs"]
 mod discrete;
+#[path = "geometric_cue_joint_evaluate.rs"]
+mod joint_evaluate;
 #[path = "geometric_cue_joint_fit.rs"]
 mod joint_fit;
 #[path = "geometric_cue_joint_probe.rs"]
@@ -26,6 +28,7 @@ fn composition_panel(a: &Args) -> Option<&CueCompositionPanel> {
         .or_else(|| a.cue_support_probe.as_ref().map(|c| &c.composition_panel))
         .or(a.cue_joint_probe.as_ref())
         .or(a.cue_joint_fit.as_ref())
+        .or(a.cue_joint_evaluate.as_ref())
         .or_else(|| {
             a.cue_discrete_fit
                 .as_ref()
@@ -83,7 +86,15 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     if (a.mode == "cue-calibration-joint-fit") != a.cue_joint_fit.is_some() {
         return Err(invalid("joint fit explicit-mode contract differs").into());
     }
-    if let Some(c) = a.cue_joint_probe.as_ref().or(a.cue_joint_fit.as_ref()) {
+    if (a.mode == "cue-calibration-joint-evaluate") != a.cue_joint_evaluate.is_some() {
+        return Err(invalid("joint evaluation explicit-mode contract differs").into());
+    }
+    if let Some(c) = a
+        .cue_joint_probe
+        .as_ref()
+        .or(a.cue_joint_fit.as_ref())
+        .or(a.cue_joint_evaluate.as_ref())
+    {
         if c.profile != COMPOSITION_PROFILE
             || c.development_rows != 512
             || c.evaluation_rows != 128
@@ -992,6 +1003,22 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         return Err(invalid("prospective evaluation panel report differs before learning").into());
     }
     let development = panel(&a.development_panel, development_rows, &integer, &tok, a)?;
+    if a.cue_joint_evaluate.is_some() {
+        return joint_evaluate::run(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &tok,
+            &weights,
+            &f,
+            &development,
+            &inputs,
+            &seals,
+            &receipts,
+        );
+    }
     if a.cue_joint_fit.is_some() {
         return joint_fit::run(
             a,
