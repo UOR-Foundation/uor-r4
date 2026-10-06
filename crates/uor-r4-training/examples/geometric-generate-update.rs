@@ -44,6 +44,7 @@ struct Args {
     exp: PathBuf,
     seed: u64,
     steps: usize,
+    audit_from: Option<PathBuf>,
 }
 fn bad(msg: &str) -> Box<dyn Error> {
     std::io::Error::new(std::io::ErrorKind::InvalidInput, msg).into()
@@ -55,7 +56,16 @@ fn args() -> Result<Args> {
     let mut fields = BTreeMap::new();
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
-        if !["--out", "--exp", "--seed", "--steps", "--device"].contains(&k.as_str()) {
+        if ![
+            "--out",
+            "--exp",
+            "--seed",
+            "--steps",
+            "--device",
+            "--audit-from",
+        ]
+        .contains(&k.as_str())
+        {
             return Err(bad("unknown argument"));
         }
         let v = it.next().ok_or_else(|| bad("missing argument value"))?;
@@ -63,7 +73,16 @@ fn args() -> Result<Args> {
             return Err(bad("duplicate argument"));
         }
     }
-    if fields.get("--device").map(String::as_str) != Some("cuda") {
+    let audit_from = fields.remove("--audit-from").map(PathBuf::from);
+    if audit_from.is_some() {
+        if fields.get("--device").map(String::as_str) != Some("native")
+            || fields.contains_key("--steps")
+        {
+            return Err(bad(
+                "audit requires --device native and forbids --steps; no optimizer",
+            ));
+        }
+    } else if fields.get("--device").map(String::as_str) != Some("cuda") {
         return Err(bad("explicit --device cuda required; no CPU fallback"));
     }
     let out = PathBuf::from(
@@ -84,11 +103,21 @@ fn args() -> Result<Args> {
         .get("--steps")
         .map_or(Ok(1), |s| s.parse::<usize>())?;
     validate(&out, &exp, steps)?;
+    if let Some(root) = &audit_from {
+        if !root.is_absolute()
+            || root.components().any(|c| matches!(c, Component::ParentDir))
+            || root.starts_with(&out)
+            || out.starts_with(root)
+        {
+            return Err(bad("audit source/output overlap or nonabsolute path"));
+        }
+    }
     Ok(Args {
         out,
         exp,
         seed,
         steps,
+        audit_from,
     })
 }
 fn validate(out: &Path, exp: &Path, steps: usize) -> Result<()> {
@@ -355,6 +384,157 @@ fn rollout(
         json!({"prompt_ids":prompt,"generated_ids":tokens,"eos":eos,"steps":evidence,"scope":"target-free integer autoregression; no Copy candidates/no claimed language"}),
     )
 }
+fn crossed_replays(
+    root: &Path,
+    contexts: [&NativeContextQ4; 2],
+    decoders: [&NativeGeometricGenerate; 2],
+    binding: &SourceActionBinding,
+    exp: &[u8],
+) -> Result<Value> {
+    let geometry = HistoricalH4Tables::from_bytes(GEOMETRY)?;
+    let mut all_scores: Vec<Vec<Vec<i64>>> = Vec::new();
+    let mut arms = Vec::new();
+    for (name, c, g) in [
+        ("C0G0", 0, 0),
+        ("C1G0", 1, 0),
+        ("C0G1", 0, 1),
+        ("C1G1", 1, 1),
+    ] {
+        let mut pool = NativeVocabularyActions::new(binding.clone(), exp)?;
+        let mut records = Vec::new();
+        let mut scores_arm = Vec::new();
+        let mut ce = 0.;
+        let mut correct = 0;
+        for (index, (ids, target)) in rows().iter().enumerate() {
+            let mut state = NativeContextState::new(1, 2)?;
+            for &id in ids {
+                state.step(id as usize, contexts[c].native(), &geometry)?;
+            }
+            let mut scores = vec![0; VOCAB];
+            let mut counts = GenerateReadCounts::default();
+            decoders[g].score_into(state.states(), &mut scores, &mut counts)?;
+            let trace = pool.reduce_trace(&scores, &[], &[])?;
+            // Labels score the completed target-free native read/pool.
+            let mass = trace
+                .token_masses
+                .iter()
+                .find(|m| m.token_id == *target)
+                .ok_or_else(|| bad("crossed target missing public mass"))?
+                .weight_q31;
+            if mass == 0 || trace.summary.total_weight_q31 == 0 {
+                return Err(bad("crossed native support invalid"));
+            }
+            let probability = mass as f64 / trace.summary.total_weight_q31 as f64;
+            let nll = -probability.ln();
+            let hit = trace.summary.chosen_token_id == *target;
+            ce += nll;
+            correct += usize::from(hit);
+            records.push(json!({"index":index,"causal_prompt_ids":ids,"actual_states":state.states().iter().map(|s|s.index()).collect::<Vec<_>>(),"raw_scores_q24":scores,"target_label_only_after_pool":target,"target_mass_q31":mass,"target_probability":probability,"native_ce":nll,"exact_prediction":hit,"pool":trace.summary,"counts":counts}));
+            scores_arm.push(scores);
+        }
+        arms.push(
+            json!({"arm":name,"native_mean_ce":ce/8.,"exact_predictions":correct,"rows":records}),
+        );
+        all_scores.push(scores_arm);
+    }
+    let mut effects = Vec::new();
+    for (index, (_, target)) in rows().iter().enumerate() {
+        let mut comparisons = Vec::new();
+        for (name, a, b) in [
+            ("context_at_initial_decoder", 0, 1),
+            ("context_at_final_decoder", 2, 3),
+            ("decoder_at_initial_context", 0, 2),
+            ("decoder_at_final_context", 1, 3),
+        ] {
+            let left = &all_scores[a][index];
+            let right = &all_scores[b][index];
+            let changed = left.iter().zip(right).filter(|(x, y)| x != y).count();
+            let clipped_changed = left
+                .iter()
+                .zip(right)
+                .filter(|(x, y)| {
+                    (**x).clamp(-(8_i64 << 24), 8_i64 << 24)
+                        != (**y).clamp(-(8_i64 << 24), 8_i64 << 24)
+                })
+                .count();
+            let max_abs = left
+                .iter()
+                .zip(right)
+                .map(|(x, y)| x.saturating_sub(*y).unsigned_abs())
+                .max()
+                .unwrap_or(0);
+            comparisons.push(json!({"factor":name,"raw_score_changed_tokens":changed,"clipped_score_changed_tokens":clipped_changed,"maximum_raw_score_difference_q24":max_abs,"target_raw_score_difference_q24":right[*target as usize]-left[*target as usize]}));
+        }
+        effects.push(json!({"index":index,"comparisons":comparisons}));
+    }
+    write(
+        root,
+        "crossed-native-replays.json",
+        &json!({"schema":"uor-r4.generate-crossed-native-replays/1","scope":"same eight fixed causal prefixes; target-free native predictions before labels; not fit/fresh","arms":arms,"factor_effects":effects,"native_optimizer_updates":0,"numerical_runtime":"integer context/Generate/pool; CE f64 reporting only"}),
+    )?;
+    Ok(
+        json!({"file":"crossed-native-replays.json","sha256":hash(&fs::read(root.join("crossed-native-replays.json"))?),"arms":4,"rows_per_arm":8,"new_optimizer_updates":0}),
+    )
+}
+fn audit_existing(a: &Args, start: Instant) -> Result<Value> {
+    let input = a
+        .audit_from
+        .as_ref()
+        .ok_or_else(|| bad("audit input missing"))?;
+    report_output::verify(input)?;
+    let report: Value = serde_json::from_slice(&fs::read(input.join("report.json"))?)?;
+    if report["schema"] != "uor-r4.geometric-generate-update/1"
+        || report["status"] != "COMPLETED"
+        || report["seed"].as_u64() != Some(a.seed)
+        || report["vocabulary"].as_u64() != Some(4096)
+    {
+        return Err(bad("audit parent status/seed/schema/vocab differs"));
+    }
+    let tok = fs::read(input.join("tokenizer.json"))?;
+    let binding = SourceActionBinding::new(&tok)?;
+    let exp = fs::read(&a.exp)?;
+    if report["tokenizer_sha256"] != hash(&tok)
+        || report["canonical_exp_sha256"] != hash(&exp)
+        || binding.vocab_size() != VOCAB
+    {
+        return Err(bad("audit tokenizer/exp binding differs"));
+    }
+    let frozen: Value = serde_json::from_slice(&fs::read(input.join("frozen-inputs.json"))?)?;
+    let expected = json!({"scope":"synthetic next-symbol update instrument","source_only_prompts":rows().iter().map(|r|&r.0).collect::<Vec<_>>(),"targets_training_labels_only":rows().iter().map(|r|r.1).collect::<Vec<_>>(),"copy_sources":[],"draw":"fixed-eight/1;not seed-dependent data"});
+    if frozen != expected {
+        return Err(bad("audit fixed prompts/labels differ"));
+    }
+    let mut contexts = Vec::new();
+    let mut decoders = Vec::new();
+    let mut hashes = BTreeMap::new();
+    for label in ["initial", "final"] {
+        let cp = fs::read(input.join(format!("context-{label}-q4.bin")))?;
+        let gp = fs::read(input.join(format!("generate-{label}.bin")))?;
+        if report[label]["context_packed_sha256"] != hash(&cp)
+            || report[label]["generate_sha256"] != hash(&gp)
+        {
+            return Err(bad("audit checkpoint hash mismatch"));
+        }
+        contexts.push(NativeContextQ4::new(CONFIG, &cp)?);
+        decoders.push(NativeGeometricGenerate::from_bytes(&gp, &binding)?);
+        hashes.insert(
+            label,
+            json!({"context_sha256":hash(&cp),"decoder_sha256":hash(&gp)}),
+        );
+    }
+    let receipt = crossed_replays(
+        &a.out,
+        [&contexts[0], &contexts[1]],
+        [&decoders[0], &decoders[1]],
+        &binding,
+        &exp,
+    )?;
+    report_output::verify(input)?;
+    Ok(
+        json!({"schema":"uor-r4.geometric-generate-crossed-audit/1","status":"COMPLETED","mode":"native-only saved-checkpoint crossed replay","input_root":input,"input_manifest_sha256":hash(&fs::read(input.join("manifest.json"))?),"input_report_sha256":hash(&fs::read(input.join("report.json"))?),"checkpoint_hashes":hashes,"seed":a.seed,"updates":0,"cuda_requested":false,"fresh_predictions":0,"selection":"NONE","crossed_replay":receipt,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+    )
+}
+
 fn run(a: &Args, start: Instant) -> Result<Value> {
     let device = cuda()?;
     let exp = fs::read(&a.exp)?;
@@ -562,17 +742,28 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         "native-reloaded-generation.json",
         &json!(generations),
     )?;
+    let crossed = crossed_replays(
+        &a.out,
+        [&initial_context, &final_context],
+        [&initial_generate, &final_generate],
+        &binding,
+        &exp,
+    )?;
     let exe = std::env::current_exe()?;
     let exe_sha = hash(&fs::read(exe)?);
     Ok(
-        json!({"schema":"uor-r4.geometric-generate-update/1","status":"COMPLETED","scope":"joint CUDA one/few-update execution admission; synthetic next-symbols; not language/chat","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":exe_sha,"device":"CUDA:0","cpu_fallback":false,"seed":a.seed,"initialization":"deterministic nonsemantic transition masters .25*{-1,0,1}; Generate seeded shared potentials/base120 tuples","adamw":{"lr":0.2,"beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.0,"global_clip":1.0},"admitted_context_families":["token_transition","self_transition","neighbor_transition"],"unused_observation_families":"six root/category families frozen; not required positive","state_sensitivity":state_sensitivity,"updates":a.steps,"vocabulary":VOCAB,"lanes":2,"batch":8,"source_candidates":0,"initial_source_shadows":initial_shadows,"final_source_shadows":final_shadows,"final_shadow_download_seconds":final_shadow_download_seconds,"peak_host_rss_kib":peak_rss_kib(),"tokenizer_sha256":hash(&tok),"canonical_exp_sha256":hash(&exp),"cpu_reference_rows":1,"cpu_reference_backward":false,"initial":initial,"final":final_receipt,"initial_export_reload_seconds":initial_export_seconds,"final_export_reload_seconds":export_seconds,"native_context_family_changes":context_changes(&initial_context,&final_context)?,"native_generate_coefficient_changes":generate_changes(&initial_generate,&final_generate)?,"prototype_entries_changed":prototype_changed,"context_packed_bytes_changed":initial_context.packed_coefficients().iter().zip(final_context.packed_coefficients()).filter(|(a,b)|a!=b).count(),"generate_native_bytes_changed":initial_generate.to_bytes()?.iter().zip(final_generate.to_bytes()?.iter()).filter(|(a,b)|a!=b).count(),"first_position_score_changed_rows":score_changed_rows,"actual_native_feedback_rollouts":8,"generation_cap":32,"fresh_predictions":0,"selection":"NONE","report_cap_bytes":CAP,"elapsed_seconds":start.elapsed().as_secs_f64(),"limitation":"single update need not cross quarter-grid/prototype boundaries; frozen native identity is not failed learning; no corpus/bench2chat qualification; observation-root/category families not directly consumed by state decoder"}),
+        json!({"schema":"uor-r4.geometric-generate-update/1","status":"COMPLETED","scope":"joint CUDA one/few-update execution admission; synthetic next-symbols; not language/chat","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":exe_sha,"device":"CUDA:0","cpu_fallback":false,"seed":a.seed,"initialization":"deterministic nonsemantic transition masters .25*{-1,0,1}; Generate seeded shared potentials/base120 tuples","adamw":{"lr":0.2,"beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.0,"global_clip":1.0},"admitted_context_families":["token_transition","self_transition","neighbor_transition"],"unused_observation_families":"six root/category families frozen; not required positive","state_sensitivity":state_sensitivity,"updates":a.steps,"vocabulary":VOCAB,"lanes":2,"batch":8,"source_candidates":0,"initial_source_shadows":initial_shadows,"final_source_shadows":final_shadows,"final_shadow_download_seconds":final_shadow_download_seconds,"peak_host_rss_kib":peak_rss_kib(),"tokenizer_sha256":hash(&tok),"canonical_exp_sha256":hash(&exp),"cpu_reference_rows":1,"cpu_reference_backward":false,"initial":initial,"final":final_receipt,"initial_export_reload_seconds":initial_export_seconds,"final_export_reload_seconds":export_seconds,"native_context_family_changes":context_changes(&initial_context,&final_context)?,"native_generate_coefficient_changes":generate_changes(&initial_generate,&final_generate)?,"prototype_entries_changed":prototype_changed,"context_packed_bytes_changed":initial_context.packed_coefficients().iter().zip(final_context.packed_coefficients()).filter(|(a,b)|a!=b).count(),"generate_native_bytes_changed":initial_generate.to_bytes()?.iter().zip(final_generate.to_bytes()?.iter()).filter(|(a,b)|a!=b).count(),"first_position_score_changed_rows":score_changed_rows,"actual_native_feedback_rollouts":8,"crossed_native_replays":crossed,"generation_cap":32,"fresh_predictions":0,"selection":"NONE","report_cap_bytes":CAP,"elapsed_seconds":start.elapsed().as_secs_f64(),"limitation":"single update need not cross quarter-grid/prototype boundaries; frozen native identity is not failed learning; no corpus/bench2chat qualification; observation-root/category families not directly consumed by state decoder"}),
     )
 }
 fn main() -> Result<()> {
     let a = args()?;
     report_output::claim(&a.out)?;
     let start = Instant::now();
-    let result = run(&a, start);
+    let result = if a.audit_from.is_some() {
+        audit_existing(&a, start)
+    } else {
+        run(&a, start)
+    };
     let report = match &result {
         Ok(v) => v.clone(),
         Err(e) => {
