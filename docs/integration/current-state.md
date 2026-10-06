@@ -1,5 +1,45 @@
 # Current UOR-R4 research state
 
+## Joint finite-state credit and full-state feasibility — October 6, 13:45Z
+
+The previously NOT_RUN state-utility audit now completes on canonical-volume
+pod `vxf2pvetpo2k69`, Linux x86_64 RTX5090. Exact instrument source495ca9876a021ae95609d035ddc5ae79ee3af4f9
+and binary2e754c1520cd1a0a7dd05ca0256998130d02e3d16ee0a6aa1b09603a00021306
+replay the completed joint128 artifact. Exit0, wrapper19.269s, RSS626524KiB;
+no optimizer updates. Report SHA256a66cb3c4e3f0f2671a3233f9bb0f25b4d9da1472a9930d697a02a779e1315ee2.
+Independent saved-evidence review reconstructs all960 native candidate losses,
+best choices and ordering counters. Native and surrogate best code agree8/8,
+with zero selected regret. All8 rows admit a better lane0 state (0.1242–0.5021
+nats), but none of960 alternatives wins the first token. There are1286/57120
+pairwise ordering reversals and70 tangent-rewarded adverse alternatives; these
+do not change the best choice. This result does not justify replacing terminal
+state credit. Original artifact/row bytes and BLAKE3 were not independently
+rehashed in the saved-evidence review; no second CUDA execution is claimed.
+
+The distinct existing max-gold full-state witness then completes exit0 in6.331s,
+RSS284220KiB, same binary/artifact/factual Copy. It wins53/512 first targets
+versus0parent. Report SHA2562f0755df14dcb5fd42bc3e372cb6fe6f20b46d810e472155d96e90e7919ce8e1.
+These are label-conditioned feasibility witnesses, not learned context states
+or successful replies. Losing459 witnesses are not impossibility certificates.
+The older146-win/328-impossibility result belongs to output-only fields and
+cannot be reused for this final joint artifact.
+
+Next: inspect actual recurrent credit/action margins and shared-parameter
+realizability against the53 feasible states before another fit. Retain the
+separate requirement for a final-joint-field/factual-Copy optimistic bound on
+the unresolved rows; no Copy gate, normalizer or estimator replacement follows.
+
+The exact complete checkpoint plus bound inputs/configuration/tokenizer/native
+tables are archived as1128 SHA256-verified members,341267494 source bytes,
+53809913-byte compressed bundle. Cloud-store upload/download MD5 verification
+succeeds for `icloud:UOR-R4/results/codex/portable-joint-checkpoint-preserved.tar`,
+54094336bytes, MD5`9983e735bdda4825ec0f71bdad4ce04b`. Both diagnostic reports and
+receipts are similarly archived at `icloud:UOR-R4/results/codex/state-utility-and-ceiling-preserved.tar`,
+1123840bytes, MD5`40ad6f0154b7855f338abbe28dd693bf`.
+Pod released/deleted13:44:46Z,401s rental (~$0.1103 at$0.99/h), no foreign pod
+touched. Cumulative reserved paid ceiling15.0975USD and complete-wall ceiling47190s
+retain prior charges. Source delivery remains PR#1792, unmerged.
+
 ## Finite native H4 utility instrument — October 6, implementation validated
 
 The opt-in `--state-utility` mode is implemented in the existing Rust code probe

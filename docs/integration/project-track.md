@@ -27,7 +27,7 @@ this is not fresh transfer. Full eight-state uniqueness does not prove separatio
 by shared unary/disjoint-pair fields. Learned ordinary reply generation remains
 unqualified until complete actual own-prefix answers work.
 
-The state/pool discriminator now executes: exact current-field H4 witnesses
+The output-only state/pool discriminator executes: exact output-only-field H4 witnesses
 win146/512 first targets versus0parent. A joined saved-record audit certifies
 328/512 cannot win under the exact current-field gold ceiling and Copy aliases,
 so a context-state-only repair cannot solve those rows with factual Copy fixed.
@@ -44,13 +44,18 @@ tokens. Factual final gold ranks first within Generate on1/512 rows and competin
 Copy alone exceeds gold mass on512/512. Both discrimination and competition
 remain; no unchanged dose or Copy-only gate follows.
 
-The next causal discriminator compares the actual current120-state adjoint with
+The next causal discriminator has now compared the actual current120-state adjoint with
 exact native finite alias-pool loss over120 H4 alternatives at eight predeclared
 first positions/lane0, keeping factual Copy and other fields fixed. It performs
-zero updates. A local surrogate/native ordering conflict would justify testing
-exact conditional loss utilities on the existing geometric carrier; comparable
-ordering does not. This is not a full context rerun or evidence that recurrence
-can realize arbitrary states. A final-field/factual-Copy bound is still needed
+zero updates. Native and surrogate best choices agree8/8 with zero selection
+regret; no960 single-lane alternative wins. Minor ordering conflicts do not
+justify replacing the terminal estimator. A distinct full-state max-gold
+witness wins53/512 against factual Copy at the final joint fields. Those states
+establish conditional readout feasibility, not learned context or attention.
+Next inspect recurrent credit, action margins and shared-parameter realizability
+against these successful witnesses before another fit. This is not a full
+context rerun or evidence that recurrence can realize arbitrary states.
+A final-joint-field/factual-Copy bound is still needed for unresolved rows
 before adopting selected existing Copy-field learning. Useful complete actual
 own-prefix replies remain the primary outcome before frozen transfer.
 A single seed is exploratory, not a multi-seed capability verdict. No runtime
