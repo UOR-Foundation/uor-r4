@@ -36,8 +36,15 @@ The subsequent architectural candidate is contextual JEPA learning over a
 retained signed geometric state, with SpiralCore anchor-frame transport tested
 separately. It reuses the full-120 state-credit carrier and exact H4 tables,
 retains the token/EOS objective, and excludes future target information from
-runtime. Neither contextual JEPA nor the retained-frame operator is implemented
-or measured yet. See the [saved reply diagnosis](../research/joint-potential-reply-diagnosis-2026-10-06.md)
+runtime. The frozen-target audit at `c917e7e4` passed five release tests, built, and
+executed both checkpoint encoders: no collisions among 34 paired contrasts,
+including 12 pairs with identical token multisets. Endpoint and three-checkpoint
+targets both distinguish all 64 unique texts, so no extra preservation benefit
+from three checkpoints is measured. This is information-retention evidence,
+not semantic or language qualification. Contextual JEPA learning and retained-frame
+transport remain unimplemented/unmeasured. Audit actual reply-span targets before
+choosing a predictive auxiliary; endpoint-only is the smaller current candidate.
+See the [contextual target audit](../research/contextual-geometric-target-design-2026-10-06.md). See the [saved reply diagnosis](../research/joint-potential-reply-diagnosis-2026-10-06.md)
 and [SpiralCore assessment](../research/spiralcore-attention-revisit-2026-10-06.md).
 
 ## Joint geometric scorer learning integration — October 6

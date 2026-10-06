@@ -66,3 +66,56 @@ measured missing distinction and improve predictions.
 
 The first target audit is deterministic and uses the actual frozen native
 encoder. It does not adopt the target or initiate a new training campaign.
+
+
+## Executed frozen-target audit
+
+Source `c917e7e486c391377232f0d29620cbe9efb0441a`, executable SHA256
+`a3ef32309fb8f988e2e2e895a36fae634bfed7a66212f98534c80c978445cbb0`.
+On Linux x86_64 pod `5j908ccd585p4s`, actual CPU-only release tests passed
+five checks (three authored audit tests and two imported output-preservation
+tests). Release build and both native audits exited zero. Complete wrapper
+cost was 142.361 seconds; the two native encoding/report commands took
+7.108 and 4.055 seconds. No GPU work or optimizer updates occurred in this audit.
+The concurrent phase fit continued unchanged.
+
+The input SHA256 is
+`bdb646db2f02fddaf82fe88a31dc199dfc29a927acc09536dbea3c05a15ccdcd`.
+An independent reviewer checked input strings/IDs/kinds, reported trajectory
+lengths, signed-code inventory, counts, source/executable identities and sealed
+file inventories. Rust executions verified parent and output seals.
+
+| Information-retention observation | Frozen checkpoint 0 | Old fit checkpoint 128 |
+|---|---:|---:|
+| Authored pairs | 34 | 34 |
+| Same-token-length pairs | 21 | 21 |
+| Same-token-multiset pairs | 12 | 12 |
+| Paired endpoint collisions | 0 | 0 |
+| Paired three-checkpoint collisions | 0 | 0 |
+| Paired full-trajectory collisions | 0 | 0 |
+| Unique endpoint tuples / span occurrences | 64/68 | 64/68 |
+| Unique three-checkpoint tuples / span occurrences | 64/68 | 64/68 |
+
+There are exactly 64 unique input texts. Repeated signatures correspond only
+to identical repeated text. Consequently this panel shows no additional
+separation from three checkpoints over the endpoint. It does show retention
+of the tested order contrasts, including identical-token-multiset pairs.
+It does not show a semantic neighborhood, grammar understanding, future
+predictability or improved next-token generation. An order-sensitive,
+high-entropy encoding can separate strings without supplying a useful teacher.
+Equal retained-state targets also do not imply equal complete model outputs:
+the token-conditioned address observations are separate.
+
+Decision: keep contextual JEPA available, but do not adopt a three-checkpoint
+auxiliary on this result alone. First audit actual reply spans under a frozen
+teacher-input convention, distinguishing role, value, reply form and length.
+Then a bounded paired versus shuffled-target learning comparison can test
+whether the auxiliary improves prediction. Endpoint-only remains the smaller
+candidate because no extra preservation benefit from three checkpoints has
+been measured here. The active phase-loss fit is a separate causal pilot.
+
+Reports remain at `/workspace/uor-r4/codex/native-geometric-generate/`
+`context-target-cp0-audit-attempt1` and `context-target-cp128-audit-attempt1`.
+Report SHA256 values are respectively
+`a6488d53a9e96658f61135183ae13de3fb65e8fdd5d0ae896824f6ebdc9645cb`
+and `5ab47bebbd35b0e53877340ab7e14261ebbc9c3bb03d6bc3dbe52f1e612107d1`.
