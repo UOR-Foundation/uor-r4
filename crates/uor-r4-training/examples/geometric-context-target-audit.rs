@@ -73,6 +73,12 @@ fn args() -> Result<Args> {
             .remove("--out")
             .ok_or_else(|| bad("--out required"))?,
     ))?;
+    if out
+        .ancestors()
+        .any(|parent| parent.join("manifest.json").is_file())
+    {
+        return Err(bad("output cannot be nested beneath any sealed root").into());
+    }
     if out.starts_with(&fit_root) || fit_root.starts_with(&out) || input.starts_with(&out) {
         return Err(bad("input/output overlap").into());
     }
@@ -192,7 +198,9 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     let manifest_sha = sha256_file(&a.fit_root.join("manifest.json"))?;
     let fitbytes = fs::read(a.fit_root.join("report.json"))?;
     let fit: Value = serde_json::from_slice(&fitbytes)?;
-    if fit["status"] != json!("COMPLETED") {
+    if fit["schema"] != json!("uor-r4.geometric-bank-generate-fit/1")
+        || fit["status"] != json!("COMPLETED")
+    {
         return Err(
             bad("requires completed sealed original fit; live unsealed fits unsupported").into(),
         );
