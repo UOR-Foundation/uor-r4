@@ -29,8 +29,11 @@ across entry, later Copy-covered, and later Generate-only positions. At
 zero-update admissions passed. Native hard-pool parity passed independently;
 all initial Source, Generate-source, native, cue and prefix files are byte
 identical to the original fit. The 128-update matched fit will assess the final
-checkpoint as well as the existing selected checkpoint. One seed diagnoses the
-objective intervention; it does not qualify transfer or chat.
+checkpoint as well as the existing selected checkpoint. The actual fit at
+`ef8c0494` is running on the leased RTX 5090; terminal quality evaluation is
+pending. Its two phase checks, one wall-overrun check and release build passed.
+Healthy work continues beyond a self-set estimate under owner direction #1802.
+One seed diagnoses the objective intervention; it does not qualify transfer or chat.
 
 The subsequent architectural candidate is contextual JEPA learning over a
 retained signed geometric state, with SpiralCore anchor-frame transport tested
@@ -44,6 +47,22 @@ from three checkpoints is measured. This is information-retention evidence,
 not semantic or language qualification. Contextual JEPA learning and retained-frame
 transport remain unimplemented/unmeasured. Audit actual reply-span targets before
 choosing a predictive auxiliary; endpoint-only is the smaller current candidate.
+
+The adversarial actual-data review finds only 48 canonical replies across 512
+construction rows, using two fixed forms and the same 24 literals per role;
+training/development inputs are identical. Authenticated saved-state analysis
+verifies all 1,024 initial/final row SHA references: entry and first literal-byte
+intersection each have 512 distinct ordered eight-lane retained states at both
+checkpoints, with no next-token/full-answer conflict groups. No deterministic
+state-interface ambiguity is observed here; semantic organization, learnability
+and decoder sufficiency are not established. The historical read-feedback
+family suggests an all-bank predicted-read-to-retained-state-to-Generate seam,
+but an unchanged frozen Copy ranker makes that bridge-only fit impossible on the
+old final parent: every entry target is absent from Copy and every competing
+Copy score exceeds Generate's legal 91/16 bound. Inspect the live phase result
+before choosing that intervention. Retain signed source provenance, matched
+extra-capacity/query/surface/distractor controls and hard/export parity; no
+bridge is implemented by this review.
 See the [contextual target audit](../research/contextual-geometric-target-design-2026-10-06.md). See the [saved reply diagnosis](../research/joint-potential-reply-diagnosis-2026-10-06.md)
 and [SpiralCore assessment](../research/spiralcore-attention-revisit-2026-10-06.md).
 
