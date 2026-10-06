@@ -69,6 +69,8 @@ struct Args {
     learning_rate: f64,
     prototype_learning_rate: f64,
     context_learning_rate: f64,
+    #[serde(default)]
+    potential_learning_rate: Option<f64>,
     maximum_seconds: u64,
     maximum_report_bytes: u64,
     out: PathBuf,
@@ -280,7 +282,11 @@ fn args() -> Result<Args> {
         ));
     }
     if !["admission", "fit"].contains(&a.mode.as_str())
-        || !["output-only", "joint"].contains(&a.arm.as_str())
+        || !["output-only", "joint", "joint-potential"].contains(&a.arm.as_str())
+        || (a.arm == "joint-potential" && a.potential_learning_rate.is_none())
+        || a.potential_learning_rate
+            .is_some_and(|lr| !lr.is_finite() || lr <= 0. || lr > 0.01)
+        || (a.arm != "joint-potential" && a.potential_learning_rate.is_some())
         || ![1, 2].contains(&a.token_backward_chunk)
         || a.updates == 0
         || a.updates > 128
@@ -470,10 +476,24 @@ fn parameters(
     arm: &str,
 ) -> BTreeMap<String, Var> {
     let mut p = g.parameters();
-    if arm == "joint" {
+    if matches!(arm, "joint" | "joint-potential") {
         p.extend(source.context_state_parameters());
     }
+    if arm == "joint-potential" {
+        p.extend(source.potential_parameters());
+    }
     p
+}
+fn compile_learning_source(
+    source: &SourceRealizerWeights,
+    frozen: &NativeSourceRealizer,
+    arm: &str,
+) -> Result<NativeSourceRealizer> {
+    Ok(if arm == "joint-potential" {
+        source.compile_context_potential_rebound(frozen)?
+    } else {
+        source.compile_context_state_rebound(frozen)?
+    })
 }
 fn native_step(
     model: &IntegerRealizer,
@@ -518,11 +538,43 @@ fn native_step(
                     .ok_or_else(|| bad("Copy score overflow"))?;
             }
         }
+        let mut components = BTreeMap::new();
+        for (name, source) in [
+            ("cue", &trace.cue_bank.carrier.copy_q24),
+            ("prefix", &trace.prefix.copy_q24),
+        ] {
+            let mut totals = vec![0i64; ids.len()];
+            if source.len() != b.heads.len() {
+                return Err(bad("Copy component head count differs"));
+            }
+            for head in source {
+                if head.len() != ids.len() {
+                    return Err(bad("Copy component candidate count differs"));
+                }
+                for (j, &score) in head.iter().enumerate() {
+                    totals[j] = totals[j]
+                        .checked_add(score)
+                        .ok_or_else(|| bad("Copy component overflow"))?;
+                }
+            }
+            components.insert(name, totals);
+        }
+        let contextual = scores
+            .iter()
+            .enumerate()
+            .map(|(j, &score)| {
+                score
+                    .checked_sub(components["cue"][j])
+                    .and_then(|s| s.checked_sub(components["prefix"][j]))
+                    .ok_or_else(|| bad("Copy contextual attribution overflow"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        components.insert("contextual", contextual);
         (
             codes,
             ids,
             scores,
-            json!({"candidates":b.candidates,"causal_tokens":b.context.tokens,"legacy_terminal_actions_discarded":true}),
+            json!({"copy_components_q24":components,"candidates":b.candidates,"causal_tokens":b.context.tokens,"legacy_terminal_actions_discarded":true}),
         )
     } else {
         let ids = e.causal_no_source(actual)?;
@@ -649,7 +701,7 @@ fn checkpoint(
         ));
     }
     fs::create_dir(&root)?;
-    let native = source.compile_context_state_rebound(frozen)?;
+    let native = compile_learning_source(source, frozen, &a.arm)?;
     source.save_source(&root.join("source"))?;
     native.save(&root.join("native"))?;
     let binding = native.execution_binding()?;
@@ -732,7 +784,20 @@ fn checkpoint(
         .zip(&oldcontext)
         .filter(|(a, b)| a != b)
         .count();
-    let receipt = json!({"step":step,"parent":binding,"balanced_token_geometry":a.balanced_token_geometry,"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":true,"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
+    let potential_bytes = fs::read(root.join("native/consumer/potential-q4.bin"))?;
+    let old_potential = fs::read(a.native_artifact.join("consumer/potential-q4.bin"))?;
+    if potential_bytes.len() != old_potential.len() {
+        return Err(bad("native potential width changed"));
+    }
+    let potential_changes = potential_bytes
+        .iter()
+        .zip(&old_potential)
+        .filter(|(a, b)| a != b)
+        .count();
+    if a.arm != "joint-potential" && potential_changes != 0 {
+        return Err(bad("frozen potential payload changed"));
+    }
+    let receipt = json!({"step":step,"parent":binding,"balanced_token_geometry":a.balanced_token_geometry,"generate_sha256":sha256_bytes(&bytes),"cue_metadata_sha256":sha256_file(&root.join("cue/native-metadata.json"))?,"prefix_metadata_sha256":sha256_file(&root.join("prefix/native-metadata.json"))?,"cue_payload_sha256":sha256_bytes(cue.packed_coefficients()),"prefix_payload_sha256":sha256_bytes(prefix.packed_coefficients()),"native_independently_reloaded":true,"context_packed_bytes_changed_from_donor":context_changes,"context_packed_sha256":sha256_bytes(&contextbytes),"frozen_scoring_except_context":a.arm != "joint-potential","learned_potential_coefficients":a.arm == "joint-potential","potential_packed_bytes_changed_from_donor":potential_changes,"potential_packed_sha256":sha256_bytes(&potential_bytes),"generation_f32_source_access":false,"sidecars_independently_disk_reloaded_verified":true,"training_resume":"NOT_SUPPORTED; source masters retained, Adam moment states not exported"});
     fs::write(
         root.join("receipt.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -760,8 +825,12 @@ fn batch(
     retain_inactive: bool,
 ) -> Result<(BTreeMap<String, Tensor>, Value)> {
     let begun = Instant::now();
-    let current = source.compile_context_state_rebound(frozen)?;
-    let prepared = source.prepare_on_device(&current, device)?;
+    let current = compile_learning_source(source, frozen, &a.arm)?;
+    let prepared = if a.arm == "joint-potential" {
+        source.prepare_context_potential_on_device(&current, device)?
+    } else {
+        source.prepare_on_device(&current, device)?
+    };
     let cue = current.compile_cue_carrier(cueq.clone())?;
     let prefix = current.compile_prefix_transport(&cue, prefix_clone(prefixq)?)?;
     let snapshot = g.prepare_native()?;
@@ -771,7 +840,15 @@ fn batch(
     let staged = begun.elapsed().as_secs_f64();
     let mut learner = PreparedBankGenerate::new(&prepared, g, &snapshot, exp)?
         .with_prefix_temporal_utility(a.prefix_temporal_utility);
-    let params = parameters(source, g, "joint");
+    let params = parameters(
+        source,
+        g,
+        if a.arm == "joint-potential" {
+            "joint-potential"
+        } else {
+            "joint"
+        },
+    );
     let active = parameters(source, g, &a.arm);
     let mut sums = BTreeMap::<String, Tensor>::new();
     let mut nativece = 0.;
@@ -950,7 +1027,7 @@ fn batch(
         return Err(bad("decoder credit disconnected"));
     }
     let first_context_diagnostic = json!({"status":if a.mode != "admission" {"NOT_MEASURED_FIT_UNCHANGED"} else if backward_chunk != 1 {"NOT_MEASURED_REQUIRES_CHUNK1"} else if first_context_receipts.is_empty() {"NOT_MEASURED_NO_ELIGIBLE_FIRST_TARGETS"} else {"MEASURED"},"rows":first_context_receipts,"auxiliary_backward_calls":first_context_receipts.len(),"auxiliary_backward_seconds":first_context_backward_seconds,"scope":"absent-Copy first canonical positions only; same fullpool forward/teacher loss weighting, Copy adjoint detached only in auxiliary backward; Generate retained hard120 carrier to actual9context parameter families; no direct per-root utility measurement; no optimizer use or changed objective"});
-    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"credit_scope":if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
+    let report = json!({"episode_indices":indices,"episodes":indices.len(),"target_positions":positions,"native_equal_episode_ce":nativece,"gradient_families":family,"gradient_global_l2":norm2.sqrt(),"staging_native_snapshot_seconds":staged,"forward_including_host_native_oracle_synced_seconds":forwardseconds,"backward_synced_seconds":backwardseconds,"elapsed_seconds":begun.elapsed().as_secs_f64(),"generate_master_download_bytes":snapshot.downloaded_master_bytes,"potential_credit_scope":if a.arm == "joint-potential" {"opt-in-existing-potential-Q4-selected-all-causal-source-pairs;native-hard-Q24-anchor;device-coefficient-adjoint-plus-unchanged-context-adjoint;cue/prefix-numeric-frozen;no-gate-or-new-normalizer/1"} else {"FROZEN"},"credit_scope":if a.arm == "joint-potential" { "existing-Generate-and-context-credit-plus-learned-geometric-potential-Copy;one-common-fullvocabulary-alias-loss;fixed-cue/prefix" } else if a.prefix_temporal_utility { uor_r4_training::geometric_bank_generate::PREFIX_TEMPORAL_CREDIT_SCOPE } else { uor_r4_training::geometric_bank_generate::CREDIT_SCOPE },"prefix_temporal_utility":a.prefix_temporal_utility,"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"gradient_accumulation":"stream bounded token-chunk backward; per-token equal-episode weights applied before sum; detached device F32 gradient accumulation; no host dynamic adjoints","token_backward_chunk":backward_chunk,"backward_calls":backward_calls,"first_generate_context_credit":first_context_diagnostic,"updates":0,"independent_native_hard_pool_parity":independent.is_some(),"output_only_cost_scope":"same composed graph credit is computed for diagnostics; context gradients excluded before global norm/optimizer, context does not update"});
     if !retain_inactive {
         sums.retain(|name, _| active.contains_key(name));
     }
@@ -984,6 +1061,11 @@ fn accumulate_backward(
         if let Some(grad) = grads.get(var.as_tensor()) {
             if !grad.device().same_device(device) {
                 return Err(bad("gradient CPU fallback"));
+            }
+            if !grad.sqr()?.sum_all()?.to_scalar::<f32>()?.is_finite() {
+                return Err(bad(format!(
+                    "nonfinite device gradient before accumulation: {name}"
+                )));
             }
             let next = match sums.get(name) {
                 Some(old) => old.add(grad)?.detach(),
@@ -1193,8 +1275,15 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         .iter()
         .copied()
         .collect::<BTreeSet<_>>();
-    let source =
-        SourceRealizerWeights::load_source_on_device(&a.source_weights, &tokenizerbytes, &device)?;
+    let source = if a.arm == "joint-potential" {
+        SourceRealizerWeights::load_context_potential_on_device(
+            &a.source_weights,
+            &tokenizerbytes,
+            &device,
+        )?
+    } else {
+        SourceRealizerWeights::load_source_on_device(&a.source_weights, &tokenizerbytes, &device)?
+    };
     let meta = read(&a.native_artifact.join("metadata.json"))?;
     let identity: ConsumerIdentity = serde_json::from_value(meta["identity"].clone())?;
     let frozen = NativeSourceRealizer::load(&a.native_artifact, &source, &identity)?;
@@ -1260,12 +1349,18 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         .into_iter()
         .partition(|(n, _)| n == "generate.prototype_choices");
     let context = source.context_state_parameters();
+    let potential = source.potential_parameters();
     let coeffmargins = quarter_margins(&coefficients)?;
     let contextmargins = quarter_margins(&context)?;
+    let potentialmargins = if a.arm == "joint-potential" {
+        Some(quarter_margins(&potential)?)
+    } else {
+        None
+    };
     write(
         a,
         "optimizer-design.json",
-        &json!({"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"initialization_scope":"label-free tokenID geometry only; same energy seed/pairgraph/coefficient margins/prototype gap; no semantic-distance claim","generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
+        &json!({"balanced_token_geometry":a.balanced_token_geometry,"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"initialization_scope":"label-free tokenID geometry only; same energy seed/pairgraph/coefficient margins/prototype gap; no semantic-distance claim","generate_coefficient_lr":a.learning_rate,"prototype_lr":a.prototype_learning_rate,"context_lr":a.context_learning_rate,"potential_lr":a.potential_learning_rate,"potential_initial_quarter_margins":potentialmargins,"potential_optimizer_active":a.arm == "joint-potential","potential_possible_nonzero_families_on_absent_content":["context_unary","context_radius","context_presence","content_presence"],"potential_structurally_zero_families_on_absent_content":["content_unary","content_radius","pair"],"potential_presence_scope":"content_presence cell0 is a shared baseline; context_presence uses authentic categorical endpoint cells; source-covered Copy retention required","beta1":0.9,"beta2":0.999,"eps":1e-8,"weight_decay":0.,"same_global_clip_l2":1.,"coefficient_initial_quarter_margins":coeffmargins,"context_initial_quarter_margins":contextmargins,"prototype_initial_winner_gap":2.,"reachability_upper_bound_multiplier_128":227.47318,"reachability_scope":"upper bound permits crossings at declared rates; does not guarantee changes or benefit; no initialization-margin manipulation"}),
     )?;
     let first = a
         .admission_episode_indices
@@ -1373,10 +1468,34 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
             .values()
             .filter_map(|v| v["minimum_quarter_crossing_shadow_distance"].as_f64())
             .fold(f64::INFINITY, f64::min);
-        if (a.arm == "joint" && a.context_learning_rate * 227.47318 <= minimum_context_margin)
+        if (matches!(a.arm.as_str(), "joint" | "joint-potential")
+            && a.context_learning_rate * 227.47318 <= minimum_context_margin)
             || 2. * a.prototype_learning_rate * 227.47318 <= 2.
         {
             return Err(bad("declared learning rates cannot reach an initial native context/prototype boundary within128steps"));
+        }
+        if let Some(margins) = &potentialmargins {
+            let minimum = margins
+                .as_object()
+                .ok_or_else(|| bad("potential margins"))?
+                .iter()
+                .filter(|(name, _)| {
+                    !matches!(
+                        name.as_str(),
+                        "consumer.potential.content_unary"
+                            | "consumer.potential.content_radius"
+                            | "consumer.potential.pair"
+                    )
+                })
+                .filter_map(|(_, v)| v["minimum_quarter_crossing_shadow_distance"].as_f64())
+                .fold(f64::INFINITY, f64::min);
+            if a.potential_learning_rate
+                .ok_or_else(|| bad("missing potential rate"))?
+                * 227.47318
+                <= minimum
+            {
+                return Err(bad("declared potential rate cannot reach any initially active native coefficient boundary within128steps"));
+            }
         }
         let projection = admission["elapsed_seconds"]
             .as_f64()
@@ -1409,8 +1528,17 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         };
         let mut co = adam(&coefficients, a.learning_rate)?;
         let mut po = adam(&prototype, a.prototype_learning_rate)?;
-        let mut cx = if a.arm == "joint" {
+        let mut cx = if matches!(a.arm.as_str(), "joint" | "joint-potential") {
             Some(adam(&context, a.context_learning_rate)?)
+        } else {
+            None
+        };
+        let mut cp = if a.arm == "joint-potential" {
+            Some(adam(
+                &potential,
+                a.potential_learning_rate
+                    .ok_or_else(|| bad("missing potential learning rate"))?,
+            )?)
         } else {
             None
         };
@@ -1452,6 +1580,10 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
                 for v in context.values() {
                     v.set(&v.as_tensor().clamp(-1.75, 1.75)?)?;
                 }
+            }
+            if let Some(o) = cp.as_mut() {
+                apply(o, &potential, &grads, &denominator)?;
+                source.project_potential_range()?;
             }
             generate.project_shadow_range()?;
             device.synchronize()?;
@@ -1565,6 +1697,21 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn accumulated_nonfinite_credit_is_rejected_before_optimizer_input() -> Result<()> {
+        let var = Var::new(1f32, &Device::Cpu)?;
+        let params = BTreeMap::from([(
+            "consumer.potential.context_presence".to_owned(),
+            var.clone(),
+        )]);
+        let loss = var.as_tensor().affine(f64::NAN, 0.)?;
+        let mut sums = BTreeMap::new();
+        assert!(accumulate_backward(loss, &params, &mut sums, &Device::Cpu, false).is_err());
+        assert!(sums.is_empty());
+        assert_eq!(var.to_scalar::<f32>()?, 1.);
+        Ok(())
+    }
+
     #[test]
     fn chunk_gradient_parity_rejects_changed_gradient() -> Result<()> {
         let reference =

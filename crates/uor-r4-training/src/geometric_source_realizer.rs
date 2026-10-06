@@ -51,6 +51,7 @@ use crate::{
         frozen_potential_forward,
     },
     geometric_no_read::{NoReadBatch, NoReadWeights},
+    geometric_potential_q4::PotentialQ4Pair,
     geometric_source_actions::{SourceActionBinding, POLICY as ACTION_POLICY},
     geometric_source_emission_view::SourceEmissionView,
     geometric_transport_state_credit::{
@@ -249,6 +250,41 @@ impl SourceRealizerWeights {
         Ok(native)
     }
 
+    /// Existing potential families only; no cue/prefix/end coefficient admission.
+    pub fn potential_parameters(&self) -> BTreeMap<String, Var> {
+        self.consumer
+            .potential
+            .parameters()
+            .into_iter()
+            .map(|(name, var)| (format!("consumer.potential.{name}"), var))
+            .collect()
+    }
+
+    /// Explicit context+potential admission. The context-only export remains strict.
+    pub fn compile_context_potential_rebound(
+        &self,
+        frozen_parent: &NativeSourceRealizer,
+    ) -> Result<NativeSourceRealizer> {
+        frozen_parent.artifact_binding()?;
+        verify_context_potential_inventory(
+            &parameter_identities(self)?,
+            &frozen_parent.metadata.source_parameters,
+        )?;
+        let mut native = self.compile(frozen_parent.metadata.identity.clone())?;
+        if native.consumer.context.config() != frozen_parent.consumer.context.config()
+            || native.consumer.potential.config() != frozen_parent.consumer.potential.config()
+        {
+            return Err(invalid("composed context/potential configuration changed"));
+        }
+        let (_, metadata) = native.export_payloads()?;
+        native.compiled_metadata_sha256 = Some(sha256_bytes(&metadata));
+        Ok(native)
+    }
+
+    pub fn project_potential_range(&self) -> Result<()> {
+        self.consumer.potential.project_shadow_range()
+    }
+
     /// Export/reload a new context parent and recompile the exact same numeric
     /// cue/joint/prefix/end payloads under its real new context identity.
     pub fn save_context_state_rebound(
@@ -259,6 +295,48 @@ impl SourceRealizerWeights {
         frozen_cue: &NativeCueCarrier<'_>,
         frozen_prefix: &NativePrefixTransport<'_>,
         frozen_end: &NativeSourceEndTransport<'_>,
+    ) -> Result<serde_json::Value> {
+        self.save_context_learning_rebound(
+            path,
+            frozen_parent,
+            frozen_native_root,
+            frozen_cue,
+            frozen_prefix,
+            frozen_end,
+            false,
+        )
+    }
+
+    /// Opt-in export with learned potential; numeric cue/prefix/end payloads freeze.
+    pub fn save_context_potential_rebound(
+        &self,
+        path: &Path,
+        frozen_parent: &NativeSourceRealizer,
+        frozen_native_root: &Path,
+        frozen_cue: &NativeCueCarrier<'_>,
+        frozen_prefix: &NativePrefixTransport<'_>,
+        frozen_end: &NativeSourceEndTransport<'_>,
+    ) -> Result<serde_json::Value> {
+        self.save_context_learning_rebound(
+            path,
+            frozen_parent,
+            frozen_native_root,
+            frozen_cue,
+            frozen_prefix,
+            frozen_end,
+            true,
+        )
+    }
+
+    fn save_context_learning_rebound(
+        &self,
+        path: &Path,
+        frozen_parent: &NativeSourceRealizer,
+        frozen_native_root: &Path,
+        frozen_cue: &NativeCueCarrier<'_>,
+        frozen_prefix: &NativePrefixTransport<'_>,
+        frozen_end: &NativeSourceEndTransport<'_>,
+        allow_potential: bool,
     ) -> Result<serde_json::Value> {
         let old_binding = frozen_parent.artifact_binding()?;
         if crate::sha256_file(&frozen_native_root.join("metadata.json"))?
@@ -272,7 +350,11 @@ impl SourceRealizerWeights {
         {
             return Err(invalid("composed frozen parent/sidecar binding differs"));
         }
-        let current = self.compile_context_state_rebound(frozen_parent)?;
+        let current = if allow_potential {
+            self.compile_context_potential_rebound(frozen_parent)?
+        } else {
+            self.compile_context_state_rebound(frozen_parent)?
+        };
         let (old_files, _) = frozen_parent.export_payloads()?;
         let (new_files, _) = current.export_payloads()?;
         let mut frozen_files = BTreeMap::new();
@@ -285,7 +367,8 @@ impl SourceRealizerWeights {
             if matches!(
                 name.as_str(),
                 "consumer/context-q4.bin" | "consumer/metadata.json"
-            ) {
+            ) || (allow_potential && name == "consumer/potential-q4.bin")
+            {
                 continue;
             }
             if new_files.get(name) != Some(bytes) {
@@ -387,10 +470,10 @@ impl SourceRealizerWeights {
             )?;
         }
         Ok(
-            serde_json::json!({"schema":"uor-r4.composed-context-state-rebind/1","old_parent":old_binding,"new_parent":new_binding,"frozen_numeric_payloads_sha256":frozen_files,
+            serde_json::json!({"schema":if allow_potential {"uor-r4.composed-context-potential-rebind/1"} else {"uor-r4.composed-context-state-rebind/1"},"learned_potential":allow_potential,"old_parent":old_binding,"new_parent":new_binding,"frozen_numeric_payloads_sha256":frozen_files,
             "cue_packed_sha256":sha256_bytes(cue.packed_coefficients()),"cue_joint_packed_sha256":cue.joint().map(|j|sha256_bytes(j.packed_coefficients())),
             "prefix_packed_sha256":sha256_bytes(prefix.packed_coefficients()),"end_period_packed_sha256":sha256_bytes(end.period_packed_coefficients()),"end_stop_packed_sha256":sha256_bytes(end.stop_packed_coefficients()),
-            "new_context_packed_sha256":cue.metadata().context_packed_sha256,"context_state_source_receipts":parameter_identities(&source)?.into_iter().filter(|(name,_)|context_state_parameter(name)).collect::<BTreeMap<_,_>>(),
+            "new_potential_packed_sha256":sha256_bytes(&source.consumer.potential.packed_coefficients()?),"new_context_packed_sha256":cue.metadata().context_packed_sha256,"context_state_source_receipts":parameter_identities(&source)?.into_iter().filter(|(name,_)|context_state_parameter(name)).collect::<BTreeMap<_,_>>(),
             "independent_integer_reload":true,"source_file_copy_or_metadata_transplant":false}),
         )
     }
@@ -633,6 +716,7 @@ impl SourceRealizerWeights {
             source: self,
             native,
             consumer: self.consumer.prepare(&native.consumer)?,
+            potential_coefficient_credit: false,
         })
     }
 
@@ -676,6 +760,33 @@ impl SourceRealizerWeights {
         };
         result.validate()?;
         Ok(result)
+    }
+
+    /// Opt-in device staging for coadaptation; original loader freezes scorer Vars.
+    pub fn load_context_potential_on_device(
+        path: &Path,
+        tokenizer_bytes: &[u8],
+        device: &Device,
+    ) -> Result<Self> {
+        let mut source = Self::load_source_on_device(path, tokenizer_bytes, device)?;
+        source.consumer.potential = source.consumer.potential.to_device(device)?;
+        source.validate()?;
+        Ok(source)
+    }
+
+    /// Enables only selected-pair coefficient credit, retaining native hard scores
+    /// and the original frozen-operator context adjoint as separate graph paths.
+    pub fn prepare_context_potential_on_device<'a>(
+        &'a self,
+        native: &'a NativeSourceRealizer,
+        device: &Device,
+    ) -> Result<PreparedSourceRealizer<'a>> {
+        if !self.consumer.potential.device()?.same_device(device) {
+            return Err(invalid("composed potential parameter device differs"));
+        }
+        let mut prepared = self.prepare_on_device(native, device)?;
+        prepared.potential_coefficient_credit = true;
+        Ok(prepared)
     }
 
     pub fn save_source(&self, path: &Path) -> Result<()> {
@@ -740,7 +851,10 @@ fn parameter_identities(
         .parameters()
         .into_iter()
         .map(|(name, value)| {
-            let values = value.flatten_all()?.to_vec1::<f32>()?;
+            let values = value
+                .flatten_all()?
+                .to_device(&Device::Cpu)?
+                .to_vec1::<f32>()?;
             if values.iter().any(|x| !x.is_finite()) {
                 return Err(invalid("realizer nonfinite source parameter"));
             }
@@ -816,6 +930,42 @@ fn verify_context_state_inventory(
             .ok_or_else(|| invalid("composed source family absent"))?;
         if now.shape != receipt.shape || (!context_state_parameter(name) && now != receipt) {
             return Err(invalid("composed changed frozen family or shape"));
+        }
+    }
+    Ok(())
+}
+
+fn potential_parameter(name: &str) -> bool {
+    matches!(
+        name,
+        "consumer.potential.content_unary"
+            | "consumer.potential.context_unary"
+            | "consumer.potential.pair"
+            | "consumer.potential.content_radius"
+            | "consumer.potential.context_radius"
+            | "consumer.potential.content_presence"
+            | "consumer.potential.context_presence"
+    )
+}
+fn verify_context_potential_inventory(
+    current: &BTreeMap<String, ParameterIdentity>,
+    frozen: &BTreeMap<String, ParameterIdentity>,
+) -> Result<()> {
+    if current.keys().ne(frozen.keys()) {
+        return Err(invalid(
+            "composed context/potential source inventory differs",
+        ));
+    }
+    for (name, receipt) in frozen {
+        let now = current
+            .get(name)
+            .ok_or_else(|| invalid("composed source family absent"))?;
+        if now.shape != receipt.shape
+            || (!context_state_parameter(name) && !potential_parameter(name) && now != receipt)
+        {
+            return Err(invalid(
+                "composed context/potential changed frozen family or shape",
+            ));
         }
     }
     Ok(())
@@ -2623,6 +2773,7 @@ pub struct PreparedSourceRealizer<'a> {
     source: &'a SourceRealizerWeights,
     native: &'a NativeSourceRealizer,
     consumer: PreparedConsumerStep<'a>,
+    potential_coefficient_credit: bool,
 }
 
 impl PreparedSourceRealizer<'_> {
@@ -2967,7 +3118,9 @@ impl PreparedSourceRealizer<'_> {
     }
 
     /// Complete current native cue/prefix/end forward with context-state credit.
-    /// Coefficients/algebra are frozen. All native source occurrences are scored;
+    /// Default scorer coefficients/algebra freeze; explicit context+potential
+    /// preparation adds selected-pair coefficient credit without changing scores.
+    /// All native source occurrences are scored;
     /// every consumed state packet is replayed from its authentic
     /// token/reset input before fixed-operator adjoints enter the alias loss.
     fn assemble_bank_composed_copy(
@@ -3022,6 +3175,44 @@ impl PreparedSourceRealizer<'_> {
             &vec![absent; time * width],
             &context,
         )?;
+        let coefficient_credit = if self.potential_coefficient_credit {
+            let mut pairs = Vec::with_capacity(c.heads * count);
+            for h in 0..c.heads {
+                let q = ((time - 1) * c.heads + h) * c.lanes_per_head;
+                for &position in &positions {
+                    let k = (position as usize * c.heads + h) * c.lanes_per_head;
+                    pairs.push(PotentialQ4Pair {
+                        head: h,
+                        query_content: &copy.content_codes[q..q + c.lanes_per_head],
+                        candidate_content: &copy.content_codes[k..k + c.lanes_per_head],
+                        query_context: &copy.context_codes[q..q + c.lanes_per_head],
+                        candidate_context: &copy.context_codes[k..k + c.lanes_per_head],
+                    });
+                }
+            }
+            let mut chunks = Vec::new();
+            for (chunk_index, selected) in pairs.chunks(4096).enumerate() {
+                let out = self
+                    .source
+                    .consumer
+                    .potential
+                    .forward_selected_codes(selected)?;
+                for (j, &score) in out.scores_q24.iter().enumerate() {
+                    let flat = chunk_index * 4096 + j;
+                    let h = flat / count;
+                    let candidate = flat % count;
+                    let at = h * time + time - 1;
+                    if score != copy.scores_q24[at * time + positions[candidate] as usize] {
+                        return Err(invalid("composed coefficient/context hard scores differ"));
+                    }
+                }
+                // Subtraction first preserves the exact native forward anchor.
+                chunks.push((&out.scores - out.scores.detach())?);
+            }
+            Some(Tensor::cat(&chunks, 0)?.reshape((c.heads, count))?)
+        } else {
+            None
+        };
         let query_output = self
             .consumer
             .context
@@ -3120,6 +3311,11 @@ impl PreparedSourceRealizer<'_> {
                 }
             }
             let contextual = copy.scores.i((0, h, time - 1))?.index_select(&index, 0)?;
+            let contextual = if let Some(credit) = &coefficient_credit {
+                (&contextual + credit.i(h)?)?
+            } else {
+                contextual
+            };
             let raw = (&contextual + cue_credit.scores.i(h)?)?;
             copy_heads.push((&raw + prefix_credit.scores.i(h)?)?);
             contextual_heads.push(contextual);
@@ -7316,6 +7512,63 @@ mod tests {
             // Ordinary token 5 is absent from the source. It is still admitted
             // by Generate before its label enters the common loss.
             assert!(joint.loss(5)?.to_scalar::<f32>()?.is_finite());
+            let coadapted = fixture
+                .weights
+                .prepare_context_potential_on_device(&native, &Device::Cpu)?;
+            let mut coadapted_pool = crate::geometric_bank_generate::PreparedBankGenerate::new(
+                &coadapted, &generate, &snapshot, &exp,
+            )?;
+            let coadapted_out = coadapted_pool.forward_bank(&segments, &[5], own, &cue, &prefix)?;
+            assert_eq!(coadapted_out.actions, joint.actions);
+            for target in [5, 4] {
+                // absent-Copy Generate and source-covered alias
+                let default_loss = joint.loss(target)?;
+                let learned_loss = coadapted_out.loss(target)?;
+                assert_eq!(
+                    default_loss.to_scalar::<f32>()?.to_bits(),
+                    learned_loss.to_scalar::<f32>()?.to_bits()
+                );
+                let frozen_grads = default_loss.backward()?;
+                let learned_grads = learned_loss.backward()?;
+                let mut nonzero = false;
+                for (name, var) in fixture.weights.potential_parameters() {
+                    assert!(frozen_grads.get(var.as_tensor()).is_none());
+                    let gradient = learned_grads
+                        .get(var.as_tensor())
+                        .ok_or_else(|| invalid("potential credit disconnected"))?;
+                    let values = gradient.flatten_all()?.to_vec1::<f32>()?;
+                    assert!(values.iter().all(|v| v.is_finite()));
+                    if matches!(
+                        name.as_str(),
+                        "consumer.potential.content_unary"
+                            | "consumer.potential.content_radius"
+                            | "consumer.potential.pair"
+                    ) {
+                        assert!(values.iter().all(|v| *v == 0.));
+                    }
+                    nonzero |= values.iter().any(|v| v.abs() > 1e-8);
+                }
+                assert!(
+                    nonzero,
+                    "actual full-vocabulary loss must reach potential coefficients"
+                );
+                for (name, var) in fixture.weights.context_state_parameters() {
+                    let left = frozen_grads
+                        .get(var.as_tensor())
+                        .ok_or_else(|| invalid("frozen context gradient missing"))?
+                        .flatten_all()?
+                        .to_vec1::<f32>()?;
+                    let right = learned_grads
+                        .get(var.as_tensor())
+                        .ok_or_else(|| invalid("coadapted context gradient missing"))?
+                        .flatten_all()?
+                        .to_vec1::<f32>()?;
+                    assert_eq!(
+                        left, right,
+                        "coefficient credit altered existing context credit {name}"
+                    );
+                }
+            }
             let no_source = unified.forward_no_source(&[5, 4])?;
             assert!(no_source.copy.is_none());
             assert!(no_source.copy_token_ids.is_empty());
@@ -7479,6 +7732,47 @@ mod tests {
         ] {
             assert!(dest.join(file).is_file());
         }
+        let potential =
+            &fixture.weights.potential_parameters()["consumer.potential.context_presence"];
+        let mut values = potential.flatten_all()?.to_vec1::<f32>()?;
+        values[0] += 0.25;
+        potential.set(&Tensor::from_vec(values, potential.shape(), &Device::Cpu)?)?;
+        assert!(fixture
+            .weights
+            .compile_context_state_rebound(&native)
+            .is_err());
+        let learned = fixture.weights.compile_context_potential_rebound(&native)?;
+        assert_ne!(learned.execution_binding()?, current.execution_binding()?);
+        let potential_dest = fixture.path.join("context-potential-rebound");
+        let potential_receipt = fixture.weights.save_context_potential_rebound(
+            &potential_dest,
+            &native,
+            &root,
+            &cue,
+            &prefix,
+            &end,
+        )?;
+        assert_eq!(potential_receipt["learned_potential"], true);
+        let restored_source =
+            SourceRealizerWeights::load_source(&potential_dest.join("source"), TOK.as_bytes())?;
+        let restored = NativeSourceRealizer::load(
+            &potential_dest.join("native"),
+            &restored_source,
+            &fixture.identity,
+        )?;
+        assert_eq!(restored.artifact_binding()?, learned.execution_binding()?);
+        assert_ne!(
+            fs::read(potential_dest.join("native/consumer/potential-q4.bin"))?,
+            fs::read(root.join("consumer/potential-q4.bin"))?
+        );
+        assert_eq!(
+            fs::read(potential_dest.join("cue/cue-q4.bin"))?,
+            fs::read(dest.join("cue/cue-q4.bin"))?
+        );
+        assert_eq!(
+            fs::read(potential_dest.join("prefix/prefix-q4.bin"))?,
+            fs::read(dest.join("prefix/prefix-q4.bin"))?
+        );
         let terminal = &fixture.weights.terminal_parameters()["period.coefficients"];
         let mut values = terminal.flatten_all()?.to_vec1::<f32>()?;
         values[0] += 0.25;
@@ -7486,6 +7780,10 @@ mod tests {
         assert!(fixture
             .weights
             .compile_context_state_rebound(&native)
+            .is_err());
+        assert!(fixture
+            .weights
+            .compile_context_potential_rebound(&native)
             .is_err());
         Ok(())
     }
