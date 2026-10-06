@@ -1,5 +1,41 @@
 # Current UOR-R4 research state
 
+## First-decision checkpoint attribution — October 6, 12:33Z
+
+The native first-token cross auditor is implemented at `a6a407beac3d127aebbdb3493916218fda2f663a`,
+source SHA256`0ce096f8dc45f4d2e6ecb09c6d75b54218552379ccd3eff1f610428529a0a13c`,
+binary SHA256`e26b3389696e07d471ebb2a092ffc07d64c5145d3c269e561da1df3454301f7f`.
+An initial release build succeeds but two tests reject a tiny tokenizer without
+a period token; that195.223s attempt is retained. The fixture-only repair passes
+release build and all three focused tests in80.937s, cumulative276.159s within
+the300s build/check envelope. Tests cover duplicate Copy alias competition,
+invalid first packets/provenance and exact mass ties despite unequal raw scores.
+No production scoring or model training is changed by the fixture repair.
+
+The completed balanced output-only positive control runs exit0 in11.922s,
+RSS121692KiB. All512 initial/final factual first-pool diagonals reproduce the
+saved native score SHA, pool summary, chosen token and target mass. Frozen-context
+and Copy mediator swaps are identical in every row at fixed Generate. All six
+arms have0 correct first tokens; final-field first NLL7.900658 versus initial
+8.343483, using an unweighted mean across512 first positions. This weighting is
+different from the phase-credit audit's answer-length-weighted first subset.
+Report SHA256`249c2f911900a9718758aa4b8325055a474f10ecdc9e73bdad8ddd887251ab51`;
+canonical root`/workspace/uor-r4/codex/native-geometric-generate/checkpoint-cross-balanced-control-attempt1`.
+Returned compressed evidence is224281bytes and its report SHA is checked.
+Independent source/wrapper review approves; saved-result review is pending.
+This validates an attribution instrument, not a model improvement.
+
+The matched balanced joint fit remains RUNNING at sourcef6136103. Its audit is
+queued behind the existing GPU0 lock, and requires a completed/sealed fit plus
+the successful512-row frozen-context control. Six native pools separate full
+context/Generate crossings and final-Generate state/Copy mediator swaps; labels
+enter only after scoring. Surgical swaps are not runnable contexts. Complete
+cross-arm own-prefix replies are NOT_MEASURED. Both audits are bounded90s each,
+combined reports≤16MiB, CPU2/1GiB; no new fit or paid extension. Exact archive
+expansion requires recorded transient source/cache1→2GiB allowance; actual new
+source1260MiB, laptop free36GiB. The tool records integer-pod-CPU arithmetic,
+not CUDA model evaluation. Final native first-token/reply outcomes remain pending.
+
 ## Balanced joint learning — October 6, 12:06Z, RUNNING
 
 Exact source `f6136103f8c696ea1f0bcf70d6e830e2b0d3cefe` passes its release
