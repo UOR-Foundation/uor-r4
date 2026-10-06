@@ -370,3 +370,33 @@ This demonstrates a decoder-ranking deficit separately from the remaining
 Copy competition. It supports a matched label-free all-lane initialization
 intervention, subject to the after-step adversarial review; it does not qualify
 prose, attention transfer or chat, and it does not justify changing normalization.
+
+Independent PI review reads both actual audit reports, verifies their SHA256
+identities and traverses all2048 rows: all three factor decompositions, both
+margin vectors, code ranges, pair order, higher-factor cancellation and saved
+Copy/Generate mass sums agree. That review does not independently rerun inference
+or score-vector/BLAKE3 hashing. The executed auditor owns those latter checks.
+
+## Next single-change control: balanced initial token geometry
+
+At numerical head2a5bbd09 the fitter exposes default-false
+`balanced_token_geometry`; the old `seeded` API retains its original digit
+assignment. The opt-in assigns token `t=a+120b` to lanej using
+`(a+j*b+existing_offset_j) mod120`. Adjacent pairs have determinant1 over
+`Z/120`, so each pair recovers `(a,b)` and remains injective for4096 tokens.
+Each lane contains all120 codes with34/35 counts. The arrangement changes
+label-free root indices, not semantic distances. All coordinates remain a
+deterministic embedding of token identity, not eight independent semantic axes.
+
+Energy RNG/order, pair graph, q4 coefficients/biases, prototype winner gap2,
+optimizer/objective and runtime operator costs remain fixed. Initialization mode
+is explicit in admission, optimizer design, checkpoint receipt and final report;
+exported artifacts contain the actual codes. The first pair already carried
+4096 identities, so the intervention activates additional state-conditioned
+token distinctions rather than adding identity information. Its different
+initial score distribution must also be reported before attributing benefits.
+Independent exact-head source review finds no blocker. Release compilation and
+focused legacy/export/balance checks are running on the pod; CUDA admission,
+balanced fit and any predictive improvement are NOT_RUN. Existing six frozen
+runs continue. The next fit is a matched output-only comparison after their
+complete decision and full prospective cost admission.
