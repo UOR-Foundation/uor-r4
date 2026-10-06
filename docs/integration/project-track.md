@@ -36,13 +36,23 @@ The next learning diagnosis must consider shared-field and context coadaptation,
 with complete-reply usefulness retained as the primary goal. The completed phase-separated CUDA audit finds locally favorable first-position
 credit under the total field gradient in every coefficient family, with no
 projection saturation. First NLL improved alongside both body phases. This does
-not justify a new curriculum or score rescaling. The next causal control is the
-existing joint learner with the same balanced initial geometry, donor, seed and
-128-update dose as the completed output-only control. Earlier joint fits used
-the restricted token bank. Admission must separately measure absent-Copy first
-position credit through the full120 context carrier, native forward parity and
-complete cost. Actual first-token and complete own-prefix replies decide whether
-to freeze for source/order transfer; changed context bytes or CE alone do not.
+not justify a new curriculum or score rescaling. The matched balanced joint
+control has now completed128updates: CE7.917683 versus output-only7.793083,
+with0/512 complete replies in both. Actual first Generate-to-context credit is
+connected, but all six native checkpoint-cross arms remain0/512 correct first
+tokens. Factual final gold ranks first within Generate on1/512 rows and competing
+Copy alone exceeds gold mass on512/512. Both discrimination and competition
+remain; no unchanged dose or Copy-only gate follows.
+
+The next causal discriminator compares the actual current120-state adjoint with
+exact native finite alias-pool loss over120 H4 alternatives at eight predeclared
+first positions/lane0, keeping factual Copy and other fields fixed. It performs
+zero updates. A local surrogate/native ordering conflict would justify testing
+exact conditional loss utilities on the existing geometric carrier; comparable
+ordering does not. This is not a full context rerun or evidence that recurrence
+can realize arbitrary states. A final-field/factual-Copy bound is still needed
+before adopting selected existing Copy-field learning. Useful complete actual
+own-prefix replies remain the primary outcome before frozen transfer.
 A single seed is exploratory, not a multi-seed capability verdict. No runtime
 oracle, semantic gate or new normalizer follows from this result.
 

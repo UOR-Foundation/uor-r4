@@ -131,6 +131,7 @@ fn probe(
     start: Instant,
     state_ceiling: bool,
     field_credit: bool,
+    state_utility: bool,
 ) -> Result<()> {
     report_output::verify(fit)?;
     deadline(start)?;
@@ -195,7 +196,7 @@ fn probe(
         &initial_binding,
     )?;
     if initial_binding != binding
-        || (!(state_ceiling || field_credit)
+        || (!(state_ceiling || field_credit || state_utility)
             && (initial.prototypes() != model.prototypes()
                 || uint(&stage["evaluation"], "complete")? != 0))
     {
@@ -208,6 +209,22 @@ fn probe(
     let oracle_rows = arr(&oracles, "cases")?;
     if refs.len() != 512 || oracle_rows.len() != refs.len() {
         return Err(bad("requires bound full512 construction panel"));
+    }
+    if state_utility {
+        #[cfg(feature = "cuda")]
+        return state_utility_audit(
+            fit,
+            out,
+            start,
+            &report,
+            refs,
+            oracle_rows,
+            &model,
+            &mut pool,
+            &config_bytes,
+        );
+        #[cfg(not(feature = "cuda"))]
+        return Err(bad("state-utility requires CUDA; no CPU fallback"));
     }
     if field_credit {
         #[cfg(feature = "cuda")]
@@ -926,13 +943,247 @@ fn field_credit_audit(
     Ok(())
 }
 
+/// Pair ordering is diagnostic, with exact ties kept separate. Lower is better
+/// for both actual loss and its production first-order state adjoint.
+fn ordering_counts(native: &[f64; 120], surrogate: &[f64; 120]) -> (usize, usize, usize) {
+    let (mut agree, mut reverse, mut tied) = (0, 0, 0);
+    for a in 0..120 {
+        for b in a + 1..120 {
+            let n = native[a].total_cmp(&native[b]);
+            let s = surrogate[a].total_cmp(&surrogate[b]);
+            if native[a] == native[b] || surrogate[a] == surrogate[b] {
+                tied += 1;
+            } else if n == s {
+                agree += 1;
+            } else {
+                reverse += 1;
+            }
+        }
+    }
+    (agree, reverse, tied)
+}
+#[cfg(feature = "cuda")]
+fn state_utility_audit(
+    fit: &Path,
+    out: &Path,
+    start: Instant,
+    report: &Value,
+    refs: &[Value],
+    oracles: &[Value],
+    model: &NativeGeometricGenerate,
+    pool: &mut NativeVocabularyActions,
+    config_bytes: &[u8],
+) -> Result<()> {
+    use candle_core::{Device, Tensor, Var};
+    use uor_r4_training::geometric_generate_learning::{
+        vocabulary_marginal_loss, GenerateLearningWeights,
+    };
+    const SELECTED: [usize; 8] = [128, 129, 256, 257, 384, 385, 448, 449];
+    let check_time = || -> Result<()> {
+        if start.elapsed().as_secs_f64() >= 120. {
+            return Err(bad("state utility 120-second ceiling"));
+        }
+        Ok(())
+    };
+    if report["arm"] != "joint" {
+        return Err(bad("state utility requires completed joint arm"));
+    }
+    let device = Device::new_cuda(0)?;
+    let weights = GenerateLearningWeights::from_native(pool.binding().clone(), model, &device)?;
+    if weights.export_native()?.to_bytes()? != model.to_bytes()? {
+        return Err(bad("state utility reconstructed native export differs"));
+    }
+    let prepared = weights.prepare_native()?;
+    let mut rows = Vec::new();
+    let (
+        mut improving_rows,
+        mut surrogate_reversals,
+        mut native_wins,
+        mut native_selected_wins,
+        mut surrogate_wins,
+    ) = (0, 0, 0, 0, 0);
+    for index in SELECTED {
+        check_time()?;
+        let row = load_row(fit, &refs[index])?;
+        let canonical = arr(&row, "canonical")?;
+        let first = canonical
+            .first()
+            .ok_or_else(|| bad("state utility canonical absent"))?;
+        let native = &first["native"];
+        if !arr(native, "actual_prefix_ids")?.is_empty() {
+            return Err(bad("state utility first prefix nonempty"));
+        }
+        let (state, scores, ids, copy) = replay(native, model, pool)?;
+        // Independently authenticate actual generation's empty-prefix diagonal.
+        let generation = arr(&row, "generation")?
+            .first()
+            .ok_or_else(|| bad("state utility generation absent"))?;
+        let factual = generation;
+        if !arr(factual, "actual_prefix_ids")?.is_empty() {
+            return Err(bad("generation first prefix nonempty"));
+        }
+        let (gs, gg, gi, gc) = replay(factual, model, pool)?;
+        if gs != state || gg != scores || gi != ids || gc != copy {
+            return Err(bad("first canonical/generation mediators differ"));
+        }
+        for key in [
+            "retained_state_codes",
+            "generate_raw_scores_sha256",
+            "copy_token_ids",
+            "copy_raw_scores_q24",
+            "pool",
+            "source_provenance",
+        ] {
+            if factual.get(key).is_none() || factual[key] != native[key] {
+                return Err(bad("first packet provenance/mediators differ"));
+            }
+        }
+        if row["generated_ids"] != refs[index]["generated_ids"] {
+            return Err(bad("saved reference generation differs"));
+        }
+        let trace = pool.reduce_trace(&scores, &ids, &copy)?;
+        if ints(&row["generated_ids"])?.first().copied()
+            != Some(i64::from(trace.summary.chosen_token_id))
+        {
+            return Err(bad("first actual generation choice differs"));
+        }
+        // Labels enter only after target-free factual replay.
+        let labels = ints(&row["canonical_target_ids_labels_only"])?;
+        if row["id"] != oracles[index]["id"]
+            || row["canonical_target_ids_labels_only"]
+                != oracles[index]["canonical_ids_labels_only"]
+            || labels.len() != canonical.len()
+            || labels.is_empty()
+        {
+            return Err(bad("state utility frozen oracle identity/length differs"));
+        }
+        let target = u32::try_from(uint(first, "target_label_only")?)?;
+        if labels[0] != i64::from(target) || !pool.binding().admits_token(target) {
+            return Err(bad("state utility legal target differs"));
+        }
+        if ids.contains(&target) {
+            return Err(bad("state utility requires absent-Copy first target"));
+        }
+        let mass = trace
+            .token_masses
+            .iter()
+            .find(|m| m.token_id == target)
+            .ok_or_else(|| bad("target mass absent"))?
+            .weight_q31;
+        if uint(first, "native_target_mass")? != mass
+            || uint(first, "native_denominator")? != trace.summary.total_weight_q31
+        {
+            return Err(bad("state utility saved mass differs"));
+        }
+        let weight = 1. / refs.len() as f64 / labels.len() as f64;
+        let incumbent = usize::from(state[0].index());
+        let mut onehot = vec![0f32; model.lanes() * 120];
+        for (lane, code) in state.iter().enumerate() {
+            onehot[lane * 120 + usize::from(code.index())] = 1.;
+        }
+        let choices = Var::from_vec(onehot, (model.lanes(), 120), &device)?;
+        let forward =
+            weights.forward_prepared_state_choices(&prepared, &state, choices.as_tensor())?;
+        if forward.scores_q24 != scores {
+            return Err(bad("state utility graph hard score differs"));
+        }
+        let copy_graph = Tensor::from_vec(
+            copy.iter()
+                .map(|&v| (v as f64 / 16_777_216.) as f32)
+                .collect::<Vec<_>>(),
+            copy.len(),
+            &device,
+        )?;
+        let objective =
+            vocabulary_marginal_loss(&trace, &forward.raw_scores, Some(&copy_graph), target)?
+                .affine(weight, 0.)?;
+        if (f64::from(objective.to_scalar::<f32>()?)
+            - loss(mass, trace.summary.total_weight_q31)? * weight)
+            .abs()
+            > 1e-6
+        {
+            return Err(bad(
+                "actual production anchored loss differs from native factual loss",
+            ));
+        }
+        let grads = objective.backward()?;
+        let downloaded = grads
+            .get(choices.as_tensor())
+            .ok_or_else(|| bad("actual state Var gradient absent"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        if downloaded.len() != model.lanes() * 120 || downloaded.iter().any(|x| !x.is_finite()) {
+            return Err(bad("state utility gradient malformed"));
+        }
+        let mut surrogate = [0.; 120];
+        for code in 0..120 {
+            surrogate[code] = f64::from(downloaded[code]) - f64::from(downloaded[incumbent]);
+        }
+        // All other gradients are discarded; no optimizer or context is invoked.
+        let mut losses = [0.; 120];
+        let mut candidates = Vec::new();
+        let mut state_alt = state.clone();
+        for code in 0..120 {
+            check_time()?;
+            state_alt[0] = H4Code::try_from(code as u8)?;
+            let mut gen = vec![0; model.vocab_size()];
+            model.score_into(&state_alt, &mut gen, &mut GenerateReadCounts::default())?;
+            let t = pool.reduce_trace(&gen, &ids, &copy)?;
+            let tm = t
+                .token_masses
+                .iter()
+                .find(|m| m.token_id == target)
+                .ok_or_else(|| bad("alternative target mass absent"))?
+                .weight_q31;
+            losses[code] = loss(tm, t.summary.total_weight_q31)?;
+            native_wins += usize::from(t.summary.chosen_token_id == target);
+            if code == incumbent && (t.summary != trace.summary || gen != scores) {
+                return Err(bad("incumbent alternative replay differs"));
+            }
+            candidates.push(json!({"state_code":code,"incumbent":code==incumbent,"centered_actual_surrogate_utility":surrogate[code],"native_nll":losses[code],"native_target_mass":tm,"native_denominator":t.summary.total_weight_q31,"chosen_token_id":t.summary.chosen_token_id,"first_correct":t.summary.chosen_token_id==target}));
+        }
+        let nb = best_code(&losses, incumbent);
+        let sb = best_code(&surrogate, incumbent);
+        let improving = losses[nb] < losses[incumbent];
+        let reversal = losses[sb] > losses[incumbent];
+        improving_rows += usize::from(improving);
+        surrogate_reversals += usize::from(reversal);
+        native_selected_wins += usize::from(candidates[nb]["first_correct"] == true);
+        surrogate_wins += usize::from(candidates[sb]["first_correct"] == true);
+        let (agree, reverse, tied) = ordering_counts(&losses, &surrogate);
+        let native_improving_rejected = (0..120)
+            .filter(|&c| losses[c] < losses[incumbent] && surrogate[c] >= 0.)
+            .count();
+        let surrogate_improving_adverse = (0..120)
+            .filter(|&c| surrogate[c] < 0. && losses[c] > losses[incumbent])
+            .count();
+        for code in 0..120 {
+            candidates[code]["native_nll_delta_from_incumbent"] =
+                json!(losses[code] - losses[incumbent]);
+        }
+        rows.push(json!({"index":index,"id":row["id"],"source_row_sha256":refs[index]["row_sha256"],"gold_label_only":target,"state_codes":state.iter().map(|c|c.index()).collect::<Vec<_>>(),"lane":0,"incumbent":incumbent,"original_equal_episode_weight":weight,"native_best_code":nb,"surrogate_best_code":sb,"native_best_improves":improving,"surrogate_selected_worsens":reversal,"surrogate_native_regret":losses[sb]-losses[nb],"native_incumbent_nll":losses[incumbent],"native_best_nll":losses[nb],"surrogate_selected_native_nll":losses[sb],"ordering":{"agree":agree,"reverse":reverse,"tied":tied,"native_improving_rejected":native_improving_rejected,"surrogate_improving_adverse":surrogate_improving_adverse},"candidates":candidates}));
+    }
+    let bytes = serde_json::to_vec_pretty(
+        &json!({"schema":"uor-r4.geometric-generate-state-utility/1","status":"COMPLETED","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"input_report_sha256":sha256_bytes(&fs::read(fit.join("report.json"))?),"input_manifest_sha256":sha256_bytes(&fs::read(fit.join("manifest.json"))?),"config_sha256":sha256_bytes(config_bytes),"input_generate_sha256":sha256_bytes(&model.to_bytes()?),"input_fit_source_commit":report["source_commit"],"fit_seed":report["seed"],"state_channel_gradient_scope":"actual production first-order utility at native hard prototypes reconstructed from native artifact; not fitted prototype/context/optimizer gradient replay","device":"cuda:0","selected_rows":SELECTED,"lane":0,"cases":8,"native_alternatives":960,"updates":0,"rows_with_native_improvement":improving_rows,"surrogate_selected_reversals":surrogate_reversals,"alternative_first_wins":native_wins,"native_selected_first_wins":native_selected_wins,"surrogate_selected_first_wins":surrogate_wins,"elapsed_seconds":start.elapsed().as_secs_f64(),"maximum_seconds":120,"maximum_report_bytes":4*1024*1024,"scope":"offline labeled local Generate state-channel utility ordering diagnostic; actual CUDA production loss backward; exact native fullpool alternatives with frozen factual Copy, other lanes, coefficients and prototypes; no optimizer, context rerun, executable context intervention, own-prefix generation or chat claim","rows":rows}),
+    )?;
+    check_time()?;
+    if bytes.len() > 4 * 1024 * 1024 {
+        return Err(bad("state utility report exceeds4MiB"));
+    }
+    fs::write(out.join("report.json"), bytes)?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() != 3
-        && !(args.len() == 4 && (args[3] == "--state-ceiling" || args[3] == "--field-credit"))
+        && !(args.len() == 4
+            && (args[3] == "--state-ceiling"
+                || args[3] == "--field-credit"
+                || args[3] == "--state-utility"))
     {
         return Err(bad(
-            "usage: geometric-generate-code-probe FIT_ROOT FIT_CONFIG REPORT_OUTPUT [--state-ceiling|--field-credit]",
+            "usage: geometric-generate-code-probe FIT_ROOT FIT_CONFIG REPORT_OUTPUT [--state-ceiling|--field-credit|--state-utility]",
         ));
     }
     let fit = PathBuf::from(&args[0]);
@@ -942,8 +1193,8 @@ fn main() -> Result<()> {
         return Err(bad("fit/config absent"));
     }
     #[cfg(not(feature = "cuda"))]
-    if args.len() == 4 && args[3] == "--field-credit" {
-        return Err(bad("field-credit requires a CUDA build; no CPU fallback"));
+    if args.len() == 4 && (args[3] == "--field-credit" || args[3] == "--state-utility") {
+        return Err(bad("CUDA audit requires a CUDA build; no CPU fallback"));
     }
     let prospective = output_support::prospective_output(&out)?;
     for input in [&fit, &config] {
@@ -958,6 +1209,11 @@ fn main() -> Result<()> {
             return Err(bad("output beneath sealed input"));
         }
     }
+    // CUDA admission precedes report ownership: no silent CPU fallback.
+    #[cfg(feature = "cuda")]
+    if args.len() == 4 && args[3] == "--state-utility" {
+        let _ = candle_core::Device::new_cuda(0)?;
+    }
     report_output::claim(&out)?;
     let result = probe(
         &fit,
@@ -966,6 +1222,7 @@ fn main() -> Result<()> {
         Instant::now(),
         args.len() == 4 && args[3] == "--state-ceiling",
         args.len() == 4 && args[3] == "--field-credit",
+        args.len() == 4 && args[3] == "--state-utility",
     );
     if let Err(e) = &result {
         fs::write(
@@ -1015,6 +1272,18 @@ mod tests {
         v[4] = 2.;
         assert_eq!(best_code(&v, 17), 2);
         assert_eq!(best_code(&v, 4), 4);
+    }
+    #[test]
+    fn finite_choice_ordering_counts_preserve_ties_and_detect_reversal() {
+        let mut native = [2.; 120];
+        let mut surrogate = [2.; 120];
+        native[0] = 0.;
+        native[1] = 1.;
+        surrogate[0] = 1.;
+        surrogate[1] = 0.;
+        let (agree, reverse, tied) = ordering_counts(&native, &surrogate);
+        assert_eq!((agree, reverse, tied), (236, 1, 6903));
+        assert_eq!(agree + reverse + tied, 120 * 119 / 2);
     }
     #[test]
     fn teacher_objective_positive_mass_contract_and_relative_paths() -> Result<()> {
