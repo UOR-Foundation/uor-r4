@@ -124,7 +124,13 @@ struct Position {
     alternatives: [i64; 120],
     cache: GenerateSubstitutionCache,
 }
-fn probe(fit: &Path, config_path: &Path, out: &Path, start: Instant) -> Result<()> {
+fn probe(
+    fit: &Path,
+    config_path: &Path,
+    out: &Path,
+    start: Instant,
+    state_ceiling: bool,
+) -> Result<()> {
     report_output::verify(fit)?;
     deadline(start)?;
     let report = read(&fit.join("report.json"))?;
@@ -188,8 +194,9 @@ fn probe(fit: &Path, config_path: &Path, out: &Path, start: Instant) -> Result<(
         &initial_binding,
     )?;
     if initial_binding != binding
-        || initial.prototypes() != model.prototypes()
-        || uint(&stage["evaluation"], "complete")? != 0
+        || (!state_ceiling
+            && (initial.prototypes() != model.prototypes()
+                || uint(&stage["evaluation"], "complete")? != 0))
     {
         return Err(bad("requires balanced static-code completed failure; otherwise this discriminator is inapplicable"));
     }
@@ -200,6 +207,21 @@ fn probe(fit: &Path, config_path: &Path, out: &Path, start: Instant) -> Result<(
     let oracle_rows = arr(&oracles, "cases")?;
     if refs.len() != 512 || oracle_rows.len() != refs.len() {
         return Err(bad("requires bound full512 construction panel"));
+    }
+    if state_ceiling {
+        return state_ceiling_audit(
+            fit,
+            out,
+            start,
+            &report,
+            stage,
+            refs,
+            oracle_rows,
+            &binding,
+            &model,
+            &mut pool,
+            &config_bytes,
+        );
     }
     let mut frequency = BTreeMap::<u32, usize>::new();
     // Predeclare lane0; token selection uses only incumbent failed first targets.
@@ -420,11 +442,139 @@ fn probe(fit: &Path, config_path: &Path, out: &Path, start: Instant) -> Result<(
     )?;
     Ok(())
 }
+
+/// Disjoint pairs and isolated unary lanes separate exactly. Overlapping edges
+/// are rejected; this is not a heuristic optimizer for a coupled graph.
+fn relative_ceiling(
+    energy: &uor_r4_core::native_geometric::learner::integrated_attention::geometry::EnergyTables,
+    lanes: usize,
+) -> Result<(Vec<u8>, i64)> {
+    let mut used = vec![false; lanes];
+    let mut roots = vec![0u8; lanes];
+    let mut sum = 0i64;
+    for (edge, pair) in energy.edges().iter().enumerate() {
+        let a = usize::from(pair.left);
+        let b = usize::from(pair.right);
+        if a >= lanes || b >= lanes || a == b || used[a] || used[b] {
+            return Err(bad("state ceiling requires disjoint valid pair edges"));
+        }
+        used[a] = true;
+        used[b] = true;
+        let mut best = i64::MIN;
+        // Lexicographic relative-code ties choose the smallest (left,right).
+        for left in 0..120u8 {
+            for right in 0..120u8 {
+                let v = i64::from(energy.get_unary(pair.left, left)?)
+                    + i64::from(energy.get_unary(pair.right, right)?)
+                    + i64::from(energy.get_pair(edge, left, right)?);
+                if v > best {
+                    best = v;
+                    roots[a] = left;
+                    roots[b] = right;
+                }
+            }
+        }
+        sum = sum
+            .checked_add(best)
+            .ok_or_else(|| bad("ceiling overflow"))?;
+    }
+    for lane in 0..lanes {
+        if !used[lane] {
+            let mut best = i64::MIN;
+            for root in 0..120u8 {
+                let v = i64::from(energy.get_unary(lane as u8, root)?);
+                if v > best {
+                    best = v;
+                    roots[lane] = root;
+                }
+            }
+            sum = sum
+                .checked_add(best)
+                .ok_or_else(|| bad("ceiling overflow"))?;
+        }
+    }
+    Ok((roots, sum))
+}
+fn state_ceiling_audit(
+    fit: &Path,
+    out: &Path,
+    start: Instant,
+    report: &Value,
+    stage: &Value,
+    refs: &[Value],
+    oracles: &[Value],
+    binding: &SourceActionBinding,
+    model: &NativeGeometricGenerate,
+    pool: &mut NativeVocabularyActions,
+    config_bytes: &[u8],
+) -> Result<()> {
+    let (relative, factor_max) = relative_ceiling(model.energy(), model.lanes())?;
+    let mut rows = Vec::with_capacity(refs.len());
+    let mut before = 0usize;
+    let mut after = 0usize;
+    for (reference, oracle) in refs.iter().zip(oracles) {
+        deadline(start)?;
+        let row = load_row(fit, reference)?;
+        let first = arr(&row, "canonical")?
+            .first()
+            .ok_or_else(|| bad("first canonical absent"))?;
+        let native = &first["native"];
+        if !arr(native, "actual_prefix_ids")?.is_empty()
+            || row["id"] != oracle["id"]
+            || row["canonical_target_ids_labels_only"] != oracle["canonical_ids_labels_only"]
+        {
+            return Err(bad("first prefix/oracle identity differs"));
+        }
+        let (parent_state, _, ids, copy) = replay(native, model, pool)?;
+        // Labels enter only after the complete incumbent native replay.
+        let gold = u32::try_from(uint(first, "target_label_only")?)?;
+        if !binding.admits_token(gold)
+            || oracle["canonical_ids_labels_only"][0].as_u64() != Some(u64::from(gold))
+        {
+            return Err(bad("gold label identity differs"));
+        }
+        let mut witness = Vec::with_capacity(model.lanes());
+        for (lane, &r) in relative.iter().enumerate() {
+            let prototype = model.prototypes()[gold as usize * model.lanes() + lane];
+            // inv(state)*prototype=r implies state=prototype*inv(r).
+            let state = model
+                .algebra()
+                .compose(prototype, model.algebra().inverse(r)?)?;
+            witness.push(H4Code::try_from(state)?);
+        }
+        let max_q24 = (factor_max + i64::from(model.token_bias(gold as usize)?))
+            .checked_mul(
+                1i64 << uor_r4_core::native_geometric::learner::geometric_generate::SCORE_SHIFT,
+            )
+            .ok_or_else(|| bad("ceiling Q24 overflow"))?;
+        let mut scores = vec![0i64; model.vocab_size()];
+        model.score_into(&witness, &mut scores, &mut GenerateReadCounts::default())?;
+        if scores[gold as usize] != max_q24 {
+            return Err(bad("native witness does not attain computed gold maximum"));
+        }
+        // Copy is intentionally frozen: this is a readout feasibility witness,
+        // not a recomputed attention/transition or a deployable state intervention.
+        let trace = pool.reduce_trace(&scores, &ids, &copy)?;
+        let old = u32::try_from(uint(&native["pool"]["summary"], "chosen_token_id")?)?;
+        before += usize::from(old == gold);
+        after += usize::from(trace.summary.chosen_token_id == gold);
+        rows.push(json!({"id":row["id"],"gold_label_only":gold,"parent_state":parent_state.iter().map(|x|x.index()).collect::<Vec<_>>(),"witness_state":witness.iter().map(|x|x.index()).collect::<Vec<_>>(),"max_gold_raw_q24":max_q24,"parent_chosen_token_id":old,"witness_chosen_token_id":trace.summary.chosen_token_id,"witness_pool":trace.summary,"gold_wins":trace.summary.chosen_token_id==gold}));
+    }
+    report_output::verify(fit)?;
+    fs::write(
+        out.join("report.json"),
+        serde_json::to_vec_pretty(
+            &json!({"schema":"uor-r4.geometric-generate-state-ceiling/1","status":"COMPLETED","scope":"gold-conditioned oracle readout feasibility diagnostic; arbitrary state per first position; frozen factual Copy scores; no learned transition/attention, candidate artifact, update, own-prefix or transfer claim","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_bytes(&fs::read(std::env::current_exe()?)?),"input_report_sha256":sha256_bytes(&fs::read(fit.join("report.json"))?),"input_manifest_sha256":sha256_bytes(&fs::read(fit.join("manifest.json"))?),"config_sha256":sha256_bytes(config_bytes),"input_generate_sha256":stage["checkpoint"]["generate_sha256"],"fit_seed":report["seed"],"cases":rows.len(),"updates":0,"relative_code_maximizer":relative,"factor_max_unshifted":factor_max,"first_teacher_forced_correct_parent":before,"first_teacher_forced_correct_max_gold_witness":after,"limitation":"A losing max-gold witness does not prove that no state can win; ceiling is only an absolute target-score bound, not maximum target margin or mass","rows":rows,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+        )?,
+    )?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    if args.len() != 3 {
+    if args.len() != 3 && !(args.len() == 4 && args[3] == "--state-ceiling") {
         return Err(bad(
-            "usage: geometric-generate-code-probe FIT_ROOT FIT_CONFIG REPORT_OUTPUT",
+            "usage: geometric-generate-code-probe FIT_ROOT FIT_CONFIG REPORT_OUTPUT [--state-ceiling]",
         ));
     }
     let fit = PathBuf::from(&args[0]);
@@ -447,7 +597,7 @@ fn main() -> Result<()> {
         }
     }
     report_output::claim(&out)?;
-    let result = probe(&fit, &config, &out, Instant::now());
+    let result = probe(&fit, &config, &out, Instant::now(), args.len() == 4);
     if let Err(e) = &result {
         fs::write(
             out.join("failure.json"),
@@ -463,6 +613,31 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn disjoint_ceiling_exact_pair_and_isolated_lane_with_smallest_ties() -> Result<()> {
+        use uor_r4_core::native_geometric::learner::integrated_attention::geometry::{
+            EnergyTables, LanePair,
+        };
+        let mut e = EnergyTables::zeroed(3, vec![LanePair { left: 0, right: 1 }])?;
+        e.set_unary(0, 7, 3)?;
+        e.set_unary(1, 9, 2)?;
+        e.set_pair(0, 7, 9, 4)?;
+        e.set_unary(2, 11, 5)?;
+        e.set_unary(2, 12, 5)?;
+        let (roots, maximum) = relative_ceiling(&e, 3)?;
+        assert_eq!(roots, vec![7, 9, 11]);
+        assert_eq!(maximum, 14);
+        let overlapping = EnergyTables::zeroed(
+            3,
+            vec![
+                LanePair { left: 0, right: 1 },
+                LanePair { left: 1, right: 2 },
+            ],
+        )?;
+        assert!(relative_ceiling(&overlapping, 3).is_err());
+        assert!(relative_ceiling(&e, 1).is_err());
+        Ok(())
+    }
     #[test]
     fn incumbent_retained_on_ties_and_only_strict_improvement_selected() {
         let mut v = [3.; 120];
