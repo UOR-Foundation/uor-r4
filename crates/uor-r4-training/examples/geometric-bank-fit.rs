@@ -15,7 +15,10 @@ use uor_r4_core::{
     report_output,
 };
 use uor_r4_integer::{
-    geometric_cue_carrier::{CueAngularConfig, CueAngularQ4, CueScoreMode, NativeCueCarrier},
+    geometric_cue_carrier::{
+        CueAngularConfig, CueAngularQ4, CueJointMetadata, CueJointQ4, CueScoreMode,
+        NativeCueCarrier,
+    },
     geometric_occurrence_read::{FrameMetadata, FrameStatus, SelectedRecordFrame, SourceIdentity},
     geometric_source_realizer::{
         NativeArtifactBinding, NativeSourceRealizer as IntegerRealizer, SourceBankSegment,
@@ -71,6 +74,7 @@ fn cue_calibration_mode(a: &Args) -> bool {
             | "cue-calibration-discrete-complete"
             | "cue-calibration-credit-audit"
             | "cue-calibration-support-probe"
+            | "cue-calibration-joint-probe"
     )
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -198,6 +202,8 @@ pub(crate) struct Args {
     pub(crate) cue_credit_audit: Option<CueCreditAudit>,
     #[serde(default)]
     pub(crate) cue_support_probe: Option<CueSupportProbe>,
+    #[serde(default)]
+    pub(crate) cue_joint_probe: Option<CueCompositionPanel>,
     #[serde(default)]
     pub(crate) cue_discrete_completion_root: Option<PathBuf>,
     #[serde(default)]
@@ -492,6 +498,7 @@ fn checked_args() -> Result<Args> {
         "cue-calibration-discrete-complete",
         "cue-calibration-credit-audit",
         "cue-calibration-support-probe",
+        "cue-calibration-joint-probe",
         "prefix-broadbatch",
         "prefix-fit",
         "terminal-broadbatch",
@@ -525,7 +532,10 @@ fn checked_args() -> Result<Args> {
                     | "cue-calibration-fit"
             ) {
                 900
-            } else if a.mode == "cue-calibration-support-probe" {
+            } else if matches!(
+                a.mode.as_str(),
+                "cue-calibration-support-probe" | "cue-calibration-joint-probe"
+            ) {
                 900
             } else if a.mode == "cue-calibration-credit-audit" {
                 600
@@ -539,7 +549,10 @@ fn checked_args() -> Result<Args> {
         || a.maximum_context_tokens != 128
         || a.maximum_generation_tokens > 32
         || a.maximum_report_bytes
-            != if a.mode == "cue-calibration-support-probe" {
+            != if matches!(
+                a.mode.as_str(),
+                "cue-calibration-support-probe" | "cue-calibration-joint-probe"
+            ) {
                 1024 * 1024 * 1024
             } else if a.mode == "cue-calibration-credit-audit" {
                 64 * 1024 * 1024
@@ -1892,6 +1905,27 @@ struct CueAuthorization {
     batch_episodes: usize,
     maximum_fit_seconds: u64,
 }
+fn cue_angular_load(root: &Path, metadata: &Value) -> Result<CueAngularQ4> {
+    let config: CueAngularConfig = serde_json::from_value(metadata["potential"].clone())?;
+    let packed = fs::read(root.join("cue-q4.bin"))?;
+    let mut angular = CueAngularQ4::new(config, &packed).map_err(|e| invalid(e.to_string()))?;
+    if let Some(value) = metadata.get("joint") {
+        let receipt: CueJointMetadata = serde_json::from_value(value.clone())?;
+        let joint = CueJointQ4::new(receipt.config, fs::read(root.join("cue-joint-q4.bin"))?)
+            .map_err(|e| invalid(e.to_string()))?;
+        if joint.metadata() != receipt {
+            return Err(invalid("native joint cue receipt differs").into());
+        }
+        angular = angular
+            .with_joint(joint)
+            .map_err(|e| invalid(e.to_string()))?;
+    } else if root.join("cue-joint-q4.bin").exists()
+        || root.join("cue-joint-source-f32.bin").exists()
+    {
+        return Err(invalid("native cue joint sidecar without metadata").into());
+    }
+    Ok(angular)
+}
 pub(crate) fn cue_native_load<'a>(
     root: &Path,
     parent: &'a IntegerRealizer,
@@ -1902,10 +1936,7 @@ pub(crate) fn cue_native_load<'a>(
     if &binding != parent.artifact_binding() {
         return Err(invalid("native-only cue parent binding differs").into());
     }
-    let config: CueAngularConfig = serde_json::from_value(metadata["potential"].clone())?;
-    let packed = fs::read(root.join("cue-q4.bin"))?;
-    let angular = CueAngularQ4::new(config, &packed).map_err(|e| invalid(e.to_string()))?;
-    let carrier = parent.compile_cue_carrier(angular)?;
+    let carrier = parent.compile_cue_carrier(cue_angular_load(root, &metadata)?)?;
     if serde_json::to_value(carrier.metadata())? != metadata {
         return Err(invalid("native-only cue metadata/context/geometry/q4 receipt differs").into());
     }
@@ -2621,11 +2652,7 @@ fn prefix_training_cue_load<'a>(
     parent: &'a NativeSourceRealizer,
 ) -> Result<NativeCueCarrier<'a>> {
     let metadata = read_json(&root.join("native-metadata.json"))?;
-    let config: CueAngularConfig = serde_json::from_value(metadata["potential"].clone())?;
-    let carrier = parent.compile_cue_carrier(
-        CueAngularQ4::new(config, &fs::read(root.join("cue-q4.bin"))?)
-            .map_err(|e| invalid(e.to_string()))?,
-    )?;
+    let carrier = parent.compile_cue_carrier(cue_angular_load(root, &metadata)?)?;
     if serde_json::to_value(carrier.metadata())? != metadata {
         return Err(invalid("training frozen native cue binding differs").into());
     }

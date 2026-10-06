@@ -24,7 +24,9 @@ use std::{
 use candle_core::{Device, IndexOp, Tensor, Var};
 use serde::{Deserialize, Serialize};
 use uor_r4_integer::{
-    geometric_cue_carrier::{CueAngularConfig, CueAngularQ4, CueScoreMode, NativeCueCarrier},
+    geometric_cue_carrier::{
+        CueAngularConfig, CueAngularQ4, CueJointConfig, CueJointQ4, CueScoreMode, NativeCueCarrier,
+    },
     geometric_no_read::{NativeGeometricNoRead, NoReadConfig},
     geometric_occurrence_read::SelectedRecordFrame,
     geometric_potential::AddressLane,
@@ -307,13 +309,7 @@ impl SourceRealizerWeights {
         )
         .map_err(|e| invalid(e.to_string()))?;
         let cue = integer
-            .compile_cue_carrier(
-                CueAngularQ4::new(
-                    frozen_cue.metadata().potential,
-                    frozen_cue.packed_coefficients(),
-                )
-                .map_err(|e| invalid(e.to_string()))?,
-            )
+            .compile_cue_carrier(frozen_cue.angular_source())
             .map_err(|e| invalid(e.to_string()))?;
         let prefix = integer
             .compile_prefix_transport(
@@ -351,6 +347,12 @@ impl SourceRealizerWeights {
                 serde_json::to_vec_pretty(&metadata)?,
             )?;
             fs::write(root.join(format!("{name}-q4.bin")), packed)?;
+        }
+        if let Some(joint) = cue.joint() {
+            fs::write(
+                path.join("cue/cue-joint-q4.bin"),
+                joint.packed_coefficients(),
+            )?;
         }
         let receipt = TerminalRebindReceipt {
             schema: "uor-r4.geometric-terminal-rebind/1".into(),
@@ -1173,6 +1175,7 @@ pub struct BankRealizerLoss {
 /// Parent context, ordinary source heads and terminal heads are immutable.
 pub struct CueAngularWeights {
     coefficients: Var,
+    joint_coefficients: Option<Var>,
     metadata: CueAngularSourceMetadata,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -1185,6 +1188,15 @@ struct CueAngularSourceMetadata {
     source_sha256: String,
     packed_sha256: String,
     native_metadata: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    joint: Option<CueJointSourceMetadata>,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CueJointSourceMetadata {
+    config: CueJointConfig,
+    source_sha256: String,
+    packed_sha256: String,
 }
 fn cue_parent_files(
     native: &NativeSourceRealizer,
@@ -1229,6 +1241,19 @@ impl CueAngularWeights {
             .collect::<Vec<_>>();
         let mut result = Self::zero(parent, native_root, config.mode)?;
         result.coefficients = Var::from_vec(values, count, &Device::Cpu)?;
+        if let Some(joint) = donor.joint() {
+            let values = unpack_coefficients(16, joint.packed_coefficients())
+                .map_err(|e| invalid(e.to_string()))?
+                .into_iter()
+                .map(|q| f32::from(q) * 0.25)
+                .collect::<Vec<_>>();
+            result.joint_coefficients = Some(Var::from_vec(values, 16, &Device::Cpu)?);
+            result.metadata.joint = Some(CueJointSourceMetadata {
+                config: joint.config(),
+                source_sha256: String::new(),
+                packed_sha256: String::new(),
+            });
+        }
         if result.packed_coefficients()? != donor.packed_coefficients() {
             return Err(invalid("cue warm-start quarter-grid replay differs"));
         }
@@ -1258,6 +1283,7 @@ impl CueAngularWeights {
             .map_err(|e| invalid(e.to_string()))?;
         let result = Self {
             coefficients: Var::from_vec(vec![0f32; count], count, &Device::Cpu)?,
+            joint_coefficients: None,
             metadata: CueAngularSourceMetadata {
                 schema: "uor-r4.geometric-cue-angular-source/1".into(),
                 parent: parent.artifact_binding()?,
@@ -1266,6 +1292,7 @@ impl CueAngularWeights {
                 source_sha256: String::new(),
                 packed_sha256: String::new(),
                 native_metadata: serde_json::Value::Null,
+                joint: None,
             },
         };
         let mut result = result;
@@ -1282,7 +1309,97 @@ impl CueAngularWeights {
         &self.metadata.parent
     }
     pub fn parameters(&self) -> BTreeMap<String, Var> {
-        BTreeMap::from([("cue.coefficients".into(), self.coefficients.clone())])
+        let mut result = BTreeMap::from([("cue.coefficients".into(), self.coefficients.clone())]);
+        result.extend(self.joint_parameters());
+        result
+    }
+    /// Joint-only learning must use this family; existing unary coefficients are frozen.
+    pub fn joint_parameters(&self) -> BTreeMap<String, Var> {
+        self.joint_coefficients
+            .as_ref()
+            .map_or_else(BTreeMap::new, |v| {
+                BTreeMap::from([("cue.joint.coefficients".into(), v.clone())])
+            })
+    }
+    pub fn joint_config(&self) -> Option<CueJointConfig> {
+        self.metadata.joint.as_ref().map(|m| m.config)
+    }
+    pub fn with_zero_joint(
+        mut self,
+        parent: &NativeSourceRealizer,
+        config: CueJointConfig,
+    ) -> Result<Self> {
+        if self.metadata.parent != parent.artifact_binding()? || self.joint_coefficients.is_some() {
+            return Err(invalid(
+                "joint cue initializer parent differs/already initialized",
+            ));
+        }
+        self.joint_coefficients = Some(Var::from_vec(vec![0f32; 16], 16, &Device::Cpu)?);
+        self.metadata.joint = Some(CueJointSourceMetadata {
+            config,
+            source_sha256: String::new(),
+            packed_sha256: String::new(),
+        });
+        self.metadata.native_metadata =
+            serde_json::to_value(parent.compile_cue_carrier(self.native()?)?.metadata())?;
+        Ok(self)
+    }
+    pub fn joint_packed_coefficients(&self) -> Result<Option<Vec<u8>>> {
+        match (&self.joint_coefficients, &self.metadata.joint) {
+            (None, None) => Ok(None),
+            (Some(v), Some(_)) => {
+                let values = v.to_vec1::<f32>()?;
+                if values.len() != 16
+                    || values
+                        .iter()
+                        .any(|x| !x.is_finite() || *x < -1.75 || *x > 1.75)
+                {
+                    return Err(invalid("joint cue shadow shape/range differs"));
+                }
+                Ok(Some(
+                    pack_coefficients(
+                        &values
+                            .into_iter()
+                            .map(|x| (x * 4.).round() as i8)
+                            .collect::<Vec<_>>(),
+                    )
+                    .map_err(|e| invalid(e.to_string()))?,
+                ))
+            }
+            _ => Err(invalid("joint cue shadow/metadata presence differs")),
+        }
+    }
+    pub fn project_joint_shadow_range(&self) -> Result<()> {
+        let v = self
+            .joint_coefficients
+            .as_ref()
+            .ok_or_else(|| invalid("joint cue shadow absent"))?;
+        let values = v.to_vec1::<f32>()?;
+        if values.iter().any(|x| !x.is_finite()) {
+            return Err(invalid("nonfinite joint cue shadow"));
+        }
+        v.set(&Tensor::from_vec(
+            values
+                .into_iter()
+                .map(|x| x.clamp(-1.75, 1.75))
+                .collect::<Vec<_>>(),
+            v.shape(),
+            &Device::Cpu,
+        )?)?;
+        Ok(())
+    }
+    fn joint_matches(&self, carrier: &NativeCueCarrier<'_>) -> Result<bool> {
+        Ok(
+            match (
+                self.joint_config(),
+                self.joint_packed_coefficients()?,
+                carrier.joint(),
+            ) {
+                (None, None, None) => true,
+                (Some(c), Some(p), Some(j)) => c == j.config() && p == j.packed_coefficients(),
+                _ => false,
+            },
+        )
     }
     pub fn project_shadow_range(&self) -> Result<()> {
         let v = self.coefficients.to_vec1::<f32>()?;
@@ -1311,8 +1428,15 @@ impl CueAngularWeights {
         .map_err(|e| invalid(e.to_string()))
     }
     pub fn native(&self) -> Result<CueAngularQ4> {
-        CueAngularQ4::new(self.config(), &self.packed_coefficients()?)
-            .map_err(|e| invalid(e.to_string()))
+        let cue = CueAngularQ4::new(self.config(), &self.packed_coefficients()?)
+            .map_err(|e| invalid(e.to_string()))?;
+        match (self.joint_config(), self.joint_packed_coefficients()?) {
+            (None, None) => Ok(cue),
+            (Some(config), Some(packed)) => cue
+                .with_joint(CueJointQ4::new(config, packed).map_err(|e| invalid(e.to_string()))?)
+                .map_err(|e| invalid(e.to_string())),
+            _ => Err(invalid("joint cue native presence differs")),
+        }
     }
     fn source_bytes(&self) -> Result<Vec<u8>> {
         Ok(self
@@ -1323,13 +1447,53 @@ impl CueAngularWeights {
             .collect())
     }
     pub fn save(&self, path: &Path) -> Result<()> {
-        fs::create_dir(path)?;
+        if self.joint_coefficients.is_some() || self.metadata.joint.is_some() {
+            return Err(invalid(
+                "joint cue save requires current parent compilation",
+            ));
+        }
+        self.save_bound(path, None)
+    }
+    pub fn save_with_parent(&self, path: &Path, parent: &NativeSourceRealizer) -> Result<()> {
+        if self.parent_binding() != &parent.artifact_binding()? {
+            return Err(invalid("joint cue save current parent differs"));
+        }
+        let cue = parent.compile_cue_carrier(self.native()?)?;
+        self.save_bound(path, Some(serde_json::to_value(cue.metadata())?))
+    }
+    fn save_bound(&self, path: &Path, native_metadata: Option<serde_json::Value>) -> Result<()> {
         let source = self.source_bytes()?;
         let packed = self.packed_coefficients()?;
         let mut m = self.metadata.clone();
         m.source_sha256 = sha256_bytes(&source);
         m.packed_sha256 = sha256_bytes(&packed);
+        if let Some(metadata) = native_metadata {
+            m.native_metadata = metadata;
+        }
         m.native_metadata["potential_packed_sha256"] = serde_json::json!(m.packed_sha256);
+        let joint_payload = match (
+            &self.joint_coefficients,
+            &mut m.joint,
+            self.joint_packed_coefficients()?,
+        ) {
+            (None, None, None) => None,
+            (Some(v), Some(j), Some(p)) => {
+                let raw = v
+                    .to_vec1::<f32>()?
+                    .into_iter()
+                    .flat_map(f32::to_le_bytes)
+                    .collect::<Vec<_>>();
+                j.source_sha256 = sha256_bytes(&raw);
+                j.packed_sha256 = sha256_bytes(&p);
+                Some((raw, p))
+            }
+            _ => return Err(invalid("joint cue save presence differs")),
+        };
+        fs::create_dir(path)?;
+        if let Some((raw, p)) = joint_payload {
+            fs::write(path.join("cue-joint-source-f32.bin"), raw)?;
+            fs::write(path.join("cue-joint-q4.bin"), p)?;
+        }
         fs::write(
             path.join("native-metadata.json"),
             serde_json::to_vec_pretty(&m.native_metadata)?,
@@ -1361,10 +1525,41 @@ impl CueAngularWeights {
             .chunks_exact(4)
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
             .collect::<Vec<_>>();
+        let joint_coefficients = if let Some(j) = &m.joint {
+            let raw = fs::read(path.join("cue-joint-source-f32.bin"))?;
+            let packed = fs::read(path.join("cue-joint-q4.bin"))?;
+            if raw.len() != 64
+                || packed.len() != 8
+                || j.source_sha256 != sha256_bytes(&raw)
+                || j.packed_sha256 != sha256_bytes(&packed)
+            {
+                return Err(invalid("joint cue source/native binding differs"));
+            }
+            Some(Var::from_vec(
+                raw.chunks_exact(4)
+                    .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                    .collect::<Vec<_>>(),
+                16,
+                &Device::Cpu,
+            )?)
+        } else {
+            if path.join("cue-joint-source-f32.bin").exists()
+                || path.join("cue-joint-q4.bin").exists()
+            {
+                return Err(invalid("joint cue sidecars unbound by metadata"));
+            }
+            None
+        };
         let result = Self {
             coefficients: Var::from_vec(values, count, &Device::Cpu)?,
+            joint_coefficients,
             metadata: m,
         };
+        if let Some(p) = result.joint_packed_coefficients()? {
+            if fs::read(path.join("cue-joint-q4.bin"))? != p {
+                return Err(invalid("joint cue source/native packed replay differs"));
+            }
+        }
         if result.packed_coefficients()? != packed {
             return Err(invalid("cue source/native packed replay differs"));
         }
@@ -1379,6 +1574,28 @@ impl CueAngularWeights {
         }
         Ok(result)
     }
+}
+// Offline constant features only. Runtime compiles these canonical Q25
+// coordinates into the integer ordered-pair table; no float serving is added.
+fn cue_joint_outer_product(left: Option<u8>, right: Option<u8>) -> Result<[f32; 16]> {
+    let (Some(left), Some(right)) = (left, right) else {
+        return Ok([0.; 16]);
+    };
+    let basis = &uor_r4_integer::geometric_no_read::CANONICAL_BASIS_Q25;
+    let a = basis
+        .get(usize::from(left))
+        .ok_or_else(|| invalid("joint cue left root exceeds120"))?;
+    let b = basis
+        .get(usize::from(right))
+        .ok_or_else(|| invalid("joint cue right root exceeds120"))?;
+    let mut result = [0.; 16];
+    for i in 0..4 {
+        for j in 0..4 {
+            result[i * 4 + j] =
+                (f64::from(a[i]) / 33554432. * (f64::from(b[j]) / 33554432.)) as f32;
+        }
+    }
+    Ok(result)
 }
 pub struct PrefixAngularWeights {
     coefficients: Var,
@@ -2345,6 +2562,11 @@ impl PreparedSourceRealizer<'_> {
         }
         // The adapter checks final native states, roots, categories and codes;
         // independent identity-reset encodes are connected to current root Vars.
+        if carrier.metadata.joint.is_some() {
+            return Err(invalid(
+                "joint cue context adjoint unsupported; use frozen-root joint-only loss",
+            ));
+        }
         let cue_credit = frozen_cue_root_forward(
             carrier.metadata.potential,
             cue.packed_coefficients(),
@@ -2435,6 +2657,7 @@ impl PreparedSourceRealizer<'_> {
     ) -> Result<CueBankRealizerLoss> {
         if weights.parent_binding() != &self.native.artifact_binding()?
             || weights.packed_coefficients()?.as_slice() != carrier.packed_coefficients()
+            || !weights.joint_matches(carrier)?
         {
             return Err(invalid("cue current packed/source parent differs"));
         }
@@ -2517,6 +2740,7 @@ impl PreparedSourceRealizer<'_> {
         if weights.parent_binding() != &self.native.artifact_binding()?
             || weights.packed_coefficients()?.as_slice() != cue.packed_coefficients()
             || weights.config() != cue.metadata().potential
+            || !weights.joint_matches(cue)?
         {
             return Err(invalid("cue endpoint current packed/source parent differs"));
         }
@@ -2580,6 +2804,94 @@ impl PreparedSourceRealizer<'_> {
         let probability = mass as f64 / actions.total_weight_q31 as f64;
         // Authoritative final scores anchor the numerical loss. Zero endpoint
         // adjoints do not remove the calibrated Period/Stop logits or masses.
+        let loss = marginal_action_loss(actions, &credit, target, probability)?;
+        Ok(CueSourceEndBankRealizerLoss {
+            loss,
+            trace,
+            target_probability: probability,
+        })
+    }
+
+    /// Joint-only coefficient credit at actual ordered relative roots. The full
+    /// native chain executes before labels; its factual source branch, roots,
+    /// unary cue, parent Copy, prefix and terminal operators remain constants.
+    pub fn loss_bank_cue_joint_source_end(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        target: u32,
+        weights: &CueAngularWeights,
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        end: &NativeSourceEndTransport<'_>,
+    ) -> Result<CueSourceEndBankRealizerLoss> {
+        if weights.parent_binding() != &self.native.artifact_binding()?
+            || weights.config() != cue.metadata().potential
+            || weights.packed_coefficients()?.as_slice() != cue.packed_coefficients()
+            || !weights.joint_matches(cue)?
+        {
+            return Err(invalid("joint cue current packed/source parent differs"));
+        }
+        let config = weights
+            .joint_config()
+            .ok_or_else(|| invalid("joint-only cue configuration absent"))?;
+        let coefficients = weights
+            .joint_coefficients
+            .as_ref()
+            .ok_or_else(|| invalid("joint-only cue Var absent"))?;
+        let trace = self.native.read_bank_with_source_end_transport(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            end,
+        )?;
+        let actions = &trace.actions;
+        let mass = actions
+            .token_masses
+            .iter()
+            .find(|v| v.token_id == target)
+            .map_or(0, |v| v.weight_q31);
+        if mass == 0 || actions.total_weight_q31 == 0 || mass > actions.total_weight_q31 {
+            return Err(invalid(
+                "joint cue native target zero/invalid support; no floor",
+            ));
+        }
+        let count = trace.prefix_bank.cue_bank.bank.candidates.len();
+        let carrier = &trace.prefix_bank.cue_bank.carrier;
+        let lanes = weights.config().heads * weights.config().lanes_per_head;
+        if count == 0
+            || actions.actions.len() != count + 2
+            || carrier.relative_roots.len() != lanes
+            || carrier.relative_roots.iter().any(|r| r.len() != count)
+        {
+            return Err(invalid("joint cue native relative-root shape differs"));
+        }
+        let left = config.head * weights.config().lanes_per_head + config.left_lane;
+        let right = config.head * weights.config().lanes_per_head + config.right_lane;
+        if left >= lanes || right >= lanes {
+            return Err(invalid("joint cue native ordered lanes exceed dimensions"));
+        }
+        let mut features = Vec::with_capacity(count * 16);
+        for candidate in 0..count {
+            features.extend(cue_joint_outer_product(
+                carrier.relative_roots[left][candidate],
+                carrier.relative_roots[right][candidate],
+            )?);
+        }
+        let copies = Tensor::from_vec(features, (count, 16), &Device::Cpu)?
+            .broadcast_mul(&coefficients.reshape((1, 16))?)?
+            .sum(1)?;
+        let credit = Tensor::cat(
+            &[
+                copies,
+                Tensor::zeros(2, candle_core::DType::F32, &Device::Cpu)?,
+            ],
+            0,
+        )?;
+        let probability = mass as f64 / actions.total_weight_q31 as f64;
         let loss = marginal_action_loss(actions, &credit, target, probability)?;
         Ok(CueSourceEndBankRealizerLoss {
             loss,
@@ -3508,6 +3820,9 @@ mod tests {
     }
     impl Fixture {
         fn new() -> Result<Self> {
+            Self::new_with_lanes(1)
+        }
+        fn new_with_lanes(lanes: usize) -> Result<Self> {
             let path = std::env::temp_dir().join(format!(
                 "uor-source-realizer-{}-{}",
                 std::process::id(),
@@ -3515,7 +3830,7 @@ mod tests {
             ));
             fs::create_dir(&path)?;
             let consumer =
-                ConsumerWeights::initialize(&path.join("base"), TOK.as_bytes(), 8, 1, 1, 41)?;
+                ConsumerWeights::initialize(&path.join("base"), TOK.as_bytes(), 8, 1, lanes, 41)?;
             let weights = SourceRealizerWeights::new(consumer, TOK.as_bytes(), 43)?;
             // Uniform hard scores give exact, independently known alias loss
             // and coefficient adjoint signs, without a model training dose.
@@ -4580,6 +4895,222 @@ mod tests {
         );
         assert!(CueAngularWeights::from_native(&native, &native_root, &foreign_donor).is_err());
         assert!(CueAngularWeights::from_native(&native, &foreign_root, &donor).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn optional_joint_cue_roundtrip_full_native_loss_and_frozen_families() -> Result<()> {
+        let fixture = Fixture::new_with_lanes(2)?;
+        let category = &fixture.weights.consumer.context.parameters()["token_category"];
+        let mut values = vec![0.; category.elem_count()];
+        for row in values.chunks_exact_mut(33) {
+            row[1] = 1.75;
+        }
+        category.set(&Tensor::from_vec(values, category.shape(), &Device::Cpu)?)?;
+        let root = &fixture.weights.consumer.context.parameters()["token_root"];
+        let mut values = vec![0.; root.elem_count()];
+        for token in 0..8 {
+            for lane in 0..2 {
+                values[(token * 2 + lane) * 120 + 1] = 1.75;
+            }
+        }
+        values[(5 * 2) * 120 + 1] = 0.;
+        values[(5 * 2) * 120 + 3] = 1.75;
+        root.set(&Tensor::from_vec(values, root.shape(), &Device::Cpu)?)?;
+        let native = fixture.weights.compile(fixture.identity.clone())?;
+        let native_root = fixture.path.join("joint-native");
+        native.save(&native_root)?;
+        let native = NativeSourceRealizer::load(&native_root, &fixture.weights, &fixture.identity)?;
+        let legacy =
+            CueAngularWeights::zero(&native, &native_root, CueScoreMode::DirectedRelative)?;
+        let legacy_path = fixture.path.join("legacy-no-joint");
+        legacy.save(&legacy_path)?;
+        assert!(!legacy_path.join("cue-joint-q4.bin").exists());
+        assert!(serde_json::from_slice::<serde_json::Value>(&fs::read(
+            legacy_path.join("metadata.json")
+        )?)?
+        .get("joint")
+        .is_none());
+        let joint = legacy.with_zero_joint(
+            &native,
+            CueJointConfig {
+                head: 0,
+                left_lane: 0,
+                right_lane: 1,
+            },
+        )?;
+        assert_eq!(joint.joint_parameters().len(), 1);
+        let refused = fixture.path.join("joint-refused-parentless");
+        assert!(joint.save(&refused).is_err());
+        assert!(!refused.exists());
+        let var = joint
+            .joint_coefficients
+            .as_ref()
+            .ok_or_else(|| invalid("fixture joint Var missing"))?;
+        let mut v = vec![0f32; 16];
+        v[15] = 0.25;
+        var.set(&Tensor::from_vec(v, 16, &Device::Cpu)?)?;
+        let cue_root = fixture.path.join("joint-cue");
+        joint.save_with_parent(&cue_root, &native)?;
+        let restored = CueAngularWeights::load(&cue_root, &native, &native_root)?;
+        let cue = native.compile_cue_carrier(restored.native()?)?;
+        let warm = CueAngularWeights::from_native(&native, &native_root, &cue)?;
+        assert_eq!(
+            warm.joint_packed_coefficients()?,
+            restored.joint_packed_coefficients()?
+        );
+        assert_eq!(
+            native.compile_cue_carrier(warm.native()?)?.metadata(),
+            cue.metadata()
+        );
+        let prefix_weights = PrefixAngularWeights::zero(
+            &native,
+            &native_root,
+            &cue_root,
+            &cue,
+            PrefixScoreMode::DirectedRelative,
+        )?;
+        prefix_weights.coefficients.set(&Tensor::full(
+            0.25f32,
+            prefix_weights.coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        let prefix_root = fixture.path.join("joint-prefix");
+        prefix_weights.save(&prefix_root)?;
+        let prefix = native.compile_prefix_transport(&cue, prefix_weights.native()?)?;
+        let end_weights = SourceEndAngularWeights::zero(
+            &native,
+            &native_root,
+            &cue_root,
+            &prefix_root,
+            &cue,
+            &prefix,
+            SourceEndScoreMode::DirectedRelative,
+        )?;
+        end_weights.period_coefficients.set(&Tensor::full(
+            0.5f32,
+            end_weights.period_coefficients.shape(),
+            &Device::Cpu,
+        )?)?;
+        let end = native.compile_source_end_transport(&cue, &prefix, end_weights.native()?)?;
+        let ids = [4];
+        let other = [6];
+        let compiler = SourceEmissionCompiler::new(TOK.as_bytes())?;
+        let view = compiler.compile(&ids)?;
+        let other_view = compiler.compile(&other)?;
+        let mut other_frame = frame(&other);
+        other_frame.identity = SourceIdentity {
+            record: 8,
+            commit: 10,
+        };
+        let segments = [
+            SourceBankSegment::Context {
+                token_ids: &[4],
+                role: 1,
+                event: 1,
+            },
+            SourceBankSegment::Source {
+                frame: frame(&ids),
+                view: &view,
+                event: 1,
+            },
+            SourceBankSegment::Context {
+                token_ids: &[5],
+                role: 1,
+                event: 2,
+            },
+            SourceBankSegment::Source {
+                frame: other_frame,
+                view: &other_view,
+                event: 2,
+            },
+        ];
+        let prepared = fixture.weights.prepare(&native)?;
+        let out = prepared.loss_bank_cue_joint_source_end(
+            &segments,
+            &[4],
+            &[],
+            4,
+            &restored,
+            &cue,
+            &prefix,
+            &end,
+        )?;
+        let factual = native.read_bank_with_source_end_transport(
+            &segments,
+            &[4],
+            &[],
+            &cue,
+            &prefix,
+            &end,
+        )?;
+        assert_eq!(out.trace, factual);
+        let actions = &factual.actions;
+        let mass = actions
+            .token_masses
+            .iter()
+            .find(|v| v.token_id == 4)
+            .ok_or_else(|| invalid("fixture target absent"))?
+            .weight_q31;
+        let expected = -(mass as f64 / actions.total_weight_q31 as f64).ln();
+        assert!((f64::from(out.loss.to_scalar::<f32>()?) - expected).abs() < 1e-4);
+        let carrier = &factual.prefix_bank.cue_bank.carrier;
+        assert_ne!(carrier.relative_roots[0][0], carrier.relative_roots[0][1]);
+        let store = out.loss.backward()?;
+        for v in fixture
+            .weights
+            .parameters()
+            .values()
+            .chain(prefix_weights.parameters().values())
+            .chain(end_weights.parameters().values())
+        {
+            assert!(store.get(v.as_tensor()).is_none());
+        }
+        assert!(store.get(restored.coefficients.as_tensor()).is_none());
+        let g = store
+            .get(
+                restored
+                    .joint_coefficients
+                    .as_ref()
+                    .ok_or_else(|| invalid("fixture reloaded joint missing"))?
+                    .as_tensor(),
+            )
+            .ok_or_else(|| invalid("fixture joint gradient missing"))?
+            .to_vec1::<f32>()?;
+        assert_eq!(g.len(), 16);
+        assert!(g.iter().all(|x| x.is_finite()));
+        assert!(g.iter().any(|x| x.abs() > 1e-8));
+        let mut foreign = restored
+            .joint_coefficients
+            .as_ref()
+            .ok_or_else(|| invalid("fixture joint missing"))?
+            .to_vec1::<f32>()?;
+        foreign[15] = 0.5;
+        restored
+            .joint_coefficients
+            .as_ref()
+            .ok_or_else(|| invalid("fixture joint missing"))?
+            .set(&Tensor::from_vec(foreign, 16, &Device::Cpu)?)?;
+        assert!(prepared
+            .loss_bank_cue_joint_source_end(&segments, &[4], &[], 4, &restored, &cue, &prefix, &end)
+            .is_err());
+        fs::write(cue_root.join("cue-joint-q4.bin"), [0u8; 8])?;
+        assert!(CueAngularWeights::load(&cue_root, &native, &native_root).is_err());
+        Ok(())
+    }
+    #[test]
+    fn joint_outer_product_preserves_order_and_masks_missing_roots() -> Result<()> {
+        assert_eq!(cue_joint_outer_product(None, Some(1))?, [0.; 16]);
+        assert_eq!(cue_joint_outer_product(Some(1), None)?, [0.; 16]);
+        assert!(cue_joint_outer_product(Some(120), Some(1)).is_err());
+        let a = cue_joint_outer_product(Some(1), Some(3))?;
+        let b = cue_joint_outer_product(Some(3), Some(1))?;
+        assert_ne!(a, b);
+        for i in 0..4 {
+            for j in 0..4 {
+                assert_eq!(a[i * 4 + j], b[j * 4 + i]);
+            }
+        }
         Ok(())
     }
 

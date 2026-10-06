@@ -1,5 +1,28 @@
 # Current UOR-R4 research state
 
+## Ordered geometric cue foundation — October 5 (implementation pending execution)
+
+The next bounded discriminator adds an optional ordered interaction of global
+cue lanes5,7 (head1/local1,3) to the retained support8 development donor. Sixteen
+Q4 coefficients compile into a64KiB padded table using the existing canonical
+Q25 basis and checked pair arithmetic. Numerical scoring reuses directed H4
+relative roots, masks either absent lane, and performs one additional lookup/add.
+The canonical Q25 observation basis is rounded; it is not exact Z[phi].
+
+The foundation preserves the unary parent, admission and frozen prefix/end
+payloads. It exports/reloads the whole cue→prefix→end metadata chain, tests zero
+overlay numerical and generated-output parity on512 development rows, checks
+only16 coefficients receive final native-loss credit, and applies one signed
+quarter intervention as a sensitivity check. It runs no optimizer or held-out
+predictions. Until actual execution completes, this is source implementation,
+not a measured attention improvement. No chat or transfer promotion follows.
+
+[Work card](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6005856726)
+precharges120 minutes total; buildCPU8/RSS8GiB, nativeCPU16/RSS12GiB/900s,
+1GiB per report and10GiB Codex pod storage with128MiB reserve. Compute uses
+main uor-pod under the owner cap. DeepSeek owns its independent softmax and
+tensor-core offline training investigation; this task does not change that seam.
+
 ## Frozen geometric cue support comparison — October 5
 
 [PR1767](https://github.com/UOR-Foundation/uor-r4/pull/1767), numerical source

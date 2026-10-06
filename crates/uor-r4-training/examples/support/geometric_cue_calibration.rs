@@ -4,6 +4,8 @@ use super::*;
 mod credit_audit;
 #[path = "geometric_cue_discrete.rs"]
 mod discrete;
+#[path = "geometric_cue_joint_probe.rs"]
+mod joint_probe;
 #[path = "geometric_cue_support_probe.rs"]
 mod support_probe;
 use uor_r4_integer::geometric_source_end_transport::{
@@ -20,6 +22,7 @@ fn composition_panel(a: &Args) -> Option<&CueCompositionPanel> {
         .as_ref()
         .map(|c| &c.composition_panel)
         .or_else(|| a.cue_support_probe.as_ref().map(|c| &c.composition_panel))
+        .or(a.cue_joint_probe.as_ref())
         .or_else(|| {
             a.cue_discrete_fit
                 .as_ref()
@@ -70,6 +73,20 @@ pub(super) fn validate(a: &Args) -> Result<()> {
     }
     if (a.mode == "cue-calibration-support-probe") != a.cue_support_probe.is_some() {
         return Err(invalid("cue support configuration is explicit-probe-only").into());
+    }
+    if (a.mode == "cue-calibration-joint-probe") != a.cue_joint_probe.is_some() {
+        return Err(invalid("joint foundation explicit-mode contract differs").into());
+    }
+    if let Some(c) = &a.cue_joint_probe {
+        if c.profile != COMPOSITION_PROFILE
+            || c.development_rows != 512
+            || c.evaluation_rows != 128
+            || a.admission.is_some()
+            || a.fit_authorization.is_some()
+            || a.admission_manifest_sha256.is_some()
+        {
+            return Err(invalid("joint foundation panel/no-fit contract differs").into());
+        }
     }
     if let Some(c) = &a.cue_support_probe {
         if c.composition_panel.profile != COMPOSITION_PROFILE
@@ -309,7 +326,11 @@ fn save_chain(
     parent: &NativeSourceRealizer,
     f: &Frozen,
 ) -> Result<()> {
-    weights.save(&root.join("cue"))?;
+    if weights.joint_config().is_some() {
+        weights.save_with_parent(&root.join("cue"), parent)?;
+    } else {
+        weights.save(&root.join("cue"))?;
+    }
     let c = parent.compile_cue_carrier(weights.native()?)?;
     let (p, e) = f.training(parent, &c)?;
     for name in ["prefix", "source-end"] {
@@ -384,7 +405,12 @@ fn batch(
             Ok((c, p, e))
         })
         .transpose()?;
-    let params = weights.parameters();
+    let joint = weights.joint_config().is_some();
+    let params = if joint {
+        weights.joint_parameters()
+    } else {
+        weights.parameters()
+    };
     let parentvars = source.parameters();
     let mut gradients = BTreeMap::<String, Tensor>::new();
     let mut rows = Vec::new();
@@ -396,16 +422,29 @@ fn batch(
         let mut ce = 0.;
         for (step, &target) in row.target.iter().enumerate() {
             deadline(a, start)?;
-            let out = prepared.loss_bank_cue_source_end(
-                &segments,
-                &row.packet.query_ids,
-                &row.target[..step],
-                target,
-                weights,
-                &c,
-                &p,
-                &e,
-            )?;
+            let out = if joint {
+                prepared.loss_bank_cue_joint_source_end(
+                    &segments,
+                    &row.packet.query_ids,
+                    &row.target[..step],
+                    target,
+                    weights,
+                    &c,
+                    &p,
+                    &e,
+                )?
+            } else {
+                prepared.loss_bank_cue_source_end(
+                    &segments,
+                    &row.packet.query_ids,
+                    &row.target[..step],
+                    target,
+                    weights,
+                    &c,
+                    &p,
+                    &e,
+                )?
+            };
             if let (Some(n), Some((ic, ip, ie))) = (integer, independent.as_ref()) {
                 if out.trace
                     != n.read_bank_with_source_end_transport(
@@ -436,6 +475,13 @@ fn batch(
             ce += native_ce;
             positions += 1;
             let store = (&out.loss * scale(indices.len(), row.target.len())?)?.backward()?;
+            if joint
+                && weights.parameters().iter().any(|(name, v)| {
+                    !params.contains_key(name) && store.get(v.as_tensor()).is_some()
+                })
+            {
+                return Err(invalid("joint foundation connects frozen unary Var").into());
+            }
             if parentvars
                 .values()
                 .any(|v| store.get(v.as_tensor()).is_some())
@@ -478,7 +524,7 @@ fn batch(
     }
     Ok(Batch {
         gradients,
-        report: json!({"episodes":indices.len(),"episode_indices":indices,"target_positions":positions,"native_equal_episode_ce":mean,"gradient_global_norm":sq.sqrt(),"gradient_nonzero_observed":sq>0.,"nonzero_required":require_nonzero,"gradient_families":stats,"parent_gradient_graph_absent":true,"independent_native_trace_parity":integer.is_some(),"frozen_payloads":f.hashes(),"rows":rows,"elapsed_seconds":began.elapsed().as_secs_f64(),"active_families":FAMILIES,"objective":"equalepisode fullanswer+EOS ordinary final native alias CE; no floor; labels after full native read","gradient_scope":"cue coefficients at factual present angular bins only; encoder/roots/prefix/endpoint/factualSource argmax stopped"}),
+        report: json!({"episodes":indices.len(),"episode_indices":indices,"target_positions":positions,"native_equal_episode_ce":mean,"gradient_global_norm":sq.sqrt(),"gradient_nonzero_observed":sq>0.,"nonzero_required":require_nonzero,"gradient_families":stats,"parent_gradient_graph_absent":true,"independent_native_trace_parity":integer.is_some(),"frozen_payloads":f.hashes(),"rows":rows,"elapsed_seconds":began.elapsed().as_secs_f64(),"active_families":if joint {"cue-joint-16-only/final-native/1"} else {FAMILIES},"objective":"equalepisode fullanswer+EOS ordinary final native alias CE; no floor; labels after full native read","gradient_scope":if joint {"16 joint coefficients at ordered factual relative-root outer products only; unary/encoder/roots/prefix/endpoint/factualSource argmax stopped"} else {"cue coefficients at factual present angular bins only; encoder/roots/prefix/endpoint/factualSource argmax stopped"}}),
     })
 }
 
@@ -940,6 +986,22 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         return Err(invalid("prospective evaluation panel report differs before learning").into());
     }
     let development = panel(&a.development_panel, development_rows, &integer, &tok, a)?;
+    if a.cue_joint_probe.is_some() {
+        return joint_probe::run(
+            a,
+            start,
+            &source,
+            &parent,
+            &integer,
+            &tok,
+            &weights,
+            &f,
+            &development,
+            &inputs,
+            &seals,
+            &receipts,
+        );
+    }
     if a.cue_credit_audit.is_some() {
         return credit_audit::run(
             a,
