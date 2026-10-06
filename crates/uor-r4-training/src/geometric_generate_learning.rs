@@ -1748,6 +1748,120 @@ mod tests {
     }
     #[cfg(feature = "cuda")]
     #[test]
+    fn balanced_eight_lane_cuda_hard_state_adjoint_parity() -> Result<()> {
+        // The carried base-120 digit and every lane must participate in credit.
+        // Missing CUDA is an error, never a skipped numerical comparison.
+        let gpu = Device::new_cuda(0)?;
+        let mut tokenizer: serde_json::Value = serde_json::from_str(TOK)?;
+        let vocab = tokenizer["model"]["vocab"]
+            .as_object_mut()
+            .ok_or_else(|| invalid("test tokenizer vocab absent"))?;
+        for token in 8..141 {
+            vocab.insert(format!("token{token:04}"), serde_json::json!(token));
+        }
+        let binding = SourceActionBinding::new(&serde_json::to_vec(&tokenizer)?)
+            .map_err(|e| invalid(e.to_string()))?;
+        assert_eq!(binding.vocab_size(), 141);
+        let cpu = GenerateLearningWeights::seeded_balanced_token_geometry(
+            binding.clone(),
+            8,
+            71,
+            &Device::Cpu,
+        )?;
+        let native = cpu.export_native()?;
+        let cuda = GenerateLearningWeights::from_native(binding, &native, &gpu)?;
+        let states = [
+            code(4)?,
+            code(13)?,
+            code(29)?,
+            code(47)?,
+            code(61)?,
+            code(79)?,
+            code(97)?,
+            code(113)?,
+        ];
+        let mut onehot = vec![0f32; 8 * ROOT_COUNT];
+        for (lane, state) in states.iter().enumerate() {
+            onehot[lane * ROOT_COUNT + usize::from(state.index())] = 1.;
+        }
+        let zc = Var::from_tensor(&Tensor::from_vec(
+            onehot.clone(),
+            (8, ROOT_COUNT),
+            &Device::Cpu,
+        )?)?;
+        let zg = Var::from_tensor(&Tensor::from_vec(onehot, (8, ROOT_COUNT), &gpu)?)?;
+        let c =
+            cpu.forward_prepared_state_choices(&cpu.prepare_native()?, &states, zc.as_tensor())?;
+        let d =
+            cuda.forward_prepared_state_choices(&cuda.prepare_native()?, &states, zg.as_tensor())?;
+        assert_eq!(c.scores_q24, d.scores_q24);
+        assert_eq!(
+            c.raw_scores.to_vec1::<f32>()?,
+            d.raw_scores.to_vec1::<f32>()?
+        );
+        let adjoints = (0..141)
+            .map(|token| ((token % 17) as f32 - 8.) / 16. + (token / 17) as f32 / 128.)
+            .collect::<Vec<_>>();
+        let cg = (&c.raw_scores * Tensor::from_vec(adjoints.clone(), 141, &Device::Cpu)?)?
+            .sum_all()?
+            .backward()?;
+        let dg = (&d.raw_scores * Tensor::from_vec(adjoints, 141, &gpu)?)?
+            .sum_all()?
+            .backward()?;
+        let mut cp = cpu.parameters();
+        let mut dp = cuda.parameters();
+        cp.insert("state".into(), zc);
+        dp.insert("state".into(), zg);
+        assert_eq!(cp.len(), dp.len());
+        for (name, a) in cp {
+            let b = dp
+                .get(&name)
+                .ok_or_else(|| invalid("CUDA test parameter name missing"))?;
+            assert_eq!(a.dims(), b.dims(), "{name}");
+            let x = grad(&cg, a.as_tensor())?;
+            let y = grad(&dg, b.as_tensor())?;
+            assert_eq!(x.len(), y.len(), "{name}");
+            for (&x, &y) in x.iter().zip(&y) {
+                assert!(x.is_finite() && y.is_finite());
+                assert!((x - y).abs() <= 2e-4 + 2e-4 * x.abs(), "{name}: {x} {y}");
+            }
+            if name == "generate.prototype_choices" {
+                assert_eq!(x.len(), 141 * 8 * ROOT_COUNT);
+                for lane in 0..8 {
+                    assert!(
+                        x.chunks_exact(8 * ROOT_COUNT).any(|token| {
+                            token[lane * ROOT_COUNT..(lane + 1) * ROOT_COUNT]
+                                .iter()
+                                .any(|v| v.abs() > 1e-6)
+                        }),
+                        "prototype lane {lane} has no credit"
+                    );
+                }
+            } else if name == "state" || name == "generate.unary" {
+                assert_eq!(x.len(), 8 * ROOT_COUNT);
+                for (lane, row) in x.chunks_exact(ROOT_COUNT).enumerate() {
+                    assert!(
+                        row.iter().any(|v| v.abs() > 1e-6),
+                        "{name} lane {lane} has no credit"
+                    );
+                }
+            } else if name == "generate.pair" {
+                assert_eq!(x.len(), 4 * ROOT_COUNT * ROOT_COUNT);
+                for (edge, row) in x.chunks_exact(ROOT_COUNT * ROOT_COUNT).enumerate() {
+                    assert!(
+                        row.iter().any(|v| v.abs() > 1e-6),
+                        "pair edge {edge} has no credit"
+                    );
+                }
+            } else {
+                assert_eq!(name, "generate.bias");
+                assert!(x.iter().any(|v| v.abs() > 1e-6));
+            }
+        }
+        Ok(())
+    }
+    #[cfg(feature = "cuda")]
+    #[test]
     fn generate_learning_cuda_explicit_hard_and_full_choice_gradient_parity() -> Result<()> {
         // Explicit CUDA test: no missing-device skip can be mistaken for PASS.
         let gpu = Device::new_cuda(0)?;
