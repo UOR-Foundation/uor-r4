@@ -2354,7 +2354,9 @@ mod tests {
             .actions
             .as_ref()
             .ok_or_else(|| invalid("fixture typed actions absent"))?;
-        assert_eq!(a.actions.len(), 8);
+        // Emission views include their compiled leading-space token.
+        // Count derived Copy occurrences, not original store token IDs.
+        assert_eq!(a.actions.len(), view.emitted_token_ids().len() * 2 + 4);
         for (left, right) in a.actions.iter().zip(&b.actions) {
             assert_eq!(left.source, right.source);
             assert_eq!(left.action, right.action);
