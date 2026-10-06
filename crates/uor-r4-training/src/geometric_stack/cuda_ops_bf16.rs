@@ -1096,8 +1096,48 @@ impl FusedRead {
             candle_core::bail!("CUDA input layout exceeds its buffer");
         };
         let device = &s1.device;
-        let pass = self.cuda_pass_bf(device, query, kv.slice(..), aux, false)?;
         let total = rows * value;
+        if cuda_read_kernels() == CudaReadKernels::Flash {
+            let dims = self.cuda_dims()?;
+            let lift_len = if self.score.scaled() { rows } else { 1 };
+            let query_lift = uninit::<f64>(device, lift_len)?;
+            let key_lift = uninit::<f64>(device, lift_len)?;
+            if self.score.scaled() {
+                launch_bf16(
+                    device,
+                    "read_lift",
+                    rows,
+                    &[
+                        Arg::B(query.slice(..)),
+                        Arg::B(kv.slice(..)),
+                        Arg::d(&query_lift),
+                        Arg::d(&key_lift),
+                        Arg::Dims(dims),
+                    ],
+                )?;
+            }
+            let out = uninit::<bf16>(device, total)?;
+            launch_groups_bf16(
+                device,
+                "read_flash_fwd",
+                (time.div_ceil(16), 1, self.batch * self.heads),
+                (16, 16, 1),
+                &[
+                    Arg::B(query),
+                    Arg::B(kv),
+                    Arg::F(aux),
+                    Arg::d(&query_lift),
+                    Arg::d(&key_lift),
+                    Arg::b(&out),
+                    Arg::Dims(dims),
+                ],
+            )?;
+            return Ok((
+                storage_bf(out, device),
+                Shape::from((self.batch, self.heads, time, value)),
+            ));
+        }
+        let pass = self.cuda_pass_bf(device, query, kv.slice(..), aux, false)?;
         let out = uninit::<bf16>(device, total)?;
         launch_bf16(
             device,

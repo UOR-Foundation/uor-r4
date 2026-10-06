@@ -1230,6 +1230,134 @@ extern "C" __global__ void read_mix(
     out[id] = act_from_f(accum);
 }
 
+// Flash-style forward of the same read: no T x T buffer. One 16 x 16 block
+// per (16-row query tile, index); it walks the key tiles j <= t, computes the
+// scores exactly as read_tile_inner (f32 inner product, f64 lifts/distance),
+// keeps an online softmax in f32 (running max including the NoRead logit,
+// running sum, rescaled accumulator) and writes out = sum p v. The NoRead
+// slot joins the normaliser with a zero value. Values are taken in chunks of
+// FLASH_VALUE_CHUNK columns (the scores are recomputed per chunk), so any
+// value width works with static shared memory only.
+#define FLASH_VALUE_CHUNK 128
+
+__device__ __forceinline__ float half_warp_max(float v) {
+    for (int o = 8; o > 0; o >>= 1) v = fmaxf(v, __shfl_xor_sync(0xffffffffu, v, o));
+    return v;
+}
+
+__device__ __forceinline__ float half_warp_sum(float v) {
+    for (int o = 8; o > 0; o >>= 1) v += __shfl_xor_sync(0xffffffffu, v, o);
+    return v;
+}
+
+extern "C" __global__ void read_flash_fwd(
+    const act_t* query, const act_t* kv, const float* aux,
+    const double* query_lift, const double* key_lift, act_t* out, ReadDims d
+) {
+    uint tt = blockIdx.x;
+    uint index = blockIdx.z;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint head = index % d.heads;
+    uint lx = threadIdx.x;
+    uint ly = threadIdx.y;
+    uint tid = ly * 16 + lx;
+    uint t = tt * 16 + ly;
+    bool row_ok = t < time;
+    u64 row = (u64)index * time + t;
+    __shared__ float tile_a[16][17];
+    __shared__ float tile_b[16][17];
+    __shared__ float probs[16][17];
+    __shared__ float tile_v[16][FLASH_VALUE_CHUNK];
+    float null_score = (d.null_on != 0 && row_ok) ? aux[row] : neg_inf();
+    double lq = 0.0;
+    double beta = 0.0;
+    double offset = 0.0;
+    if (d.score != 0) {
+        if (row_ok) lq = query_lift[row];
+        u64 beta_offset = read_beta_offset(d);
+        beta = (double)aux[beta_offset + head];
+        offset = (double)aux[beta_offset + d.heads + head];
+    }
+    for (uint v0 = 0; v0 < d.value; v0 += FLASH_VALUE_CHUNK) {
+        float maximum = null_score;
+        float total = d.null_on != 0 ? 1.0f : 0.0f;
+        float acc_out[FLASH_VALUE_CHUNK / 16];
+        #pragma unroll
+        for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) acc_out[i] = 0.0f;
+        for (uint jt = 0; jt <= tt; ++jt) {
+            uint j = jt * 16 + lx;
+            uint b_row = jt * 16 + ly;
+            float acc = 0.0f;
+            for (uint c0 = 0; c0 < d.key; c0 += 16) {
+                uint c = c0 + lx;
+                tile_a[ly][lx] = (row_ok && c < d.key)
+                    ? act_to_f(query[row * d.key + c]) : 0.0f;
+                tile_b[ly][lx] = (b_row < time && c < d.key)
+                    ? act_to_f(kv[((u64)index * time + b_row) * width + c]) : 0.0f;
+                __syncthreads();
+                for (uint k = 0; k < 16; ++k) {
+                    acc += tile_a[ly][k] * tile_b[lx][k];
+                }
+                __syncthreads();
+            }
+            // Rows past the end score 0 (finite, never written); j > t is masked.
+            float score = 0.0f;
+            if (row_ok) {
+                if (j > t) {
+                    score = neg_inf();
+                } else {
+                    float age = d.age_on != 0
+                        ? aux[read_age_offset(d) + (u64)head * time + (t - j)] : 0.0f;
+                    if (d.score == 0) {
+                        float scale = 1.0f / sqrtf((float)d.key);
+                        score = acc * scale + age;
+                    } else {
+                        double lk = key_lift[(u64)index * time + j];
+                        double e = d.score == 1 ? lq * lk - (double)acc - 1.0
+                                                : lq + lk - 2.0 * (double)acc;
+                        score = (float)(-beta * (read_distance(d, e) - offset)) + age;
+                    }
+                }
+            }
+            // Every valid row has j = jt * 16 <= t in this tile, so the new
+            // maximum is finite.
+            float next = fmaxf(maximum, half_warp_max(score));
+            float p = expf(score - next);
+            float rescale = expf(maximum - next);
+            total = total * rescale + half_warp_sum(p);
+            maximum = next;
+            #pragma unroll
+            for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) acc_out[i] *= rescale;
+            probs[ly][lx] = p;
+            for (uint e = tid; e < 16 * FLASH_VALUE_CHUNK; e += 256) {
+                uint jj = e / FLASH_VALUE_CHUNK;
+                uint c = e % FLASH_VALUE_CHUNK;
+                uint key_row = jt * 16 + jj;
+                tile_v[jj][c] = (key_row < time && v0 + c < d.value)
+                    ? act_to_f(kv[((u64)index * time + key_row) * width + d.key + v0 + c])
+                    : 0.0f;
+            }
+            __syncthreads();
+            #pragma unroll
+            for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) {
+                float s = 0.0f;
+                for (uint jj = 0; jj < 16; ++jj) s += probs[ly][jj] * tile_v[jj][lx + 16 * i];
+                acc_out[i] += s;
+            }
+            __syncthreads();
+        }
+        if (row_ok) {
+            float inverse = 1.0f / total;
+            #pragma unroll
+            for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) {
+                uint c = v0 + lx + 16 * i;
+                if (c < d.value) out[row * d.value + c] = act_from_f(acc_out[i] * inverse);
+            }
+        }
+    }
+}
+
 // Per row, one warp: the softmax backward in f64 as the CPU. Writes
 // ds = p (dp - <p, dp>) (f64), the inner-product gradients (f32), the NoRead
 // logit gradient (into d_aux), and for Lorentz/L2 the query self coefficient

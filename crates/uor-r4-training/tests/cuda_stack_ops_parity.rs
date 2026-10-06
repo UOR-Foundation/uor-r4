@@ -2625,3 +2625,195 @@ fn test_read_supervision_parity() -> uor_r4_training::Result<()> {
     let _ = std::fs::remove_dir_all(&dir);
     Ok(())
 }
+
+/// The flash-style read forward (online softmax, no T x T buffer) against the
+/// fused forward and the CPU reference, f32 and bf16 storage, with the
+/// general configurations plus long rows and odd value widths; then the whole
+/// forward and backward with the flash forward selected against the fused
+/// one (the backward is shared).
+#[cfg(feature = "cuda")]
+#[test]
+fn test_flash_read_forward_parity() -> uor_r4_training::Result<()> {
+    use candle_core::DType;
+    use uor_r4_training::geometric_stack::{
+        fused_aux_len, fused_read, set_cuda_read_kernels, CudaReadKernels, ReadScore,
+    };
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let cpu_dev = candle_core::Device::Cpu;
+    let shapes = [
+        (2usize, 3usize, 13usize, 8usize, 9usize),
+        (1, 2, 37, 16, 16),
+        (2, 4, 5, 4, 5),
+        (1, 1, 1, 4, 4),
+        (1, 2, 129, 16, 64),
+        (1, 2, 384, 16, 64),
+        (1, 1, 384, 8, 37),
+        (1, 1, 129, 8, 200),
+    ];
+    let configs = [
+        (ReadScore::Dot, false, false),
+        (ReadScore::Dot, true, true),
+        (ReadScore::Lorentz, true, true),
+        (ReadScore::Lorentz, false, false),
+        (ReadScore::Lorentz, true, false),
+        (ReadScore::L2, true, true),
+        (ReadScore::L2, false, false),
+    ];
+    let forward = |device: &candle_core::Device,
+                   dtype: DType,
+                   data: [&Vec<f32>; 4],
+                   shape: (usize, usize, usize, usize, usize),
+                   score: ReadScore,
+                   null: bool,
+                   age: bool|
+     -> uor_r4_training::Result<Vec<f32>> {
+        let (batch, heads, time, key, value) = shape;
+        let t = |d: &Vec<f32>, w: usize| {
+            candle_core::Tensor::from_vec(d.clone(), (batch, heads, time, w), device)?
+                .to_dtype(dtype)
+        };
+        let aux = candle_core::Tensor::from_vec(data[3].clone(), data[3].len(), device)?;
+        let out = fused_read(
+            &t(data[0], key)?,
+            &t(data[1], key)?,
+            &t(data[2], value)?,
+            &aux,
+            score,
+            null,
+            age,
+            false,
+        )?;
+        Ok(out.to_dtype(DType::F32)?.flatten_all()?.to_vec1::<f32>()?)
+    };
+    let check = |reference: &[f32], got: &[f32], ulp: f32, name: &str| -> f32 {
+        assert_eq!(reference.len(), got.len(), "{name} length");
+        let mut worst = 0.0f32;
+        for (i, (&r, &g)) in reference.iter().zip(got).enumerate() {
+            let diff = (r - g).abs();
+            assert!(
+                diff <= 1e-4 + (1e-3 + ulp) * r.abs(),
+                "{name} [{i}]: reference {r} flash {g}"
+            );
+            worst = worst.max(diff);
+        }
+        worst
+    };
+    let mut case = 0u64;
+    for &shape in &shapes {
+        let (batch, heads, time, key, value) = shape;
+        for &(score, null, age) in &configs {
+            case += 1;
+            let seed = 5000 + 17 * case;
+            let q_data = noise(batch * heads * time * key, seed, 0.8);
+            let k_data = noise(batch * heads * time * key, seed + 1, 0.8);
+            let v_data = noise(batch * heads * time * value, seed + 2, 1.0);
+            let aux_len = fused_aux_len(batch, heads, time, score, null, age).max(1);
+            let mut aux_data = noise(aux_len, seed + 3, 0.5);
+            if score.scaled() {
+                let base = aux_len - 2 * heads;
+                for h in 0..heads {
+                    aux_data[base + h] = 0.7 + 0.3 * h as f32;
+                    aux_data[base + heads + h] = 0.2 * h as f32 - 0.1;
+                }
+            }
+            let data = [&q_data, &k_data, &v_data, &aux_data];
+            let name = format!(
+                "flash {score:?} null{null} age{age} b{batch} h{heads} t{time} k{key} v{value}"
+            );
+            let cpu = forward(&cpu_dev, DType::F32, data, shape, score, null, age)?;
+            for dtype in [DType::F32, DType::BF16] {
+                set_cuda_read_kernels(CudaReadKernels::Fused);
+                let fused = forward(&cuda_dev, dtype, data, shape, score, null, age)?;
+                set_cuda_read_kernels(CudaReadKernels::Flash);
+                let flash = forward(&cuda_dev, dtype, data, shape, score, null, age)?;
+                // bf16 output rounds once; a sum on a rounding boundary may
+                // land one bf16 step (2^-8 relative) from the fused one.
+                let ulp = if dtype == DType::BF16 {
+                    1.0 / 256.0
+                } else {
+                    0.0
+                };
+                let worst = check(&fused, &flash, ulp, &format!("{name} {dtype:?} vs fused"));
+                if dtype == DType::F32 {
+                    let cpu_worst = check(&cpu, &flash, 0.0, &format!("{name} vs CPU"));
+                    println!("{name} f32: |flash-fused| {worst:e} |flash-cpu| {cpu_worst:e}");
+                } else {
+                    println!("{name} bf16: |flash-fused| {worst:e}");
+                }
+            }
+            if time <= 129 {
+                let w_data = noise(batch * heads * time * value, seed + 4, 1.0);
+                let run_data = [&q_data, &k_data, &v_data, &aux_data, &w_data];
+                set_cuda_read_kernels(CudaReadKernels::Fused);
+                let fused = read_run(&cuda_dev, run_data, shape, score, null, age)?;
+                set_cuda_read_kernels(CudaReadKernels::Flash);
+                let flash = read_run(&cuda_dev, run_data, shape, score, null, age)?;
+                for (k, part) in ["out", "dq", "dk", "dv", "d_aux"].iter().enumerate() {
+                    compare(
+                        &fused[k],
+                        &flash[k],
+                        1e-3,
+                        &format!("{name} fwd+bwd {part}"),
+                    );
+                }
+            }
+        }
+    }
+    set_cuda_read_kernels(CudaReadKernels::Fused);
+    Ok(())
+}
+
+/// Forward-only timing of the fused and flash reads at training size.
+/// Run explicitly: `bench_flash_read_forward --ignored --nocapture`.
+#[cfg(feature = "cuda")]
+#[test]
+#[ignore]
+fn bench_flash_read_forward() -> uor_r4_training::Result<()> {
+    use std::time::Instant;
+    use uor_r4_training::geometric_stack::{
+        fused_aux_len, fused_read, set_cuda_read_kernels, CudaReadKernels, ReadScore,
+    };
+    let cuda_dev = match candle_core::Device::new_cuda(0) {
+        Ok(dev) => dev,
+        Err(e) => return no_device(e),
+    };
+    let (batch, heads, time, key, value) = (16usize, 8usize, 384usize, 72usize, 72usize);
+    let rows = batch * heads * time;
+    let t = |len: usize, seed: u64, w: usize| {
+        candle_core::Tensor::from_vec(noise(len, seed, 0.5), (batch, heads, time, w), &cuda_dev)
+    };
+    let q = t(rows * key, 1, key)?;
+    let k = t(rows * key, 2, key)?;
+    let v = t(rows * value, 3, value)?;
+    let mut aux = noise(
+        fused_aux_len(batch, heads, time, ReadScore::L2, true, true),
+        4,
+        0.5,
+    );
+    let n = aux.len();
+    for h in 0..heads {
+        aux[n - 2 * heads + h] = 1.0;
+        aux[n - heads + h] = 0.0;
+    }
+    let aux = candle_core::Tensor::from_vec(aux, n, &cuda_dev)?;
+    for kernels in [CudaReadKernels::Fused, CudaReadKernels::Flash] {
+        set_cuda_read_kernels(kernels);
+        let run = || fused_read(&q, &k, &v, &aux, ReadScore::L2, true, true, false);
+        for _ in 0..5 {
+            run()?;
+        }
+        cuda_dev.synchronize()?;
+        let started = Instant::now();
+        for _ in 0..200 {
+            run()?;
+        }
+        cuda_dev.synchronize()?;
+        let ms = started.elapsed().as_secs_f64() * 1e3 / 200.0;
+        println!("{kernels:?} forward b{batch} h{heads} t{time} k{key} v{value} L2 null+age: {ms:.3} ms/call");
+    }
+    set_cuda_read_kernels(CudaReadKernels::Fused);
+    Ok(())
+}

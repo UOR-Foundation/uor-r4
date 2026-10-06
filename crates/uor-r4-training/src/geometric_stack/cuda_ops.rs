@@ -1176,8 +1176,48 @@ impl FusedRead {
             return via_host3(self, [(s1, l1), (s2, l2), (s3, l3)]);
         };
         let device = &s1.device;
-        let pass = self.cuda_pass(device, query, kv.slice(..), aux, false)?;
         let total = rows * value;
+        if cuda_read_kernels() == CudaReadKernels::Flash {
+            let dims = self.cuda_dims()?;
+            let lift_len = if self.score.scaled() { rows } else { 1 };
+            let query_lift = uninit::<f64>(device, lift_len)?;
+            let key_lift = uninit::<f64>(device, lift_len)?;
+            if self.score.scaled() {
+                launch(
+                    device,
+                    "read_lift",
+                    rows,
+                    &[
+                        Arg::F(query.slice(..)),
+                        Arg::F(kv.slice(..)),
+                        Arg::d(&query_lift),
+                        Arg::d(&key_lift),
+                        Arg::Dims(dims),
+                    ],
+                )?;
+            }
+            let out = uninit::<f32>(device, total)?;
+            launch_groups(
+                device,
+                "read_flash_fwd",
+                (time.div_ceil(16), 1, self.batch * self.heads),
+                (16, 16, 1),
+                &[
+                    Arg::F(query),
+                    Arg::F(kv),
+                    Arg::F(aux),
+                    Arg::d(&query_lift),
+                    Arg::d(&key_lift),
+                    Arg::f(&out),
+                    Arg::Dims(dims),
+                ],
+            )?;
+            return Ok((
+                storage(out, device),
+                Shape::from((self.batch, self.heads, time, value)),
+            ));
+        }
+        let pass = self.cuda_pass(device, query, kv.slice(..), aux, false)?;
         let out = uninit::<f32>(device, total)?;
         launch(
             device,
