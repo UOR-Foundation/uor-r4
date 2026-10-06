@@ -353,5 +353,19 @@
     "causal_design": "Compare identical Generate initialization/exposure output-only frozen-context arm versus joint existing-context-plus-Generate arm, keep full target-free tokenizer candidate admission, require absent-source target tokens and actual emitted-prefix feedback. Current memory Copy remains typed and can alias by exact tokenID. Development native CE and actual independently reloaded ownprefix outputs decide before separate held-out construction draw.",
     "state_goal_connection": "The general Generate channel closes missing support for prose while joint state learning uses the geometry to predict those tokens. Porting old coefficient-only terminalfits improves compute plumbing but does not repair that mechanism gap.",
     "claim_for_delivery_docs": "CUDA composed context forward/backward and zero-update probe are implemented and numerically checked at exact head. Historical fit modes remain CPU; no CUDA model fit or learning improvement has yet been measured."
+  },
+  "preservation": {
+    "pod": "hae7aux68l9e78",
+    "source_and_canonical_files": 66,
+    "sha256_inventory": "c04e843085bc05022c825eb7f13d9a016802c08a251e67989120207de76b1c36",
+    "canonical_root": "/workspace/uor-r4/codex/native-cuda-learning",
+    "canonical_pod_at_copy": "hlch9k5hnvjb1b",
+    "source_archive_sha256": "26f851ec80aabf8c28b24e5599fdfedb0444bd684bdccd32a452a3b121e791fe",
+    "binary_sha256": "b2572d2feb058416d052dbefae28d013b4cba1bf80d58bb243248727e83cdcd9",
+    "icloud": "icloud:UOR-R4/results/codex/native-cuda-receipts-20261006.tar",
+    "icloud_bytes": 265728,
+    "icloud_md5": "7ba69154951507641aa5e1223abbd31d",
+    "lease": "released",
+    "pod_storage_codex": "5.5GiB shared /workspace +1.3GiB /root before delete"
   }
 }

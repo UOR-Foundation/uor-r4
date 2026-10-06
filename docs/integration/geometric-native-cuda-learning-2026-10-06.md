@@ -16,7 +16,7 @@ On one deliberately selected RTX4090, the12 matched composed passes total CPU1.0
 
 The actual probe completes in15.147s externally /14.003s reported, peak hostRSS1,104,539,648B. Initial source/native admission2.066s, host export/reload3.504s. Final scoped checks/build take151.394s, largest measured hostRSS3,298,496,512B. Failed runner, cache, Rust API and NVRTC bring-up attempts remain preserved separately and are not geometry negatives. Explicit4090 was used after5090 allocation failed; no A100-family GPU was adopted.
 
-[Execution evidence](../evidence/geometric-native-cuda-learning-2026-10-06.json) binds source, binary, configuration, input hashes, checks and timings. Durable reports, executable, source archive and failed attempts are retained under `/workspace/uor-r4/codex/native-cuda-learning/`; noncanonical output must be copied to the canonical volume before pod deletion.
+[Execution evidence](../evidence/geometric-native-cuda-learning-2026-10-06.json) binds source, binary, configuration, input hashes, checks and timings. Durable reports, executable, source archive and failed attempts are retained under `/workspace/uor-r4/codex/native-cuda-learning/`; all66 files were copied from the noncanonical volume to canonical EUR-NO-1 and their aggregate SHA256 inventory matches. The lease is released; deletion follows that verified preservation. Thin local receipts are MD5-verified in iCloud (265728B, MD5 `7ba69154951507641aa5e1223abbd31d`).
 
 ## Next integrated step
 
