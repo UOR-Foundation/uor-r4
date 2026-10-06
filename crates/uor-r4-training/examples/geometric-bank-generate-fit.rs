@@ -1400,6 +1400,23 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         a.token_backward_chunk,
         true,
     )?;
+    if a.arm == "joint-potential" {
+        let families = admission["gradient_families"]
+            .as_object()
+            .ok_or_else(|| bad("potential admission gradient inventory absent"))?;
+        if !families.iter().any(|(name, receipt)| {
+            name.starts_with("consumer.potential.")
+                && receipt["connected"] == true
+                && receipt["optimizer_active"] == true
+                && receipt["l2"]
+                    .as_f64()
+                    .is_some_and(|v| v.is_finite() && v > 0.)
+        }) {
+            return Err(bad(
+                "joint-potential initial admission has no finite nonzero potential credit",
+            ));
+        }
+    }
     write(a, "first-b8-admission.json", &admission)?;
     if a.mode == "admission" && a.token_backward_chunk == 2 {
         let (reference_grads, reference) = batch(
