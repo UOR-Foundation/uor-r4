@@ -2196,12 +2196,16 @@ impl StackModel {
         // span probe they never enter the scores and are removed before
         // `read.out`. Exclusive with the other two blocks (the extraction below
         // relies on that), which is checked here rather than silently mixed.
-        let value = match binding.as_ref().and_then(|binding| binding.weights.as_ref()) {
+        let value = match binding
+            .as_ref()
+            .and_then(|binding| binding.weights.as_ref())
+        {
             None => value,
             Some(dump) => {
-                if binding.as_ref().is_some_and(|binding| {
-                    binding.target.is_some() || binding.probe.is_some()
-                }) {
+                if binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.target.is_some() || binding.probe.is_some())
+                {
                     return Err(invalid(
                         "the read weight dump is exclusive with the binding label and span probe",
                     ));
@@ -2250,7 +2254,10 @@ impl StackModel {
                 .to_dtype(DType::F32)?;
             probe.layers.push((layer, masses));
         }
-        if let Some(dump) = binding.as_mut().and_then(|binding| binding.weights.as_mut()) {
+        if let Some(dump) = binding
+            .as_mut()
+            .and_then(|binding| binding.weights.as_mut())
+        {
             // The identity block is the only auxiliary value block (checked in
             // `read_binding_values`), so it starts at the ordinary width.
             let weights = read.narrow(3, value_width, time)?;
@@ -6629,7 +6636,9 @@ impl StackModel {
             return Err(invalid("read weight rows needs at least one row"));
         }
         if time == 0 || time > self.config.context {
-            return Err(invalid("read weight rows needs one window within the context"));
+            return Err(invalid(
+                "read weight rows needs one window within the context",
+            ));
         }
         let p = self.params()?;
         let x = self.embed_with(&p, ids, batch, time)?;
@@ -6781,6 +6790,93 @@ impl StackModel {
             generator,
             mixture,
             pointer: Some(PointerProbe { gate, attention }),
+        })
+    }
+
+    /// Diagnostic of one geometric read layer's score inputs over one window
+    /// (batch 1): the per-head queries and keys after every projection the
+    /// ordinary read applies (identity carry and the F2 previous-key channel
+    /// included), the NoRead logits, the age table over the window's distances
+    /// and, for the scaled scores, `beta = exp(log_beta)` and `offset`.
+    /// [`ReadQueryKey::row`] recomputes a row's scores and softmax weights from
+    /// them exactly as the fused read does. Nothing is changed: the forward is
+    /// the ordinary one up to `layer`. Refused where the read has another
+    /// score path (geometric address or span, identity latch, lineage, a flock
+    /// selection) or `layer` is not a read layer.
+    pub fn read_query_key(&self, ids: &[u32], layer: usize) -> Result<ReadQueryKey> {
+        let time = ids.len();
+        if time == 0 || time > self.config.context {
+            return Err(invalid(
+                "read query/key probe needs one window within the context",
+            ));
+        }
+        if self.config.arch != StackArch::Geometric
+            || layer >= self.config.layers()
+            || self.config.layer_kind(layer) == 'r'
+        {
+            return Err(invalid("read query/key probe needs a geometric read layer"));
+        }
+        if self.geometric_address.is_some()
+            || self.geometric_span.is_some()
+            || self.read_identity_latch.is_some()
+            || self.read_lineage.is_some()
+            || self.config.select.is_some()
+        {
+            return Err(invalid(
+                "read query/key probe observes the plain fused read only (no address, span, latch, lineage or flock)",
+            ));
+        }
+        let p = self.params()?;
+        let x = self.embed_with(&p, ids, 1, time)?;
+        let x = self.layer_range_bound(&p, x, 0..layer, &mut None, &mut None, LatchGates::Soft)?;
+        let u = self.norm(&p, &x, &layer_name(layer, "read_norm.weight"))?;
+        let identity = self.read_identity_input(&u)?;
+        let query = self.linear(&identity, p.layer(layer, "read.query.weight")?)?;
+        let mut key = self.linear(&identity, p.layer(layer, "read.key.weight")?)?;
+        if self.read_key_shift {
+            key = previous_key_channel(&key)?;
+        }
+        let rows = |t: Tensor| -> Result<Vec<Vec<Vec<f32>>>> {
+            Ok(self
+                .heads(&t, 1, time)?
+                .get(0)?
+                .to_dtype(DType::F32)?
+                .to_vec3::<f32>()?)
+        };
+        let null = self
+            .linear(&u, p.layer(layer, "read.null.weight")?)?
+            .to_dtype(DType::F32)?
+            .broadcast_add(p.layer(layer, "read.null.bias")?)?
+            .get(0)?
+            .t()?
+            .contiguous()?
+            .to_vec2::<f32>()?;
+        let age = p
+            .layer(layer, "read.age")?
+            .narrow(1, 0, time)?
+            .to_vec2::<f32>()?;
+        let (beta, offset) = if self.config.read.scaled() {
+            (
+                p.layer(layer, "read.log_beta")?
+                    .exp()?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?,
+                p.layer(layer, "read.offset")?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?,
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        Ok(ReadQueryKey {
+            layer,
+            score: self.config.read,
+            query: rows(query)?,
+            key: rows(key)?,
+            null,
+            age,
+            beta,
+            offset,
         })
     }
 
@@ -13239,6 +13335,88 @@ pub struct ReadSpanMasses {
     pub heads: Vec<Vec<f64>>,
 }
 
+/// One geometric read layer's score inputs over a window
+/// ([`StackModel::read_query_key`]): `query[h][t]` and `key[h][j]` per head
+/// and position, `null[h][t]` the NoRead logit, `age[h][d]` the age bias at
+/// distance `d`, and per head `beta`/`offset` for the scaled scores (empty for
+/// Dot).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadQueryKey {
+    pub layer: usize,
+    pub score: ReadScore,
+    pub query: Vec<Vec<Vec<f32>>>,
+    pub key: Vec<Vec<Vec<f32>>>,
+    pub null: Vec<Vec<f32>>,
+    pub age: Vec<Vec<f32>>,
+    pub beta: Vec<f32>,
+    pub offset: Vec<f32>,
+}
+
+/// One read row's scores, recomputed by [`ReadQueryKey::row`]: for each source
+/// `j <= t` the content term, the age term and their sum (the fused read's
+/// score, rounded to f32 as it is), the softmax weight with NoRead in the
+/// denominator, and the NoRead weight.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadRowScores {
+    pub content: Vec<f64>,
+    pub age: Vec<f64>,
+    pub total: Vec<f64>,
+    pub weight: Vec<f64>,
+    pub no_read: f64,
+}
+
+impl ReadQueryKey {
+    /// Head `head`'s row at query position `t`, by the fused read's own rule:
+    /// `q.k / sqrt(width)` (Dot), `-beta (|q - k| - offset)` (L2, squared
+    /// distance clamped below), `-beta (arcosh(z) - offset)` (Lorentz), each
+    /// plus `age[t - j]`, softmax over `0..=t` and the NoRead logit.
+    pub fn row(&self, head: usize, t: usize) -> Result<ReadRowScores> {
+        let query = self
+            .query
+            .get(head)
+            .and_then(|rows| rows.get(t))
+            .ok_or_else(|| invalid("read row outside the probed window"))?;
+        let width = query.len();
+        let square = |row: &[f32]| f64::from(dot(row, row));
+        let mut content = Vec::with_capacity(t + 1);
+        let mut age = Vec::with_capacity(t + 1);
+        let mut total = Vec::with_capacity(t + 1);
+        for j in 0..=t {
+            let key = &self.key[head][j];
+            let inner = dot(query, key);
+            let c = match self.score {
+                ReadScore::Dot => f64::from(inner * (1.0 / (width as f32).sqrt())),
+                ReadScore::L2 => {
+                    let s = square(query) + square(key) - 2.0 * f64::from(inner);
+                    -f64::from(self.beta[head]) * (l2_distance(s) - f64::from(self.offset[head]))
+                }
+                ReadScore::Lorentz => {
+                    let lift = |row: &[f32]| (1.0 + square(row)).sqrt();
+                    let e = lift(query) * lift(key) - f64::from(inner) - 1.0;
+                    -f64::from(self.beta[head])
+                        * (lorentz_distance(e) - f64::from(self.offset[head]))
+                }
+            };
+            let a = f64::from(self.age[head][t - j]);
+            content.push(c);
+            age.push(a);
+            total.push(f64::from((c as f32) + self.age[head][t - j]));
+        }
+        let null = f64::from(self.null[head][t]);
+        let maximum = total.iter().copied().fold(null, f64::max);
+        let null_weight = (null - maximum).exp();
+        let exps: Vec<f64> = total.iter().map(|&s| (s - maximum).exp()).collect();
+        let sum = null_weight + exps.iter().sum::<f64>();
+        Ok(ReadRowScores {
+            content,
+            age,
+            total,
+            weight: exps.iter().map(|&e| e / sum).collect(),
+            no_read: null_weight / sum,
+        })
+    }
+}
+
 /// The pointer head at the probed query: its gate `g` and its attention over
 /// the window's positions `0..=t`.
 #[derive(Clone, Debug, PartialEq)]
@@ -18698,6 +18876,44 @@ mod tests {
         }
         assert!(model.read_span_probe(&ids, &[vec![time]]).is_err());
         assert!(model.read_span_probe(&ids, &[]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn read_query_key_recomputes_the_fused_read_weights() -> Result<()> {
+        let ids = [3u32, 7, 9, 7, 5, 6, 2, 7];
+        let time = ids.len();
+        let spans: Vec<Vec<usize>> = (0..time).map(|j| vec![j]).collect();
+        for score in [ReadScore::L2, ReadScore::Lorentz, ReadScore::Dot] {
+            for shift in [false, true] {
+                let mut model =
+                    StackModel::new(tiny(StackArch::Geometric, "rara", score, true), &cpu())?;
+                if shift {
+                    model.set_read_key_shift(true)?;
+                }
+                let probe = model.read_span_probe(&ids, &spans)?;
+                for read in &probe.reads {
+                    let qk = model.read_query_key(&ids, read.layer)?;
+                    assert_eq!(qk.layer, read.layer);
+                    for (head, masses) in read.heads.iter().enumerate() {
+                        let row = qk.row(head, time - 1)?;
+                        let total: f64 = row.weight.iter().sum::<f64>() + row.no_read;
+                        assert!((total - 1.0).abs() < 1e-9);
+                        for j in 0..time {
+                            assert!(
+                                (row.weight[j] - masses[j]).abs() < 1e-5,
+                                "{score:?} shift={shift} layer {} head {head} source {j}: {} vs {}",
+                                read.layer,
+                                row.weight[j],
+                                masses[j]
+                            );
+                        }
+                    }
+                }
+                assert!(model.read_query_key(&ids, 0).is_err());
+                assert!(model.read_query_key(&[], 1).is_err());
+            }
+        }
         Ok(())
     }
 
