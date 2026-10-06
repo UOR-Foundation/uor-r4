@@ -256,8 +256,24 @@ fn write(a: &Args, name: &str, v: &Value) -> Result<()> {
     Ok(())
 }
 fn deadline(a: &Args, start: Instant) -> Result<()> {
-    if start.elapsed().as_secs() >= a.maximum_seconds {
-        return Err(bad("declared wall bound"));
+    let elapsed = start.elapsed().as_secs_f64();
+    if elapsed >= a.maximum_seconds as f64 && !a.out.join("wall-estimate-overrun.json").exists() {
+        // Owner rule (6 October): a self-set estimate must not terminate a
+        // progressing run. Resource/lease extensions still need ledger visibility
+        // from the controlling lab; this notice does not renew a GPU lease.
+        write(
+            a,
+            "wall-estimate-overrun.json",
+            &json!({
+                "schema":"uor-r4.wall-estimate-overrun/1",
+                "declared_estimate_seconds":a.maximum_seconds,
+                "first_observed_elapsed_seconds":elapsed,
+                "action":"continue; self-set estimate is not a cancellation rule",
+                "operator_obligation":"record extension on owning issue and renew active lease; owner spending caps, disk floor and failed/diverged work remain boundaries",
+                "preflight_projection_admission":"unchanged"
+            }),
+        )?;
+        eprintln!("Wall estimate exceeded after {elapsed:.3}s; continuing under owner rule. Record extension and renew the active lease.");
     }
     Ok(())
 }
@@ -1791,7 +1807,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         }
     }
     Ok(
-        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
+        json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"COMPLETED","mode":a.mode,"arm":a.arm,"seed":a.seed,"balanced_token_geometry":a.balanced_token_geometry,"phase_balanced_token_loss":a.phase_balanced_token_loss,"training_loss_weight_policy":loss_weight_policy(a.phase_balanced_token_loss),"token_geometry_initialization":if a.balanced_token_geometry {"balanced-a+j*b-with-existing-offset/1"}else{"legacy-base120-digits-with-existing-offset/1"},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"executable_sha256":sha256_file(&std::env::current_exe()?)?,"report_scope":"initial/final checkpoints only; native full512 ownprefix selection; admission8subset explicitly not full512 quality verdict","updates":if a.mode=="fit"{a.updates}else{0},"selected_step":selected,"stages":stages,"fresh":freshresult,"elapsed_seconds":start.elapsed().as_secs_f64(),"wall_time_estimate_seconds":a.maximum_seconds,"wall_time_estimate_exceeded":start.elapsed().as_secs_f64()>=a.maximum_seconds as f64,"runtime_scope":"actual all-source Copy plus full legal native geometric Generate; integer CPU oracle/serving and CUDA learning; no legacy terminal mass","language_scope":"bounded framed grounded answers; not general chat/reasoning; no-source path available but not qualified if panel lacks such rows"}),
     )
 }
 fn main() -> Result<()> {
@@ -1802,7 +1818,7 @@ fn main() -> Result<()> {
     let report = match &result {
         Ok(v) => v.clone(),
         Err(e) => {
-            json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"FAILED","error":e.to_string(),"elapsed_seconds":start.elapsed().as_secs_f64(),"model_verdict":"UNQUALIFIED; preserve completed rows/checkpoints; unfinished fit is not model failure"})
+            json!({"schema":"uor-r4.geometric-bank-generate-fit/1","status":"FAILED","error":e.to_string(),"elapsed_seconds":start.elapsed().as_secs_f64(),"wall_time_estimate_seconds":a.maximum_seconds,"wall_time_estimate_exceeded":start.elapsed().as_secs_f64()>=a.maximum_seconds as f64,"model_verdict":"UNQUALIFIED; preserve completed rows/checkpoints; unfinished fit is not model failure"})
         }
     };
     write(&a, "report.json", &report)?;
