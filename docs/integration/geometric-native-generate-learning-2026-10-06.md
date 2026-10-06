@@ -630,3 +630,30 @@ This is saved-evidence/artifact review, not another inference or BLAKE3 run.
 Wrapper3435.6876s/RSS921796KiB; third joint remains unfinished. The three
 output-only seeds replicate the restriction but the paired family verdict
 remains pending.
+
+## Balanced integrated admission and first fit
+
+Actual zero-update admission atc722 completes31.054s/exit0 onGPU0.
+RepresentativeB8 takes23.28219891s across103 targetpositions; full native
+Copy+Generate pool parity passes and all13 CUDA gradient families are connected,
+finite and positive. Nine context families are diagnostic/inactive for this
+output-only arm. Initial-only evaluation remains0/8,CE8.2074776973776; this is
+not learned quality or a512-row verdict. Independent actual report/gradient
+review receipt SHA256 d56d9c6746e4be9caa12b089bfef49f8f7a15a2c8ef6b0e76df6a3ed31947506.
+
+New actual evidence supports a prospective scheduling revision: start one
+matched balanced output-only seed1001 while the last legacy joint completes.
+All three output-only parents are complete negatives, so the unfinished joint
+can change priority but cannot invalidate this fixed-context matched comparison.
+A useful joint candidate takes transfer/integration priority. Further balanced
+seeds are not admitted until the paired verdict and first balanced result.
+The card on#820 records explicit rental5.5→6h (+$0.99 maximum, same$1.98/h pod)
+and completewall6→6.5h extension under standing owner run authorization.
+Rental endpoint10:51Z and wall11:00:33Z include4500s model/4600s outer bounds
+and return margin. No new pod or silent cost increase.
+
+Fit starts09:13:32Z, PID13171, sourcec722, binarySHA2c1b6e2768f854ef30a43535b56ced938c772fb8015baefd97bbf631b2cb936a,
+configSHA0b111b8525cf53b371d8242f8c0df5802e34deb13372476e8911e3cf1089daba.
+Same128updates/B8/donor/frozencontext/LRs/objective, balancedinitialization
+alone changed; prefixutilityfalse. Nativefull512initialevaluation and an actual
+complete-cost gate precede optimizer1. No learned result yet.

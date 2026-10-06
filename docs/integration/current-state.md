@@ -1,12 +1,20 @@
 # Current UOR-R4 research state
 
-## First native Generate fit pair — October 6
+## Native Generate paired fits and balanced control — October 6
 
 Balanced initialization CUDA-adjoint comparison passes on actual CUDA at
 e2283804 (one explicit test, exact Q24/raw forward and all parameter/state
 adjoints within declared tolerance). Exact-source build takes102s; test1.30s,
-wrapper2s. Integrated zero-update B8 admission runs on GPU0 from09:07:15Z;
-no balanced fit is admitted yet. Output-only seed1003 finishes128updates and
+wrapper2s. Integrated zero-update B8 admission completes at09:07:47Z (31.054s wrapper,
+23.2822s B8): full native pool parity across103 positions, all13 gradient
+families connected/finite/positive,0updates; initial-only quality0/8.
+The prospective card explicitly revises scheduling: one balanced output-only
+seed1001 fit starts09:13:32Z on GPU0, PID13171, immutable c722 fitter,
+matched128updates/frozen context/data/LRs. Its full512baseline and complete
+cost gate precede optimizer1. Further balanced seeds remain NOT_ADMITTED.
+Owner standing run authorization supports the recorded rental5.5→6h
+extension (+$0.99 maximum) and completewall6→6.5h; new rental endpoint10:51Z,
+wall11:00:33Z. This is a recorded extension, not unchanged limits. Output-only seed1003 finishes128updates and
 exits0 at09:06:38Z: CE8.187637→7.907143,0/512 complete, all first errors0,
 all hard codes unchanged. Independent saved-evidence review covers1024 row
 hashes and6664 canonical positions per stage; it does not rerun inference or
