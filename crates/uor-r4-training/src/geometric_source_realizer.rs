@@ -7207,6 +7207,69 @@ mod tests {
                 assert_eq!(score, (expected as f64 / 16_777_216.) as f32);
             }
             assert_eq!(copy_only.state_credit_components.len(), 3);
+            let generate = crate::geometric_generate_learning::GenerateLearningWeights::seeded(
+                fixture.weights.binding().clone(),
+                2,
+                1001,
+                &Device::Cpu,
+            )?;
+            let snapshot = generate.prepare_native()?;
+            let exp = fs::read(root.join("consumer/exp-q31.bin"))?;
+            let mut unified = crate::geometric_bank_generate::PreparedBankGenerate::new(
+                &prepared, &generate, &snapshot, &exp,
+            )?;
+            let joint = unified.forward_bank(&segments, &[5], own, &cue, &prefix)?;
+            assert_eq!(joint.copy_token_ids, vec![4, 4]);
+            assert_eq!(
+                joint.context()?.trace.states,
+                copy_only.context.trace.states
+            );
+            assert_eq!(
+                joint
+                    .final_state_codes
+                    .iter()
+                    .map(|c| c.index())
+                    .collect::<Vec<_>>(),
+                *copy_only
+                    .context
+                    .trace
+                    .states
+                    .last()
+                    .ok_or_else(|| invalid("missing final state"))?
+            );
+            let alias_mass = joint
+                .actions
+                .actions
+                .iter()
+                .filter(|a| a.token_id == 4)
+                .map(|a| a.weight_q31)
+                .sum::<u64>();
+            assert_eq!(
+                joint
+                    .actions
+                    .token_masses
+                    .iter()
+                    .find(|m| m.token_id == 4)
+                    .ok_or_else(|| invalid("missing unified target mass"))?
+                    .weight_q31,
+                alias_mass
+            );
+            // Ordinary token 5 is absent from the source. It is still admitted
+            // by Generate before its label enters the common loss.
+            assert!(joint.loss(5)?.to_scalar::<f32>()?.is_finite());
+            let no_source = unified.forward_no_source(&[5, 4])?;
+            assert!(no_source.copy.is_none());
+            assert!(no_source.copy_token_ids.is_empty());
+            assert!(no_source.loss(5)?.to_scalar::<f32>()?.is_finite());
+            assert!(unified.forward_no_source(&[]).is_err());
+            let loaded = uor_r4_core::native_geometric::learner::geometric_generate::NativeGeometricGenerate::from_bytes(
+                &snapshot.native.to_bytes()?, fixture.weights.binding(),
+            ).map_err(|e| invalid(e.to_string()))?;
+            let mut reloaded_scores = vec![0; fixture.weights.binding().vocab_size()];
+            loaded.score_into(&joint.final_state_codes, &mut reloaded_scores,
+                &mut uor_r4_core::native_geometric::learner::geometric_generate::GenerateReadCounts::default())
+                .map_err(|e| invalid(e.to_string()))?;
+            assert_eq!(reloaded_scores, joint.generate.scores_q24);
             assert!(prepared
                 .forward_bank_composed_copy(&segments, &[], own, &cue, &prefix)
                 .is_err());
