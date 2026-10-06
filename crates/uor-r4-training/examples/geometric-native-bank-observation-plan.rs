@@ -3,6 +3,8 @@
 //! Input is a NEW sealed bundle of retained frozen-inputs512/128 (+opened repeat16),
 //! not a partial cached directory masquerading as the original sealed full report.
 //! Output:64 open-development histories +16 separately prospective fresh histories.
+//! Explicit fresh-only diversity authoring emits64 histories/128 queries and
+//! binds familiar full-literal coverage to a sealed existing development plan.
 //! Finite deterministic source construction; public formatter/budget eligibility only.
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -40,7 +42,10 @@ struct Args {
     native_artifact: PathBuf,
     trusted_binding: PathBuf,
     trusted_binding_sha256: String,
-    development_out: PathBuf,
+    #[serde(default)]
+    development_out: Option<PathBuf>,
+    #[serde(default)]
+    fresh_only_training_plan: Option<BoundRoot>,
     fresh_out: PathBuf,
     maximum_seconds: u64,
     maximum_report_bytes: usize,
@@ -655,6 +660,18 @@ fn diversity_histories(
     _repeats: &[Wire],
     exposed_banks: &BTreeSet<String>,
 ) -> Result<(Vec<History>, Vec<History>)> {
+    diversity_histories_for_mode(all, _repeats, exposed_banks, None)
+}
+fn diversity_histories_for_mode(
+    all: &[Wire],
+    _repeats: &[Wire],
+    exposed_banks: &BTreeSet<String>,
+    training_plan: Option<&Value>,
+) -> Result<(Vec<History>, Vec<History>)> {
+    let fresh_only = training_plan.is_some();
+    if let Some(plan) = training_plan {
+        validate_fresh_training_plan(plan)?;
+    }
     fn donor(all: &[Wire], role: &str, act: &str, value: &str) -> Result<Wire> {
         all.iter()
             .find(|w| w.relation == role && w.act == act && literal(w).is_ok_and(|v| v == value))
@@ -671,6 +688,7 @@ fn diversity_histories(
         ("update", Some(4), 4, 1),
         ("reassert", Some(2), 4, 1),
     ] {
+        let dev_blocks = if fresh_only { 0 } else { dev_blocks };
         // Reassertions are prospectively authored by repeating a retained assert wire.
         // Ordinary both-role witnesses suffice; original repeated histories are not claimed.
         let source = all;
@@ -790,17 +808,26 @@ fn diversity_histories(
             return Err(invalid(format!("diversity insufficient disjoint donor blocks for {stratum}: {selected}; no adaptive replacement")).into());
         }
     }
-    if development.len() != 256 || fresh.len() != 64 {
+    if development.len() != if fresh_only { 0 } else { 256 } || fresh.len() != 64 {
         return Err(invalid("diversity fixed512/128 row design differs").into());
     }
     role_diversity::validate_literal_coverage(
-        &json!({"histories":development}),
+        training_plan.unwrap_or(&json!({"histories":development})),
         &json!({"histories":fresh}),
     )?;
     Ok((development, fresh))
 }
 
 fn run(a: &Args, t: Instant) -> Result<Value> {
+    let fresh_only = validate_author(a)?;
+    let training_plan = if let Some(reference) = &a.fresh_only_training_plan {
+        verify(&reference.root, &reference.manifest_sha256)?;
+        let plan = read_json(&reference.root.join("plan.json"))?;
+        validate_fresh_training_plan(&plan)?;
+        Some(plan)
+    } else {
+        None
+    };
     verify(&a.input_bundle, &a.input_manifest_sha256)?;
     let frozen = read_json(&a.input_bundle.join("frozen-inputs.json"))?;
     let train = rows(&frozen["training"])?;
@@ -989,7 +1016,11 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         }
     }
     if diverse {
-        (development, fresh) = diversity_histories(&all, &repeat, &exposed_banks)?;
+        (development, fresh) = if let Some(training_plan) = training_plan.as_ref() {
+            diversity_histories_for_mode(&all, &repeat, &exposed_banks, Some(training_plan))?
+        } else {
+            diversity_histories(&all, &repeat, &exposed_banks)?
+        };
     }
     let untouched = a.transfer_profile == TransferProfile::SupportedUntouchedComposition;
     if (untouched || diverse)
@@ -1141,10 +1172,12 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         }
         eligibility.push(eligible(h, &native, &tok)?);
     }
-    for (out, split, histories, fp) in [
-        (&a.development_out, "development", &development, &dev_fp),
-        (&a.fresh_out, "fresh", &fresh, &fresh_fp),
-    ] {
+    let outputs = a
+        .development_out
+        .iter()
+        .map(|out| (out, "development", &development, &dev_fp))
+        .chain(std::iter::once((&a.fresh_out, "fresh", &fresh, &fresh_fp)));
+    for (out, split, histories, fp) in outputs {
         let plan = json!({"schema":"uor-r4.raw-natural-reader-construction-plan/1","split":split,"source_policy":a.assertion_query_policy.source_policy(),"histories":histories});
         let planbytes = serde_json::to_vec_pretty(&plan)?;
         let diversity_control = if diverse {
@@ -1165,7 +1198,14 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         } else {
             None
         };
-        let receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else if diverse {"exact retained donor literal bytes; new role/value bank combinations; balanced literal roles/positions and crossed familiar wording; not retained-original utterance bytes or unseen literals"}else if untouched && split=="fresh" {"fixed generated fresh literal bytes in retained donor frames;original frame witnesses bound;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"transfer_profile":a.transfer_profile,"prospective_reassert_donor_policy":if diverse {Some("ordinary-retained-both-role-two-word-assertion-witnesses/authored-same-value-repeat/1")}else{None},"prospective_diversity_control":diversity_control,"fresh_payload_novelty_claimed":untouched && split=="fresh","transfer_novelty":if untouched && split=="fresh" {json!({"distinct_current_role_value_banks":transfer_banks,"distinct_role_act_literal_histories":transfer_histories,"matched_question_groups":["familiar","novel"],"history_exclusion_covered_roots":history_exposure_roots,"wire_extraction_coverage":wire_exposure_coverage,"familiar_queries_intentionally_overlap":true,"novel_queries":[TRANSFER_JOB_QUERY,TRANSFER_HOME_QUERY],"scope":"exact full-literal, question-string, role/value-bank and role/act/literal-history exclusion;not unseen words or universal pretraining exclusion"})}else{Value::Null},"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
+        let mut receipt = json!({"schema":"uor-r4.raw-natural-reader-construction-authoring/1","split":split,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"source_bundle_manifest_sha256":a.input_manifest_sha256,"histories":histories.len(),"resulting_allbank_queries":histories.len()*2,"query_role_balance":"both natural job/home questions on every identical bank","chronology_pairs":histories.len()/2,"assertion_query_policy":a.assertion_query_policy,"source_origin":if a.assertion_query_policy==AssertionQueryPolicy::RetainedOriginal{"retained exact utterances512/128 +opened repetition16;fresh fixed known-frame compositions"}else if diverse {"exact retained donor literal bytes; new role/value bank combinations; balanced literal roles/positions and crossed familiar wording; not retained-original utterance bytes or unseen literals"}else if untouched && split=="fresh" {"fixed generated fresh literal bytes in retained donor frames;original frame witnesses bound;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"}else{"retained donor literal bytes and chronology;prospectively authored explicit-current-role assertion/query frames;not retained-original utterance bytes"},"derived_source_origin_sha256":origin_bytes.as_ref().map(|bytes|sha256_bytes(bytes)),"transfer_profile":a.transfer_profile,"prospective_reassert_donor_policy":if diverse {Some("ordinary-retained-both-role-two-word-assertion-witnesses/authored-same-value-repeat/1")}else{None},"prospective_diversity_control":diversity_control,"fresh_payload_novelty_claimed":untouched && split=="fresh","transfer_novelty":if untouched && split=="fresh" {json!({"distinct_current_role_value_banks":transfer_banks,"distinct_role_act_literal_histories":transfer_histories,"matched_question_groups":["familiar","novel"],"history_exclusion_covered_roots":history_exposure_roots,"wire_extraction_coverage":wire_exposure_coverage,"familiar_queries_intentionally_overlap":true,"novel_queries":[TRANSFER_JOB_QUERY,TRANSFER_HOME_QUERY],"scope":"exact full-literal, question-string, role/value-bank and role/act/literal-history exclusion;not unseen words or universal pretraining exclusion"})}else{Value::Null},"source_label_scope":"offline construction only;not learned compiler result","semantic_fingerprints":fp,"numerical_packet_fingerprints":if split=="development"{&dev_numerical}else{&fresh_numerical},"exposed_roots":a.exposed_roots.iter().map(|e|json!({"root":e.root,"manifest_sha256":e.manifest_sha256})).collect::<Vec<_>>(),"plan_sha256":sha256_bytes(&planbytes),"public_formatter_eligibility":"all rows before prediction;support probabilities NOT_RUN","native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE","elapsed_seconds":t.elapsed().as_secs_f64()});
+        if fresh_only {
+            let reference = a
+                .fresh_only_training_plan
+                .as_ref()
+                .ok_or_else(|| invalid("fresh-only training reference absent"))?;
+            receipt["fresh_only_authoring"] = json!({"mode":"author-fresh-only","development_output_created":false,"fixed_bank_blocks":{"length2":2,"length4":2,"length8":2,"update":1,"reassert":1},"literal_coverage_training_plan":{"root":reference.root,"manifest_sha256":reference.manifest_sha256,"plan_sha256":sha256_file(&reference.root.join("plan.json"))?},"literal_coverage":"all fresh full literals witnessed in bound existing development512 plan; no newly created sibling development"});
+        }
         let rb = serde_json::to_vec_pretty(&receipt)?;
         let eb = serde_json::to_vec_pretty(
             &json!({"rows":eligibility.iter().filter(|x|histories.iter().any(|h|x["history"]==h.id)).collect::<Vec<_>>()}),
@@ -1186,6 +1226,9 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     for e in &a.exposed_roots {
         verify(&e.root, &e.manifest_sha256)?;
     }
+    if let Some(reference) = &a.fresh_only_training_plan {
+        verify(&reference.root, &reference.manifest_sha256)?;
+    }
     if sha256_file(&a.trusted_binding)? != a.trusted_binding_sha256 {
         return Err(invalid("public parent binding changed during source authoring").into());
     }
@@ -1193,9 +1236,48 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         json!({"status":"COMPLETED","development_histories":development.len(),"fresh_histories":fresh.len(),"native_predictions":"NOT_RUN"}),
     )
 }
-fn author(a: Args) -> Result<()> {
-    if a.mode.as_deref().is_some_and(|m| m != "author") {
+fn validate_fresh_training_plan(plan: &Value) -> Result<()> {
+    if plan["schema"] != "uor-r4.raw-natural-reader-construction-plan/1"
+        || plan["split"] != "development"
+        || plan["source_policy"] != AssertionQueryPolicy::SupportedCurrentRole.source_policy()
+    {
+        return Err(
+            invalid("fresh-only coverage requires existing supported development plan").into(),
+        );
+    }
+    role_diversity::validate(plan)?;
+    Ok(())
+}
+fn validate_author(a: &Args) -> Result<bool> {
+    if a.mode
+        .as_deref()
+        .is_some_and(|m| m != "author" && m != "author-fresh-only")
+    {
         return Err(invalid("unknown plan authoring mode").into());
+    }
+    let fresh_only = a.mode.as_deref() == Some("author-fresh-only");
+    if fresh_only != a.fresh_only_training_plan.is_some()
+        || fresh_only == a.development_out.is_some()
+        || (fresh_only && a.transfer_profile != TransferProfile::SupportedProspectiveRoleDiversity)
+    {
+        return Err(invalid("fresh-only explicit mode/reference/output contract differs").into());
+    }
+    if let Some(reference) = &a.fresh_only_training_plan {
+        if reference.manifest_sha256.len() != 64
+            || !reference
+                .manifest_sha256
+                .bytes()
+                .all(|c| c.is_ascii_hexdigit())
+            || !a
+                .exposed_roots
+                .iter()
+                .any(|e| e.root == reference.root && e.manifest_sha256 == reference.manifest_sha256)
+        {
+            return Err(invalid(
+                "fresh-only training reference must be an exact bound exposed plan",
+            )
+            .into());
+        }
     }
     if a.schema != "uor-r4.native-bank-observation-plan-args/1"
         || (a.transfer_profile == TransferProfile::SupportedProspectiveRoleDiversity
@@ -1207,37 +1289,51 @@ fn author(a: Args) -> Result<()> {
     {
         return Err(invalid("authorer argument scope/caps invalid").into());
     }
-    let dev = output_support::prospective_output(&a.development_out)?;
+    Ok(fresh_only)
+}
+fn author(a: Args) -> Result<()> {
+    validate_author(&a)?;
+    let dev = a
+        .development_out
+        .as_ref()
+        .map(|p| output_support::prospective_output(p))
+        .transpose()?;
     let fresh = output_support::prospective_output(&a.fresh_out)?;
-    if dev.starts_with(&fresh) || fresh.starts_with(&dev) {
+    if dev
+        .as_ref()
+        .is_some_and(|dev| dev.starts_with(&fresh) || fresh.starts_with(dev))
+    {
         return Err(invalid("plan outputs overlap").into());
     }
+    let outputs = dev
+        .iter()
+        .chain(std::iter::once(&fresh))
+        .collect::<Vec<_>>();
     for p in [&a.input_bundle, &a.native_artifact, &a.trusted_binding] {
         let p = fs::canonicalize(p)?;
-        if dev.starts_with(&p)
-            || p.starts_with(&dev)
-            || fresh.starts_with(&p)
-            || p.starts_with(&fresh)
+        if outputs
+            .iter()
+            .any(|out| out.starts_with(&p) || p.starts_with(out))
         {
             return Err(invalid("output/input intersection").into());
         }
     }
     for e in &a.exposed_roots {
         let p = fs::canonicalize(&e.root)?;
-        if dev.starts_with(&p)
-            || p.starts_with(&dev)
-            || fresh.starts_with(&p)
-            || p.starts_with(&fresh)
+        if outputs
+            .iter()
+            .any(|out| out.starts_with(&p) || p.starts_with(out))
         {
             return Err(invalid("output/exposure intersection").into());
         }
     }
-    report_output::claim(&a.development_out)?;
-    report_output::claim(&a.fresh_out)?;
+    for out in &outputs {
+        report_output::claim(out)?;
+    }
     let t = Instant::now();
     let result = run(&a, t);
     if let Err(e) = &result {
-        for p in [&a.development_out, &a.fresh_out] {
+        for p in &outputs {
             fs::write(
                 p.join("failure.json"),
                 serde_json::to_vec_pretty(
@@ -1246,7 +1342,7 @@ fn author(a: Args) -> Result<()> {
             )?;
         }
     }
-    for p in [&a.development_out, &a.fresh_out] {
+    for p in &outputs {
         report_output::seal(p)?;
         report_output::verify(p)?;
     }
@@ -1647,6 +1743,102 @@ mod prospective_diversity_tests {
             }
         }
         all
+    }
+    fn author_args() -> Result<Args> {
+        Ok(serde_json::from_value(json!({
+            "schema":"uor-r4.native-bank-observation-plan-args/1",
+            "assertion_query_policy":"supported-current-role/1",
+            "transfer_profile":"supported-prospective-role-diversity/1",
+            "input_bundle":"input", "input_manifest_sha256":"a".repeat(64),
+            "exposed_roots":[{"root":"trained", "manifest_sha256":"b".repeat(64)}],
+            "native_artifact":"native", "trusted_binding":"binding",
+            "trusted_binding_sha256":"c".repeat(64),
+            "development_out":"development", "fresh_out":"fresh",
+            "maximum_seconds":300, "maximum_report_bytes":16777216
+        }))?)
+    }
+    #[test]
+    fn fresh_only_mode_requires_bound_reference_and_no_development_output() -> Result<()> {
+        let mut a = author_args()?;
+        assert!(!validate_author(&a)?); // Historical absent mode remains author.
+        a.mode = Some("author".into());
+        assert!(!validate_author(&a)?);
+        a.mode = Some("author-fresh-only".into());
+        assert!(validate_author(&a).is_err());
+        a.fresh_only_training_plan = Some(BoundRoot {
+            root: "trained".into(),
+            manifest_sha256: "b".repeat(64),
+        });
+        assert!(validate_author(&a).is_err()); // Even an unused sibling path is rejected.
+        a.development_out = None;
+        assert!(validate_author(&a)?);
+        a.exposed_roots.clear();
+        assert!(validate_author(&a).is_err());
+        a.exposed_roots.push(BoundRoot {
+            root: "trained".into(),
+            manifest_sha256: "d".repeat(64),
+        });
+        assert!(validate_author(&a).is_err());
+        a.exposed_roots[0].manifest_sha256 = "b".repeat(64);
+        a.mode = Some("author".into());
+        assert!(validate_author(&a).is_err());
+        a.mode = Some("author-fresh-only".into());
+        a.transfer_profile = TransferProfile::RetainedComposition;
+        assert!(validate_author(&a).is_err());
+        Ok(())
+    }
+    #[test]
+    fn fresh_only_preserves_fixed_schedule_and_binds_existing_trained_literal_coverage(
+    ) -> Result<()> {
+        let all = donors_with_count(8);
+        let (mut dev, oldfresh) = diversity_histories(&all, &[], &BTreeSet::new())?;
+        assert_eq!(dev.len(), 256);
+        assert_eq!(oldfresh.len(), 64);
+        let excluded = dev
+            .iter()
+            .chain(&oldfresh)
+            .map(semantic_identity)
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .map(|(bank, _)| bank)
+            .collect::<BTreeSet<_>>();
+        // The old full design consumes scarce edges on a never-used sibling dev.
+        assert!(diversity_histories(&all, &[], &excluded).is_err());
+        apply_supported_policy_mode(&mut dev, true)?;
+        let training = json!({"schema":"uor-r4.raw-natural-reader-construction-plan/1",
+            "split":"development", "source_policy":AssertionQueryPolicy::SupportedCurrentRole.source_policy(),
+            "histories":dev});
+        let (empty, mut fresh) =
+            diversity_histories_for_mode(&all, &[], &excluded, Some(&training))?;
+        assert!(empty.is_empty());
+        assert_eq!(fresh.len(), 64);
+        let (_, again) = diversity_histories_for_mode(&all, &[], &excluded, Some(&training))?;
+        assert_eq!(serde_json::to_value(&fresh)?, serde_json::to_value(&again)?);
+        for h in &fresh {
+            assert!(!excluded.contains(&semantic_identity(h)?.0));
+        }
+        apply_supported_policy_mode(&mut fresh, true)?;
+        let fp = json!({"split":"fresh","histories":fresh});
+        assert_eq!(role_diversity::validate(&fp)?["rows"], 128);
+        role_diversity::validate_literal_coverage(&training, &fp)?;
+        let mut wrong = training.clone();
+        wrong["split"] = json!("fresh");
+        assert!(validate_fresh_training_plan(&wrong).is_err());
+        wrong = training.clone();
+        wrong["histories"]
+            .as_array_mut()
+            .ok_or_else(|| invalid("fixture histories absent"))?
+            .pop();
+        assert!(validate_fresh_training_plan(&wrong).is_err());
+        let mut unseen = fp.clone();
+        let turn = &mut unseen["histories"][0]["turns"][0];
+        let template = turn["template"]
+            .as_str()
+            .ok_or_else(|| invalid("fixture template absent"))?
+            .to_owned();
+        turn["text"] = json!(template.replace("{v}", "never seen full literal"));
+        assert!(role_diversity::validate_literal_coverage(&training, &unseen).is_err());
+        Ok(())
     }
     #[test]
     fn diverse_known_literals_are_role_order_wording_balanced_and_whole_bank_partitioned(
