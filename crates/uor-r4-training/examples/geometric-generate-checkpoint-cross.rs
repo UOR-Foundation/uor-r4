@@ -502,9 +502,9 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const TOK: &str = r#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,"a":3,"b":4},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
+    const TOK: &str = r#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"b":4},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
     #[test]
-    fn alias_competition_survives_surgical_Copy_swap() -> Result<()> {
+    fn alias_competition_survives_surgical_copy_swap() -> Result<()> {
         let binding = SourceActionBinding::new(TOK.as_bytes())?;
         // Offline fixture formula; the public constructor authenticates it.
         let table = (0..uor_r4_integer::geometric_read::EXP_TABLE_LEN)
