@@ -1,16 +1,24 @@
 # UOR-R4 Geometric Language Model — canonical project plan
 
-## Immediate geometric attention dependency — October 5 cue result
+## Immediate geometric attention dependency — October 6 source-bound result
 
-The [four-arm sensitivity](https://github.com/UOR-Foundation/uor-r4/pull/1777)
-leaves unary completion74/512 unchanged and reduces joint/combined completion
-to70. Do not start a larger coadaptation fit from this result. Saved paths expose
-routing-phase coupling:3 losses keep the same source but cue shifts Copy across
-unchanged terminals. Next test shared geometric cue offsets for each source's
-typed Copy/Period/Stop actions, with legacy and alias-expansion controls, explicit
-bounds and provenance. Raw contrast cancellation is arithmetic; generated benefit
-and independent source-prior normalization are not established. Current state
-owns exact evidence and all negative arms.
+The [source-bound action probe](geometric-source-bound-actions-2026-10-06.md)
+executes per-source geometric Copy/Period/Stop actions. Shared cue improves
+completion69→72/512 versus the identical no-terminal-cue layout, but legacy74
+remains the retained control. No new fit or heldout predictions. Lower native CE
+does not override the primary complete-answer count. Retain all row tradeoffs;
+flat source/phase/alias coupling remains, and initial raw Copy rankings are
+unchanged. Do not start a larger unchanged coadaptation fit or retire geometry.
+Owner correction holds the proposed cue-only record-credit follow-up. Next identify
+the smallest existing learned state/query/transport→native prediction integration
+where causal next-token error changes the geometry itself. Current joint-cue loss
+freezes observation roots; the observation adapter rejects joint-context adjoints.
+The Copy/Period/Stop task lacks general Generate support. Reuse prior learning and
+negative evidence; do not invent a missing learner or launch another local patch
+by default. Require retrieval without supplied answers and context-external token
+continuations, exact native export/reload and complete own-prefix outputs. Expert
+source/history assessment determines the concrete seam before fitting. Current
+state owns exact results, identities, reviews and costs.
 
 The frozen joint-cue transfer in [PR1775](https://github.com/UOR-Foundation/uor-r4/pull/1775)
 now leaves complete fresh replies20/128 unchanged (3 gains/3 losses), with first

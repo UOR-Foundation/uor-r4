@@ -1,5 +1,34 @@
 # Current UOR-R4 research state
 
+## Source-bound actions: useful contrast, legacy retained — October 6
+
+[PR1778](https://github.com/UOR-Foundation/uor-r4/pull/1778), numerical head
+`4cc70f08e2a3062b122d3348d8a5885a33e77a80`, runs the development-only zero-update
+three-arm source-bound probe. Complete own-prefix answers /512 are legacy74,
+all-source/no-terminal-cue69, all-source/shared-cue72. Shared cue gains5/loses2
+versus the matched layout; versus legacy it gains18/loses20. Native CE decreases
+0.9544226152→0.8714107967→0.8653232323, but completion is primary and legacy stays
+the default. No evaluation128 predictions, fit, selection or adoption.
+
+Per-source endpoints and authentic shared cues now execute through bounded native
+integer actions with explicit provenance. Raw Copy ranking at the same prefix is
+unchanged. Flat alias normalization still couples source mass, phase and length;
+this does not establish a normalized independent source prior or geometric chat.
+[The record](geometric-source-bound-actions-2026-10-06.md) preserves all arms,
+failed fixture/admission checks, exact identities, scoped costs and exclusions.
+87 focused tests plus release builds PASS at the numerical head. Actual probe
+exit0,39.375s,CPU16/RSS6,777,573,376B on pod Linux x86_64; no CUDA/Metal/opcode claim.
+
+Owner correction after the probe: hold the proposed cue-only record-credit
+follow-up. The immediate question is how ordinary causal prediction error learns
+the geometric representation and transport used for prediction. Current joint-cue
+credit freezes the representation, and the observation adapter rejects joint-cue
+context adjoints; this Copy/Period/Stop instrument cannot establish general Generate.
+Expert source/history review is identifying the smallest integration of existing
+learned state/transport and generation machinery, with actual hard export/reload
+and context-external token continuations. No integrated-learning result claimed.
+DeepSeek retains training-normalizer ownership.
+
 ## Unary/joint sensitivity and routing-phase coupling — October 6
 
 [PR1777](https://github.com/UOR-Foundation/uor-r4/pull/1777), numerical head
