@@ -92,6 +92,7 @@ __device__ __forceinline__ float neg_inf() { return __int_as_float(0xff800000); 
 // rounding `half::bf16::from_f32` (Candle's f32 -> bf16 cast) performs.
 // ---------------------------------------------------------------------------
 #ifdef UOR_STORAGE_BF16
+#include <mma.h>
 typedef unsigned short act_t;
 #define UOR_ACT_BYTES 2
 
@@ -1250,6 +1251,7 @@ __device__ __forceinline__ float half_warp_sum(float v) {
     return v;
 }
 
+#ifndef UOR_STORAGE_BF16
 extern "C" __global__ void read_flash_fwd(
     const act_t* query, const act_t* kv, const float* aux,
     const double* query_lift, const double* key_lift, act_t* out, ReadDims d
@@ -1357,6 +1359,176 @@ extern "C" __global__ void read_flash_fwd(
         }
     }
 }
+#else
+// bf16 storage: the same forward with its two matrix products on tensor
+// cores (bf16 16x16x16 WMMA fragments, f32 accumulation). One block of 8
+// warps per 16-row query tile walks key blocks of FLASH_TC_KEYS keys: each
+// warp computes one 16 x 16 tile of S = Q K^T (the bf16 products are exact in
+// f32, so only the summation order differs from read_tile_inner), the score
+// transform and online softmax stay in f32/f64 exactly as above, and each
+// warp then accumulates one 16-column slice of P V with P rounded to bf16
+// (the only added rounding; the normaliser sums the same rounded weights).
+// K and V are zero padded to multiples of 16 in shared memory.
+#define FLASH_TC_KEYS 128
+#define FLASH_TC_KCHUNK 64
+
+extern "C" __global__ void read_flash_fwd(
+    const act_t* query, const act_t* kv, const float* aux,
+    const double* query_lift, const double* key_lift, act_t* out, ReadDims d
+) {
+    using namespace nvcuda;
+    uint tt = blockIdx.x;
+    uint index = blockIdx.z;
+    uint time = d.time;
+    uint width = d.key + d.value;
+    uint head = index % d.heads;
+    uint lx = threadIdx.x;
+    uint ly = threadIdx.y;
+    uint tid = ly * 16 + lx;
+    uint warp = tid >> 5;
+    uint t = tt * 16 + ly;
+    bool row_ok = t < time;
+    u64 row = (u64)index * time + t;
+    __shared__ __align__(32) act_t q_s[16 * FLASH_TC_KCHUNK];
+    __shared__ __align__(32) act_t kv_s[FLASH_TC_KEYS * FLASH_VALUE_CHUNK];
+    __shared__ __align__(32) float s_s[16 * FLASH_TC_KEYS];
+    __shared__ __align__(32) act_t p_s[16 * FLASH_TC_KEYS];
+    const __nv_bfloat16* q_b = reinterpret_cast<const __nv_bfloat16*>(q_s);
+    const __nv_bfloat16* kv_b = reinterpret_cast<const __nv_bfloat16*>(kv_s);
+    const __nv_bfloat16* p_b = reinterpret_cast<const __nv_bfloat16*>(p_s);
+    const act_t* base = kv + (u64)index * time * width;
+    float null_score = (d.null_on != 0 && row_ok) ? aux[row] : neg_inf();
+    double lq = 0.0;
+    double beta = 0.0;
+    double offset = 0.0;
+    if (d.score != 0) {
+        if (row_ok) lq = query_lift[row];
+        u64 beta_offset = read_beta_offset(d);
+        beta = (double)aux[beta_offset + head];
+        offset = (double)aux[beta_offset + d.heads + head];
+    }
+    uint last_key = min(tt * 16 + 15, time - 1);
+    uint blocks = last_key / FLASH_TC_KEYS + 1;
+    for (uint v0 = 0; v0 < d.value; v0 += FLASH_VALUE_CHUNK) {
+        float maximum = null_score;
+        float total = d.null_on != 0 ? 1.0f : 0.0f;
+        float acc_out[FLASH_VALUE_CHUNK / 16];
+        #pragma unroll
+        for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) acc_out[i] = 0.0f;
+        for (uint jb = 0; jb < blocks; ++jb) {
+            uint k0 = jb * FLASH_TC_KEYS;
+            uint live = min(last_key + 1 - k0, (uint)FLASH_TC_KEYS);
+            bool warp_keys = warp * 16 < live;
+            wmma::fragment<wmma::accumulator, 16, 16, 16, float> s_frag;
+            wmma::fill_fragment(s_frag, 0.0f);
+            for (uint c0 = 0; c0 < d.key; c0 += FLASH_TC_KCHUNK) {
+                uint cw = min(d.key - c0, (uint)FLASH_TC_KCHUNK);
+                for (uint e = tid; e < 16 * FLASH_TC_KCHUNK; e += 256) {
+                    uint r = e / FLASH_TC_KCHUNK;
+                    uint c = e % FLASH_TC_KCHUNK;
+                    uint qr = tt * 16 + r;
+                    q_s[e] = (qr < time && c < cw)
+                        ? query[((u64)index * time + qr) * d.key + c0 + c] : (act_t)0;
+                }
+                for (uint e = tid; e < live * FLASH_TC_KCHUNK; e += 256) {
+                    uint r = e / FLASH_TC_KCHUNK;
+                    uint c = e % FLASH_TC_KCHUNK;
+                    kv_s[e] = c < cw ? base[(u64)(k0 + r) * width + c0 + c] : (act_t)0;
+                }
+                __syncthreads();
+                if (warp_keys) {
+                    for (uint s = 0; s * 16 < cw; ++s) {
+                        wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
+                        wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::col_major> b;
+                        wmma::load_matrix_sync(a, q_b + s * 16, FLASH_TC_KCHUNK);
+                        wmma::load_matrix_sync(b, kv_b + warp * 16 * FLASH_TC_KCHUNK + s * 16, FLASH_TC_KCHUNK);
+                        wmma::mma_sync(s_frag, a, b, s_frag);
+                    }
+                }
+                __syncthreads();
+            }
+            wmma::store_matrix_sync(s_s + warp * 16, s_frag, FLASH_TC_KEYS, wmma::mem_row_major);
+            for (uint e = tid; e < FLASH_TC_KEYS * FLASH_VALUE_CHUNK; e += 256) {
+                uint r = e / FLASH_VALUE_CHUNK;
+                uint c = e % FLASH_VALUE_CHUNK;
+                kv_s[e] = (r < live && v0 + c < d.value)
+                    ? base[(u64)(k0 + r) * width + d.key + v0 + c] : (act_t)0;
+            }
+            __syncthreads();
+            float sc[FLASH_TC_KEYS / 16];
+            float block_max = neg_inf();
+            #pragma unroll
+            for (uint i = 0; i < FLASH_TC_KEYS / 16; ++i) {
+                uint j = k0 + lx + 16 * i;
+                float acc = s_s[ly * FLASH_TC_KEYS + lx + 16 * i];
+                // Rows past the end score 0 (finite, never written); j > t is masked.
+                float score = 0.0f;
+                if (row_ok) {
+                    if (j > t) {
+                        score = neg_inf();
+                    } else {
+                        float age = d.age_on != 0
+                            ? aux[read_age_offset(d) + (u64)head * time + (t - j)] : 0.0f;
+                        if (d.score == 0) {
+                            float scale = 1.0f / sqrtf((float)d.key);
+                            score = acc * scale + age;
+                        } else {
+                            double lk = key_lift[(u64)index * time + j];
+                            double e = d.score == 1 ? lq * lk - (double)acc - 1.0
+                                                    : lq + lk - 2.0 * (double)acc;
+                            score = (float)(-beta * (read_distance(d, e) - offset)) + age;
+                        }
+                    }
+                }
+                sc[i] = score;
+                block_max = fmaxf(block_max, score);
+            }
+            // Block 0 holds j = 0 <= t for every valid row, so the running
+            // maximum is finite from the first block on.
+            float next = fmaxf(maximum, half_warp_max(block_max));
+            float psum = 0.0f;
+            #pragma unroll
+            for (uint i = 0; i < FLASH_TC_KEYS / 16; ++i) {
+                act_t p = act_from_f(expf(sc[i] - next));
+                psum += act_to_f(p);
+                p_s[ly * FLASH_TC_KEYS + lx + 16 * i] = p;
+            }
+            float rescale = expf(maximum - next);
+            total = total * rescale + half_warp_sum(psum);
+            maximum = next;
+            #pragma unroll
+            for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) acc_out[i] *= rescale;
+            __syncthreads();
+            if (v0 + warp * 16 < d.value) {
+                wmma::fragment<wmma::accumulator, 16, 16, 16, float> o_frag;
+                wmma::fill_fragment(o_frag, 0.0f);
+                for (uint s = 0; s * 16 < live; ++s) {
+                    wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
+                    wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> b;
+                    wmma::load_matrix_sync(a, p_b + s * 16, FLASH_TC_KEYS);
+                    wmma::load_matrix_sync(b, kv_b + s * 16 * FLASH_VALUE_CHUNK + warp * 16, FLASH_VALUE_CHUNK);
+                    wmma::mma_sync(o_frag, a, b, o_frag);
+                }
+                wmma::store_matrix_sync(s_s + warp * 16, o_frag, FLASH_TC_KEYS, wmma::mem_row_major);
+            }
+            __syncthreads();
+            #pragma unroll
+            for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) {
+                if (v0 + 16 * i < d.value) acc_out[i] += s_s[ly * FLASH_TC_KEYS + lx + 16 * i];
+            }
+            __syncthreads();
+        }
+        if (row_ok) {
+            float inverse = 1.0f / total;
+            #pragma unroll
+            for (uint i = 0; i < FLASH_VALUE_CHUNK / 16; ++i) {
+                uint c = v0 + lx + 16 * i;
+                if (c < d.value) out[row * d.value + c] = act_from_f(acc_out[i] * inverse);
+            }
+        }
+    }
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // Flash read backward: no T x T buffer. Each block recomputes its 16 x 16
@@ -2346,6 +2518,15 @@ extern "C" __global__ void sq_tree(
         }
     }
 
+    /// The CUDA toolkit include directory NVRTC reads <mma.h> from:
+    /// `$CUDA_HOME/include` (or `$CUDA_PATH`), else `/usr/local/cuda/include`.
+    fn cuda_include_dir() -> String {
+        let root = std::env::var("CUDA_HOME")
+            .or_else(|_| std::env::var("CUDA_PATH"))
+            .unwrap_or_else(|_| "/usr/local/cuda".to_string());
+        format!("{root}/include")
+    }
+
     /// The stack kernels' PTX, compiled once per process and per storage by
     /// NVRTC from the same source (the bf16 build defines UOR_STORAGE_BF16).
     fn ptx(storage: Storage) -> Result<&'static str> {
@@ -2363,6 +2544,7 @@ extern "C" __global__ void sq_tree(
                     vec!["-DUOR_STORAGE_BF16".to_string()],
                 ),
             };
+            let bf16 = matches!(storage, Storage::Bf16);
             let options = cudarc::nvrtc::CompileOptions {
                 use_fast_math: Some(false),
                 prec_sqrt: Some(true),
@@ -2370,6 +2552,14 @@ extern "C" __global__ void sq_tree(
                 ftz: Some(false),
                 name: Some(name),
                 options: defines,
+                // The bf16 build's flash read uses bf16 WMMA (sm_80 and later)
+                // from <mma.h> in the toolkit's include directory.
+                arch: bf16.then_some("compute_80"),
+                include_paths: if bf16 {
+                    vec![cuda_include_dir()]
+                } else {
+                    Vec::new()
+                },
                 ..Default::default()
             };
             cudarc::nvrtc::compile_ptx_with_opts(CUDA_STACK_SOURCE, options)
