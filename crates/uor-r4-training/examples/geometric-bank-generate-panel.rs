@@ -378,8 +378,10 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         if field(&contexts[i], "source_views")? != &json!(views) {
             return Err(invalid("source views fail independent tokenizer recompilation").into());
         }
-        let answer = r.role.prose(&r.literal)?;
-        let mut target = encoded(&tok, &format!(" {answer}"), &binding)?;
+        // Frame the accepted bytes once at authoring. Runtime membership is
+        // exact; neither an evaluator trim nor a serving formatter supplies it.
+        let answer = format!(" {}", r.role.prose(&r.literal)?);
+        let mut target = encoded(&tok, &answer, &binding)?;
         target.push(binding.eos_token_id());
         let prefix = match r.role {
             Role::Job => " Your job is ",
