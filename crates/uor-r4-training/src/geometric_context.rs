@@ -3337,6 +3337,83 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn expected_limitation_delayed_poststate_utility_loses_permutation_carry() -> Result<()> {
+        use uor_r4_integer::h4_tables::H4Code;
+        // Diagnostic of the CURRENT surrogate, not a correctness/learning gate.
+        // A final fixed action still transports old state into post-state. With
+        // zero transition bases, direct state-logit adjoints currently stop at
+        // the final token's scores and omit this temporal permutation credit.
+        let weights = strict_zero(2, 4, 1)?;
+        let mut transitions = vec![0f32; 240];
+        transitions[3] = 1.; // First token chooses +i in the historical frame.
+        transitions[120 + 1] = 1.; // Second token chooses identity.
+        set(&weights, TT, transitions.clone())?;
+        for name in [ST, SR, SC] {
+            assert!(weights.parameters[name]
+                .flatten_all()?
+                .to_vec1::<f32>()?
+                .iter()
+                .all(|&x| x == 0.));
+        }
+        let output = weights.forward_q4(&[0, 1], 1, 2, false)?;
+        assert_eq!(output.trace.actions, vec![vec![3], vec![1]]);
+        assert_eq!(output.trace.states, vec![vec![3], vec![3]]);
+
+        // Use the actual native codec to intervene on the retained state just
+        // before token 1. Neither labels nor a surrogate select its action.
+        let expanded = ExpandedContext::compile(&weights)?;
+        let native = expanded.native(weights.config())?;
+        let geometry = admit_geometry(PINNED)?;
+        let mut utilities = [0f64; 120];
+        for (old, utility) in utilities.iter_mut().enumerate() {
+            let retained = [H4Code::try_from(old as u8).map_err(|e| invalid(e.to_string()))?];
+            let mut replay = NativeContextState::from_states(1, 1, &retained)
+                .map_err(|e| invalid(e.to_string()))?;
+            let step = replay
+                .step(1, &native, &geometry)
+                .map_err(|e| invalid(e.to_string()))?;
+            assert_eq!(step.actions[0].index(), 1);
+            assert_eq!(replay.states()[0].index(), old as u8);
+            *utility = if replay.states()[0].index() == 3 {
+                1.
+            } else {
+                0.
+            };
+        }
+        assert_eq!(utilities[3], 1.);
+        assert_eq!(utilities[5], 0.);
+
+        // This is the same full120 local expectation used by the Generate
+        // state-input surrogate, without a four-coordinate projection. The
+        // selected hard score can be anchored separately without changing it.
+        let logits = output.state_logits.narrow(1, 1, 1)?.reshape(120)?;
+        let table = Tensor::from_vec(
+            utilities.iter().map(|&x| x as f32).collect::<Vec<_>>(),
+            120,
+            &Device::Cpu,
+        )?;
+        let expected = (candle_nn::ops::softmax(&logits, 0)? * table)?.sum_all()?;
+        let gradients = expected.backward()?;
+        let gradient = gradients
+            .get(weights.parameters[TT].as_tensor())
+            .ok_or_else(|| invalid("diagnostic transition gradient absent"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert!(gradient[120..].iter().any(|x| x.abs() > 1e-6));
+        assert!(gradient[..120].iter().all(|&x| x == 0.));
+
+        // A full120 factual-action carry would give earlier choices the native
+        // conditional utility U(old * identity), which is nonconstant. Show
+        // its expected local choice credit explicitly; do NOT inject it into
+        // the current operator or apply a second softmax to its score adjoints.
+        let action_logits: [f64; 120] = std::array::from_fn(|a| f64::from(transitions[a]));
+        let p = probabilities(&action_logits);
+        let mean = (0..120).map(|a| p[a] * utilities[a]).sum::<f64>();
+        let missing_credit = p[3] * (utilities[3] - mean);
+        assert!(missing_credit > 1e-3);
+        Ok(())
+    }
+    #[test]
     fn context_post_state_even_table_credit_survives_four_coordinate_nullspace() -> Result<()> {
         let op = ContextOp {
             batch: 1,
