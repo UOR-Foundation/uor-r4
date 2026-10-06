@@ -58,6 +58,21 @@ alias-pool objective before changing the estimator or dose. If useful replies
 emerge, freeze independent source/order transfer first. General chat, reasoning
 and whole-path D11/laptop-cost qualification remain outstanding.
 
+The conditional exact-native one-coordinate probe is implemented at365c8603.
+Its opaque integer mass cache preserves all Copy aliases and nongold denominator
+changes, falling back to the full reducer when the clipped reference changes.
+The probe independently verifies sealed scores/pools, binds inputs and labels,
+retains the incumbent on ties and reloads/replays the chosen native artifact.
+Exact-source pod release build plus7 vocabulary-action and4 probe/output tests
+pass (235.174s,3590668KiB peak child RSS); binary SHA256
+`61cb2b9e945cbccc0b6a9d5b182784cffc5e222f8dd2086ba951d19df2a47439`.
+An earlier0.492s source-verifier attempt rejected an expanded LFS payload before
+Cargo; repaired admission binds1824 expanded objects to their commit pointers
+and verifies17118files/1279818104bytes. No model probe has run. Conditional card
+[#820](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6013940163)
+permits one240s native artifact probe only if balanced static-code failure remains.
+This is an offline instrument, not an optimizer adoption or prediction result.
+
 ## Delayed geometric prediction credit — October 6
 
 Native120-state interventions reproduce a missing temporal learning path: a fixed
