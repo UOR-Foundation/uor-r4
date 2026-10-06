@@ -2626,6 +2626,11 @@ pub struct PreparedSourceRealizer<'a> {
 }
 
 impl PreparedSourceRealizer<'_> {
+    /// Fixed tokenizer and dialogue identity shared by native action families.
+    pub fn binding(&self) -> &SourceActionBinding {
+        &self.source.binding
+    }
+
     /// Expose an actual prepared context encode for device parity diagnostics.
     /// No source selection or target enters this offline learning interface.
     pub fn context_output(
