@@ -2,6 +2,16 @@
 
 ## Immediate geometric attention dependency — October 5 cue result
 
+The frozen joint-cue transfer in [PR1775](https://github.com/UOR-Foundation/uor-r4/pull/1775)
+now leaves complete fresh replies20/128 unchanged (3 gains/3 losses), with first
+source68→67. Retain the development donor; do not repeat its fit or retire the
+family. Saved traces preserve different consumed query/relative/joint features
+for all64 opposite-role pairs, yet learned ranking selects the same source in33
+pairs. The immediate dependency is geometric query-to-source ranking and honest
+credit, with later continuation failures diagnosed separately. Current state
+owns exact results and artifacts. DeepSeek owns softmax/tensorcore training;
+this native binding track does not change that shared training seam.
+
 Retain [calibrated native endpoints and cue evidence](geometric-endpoint-calibration-2026-10-05.md):
 complete development replies11→23/128; attention remains open. The cue-only full-path
 learner now has exact baseline replay, connected finite credit and scoped executed

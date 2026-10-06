@@ -1,5 +1,60 @@
 # Current UOR-R4 research state
 
+## Frozen joint-cue transfer — October 6 (candidate retained, no transfer gain)
+
+[PR1775](https://github.com/UOR-Foundation/uor-r4/pull/1775), numerical source
+`8d09c53e62ac84825de0622e8c92e44739d6cb6e`, evaluates the unchanged trial12
+joint artifact against original unary, exact zero-overlay replay and reversed
+ordered roots. No fitting, gradients, updates or evaluation-based selection occur.
+The new Rust fresh-only author binds the actual earlier training plan and retains
+28 unique exposure exclusions. It authors64 new paired histories/128 rows without
+an unused512-row development output or relaxed source caps. The old exposed128
+rows are a separate continuity diagnostic.
+
+| Prospective128 rows | Original / zero | Learned joint | Reversed joint |
+| --- | ---: | ---: | ---: |
+| Complete own-prefix replies |20|20|18|
+| First factual source correct |68|67|67|
+| First emitted token exact |61|62|61|
+| Both paired sources /64 |16|17|17|
+| Both paired complete /64 |3|4|3|
+| Native equal-episode CE |0.9853844437102381|0.9843508499780389|0.9952746619263687|
+
+Learned versus original has3 complete gains and3 losses. One loss breaks initial
+source/token selection; two retain correct initial source/token and fail later.
+The source metric is a canonical factual Copy ranking, not an actual source
+commitment; token-alias aggregation can separate these outcomes. The exposed
+continuity panel changes complete14→15, source65→64 and first-token61→59.
+Both zero overlays reproduce the full original numerical behavior. Independent
+reviews recount outcomes and verify bindings. This does not transfer the prior
+59→74/512 development gain or qualify general chat, attention, geometric advantage
+or replicated-family behavior. Retain the donor and all negative outcomes.
+
+A read-only saved-feature audit finds distinct consumed query-root observations
+and per-record relative/joint descriptors in all64 opposite-role pairs. No pair
+has identical consumed descriptors, while the learned arm selects the same
+factual source for both questions in33/64 pairs (original36/64). For this panel,
+query distinction is preserved but source ranking/generalization remains weak;
+this is not a universal representation-sufficiency claim. Next inspect saved
+correct-versus-distractor margins and first-divergence paths, then select the
+smallest supported geometric ranking/credit change. All-source terminal actions
+remain conditional on a witnessed terminal-source branch defect; they cannot
+repair initial wrong Copy ordering alone. No repeated dose, redraw or family
+retirement follows from this result. DeepSeek owns softmax/tensorcore training.
+
+Executed on Linux x86_64 pod `c17adb9c6ac8`, CUDA hidden: focused checks/release
+build202.370s, CPU8, peak RSS5,006,172,160B; Rust panel preparation4.063s, CPU16,
+RSS115,187,712B; the two evaluations18.728s and17.876s, CPU16, peak
+RSS1,470,443,520B. Clean committed Git archive binds source; executable SHA256
+`292df8ca01599170f2d7b45de4ad256921675968b6c05285e688a283418f7168`.
+Fresh panel manifest SHA256
+`ce9d0f039c896e67c72c0e3125576903bc05892193058902d012a59281e60f87`.
+Preserved setup refusals occurred before model loading and are not quality
+negatives. Durable reports are under
+`/workspace/uor-r4/codex/cue-joint-transfer/{evaluate-diagnostic-2,evaluate-fresh-2}`.
+Complete preparation/review/storage remains within the previously precharged
+continuation; no ledger reset. PR1775 is stacked/open, not delivered to main.
+
 ## Joint geometric cue learning — October 6 (development candidate)
 
 [PR1772](https://github.com/UOR-Foundation/uor-r4/pull/1772), numerical source
