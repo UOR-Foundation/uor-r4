@@ -2,87 +2,61 @@
 
 ## Native Generate paired fits and balanced control — October 6
 
-Balanced initialization CUDA-adjoint comparison passes on actual CUDA at
-e2283804 (one explicit test, exact Q24/raw forward and all parameter/state
-adjoints within declared tolerance). Exact-source build takes102s; test1.30s,
-wrapper2s. Integrated zero-update B8 admission completes at09:07:47Z (31.054s wrapper,
-23.2822s B8): full native pool parity across103 positions, all13 gradient
-families connected/finite/positive,0updates; initial-only quality0/8.
-The prospective card explicitly revises scheduling: one balanced output-only
-seed1001 attempt1 starts09:13:32Z, but terminates beforeoptimizer1 at09:17:25Z:
-actual B8 28.157s projects5024.419s above4500. Preserve its full512initial
-rows/sealed failure and232.292s cost; this is not a mechanism negative.
-Attempt2 starts09:19:05Z onGPU0, PID13319, same immutable c722 fitter,
-seed/data/donor/LRs/128updates; only output path and max4500→5100 change
-(outer5200). Complete initial evaluation/cost gate still precedes optimizer1.
-No additional rental extension; latest-start estimate drifts5s but actual
-5200s end10:45:45Z leaves5m15s before10:51Z rental endpoint. Further balanced seeds remain NOT_ADMITTED.
-Owner standing run authorization supports the recorded rental5.5→6h
-extension (+$0.99 maximum) and completewall6→6.5h; new rental endpoint10:51Z,
-wall11:00:33Z. This is a recorded extension, not unchanged limits. Output-only seed1003 finishes128updates and
-exits0 at09:06:38Z: CE8.187637→7.907143,0/512 complete, all first errors0,
-all hard codes unchanged. Independent saved-evidence review covers1024 row
-hashes and6664 canonical positions per stage; it does not rerun inference or
-BLAKE3 verification. Three output-only arms now replicate the restriction;
-final joint seed1003 remains live for the full paired verdict.
+All six legacy fits complete128updates across three paired seeds. Every fit
+improves canonical equal-episode CE but remains0/512 complete own-prefix replies,
+with all first errors at0 and all32768 hard token codes unchanged. First gold
+tokens are absent from Copy in every row. Output-only has lower mean final CE
+in every seed; joint changes context bytes and all512 generated sequences per
+seed, helping a minority of matched rows without solving first-token prediction.
 
-At frozen `1698aa79`, both seed1001 arms complete128 updates and exit0 with
-sealed reports and independently reloaded native artifacts. Output-only native
-equal-episode CE improves8.185317→7.903411; joint improves to7.928527. Both
-remain0/512 complete answers, with every first error at position0. The direct
-generation schema confirms that all512 first targets are absent from Copy.
-Three matched seeds remain the declared family decision. Seed1002 output-only
-also completes128 updates and exits0: CE8.182738→7.902866, still0/512 with
-all first errors at0 and all32768 hard codes unchanged. Its1024 initial/final row
-SHA256 bindings and native artifact code arrays are audited; this is not a
-second independent inference replay. Joint seed1002 also completes128 updates
-and exits0 at08:13:50Z: CE8.182738→7.931800,0/512, all first errors at0, unchanged
-hard codes and11953 changed context bytes. Independent review checks both arms
-against all1024 saved rows each and recomputes canonical CE. Output-only seed1003 completes as recorded above; the joint run uses attempt3
-from08:27:18Z, with full initial replay matching as detailed below. The second paired
-result repeats the first; the declared three-seed verdict remains pending.
+| Seed | Initial CE | Output-only final CE | Joint final CE | Joint lower row CE | Joint context bytes changed |
+|---|---:|---:|---:|---:|---:|
+|1001|8.185317|7.903411|7.928527|222/512|13072|
+|1002|8.182738|7.902866|7.931800|201/512|11953|
+|1003|8.187637|7.907143|7.924625|227/512|12207|
 
-Joint seed1003 attempt1 stops before optimizer1 because its measured4801.907s
-projection exceeds4500s. Attempt2 raises the configured limit but the frozen
-binary rejects it before report claim; both are execution failures with0updates.
-The one-line argument-ceiling repair atc7222d7e has an actual pod release build
-and6 fitter checks PASS. Attempt3 starts08:27:18Z at that source, same model/data/
-seed/optimizer and128updates, with only output path/time limit changed. All512 initial row objects match1698, including6664 canonical/16196 own-prefix
-native packets. Actual firstB8 cost21.940s projects4055.683s below5100; optimization
-has begun. This remains an unfinished seed, not a final quality result.
-Complete6h wall and5.5h rental ceilings remain unchanged. Source review confirms
-both newer optional mechanisms remain disabled in this scientific arm.
+Independent review checks6144 report-bound saved-row hashes, recomputes6664
+canonical positions perstage/run, checks manifest file sets/sizes and native
+prototype/context bytes. It does not rerun inference/tokenization or BLAKE3
+digests. Third joint exits0 at09:26:56Z,3578.184s/RSS921252KiB. Its sourcec722
+is the retained validation-ceiling repair; all512 initial rows match1698 and
+optional mechanisms are disabled. Cost-refused/preclaim failed attempts remain
+execution evidence, not completed seeds. Research record retains exact receipts.
 
+The unchanged legacy token bank has diversity `[120,35,1,1,1,1,1,1]`.
+Six unary and three pair factors cancel from token ranking. Native margin
+replays on the first two seeds establish that most first gold targets lose
+inside Generate; pooled Copy competition is secondary for the remaining cases.
+No first-position clipping explains those failures. This is a decoder restriction,
+not an identity collision or geometric-family verdict.
 
-All32768 native token prototype codes remain unchanged in both arms. Lane
-diversity stays `[120,35,1,1,1,1,1,1]`. With disjoint pair edges, the six constant
-lanes cancel from generated-token raw score differences, although they affect
-Generate/Copy calibration and earlier recurrence. This is a measured decoder
-restriction, not an identity collision or a geometric-family rejection. Native
-first-position Copy scores stay below5.6875 nats and no actions clip, excluding
-the proposed upper-score barrier on those factual positions. The exact native
-score-SHA replay now passes2048 first positions at a84bf2e1;2 focused checks pass.
-Output-only472/512 and joint495/512 gold targets remain strictly below best
-Generate; deterministic gold-best21/8 still lose pooled Copy. Independent review
-traverses all2048 rows and verifies factor/mass arithmetic. Next: prepare a
-default-off label-free balanced all-lane initialization control (implemented at
-2a5bbd09; actual release build and16 CPU checks PASS), then decide whether to
-admit its matched output-only comparison from the completed paired results and
-prospective cost. Useful later-seed replies or a changed dominant failure take
-priority over the prepared comparison. New-mode CUDA
-admission/fit remain NOT_RUN. No normalizer
-change or dose increase. PR1792 remains draft/unmerged.
+One matched balanced output-only seed1001 is active on GPU0/PID13319 from
+09:19:05Z. It preserves seed/donor/frozencontext/data/LRs/128updates, with
+label-free all-eight-lane token initialization and prefixutilityfalse. Actual
+CUDA adjoint comparison passes1/1 at e2283804; integrated zero-update admission
+passes native pool parity across103 positions with13 connected positive finite
+families. First fit attempt1 fails timing beforeoptimizer1 and is retained.
+Attempt2 changes only out and4500→5100 model limit (outer5200), same c722 binary.
+All512 initial rows match attempt1, including6664 canonical/16355 own-prefix
+packets. Actual B8 24.341469343s projects4424.48772131s below5100 before
+optimizer1; optimization is underway, no completed quality result.
 
-Second-seed native margin replay also completes/seals at existinga84bf2e1:
-all2048 first-position score hashes match. Final output-only471/512 strict
-Generate deficits and41 targets at the maximum;22 of those select the gold
-but lose pooled Copy. Joint has495deficits and17 targets at the maximum;5 of
-those select the gold but lose pooled Copy. Higher6unary/3pair factors
-cancel in every raw margin. This repeats the first-seed ranking diagnosis,
-without qualifying balanced initialization or a model family. The bounded CPU
-audits take9.20/9.93s and exit0; first wrapper attempt127 missing timing utility
-executes no model and is preserved separately. Both live fits remain untouched.
+Recorded rental5.5→6h extension costs at most+$0.99 ($11.88total); complete
+wall6→6.5h. Rental endpoint10:51Z/wall11:00:33Z remain unchanged by retry.
+The5s start-estimate drift leaves5m15s after outerend10:45:45Z. All failed work
+is retained/charged. Codex releases GPU1 by narrowing its lease toGPU0 after
+legacy completion; no new pod. Further balanced seeds remain NOT_ADMITTED.
 
+Source/data review finds input-only reference512/512, legal tokenizer roundtrip,
+competing full Sources, labels separate from admission and past-only teacher
+forcing. Full8state uniqueness does not prove shared-factor separability, and
+this exposed construction panel is not fresh transfer. Retained SharedCore
+hard-objective learning supplies a conditional optimizer pattern; its historical
+byte-tree and parser objectives are not adopted. If balanced still fails with
+static codes, inspect actual native conditional alternatives on the complete
+alias-pool objective before changing the estimator or dose. If useful replies
+emerge, freeze independent source/order transfer first. General chat, reasoning
+and whole-path D11/laptop-cost qualification remain outstanding.
 
 ## Delayed geometric prediction credit — October 6
 

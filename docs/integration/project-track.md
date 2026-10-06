@@ -2,42 +2,57 @@
 
 ## Predictive geometry and native CUDA learning — October 6
 
-The immediate learning dependency now has an executed causal diagnosis and
-CPU/CUDA repair: [full120 temporal Generate utility](geometric-native-generate-learning-2026-10-06.md)
-reaches earlier geometric transitions that the old state-logit channel omitted.
-Keep its native forward fixed and qualify real-data admission before the joint fit.
-The older Copy channels remain explicit controls and a subsequent credit seam;
-do not infer their repair or useful attention from Generate checks alone.
+The [native Generate learner](geometric-native-generate-learning-2026-10-06.md)
+now has executed CPU/CUDA parity, full120 delayed geometric credit, real full-bank
+Copy+Generate admission and six completed128-update fits across three paired
+seeds. Every fit improves canonical CE but remains0/512 complete replies, fails
+at its first generated token and exports unchanged hard token codes. Joint
+learning changes context bytes and all generated sequences, helping some rows
+but worsening mean CE in every seed. Retain that adverse interaction; it does
+not establish a geometry-family failure or justify repeating the same dose.
 
-[Native Generate](geometric-native-generate-learning-2026-10-06.md) now executes
-a real CUDA optimizer step with independent integer reload. Both context and
-decoder coefficients change, but the joint synthetic endpoint loses four exact
-targets versus the decoder-only cross; retain this adverse interaction. The next
-integrated path uses Generate and Copy from the SAME full-bank state, real-tokenizer
-ordinary reply words and a separately authored input-derived answerability control.
-Compare output-only/joint on the full exposed construction panel before prospectively
-unopened transfer. Native coefficient and prototype threshold reachability must be
-checked before a bounded fit; tiny rates that mathematically lock geometry cannot
-answer the learning question. Actual complete emitted-prefix replies remain primary.
-The bank fitter compiles and real CUDA admission executes; actual optimizer fits
-remain pending measured complete-cost admission. Connected gradients, discrete byte
-changes and a passed authoring control do not qualify chat or attention.
+The immediate intervention is one matched, label-free balanced token-code
+initialization across all eight existing lanes. Six legacy token-constant lanes
+cancel from Generate ranking, so their activation changes effective factor
+participation without adding runtime operators or semantic features. The new
+mode passes explicit eight-lane CUDA adjoint parity and actual native bank
+admission. Its seed1001 output-only fit is active; all512 initial rows match the
+retained cost-refused attempt, and the retry passes complete-cost admission
+before optimizer1. Further seeds are not admitted by this result. Current state
+owns exact source, artifacts, processes, cost limits and results.
 
-[Composed predictive state credit](geometric-composed-state-credit-2026-10-06.md)
-is now executed: all9 state families receive nonzero credit at12 sampled positions,
-with unchanged native baseline and independent export/reload output. This admits
-the learning connection, not a prediction improvement. Before the next fit, adapt
-the actual native learner's fit/optimizer to the [validated CUDA backend](geometric-native-cuda-learning-2026-10-06.md).
-Its forward/backward parity is now measured; the historical fit modes still need
-device selection and resident-step integration. Adding a device flag or using the
-separate D19 backend is insufficient. Do not rent idle
-GPUs to repeat CPU-only fits. Keep normalizer work with DeepSeek.
-The next predictive capability remains ordinary-token Generate jointly trained
-with geometric recurrence and attention, admitting the complete fixed vocabulary
-without supplied-answer records or authored semantic slots. Use shared H4 token-code
-potentials as the geometric hypothesis and direct token/root Q4 tables as a capacity
-control. Require absent-source next tokens, actual own-prefix continuations and
-independent integer reload; connected gradients alone are not success.
+The [panel answerability review](geometric-native-generate-learning-2026-10-06.md)
+finds no selected-answer handoff or actual token-label contradiction: input-only
+reference512/512, tokenizer roundtrip/legal EOS, competing full Sources and
+past-only teacher forcing. Construction and development reuse the exposed panel;
+this is not fresh transfer. Full eight-state uniqueness does not prove separation
+by shared unary/disjoint-pair fields. Learned ordinary reply generation remains
+unqualified until complete actual own-prefix answers work.
+
+Next decisions follow actual native behavior:
+
+- If the balanced learner produces useful complete replies, retain it and freeze
+  independent source/order transfer before claiming generalization; distinguish
+  initialization gains from fitted gains and then revisit joint context learning.
+- If hard codes remain static and prediction fails, test native conditional code
+  alternatives against the entire declared alias-pool objective. Reuse retained
+  SharedCore hard-loss incumbent/rollback/replay learning rather than treating
+  categorical learning as absent. Its historical byte-tree objective is not the
+  current decoder. Every nongold denominator position still matters; only actual
+  improving alternatives justify adapting an accepted-code optimizer.
+- If no useful alternatives appear, investigate coupled representation/factor
+  capacity; do not change dose, normalize away the failure or add semantic gates.
+
+[Composed state credit](geometric-composed-state-credit-2026-10-06.md) and the
+[resident native CUDA learner](geometric-native-cuda-learning-2026-10-06.md)
+remain implemented connections, not chat qualification. Older Copy channels
+remain a subsequent credit seam; do not infer their repair from Generate checks.
+Keep normalizer work with DeepSeek and shared-session ownership coordinated.
+The target remains ordinary-token prediction jointly using native recurrence,
+geometric attention and the complete vocabulary, without supplied answers,
+transformer serving or a new Python model dependency. Shared H4 potentials remain
+the hypothesis; general prose, reasoning and whole-path laptop cost still require
+capability evidence. No historical engine is reactivated by this source review.
 
 
 ## Immediate geometric attention dependency — October 6 source-bound result

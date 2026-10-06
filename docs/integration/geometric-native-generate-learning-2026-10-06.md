@@ -673,3 +673,53 @@ The latest-start estimate09:19:00Z drifts5s; actual outerend10:45:45Z still
 leaves5m15s before the unchanged10:51Z rental ceiling. No additional paid
 extension and no automatic third retry. Full initial replay/cost admission
 remain pending.
+
+## Completed paired verdict and retained learning mechanisms
+
+Final joint seed1003 exits0 at09:26:56Z:128updates,CE8.187637→7.924625,
+0/512complete/allfirsterrors0,0hardcodechanges,12207 changedcontextbytes.
+Independent six-run review checks6144 saved-row SHA bindings, native payloads
+and6664 canonicalpositions perstage/run. All512 first targets in each of the six runs areGenerate-only;
+all512 paired generated sequences differ perseed. Joint lower-CE row counts
+are222/201/227; output-only lower290/311/285, no ties. Output-only meanCE is
+better in allseeds; neitherarm solvesprediction. No additional inference or
+BLAKE3 digest verification occurs in this saved-evidence review. ReceiptSHA256
+e50428692334f0bdabfc15cbb7cff367f7c3168dcfbec2edb02a6b9dfc746e03.
+
+Balanced retry completes full512initialparity againstattempt1:6664canonical
+and16355ownprefixpackets, initialevaluationSHA66705d22eda9e4b4e4ccd23ba0ba4200e7617f49cd8e46df48e996b0e2c04e1b.
+ActualB8 24.341469343s projects4424.48772131s<5100 beforeoptimizer1; fit
+is now optimizing, stillunfinished. InitialparityreviewSHA9df912b33d73e17427a485070dbcdbd33521a4a93c11c3922c6f4edecefcdcd4.
+
+Retained native learning was not absent. `shared_core/training.rs::fit`
+recomputes hard causal byte/EOS likelihood after root proposals, retains strict
+improvements and rolls back rejected moves. `shared_core/tied_training.rs`
+implements callback-based hard categorical search with best-pair replay.
+Historical delivery#1229/#1234/#1237 retains failed comparator/transfer gates;
+those limits remain, and the older257-symbol tree is not a current4096-token
+Copy+Generate optimizer. The reusable piece is incumbent/whole-objective/rollback/
+replay discipline, together with currentGenerate120-code conditional scorers.
+Parsing/read-utility/address-margin learners are not prediction-loss substitutes.
+
+For one decoder-only token-prototype substitution at fixed teacher-forced states,
+all training positions matter because even nongold changes affect the denominator.
+Source analysis identifies a conditional exact mass cache: when the clipped
+maximum reference stays unchanged, replace that Generate atom weight in total
+mass and in goldalias mass iff its token isgold. Copyaliases stayincluded.
+Changed references require full authoritative reduction; quantized interpolation
+does not admit assumed uniform rescaling. A future implementation must reuse
+the authenticated exp/kernel and original CE accumulation order. This is a
+loss-mass identity, not a fabricated full reduction trace or current optimizer.
+Context/coefficient changes invalidate its cache. Acceptedhardcodes must own
+export state so a later shadow export cannot overwrite them. No helper/search
+is implemented or adopted here; require actual improving native alternatives
+and the balanced result before adaptation.
+
+Panel source review finds no selected-answer handoff or actual label/token
+contradiction:512input-onlyreference controls pass, actualtokenizer/EOSchecks
+pass, multiple competing Sources are admitted, goldselected Source appears
+only in labels/reference receipts, and teacherforcing exposes pasttokens only.
+The full8state collision audit does not prove separability by shared factors.
+Max-event reference metadata is not automatically a native semantic input;
+visiblepanelcues support the bounded task, not arbitrarytimestampreasoning.
+No new data regeneration or modelcompute accompanies this source review.
