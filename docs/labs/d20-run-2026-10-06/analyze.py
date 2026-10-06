@@ -18,8 +18,8 @@ ROOTS = {
     ("geometric", 2): f"{BATTERY}/R2-G-rrarra-s2",
     ("geometric", 3): f"{BATTERY}/R2-G-rrarra-s3",
     ("control", 1): f"{REPORTS}/d20run-20261006-0136-ctl6-rrarra-s1",
-    ("control", 2): f"{BATTERY}/R2-C6-matched-s2",
-    ("control", 3): f"{BATTERY}/R2-C6-matched-s3",
+    ("control", 2): f"{REPORTS}/d20run-20261006-0152-ctl6-rrarra-s2",
+    ("control", 3): f"{REPORTS}/d20run-20261006-0152-ctl6-rrarra-s3",
 }
 VOID_ROOTS = {
     "G-s1-original": "d20-control-20261006-0110-battery/G-rrarra-s1 (SIGTERM 9 s)",
