@@ -1276,7 +1276,7 @@ impl FusedRead {
                 )?;
             }
             let d_aux = if self.null || self.age || scaled {
-                tensor(d_aux, device, aux.shape())
+                tensor_f32(d_aux, device, aux.shape())
             } else {
                 Tensor::zeros(aux.shape(), DType::F32, aux.device())?
             };
