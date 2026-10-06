@@ -321,19 +321,16 @@ pub const CLAUSE_SEPARATORS: [&str; 3] = [" and ", " but ", " / "];
 
 /// Clause split of one sentence at every occurrence of a separator.
 fn split_coordinated(sentence: &str) -> Vec<String> {
-    let lower = sentence.to_lowercase();
-    // Byte offsets are identical for ASCII; fall back to no split if
-    // lowercasing changed the byte length.
-    if lower.len() != sentence.len() {
-        return vec![sentence.to_string()];
-    }
+    // ASCII lowercasing keeps every byte offset; the separators are ASCII,
+    // so a match always starts and ends on a char boundary.
+    let lower = sentence.to_ascii_lowercase();
     let mut cuts: Vec<(usize, usize)> = Vec::new();
     let bytes = lower.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
         let mut matched = None;
         for sep in CLAUSE_SEPARATORS {
-            if lower[i..].starts_with(sep) {
+            if bytes[i..].starts_with(sep.as_bytes()) {
                 matched = Some(sep.len());
                 break;
             }
@@ -717,10 +714,27 @@ pub struct MiniLm {
 }
 
 fn linear(x: &Tensor, w: &Tensor, b: &Tensor) -> Result<Tensor> {
-    x.broadcast_matmul(&w.t().map_err(ce)?)
+    // Flatten leading dimensions into one 2-D matmul (a broadcast batched
+    // matmul of many 3-row products is far slower on the CPU backend).
+    let dims = x.dims().to_vec();
+    let (rows, inner) = match dims.as_slice() {
+        [r, i] => (*r, *i),
+        [a, t, i] => (a * t, *i),
+        _ => return Err(format!("linear: unsupported shape {dims:?}")),
+    };
+    let out = w.dims()[0];
+    let y = x
+        .reshape((rows, inner))
+        .map_err(ce)?
+        .matmul(&w.t().map_err(ce)?)
         .map_err(ce)?
         .broadcast_add(b)
-        .map_err(ce)
+        .map_err(ce)?;
+    let mut shape = dims;
+    if let Some(last) = shape.last_mut() {
+        *last = out;
+    }
+    y.reshape(shape).map_err(ce)
 }
 
 fn layer_norm(x: &Tensor, w: &Tensor, b: &Tensor) -> Result<Tensor> {
@@ -1174,6 +1188,8 @@ mod tests {
         let c = split_clauses("tea / coffee; then juice! Really?! ok");
         assert_eq!(c, vec!["tea", "coffee", "then juice!", "Really?!", "ok"]);
         // A period inside a number does not split; "And" at a sentence start does not.
+        let c = split_clauses("Café and crème brûlée and tea.");
+        assert_eq!(c, vec!["Café", "crème brûlée", "tea."]);
         let c = split_clauses("It costs 3.50 dollars. And then we left");
         assert_eq!(c, vec!["It costs 3.50 dollars.", "And then we left"]);
         let h = segment_history(&["A and B.", "C."]);
