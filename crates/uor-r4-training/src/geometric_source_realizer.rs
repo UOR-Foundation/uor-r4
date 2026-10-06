@@ -4993,8 +4993,10 @@ mod tests {
             &Device::Cpu,
         )?)?;
         let end = native.compile_source_end_transport(&cue, &prefix, end_weights.native()?)?;
-        let ids = [4];
-        let other = [6];
+        // The first Copy token uses the tokenizer's leading-space alias;
+        // repeated values retain ordinary token 4/6 support after that alias.
+        let ids = [4, 4, 4];
+        let other = [6, 6, 6];
         let compiler = SourceEmissionCompiler::new(TOK.as_bytes())?;
         let view = compiler.compile(&ids)?;
         let other_view = compiler.compile(&other)?;
@@ -5054,8 +5056,22 @@ mod tests {
             .weight_q31;
         let expected = -(mass as f64 / actions.total_weight_q31 as f64).ln();
         assert!((f64::from(out.loss.to_scalar::<f32>()?) - expected).abs() < 1e-4);
+        let bank = &factual.prefix_bank.cue_bank.bank;
+        let target_candidate = bank
+            .candidates
+            .iter()
+            .position(|c| c.occurrence.record == 7)
+            .ok_or_else(|| invalid("joint fixture target record not admitted"))?;
+        let other_candidate = bank
+            .candidates
+            .iter()
+            .position(|c| c.occurrence.record == 8)
+            .ok_or_else(|| invalid("joint fixture distractor record not admitted"))?;
         let carrier = &factual.prefix_bank.cue_bank.carrier;
-        assert_ne!(carrier.relative_roots[0][0], carrier.relative_roots[0][1]);
+        assert_ne!(
+            carrier.relative_roots[0][target_candidate],
+            carrier.relative_roots[0][other_candidate]
+        );
         let store = out.loss.backward()?;
         for v in fixture
             .weights
