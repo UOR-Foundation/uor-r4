@@ -1,27 +1,72 @@
 # Current UOR-R4 research state
 
-## Ordered geometric cue foundation — October 5 (implementation pending execution)
+## Ordered geometric cue foundation — October 5 (executed, no adoption)
 
-The next bounded discriminator adds an optional ordered interaction of global
-cue lanes5,7 (head1/local1,3) to the retained support8 development donor. Sixteen
-Q4 coefficients compile into a64KiB padded table using the existing canonical
-Q25 basis and checked pair arithmetic. Numerical scoring reuses directed H4
-relative roots, masks either absent lane, and performs one additional lookup/add.
-The canonical Q25 observation basis is rounded; it is not exact Z[phi].
+[PR1768](https://github.com/UOR-Foundation/uor-r4/pull/1768), numerical source
+`5d5b4c56587615d08efea73fe0173c3ab1d689fe`, implements and executes an optional
+ordered interaction of global cue lanes5,7 (head1/local1,3) from the support8
+unary donor `771864b7581b79a9d7b93137eb5e28e863da1361e04f41c0bf8810e442469781`.
+Sixteen Q4 coefficients reuse the checked pair compiler and pinned canonical
+Q25 basis to construct a64KiB padded table. The basis is rounded, not exact
+Z[phi]. Scoring reuses directed H4 relation roots, masks either absent lane and
+adds one lookup score. Legacy None files/metadata remain; Some binds separate
+shadow/packed bytes, basis/table hashes and actual cue→prefix→end receipts.
+This does not qualify whole-model opcodes, allocation or laptop serving.
 
-The foundation preserves the unary parent, admission and frozen prefix/end
-payloads. It exports/reloads the whole cue→prefix→end metadata chain, tests zero
-overlay numerical and generated-output parity on512 development rows, checks
-only16 coefficients receive final native-loss credit, and applies one signed
-quarter intervention as a sensitivity check. It runs no optimizer or held-out
-predictions. Until actual execution completes, this is source implementation,
-not a measured attention improvement. No chat or transfer promotion follows.
+Actual512 development rows /5,128 target positions pass zero-overlay numerical
+state/route/mass and own-prefix generated-output replay against the parent.
+Independent training/native reload and full integer trace parity pass. All16
+joint coefficients have finite nonzero final native-loss gradients; source and
+unary Vars are disconnected, while prefix/end payload bytes stay fixed.
+Gradient norm0.017253972812009397. Native row-average CE matches0.9665787502842376.
+One sensitivity intervention uses coordinate14 at−1 quarter; the saved signed
+vector and lower-index tie law independently reproduce that choice. No optimizer
+or held-out predictions ran, and this is not an adopted fit.
 
-[Work card](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-6005856726)
-precharges120 minutes total; buildCPU8/RSS8GiB, nativeCPU16/RSS12GiB/900s,
-1GiB per report and10GiB Codex pod storage with128MiB reserve. Compute uses
-main uor-pod under the owner cap. DeepSeek owns its independent softmax and
-tensor-core offline training investigation; this task does not change that seam.
+| Development outcome | Zero joint / parent | Quarter intervention |
+| --- | ---: | ---: |
+| Native full-answer/EOS CE |0.9665787502842376|0.9644756729173819|
+| First-token correct /512 |219|224|
+| Complete own-prefix answer /512 |59|58|
+
+First-token outcomes have8 gains/3 losses; completion has2 gains/3 losses.
+First-read bank-route indices change on13 rows (not a source-accuracy claim).
+Keep the quarter as sensitivity evidence, not chat/transfer progress. Saved-trace
+analysis verifies table-read/relative-read accounting on1,024 first reads: joint
+present candidates range0–31, mean13.78515625. It needs no extra relative lookup;
+the extra packed payload is8B and expanded table64KiB.
+
+Scoped release checks pass2 integer +2 exact new training tests +43 fitter +49
+observer tests, formatting and build, at this same numerical head. The first two
+attempts remain retained: ambiguous F64 fixture construction, then unsupported
+first-token emission alias. The guarded probes refused to start; these are not
+mechanism negatives. Existing unary terminal-rebind tests do not cover the
+optional-joint export branch; that branch is source-inspected only.
+
+Actual checks3:180.361s CPU8, peak owned RSS3,138,940,928B. Actual foundation:
+60.047s CPU16, peak owned RSS7,908,687,872B, Linux x86_64 `fc889a47ddcc`, CUDA
+hidden; no Metal/CUDA model proof. Saved-trace analysis:6.371s CPU2/RSS665,620,480B.
+Report lists456,795,105B under its1GiB cap. Executable SHA256
+`66f31a127f775ac7f8e7f0bbd7b5b1c88a22a7795611d0cca9412bb87d6a24d7`;
+configuration SHA256
+`e3fdd24e86830a8a25b236bc22a17b773b4bd93bf2a536fddb74301da99973cf`.
+Full retained reports, negative checks, binary, exact overlays/inventories and
+helper commands live in `/workspace/uor-r4/codex/cue-joint-foundation/` on the
+canonical network volume. The laptop holds only a small receipt subset, not a
+complete sealed report root. Complete cost was precharged120 minutes including
+preparation, failed checks, retry, review and preservation. Codex canonical
+storage6.5GiB plus1.4GiB volatile source before shutdown stayed below10GiB.
+
+Next freeze this pair and zero overlay for one bounded joint-only learning
+experiment with full answer/EOS and generated-completion outcomes; retain every
+per-row harm and the zero parent. First inspect the3 completion losses to
+separate changed binding from prefix/end effects. Lower CE alone does not justify
+chat adoption. After selection use frozen reversed-order and companion-erased
+controls, then a newly frozen unexposed composition panel; refitting the reversed
+bilinear matrix merely transposes its parameters. Keep a single-parent result
+separate from the3-seed bench /2-seed chat verdict required by the shared audit.
+DeepSeek's softmax/tensor-core offline-training investigation remains a separate
+owned seam; this task does not change it.
 
 ## Frozen geometric cue support comparison — October 5
 

@@ -52,6 +52,15 @@ complete development answers. The wider step regresses the exposed composition
 panel; retain both its development donor and the original parent, without a chat
 promotion or unchanged dose extension. Current state owns exact counters/receipts.
 
+The executed [joint foundation](current-state.md#ordered-geometric-cue-foundation--october-5-executed-no-adoption)
+now validates zero-overlay replay, separate artifact binding, joint-only native
+credit and a forward-sensitive integer interaction. Its one quarter improves
+native CE and first tokens but loses one net complete answer; it is retained
+sensitivity evidence, not adoption. Next inspect those completion harms and run
+one bounded joint-only learning experiment with useful-output guards before any
+new-composition transfer verdict. DeepSeek's offline softmax/tensor-core work
+owns a separate training seam.
+
 The development-only binding analysis now motivates freezing ordered lanes5,7
 for one isolated zero-initialized joint cue overlay, with uniquely attributable
 Source-record credit and companion-permutation controls retained. Sparse joint
