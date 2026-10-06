@@ -208,8 +208,8 @@ pub(super) fn context_forward(
     let trace = zeros::<u32>(d, op.batch * op.time * 24)?;
     let out = zeros::<f32>(d, op.batch * op.time * op.lanes() * PACKED_WIDTH)?;
     let err = zeros::<u32>(d, 1)?;
-    finite(d, rows.clone(), la.shape().elem_count(), &err)?;
-    finite(d, basis.clone(), lb.shape().elem_count(), &err)?;
+    finite(d, rows.slice(..), la.shape().elem_count(), &err)?;
+    finite(d, basis.slice(..), lb.shape().elem_count(), &err)?;
     if op.native_steps.is_some() {
         let count = op.batch * op.time * op.lanes() * 120;
         launch(
@@ -286,9 +286,9 @@ pub(super) fn context_backward(
     let group = upload(d, &products())?;
     let native = upload(d, &metadata(op)?)?;
     let err = zeros::<u32>(d, 1)?;
-    finite(d, rows.clone(), a.elem_count(), &err)?;
-    finite(d, basis.clone(), b.elem_count(), &err)?;
-    finite(d, up.clone(), grad.elem_count(), &err)?;
+    finite(d, rows.slice(..), a.elem_count(), &err)?;
+    finite(d, basis.slice(..), b.elem_count(), &err)?;
+    finite(d, up.slice(..), grad.elem_count(), &err)?;
     let trace = if op.native_steps.is_some() {
         native
     } else {
@@ -299,8 +299,8 @@ pub(super) fn context_backward(
             "context_fwd",
             op.batch,
             &[
-                Arg::F(rows.clone()),
-                Arg::F(basis.clone()),
+                Arg::F(rows.slice(..)),
+                Arg::F(basis.slice(..)),
                 Arg::D(q.as_view()),
                 Arg::U(group.as_view()),
                 Arg::U(native.as_view()),
@@ -330,8 +330,8 @@ pub(super) fn context_backward(
             "readout_credit",
             count,
             &[
-                Arg::F(basis.clone()),
-                Arg::F(up.clone()),
+                Arg::F(basis.slice(..)),
+                Arg::F(up.slice(..)),
                 Arg::D(q.as_view()),
                 Arg::U(trace.as_view()),
                 Arg::D(dr.as_view()),
@@ -350,9 +350,9 @@ pub(super) fn context_backward(
             "action_credit",
             op.batch * op.lanes(),
             &[
-                Arg::F(rows.clone()),
-                Arg::F(basis.clone()),
-                Arg::F(up.clone()),
+                Arg::F(rows.slice(..)),
+                Arg::F(basis.slice(..)),
+                Arg::F(up.slice(..)),
                 Arg::D(q.as_view()),
                 Arg::U(trace.as_view()),
                 Arg::D(con.as_view()),
@@ -373,8 +373,8 @@ pub(super) fn context_backward(
             "transition_credit",
             count,
             &[
-                Arg::F(basis.clone()),
-                Arg::F(up.clone()),
+                Arg::F(basis.slice(..)),
+                Arg::F(up.slice(..)),
                 Arg::D(q.as_view()),
                 Arg::U(group.as_view()),
                 Arg::U(trace.as_view()),
@@ -465,11 +465,11 @@ fn emit_run(
     let dr = zeros::<f32>(d, n * 120)?;
     let dc = zeros::<f32>(d, n * 33)?;
     let err = zeros::<u32>(d, 1)?;
-    finite(d, r.clone(), n * 120, &err)?;
-    finite(d, c.clone(), n * 33, &err)?;
+    finite(d, r.slice(..), n * 120, &err)?;
+    finite(d, c.slice(..), n * 33, &err)?;
     let backward = up.is_some();
     if let Some(v) = &up {
-        finite(d, v.clone(), n * 4, &err)?;
+        finite(d, v.slice(..), n * 4, &err)?;
     }
     launch(
         d,
