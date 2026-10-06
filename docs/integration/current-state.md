@@ -1,5 +1,18 @@
 # Current UOR-R4 research state
 
+## Delayed geometric prediction credit — October 6
+
+Native120-state interventions reproduce a missing temporal learning path: a fixed
+final action transports earlier state into final utility, yet old state-logit
+credit gives the earlier transition zero gradient when its score bases vanish.
+The [Generate repair](geometric-native-generate-learning-2026-10-06.md) retains
+full120 utility through exact H4 action/state permutations on CPU/CUDA.33 focused
+checks pass at `f6973e0a`, including actual GPU parity and no doubled Generate
+parameter credit. Native forward/artifacts remain fixed; this is a local surrogate,
+not a global posterior. Copy credit remains legacy. Next: real-bank CUDA/native
+admission, then measured complete-cost admission for paired128-update fits.
+PR1792 is still draft/unmerged; no language result from these checks.
+
 ## Native Generate update — October 6, mixed result
 
 [Native Generate learning](geometric-native-generate-learning-2026-10-06.md) now

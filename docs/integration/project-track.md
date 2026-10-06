@@ -2,6 +2,13 @@
 
 ## Predictive geometry and native CUDA learning — October 6
 
+The immediate learning dependency now has an executed causal diagnosis and
+CPU/CUDA repair: [full120 temporal Generate utility](geometric-native-generate-learning-2026-10-06.md)
+reaches earlier geometric transitions that the old state-logit channel omitted.
+Keep its native forward fixed and qualify real-data admission before the joint fit.
+The older Copy channels remain explicit controls and a subsequent credit seam;
+do not infer their repair or useful attention from Generate checks alone.
+
 [Native Generate](geometric-native-generate-learning-2026-10-06.md) now executes
 a real CUDA optimizer step with independent integer reload. Both context and
 decoder coefficients change, but the joint synthetic endpoint loses four exact

@@ -7,12 +7,45 @@ ordinary response tokens and retrieval over the same full causal source-bank sta
 
 ## Implemented mechanism
 
+### Delayed finite-state credit repair
+
+A native intervention diagnosis at `e5072039c51a0d5f62b365d1c6edfaa5b125db19`
+reproduces a causal omission in the older state-logit learning path. The second
+token has a fixed identity action and zero state-dependent transition bases.
+Changing its earlier retained state across all120 H4 roots changes its final
+native utility, but the old backward gives the first token exactly zero transition
+credit. This is an executed diagnosis, not a negative geometry verdict.
+
+The repair adds a training-only hard-onehot retained-state utility channel. Its
+backward retains120 values through time: action alternatives receive `U(old*a)`,
+the existing local action-choice pullback runs once, and earlier-state alternatives
+receive `U(r*factual_action)` plus the transition-score dependence on each root.
+Arbitrary utility is not projected into four coordinates. Other lanes and the
+carried action remain factual, so this is a declared local finite-choice surrogate,
+not a global recurrent posterior or a derivative of argmax.
+
+Generate replaces its old state-softmax attachment with this utility channel.
+Factual coefficient and token-prototype gradients remain separate. Native forward
+scores, state transitions and artifact formats are unchanged. Existing Copy
+consumers still use their legacy logit/four-coordinate credit; the repair does not
+yet qualify their temporal learning.
+
+At `f6973e0a6b0eedcd1e4ee92b743e59c53303de64`,33 focused checks pass on the
+leased5090 pod:23 context checks,9 Generate checks and1 bank-binding check. Actual
+CUDA tests cover delayed even-harmonic credit, CPU/CUDA parity, cross-lane dependence,
+reset, and unchanged legacy channels. The Generate check independently enumerates
+native conditional utilities and verifies unchanged parameter gradients without
+duplicate state credit. Binary SHA256:
+`6bc8563b2d5f037a590004d7380c4d405c701800d8645ed30a8d5bd9d1486ec3`.
+Real-data CUDA admission and optimizer fits remain separate requirements.
+
 The opt-in decoder learns H4 token-code tuples, directed relative unary fields,
 ordered pair fields and token biases. Scores use the exact historical H4 frame.
 Full120 conditional utilities carry local state/code credit, including table modes
 that the older four-coordinate projection erased. The factual score is the native
-integer score; offline Rust/CUDA supplies its differentiable adjoints. The earlier
-recurrence still uses its four-coordinate approximation. The current bank adapter
+integer score; offline Rust/CUDA supplies its declared surrogate adjoints. The
+legacy channels retain their four-coordinate recurrence; Generate now has the
+separate temporal utility channel described above. The current bank adapter
 scores every Copy occurrence; the stopped selected-winner route belongs to the
 older endpoint Period/Stop branch, which this vocabulary pool does not consume.
 Differentiating that older route would not repair this path's temporal credit.
