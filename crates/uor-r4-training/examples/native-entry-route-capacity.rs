@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 //! Offline trained-checkpoint entry route capacity. No optimizer or runtime selector.
 use candle_core::Device;
 use serde::Deserialize;
