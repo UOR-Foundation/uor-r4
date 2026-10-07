@@ -209,12 +209,28 @@ export UOR_POD_MAX_PODS=9 UOR_POD_MAX_RATE=99
 expect "up: no 5090 in EUR-NO-1 -> EU-RO-1, never 4090" 0 "Creating 2 x 5090 .* in EU-RO-1 volume dryrunvolume \\(non-canonical\\) for codex/x1" -- up "${X1[@]}" --purpose x --hours 1 --count 2
 expect "up: creates uor-shared-EU-RO-1 lazily" 0 "network-volume create --name uor-shared-EU-RO-1 --size 100 --data-center-id EU-RO-1" -- up "${X1[@]}" --purpose x --hours 1 --count 2
 expect "up --gpu 4090 explicit -> EUR-NO-1 canonical" 0 "Creating 2 x 4090 .* in EUR-NO-1 for codex/x1" -- up "${X1[@]}" --gpu 4090 --purpose x --hours 1 --count 2
-UOR_POD_VOLUME_DCS="EUR-NO-1 EUR-IS-1" expect "up: no 5090 in volume DCs refuses (no silent fallback)" 1 "no 5090 stock in EUR-NO-1 EUR-IS-1.*--wait" -- up "${X1[@]}" --purpose x --hours 1 --count 2
+UOR_POD_VOLUME_DCS="EUR-NO-1 EUR-IS-1" expect "up --gpu 5090: no 5090 in volume DCs refuses (no silent fallback)" 1 "no 5090 stock in EUR-NO-1 EUR-IS-1.*--wait" -- up "${X1[@]}" --gpu 5090 --purpose x --hours 1 --count 2
 has "refusal prints the stock table" "4090 \\\$0.74: EUR-NO-1\\*=Low"
-UOR_POD_VOLUME_DCS="EUR-NO-1 EUR-IS-1" expect "up --wait retries every minute" 0 "would retry every 1 min" -- up "${X1[@]}" --purpose x --hours 1 --count 2 --wait --wait-hours 1
+UOR_POD_VOLUME_DCS="EUR-NO-1 EUR-IS-1" expect "up --wait retries every minute" 0 "would retry every 1 min" -- up "${X1[@]}" --gpu 5090 --purpose x --hours 1 --count 2 --wait --wait-hours 1
 UOR_POD_VOLUME_DCS="EUR-NO-1 EUR-IS-1" expect "up --allow-off-volume places 5090 in EU-RO-1 without volume" 0 "Creating 2 x 5090 .* in EU-RO-1 OFF-VOLUME" -- up "${X1[@]}" --purpose x --hours 1 --count 2 --allow-off-volume
 UOR_POD_MAX_RATE=4 expect "up over rate cap refused" 1 "exceeds \\\$4/h" -- up "${X1[@]}" --purpose x --hours 1 --count 3
 expect "up (dry) names the next datacenter to try on a stock error" 0 "if EU-RO-1 reports no instances available, try next" -- up "${X1[@]}" --purpose x --hours 1 --count 2
+# GPU ladder (owner 2026-10-07): without --gpu, 5090 -> 4090 -> RTX PRO 6000.
+cp "$FAKE/gpus.json" "$FAKE/gpus.json.orig"
+cat > "$FAKE/gpus.json" <<'J'
+[
+ {"gpuId":"NVIDIA GeForce RTX 5090","securePricePerHr":0.99,"dataCenterAvailability":[{"dataCenterId":"EUR-NO-1","stockStatus":"none"},{"dataCenterId":"EU-RO-1","stockStatus":"none"}]},
+ {"gpuId":"NVIDIA GeForce RTX 4090","securePricePerHr":0.74,"dataCenterAvailability":[{"dataCenterId":"EUR-NO-1","stockStatus":"Low"}]},
+ {"gpuId":"NVIDIA RTX PRO 6000 Blackwell Server Edition","securePricePerHr":2.09,"dataCenterAvailability":[{"dataCenterId":"EU-RO-1","stockStatus":"Low"}]}
+]
+J
+expect "ladder: no 5090 anywhere -> 4090" 0 "Creating 2 x 4090 \\(ladder\\) .* in EUR-NO-1 for codex/x1" -- up "${X1[@]}" --purpose x --hours 1 --count 2
+expect "explicit --gpu 5090 with no stock still refuses" 1 "no 5090 stock in .*--wait" -- up "${X1[@]}" --gpu 5090 --purpose x --hours 1 --count 2
+jq 'map(if .gpuId == "NVIDIA GeForce RTX 4090" then .dataCenterAvailability = [{"dataCenterId":"EUR-NO-1","stockStatus":"none"}] else . end)' "$FAKE/gpus.json" > "$FAKE/gpus.json.new" && mv "$FAKE/gpus.json.new" "$FAKE/gpus.json"
+expect "ladder: no 5090 or 4090 -> RTX PRO 6000" 0 "Creating 2 x pro6000 \\(ladder\\) .* in EU-RO-1 volume" -- up "${X1[@]}" --purpose x --hours 1 --count 2
+jq 'map(.dataCenterAvailability |= map(.stockStatus = "none"))' "$FAKE/gpus.json" > "$FAKE/gpus.json.new" && mv "$FAKE/gpus.json.new" "$FAKE/gpus.json"
+expect "ladder: no stock on any rung refuses, naming the ladder" 1 "no ladder 5090 -> 4090 -> pro6000 stock" -- up "${X1[@]}" --purpose x --hours 1 --count 2
+mv "$FAKE/gpus.json.orig" "$FAKE/gpus.json"
 # helper files are checked before anything is created: a copy of the tool with
 # one helper missing, empty or broken must stop before any create/volume call
 PF=$W/pf; mkdir -p "$PF"; cp "$HERE/../uor-pod" "$HERE/../uor-pod-bootstrap.sh" "$HERE/../hot-set.txt" "$PF/"
@@ -419,7 +435,7 @@ echo '[]' > "$FAKE/pods.json"
 cat > "$FAKE/gpus.json" <<'J'
 [{"gpuId":"NVIDIA GeForce RTX 5090","securePricePerHr":0.99,"dataCenterAvailability":[{"dataCenterId":"EUR-NO-1","stockStatus":"Low"},{"dataCenterId":"EU-RO-1","stockStatus":"Low"},{"dataCenterId":"EUR-IS-1","stockStatus":"Low"}]}]
 J
-UP=(up "${X1[@]}" --purpose fallback --hours 1 --count 2 --no-bootstrap --ref "$SHA40")
+UP=(up "${X1[@]}" --gpu 5090 --purpose fallback --hours 1 --count 2 --no-bootstrap --ref "$SHA40")
 creates() { grep -c "pod create .*--data-center-ids $1" "$FAKE/calls" || true; }
 echo EUR-NO-1 > "$FAKE/nostock"; : > "$FAKE/calls"
 expect "create out of stock in EUR-NO-1 -> next datacenter EU-RO-1" 0 "Pod podnew created" -- "${UP[@]}"
@@ -444,7 +460,7 @@ rm -f "$FAKE/create-error"
 # ---- "Low" stock is usually one free card per host: without --count, up falls
 # back from 2 GPUs to 1; an explicit --count 2 insists
 rm -rf "$UOR_POD_STATE"; echo '[]' > "$FAKE/pods.json"; echo 1 > "$FAKE/max-count"; : > "$FAKE/calls"
-UP1=(up "${X1[@]}" --purpose fallback --hours 1 --no-bootstrap --ref "$SHA40")
+UP1=(up "${X1[@]}" --gpu 5090 --purpose fallback --hours 1 --no-bootstrap --ref "$SHA40")
 expect "no host with 2 free and no --count -> falls back to 1 GPU" 0 "Pod podnew created" -- "${UP1[@]}"
 has "the fallback is announced" "no 2 x 5090 on one host; falling back to 1 x 5090"
 if grep -q -- "--gpu-count 1 " "$FAKE/calls"; then ok "the second attempt asks for one GPU"; else bad "the second attempt asks for one GPU"; fi

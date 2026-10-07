@@ -75,12 +75,17 @@ GPU_POLICY='5090|NVIDIA GeForce RTX 5090|120|default
 4090|NVIDIA GeForce RTX 4090|89|explicit
 l40s|NVIDIA L40S|89|explicit
 6000ada|NVIDIA RTX 6000 Ada Generation|89|explicit
+pro6000|NVIDIA RTX PRO 6000 Blackwell Server Edition|120|explicit
 a100|NVIDIA A100 80GB PCIe|80|forbidden
 a100sxm|NVIDIA A100-SXM4-80GB|80|forbidden
 h100|NVIDIA H100 80GB HBM3|90|forbidden
 h100pcie|NVIDIA H100 PCIe|90|forbidden
 h200|NVIDIA H200|90|forbidden
 b200|NVIDIA B200|100|forbidden'
+
+# `up` without --gpu walks this ladder (owner decision 2026-10-07: 5090, then
+# 4090, then RTX PRO 6000); an explicit --gpu KEY tries that GPU only.
+GPU_LADDER='5090 4090 pro6000'
 
 gpu_field() {  # gpu_field KEY N -> field N (2 id, 3 cap, 4 tier)
   printf '%s\n' "$GPU_POLICY" | awk -F'|' -v k="$1" -v n="$2" '$1==k {print $n}'
@@ -365,7 +370,7 @@ unmirror_lease() {
 # ---------------------------------------------------------------- argument parsing
 LAB='' SESSION='' ID='' WHO='' PURPOSE='' HOURS='' CARD='' GPUS='' GPU='' COUNT='' REF=main
 OWNER_OK=0 OFF_VOLUME=0 WAIT=0 WAIT_HOURS=2 NO_BOOT=0 KEEP_FAIL=0 OLLAMA=0 FORCE=0 FORCE_RETRY=0 OPTS_SEEN=''
-NO_MIRROR=0 DISCARD_LOCAL=0 CONFIRM_ARCHIVED=0 DU=0 NLINES=20 VIA='' UP_TEST=0 KEEP_REASON='' OLDER=24h YES=0
+LADDER=0 NO_MIRROR=0 DISCARD_LOCAL=0 CONFIRM_ARCHIVED=0 DU=0 NLINES=20 VIA='' UP_TEST=0 KEEP_REASON='' OLDER=24h YES=0
 POS=()
 parse() {
   while [ $# -gt 0 ]; do
@@ -586,7 +591,7 @@ price_of() { echo "$1" | jq -r --arg g "$2" '.[] | select(.gpuId == $g) | .secur
 print_stock_table() {  # STOCK-JSON [KEYS]
   local stock=$1 k
   echo "Stock by datacenter (secure \$/GPU/h; * = volume datacenter, placement order $VOLUME_DCS):"
-  for k in ${2:-5090 4090 l40s 6000ada}; do
+  for k in ${2:-5090 4090 pro6000 l40s 6000ada}; do
     echo "$stock" | jq -r --arg g "$(gpu_field "$k" 2)" --arg k "$k" --arg vdcs " $VOLUME_DCS " \
       '.[] | select(.gpuId == $g) | "  \($k) $\(.securePricePerHr // "?"): \([.dataCenterAvailability[]? | select(.stockStatus != "none" and .stockStatus != "")
         | .dataCenterId as $d | "\($d)\(if ($vdcs | contains(" " + $d + " ")) then "*" else "" end)=\(.stockStatus)"] | join(" ") | if . == "" then "no stock" else . end)"'
@@ -653,6 +658,7 @@ up_attempt() {
     die "cap reached ($n_run of $MAX_PODS pods) and no GPU is free: wait for a lease to expire (uor-pod status) or ask the owner. Do not fall back to the laptop CPU because of the cap."
   fi
   gid=$(gpu_field "$req" 2); price=$(price_of "$stock" "$gid")
+  if [ -z "$price" ] && [ "$LADDER" = 1 ]; then info "no secure-cloud listing for $gid"; UP_STOCK=$(print_stock_table "$stock"); return 2; fi
   [ -n "$price" ] || { lock_release; die "no secure-cloud price listed for $gid"; }
   add=$(jq -n --argjson p "$price" --argjson c "$count" '$p * $c')
   if jq -en --argjson r "$rate" --argjson a "$add" --argjson m "$MAX_RATE" '$r + $a > $m' >/dev/null && [ "$OWNER_OK" != 1 ]; then
@@ -699,7 +705,7 @@ up_create() {  # COUNT NAME REQ
     if [ "$off" = 1 ]; then args+=(--volume-in-gb "$OFF_VOLUME_DISK_GB"); else args+=(--network-volume-id "$vol"); fi
     UP_DC=$dc UP_OFF=$off UP_VOL=$vol where=$dc
     if [ "$off" = 1 ]; then where="$dc OFF-VOLUME"; elif [ "$dc" != "$CANONICAL_DC" ]; then where="$dc volume $vol (non-canonical)"; fi
-    echo "Creating $count x $req (\$$UP_ADD/h) in $where for $WHO: $PURPOSE"
+    echo "Creating $count x $req$( [ "${LADDER:-0}" = 1 ] && echo ' (ladder)') (\$$UP_ADD/h) in $where for $WHO: $PURPOSE"
     if is_dry; then
       echo "DRY-RUN: runpodctl ${args[*]}" >&2
       echo "DRY-RUN: if $dc reports no instances available, try next:${UP_CANDS#*"$cand"}" >&2
@@ -777,7 +783,9 @@ cmd_up() {
   check_up_args
   [ -n "$LAB" ] && [ -n "$PURPOSE" ] && [ -n "$HOURS" ] || die "up needs --lab, --session, --purpose and --hours"
   check_who; check_hours "$HOURS"
-  local req=${GPU:-5090} count=${COUNT:-2} tier rc deadline waited=0
+  local req=${GPU:-5090} count=${COUNT:-2} tier rc deadline waited=0 rungs=${GPU:-$GPU_LADDER} want
+  LADDER=0; [ -n "$GPU" ] || LADDER=1
+  want=$req; [ "$LADDER" = 0 ] || want="ladder ${GPU_LADDER// / -> }"
   tier=$(gpu_field "$req" 4)
   [ -n "$tier" ] || die "unknown --gpu '$req' (policy keys: $(printf '%s\n' "$GPU_POLICY" | cut -d'|' -f1 | tr '\n' ' '))"
   if [ "$tier" = forbidden ] && [ "$OWNER_OK" != 1 ]; then
@@ -802,33 +810,38 @@ cmd_up() {
   if [ "$UP_TEST" = 1 ]; then name="$TEST_PREFIX$LAB-$(date -u +%m%d-%H%M)"; fi
 
   while :; do
-    lock_acquire
-    rc=0; up_attempt "$req" "$count" || rc=$?
-    if [ "$rc" = 0 ]; then
-      t_create=$(now_epoch)
-      up_create "$count" "$name" "$req" || rc=$?
-      [ "$rc" = 0 ] && break
-    fi
-    lock_release
+    # ladder: the first rung with stock wins; a rung without stock (rc 2) passes
+    # to the next. Caps, free-GPU and create errors stop `up` as before.
+    for req in $rungs; do
+      lock_acquire
+      rc=0; up_attempt "$req" "$count" || rc=$?
+      if [ "$rc" = 0 ]; then
+        t_create=$(now_epoch)
+        up_create "$count" "$name" "$req" || rc=$?
+        [ "$rc" = 0 ] && break 2
+      fi
+      lock_release
+      [ "$LADDER" = 0 ] || info "ladder: no $count x $req placed; trying the next rung"
+    done
     # "Low" stock usually means one free card per host: without an explicit
     # --count, settle for one GPU rather than wait for a 2-GPU host
     if [ -z "$COUNT" ] && [ "$count" -gt 1 ]; then
-      warn "no $count x $req on one host; falling back to 1 x $req (start another pod for a second job)"
+      warn "no $count x $want on one host; falling back to 1 x $want (start another pod for a second job)"
       count=1; continue
     fi
     echo "$UP_STOCK"
     if [ "$WAIT" != 1 ]; then
-      die "no $req stock in $VOLUME_DCS. Re-run with --wait (retries every minute for --wait-hours, default 2)$([ "$req" = 5090 ] && echo ', or choose --gpu 4090 explicitly'); --allow-off-volume places it without a volume"
+      die "no $want stock in $VOLUME_DCS. Re-run with --wait (retries every minute for --wait-hours, default 2)$([ "$req" = 5090 ] && echo ', or choose --gpu 4090 explicitly'); --allow-off-volume places it without a volume"
     fi
     if is_dry; then echo "DRY-RUN: would retry every $((WAIT_INTERVAL / 60)) min until $(jq -rn --argjson t "$deadline" '$t | todate')"; return 0; fi
     if [ "$(now_epoch)" -ge "$deadline" ]; then
       lock_acquire; ledger up-gave-up "$LAB" '' "{\"gpu\": \"$req\", \"count\": $count, \"waited_s\": $waited}"; lock_release
-      board "up gave up: no $count x $req in $VOLUME_DCS after $((waited / 60)) min (by=$WHO — $PURPOSE)"
+      board "up gave up: no $count x $want in $VOLUME_DCS after $((waited / 60)) min (by=$WHO — $PURPOSE)"
       die "no $req stock after waiting $((waited / 60)) min"
     fi
     if [ "$waited" = 0 ]; then
       lock_acquire; ledger up-waiting "$LAB" '' "{\"gpu\": \"$req\", \"count\": $count, \"wait_hours\": $WAIT_HOURS}"; lock_release
-      board "up waiting: no $count x $req in $VOLUME_DCS; by=$WHO retries every $((WAIT_INTERVAL / 60)) min for up to ${WAIT_HOURS} h — $PURPOSE"
+      board "up waiting: no $count x $want in $VOLUME_DCS; by=$WHO retries every $((WAIT_INTERVAL / 60)) min for up to ${WAIT_HOURS} h — $PURPOSE"
     fi
     info "retrying in $((WAIT_INTERVAL / 60)) min (until $(jq -rn --argjson t "$deadline" '$t | todate'))"
     sleep "$WAIT_INTERVAL"; waited=$((waited + WAIT_INTERVAL))
@@ -847,10 +860,10 @@ cmd_up() {
   mkdir -p "$STATE/leases/$pod"
   write_lease "$pod" "$ID" "$(jq -cn --argjson c "$count" '[range(0; $c)]')"
   ledger up "$LAB" "$pod" "$(jq -cn --arg g "$req" --argjson c "$count" --arg dc "$UP_DC" --argjson usd "$UP_ADD" \
-    --arg purpose "$PURPOSE" --arg card "$CARD" --arg v "$UP_VOL" --argjson canon "$canon" \
-    '{gpu: $g, count: $c, dc: $dc, volume: $v, canonical: $canon, usd_per_h: $usd, purpose: $purpose, card: $card}')"
+    --arg purpose "$PURPOSE" --arg card "$CARD" --arg v "$UP_VOL" --argjson canon "$canon" --arg sel "$( [ "$LADDER" = 1 ] && echo ladder || echo explicit)" \
+    '{gpu: $g, count: $c, dc: $dc, volume: $v, canonical: $canon, usd_per_h: $usd, purpose: $purpose, card: $card, gpu_choice: $sel}')"
   lock_release
-  board "up $pod ($count x $req, $where, \$$UP_ADD/h) by=$WHO hours=$HOURS — $PURPOSE${CARD:+ [$CARD]}"
+  board "up $pod ($count x $req$( [ "$LADDER" = 1 ] && echo ' via ladder'), $where, \$$UP_ADD/h) by=$WHO hours=$HOURS — $PURPOSE${CARD:+ [$CARD]}"
   echo "Pod $pod created; waiting for SSH (up to $SSH_WAIT_SECONDS s)"
 
   local deadline addr t_ssh
