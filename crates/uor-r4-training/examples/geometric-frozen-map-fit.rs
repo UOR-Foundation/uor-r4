@@ -88,6 +88,8 @@ struct Args {
     maximum_seconds: u64,
     maximum_report_bytes: u64,
     out: PathBuf,
+    #[serde(default)]
+    baseline: Option<PathBuf>,
 }
 const INPUT_SHA: &str = "b9661606b280884217a64e0a5b643f8324a90390e47ade7241da0889a5f7c86a";
 const LABEL_SHA: &str = "84991e0657b5697c0e061eaa3fe86e4a0ec7ce6bc2be8371b62698c6b8126155";
@@ -314,6 +316,7 @@ fn args() -> Result<Args> {
         || a.maximum_seconds == 0
         || a.maximum_report_bytes < (64 << 20)
         || a.maximum_report_bytes > (2 << 30)
+        || (a.baseline.is_some() && a.mode != Mode::Fit)
     {
         return Err(bad("fixed order seeds/resource admission"));
     }
@@ -327,7 +330,10 @@ fn args() -> Result<Args> {
         &a.training_labels,
         &a.development_inputs,
         &a.development_labels,
-    ] {
+    ]
+    .into_iter()
+    .chain(a.baseline.iter())
+    {
         let input = fs::canonicalize(path)?;
         if output.starts_with(&input) || input.starts_with(&output) {
             return Err(bad("output/input overlap"));
@@ -1572,6 +1578,218 @@ fn metrics(a: &Args, eval: &Value, eps: &[Episode]) -> Result<Value> {
         "scope":"complete native own-prefix outputs and separately canonical teacher-prefix metrics; own position matches without a correct preceding prefix are not successful source-dependent continuation"}),
     )
 }
+
+// f63's native_step/evaluate semantics are byte-identical here. This explicit
+// compatibility allowance must be revisited if initialized native evaluation
+// semantics change; a matching parameter count alone never permits reuse.
+const BASELINE_PRODUCER: &str = "f63ed81fd4f74d2501ba3d9888420662492416df";
+fn baseline_identity(base: &Value, current: &Value, before: &Value, now: &Value) -> Result<()> {
+    let producer = base["source_commit"]
+        .as_str()
+        .ok_or_else(|| bad("baseline producer absent"))?;
+    if producer != BASELINE_PRODUCER && Some(producer) != option_env!("UOR_BUILD_SOURCE_COMMIT") {
+        return Err(bad(
+            "baseline producer has no explicit native-evaluation compatibility",
+        ));
+    }
+    for field in [
+        "checkpoint_receipt_sha256",
+        "parent_config_sha256",
+        "training_input_sha256",
+        "training_labels_sha256",
+        "original_bridge_masters",
+        "marker_masters",
+        "categorical",
+        "initial_active_masters",
+        "active_parameter_names",
+        "fresh_adam",
+        "rates",
+        "phase_policy",
+    ] {
+        if base.get(field).is_none() || base[field] != current[field] {
+            return Err(bad(&format!("baseline initial identity differs: {field}")));
+        }
+    }
+    for field in [
+        "step",
+        "parent",
+        "original_parent",
+        "source_metadata_rebound",
+        "generate_sha256",
+        "original_quarter_sha256",
+        "categorical_sha256",
+        "categorical_receipt",
+        "native_independently_reloaded",
+        "masters_independently_reloaded",
+    ] {
+        if before.get(field).is_none() || before[field] != now[field] {
+            return Err(bad(&format!(
+                "baseline checkpoint identity differs: {field}"
+            )));
+        }
+    }
+    if before["step"] != 0
+        || before["native_independently_reloaded"] != true
+        || before["masters_independently_reloaded"] != true
+        || base["fresh_adam"] != true
+    {
+        return Err(bad("baseline initialization/reload admission"));
+    }
+    // Credit, data-order seed, host and CUDA device are not initialized integer
+    // evaluation inputs. Each fit still executes fresh seed-specific graph parity.
+    Ok(())
+}
+fn tree_identity(root: &Path) -> Result<String> {
+    fn walk(root: &Path, path: &Path, rows: &mut Vec<(String, u64, String)>) -> Result<()> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if kind.is_dir() {
+                walk(root, &entry.path(), rows)?;
+            } else if kind.is_file() {
+                rows.push((
+                    entry.path().strip_prefix(root)?.display().to_string(),
+                    entry.metadata()?.len(),
+                    sha256_file(&entry.path())?,
+                ));
+            } else {
+                return Err(bad("baseline artifact has a nonregular entry"));
+            }
+        }
+        Ok(())
+    }
+    let mut rows = Vec::new();
+    walk(root, root, &mut rows)?;
+    rows.sort();
+    Ok(sha256_bytes(&serde_json::to_vec(&rows)?))
+}
+fn reuse_baseline(
+    a: &Args,
+    root: &Path,
+    dev: &[Episode],
+    current_receipt: &Value,
+) -> Result<(Value, Value)> {
+    report_output::verify(root)?;
+    let report = read(&root.join("report.json"))?;
+    let admission = read(&root.join("admission.json"))?;
+    let zero = read(&root.join("zero-update-admission.json"))?;
+    if report["schema"] != "uor-r4.geometric-frozen-map-fit/1"
+        || report["status"] != "COMPLETED"
+        || report["mode"] != "admission"
+        || report["updates"] != 0
+        || report["admission"] != zero
+        || zero["independent_native_parity"] != true
+        || zero["matched_forward_loss_bit_equal"] != true
+    {
+        return Err(bad(
+            "baseline must be a completed sealed zero-update native admission",
+        ));
+    }
+    let current = read(&a.out.join("admission.json"))?;
+    let previous_receipt = read(&root.join("checkpoint-0000/receipt.json"))?;
+    baseline_identity(&admission, &current, &previous_receipt, current_receipt)?;
+    let mut artifact_receipts = BTreeMap::new();
+    for name in [
+        "source",
+        "native",
+        "read-state-bridge-source",
+        "cue",
+        "prefix",
+    ] {
+        let expected = tree_identity(&root.join("checkpoint-0000").join(name))?;
+        if expected != tree_identity(&a.out.join("checkpoint-0000").join(name))? {
+            return Err(bad(
+                "baseline initialized source/native/frozen master bytes differ",
+            ));
+        }
+        artifact_receipts.insert(name, expected);
+    }
+    for name in [
+        "generate.bin",
+        "read-state-bridge.bin",
+        "read-state-bridge-categorical.bin",
+    ] {
+        if sha256_file(&root.join("checkpoint-0000").join(name))?
+            != sha256_file(&a.out.join("checkpoint-0000").join(name))?
+        {
+            return Err(bad("baseline initialized native decoder/map bytes differ"));
+        }
+    }
+    let evaluation = read(&root.join("development-0000.json"))?;
+    let metric = read(&root.join("metrics-0000.json"))?;
+    if report["initial_metrics"] != metric
+        || evaluation["cases"] != 512
+        || evaluation["target_positions"] != 6664
+        || dev.len() != 512
+    {
+        return Err(bad("baseline complete evaluation/metric scope differs"));
+    }
+    let refs = evaluation["rows"]
+        .as_array()
+        .ok_or_else(|| bad("baseline rows absent"))?;
+    if refs.len() != dev.len() {
+        return Err(bad("baseline missing row references"));
+    }
+    for (index, (reference, e)) in refs.iter().zip(dev).enumerate() {
+        let name = format!("development-0000-row-{index:04}.json");
+        if reference["id"] != e.packet.id || reference["row_file"] != name {
+            return Err(bad("baseline ordered row ID/file differs"));
+        }
+        let path = root.join(&name);
+        let bytes = fs::read(&path)?;
+        if reference["row_sha256"] != sha256_bytes(&bytes) {
+            return Err(bad("baseline row hash differs"));
+        }
+        let row: Value = serde_json::from_slice(&bytes)?;
+        if row["id"] != e.packet.id
+            || row["canonical_target_ids_labels_only"] != json!(e.target)
+            || row["generated_ids"] != reference["generated_ids"]
+            || row["complete"] != reference["complete"]
+        {
+            return Err(bad("baseline row label/output reference differs"));
+        }
+        let canonical = row["canonical"]
+            .as_array()
+            .ok_or_else(|| bad("baseline canonical rows absent"))?;
+        if canonical.len() != e.target.len()
+            || canonical
+                .iter()
+                .zip(&e.target)
+                .any(|(step, target)| step["target_label_only"] != *target)
+        {
+            return Err(bad("baseline canonical target coverage differs"));
+        }
+        if size(&a.out)? + bytes.len() as u64 > a.maximum_report_bytes - 1_048_576 {
+            return Err(bad("baseline evidence copy exceeds report cap"));
+        }
+        // Keep the fit report self-contained. Never write into the sealed source.
+        use std::io::Write;
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(a.out.join(name))?
+            .write_all(&bytes)?;
+    }
+    let reproduced = metrics(a, &evaluation, dev)?;
+    if reproduced != metric {
+        return Err(bad(
+            "baseline metrics do not reproduce from complete copied rows",
+        ));
+    }
+    write(a, "development-0000.json", &evaluation)?;
+    let provenance = json!({"reused":true,"execution":"NOT_RUN in this fit; copied authenticated initial native evaluation",
+        "producer_source_commit":admission["source_commit"],"compatible_consumer_source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),
+        "baseline_root":root,"baseline_manifest_sha256":sha256_file(&root.join("manifest.json"))?,
+        "baseline_report_sha256":sha256_file(&root.join("report.json"))?,
+        "baseline_evaluation_sha256":sha256_file(&root.join("development-0000.json"))?,
+        "baseline_metrics_sha256":sha256_file(&root.join("metrics-0000.json"))?,
+        "initialized_artifact_tree_identities":artifact_receipts,"rows_verified_and_copied":refs.len(),
+        "producer_elapsed_seconds":report["elapsed_seconds"],
+        "compatibility_scope":"same initialized integer source/native/decoder/categorical map, full input/labels and master identities; native_step/evaluate unchanged; order/credit do not enter native inference; each fit executes its own graph/native admission"});
+    write(a, "baseline-reuse.json", &provenance)?;
+    Ok((evaluation, provenance))
+}
+
 fn optimizer(vars: &BTreeMap<String, Var>, lr: f64) -> Result<AdamW> {
     Ok(AdamW::new(
         vars.values().cloned().collect(),
@@ -1697,26 +1915,36 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     let indices = schedule[..BATCH].to_vec();
     let (_, admission) = batch(a, &l, &train, &indices, &d, start, Some(&initial_native))?;
     write(a, "zero-update-admission.json", &admission)?;
-    let baseline = evaluate(
-        a,
-        "development-0000",
-        &initial_native,
-        &initial_generate,
-        Some(&initial_bridge),
-        &l.exp,
-        &dev,
-        &l.tokenizer,
-        &l.cue,
-        &l.prefix,
-        start,
-    )?;
+    let (baseline, baseline_provenance) = if let Some(root) = &a.baseline {
+        reuse_baseline(a, root, &dev, &initial_receipt)?
+    } else {
+        let evaluation = evaluate(
+            a,
+            "development-0000",
+            &initial_native,
+            &initial_generate,
+            Some(&initial_bridge),
+            &l.exp,
+            &dev,
+            &l.tokenizer,
+            &l.cue,
+            &l.prefix,
+            start,
+        )?;
+        (
+            evaluation,
+            json!({"execution":"new native CPU integer evaluation on this pod",
+            "reused":false,"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT")}),
+        )
+    };
     let initial_metrics = metrics(a, &baseline, &dev)?;
     write(a, "metrics-0000.json", &initial_metrics)?;
     if a.mode == Mode::Admission {
         return Ok(
             json!({"schema":"uor-r4.geometric-frozen-map-fit/1","status":"COMPLETED","mode":"admission",
             "updates":0,"credit":a.credit.name(),"order_seed":a.seed,"admission":admission,
-            "initial_metrics":initial_metrics,"elapsed_seconds":start.elapsed().as_secs_f64(),
+            "initial_metrics":initial_metrics,"initial_evaluation_provenance":baseline_provenance,
+            "elapsed_seconds":start.elapsed().as_secs_f64(),
             "scope":"zero-update authenticated categorical restart admission; no learning verdict"}),
         );
     }
@@ -1802,6 +2030,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         "order_seed":a.seed,"updates":UPDATES,"batch":BATCH,"token_backward_chunk":1,
         "initial_receipt":initial_receipt,"final_receipt":final_receipt,
         "initial_metrics":initial_metrics,"final_metrics":final_metrics,
+        "initial_evaluation_provenance":baseline_provenance,
         "final_active_masters":identities(&active(&l.source,&l.generate)?)?,
         "frozen_original_masters":frozen_original,"frozen_marker_masters":frozen_marker,
         "elapsed_seconds":start.elapsed().as_secs_f64(),
@@ -1874,5 +2103,65 @@ mod tests {
         assert!(norm > 2e-25 && norm < 3e-25);
         assert_eq!(denominator.to_scalar::<f32>()?, 1.);
         Ok(())
+    }
+    fn baseline_fixture() -> (Value, Value) {
+        let mut base =
+            json!({"source_commit":BASELINE_PRODUCER,"credit":"clipped","order_seed":1001});
+        for field in [
+            "checkpoint_receipt_sha256",
+            "parent_config_sha256",
+            "training_input_sha256",
+            "training_labels_sha256",
+            "original_bridge_masters",
+            "marker_masters",
+            "categorical",
+            "initial_active_masters",
+            "active_parameter_names",
+            "rates",
+            "phase_policy",
+        ] {
+            base[field] = json!({"identity":field});
+        }
+        base["fresh_adam"] = json!(true);
+        let mut checkpoint = json!({"step":0,"native_independently_reloaded":true,"masters_independently_reloaded":true});
+        for field in [
+            "parent",
+            "original_parent",
+            "source_metadata_rebound",
+            "generate_sha256",
+            "original_quarter_sha256",
+            "categorical_sha256",
+            "categorical_receipt",
+        ] {
+            checkpoint[field] = json!({"identity":field});
+        }
+        (base, checkpoint)
+    }
+    #[test]
+    fn baseline_accepts_only_same_initialized_model_independent_of_order_and_credit() -> Result<()>
+    {
+        let (base, checkpoint) = baseline_fixture();
+        let mut current = base.clone();
+        current["credit"] = json!("raw_identity");
+        current["order_seed"] = json!(1003);
+        baseline_identity(&base, &current, &checkpoint, &checkpoint)?;
+        current["initial_active_masters"] = json!({"different_context_master":true});
+        assert!(baseline_identity(&base, &current, &checkpoint, &checkpoint).is_err());
+        let mut changed = checkpoint.clone();
+        changed["generate_sha256"] = json!("different");
+        assert!(baseline_identity(&base, &base, &checkpoint, &changed).is_err());
+        Ok(())
+    }
+    #[test]
+    fn baseline_rejects_unreviewed_producer_or_incomplete_initial_identity() {
+        let (mut base, checkpoint) = baseline_fixture();
+        base["source_commit"] = json!("unreviewed-producer");
+        assert!(baseline_identity(&base, &base, &checkpoint, &checkpoint).is_err());
+        base["source_commit"] = json!(BASELINE_PRODUCER);
+        base.as_object_mut().map(|m| m.remove("marker_masters"));
+        assert!(baseline_identity(&base, &base, &checkpoint, &checkpoint).is_err());
+        let (base, mut checkpoint) = baseline_fixture();
+        checkpoint["step"] = json!(1);
+        assert!(baseline_identity(&base, &base, &checkpoint, &checkpoint).is_err());
     }
 }
