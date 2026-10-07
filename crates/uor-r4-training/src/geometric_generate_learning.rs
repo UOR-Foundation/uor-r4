@@ -2585,7 +2585,7 @@ mod tests {
         println!(
             "RETAINED_GENERATE_NATIVE_PARITY payload={} file_sha256={} vocab={} lanes={} states=32",
             native.metadata().payload_sha256,
-            sha256_bytes(&bytes),
+            hex::encode(Sha256::digest(&bytes)),
             native.vocab_size(),
             native.lanes()
         );
