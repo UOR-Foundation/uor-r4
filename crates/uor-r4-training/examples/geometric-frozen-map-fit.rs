@@ -2209,6 +2209,7 @@ fn entry_ceiling_panel(
     let (mut full_correct, mut generate_only_correct) = (0usize, 0usize);
     let (mut full_copy_dominated, mut gold_in_copy) = (0usize, 0usize);
     let mut gold_ranks: Vec<u64> = Vec::new();
+    let mut next_gold_ranks: Vec<u64> = Vec::new();
     let mut gold_mass_fraction: Vec<f64> = Vec::new();
     for (index, e) in eps.iter().enumerate() {
         // Complete target-free native bank selection first. Labels cannot choose
@@ -2241,6 +2242,49 @@ fn entry_ceiling_panel(
             .position(|m| m.0 == gold)
             .map(|position| position as u64 + 1);
         gold_ranks.push(gold_rank.unwrap_or(ordered.len() as u64 + 1));
+        // The same read one token later, after observing the correct first
+        // token. This separates "the boundary state carries nothing" from "the
+        // emission cannot rank at all": the continuation is given its prefix,
+        // while the entry position has to select the answer from the query.
+        if e.target.len() > 1 {
+            let native_next = native_step(
+                model,
+                g,
+                Some(bridge),
+                &mut pool,
+                e,
+                &[gold],
+                &l.cue,
+                &l.prefix,
+            )?;
+            let state_next: Vec<u8> =
+                serde_json::from_value(native_next["retained_state_codes"].clone())?;
+            let state_next = state_next
+                .into_iter()
+                .map(H4Code::try_from)
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let mut scores_next = vec![0i64; g.vocab_size()];
+            g.score_into(
+                &state_next,
+                &mut scores_next,
+                &mut GenerateReadCounts::default(),
+            )?;
+            let only_next = only.reduce_trace(&scores_next, &[], &[])?;
+            let gold_next = e.target[1];
+            let mut ordered_next = only_next
+                .token_masses
+                .iter()
+                .map(|m| (m.token_id, m.weight_q31))
+                .collect::<Vec<_>>();
+            ordered_next.sort_by(|x, y| y.1.cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
+            next_gold_ranks.push(
+                ordered_next
+                    .iter()
+                    .position(|m| m.0 == gold_next)
+                    .map(|position| position as u64 + 1)
+                    .unwrap_or(ordered_next.len() as u64 + 1),
+            );
+        }
         gold_mass_fraction.push(
             ordered
                 .iter()
@@ -2264,8 +2308,10 @@ fn entry_ceiling_panel(
         );
     }
     let mut ranks = gold_ranks.clone();
+    let mut next_ranks = next_gold_ranks.clone();
     let mut fractions = gold_mass_fraction.clone();
     ranks.sort_unstable();
+    next_ranks.sort_unstable();
     fractions.sort_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
     let pick = |v: &[u64], q: f64| -> u64 {
         if v.is_empty() {
@@ -2291,6 +2337,10 @@ fn entry_ceiling_panel(
         "generate_only_gold_rank_p90":pick(&ranks, 0.9),
         "generate_only_gold_rank_max":ranks.last().copied().unwrap_or(0),
         "generate_only_gold_mass_fraction_median":pick_fraction(&fractions, 0.5),
+        "next_token_gold_rank_median":pick(&next_ranks, 0.5),
+        "next_token_gold_rank_p90":pick(&next_ranks, 0.9),
+        "next_token_gold_rank_max":next_ranks.last().copied().unwrap_or(0),
+        "next_token_rows":next_ranks.len(),
         "generate_actions":eps
             .first()
             .map_or(0, |_| only.legal_token_ids().len()),
