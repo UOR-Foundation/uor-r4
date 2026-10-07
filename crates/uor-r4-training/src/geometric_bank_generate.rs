@@ -65,7 +65,7 @@ impl ReadStateBridge<'_> {
     }
     fn native(
         &self,
-    ) -> &uor_r4_integer::geometric_read_state_bridge::NativeGeometricReadStateBridge {
+    ) -> &uor_r4_core::native_geometric::learner::geometric_read_state_bridge::NativeGeometricReadStateBridge{
         match self {
             Self::Legacy(_, prepared) => &prepared.native,
             Self::Categorical(prepared) => prepared.native(),
