@@ -316,6 +316,10 @@ struct Labels {
 struct Label {
     id: String,
     answers: FrozenAnswers,
+    /// Transfer-panel pair linkage, declared so the strict schema still accepts
+    /// panels that carry it. The entry read does not use it.
+    #[serde(default)]
+    pair_id: Option<String>,
 }
 struct Episode {
     packet: Packet,
