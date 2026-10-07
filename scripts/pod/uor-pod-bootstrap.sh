@@ -254,12 +254,16 @@ if [ "$NONCANON" = 1 ]; then
     store=${UOR_HF_STORE:-caseyallard/uor-r4-store}
     log "non-canonical volume: fetching$missing from HF dataset $store"
     if pip install -q --break-system-packages "huggingface_hub[cli]" &&
-       hf download "$store" --repo-type dataset --include 'data/*' --local-dir /workspace/uor-r4/; then
+       hf download "$store" --repo-type dataset $(for f in $missing; do printf -- "--include data/%s " "$f"; done) --local-dir /workspace/uor-r4/; then
       fetched=''
       for f in $missing; do if [ -e "$DATA/$f" ]; then fetched="$fetched $f"; fi; done
       log "HF store fetched:${fetched:- nothing}"
-      if [ -f "$DATA/MD5SUMS" ]; then
-        (cd "$DATA" && md5sum -c --quiet MD5SUMS) || log "WARNING: HF store files fail MD5SUMS (see above); continuing"
+      if [ -f "$DATA/MD5SUMS" ] && [ -n "$fetched" ]; then
+        # check only the files fetched now; files that were already there are not re-checked
+        sums=$(grep -E "^[0-9a-f]+  \*?($(echo $fetched | sed 's/ /|/g; s/\./\\./g'))\$" "$DATA/MD5SUMS" || true)
+        if [ -n "$sums" ]; then
+          (cd "$DATA" && echo "$sums" | md5sum -c --quiet -) || log "WARNING: HF store files fail MD5SUMS (see above); continuing"
+        fi
       fi
     else
       log "WARNING: HF store fetch failed; continuing without it"

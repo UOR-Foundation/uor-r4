@@ -95,6 +95,9 @@ case "$1 $2" in
   "network-volume create")
     [ "${FAKE_ALLOW_CREATE:-0}" = 1 ] || { echo "REAL MUTATION CALLED IN DRY RUN" >&2; exit 9; }
     echo '{"id":"volnew"}';;
+  "network-volume delete")
+    [ "${FAKE_ALLOW_CREATE:-0}" = 1 ] || { echo "REAL MUTATION CALLED IN DRY RUN" >&2; exit 9; }
+    echo '{}';;
   "pod delete")
     [ "${FAKE_ALLOW_CREATE:-0}" = 1 ] || { echo "REAL MUTATION CALLED IN DRY RUN" >&2; exit 9; }
     echo '{}';;
@@ -532,6 +535,29 @@ if jq -e '.podnew.dc == "CA-MTL-1" and .podnew.canonical == false' "$UOR_POD_STA
 rm -rf "$UOR_POD_STATE"; fresh_pods
 UOR_POD_VOLUME_DCS="EUR-NO-1 EU-RO-1 EUR-IS-1" expect "UOR_POD_VOLUME_DCS set -> extra datacenters are not used" 1 "no ladder 5090 -> 4090 -> pro6000 stock in EUR-NO-1 EU-RO-1 EUR-IS-1" -- "${ANY[@]}"
 if ! grep -q 'pod create' "$FAKE/calls"; then ok "no create anywhere with an explicit datacenter list"; else bad "no create anywhere with an explicit datacenter list"; fi
+# ladder + rate cap: 2 x 5090 busts the cap but 2 x 4090 fits -> the ladder goes on
+# to the cheaper rung instead of ending `up` on the first rung's cap miss
+cat > "$FAKE/gpus.json" <<'J'
+[{"gpuId":"NVIDIA GeForce RTX 5090","securePricePerHr":0.99,"dataCenterAvailability":[{"dataCenterId":"EUR-NO-1","stockStatus":"Low"}]},
+ {"gpuId":"NVIDIA GeForce RTX 4090","securePricePerHr":0.74,"dataCenterAvailability":[{"dataCenterId":"EUR-NO-1","stockStatus":"Low"}]}]
+J
+rm -rf "$UOR_POD_STATE"; rm -f "$FAKE/nostock"
+echo '[{"id":"podx","name":"x","desiredStatus":"RUNNING","gpuCount":4,"costPerHr":3.5,"uptimeSeconds":10}]' > "$FAKE/pods.json"
+: > "$FAKE/calls"
+UOR_POD_MAX_RATE=5 expect "ladder: a rate-cap miss on 5090 continues to the cheaper 4090 rung" 0 "Pod podnew created" -- "${ANY[@]}"
+has "the cheaper rung is the one created" "Creating 2 x 4090 \(ladder\)"
+rm -rf "$UOR_POD_STATE"; echo '[{"id":"podx","name":"x","desiredStatus":"RUNNING","gpuCount":4,"costPerHr":4.9,"uptimeSeconds":10}]' > "$FAKE/pods.json"
+UOR_POD_MAX_RATE=5 expect "ladder: every rung over the cap ends with the cap message" 1 "cap: running .* exceeds .*5/h; needs --owner-approved" -- "${ANY[@]}"
+# a new volume made for a datacenter whose create then has no stock is deleted;
+# a pre-existing volume (the canonical one) never is
+cat > "$FAKE/gpus.json" <<'J'
+[{"gpuId":"NVIDIA GeForce RTX 5090","securePricePerHr":0.99,"dataCenterAvailability":[{"dataCenterId":"EUR-NO-1","stockStatus":"Low"},{"dataCenterId":"CA-MTL-1","stockStatus":"Low"}]}]
+J
+rm -rf "$UOR_POD_STATE"; echo '[]' > "$FAKE/pods.json"; printf 'EUR-NO-1\nCA-MTL-1\n' > "$FAKE/nostock"; : > "$FAKE/calls"
+expect "stock error in a new extra datacenter" 1 "no instances" -- "${UP[@]}"
+if grep -q 'network-volume create --name uor-shared-CA-MTL-1' "$FAKE/calls" && [ "$(grep -c 'network-volume delete' "$FAKE/calls")" = 1 ] && grep -q 'network-volume delete volnew' "$FAKE/calls"; then
+  ok "the volume created for CA-MTL-1 is deleted; the canonical volume is not"; else bad "the volume created for CA-MTL-1 is deleted; the canonical volume is not"; fi
+rm -f "$FAKE/nostock"
 cp "$FAKE/pods.orig.json" "$FAKE/pods.json"
 unset FAKE_ALLOW_CREATE UOR_POD_MAX_PODS UOR_POD_MAX_RATE UOR_POD_SSH_WAIT
 export UOR_POD_DRY_RUN=1

@@ -637,6 +637,7 @@ ensure_volume() {  # DC -> volume id; creates uor-shared-<DC> (100 GB, owner-app
 # One placement attempt (caller holds the lock). Sets UP_* or returns 2 when no stock.
 up_attempt() {
   local req=$1 count=$2 pods stock id free gtype probe states n_run rate gid price dc='' off=0 add
+  UP_CAPMSG=''
   pods=$(pods_all); stock=$(gpu_stock)
 
   # 1. a free leased-compatible GPU already exists? (same GPU type, or type not yet known)
@@ -678,7 +679,11 @@ up_attempt() {
   [ -n "$price" ] || { lock_release; die "no secure-cloud price listed for $gid"; }
   add=$(jq -n --argjson p "$price" --argjson c "$count" '$p * $c')
   if jq -en --argjson r "$rate" --argjson a "$add" --argjson m "$MAX_RATE" '$r + $a > $m' >/dev/null && [ "$OWNER_OK" != 1 ]; then
-    lock_release; die "cap: running \$$rate/h + new \$$add/h exceeds \$$MAX_RATE/h; needs --owner-approved"
+    # ladder: a rung that busts the rate cap is a miss like a rung without stock,
+    # so the next (cheaper) rung or the 1x fallback still gets its chance
+    UP_CAPMSG="cap: running \$$rate/h + new \$$add/h exceeds \$$MAX_RATE/h; needs --owner-approved"
+    if [ "$LADDER" = 1 ]; then info "$count x $req: $UP_CAPMSG"; return 2; fi
+    lock_release; die "$UP_CAPMSG"
   fi
 
   # 3. placement candidates: the volume datacenters that list stock, in policy
@@ -710,10 +715,11 @@ NO_STOCK_RE='no longer any instances available|no instances (are )?(currently )?
 # the lock). Sets POD_JSON, UP_DC, UP_OFF, UP_VOL. Returns 0 when created, 2 when
 # every candidate reported no stock; any other create error is fatal.
 up_create() {  # COUNT NAME REQ
-  local count=$1 name=$2 req=$3 cand dc off vol args created tried='' where
+  local count=$1 name=$2 req=$3 cand dc off vol args created tried='' where new_vol
   for cand in $UP_CANDS; do
-    dc=${cand%:*} off=${cand#*:} vol=''
+    dc=${cand%:*} off=${cand#*:} vol='' new_vol=0
     if [ "$off" = 0 ]; then
+      is_dry || [ -n "$(volume_for_dc "$dc")" ] || new_vol=1  # created by this call, not pre-existing
       vol=$(ensure_volume "$dc") || { lock_release; die "could not find or create volume uor-shared-$dc"; }
     fi
     args=(pod create --template-id "$TEMPLATE_ID" --name "$name" --gpu-id "$UP_GID" --gpu-count "$count"
@@ -740,6 +746,16 @@ up_create() {  # COUNT NAME REQ
     if printf '%s' "$created" | grep -qiE "$NO_STOCK_RE"; then
       warn "pod create in $dc: no instances available any more ($(printf '%s' "$created" | tail -1)); trying the next datacenter"
       tried="$tried $dc"
+      # a volume this call just created for a datacenter that then had no stock
+      # would bill for nothing: remove it (never a pre-existing volume)
+      if [ "$new_vol" = 1 ]; then
+        if runpodctl network-volume delete "$vol" >/dev/null 2>&1; then
+          info "deleted the volume $vol created for $dc (no stock there)"
+          ledger volume-delete "$LAB" '' "$(jq -cn --arg v "$vol" --arg dc "$dc" '{volume: $v, dc: $dc, reason: "no stock after create"}')"
+        else
+          warn "DELETE FAILED for the new volume $vol (uor-shared-$dc) — delete it by hand: runpodctl network-volume delete $vol"
+        fi
+      fi
       continue
     fi
     lock_release; die "pod create failed in $dc: $(printf '%s' "$created" | tail -3)"
@@ -826,12 +842,15 @@ cmd_up() {
   name="uor-$LAB-$(date -u +%m%d-%H%M)"
   if [ "$UP_TEST" = 1 ]; then name="$TEST_PREFIX$LAB-$(date -u +%m%d-%H%M)"; fi
 
+  local cap_only
   while :; do
+    cap_only=1
     # ladder: the first rung with stock wins; a rung without stock (rc 2) passes
     # to the next. Caps, free-GPU and create errors stop `up` as before.
     for req in $rungs; do
       lock_acquire
       rc=0; up_attempt "$req" "$count" || rc=$?
+      if [ "$rc" = 2 ] && [ -n "$UP_CAPMSG" ]; then :; else cap_only=0; fi
       if [ "$rc" = 0 ]; then
         t_create=$(now_epoch)
         up_create "$count" "$name" "$req" || rc=$?
@@ -846,18 +865,20 @@ cmd_up() {
       warn "no $count x $want on one host; falling back to 1 x $want (start another pod for a second job)"
       count=1; continue
     fi
+    # every rung (and the 1x fallback) failed only on the rate cap
+    [ "$cap_only" = 0 ] || die "$UP_CAPMSG"
     echo "$UP_STOCK"
     if [ "$WAIT" != 1 ]; then
-      die "no $want stock in $VOLUME_DCS. Re-run with --wait (retries every minute for --wait-hours, default 2)$([ "$req" = 5090 ] && echo ', or choose --gpu 4090 explicitly'); --allow-off-volume places it without a volume"
+      die "no $want stock in $VOLUME_DCS${EXTRA_VOLUME_DCS:+ $EXTRA_VOLUME_DCS}. Re-run with --wait (retries every minute for --wait-hours, default 2)$([ "$req" = 5090 ] && echo ', or choose --gpu 4090 explicitly'); --allow-off-volume places it without a volume"
     fi
     if is_dry; then echo "DRY-RUN: would retry every $((WAIT_INTERVAL / 60)) min until $(jq -rn --argjson t "$deadline" '$t | todate')"; return 0; fi
     if [ "$(now_epoch)" -ge "$deadline" ]; then
-      lock_acquire; ledger up-gave-up "$LAB" '' "{\"gpu\": \"$req\", \"count\": $count, \"waited_s\": $waited}"; lock_release
+      lock_acquire; ledger up-gave-up "$LAB" '' "{\"gpu\": \"$want\", \"count\": $count, \"waited_s\": $waited}"; lock_release
       board "up gave up: no $count x $want in $VOLUME_DCS after $((waited / 60)) min (by=$WHO — $PURPOSE)"
-      die "no $req stock after waiting $((waited / 60)) min"
+      die "no $want stock after waiting $((waited / 60)) min"
     fi
     if [ "$waited" = 0 ]; then
-      lock_acquire; ledger up-waiting "$LAB" '' "{\"gpu\": \"$req\", \"count\": $count, \"wait_hours\": $WAIT_HOURS}"; lock_release
+      lock_acquire; ledger up-waiting "$LAB" '' "{\"gpu\": \"$want\", \"count\": $count, \"wait_hours\": $WAIT_HOURS}"; lock_release
       board "up waiting: no $count x $want in $VOLUME_DCS; by=$WHO retries every $((WAIT_INTERVAL / 60)) min for up to ${WAIT_HOURS} h — $PURPOSE"
     fi
     info "retrying in $((WAIT_INTERVAL / 60)) min (until $(jq -rn --argjson t "$deadline" '$t | todate'))"
