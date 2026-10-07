@@ -72,11 +72,19 @@ impl Default for ControlRates {
 }
 fn control_settings(a: &Args) -> Result<(usize, ControlRates)> {
     if a.mode != Mode::PredictionControl
-        && (a.prediction_control_updates.is_some() || a.prediction_control_rates.is_some())
+        && (a.prediction_control_updates.is_some()
+            || a.prediction_control_rates.is_some()
+            || a.prediction_control_resume.is_some()
+            || a.prediction_control_trainable != ControlTrainable::Joint)
     {
         return Err(bad(
             "prediction control settings cannot change fixed fit/admission",
         ));
+    }
+    if (a.prediction_control_trainable == ControlTrainable::GenerateField)
+        != a.prediction_control_resume.is_some()
+    {
+        return Err(bad("Generate-field control requires explicit resume; resume requires Generate-field control"));
     }
     let n = a.prediction_control_updates.unwrap_or(32);
     let r = a.prediction_control_rates.unwrap_or_default();
@@ -128,6 +136,13 @@ impl ReadStatePullback {
         }
     }
 }
+#[derive(Clone, Copy, Debug, Default, Deserialize, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum ControlTrainable {
+    #[default]
+    Joint,
+    GenerateField,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Args {
@@ -153,6 +168,10 @@ struct Args {
     prediction_control_updates: Option<usize>,
     #[serde(default)]
     prediction_control_rates: Option<ControlRates>,
+    #[serde(default)]
+    prediction_control_resume: Option<PathBuf>,
+    #[serde(default)]
+    prediction_control_trainable: ControlTrainable,
 }
 const CONTROL_INDICES: [usize; 8] = [0, 1, 4, 5, 8, 9, 12, 13];
 const INPUT_SHA: &str = "b9661606b280884217a64e0a5b643f8324a90390e47ade7241da0889a5f7c86a";
@@ -398,6 +417,7 @@ fn args() -> Result<Args> {
     ]
     .into_iter()
     .chain(a.baseline.iter())
+    .chain(a.prediction_control_resume.iter())
     {
         let input = fs::canonicalize(path)?;
         if output.starts_with(&input) || input.starts_with(&output) {
@@ -2146,6 +2166,104 @@ fn control_crossings(
     )
 }
 
+const CONTROL_RESUME_PRODUCER: &str = "3fc63bec66e03a3148c83c48c795667582d258c2";
+fn restore_control_resume(a: &Args, l: &Loaded, d: &Device) -> Result<Option<Value>> {
+    let Some(root) = &a.prediction_control_resume else {
+        return Ok(None);
+    };
+    report_output::verify(root)?;
+    let r = read(&root.join("report.json"))?;
+    let admission = read(&root.join("admission.json"))?;
+    let cp = root.join("checkpoint-0032");
+    let receipt = read(&cp.join("receipt.json"))?;
+    if r["schema"] != "uor-r4.geometric-prediction-control/1"
+        || r["status"] != "COMPLETED"
+        || r["mode"] != "prediction_control"
+        || r["source_commit"] != CONTROL_RESUME_PRODUCER
+        || r["updates"] != 32
+        || r["original_indices"] != json!(CONTROL_INDICES)
+        || r["final_receipt"] != receipt
+        || receipt["step"] != 32
+        || receipt["credit"] != a.credit.name()
+        || receipt["read_state_pullback"] != a.read_state_pullback.name()
+        || admission["input_sha256"] != INPUT_SHA
+        || admission["labels_sha256"] != LABEL_SHA
+        || admission["checkpoint_receipt_sha256"] != CP_RECEIPT_SHA
+        || admission["credit"] != a.credit.name()
+        || admission["read_state_pullback"] != a.read_state_pullback.name()
+        || admission["panel"]["original_indices"] != json!(CONTROL_INDICES)
+    {
+        return Err(bad("resume must be the authenticated completed original control32 with matching data/geometry/credit"));
+    }
+    if tree_identity(&cp.join("read-state-bridge-source"))?
+        != tree_identity(&a.checkpoint.join("read-state-bridge-source"))?
+    {
+        return Err(bad("resume changed original frozen bridge masters"));
+    }
+    let cue = cue_payload(&cp.join("cue"))?;
+    let prefix = prefix_payload(&cp.join("prefix"))?;
+    if cue.config() != l.cue.config()
+        || cue.packed_coefficients() != l.cue.packed_coefficients()
+        || cue.joint().map(|v| v.packed_coefficients())
+            != l.cue.joint().map(|v| v.packed_coefficients())
+        || prefix.config() != l.prefix.config()
+        || prefix.packed_coefficients() != l.prefix.packed_coefficients()
+    {
+        return Err(bad(
+            "resume changed fixed cue/prefix coefficient/configuration payloads",
+        ));
+    }
+    if sha256_file(&cp.join("read-state-bridge.bin"))? != QUARTER_SHA
+        || sha256_file(&cp.join("read-state-bridge-categorical.bin"))? != CAT_SHA
+    {
+        return Err(bad("resume changed frozen bridge"));
+    }
+    let tokbytes = fs::read(cp.join("native/tokenizer.json"))?;
+    let binding: NativeArtifactBinding = serde_json::from_value(receipt["parent"].clone())?;
+    let resumed_native = IntegerRealizer::load_native(&cp.join("native"), &binding)?;
+    if resumed_native.binding() != l.integer.binding() {
+        return Err(bad("resume tokenizer/protocol binding differs"));
+    }
+    let restored =
+        SourceRealizerWeights::load_context_potential_on_device(&cp.join("source"), &tokbytes, d)?;
+    let mut source = l.source.context_state_parameters();
+    source.extend(l.source.potential_parameters());
+    let mut donor = restored.context_state_parameters();
+    donor.extend(restored.potential_parameters());
+    if source.keys().collect::<Vec<_>>() != donor.keys().collect::<Vec<_>>() {
+        return Err(bad("resume source master families differ"));
+    }
+    for (name, var) in &source {
+        var.set(donor[name].as_tensor())?;
+    }
+    let gm = read(&cp.join("generate-source/metadata.json"))?;
+    if gm["tokenizer_sha256"] != sha256_bytes(&tokbytes)
+        || gm["protocol"] != serde_json::to_value(l.integer.binding().protocol())?
+        || gm["lanes"] != json!(l.generate.lanes())
+    {
+        return Err(bad("resume Generate metadata binding differs"));
+    }
+    restore(
+        &cp.join("generate-source"),
+        &gm["parameters"],
+        &l.generate.parameters(),
+        d,
+    )?;
+    if l.generate.export_native()?.to_bytes()? != fs::read(cp.join("generate.bin"))? {
+        return Err(bad("resumed Generate masters do not export saved artifact"));
+    }
+    let n = l.source.compile_context_potential_rebound(&l.frozen)?;
+    if serde_json::to_value(n.artifact_binding()?)? != receipt["parent"] {
+        return Err(bad(
+            "resumed source masters do not export saved native identity",
+        ));
+    }
+    Ok(Some(
+        json!({"root":fs::canonicalize(root)?,"producer_source_commit":CONTROL_RESUME_PRODUCER,
+        "report_sha256":sha256_file(&root.join("report.json"))?,"manifest_sha256":sha256_file(&root.join("manifest.json"))?,
+        "checkpoint_receipt_sha256":sha256_file(&cp.join("receipt.json"))?,"continued_parent_steps":32,"optimizer":"fresh field Adam, prior moments not resumed"}),
+    ))
+}
 fn run_prediction_control(
     a: &Args,
     start: Instant,
@@ -2155,6 +2273,7 @@ fn run_prediction_control(
     dev: Vec<Episode>,
 ) -> Result<Value> {
     let (limit, rates) = control_settings(a)?;
+    let resume = restore_control_resume(a, l, d)?;
     let eps = dev
         .into_iter()
         .enumerate()
@@ -2175,7 +2294,7 @@ fn run_prediction_control(
         "admission.json",
         &json!({"mode":"prediction_control","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),
         "checkpoint_receipt_sha256":CP_RECEIPT_SHA,"input_sha256":INPUT_SHA,"labels_sha256":LABEL_SHA,
-        "panel":panel,"updates":limit,"rates":rates,"credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),
+        "panel":panel,"updates":limit,"rates":rates,"resume":resume,"trainable":a.prediction_control_trainable,"credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),
         "native_pool_backend":"host","fresh_adam":true,"initial_active_masters":identities(&active(&l.source,&l.generate)?)?,
         "original_bridge_masters":original,"marker_masters":marker,"phase_policy":loss_weight_policy(true)}),
     )?;
@@ -2188,10 +2307,27 @@ fn run_prediction_control(
     if g.vocab_size() != 4096 {
         return Err(bad("control requires the full pinned 4096 vocabulary"));
     }
-    if g.to_bytes()? != fs::read(a.checkpoint.join("generate.bin"))?
-        || initial_receipt["parent"] != l.receipt["parent"]
+    let initial_parent = if let Some(root) = &a.prediction_control_resume {
+        root.join("checkpoint-0032")
+    } else {
+        a.checkpoint.clone()
+    };
+    let expected_receipt = read(&initial_parent.join("receipt.json"))?;
+    if g.to_bytes()? != fs::read(initial_parent.join("generate.bin"))?
+        || initial_receipt["parent"] != expected_receipt["parent"]
     {
-        return Err(bad("control zero-update donor identity differs"));
+        return Err(bad("control zero-update donor/resume identity differs"));
+    }
+    if a.prediction_control_resume.is_some() {
+        for name in ["source", "native", "cue", "prefix"] {
+            if tree_identity(&a.out.join("checkpoint-0000").join(name))?
+                != tree_identity(&initial_parent.join(name))?
+            {
+                return Err(bad(
+                    "initial resumed checkpoint is not exact saved native/master input",
+                ));
+            }
+        }
     }
     let (_, admission) = batch(a, l, train, &CONTROL_INDICES, d, start, Some(&model))?;
     write(a, "zero-update-admission.json", &admission)?;
@@ -2221,6 +2357,11 @@ fn run_prediction_control(
         .partition(|(name, _)| name == "generate.prototype_choices");
     let context = l.source.context_state_parameters();
     let potential = l.source.potential_parameters();
+    let field_only = a.prediction_control_trainable == ControlTrainable::GenerateField;
+    let mut frozen_groups = prototype.clone();
+    frozen_groups.extend(context.clone());
+    frozen_groups.extend(potential.clone());
+    let frozen_groups_identity = identities(&frozen_groups)?;
     let mut go = optimizer(&coefficients, rates.generate)?;
     let mut po = optimizer(&prototype, rates.prototype)?;
     let mut co = optimizer(&context, rates.context)?;
@@ -2231,16 +2372,31 @@ fn run_prediction_control(
         disk_floor(a)?;
         deadline(a, start)?;
         let (grads, receipt) = batch(a, l, train, &CONTROL_INDICES, d, start, None)?;
+        let grads = if field_only {
+            grads
+                .into_iter()
+                .filter(|(name, _)| coefficients.contains_key(name))
+                .collect()
+        } else {
+            grads
+        };
         let (denominator, norm) = clip_denominator(&grads, d)?;
         apply(&mut go, &coefficients, &grads, &denominator)?;
-        apply(&mut po, &prototype, &grads, &denominator)?;
-        apply(&mut co, &context, &grads, &denominator)?;
-        apply(&mut vo, &potential, &grads, &denominator)?;
-        l.generate.project_shadow_range()?;
-        for var in context.values() {
-            var.set(&var.as_tensor().clamp(-1.75, 1.75)?)?;
+        if !field_only {
+            apply(&mut po, &prototype, &grads, &denominator)?;
+            apply(&mut co, &context, &grads, &denominator)?;
+            apply(&mut vo, &potential, &grads, &denominator)?;
+            for var in context.values() {
+                var.set(&var.as_tensor().clamp(-1.75, 1.75)?)?;
+            }
+            l.source.project_potential_range()?;
         }
-        l.source.project_potential_range()?;
+        l.generate.project_shadow_range()?;
+        if field_only && identities(&frozen_groups)? != frozen_groups_identity {
+            return Err(bad(
+                "Generate-field control changed frozen Context/Potential/prototype masters",
+            ));
+        }
         if identities(&l.original_bridge.parameters())? != original
             || identities(&l.marker.parameters())? != marker
         {
@@ -2284,7 +2440,7 @@ fn run_prediction_control(
     Ok(
         json!({"schema":"uor-r4.geometric-prediction-control/1","status":"COMPLETED","mode":"prediction_control",
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"updates":limit,"rates":rates,"native_pool_backend":"host",
-        "original_indices":CONTROL_INDICES,"training_row_draws":limit*8,"target_position_draws":limit*84,
+        "resume":resume,"trainable":a.prediction_control_trainable,"original_indices":CONTROL_INDICES,"training_row_draws":limit*8,"target_position_draws":limit*84,
         "initial_receipt":initial_receipt,"final_receipt":final_receipt,"blocks":blocks,
         "native_prediction_control_win":win,"elapsed_seconds":start.elapsed().as_secs_f64(),
         "scope":"construction learning control on8 retained cases; complete accepted own-prefix replies+EOS and four source-swap pairs required; no generalization/chat/attention qualification; initial diagnostic0 can be run before choosing prospective control rates"}),
@@ -2574,6 +2730,15 @@ mod tests {
         assert!(control_settings(&parsed).is_err());
         config["mode"] = json!("admission");
         assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
+        config["mode"] = json!("prediction_control");
+        config["prediction_control_trainable"] = json!("generate_field");
+        assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
+        config["prediction_control_resume"] = json!("sealed-control32");
+        assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_ok());
+        config["prediction_control_trainable"] = json!("joint");
+        assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
+        config["prediction_control_trainable"] = json!("unknown");
+        assert!(serde_json::from_value::<Args>(config.clone()).is_err());
         config["mode"] = json!("unknown_control");
         assert!(serde_json::from_value::<Args>(config).is_err());
         Ok(())
