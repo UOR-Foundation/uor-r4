@@ -75,6 +75,8 @@ fn control_settings(a: &Args) -> Result<(usize, ControlRates)> {
         && (a.prediction_control_updates.is_some()
             || a.prediction_control_rates.is_some()
             || a.prediction_control_resume.is_some()
+            || a.prediction_control_resume_source_step.is_some()
+            || a.prediction_control_resume_generate_step.is_some()
             || a.prediction_control_trainable != ControlTrainable::Joint)
     {
         return Err(bad(
@@ -85,6 +87,12 @@ fn control_settings(a: &Args) -> Result<(usize, ControlRates)> {
         != a.prediction_control_resume.is_some()
     {
         return Err(bad("Generate-field control requires explicit resume; resume requires Generate-field control"));
+    }
+    if a.prediction_control_resume.is_none()
+        && (a.prediction_control_resume_source_step.is_some()
+            || a.prediction_control_resume_generate_step.is_some())
+    {
+        return Err(bad("component steps require authenticated resume"));
     }
     let n = a.prediction_control_updates.unwrap_or(32);
     let r = a.prediction_control_rates.unwrap_or_default();
@@ -171,6 +179,10 @@ struct Args {
     prediction_control_rates: Option<ControlRates>,
     #[serde(default)]
     prediction_control_resume: Option<PathBuf>,
+    #[serde(default)]
+    prediction_control_resume_source_step: Option<usize>,
+    #[serde(default)]
+    prediction_control_resume_generate_step: Option<usize>,
     #[serde(default)]
     prediction_control_trainable: ControlTrainable,
 }
@@ -2175,16 +2187,40 @@ fn restore_control_resume(a: &Args, l: &Loaded, d: &Device) -> Result<Option<Val
     report_output::verify(root)?;
     let r = read(&root.join("report.json"))?;
     let admission = read(&root.join("admission.json"))?;
-    let cp = root.join("checkpoint-0032");
+    let source_step = a.prediction_control_resume_source_step.unwrap_or(32);
+    let generate_step = a.prediction_control_resume_generate_step.unwrap_or(32);
+    let cross = source_step == 48
+        && generate_step == 64
+        && r["source_commit"] == "b451571aa638d1f93e3ccf25f718f27ed2ea731f";
+    let original =
+        source_step == 32 && generate_step == 32 && r["source_commit"] == CONTROL_RESUME_PRODUCER;
+    if !original && !cross {
+        return Err(bad("unreviewed component-resume producer/step combination"));
+    }
+    if cross && control_settings(a)?.0 != 0 {
+        return Err(bad("component recomposition is zero-update only"));
+    }
+    let final_step = if cross { 64 } else { 32 };
+    let cp = root.join(format!("checkpoint-{source_step:04}"));
+    let gp = root.join(format!("checkpoint-{generate_step:04}"));
+    let final_receipt = read(&root.join(format!("checkpoint-{final_step:04}/receipt.json")))?;
+    let generate_receipt = read(&gp.join("receipt.json"))?;
     let receipt = read(&cp.join("receipt.json"))?;
     if r["schema"] != "uor-r4.geometric-prediction-control/1"
         || r["status"] != "COMPLETED"
         || r["mode"] != "prediction_control"
-        || r["source_commit"] != CONTROL_RESUME_PRODUCER
-        || r["updates"] != 32
+        || r["updates"] != final_step
         || r["original_indices"] != json!(CONTROL_INDICES)
-        || r["final_receipt"] != receipt
-        || receipt["step"] != 32
+        || r["final_receipt"] != final_receipt
+        || final_receipt["step"] != final_step
+        || receipt["step"] != source_step
+        || generate_receipt["step"] != generate_step
+        || generate_receipt["generate_sha256"] != sha256_file(&gp.join("generate.bin"))?
+        || generate_receipt["credit"] != a.credit.name()
+        || generate_receipt["read_state_pullback"] != a.read_state_pullback.name()
+        || !r["blocks"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|v| v["step"] == source_step))
         || receipt["credit"] != a.credit.name()
         || receipt["read_state_pullback"] != a.read_state_pullback.name()
         || admission["input_sha256"] != INPUT_SHA
@@ -2194,7 +2230,7 @@ fn restore_control_resume(a: &Args, l: &Loaded, d: &Device) -> Result<Option<Val
         || admission["read_state_pullback"] != a.read_state_pullback.name()
         || admission["panel"]["original_indices"] != json!(CONTROL_INDICES)
     {
-        return Err(bad("resume must be the authenticated completed original control32 with matching data/geometry/credit"));
+        return Err(bad("resume must be an authenticated completed supported control with matching components/data/geometry/credit"));
     }
     if tree_identity(&cp.join("read-state-bridge-source"))?
         != tree_identity(&a.checkpoint.join("read-state-bridge-source"))?
@@ -2237,7 +2273,7 @@ fn restore_control_resume(a: &Args, l: &Loaded, d: &Device) -> Result<Option<Val
     for (name, var) in &source {
         var.set(donor[name].as_tensor())?;
     }
-    let gm = read(&cp.join("generate-source/metadata.json"))?;
+    let gm = read(&gp.join("generate-source/metadata.json"))?;
     if gm["tokenizer_sha256"] != sha256_bytes(&tokbytes)
         || gm["protocol"] != serde_json::to_value(l.integer.binding().protocol())?
         || gm["lanes"] != json!(l.generate.lanes())
@@ -2245,13 +2281,55 @@ fn restore_control_resume(a: &Args, l: &Loaded, d: &Device) -> Result<Option<Val
         return Err(bad("resume Generate metadata binding differs"));
     }
     restore(
-        &cp.join("generate-source"),
+        &gp.join("generate-source"),
         &gm["parameters"],
         &l.generate.parameters(),
         d,
     )?;
-    if l.generate.export_native()?.to_bytes()? != fs::read(cp.join("generate.bin"))? {
+    if l.generate.export_native()?.to_bytes()? != fs::read(gp.join("generate.bin"))? {
         return Err(bad("resumed Generate masters do not export saved artifact"));
+    }
+    if cross {
+        let other_binding: NativeArtifactBinding =
+            serde_json::from_value(generate_receipt["parent"].clone())?;
+        let other_native = IntegerRealizer::load_native(&gp.join("native"), &other_binding)?;
+        if other_native.binding() != resumed_native.binding() {
+            return Err(bad("component tokenizer/protocol binding differs"));
+        }
+        let other_source = SourceRealizerWeights::load_context_potential_on_device(
+            &gp.join("source"),
+            &tokbytes,
+            &Device::Cpu,
+        )?;
+        if identities(&other_source.context_state_parameters())?
+            != identities(&restored.context_state_parameters())?
+        {
+            return Err(bad("component Context masters differ"));
+        }
+        let source_gm = read(&cp.join("generate-source/metadata.json"))?;
+        if source_gm["parameters"]["generate.prototype_choices"]
+            != gm["parameters"]["generate.prototype_choices"]
+        {
+            return Err(bad("component prototype masters differ"));
+        }
+        for name in ["read-state-bridge-source"] {
+            if tree_identity(&cp.join(name))? != tree_identity(&gp.join(name))? {
+                return Err(bad("component frozen bridge masters differ"));
+            }
+        }
+        let gc = cue_payload(&gp.join("cue"))?;
+        let pc = prefix_payload(&gp.join("prefix"))?;
+        if gc.config() != l.cue.config()
+            || gc.packed_coefficients() != l.cue.packed_coefficients()
+            || gc.joint().map(|v| v.packed_coefficients())
+                != l.cue.joint().map(|v| v.packed_coefficients())
+            || pc.config() != l.prefix.config()
+            || pc.packed_coefficients() != l.prefix.packed_coefficients()
+            || sha256_file(&gp.join("read-state-bridge.bin"))? != QUARTER_SHA
+            || sha256_file(&gp.join("read-state-bridge-categorical.bin"))? != CAT_SHA
+        {
+            return Err(bad("component frozen sidecars differ"));
+        }
     }
     let n = l.source.compile_context_potential_rebound(&l.frozen)?;
     // Provenance belongs to the independently saved/reloaded parent; the
@@ -2268,9 +2346,9 @@ fn restore_control_resume(a: &Args, l: &Loaded, d: &Device) -> Result<Option<Val
         ));
     }
     Ok(Some(
-        json!({"root":fs::canonicalize(root)?,"producer_source_commit":CONTROL_RESUME_PRODUCER,
+        json!({"root":fs::canonicalize(root)?,"producer_source_commit":r["source_commit"],"source_step":source_step,"generate_step":generate_step,"component_recomposition":cross,
         "report_sha256":sha256_file(&root.join("report.json"))?,"manifest_sha256":sha256_file(&root.join("manifest.json"))?,
-        "checkpoint_receipt_sha256":sha256_file(&cp.join("receipt.json"))?,"continued_parent_steps":32,"optimizer":"fresh field Adam, prior moments not resumed"}),
+        "checkpoint_receipt_sha256":sha256_file(&cp.join("receipt.json"))?,"generate_checkpoint_receipt_sha256":sha256_file(&gp.join("receipt.json"))?,"final_checkpoint_receipt_sha256":sha256_file(&root.join(format!("checkpoint-{final_step:04}/receipt.json")))?,"producer_completed_block_updates":final_step,"continued_parent_steps":if cross {None} else {Some(32)},"optimizer":if cross {"zero-update component recomposition; no optimizer steps"} else {"fresh field Adam, prior moments not resumed"}}),
     ))
 }
 fn run_prediction_control(
@@ -2317,12 +2395,23 @@ fn run_prediction_control(
         return Err(bad("control requires the full pinned 4096 vocabulary"));
     }
     let initial_parent = if let Some(root) = &a.prediction_control_resume {
-        root.join("checkpoint-0032")
+        root.join(format!(
+            "checkpoint-{:04}",
+            a.prediction_control_resume_source_step.unwrap_or(32)
+        ))
     } else {
         a.checkpoint.clone()
     };
     let expected_receipt = read(&initial_parent.join("receipt.json"))?;
-    if g.to_bytes()? != fs::read(initial_parent.join("generate.bin"))?
+    let initial_generate = if let Some(root) = &a.prediction_control_resume {
+        root.join(format!(
+            "checkpoint-{:04}",
+            a.prediction_control_resume_generate_step.unwrap_or(32)
+        ))
+    } else {
+        a.checkpoint.clone()
+    };
+    if g.to_bytes()? != fs::read(initial_generate.join("generate.bin"))?
         || initial_receipt["parent"] != expected_receipt["parent"]
     {
         return Err(bad("control zero-update donor/resume identity differs"));
@@ -2761,6 +2850,13 @@ mod tests {
         assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_ok());
         config["prediction_control_trainable"] = json!("potential_generate_field");
         assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_ok());
+        config["prediction_control_updates"] = json!(0);
+        config["prediction_control_resume_source_step"] = json!(48);
+        config["prediction_control_resume_generate_step"] = json!(64);
+        let mixed: Args = serde_json::from_value(config.clone())?;
+        assert_eq!(mixed.prediction_control_resume_source_step, Some(48));
+        assert_eq!(mixed.prediction_control_resume_generate_step, Some(64));
+        assert_eq!(control_settings(&mixed)?.0, 0);
         config
             .as_object_mut()
             .ok_or_else(|| bad("test object"))?
