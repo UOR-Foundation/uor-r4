@@ -140,6 +140,27 @@ impl Row {
             ])
         })
     }
+    /// Record metadata only, no prompt text: what the physical records say.
+    fn sig_record_metadata(&self) -> String {
+        let per_source = self
+            .source_identity
+            .iter()
+            .map(|(_, _, relation, view, entity)| {
+                let mut entity = entity.clone();
+                entity.sort_unstable();
+                format!("r{relation}v{view}e{entity:?}")
+            })
+            .collect::<Vec<_>>();
+        signature(&[format!("m{per_source:?}")])
+    }
+    /// Record metadata plus the context shape, still no prompt text.
+    fn sig_metadata_and_context(&self) -> String {
+        signature(&[self.sig_record_metadata(), format!("c{:?}", self.context)])
+    }
+    /// Context shape only.
+    fn sig_context_only(&self) -> String {
+        signature(&[format!("c{:?}", self.context)])
+    }
 }
 
 fn determinism(rows: &[Row], key: impl Fn(&Row) -> Option<String>) -> (usize, usize, usize) {
@@ -155,14 +176,27 @@ fn determinism(rows: &[Row], key: impl Fn(&Row) -> Option<String>) -> (usize, us
     (seen.len(), ambiguous, covered)
 }
 
+/// Label-independent split. The panel alternates its two answers with index
+/// parity, so splitting on parity puts one answer entirely in the training half
+/// and every signature is unseen at test time -- a split artifact, not a result.
+/// Hash the case id instead.
+fn split_of(id: &str) -> usize {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in id.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    (hash % 2) as usize
+}
+
 fn held_out(
     rows: &[Row],
     key: impl Fn(&Row) -> Option<String>,
-    parity: usize,
+    split: usize,
 ) -> (usize, usize, usize) {
     let mut table = BTreeMap::<String, BTreeMap<u32, usize>>::new();
-    for (index, row) in rows.iter().enumerate() {
-        if index % 2 == parity {
+    for row in rows {
+        if split_of(&row.id) == split {
             continue;
         }
         if let Some(key) = key(row) {
@@ -172,8 +206,8 @@ fn held_out(
     let mut seen = 0usize;
     let mut correct = 0usize;
     let mut test = 0usize;
-    for (index, row) in rows.iter().enumerate() {
-        if index % 2 != parity {
+    for row in rows {
+        if split_of(&row.id) != split {
             continue;
         }
         test += 1;
@@ -191,6 +225,54 @@ fn held_out(
         }
     }
     (test, seen, correct)
+}
+
+/// Hold out one whole query signature at a time: fit on every other query and
+/// predict the held-out query's rows. This is the generalisation question that
+/// matters -- a scorer keyed on the prompt cannot answer a wording it has never
+/// seen, so only a feature computed from the records can carry across.
+fn leave_one_query_out(
+    rows: &[Row],
+    name: &str,
+    key: impl Fn(&Row) -> Option<String> + Copy,
+) -> serde_json::Value {
+    let queries = rows
+        .iter()
+        .map(|row| row.sig_query())
+        .collect::<BTreeSet<_>>();
+    let (mut test, mut seen, mut correct) = (0usize, 0usize, 0usize);
+    for held_out_query in &queries {
+        let mut table = BTreeMap::<String, BTreeMap<u32, usize>>::new();
+        for row in rows {
+            if &row.sig_query() == held_out_query {
+                continue;
+            }
+            if let Some(key) = key(row) {
+                *table.entry(key).or_default().entry(row.answer).or_default() += 1;
+            }
+        }
+        for row in rows {
+            if &row.sig_query() != held_out_query {
+                continue;
+            }
+            test += 1;
+            let Some(key) = key(row) else { continue };
+            let Some(counts) = table.get(&key) else {
+                continue;
+            };
+            seen += 1;
+            let best = counts
+                .iter()
+                .max_by(|x, y| x.1.cmp(y.1).then_with(|| y.0.cmp(x.0)))
+                .map(|(token, _)| *token);
+            if best == Some(row.answer) {
+                correct += 1;
+            }
+        }
+    }
+    json!({"signature":name,"rows":rows.len(),"distinct_queries":queries.len(),
+        "unseen_query_test_rows":test,"unseen_query_signature_seen":seen,"unseen_query_correct":correct,
+        "unseen_query_accuracy_of_seen":if seen==0 {0.0} else {correct as f64/seen as f64}})
 }
 
 fn report(
@@ -289,6 +371,13 @@ fn main() -> Result<()> {
             report(&rows, "query_plus_source_identity", |row| Some(row.sig_query_source_identity())),
             report(&rows, "all_boundary_features", |row| Some(row.sig_all())),
             value_form,
+        ],
+        "unseen_query": [
+            leave_one_query_out(&rows, "query_only", |row| Some(row.sig_query())),
+            leave_one_query_out(&rows, "query_plus_source_identity", |row| Some(row.sig_query_source_identity())),
+            leave_one_query_out(&rows, "record_metadata_only", |row| Some(row.sig_record_metadata())),
+            leave_one_query_out(&rows, "record_metadata_and_context", |row| Some(row.sig_metadata_and_context())),
+            leave_one_query_out(&rows, "context_only", |row| Some(row.sig_context_only())),
         ],
         "scope": "offline panel feasibility read for an entry scorer; no model, no fit, no serving claim; train and development are the identical exposed 512-row panel",
     });
