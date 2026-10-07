@@ -13,13 +13,15 @@ The prospective construction fit uses the authenticated frozen Source48/Generate
 | Correct prefix reaching the first source-dependent divergence | 8/512 | 51/512 | 87/512 |
 | Correctly reached and correct at that divergence | 8/512 | 11/512 | 12/512 |
 | Both source-swap arms correctly reached and correct there | 4/256 pairs | 4/256 pairs | 2/256 pairs |
-| Complete source-swap pairs | 4/256 | 1/256 | 0/256 |
+| Complete source-swap pairs | 4/256 | 2/256 | 0/256 |
 | Teacher-prefix correctness at divergence | 50/512 | 58/512 | 48/512 |
 | Copy-covered later teacher positions correct | 355/4,128 | 369/4,128 | 262/4,128 |
 | Any emitted EOS | 11/512 | 10/512 | 8/512 |
 | Equal-episode teacher CE | 6.1992635176 | 5.4240809543 | 5.5841934868 |
 
 Independent saved-row review finds zero gained complete answers, three lost and five retained. Lost rows0,4,12 are forward-job replies; row4 emits the intended value then overruns, and rows0/12 also corrupt continuation. All lose EOS. Complete answers regress in both drawn (4 to3) and undrawn (4 to2) cohorts. Every one of the 1,024 endpoint row hashes, emitted-prefix chains, chosen tokens, decoded bytes, acceptance-plus-EOS flags and native-mass CE is verified. All 512 target values occur in supplied Source and Context, with no identical-input/different-answer collision. This is answerable authored construction data, not held-out language evidence. The large entry gain therefore establishes bounded learned entry behavior, not complete prediction, generalization or geometric-family superiority. Preserve learned32 as research evidence and retain the frozen parent as the accepted model.
+
+**October 7 onboarding correction:** fresh reading of the exact retained run reproduces five complete rows `[1,5,8,9,13]`, including two complete source-swap pairs `[1,9]` and `[5,13]`. The earlier table and handoff reported one pair incorrectly. The corrected pair counts are 4/2/0; the unchanged complete-answer regression and zero gained answers remain. The [onboarding review](../research/astra-onboarding-2026-10-07.md) records the scope of the saved-row audit and distinguishes this arithmetic correction from a new model execution.
 
 Linux RTX4090 pod `lg5m36pkj563my` completed with exit0 in382.471s: cache preparation38.195s, fit loop20.725s, checkpoint work2.328s and native evaluation318.512s. The cached tensors occupy218,843,616bytes. CUDA computes the coefficient gathers/credit/backward; native integer preparation/evaluation and the alias reducer remain CPU work, with full transfer accounting. No fully resident CUDA or laptop-speed/energy claim follows. The cached standard pod bootstrap took2s and performed no cold build. The lease is released and pod deleted after archiving.
 
