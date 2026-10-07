@@ -839,9 +839,9 @@ pub mod geometric_bank_generate;
 
 #[cfg(feature = "cuda")]
 mod geometric_generate_cuda;
+pub mod geometric_generate_learning;
 #[cfg(feature = "cuda")]
 pub mod geometric_vocabulary_actions_cuda;
-pub mod geometric_generate_learning;
 
 pub mod geometric_read_state_bridge;
 
