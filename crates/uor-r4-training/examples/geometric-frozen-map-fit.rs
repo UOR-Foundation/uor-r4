@@ -81,20 +81,20 @@ fn control_settings(a: &Args) -> Result<(usize, ControlRates)> {
             "prediction control settings cannot change fixed fit/admission",
         ));
     }
-    if (a.prediction_control_trainable == ControlTrainable::GenerateField)
+    if (a.prediction_control_trainable != ControlTrainable::Joint)
         != a.prediction_control_resume.is_some()
     {
         return Err(bad("Generate-field control requires explicit resume; resume requires Generate-field control"));
     }
     let n = a.prediction_control_updates.unwrap_or(32);
     let r = a.prediction_control_rates.unwrap_or_default();
-    if ![0, 16, 32].contains(&n)
+    if ![0, 16, 32, 64].contains(&n)
         || [r.generate, r.prototype, r.context, r.potential]
             .iter()
             .any(|x| !x.is_finite() || *x <= 0.)
     {
         return Err(bad(
-            "control requires explicit0/16/32 updates and finite positive rates",
+            "control requires explicit0/16/32/64 updates and finite positive rates",
         ));
     }
     Ok((n, r))
@@ -142,6 +142,7 @@ enum ControlTrainable {
     #[default]
     Joint,
     GenerateField,
+    PotentialGenerateField,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -2253,7 +2254,15 @@ fn restore_control_resume(a: &Args, l: &Loaded, d: &Device) -> Result<Option<Val
         return Err(bad("resumed Generate masters do not export saved artifact"));
     }
     let n = l.source.compile_context_potential_rebound(&l.frozen)?;
-    if serde_json::to_value(n.artifact_binding()?)? != receipt["parent"] {
+    // Provenance belongs to the independently saved/reloaded parent; the
+    // freshly compiled object supplies only a would-export execution identity.
+    let identity: ConsumerIdentity =
+        serde_json::from_value(read(&cp.join("native/metadata.json"))?["identity"].clone())?;
+    let reloaded = NativeSourceRealizer::load(&cp.join("native"), &l.source, &identity)?;
+    let loaded_binding = reloaded.artifact_binding()?;
+    if serde_json::to_value(&loaded_binding)? != receipt["parent"]
+        || n.execution_binding()? != loaded_binding
+    {
         return Err(bad(
             "resumed source masters do not export saved native identity",
         ));
@@ -2357,10 +2366,13 @@ fn run_prediction_control(
         .partition(|(name, _)| name == "generate.prototype_choices");
     let context = l.source.context_state_parameters();
     let potential = l.source.potential_parameters();
-    let field_only = a.prediction_control_trainable == ControlTrainable::GenerateField;
+    let field_only = a.prediction_control_trainable != ControlTrainable::Joint;
+    let potential_active = a.prediction_control_trainable != ControlTrainable::GenerateField;
     let mut frozen_groups = prototype.clone();
     frozen_groups.extend(context.clone());
-    frozen_groups.extend(potential.clone());
+    if !potential_active {
+        frozen_groups.extend(potential.clone());
+    }
     let frozen_groups_identity = identities(&frozen_groups)?;
     let mut go = optimizer(&coefficients, rates.generate)?;
     let mut po = optimizer(&prototype, rates.prototype)?;
@@ -2375,7 +2387,10 @@ fn run_prediction_control(
         let grads = if field_only {
             grads
                 .into_iter()
-                .filter(|(name, _)| coefficients.contains_key(name))
+                .filter(|(name, _)| {
+                    coefficients.contains_key(name)
+                        || (potential_active && potential.contains_key(name))
+                })
                 .collect()
         } else {
             grads
@@ -2385,16 +2400,18 @@ fn run_prediction_control(
         if !field_only {
             apply(&mut po, &prototype, &grads, &denominator)?;
             apply(&mut co, &context, &grads, &denominator)?;
-            apply(&mut vo, &potential, &grads, &denominator)?;
             for var in context.values() {
                 var.set(&var.as_tensor().clamp(-1.75, 1.75)?)?;
             }
+        }
+        if potential_active {
+            apply(&mut vo, &potential, &grads, &denominator)?;
             l.source.project_potential_range()?;
         }
         l.generate.project_shadow_range()?;
         if field_only && identities(&frozen_groups)? != frozen_groups_identity {
             return Err(bad(
-                "Generate-field control changed frozen Context/Potential/prototype masters",
+                "field control changed frozen Context/prototype or inactive Potential masters",
             ));
         }
         if identities(&l.original_bridge.parameters())? != original
@@ -2440,7 +2457,7 @@ fn run_prediction_control(
     Ok(
         json!({"schema":"uor-r4.geometric-prediction-control/1","status":"COMPLETED","mode":"prediction_control",
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"updates":limit,"rates":rates,"native_pool_backend":"host",
-        "resume":resume,"trainable":a.prediction_control_trainable,"original_indices":CONTROL_INDICES,"training_row_draws":limit*8,"target_position_draws":limit*84,
+        "resume":resume,"trainable":a.prediction_control_trainable,"source_routing_scope":"Potential updates may change selected physical Source and transported state; no fixed-coordinate claim","original_indices":CONTROL_INDICES,"training_row_draws":limit*8,"target_position_draws":limit*84,
         "initial_receipt":initial_receipt,"final_receipt":final_receipt,"blocks":blocks,
         "native_prediction_control_win":win,"elapsed_seconds":start.elapsed().as_secs_f64(),
         "scope":"construction learning control on8 retained cases; complete accepted own-prefix replies+EOS and four source-swap pairs required; no generalization/chat/attention qualification; initial diagnostic0 can be run before choosing prospective control rates"}),
@@ -2715,6 +2732,13 @@ mod tests {
             control_settings(&serde_json::from_value::<Args>(config.clone())?)?.0,
             32
         );
+        config["prediction_control_updates"] = json!(64);
+        assert_eq!(
+            control_settings(&serde_json::from_value::<Args>(config.clone())?)?.0,
+            64
+        );
+        config["prediction_control_updates"] = json!(65);
+        assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
         config["prediction_control_updates"] = json!(8);
         assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
         config["prediction_control_updates"] = json!(32);
@@ -2735,6 +2759,14 @@ mod tests {
         assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
         config["prediction_control_resume"] = json!("sealed-control32");
         assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_ok());
+        config["prediction_control_trainable"] = json!("potential_generate_field");
+        assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_ok());
+        config
+            .as_object_mut()
+            .ok_or_else(|| bad("test object"))?
+            .remove("prediction_control_resume");
+        assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
+        config["prediction_control_resume"] = json!("sealed-control32");
         config["prediction_control_trainable"] = json!("joint");
         assert!(control_settings(&serde_json::from_value::<Args>(config.clone())?).is_err());
         config["prediction_control_trainable"] = json!("unknown");
