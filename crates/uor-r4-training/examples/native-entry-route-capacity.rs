@@ -401,7 +401,7 @@ fn admit_config(c: &Config) -> Result<()> {
         || !valid_digest(&c.expected_checkpoint_receipt_sha256)
         || !valid_digest(&c.expected_generate_sha256)
         || c.pin_lineage != 1
-        || c.pin_commit != 2
+        || c.pin_commit != 4
         || c.pin_scope != "compiler-probe"
     {
         return Err(bad("configuration digest/pinned bank scope differs"));
@@ -496,6 +496,23 @@ fn run(c: &Config) -> Result<Value> {
     {
         return Err(bad(
             "complete unique empty-prefix 512-row input panel differs",
+        ));
+    }
+    // The authenticated full panel includes update/reassertion records at 3/4.
+    // Pin metadata bounds admission only; record identity and chronology stay exact.
+    let maximum_commit = panel
+        .cases
+        .iter()
+        .flat_map(|p| p.segments.iter())
+        .filter_map(|s| match s {
+            Segment::Source { commit, .. } => Some(*commit),
+            _ => None,
+        })
+        .max()
+        .ok_or_else(|| bad("panel source commit absent"))?;
+    if maximum_commit != c.pin_commit {
+        return Err(bad(
+            "snapshot pin differs from full authenticated panel maximum commit",
         ));
     }
     let cp = c.baseline.join("checkpoint-0128");
@@ -926,6 +943,7 @@ fn run(c: &Config) -> Result<Value> {
         "baseline":c.baseline,"baseline_producer":PRODUCER,"baseline_report_sha256":c.expected_baseline_report_sha256,
         "checkpoint_receipt_sha256":c.expected_checkpoint_receipt_sha256,"checkpoint":"checkpoint-0128","checkpoint_receipt":receipt,
         "inputs_sha256":INPUT_SHA,"generate_sha256":c.expected_generate_sha256,"categorical_sha256":BRIDGE_SHA,"exp_sha256":EXP_SHA,
+        "bank_pin":{"lineage":c.pin_lineage,"commit":c.pin_commit,"scope":c.pin_scope,"admission":"max commit of full authenticated public input panel; no record rewritten"},
         "factual_parity":{"saved_summary_vectors_hashes_states_and_occurrences":true,"saved_complete_token_masses":"UNAVAILABLE_IN_ORIGINAL_PRODUCER_SCHEMA","independent_complete_alias_mass_reconstruction":true},
         "native_source_binding":generator.source_binding(),"device":"cuda:0","cuda_visible_devices":std::env::var("CUDA_VISIBLE_DEVICES").ok(),
         "completed_rows":rows.len(),"physical_source_routes_executed":physical_count,"query_preserving_controls":query_count,
@@ -1122,7 +1140,7 @@ mod argument_tests {
                 inputs: inputs.clone(),
                 output,
                 pin_lineage: 1,
-                pin_commit: 2,
+                pin_commit: 4,
                 pin_scope: "compiler-probe".into(),
             };
             let mut nested = config(inputs_root.join("missing/attempt"));
