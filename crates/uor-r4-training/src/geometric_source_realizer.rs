@@ -5013,6 +5013,7 @@ mod tests {
         let source =
             SourceRealizerWeights::load_source_on_device(&cp.join("source"), &tok, &device)?;
         let native = NativeSourceRealizer::load(&cp.join("native"), &source, &identity)?;
+        let prepared = source.prepare_on_device(&native, &device)?;
         assert_eq!(
             serde_json::to_value(native.artifact_binding()?)?,
             receipt["parent"]
@@ -5048,7 +5049,7 @@ mod tests {
                 if ids.is_empty() {
                     return Err(invalid("retained context is empty"));
                 }
-                let context = source.consumer.context.forward(&ids, 1, ids.len(), false)?;
+                let context = prepared.context_output(&ids, false)?;
                 let candidates = provenance["candidates"]
                     .as_array()
                     .ok_or_else(|| invalid("retained physical candidates absent"))?;
@@ -6095,7 +6096,6 @@ impl PreparedSourceRealizer<'_> {
         trace: &uor_r4_integer::geometric_source_realizer::PrefixBankRealizerTrace,
         prefix_temporal_utility: bool,
     ) -> Result<ComposedCopyAssembly> {
-        let device = self.source.consumer.context.device();
         let bank = &trace.cue_bank.bank;
         let carrier = &trace.cue_bank.carrier;
         let transport = &trace.prefix;
