@@ -111,6 +111,16 @@ pub struct GenerateLearningOutput {
     pub costs: GenerateLearningCosts,
 }
 
+/// Explicit offline CUDA output. Native Q24 scores stay on the device; the
+/// public host-trace path retains its original materialization behavior.
+pub struct GenerateDeviceLearningOutput {
+    pub raw_scores: Tensor,
+    pub clipped_scores: Tensor,
+    pub scores_q24: Tensor,
+    pub native_counts: GenerateReadCounts,
+    pub costs: GenerateLearningCosts,
+}
+
 fn device_admit(device: &Device) -> Result<()> {
     if !device.is_cpu() && !device.is_cuda() {
         return Err(invalid(
@@ -548,7 +558,8 @@ impl GenerateLearningWeights {
         state: &[H4Code],
         state_logits: &Tensor,
     ) -> Result<GenerateLearningOutput> {
-        self.forward_prepared_state_input(prepared, state, state_logits, false)
+        self.forward_prepared_state_input(prepared, state, state_logits, false, false)
+            .map(|(out, _)| out)
     }
 
     /// Explicit finite-state utility channel from the same causal context op.
@@ -561,7 +572,30 @@ impl GenerateLearningWeights {
         state: &[H4Code],
         state_choices: &Tensor,
     ) -> Result<GenerateLearningOutput> {
-        self.forward_prepared_state_input(prepared, state, state_choices, true)
+        self.forward_prepared_state_input(prepared, state, state_choices, true, false)
+            .map(|(out, _)| out)
+    }
+
+    /// Same state-choice graph and authenticated hard scorer, without the full
+    /// vocabulary device-to-host download. Fresh snapshot rules are unchanged.
+    pub fn forward_prepared_state_choices_device(
+        &self,
+        prepared: &PreparedGenerateLearning,
+        state: &[H4Code],
+        state_choices: &Tensor,
+    ) -> Result<GenerateDeviceLearningOutput> {
+        if !self.device().is_cuda() {
+            return Err(invalid("Generate device-score path requires CUDA"));
+        }
+        let (out, hard) =
+            self.forward_prepared_state_input(prepared, state, state_choices, true, true)?;
+        Ok(GenerateDeviceLearningOutput {
+            raw_scores: out.raw_scores,
+            clipped_scores: out.clipped_scores,
+            scores_q24: hard.ok_or_else(|| invalid("Generate device hard scores absent"))?,
+            native_counts: out.native_counts,
+            costs: out.costs,
+        })
     }
 
     /// Frozen factual-state diagnostic: only selected Q4 field coefficients
@@ -679,7 +713,8 @@ impl GenerateLearningWeights {
         state: &[H4Code],
         state_logits: &Tensor,
         explicit_choices: bool,
-    ) -> Result<GenerateLearningOutput> {
+        retain_device_scores: bool,
+    ) -> Result<(GenerateLearningOutput, Option<Tensor>)> {
         self.validate_shapes()?;
         let native = &prepared.native;
         let cache = &prepared.cache;
@@ -723,7 +758,27 @@ impl GenerateLearningWeights {
             }
         }
         let v = self.vocab_size();
-        let (hard, anchor, counts) = self.hard_scores(prepared, state)?;
+        let (hard, anchor, counts, device_hard) = if retain_device_scores {
+            #[cfg(feature = "cuda")]
+            {
+                let scorer = cache
+                    .native_cuda
+                    .as_ref()
+                    .ok_or_else(|| invalid("Generate CUDA integer snapshot absent"))?;
+                let (scores, anchor) = scorer.score(native, state)?;
+                (
+                    Vec::new(),
+                    anchor,
+                    GenerateReadCounts::default(),
+                    Some(scores),
+                )
+            }
+            #[cfg(not(feature = "cuda"))]
+            return Err(invalid("Generate device scores require cuda feature"));
+        } else {
+            let (hard, anchor, counts) = self.hard_scores(prepared, state)?;
+            (hard, anchor, counts, None)
+        };
         let u = (q4_shadow_ste(self.unary.as_tensor())? * QUARTER_TO_NATS)?;
         let p = if self.edges.is_empty() {
             self.pair.as_tensor().clone()
@@ -826,41 +881,48 @@ impl GenerateLearningWeights {
         let raw_scores =
             ((&anchor + (&coefficient - coefficient.detach())?)? + (&input - input.detach())?)?;
         let clipped_scores = raw_scores.clamp(-8f32, 8f32)?;
-        Ok(GenerateLearningOutput {
-            raw_scores,
-            clipped_scores,
-            scores_q24: hard,
-            native_counts: counts,
-            costs: GenerateLearningCosts {
-                vocabulary_rows: v,
-                lanes: self.lanes,
-                ordered_pairs: self.edges.len(),
-                conditional_choice_rows: 2 * v * self.lanes,
-                staged_index_bytes: 0,
-                staged_hard_score_bytes: if self.device().is_cuda() { 0 } else { 4 * v },
-                hard_score_backend: if self.device().is_cuda() {
-                    "cuda-authenticated-i64-factors"
-                } else {
-                    "cpu-native"
+        Ok((
+            GenerateLearningOutput {
+                raw_scores,
+                clipped_scores,
+                scores_q24: hard,
+                native_counts: counts,
+                costs: GenerateLearningCosts {
+                    vocabulary_rows: v,
+                    lanes: self.lanes,
+                    ordered_pairs: self.edges.len(),
+                    conditional_choice_rows: 2 * v * self.lanes,
+                    staged_index_bytes: 0,
+                    staged_hard_score_bytes: if self.device().is_cuda() { 0 } else { 4 * v },
+                    hard_score_backend: if self.device().is_cuda() {
+                        "cuda-authenticated-i64-factors"
+                    } else {
+                        "cpu-native"
+                    },
+                    hard_score_download_bytes: if self.device().is_cuda() && !retain_device_scores {
+                        8 * v
+                    } else {
+                        0
+                    },
+                    hard_score_state_staged_bytes: if self.device().is_cuda() {
+                        4 * self.lanes
+                    } else {
+                        0
+                    },
+                    hard_score_device_launches: usize::from(self.device().is_cuda()),
+                    snapshot_native_factor_bytes: self.native_factor_device_bytes(prepared),
+                    export_master_download_bytes: prepared.downloaded_master_bytes,
+                    max_conditional_utility_elements: v * ROOT_COUNT,
+                    loss_status_scalars: if retain_device_scores { 4 } else { 2 },
+                    snapshot_staged_index_bytes: cache.staged_bytes,
+                    snapshot_device_index_bytes: cache.device_index_bytes,
+                    per_position_device_index_elements: device_index_elements,
+                    snapshot_choice_probability_bytes: 4 * v * self.lanes * ROOT_COUNT,
+                    generate_only_loss_staged_bytes_upper: 16 * v + 4,
                 },
-                hard_score_download_bytes: if self.device().is_cuda() { 8 * v } else { 0 },
-                hard_score_state_staged_bytes: if self.device().is_cuda() {
-                    4 * self.lanes
-                } else {
-                    0
-                },
-                hard_score_device_launches: usize::from(self.device().is_cuda()),
-                snapshot_native_factor_bytes: self.native_factor_device_bytes(prepared),
-                export_master_download_bytes: prepared.downloaded_master_bytes,
-                max_conditional_utility_elements: v * ROOT_COUNT,
-                loss_status_scalars: 2,
-                snapshot_staged_index_bytes: cache.staged_bytes,
-                snapshot_device_index_bytes: cache.device_index_bytes,
-                per_position_device_index_elements: device_index_elements,
-                snapshot_choice_probability_bytes: 4 * v * self.lanes * ROOT_COUNT,
-                generate_only_loss_staged_bytes_upper: 16 * v + 4,
             },
-        })
+            device_hard,
+        ))
     }
 
     /// Deliberately uncached CPU reference for exact index/gradient parity.
@@ -1199,6 +1261,68 @@ pub enum VocabularyScoreAdjoint {
     RawIdentity,
 }
 
+/// Same full-alias native anchor and offline score Jacobian as the host-trace
+/// loss. Target enters after the opaque, target-free device pool exists.
+/// Four scalar downloads: finite status, raw equality, target mass and total.
+#[cfg(feature = "cuda")]
+pub fn vocabulary_marginal_loss_device_with_credit(
+    pool: &crate::geometric_vocabulary_actions_cuda::DeviceVocabularyReduction,
+    generate_raw: &Tensor,
+    copy_raw: Option<&Tensor>,
+    target: u32,
+    credit: VocabularyScoreAdjoint,
+) -> Result<Tensor> {
+    if generate_raw.dims() != [pool.binding().vocab_size()]
+        || generate_raw.dtype() != DType::F32
+        || !generate_raw
+            .device()
+            .same_device(pool.hard_action_scores().device())
+    {
+        return Err(invalid(
+            "device alias loss Generate shape/dtype/device differs",
+        ));
+    }
+    let generate = generate_raw.index_select(&pool.legal_generate_ids()?, 0)?;
+    let combined = if pool.copy_count() == 0 {
+        if copy_raw.is_some_and(|c| c.elem_count() != 0) {
+            return Err(invalid("device alias loss unexpected Copy scores"));
+        }
+        generate
+    } else {
+        let copy = copy_raw.ok_or_else(|| invalid("device alias loss missing Copy scores"))?;
+        if copy.dims() != [pool.copy_count()]
+            || copy.dtype() != DType::F32
+            || !copy.device().same_device(generate_raw.device())
+        {
+            return Err(invalid("device alias loss Copy shape/dtype/device differs"));
+        }
+        Tensor::cat(&[&generate, copy], 0)?
+    };
+    if !combined.sqr()?.sum_all()?.to_scalar::<f32>()?.is_finite() {
+        return Err(invalid("device alias loss scores nonfinite"));
+    }
+    let difference = (&combined - pool.raw_action_scores())?
+        .abs()?
+        .max(0)?
+        .to_scalar::<f32>()?;
+    if difference != 0. || !difference.is_finite() {
+        return Err(invalid(
+            "device alias loss raw graph differs from native pool",
+        ));
+    }
+    let bounded = combined.clamp(-8f32, 8f32)?;
+    let credit_scores = match credit {
+        VocabularyScoreAdjoint::Clipped => &bounded,
+        VocabularyScoreAdjoint::RawIdentity => &combined,
+    };
+    let scores = (pool.hard_action_scores() + (credit_scores - credit_scores.detach())?)?;
+    let probability = candle_nn::ops::softmax(&scores, 0)?;
+    let soft_target = (probability * pool.target_mask(target)?)?.sum_all()?;
+    let anchored = (Tensor::new(pool.native_probability(target)?, generate_raw.device())?
+        + (&soft_target - soft_target.detach())?)?;
+    Ok(anchored.log()?.neg()?)
+}
+
 /// Flat action marginal with labels used only after a target-free native pool.
 /// Native token mass is aggregated before the sole float probability boundary.
 /// Copy scores may be frozen or carry separately implemented input credit.
@@ -1358,6 +1482,61 @@ mod tests {
     const TOK: &str = r#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5,"Ġ":6,"Ġa":7},"merges":["Ġ a"]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
     fn binding() -> Result<SourceActionBinding> {
         SourceActionBinding::new(TOK.as_bytes()).map_err(|e| invalid(e.to_string()))
+    }
+    #[test]
+    fn generate_device_scores_explicitly_reject_cpu() -> Result<()> {
+        let w = GenerateLearningWeights::seeded(binding()?, 2, 7, &Device::Cpu)?;
+        let prepared = w.prepare_native()?;
+        let choices = Tensor::zeros((2, ROOT_COUNT), DType::F32, &Device::Cpu)?;
+        assert!(w
+            .forward_prepared_state_choices_device(&prepared, &[H4Code::IDENTITY; 2], &choices)
+            .is_err());
+        Ok(())
+    }
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "explicit CUDA required; set UOR_R4_CUDA_REQUIRED=1, no CPU fallback"]
+    fn generate_device_scores_preserve_hard_forward_and_choice_gradients() -> Result<()> {
+        if std::env::var("UOR_R4_CUDA_REQUIRED").as_deref() != Ok("1") {
+            return Err(invalid(
+                "set UOR_R4_CUDA_REQUIRED=1 for explicit CUDA checks",
+            ));
+        }
+        let d = Device::new_cuda(0)?;
+        let w = GenerateLearningWeights::seeded(binding()?, 2, 7, &d)?;
+        let prepared = w.prepare_native()?;
+        let states = [code(4)?, code(13)?];
+        let mut onehot = vec![0f32; 2 * ROOT_COUNT];
+        onehot[4] = 1.;
+        onehot[ROOT_COUNT + 13] = 1.;
+        let choices = Var::from_vec(onehot, (2, ROOT_COUNT), &d)?;
+        let old = w.forward_prepared_state_choices(&prepared, &states, choices.as_tensor())?;
+        let new =
+            w.forward_prepared_state_choices_device(&prepared, &states, choices.as_tensor())?;
+        assert_eq!(old.scores_q24, new.scores_q24.to_vec1::<i64>()?);
+        assert_eq!(
+            old.raw_scores.to_vec1::<f32>()?,
+            new.raw_scores.to_vec1::<f32>()?
+        );
+        assert_eq!(old.costs.hard_score_download_bytes, 8 * w.vocab_size());
+        assert_eq!(new.costs.hard_score_download_bytes, 0);
+        let weights = Tensor::from_vec(
+            (0..w.vocab_size())
+                .map(|i| ((i % 3) as f32 - 1.) * 0.25)
+                .collect::<Vec<_>>(),
+            w.vocab_size(),
+            &d,
+        )?;
+        let og = (&old.raw_scores * &weights)?.sum_all()?.backward()?;
+        let ng = (&new.raw_scores * &weights)?.sum_all()?.backward()?;
+        for var in w.parameters().values() {
+            assert_eq!(grad(&og, var.as_tensor())?, grad(&ng, var.as_tensor())?);
+        }
+        assert_eq!(
+            grad(&og, choices.as_tensor())?,
+            grad(&ng, choices.as_tensor())?
+        );
+        Ok(())
     }
     fn code(x: u8) -> Result<H4Code> {
         H4Code::try_from(x).map_err(|e| invalid(e.to_string()))

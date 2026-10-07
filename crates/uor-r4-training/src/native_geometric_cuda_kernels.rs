@@ -78,6 +78,63 @@ fn ptx() -> Result<&'static str> {
     }
 }
 const SOURCE: &str = r#"
+// Offline exact alias reduction. All positive masses fit signed64 under the
+// admitted4096+128 action bound; unsigned atomics cannot overflow.
+__device__ unsigned long long alias_exp(unsigned long long gap,const unsigned*exp,unsigned len){
+ unsigned long long idx=gap>>16;
+ if(idx+1>=len)return 0;
+ unsigned long long a=exp[idx],b=exp[idx+1];
+ return a-(((a-b)*(gap&65535ULL))>>16);
+}
+__device__ long long alias_clip(long long x){return x< -134217728LL?-134217728LL:(x>134217728LL?134217728LL:x);}
+extern "C" __global__ void native_alias_reference(const long long*gen,const unsigned*legal,
+ const long long*copy,long long*refs,unsigned ng,unsigned nc){
+ if(blockIdx.x||threadIdx.x)return;
+ long long r=gen[legal[0]];
+ for(unsigned i=1;i<ng;i++)if(gen[legal[i]]>r)r=gen[legal[i]];
+ for(unsigned i=0;i<nc;i++)if(copy[i]>r)r=copy[i];
+ refs[0]=r;refs[1]=alias_clip(r);
+}
+extern "C" __global__ void native_alias_weights(const long long*gen,const unsigned*legal,
+ const unsigned*copyids,const long long*copy,const unsigned*exp,const long long*refs,
+ long long*weights,long long*masses,long long*gm,long long*rm,float*hard,float*rawf,
+ unsigned ng,unsigned nc,unsigned len){
+ unsigned i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=ng+nc)return;
+ unsigned id=i<ng?legal[i]:copyids[i-ng];long long raw=i<ng?gen[id]:copy[i-ng];
+ long long clipped=alias_clip(raw);
+ unsigned long long w=alias_exp((unsigned long long)(refs[1]-clipped),exp,len);
+ // Unsigned subtraction is the exact nonnegative mathematical gap, including
+ // MIN..MAX. Compare the tail before any signed narrowing/indexing.
+ unsigned long long gap=(unsigned long long)refs[0]-(unsigned long long)raw;
+ unsigned long long rw=gap>=((unsigned long long)(len-1)<<16)?0:alias_exp(gap,exp,len);
+ weights[i]=(long long)w;hard[i]=(float)clipped*(1.0f/16777216.0f);
+ rawf[i]=__double2float_rn(__dmul_rn(__ll2double_rn(raw),1.0/16777216.0));
+ atomicAdd((unsigned long long*)&masses[id],w);
+ atomicAdd((unsigned long long*)&rm[id],rw);
+ if(i<ng)gm[id]=(long long)w;
+}
+// Compact19-field summary, exactly VocabularyReduction declaration order.
+extern "C" __global__ void native_alias_summary(const long long*gen,const unsigned*legal,
+ const long long*copy,const long long*refs,const long long*masses,const long long*gm,
+ const long long*rm,long long*out,unsigned ng,unsigned nc){
+ if(blockIdx.x||threadIdx.x)return;
+ unsigned chosen=legal[0],rawchosen=chosen;unsigned long long total=0,gt=0,rt=0,low=0,high=0;
+ for(unsigned i=0;i<ng;i++){
+  unsigned id=legal[i];total+=(unsigned long long)masses[id];gt+=(unsigned long long)gm[id];rt+=(unsigned long long)rm[id];
+  if(masses[id]>masses[chosen])chosen=id;
+  if(rm[id]>rm[rawchosen])rawchosen=id;
+ }
+ for(unsigned i=0;i<ng+nc;i++){
+  long long raw=i<ng?gen[legal[i]]:copy[i-ng];low+=raw< -134217728LL;high+=raw>134217728LL;
+ }
+ unsigned rank=1,rawrank=1;
+ for(unsigned i=0;i<ng;i++){unsigned id=legal[i];rank+=rm[id]>rm[chosen];rawrank+=masses[id]>masses[rawchosen];}
+ out[0]=ng;out[1]=nc;out[2]=refs[1];out[3]=(long long)total;out[4]=chosen;out[5]=masses[chosen];
+ out[6]=(long long)gt;out[7]=(long long)(total-gt);out[8]=gm[chosen];out[9]=masses[chosen]-gm[chosen];
+ out[10]=(long long)low;out[11]=(long long)high;out[12]=refs[0];out[13]=(long long)rt;out[14]=rawchosen;
+ out[15]=rm[rawchosen];out[16]=rank;out[17]=rawrank;out[18]=chosen!=rawchosen;
+}
+
 // Exact native Generate Q24 factors are immutable admitted snapshot data.
 // Relative rows encode inv(state)*prototype; identity is table-defined (1).
 extern "C" __global__ void native_generate_q24(const unsigned*rel,const unsigned*proto,

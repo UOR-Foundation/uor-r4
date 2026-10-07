@@ -139,6 +139,86 @@ pub struct BankGenerateOutput {
     pub read_state_bridge: Option<(usize, BridgeLearningOutput)>,
 }
 
+/// Common target-free state/provenance preparation, before either pool backend.
+struct BankGenerateState {
+    copy: Option<ComposedCopyBankOutput>,
+    no_source_context: Option<ContextQ4Output>,
+    causal_token_ids: Vec<u32>,
+    final_state_codes: Vec<H4Code>,
+    state_choices: Tensor,
+    copy_token_ids: Vec<u32>,
+    copy_scores_q24: Vec<i64>,
+    credit_scope: &'static str,
+    read_state_bridge: Option<(usize, BridgeLearningOutput)>,
+}
+
+/// Genuine device reduction; it never substitutes an empty host trace.
+/// Context/Copy preparation and compact requested summaries remain host work.
+#[cfg(feature = "cuda")]
+pub struct DeviceBankGenerateOutput {
+    actions: crate::geometric_vocabulary_actions_cuda::DeviceVocabularyReduction,
+    generate: crate::geometric_generate_learning::GenerateDeviceLearningOutput,
+    copy: Option<ComposedCopyBankOutput>,
+    no_source_context: Option<ContextQ4Output>,
+    causal_token_ids: Vec<u32>,
+    final_state_codes: Vec<H4Code>,
+    copy_token_ids: Vec<u32>,
+    copy_scores_q24: Vec<i64>,
+    credit_scope: &'static str,
+    read_state_bridge: Option<(usize, BridgeLearningOutput)>,
+}
+
+#[cfg(feature = "cuda")]
+impl DeviceBankGenerateOutput {
+    pub fn actions(&self) -> &crate::geometric_vocabulary_actions_cuda::DeviceVocabularyReduction {
+        &self.actions
+    }
+    pub fn generate(&self) -> &crate::geometric_generate_learning::GenerateDeviceLearningOutput {
+        &self.generate
+    }
+    pub fn copy_token_ids(&self) -> &[u32] {
+        &self.copy_token_ids
+    }
+    pub fn copy_scores_q24(&self) -> &[i64] {
+        &self.copy_scores_q24
+    }
+    pub fn final_state_codes(&self) -> &[H4Code] {
+        &self.final_state_codes
+    }
+    pub fn causal_token_ids(&self) -> &[u32] {
+        &self.causal_token_ids
+    }
+    pub fn credit_scope(&self) -> &'static str {
+        self.credit_scope
+    }
+    pub fn read_state_bridge(&self) -> Option<&(usize, BridgeLearningOutput)> {
+        self.read_state_bridge.as_ref()
+    }
+
+    pub fn context(&self) -> Result<&ContextQ4Output> {
+        match (&self.copy, &self.no_source_context) {
+            (Some(copy), None) => Ok(&copy.context),
+            (None, Some(context)) => Ok(context),
+            _ => Err(invalid("device bank Generate context ownership differs")),
+        }
+    }
+
+    pub fn loss_with_credit(&self, target: u32, credit: VocabularyScoreAdjoint) -> Result<Tensor> {
+        crate::geometric_generate_learning::vocabulary_marginal_loss_device_with_credit(
+            &self.actions,
+            &self.generate.raw_scores,
+            self.copy.as_ref().map(|c| &c.copy_raw),
+            target,
+            credit,
+        )
+    }
+
+    /// Allocating explicit diagnostic adapter, excluded from ordinary learning.
+    pub fn action_trace(&self) -> Result<VocabularyActionTrace> {
+        self.actions.trace()
+    }
+}
+
 fn same_binding(a: &SourceActionBinding, b: &SourceActionBinding) -> bool {
     a.tokenizer_sha256() == b.tokenizer_sha256()
         && a.protocol() == b.protocol()
@@ -242,14 +322,14 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
     /// Query/prefix/context are causal state inputs, never source candidates.
     /// The old Copy preparer intentionally rejects empty/context-only banks;
     /// use explicit `forward_no_source` instead of inventing a Source record.
-    pub fn forward_bank(
+    fn prepare_bank_state(
         &mut self,
         segments: &[SourceBankSegment<'_>],
         query: &[u32],
         actual_prefix: &[u32],
         cue: &NativeCueCarrier<'_>,
         prefix: &NativePrefixTransport<'_>,
-    ) -> Result<BankGenerateOutput> {
+    ) -> Result<BankGenerateState> {
         let copy = if self.prefix_temporal_utility {
             self.realizer
                 .forward_bank_composed_copy_with_prefix_utility(
@@ -389,22 +469,12 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
         } else {
             None
         };
-        let generated = self.generate.forward_prepared_state_choices(
-            self.prepared_generate,
-            &states,
-            &logits,
-        )?;
-        let actions = self
-            .pool
-            .reduce_trace(&generated.scores_q24, &ids, &scores)
-            .map_err(|e| invalid(e.to_string()))?;
-        Ok(BankGenerateOutput {
-            actions,
-            generate: generated,
+        Ok(BankGenerateState {
             copy: Some(copy),
             no_source_context: None,
             causal_token_ids,
             final_state_codes: states,
+            state_choices: logits,
             copy_token_ids: ids,
             copy_scores_q24: scores,
             read_state_bridge,
@@ -432,7 +502,7 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
     /// Ordinary causal continuation with zero admitted Copy occurrences. IDs
     /// must already contain the actual history/query/prefix in caller order.
     /// Empty input is rejected; there is no fabricated identity/source token.
-    pub fn forward_no_source(&mut self, causal_ids: &[u32]) -> Result<BankGenerateOutput> {
+    fn prepare_no_source_state(&mut self, causal_ids: &[u32]) -> Result<BankGenerateState> {
         if causal_ids.is_empty()
             || causal_ids
                 .iter()
@@ -444,26 +514,133 @@ impl<'a, 'source> PreparedBankGenerate<'a, 'source> {
         }
         let context = self.realizer.context_output(causal_ids, false)?;
         let (states, logits) = final_retained_state(&context, self.generate.lanes())?;
-        let generated = self.generate.forward_prepared_state_choices(
-            self.prepared_generate,
-            &states,
-            &logits,
-        )?;
-        let actions = self
-            .pool
-            .reduce_trace(&generated.scores_q24, &[], &[])
-            .map_err(|e| invalid(e.to_string()))?;
-        Ok(BankGenerateOutput {
-            actions,
-            generate: generated,
+        Ok(BankGenerateState {
             copy: None,
             no_source_context: Some(context),
             causal_token_ids: causal_ids.to_vec(),
             final_state_codes: states,
+            state_choices: logits,
             copy_token_ids: vec![],
             copy_scores_q24: vec![],
             credit_scope: NO_SOURCE_CREDIT_SCOPE,
             read_state_bridge: None,
+        })
+    }
+
+    pub fn forward_bank(
+        &mut self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+    ) -> Result<BankGenerateOutput> {
+        let state = self.prepare_bank_state(segments, query, actual_prefix, cue, prefix)?;
+        self.finish_host(state)
+    }
+
+    pub fn forward_no_source(&mut self, causal_ids: &[u32]) -> Result<BankGenerateOutput> {
+        let state = self.prepare_no_source_state(causal_ids)?;
+        self.finish_host(state)
+    }
+
+    fn finish_host(&mut self, state: BankGenerateState) -> Result<BankGenerateOutput> {
+        let generate = self.generate.forward_prepared_state_choices(
+            self.prepared_generate,
+            &state.final_state_codes,
+            &state.state_choices,
+        )?;
+        let actions = self
+            .pool
+            .reduce_trace(
+                &generate.scores_q24,
+                &state.copy_token_ids,
+                &state.copy_scores_q24,
+            )
+            .map_err(|e| invalid(e.to_string()))?;
+        Ok(BankGenerateOutput {
+            actions,
+            generate,
+            copy: state.copy,
+            no_source_context: state.no_source_context,
+            causal_token_ids: state.causal_token_ids,
+            final_state_codes: state.final_state_codes,
+            copy_token_ids: state.copy_token_ids,
+            copy_scores_q24: state.copy_scores_q24,
+            credit_scope: state.credit_scope,
+            read_state_bridge: state.read_state_bridge,
+        })
+    }
+
+    /// Explicit offline CUDA path. The portable/default trace path is unchanged.
+    /// The target-free device pool precedes all loss-label access.
+    #[cfg(feature = "cuda")]
+    pub fn forward_bank_device(
+        &mut self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+        pool: &crate::geometric_vocabulary_actions_cuda::PreparedNativeVocabularyCuda,
+    ) -> Result<DeviceBankGenerateOutput> {
+        self.admit_device_pool(pool)?;
+        let state = self.prepare_bank_state(segments, query, actual_prefix, cue, prefix)?;
+        self.finish_device(state, pool)
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn forward_no_source_device(
+        &mut self,
+        causal_ids: &[u32],
+        pool: &crate::geometric_vocabulary_actions_cuda::PreparedNativeVocabularyCuda,
+    ) -> Result<DeviceBankGenerateOutput> {
+        self.admit_device_pool(pool)?;
+        let state = self.prepare_no_source_state(causal_ids)?;
+        self.finish_device(state, pool)
+    }
+
+    #[cfg(feature = "cuda")]
+    fn admit_device_pool(
+        &self,
+        pool: &crate::geometric_vocabulary_actions_cuda::PreparedNativeVocabularyCuda,
+    ) -> Result<()> {
+        if !same_binding(pool.binding(), self.generate.binding())
+            || !pool.device().same_device(self.generate.device())
+            || !pool.device().is_cuda()
+        {
+            return Err(invalid("bank device pool binding/device differs"));
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn finish_device(
+        &self,
+        state: BankGenerateState,
+        pool: &crate::geometric_vocabulary_actions_cuda::PreparedNativeVocabularyCuda,
+    ) -> Result<DeviceBankGenerateOutput> {
+        let generate = self.generate.forward_prepared_state_choices_device(
+            self.prepared_generate,
+            &state.final_state_codes,
+            &state.state_choices,
+        )?;
+        let actions = pool.reduce(
+            &generate.scores_q24,
+            &state.copy_token_ids,
+            &state.copy_scores_q24,
+        )?;
+        Ok(DeviceBankGenerateOutput {
+            actions,
+            generate,
+            copy: state.copy,
+            no_source_context: state.no_source_context,
+            causal_token_ids: state.causal_token_ids,
+            final_state_codes: state.final_state_codes,
+            copy_token_ids: state.copy_token_ids,
+            copy_scores_q24: state.copy_scores_q24,
+            credit_scope: state.credit_scope,
+            read_state_bridge: state.read_state_bridge,
         })
     }
 }

@@ -28,17 +28,19 @@ use uor_r4_integer::{
     geometric_source_realizer::{
         NativeArtifactBinding, NativeSourceRealizer as IntegerRealizer, SourceBankSegment,
     },
-    geometric_vocabulary_actions::NativeVocabularyActions,
+    geometric_vocabulary_actions::{NativeVocabularyActions, VocabularyActionTrace},
 };
 use uor_r4_tokenizer::ByteBpeTokenizer;
 use uor_r4_training::{
-    geometric_bank_generate::PreparedBankGenerate,
+    geometric_bank_generate::{BankGenerateOutput, PreparedBankGenerate},
     geometric_generate_learning::{GenerateLearningWeights, VocabularyScoreAdjoint},
     geometric_occurrence_consumer::{
         source_realizer::{NativeSourceRealizer, SourceRealizerWeights},
         ConsumerIdentity,
     },
-    geometric_read_state_bridge::{BridgeLearningWeights, PreparedCategoricalBridge},
+    geometric_read_state_bridge::{
+        BridgeLearningOutput, BridgeLearningWeights, PreparedCategoricalBridge,
+    },
     sha256_bytes, sha256_file,
 };
 #[path = "../../uor-r4-integer/examples/support/source_probe.rs"]
@@ -88,6 +90,22 @@ impl ReadStatePullback {
         }
     }
 }
+/// Explicit offline pool backend; omitted configurations keep the original host path.
+#[derive(Clone, Copy, Debug, Default, Deserialize, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum NativePoolBackend {
+    #[default]
+    Host,
+    Cuda,
+}
+impl NativePoolBackend {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::Cuda => "cuda",
+        }
+    }
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Args {
@@ -95,6 +113,8 @@ struct Args {
     credit: Credit,
     #[serde(default)]
     read_state_pullback: ReadStatePullback,
+    #[serde(default)]
+    native_pool_backend: NativePoolBackend,
     seed: u64,
     checkpoint: PathBuf,
     saved_fit: PathBuf,
@@ -331,6 +351,9 @@ fn args() -> Result<Args> {
         return Err(bad("one JSON config only"));
     }
     let a: Args = serde_json::from_slice(&fs::read(path)?)?;
+    if a.native_pool_backend == NativePoolBackend::Cuda && !cfg!(feature = "cuda") {
+        return Err(bad("CUDA native pool requested without CUDA build support"));
+    }
     if ![1001, 1002, 1003].contains(&a.seed)
         || a.maximum_seconds == 0
         || a.maximum_report_bytes < (64 << 20)
@@ -1084,6 +1107,133 @@ fn order(seed: u64, n: usize) -> Vec<usize> {
     }
     out
 }
+/// Real host/device results; full trace materialization is admission-only.
+enum FitBankOutput {
+    Host(BankGenerateOutput),
+    #[cfg(feature = "cuda")]
+    Cuda(uor_r4_training::geometric_bank_generate::DeviceBankGenerateOutput),
+}
+impl FitBankOutput {
+    fn copy_token_ids(&self) -> &[u32] {
+        match self {
+            Self::Host(out) => &out.copy_token_ids,
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => out.copy_token_ids(),
+        }
+    }
+    fn copy_scores(&self) -> &[i64] {
+        match self {
+            Self::Host(out) => &out.copy_scores_q24,
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => out.copy_scores_q24(),
+        }
+    }
+    fn states(&self) -> &[uor_r4_integer::h4_tables::H4Code] {
+        match self {
+            Self::Host(out) => &out.final_state_codes,
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => out.final_state_codes(),
+        }
+    }
+    fn bridge(&self) -> Option<&(usize, BridgeLearningOutput)> {
+        match self {
+            Self::Host(out) => out.read_state_bridge.as_ref(),
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => out.read_state_bridge(),
+        }
+    }
+    fn trace_for_admission(&self) -> Result<VocabularyActionTrace> {
+        Ok(match self {
+            Self::Host(out) => out.actions.clone(),
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => out.action_trace()?,
+        })
+    }
+    fn generate_scores_for_admission(&self) -> Result<Vec<i64>> {
+        Ok(match self {
+            Self::Host(out) => out.generate.scores_q24.clone(),
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => out.generate().scores_q24.to_vec1::<i64>()?,
+        })
+    }
+    fn native_target_mass_and_total(&self, target: u32) -> Result<(u64, u64)> {
+        match self {
+            Self::Host(out) => Ok((
+                out.actions
+                    .token_masses
+                    .iter()
+                    .find(|m| m.token_id == target)
+                    .ok_or_else(|| bad("target support absent"))?
+                    .weight_q31,
+                out.actions.summary.total_weight_q31,
+            )),
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => Ok((
+                out.actions().target_mass(target)?,
+                out.actions().summary()?.total_weight_q31,
+            )),
+        }
+    }
+    fn loss_with_credit(&self, target: u32, credit: VocabularyScoreAdjoint) -> Result<Tensor> {
+        Ok(match self {
+            Self::Host(out) => out.loss_with_credit(target, credit)?,
+            #[cfg(feature = "cuda")]
+            Self::Cuda(out) => out.loss_with_credit(target, credit)?,
+        })
+    }
+}
+
+/// Admission-only actual-bank graph comparison, with no optimizer updates.
+/// Use a relative scale per real parameter; the floor is only F32 underflow.
+fn compare_native_bank_gradients(
+    host: &BankGenerateOutput,
+    device: &FitBankOutput,
+    target: u32,
+    parameters: &BTreeMap<String, Var>,
+) -> Result<Value> {
+    let mut policies = Vec::new();
+    for credit in [
+        VocabularyScoreAdjoint::Clipped,
+        VocabularyScoreAdjoint::RawIdentity,
+    ] {
+        let old = host.loss_with_credit(target, credit)?;
+        let new = device.loss_with_credit(target, credit)?;
+        let (ov, nv) = (old.to_scalar::<f32>()?, new.to_scalar::<f32>()?);
+        if !ov.is_finite() || ov.to_bits() != nv.to_bits() {
+            return Err(bad("actual bank host/device native-anchor losses differ"));
+        }
+        let (og, ng) = (old.backward()?, new.backward()?);
+        let mut fields = Vec::new();
+        for (name, var) in parameters {
+            match (og.get(var.as_tensor()), ng.get(var.as_tensor())) {
+                (None, None) => fields.push(json!({"parameter":name,"present":false})),
+                (Some(a), Some(b)) => {
+                    let delta = (a - b)?.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?;
+                    let scale = a
+                        .abs()?
+                        .flatten_all()?
+                        .max(0)?
+                        .to_scalar::<f32>()?
+                        .max(b.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?);
+                    let tolerance = 1e-4f32 * scale + 8. * f32::MIN_POSITIVE;
+                    if !delta.is_finite() || !scale.is_finite() || delta > tolerance {
+                        return Err(bad(&format!(
+                            "actual bank gradient differs: {name}; delta={delta} scale={scale}"
+                        )));
+                    }
+                    fields.push(json!({"parameter":name,"present":true,"max_abs_difference":delta,
+                        "max_abs_gradient":scale,"relative_max_difference":if scale>0. {delta/scale}else{0.}}));
+                }
+                _ => return Err(bad("actual bank host/device gradient presence differs")),
+            }
+        }
+        policies
+            .push(json!({"credit":format!("{credit:?}"),"loss_bits":ov.to_bits(),"fields":fields}));
+    }
+    Ok(json!({"target_label_only":target,"policies":policies,
+        "tolerance":"1e-4 times max absolute gradient per parameter plus8*F32MIN_POSITIVE; no ordinary absolute floor"}))
+}
+
 fn batch(
     a: &Args,
     l: &Loaded,
@@ -1125,6 +1275,18 @@ fn batch(
         )?,
     }
     .with_read_selector_credit(true);
+    #[cfg(feature = "cuda")]
+    let cuda_pool = if a.native_pool_backend == NativePoolBackend::Cuda {
+        Some(
+            uor_r4_training::geometric_vocabulary_actions_cuda::PreparedNativeVocabularyCuda::new(
+                l.generate.binding().clone(),
+                &l.exp,
+                d,
+            )?,
+        )
+    } else {
+        None
+    };
     let params = active(&l.source, &l.generate)?;
     let mut sums = BTreeMap::<String, Tensor>::new();
     let mut rows = Vec::new();
@@ -1132,6 +1294,7 @@ fn batch(
     let mut positions = 0;
     let mut phase_positions = [0usize; 3];
     let mut phase_losses = [0.; 3];
+    let mut device_gradient_parity = Vec::new();
     let mut pool = NativeVocabularyActions::new(l.generate.binding().clone(), &l.exp)?;
     for &index in indices {
         let e = eps.get(index).ok_or_else(|| bad("batch index absent"))?;
@@ -1143,20 +1306,52 @@ fn batch(
             .collect::<BTreeSet<_>>();
         let mut plan = None;
         let mut ep_loss = 0.;
+        let mut checked_phases = [false; 3];
         for (t, &target) in e.target.iter().enumerate() {
             deadline(a, start)?;
-            let out = if e.has_source() {
-                learner.forward_bank(
-                    &e.segments()?,
-                    &e.packet.query_ids,
-                    &e.target[..t],
-                    &cue,
-                    &prefix,
-                )?
-            } else {
-                learner.forward_no_source(&e.causal_no_source(&e.target[..t])?)?
+            let out = match a.native_pool_backend {
+                NativePoolBackend::Host => FitBankOutput::Host(if e.has_source() {
+                    learner.forward_bank(
+                        &e.segments()?,
+                        &e.packet.query_ids,
+                        &e.target[..t],
+                        &cue,
+                        &prefix,
+                    )?
+                } else {
+                    learner.forward_no_source(&e.causal_no_source(&e.target[..t])?)?
+                }),
+                NativePoolBackend::Cuda => {
+                    #[cfg(feature = "cuda")]
+                    {
+                        let pool = cuda_pool.as_ref().ok_or_else(|| bad("CUDA pool absent"))?;
+                        FitBankOutput::Cuda(if e.has_source() {
+                            learner.forward_bank_device(
+                                &e.segments()?,
+                                &e.packet.query_ids,
+                                &e.target[..t],
+                                &cue,
+                                &prefix,
+                                pool,
+                            )?
+                        } else {
+                            learner.forward_no_source_device(
+                                &e.causal_no_source(&e.target[..t])?,
+                                pool,
+                            )?
+                        })
+                    }
+                    #[cfg(not(feature = "cuda"))]
+                    {
+                        return Err(bad("CUDA native pool requires CUDA build"));
+                    }
+                }
             };
-            let union = out.copy_token_ids.iter().copied().collect::<BTreeSet<_>>();
+            let union = out
+                .copy_token_ids()
+                .iter()
+                .copied()
+                .collect::<BTreeSet<_>>();
             if union != expected_union {
                 return Err(bad("actual all-source Copy union changed"));
             }
@@ -1171,8 +1366,8 @@ fn batch(
                     &l.cue,
                     &l.prefix,
                 )?;
-                let masses = out
-                    .actions
+                let actions = out.trace_for_admission()?;
+                let masses = actions
                     .token_masses
                     .iter()
                     .map(|m| {
@@ -1184,18 +1379,14 @@ fn batch(
                         ]
                     })
                     .collect::<Vec<_>>();
-                if expected["pool"]["summary"] != serde_json::to_value(&out.actions.summary)?
+                if expected["pool"]["summary"] != serde_json::to_value(&actions.summary)?
                     || expected["pool"]["token_masses"] != json!(masses)
-                    || expected["copy_token_ids"] != json!(out.copy_token_ids)
-                    || expected["copy_raw_scores_q24"] != json!(out.copy_scores_q24)
+                    || expected["copy_token_ids"] != json!(out.copy_token_ids())
+                    || expected["copy_raw_scores_q24"] != json!(out.copy_scores())
                     || expected["retained_state_codes"]
-                        != json!(out
-                            .final_state_codes
-                            .iter()
-                            .map(|c| c.index())
-                            .collect::<Vec<_>>())
+                        != json!(out.states().iter().map(|c| c.index()).collect::<Vec<_>>())
                     || expected["generate_raw_scores_sha256"]
-                        != sha256_bytes(&serde_json::to_vec(&out.generate.scores_q24)?)
+                        != sha256_bytes(&serde_json::to_vec(&out.generate_scores_for_admission()?)?)
                 {
                     return Err(bad(
                         "independent native categorical bank/Generate/pool parity differs",
@@ -1211,11 +1402,10 @@ fn batch(
                     return Err(bad("matched credits have different forward losses"));
                 }
                 let (_, bridge) = out
-                    .read_state_bridge
-                    .as_ref()
+                    .bridge()
                     .ok_or_else(|| bad("categorical bridge absent"))?;
                 let nb = &expected["source_provenance"]["read_state_bridge"];
-                if nb["selected_ordinal"] != json!(out.read_state_bridge.as_ref().map(|v| v.0))
+                if nb["selected_ordinal"] != json!(out.bridge().map(|v| v.0))
                     || nb["action_codes"]
                         != json!(bridge
                             .action_codes
@@ -1241,14 +1431,35 @@ fn batch(
             let plan = plan.as_ref().ok_or_else(|| bad("loss phases absent"))?;
             let weight = plan.weights[t];
             let phase = plan.phases[t];
-            let mass = out
-                .actions
-                .token_masses
-                .iter()
-                .find(|m| m.token_id == target)
-                .ok_or_else(|| bad("target support absent"))?
-                .weight_q31;
-            let nll = -(mass as f64 / out.actions.summary.total_weight_q31 as f64).ln();
+            if independent.is_some()
+                && a.native_pool_backend == NativePoolBackend::Cuda
+                && !checked_phases[phase]
+            {
+                // One position from each nonempty phase of every admitted episode.
+                // Rebuild the authentic old path; don't compare a fabricated trace/graph.
+                let host = if e.has_source() {
+                    learner.forward_bank(
+                        &e.segments()?,
+                        &e.packet.query_ids,
+                        &e.target[..t],
+                        &cue,
+                        &prefix,
+                    )?
+                } else {
+                    learner.forward_no_source(&e.causal_no_source(&e.target[..t])?)?
+                };
+                let parity = compare_native_bank_gradients(&host, &out, target, &params)?;
+                device_gradient_parity
+                    .push(json!({"id":e.packet.id,"position":t,"phase":phase,"comparison":parity}));
+                checked_phases[phase] = true;
+            }
+            // Compact native integer scalars reproduce the previous F64 log.
+            // The device path downloads no full vocabulary here.
+            let (mass, denominator) = out.native_target_mass_and_total(target)?;
+            if mass == 0 || denominator == 0 || mass > denominator {
+                return Err(bad("native target mass/denominator invalid"));
+            }
+            let nll = -(mass as f64 / denominator as f64).ln();
             if !nll.is_finite() {
                 return Err(bad("nonfinite native token objective"));
             }
@@ -1293,8 +1504,9 @@ fn batch(
         json!({"indices":indices,"rows":rows,"positions":positions,"weighted_native_loss":total,
         "phase_positions":phase_positions,"phase_losses":phase_losses,
         "independent_native_parity":independent.is_some(),
+        "device_actual_bank_gradient_parity":device_gradient_parity,
         "matched_forward_loss_bit_equal":independent.is_some(),
-        "credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),"token_backward_chunk":1,"frozen_bridge_excluded_from_gradient_accumulation":true}),
+        "credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),"native_pool_backend":a.native_pool_backend.name(),"token_backward_chunk":1,"frozen_bridge_excluded_from_gradient_accumulation":true}),
     ))
 }
 fn save_masters(root: &Path, vars: &BTreeMap<String, Var>) -> Result<Value> {
@@ -1943,7 +2155,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         "categorical":l.categorical_receipt,"initial_active_masters":initial_masters,
         "active_parameter_names":active(&l.source,&l.generate)?.keys().collect::<Vec<_>>(),
         "fresh_adam":true,"rates":{"generate":0.003,"prototype":0.01,"context":0.002,"potential":0.003},
-        "phase_policy":loss_weight_policy(true),"credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),"CUDA_VISIBLE_DEVICES":std::env::var("CUDA_VISIBLE_DEVICES").ok()}),
+        "phase_policy":loss_weight_policy(true),"credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),"native_pool_backend":a.native_pool_backend.name(),"CUDA_VISIBLE_DEVICES":std::env::var("CUDA_VISIBLE_DEVICES").ok()}),
     )?;
     let (initial_native, initial_generate, initial_bridge, initial_receipt) = checkpoint(a, 0, &l)?;
     if initial_native.binding().tokenizer_sha256() != l.integer.binding().tokenizer_sha256()
@@ -2066,7 +2278,7 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
     write(a, "metrics-0128.json", &final_metrics)?;
     Ok(
         json!({"schema":"uor-r4.geometric-frozen-map-fit/1","status":"COMPLETED","mode":"fit",
-        "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"device":"cuda:0","credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),
+        "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"device":"cuda:0","credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),"native_pool_backend":a.native_pool_backend.name(),
         "order_seed":a.seed,"updates":UPDATES,"batch":BATCH,"token_backward_chunk":1,
         "initial_receipt":initial_receipt,"final_receipt":final_receipt,
         "initial_metrics":initial_metrics,"final_metrics":final_metrics,
@@ -2085,7 +2297,7 @@ fn main() -> Result<()> {
     let report = match &result {
         Ok(value) => value.clone(),
         Err(e) => {
-            json!({"schema":"uor-r4.geometric-frozen-map-fit/1","status":"FAILED","error":e.to_string(),"credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),
+            json!({"schema":"uor-r4.geometric-frozen-map-fit/1","status":"FAILED","error":e.to_string(),"credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),"native_pool_backend":a.native_pool_backend.name(),
             "elapsed_seconds":start.elapsed().as_secs_f64(),
             "model_verdict":"UNQUALIFIED; preserve partial checkpoints and completed rows; execution failure is not model failure"})
         }
@@ -2110,6 +2322,7 @@ mod tests {
             "development_labels":"labels","maximum_seconds":3600,"maximum_report_bytes":1073741824,"out":"new"});
         let legacy: Args = serde_json::from_value(original.clone())?;
         assert_eq!(legacy.read_state_pullback, ReadStatePullback::Legacy);
+        assert_eq!(legacy.native_pool_backend, NativePoolBackend::Host);
         assert_eq!(
             serde_json::to_value(legacy.read_state_pullback)?,
             json!("legacy")
@@ -2123,6 +2336,14 @@ mod tests {
             json!("categorical")
         );
         assert!(parsed.credit == Credit::RawIdentity);
+        let mut cuda = original;
+        cuda["native_pool_backend"] = json!("cuda");
+        assert_eq!(
+            serde_json::from_value::<Args>(cuda.clone())?.native_pool_backend,
+            NativePoolBackend::Cuda
+        );
+        cuda["native_pool_backend"] = json!("automatic");
+        assert!(serde_json::from_value::<Args>(cuda).is_err());
         categorical["read_state_pullback"] = json!("query_keep");
         assert!(serde_json::from_value::<Args>(categorical).is_err());
         Ok(())
