@@ -6,9 +6,7 @@ use crate::{
     native_geometric_cuda_kernels::{launch, Arg},
     Result,
 };
-use candle_core::{
-    backend::BackendStorage, op::BackpropOp, CudaStorage, DType, Device, Storage, Tensor,
-};
+use candle_core::{op::BackpropOp, CudaStorage, DType, Device, Storage, Tensor};
 use uor_r4_core::native_geometric::learner::geometric_generate::{
     NativeGeometricGenerate, SCORE_SHIFT,
 };
@@ -166,13 +164,13 @@ impl NativeGenerateCuda {
         Ok((
             Tensor::from_storage(
                 Storage::Cuda(CudaStorage::wrap_cuda_slice(scores, device.clone())),
-                self.vocab.into(),
+                self.vocab,
                 BackpropOp::none(),
                 false,
             ),
             Tensor::from_storage(
                 Storage::Cuda(CudaStorage::wrap_cuda_slice(anchor, device.clone())),
-                self.vocab.into(),
+                self.vocab,
                 BackpropOp::none(),
                 false,
             ),

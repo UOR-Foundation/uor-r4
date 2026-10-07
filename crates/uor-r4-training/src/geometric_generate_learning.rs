@@ -85,6 +85,7 @@ pub struct GenerateLearningCosts {
     pub staged_hard_score_bytes: usize,
     pub hard_score_backend: &'static str,
     pub hard_score_download_bytes: usize,
+    pub hard_score_state_staged_bytes: usize,
     pub hard_score_device_launches: usize,
     pub snapshot_native_factor_bytes: usize,
     pub export_master_download_bytes: usize,
@@ -653,6 +654,11 @@ impl GenerateLearningWeights {
                     "cpu-native"
                 },
                 hard_score_download_bytes: if self.device().is_cuda() { 8 * v } else { 0 },
+                hard_score_state_staged_bytes: if self.device().is_cuda() {
+                    4 * self.lanes
+                } else {
+                    0
+                },
                 hard_score_device_launches: usize::from(self.device().is_cuda()),
                 snapshot_native_factor_bytes: self.native_factor_device_bytes(prepared),
                 export_master_download_bytes: prepared.downloaded_master_bytes,
@@ -838,6 +844,11 @@ impl GenerateLearningWeights {
                     "cpu-native"
                 },
                 hard_score_download_bytes: if self.device().is_cuda() { 8 * v } else { 0 },
+                hard_score_state_staged_bytes: if self.device().is_cuda() {
+                    4 * self.lanes
+                } else {
+                    0
+                },
                 hard_score_device_launches: usize::from(self.device().is_cuda()),
                 snapshot_native_factor_bytes: self.native_factor_device_bytes(prepared),
                 export_master_download_bytes: prepared.downloaded_master_bytes,
@@ -1035,6 +1046,11 @@ impl GenerateLearningWeights {
                     "cpu-native"
                 },
                 hard_score_download_bytes: if self.device().is_cuda() { 8 * v } else { 0 },
+                hard_score_state_staged_bytes: if self.device().is_cuda() {
+                    4 * self.lanes
+                } else {
+                    0
+                },
                 hard_score_device_launches: usize::from(self.device().is_cuda()),
                 snapshot_native_factor_bytes: self.native_factor_device_bytes(prepared),
                 export_master_download_bytes: prepared.downloaded_master_bytes,
@@ -2404,7 +2420,7 @@ mod tests {
                 vec![]
             } else {
                 vec![
-                    LanePair { left: 1, right: 0 },
+                    LanePair { left: 0, right: 1 },
                     LanePair { left: 2, right: 7 },
                     LanePair { left: 5, right: 3 },
                     LanePair { left: 4, right: 6 },
