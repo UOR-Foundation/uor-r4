@@ -506,6 +506,24 @@ if ! grep -q 'runpodctl pod delete' "$FAKE/calls"; then ok "a failed Ollama does
 if grep '"event":"bootstrap"' "$UOR_POD_STATE/ledger.jsonl" | tail -1 | jq -e '.rc == 0 and .ollama == "FAILED"' >/dev/null; then
   ok "the Ollama failure is recorded in the bootstrap ledger event"; else bad "the Ollama failure is recorded in the bootstrap ledger event"; fi
 if grep -q -- "--with-ollama | tee" "$FAKE/bootcmd" || grep -q -- "--with-ollama 2>&1" "$FAKE/bootcmd"; then ok "--with-ollama reaches the bootstrap"; else bad "--with-ollama reaches the bootstrap"; fi
+# ---- any-region placement: no ladder GPU in the volume datacenters, stock in
+# two allowlisted extra datacenters -> the one with more stock, non-canonical;
+# an explicit UOR_POD_VOLUME_DCS keeps placement to that list only
+cat > "$FAKE/gpus.json" <<'J'
+[{"gpuId":"NVIDIA GeForce RTX 5090","securePricePerHr":0.99,"dataCenterAvailability":[{"dataCenterId":"EUR-NO-1","stockStatus":"none"},{"dataCenterId":"US-TX-3","stockStatus":"Low"},{"dataCenterId":"CA-MTL-1","stockStatus":"High"},{"dataCenterId":"AP-JP-1","stockStatus":"High"}]},
+ {"gpuId":"NVIDIA GeForce RTX 4090","securePricePerHr":0.74,"dataCenterAvailability":[{"dataCenterId":"EU-RO-1","stockStatus":"none"}]}]
+J
+ANY=(up "${X1[@]}" --purpose anyregion --hours 1 --count 2 --no-bootstrap --ref "$SHA40")
+rm -rf "$UOR_POD_STATE"; fresh_pods
+expect "no ladder stock in the volume datacenters -> placed in an extra datacenter" 0 "Pod podnew created" -- "${ANY[@]}"
+has "the extra datacenter with more stock is tried first, labelled non-canonical" "Creating 2 x 5090 \(ladder\) .* in CA-MTL-1 volume volnew \(non-canonical\)"
+if [ "$(creates CA-MTL-1)" = 1 ] && [ "$(creates US-TX-3)" = 0 ] && [ "$(creates AP-JP-1)" = 0 ]; then
+  ok "one create, in CA-MTL-1; a datacenter outside the allowlist is never used"; else bad "one create, in CA-MTL-1; a datacenter outside the allowlist is never used"; fi
+if jq -e '.podnew.dc == "CA-MTL-1" and .podnew.canonical == false' "$UOR_POD_STATE/pods.json" >/dev/null; then
+  ok "the extra-datacenter pod is cached as non-canonical"; else bad "the extra-datacenter pod is cached as non-canonical"; fi
+rm -rf "$UOR_POD_STATE"; fresh_pods
+UOR_POD_VOLUME_DCS="EUR-NO-1 EU-RO-1 EUR-IS-1" expect "UOR_POD_VOLUME_DCS set -> extra datacenters are not used" 1 "no ladder 5090 -> 4090 -> pro6000 stock in EUR-NO-1 EU-RO-1 EUR-IS-1" -- "${ANY[@]}"
+if ! grep -q 'pod create' "$FAKE/calls"; then ok "no create anywhere with an explicit datacenter list"; else bad "no create anywhere with an explicit datacenter list"; fi
 cp "$FAKE/pods.orig.json" "$FAKE/pods.json"
 unset FAKE_ALLOW_CREATE UOR_POD_MAX_PODS UOR_POD_MAX_RATE UOR_POD_SSH_WAIT
 export UOR_POD_DRY_RUN=1

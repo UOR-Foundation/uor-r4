@@ -49,6 +49,14 @@ TEMPLATE_ID=${UOR_POD_TEMPLATE:-h15vb984sw}
 # Placement order: the network-volume datacenters that list RTX 5090 stock.
 # EUR-NO-1's volume is the canonical store; the others get uor-shared-<DC> lazily.
 VOLUME_DCS=${UOR_POD_VOLUME_DCS:-EUR-NO-1 EU-RO-1 EUR-IS-1}
+# Any-region placement (owner-approved 2026-10-07): when UOR_POD_VOLUME_DCS is
+# not set, `up` also tries these Secure datacenters after VOLUME_DCS, the ones
+# with more stock first. `runpodctl datacenter list` reports no network-volume
+# support (only id, name, location, gpuAvailability), so this is a maintained
+# allowlist of datacenters known to be volume-capable on 2026-10-07. A pod here
+# gets its own uor-shared-<DC> volume and is non-canonical, as in EU-RO-1.
+EXTRA_VOLUME_DCS="US-CO-1 US-NC-2 US-IL-1 US-KS-2 US-TX-3 CA-MTL-1"
+[ -z "${UOR_POD_VOLUME_DCS+set}" ] || EXTRA_VOLUME_DCS=''
 CANONICAL_DC=EUR-NO-1
 VOLUME_ID=lmd1pfah3y
 NEW_VOLUME_GB=100
@@ -587,6 +595,14 @@ stock_in() {  # STOCK-JSON GPU-ID DC -> stock status ('' when none)
     '.[] | select(.gpuId == $g) | .dataCenterAvailability[]? | select(.dataCenterId == $dc) | .stockStatus // ""
      | select(. != "none" and . != "")' | head -1
 }
+extra_dcs_by_stock() {  # STOCK-JSON GPU-ID -> the EXTRA_VOLUME_DCS with stock, High before Medium before Low
+  [ -n "$EXTRA_VOLUME_DCS" ] || return 0
+  echo "$1" | jq -r --arg g "$2" --arg x " $EXTRA_VOLUME_DCS " \
+    '[.[] | select(.gpuId == $g) | .dataCenterAvailability[]?
+      | .dataCenterId as $d | select((.stockStatus // "") != "none" and (.stockStatus // "") != "" and ($x | contains(" " + $d + " ")))
+      | {d: .dataCenterId, r: ({"High": 0, "Medium": 1, "Low": 2}[.stockStatus] // 3)}]
+     | sort_by(.r) | .[].d'
+}
 price_of() { echo "$1" | jq -r --arg g "$2" '.[] | select(.gpuId == $g) | .securePricePerHr // empty' | head -1; }
 print_stock_table() {  # STOCK-JSON [KEYS]
   local stock=$1 k
@@ -672,6 +688,7 @@ up_attempt() {
   for dc in $VOLUME_DCS; do
     if [ -n "$(stock_in "$stock" "$gid" "$dc")" ]; then cands="$cands $dc:0"; else info "no $req stock in $dc"; fi
   done
+  for dc in $(extra_dcs_by_stock "$stock" "$gid"); do cands="$cands $dc:0"; done
   if [ -z "$cands" ] && [ "$OFF_VOLUME" = 1 ]; then
     for dc in $(echo "$stock" | jq -r --arg g "$gid" '.[] | select(.gpuId == $g) | .dataCenterAvailability[]?
       | select(.stockStatus != "none" and .stockStatus != "") | .dataCenterId'); do
