@@ -2422,7 +2422,7 @@ mod tests {
                 vec![
                     LanePair { left: 0, right: 1 },
                     LanePair { left: 2, right: 7 },
-                    LanePair { left: 5, right: 3 },
+                    LanePair { left: 3, right: 5 },
                     LanePair { left: 4, right: 6 },
                 ]
             };
@@ -2530,6 +2530,87 @@ mod tests {
                 let cuda = start.elapsed().as_secs_f64();
                 println!("NATIVE_GENERATE_TIMING lanes={lanes} vocab=4096 round={round} iterations=64 cpu_seconds={cpu:.9} cuda_with_download_seconds={cuda:.9} ratio={:.4}", cpu / cuda);
             }
+        }
+        Ok(())
+    }
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "requires explicit retained checkpoint and CUDA; absence is an error"]
+    fn native_generate_cuda_retained_checkpoint_scores_and_timing() -> Result<()> {
+        let root = std::env::var("UOR_GENERATE_CHECKPOINT")
+            .map_err(|_| invalid("set UOR_GENERATE_CHECKPOINT for actual artifact test"))?;
+        let root = std::path::Path::new(&root);
+        let binding = SourceActionBinding::new(&std::fs::read(root.join("native/tokenizer.json"))?)
+            .map_err(|e| invalid(e.to_string()))?;
+        let bytes = std::fs::read(root.join("generate.bin"))?;
+        let native = NativeGeometricGenerate::from_bytes(&bytes, &binding)
+            .map_err(|e| invalid(e.to_string()))?;
+        let gpu = Device::new_cuda(0)?;
+        let learner = GenerateLearningWeights::from_native(binding, &native, &gpu)?;
+        let prepared = learner.prepare_native()?;
+        assert_eq!(
+            prepared
+                .native
+                .to_bytes()
+                .map_err(|e| invalid(e.to_string()))?,
+            bytes
+        );
+        let scorer = prepared
+            .cache
+            .native_cuda
+            .as_ref()
+            .ok_or_else(|| invalid("actual Generate CUDA scorer absent"))?;
+        let mut expected = vec![0i64; native.vocab_size()];
+        let states = (0..32)
+            .map(|row| {
+                (0..native.lanes())
+                    .map(|lane| code(((row * 17 + lane * 31 + 1) % ROOT_COUNT) as u8))
+                    .collect::<Result<Vec<_>>>()
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for state in &states {
+            native
+                .score_into(state, &mut expected, &mut GenerateReadCounts::default())
+                .map_err(|e| invalid(e.to_string()))?;
+            let (scores, anchor) = scorer.score(&native, state)?;
+            assert_eq!(scores.to_vec1::<i64>()?, expected);
+            assert_eq!(
+                anchor.to_vec1::<f32>()?,
+                expected
+                    .iter()
+                    .map(|&score| (score as f64 / Q24) as f32)
+                    .collect::<Vec<_>>()
+            );
+        }
+        println!(
+            "RETAINED_GENERATE_NATIVE_PARITY payload={} file_sha256={} vocab={} lanes={} states=32",
+            native.metadata().payload_sha256,
+            sha256_bytes(&bytes),
+            native.vocab_size(),
+            native.lanes()
+        );
+        let _ = scorer.score(&native, &states[0])?.0.to_vec1::<i64>()?;
+        for round in 0..3 {
+            // Alternate measurement order to avoid a fixed warm/thermal bias.
+            let mut seconds = [0.; 2];
+            let order = if round % 2 == 0 { [0, 1] } else { [1, 0] };
+            for backend in order {
+                let start = std::time::Instant::now();
+                for state in states.iter().cycle().take(64) {
+                    if backend == 0 {
+                        native
+                            .score_into(state, &mut expected, &mut GenerateReadCounts::default())
+                            .map_err(|e| invalid(e.to_string()))?;
+                        std::hint::black_box(&expected);
+                    } else {
+                        let values = scorer.score(&native, state)?.0.to_vec1::<i64>()?;
+                        std::hint::black_box(values);
+                    }
+                }
+                seconds[backend] = start.elapsed().as_secs_f64();
+            }
+            println!("RETAINED_GENERATE_TIMING round={round} iterations=64 cpu_seconds={:.9} cuda_with_download_seconds={:.9} ratio={:.4}",
+                seconds[0], seconds[1], seconds[0]/seconds[1]);
         }
         Ok(())
     }
