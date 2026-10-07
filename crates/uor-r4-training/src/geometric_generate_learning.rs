@@ -2398,23 +2398,40 @@ mod tests {
         }
         Ok(())
     }
+    fn generate_sparse_fixture_binding() -> Result<SourceActionBinding> {
+        let mut tokenizer: serde_json::Value = serde_json::from_str(TOK)?;
+        let vocab = tokenizer["model"]["vocab"]
+            .as_object_mut()
+            .ok_or_else(|| invalid("Generate CUDA test vocab absent"))?;
+        // Model IDs must be dense. An added token above that dense range
+        // creates genuine sparse holes without violating tokenizer admission.
+        for token in 8..4093 {
+            vocab.insert(format!("token{token:04}"), serde_json::json!(token));
+        }
+        tokenizer["added_tokens"]
+            .as_array_mut()
+            .ok_or_else(|| invalid("Generate CUDA test added tokens absent"))?
+            .push(serde_json::json!({"id":4095,"content":"extra_4095"}));
+        let binding = SourceActionBinding::new(&serde_json::to_vec(&tokenizer)?)
+            .map_err(|e| invalid(e.to_string()))?;
+        Ok(binding)
+    }
+    #[test]
+    fn generate_sparse_fixture_admits_added_token_holes() -> Result<()> {
+        let binding = generate_sparse_fixture_binding()?;
+        assert_eq!(binding.vocab_size(), 4096);
+        assert!(binding.admits_token(4092));
+        assert!(!binding.admits_token(4093));
+        assert!(!binding.admits_token(4094));
+        assert!(binding.admits_token(4095));
+        Ok(())
+    }
     #[cfg(feature = "cuda")]
     #[test]
     #[ignore = "explicit CUDA geometry parity and timing; a missing device is an error"]
     fn native_generate_cuda_all_roots_signed_pairs_and_sparse_vocab() -> Result<()> {
         let gpu = Device::new_cuda(0)?;
-        let mut tokenizer: serde_json::Value = serde_json::from_str(TOK)?;
-        let vocab = tokenizer["model"]["vocab"]
-            .as_object_mut()
-            .ok_or_else(|| invalid("Generate CUDA test vocab absent"))?;
-        for token in 8..4096 {
-            if token != 17 && token != 128 {
-                vocab.insert(format!("token{token:04}"), serde_json::json!(token));
-            }
-        }
-        let binding = SourceActionBinding::new(&serde_json::to_vec(&tokenizer)?)
-            .map_err(|e| invalid(e.to_string()))?;
-        assert_eq!(binding.vocab_size(), 4096);
+        let binding = generate_sparse_fixture_binding()?;
         for lanes in [1, 8] {
             let edges = if lanes == 1 {
                 vec![]
