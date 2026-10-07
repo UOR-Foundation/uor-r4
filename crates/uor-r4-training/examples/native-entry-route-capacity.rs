@@ -173,11 +173,114 @@ fn compare_token_masses(
     }
     Ok(())
 }
-fn compare_step(actual: &NativeBankGenerateStep, expected: &Value) -> Result<()> {
-    compare_token_masses(
-        &actual.actions.token_masses,
-        &expected["pool"]["token_masses"],
+// Offline independent fold: never trust reducer weights or nonexistent saved fields.
+fn reconstruct_token_masses(
+    generate: &[i64],
+    copy_ids: &[u32],
+    copy: &[i64],
+    legal: &[u32],
+    exp: &[u32],
+) -> Result<Vec<uor_r4_integer::geometric_vocabulary_actions::VocabularyTokenMass>> {
+    use uor_r4_integer::geometric_vocabulary_actions::VocabularyTokenMass;
+    if copy_ids.len() != copy.len()
+        || legal.is_empty()
+        || legal.windows(2).any(|w| w[0] >= w[1])
+        || legal.iter().any(|&id| id as usize >= generate.len())
+        || copy_ids.iter().any(|id| legal.binary_search(id).is_err())
+    {
+        return Err(bad(
+            "independent alias reconstruction shape/legal identity differs",
+        ));
+    }
+    let clip = certificate::CLIP_Q24;
+    let reference = legal
+        .iter()
+        .map(|&id| generate[id as usize])
+        .chain(copy.iter().copied())
+        .max()
+        .ok_or_else(|| bad("reference absent"))?
+        .clamp(-clip, clip);
+    let weight = |raw: i64| -> Result<u64> {
+        let gap = reference
+            .checked_sub(raw.clamp(-clip, clip))
+            .ok_or_else(|| bad("independent reference overflow"))? as u64;
+        let index = (gap >> 16) as usize;
+        let a = u64::from(
+            *exp.get(index)
+                .ok_or_else(|| bad("independent exp coverage"))?,
+        );
+        let b = u64::from(
+            *exp.get(index + 1)
+                .ok_or_else(|| bad("independent exp coverage"))?,
+        );
+        let delta = a
+            .checked_sub(b)
+            .ok_or_else(|| bad("independent exp order"))?;
+        let w = a
+            .checked_sub(
+                delta
+                    .checked_mul(gap & 65535)
+                    .ok_or_else(|| bad("independent interpolation overflow"))?
+                    >> 16,
+            )
+            .ok_or_else(|| bad("independent weight overflow"))?;
+        if w == 0 {
+            return Err(bad("independent nonpositive served mass"));
+        }
+        Ok(w)
+    };
+    let mut rows = legal
+        .iter()
+        .map(|&id| {
+            let w = weight(generate[id as usize])?;
+            Ok(VocabularyTokenMass {
+                token_id: id,
+                weight_q31: w,
+                generate_weight_q31: w,
+                copy_weight_q31: 0,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    // Every physical Copy contributes, including equal token/code occurrences.
+    for (&id, &score) in copy_ids.iter().zip(copy) {
+        let index = legal
+            .binary_search(&id)
+            .map_err(|_| bad("copy identity absent"))?;
+        let w = weight(score)?;
+        rows[index].copy_weight_q31 = rows[index]
+            .copy_weight_q31
+            .checked_add(w)
+            .ok_or_else(|| bad("independent Copy alias overflow"))?;
+        rows[index].weight_q31 = rows[index]
+            .weight_q31
+            .checked_add(w)
+            .ok_or_else(|| bad("independent total alias overflow"))?;
+    }
+    Ok(rows)
+}
+fn compare_step(
+    actual: &NativeBankGenerateStep,
+    expected: &Value,
+    legal: &[u32],
+    exp: &[u32],
+) -> Result<()> {
+    let independent = reconstruct_token_masses(
+        &actual.generate_raw_scores_q24,
+        &actual.copy_token_ids,
+        &actual.copy_raw_scores_q24,
+        legal,
+        exp,
     )?;
+    if actual.actions.token_masses != independent {
+        return Err(bad(
+            "independent complete alias mass reconstruction differs",
+        ));
+    }
+    // Original reports retain summary/hash/inputs, not complete token masses.
+    // A present field is checked strictly; absence is declared in the receipt.
+    if let Some(saved) = expected["pool"].get("token_masses") {
+        compare_token_masses(&actual.actions.token_masses, saved)?;
+    }
     if expected["actual_prefix_ids"] != json!(actual.actual_prefix_ids)
         || expected["copy_token_ids"] != json!(actual.copy_token_ids)
         || expected["copy_raw_scores_q24"] != json!(actual.copy_raw_scores_q24)
@@ -534,7 +637,7 @@ fn run(c: &Config) -> Result<Value> {
         let query_bank = query_generator.admit_bank(snapshot(packet, c)?)?;
         let start = Instant::now();
         let factual = generator.step(&bank, &[])?;
-        compare_step(&factual, &expected["native"])?;
+        compare_step(&factual, &expected["native"], &legal, &exp)?;
         let query_step = query_generator.step(&query_bank, &[])?;
         factual_seconds += start.elapsed().as_secs_f64();
         let bank_trace = &factual
@@ -823,6 +926,7 @@ fn run(c: &Config) -> Result<Value> {
         "baseline":c.baseline,"baseline_producer":PRODUCER,"baseline_report_sha256":c.expected_baseline_report_sha256,
         "checkpoint_receipt_sha256":c.expected_checkpoint_receipt_sha256,"checkpoint":"checkpoint-0128","checkpoint_receipt":receipt,
         "inputs_sha256":INPUT_SHA,"generate_sha256":c.expected_generate_sha256,"categorical_sha256":BRIDGE_SHA,"exp_sha256":EXP_SHA,
+        "factual_parity":{"saved_summary_vectors_hashes_states_and_occurrences":true,"saved_complete_token_masses":"UNAVAILABLE_IN_ORIGINAL_PRODUCER_SCHEMA","independent_complete_alias_mass_reconstruction":true},
         "native_source_binding":generator.source_binding(),"device":"cuda:0","cuda_visible_devices":std::env::var("CUDA_VISIBLE_DEVICES").ok(),
         "completed_rows":rows.len(),"physical_source_routes_executed":physical_count,"query_preserving_controls":query_count,
         "physical_source_count_histogram":candidate_histogram,"target_id_histogram":target_histogram,
@@ -917,6 +1021,33 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod argument_tests {
     use super::*;
+    #[test]
+    fn independent_alias_fold_keeps_duplicates_holes_clipping_and_fraction() -> Result<()> {
+        let exp = (0..4098).map(|i| 1_000_000 - i * 17).collect::<Vec<u32>>();
+        let mut gen = vec![0; 10];
+        gen[2] = certificate::CLIP_Q24 + 7;
+        gen[9] = -certificate::CLIP_Q24;
+        gen[7] = i64::MAX;
+        let copy = [
+            certificate::CLIP_Q24,
+            certificate::CLIP_Q24 - 32768,
+            -certificate::CLIP_Q24 - 1,
+        ];
+        let rows = reconstruct_token_masses(&gen, &[5, 5, 9], &copy, &[2, 5, 9], &exp)?;
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].weight_q31, 1_000_000);
+        assert_eq!(rows[1].generate_weight_q31, 1_000_000 - 2048 * 17);
+        assert_eq!(rows[1].copy_weight_q31, 1_000_000 + 999_992);
+        assert_eq!(
+            rows[1].weight_q31,
+            rows[1].generate_weight_q31 + rows[1].copy_weight_q31
+        );
+        assert_eq!(rows[2].generate_weight_q31, 1_000_000 - 4096 * 17);
+        assert_eq!(rows[2].copy_weight_q31, rows[2].generate_weight_q31);
+        assert!(reconstruct_token_masses(&gen, &[7], &[0], &[2, 5, 9], &exp).is_err());
+        assert!(reconstruct_token_masses(&gen, &[5], &[], &[2, 5, 9], &exp).is_err());
+        Ok(())
+    }
     #[test]
     fn factual_pool_parity_rejects_hidden_alias_decomposition_change() -> Result<()> {
         use uor_r4_integer::geometric_vocabulary_actions::VocabularyTokenMass;
