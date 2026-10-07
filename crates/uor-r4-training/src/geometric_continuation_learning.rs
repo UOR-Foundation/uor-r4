@@ -89,6 +89,17 @@ pub struct ContinuationLearningCosts {
     pub credit_scope: &'static str,
 }
 
+/// Device-resident coefficient-only result for an exact device alias pool.
+/// It does not introduce state/prototype credit or imply bank integration.
+pub struct ContinuationDeviceLearningOutput {
+    /// Unclipped graph delta; add before the sole ordinary pool clip.
+    pub delta_raw_scores: Tensor,
+    /// Authenticated I64 Q24 delta in complete token-ID order, on the device.
+    pub delta_scores_q24: Tensor,
+    pub native_counts: ContinuationReadCounts,
+    pub costs: ContinuationLearningCosts,
+}
+
 pub struct ContinuationLearningOutput {
     /// Unclipped nats. Add to ordinary Generate raw scores before final clip.
     pub delta_raw_scores: Tensor,
@@ -358,6 +369,17 @@ impl ContinuationLearningWeights {
         self.forward_cached(prepared, state, None)
     }
 
+    /// First rung without the compatibility per-position score download.
+    /// The same snapshot/device admission and selected coefficient adjoint are
+    /// used as the host API. CUDA callers must refresh after every update.
+    pub fn forward_prepared_coefficients_only_on_device(
+        &self,
+        prepared: &PreparedContinuationLearning,
+        state: &[H4Code],
+    ) -> Result<ContinuationDeviceLearningOutput> {
+        self.forward_cached_on_device(prepared, state, None)
+    }
+
     /// Same hard forward plus full120 utility on the actual retained-state
     /// onehot carrier. Do not softmax this carrier a second time.
     pub fn forward_prepared_state_choices(
@@ -375,6 +397,28 @@ impl ContinuationLearningWeights {
         state: &[H4Code],
         choices: Option<&Tensor>,
     ) -> Result<ContinuationLearningOutput> {
+        let device = self.forward_cached_on_device(prepared, state, choices)?;
+        let delta_scores_q24 = device.delta_scores_q24.to_vec1::<i64>()?;
+        let mut costs = device.costs;
+        costs.hard_score_download_bytes = if self.device().is_cuda() {
+            8 * self.vocab_size()
+        } else {
+            0
+        };
+        Ok(ContinuationLearningOutput {
+            delta_raw_scores: device.delta_raw_scores,
+            delta_scores_q24,
+            native_counts: device.native_counts,
+            costs,
+        })
+    }
+
+    fn forward_cached_on_device(
+        &self,
+        prepared: &PreparedContinuationLearning,
+        state: &[H4Code],
+        choices: Option<&Tensor>,
+    ) -> Result<ContinuationDeviceLearningOutput> {
         self.validate_snapshot(prepared, state)?;
         if let Some(choices) = choices {
             carrier_admit(choices, state, self.device())?;
@@ -416,19 +460,20 @@ impl ContinuationLearningWeights {
                         .sum(1)?)?;
             }
         }
-        // Compatibility host pool still receives exact integers. The anchor
-        // is formed from these same integers on-device, not recomputed floats.
-        let delta_scores_q24 = hard.to_vec1::<i64>()?;
+        // Anchor and exact integers stay device-resident. Only the legacy
+        // compatibility wrapper above materializes a host score vector.
         let anchor = hard.to_dtype(DType::F32)?.affine(1. / Q24, 0.)?.detach();
         let mut raw = (&anchor + (&coefficients - coefficients.detach())?)?;
         if choices.is_some() {
             raw = (&raw + (&utility - utility.detach())?)?;
         }
-        Ok(ContinuationLearningOutput {
+        let mut costs = self.costs(prepared, choices.is_some(), false);
+        costs.hard_score_download_bytes = 0;
+        Ok(ContinuationDeviceLearningOutput {
             delta_raw_scores: raw,
-            delta_scores_q24,
+            delta_scores_q24: hard,
             native_counts: ContinuationReadCounts::default(),
-            costs: self.costs(prepared, choices.is_some(), false),
+            costs,
         })
     }
 
@@ -743,6 +788,65 @@ mod tests {
         Ok(())
     }
 
+    fn coefficient_output_parity(device: &Device) -> Result<()> {
+        let (weights, generate) = fixture(device)?;
+        patterned(&weights)?;
+        let prepared = weights.prepare_native(weights.native_binding(), &generate)?;
+        let codes = state(119, 0)?;
+        let host = weights.forward_prepared_coefficients_only(&prepared, &codes)?;
+        let resident = weights.forward_prepared_coefficients_only_on_device(&prepared, &codes)?;
+        assert_eq!(resident.delta_scores_q24.dtype(), DType::I64);
+        assert!(resident.delta_scores_q24.device().same_device(device));
+        assert!(resident.delta_raw_scores.device().same_device(device));
+        assert_eq!(resident.costs.hard_score_download_bytes, 0);
+        assert_eq!(resident.costs.conditional_choice_rows, 0);
+        assert_eq!(
+            resident.delta_scores_q24.to_vec1::<i64>()?,
+            host.delta_scores_q24
+        );
+        assert_eq!(
+            resident.delta_raw_scores.to_vec1::<f32>()?,
+            host.delta_raw_scores.to_vec1::<f32>()?
+        );
+        // Signed, nonuniform upstream utilities expose indexing/adjoint drift
+        // that an all-ones reduction can cancel.
+        let utility = Tensor::from_vec(
+            (0..weights.vocab_size())
+                .map(|i| (i as f32 - 3.) * 0.375)
+                .collect::<Vec<_>>(),
+            weights.vocab_size(),
+            device,
+        )?;
+        let hg = host.delta_raw_scores.mul(&utility)?.sum_all()?.backward()?;
+        let dg = resident
+            .delta_raw_scores
+            .mul(&utility)?
+            .sum_all()?
+            .backward()?;
+        assert_eq!(
+            gradient(&hg, weights.unary.as_tensor())?,
+            gradient(&dg, weights.unary.as_tensor())?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn continuation_host_device_coefficients_values_and_gradients_match() -> Result<()> {
+        coefficient_output_parity(&Device::Cpu)?;
+        let (weights, generate) = fixture(&Device::Cpu)?;
+        let prepared = weights.prepare_native(weights.native_binding(), &generate)?;
+        weights
+            .unary
+            .set(&Tensor::full(0.25f32, (2, ROOT_COUNT), &Device::Cpu)?)?;
+        assert!(weights
+            .forward_prepared_coefficients_only_on_device(&prepared, &state(0, 0)?)
+            .is_err());
+        assert!(weights
+            .forward_prepared_coefficients_only_on_device(&prepared, &state(0, 0)?[..1])
+            .is_err());
+        Ok(())
+    }
+
     #[test]
     fn continuation_export_requires_explicit_current_receipt_and_same_base_parent() -> Result<()> {
         let (weights, generate) = fixture(&Device::Cpu)?;
@@ -865,6 +969,7 @@ mod tests {
     fn continuation_cuda_i64_delta_and_full120_adjoint_match_cpu_reference() -> Result<()> {
         let cuda = Device::new_cuda(0)?;
         full120_parity(&cuda)?;
+        coefficient_output_parity(&cuda)?;
         let (cpu_weights, cpu_generate) = fixture(&Device::Cpu)?;
         let (cuda_weights, cuda_generate) = fixture(&cuda)?;
         patterned(&cpu_weights)?;
@@ -877,6 +982,17 @@ mod tests {
         let cpu = cpu_weights.forward_prepared_coefficients_only(&cpu_prepared, &codes)?;
         let gpu = cuda_weights.forward_prepared_coefficients_only(&cuda_prepared, &codes)?;
         assert_eq!(cpu.delta_scores_q24, gpu.delta_scores_q24);
+        let gpu_resident =
+            cuda_weights.forward_prepared_coefficients_only_on_device(&cuda_prepared, &codes)?;
+        assert_eq!(
+            gpu_resident.delta_scores_q24.to_vec1::<i64>()?,
+            cpu.delta_scores_q24
+        );
+        assert_eq!(
+            gpu_resident.delta_raw_scores.to_vec1::<f32>()?,
+            cpu.delta_raw_scores.to_vec1::<f32>()?
+        );
+        assert_eq!(gpu_resident.costs.hard_score_download_bytes, 0);
         assert_eq!(
             cpu.delta_raw_scores.to_vec1::<f32>()?,
             gpu.delta_raw_scores.to_vec1::<f32>()?
