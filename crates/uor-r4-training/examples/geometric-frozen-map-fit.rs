@@ -1931,15 +1931,16 @@ fn metrics(a: &Args, eval: &Value, eps: &[Episode]) -> Result<Value> {
             own_count += usize::from(own);
             reached_count += usize::from(reached);
             reached_correct_count += usize::from(reached && own);
-            arms.push(
-                json!({"index":k,"id":eps[k].packet.id,"position":pos,"target":target,
+            let mut arm = json!({"index":k,"id":eps[k].packet.id,"position":pos,"target":target,
                 "teacher_prefix_correct":teacher,"own_position_correct":own,
                 "own_prefix_reached_correctly":reached,
-                "own_prefix_reached_and_answered_correctly":reached && own,
                 "target_mass":canonical[pos]["native_target_mass"],
                 "denominator":canonical[pos]["native_denominator"],
-                "chosen_token":chosen}),
-            );
+                "chosen_token":chosen});
+            if a.mode == Mode::JointContinuation {
+                arm["own_prefix_reached_and_answered_correctly"] = json!(reached && own);
+            }
+            arms.push(arm);
         }
         teacher_both += usize::from(arms.iter().all(|v| v["teacher_prefix_correct"] == true));
         own_both += usize::from(arms.iter().all(|v| v["own_position_correct"] == true));
@@ -1950,18 +1951,22 @@ fn metrics(a: &Args, eval: &Value, eps: &[Episode]) -> Result<Value> {
         complete_both += usize::from(refs[i]["complete"] == true && refs[j]["complete"] == true);
         receipts.push(json!({"indices":[i,j],"first_divergent_position":pos,"arms":arms}));
     }
-    Ok(
-        json!({"rows":eps.len(),"missing_rows":0,"entry_teacher_correct":entry_teacher,"entry_own_correct":entry_own,
+    let mut result = json!({"rows":eps.len(),"missing_rows":0,"entry_teacher_correct":entry_teacher,"entry_own_correct":entry_own,
         "first_divergent_teacher_correct":teacher_count,"first_divergent_own_position_correct":own_count,
         "first_divergent_own_prefix_reached":reached_count,"paired_teacher_both_correct":teacher_both,
-        "first_divergent_own_prefix_reached_and_answered_correctly":reached_correct_count,
-        "paired_own_prefix_reached_and_answered_both_correct":reached_correct_both,
-        "complete_swap_pairs":complete_both,
-        "any_emitted_eos":refs.iter().filter(|r| r["eos"] == true).count(),
         "paired_own_position_both_correct":own_both,"pairs":receipts,
         "later_copy_covered_positions":copy_total,"later_copy_covered_teacher_correct":copy_correct,
-        "scope":"complete native own-prefix outputs and separately canonical teacher-prefix metrics; own position matches without a correct preceding prefix are not successful source-dependent continuation"}),
-    )
+        "scope":"complete native own-prefix outputs and separately canonical teacher-prefix metrics; own position matches without a correct preceding prefix are not successful source-dependent continuation"});
+    // Legacy baseline reuse compares the complete historical metric object.
+    // New diagnostics must not invalidate a verified old evaluation receipt.
+    if a.mode == Mode::JointContinuation {
+        result["first_divergent_own_prefix_reached_and_answered_correctly"] =
+            json!(reached_correct_count);
+        result["paired_own_prefix_reached_and_answered_both_correct"] = json!(reached_correct_both);
+        result["complete_swap_pairs"] = json!(complete_both);
+        result["any_emitted_eos"] = json!(refs.iter().filter(|r| r["eos"] == true).count());
+    }
+    Ok(result)
 }
 
 // f63's native_step/evaluate semantics are byte-identical here. This explicit
@@ -4855,6 +4860,74 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_saved_row_metrics_reproduce_exact_historical_schema() -> Result<()> {
+        struct TemporaryRows(PathBuf);
+        impl Drop for TemporaryRows {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let temp = TemporaryRows(std::env::temp_dir().join(format!(
+            "uor-legacy-metrics-{}-{unique}",
+            std::process::id()
+        )));
+        fs::create_dir(&temp.0)?;
+        let a: Args = serde_json::from_value(
+            json!({"mode":"prediction_control","credit":"raw_identity","seed":1001,
+            "checkpoint":"cp","saved_fit":"fit","categorical":"cat","parent_config":"parent",
+            "training_inputs":"input","training_labels":"labels","development_inputs":"input","development_labels":"labels",
+            "maximum_seconds":3600,"maximum_report_bytes":1073741824,"out":temp.0}),
+        )?;
+        let mut episodes = Vec::new();
+        let mut refs = Vec::new();
+        let mut expected_arms = Vec::new();
+        for (index, target, generated) in
+            [(0usize, 20u32, vec![10, 20, 1]), (1, 30, vec![99, 30, 1])]
+        {
+            let id = format!("legacy-swap{index}-pair");
+            let canonical = [10,target,1].into_iter().map(|chosen| json!({
+                "native_target_mass":2,"native_denominator":4,
+                "native":{"copy_token_ids":[target],"pool":{"summary":{"chosen_token_id":chosen}}}
+            })).collect::<Vec<_>>();
+            let filename = format!("row-{index}.json");
+            fs::write(
+                temp.0.join(&filename),
+                serde_json::to_vec(&json!({"canonical":canonical,"generated_ids":generated}))?,
+            )?;
+            refs.push(json!({"id":id,"row_file":filename,"row_sha256":sha256_file(&temp.0.join(&filename))?,
+                "complete":index==0,"eos":true}));
+            expected_arms.push(json!({"index":index,"id":id,"position":1,"target":target,
+                "teacher_prefix_correct":true,"own_position_correct":true,"own_prefix_reached_correctly":index==0,
+                "target_mass":2,"denominator":4,"chosen_token":target}));
+            episodes.push(Episode {
+                packet: Packet {
+                    id,
+                    segments: vec![],
+                    query_ids: vec![5],
+                    actual_prefix_ids: vec![],
+                },
+                answers: serde_json::from_value(
+                    json!({"intent":"current","accepted":["fixture"]}),
+                )?,
+                target: vec![10, target, 1],
+                views: vec![],
+            });
+        }
+        let actual = metrics(&a, &json!({"rows":refs}), &episodes)?;
+        let historical = json!({"rows":2,"missing_rows":0,"entry_teacher_correct":2,"entry_own_correct":1,
+            "first_divergent_teacher_correct":2,"first_divergent_own_position_correct":2,
+            "first_divergent_own_prefix_reached":1,"paired_teacher_both_correct":1,"paired_own_position_both_correct":1,
+            "pairs":[{"indices":[0,1],"first_divergent_position":1,"arms":expected_arms}],
+            "later_copy_covered_positions":2,"later_copy_covered_teacher_correct":2,
+            "scope":"complete native own-prefix outputs and separately canonical teacher-prefix metrics; own position matches without a correct preceding prefix are not successful source-dependent continuation"});
+        assert_eq!(actual, historical);
+        Ok(())
+    }
+
     #[test]
     fn joint_continuation_admits_only_declared_families_and_credit() -> Result<()> {
         let base = json!({"mode":"joint_continuation","credit":"raw_identity","read_state_pullback":"categorical","seed":1001,
