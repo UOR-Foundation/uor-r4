@@ -51,6 +51,7 @@ enum Mode {
     Admission,
     Fit,
     PredictionControl,
+    EntryCeiling,
 }
 #[derive(Clone, Copy, Debug, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
@@ -2186,6 +2187,70 @@ fn control_entry_diagnostics(
     Ok(v)
 }
 
+/// Zero-update entry-position ceiling over every development row.
+///
+/// The same target-free native forward as the control diagnostic, run over the
+/// whole panel and reported twice: once with the physical Copy channel present
+/// (the live mixed pool) and once with it removed (the Generate-only pool).
+/// Labels are read only after each forward, so this is a capability bound on
+/// the frozen artifact: not a fit, not a selection, not a serving change.
+fn entry_ceiling_panel(
+    a: &Args,
+    l: &Loaded,
+    model: &IntegerRealizer,
+    g: &NativeGeometricGenerate,
+    bridge: &NativeGeometricReadStateBridge,
+    eps: &[Episode],
+) -> Result<Value> {
+    use uor_r4_integer::h4_tables::H4Code;
+    let mut pool = NativeVocabularyActions::new(model.binding().clone(), &l.exp)?;
+    let mut only = NativeVocabularyActions::new(model.binding().clone(), &l.exp)?;
+    let mut rows = Vec::new();
+    let (mut full_correct, mut generate_only_correct) = (0usize, 0usize);
+    let (mut full_copy_dominated, mut gold_in_copy) = (0usize, 0usize);
+    for (index, e) in eps.iter().enumerate() {
+        // Complete target-free native bank selection first. Labels cannot choose
+        // a source occurrence, frame, route, state or vocabulary candidate.
+        let native = native_step(model, g, Some(bridge), &mut pool, e, &[], &l.cue, &l.prefix)?;
+        let state: Vec<u8> = serde_json::from_value(native["retained_state_codes"].clone())?;
+        let state = state
+            .into_iter()
+            .map(H4Code::try_from)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut scores = vec![0i64; g.vocab_size()];
+        g.score_into(&state, &mut scores, &mut GenerateReadCounts::default())?;
+        let ids: Vec<u32> = serde_json::from_value(native["copy_token_ids"].clone())?;
+        let copies: Vec<i64> = serde_json::from_value(native["copy_raw_scores_q24"].clone())?;
+        let full = pool.reduce_trace(&scores, &ids, &copies)?;
+        let generate_only = only.reduce_trace(&scores, &[], &[])?;
+        let gold = e.target[0];
+        let full_chosen = full.summary.chosen_token_id;
+        let only_chosen = generate_only.summary.chosen_token_id;
+        full_correct += usize::from(full_chosen == gold);
+        generate_only_correct += usize::from(only_chosen == gold);
+        full_copy_dominated += usize::from(
+            full.summary.chosen_copy_weight_q31 > full.summary.chosen_generate_weight_q31,
+        );
+        gold_in_copy += usize::from(ids.contains(&gold));
+        rows.push(
+            json!({"index":index,"id":e.packet.id,"gold_entry_label_only":gold,
+            "full_chosen":full_chosen,"generate_only_chosen":only_chosen,
+            "full_correct":full_chosen==gold,"generate_only_correct":only_chosen==gold,
+            "gold_in_copy_candidates":ids.contains(&gold),"copy_candidates":ids.len(),
+            "full_summary":full.summary,"generate_only_summary":generate_only.summary}),
+        );
+    }
+    let v = json!({"rows":eps.len(),
+        "full_pool_entry_correct":full_correct,
+        "generate_only_entry_correct":generate_only_correct,
+        "full_pool_winners_copy_dominated":full_copy_dominated,
+        "rows_with_gold_in_copy_candidates":gold_in_copy,
+        "row_records":rows,
+        "scope":"zero-update entry ceiling: target-free native forward, full mixed pool versus Generate-only pool, labels read after forward; a capability bound on one artifact, not a fit and not held-out language evidence"});
+    write(a, "entry-ceiling.json", &v)?;
+    Ok(v)
+}
+
 fn control_crossings(
     a: &Args,
     initial: &NativeGeometricGenerate,
@@ -2704,6 +2769,23 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
             "scope":"zero-update authenticated categorical restart admission; no learning verdict"}),
         );
     }
+    if a.mode == Mode::EntryCeiling {
+        let ceiling = entry_ceiling_panel(
+            a,
+            &l,
+            &initial_native,
+            &initial_generate,
+            &initial_bridge,
+            &dev,
+        )?;
+        return Ok(
+            json!({"schema":"uor-r4.geometric-frozen-map-fit/1","status":"COMPLETED","mode":"entry_ceiling",
+            "updates":0,"credit":a.credit.name(),"read_state_pullback":a.read_state_pullback.name(),"order_seed":a.seed,
+            "checkpoint_receipt_sha256":CP_RECEIPT_SHA,"ceiling":ceiling,"initial_metrics":initial_metrics,
+            "elapsed_seconds":start.elapsed().as_secs_f64(),
+            "scope":"zero-update entry-position ceiling with the physical Copy channel removed; labels read only after the target-free forward; no fit and no serving change"}),
+        );
+    }
     let gp = l.generate.parameters();
     let (prototype, coefficients): (BTreeMap<_, _>, BTreeMap<_, _>) = gp
         .into_iter()
@@ -2960,6 +3042,20 @@ mod tests {
         // The legacy position-mean policy is untouched by the scope.
         let legacy = episode_loss_weights(&target, &copy, 8, false, LossScope::EntryOnly)?;
         assert!(legacy.weights.iter().all(|w| *w > 0.));
+        Ok(())
+    }
+    #[test]
+    fn entry_ceiling_mode_is_a_distinct_zero_update_configuration() -> Result<()> {
+        let config = json!({"mode":"entry_ceiling","credit":"clipped","seed":1001,
+            "checkpoint":"cp","saved_fit":"fit","categorical":"cat","parent_config":"parent",
+            "training_inputs":"input","training_labels":"labels","development_inputs":"input",
+            "development_labels":"labels","maximum_seconds":3600,"maximum_report_bytes":1073741824,"out":"new"});
+        let a: Args = serde_json::from_value(config.clone())?;
+        assert!(a.mode == Mode::EntryCeiling);
+        // The ceiling is a zero-update bound, so it must not be reachable through
+        // the fit or control modes, and it must not imply a declared dose.
+        assert!(a.mode != Mode::Fit && a.mode != Mode::Admission);
+        assert!(serde_json::from_value::<Args>(config).is_ok());
         Ok(())
     }
     #[test]
