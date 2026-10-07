@@ -2357,8 +2357,12 @@ fn run_entry_scorer_fit(a: &Args, start: Instant, l: &Loaded, dev: &[Episode]) -
     fs::write(&artifact, serde_json::to_vec_pretty(&scorer)?)?;
     let reloaded_bytes = fs::read(&artifact)?;
     let reloaded: EntryScorer = serde_json::from_slice(&reloaded_bytes)?;
+    // Compare like with like: the file is pretty-printed, so hash the canonical
+    // serialization of the reloaded copy rather than the file bytes.
+    let expected = scorer.sha256()?;
+    let reloaded_sha = sha256_bytes(&serde_json::to_vec(&reloaded)?);
     if reloaded.schema != ENTRY_SCORER_SCHEMA
-        || sha256_bytes(&reloaded_bytes) != scorer.sha256()?
+        || reloaded_sha != expected
         || reloaded.rows.len() != scorer.rows.len()
     {
         return Err(bad("entry scorer export/reload identity differs"));
@@ -2396,7 +2400,7 @@ fn run_entry_scorer_fit(a: &Args, start: Instant, l: &Loaded, dev: &[Episode]) -
         entry_correct_by_split(a, &base_eval, dev)?;
     let (fit_ok, fit_n, held_ok, held_n) = entry_correct_by_split(a, &scored_eval, dev)?;
     let v = json!({"schema":"uor-r4.entry-scorer-fit/1","status":"COMPLETED","mode":"entry_scorer_fit",
-        "artifact":"entry-scorer.json","artifact_sha256":sha256_bytes(&reloaded_bytes),
+        "artifact":"entry-scorer.json","artifact_sha256":reloaded_sha.clone(),
         "feature_law":reloaded.feature_law,"distinct_features":reloaded.rows.len(),
         "fit_rows":fit_rows,"held_out_rows":held_rows,
         "pool_entry_correct":{"in_sample":base_fit,"in_sample_rows":base_fit_n,"held_out":base_held,"held_out_rows":base_held_n},
