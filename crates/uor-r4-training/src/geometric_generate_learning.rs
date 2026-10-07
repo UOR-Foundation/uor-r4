@@ -2426,6 +2426,92 @@ mod tests {
         assert!(binding.admits_token(4095));
         Ok(())
     }
+    fn generate_signed_pair_fixture(
+        binding: &SourceActionBinding,
+        lanes: usize,
+    ) -> Result<NativeGeometricGenerate> {
+        let edges = if lanes == 1 {
+            vec![]
+        } else {
+            vec![
+                LanePair { left: 0, right: 1 },
+                LanePair { left: 2, right: 7 },
+                LanePair { left: 3, right: 5 },
+                LanePair { left: 4, right: 6 },
+            ]
+        };
+        let mut energy =
+            EnergyTables::zeroed(lanes as u8, edges).map_err(|e| invalid(e.to_string()))?;
+        for lane in 0..lanes {
+            for root in 0..ROOT_COUNT {
+                energy
+                    .set_unary(
+                        lane as u8,
+                        root as u8,
+                        if (lane + root) % 2 == 0 { -7 } else { 7 },
+                    )
+                    .map_err(|e| invalid(e.to_string()))?;
+            }
+        }
+        for edge in 0..energy.edges().len() {
+            for left in 0..ROOT_COUNT {
+                for right in 0..ROOT_COUNT {
+                    energy
+                        .set_pair(
+                            edge,
+                            left as u8,
+                            right as u8,
+                            ((left * 7 + right * 11 + edge) % 15) as i8 - 7,
+                        )
+                        .map_err(|e| invalid(e.to_string()))?;
+                }
+            }
+        }
+        assert!(energy.set_unary(0, 0, -9).is_err());
+        assert!(energy.set_unary(0, 0, 8).is_err());
+        let prototypes = (0..4096)
+            .flat_map(|token| (0..lanes).map(move |lane| ((token + 19 * lane) % ROOT_COUNT) as u8))
+            .collect::<Vec<_>>();
+        // Generic q4 permits -8, but Generate artifacts require symmetric
+        // -7..7. Check both levels before asking for a CUDA device.
+        let mut inadmissible = energy.clone();
+        inadmissible
+            .set_unary(0, 0, -8)
+            .map_err(|e| invalid(e.to_string()))?;
+        assert!(NativeGeometricGenerate::compile(
+            binding,
+            lanes,
+            &prototypes,
+            &vec![0x97; 4096 / 2],
+            inadmissible
+        )
+        .is_err());
+        let native = NativeGeometricGenerate::compile(
+            binding,
+            lanes,
+            &prototypes,
+            &vec![0x97; 4096 / 2],
+            energy,
+        )
+        .map_err(|e| invalid(e.to_string()))?;
+        Ok(native)
+    }
+    #[test]
+    fn generate_signed_pair_fixture_cpu_admission() -> Result<()> {
+        let binding = generate_sparse_fixture_binding()?;
+        for lanes in [1, 8] {
+            let native = generate_signed_pair_fixture(&binding, lanes)?;
+            let mut scores = vec![0i64; 4096];
+            native
+                .score_into(
+                    &vec![H4Code::IDENTITY; lanes],
+                    &mut scores,
+                    &mut GenerateReadCounts::default(),
+                )
+                .map_err(|e| invalid(e.to_string()))?;
+        }
+        Ok(())
+    }
     #[cfg(feature = "cuda")]
     #[test]
     #[ignore = "explicit CUDA geometry parity and timing; a missing device is an error"]
@@ -2433,57 +2519,7 @@ mod tests {
         let gpu = Device::new_cuda(0)?;
         let binding = generate_sparse_fixture_binding()?;
         for lanes in [1, 8] {
-            let edges = if lanes == 1 {
-                vec![]
-            } else {
-                vec![
-                    LanePair { left: 0, right: 1 },
-                    LanePair { left: 2, right: 7 },
-                    LanePair { left: 3, right: 5 },
-                    LanePair { left: 4, right: 6 },
-                ]
-            };
-            let mut energy =
-                EnergyTables::zeroed(lanes as u8, edges).map_err(|e| invalid(e.to_string()))?;
-            for lane in 0..lanes {
-                for root in 0..ROOT_COUNT {
-                    energy
-                        .set_unary(
-                            lane as u8,
-                            root as u8,
-                            if (lane + root) % 2 == 0 { -7 } else { 7 },
-                        )
-                        .map_err(|e| invalid(e.to_string()))?;
-                }
-            }
-            for edge in 0..energy.edges().len() {
-                for left in 0..ROOT_COUNT {
-                    for right in 0..ROOT_COUNT {
-                        energy
-                            .set_pair(
-                                edge,
-                                left as u8,
-                                right as u8,
-                                ((left * 7 + right * 11 + edge) % 15) as i8 - 7,
-                            )
-                            .map_err(|e| invalid(e.to_string()))?;
-                    }
-                }
-            }
-            assert!(energy.set_unary(0, 0, -8).is_err());
-            let prototypes = (0..4096)
-                .flat_map(|token| {
-                    (0..lanes).map(move |lane| ((token + 19 * lane) % ROOT_COUNT) as u8)
-                })
-                .collect::<Vec<_>>();
-            let native = NativeGeometricGenerate::compile(
-                &binding,
-                lanes,
-                &prototypes,
-                &vec![0x97; 4096 / 2],
-                energy,
-            )
-            .map_err(|e| invalid(e.to_string()))?;
+            let native = generate_signed_pair_fixture(&binding, lanes)?;
             let learner = GenerateLearningWeights::from_native(binding.clone(), &native, &gpu)?;
             let prepared = learner.prepare_native()?;
             let scorer = prepared
