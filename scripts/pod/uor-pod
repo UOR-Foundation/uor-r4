@@ -6,7 +6,7 @@
 #   uor-pod                                    the rules (one screen)
 #   uor-pod status [--du] [--all]              rules, pods (running and stopped), leases,
 #                                              per-GPU use, free GPUs, 5090 stock, volume use
-#   uor-pod up --lab L --session S --purpose "..." --hours H [--gpu 5090] [--count 2]
+#   uor-pod up --lab L --session S --purpose "..." --hours H [--gpu KEY: default ladder 5090 -> 4090 -> pro6000] [--count 2]
 #              [--card URL] [--wait [--wait-hours 2]] [--ref SHA|main] [--with-ollama]
 #              [--test] [--allow-off-volume] [--no-bootstrap] [--keep-on-failure] [--owner-approved]
 #              [--force-retry]   every argument is checked before the Runpod API is called;
@@ -914,6 +914,15 @@ cmd_up() {
   echo "SSH ready after ${t_ssh}s: $(addr_line "$pod")"
   lock_acquire; ledger ssh-ready "$LAB" "$pod" "{\"create_to_ssh_s\": $t_ssh}"; lock_release
   mirror_lease "$pod" "$ID"
+  # the Hugging Face token (private store caseyallard/uor-r4-store) goes over
+  # stdin, never on a command line or in a log
+  if ! is_dry && [ -f "$HOME/.cache/huggingface/token" ]; then
+    if pod_ssh "$pod" 'mkdir -p /root/.cache/huggingface && umask 077 && cat > /root/.cache/huggingface/token' < "$HOME/.cache/huggingface/token"; then
+      info "hf token copied"
+    else
+      warn "hf token copy to $pod failed (the bootstrap's store fetch will be skipped)"
+    fi
+  fi
   if [ "$canon" = false ]; then
     # a non-canonical /workspace starts empty: copy the hot set before bootstrap
     # (toolchain and cached binaries make the bootstrap warm). Best effort.
@@ -1279,17 +1288,21 @@ resolve_ref() {  # REF -> full SHA on stdout; dies with the reason otherwise
 # The pod-side bootstrap's argument vector, built in one place for the preflight
 # and the real run, and checked by the bootstrap's own parser (--check-args).
 BOOT_ARGS=()
-bootstrap_args() {  # SHA POD OFF-VOLUME(true|false) -> BOOT_ARGS
+bootstrap_args() {  # SHA POD OFF-VOLUME(true|false) [CANONICAL(true|false)] -> BOOT_ARGS
   BOOT_ARGS=(--sha "$1" --pod "$2")
   if [ "$OLLAMA" = 1 ]; then BOOT_ARGS+=(--with-ollama); fi
   if [ "$3" = true ]; then BOOT_ARGS+=(--off-volume); fi
+  if [ "${4:-true}" = false ]; then BOOT_ARGS+=(--non-canonical); fi
 }
 preflight_bootstrap_args() {  # SHA -> dies unless the bootstrap accepts every argument vector `up` may pass
   local off out
+  local canon
   for off in false $( [ "$OFF_VOLUME" = 1 ] && echo true ); do
-    bootstrap_args "$1" preflightpod "$off"
-    out=$(bash "$HERE/uor-pod-bootstrap.sh" --check-args "${BOOT_ARGS[@]}" 2>&1) ||
-      die "the bootstrap rejects the arguments up would pass (${BOOT_ARGS[*]}): $out (nothing was created)"
+    for canon in true false; do  # placement decides canonical only after create
+      bootstrap_args "$1" preflightpod "$off" "$canon"
+      out=$(bash "$HERE/uor-pod-bootstrap.sh" --check-args "${BOOT_ARGS[@]}" 2>&1) ||
+        die "the bootstrap rejects the arguments up would pass (${BOOT_ARGS[*]}): $out (nothing was created)"
+    done
   done
 }
 
@@ -1329,7 +1342,7 @@ do_bootstrap() {  # POD -> copy reaper + bootstrap, mirror leases, run bootstrap
   fi
   sha=$(resolve_ref "$REF") || return 1
   off=$(echo "$cache" | jq -r '.off_volume // false')
-  bootstrap_args "$sha" "$pod" "$off"
+  bootstrap_args "$sha" "$pod" "$off" "$(echo "$cache" | jq -r 'if .canonical == false then "false" else "true" end')"
   out=$(bash "$HERE/uor-pod-bootstrap.sh" --check-args "${BOOT_ARGS[@]}" 2>&1) ||
     { warn "the bootstrap rejects its arguments (${BOOT_ARGS[*]}): $out"; return 1; }
   ts=$(date -u +%Y%m%dT%H%M%SZ)

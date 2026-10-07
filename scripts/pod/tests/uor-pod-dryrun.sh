@@ -299,6 +299,7 @@ chk() {  # NAME RC PATTERN bootstrap-args...
   if [ "$rc" = "$want" ] && grep -qE -e "$pat" "$W/out"; then ok "$name"; else echo "     rc=$rc"; bad "$name"; fi
 }
 chk "bootstrap --check-args accepts a full SHA" 0 "bootstrap arguments OK" --sha "$MAIN_SHA" --pod podx --with-ollama --off-volume
+chk "bootstrap --check-args accepts --non-canonical" 0 "bootstrap arguments OK" --sha "$MAIN_SHA" --pod podx --non-canonical
 chk "bootstrap --check-args rejects a short SHA" 2 "--sha must be a full 40-character commit \\(got 7" --sha "${MAIN_SHA:0:7}" --pod podx
 chk "bootstrap --check-args rejects upper-case hex" 2 "lower-case hex" --sha "$(printf '%s' "$MAIN_SHA" | tr 'a-f' 'A-F')"
 chk "bootstrap --check-args rejects an unknown argument" 2 "unknown argument --bogus" --sha "$MAIN_SHA" --bogus
@@ -506,6 +507,13 @@ if ! grep -q 'runpodctl pod delete' "$FAKE/calls"; then ok "a failed Ollama does
 if grep '"event":"bootstrap"' "$UOR_POD_STATE/ledger.jsonl" | tail -1 | jq -e '.rc == 0 and .ollama == "FAILED"' >/dev/null; then
   ok "the Ollama failure is recorded in the bootstrap ledger event"; else bad "the Ollama failure is recorded in the bootstrap ledger event"; fi
 if grep -q -- "--with-ollama | tee" "$FAKE/bootcmd" || grep -q -- "--with-ollama 2>&1" "$FAKE/bootcmd"; then ok "--with-ollama reaches the bootstrap"; else bad "--with-ollama reaches the bootstrap"; fi
+# ---- the Hugging Face token: `up` copies ~/.cache/huggingface/token to the pod
+# over stdin; the value never appears in the output or on a command line
+HH=$W/hfhome; mkdir -p "$HH/.cache/huggingface"; printf 'hf_FAKETOKEN123' > "$HH/.cache/huggingface/token"
+rm -rf "$UOR_POD_STATE"; fresh_pods
+HOME=$HH expect "up with an HF token on the laptop" 0 "hf token copied" -- up --lab claude --session hftok --purpose hf --hours 1 --count 2 --no-bootstrap --ref "$SHA40"
+if grep -q 'cat > /root/.cache/huggingface/token' "$FAKE/calls"; then ok "the token is copied to the pod over ssh"; else bad "the token is copied to the pod over ssh"; fi
+if ! grep -q 'hf_FAKETOKEN123' "$W/out" "$FAKE/calls"; then ok "the token value is in neither the output nor any command line"; else bad "the token value is in neither the output nor any command line"; fi
 # ---- any-region placement: no ladder GPU in the volume datacenters, stock in
 # two allowlisted extra datacenters -> the one with more stock, non-canonical;
 # an explicit UOR_POD_VOLUME_DCS keeps placement to that list only
