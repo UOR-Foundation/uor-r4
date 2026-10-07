@@ -2208,6 +2208,8 @@ fn entry_ceiling_panel(
     let mut rows = Vec::new();
     let (mut full_correct, mut generate_only_correct) = (0usize, 0usize);
     let (mut full_copy_dominated, mut gold_in_copy) = (0usize, 0usize);
+    let mut gold_ranks: Vec<u64> = Vec::new();
+    let mut gold_mass_fraction: Vec<f64> = Vec::new();
     for (index, e) in eps.iter().enumerate() {
         // Complete target-free native bank selection first. Labels cannot choose
         // a source occurrence, frame, route, state or vocabulary candidate.
@@ -2226,6 +2228,26 @@ fn entry_ceiling_panel(
         let gold = e.target[0];
         let full_chosen = full.summary.chosen_token_id;
         let only_chosen = generate_only.summary.chosen_token_id;
+        // Where the answer sits in the fully ordered emission, so "the emission
+        // cannot do it" and "the emission nearly does it" are distinguishable.
+        let mut ordered = generate_only
+            .token_masses
+            .iter()
+            .map(|m| (m.token_id, m.weight_q31))
+            .collect::<Vec<_>>();
+        ordered.sort_by(|x, y| y.1.cmp(&x.1).then_with(|| x.0.cmp(&y.0)));
+        let gold_rank = ordered
+            .iter()
+            .position(|m| m.0 == gold)
+            .map(|position| position as u64 + 1);
+        gold_ranks.push(gold_rank.unwrap_or(ordered.len() as u64 + 1));
+        gold_mass_fraction.push(
+            ordered
+                .iter()
+                .find(|m| m.0 == gold)
+                .map(|m| m.1 as f64 / generate_only.summary.total_weight_q31.max(1) as f64)
+                .unwrap_or(0.),
+        );
         full_correct += usize::from(full_chosen == gold);
         generate_only_correct += usize::from(only_chosen == gold);
         full_copy_dominated += usize::from(
@@ -2237,16 +2259,43 @@ fn entry_ceiling_panel(
             "full_chosen":full_chosen,"generate_only_chosen":only_chosen,
             "full_correct":full_chosen==gold,"generate_only_correct":only_chosen==gold,
             "gold_in_copy_candidates":ids.contains(&gold),"copy_candidates":ids.len(),
+            "gold_generate_rank":gold_rank,
             "full_summary":full.summary,"generate_only_summary":generate_only.summary}),
         );
     }
+    let mut ranks = gold_ranks.clone();
+    let mut fractions = gold_mass_fraction.clone();
+    ranks.sort_unstable();
+    fractions.sort_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
+    let pick = |v: &[u64], q: f64| -> u64 {
+        if v.is_empty() {
+            0
+        } else {
+            v[((v.len() as f64 - 1.) * q).round() as usize]
+        }
+    };
+    let pick_fraction = |v: &[f64], q: f64| -> f64 {
+        if v.is_empty() {
+            0.
+        } else {
+            v[((v.len() as f64 - 1.) * q).round() as usize]
+        }
+    };
     let v = json!({"rows":eps.len(),
         "full_pool_entry_correct":full_correct,
         "generate_only_entry_correct":generate_only_correct,
         "full_pool_winners_copy_dominated":full_copy_dominated,
         "rows_with_gold_in_copy_candidates":gold_in_copy,
+        "generate_only_gold_rank_min":ranks.first().copied().unwrap_or(0),
+        "generate_only_gold_rank_median":pick(&ranks, 0.5),
+        "generate_only_gold_rank_p90":pick(&ranks, 0.9),
+        "generate_only_gold_rank_max":ranks.last().copied().unwrap_or(0),
+        "generate_only_gold_mass_fraction_median":pick_fraction(&fractions, 0.5),
+        "generate_actions":eps
+            .first()
+            .map_or(0, |_| only.legal_token_ids().len()),
         "row_records":rows,
-        "scope":"zero-update entry ceiling: target-free native forward, full mixed pool versus Generate-only pool, labels read after forward; a capability bound on one artifact, not a fit and not held-out language evidence"});
+        "scope":"zero-update entry ceiling: target-free native forward, mixed pool versus Generate-only pool, labels read after forward; gold rank is its position in the fully ordered emission; a capability bound on one artifact, not a fit and not held-out language evidence"});
     write(a, "entry-ceiling.json", &v)?;
     Ok(v)
 }
