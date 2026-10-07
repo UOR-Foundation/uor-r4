@@ -505,7 +505,10 @@ fn run(a: &Config, d: &Device) -> Result<Value> {
 
         let before_packet = sha256_bytes(&serde_json::to_vec(&(
             out.actions.clone(),
-            out.final_state_codes.clone(),
+            out.final_state_codes
+                .iter()
+                .map(|c| c.index())
+                .collect::<Vec<_>>(),
             out.copy_scores_q24.clone(),
         ))?);
         l.answers.validate()?;
@@ -527,7 +530,10 @@ fn run(a: &Config, d: &Device) -> Result<Value> {
         let new_g = diagnostic.loss.backward()?;
         let after_packet = sha256_bytes(&serde_json::to_vec(&(
             out.actions.clone(),
-            out.final_state_codes.clone(),
+            out.final_state_codes
+                .iter()
+                .map(|c| c.index())
+                .collect::<Vec<_>>(),
             out.copy_scores_q24.clone(),
         ))?);
         if before_packet != after_packet {
