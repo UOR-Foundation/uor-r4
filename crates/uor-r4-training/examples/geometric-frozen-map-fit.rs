@@ -2548,6 +2548,28 @@ fn run_prediction_control(
     write(a, "zero-update-admission.json", &admission)?;
     // Initial entry replay precedes any optimizer construction or update.
     control_entry_diagnostics(a, l, &model, &g, &b, &eps, 0)?;
+    // The eight control cases are a selected subset. Measure the same artifact's
+    // entry decision on the whole panel it was drawn from, mixed pool versus
+    // Generate-only pool, so "works on the eight" and "works on the panel" are
+    // separate numbers rather than one number and an assumption. At the declared
+    // zero-update recomposition the artifact measured here is the recomposed one.
+    let panel_ceiling = {
+        let public = NativeVocabularyActions::new(l.integer.binding().clone(), &l.exp)?;
+        let legal = public
+            .legal_token_ids()
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let panel = load_panel(
+            &a.development_inputs,
+            &a.development_labels,
+            &l.integer,
+            &l.tokenizer,
+            &legal,
+            512,
+        )?;
+        entry_ceiling_panel(a, l, &model, &g, &b, &panel)?
+    };
     let initial_eval = evaluate(
         a,
         "prediction-0000",
@@ -2664,7 +2686,7 @@ fn run_prediction_control(
         json!({"schema":"uor-r4.geometric-prediction-control/1","status":"COMPLETED","mode":"prediction_control",
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"updates":limit,"rates":rates,"native_pool_backend":"host",
         "resume":resume,"trainable":a.prediction_control_trainable,"source_routing_scope":"Potential updates may change selected physical Source and transported state; no fixed-coordinate claim","original_indices":CONTROL_INDICES,"training_row_draws":limit*8,"target_position_draws":limit*84,
-        "initial_receipt":initial_receipt,"final_receipt":final_receipt,"blocks":blocks,
+        "initial_receipt":initial_receipt,"final_receipt":final_receipt,"blocks":blocks,"panel_ceiling_step0":panel_ceiling,
         "native_prediction_control_win":win,"elapsed_seconds":start.elapsed().as_secs_f64(),
         "scope":"construction learning control on8 retained cases; complete accepted own-prefix replies+EOS and four source-swap pairs required; no generalization/chat/attention qualification; initial diagnostic0 can be run before choosing prospective control rates"}),
     )
