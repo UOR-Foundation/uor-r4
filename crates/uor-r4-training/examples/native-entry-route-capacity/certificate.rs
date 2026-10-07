@@ -178,6 +178,13 @@ mod tests {
         let mut mixed = descending();
         let plateau = mixed[2048];
         mixed[2048..].fill(plateau);
+        // At maximum reference +8, target reads 2048 but competitor reads
+        // 2047. A plateau starting at 2048 leaves their strict gap intact.
+        assert!(certify_generate_dominance(&[0, INTERVAL_Q24], &[0, 1], 0, &mixed)?.is_some());
+        // Include BOTH endpoints at that admissible reference. Their tie
+        // prevents a higher-ID certificate even though earlier gaps are strict.
+        let plateau = mixed[2047];
+        mixed[2047..].fill(plateau);
         assert!(certify_generate_dominance(&[0, INTERVAL_Q24], &[0, 1], 0, &mixed)?.is_none());
         Ok(())
     }
