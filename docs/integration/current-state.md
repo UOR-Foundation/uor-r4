@@ -1,5 +1,31 @@
 # Current UOR-R4 research state
 
+## Shared geometric energy learns entry, but complete answers regress — October 7
+
+[PR #1858](https://github.com/UOR-Foundation/uor-r4/pull/1858) merged as `1a5e4e871240c534d0cf9c02b522935342d86d3b`; all seven delivered files match reviewed head `c64cce4f2fc76cd8534a945184223fab0f3065a5`. The versioned shared-action field and existing continuation-only fitter now execute. Thirty-two focused CPU tests and two explicitly selected CUDA score/Copy-adjoint controls pass; ignored tests are excluded. Both package checks and merged-fitter tests pass. Changed-file formatting passes; full workspace formatting reports nine inherited unrelated files. These are implementation checks, not language qualification.
+
+The prospective construction fit uses the authenticated frozen Source48/Generate64 parent, seed1001, 32 updates with batch8 and rate0.03. Only the 960 shared signed-H4 continuation coefficients train. All 512 exposed source-bank cases are cached and evaluated; the dose draws 256 distinct cases and supervises 3,311 complete-answer positions including EOS. The actual query and prior prefix drive the local carrier. The same token energy modifies Generate and every physical Copy occurrence before the sole common clip. All factual source selection and upstream parameters remain frozen. No target, supplied selected record, answer mask or first-token gate enters generation.
+
+| Measured endpoint on the exposed512 panel | Null field | Learned32 |
+|---|---:|---:|
+| Complete accepted answer with EOS | 8/512 | 5/512 |
+| Correct first token | 8/512 | 455/512 |
+| Correct prefix reaching the first source-dependent divergence | 8/512 | 51/512 |
+| Correctly reached and correct at that divergence | 8/512 | 11/512 |
+| Both source-swap arms correctly reached and correct there | 4/256 pairs | 4/256 pairs |
+| Teacher-prefix correctness at divergence | 50/512 | 58/512 |
+| Copy-covered later teacher positions correct | 355/4,128 | 369/4,128 |
+| Any emitted EOS | 11/512 | 10/512 |
+| Equal-episode teacher CE | 6.1992635176 | 5.4240809543 |
+
+Independent saved-row review finds zero gained complete answers, three lost and five retained. Lost rows0,4,12 are forward-job replies; row4 emits the intended value then overruns, and rows0/12 also corrupt continuation. All lose EOS. Complete answers regress in both drawn (4 to3) and undrawn (4 to2) cohorts. Every one of the 1,024 endpoint row hashes, emitted-prefix chains, chosen tokens, decoded bytes, acceptance-plus-EOS flags and native-mass CE is verified. All 512 target values occur in supplied Source and Context, with no identical-input/different-answer collision. This is answerable authored construction data, not held-out language evidence. The large entry gain therefore establishes bounded learned entry behavior, not complete prediction, generalization or geometric-family superiority. Preserve learned32 as research evidence and retain the frozen parent as the accepted model.
+
+Linux RTX4090 pod `lg5m36pkj563my` completed with exit0 in382.471s: cache preparation38.195s, fit loop20.725s, checkpoint work2.328s and native evaluation318.512s. The cached tensors occupy218,843,616bytes. CUDA computes the coefficient gathers/credit/backward; native integer preparation/evaluation and the alias reducer remain CPU work, with full transfer accounting. No fully resident CUDA or laptop-speed/energy claim follows. The cached standard pod bootstrap took2s and performed no cold build. The lease is released and pod deleted after archiving.
+
+The complete68MiB report directory, both checkpoints, config, logs and CUDA receipts are preserved in private HF `caseyallard/uor-r4-store`, prefix `codex/native-continuation-field/construction32-c64cce4/`, revision `a15afa29edd99f76f8678e6481dd09c9f3774889`. The8,760,148-byte archive SHA256 is `5eaee0773d42f9bdacade29cfa7ebcf1d0e35f5a177eb32f86abbf05f866c15a`, freshly downloaded and verified on a different pod. Report SHA256 is `5ae02623b2d132156b4d7ab02fd85b24e47ab307cff85e7cfe3951ac00d104b7`; manifest `487a73e5b84b9794fffac9094f3cc41d38e48ffe500c23af76914578b124e6a9`. Runtime/source/checks are independently preserved at HF revision `f3be21f2d96dec3e4d5e4038310c901bff5aa699`, prefix `codex/native-continuation-field/fit-runtime-c64cce4/`. No large laptop download was required.
+
+**Next:** inspect and reuse the existing actual-read/source-state continuation-credit interface alongside query and emitted-prefix state. The new local field cannot itself learn factual conditioning or update the frozen source selector. Do not assume that every remaining error is routing; value progression and EOS also fail. Preserve the whole factual bank, physical aliases, existing compiler and own-feedback evaluation; couple only an identified missing credit path, then perform focused execution checks before another fit. An unchanged dose extension is not the default capability milestone; a constant-carrier attribution check is secondary to complete-output progress. No new engine, phase gate, supplied-record shortcut or automatic broad fit is adopted. Earlier NOT_RUN statements below describe their dated pre-fit state.
+
 ## Shared-action continuation learning corrects a score-range obstruction — October 7
 
 The v1 continuation factor from [#1855](https://github.com/UOR-Foundation/uor-r4/pull/1855) has an eight-lane maximum of +3.5 nats. A retained-score diagnostic reproduces all 32 development first-step action traces with the authoritative integer reducer. Exhausting every possible common clipped reference under the strict v1 coefficients, while relaxing coefficient correlations, proves that ten gold Generate atoms remain below a wrong token's Copy-only alias mass. These gold tokens are absent from Copy. This is a finite artifact/range exclusion, not missing language knowledge or failure of geometric learning. No fit was launched under that constraint.
