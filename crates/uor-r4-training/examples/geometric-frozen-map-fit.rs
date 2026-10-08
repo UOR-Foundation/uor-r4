@@ -5644,6 +5644,7 @@ fn run_joint_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value>
     if a.constrained_context_learning {
         report["constrained_context_learning"] = json!(true);
         report["constrained_context_policy"] = constrained_context::policy();
+        report["scope"] = json!("exposed512 one coordinated shared Context basis update constrained by exact original-success native decisions; Potential/Generate/U/prototypes/categorical map fixed; independently reloaded native own-prefix outputs; greedy construction, no transfer/chat/energy qualification");
     }
     if a.categorical_action_learning {
         report["categorical_action_learning"] =
