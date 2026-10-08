@@ -1391,18 +1391,17 @@ mod categorical_pullback_tests {
         .is_err());
         Ok(())
     }
-    #[test]
-    fn categorical_action_full120_adjoint_preserves_context_credit_once() -> Result<()> {
+    fn categorical_action_adjoint_fixture(device: &Device) -> Result<Vec<Vec<f32>>> {
         let map = (0..2 * ROOTS)
             .map(|i| if i % 3 == 0 { 0 } else { 1 })
             .collect::<Vec<_>>();
-        let (binding, parent) = fixture(&map, &Device::Cpu)?;
+        let (binding, parent) = fixture(&map, device)?;
         let w = trainable(&parent, &binding)?;
         let prepared = w.prepare_native()?;
         let q = [code(7)?, code(31)?];
         let k = [code(11)?, code(119)?];
-        let qc = Var::from_tensor(&hard_choices(&q, &Device::Cpu)?)?;
-        let kc = Var::from_tensor(&hard_choices(&k, &Device::Cpu)?)?;
+        let qc = Var::from_tensor(&hard_choices(&q, device)?)?;
+        let kc = Var::from_tensor(&hard_choices(&k, device)?)?;
         let old = parent.forward(&q, &k, qc.as_tensor(), kc.as_tensor())?;
         let new = prepared.forward(&q, &k, qc.as_tensor(), kc.as_tensor())?;
         assert_eq!(old.post_state_codes, new.post_state_codes);
@@ -1413,7 +1412,7 @@ mod categorical_pullback_tests {
             new.state_choices.to_vec2::<f32>()?
         );
         assert_eq!(new.credit_scope, TRAINABLE_CATEGORICAL_CREDIT_SCOPE);
-        let u = utility(2 * ROOTS, &Device::Cpu)?;
+        let u = utility(2 * ROOTS, device)?;
         let og = old.state_choices.mul(&u)?.sum_all()?.backward()?;
         let ng = new.state_choices.mul(&u)?.sum_all()?.backward()?;
         for carrier in [&qc, &kc] {
@@ -1450,6 +1449,32 @@ mod categorical_pullback_tests {
             }
         }
         assert_eq!(actual, expected);
+        let mut gradients = vec![actual];
+        for carrier in [&qc, &kc] {
+            gradients.push(
+                ng.get(carrier.as_tensor())
+                    .ok_or_else(|| invalid("context credit absent"))?
+                    .flatten_all()?
+                    .to_vec1::<f32>()?,
+            );
+        }
+        Ok(gradients)
+    }
+    #[test]
+    fn categorical_action_full120_adjoint_preserves_context_credit_once() -> Result<()> {
+        categorical_action_adjoint_fixture(&Device::Cpu)?;
+        Ok(())
+    }
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "requires an explicitly leased CUDA GPU; no skipped parity claim"]
+    fn categorical_action_cuda_full120_adjoint_matches_cpu_and_frozen_context_credit() -> Result<()>
+    {
+        let device = Device::new_cuda(0)?;
+        assert_eq!(
+            categorical_action_adjoint_fixture(&Device::Cpu)?,
+            categorical_action_adjoint_fixture(&device)?,
+        );
         Ok(())
     }
     #[test]
