@@ -1659,6 +1659,11 @@ fn component_donor_invariants(a: &FrozenModel, b: &FrozenModel) -> Result<Value>
                 == b.generator.generate_model().prototypes(),
         "Generate metadata/prototypes changed beyond coefficients",
     )?;
+    entry_require(
+        a.generator.generate_model().energy().edges()
+            == b.generator.generate_model().energy().edges(),
+        "Generate ordered factor topology differs",
+    )?;
     let mut sidecars = BTreeMap::new();
     for name in [
         "read-state-bridge.bin",
