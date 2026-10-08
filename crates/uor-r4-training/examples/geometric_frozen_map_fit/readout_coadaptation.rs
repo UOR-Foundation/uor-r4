@@ -339,6 +339,32 @@ fn capture(
     }
     Ok((pools, donors, json!(rows)))
 }
+fn require_gradient_inventory(inventory: &Value) -> Result<()> {
+    let entries = inventory
+        .as_object()
+        .ok_or_else(|| bad("readout gradient inventory is not an object"))?;
+    replay_require(
+        entries.len() == 2
+            && ["cue.coefficients", "prefix.coefficients"]
+                .iter()
+                .all(|name| entries.contains_key(*name)),
+        "readout saved gradient inventory must contain exactly both active families",
+    )?;
+    for name in ["cue.coefficients", "prefix.coefficients"] {
+        let row = &inventory[name];
+        replay_require(
+            row["shape"] == json!([960])
+                && row["bytes"] == 3840
+                && row["missing_gradient_filled_zero"] == false,
+            "readout saved gradient must contain960 measured values, not synthetic zeros",
+        )?;
+        replay_require(
+            row["file"] == format!("native-code-ranking-gradients/{name}.f32le"),
+            "readout saved gradient path differs",
+        )?;
+    }
+    Ok(())
+}
 fn gradient(
     a: &Args,
     start: Instant,
@@ -427,6 +453,17 @@ fn gradient(
         &json!({"positions":terms.len(),"combined":combined,"elapsed_seconds":seconds,"active_names":params.keys().collect::<Vec<_>>(),"upstream_parameters_applied":false,"rows":rows}),
     )?;
     let inventory = np::save_ranking_gradients(a, params, &sums)?;
+    require_gradient_inventory(&inventory)?;
+    for name in ["cue.coefficients", "prefix.coefficients"] {
+        let path = a
+            .out
+            .join(format!("native-code-ranking-gradients/{name}.f32le"));
+        replay_require(
+            fs::metadata(&path)?.len() == 3840 && inventory[name]["sha256"] == sha256_file(&path)?,
+            "readout saved measured gradient file bytes/hash differ",
+        )?;
+    }
+
     let values = sums
         .iter()
         .map(|(name, t)| {
@@ -911,6 +948,22 @@ fn copy_child_plans(a: &Args, child: &Args) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn readout_gradient_inventory_rejects_missing_or_synthetic_family() -> Result<()> {
+        let mut value = json!({"cue.coefficients":{"shape":[960],"bytes":3840,"file":"native-code-ranking-gradients/cue.coefficients.f32le","missing_gradient_filled_zero":false},"prefix.coefficients":{"shape":[960],"bytes":3840,"file":"native-code-ranking-gradients/prefix.coefficients.f32le","missing_gradient_filled_zero":false}});
+        require_gradient_inventory(&value)?;
+        value["prefix.coefficients"]["missing_gradient_filled_zero"] = json!(true);
+        assert!(require_gradient_inventory(&value).is_err());
+        value["prefix.coefficients"]["missing_gradient_filled_zero"] = json!(false);
+        value["prefix.coefficients"]["shape"] = json!([8, 120]);
+        assert!(require_gradient_inventory(&value).is_err());
+        value
+            .as_object_mut()
+            .ok_or_else(|| bad("test inventory absent"))?
+            .remove("prefix.coefficients");
+        assert!(require_gradient_inventory(&value).is_err());
+        Ok(())
+    }
     #[test]
     fn readout_gate_requires_new_fact_and_fresh_descent() {
         assert!(!gate(4., 3., 0));
