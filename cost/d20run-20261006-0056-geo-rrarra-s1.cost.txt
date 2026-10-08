@@ -1,0 +1,3 @@
+arm=geo seed=1 root=/Users/casey.allard/uor-r4-worktrees/reports/d20run-20261006-0056-geo-rrarra-s1 exit=143
+wall_seconds=296 max_rss_bytes=unknown root_kib=12
+free_bytes_before=35732135936 free_bytes_after=38761349120

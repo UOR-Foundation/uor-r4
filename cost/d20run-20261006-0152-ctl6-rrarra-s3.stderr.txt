@@ -1,0 +1,39 @@
+ordinary_attention {"age_init":"default","age_init_slopes":[0.25,0.0625,0.015625,0.00390625],"lineage":"none","lineage_record":{"name":"none"},"read_key_shift":false,"read_layers":6,"recurrence_layers":0,"recurrent_state_floats_per_layer":128,"stack_config":{"arch":"transformer","context":512,"heads":4,"mlp_hidden":395,"pattern":"aaaaaa","read":"dot","rotation":false,"seed":3,"vocab_size":512,"width":128}}: 1370496 parameters, context 512, buckets ["d16", "d64", "d200", "d400"]
+step 100 lr 1.00e-3 train query NLL 5.7450 grad 17.340 in-class acc 0.000 d16=0.000 d64=0.000 d200=0.000 d400=0.000 | held-out acc 0.004 (111s)
+step 200 lr 9.92e-4 train query NLL 5.4935 grad 0.727 in-class acc 0.004 d16=0.000 d64=0.000 d200=0.016 d400=0.000 | held-out acc 0.004 (223s)
+step 300 lr 9.70e-4 train query NLL 5.4230 grad 1.650 in-class acc 0.066 d16=0.203 d64=0.062 d200=0.000 d400=0.000 | held-out acc 0.047 (336s)
+step 400 lr 9.33e-4 train query NLL 5.1416 grad 1.722 in-class acc 0.207 d16=0.719 d64=0.094 d200=0.000 d400=0.016 | held-out acc 0.184 (455s)
+step 500 lr 8.83e-4 train query NLL 4.8638 grad 2.059 in-class acc 0.227 d16=0.750 d64=0.109 d200=0.000 d400=0.047 | held-out acc 0.207 (569s)
+step 600 lr 8.22e-4 train query NLL 4.6369 grad 2.047 in-class acc 0.211 d16=0.703 d64=0.125 d200=0.000 d400=0.016 | held-out acc 0.188 (680s)
+step 700 lr 7.51e-4 train query NLL 4.4259 grad 2.161 in-class acc 0.227 d16=0.766 d64=0.109 d200=0.000 d400=0.031 | held-out acc 0.164 (781s)
+step 800 lr 6.74e-4 train query NLL 4.2687 grad 1.972 in-class acc 0.223 d16=0.750 d64=0.109 d200=0.000 d400=0.031 | held-out acc 0.148 (879s)
+step 900 lr 5.92e-4 train query NLL 4.0992 grad 2.444 in-class acc 0.223 d16=0.734 d64=0.125 d200=0.016 d400=0.016 | held-out acc 0.102 (1008s)
+step 1000 lr 5.09e-4 train query NLL 3.9467 grad 2.460 in-class acc 0.238 d16=0.781 d64=0.156 d200=0.000 d400=0.016 | held-out acc 0.059 (1132s)
+step 1100 lr 4.28e-4 train query NLL 3.8528 grad 2.369 in-class acc 0.234 d16=0.750 d64=0.156 d200=0.016 d400=0.016 | held-out acc 0.020 (1257s)
+step 1200 lr 3.50e-4 train query NLL 3.7803 grad 2.595 in-class acc 0.215 d16=0.719 d64=0.125 d200=0.000 d400=0.016 | held-out acc 0.012 (1404s)
+step 1300 lr 2.79e-4 train query NLL 3.7242 grad 2.534 in-class acc 0.211 d16=0.734 d64=0.109 d200=0.000 d400=0.000 | held-out acc 0.008 (1541s)
+step 1400 lr 2.18e-4 train query NLL 3.6641 grad 2.609 in-class acc 0.250 d16=0.781 d64=0.203 d200=0.016 d400=0.000 | held-out acc 0.008 (1679s)
+step 1500 lr 1.68e-4 train query NLL 3.6207 grad 2.591 in-class acc 0.238 d16=0.797 d64=0.141 d200=0.016 d400=0.000 | held-out acc 0.004 (1819s)
+step 1600 lr 1.31e-4 train query NLL 3.5970 grad 2.735 in-class acc 0.242 d16=0.781 d64=0.156 d200=0.016 d400=0.016 | held-out acc 0.000 (1959s)
+step 1700 lr 1.08e-4 train query NLL 3.5756 grad 2.615 in-class acc 0.234 d16=0.734 d64=0.172 d200=0.016 d400=0.016 | held-out acc 0.000 (2117s)
+step 1800 lr 1.00e-4 train query NLL 3.5502 grad 2.667 in-class acc 0.242 d16=0.781 d64=0.156 d200=0.016 d400=0.016 | held-out acc 0.000 (2265s)
+final in-class fresh acc 0.2563 d16=0.758 d64=0.215 d200=0.012 d400=0.041; held-out-class acc 0.0010 d16=0.004 d64=0.000 d200=0.000 d400=0.000
+reachability: read rows 0 nonzero 0; key-ablation changed rows 2048/2048 (argmax 76), max |dlogit| 0.959224
+     2276.31 real      2812.66 user       196.21 sys
+          5081120768  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              767249  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  40  voluntary context switches
+            30774874  involuntary context switches
+      31993208382995  instructions retired
+       7949653985100  cycles elapsed
+          6152803560  peak memory footprint
