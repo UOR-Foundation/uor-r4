@@ -314,3 +314,42 @@ full-path multiplier/float/parameter-access compliance and measured M1 energy;
 rendered SpiralCore behavior; new literature results beyond the cited retained
 source survey. None is inferred from compilation, a source definition or a
 transport CI acknowledgement.
+
+## Refreshed selection diagnostic and conditional next decision
+
+Main advanced during execution to
+`c2a41a3047af22c77164886ab5b0d0a89c7b0c3a`
+([#1863](https://github.com/UOR-Foundation/uor-r4/pull/1863)). Its four-line
+addition records source provenance in the existing empty-prefix entry-ceiling
+diagnostic; it changes no model decision. The integration branch preserves it,
+while the joint model experiment stays pinned to producer `9aec2d4465`.
+
+The PR interpretation does not follow from the displayed statistics. Selected
+ordinal counts9/4/3 versus8/3/5 are not identical; even identical marginals do
+not establish paired invariance under a question intervention. Every coordinate
+changing under question and content demonstrates a lack of coordinatewise
+factorization on those pairs, not an inability to decode their joint encoding.
+A reversible mixing can entangle both factors in every coordinate. Near-uniform
+Hamming distance is not an impossibility result for relative-H4 learning.
+
+The useful existing-data discriminator pairs packets with the same complete
+source bank, order, entity and prefix while changing only the question. Compare
+selected record/occurrence identities, not merely ordinals or marginal counts,
+and judge the expected relation afterward. Analyze fixed-question assignment
+swaps separately. If existing rows lack those matches, retain the missing
+comparison explicitly. Same-question clustering is not a universal acceptance
+gate: factual answers can require different source occurrences across entities.
+Empty-prefix entry and later factual continuation also require distinct
+information; this diagnostic must not conflate them.
+
+Before seeing the joint64 outcome, mathematical review fixed the following
+conditional discriminator. First authenticate complete row outcomes and actual
+U quarter codes. If U remains zero, investigate the measured quantization
+boundary. If entry fails with nonzero U, the failure precedes any wrong emitted
+feedback; a matched final Source/Generate with learned versus authenticated
+zero U can isolate its contribution without retraining. If entry succeeds but
+factual continuation fails, inspect paired source swaps at the common correct
+prefix using full bridge occurrence traces. Correct text followed by overrun
+isolates stopping only for those rows. Saved master motion or aggregate CE
+cannot causally separate simultaneous Source/Generate/U changes. No additional
+rate, dose, seed or selector search follows automatically from a negative.
