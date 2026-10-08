@@ -794,7 +794,7 @@ mod tests {
         for family in BASIS {
             params.insert(
                 format!("consumer.context.{family}"),
-                Var::from_vec(vec![0.; 8], (1, 1, 2, 4), &Device::Cpu)?,
+                Var::from_vec(vec![0f32; 8], (1, 1, 2, 4), &Device::Cpu)?,
             );
         }
         for name in [
@@ -805,7 +805,7 @@ mod tests {
             "generate.bias",
             "continuation.unary",
         ] {
-            params.insert(name.into(), Var::from_vec(vec![0.; 2], 2, &Device::Cpu)?);
+            params.insert(name.into(), Var::from_vec(vec![0f32; 2], 2, &Device::Cpu)?);
         }
         let mut gradients = params
             .iter()
@@ -842,7 +842,7 @@ mod tests {
     fn native_code_failed_attempt_restores_every_parent_bit() -> Result<()> {
         let params = BTreeMap::from([(
             "x".into(),
-            Var::from_vec(vec![-0., 0.03, 1.71], 3, &Device::Cpu)?,
+            Var::from_vec(vec![-0f32, 0.03, 1.71], 3, &Device::Cpu)?,
         )]);
         let parent = snapshot(&params)?;
         let outcome: Result<()> = attempt_restored(&params, &parent, || {
