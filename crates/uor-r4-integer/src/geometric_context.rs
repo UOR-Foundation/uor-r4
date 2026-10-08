@@ -632,7 +632,7 @@ impl NativeContextTables {
             .lanes
             .get(flat_lane)
             .ok_or(ContextError::InvalidDecisionLane(flat_lane))?;
-        let (factors, values, shift, count) = match family {
+        let (factors, values, shift, count): (&Factors, &[i32], u32, usize) = match family {
             ContextDecisionFamily::Transition => (
                 &lane.transition,
                 &token.transition[flat_lane],
