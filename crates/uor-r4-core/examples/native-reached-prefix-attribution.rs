@@ -345,7 +345,7 @@ fn admit_paths(c: &mut Config) -> Result<()> {
         )?;
     }
     let (cache_cap, report_cap) = if c.endpoint_kind == EndpointKind::SelectedReadoutIntermediate {
-        (256 * 1024 * 1024, 64 * 1024 * 1024)
+        (256 * 1024 * 1024, 128 * 1024 * 1024)
     } else {
         (128 * 1024 * 1024, 128 * 1024 * 1024)
     };
