@@ -612,7 +612,7 @@ mod tests {
         ];
         let parent = np::Shadows::from([
             (names[0].clone(), vec![0.; 8]),
-            (names[1].clone(), vec![-2.; 8]),
+            (names[1].clone(), vec![-1.75; 8]),
         ]);
         let gradients = np::Shadows::from([
             (names[0].clone(), vec![1.; 8]),
