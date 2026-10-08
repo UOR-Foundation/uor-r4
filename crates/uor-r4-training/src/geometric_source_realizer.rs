@@ -5546,8 +5546,17 @@ mod tests {
             .compile(fixture.identity.clone())?
             .save(&native_root)?;
         let native = NativeSourceRealizer::load(&native_root, &fixture.weights, &fixture.identity)?;
-        let staged =
-            SourceRealizerWeights::load_source_on_device(&source_root, TOK.as_bytes(), device)?;
+        let staged = SourceRealizerWeights::load_context_potential_on_device(
+            &source_root,
+            TOK.as_bytes(),
+            device,
+        )?;
+        // Match the runner's staged loader: composed Potential STEs share the
+        // graph device, though only Cue/Prefix masters are eligible for edits.
+        assert!(staged
+            .potential_parameters()
+            .values()
+            .all(|v| v.device().same_device(device)));
         let before = parameter_identities(&staged)?;
         let prepared = staged.prepare_context_potential_on_device(&native, device)?;
         let joint = CueJointQ4::new(
