@@ -616,11 +616,16 @@ pub(super) fn run(a: &Args, start: Instant) -> Result<Value> {
         let scope = json!({"origin":"fresh","input_index":245,"position":position,"packet_sha256":sha256_bytes(&serde_json::to_vec(&e.packet)?),"baseline_file":path,"baseline_sha256":sha256_file(&path)?});
         let coverage = validate_events(&events, &tables)?;
         let u = u_suffix(&events, &native, &prefix)?;
+        let native_snapshot = stream(
+            a,
+            &format!("fresh-row-0245-position-{position:02}.json"),
+            &json!({"input_index":245,"position":position,"id":e.packet.id,"actual_prefix_ids":prefix,"native":native}),
+        )?;
         margin_rows.extend(margins(&events, self_offset, &q, &scope)?);
         let first = fresh_events.len();
         fresh_events.extend(events);
         fresh_calls.push(json!({"kind":"native_step","index":245,"position":position,"prefix":prefix,"first":first,"count":fresh_events.len()-first}));
-        fresh.push(json!({"scope":scope,"coverage":coverage,"u_suffix":u,"native_parity":true}));
+        fresh.push(json!({"scope":scope,"coverage":coverage,"u_suffix":u,"native_parity":true,"native_snapshot":native_snapshot}));
         frames.push(json!({"input_index":245,"position":position,"id":e.packet.id,"origin":"fresh","actual_prefix_ids":prefix}));
     }
     let capture = stream(
