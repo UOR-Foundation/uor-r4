@@ -737,6 +737,7 @@ fn args() -> Result<Args> {
     .into_iter()
     .chain(a.baseline.iter())
     .chain(a.prediction_control_resume.iter())
+    .chain(a.retained_context_root.iter())
     .chain(
         a.reference_replay
             .iter()
