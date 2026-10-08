@@ -970,7 +970,11 @@ fn run(c: &Config, written: &mut u64) -> Result<Value> {
         {
             frame["schema"] = json!("uor-r4.native-reached-prefix-frame/3");
             frame["factor_layout"] = compact_factor_layout();
-            frame["request_role_scope"]=json!("offline row cohort only; factual_failure includes preceding correct position3; labels attached separately after all captures");
+            frame["request_role_scope"] = json!(if qualification.is_some() {
+                "two authenticated actual first-divergence frames; labels attached separately after both captures"
+            } else {
+                "offline row cohort only; factual_failure includes preceding correct position3; labels attached separately after all captures"
+            });
         }
         if qualification.is_some() {
             frame["endpoint_admission"]=json!("UNSELECTED_PREFIX_CANDIDATE; diagnostic capture only; failed cheap qualification retained");
