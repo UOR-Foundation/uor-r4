@@ -133,6 +133,7 @@ fn reference_replay_settings(a: &Args) -> Result<()> {
             .ok_or_else(|| bad("replay joint rates absent"))?;
         replay_require(
             a.mode == Mode::JointContinuation
+                && !a.query_conditioned_read
                 && a.seed == 1001
                 && a.updates == 1
                 && c.lambda == 1.0
@@ -5896,6 +5897,7 @@ mod tests {
             ("updates", json!(2)),
             ("seed", json!(1002)),
             ("mode", json!("fit")),
+            ("query_conditioned_read", json!(true)),
         ] {
             let mut changed = base.clone();
             changed[key] = value;
