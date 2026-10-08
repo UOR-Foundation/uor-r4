@@ -76,6 +76,8 @@ mod native_proposals;
 mod output_support;
 #[path = "geometric_frozen_map_fit/prefix_context_credit.rs"]
 mod prefix_context_credit;
+#[path = "geometric_frozen_map_fit/prefix_fragment_learning.rs"]
+mod prefix_fragment_learning;
 #[path = "geometric_frozen_map_fit/prototype_compensation.rs"]
 mod prototype_compensation;
 #[path = "geometric_frozen_map_fit/reached_u.rs"]
@@ -158,6 +160,10 @@ fn replay_require(ok: bool, message: &str) -> Result<()> {
     }
 }
 fn reference_replay_settings(a: &Args) -> Result<()> {
+    prefix_fragment_learning::validate_settings(a)?;
+    if a.prefix_fragment_learning.is_some() {
+        return Ok(());
+    }
     context_cue_coadapt::validate_settings(a)?;
     if a.context_cue_coadapt.is_some() {
         return Ok(());
@@ -518,6 +524,8 @@ struct Args {
     context_path_credit: Option<context_path_credit::Config>,
     #[serde(default)]
     context_cue_coadapt: Option<context_cue_coadapt::Config>,
+    #[serde(default)]
+    prefix_fragment_learning: Option<prefix_fragment_learning::Config>,
 }
 const CONTROL_INDICES: [usize; 8] = [0, 1, 4, 5, 8, 9, 12, 13];
 fn default_updates() -> usize {
@@ -794,6 +802,11 @@ fn args() -> Result<(Args, Vec<u8>)> {
             .iter()
             .filter_map(|c| c.recorded_finite_contrast.as_ref())
             .flat_map(|c| [&c.retained_path_root, &c.retained_probe_root]),
+    )
+    .chain(
+        a.prefix_fragment_learning
+            .iter()
+            .flat_map(|c| [&c.retained_intermediate_root, &c.retained_probe_root]),
     )
     .chain(a.context_cue_coadapt.iter().flat_map(|c| {
         [
@@ -5246,6 +5259,9 @@ fn joint_row_comparison(before: &Value, after: &Value) -> Result<Value> {
 }
 
 fn run_joint_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
+    if a.prefix_fragment_learning.is_some() {
+        return prefix_fragment_learning::run(a, start, d);
+    }
     if a.context_cue_coadapt.is_some() {
         return context_cue_coadapt::run(a, start, d);
     }
@@ -6498,6 +6514,7 @@ fn main() -> Result<()> {
     let start = Instant::now();
     let result = (|| -> Result<Value> {
         if a.context_path_credit.is_some()
+            || a.prefix_fragment_learning.is_some()
             || a.context_cue_coadapt.is_some()
             || a.prefix_context_credit.is_some()
             || a.readout_coadaptation
