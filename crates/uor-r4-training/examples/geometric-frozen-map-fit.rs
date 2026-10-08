@@ -4688,13 +4688,6 @@ fn continuation_checkpoint(
         "native_independently_reloaded":true,"masters_independently_reloaded":true,
         "upstream_training":"all Context/Source/Potential/Generate/prototype/bridge/cue/prefix frozen; no old Vars loaded",
         "fresh_adam":"zero moments; not optimizer-state continuation"});
-    if a.constrained_emission_learning {
-        receipt["constrained_emission_learning"] = json!(true);
-        receipt["immediate_input"] = constrained_emission::input_identity(a)?;
-        receipt["fresh_adam"] = json!(false);
-        receipt["credit_scope"] = json!("fresh retained-Context gradient; only shared Generate unary/pair adjacent Q4 codes accumulate under exact pooled successful-output constraints; all upstream, bias, prototypes and U numerical masters fixed; one composite, no Adam");
-    }
-
     fs::write(
         root.join("continuation-source/metadata.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -4985,6 +4978,13 @@ fn joint_checkpoint(
         receipt["fresh_adam"] = json!(false);
         receipt["credit_scope"] = json!("one original-parent full120 shared categorical action contrast; only one action row may change; Context/Potential/Generate/U fixed for attribution, no Adam; independent native CE acceptance; not joint Context adaptation");
     }
+    if a.constrained_emission_learning {
+        receipt["constrained_emission_learning"] = json!(true);
+        receipt["immediate_input"] = constrained_emission::input_identity(a)?;
+        receipt["fresh_adam"] = json!(false);
+        receipt["credit_scope"] = json!("fresh retained-Context gradient; only shared Generate unary/pair adjacent Q4 codes accumulate under exact pooled successful-output constraints; all upstream, bias, prototypes and U numerical masters fixed; one composite, no Adam");
+    }
+
     fs::write(
         root.join("continuation-source/metadata.json"),
         serde_json::to_vec_pretty(&receipt)?,
