@@ -392,6 +392,55 @@ fn fixed_gradients(
         json!({"positions":terms.len(),"task":loss[0],"reference":loss[1],"combined":loss[0]+loss[1],"elapsed_seconds":clock.elapsed().as_secs_f64(),"eligible":["generate.unary","generate.pair"],"prototype_credit":false,"context_credit":false,"U_credit":false,"bias":"graph coefficient credit may exist; frozen and excluded from retained gradient inventory","rows":row_receipts,"intermediate_generate_sha256":p.generate_sha256}),
     ))
 }
+/// Child checkpoints retain the authenticated root plan before receipt rebinding.
+/// Copies preserve exact root bytes; the authoritative preparation can use a
+/// different JSON serialization, so compare its complete parsed value first.
+fn copy_child_reference(parent: &Args, child: &Args) -> Result<()> {
+    replay_require(
+        parent.reached_frontier_objective
+            && child.reached_frontier_objective
+            && serde_json::to_value(&parent.reference_replay)?
+                == serde_json::to_value(&child.reference_replay)?,
+        "child reference configuration differs",
+    )?;
+    let c = parent
+        .reference_replay
+        .as_ref()
+        .ok_or_else(|| bad("child reference configuration absent"))?;
+    let root_frontier = read(&parent.out.join("frontier-plan.json"))?;
+    replay_require(
+        root_frontier == read(&c.plan_root.join("plan.json"))?
+            && read(&parent.out.join("reference-plan.json"))?
+                == root_frontier["canonical_reference"],
+        "root copied frontier/reference differs from authenticated preparation",
+    )?;
+    let binding = reference_binding(parent)?;
+    let mut copies = serde_json::Map::new();
+    for name in ["frontier-plan.json", "reference-plan.json"] {
+        let input = parent.out.join(name);
+        let output = child.out.join(name);
+        fs::copy(&input, &output)?;
+        let expected = sha256_file(&input)?;
+        replay_require(
+            sha256_file(&output)? == expected,
+            "child reference plan byte identity differs",
+        )?;
+        copies.insert(
+            name.to_owned(),
+            json!({"sha256":expected,"bytes":fs::metadata(&output)?.len()}),
+        );
+    }
+    let rebound = reference_binding(child)?;
+    replay_require(
+        rebound == binding,
+        "child checkpoint reference receipt differs from root",
+    )?;
+    write(
+        child,
+        "child-plan-binding.json",
+        &json!({"files":copies,"reference_binding":rebound}),
+    )
+}
 fn original_outputs(a: &Args) -> Result<Value> {
     let root = &config(a)?.retained_emission_root;
     let mut output = read(&root.join("development-0001.json"))?;
@@ -559,6 +608,7 @@ fn execute(
     let mut intermediate_args = a.clone();
     intermediate_args.out = a.out.join("prototype-intermediate");
     report_output::claim(&intermediate_args.out)?;
+    copy_child_reference(a, &intermediate_args)?;
     let (intermediate, intermediate_field, intermediate_receipt) =
         joint_checkpoint(&intermediate_args, 0, l, weights)?;
     verify_intervention(&before, &intermediate)?;
@@ -660,6 +710,7 @@ fn execute(
         let mut candidate = a.clone();
         candidate.out = a.out.join("native-candidate-00");
         report_output::claim(&candidate.out)?;
+        copy_child_reference(a, &candidate)?;
         let outcome = np::attempt_restored(params, original, || {
             np::apply_edits(params, original, &construction.edits)?;
             let (current, field, receipt) = joint_checkpoint(&candidate, 0, l, weights)?;
@@ -795,6 +846,64 @@ fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn claimed_child_checkpoint_receipt_reuses_exact_authenticated_root_plan() -> Result<()> {
+        struct Temporary(PathBuf);
+        impl Drop for Temporary {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let temp = Temporary(std::env::temp_dir().join(format!(
+            "uor-compensation-child-{}-{unique}",
+            std::process::id()
+        )));
+        fs::create_dir(&temp.0)?;
+        let authority = temp.0.join("authority");
+        fs::create_dir(&authority)?;
+        let frontier = json!({"schema":"uor-r4.reached-frontier-plan/1","terms":[{"index":399,"target":617}],"canonical_reference":{"rows":[{"id":"frozen"}]}});
+        fs::write(authority.join("plan.json"), serde_json::to_vec(&frontier)?)?;
+        let parent: Args = serde_json::from_value(
+            json!({"mode":"joint_continuation","credit":"raw_identity","seed":1001,
+            "checkpoint":"cp","saved_fit":"fit","categorical":"cat","parent_config":"parent","training_inputs":"inputs","training_labels":"labels","development_inputs":"inputs","development_labels":"labels",
+            "maximum_seconds":3600,"maximum_report_bytes":1073741824,"out":temp.0.join("outer"),"reached_frontier_objective":true,
+            "reference_replay":{"plan_root":authority,"reference_root":"donor","expected_plan_report_sha256":"unused-test-pin","expected_plan_manifest_sha256":"unused-test-pin","lambda":1.0}}),
+        )?;
+        report_output::claim(&parent.out)?;
+        fs::write(
+            parent.out.join("frontier-plan.json"),
+            serde_json::to_vec_pretty(&frontier)?,
+        )?;
+        fs::write(
+            parent.out.join("reference-plan.json"),
+            serde_json::to_vec_pretty(&frontier["canonical_reference"])?,
+        )?;
+        let binding = reference_binding(&parent)?;
+        assert_ne!(binding["plan_sha256"], binding["copied_plan_sha256"]);
+        for name in ["prototype-intermediate", "native-candidate-00"] {
+            let mut child = parent.clone();
+            child.out = parent.out.join(name);
+            report_output::claim(&child.out)?;
+            // This is the actual previously failing checkpoint-receipt seam.
+            assert!(reference_binding(&child).is_err());
+            copy_child_reference(&parent, &child)?;
+            assert_eq!(reference_binding(&child)?, binding);
+            assert_eq!(
+                read(&child.out.join("child-plan-binding.json"))?["reference_binding"],
+                binding
+            );
+            for file in ["frontier-plan.json", "reference-plan.json"] {
+                assert_eq!(
+                    fs::read(parent.out.join(file))?,
+                    fs::read(child.out.join(file))?
+                );
+            }
+        }
+        Ok(())
+    }
     #[test]
     fn prototype_intervention_changes_only_selected_master_row_and_unique_argmax() -> Result<()> {
         let mut values = vec![0.0; 3 * 2 * 120];
