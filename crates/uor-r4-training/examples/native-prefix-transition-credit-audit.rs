@@ -11,7 +11,7 @@ use std::{
 };
 use uor_r4_core::report_output;
 use uor_r4_integer::geometric_context_q4::{unpack_coefficients, ContextQ4Config};
-#[path = "native_prefix_transition_margins.rs"]
+#[path = "native_prefix_transition_credit/margins.rs"]
 mod native_prefix_transition_margins;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const REPORT: &str = "1f7a51fe58e56862f6e8cd269225445bf9d42354d3cfe7eaf96a5910707568c9";
