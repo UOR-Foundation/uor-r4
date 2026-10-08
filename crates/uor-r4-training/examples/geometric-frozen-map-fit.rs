@@ -6511,6 +6511,27 @@ mod tests {
         let mut reached = enabled.clone();
         reached["reached_frontier_objective"] = json!(true);
         reference_replay_settings(&serde_json::from_value(reached.clone())?)?;
+        let mut emission = reached.clone();
+        emission["constrained_emission_learning"] = json!(true);
+        emission["retained_context_root"] = json!("context-sealed");
+        let admitted_emission: Args = serde_json::from_value(emission.clone())?;
+        reference_replay_settings(&admitted_emission)?;
+        assert_eq!(
+            proposal_policy(&admitted_emission),
+            constrained_emission::policy()
+        );
+        for (key, value) in [
+            ("retained_context_root", Value::Null),
+            ("constrained_emission_learning", json!(false)),
+            ("constrained_context_learning", json!(true)),
+            ("categorical_action_learning", json!(true)),
+            ("reached_frontier_objective", json!(false)),
+            ("native_code_proposals", json!(false)),
+        ] {
+            let mut invalid = emission.clone();
+            invalid[key] = value;
+            assert!(reference_replay_settings(&serde_json::from_value(invalid)?).is_err());
+        }
         let mut constrained = reached.clone();
         constrained["constrained_context_learning"] = json!(true);
         let admitted: Args = serde_json::from_value(constrained.clone())?;
