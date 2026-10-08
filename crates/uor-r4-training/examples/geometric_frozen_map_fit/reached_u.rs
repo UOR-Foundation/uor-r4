@@ -60,6 +60,39 @@ fn settle(
         np::restore(params, original)
     }
 }
+fn verify_packed_u(packed: &[u8], masters: &[f32]) -> Result<()> {
+    replay_require(
+        packed.len() == 480 && masters.len() == 960,
+        "U-only packing shape differs",
+    )?;
+    for (index, &master) in masters.iter().enumerate() {
+        replay_require(
+            master.is_finite() && (-1.75..=1.75).contains(&master),
+            "U-only expected master outside legal quarter range",
+        )?;
+        let nibble = (packed[index / 2] >> ((index & 1) * 4)) & 15;
+        let code = if nibble >= 8 {
+            nibble as i8 - 16
+        } else {
+            nibble as i8
+        };
+        replay_require(
+            code != -8 && code == (master * 4.).round() as i8,
+            "U-only native packing differs from expected960codes",
+        )?;
+    }
+    Ok(())
+}
+fn verify_u_codes(field: &NativeContinuationField, expected: &np::Shadows) -> Result<()> {
+    replay_require(
+        expected.len() == 1 && field.applies_to_copy(),
+        "U-only expected family/shared-action policy differs",
+    )?;
+    let masters = expected
+        .get("continuation.unary")
+        .ok_or_else(|| bad("U-only expected masters absent"))?;
+    verify_packed_u(field.packed_unary(), masters)
+}
 fn authenticate(root: &Path) -> Result<ContinuationParent> {
     report_output::verify(root)?;
     replay_require(
@@ -538,11 +571,7 @@ fn run_inner(
     let candidate = np::attempt_restored(params, original, || -> Result<(Value, Value)> {
         np::apply_edits(params, original, &construction.edits)?;
         let (candidate, field, receipt) = export(&child, 0, p, weights)?;
-        np::verify_codes(
-            &candidate,
-            &field,
-            &np::edited(original, &construction.edits)?,
-        )?;
+        verify_u_codes(&field, &np::edited(original, &construction.edits)?)?;
         let full = verify_guard_export(&candidate, &field, &eps, &guards, Some(&construction))?;
         write(&child, "reloaded-protected-pools.json", &full)?;
         let objective = np::score(
@@ -583,8 +612,7 @@ fn run_inner(
     let selected = gate(base, loss, corrected);
     settle(params, original, &construction.edits, selected)?;
     let (final_parent, final_field, final_receipt) = export(a, 1, p, weights)?;
-    np::verify_codes(
-        &final_parent,
+    verify_u_codes(
         &final_field,
         &if selected {
             np::edited(original, &construction.edits)?
@@ -698,6 +726,23 @@ mod tests {
             var.flatten_all()?.to_vec1::<f32>()?[0].to_bits(),
             (-0.0f32).to_bits()
         );
+        Ok(())
+    }
+    #[test]
+    fn u_only_packing_checks_all960_signed_codes_without_upstream_vars() -> Result<()> {
+        let mut values = vec![0f32; 960];
+        values[0] = -1.75;
+        values[1] = 1.75;
+        values[959] = -0.25;
+        let mut packed = vec![0u8; 480];
+        packed[0] = 0x79;
+        packed[479] = 0xf0;
+        verify_packed_u(&packed, &values)?;
+        packed[479] = 0x70;
+        assert!(verify_packed_u(&packed, &values).is_err());
+        packed[479] = 0xf0;
+        packed[20] = 8;
+        assert!(verify_packed_u(&packed, &values).is_err());
         Ok(())
     }
 }
