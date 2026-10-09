@@ -179,3 +179,36 @@ Pages source) and `codex/lab-state` were excluded.
 | [`feature/quantum-graph-integration.local`](other-labs-20261009/feature_quantum-graph-integration.local.patch) | 2026-07-23 | 7 | Casey Allard | `1100eb16b8` | `8a573f45cf` | fix(model-source): add #[allow(dead_code)] to fast_matmul_backend on non-macOS targets |
 | [`copilot/fix-width-newtypes-serialization`](other-labs-20261009/copilot_fix-width-newtypes-serialization.patch) | 2026-07-22 | 2 | copilot-swe-agent[bot] | `f9da5f38c0` | `aaa3478156` | fix: eliminate usize at router wasm/JSON serialization boundaries |
 | [`issue-78-resolution-status`](other-labs-20261009/issue-78-resolution-status.patch) | 2026-07-22 | 2 | Casey Allard | `d270b6f6f9` | `139209c615` | Implement ResolutionStatus behavior in the deployed path |
+
+## DeepSeek branches (archived 2026-10-09 by the DeepSeek lab)
+
+Six `deepseek/*` branches held work that was not in `main`. They were identified by PATCH-ID
+comparison (`git cherry`), not by ancestry: deliveries here are squash-merged, so a branch tip is never
+an ancestor of `main` even when its content is fully present, and an ancestry test reports 141 of the
+146 `deepseek/*` branches as unmerged when only these six genuinely were. Content diffs mislead for the
+same reason, since a branch is cut from an older `main`.
+
+Status: RETAINED, NOT ACTIVATED - an archive for restoration, not a promotion of code into the live
+tree. All six branches have been deleted from GitHub and locally. They are dated 5-7 October 2026 and
+are superseded experiments, a frozen gate and handoff, a control battery, and a retraction.
+
+NOTE: `deepseek/d20-control-land` (local, deleted) carried the SAME two commits as
+`deepseek/d20-control` (5a37b9814 + cf1a807c8); it is a duplicate and has no separate entry.
+
+| Branch | Last commit | Commits | Lines added | Tip | Merge-base | Last subject |
+|---|---|---|---|---|---|---|
+| [`deepseek/aa-dispatch`](deepseek_aa-dispatch.patch) | 2026-10-05 | 2 | +2346 lines | `c83c25e57` | `258e1c6698` | addressed_attention: arithmetic oracle — the operator computes exactly; the emission head canno |
+| [`deepseek/bf16-phase2b-gate`](deepseek_bf16-phase2b-gate.patch) | 2026-10-05 | 3 | +533 lines | `10e2577f6` | `6a918a4349` | Phase 2b gate: run the frozen read A/B and print the decision |
+| [`deepseek/d20-control`](deepseek_d20-control.patch) | 2026-10-07 | 2 | +1440 lines | `cf1a807c8` | `d2cae5ba57` | Preserve the D20 matched-control battery and its analysis |
+| [`deepseek/d20-run`](deepseek_d20-run.patch) | 2026-10-07 | 4 | +3597 lines | `d5172e7f6` | `d2cae5ba57` | Preserve the D20 matched-control run products |
+| [`deepseek/entry-ceiling`](deepseek_entry-ceiling.patch) | 2026-10-07 | 4 | +219 lines | `e56c1fc74` | `d99e999220` | Add the one-token-prefix rank control to the entry ceiling |
+| [`deepseek/entry-isolation`](deepseek_entry-isolation.patch) | 2026-10-07 | 2 | +136 lines | `1d98faaea` | `84459eaf62` | Retract the drowned-entry diagnosis in the 2026-10-07 handoff |
+
+A verified restorable bundle of all six (complete object closure, ~115 MB) is in iCloud rather than
+this repository - GitHub rejects files above 100 MB, and bulk material belongs in iCloud with `main`
+holding the index. Object `icloud:UOR-R4/results/deepseek/ds-bundle-icloud.tar`, tar md5
+`3d6233391fa48623e18589e2778d326a`, bundle md5 `14d17ccd22f1ee196e1479866823be4f`. Verified 2026-10-09:
+`git bundle verify` reports a complete history, and fetching it into a scratch clone restored all six
+branches with tips matching the table above. The patches here are readable records but are NOT reliably
+applicable on their own (0 of 6 plain, 1 of 6 three-way), because the branches predate `main`'s
+movement - use the bundle to restore.
