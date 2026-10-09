@@ -1,0 +1,2124 @@
+//! Offline coupled Prefix/Generate complete-episode credit; no serving changes.
+use super::context_cue_coadapt as shared;
+use super::generate_episode_learning as generate;
+use super::native_proposals as np;
+use super::prefix_fragment_learning as prefix;
+use super::*;
+use serde::Serialize;
+use uor_r4_integer::geometric_vocabulary_actions::GeneratePatchCache;
+use uor_r4_integer::h4_tables::H4Code;
+use uor_r4_training::geometric_generate_learning::vocabulary_marginal_loss_with_credit;
+use uor_r4_training::geometric_occurrence_consumer::source_realizer::{
+    CueAngularWeights, PrefixAngularWeights,
+};
+const PREFIX: &str = "prefix.coefficients";
+const GENERATE: &str = "generate.unary";
+const COUNT: usize = 960;
+const VOCAB: usize = 4096;
+const GUARDS: usize = 380;
+const UNION: usize = 391;
+const CACHE_CAP: usize = 256 * 1024 * 1024;
+const POST_CAP: usize = 16 * 1024 * 1024;
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Config {
+    pub original_inputs: prefix::Config,
+}
+impl Config {
+    pub(super) fn input_roots(&self) -> Vec<&PathBuf> {
+        let mut r = vec![
+            &self.original_inputs.retained_intermediate_root,
+            &self.original_inputs.retained_probe_root,
+        ];
+        if let Some(e) = &self.original_inputs.episode {
+            r.extend([
+                &e.typed_authority,
+                &e.retained_projection.root,
+                &e.retained_supplement_root,
+            ]);
+            r.extend(e.phases.iter().map(|p| &p.capture.root));
+        }
+        r
+    }
+}
+pub(super) fn validate_settings(a: &Args) -> Result<()> {
+    if let Some(c) = &a.coupled_episode_learning {
+        replay_require(
+            a.mode == Mode::JointContinuation
+                && a.updates == 1
+                && a.loss_scope == LossScope::All
+                && c.original_inputs.episode.is_some()
+                && c.original_inputs.joint.is_none()
+                && c.original_inputs.trajectory.is_none()
+                && a.generate_episode_learning.is_none()
+                && a.generate_episode_completion.is_none()
+                && a.prefix_fragment_learning.is_none()
+                && a.prefix_artifact_check.is_none()
+                && a.context_cue_coadapt.is_none()
+                && a.prefix_context_credit.is_none()
+                && a.context_path_credit.is_none()
+                && a.readout_coadaptation.is_none()
+                && a.reached_u.is_none()
+                && a.prototype_compensation.is_none()
+                && a.reference_replay.is_none()
+                && a.retained_context_root.is_none()
+                && !a.native_code_proposals
+                && !a.reached_frontier_objective
+                && !a.constrained_context_learning
+                && !a.constrained_emission_learning
+                && !a.categorical_action_learning
+                && !a.categorical_action_only,
+            "coupled episode mode/settings conflict",
+        )?;
+        let mut inherited = a.clone();
+        inherited.coupled_episode_learning = None;
+        inherited.prefix_fragment_learning = Some(c.original_inputs.clone());
+        prefix::validate_settings(&inherited)?;
+    }
+    Ok(())
+}
+pub(super) fn policy() -> Value {
+    json!({"schema":"uor-r4.coupled-episode-policy/1","active":[PREFIX,GENERATE],
+        "original_selected_initializer":true,"weighted_roles":32,"physical_backward_calls":31,"prebackward_native_parity_graph_forwards":31,"gradient_graph_forwards":31,
+        "task":"all15 each1/15","reference":"same17 each1/17","guards":380,"reload_union":391,
+        "rank":"original finite f32 g/m widened f64, actual targetf32/4-master delta; total_cmp/family/index",
+        "rank_scale":"native scales already in graph derivative; no additional4x",
+        "prefix":"preferred adjacent direction once;zero/saturated NOOP preserves fractional bits",
+        "generate":"all14 other legal codes at SAME incumbent coupled epoch; min feasible CURRENT CE/signedq tie",
+        "maximum_alternatives":14400,"rerank":false,"revisit":false,"optimizer_updates":0,
+        "gradient_surrogate":"direct Prefix gather and detached physical donor state utility plus factual Generate unary STE in same loss",
+        "transaction":"strict current combined CE1e-10*(1+abs(current)) and17/380 winners; atomic all required rows",
+        "final":"original normalized episode+combined CE descent/all15 inclEOS/17/380",
+        "actual9":"immediate separate typed wholeanswer/EOS qualification only after positive sealed construction",
+        "serving_changes":false})
+}
+#[derive(Clone, Serialize)]
+struct Coordinate {
+    family: String,
+    index: usize,
+    gradient: f32,
+    original_master: f32,
+    rank_code: i8,
+    original_code: i8,
+    actual_master_delta: f64,
+    priority: f64,
+    status: String,
+}
+fn order(pm: &[f32], pg: &[f32], gm: &[f32], gg: &[f32]) -> Result<Vec<Coordinate>> {
+    replay_require(
+        [pm.len(), pg.len(), gm.len(), gg.len()]
+            .iter()
+            .all(|n| *n == COUNT),
+        "coupled rank shape",
+    )?;
+    let mut rows = Vec::with_capacity(COUNT * 2);
+    for (family, m, g) in [(PREFIX, pm, pg), (GENERATE, gm, gg)] {
+        for i in 0..COUNT {
+            replay_require(
+                m[i].is_finite() && g[i].is_finite(),
+                "coupled nonfinite rank",
+            )?;
+            let q = generate::code(m[i])?;
+            let (rank, status) = if family == PREFIX {
+                let d = if g[i] > 0. {
+                    -1
+                } else if g[i] < 0. {
+                    1
+                } else {
+                    0
+                };
+                if d == 0 {
+                    (q, "zero_gradient")
+                } else if !(-7..=7).contains(&(q + d)) {
+                    (q, "saturated")
+                } else {
+                    (q + d, "eligible")
+                }
+            } else {
+                let mut codes = (-7i8..=7).filter(|x| *x != q).collect::<Vec<_>>();
+                codes.sort_by(|x, y| {
+                    let ux = f64::from(g[i]) * (f64::from(f32::from(*x) * 0.25) - f64::from(m[i]));
+                    let uy = f64::from(g[i]) * (f64::from(f32::from(*y) * 0.25) - f64::from(m[i]));
+                    ux.total_cmp(&uy).then(x.cmp(y))
+                });
+                (
+                    *codes
+                        .first()
+                        .ok_or_else(|| bad("rank legal population empty"))?,
+                    "all14",
+                )
+            };
+            let target = if family == PREFIX && status != "eligible" {
+                m[i]
+            } else {
+                f32::from(rank) * 0.25
+            };
+            let delta = f64::from(target) - f64::from(m[i]);
+            rows.push(Coordinate {
+                family: family.into(),
+                index: i,
+                gradient: g[i],
+                original_master: m[i],
+                rank_code: rank,
+                original_code: q,
+                actual_master_delta: delta,
+                priority: f64::from(g[i]) * delta,
+                status: status.into(),
+            });
+        }
+    }
+    rows.sort_by(|a, b| {
+        a.priority
+            .total_cmp(&b.priority)
+            .then(a.family.cmp(&b.family))
+            .then(a.index.cmp(&b.index))
+    });
+    Ok(rows)
+}
+struct RowIncidence {
+    offsets: Vec<usize>,
+    tokens: Vec<u16>,
+}
+impl RowIncidence {
+    fn new(g: &NativeGeometricGenerate, post: &[H4Code], legal: &[u32]) -> Result<Self> {
+        let mut counts = vec![0usize; COUNT];
+        for &token in legal {
+            let mut keys = vec![0u32; g.lanes() + g.energy().edges().len()];
+            g.factor_incidence_into(post, token as usize, &mut keys, &mut Default::default())?;
+            for &k in &keys[..8] {
+                replay_require((k as usize) < COUNT, "unary key domain")?;
+                counts[k as usize] += 1;
+            }
+        }
+        let mut offsets = vec![0usize; COUNT + 1];
+        for i in 0..COUNT {
+            offsets[i + 1] = offsets[i] + counts[i];
+        }
+        let mut tokens = vec![0u16; offsets[COUNT]];
+        let mut cursor = offsets[..COUNT].to_vec();
+        for &token in legal {
+            replay_require(token < VOCAB as u32, "legal token domain")?;
+            let mut keys = vec![0u32; g.lanes() + g.energy().edges().len()];
+            g.factor_incidence_into(post, token as usize, &mut keys, &mut Default::default())?;
+            for &k in &keys[..8] {
+                let k = k as usize;
+                tokens[cursor[k]] = token as u16;
+                cursor[k] += 1;
+            }
+        }
+        Ok(Self { offsets, tokens })
+    }
+    fn matching(&self, k: usize) -> &[u16] {
+        &self.tokens[self.offsets[k]..self.offsets[k + 1]]
+    }
+    fn bytes(&self) -> usize {
+        self.offsets.capacity() * std::mem::size_of::<usize>() + self.tokens.capacity() * 2
+    }
+    fn digest(&self) -> Result<String> {
+        Ok(sha256_bytes(&serde_json::to_vec(
+            &json!({"offsets":self.offsets,"tokens":self.tokens}),
+        )?))
+    }
+}
+struct PostCache {
+    binding: NativeArtifactBinding,
+    bridge: String,
+    values: BTreeMap<(usize, usize), (String, Vec<H4Code>)>,
+    bytes: usize,
+    peak: usize,
+    calls: usize,
+}
+impl PostCache {
+    fn new(p: &ContinuationParent) -> Self {
+        Self {
+            binding: p.binding.clone(),
+            bridge: sha256_bytes(&p.bridge),
+            values: BTreeMap::new(),
+            bytes: 4096,
+            peak: 4096,
+            calls: 0,
+        }
+    }
+    fn get(
+        &mut self,
+        row: usize,
+        donor: usize,
+        f: &shared::Frame,
+        p: &ContinuationParent,
+    ) -> Result<Vec<H4Code>> {
+        replay_require(
+            self.binding == p.binding
+                && self.bridge == sha256_bytes(&p.bridge)
+                && f.query.len() == 8
+                && f.sources.iter().all(|x| x.len() == 8),
+            "coupled immutable post epoch",
+        )?;
+        let source = f
+            .sources
+            .get(donor)
+            .ok_or_else(|| bad("physical donor absent"))?;
+        let witness = sha256_bytes(&serde_json::to_vec(
+            &json!({"input":f.input,"position":f.position,"query":f.query.iter().map(|c|c.index()).collect::<Vec<_>>(),"source":source.iter().map(|c|c.index()).collect::<Vec<_>>(),"occurrence":f.native["bank_trace"]["cue_bank"]["bank"]["candidates"][donor]}),
+        )?);
+        if let Some((old, post)) = self.values.get(&(row, donor)) {
+            replay_require(*old == witness, "immutable post identity collision")?;
+            return Ok(post.clone());
+        }
+        let bridge = NativeGeometricReadStateBridge::from_bytes(&p.bridge, p.integer.binding())?;
+        let mut post = vec![H4Code::IDENTITY; 8];
+        let mut actions = post.clone();
+        let mut scores = vec![0i64; 8 * 120];
+        bridge.apply_into(
+            &f.query,
+            source,
+            &mut post,
+            &mut actions,
+            &mut scores,
+            &mut BridgeReadCounts::default(),
+        )?;
+        let charge = 1024 + post.capacity() * std::mem::size_of::<H4Code>();
+        if self.bytes + charge > POST_CAP {
+            self.values.clear();
+            self.bytes = 4096;
+        }
+        self.bytes += charge;
+        self.peak = self.peak.max(self.bytes);
+        self.calls += 1;
+        self.values.insert((row, donor), (witness, post.clone()));
+        Ok(post)
+    }
+}
+fn earliest(v: &[i64]) -> Result<usize> {
+    let mut best = 0;
+    let mut score = *v.first().ok_or_else(|| bad("empty physical Copy pool"))?;
+    for (i, &s) in v.iter().enumerate().skip(1) {
+        if s > score {
+            best = i;
+            score = s;
+        }
+    }
+    Ok(best)
+}
+fn native_with_unary(p: &ContinuationParent, values: &[f32]) -> Result<NativeGeometricGenerate> {
+    let original = NativeGeometricGenerate::from_bytes(&p.generate, p.integer.binding())?;
+    let weights =
+        GenerateLearningWeights::from_native(p.integer.binding().clone(), &original, &Device::Cpu)?;
+    replay_require(values.len() == COUNT, "current unary shape")?;
+    weights.unary.set(&Tensor::from_vec(
+        values.to_vec(),
+        weights.unary.shape(),
+        &Device::Cpu,
+    )?)?;
+    Ok(weights.export_native()?)
+}
+
+fn graph_loss(
+    a: &Args,
+    f: &shared::Frame,
+    pool: &shared::Pool,
+    row: usize,
+    p: &ContinuationParent,
+    pw: &PrefixAngularWeights,
+    g: &GenerateLearningWeights,
+    prepared: &uor_r4_training::geometric_generate_learning::PreparedGenerateLearning,
+    donor: &mut shared::DonorCache,
+) -> Result<Tensor> {
+    let d = g.device();
+    let credit = pw.coefficient_credit(
+        f.prefix_trace
+            .as_ref()
+            .ok_or_else(|| bad("Prefix trace missing"))?,
+        d,
+    )?;
+    let base = Tensor::from_vec(
+        pool.base_copy
+            .iter()
+            .map(|v| (*v as f64 / 16777216.) as f32)
+            .collect::<Vec<_>>(),
+        f.ids.len(),
+        d,
+    )?;
+    let delta = (&credit - credit.detach())?;
+    let raw = (&base + &delta)?;
+    let alternatives = (0..f.ids.len())
+        .map(|j| donor.get(row, j, f, p).map(|x| x.0))
+        .collect::<Result<Vec<_>>>()?;
+    let state = shared::selector(&pool.post, &alternatives, &raw, d)?;
+    let out = g.forward_prepared_state_choices(prepared, &pool.post, &state)?;
+    let numerical = out
+        .scores_q24
+        .iter()
+        .zip(&f.u)
+        .map(|(g, u)| g.checked_add(*u))
+        .collect::<Option<Vec<_>>>();
+    replay_require(
+        numerical == Some(pool.generate.clone()),
+        "coupled factual Generate/U anchor differs",
+    )?;
+    let ug = Tensor::from_vec(
+        f.u.iter()
+            .map(|v| (*v as f64 / 16777216.) as f32)
+            .collect::<Vec<_>>(),
+        VOCAB,
+        d,
+    )?;
+    let hardg = Tensor::from_vec(
+        pool.generate
+            .iter()
+            .map(|v| (*v as f64 / 16777216.) as f32)
+            .collect::<Vec<_>>(),
+        VOCAB,
+        d,
+    )?;
+    let softg = (&out.raw_scores + &ug)?;
+    let joinedg = (&hardg + (&softg - softg.detach())?)?;
+    let uc = Tensor::from_vec(
+        f.ids
+            .iter()
+            .map(|id| (f.u[*id as usize] as f64 / 16777216.) as f32)
+            .collect::<Vec<_>>(),
+        f.ids.len(),
+        d,
+    )?;
+    let hardc = Tensor::from_vec(
+        pool.copy
+            .iter()
+            .map(|v| (*v as f64 / 16777216.) as f32)
+            .collect::<Vec<_>>(),
+        f.ids.len(),
+        d,
+    )?;
+    let softc = (&raw + &uc)?;
+    let joinedc = (&hardc + (&softc - softc.detach())?)?;
+    Ok((vocabulary_marginal_loss_with_credit(
+        &pool.trace,
+        &joinedg,
+        Some(&joinedc),
+        f.target,
+        a.credit.policy(),
+    )? * f.weight)?)
+}
+
+fn gradients(
+    a: &Args,
+    start: Instant,
+    p: &ContinuationParent,
+    frames: &[shared::Frame],
+    pools: &[shared::Pool],
+    d: &Device,
+) -> Result<(Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>)> {
+    replay_require(
+        frames.len() == 31 && pools.len() == 31,
+        "coupled physical graph population mismatch",
+    )?;
+    let sw = SourceRealizerWeights::load_context_potential_on_device(
+        &a.checkpoint.join("source"),
+        &fs::read(a.checkpoint.join("native/tokenizer.json"))?,
+        &Device::Cpu,
+    )?;
+    let native = NativeSourceRealizer::load(
+        &a.checkpoint.join("native"),
+        &sw,
+        &shared::dec::<ConsumerIdentity>(
+            &read(&a.checkpoint.join("native/metadata.json"))?["identity"],
+        )?,
+    )?;
+    let cue = CueAngularWeights::load(
+        &a.checkpoint.join("cue"),
+        &native,
+        &a.checkpoint.join("native"),
+    )?;
+    let carrier = native.compile_cue_carrier(cue.native()?)?;
+    let actual = PrefixAngularWeights::load(
+        &a.checkpoint.join("prefix"),
+        &native,
+        &a.checkpoint.join("native"),
+        &a.checkpoint.join("cue"),
+        &carrier,
+    )?;
+    let transported = native.compile_prefix_transport(&carrier, actual.native()?)?;
+    let active = PrefixAngularWeights::from_native(
+        &native,
+        &a.checkpoint.join("native"),
+        &a.checkpoint.join("cue"),
+        &carrier,
+        &transported,
+        d,
+    )?;
+    let bits = np::snapshot(&actual.parameters())?;
+    np::restore(&active.parameters(), &bits)?;
+    replay_require(
+        np::same_bits(&bits, &np::snapshot(&active.parameters())?)
+            && active.packed_coefficients()?
+                == fs::read(a.checkpoint.join("prefix/prefix-q4.bin"))?,
+        "coupled Prefix actual masters/native lost",
+    )?;
+    let pm = bits
+        .get(PREFIX)
+        .ok_or_else(|| bad("Prefix original masters missing"))?
+        .clone();
+    let ng = NativeGeometricGenerate::from_bytes(&p.generate, p.integer.binding())?;
+    let g = GenerateLearningWeights::from_native(p.integer.binding().clone(), &ng, d)?;
+    restore(
+        &a.checkpoint.join("generate-source"),
+        &read(&a.checkpoint.join("generate-source/metadata.json"))?["parameters"],
+        &g.parameters(),
+        d,
+    )?;
+    replay_require(
+        g.export_native()?.to_bytes()? == p.generate,
+        "coupled Generate actual master/native differs",
+    )?;
+    let gm = np::snapshot(&g.parameters())?
+        .remove(GENERATE)
+        .ok_or_else(|| bad("Generate unary master missing"))?;
+    let pv = active
+        .parameters()
+        .remove(PREFIX)
+        .ok_or_else(|| bad("Prefix Var missing"))?;
+    let prepared = g.prepare_native()?;
+    let mut donor = shared::DonorCache::with_limit(p, 64 * 1024 * 1024)?;
+    for (i, (f, pool)) in frames.iter().zip(pools).enumerate() {
+        replay_require(
+            pool.donor == earliest(&pool.base_copy)?
+                && f.native["bridge"]["selected_ordinal"].as_u64() == Some(pool.donor as u64)
+                && json!(f.u) == f.native["continuation"]["delta_scores_q24"]
+                && pool.copy
+                    == pool
+                        .base_copy
+                        .iter()
+                        .zip(&f.ids)
+                        .map(|(base, id)| base.checked_add(f.u[*id as usize]))
+                        .collect::<Option<Vec<_>>>()
+                        .ok_or_else(|| bad("coupled Copy/U overflow"))?,
+            "coupled physical donor/U/alias authority differs",
+        )?;
+        replay_require(
+            json!(pool.generate) == f.native["generate_q24"]
+                && json!(pool.copy) == f.native["copy_q24"]
+                && json!(pool.post.iter().map(|c| c.index()).collect::<Vec<_>>())
+                    == f.native["post_state"]
+                && serde_json::to_value(&pool.trace)? == f.native["pool"],
+            "coupled31 full native pool parity differs",
+        )?;
+        drop(graph_loss(
+            a, f, pool, i, p, &active, &g, &prepared, &mut donor,
+        )?);
+    }
+    write(
+        a,
+        "coupled-forward-parity.json",
+        &json!({"all_before_any_backward":true,"physical_frames":31,
+        "raw_G_Copy_U_donor_post_full_alias_pool":true,"device":"cuda","captured_objective_encoder_calls":0,"gradient_context_backward_calls":0}),
+    )?;
+    let mut ps = vec![0f32; COUNT];
+    let mut gs = vec![0f32; COUNT];
+    let mut terms = Vec::new();
+    let mut graph_ce = 0.;
+    for (i, (f, pool)) in frames.iter().zip(pools).enumerate() {
+        shared::progress(a, start)?;
+        let loss = graph_loss(a, f, pool, i, p, &active, &g, &prepared, &mut donor)?;
+        graph_ce += f64::from(loss.to_scalar::<f32>()?);
+        let gr = loss.backward()?;
+        let mut files = Vec::new();
+        for (name, var, total) in [(PREFIX, &pv, &mut ps), (GENERATE, &g.unary, &mut gs)] {
+            let values = gr
+                .get(var.as_tensor())
+                .ok_or_else(|| bad("coupled family gradient MISSING; no zero fill"))?
+                .flatten_all()?
+                .to_device(&Device::Cpu)?
+                .to_vec1::<f32>()?;
+            replay_require(
+                values.len() == COUNT && values.iter().all(|x| x.is_finite()),
+                "coupled gradient shape/nonfinite",
+            )?;
+            for (sum, &value) in total.iter_mut().zip(&values) {
+                *sum += value;
+            }
+            let file = format!("coupled-gradient-{name}-term-{i:02}.f32le");
+            let bytes = values
+                .iter()
+                .flat_map(|v| v.to_le_bytes())
+                .collect::<Vec<_>>();
+            fs::write(a.out.join(&file), &bytes)?;
+            files.push(json!({"family":name,"file":file,"shape":[960],"bytes":bytes.len(),"sha256":sha256_bytes(&bytes),
+                "status":"PRESENT","missing_gradient_filled_zero":false,"all_zero":values.iter().all(|x|*x==0.),
+                "l2_norm":values.iter().map(|v|f64::from(*v).powi(2)).sum::<f64>().sqrt()}));
+        }
+        terms.push(json!({"physical_index":i,"input_index":f.input,"position":f.position,"target":f.target,"weight":f.weight,"families":files}));
+    }
+    let mut aggregate = Vec::new();
+    for (name, values, master) in [(PREFIX, &ps, &pm), (GENERATE, &gs, &gm)] {
+        replay_require(
+            values.iter().all(|x| x.is_finite()),
+            "coupled aggregate nonfinite",
+        )?;
+        for (kind, data) in [("gradient", values), ("initial-master", master)] {
+            let bytes = data
+                .iter()
+                .flat_map(|v| v.to_le_bytes())
+                .collect::<Vec<_>>();
+            let file = format!("coupled-{name}-{kind}.f32le");
+            fs::write(a.out.join(&file), &bytes)?;
+            aggregate.push(json!({"family":name,"kind":kind,"file":file,"shape":[960],"bytes":bytes.len(),"sha256":sha256_bytes(&bytes)}));
+        }
+    }
+    write(
+        a,
+        "coupled-gradient-receipt.json",
+        &json!({"weighted_roles":32,"physical_backward_calls":31,"prebackward_native_parity_graph_forwards":31,"gradient_graph_forwards":31,"extracted_families":[PREFIX,GENERATE],
+        "perterm":terms,"files":aggregate,"aggregate_sum":"ordered f32 sum of already weighted31physical gradients; no synthetic32arrays",
+        "weighted_graph_ce":graph_ce,"surrogate":policy()["gradient_surrogate"],"context_gradient":"NOT_RUN","donor_cache_peak_bytes":donor.peak}),
+    )?;
+    Ok((pm, ps, gm, gs))
+}
+struct Replacement {
+    cache: GeneratePatchCache,
+    post: Vec<H4Code>,
+    donor: usize,
+    incidence: Option<RowIncidence>,
+}
+fn replacement(
+    row: usize,
+    f: &shared::Frame,
+    parent_prefix: &[f32],
+    prefix: &[f32],
+    g: &NativeGeometricGenerate,
+    p: &ContinuationParent,
+    postcache: &mut PostCache,
+    red: &mut NativeVocabularyActions,
+    legal: &[u32],
+    oldpost: &[H4Code],
+) -> Result<Replacement> {
+    let trace = f
+        .prefix_trace
+        .as_ref()
+        .ok_or_else(|| bad("Prefix incidence trace missing"))?;
+    replay_require(
+        trace.angular_indices.len() == 8
+            && trace.angular_indices.iter().all(|v| v.len() == f.ids.len()),
+        "Prefix unmasked lane/physical key count",
+    )?;
+    let keys = (0..f.ids.len())
+        .map(|j| {
+            (0..8)
+                .map(|lane| Some(lane * 120 + usize::from(trace.angular_indices[lane][j])))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let base = shared::staged_base(&f.base_copy, &keys, parent_prefix, prefix)?;
+    let donor = earliest(&base)?;
+    let post = postcache.get(row, donor, f, p)?;
+    let mut generate = vec![0i64; VOCAB];
+    g.score_into(&post, &mut generate, &mut GenerateReadCounts::default())?;
+    for (x, &u) in generate.iter_mut().zip(&f.u) {
+        *x = x
+            .checked_add(u)
+            .ok_or_else(|| bad("coupled G+U overflow"))?;
+    }
+    let copy = base
+        .iter()
+        .zip(&f.ids)
+        .map(|(&x, &id)| {
+            x.checked_add(f.u[id as usize])
+                .ok_or_else(|| bad("coupled Copy+U overflow"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let cache = red.prepare_generate_patch_cache(generate, f.ids.clone(), copy)?;
+    let incidence = if post == oldpost {
+        None
+    } else {
+        Some(RowIncidence::new(g, &post, legal)?)
+    };
+    Ok(Replacement {
+        cache,
+        post,
+        donor,
+        incidence,
+    })
+}
+fn replacement_objective(
+    frames: &[shared::Frame],
+    map: &[usize],
+    spec: &shared::ObjectiveSpec,
+    caches: &[GeneratePatchCache],
+    replacements: &BTreeMap<usize, Replacement>,
+) -> Result<Value> {
+    let mut task = 0.;
+    let mut reference = 0.;
+    let mut good = 0;
+    let mut phases = Vec::new();
+    let mut masses = Vec::new();
+    let val = |row: usize| {
+        let c = replacements
+            .get(&row)
+            .map(|x| &x.cache)
+            .unwrap_or(&caches[row]);
+        (
+            c.token_masses()[frames[row].target as usize],
+            c.summary().total_weight_q31,
+            c.summary().chosen_token_id,
+        )
+    };
+    for &row in map {
+        let (m, t, c) = val(row);
+        replay_require(m > 0 && t > 0, "coupled objective empty mass")?;
+        masses.push(json!([m, t, c]));
+    }
+    for role in spec
+        .roles
+        .as_ref()
+        .ok_or_else(|| bad("coupled32 explicit roles missing"))?
+    {
+        let row = map
+            .iter()
+            .copied()
+            .find(|&r| frames[r].input == role.input && frames[r].position == role.position)
+            .ok_or_else(|| bad("coupled role frame missing"))?;
+        let (m, t, c) = val(row);
+        let ce = -(m as f64 / t as f64).ln() * role.weight;
+        if role.task {
+            task += ce;
+            phases.push(json!({"position":role.position,"target":frames[row].target,"chosen":c,"target_mass":m,"total_mass":t}));
+        } else {
+            reference += ce;
+            good += usize::from(c == frames[row].target);
+        }
+    }
+    Ok(
+        json!({"combined":task+reference,"task":task,"reference":reference,"correct_reference_frames":good,
+        "phases":phases,"objective_masses":masses,"all_phase_winners":phases.iter().all(|p|p["target"]==p["chosen"])}),
+    )
+}
+fn prefix_affected(frames: &[shared::Frame], key: usize) -> Result<Vec<usize>> {
+    let mut rows = Vec::new();
+    for (row, f) in frames.iter().enumerate() {
+        let trace = f
+            .prefix_trace
+            .as_ref()
+            .ok_or_else(|| bad("guard Prefix trace missing"))?;
+        replay_require(trace.angular_indices.len() == 8, "Prefix lane count")?;
+        if trace.angular_indices[key / 120]
+            .iter()
+            .any(|bin| usize::from(*bin) == key % 120)
+        {
+            rows.push(row);
+        }
+    }
+    Ok(rows)
+}
+fn replacement_digest(
+    rows: &BTreeMap<usize, Replacement>,
+    frames: &[shared::Frame],
+) -> Result<String> {
+    let values=rows.iter().map(|(&i,r)| {let s=r.cache.summary();json!({"row":i,"reference_q24":s.reference_q24,
+        "total_weight_q31":s.total_weight_q31,"chosen_token_id":s.chosen_token_id,"chosen_weight_q31":s.chosen_weight_q31,
+        "target_mass":r.cache.token_masses()[frames[i].target as usize]})}).collect::<Vec<_>>();
+    Ok(sha256_bytes(&serde_json::to_vec(&values)?))
+}
+
+fn construct(
+    a: &Args,
+    start: Instant,
+    p: &ContinuationParent,
+    frames: &[shared::Frame],
+    map: &[usize],
+    spec: &shared::ObjectiveSpec,
+    pm: &[f32],
+    pg: &[f32],
+    gm: &[f32],
+    gg: &[f32],
+    caches: &mut [GeneratePatchCache],
+    posts: &mut [Vec<H4Code>],
+    donors: &mut [usize],
+    incidences: &mut [RowIncidence],
+    legal: &[u32],
+    red: &mut NativeVocabularyActions,
+) -> Result<(Vec<f32>, Vec<f32>, Value, Value)> {
+    use std::io::Write as _;
+    let ranked = order(pm, pg, gm, gg)?;
+    write(a, "coupled-coordinate-order.json", &json!(ranked))?;
+    let baseline = generate::objective(frames, map, spec, caches, &generate::Patches::new())?;
+    let mut current = baseline.clone();
+    let mut prefix = pm.to_vec();
+    let mut unary = gm.to_vec();
+    let mut epoch = 0u64;
+    let mut pc = PostCache::new(p);
+    let mut native = native_with_unary(p, &unary)?;
+    let mut accepted_prefix = 0usize;
+    let mut accepted_generate = 0usize;
+    let mut alternatives_count = 0u64;
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(a.out.join("coupled-construction.json"))?;
+    let mut journal = std::io::BufWriter::new(file);
+    journal.write_all(b"{\"policy\":")?;
+    serde_json::to_writer(&mut journal, &policy())?;
+    journal.write_all(b",\"coordinate_records\":[")?;
+    for (ordinal, coordinate) in ranked.iter().enumerate() {
+        shared::progress(a, start)?;
+        let before_epoch = epoch;
+        let mut alternatives = Vec::new();
+        let mut selected = json!({"status":"unchanged"});
+        if coordinate.family == PREFIX {
+            if coordinate.status == "eligible" {
+                alternatives_count += 1;
+                let mut proposed = prefix.clone();
+                proposed[coordinate.index] = f32::from(coordinate.rank_code) * 0.25;
+                let affected = prefix_affected(frames, coordinate.index)?;
+                let affected_guards = affected
+                    .iter()
+                    .copied()
+                    .filter(|i| *i < GUARDS)
+                    .collect::<Vec<_>>();
+                let mut rows = BTreeMap::new();
+                for &row in map {
+                    if affected.binary_search(&row).is_ok() {
+                        rows.insert(
+                            row,
+                            replacement(
+                                row,
+                                &frames[row],
+                                pm,
+                                &proposed,
+                                &native,
+                                p,
+                                &mut pc,
+                                red,
+                                legal,
+                                &posts[row],
+                            )?,
+                        );
+                    }
+                }
+                let next = replacement_objective(frames, map, spec, caches, &rows)?;
+                let objective_gate = generate::valid_objective(&current, &next)?;
+                let mut checked = Vec::new();
+                let mut failure = Value::Null;
+                if objective_gate {
+                    for &row in &affected_guards {
+                        if !rows.contains_key(&row) {
+                            rows.insert(
+                                row,
+                                replacement(
+                                    row,
+                                    &frames[row],
+                                    pm,
+                                    &proposed,
+                                    &native,
+                                    p,
+                                    &mut pc,
+                                    red,
+                                    legal,
+                                    &posts[row],
+                                )?,
+                            );
+                        }
+                        checked.push(row);
+                        let winner = rows[&row].cache.summary().chosen_token_id;
+                        if winner != frames[row].target {
+                            failure = json!({"guard_index":row,"required":frames[row].target,"chosen":winner});
+                            break;
+                        }
+                    }
+                }
+                let feasible = objective_gate && failure.is_null();
+                let changes = rows
+                    .iter()
+                    .map(|(&i, r)| {
+                        Ok(json!([
+                            i,
+                            donors[i],
+                            r.donor,
+                            r.post.iter().map(|c| c.index()).collect::<Vec<_>>(),
+                            r.incidence.is_some(),
+                            match &r.incidence {
+                                Some(x) => x.digest()?,
+                                None => incidences[i].digest()?,
+                            }
+                        ]))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let staged_digest = replacement_digest(&rows, frames)?;
+                alternatives.push(json!({"code":coordinate.rank_code,"incumbent_epoch":epoch,"objective":journal_objective(&next),
+                    "strict_current_CE_and17":objective_gate,"affected_guard_indices":affected_guards,
+                    "checked_guard_indices":checked,"first_failure":failure,"guard_status":if !objective_gate{"NOT_CHECKED_OBJECTIVE_GATE_FALSE"}else if !failure.is_null(){"FIRST_VETO"}else{"FULL_PASS"},
+                    "feasible":feasible,"changed_rows":changes,"staged_summary_digest":staged_digest}));
+                if feasible {
+                    // Every allocation/arithmetic/guard validation completed before infallible row swaps.
+                    for &row in rows.keys() {
+                        replay_require(
+                            row < caches.len()
+                                && row < posts.len()
+                                && row < donors.len()
+                                && row < incidences.len(),
+                            "Prefix replacement batch row domain",
+                        )?;
+                    }
+                    for (row, r) in rows {
+                        caches[row] = r.cache;
+                        posts[row] = r.post;
+                        donors[row] = r.donor;
+                        if let Some(inc) = r.incidence {
+                            incidences[row] = inc;
+                        }
+                    }
+                    prefix = proposed;
+                    current = next;
+                    epoch += 1;
+                    accepted_prefix += 1;
+                    selected = json!({"status":"committed","code":coordinate.rank_code,"staged_summary_digest":staged_digest});
+                }
+            } else {
+                selected = json!({"status":"noop","reason":coordinate.status});
+            }
+        } else {
+            let incumbent = generate::code(unary[coordinate.index])?;
+            let mut best: Option<(f64, i8, generate::Patches, Value, String)> = None;
+            for proposed in -7i8..=7 {
+                if proposed == incumbent {
+                    continue;
+                }
+                alternatives_count += 1;
+                let delta = i64::from(proposed - incumbent) * (1 << 20);
+                let mut changes = BTreeMap::new();
+                let mut changed_atoms = 0usize;
+                for (row, inc) in incidences.iter().enumerate() {
+                    if !inc.matching(coordinate.index).is_empty() {
+                        let atoms = inc
+                            .matching(coordinate.index)
+                            .iter()
+                            .map(|&t| {
+                                Ok((
+                                    u32::from(t),
+                                    caches[row].generate_scores()[t as usize]
+                                        .checked_add(delta)
+                                        .ok_or_else(|| bad("coupled unary overflow"))?,
+                                ))
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        changed_atoms += atoms.len();
+                        changes.insert(row, atoms);
+                    }
+                }
+                let affected = changes
+                    .keys()
+                    .copied()
+                    .filter(|i| *i < GUARDS)
+                    .collect::<Vec<_>>();
+                let mut staged = generate::Patches::new();
+                for &row in map {
+                    generate::stage_row(row, &changes, caches, &mut staged, red)?;
+                }
+                let next = generate::objective(frames, map, spec, caches, &staged)?;
+                let objective_gate = generate::valid_objective(&current, &next)?;
+                let mut checked = Vec::new();
+                let mut failure = Value::Null;
+                if objective_gate {
+                    for &row in &affected {
+                        generate::stage_row(row, &changes, caches, &mut staged, red)?;
+                        checked.push(row);
+                        let winner = staged[&row].summary().chosen_token_id;
+                        if winner != frames[row].target {
+                            failure = json!({"guard_index":row,"required":frames[row].target,"chosen":winner});
+                            break;
+                        }
+                    }
+                }
+                let feasible = objective_gate && failure.is_null();
+                let digest = generate::digest_staged(&staged, frames, caches)?;
+                alternatives.push(json!({"code":proposed,"incumbent_code":incumbent,"incumbent_epoch":epoch,
+                    "delta_code":proposed-incumbent,"actual_master_delta_from_original":f64::from(f32::from(proposed)*0.25)-f64::from(gm[coordinate.index]),
+                    "changed_atom_count":changed_atoms,"objective":journal_objective(&next),"strict_current_CE_and17":objective_gate,
+                    "affected_guard_indices":affected,"checked_guard_indices":checked,"first_failure":failure,
+                    "guard_status":if !objective_gate{"NOT_CHECKED_OBJECTIVE_GATE_FALSE"}else if !failure.is_null(){"FIRST_VETO"}else{"FULL_PASS"},
+                    "feasible":feasible,"staged_summary_digest":digest}));
+                let ce = next["combined"]
+                    .as_f64()
+                    .ok_or_else(|| bad("coupled candidateCE missing"))?;
+                let replace = best
+                    .as_ref()
+                    .is_none_or(|(old, q, _, _, _)| ce < *old || (ce == *old && proposed < *q));
+                if feasible && replace {
+                    best = Some((ce, proposed, staged, next, digest));
+                }
+            }
+            if let Some((_, q, staged, next, digest)) = best {
+                // Build the next native artifact before committing opaque row patches.
+                let mut proposed = unary.clone();
+                proposed[coordinate.index] = f32::from(q) * 0.25;
+                let next_native = native_with_unary(p, &proposed)?;
+                red.commit_generate_patch_batch(caches, staged.into_iter().collect())?;
+                unary = proposed;
+                native = next_native;
+                current = next;
+                epoch += 1;
+                accepted_generate += 1;
+                selected = json!({"status":"committed","code":q,"staged_summary_digest":digest});
+            }
+        }
+        if ordinal > 0 {
+            journal.write_all(b",")?;
+        }
+        serde_json::to_writer(
+            &mut journal,
+            &json!({"order":ordinal,"family":coordinate.family,"index":coordinate.index,
+            "original_master":coordinate.original_master,"original_master_bits":coordinate.original_master.to_bits(),
+            "gradient":coordinate.gradient,"gradient_bits":coordinate.gradient.to_bits(),"priority":coordinate.priority,
+            "priority_bits":coordinate.priority.to_bits(),"rank_code":coordinate.rank_code,"rank_status":coordinate.status,
+            "incumbent_epoch":before_epoch,"epoch_after":epoch,"alternatives":alternatives,"selected":selected}),
+        )?;
+    }
+    let summary = json!({"coordinates":1920,"maximum_alternatives":14400,"evaluated_alternatives":alternatives_count,
+        "accepted_prefix":accepted_prefix,"accepted_generate":accepted_generate,"accepted_epoch":epoch,"revisited":0,
+        "initial":baseline,"final":current,"immutable_post_cache_peak_bytes":pc.peak,"immutable_post_bridge_calls":pc.calls,
+        "selected_restage_count":0});
+    journal.write_all(b"],\"summary\":")?;
+    serde_json::to_writer(&mut journal, &summary)?;
+    journal.write_all(b"}\n")?;
+    journal.flush()?;
+    Ok((prefix, unary, current, summary))
+}
+
+// Bound cache capacity by concrete row representations, never by an expected
+// small affected subset. A late veto can retain replacements for all391 rows.
+fn capacity_projection(max_copy: usize, legal: usize) -> Result<Value> {
+    replay_require(
+        legal <= VOCAB,
+        "coupled legal vocabulary exceeds raw domain",
+    )?;
+    let row_cache = 3 * VOCAB * 8 + 4 * max_copy * 8 + 8 * VOCAB + 2048;
+    let row_incidence = 961 * std::mem::size_of::<usize>() + 8 * legal * 2 + 1024;
+    let pending = (VOCAB * 32).max(3 * VOCAB * 8) + 2048;
+    // Sparse and full fallback storage are enum alternatives, never coexistent.
+    let incumbent = UNION * (row_cache + row_incidence);
+    let prefix_stage = UNION * (row_cache + row_incidence);
+    let generate_stage = 2 * UNION * pending;
+    let change_vectors = UNION * VOCAB * std::mem::size_of::<(u32, i64)>();
+    let cache =
+        incumbent + prefix_stage.max(generate_stage + change_vectors) + POST_CAP + 8 * 1024 * 1024;
+    Ok(
+        json!({"row_cache_bytes":row_cache,"row_incidence_bytes":row_incidence,
+        "pending_row_bytes":pending,"persistent391_cache_incidence":incumbent,
+        "prefix_all391_replacement_stage":prefix_stage,"generate_best_and_current_stage":generate_stage,
+        "immutable_post_cache_cap":POST_CAP,"containers_margin":8*1024*1024,"all391_changed_atom_vector_bytes":change_vectors,
+        "cache_upper_bound":cache,"cache_cap":CACHE_CAP,"max_copy_aliases":max_copy,"legal_generate_ids":legal}),
+    )
+}
+
+fn journal_objective(v: &Value) -> Value {
+    json!({"combined":v["combined"],"task":v["task"],"reference":v["reference"],
+        "correct_reference_frames":v["correct_reference_frames"],"all_phase_winners":v["all_phase_winners"],
+        "objective_masses":v["objective_masses"]})
+}
+fn journal_upper_bound() -> Result<u64> {
+    let objective = json!({"combined":-f64::MAX,"task":-f64::MAX,"reference":-f64::MAX,
+        "correct_reference_frames":17,"all_phase_winners":false,
+        "objective_masses":vec![json!([u64::MAX,u64::MAX,u32::MAX]);31]});
+    let affected = (0..GUARDS).collect::<Vec<_>>();
+    let base = json!({"code":-7,"incumbent_code":7,"incumbent_epoch":1920,"delta_code":-14,
+        "actual_master_delta_from_original":-f64::MAX,"changed_atom_count":UNION*VOCAB,
+        "objective":objective,"strict_current_CE_and17":false,"affected_guard_indices":affected,
+        "checked_guard_indices":affected,"first_failure":{"guard_index":379,"required":u32::MAX,"chosen":u32::MAX},
+        "guard_status":"NOT_CHECKED_OBJECTIVE_GATE_FALSE","feasible":false,"staged_summary_digest":"f".repeat(64)});
+    let mut pref = base.clone();
+    pref["changed_rows"] = json!((0..UNION)
+        .map(|i| json!([i, 512, 512, vec![119; 8], true, "f".repeat(64)]))
+        .collect::<Vec<_>>());
+    let g = serde_json::to_vec(&base)?.len() as u64;
+    let p = serde_json::to_vec(&pref)?.len() as u64;
+    Ok(g * 13440 + p * 960 + 1920 * 2048 + 16 * 1024 * 1024)
+}
+fn original_guard_alias_bound(c: &Config) -> Result<usize> {
+    #[derive(Deserialize)]
+    struct Aliases {
+        copy_ids: Vec<u32>,
+    }
+    let file = c
+        .original_inputs
+        .retained_intermediate_root
+        .join("exported-candidate-protected-pools.json");
+    replay_require(
+        sha256_file(&file)? == "fcde63e9fc12f218b866b71323601485db7f93fd1b69a54beec91e87a7b84fad",
+        "coupled full377 source identity differs",
+    )?;
+    let rows: Vec<Aliases> =
+        serde_json::from_reader(std::io::BufReader::new(fs::File::open(&file)?))?;
+    replay_require(rows.len() == 377, "coupled retained guard count differs")?;
+
+    #[derive(Deserialize)]
+    struct Snapshot {
+        native: Aliases,
+    }
+    let e = c
+        .original_inputs
+        .episode
+        .as_ref()
+        .ok_or_else(|| bad("episode config absent"))?;
+    report_output::verify(&e.retained_supplement_root)?;
+    replay_require(
+        sha256_file(&e.retained_supplement_root.join("report.json"))?
+            == e.expected_supplement_report_sha256
+            && sha256_file(&e.retained_supplement_root.join("manifest.json"))?
+                == e.expected_supplement_manifest_sha256,
+        "coupled supplement count authority differs",
+    )?;
+    let mut max = rows.iter().map(|r| r.copy_ids.len()).max().unwrap_or(0);
+    for leaf in ["frame-0003-position-01.json", "frame-0455-position-00.json"] {
+        let n: Snapshot = serde_json::from_reader(std::io::BufReader::new(fs::File::open(
+            e.retained_supplement_root.join(leaf),
+        )?))?;
+        max = max.max(n.native.copy_ids.len());
+    }
+    Ok(max)
+}
+fn pregradient_projection(a: &Args, c: &Config, frames: &[shared::Frame]) -> Result<()> {
+    let e = c
+        .original_inputs
+        .episode
+        .as_ref()
+        .ok_or_else(|| bad("episode config absent"))?;
+    report_output::verify(&e.retained_projection.root)?;
+    replay_require(
+        sha256_file(&e.retained_projection.root.join("report.json"))?
+            == e.retained_projection.expected_report_sha256
+            && sha256_file(&e.retained_projection.root.join("manifest.json"))?
+                == e.retained_projection.expected_manifest_sha256,
+        "coupled retained resource authority differs",
+    )?;
+    let old = read(
+        &e.retained_projection
+            .root
+            .join("trajectory-resource-projection.json"),
+    )?;
+    let oldpre = read(&e.retained_projection.root.join("resource-projection.json"))?;
+    let typed = old["typed_guard_frame_bound"]
+        .as_u64()
+        .ok_or_else(|| bad("typed guard bound missing"))?;
+    let max_copy = frames
+        .iter()
+        .map(|f| f.ids.len())
+        .max()
+        .unwrap_or(0)
+        .max(original_guard_alias_bound(c)?)
+        .max(512);
+    // Authenticate all377 retained physical alias counts before gradients;512
+    // conservatively covers the two sealed supplements and objective-derived p3.
+    // Every actual380 row is rechecked before constructor allocation.
+    let cap = capacity_projection(max_copy, VOCAB)?;
+    let cache = cap["cache_upper_bound"]
+        .as_u64()
+        .ok_or_else(|| bad("cache bound missing"))?;
+    let full = frames.iter().try_fold(0u64, |n, f| {
+        Ok::<_, Box<dyn std::error::Error>>(n + serde_json::to_vec(&f.native)?.len() as u64)
+    })?;
+    let numeric = typed + cache + full * 2 + 32 * 1024 * 1024;
+    replay_require(
+        oldpre["process_ram_cap"] == 4 * 1024 * 1024 * 1024u64,
+        "retained phase process authority differs",
+    )?;
+    // Prior measured fresh31 and complete380 host phases were sequential. Charge
+    // their maximum plus allocator/device reserve, ALL current serialized31
+    // expansion and the second family/native staging reserve, not old20 delta.
+    let process = (2489696u64 * 1024).max(1540696u64 * 1024)
+        + 512 * 1024 * 1024
+        + full * 8
+        + 128 * 1024 * 1024;
+    let reload_max = 535837u64;
+    let journal = journal_upper_bound()?;
+    let report = (reload_max + 16384) * UNION as u64
+        + journal
+        + 57780353
+        + 48 * 1024 * 1024
+        + 32 * 1024 * 1024;
+    let v = json!({"stage":"BEFORE_ANY_BACKWARD","capacity":cap,"typed_guard_frame_bound":typed,
+        "actual31_full_serialized_native_bytes":full,"numeric_upper_bound":numeric,"numeric_cap":512*1024*1024u64,
+        "process_ram_projection_bytes":process,"process_ram_cap":4*1024*1024*1024u64,
+        "report_upper_bound":report,"report_cap":a.maximum_report_bytes,"streamed_journal_reserve":journal,
+        "native391_snapshot_max_measured_bytes":reload_max,"fresh_family_gradient_bytes":2*32*3840,
+        "graph_lifetime":"31 sequential joint graphs; original377 authority dropped before graph; all device graph/prepared Generate dropped before380 guards",
+        "constructor_lifetime":"full Pool buffers consumed/dropped before incidence/staging; replacement row incidence only, no global CSR clone",
+        "role_count":32,"physical_graph_count":31,"episode_length":15,"fresh_backward_calls_completed":0,
+        "original_resource_receipt":old,"original_pregradient_receipt":oldpre});
+    write(a, "coupled-pregradient-resource-projection.json", &v)?;
+    replay_require(
+        cache <= CACHE_CAP as u64
+            && numeric <= 512 * 1024 * 1024
+            && process <= 4 * 1024 * 1024 * 1024
+            && report + 1024 * 1024 < a.maximum_report_bytes,
+        "coupled complete pregradient resource projection exceeded",
+    )
+}
+fn cache_mass_parity(cache: &GeneratePatchCache, pool: &shared::Pool) -> Result<()> {
+    replay_require(
+        cache.summary().chosen_token_id == pool.trace.summary.chosen_token_id
+            && cache.summary().total_weight_q31 == pool.trace.summary.total_weight_q31
+            && pool
+                .trace
+                .token_masses
+                .iter()
+                .all(|m| cache.token_masses()[m.token_id as usize] == m.weight_q31),
+        "coupled opaque cache complete mass parity differs",
+    )
+}
+pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
+    validate_settings(a)?;
+    replay_require(!d.is_cpu(), "coupled fresh gradient requires CUDA")?;
+    let c = a
+        .coupled_episode_learning
+        .as_ref()
+        .ok_or_else(|| bad("coupled config absent"))?;
+    let original = ContinuationParent::from_checkpoint(&a.checkpoint)?;
+    replay_require(
+        original.binding.metadata_sha256 == shared::SOURCE
+            && sha256_bytes(&original.generate) == shared::G_SHA
+            && sha256_file(&a.checkpoint.join("continuation-field.bin"))? == shared::U_SHA,
+        "coupled original epoch differs",
+    )?;
+    let original_g =
+        NativeGeometricGenerate::from_bytes(&original.generate, original.integer.binding())?;
+    let field = NativeContinuationField::from_bytes(
+        &fs::read(a.checkpoint.join("continuation-field.bin"))?,
+        &original.binding,
+        &original_g,
+    )?;
+    let (mut objectives, spec) =
+        prefix::prepare_generate_objective(a, &c.original_inputs, &original)?;
+    replay_require(
+        objectives.len() == 31 && spec.roles.as_ref().is_some_and(|r| r.len() == 32),
+        "coupled role/physical population differs",
+    )?;
+    let mut reducer =
+        NativeVocabularyActions::new(original.integer.binding().clone(), &original.exp)?;
+    let mut objective_pools = objectives
+        .iter()
+        .map(|f| generate::saved_pool(f, &mut reducer))
+        .collect::<Result<Vec<_>>>()?;
+    for f in &objectives {
+        let state = shared::codes(&f.native["continuation"]["state_codes"])?;
+        let mut u = vec![0; VOCAB];
+        field.score_delta_into(&state, &original_g, &mut u, &mut Default::default())?;
+        replay_require(u == f.u, "coupled original U arithmetic differs")?;
+    }
+    let baseline_full = shared::objective_for_spec(&objectives, &objective_pools, &spec)?;
+    write(a, "initial-original-objective.json", &baseline_full)?;
+    pregradient_projection(a, c, &objectives)?;
+    let (pm, pg, gm, gg) = gradients(a, start, &original, &objectives, &objective_pools, d)?;
+    generate::slim(&mut objectives)?;
+    for p in &mut objective_pools {
+        generate::compact_pool(p);
+    }
+    let (mut frames, mut pools, authority) =
+        prefix::prepare_generate_guards(a, &c.original_inputs, &original, &objectives, &spec)?;
+    replay_require(
+        frames.len() == GUARDS && pools.len() == GUARDS,
+        "coupled guard population differs",
+    )?;
+    let mut map = Vec::with_capacity(31);
+    for (f, pool) in objectives.into_iter().zip(objective_pools) {
+        if let Some(row) = frames
+            .iter()
+            .position(|g| g.input == f.input && g.position == f.position)
+        {
+            replay_require(
+                frames[row].id == f.id
+                    && frames[row].prefix == f.prefix
+                    && pools[row].generate == pool.generate
+                    && pools[row].copy == pool.copy
+                    && pools[row].post == pool.post
+                    && pools[row].donor == pool.donor,
+                "coupled objective/guard overlap differs",
+            )?;
+            frames[row] = f;
+            map.push(row);
+        } else {
+            map.push(frames.len());
+            frames.push(f);
+            pools.push(pool);
+        }
+    }
+    replay_require(
+        frames.len() == UNION
+            && map.len() == 31
+            && frames
+                .iter()
+                .map(|f| (f.input, f.position))
+                .collect::<BTreeSet<_>>()
+                .len()
+                == UNION,
+        "coupled391 unique union differs",
+    )?;
+    let rows=frames.iter().enumerate().map(|(i,f)|json!({"row":i,"input_index":f.input,"position":f.position,
+        "id":f.id,"actual_prefix_ids":f.prefix,"target_label_only":f.target,"zero_weight_guard":i<GUARDS,
+        "guard_weight":0.,"coalesced_objective_weight":f.weight,"donor":pools[i].donor,
+        "post_state":pools[i].post.iter().map(|x|x.index()).collect::<Vec<_>>()})).collect::<Vec<_>>();
+    write(
+        a,
+        "coupled-population.json",
+        &json!({"rows":rows,"objective_row_map":map,"roles":spec.roles,
+        "guard_population":authority,"guards":GUARDS,"unique_union":UNION,"weighted_roles":32,"physical_frames":31}),
+    )?;
+    let legal = reducer.legal_token_ids().to_vec();
+    let max_copy = frames.iter().map(|f| f.ids.len()).max().unwrap_or(0);
+    replay_require(
+        max_copy <= 512,
+        "coupled actual physical aliases exceed pregradient bound",
+    )?;
+    let cap = capacity_projection(512, legal.len())?;
+    write(
+        a,
+        "coupled-constructor-resource-projection.json",
+        &json!({"capacity":cap,
+        "stage":"AFTER31_BACKWARDS_BEFORE_CONSTRUCTOR","actual_max_copy_aliases":max_copy,
+        "model_graph_and_prepared_device_tensors_dropped":true,"all380_authority_complete":true,
+        "pool_actions":"OMITTED_RECONSTRUCTIBLE_FROM_COMPLETE_SCORES"}),
+    )?;
+    replay_require(
+        cap["cache_upper_bound"]
+            .as_u64()
+            .is_some_and(|n| n <= CACHE_CAP as u64),
+        "coupled actual cache cap exceeded",
+    )?;
+    let mut posts = Vec::with_capacity(UNION);
+    let mut donors = Vec::with_capacity(UNION);
+    let mut caches = Vec::with_capacity(UNION);
+    for (pool, f) in pools.drain(..).zip(&mut frames) {
+        let cache = reducer.prepare_generate_patch_cache(
+            pool.generate.clone(),
+            f.ids.clone(),
+            pool.copy.clone(),
+        )?;
+        cache_mass_parity(&cache, &pool)?;
+        posts.push(pool.post);
+        donors.push(pool.donor);
+        caches.push(cache);
+        let continuation = f.native["continuation"].clone();
+        let candidates = f.native["bank_trace"]["cue_bank"]["bank"]["candidates"].clone();
+        f.native = json!({"continuation":continuation,"bank_trace":{"cue_bank":{"bank":{"candidates":candidates}}}});
+    }
+    drop(pools);
+    let mut incidences = posts
+        .iter()
+        .map(|post| RowIncidence::new(&original_g, post, &legal))
+        .collect::<Result<Vec<_>>>()?;
+    write(
+        a,
+        "coupled-incidence.json",
+        &json!({"legal_generate_ids":legal,"row_incidence_digests":incidences.iter().map(|x|x.digest()).collect::<Result<Vec<_>>>()?,
+        "total_postings":incidences.iter().map(|x|x.tokens.len()).sum::<usize>(),
+        "encoding":"each row offsets961 usize and token u16 postings; first8 native factor keys; legal IDs only"}),
+    )?;
+    let initial = generate::objective(&frames, &map, &spec, &caches, &generate::Patches::new())?;
+    replay_require(
+        (initial["combined"]
+            .as_f64()
+            .ok_or_else(|| bad("initial CE missing"))?
+            - baseline_full["combined"]
+                .as_f64()
+                .ok_or_else(|| bad("baseline CE missing"))?)
+        .abs()
+            < 1e-12,
+        "coupled cache baseline differs",
+    )?;
+    let (current_prefix, current_unary, value, construction) = construct(
+        a,
+        start,
+        &original,
+        &frames,
+        &map,
+        &spec,
+        &pm,
+        &pg,
+        &gm,
+        &gg,
+        &mut caches,
+        &mut posts,
+        &mut donors,
+        &mut incidences,
+        &legal,
+        &mut reducer,
+    )?;
+    let all_guards = (0..GUARDS).all(|i| caches[i].summary().chosen_token_id == frames[i].target);
+    let gate = generate::final_gate(&initial, &value, all_guards)?;
+    write(a, "final-objective.json", &value)?;
+    write(
+        a,
+        "final-trajectory-guards.json",
+        &json!({"guards":GUARDS,"all_original_winners":all_guards,
+        "terms":(0..GUARDS).map(|i|json!({"guard_index":i,"input_index":frames[i].input,"position":frames[i].position,
+            "required_original_winner":frames[i].target,"chosen":caches[i].summary().chosen_token_id,"pool":caches[i].summary()})).collect::<Vec<_>>()}),
+    )?;
+    drop(incidences);
+    drop(pg);
+    drop(gg);
+    let receipt = export_reload(
+        a,
+        &original,
+        &field,
+        &frames,
+        &caches,
+        &posts,
+        &donors,
+        &pm,
+        &gm,
+        &current_prefix,
+        &current_unary,
+        &mut reducer,
+    )?;
+    let min_query = frames
+        .iter()
+        .filter_map(|f| f.native["continuation"]["query_tokens"].as_u64())
+        .min();
+    let max_query = frames
+        .iter()
+        .filter_map(|f| f.native["continuation"]["query_tokens"].as_u64())
+        .max();
+    Ok(
+        json!({"schema":"uor-r4.coupled-episode-report/1","status":"COMPLETED","mode":"coupled_episode_learning",
+        "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"policy":policy(),"selected_model":false,
+        "finite_episode_positive":gate["passed"],"final_gate":gate,"baseline_objective":initial,"candidate_objective":value,
+        "construction_summary":construction,"candidate_receipt":receipt,"all_original380_preserved":all_guards,
+        "weighted_roles":32,"unique_objective_frames":31,"episode_length":15,"state_width":8,
+        "active_scalars_per_family":960,"physical_backward_calls":31,"prebackward_native_parity_graph_forwards":31,"gradient_graph_forwards":31,"extracted_family_gradients":2,
+        "optimizer_updates":0,"candidate_native_steps":391,"expected_final_pool_reductions":391,
+        "gradient_context_encoder_calls":0,"new_captured_objective_encoder_calls":0,
+        "native_reload_context_encoding":"normal native generator during391 independent steps",
+        "saved_query_token_count_range":[min_query,max_query],
+        "source_physical_candidate_count_range":[frames.iter().map(|f|f.ids.len()).min(),max_copy],
+        "actual_prefix_token_count_range":[frames.iter().map(|f|f.prefix.len()).min(),frames.iter().map(|f|f.prefix.len()).max()],
+        "training_context_window":"fixed authenticated saved query/source/prefix inputs; no newly chosen token window",
+        "evaluation_scope":"actual9 typed ownfeedback/EOS plus original8 only if positive; no full512",
+        "actual9":"NOT_RUN_SEPARATE_ARTIFACT_CHECK","full512":"NOT_RUN","useful_candidate":false,
+        "parent_master_bits_restored":true,"original_episode_authority":c.original_inputs.episode}),
+    )
+}
+
+fn export_reload(
+    a: &Args,
+    p: &ContinuationParent,
+    old_u: &NativeContinuationField,
+    frames: &[shared::Frame],
+    caches: &[GeneratePatchCache],
+    posts: &[Vec<H4Code>],
+    donors: &[usize],
+    pm: &[f32],
+    gm: &[f32],
+    current_prefix: &[f32],
+    current_unary: &[f32],
+    red: &mut NativeVocabularyActions,
+) -> Result<Value> {
+    let d = Device::Cpu;
+    let loaded = load_joint_continuation(a, p, &d)?;
+    let cue = CueAngularWeights::load(
+        &a.checkpoint.join("cue"),
+        &loaded.frozen,
+        &a.checkpoint.join("native"),
+    )?;
+    let carrier = loaded.frozen.compile_cue_carrier(cue.native()?)?;
+    let prefix = PrefixAngularWeights::load(
+        &a.checkpoint.join("prefix"),
+        &loaded.frozen,
+        &a.checkpoint.join("native"),
+        &a.checkpoint.join("cue"),
+        &carrier,
+    )?;
+    let mut params = loaded.generate.parameters();
+    params.extend(prefix.parameters());
+    let saved = np::snapshot(&params)?;
+    replay_require(
+        saved
+            .get(PREFIX)
+            .is_some_and(|m| m.iter().zip(pm).all(|(a, b)| a.to_bits() == b.to_bits()))
+            && saved
+                .get(GENERATE)
+                .is_some_and(|m| m.iter().zip(gm).all(|(a, b)| a.to_bits() == b.to_bits())),
+        "coupled independently loaded initial master authority differs",
+    )?;
+    let frozen_source = identities(&loaded.source.parameters())?;
+    let frozen_cue = identities(&cue.parameters())?;
+    let result = np::attempt_restored(&params, &saved, || {
+        let mut expected = saved.clone();
+        expected.insert(PREFIX.into(), current_prefix.to_vec());
+        expected.insert(GENERATE.into(), current_unary.to_vec());
+        np::restore(&params, &expected)?;
+        replay_require(
+            np::same_bits(&np::snapshot(&params)?, &expected)
+                && identities(&loaded.source.parameters())? == frozen_source
+                && identities(&cue.parameters())? == frozen_cue,
+            "coupled selected/frozen floating master guard differs",
+        )?;
+        let (cp, rebound, mut receipt) =
+            shared::export_joint(a, &loaded, &cue, Some(&prefix), p, &d)?;
+        replay_require(
+            cp.binding == p.binding
+                && cp.bridge == p.bridge
+                && cp.cue == p.cue
+                && cp.joint == p.joint
+                && rebound.packed_unary() == old_u.packed_unary(),
+            "coupled Source/bridge/Cue/U numerical export differs",
+        )?;
+        let root = a.out.join("checkpoint-0001");
+        let mut repairs = Vec::new();
+        for entry in fs::read_dir(a.checkpoint.join("cue"))? {
+            let entry = entry?;
+            replay_require(
+                entry.file_type()?.is_file(),
+                "frozen Cue directory contains unsupported type",
+            )?;
+            let leaf = entry.file_name();
+            repairs.push(generate::restore_original_sidecar_file(
+                &entry.path(),
+                &root.join("cue").join(&leaf),
+                leaf.to_str() == Some("native-metadata.json"),
+            )?);
+        }
+        generate::exact_frozen_directory(&a.checkpoint.join("cue"), &root.join("cue"))?;
+        // Cue is numerically frozen and restored to ORIGINAL bytes. Its byte
+        // bindings must be reflected in learned Prefix metadata, not the
+        // temporary generic writer's semantically equivalent JSON serialization.
+        let transport = loaded
+            .frozen
+            .compile_prefix_transport(&carrier, prefix.native()?)?;
+        let mut rebound_prefix = PrefixAngularWeights::from_native(
+            &loaded.frozen,
+            &root.join("native"),
+            &root.join("cue"),
+            &carrier,
+            &transport,
+            &d,
+        )?;
+        np::restore(
+            &rebound_prefix.parameters(),
+            &np::snapshot(&prefix.parameters())?,
+        )?;
+        rebound_prefix.rebind_cue(&loaded.frozen, &root.join("cue"), &carrier)?;
+        rebound_prefix.save(&root.join("prefix"))?;
+
+        generate::exact_frozen_directory(&a.checkpoint.join("source"), &root.join("source"))?;
+        for leaf in [
+            "source/consumer/context.safetensors",
+            "source/consumer/potential.safetensors",
+            "continuation-source/continuation.unary.f32le",
+        ] {
+            if a.checkpoint.join(leaf).is_file() {
+                replay_require(
+                    fs::read(a.checkpoint.join(leaf))? == fs::read(root.join(leaf))?,
+                    "coupled frozen numerical file differs",
+                )?;
+            }
+        }
+        let cpu_g = GenerateLearningWeights::from_native(
+            cp.integer.binding().clone(),
+            &NativeGeometricGenerate::from_bytes(&cp.generate, cp.integer.binding())?,
+            &d,
+        )?;
+        restore(
+            &root.join("generate-source"),
+            &read(&root.join("generate-source/metadata.json"))?["parameters"],
+            &cpu_g.parameters(),
+            &d,
+        )?;
+        let cpu_prefix = PrefixAngularWeights::load(
+            &root.join("prefix"),
+            &loaded.frozen,
+            &root.join("native"),
+            &root.join("cue"),
+            &carrier,
+        )?;
+        let mut disk = cpu_g.parameters();
+        disk.extend(cpu_prefix.parameters());
+        replay_require(
+            np::same_bits(&np::snapshot(&disk)?, &expected)
+                && cpu_g.export_native()?.to_bytes()? == cp.generate,
+            "coupled independent all-master reload differs",
+        )?;
+        drop(disk);
+        drop(cpu_g);
+        drop(cpu_prefix);
+        drop(expected);
+        write(
+            a,
+            "coupled-frozen-sidecar-restoration.json",
+            &json!({"files":repairs,"frozen_numerical_source":true,
+            "frozen_Cue":true,"active_Prefix":true,"active_Generate_unary":true,"U_coefficients_frozen":true}),
+        )?;
+        receipt["mode"] = json!("coupled_episode_learning");
+        receipt["policy"] = policy();
+        receipt["active_parameter_names"] = json!([PREFIX, GENERATE]);
+        receipt["fresh_adam"] = json!(false);
+        receipt["optimizer_updates"] = json!(0);
+        receipt["new_gradients"] = json!(1);
+        receipt["coefficient_backward_calls"] = json!(31);
+        receipt["extracted_family_gradients"] = json!(2);
+        receipt["credit_scope"]=json!("one31 factual fullaliasloss joint pullback: Prefix direct gather plus detached conditional donor contrast and factual Generate unary coefficient STE; only two960 gradients extracted/proposed; no Context/Cue/U extraction");
+        receipt["frozen_numerical_scope"]=json!("all Source/Context/Potential/map/Cue angular+joint/Generate pair+bias+prototype/bridge/U masters frozen; Prefix960 and Generate unary960 only");
+        receipt["generate_sha256"] = json!(sha256_bytes(&cp.generate));
+        receipt["prefix_sha256"] = json!(sha256_file(&root.join("prefix/prefix-q4.bin"))?);
+        receipt["candidate_native_steps"] = json!(0);
+        receipt["native_independently_reloaded"] = json!(false);
+        for leaf in ["receipt.json", "continuation-source/metadata.json"] {
+            fs::write(root.join(leaf), serde_json::to_vec_pretty(&receipt)?)?;
+        }
+        let reloaded = ContinuationParent::from_checkpoint(&root)?;
+        let mut final_pools = Vec::with_capacity(UNION);
+        for (i, cache) in caches.iter().enumerate() {
+            let mut trace = red.reduce_trace(
+                cache.generate_scores(),
+                cache.copy_token_ids(),
+                cache.copy_scores(),
+            )?;
+            replay_require(
+                trace.summary.chosen_token_id == cache.summary().chosen_token_id
+                    && trace.summary.total_weight_q31 == cache.summary().total_weight_q31
+                    && trace
+                        .token_masses
+                        .iter()
+                        .all(|m| cache.token_masses()[m.token_id as usize] == m.weight_q31),
+                "coupled final authoritative mass parity differs",
+            )?;
+            trace.actions.clear();
+            trace.actions.shrink_to_fit();
+            let base_copy = cache
+                .copy_scores()
+                .iter()
+                .zip(&frames[i].ids)
+                .map(|(v, id)| v.checked_sub(frames[i].u[*id as usize]))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| bad("coupled final BASE subtraction overflow"))?;
+            replay_require(
+                earliest(&base_copy)? == donors[i],
+                "coupled final physical donor differs",
+            )?;
+            final_pools.push(shared::Pool {
+                donor: donors[i],
+                post: posts[i].clone(),
+                generate: cache.generate_scores().to_vec(),
+                copy: cache.copy_scores().to_vec(),
+                base_copy,
+                trace,
+            });
+        }
+        shared::reload_guard_candidate(a, &reloaded, &rebound, frames, &final_pools)?;
+        receipt["candidate_native_steps"] = json!(391);
+        receipt["expected_finite_pool_reductions"] = json!(391);
+        receipt["native_independently_reloaded"] = json!(true);
+        for leaf in ["receipt.json", "continuation-source/metadata.json"] {
+            fs::write(root.join(leaf), serde_json::to_vec_pretty(&receipt)?)?;
+        }
+        Ok(receipt)
+    });
+    replay_require(
+        np::same_bits(&np::snapshot(&params)?, &saved),
+        "coupled parent masters not restored",
+    )?;
+    result
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ArtifactAuthority {
+    pub expected_report_sha256: String,
+    pub expected_manifest_sha256: String,
+    pub expected_generate_sha256: String,
+    pub expected_unary_master_sha256: String,
+    pub expected_prefix_packed_sha256: String,
+    pub expected_prefix_master_sha256: String,
+    pub expected_continuation_sha256: String,
+}
+pub(super) fn validate_artifact_authority(p: &ArtifactAuthority) -> Result<()> {
+    replay_require(
+        [
+            &p.expected_report_sha256,
+            &p.expected_manifest_sha256,
+            &p.expected_generate_sha256,
+            &p.expected_unary_master_sha256,
+            &p.expected_prefix_packed_sha256,
+            &p.expected_prefix_master_sha256,
+            &p.expected_continuation_sha256,
+        ]
+        .iter()
+        .all(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())),
+        "coupled artifact external hashes invalid",
+    )
+}
+pub(super) fn authenticate_positive_artifact(
+    a: &Args,
+    c: &prefix::ArtifactConfig,
+    v: &Value,
+) -> Result<()> {
+    let pin = c
+        .coupled_episode_candidate
+        .as_ref()
+        .ok_or_else(|| bad("coupled artifact authority absent"))?;
+    validate_artifact_authority(pin)?;
+    replay_require(
+        v["status"] == "COMPLETED"
+            && v["mode"] == "coupled_episode_learning"
+            && v["selected_model"] == false
+            && v["finite_episode_positive"] == true
+            && v["final_gate"]["passed"] == true
+            && v["all_original380_preserved"] == true
+            && v["physical_backward_calls"] == 31
+            && v["extracted_family_gradients"] == 2
+            && v["weighted_roles"] == 32
+            && v["unique_objective_frames"] == 31
+            && v["candidate_native_steps"] == 391
+            && v["optimizer_updates"] == 0
+            && v["candidate_objective"]["all_phase_winners"] == true
+            && v["candidate_objective"]["correct_reference_frames"] == 17,
+        "coupled artifact lacks positive native construction",
+    )?;
+    let root = &c.retained_candidate_root;
+    let gradient = read(&root.join("coupled-gradient-receipt.json"))?;
+    replay_require(
+        gradient["physical_backward_calls"] == 31 && gradient["weighted_roles"] == 32,
+        "coupled gradient receipt count differs",
+    )?;
+    let terms = gradient["perterm"]
+        .as_array()
+        .ok_or_else(|| bad("coupled gradient rows missing"))?;
+    replay_require(terms.len() == 31, "coupled gradient row count differs")?;
+    for term in terms {
+        let families = term["families"]
+            .as_array()
+            .ok_or_else(|| bad("coupled raw families absent"))?;
+        replay_require(
+            families.len() == 2,
+            "coupled extracted family count differs",
+        )?;
+        let mut names = BTreeSet::new();
+        for f in families {
+            let name = f["family"]
+                .as_str()
+                .ok_or_else(|| bad("coupled gradient name missing"))?;
+            let leaf = f["file"]
+                .as_str()
+                .ok_or_else(|| bad("coupled gradient filename missing"))?;
+            names.insert(name.to_string());
+            replay_require(
+                Path::new(leaf).components().count() == 1
+                    && f["status"] == "PRESENT"
+                    && f["missing_gradient_filled_zero"] == false
+                    && generate::regular_file_bytes(&root.join(leaf))? == 3840
+                    && sha256_file(&root.join(leaf))?
+                        == f["sha256"]
+                            .as_str()
+                            .ok_or_else(|| bad("coupled raw SHA absent"))?,
+                "coupled actual raw gradient authority differs",
+            )?;
+        }
+        replay_require(
+            names
+                == [PREFIX.to_string(), GENERATE.to_string()]
+                    .into_iter()
+                    .collect(),
+            "coupled family inventory differs",
+        )?;
+    }
+
+    let files = gradient["files"]
+        .as_array()
+        .ok_or_else(|| bad("coupled aggregate/master receipt absent"))?;
+    replay_require(
+        files.len() == 4,
+        "coupled aggregate/master file count differs",
+    )?;
+    let mut inventory = BTreeSet::new();
+    for f in files {
+        let family = f["family"]
+            .as_str()
+            .ok_or_else(|| bad("coupled file family absent"))?;
+        let kind = f["kind"]
+            .as_str()
+            .ok_or_else(|| bad("coupled file kind absent"))?;
+        let leaf = f["file"]
+            .as_str()
+            .ok_or_else(|| bad("coupled aggregate filename absent"))?;
+        replay_require(
+            [PREFIX, GENERATE].contains(&family)
+                && ["gradient", "initial-master"].contains(&kind)
+                && inventory.insert((family, kind))
+                && Path::new(leaf).components().count() == 1
+                && generate::regular_file_bytes(&root.join(leaf))? == 3840
+                && sha256_file(&root.join(leaf))?
+                    == f["sha256"]
+                        .as_str()
+                        .ok_or_else(|| bad("coupled aggregate/master SHA absent"))?,
+            "coupled aggregate/master identity differs",
+        )?;
+        if kind == "initial-master" {
+            let original =
+                c.retained_intermediate_root
+                    .join("checkpoint-0001")
+                    .join(if family == PREFIX {
+                        "prefix/prefix-source-f32.bin"
+                    } else {
+                        "generate-source/generate.unary.f32le"
+                    });
+            replay_require(
+                fs::read(&root.join(leaf))? == fs::read(&original)?,
+                "coupled ORIGINAL fractional master file differs",
+            )?;
+        }
+    }
+    let journal = read(&root.join("coupled-construction.json"))?;
+    let records = journal["coordinate_records"]
+        .as_array()
+        .ok_or_else(|| bad("coupled journal absent"))?;
+    replay_require(
+        records.len() == 1920
+            && journal["summary"]["coordinates"] == 1920
+            && journal["summary"]["revisited"] == 0
+            && journal["summary"]["maximum_alternatives"] == 14400,
+        "coupled finite once-only population differs",
+    )?;
+    let mut seen = BTreeSet::new();
+    let mut g_alternatives = 0usize;
+    for row in records {
+        let family = row["family"]
+            .as_str()
+            .ok_or_else(|| bad("coupled family absent"))?;
+        let index = shared::idx(&row["index"])?;
+        replay_require(
+            index < 960 && (family == PREFIX || family == GENERATE) && seen.insert((family, index)),
+            "coupled duplicate/out-of-domain coordinate",
+        )?;
+        if family == GENERATE {
+            let alternatives = row["alternatives"]
+                .as_array()
+                .ok_or_else(|| bad("coupled legal alternatives absent"))?;
+            let q = alternatives
+                .first()
+                .and_then(|x| x["incumbent_code"].as_i64())
+                .ok_or_else(|| bad("coupled incumbent code absent"))?;
+            let codes = alternatives
+                .iter()
+                .map(|r| {
+                    r["code"]
+                        .as_i64()
+                        .ok_or_else(|| bad("coupled proposed code absent"))
+                })
+                .collect::<Result<BTreeSet<_>>>()?;
+            replay_require(
+                alternatives.len() == 14
+                    && codes == (-7..=7).filter(|x| *x != q).collect()
+                    && alternatives
+                        .iter()
+                        .all(|r| r["incumbent_epoch"] == row["incumbent_epoch"]),
+                "coupled all14 same epoch differs",
+            )?;
+            g_alternatives += 14;
+        }
+    }
+    replay_require(
+        g_alternatives == 13440,
+        "coupled complete Generate code population differs",
+    )?;
+    drop(journal);
+    let guards = read(&root.join("final-trajectory-guards.json"))?;
+    replay_require(
+        guards["all_original_winners"] == true
+            && guards["terms"].as_array().is_some_and(|r| {
+                r.len() == 380
+                    && r.iter()
+                        .all(|r| r["chosen"] == r["required_original_winner"])
+            }),
+        "coupled380 retention receipt differs",
+    )?;
+    let original =
+        ContinuationParent::from_checkpoint(&c.retained_intermediate_root.join("checkpoint-0001"))?;
+    let cp = ContinuationParent::from_checkpoint(&a.checkpoint)?;
+    replay_require(
+        original.binding == cp.binding
+            && original.bridge == cp.bridge
+            && original.cue == cp.cue
+            && original.joint == cp.joint
+            && sha256_bytes(&cp.generate) == pin.expected_generate_sha256
+            && sha256_file(&a.checkpoint.join("generate-source/generate.unary.f32le"))?
+                == pin.expected_unary_master_sha256
+            && sha256_file(&a.checkpoint.join("prefix/prefix-q4.bin"))?
+                == pin.expected_prefix_packed_sha256
+            && sha256_file(&a.checkpoint.join("prefix/prefix-source-f32.bin"))?
+                == pin.expected_prefix_master_sha256
+            && sha256_file(&a.checkpoint.join("continuation-field.bin"))?
+                == pin.expected_continuation_sha256,
+        "coupled artifact active/frozen identity differs",
+    )?;
+    generate::exact_frozen_directory(
+        &c.retained_intermediate_root.join("checkpoint-0001/source"),
+        &a.checkpoint.join("source"),
+    )?;
+    generate::exact_frozen_directory(
+        &c.retained_intermediate_root.join("checkpoint-0001/cue"),
+        &a.checkpoint.join("cue"),
+    )?;
+    let og = NativeGeometricGenerate::from_bytes(&original.generate, original.integer.binding())?;
+    let cg = NativeGeometricGenerate::from_bytes(&cp.generate, cp.integer.binding())?;
+    let ou = NativeContinuationField::from_bytes(
+        &fs::read(
+            c.retained_intermediate_root
+                .join("checkpoint-0001/continuation-field.bin"),
+        )?,
+        &original.binding,
+        &og,
+    )?;
+    let cu = NativeContinuationField::from_bytes(
+        &fs::read(a.checkpoint.join("continuation-field.bin"))?,
+        &cp.binding,
+        &cg,
+    )?;
+    replay_require(
+        ou.packed_unary() == cu.packed_unary(),
+        "coupled U frozen coefficient bytes differ",
+    )?;
+    for entry in fs::read_dir(
+        c.retained_intermediate_root
+            .join("checkpoint-0001/generate-source"),
+    )? {
+        let entry = entry?;
+        let leaf = entry.file_name();
+        if entry.file_type()?.is_file() && leaf != "generate.unary.f32le" && leaf != "metadata.json"
+        {
+            replay_require(
+                fs::read(entry.path())?
+                    == fs::read(a.checkpoint.join("generate-source").join(leaf))?,
+                "coupled frozen Generate numerical master differs",
+            )?;
+        }
+    }
+    replay_require(
+        v["candidate_receipt"]["native_independently_reloaded"] == true
+            && v["candidate_receipt"]["active_parameter_names"] == json!([PREFIX, GENERATE]),
+        "coupled final independent reload receipt differs",
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn mixed_rank_keeps_fractional_prefix_noop_and_signed_zero() -> Result<()> {
+        let mut pm = vec![0.139f32; COUNT];
+        pm[0] = -1.75;
+        let mut pg = vec![0f32; COUNT];
+        pg[0] = 1.;
+        let gm = vec![0f32; COUNT];
+        let gg = vec![-0f32; COUNT];
+        let rows = order(&pm, &pg, &gm, &gg)?;
+        let p = rows
+            .iter()
+            .find(|r| r.family == PREFIX && r.index == 0)
+            .ok_or_else(|| bad("rank row absent"))?;
+        assert_eq!(p.status, "saturated");
+        assert_eq!(p.actual_master_delta, 0.);
+        let p = rows
+            .iter()
+            .find(|r| r.family == PREFIX && r.index == 1)
+            .ok_or_else(|| bad("rank row absent"))?;
+        assert_eq!(p.status, "zero_gradient");
+        assert_eq!(p.original_master.to_bits(), pm[1].to_bits());
+        let g = rows
+            .iter()
+            .find(|r| r.family == GENERATE && r.index == 0)
+            .ok_or_else(|| bad("rank row absent"))?;
+        assert_eq!(g.rank_code, 1); // -0*positive is -0, before +0; then lowest positive q.
+        assert_eq!(rows.len(), 1920);
+        Ok(())
+    }
+    #[test]
+    fn prefix_lane_major_alias_keys_do_not_transpose_occurrences() -> Result<()> {
+        let bins = (0..8)
+            .map(|l| vec![l as u16, 119 - l as u16])
+            .collect::<Vec<_>>();
+        let keys = (0..2)
+            .map(|j| {
+                (0..8)
+                    .map(|l| Some(l * 120 + usize::from(bins[l][j])))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let old = vec![0f32; COUNT];
+        let mut next = old.clone();
+        next[3 * 120 + 3] = 0.25;
+        let scores = shared::staged_base(&[9, 9], &keys, &old, &next)?;
+        assert_eq!(scores, vec![9 + (1 << 22), 9]);
+        assert_eq!(earliest(&[17, 17, 16])?, 0);
+        Ok(())
+    }
+    #[test]
+    fn late_prefix_replacement_discards_old_pending_identity() -> Result<()> {
+        use uor_r4_integer::geometric_source_actions::SourceActionBinding;
+        const TOK:&[u8]=br#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>","special":true},{"id":1,"content":"<|eos|>","special":true},{"id":2,"content":"<|unk|>","special":true}]}"#;
+        let exp = (0..uor_r4_integer::geometric_read::EXP_TABLE_LEN)
+            .flat_map(|i| {
+                (((-(i as f64) / 256.).exp() * (1u64 << 31) as f64).round() as u32).to_le_bytes()
+            })
+            .collect::<Vec<_>>();
+        let mut red = NativeVocabularyActions::new(SourceActionBinding::new(TOK)?, &exp)?;
+        let mut g = vec![-100 * (1 << 24); 6];
+        g[4] = 0;
+        g[5] = -(1 << 20);
+        let mut old =
+            red.prepare_generate_patch_cache(g.clone(), vec![4, 4], vec![-3 * (1 << 24); 2])?;
+        let pending = red.evaluate_generate_patch(&old, &[(5, 2 * (1 << 20))])?;
+        let replacement =
+            red.prepare_generate_patch_cache(g, vec![4, 4], vec![-3 * (1 << 24); 2])?;
+        assert_eq!(replacement.summary().chosen_token_id, 4);
+        // A rejected staged replacement leaves the incumbent and revision intact.
+        drop(replacement);
+        assert_eq!(old.revision(), 0);
+        red.commit_generate_patch_batch(std::slice::from_mut(&mut old), vec![(0, pending)])?;
+        assert_eq!(old.summary().chosen_token_id, 5);
+        Ok(())
+    }
+
+    #[test]
+    fn replacement_identity_rejects_late_old_pending_before_any_cache_commit() -> Result<()> {
+        use uor_r4_integer::geometric_source_actions::SourceActionBinding;
+        const TOK:&[u8]=br#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>","special":true},{"id":1,"content":"<|eos|>","special":true},{"id":2,"content":"<|unk|>","special":true}]}"#;
+        let exp = (0..uor_r4_integer::geometric_read::EXP_TABLE_LEN)
+            .flat_map(|i| {
+                (((-(i as f64) / 256.).exp() * (1u64 << 31) as f64).round() as u32).to_le_bytes()
+            })
+            .collect::<Vec<_>>();
+        let mut red = NativeVocabularyActions::new(SourceActionBinding::new(TOK)?, &exp)?;
+        let g = vec![-4 << 24, -4 << 24, -4 << 24, -4 << 24, 0, -1 << 20];
+        let mut caches = (0..GUARDS)
+            .map(|_| red.prepare_generate_patch_cache(g.clone(), vec![4, 4], vec![-3 << 24; 2]))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let first = red.evaluate_generate_patch(&caches[0], &[(5, 2 << 20)])?;
+        let stale = red.evaluate_generate_patch(&caches[GUARDS - 1], &[(5, 2 << 20)])?;
+        // Prefix replacement can have identical scores and revision0 but a
+        // different opaque identity; an old pending result must still fail.
+        caches[GUARDS - 1] =
+            red.prepare_generate_patch_cache(g.clone(), vec![4, 4], vec![-3 << 24; 2])?;
+        assert!(red
+            .commit_generate_patch_batch(&mut caches, vec![(0, first), (GUARDS - 1, stale)])
+            .is_err());
+        assert!(caches.iter().all(|c| c.revision() == 0
+            && c.generate_scores() == g
+            && c.summary().chosen_token_id == 4));
+        Ok(())
+    }
+
+    #[test]
+    fn changed_donor_post_rebuilds_current_unary_incidence_before_next_generate_patch() -> Result<()>
+    {
+        use uor_r4_core::native_geometric::learner::integrated_attention::geometry::EnergyTables;
+        use uor_r4_integer::geometric_source_actions::SourceActionBinding;
+        const TOK:&[u8]=br#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>","special":true},{"id":1,"content":"<|eos|>","special":true},{"id":2,"content":"<|unk|>","special":true}]}"#;
+        let binding = SourceActionBinding::new(TOK)?;
+        let exp = (0..uor_r4_integer::geometric_read::EXP_TABLE_LEN)
+            .flat_map(|i| {
+                (((-(i as f64) / 256.).exp() * (1u64 << 31) as f64).round() as u32).to_le_bytes()
+            })
+            .collect::<Vec<_>>();
+        let mut red = NativeVocabularyActions::new(binding.clone(), &exp)?;
+        let legal = red.legal_token_ids().to_vec();
+        let prototypes = (0..binding.vocab_size())
+            .flat_map(|i| vec![(i + 1) as u8; 8])
+            .collect::<Vec<_>>();
+        let mut energy = EnergyTables::zeroed(8, vec![])?;
+        let zero = NativeGeometricGenerate::compile(
+            &binding,
+            8,
+            &prototypes,
+            &vec![0; binding.vocab_size().div_ceil(2)],
+            energy.clone(),
+        )?;
+        let old = shared::codes(&json!(vec![1; 8]))?;
+        let mut new = old.clone();
+        new[0] = shared::codes(&json!(vec![2; 8]))?[0];
+        assert_eq!(earliest(&[9, 8])?, 0);
+        assert_eq!(earliest(&[8, 9])?, 1);
+        let old_inc = RowIncidence::new(&zero, &old, &legal)?;
+        let mut keys = [0u32; 8];
+        zero.factor_incidence_into(&new, 5, &mut keys, &mut Default::default())?;
+        let key = keys[0] as usize;
+        energy.set_unary(0, (key % 120) as u8, 1)?;
+        let current = NativeGeometricGenerate::compile(
+            &binding,
+            8,
+            &prototypes,
+            &vec![0; binding.vocab_size().div_ceil(2)],
+            energy.clone(),
+        )?;
+        let new_inc = RowIncidence::new(&current, &new, &legal)?;
+        assert!(new_inc.matching(key).contains(&5));
+        assert!(!old_inc.matching(key).contains(&5));
+        let mut scores = vec![0; binding.vocab_size()];
+        current.score_into(&new, &mut scores, &mut Default::default())?;
+        let frozen_u = vec![0i64, 0, 0, 0, 1 << 20, -1 << 20];
+        for (g, u) in scores.iter_mut().zip(&frozen_u) {
+            *g += u;
+        }
+        let mut cache =
+            red.prepare_generate_patch_cache(scores, vec![4, 4], vec![-3 << 24, -2 << 24])?;
+        let atoms = new_inc
+            .matching(key)
+            .iter()
+            .map(|&t| {
+                (
+                    u32::from(t),
+                    cache.generate_scores()[t as usize] + 4 * (1 << 20),
+                )
+            })
+            .collect::<Vec<_>>();
+        let pending = red.evaluate_generate_patch(&cache, &atoms)?;
+        energy.set_unary(0, (key % 120) as u8, 5)?;
+        let next = NativeGeometricGenerate::compile(
+            &binding,
+            8,
+            &prototypes,
+            &vec![0; binding.vocab_size().div_ceil(2)],
+            energy,
+        )?;
+        let mut exact = vec![0; binding.vocab_size()];
+        next.score_into(&new, &mut exact, &mut Default::default())?;
+        for (g, u) in exact.iter_mut().zip(&frozen_u) {
+            *g += u;
+        }
+        let trace = red.reduce_trace(&exact, cache.copy_token_ids(), cache.copy_scores())?;
+        assert_eq!(
+            pending.summary().chosen_token_id,
+            trace.summary.chosen_token_id
+        );
+        assert_eq!(
+            pending.summary().total_weight_q31,
+            trace.summary.total_weight_q31
+        );
+        for m in &trace.token_masses {
+            assert_eq!(pending.token_mass(&cache, m.token_id)?, m.weight_q31);
+        }
+        red.commit_generate_patch_batch(std::slice::from_mut(&mut cache), vec![(0, pending)])?;
+        assert_eq!(cache.generate_scores(), exact);
+        Ok(())
+    }
+    #[test]
+    fn worst_case_journal_and_export_fit_declared_report_without_dropping_guards() -> Result<()> {
+        let journal = journal_upper_bound()?;
+        let report =
+            (535837u64 + 16384) * 391 + journal + 57780353 + 48 * 1024 * 1024 + 32 * 1024 * 1024;
+        println!("journal_upper_bound={journal} report_upper_bound={report}");
+        assert!(report + 1024 * 1024 < 512 * 1024 * 1024);
+        Ok(())
+    }
+    #[test]
+    fn full_cache_bounds_charge_both_prefix_cache_and_incidence() -> Result<()> {
+        let v = capacity_projection(512, 4096)?;
+        assert!(
+            v["prefix_all391_replacement_stage"]
+                .as_u64()
+                .ok_or_else(|| bad("bound absent"))?
+                > 70_000_000
+        );
+        assert!(
+            v["cache_upper_bound"]
+                .as_u64()
+                .ok_or_else(|| bad("bound absent"))?
+                < CACHE_CAP as u64
+        );
+        Ok(())
+    }
+}
