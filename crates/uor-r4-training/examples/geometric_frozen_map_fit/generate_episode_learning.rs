@@ -1231,6 +1231,31 @@ fn restore_original_sidecar_file(
         "missing_original_frozen_file_copied":before.is_none()}),
     )
 }
+/// Completion-only checkpoint copy. The historical donor-master helper is flat.
+fn copy_completion_checkpoint(original: &Path, candidate: &Path) -> Result<()> {
+    replay_require(
+        fs::symlink_metadata(original)?.file_type().is_dir(),
+        "completion checkpoint source is not a regular directory",
+    )?;
+    fs::create_dir(candidate)?;
+    let mut entries = fs::read_dir(original)?.collect::<std::io::Result<Vec<_>>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let kind = entry.file_type()?;
+        let destination = candidate.join(entry.file_name());
+        if kind.is_dir() {
+            copy_completion_checkpoint(&entry.path(), &destination)?;
+        } else if kind.is_file() {
+            fs::copy(entry.path(), destination)?;
+        } else {
+            return Err(bad(
+                "completion checkpoint contains symlink or unsupported file type",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn exact_frozen_directory(original: &Path, candidate: &Path) -> Result<()> {
     let mut old = fs::read_dir(original)?
         .map(|e| e.map(|e| e.file_name()))
@@ -1597,7 +1622,7 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
         c.retained_failed_root.join("external-config-binding.json"),
         a.out.join("learning-external-config-binding.json"),
     )?;
-    copy_directory(&source_cp, &a.out.join("checkpoint-0001"))?;
+    copy_completion_checkpoint(&source_cp, &a.out.join("checkpoint-0001"))?;
     fs::copy(
         source_cp.join("receipt.json"),
         a.out.join("learning-partial-checkpoint-receipt.json"),
@@ -1621,7 +1646,7 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
         if a.checkpoint.join(family).is_dir() {
             let dest = a.out.join("checkpoint-0001").join(family);
             if !dest.exists() {
-                copy_directory(&a.checkpoint.join(family), &dest)?;
+                copy_completion_checkpoint(&a.checkpoint.join(family), &dest)?;
             } else {
                 for entry in fs::read_dir(a.checkpoint.join(family))? {
                     let entry = entry?;
@@ -2222,6 +2247,49 @@ pub(super) fn authenticate_positive_artifact(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn completion_checkpoint_copy_preserves_nested_files_and_rejects_existing_destination_and_symlinks(
+    ) -> Result<()> {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-completion-copy-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&root)?;
+        let original = root.join("original");
+        fs::create_dir(&original)?;
+        fs::create_dir(original.join("source"))?;
+        fs::create_dir(original.join("source/native"))?;
+        fs::write(original.join("receipt.json"), b"{\"old\":true}")?;
+        fs::write(original.join("source/native/packed.bin"), [0u8, 255, 19])?;
+        let copied = root.join("copied");
+        copy_completion_checkpoint(&original, &copied)?;
+        exact_frozen_directory(&original, &copied)?;
+        assert!(copy_completion_checkpoint(&original, &copied).is_err());
+        assert_eq!(
+            fs::read(copied.join("source/native/packed.bin"))?,
+            [0u8, 255, 19]
+        );
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                original.join("receipt.json"),
+                original.join("unexpected-link"),
+            )?;
+            assert!(copy_completion_checkpoint(&original, &root.join("rejected")).is_err());
+            std::os::unix::fs::symlink(&original, root.join("source-link"))?;
+            assert!(copy_completion_checkpoint(
+                &root.join("source-link"),
+                &root.join("rejected-source")
+            )
+            .is_err());
+        }
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
     #[test]
     fn sidecar_key_order_is_allowed_only_for_full_native_metadata_identity() -> Result<()> {
         let old = br#"{"parent":{"sha":"epoch"},"coefficients":[1,2]}"#;
