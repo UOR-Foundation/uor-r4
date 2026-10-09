@@ -25,6 +25,8 @@ pub(super) struct Config {
     pub original_inputs: prefix::Config,
     #[serde(default)]
     pub retained_gradient: Option<RetainedGradient>,
+    #[serde(default)]
+    pub retained_export: Option<RetainedExport>,
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -47,7 +49,36 @@ pub(super) struct RetainedGradient {
     pub inherited_partial_alternatives: usize,
     pub inherited_partial_commits: usize,
 }
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RetainedExport {
+    pub retained_failed_root: PathBuf,
+    pub retained_runtime_root: PathBuf,
+    pub retained_observation_root: PathBuf,
+    pub expected_report_sha256: String,
+    pub expected_manifest_sha256: String,
+    pub expected_runtime_identity_sha256: String,
+    pub expected_observation_manifest_sha256: String,
+    pub expected_config_sha256: String,
+    pub expected_source_commit: String,
+    pub expected_binary_sha256: String,
+    pub expected_complete_journal_sha256: String,
+    pub expected_final_objective_sha256: String,
+    pub expected_final_prefix_master_sha256: String,
+    pub expected_final_generate_master_sha256: String,
+    pub inherited_gradients: RetainedGradient,
+}
 impl Config {
+    fn retained_mode(&self) -> bool {
+        self.retained_gradient.is_some() || self.retained_export.is_some()
+    }
+    fn gradient_authority(&self) -> Option<&RetainedGradient> {
+        self.retained_gradient.as_ref().or_else(|| {
+            self.retained_export
+                .as_ref()
+                .map(|e| &e.inherited_gradients)
+        })
+    }
     pub(super) fn input_roots(&self) -> Vec<&PathBuf> {
         let mut r = vec![
             &self.original_inputs.retained_intermediate_root,
@@ -61,11 +92,18 @@ impl Config {
             ]);
             r.extend(e.phases.iter().map(|p| &p.capture.root));
         }
-        if let Some(g) = &self.retained_gradient {
+        if let Some(g) = self.gradient_authority() {
             r.extend([
                 &g.retained_failed_root,
                 &g.retained_learning_runtime_root,
                 &g.retained_learning_observation_root,
+            ]);
+        }
+        if let Some(e) = &self.retained_export {
+            r.extend([
+                &e.retained_failed_root,
+                &e.retained_runtime_root,
+                &e.retained_observation_root,
             ]);
         }
         r
@@ -100,7 +138,7 @@ pub(super) fn validate_settings(a: &Args) -> Result<()> {
                 && !a.categorical_action_only,
             "coupled episode mode/settings conflict",
         )?;
-        if let Some(g) = &c.retained_gradient {
+        if let Some(g) = c.gradient_authority() {
             replay_require(
                 [
                     &g.expected_report_sha256,
@@ -124,6 +162,33 @@ pub(super) fn validate_settings(a: &Args) -> Result<()> {
                     && g.inherited_partial_alternatives <= 14400
                     && g.inherited_partial_commits <= g.inherited_partial_coordinate_records,
                 "retained-gradient authority/configuration invalid",
+            )?;
+        }
+        replay_require(
+            !(c.retained_gradient.is_some() && c.retained_export.is_some()),
+            "retained constructor/export modes conflict",
+        )?;
+        if let Some(e) = &c.retained_export {
+            replay_require(
+                [
+                    &e.expected_report_sha256,
+                    &e.expected_manifest_sha256,
+                    &e.expected_runtime_identity_sha256,
+                    &e.expected_observation_manifest_sha256,
+                    &e.expected_config_sha256,
+                    &e.expected_binary_sha256,
+                    &e.expected_complete_journal_sha256,
+                    &e.expected_final_objective_sha256,
+                    &e.expected_final_prefix_master_sha256,
+                    &e.expected_final_generate_master_sha256,
+                ]
+                .iter()
+                .all(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+                    && e.expected_source_commit.len() == 40
+                    && e.expected_source_commit
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit()),
+                "retained export configuration identity invalid",
             )?;
         }
         let mut inherited = a.clone();
@@ -700,6 +765,7 @@ fn retained_gradients(
     let old: Config = serde_json::from_value(old_config["coupled_episode_learning"].clone())?;
     replay_require(
         old.retained_gradient.is_none()
+            && old.retained_export.is_none()
             && serde_json::to_value(&old.original_inputs)?
                 == serde_json::to_value(&c.original_inputs)?
             && fs::canonicalize(&a.checkpoint)?
@@ -1001,6 +1067,319 @@ fn retained_gradients(
     verify_inherited_copies(a, &authority)?;
     write(a, "inherited-gradient-authority.json", &authority)?;
     Ok((pm, pg, gm, gg, authority))
+}
+
+#[derive(Deserialize)]
+struct SavedSelected {
+    status: String,
+    code: Option<i8>,
+}
+#[derive(Deserialize)]
+struct SavedCoordinate {
+    family: String,
+    index: usize,
+    order: usize,
+    original_master_bits: u32,
+    incumbent_epoch: u64,
+    epoch_after: u64,
+    selected: SavedSelected,
+}
+#[derive(Deserialize)]
+struct FinishedConstruction {
+    coordinate_records: Vec<SavedCoordinate>,
+    summary: Value,
+}
+fn restored_final_masters(
+    records: &[SavedCoordinate],
+    summary: &Value,
+    pm: &[f32],
+    gm: &[f32],
+) -> Result<(Vec<f32>, Vec<f32>)> {
+    replay_require(
+        records.len() == 1920 && pm.len() == COUNT && gm.len() == COUNT,
+        "retained complete coordinate/master population differs",
+    )?;
+    let mut prefix = pm.to_vec();
+    let mut unary = gm.to_vec();
+    let mut seen = BTreeSet::new();
+    let mut epoch = 0u64;
+    let mut pc = 0usize;
+    let mut gc = 0usize;
+    for (ordinal, r) in records.iter().enumerate() {
+        replay_require(
+            r.order == ordinal
+                && r.index < COUNT
+                && seen.insert((r.family.clone(), r.index))
+                && r.incumbent_epoch == epoch,
+            "retained committed coordinate/epoch invalid",
+        )?;
+        let (original, current, count) = if r.family == PREFIX {
+            (pm, &mut prefix, &mut pc)
+        } else if r.family == GENERATE {
+            (gm, &mut unary, &mut gc)
+        } else {
+            return Err(bad("retained unknown active family"));
+        };
+        replay_require(
+            r.original_master_bits == original[r.index].to_bits(),
+            "retained original fractional master bits invalid",
+        )?;
+        if r.selected.status == "committed" {
+            let q = r
+                .selected
+                .code
+                .ok_or_else(|| bad("retained committed code absent"))?;
+            replay_require(
+                (-7..=7).contains(&q),
+                "retained committed native code invalid",
+            )?;
+            current[r.index] = f32::from(q) * 0.25;
+            epoch += 1;
+            *count += 1;
+        } else {
+            replay_require(
+                r.selected.status == "unchanged" && r.selected.code.is_none(),
+                "retained unknown noncommitted selection",
+            )?;
+        }
+        replay_require(
+            r.epoch_after == epoch,
+            "retained accepted epoch progression differs",
+        )?;
+    }
+    replay_require(
+        summary["coordinates"] == 1920
+            && summary["accepted_epoch"] == epoch
+            && summary["accepted_prefix"] == pc
+            && summary["accepted_generate"] == gc
+            && summary["evaluated_alternatives"]
+                .as_u64()
+                .is_some_and(|n| n <= 14400),
+        "retained completed summary/counters differ",
+    )?;
+    Ok((prefix, unary))
+}
+fn recover_export_state(
+    a: &Args,
+    c: &Config,
+    e: &RetainedExport,
+    pm: &[f32],
+    gm: &[f32],
+    p: &ContinuationParent,
+) -> Result<(Vec<f32>, Vec<f32>, Value, Value)> {
+    report_output::verify(&e.retained_failed_root)?;
+    replay_require(
+        sha256_file(&e.retained_failed_root.join("report.json"))? == e.expected_report_sha256
+            && sha256_file(&e.retained_failed_root.join("manifest.json"))?
+                == e.expected_manifest_sha256,
+        "retained export failure report/seal differs",
+    )?;
+    let failed = read(&e.retained_failed_root.join("report.json"))?;
+    replay_require(failed["status"]=="FAILED"
+        &&failed["error"]=="invalid reference request: Binding(\"continuation Generate dimensions/metadata\")",
+        "retained export does not match frozen U/new Generate initialization failure")?;
+    replay_require(
+        sha256_file(&e.retained_failed_root.join("config.json"))? == e.expected_config_sha256,
+        "retained completed constructor config differs",
+    )?;
+    let old_config = read(&e.retained_failed_root.join("config.json"))?;
+    let old: Config = serde_json::from_value(old_config["coupled_episode_learning"].clone())?;
+    replay_require(
+        old.retained_export.is_none()
+            && serde_json::to_value(&old.original_inputs)?
+                == serde_json::to_value(&c.original_inputs)?
+            && serde_json::to_value(&old.retained_gradient)?
+                == serde_json::to_value(Some(&e.inherited_gradients))?
+            && old_config["checkpoint"] == json!(a.checkpoint),
+        "retained completed constructor input/gradient authority differs",
+    )?;
+    report_output::verify(&e.retained_observation_root)?;
+    replay_require(
+        sha256_file(&e.retained_observation_root.join("manifest.json"))?
+            == e.expected_observation_manifest_sha256
+            && sha256_file(&e.retained_runtime_root.join("runtime-identity.json"))?
+                == e.expected_runtime_identity_sha256
+            && sha256_file(&e.retained_runtime_root.join("geometric-frozen-map-fit"))?
+                == e.expected_binary_sha256,
+        "retained constructor runtime/observation identity differs",
+    )?;
+    let runtime = read(&e.retained_runtime_root.join("runtime-identity.json"))?;
+    let launch = read(&e.retained_observation_root.join("launch.json"))?;
+    let execution = read(&e.retained_observation_root.join("execution.json"))?;
+    let attempt = read(&e.retained_failed_root.join("attempt.json"))?;
+    let binding = read(&e.retained_failed_root.join("external-config-binding.json"))?;
+    replay_require(
+        runtime["source_commit"] == e.expected_source_commit
+            && runtime["config_sha256"] == e.expected_config_sha256
+            && runtime["binary_sha256"] == e.expected_binary_sha256
+            && launch["argv"] == attempt["argv"]
+            && binding["attempt_argv"] == attempt["argv"]
+            && launch["pid"] == attempt["pid"]
+            && launch["started_utc"] == execution["started_utc"]
+            && execution["exit_code"] == 1
+            && launch["binary_sha256"] == e.expected_binary_sha256
+            && execution["binary_sha256"] == e.expected_binary_sha256
+            && launch["config_sha256"] == e.expected_config_sha256
+            && execution["config_sha256"] == e.expected_config_sha256
+            && binding["sha256"] == e.expected_config_sha256,
+        "retained actual constructor producer binding differs",
+    )?;
+    let journal = e.retained_failed_root.join("coupled-construction.json");
+    replay_require(
+        sha256_file(&journal)? == e.expected_complete_journal_sha256
+            && sha256_file(&e.retained_failed_root.join("final-objective.json"))?
+                == e.expected_final_objective_sha256,
+        "retained completed constructor journal/objective differs",
+    )?;
+    // Deserialize only coordinate commitments and compact summary. Alternatives
+    // remain authenticated bytes; no search/ordering/gradient is invoked.
+    let completed: FinishedConstruction =
+        serde_json::from_reader(std::io::BufReader::new(fs::File::open(&journal)?))?;
+    let (prefix, unary) =
+        restored_final_masters(&completed.coordinate_records, &completed.summary, pm, gm)?;
+    replay_require(
+        completed.summary["final"] == read(&e.retained_failed_root.join("final-objective.json"))?,
+        "retained final objective and complete journal disagree",
+    )?;
+    let partial = e.retained_failed_root.join("checkpoint-0001");
+    let pb = fs::read(partial.join("prefix/prefix-source-f32.bin"))?;
+    let gb = fs::read(partial.join("generate-source/generate.unary.f32le"))?;
+    replay_require(
+        sha256_bytes(&pb) == e.expected_final_prefix_master_sha256
+            && sha256_bytes(&gb) == e.expected_final_generate_master_sha256
+            && prefix
+                .iter()
+                .flat_map(|v| v.to_le_bytes())
+                .collect::<Vec<_>>()
+                == pb
+            && unary
+                .iter()
+                .flat_map(|v| v.to_le_bytes())
+                .collect::<Vec<_>>()
+                == gb,
+        "retained completed dual master bytes differ from committed records",
+    )?;
+    let g = native_with_unary(p, &unary)?;
+    replay_require(
+        g.to_bytes()? == fs::read(partial.join("generate.bin"))?,
+        "retained final Generate packing/frozen families differ",
+    )?;
+    let packed = (0..COUNT)
+        .step_by(2)
+        .map(|i| {
+            let lo = shared::native_code(prefix[i])?;
+            let hi = shared::native_code(prefix[i + 1])?;
+            Ok::<u8, Box<dyn std::error::Error>>(((lo as u8) & 15) | (((hi as u8) & 15) << 4))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    replay_require(
+        packed == fs::read(partial.join("prefix/prefix-q4.bin"))?,
+        "retained final Prefix native packing differs",
+    )?;
+    generate::exact_frozen_directory(&a.checkpoint.join("source"), &partial.join("source"))?;
+    for leaf in [
+        "read-state-bridge-categorical.bin",
+        "read-state-bridge.bin",
+        "cue/cue-q4.bin",
+        "cue/cue-joint-q4.bin",
+        "cue/cue-source-f32.bin",
+    ] {
+        replay_require(
+            fs::read(a.checkpoint.join(leaf))? == fs::read(partial.join(leaf))?,
+            "retained completed frozen payload/master differs",
+        )?;
+    }
+    for family in ["cue", "generate-source"] {
+        let original = a.checkpoint.join(family);
+        let candidate = partial.join(family);
+        let old_files = fs::read_dir(&original)?
+            .map(|e| e.map(|e| e.file_name()))
+            .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+        let new_files = fs::read_dir(&candidate)?
+            .map(|e| e.map(|e| e.file_name()))
+            .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+        replay_require(
+            old_files == new_files,
+            "retained partial sidecar file population differs",
+        )?;
+        for leaf in old_files {
+            let name = leaf
+                .to_str()
+                .ok_or_else(|| bad("retained sidecar filename invalid"))?;
+            if family == "generate-source"
+                && ["metadata.json", "generate.unary.f32le"].contains(&name)
+            {
+                continue;
+            }
+            if family == "cue" && ["metadata.json", "native-metadata.json"].contains(&name) {
+                replay_require(
+                    read(&original.join(&leaf))? == read(&candidate.join(&leaf))?,
+                    "retained frozen Cue metadata semantically differs",
+                )?;
+            } else {
+                replay_require(
+                    fs::read(original.join(&leaf))? == fs::read(candidate.join(&leaf))?,
+                    "retained frozen sidecar fractional/native payload differs",
+                )?;
+            }
+        }
+    }
+    let mut copied = Vec::new();
+    for entry in fs::read_dir(&e.retained_failed_root)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let leaf = entry.file_name().to_string_lossy().into_owned();
+        let destination = if [
+            "attempt.json",
+            "config.json",
+            "report.json",
+            "manifest.json",
+            "external-config-binding.json",
+            "inherited-gradient-authority.json",
+            "coupled-pregradient-resource-projection.json",
+            "coupled-constructor-resource-projection.json",
+        ]
+        .contains(&leaf.as_str())
+        {
+            format!("completed-constructor-{leaf}")
+        } else {
+            leaf.clone()
+        };
+        if a.out.join(&destination).exists() {
+            replay_require(
+                fs::read(entry.path())? == fs::read(a.out.join(&destination))?,
+                "copied completed scientific file was normalized differently",
+            )?;
+            copied.push(json!({"source_file":entry.path(),"file":destination,"bytes":entry.metadata()?.len(),
+                "sha256":sha256_file(&entry.path())?}));
+        } else {
+            copied.push(copy_inherited_file(a, &entry.path(), &destination)?);
+        }
+    }
+    copied.push(copy_inherited_file(
+        a,
+        &partial.join("receipt.json"),
+        "inherited-partial-checkpoint-receipt.json",
+    )?);
+    let authority = json!({"root":e.retained_failed_root,"report_sha256":e.expected_report_sha256,
+        "manifest_sha256":e.expected_manifest_sha256,"source_commit":e.expected_source_commit,
+        "config_sha256":e.expected_config_sha256,"binary_sha256":e.expected_binary_sha256,
+        "runtime_identity":runtime,"recorded_launch":launch,"recorded_execution":execution,
+        "journal_sha256":e.expected_complete_journal_sha256,"final_objective_sha256":e.expected_final_objective_sha256,
+        "final_prefix_master_sha256":e.expected_final_prefix_master_sha256,
+        "final_generate_master_sha256":e.expected_final_generate_master_sha256,
+        "copied_scientific_files":copied,"inherited_constructor_calls":1,
+        "inherited_proposals":completed.summary["evaluated_alternatives"],"new_constructor_calls":0,
+        "new_proposals":0,"new_order_selection_calls":0,"new_training_graph_forwards":0,"new_backward_calls":0,
+        "partial_checkpoint_receipt_scope":"inherited generic writer metadata, not actual completed391 reload or new optimizer authority",
+        "completion_source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),
+        "completion_attempt":read(&a.out.join("attempt.json"))?,
+        "completion_external_config_binding":read(&a.out.join("external-config-binding.json"))?});
+    verify_inherited_copies(a, &authority)?;
+    write(a, "inherited-construction-authority.json", &authority)?;
+    Ok((prefix, unary, completed.summary, authority))
 }
 
 struct Replacement {
@@ -1539,7 +1918,18 @@ fn pregradient_projection(a: &Args, c: &Config, frames: &[shared::Frame]) -> Res
     let full = frames.iter().try_fold(0u64, |n, f| {
         Ok::<_, Box<dyn std::error::Error>>(n + serde_json::to_vec(&f.native)?.len() as u64)
     })?;
-    let numeric = typed + cache + full * 2 + 32 * 1024 * 1024;
+    let retained_export_copy_peak = if let Some(e) = &c.retained_export {
+        replay_require(
+            sha256_file(&e.retained_failed_root.join("coupled-construction.json"))?
+                == e.expected_complete_journal_sha256,
+            "retained export journal projection identity differs",
+        )?;
+        generate::regular_file_bytes(&e.retained_failed_root.join("coupled-construction.json"))?
+            + 4 * 1024 * 1024
+    } else {
+        0
+    };
+    let numeric = typed + cache + full * 2 + 32 * 1024 * 1024 + retained_export_copy_peak;
     replay_require(
         oldpre["process_ram_cap"] == 4 * 1024 * 1024 * 1024u64,
         "retained phase process authority differs",
@@ -1550,7 +1940,8 @@ fn pregradient_projection(a: &Args, c: &Config, frames: &[shared::Frame]) -> Res
     let process = (2489696u64 * 1024).max(1540696u64 * 1024)
         + 512 * 1024 * 1024
         + full * 8
-        + 128 * 1024 * 1024;
+        + 128 * 1024 * 1024
+        + retained_export_copy_peak;
     let reload_max = 535837u64;
     let journal = journal_upper_bound()?;
     let report = (reload_max + 16384) * UNION as u64
@@ -1558,11 +1949,12 @@ fn pregradient_projection(a: &Args, c: &Config, frames: &[shared::Frame]) -> Res
         + 57780353
         + 48 * 1024 * 1024
         + 32 * 1024 * 1024;
-    let v = json!({"stage":if c.retained_gradient.is_some(){"BEFORE_RETAINED_GRADIENT_ADMISSION_AND_FINITE_RESTART"}else{"BEFORE_ANY_BACKWARD"},"capacity":cap,"typed_guard_frame_bound":typed,
-        "actual31_full_serialized_native_bytes":full,"numeric_upper_bound":numeric,"numeric_cap":512*1024*1024u64,
+    let v = json!({"stage":if c.retained_export.is_some(){"BEFORE_RETAINED_EXPORT_ADMISSION"}else if c.retained_mode(){"BEFORE_RETAINED_GRADIENT_ADMISSION_AND_FINITE_RESTART"}else{"BEFORE_ANY_BACKWARD"},"capacity":cap,"typed_guard_frame_bound":typed,
+        "actual31_full_serialized_native_bytes":full,"numeric_upper_bound":numeric,"retained_export_copy_peak_bytes":retained_export_copy_peak,
+        "retained_export_copy_projection":"full journal byte-copy buffer plus4MiB typed commitments/summary; alternatives ignored by typed decoder","numeric_cap":512*1024*1024u64,
         "process_ram_projection_bytes":process,"process_ram_cap":4*1024*1024*1024u64,
         "report_upper_bound":report,"report_cap":a.maximum_report_bytes,"streamed_journal_reserve":journal,
-        "native391_snapshot_max_measured_bytes":reload_max,"fresh_family_gradient_bytes":if c.retained_gradient.is_some(){0}else{2*32*3840},"retained_family_gradient_bytes":if c.retained_gradient.is_some(){2*32*3840}else{0},
+        "native391_snapshot_max_measured_bytes":reload_max,"fresh_family_gradient_bytes":if c.retained_mode(){0}else{2*32*3840},"retained_family_gradient_bytes":if c.retained_mode(){2*32*3840}else{0},
         "graph_lifetime":"31 sequential joint graphs; original377 authority dropped before graph; all device graph/prepared Generate dropped before380 guards",
         "constructor_lifetime":"full Pool buffers consumed/dropped before incidence/staging; replacement row incidence only, no global CSR clone",
         "role_count":32,"physical_graph_count":31,"episode_length":15,"fresh_backward_calls_completed":0,
@@ -1596,7 +1988,7 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         .as_ref()
         .ok_or_else(|| bad("coupled config absent"))?;
     replay_require(
-        c.retained_gradient.is_some() || !d.is_cpu(),
+        c.retained_mode() || !d.is_cpu(),
         "coupled fresh gradient requires CUDA",
     )?;
     let original = ContinuationParent::from_checkpoint(&a.checkpoint)?;
@@ -1634,19 +2026,25 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     let baseline_full = shared::objective_for_spec(&objectives, &objective_pools, &spec)?;
     write(a, "initial-original-objective.json", &baseline_full)?;
     pregradient_projection(a, c, &objectives)?;
-    let (pm, pg, gm, gg, inherited_learning) = if let Some(g) = &c.retained_gradient {
+    let (pm, pg, gm, gg, inherited_learning) = if let Some(g) = c.gradient_authority() {
         retained_gradients(a, c, g, &objectives)?
     } else {
         let (pm, pg, gm, gg) = gradients(a, start, &original, &objectives, &objective_pools, d)?;
         (pm, pg, gm, gg, Value::Null)
     };
-    let ranked = order(&pm, &pg, &gm, &gg)?;
-    if let Some(g) = &c.retained_gradient {
-        replay_require(
-            sha256_bytes(&serde_json::to_vec(&json!(ranked))?)
-                == g.expected_coordinate_order_sha256,
-            "retained frozen order verification differs",
-        )?;
+    let ranked = if c.retained_export.is_some() {
+        Vec::new()
+    } else {
+        order(&pm, &pg, &gm, &gg)?
+    };
+    if c.retained_export.is_none() {
+        if let Some(g) = c.gradient_authority() {
+            replay_require(
+                sha256_bytes(&serde_json::to_vec(&json!(ranked))?)
+                    == g.expected_coordinate_order_sha256,
+                "retained frozen order verification differs",
+            )?;
+        }
     }
     generate::slim(&mut objectives)?;
     for p in &mut objective_pools {
@@ -1716,7 +2114,7 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         a,
         "coupled-constructor-resource-projection.json",
         &json!({"capacity":cap,
-        "stage":if c.retained_gradient.is_some(){"AFTER_INHERITED31_BACKWARDS_BEFORE_FINITE_RESTART"}else{"AFTER31_BACKWARDS_BEFORE_CONSTRUCTOR"},"actual_max_copy_aliases":max_copy,
+        "stage":if c.retained_export.is_some(){"BEFORE_FINAL391_EXPECTED_POOL_RECONSTRUCTION_AND_NATIVE_RELOAD"}else if c.retained_mode(){"AFTER_INHERITED31_BACKWARDS_BEFORE_FINITE_RESTART"}else{"AFTER31_BACKWARDS_BEFORE_CONSTRUCTOR"},"actual_max_copy_aliases":max_copy,
         "model_graph_and_prepared_device_tensors_dropped":true,"all380_authority_complete":true,
         "pool_actions":"OMITTED_RECONSTRUCTIBLE_FROM_COMPLETE_SCORES"}),
     )?;
@@ -1767,27 +2165,62 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
             < 1e-12,
         "coupled cache baseline differs",
     )?;
-    let (current_prefix, current_unary, value, construction) = construct(
-        a,
-        start,
-        &original,
-        &frames,
-        &map,
-        &spec,
-        &pm,
-        &pg,
-        &gm,
-        &gg,
-        &mut caches,
-        &mut posts,
-        &mut donors,
-        &mut incidences,
-        &legal,
-        &mut reducer,
-        &ranked,
-    )?;
+    let (current_prefix, current_unary, value, construction, inherited_construction) =
+        if let Some(e) = &c.retained_export {
+            let (cp, cg, summary, authority) = recover_export_state(a, c, e, &pm, &gm, &original)?;
+            let current_g = native_with_unary(&original, &cg)?;
+            let mut pc = PostCache::new(&original);
+            for row in 0..UNION {
+                let replacement = replacement(
+                    row,
+                    &frames[row],
+                    &pm,
+                    &cp,
+                    &current_g,
+                    &original,
+                    &mut pc,
+                    &mut reducer,
+                    &legal,
+                    &posts[row],
+                )?;
+                caches[row] = replacement.cache;
+                posts[row] = replacement.post;
+                donors[row] = replacement.donor;
+            }
+            let value =
+                generate::objective(&frames, &map, &spec, &caches, &generate::Patches::new())?;
+            replay_require(
+                value == summary["final"],
+                "retained final391 reconstructed objective differs",
+            )?;
+            (cp, cg, value, summary, authority)
+        } else {
+            let (cp, cg, value, summary) = construct(
+                a,
+                start,
+                &original,
+                &frames,
+                &map,
+                &spec,
+                &pm,
+                &pg,
+                &gm,
+                &gg,
+                &mut caches,
+                &mut posts,
+                &mut donors,
+                &mut incidences,
+                &legal,
+                &mut reducer,
+                &ranked,
+            )?;
+            (cp, cg, value, summary, Value::Null)
+        };
     if !inherited_learning.is_null() {
         verify_inherited_copies(a, &inherited_learning)?;
+    }
+    if !inherited_construction.is_null() {
+        verify_inherited_copies(a, &inherited_construction)?;
     }
     let all_guards = (0..GUARDS).all(|i| caches[i].summary().chosen_token_id == frames[i].target);
     let gate = generate::final_gate(&initial, &value, all_guards)?;
@@ -1816,6 +2249,14 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         &current_unary,
         &mut reducer,
     )?;
+    // Close the immutable-science guarantee after all normalization/report
+    // rewrites and export helpers, before admitting a completed report.
+    if !inherited_learning.is_null() {
+        verify_inherited_copies(a, &inherited_learning)?;
+    }
+    if !inherited_construction.is_null() {
+        verify_inherited_copies(a, &inherited_construction)?;
+    }
     let min_query = frames
         .iter()
         .filter_map(|f| f.native["continuation"]["query_tokens"].as_u64())
@@ -1828,19 +2269,23 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         json!({"schema":"uor-r4.coupled-episode-report/1","status":"COMPLETED","mode":"coupled_episode_learning",
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"policy":policy(),"selected_model":false,
         "finite_episode_positive":gate["passed"],"final_gate":gate,"baseline_objective":initial,"candidate_objective":value,
-        "construction_summary":construction,"inherited_learning":inherited_learning,
-        "constructor_restart_from_original":c.retained_gradient.is_some(),
-        "new_training_graph_forwards":if c.retained_gradient.is_some(){0}else{62},
-        "new_backward_calls":if c.retained_gradient.is_some(){0}else{31},
+        "construction_summary":construction,"inherited_learning":inherited_learning,"inherited_construction":inherited_construction,
+        "new_constructor_calls":if c.retained_export.is_some(){0}else{1},"new_proposals":if c.retained_export.is_some(){0}else{construction["evaluated_alternatives"].as_u64().unwrap_or(0)},
+        "constructor_restart_from_original":c.retained_gradient.is_some(),"export_completion_only":c.retained_export.is_some(),
+        "new_training_graph_forwards":if c.retained_mode(){0}else{62},
+        "new_backward_calls":if c.retained_mode(){0}else{31},
         "new_gradient_context_encoder_calls":0,
-        "prior_partial_alternatives_charged":c.retained_gradient.as_ref().map(|g|g.inherited_partial_alternatives),
+        "prior_partial_alternatives_charged":c.gradient_authority().map(|g|g.inherited_partial_alternatives),
         "candidate_receipt":receipt,"all_original380_preserved":all_guards,
         "weighted_roles":32,"unique_objective_frames":31,"episode_length":15,"state_width":8,
         "active_scalars_per_family":960,"physical_backward_calls":31,"prebackward_native_parity_graph_forwards":31,"gradient_graph_forwards":31,"extracted_family_gradients":2,
         "optimizer_updates":0,"candidate_native_steps":391,"expected_final_pool_reductions":391,
+        "final_cache_preparations":if c.retained_export.is_some(){391}else{0},
+        "new_constructor_proposals":if c.retained_export.is_some(){0}else{construction["evaluated_alternatives"].as_u64().unwrap_or(0)},
+        "new_order_selection_calls":if c.retained_export.is_some(){0}else{1},
         "gradient_context_encoder_calls":0,"new_captured_objective_encoder_calls":0,
-        "logical_gradient_producer":c.retained_gradient.as_ref().map(|g|&g.expected_learning_source_commit),
-        "fresh_gradient_files":if c.retained_gradient.is_some(){0}else{62},
+        "logical_gradient_producer":c.gradient_authority().map(|g|&g.expected_learning_source_commit),
+        "fresh_gradient_files":if c.retained_mode(){0}else{62},
         "native_reload_context_encoding":"normal native generator during391 independent steps",
         "saved_query_token_count_range":[min_query,max_query],
         "source_physical_candidate_count_range":[frames.iter().map(|f|f.ids.len()).min(),max_copy],
@@ -2012,13 +2457,27 @@ fn export_reload(
         let inherited = a
             .coupled_episode_learning
             .as_ref()
-            .and_then(|c| c.retained_gradient.as_ref());
+            .and_then(|c| c.gradient_authority());
         receipt["new_gradients"] = json!(if inherited.is_some() { 0 } else { 1 });
         receipt["new_backward_calls"] = json!(if inherited.is_some() { 0 } else { 31 });
         receipt["new_training_graph_forwards"] = json!(if inherited.is_some() { 0 } else { 62 });
         receipt["inherited_learning_source_commit"] =
             json!(inherited.map(|g| &g.expected_learning_source_commit));
-        receipt["gradient_scope"] = json!(if inherited.is_some() {
+        let export_only = a
+            .coupled_episode_learning
+            .as_ref()
+            .is_some_and(|c| c.retained_export.is_some());
+        receipt["new_constructor_calls"] = json!(if export_only { 0 } else { 1 });
+        receipt["new_proposals"] = if export_only { json!(0) } else { Value::Null };
+        receipt["new_order_selection_calls"] = json!(if export_only { 0 } else { 1 });
+        receipt["inherited_constructor_source_commit"] = json!(a
+            .coupled_episode_learning
+            .as_ref()
+            .and_then(|c| c.retained_export.as_ref())
+            .map(|e| &e.expected_source_commit));
+        receipt["gradient_scope"] = json!(if export_only {
+            "31 inherited completed joint backwards; all final codes inherited from completed constructor; zero new graphs/backwards/order/proposals/constructor"
+        } else if inherited.is_some() {
             "31 inherited completed joint backwards, zero fresh graphs/backwards; original-seed finite constructor restart"
         } else {
             "31 fresh joint backwards"
@@ -2371,6 +2830,101 @@ pub(super) fn authenticate_positive_artifact(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn completed_dual_master_recovery_preserves_fractional_noops_and_rejects_stale_epoch(
+    ) -> Result<()> {
+        let pm = vec![0.139f32; COUNT];
+        let gm = vec![-0.139f32; COUNT];
+        let mut records = Vec::new();
+        let mut epoch = 0;
+        for (family, master) in [(PREFIX, &pm), (GENERATE, &gm)] {
+            for index in 0..COUNT {
+                let before = epoch;
+                let code = if index == 1 {
+                    Some(if family == PREFIX { -2 } else { 7 })
+                } else {
+                    None
+                };
+                if code.is_some() {
+                    epoch += 1;
+                }
+                records.push(SavedCoordinate {
+                    family: family.into(),
+                    index,
+                    order: records.len(),
+                    original_master_bits: master[index].to_bits(),
+                    incumbent_epoch: before,
+                    epoch_after: epoch,
+                    selected: SavedSelected {
+                        status: if code.is_some() {
+                            "committed"
+                        } else {
+                            "unchanged"
+                        }
+                        .into(),
+                        code,
+                    },
+                });
+            }
+        }
+        let summary = json!({"coordinates":1920,"accepted_epoch":2,"accepted_prefix":1,
+            "accepted_generate":1,"evaluated_alternatives":14292});
+        let (p, g) = restored_final_masters(&records, &summary, &pm, &gm)?;
+        assert_eq!(p[0].to_bits(), pm[0].to_bits());
+        assert_eq!(g[0].to_bits(), gm[0].to_bits());
+        assert_eq!(p[1], -0.5);
+        assert_eq!(g[1], 1.75);
+        records[960].incumbent_epoch = 0;
+        assert!(restored_final_masters(&records, &summary, &pm, &gm).is_err());
+        records[960].incumbent_epoch = 1;
+        records[2].original_master_bits = 0;
+        assert!(restored_final_masters(&records, &summary, &pm, &gm).is_err());
+        Ok(())
+    }
+    #[test]
+    fn frozen_u_initializes_against_original_generate_then_rebinds_changed_generate() -> Result<()>
+    {
+        use uor_r4_core::native_geometric::learner::integrated_attention::geometry::EnergyTables;
+        use uor_r4_integer::geometric_source_actions::SourceActionBinding;
+        const TOK:&[u8]=br#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5},"merges":[]},"added_tokens":[{"id":0,"content":"<|bos|>","special":true},{"id":1,"content":"<|eos|>","special":true},{"id":2,"content":"<|unk|>","special":true}]}"#;
+        let binding = SourceActionBinding::new(TOK)?;
+        let nb: NativeArtifactBinding = serde_json::from_value(
+            json!({"metadata_sha256":"a".repeat(64),
+            "identity":{"tokenizer_sha256":binding.tokenizer_sha256(),"parent_checkpoint_manifest_sha256":"b".repeat(64),
+                "parent_model_sha256":"c".repeat(64),"parent_config_sha256":"d".repeat(64)}}),
+        )?;
+        let prototypes = (0..binding.vocab_size())
+            .flat_map(|i| vec![(i + 1) as u8; 8])
+            .collect::<Vec<_>>();
+        let mut energy = EnergyTables::zeroed(8, vec![])?;
+        let original = NativeGeometricGenerate::compile(
+            &binding,
+            8,
+            &prototypes,
+            &vec![0; binding.vocab_size().div_ceil(2)],
+            energy.clone(),
+        )?;
+        let field = NativeContinuationField::compile_shared(&nb, &original, &vec![0; 8 * 60])?;
+        energy.set_unary(0, 1, 1)?;
+        let changed = NativeGeometricGenerate::compile(
+            &binding,
+            8,
+            &prototypes,
+            &vec![0; binding.vocab_size().div_ceil(2)],
+            energy,
+        )?;
+        assert!(
+            ContinuationLearningWeights::from_native(&field, &changed, &binding, &Device::Cpu)
+                .is_err()
+        );
+        let weights =
+            ContinuationLearningWeights::from_native(&field, &original, &binding, &Device::Cpu)?;
+        let rebound = weights.export_native(&nb, &changed)?;
+        assert_eq!(rebound.packed_unary(), field.packed_unary());
+        assert_eq!(rebound.metadata().generate_metadata, *changed.metadata());
+        assert!(NativeContinuationField::from_bytes(&rebound.to_bytes()?, &nb, &changed).is_ok());
+        Ok(())
+    }
     #[test]
     fn mixed_rank_keeps_fractional_prefix_noop_and_signed_zero() -> Result<()> {
         let mut pm = vec![0.139f32; COUNT];

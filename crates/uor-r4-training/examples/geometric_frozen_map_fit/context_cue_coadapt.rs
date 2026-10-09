@@ -1371,7 +1371,13 @@ pub(super) fn export_joint(
         &p.binding,
         &NativeGeometricGenerate::from_bytes(&p.generate, p.integer.binding())?,
     )?;
-    let u = ContinuationLearningWeights::from_native(&field, &generate, p.integer.binding(), d)?;
+    let original_generate = NativeGeometricGenerate::from_bytes(&p.generate, p.integer.binding())?;
+    let u = ContinuationLearningWeights::from_native(
+        &field,
+        &original_generate,
+        p.integer.binding(),
+        d,
+    )?;
     restore(
         &a.checkpoint.join("continuation-source"),
         &p.receipt["continuation_parameters"],
