@@ -1,6 +1,143 @@
 ## 2026-10-09 — Pod tooling and data usable from other accounts (claude, #2037)
 
 `uor-pod` now reads an optional `~/.config/uor-pod/config` and takes overrides for the volume, datacenter, image, board and repository; the bootstrap takes `--repo-url` and `--hf-store`. With no config, behaviour and dry-run output are unchanged (suite 240/240). `scripts/pod/config.example` and [pods-quickstart.md](../compute/pods-quickstart.md) document the setup. The tokenized TinyStories split (CDLA-Sharing-1.0) is now public in `caseyallard/uor-r4-data`, and both Hugging Face cards have a "Start here" section. Record: [open-pods-2026-10-09](../labs/open-pods-2026-10-09/README.md). Not verified: a real `up` from another account.
+## 2026-10-09 — A deterministic sub-reading for the open reply panel: 88 row checks, and a canned reply cannot pass one (deepseek, #2029)
+
+The fix for the instrument defect Results 4-7 measured. Record:
+[reply-panel-deterministic-checks-2026-10-09](../labs/reply-panel-deterministic-checks-2026-10-09/README.md).
+**CPU only, no pod, $0** — a 5m37s source build of `chat-grade` at main plus `chat-grade check`.
+
+**THE HEADLINE IS THE COVERAGE, measured before a single check was authored: 88 of the 232 rows are
+exactly determinable (37.9 %) and 144 (62.1 %) are not.** The 144 are open-ended requests ("What are
+the key components of a successful marketing campaign?", "Develop a catchphrase for a bike shop.")
+where any fluent on-topic reply is as correct as any other, so **there is no judge-free correct
+answer to check**. That is a stronger statement than Result 6's: not that the instrument is
+judge-only, but that for most of this panel there is nothing deterministic to score. **A panel
+two-thirds of which cannot be scored deterministically cannot gate a milestone no matter how good
+its judge is.** So the panel can carry a deterministic **sub-reading**, not a replacement for
+116/232 — and **criterion 1 remains NOT MET**; a new instrument is not a met milestone.
+
+**The canned-reply control PASSES, run by the grader itself.** `chat-grade check constants=` uses the
+frozen `RowCheck::passes` through `check_only_controls`, so the control arm is the instrument, not a
+reimplementation of it. **Thirteen memorised strings, 88 checked rows, zero rows passed** — including
+`Hello! How can I help you today?`, which carries 18.6 % of accepted rows at 29M and 23.9 % at 100M.
+That is the measurement Result 7 predicted, and it is what makes a future number on this sub-reading
+interpretable.
+
+**What was built:** `data/panels/reply-panel-checks.tsv` (88 checks, sha256 `ad4e9a14…`),
+`reply-panel-checks-provenance.tsv` (88 provenance rows recording that each anchor is NOT present in
+the request and NOT present in any canned reply — the property that makes a check meaningful), and
+`reply-panel-canned.txt` (13 observed memorised replies). 21 content rows use kind `any` with
+row-specific required content — the anchors differ per row, so **a single canned string cannot pass
+across rows: it would have to contain every row's content word at once**. 67 ill-posed rows use
+`abstain_exact`, selected by chat-grade's own recorded `heldout-ill-posed-v3-ids.txt` rather than by
+hand, which rejects a fabricated specific. The panel's requests are unchanged and it remains
+development evidence.
+
+**Structural validation at current main:** `check_panel` **pass**, **88 of 88 rows checked**
+(`checks_without_loaded_request: []`), **worst-case context position 168** of 384 (`follow-02`);
+`shasum -a 256 -c MANIFEST.sha256` from `data/panels/` → **29 files, 29 OK**; both novelty checkers
+re-run unchanged with the new files present and both **pass**. Recorded: the frozen macOS artifact
+`a5071cfe…` **predates the `check` subcommand** (usage `extract|grade`), so validation used a source
+build at main; `check` is dispatched at `chat-grade.rs:216`.
+
+**First reading, retrospective** on the sealed 29M replies: **2 of 88** — 2 of 21 content rows
+(`ask-03` "hydrated", `ask-06` names a horse) and 0 of 67 ill-posed rows. The 0/67 is a real
+diagnostic with one measured limit: no reply both abstains and avoids fabrication, and **27 of 67
+name a fabricated specific**, but `abstain_exact` does not credit a clarifying question and **8 of 67
+ask one**. It is used because the alternative is unsafe as it stands — a `question`-kind clarify
+check **would be passed by the canned greeting on all 67 rows**.
+
+**The unfinished part, named:** `forbid`/`keys` are **not expressible for a single-turn row** with
+the current grammar (they are parsed only for `exact`, which `validate_checks` requires to be a
+multi-turn recall row, and for `abstain_exact`). The fix is an additive kind — `reply_exact`, i.e.
+`exact`'s rule without the recall requirement — which is the Next:.
+
+**Recommendation, stated:** restate criterion 1's reply half as a deterministic sub-reading over the
+37.9 % that is determinable, and **give the open-ended remainder no gate at all** rather than build a
+second instrument for it — a gate there would be the judge again, and Step 0a already recorded that
+the lever for this panel is the float model's corpus/knowledge/capacity.
+
+**Next:** build the additive `reply_exact` check kind in `chat-grade` (`exact`'s rule without the
+recall/multi-turn requirement, permitted with `history=none`) so single-turn rows can carry expected
+content, forbidden distractors and distractor keys; use it to give the 67 ill-posed rows a
+canned-reply-proof clarify criterion and the 21 content rows their `forbid`/`keys`; then restate
+criterion 1's reply half as a deterministic sub-reading over the checked rows. Do not gate the
+open-ended 62.1 % on a judge.
+## Protected joint direction passes continuously but fails quantized screens — October 9
+
+The [protected joint constructor](../labs/protected-joint-construction-2026-10-09/README.md) integrates native pooled winner/rival margins with Prefix and Generate credit on the original coupled initializer. After 411 backwards / 822 training-graph forwards, the fixed 256-pass continuous direction passes all380 surrogate constraints, but the four quantized displacements violate104/170/98/93 respectively; all retain first-order CE descent and none reaches native proposal scoring. No update is committed: independently reloaded391 native states retain the original5/15 conditional winners,17 references and380 guards, with combined CE unchanged at5.111520730202647. **KEEP** the integration and diagnostic evidence; **REJECT** this candidate, with actual-nine/full512/fresh/multi-turn NOT_RUN_CONSTRUCTION_NEGATIVE and accepted8/512 unchanged. Execution setup failures are retained separately; this is not measured native winner loss or global infeasibility.
+
+**Next:** Attribute the four saved displacements from direction, original/destination master bits and Jacobians to rounding, clamping and fractional-bit preservation. Determine whether protection violations concentrate in particular coordinate contributions or reflect distributed discrete conflict before choosing a quantizer or transaction correction; no radius/pass sweep or weakened guards.
+
+## 2026-10-09 — Accepted and completed-but-rejected replies are not separable without the judge; one canned reply is a quarter of the reading (deepseek, #2029)
+
+Supplement to Result 6, and the comparison Result 6 could not make: it profiled the failures and contrasted
+completed against cut, but the accepted set was available too. This compares **accepted against
+completed-but-rejected on fourteen judge-free properties, both directions**, with the cut confound removed (only
+replies ending in terminal punctuation: 27 accepted against 64 rejected). CPU only, no pod, no generation, no
+grading, $0. Record: [open-reply-panel-2026-10-09](../labs/open-reply-panel-2026-10-09/README.md) Result 7.
+
+**Reconciliation first, no correction needed.** 64 rows have `no_terminal=0` (Result 6's count) and 125 are cut;
+of those 64, **62 are below the 64-token cap and 2 reach it** (`heldout-124`, `heldout-139`, both `fluent_only`).
+Result 6's 64 and the earlier 62 differ by exactly those two rows and by nothing else, and no conclusion changes
+under either definition. Also: **16 of the 43 accepted replies are themselves cut** (`no_terminal=1`), so the
+marker means "was cut", not "failed".
+
+**The finding.** Two properties survive a Bonferroni correction — the reply *is* the canned greeting
+`Hello! How can I help you today?` (8 of 27 accepted against 1 of 64, p = 0.0002), and the reply contains a
+question mark (10 of 27 against 4 of 64, p = 0.0006) — **and they are the same observation**: eight of the ten
+accepted replies with a question mark are that greeting. **Remove that one canned reply from both sides and
+nothing separates the sets at all**: median tokens 14 against 20 (Mann-Whitney p = 0.45), question mark 10.5 %
+against 4.8 % (p = 0.33), hello/hi/hey 5.3 % against 11.1 % (p = 0.67), under 15 tokens 52.6 % against 44.4 %
+(p = 0.60), over 40 tokens 26.3 % against 25.4 % (p = 1.00), and acceptance flat across length buckets
+(30.0 / 21.7 / 15.4 / 20.0 / 23.8 %).
+
+**One correction to the natural reading of Result 6's length finding.** Its length contrast is completed versus
+cut and is correct as stated — cut replies ran to the cap and are long. It should not be read as "short replies
+are rejected": against accepted replies of the same terminal-punctuation class the rejected ones are **longer**
+(median 19.5 tokens against 9, p = 0.043 before the canned reply is removed and 0.45 after), and the shortest
+replies in the panel are accepted most often. **Length is not the discriminator; it looks like one only when the
+comparison is against the cap.**
+
+**The instrument statement, measured rather than asserted.** In this population the only property that predicts
+acceptance is that the reply *is* one specific memorised string; strip it and two sets of replies that differ by
+3× in verdict are statistically indistinguishable on all fourteen properties. That is stronger than "the failures
+are diffuse": **the accepted set is not distinguishable from the completed-but-rejected set by anything
+measurable without the judge.** And the string is not a curiosity — it carries **18.6 % of all accepted rows at
+29M (9 occurrences, 8 accepted) and 23.9 % at 100M (19 occurrences, 11 accepted)**, against base rates of 18.5 %
+and 19.8 %.
+
+**Consequence.** This is a second, independent reason for Result 6's conclusion that the reply-panel half cannot
+carry criterion 1, and it adds one requirement to the replacement: the deterministic row checks must make a
+canned reply unable to pass, and any future number on this panel should disclose the canned-reply count beside
+it. Criterion 1 remains **NOT MET** and 43/232 is unchanged; STATUS/ROADMAP/#2028 unchanged. Evidence: sealed
+reports in `icloud:UOR-R4/results/deepseek/reply-panel-cap96-2026-10-09.tar`,
+`scripts/open_reply_panel_completed_classify.py`, and the per-row table in the bundle.
+
+**Next:** build the deterministic replacement for the reply panel's reading — frozen row checks in the v4/v5
+style that a canned reply cannot pass — and report the canned-reply count beside any future number on that
+panel; do not classify this failure set a third time, and do not attack the decoder for it.
+## 2026-10-09 — Open reply panel: the completed-but-rejected failures are short wrong answers, and the criterion cannot carry criterion 1 (deepseek, #2029)
+
+Splitting the 189 failures by whether the reply ended with terminal punctuation, from `verdicts-29m.tsv` on
+main: **64 completed-but-rejected** (correction: earlier comments in this line said 62) against 125 cut by
+the cap. The separator is **length, not form**: median **10 words** completed against **31** cut, and
+`repeat5` **5 %** against **34 %** — so repetition was a symptom of running long, never a mechanism of the
+real failures. Completed failures sit **evenly across tiers (21 / 21 / 22)**, confirming at the failure
+level that the well-posed-row effect was entirely the cap. **64 % are neither fluent nor relevant** with
+every form marker low: bad answers, not mis-formatted ones. And they are **diffuse** (41 / 20 / 3, no marker
+above 16 %), which fires the pre-registered stop condition — no intervention proposed or run.
+
+Consequence: **criterion 1's reply-panel half cannot carry the criterion** — diffuse failures, a cap that is
+not the constraint, a judge-borne instrument with no frozen checks (noise floor ~14 cells on 232), and a
+baseline that was macOS-only until Run A re-grounded it. Recommendation recorded: give the panel
+deterministic checks in the v4/v5 style, and replace the target with a diagnosable one (a well-posed
+single-turn request answered without a short wrong answer — the 64 are exactly that defect). CPU only, no
+pod, no generation, no grading.
+
+Next: decide criterion 1's reply half — adopt deterministic checks and a diagnosable target, or withdraw
+the 116/232 wording — and continue the v5 memory panel's single declared acceptance run.
 
 ## 2026-10-09 — Cap 96 does not raise open-reply acceptance: the budget explains the cut, not the failure (deepseek, #2029)
 

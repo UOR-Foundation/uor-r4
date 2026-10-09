@@ -454,6 +454,80 @@ Pod `260rd8ondf4mzg` existed 21:51Z–22:41Z, 1 × 5090 at $1.19/h → **≈$1.0
 **Evidence bundle.** `icloud:UOR-R4/results/deepseek/reply-panel-cap96-2026-10-09.tar` (1,417,728 B, md5 `3de8c41eb9eb7532e1243450365ce335`,
 `~/.local/share/uor-r4/bin/cloud-store fetch reply-panel-cap96-2026-10-09 <dest>`): both runs' sealed reports, manifests and attempts, the sealed macOS report for the anchor, the two comparison summaries and per-row tables, both runs' reply texts and token counts, the comparison script and the run script.
 
+## Result 7 — accepted and completed-but-rejected are NOT separable by any judge-free property, and one canned reply carries a fifth of the accepted set (supplement to Result 6)
+
+Result 6 profiled the failures and contrasted completed against cut. This compares the **accepted set** against the completed-but-rejected set on the same judge-free properties, in both directions, which is the comparison Result 6 could not make. CPU only: one sealed report plus the tokenizer crate's counts, no generation, no grading. **It confirms Result 6's conclusion with a second, independent reason, and it corrects one inference a reader might draw from Result 6's length finding.**
+
+### Reconciliation with Result 6 — both counts are right, under their definitions
+
+Of the 189 failures, **64 rows have `no_terminal=0`** (Result 6's completed-but-rejected) and 125 are cut. Of those 64, **62 are below the 64-token cap and 2 reach it** — `heldout-124` and `heldout-139`, both 64 tokens and both `fluent_only`. So Result 6's 64 and the earlier 62 differ by exactly those two rows and by nothing else; the 62 is "not budget-limited", the 64 is "`no_terminal=0`". **No conclusion in either result changes under either definition.**
+
+One correction of framing that follows: **16 of the 43 ACCEPTED replies also have `no_terminal=1`** — they were cut by the cap and accepted anyway. `no_terminal` is a marker of being cut, not of failing.
+
+### The comparison, with the cut confound removed
+
+Restrict to replies that end with terminal punctuation, so the cap cannot be doing the work: **27 accepted** against **64 completed-but-rejected**. Fourteen properties measurable without a judge, each a text rule; multiplicity handled with Bonferroni across the battery.
+
+| property | accepted (27) | rejected (64) | gap | p |
+|---|---:|---:|---:|---:|
+| reply **is** one canned greeting (`Hello! How can I help you today?`) | 8 | 1 | +0.281 | **0.0002** |
+| reply contains a question mark | 10 | 4 | +0.308 | **0.0006** |
+| reply starts hello / hi / hey | 9 | 8 | +0.208 | 0.036 |
+| request is an instruction | 2 | 17 | −0.192 | 0.049 |
+| reply is under 15 tokens | 18 | 29 | +0.214 | 0.071 |
+| reply has an unclosed code fence | 0 | 8 | −0.125 | 0.099 |
+| request is a question | 6 | 21 | −0.106 | 0.45 |
+| reply uses assistant self-reference | 7 | 22 | −0.084 | 0.47 |
+| reply is shorter than the request in words | 8 | 25 | −0.094 | 0.48 |
+| reply is over 40 tokens | 5 | 16 | −0.065 | 0.59 |
+| reply repeats a 5-gram | 2 | 3 | +0.027 | 0.63 |
+| reply contains a digit | 2 | 8 | −0.051 | 0.72 |
+| reply has no content-word overlap with the request | 10 | 22 | +0.027 | 0.81 |
+| reply restates a 4-gram of the request | 6 | 15 | −0.012 | 1.00 |
+
+Two properties survive the correction — **but they are the same observation**. Eight of the 10 accepted replies that contain a question mark **are that one canned greeting**, so the question-mark line is the greeting line. Remove the single canned reply from both sides and **nothing separates the sets at all**:
+
+| after removing the one canned reply | accepted (19) | rejected (63) | p |
+|---|---:|---:|---:|
+| median tokens | **14** | **20** | 0.45 (Mann-Whitney) |
+| contains a question mark | 10.5 % | 4.8 % | 0.33 |
+| starts hello / hi / hey | 5.3 % | 11.1 % | 0.67 |
+| under 15 tokens | 52.6 % | 44.4 % | 0.60 |
+| over 40 tokens | 26.3 % | 25.4 % | 1.00 |
+
+and acceptance is flat across length buckets (1–10 tokens 30.0 %, 11–20 21.7 %, 21–30 15.4 %, 31–40 20.0 %, 41–70 23.8 %).
+
+### One correction to the natural reading of Result 6's length finding
+
+Result 6's length contrast is **completed versus cut**, and it is correct as stated: cut replies ran to the cap and are long. It should **not** be read as "short replies are rejected". Against the accepted replies of the same terminal-punctuation class the rejected ones are **longer**, not shorter — median 19.5 tokens against 9, Mann-Whitney p = 0.043 before the canned reply is removed, p = 0.45 after. And the shortest replies in the panel are accepted most often. **Length is not the discriminator; it only looks like one when the comparison is against the cap.**
+
+### The instrument statement, now measured
+
+**The judge is drawing a line the text does not show.** In this population the only property that predicts acceptance is that the reply *is* one specific memorised string. Strip that string and two sets of replies that differ by 3× in verdict are statistically indistinguishable on all fourteen properties — length, form, question-back, restatement, self-reference, repetition, digits, code, overlap. That is the measured version of Result 6's qualitative claim, and it is a stronger statement than "the failures are diffuse": **the accepted set is not distinguishable from the completed-but-rejected set by anything measurable without the judge.**
+
+And the canned reply is not a curiosity: it carries a large share of the reading on **both** artifacts.
+
+| artifact | occurrences | accepted | acceptance rate | share of all accepted rows |
+|---|---:|---:|---:|---:|
+| 29M `chat-29m-B-lr5e-4` (43/232) | 9 | 8 | 88.9 % | **18.6 %** |
+| 100M `chat-100m-C` (46/232) | 19 | 11 | 57.9 % | **23.9 %** |
+
+Both are 3–5× the panel's base acceptance rate (18.5 % and 19.8 %). **Between a fifth and a quarter of the accepted rows on this panel are the same memorised greeting.**
+
+### What this adds to Result 6's recommendation
+
+Result 6 concluded that the reply-panel half cannot carry criterion 1 and proposed deterministic checks in the v4/v5 style. Result 7 adds a second, independent reason for the same conclusion and one more requirement on the replacement:
+
+- The failure set is diffuse (Result 6) **and** the accepted set is not separable from it without the judge (Result 7). A judge-only `acceptable` reading therefore measures the judge at least as much as the model.
+- Any replacement must also stop a **single canned reply from carrying a quarter of the reading**. Deterministic row checks do that by construction: a check that names the expected content cannot be passed by a greeting. A count of "rows where the reply is `Hello! How can I help you today?`" is itself worth reporting next to any future number on this panel, because it is 18.6 % of the current one.
+
+Evidence: `verdicts-29m.tsv` and `verdicts-100m.tsv` on main; both sealed reports in
+`icloud:UOR-R4/results/deepseek/reply-panel-cap96-2026-10-09.tar`; the comparison script
+`scripts/open_reply_panel_completed_classify.py`; and this result's own bundle
+`icloud:UOR-R4/results/deepseek/reply-panel-accepted-vs-completed-2026-10-09.tar`
+(197,632 B, md5 `104f7011b813dc8abd1fbd15a1045740`) with the per-row population table, the
+summary JSON, the sealed token counts and `verify.txt`.
+
 ## Decision
 
 **The failures are diffuse. Phase 2 is NOT opened: no candidate, no
@@ -549,27 +623,104 @@ own tree.
   training seed (decoding is greedy, `seed` is not in the graded record), and no
   other artifact on this panel was scored here.
 
+
+**Follow-up (2026-10-09 later): the deterministic replacement was built, and its coverage is the
+headline.** [reply-panel-deterministic-checks-2026-10-09](../reply-panel-deterministic-checks-2026-10-09/README.md)
+adds 88 row checks over the rows where a judge-free criterion exists and runs the canned-reply
+control through `chat-grade check constants=`: **zero of the 88 checks are passed by any memorised
+string**, including `Hello! How can I help you today?`. **88 of 232 rows (37.9 %) are exactly
+determinable; the other 144 are open-ended requests for which no judge-free correct answer exists.**
+So this panel can carry a deterministic SUB-READING, not a replacement for 116/232, and criterion 1
+remains NOT MET.
+
 ## Next:
 
-Result 5 closed the decoder question, and it closed it on the negative side. The budget is
-not the lever; the completed-but-wrong set is. What follows points there.
+Results 4 to 7 have closed this line's questions on the negative side, one after another: the
+cut is the cap (4), the cap is not the constraint (5), the failures are short wrong answers
+and diffuse (6), and the accepted set is not separable from them by anything measurable
+without the judge (7). **The reply panel's reply half cannot carry criterion 1 as
+instrumented**, and what follows replaces the instrument rather than classifying it again.
 
-1. **Point the next piece at the completed-but-wrong failures, not at the decoder.** At 64
-   tokens, 62 of the 189 failures end with terminal punctuation and are still rejected:
-   finished sentences, judged neither fluent-and-relevant. Result 3's per-category and
-   per-tier tables and Result 5's movement tables name them; Result 4's mid-clause population
-   is now a measurement artefact of the cap and not a defect to chase.
-2. **Repair criterion 1's reading** — add deterministic row checks to the reply panel (the
-   v4/v5 pattern) or state a tolerance for the judge — before anyone trains against 116/232.
-   This is now the *only* surviving criterion defect: the cap question is answered, the judge
-   question is not, and no candidate number on this panel should be accepted until it is.
-3. **Decide whether the reply panel is worth attacking at all.** The recorded lever for the
-   completed-but-wrong set is the float model's corpus/knowledge/capacity, which the frozen
+1. **Build the deterministic replacement for the reply panel's reading** — frozen row checks
+   in the v4/v5 style (expected content, forbidden distractors, no word of the distractor's
+   key) for the requests that can carry them, so at least one component of the reading cannot
+   move between identical runs. **Result 7 adds a requirement to that design: the checks must
+   make a canned reply unable to pass**, because one memorised greeting is 18.6 % of all
+   accepted rows at 29M and 23.9 % at 100M.
+2. **Report the canned-reply count beside any future number on this panel** — occurrences of
+   `Hello! How can I help you today?` and their verdicts. It is a quarter of the current
+   reading on both artifacts, and a number that does not disclose it is not interpretable.
+3. **If a judge is kept at all, state the tolerance and the noise floor with the number**, and
+   treat a delta under it as no result. That is the rule already applied to the cap run
+   (Result 5) and to the v4 memory panel (4 of 64 rows flipping verdict at the same digest).
+4. **Decide whether the reply panel is worth attacking at all.** The recorded lever for the
+   completed-but-rejected set is the float model's corpus/knowledge/capacity, which the frozen
    Step 0a decision already named and which no bounded readiness instrument reaches. If it is
-   attacked, it needs a fresh sealed panel, because Step 0a read every failing row of this one —
-   and it should be scored at a declared cap, since the cap is now known to be a measurement
-   choice rather than a lever.
+   attacked, it needs a fresh sealed panel — Step 0a read every failing row of this one — with
+   deterministic checks, a declared cap (Result 5 showed the cap is a measurement choice, not
+   a lever) and a diagnosable target of the form "answers a well-posed single-turn request
+   without a short wrong answer", which is the defect the 64 rows of Result 6 actually are.
 
 The open reply panel's failures are not one thing, and a 2.7× target is not
 reachable by one bounded intervention. That is the result, and no candidate
 follows from it.
+
+## Result 6 — the completed-but-rejected failures are SHORT WRONG ANSWERS, and the reply-panel criterion cannot carry criterion 1
+
+Measured from `verdicts-29m.tsv` on main, splitting the 189 failures by whether the reply ended with
+terminal punctuation. CPU only: no pod, no generation, no grading, no new artifact.
+
+**Correction: the count is 64 completed-but-rejected, not 62.** Earlier comments in this line said 62;
+the per-row table gives **64 rows with `no_terminal=0` out of 189**. The earlier number was mine and is
+replaced here.
+
+| property | completed-but-rejected (64) | cut by the cap (125) |
+|---|---:|---:|
+| `reply_words` median / mean | **10 / 13.9** | **31 / 31.3** |
+| `repeat5` | **5 %** | **34 %** |
+| `restate_high` | 16 % | 6 % |
+| `code_fence` | 12 % | 0 % |
+| `question` | 6 % | 3 % |
+| `echo_user` / `stub` / `role_leak` / `refusal` | 2 / 3 / 0 / 2 % | 2 / 0 / 0 / 0 % |
+| `verdict_class` | neither 41 (64 %), fluent_only 20 (31 %), relevant_only 3 (5 %) | — |
+| `tier` | everyday 21, K-ill-posed 21, K-clean 22 | — |
+
+### Three findings
+
+1. **The separator is length, not form.** Completed-but-rejected replies are **short (median 10 words)**;
+   cap-cut replies are **long (median 31)**. And `repeat5` at 34 % in the cut set against 5 % in the
+   completed set means **repetition was never a mechanism of the real failures — it is a symptom of
+   running long.** Any analysis that counts repetition as a failure mode is counting the decoder.
+2. **The well-posed-row effect was entirely the cap**, confirmed at the failure level: completed failures
+   sit evenly across tiers (21 / 21 / 22). There is no K-clean defect. The earlier structural claim in
+   this line is refuted twice — once by the token counts, once here.
+3. **They are rejected on both axes.** 64 % are neither fluent nor relevant, with every form marker low.
+   These are bad ANSWERS, not mis-formatted ones: the model gives short answers that are wrong.
+
+**They are also diffuse** — 41 neither, 20 fluent-only, 3 relevant-only, no marker above 16 % — which
+fires this line's pre-registered stop condition. No bounded intervention is proposed and none was run.
+
+### The reply-panel criterion cannot carry criterion 1
+
+Four measured reasons: the failure set is **diffuse**, classified twice with no dominant mechanism; the
+**cap is not the constraint** (2 of 85 cut replies recovered with 50 % more room; 96 tokens scores 38
+against 44); the **instrument is judge-borne only** — no frozen row checks exist for this panel, giving a
+noise floor of order 14 cells on 232; and the **baseline was a macOS-only binary** until Run A re-grounded
+it, its "sealed" status having been assumed rather than tested.
+
+A `>= 116/232` target measured by a judge over diffuse short-wrong-answer failures does not tell anyone
+what to build next. That is a criterion defect, not a model result.
+
+### What should replace it
+
+- **Deterministic checks** for the reply panel in the v4/v5 style — expected substring, forbidden
+  distractors, no word of the distractor's key — so at least one component of the reading cannot move
+  between identical runs. The memory panels have this; the reply panel does not.
+- **A diagnosable target.** "Acceptable replies at 116/232" is a judge's opinion aggregated. "The model
+  answers a well-posed single-turn request without a short wrong answer" is a defect with a name, a count
+  and a fix — and the 64 measured here are exactly that defect, countable deterministically once checks exist.
+- **If a judge is kept, state a tolerance and a noise floor** with the number, and treat a delta under it
+  as no result — the rule applied to the cap run.
+
+Evidence: `verdicts-29m.tsv` and `verdicts-100m.tsv` on main; both run reports in iCloud as
+`reply-panel-cap96-2026-10-09.tar` (1,417,728 bytes, md5 `3de8c41eb9eb7532e1243450365ce335`).
