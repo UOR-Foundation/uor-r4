@@ -24,4 +24,4 @@ mkdir -p /root/codex/prototype-target/release/examples
 cp "$CARGO_TARGET_DIR/release/examples/native_historical_version" /root/codex/prototype-target/release/examples/native_historical_version
 cp "$CARGO_TARGET_DIR/release/examples/native_historical_version" "$ROOT/runtime/native_historical_version"
 sha256sum "$ROOT/runtime/native_historical_version" > "$EVIDENCE/sealer.sha256"
-printf 'BUILD_AND_FOCUSED_TESTS_PASS\n' 
+printf 'BUILD_AND_FOCUSED_TESTS_PASS\n'
