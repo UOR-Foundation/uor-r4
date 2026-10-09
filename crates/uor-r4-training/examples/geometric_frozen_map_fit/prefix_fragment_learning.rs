@@ -367,10 +367,8 @@ fn prepare_trajectory_guards(
                         == raw["generation"][position]["continuation"]["state_codes"],
                 "guard U actual state/vector differs",
             )?;
-            let weight = frames
-                .iter()
-                .find(|f| f.input == input && f.position == position)
-                .map_or(0., |f| f.weight);
+            // Guard membership never contributes additional objective weight.
+            let weight = 0.;
             let mut f = shared::parse_saved_native_frame(
                 input,
                 position,
@@ -768,12 +766,13 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
             .find(|(i, p)| p.trace.summary.chosen_token_id != guard_frames[*i].target)
             .map(|(i, p)| compact_guard_row(&guard_frames[*i], p, *i))
             .transpose()?;
-        let accept = transaction_accept(&value, &next)? && first_failure.is_none();
+        let objective_gate = transaction_accept(&value, &next)?;
+        let accept = objective_gate && first_failure.is_none();
         let guard_trial = json!({"population":guard_frames.len(),"affected_guard_indices":affected,"checked_affected":staged_guards.len(),"unaffected_reused":guard_frames.len()-affected.len(),"first_failure":first_failure,
             "staged_affected_digest":sha256_bytes(&serde_json::to_vec(&staged_guards.iter().map(|(i,p)|compact_guard_row(&guard_frames[*i],p,*i)).collect::<Result<Vec<_>>>()?)?), "staged_digest_scope":"ordered complete affectedguard compact rows; reader independently reconstructs; no fullvector repetition",
             "accepted_guard_digest_before":guard_state_digest,"all_original380_winners":c.trajectory.is_some() && first_failure.is_none()});
         trials.push(json!({"order":order,"move":m,"status":if accept{"accepted"}else{"rejected"},"before":before,"staged":next,
-   "native_all18_checked":true,"strict_current_ce_and_all17_original_winners":accept,"trajectory_guard":guard_trial,
+   "native_all18_checked":true,"strict_current_ce_and_all17_original_winners":objective_gate,"trajectory_guard":guard_trial,
    "original_task_probability_improved":shared::improved(&baseline,&next)?,"original_gate":shared::gate(&baseline,&next)?}));
         if accept {
             for (i, pool) in staged_guards {
