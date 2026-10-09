@@ -54,9 +54,13 @@ For every claim record issue, dependency IDs, branch/worktree, owned paths,
 artifact inputs, deliverable, next checkpoint, reviewer need and host reservation.
 Only one active claim owns a given mutating task/overlapping path set. Resolve
 collisions through the coordination record; independent readers need no write
-claim. Start from refreshed main and respect exclusive file ownership. A separate
+Start from refreshed main and respect exclusive file ownership. A separate
 worktree is optional. Use a temporary branch when protected delivery requires
-it; new branches default to `codex/`. Preserve existing active shared branches.
+it; name it `<lab>/<topic>` (Codex defaults to `codex/`). All work, including
+negative, superseded and unfinished retained source, lands in main with explicit
+status. Verify the actual merge, preserve unique material, then delete redundant
+branches and workspaces before starting the next task. The live `codex/lab-state`
+coordination record is the standing operational exception.
 
 ## Work loop, leases and recovery
 
