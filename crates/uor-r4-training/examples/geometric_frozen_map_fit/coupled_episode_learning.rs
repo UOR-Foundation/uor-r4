@@ -1138,7 +1138,9 @@ fn restored_final_masters(
             *count += 1;
         } else {
             replay_require(
-                r.selected.status == "unchanged" && r.selected.code.is_none(),
+                (r.selected.status == "unchanged"
+                    || (r.selected.status == "noop" && r.family == PREFIX))
+                    && r.selected.code.is_none(),
                 "retained unknown noncommitted selection",
             )?;
         }
@@ -2858,6 +2860,8 @@ mod tests {
                     selected: SavedSelected {
                         status: if code.is_some() {
                             "committed"
+                        } else if index == 0 && family == PREFIX {
+                            "noop"
                         } else {
                             "unchanged"
                         }
@@ -2874,6 +2878,18 @@ mod tests {
         assert_eq!(g[0].to_bits(), gm[0].to_bits());
         assert_eq!(p[1], -0.5);
         assert_eq!(g[1], 1.75);
+        records[0].selected.code = Some(0);
+        assert!(restored_final_masters(&records, &summary, &pm, &gm).is_err());
+        records[0].selected.code = None;
+        records[0].epoch_after = 1;
+        assert!(restored_final_masters(&records, &summary, &pm, &gm).is_err());
+        records[0].epoch_after = 0;
+        records[0].selected.status = "unknown".into();
+        assert!(restored_final_masters(&records, &summary, &pm, &gm).is_err());
+        records[0].selected.status = "noop".into();
+        records[960].selected.status = "noop".into();
+        assert!(restored_final_masters(&records, &summary, &pm, &gm).is_err());
+        records[960].selected.status = "unchanged".into();
         records[960].incumbent_epoch = 0;
         assert!(restored_final_masters(&records, &summary, &pm, &gm).is_err());
         records[960].incumbent_epoch = 1;
