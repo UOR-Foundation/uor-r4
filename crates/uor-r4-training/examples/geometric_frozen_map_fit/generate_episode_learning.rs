@@ -38,6 +38,94 @@ impl Config {
         out
     }
 }
+
+#[derive(Clone, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CompletionConfig {
+    pub retained_failed_root: PathBuf,
+    pub retained_learning_runtime_root: PathBuf,
+    pub expected_learning_runtime_identity_sha256: String,
+    pub retained_learning_observation_root: PathBuf,
+    pub expected_learning_observation_manifest_sha256: String,
+    pub expected_report_sha256: String,
+    pub expected_manifest_sha256: String,
+    pub expected_learning_config_sha256: String,
+    pub expected_learning_source_commit: String,
+    pub expected_learning_binary_sha256: String,
+    pub expected_constructor_sha256: String,
+    pub expected_unary_master_sha256: String,
+    pub original_inputs: prefix::Config,
+}
+impl CompletionConfig {
+    pub(super) fn input_roots(&self) -> Vec<&PathBuf> {
+        let mut roots = vec![
+            &self.retained_failed_root,
+            &self.retained_learning_runtime_root,
+            &self.retained_learning_observation_root,
+            &self.original_inputs.retained_intermediate_root,
+            &self.original_inputs.retained_probe_root,
+        ];
+        if let Some(e) = &self.original_inputs.episode {
+            roots.extend([
+                &e.typed_authority,
+                &e.retained_projection.root,
+                &e.retained_supplement_root,
+            ]);
+            roots.extend(e.phases.iter().map(|p| &p.capture.root));
+        }
+        roots
+    }
+}
+const FAILED_REPORT: &str = "fe11475c744759af845a30d5bb4938bfd2f2492366771ddee25c92002ae15625";
+const FAILED_SEAL: &str = "4bd01644814324e8537a4228644c49ecd747b2d93a8f82662d8463bdaf1714cf";
+const LEARNING_CONFIG: &str = "f504d1eee00abc8517e19cbb2c2e2e067e5529820d549ff3fb0c71e9fdea4120";
+const LEARNING_SOURCE: &str = "bf09a1aa7419adee2ec12e6202565f13d08ca3ef";
+const LEARNING_BINARY: &str = "d475bea4133a49beca1d97452fd41e769da2e620d3a2d99757e31b93ffbb309b";
+const COMPLETED_CONSTRUCTOR: &str =
+    "68e2e926c05de46eb929d986675e39a18c50a1cc300e5cd059fafebd7add22ff";
+const COMPLETED_UNARY: &str = "324af524e78be9c34ea297995cca4c1006ce910dcdb5e157913d694861ef2c54";
+pub(super) fn validate_completion_settings(a: &Args) -> Result<()> {
+    if let Some(c) = &a.generate_episode_completion {
+        replay_require(
+            a.mode == Mode::JointContinuation
+                && a.updates == 1
+                && a.loss_scope == LossScope::All
+                && a.generate_episode_learning.is_none()
+                && a.prefix_fragment_learning.is_none()
+                && a.prefix_artifact_check.is_none()
+                && a.context_cue_coadapt.is_none()
+                && a.prefix_context_credit.is_none()
+                && a.context_path_credit.is_none()
+                && a.readout_coadaptation.is_none()
+                && a.reached_u.is_none()
+                && a.prototype_compensation.is_none()
+                && a.reference_replay.is_none()
+                && a.retained_context_root.is_none()
+                && !a.native_code_proposals
+                && !a.reached_frontier_objective
+                && !a.constrained_context_learning
+                && !a.constrained_emission_learning
+                && !a.categorical_action_learning
+                && !a.categorical_action_only,
+            "Generate completion requires exclusive no-learning mode",
+        )?;
+        replay_require(
+            c.expected_report_sha256 == FAILED_REPORT
+                && c.expected_learning_runtime_identity_sha256
+                    == "90273f2bbca9a2269f2edb789be0aa0157d3e6f9911b2ef510f3627fa79dd9bb"
+                && c.expected_learning_observation_manifest_sha256
+                    == "2a0e7014cdbbcd2ef753d7ab9e7030d8c0c8103ee23fe4f8fbd75938bfd5a051"
+                && c.expected_manifest_sha256 == FAILED_SEAL
+                && c.expected_learning_config_sha256 == LEARNING_CONFIG
+                && c.expected_learning_source_commit == LEARNING_SOURCE
+                && c.expected_learning_binary_sha256 == LEARNING_BINARY
+                && c.expected_constructor_sha256 == COMPLETED_CONSTRUCTOR
+                && c.expected_unary_master_sha256 == COMPLETED_UNARY,
+            "Generate completion recorded authority differs",
+        )?;
+    }
+    Ok(())
+}
 pub(super) fn validate_settings(a: &Args) -> Result<()> {
     if let Some(c) = &a.generate_episode_learning {
         replay_require(
@@ -992,16 +1080,19 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
                 let entry = entry?;
                 if entry.file_type()?.is_file() {
                     let leaf = entry.file_name();
-                    if dest.join(&leaf).exists() {
-                        replay_require(
-                            fs::read(dest.join(&leaf))? == fs::read(entry.path())?,
-                            "Generate frozen sidecar numerical/native metadata differs",
-                        )?;
-                    } else {
-                        fs::copy(entry.path(), dest.join(leaf))?;
-                    }
+                    restore_original_sidecar_file(
+                        &entry.path(),
+                        &dest.join(&leaf),
+                        leaf.to_str() == Some("native-metadata.json"),
+                    )?;
                 }
             }
+        }
+        for family in ["cue", "prefix"] {
+            exact_frozen_directory(
+                &a.checkpoint.join(family),
+                &a.out.join("checkpoint-0001").join(family),
+            )?;
         }
         for family in ["cue-source", "prefix-source"] {
             if a.checkpoint.join(family).exists() {
@@ -1096,6 +1187,759 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "new_generate_gradients":1,"optimizer_updates":0,"parent_master_bits_restored":true,
         "autoregressive_rollout":"NOT_RUN_SEPARATE_ARTIFACT_CHECK","actual9":"NOT_RUN","full512":"NOT_RUN",
         "original_episode_authority":c.retained_episode_root,"episode_request":c.original_inputs.episode}),
+    )
+}
+
+fn sidecar_identity_matches(
+    original: &[u8],
+    candidate: &[u8],
+    native_metadata: bool,
+) -> Result<bool> {
+    if native_metadata {
+        let old: Value = serde_json::from_slice(original)?;
+        let new: Value = serde_json::from_slice(candidate)?;
+        Ok(old == new)
+    } else {
+        Ok(original == candidate)
+    }
+}
+fn restore_original_sidecar_file(
+    original: &Path,
+    candidate: &Path,
+    native_metadata: bool,
+) -> Result<Value> {
+    let old = fs::read(original)?;
+    let before = if candidate.exists() {
+        Some(fs::read(candidate)?)
+    } else {
+        None
+    };
+    if let Some(bytes) = &before {
+        replay_require(
+            sidecar_identity_matches(&old, bytes, native_metadata)?,
+            "Generate frozen sidecar numerical/native metadata differs",
+        )?;
+    }
+    fs::write(candidate, &old)?;
+    replay_require(
+        fs::read(candidate)? == old,
+        "Generate original sidecar byte restoration differs",
+    )?;
+    Ok(
+        json!({"original_file":original,"candidate_file":candidate,"before_sha256":before.as_ref().map(|b|sha256_bytes(b)),
+        "after_sha256":sha256_bytes(&old),"comparison":if native_metadata{"FULL_PARSED_JSON_EQUALITY_THEN_ORIGINAL_BYTES"}else{"EXACT_BYTES"},
+        "missing_original_frozen_file_copied":before.is_none()}),
+    )
+}
+fn exact_frozen_directory(original: &Path, candidate: &Path) -> Result<()> {
+    let mut old = fs::read_dir(original)?
+        .map(|e| e.map(|e| e.file_name()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut new = fs::read_dir(candidate)?
+        .map(|e| e.map(|e| e.file_name()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    old.sort();
+    new.sort();
+    replay_require(old == new, "completion frozen directory file set differs")?;
+    for leaf in old {
+        let a = original.join(&leaf);
+        let b = candidate.join(&leaf);
+        if fs::metadata(&a)?.is_dir() {
+            replay_require(
+                fs::metadata(&b)?.is_dir(),
+                "completion frozen directory type differs",
+            )?;
+            exact_frozen_directory(&a, &b)?;
+        } else {
+            replay_require(
+                fs::read(&a)? == fs::read(&b)?,
+                "completion frozen directory bytes differ",
+            )?;
+        }
+    }
+    Ok(())
+}
+fn complete_pool_objective(
+    frames: &[shared::Frame],
+    pools: &[shared::Pool],
+    map: &[usize],
+    spec: &shared::ObjectiveSpec,
+) -> Result<Value> {
+    let mass = |row: usize| -> Result<(u64, u64, u32)> {
+        let p = pools
+            .get(row)
+            .ok_or_else(|| bad("completion objective pool missing"))?;
+        let f = frames
+            .get(row)
+            .ok_or_else(|| bad("completion objective frame missing"))?;
+        let m = p
+            .trace
+            .token_masses
+            .iter()
+            .find(|m| m.token_id == f.target)
+            .ok_or_else(|| bad("completion objective target mass missing"))?
+            .weight_q31;
+        Ok((
+            m,
+            p.trace.summary.total_weight_q31,
+            p.trace.summary.chosen_token_id,
+        ))
+    };
+    let masses = map
+        .iter()
+        .map(|&r| mass(r).map(|(m, d, w)| json!([m, d, w])))
+        .collect::<Result<Vec<_>>>()?;
+    let mut task = 0.;
+    let mut reference = 0.;
+    let mut refs = 0usize;
+    let mut phases = Vec::new();
+    for role in spec
+        .roles
+        .as_ref()
+        .ok_or_else(|| bad("completion roles absent"))?
+    {
+        let row = map
+            .iter()
+            .copied()
+            .find(|&r| frames[r].input == role.input && frames[r].position == role.position)
+            .ok_or_else(|| bad("completion role frame missing"))?;
+        let f = &frames[row];
+        let (m, d, w) = mass(row)?;
+        let ce = -(m as f64 / d as f64).ln() * role.weight;
+        if role.task {
+            task += ce;
+            phases.push(json!({"position":f.position,"target":f.target,"chosen":w,"target_mass":m,"total_mass":d}));
+        } else {
+            reference += ce;
+            refs += usize::from(w == f.target);
+        }
+    }
+    Ok(
+        json!({"combined":task+reference,"task":task,"reference":reference,"correct_reference_frames":refs,
+        "all_phase_winners":phases.iter().all(|p|p["target"]==p["chosen"]),"phases":phases,"objective_masses":masses}),
+    )
+}
+fn reconstruct_completed_unary(original: &[f32], records: &[Value]) -> Result<Vec<f32>> {
+    replay_require(
+        original.len() == COUNT && records.len() == COUNT,
+        "completed unary population differs",
+    )?;
+    let mut result = original.to_vec();
+    let mut seen = BTreeSet::new();
+    let mut epoch = 0u64;
+    let mut accepted = 0;
+    for (order, row) in records.iter().enumerate() {
+        let index = shared::idx(&row["index"])?;
+        replay_require(
+            index < COUNT
+                && seen.insert(index)
+                && row["order"] == order
+                && row["incumbent_epoch"] == epoch
+                && row["incumbent_code"] == i64::from(code(original[index])?),
+            "completed coordinate identity/epoch differs",
+        )?;
+        let alts = row["alternatives"]
+            .as_array()
+            .ok_or_else(|| bad("completed alternatives absent"))?;
+        let current = code(original[index])?;
+        let codes = alts
+            .iter()
+            .map(|a| {
+                a["code"]
+                    .as_i64()
+                    .ok_or_else(|| bad("completed code absent"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        replay_require(
+            codes
+                == (-7i64..=7)
+                    .filter(|q| *q != i64::from(current))
+                    .collect::<Vec<_>>(),
+            "completed all14 population differs",
+        )?;
+        if row["selected"]["status"] == "committed" {
+            let q = row["selected"]["code"]
+                .as_i64()
+                .ok_or_else(|| bad("committed code missing"))?;
+            replay_require(
+                (-7..=7).contains(&q)
+                    && q != i64::from(current)
+                    && alts.iter().any(|a| a["code"] == q && a["feasible"] == true),
+                "committed selection not a recorded feasible alternative",
+            )?;
+            result[index] = q as f32 * 0.25;
+            epoch += 1;
+            accepted += 1;
+        } else {
+            replay_require(
+                row["selected"]["status"] == "unchanged",
+                "completed selected status differs",
+            )?;
+        }
+        replay_require(
+            row["epoch_after"] == epoch,
+            "completed postcommit epoch differs",
+        )?;
+    }
+    replay_require(accepted == 320, "completed recorded accepted count differs")?;
+    Ok(result)
+}
+pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
+    validate_completion_settings(a)?;
+    let c = a
+        .generate_episode_completion
+        .as_ref()
+        .ok_or_else(|| bad("completion configuration missing"))?;
+    write(
+        a,
+        "completion-execution-identity.json",
+        &json!({"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),
+        "argv":std::env::args().collect::<Vec<_>>(),"own_attempt":read(&a.out.join("attempt.json"))?,
+        "own_external_config_binding":read(&a.out.join("external-config-binding.json"))?,
+        "execution_lane":"CPU host saved arithmetic and native391 only","new_backward_calls":0,
+        "new_proposals":0,"new_rankings":0,"new_optimizer_updates":0}),
+    )?;
+    let failed = shared::sealed(
+        &c.retained_failed_root,
+        &c.expected_report_sha256,
+        &c.expected_manifest_sha256,
+    )?;
+    replay_require(
+        failed["status"] == "FAILED"
+            && failed["error"] == "Generate frozen sidecar numerical/native metadata differs",
+        "completion does not match recorded export-only failure",
+    )?;
+    let old_config_file = c.retained_failed_root.join("config.json");
+    replay_require(
+        sha256_file(&old_config_file)? == LEARNING_CONFIG,
+        "completed learning raw configuration differs",
+    )?;
+    let old_config = read(&old_config_file)?;
+    let learning: Config = serde_json::from_value(old_config["generate_episode_learning"].clone())?;
+    replay_require(
+        inherited_inputs_match(
+            &serde_json::to_value(&learning.original_inputs)?,
+            &c.original_inputs,
+        )? && fs::canonicalize(&a.checkpoint)?
+            == fs::canonicalize(Path::new(
+                old_config["checkpoint"]
+                    .as_str()
+                    .ok_or_else(|| bad("original checkpoint missing"))?,
+            ))?,
+        "completion original selected inputs/checkpoint differ",
+    )?;
+    let attempt = read(&c.retained_failed_root.join("attempt.json"))?;
+    report_output::verify(&c.retained_learning_observation_root)?;
+    replay_require(
+        sha256_file(&c.retained_learning_observation_root.join("manifest.json"))?
+            == c.expected_learning_observation_manifest_sha256,
+        "learning sealed observation identity differs",
+    )?;
+    let execution = read(&c.retained_learning_observation_root.join("execution.json"))?;
+    let launch = read(&c.retained_learning_observation_root.join("launch.json"))?;
+    let runtime_identity_file = c.retained_learning_runtime_root.join("identity.json");
+    replay_require(
+        sha256_file(&runtime_identity_file)? == c.expected_learning_runtime_identity_sha256,
+        "learning source runtime identity receipt differs",
+    )?;
+    let runtime = read(&runtime_identity_file)?;
+    let binary = c
+        .retained_learning_runtime_root
+        .join("geometric-frozen-map-fit");
+    replay_require(
+        sha256_file(&binary)? == LEARNING_BINARY
+            && runtime["source_commit"] == LEARNING_SOURCE
+            && runtime["training_binary_sha256"] == LEARNING_BINARY
+            && launch["argv"] == attempt["argv"]
+            && launch["pid"] == attempt["pid"]
+            && launch["started_utc"] == execution["started_utc"]
+            && execution["exit_code"] == 1
+            && execution["binary_sha256"] == LEARNING_BINARY
+            && execution["config_sha256"] == LEARNING_CONFIG
+            && launch["binary_sha256"] == LEARNING_BINARY
+            && launch["config_sha256"] == LEARNING_CONFIG,
+        "completed learning actual launch/source/binary/config provenance differs",
+    )?;
+    write(
+        a,
+        "completion-inherited-launch-authority.json",
+        &json!({"learning_attempt":attempt,
+        "recorded_launch":launch,"recorded_execution":execution,"runtime_identity":runtime,
+        "runtime_identity_sha256":c.expected_learning_runtime_identity_sha256,
+        "observation_root":c.retained_learning_observation_root,
+        "observation_manifest_sha256":c.expected_learning_observation_manifest_sha256,
+        "immutable_binary_copy":binary,"immutable_binary_sha256":LEARNING_BINARY,
+        "relocation_scope":"original actual argv path retained; supplied immutable runtime bytes authenticated without relying on mutable build target"}),
+    )?;
+    replay_require(
+        sha256_file(&c.retained_failed_root.join("generate-construction.json"))?
+            == COMPLETED_CONSTRUCTOR,
+        "completed constructor receipt differs",
+    )?;
+    let gradient = read(
+        &c.retained_failed_root
+            .join("generate-gradient-receipt.json"),
+    )?;
+    replay_require(
+        gradient["coefficient_backward_calls"] == 31
+            && gradient["weighted_roles"] == 32
+            && gradient["active_parameter_names"] == json!([NAME]),
+        "completed gradient scope differs",
+    )?;
+    let terms = gradient["perterm"]
+        .as_array()
+        .ok_or_else(|| bad("completed gradients missing"))?;
+    replay_require(terms.len() == 31, "completed raw gradient count differs")?;
+    for row in terms {
+        let leaf = row["file"]
+            .as_str()
+            .ok_or_else(|| bad("completed raw gradient filename missing"))?;
+        replay_require(
+            Path::new(leaf).components().count() == 1
+                && row["status"] == "PRESENT"
+                && row["missing_gradient_filled_zero"] == false
+                && regular_file_bytes(&c.retained_failed_root.join(leaf))? == 3840
+                && sha256_file(&c.retained_failed_root.join(leaf))?
+                    == row["sha256"]
+                        .as_str()
+                        .ok_or_else(|| bad("completed raw gradient SHA missing"))?,
+            "completed raw gradient identity differs",
+        )?;
+    }
+    replay_require(
+        regular_file_bytes(&c.retained_failed_root.join("generate-gradient.f32le"))? == 3840
+            && sha256_file(&c.retained_failed_root.join("generate-gradient.f32le"))?
+                == gradient["aggregate"]["sha256"]
+                    .as_str()
+                    .ok_or_else(|| bad("completed aggregate SHA absent"))?,
+        "completed aggregate identity differs",
+    )?;
+    let original = ContinuationParent::from_checkpoint(&a.checkpoint)?;
+    replay_require(
+        original.binding.metadata_sha256 == shared::SOURCE
+            && sha256_bytes(&original.generate) == shared::G_SHA
+            && sha256_file(&a.checkpoint.join("continuation-field.bin"))? == shared::U_SHA,
+        "completion original Source/Generate/U differs",
+    )?;
+    let original_g =
+        NativeGeometricGenerate::from_bytes(&original.generate, original.integer.binding())?;
+    let original_weights = GenerateLearningWeights::from_native(
+        original.integer.binding().clone(),
+        &original_g,
+        &Device::Cpu,
+    )?;
+    restore(
+        &a.checkpoint.join("generate-source"),
+        &read(&a.checkpoint.join("generate-source/metadata.json"))?["parameters"],
+        &original_weights.parameters(),
+        &Device::Cpu,
+    )?;
+    let original_bits = np::snapshot(&original_weights.parameters())?;
+    let construction = read(&c.retained_failed_root.join("generate-construction.json"))?;
+    let summary = construction["summary"].clone();
+    replay_require(
+        summary["coordinates"] == 960
+            && summary["alternatives"] == 13440
+            && summary["accepted_coordinates"] == 320
+            && summary["revisited_coordinates"] == 0,
+        "completed constructor scope differs",
+    )?;
+    let expected = reconstruct_completed_unary(
+        original_bits
+            .get(NAME)
+            .ok_or_else(|| bad("original unary missing"))?,
+        construction["coordinate_records"]
+            .as_array()
+            .ok_or_else(|| bad("completed records missing"))?,
+    )?;
+    drop(construction);
+    drop(original_weights);
+    replay_require(
+        sha256_bytes(
+            &expected
+                .iter()
+                .flat_map(|x| x.to_le_bytes())
+                .collect::<Vec<_>>(),
+        ) == COMPLETED_UNARY,
+        "completed selected unary reconstruction differs",
+    )?;
+    let source_cp = c.retained_failed_root.join("checkpoint-0001");
+    replay_require(
+        sha256_file(&source_cp.join("generate-source/generate.unary.f32le"))? == COMPLETED_UNARY,
+        "partial checkpoint unary differs from completed constructor",
+    )?;
+    let mut copies = Vec::new();
+    for entry in fs::read_dir(&c.retained_failed_root)? {
+        let entry = entry?;
+        let leaf = entry.file_name();
+        if entry.file_type()?.is_file()
+            && ![
+                "attempt.json",
+                "config.json",
+                "report.json",
+                "manifest.json",
+                "external-config-binding.json",
+            ]
+            .iter()
+            .any(|x| leaf == std::ffi::OsStr::new(x))
+        {
+            fs::copy(entry.path(), a.out.join(&leaf))?;
+            copies.push(json!({"file":leaf.to_string_lossy(),"sha256":sha256_file(&entry.path())?,"bytes":regular_file_bytes(&entry.path())?}));
+        }
+    }
+    fs::copy(&old_config_file, a.out.join("learning-config.json"))?;
+    fs::copy(
+        c.retained_failed_root.join("external-config-binding.json"),
+        a.out.join("learning-external-config-binding.json"),
+    )?;
+    copy_directory(&source_cp, &a.out.join("checkpoint-0001"))?;
+    let mut repair = Vec::new();
+    for family in ["cue", "prefix"] {
+        let dest = a.out.join("checkpoint-0001").join(family);
+        for entry in fs::read_dir(a.checkpoint.join(family))? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                let leaf = entry.file_name();
+                repair.push(restore_original_sidecar_file(
+                    &entry.path(),
+                    &dest.join(&leaf),
+                    leaf.to_str() == Some("native-metadata.json"),
+                )?);
+            }
+        }
+    }
+    for family in ["cue-source", "prefix-source"] {
+        if a.checkpoint.join(family).is_dir() {
+            let dest = a.out.join("checkpoint-0001").join(family);
+            if !dest.exists() {
+                copy_directory(&a.checkpoint.join(family), &dest)?;
+            } else {
+                for entry in fs::read_dir(a.checkpoint.join(family))? {
+                    let entry = entry?;
+                    replay_require(
+                        entry.file_type()?.is_file()
+                            && fs::read(entry.path())? == fs::read(dest.join(entry.file_name()))?,
+                        "completion frozen sidecar source payload differs",
+                    )?;
+                }
+            }
+        }
+    }
+    write(
+        a,
+        "completion-sidecar-byte-restoration.json",
+        &json!({"repairs":repair,"scope":"only native-metadata.json full semantic equality permits changed bytes; all binary/f32 exact; original frozen missing files copied"}),
+    )?;
+    for family in ["cue", "prefix", "cue-source", "prefix-source"] {
+        let old = a.checkpoint.join(family);
+        let new = a.out.join("checkpoint-0001").join(family);
+        if old.exists() {
+            exact_frozen_directory(&old, &new)?;
+        } else {
+            replay_require(
+                !new.exists(),
+                "completion added an absent frozen sidecar family",
+            )?;
+        }
+    }
+    let cp = ContinuationParent::from_checkpoint(&a.out.join("checkpoint-0001"))?;
+    replay_require(
+        cp.binding == original.binding
+            && cp.bridge == original.bridge
+            && cp.cue == original.cue
+            && cp.joint == original.joint
+            && cp.prefix == original.prefix,
+        "completion frozen native families differ",
+    )?;
+    let ng = NativeGeometricGenerate::from_bytes(&cp.generate, cp.integer.binding())?;
+    let weights =
+        GenerateLearningWeights::from_native(cp.integer.binding().clone(), &ng, &Device::Cpu)?;
+    restore(
+        &a.out.join("checkpoint-0001/generate-source"),
+        &read(&a.out.join("checkpoint-0001/generate-source/metadata.json"))?["parameters"],
+        &weights.parameters(),
+        &Device::Cpu,
+    )?;
+    let actual = np::snapshot(&weights.parameters())?;
+    let mut expected_all = original_bits;
+    expected_all.insert(NAME.into(), expected);
+    replay_require(
+        np::same_bits(&actual, &expected_all)
+            && weights.export_native()?.to_bytes()? == cp.generate,
+        "completion checkpoint Generate all masters/export differs",
+    )?;
+    drop(weights);
+    drop(expected_all);
+    drop(actual);
+    for family in ["source", "generate-source"] {
+        let old = a.checkpoint.join(family);
+        for entry in fs::read_dir(&old)? {
+            let entry = entry?;
+            if family == "generate-source"
+                && entry.file_type()?.is_file()
+                && entry.file_name() != "generate.unary.f32le"
+                && entry.file_name() != "metadata.json"
+            {
+                replay_require(
+                    fs::read(entry.path())?
+                        == fs::read(
+                            a.out
+                                .join("checkpoint-0001")
+                                .join(family)
+                                .join(entry.file_name()),
+                        )?,
+                    "completion frozen Generate raw master bytes differ",
+                )?;
+            }
+        }
+    }
+    for leaf in [
+        "source/consumer/context.safetensors",
+        "source/consumer/potential.safetensors",
+        "continuation-source/continuation.unary.f32le",
+    ] {
+        if a.checkpoint.join(leaf).is_file() {
+            replay_require(
+                sha256_file(&a.checkpoint.join(leaf))?
+                    == sha256_file(&a.out.join("checkpoint-0001").join(leaf))?,
+                "completion frozen Source/U masters differ",
+            )?;
+        }
+    }
+    exact_frozen_directory(
+        &a.checkpoint.join("source"),
+        &a.out.join("checkpoint-0001/source"),
+    )?;
+    let u = NativeContinuationField::from_bytes(
+        &fs::read(a.out.join("checkpoint-0001/continuation-field.bin"))?,
+        &cp.binding,
+        &ng,
+    )?;
+    let old_u = NativeContinuationField::from_bytes(
+        &fs::read(a.checkpoint.join("continuation-field.bin"))?,
+        &original.binding,
+        &original_g,
+    )?;
+    replay_require(
+        u.packed_unary() == old_u.packed_unary(),
+        "completion rebound U numerical payload differs",
+    )?;
+    write(
+        a,
+        "completion-learning-provenance.json",
+        &json!({"failed_root":c.retained_failed_root,"failed_report_sha256":FAILED_REPORT,
+        "failed_manifest_sha256":FAILED_SEAL,"learning_config_sha256":LEARNING_CONFIG,"learning_source_commit":LEARNING_SOURCE,
+        "learning_binary_sha256":LEARNING_BINARY,"constructor_sha256":COMPLETED_CONSTRUCTOR,"selected_unary_sha256":COMPLETED_UNARY,
+        "inherited_backward_calls":31,"inherited_alternatives":13440,"copied_scientific_files":copies,
+        "completion_source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"completion_backward_calls":0,"completion_proposals":0,"source_epoch_alias":false}),
+    )?;
+    let (mut objective_frames, spec) =
+        prefix::prepare_generate_objective(a, &c.original_inputs, &original)?;
+    let mut reducer =
+        NativeVocabularyActions::new(original.integer.binding().clone(), &original.exp)?;
+    let mut objective_pools = objective_frames
+        .iter()
+        .map(|f| saved_pool(f, &mut reducer))
+        .collect::<Result<Vec<_>>>()?;
+    slim(&mut objective_frames)?;
+    for p in &mut objective_pools {
+        compact_pool(p);
+    }
+    let (mut frames, mut pools, _authority) = prefix::prepare_generate_guards(
+        a,
+        &c.original_inputs,
+        &original,
+        &objective_frames,
+        &spec,
+    )?;
+    let mut map = Vec::new();
+    for (frame, pool) in objective_frames.into_iter().zip(objective_pools) {
+        if let Some(row) = frames
+            .iter()
+            .position(|f| f.input == frame.input && f.position == frame.position)
+        {
+            replay_require(
+                frames[row].id == frame.id
+                    && frames[row].prefix == frame.prefix
+                    && pools[row].generate == pool.generate
+                    && pools[row].copy == pool.copy
+                    && pools[row].post == pool.post,
+                "completion original overlapping frame differs",
+            )?;
+            frames[row] = frame;
+            map.push(row);
+        } else {
+            map.push(frames.len());
+            frames.push(frame);
+            pools.push(pool);
+        }
+    }
+    replay_require(
+        frames.len() == UNION && map.len() == 31,
+        "completion original union differs",
+    )?;
+    let population = read(&a.out.join("generate-population.json"))?;
+    let rows = population["rows"]
+        .as_array()
+        .ok_or_else(|| bad("completion population rows missing"))?;
+    replay_require(
+        rows.len() == UNION && population["objective_row_map"] == json!(map),
+        "completion saved row map differs",
+    )?;
+    for (i, f) in frames.iter_mut().enumerate() {
+        replay_require(
+            rows[i]["input_index"] == f.input
+                && rows[i]["position"] == f.position
+                && rows[i]["id"] == f.id
+                && rows[i]["actual_prefix_ids"] == json!(f.prefix),
+            "completion frame identity differs",
+        )?;
+        f.native = json!({"continuation":f.native["continuation"].clone()});
+        f.prefix_trace = None;
+    }
+    // Saved objective fulltrace parity and protected helper authentication are
+    // complete before redundant action records are discarded. Raw score arrays,
+    // token masses, summary, bank/source/state witnesses remain retained.
+    for pool in &mut pools {
+        compact_pool(pool);
+    }
+    let pool_payload = pools
+        .iter()
+        .map(|p| {
+            (p.generate.capacity() + p.copy.capacity() + p.base_copy.capacity())
+                * std::mem::size_of::<i64>()
+                + p.trace.token_masses.capacity()
+                    * std::mem::size_of::<
+                        uor_r4_integer::geometric_vocabulary_actions::VocabularyTokenMass,
+                    >()
+        })
+        .sum::<usize>() as u64;
+    let frame_json = frames
+        .iter()
+        .map(|f| serde_json::to_vec(&f.native).map(|b| b.len() as u64))
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .into_iter()
+        .sum::<u64>();
+    let prior = read(&a.out.join("generate-resource-projection.json"))?;
+    let typed_frames = prior["prior_projection"]["typed_guard_frame_bound"]
+        .as_u64()
+        .ok_or_else(|| bad("completion typed frame projection absent"))?;
+    let numeric = pool_payload
+        .checked_add(4 * frame_json)
+        .and_then(|x| x.checked_add(typed_frames))
+        .and_then(|x| x.checked_add(32 * 1024 * 1024))
+        .ok_or_else(|| bad("completion numeric projection overflow"))?;
+    let report_before = size(&a.out)?;
+    let report_projection = report_before + 384 * 1024 * 1024;
+    write(
+        a,
+        "completion-resource-projection.json",
+        &json!({"prior_learning_projection":prior,
+        "pool_capacity_payload_bytes":pool_payload,"retained_continuation_json_bytes":frame_json,
+        "continuation_json_inflation_factor":4,"typed_guard_frame_bound":typed_frames,
+        "numerical_temporary_and_container_reserve":32*1024*1024u64,
+        "numeric_upper_bound":numeric,"numeric_cap":512*1024*1024u64,"model_compiled_tables_and_CPU_parameters":"separate process RAM; fresh gradient/CSR/pending caches absent",
+        "process_ram_cap":4*1024*1024*1024u64,"cache_cap":CACHE_CAP,
+        "normalization_donor_cache_cap":128*1024*1024u64,"normalization_cache_dropped_before_candidate391":true,
+        "backward_calls":0,"coordinate_search":0,"csr_cache":"NOT_ALLOCATED","generate_patch_caches":"NOT_ALLOCATED",
+        "native_reload_frames":391,"finite_candidate_full_pool_reductions":391,
+        "saved_objective_full_pool_reductions":31,"protected_saved_normalization_internal_reductions":"UNAVAILABLE_NOT_INSTRUMENTED_IN_REUSED_HELPER",
+        "report_bytes_before_reload":report_before,"report_projection_bytes":report_projection,
+        "report_cap_bytes":a.maximum_report_bytes,"reserved_candidate391_serialization_bytes":384*1024*1024u64,
+        "scope":"CPU saved frame normalization plus one candidate finite score/reduction per391, then unfinished391 native steps; no learning repeat"}),
+    )?;
+    replay_require(
+        numeric <= 512 * 1024 * 1024 && report_projection + 1024 * 1024 < a.maximum_report_bytes,
+        "completion full391 numerical/report projection exceeded",
+    )?;
+    for (i, pool) in pools.iter_mut().enumerate() {
+        let mut base = vec![0i64; VOCAB];
+        ng.score_into(&pool.post, &mut base, &mut Default::default())?;
+        let generate = base
+            .iter()
+            .zip(&frames[i].u)
+            .map(|(g, u)| {
+                g.checked_add(*u)
+                    .ok_or_else(|| bad("completion Generate/U overflow"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut trace = reducer.reduce_trace(&generate, &frames[i].copy_ids, &pool.copy)?;
+        trace.actions.clear();
+        trace.actions.shrink_to_fit();
+        pool.generate = generate;
+        pool.trace = trace;
+    }
+    let guarded = read(&a.out.join("final-trajectory-guards.json"))?;
+    let saved_guards = guarded["terms"]
+        .as_array()
+        .ok_or_else(|| bad("completed guard summaries missing"))?;
+    replay_require(
+        saved_guards.len() == GUARDS,
+        "completed guard summaries count differs",
+    )?;
+    for (i, row) in saved_guards.iter().enumerate() {
+        let summary = &pools[i].trace.summary;
+        replay_require(
+            row["guard_index"] == i
+                && row["input_index"] == frames[i].input
+                && row["position"] == frames[i].position
+                && row["required_original_winner"] == frames[i].target
+                && row["pool"]["reference_q24"] == summary.max_score_q24
+                && row["pool"]["chosen_token_id"] == summary.chosen_token_id
+                && row["pool"]["chosen_weight_q31"] == summary.chosen_weight_q31
+                && row["pool"]["total_weight_q31"] == summary.total_weight_q31,
+            "completion finite guard summary differs from completed cache",
+        )?;
+    }
+    let value = complete_pool_objective(&frames, &pools, &map, &spec)?;
+    replay_require(
+        value == summary["final"] && value == read(&a.out.join("final-objective.json"))?,
+        "completion candidate complete objective/masses differ from finished learning",
+    )?;
+    let all_guards =
+        (0..GUARDS).all(|i| pools[i].trace.summary.chosen_token_id == frames[i].target);
+    let initial = read(&a.out.join("initial-original-objective.json"))?;
+    let gate = final_gate(&initial, &value, all_guards)?;
+    replay_require(
+        all_guards && gate["passed"] == false,
+        "completion recorded negative gate/guards differ",
+    )?;
+    let mut receipt = read(&a.out.join("checkpoint-0001/receipt.json"))?;
+    receipt["mode"] = json!("generate_episode_completion");
+    receipt["policy"] = policy();
+    receipt["active_parameter_names"] = json!([]);
+    receipt["completion_backward_calls"] = json!(0);
+    receipt["completion_proposals"] = json!(0);
+    receipt["inherited_learning_backward_calls"] = json!(31);
+    receipt["inherited_learning_alternatives"] = json!(13440);
+    receipt["learning_source_commit"] = json!(LEARNING_SOURCE);
+    receipt["completion_source_commit"] = json!(option_env!("UOR_BUILD_SOURCE_COMMIT"));
+    receipt["candidate_native_steps"] = json!(UNION);
+    receipt["optimizer_updates"] = json!(0);
+    receipt["credit_scope"] = json!(
+        "completion only; no gradients/ranking/search; recorded original unary learning preserved"
+    );
+    for leaf in [
+        "checkpoint-0001/receipt.json",
+        "checkpoint-0001/continuation-source/metadata.json",
+    ] {
+        fs::write(a.out.join(leaf), serde_json::to_vec_pretty(&receipt)?)?;
+    }
+    let cp = ContinuationParent::from_checkpoint(&a.out.join("checkpoint-0001"))?;
+    shared::reload_guard_candidate(a, &cp, &u, &frames, &pools)?;
+    Ok(
+        json!({"schema":"uor-r4.generate-episode-completion/1","status":"COMPLETED","mode":"generate_episode_completion",
+        "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"learning_source_commit":LEARNING_SOURCE,
+        "learning_binary_sha256":LEARNING_BINARY,"learning_config_sha256":LEARNING_CONFIG,
+        "learning_failed_report_sha256":FAILED_REPORT,"learning_failed_manifest_sha256":FAILED_SEAL,
+        "completion_backward_calls":0,"completion_proposals":0,"inherited_backward_calls":31,"inherited_alternatives":13440,
+        "finite_candidate_full_pool_reductions":391,"candidate_native_steps":391,
+        "baseline_objective":initial,"candidate_objective":value,"final_gate":gate,"candidate_receipt":receipt,
+        "all_original380_preserved":all_guards,"weighted_roles":32,"unique_objective_frames":31,
+        "finite_episode_positive":false,"selected_model":false,"useful_candidate":false,
+        "actual9":"NOT_RUN_CONSTRUCTION_NEGATIVE","full512":"NOT_RUN","parent_master_bits_unchanged":true,
+        "parent_master_restoration":"NOT_APPLICABLE_NO_PARENT_MASTER_MUTATION",
+        "elapsed_seconds":start.elapsed().as_secs_f64(),"scope":"completed export/reload only; inherited fresh learning was not repeated"}),
     )
 }
 
@@ -1332,6 +2176,51 @@ pub(super) fn authenticate_positive_artifact(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn sidecar_key_order_is_allowed_only_for_full_native_metadata_identity() -> Result<()> {
+        let old = br#"{"parent":{"sha":"epoch"},"coefficients":[1,2]}"#;
+        let reordered = br#"{"coefficients":[1,2],"parent":{"sha":"epoch"}}"#;
+        let changed = br#"{"coefficients":[1,3],"parent":{"sha":"epoch"}}"#;
+        let changed_epoch = br#"{"coefficients":[1,2],"parent":{"sha":"other"}}"#;
+        assert!(sidecar_identity_matches(old, reordered, true)?);
+        assert!(!sidecar_identity_matches(old, reordered, false)?);
+        assert!(!sidecar_identity_matches(old, changed, true)?);
+        assert!(!sidecar_identity_matches(old, changed_epoch, true)?);
+        assert!(sidecar_identity_matches(old, b"not-json", true).is_err());
+        Ok(())
+    }
+    #[test]
+    fn completed_unary_reconstruction_preserves_unselected_fractional_bits_and_epochs() -> Result<()>
+    {
+        let mut masters = vec![0f32; COUNT];
+        masters[0] = 0.13;
+        masters[COUNT - 1] = -0.0;
+        let mut records = Vec::new();
+        let mut epoch = 0usize;
+        for (i, m) in masters.iter().enumerate() {
+            let current = code(*m)?;
+            let committed = i < 320;
+            let target = if current == 2 { 3 } else { 2 };
+            let alts = (-7i64..=7)
+                .filter(|q| *q != i64::from(current))
+                .map(|q| json!({"code":q,"feasible":true}))
+                .collect::<Vec<_>>();
+            records.push(json!({"order":i,"index":i,"incumbent_epoch":epoch,
+                "incumbent_code":current,"alternatives":alts,
+                "selected":{"status":if committed{"committed"}else{"unchanged"},"code":if committed{target}else{current}} ,
+                "epoch_after":epoch+usize::from(committed)}));
+            epoch += usize::from(committed);
+        }
+        let final_bits = reconstruct_completed_unary(&masters, &records)?;
+        assert_eq!(final_bits[0], 0.5);
+        assert_eq!(
+            final_bits[COUNT - 1].to_bits(),
+            masters[COUNT - 1].to_bits()
+        );
+        records[COUNT - 1]["incumbent_epoch"] = json!(321);
+        assert!(reconstruct_completed_unary(&masters, &records).is_err());
+        Ok(())
+    }
     #[test]
     fn report_projection_file_length_rejects_directory_and_missing_file() -> Result<()> {
         let nonce = std::time::SystemTime::now()

@@ -162,6 +162,10 @@ fn replay_require(ok: bool, message: &str) -> Result<()> {
     }
 }
 fn reference_replay_settings(a: &Args) -> Result<()> {
+    generate_episode_learning::validate_completion_settings(a)?;
+    if a.generate_episode_completion.is_some() {
+        return Ok(());
+    }
     generate_episode_learning::validate_settings(a)?;
     if a.generate_episode_learning.is_some() {
         return Ok(());
@@ -539,6 +543,8 @@ struct Args {
     #[serde(default)]
     generate_episode_learning: Option<generate_episode_learning::Config>,
     #[serde(default)]
+    generate_episode_completion: Option<generate_episode_learning::CompletionConfig>,
+    #[serde(default)]
     prefix_artifact_check: Option<prefix_fragment_learning::ArtifactConfig>,
 }
 const CONTROL_INDICES: [usize; 8] = [0, 1, 4, 5, 8, 9, 12, 13];
@@ -816,6 +822,11 @@ fn args() -> Result<(Args, Vec<u8>)> {
             .iter()
             .filter_map(|c| c.recorded_finite_contrast.as_ref())
             .flat_map(|c| [&c.retained_path_root, &c.retained_probe_root]),
+    )
+    .chain(
+        a.generate_episode_completion
+            .iter()
+            .flat_map(|c| c.input_roots()),
     )
     .chain(
         a.generate_episode_learning
@@ -6309,6 +6320,9 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
 }
 
 fn run(a: &Args, start: Instant) -> Result<Value> {
+    if a.generate_episode_completion.is_some() {
+        return generate_episode_learning::run_completion(a, start);
+    }
     if a.prefix_artifact_check.is_some() {
         return prefix_fragment_learning::run_artifact_check(a, start);
     }
@@ -6603,6 +6617,7 @@ fn main() -> Result<()> {
             || a.prefix_artifact_check.is_some()
             || a.prefix_fragment_learning.is_some()
             || a.generate_episode_learning.is_some()
+            || a.generate_episode_completion.is_some()
             || a.context_cue_coadapt.is_some()
             || a.prefix_context_credit.is_some()
             || a.readout_coadaptation
