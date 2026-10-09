@@ -1,5 +1,5 @@
 {
-  "status": "ADMITTED",
+  "status": "COMPLETED_DIAGNOSTIC_DELIVERY_PENDING",
   "started_utc": "2026-10-09T17:04:56.722402+00:00",
   "claim": "https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6085545262",
   "source": "819e46dfcb6de4b6255b136c52bd97b6e14b1b95",
@@ -18,5 +18,19 @@
   "new_model_gradients": 0,
   "new_fits": 0,
   "new_pods": 0,
-  "delivery_base": "5c14e047162f6747e7c8d66712ca24abfa5f0280"
+  "delivery_base": "5c14e047162f6747e7c8d66712ca24abfa5f0280",
+  "scientific_finished_utc": "2026-10-09T17:21:45.980881+00:00",
+  "elapsed_through_preservation_preparation_seconds": 1009.258479,
+  "initial_cold_build_failure_seconds": 311.96,
+  "example_tests_retry_seconds": 1.81,
+  "integer_test_compile_and_execution_seconds": 33.49,
+  "optimized_build_seconds": 2.2,
+  "diagnostic_supervised_seconds": 0.53,
+  "diagnostic_internal_seconds": 0.457347042,
+  "diagnostic_max_rss_bytes": 77889536,
+  "build_peak_rss_bytes": 2211676160,
+  "new_model_steps": 0,
+  "new_proposals": 0,
+  "new_gpu_seconds": 0,
+  "measured_complete_closeout": "Will be recorded on protected PR after merge and cleanup"
 }

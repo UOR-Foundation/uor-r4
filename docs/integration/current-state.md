@@ -1,5 +1,11 @@
 # Current UOR-R4 research state
 
+## Frozen Copy excludes every legal pair-only correction at the first saved error — October 9
+
+The [native pair/Copy bound](../labs/pair-copy-bound-2026-10-09/README.md) excludes input245/position4/target267 at all **nine** conservatively possible common references: even maximum legal target Generate mass plus every target Copy alias remains below rival307's Copy mass alone. At the actual reference, the optimistic masses are319960263 versus2147483648 Q31; the target already attains its maximum four-pair sum28. All4096 Generate/U scores and the complete saved pool reconstruct natively; three focused example tests and one integer atom test pass, with a retained loader compile failure repaired before the sole diagnostic run. This rules out further pair-only search at this fixed state with Copy/unary/bias/prototypes/U frozen; accepted **8/512**, unselected pair6/15 and separate coupled9/15 are unchanged, and no fit or whole-answer evaluation ran.
+
+**Next:** after protected delivery and cleanup, assess and specify complete-episode shared source-bound occurrence/progression credit coupled to Generate, tracing existing Prefix, donor-state and shared-action U roles while retaining the original parent and17/380 protection. Reuse the coupled9/15 and reached-first-error U-only negatives to identify a concrete joint credit/transaction change before a new fit; no unchanged pair sweep, candidate composition, removal of U or answer-specific serving case.
+
 ## Pair proposals never correct the first error despite high initial credit coverage — October 9
 
 [Saved proposal attribution](../labs/pair-proposal-attribution-2026-10-09/README.md) joins all 13,440 pair alternatives to input 245, position 4, target 267, at their actual incumbent epochs. Every alternative chooses 307: 931 accepted changes, 3,215 feasible alternatives not selected, 210 first-guard vetoes and 9,084 CE-only rejections. No target-winning proposal reaches either gate; no accepted correction is later lost. Target pooled probability rises from 0.018637775155279073 to 0.020563290376237518 without a winner crossing.
