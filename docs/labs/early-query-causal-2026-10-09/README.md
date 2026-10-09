@@ -123,7 +123,8 @@ Input SHA256 `04b48aa3a32b39398738e5219b59cc8ff90c57dd766b07b7cf8f794775a8e8b0`;
 label SHA256 `ec58bf3a84935b407cc5b5e7fb1eba4d5381be602c7df9bf5b6295f92ffa6d60`.
 Submitted retry config SHA256
 `705b832c0157400e16cb3cde4961a0d1886b75d6d3fcd4abc6f711d2150d84bb`;
-normalized sealed config hash differs because the evaluator materializes defaults.
+sealed config hash differs because the evaluator reserializes the JSON value;
+the submitted and sealed objects are identical.
 The tokenizer SHA256 is
 `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
 
@@ -171,8 +172,9 @@ all five row IDs, first-token verdicts and the actual query suffix. It reproduce
 the same numerical findings without a new model call. Both derived versions are
 retained. Raw results, runtime, exact configs, failed attempts and receipts are
 preserved in `icloud:UOR-R4/results/codex/codex-early-query-causal-20261009.tar`;
-the store index binds archive bytes and MD5. The merged PR carries final checks,
-resource charge, preservation and cleanup receipts.
+the store index binds archive bytes and MD5. Delivery is pending at this source
+head; the PR will carry final checks, resource charge, preservation and cleanup
+receipts before completion is reported.
 
 **Next:** Integrate protected winner/rival margins and authenticated Prefix credit
 through the existing coupled graph, with finite direction policy frozen before
