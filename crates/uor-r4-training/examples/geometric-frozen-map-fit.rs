@@ -6336,6 +6336,12 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
 }
 
 fn run(a: &Args, start: Instant) -> Result<Value> {
+    if a.coupled_episode_learning
+        .as_ref()
+        .is_some_and(|c| c.retained_gradient.is_some())
+    {
+        return coupled_episode_learning::run(a, start, &Device::Cpu);
+    }
     if a.generate_episode_completion.is_some() {
         return generate_episode_learning::run_completion(a, start);
     }

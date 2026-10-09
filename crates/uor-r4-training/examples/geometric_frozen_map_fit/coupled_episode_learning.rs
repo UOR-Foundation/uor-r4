@@ -23,6 +23,29 @@ const POST_CAP: usize = 16 * 1024 * 1024;
 #[serde(deny_unknown_fields)]
 pub(super) struct Config {
     pub original_inputs: prefix::Config,
+    #[serde(default)]
+    pub retained_gradient: Option<RetainedGradient>,
+}
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RetainedGradient {
+    pub retained_failed_root: PathBuf,
+    pub retained_learning_runtime_root: PathBuf,
+    pub retained_learning_observation_root: PathBuf,
+    pub expected_report_sha256: String,
+    pub expected_manifest_sha256: String,
+    pub expected_learning_runtime_identity_sha256: String,
+    pub expected_learning_observation_manifest_sha256: String,
+    pub expected_learning_config_sha256: String,
+    pub expected_learning_source_commit: String,
+    pub expected_learning_binary_sha256: String,
+    pub expected_gradient_receipt_sha256: String,
+    pub expected_coordinate_order_sha256: String,
+    pub expected_forward_parity_sha256: String,
+    pub expected_partial_journal_sha256: String,
+    pub inherited_partial_coordinate_records: usize,
+    pub inherited_partial_alternatives: usize,
+    pub inherited_partial_commits: usize,
 }
 impl Config {
     pub(super) fn input_roots(&self) -> Vec<&PathBuf> {
@@ -37,6 +60,13 @@ impl Config {
                 &e.retained_supplement_root,
             ]);
             r.extend(e.phases.iter().map(|p| &p.capture.root));
+        }
+        if let Some(g) = &self.retained_gradient {
+            r.extend([
+                &g.retained_failed_root,
+                &g.retained_learning_runtime_root,
+                &g.retained_learning_observation_root,
+            ]);
         }
         r
     }
@@ -70,6 +100,32 @@ pub(super) fn validate_settings(a: &Args) -> Result<()> {
                 && !a.categorical_action_only,
             "coupled episode mode/settings conflict",
         )?;
+        if let Some(g) = &c.retained_gradient {
+            replay_require(
+                [
+                    &g.expected_report_sha256,
+                    &g.expected_manifest_sha256,
+                    &g.expected_learning_runtime_identity_sha256,
+                    &g.expected_learning_observation_manifest_sha256,
+                    &g.expected_learning_config_sha256,
+                    &g.expected_learning_binary_sha256,
+                    &g.expected_gradient_receipt_sha256,
+                    &g.expected_coordinate_order_sha256,
+                    &g.expected_forward_parity_sha256,
+                    &g.expected_partial_journal_sha256,
+                ]
+                .iter()
+                .all(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+                    && g.expected_learning_source_commit.len() == 40
+                    && g.expected_learning_source_commit
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit())
+                    && g.inherited_partial_coordinate_records <= 1920
+                    && g.inherited_partial_alternatives <= 14400
+                    && g.inherited_partial_commits <= g.inherited_partial_coordinate_records,
+                "retained-gradient authority/configuration invalid",
+            )?;
+        }
         let mut inherited = a.clone();
         inherited.coupled_episode_learning = None;
         inherited.prefix_fragment_learning = Some(c.original_inputs.clone());
@@ -572,6 +628,381 @@ fn gradients(
     )?;
     Ok((pm, ps, gm, gs))
 }
+
+fn validate_inherited_leaf(leaf: &str) -> Result<()> {
+    replay_require(
+        matches!(
+            Path::new(leaf).components().next(),
+            Some(std::path::Component::Normal(_))
+        ) && Path::new(leaf).components().count() == 1
+            && !leaf.starts_with('.'),
+        "inherited scientific output leaf invalid",
+    )
+}
+fn copy_inherited_file(a: &Args, source: &Path, leaf: &str) -> Result<Value> {
+    validate_inherited_leaf(leaf)?;
+    let bytes = fs::read(source)?;
+    let destination = a.out.join(leaf);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&destination)?;
+    use std::io::Write as _;
+    file.write_all(&bytes)?;
+    Ok(json!({"source_file":source,"file":leaf,"bytes":bytes.len(),"sha256":sha256_bytes(&bytes)}))
+}
+fn verify_inherited_copies(a: &Args, authority: &Value) -> Result<()> {
+    for e in authority["copied_scientific_files"]
+        .as_array()
+        .ok_or_else(|| bad("inherited copy inventory absent"))?
+    {
+        let leaf = e["file"]
+            .as_str()
+            .ok_or_else(|| bad("inherited copy leaf absent"))?;
+        replay_require(
+            fs::metadata(a.out.join(leaf))?.len()
+                == e["bytes"]
+                    .as_u64()
+                    .ok_or_else(|| bad("inherited copy bytes absent"))?
+                && sha256_file(&a.out.join(leaf))?
+                    == e["sha256"]
+                        .as_str()
+                        .ok_or_else(|| bad("inherited copy hash absent"))?,
+            "inherited completed scientific bytes changed",
+        )?;
+    }
+    Ok(())
+}
+fn retained_gradients(
+    a: &Args,
+    c: &Config,
+    g: &RetainedGradient,
+    frames: &[shared::Frame],
+) -> Result<(Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Value)> {
+    report_output::verify(&g.retained_failed_root)?;
+    replay_require(
+        sha256_file(&g.retained_failed_root.join("report.json"))? == g.expected_report_sha256
+            && sha256_file(&g.retained_failed_root.join("manifest.json"))?
+                == g.expected_manifest_sha256,
+        "retained-gradient failed report/seal differs",
+    )?;
+    let failed = read(&g.retained_failed_root.join("report.json"))?;
+    replay_require(
+        failed["status"] == "FAILED" && failed["error"] == "guard Prefix trace missing",
+        "retained-gradient restart does not match guard-incidence setup failure",
+    )?;
+    let old_config = read(&g.retained_failed_root.join("config.json"))?;
+    replay_require(
+        sha256_file(&g.retained_failed_root.join("config.json"))?
+            == g.expected_learning_config_sha256,
+        "retained-gradient learning configuration hash differs",
+    )?;
+    let old: Config = serde_json::from_value(old_config["coupled_episode_learning"].clone())?;
+    replay_require(
+        old.retained_gradient.is_none()
+            && serde_json::to_value(&old.original_inputs)?
+                == serde_json::to_value(&c.original_inputs)?
+            && fs::canonicalize(&a.checkpoint)?
+                == fs::canonicalize(Path::new(
+                    old_config["checkpoint"]
+                        .as_str()
+                        .ok_or_else(|| bad("retained original checkpoint absent"))?,
+                ))?,
+        "retained-gradient original selected inputs differ",
+    )?;
+    report_output::verify(&g.retained_learning_observation_root)?;
+    replay_require(
+        sha256_file(&g.retained_learning_observation_root.join("manifest.json"))?
+            == g.expected_learning_observation_manifest_sha256,
+        "retained learning observation seal differs",
+    )?;
+    let execution = read(&g.retained_learning_observation_root.join("execution.json"))?;
+    let launch = read(&g.retained_learning_observation_root.join("launch.json"))?;
+    let attempt = read(&g.retained_failed_root.join("attempt.json"))?;
+    let runtime_file = g
+        .retained_learning_runtime_root
+        .join("runtime-identity.json");
+    replay_require(
+        sha256_file(&runtime_file)? == g.expected_learning_runtime_identity_sha256,
+        "retained learning runtime identity differs",
+    )?;
+    let runtime = read(&runtime_file)?;
+    let learning_binding = read(&g.retained_failed_root.join("external-config-binding.json"))?;
+    replay_require(
+        learning_binding["sha256"] == g.expected_learning_config_sha256
+            && learning_binding["attempt_argv"] == attempt["argv"],
+        "retained external configuration binding differs",
+    )?;
+    replay_require(
+        runtime["source_commit"] == g.expected_learning_source_commit
+            && runtime["binary_sha256"] == g.expected_learning_binary_sha256
+            && sha256_file(
+                &g.retained_learning_runtime_root
+                    .join("geometric-frozen-map-fit"),
+            )? == g.expected_learning_binary_sha256
+            && launch["argv"] == attempt["argv"]
+            && launch["pid"] == attempt["pid"]
+            && launch["started_utc"] == execution["started_utc"]
+            && execution["exit_code"] == 1
+            && launch["binary_sha256"] == g.expected_learning_binary_sha256
+            && execution["binary_sha256"] == g.expected_learning_binary_sha256
+            && launch["config_sha256"] == g.expected_learning_config_sha256
+            && execution["config_sha256"] == g.expected_learning_config_sha256,
+        "retained actual learning source/config/binary/launch differs",
+    )?;
+    let forward = read(&g.retained_failed_root.join("coupled-forward-parity.json"))?;
+    replay_require(
+        sha256_file(&g.retained_failed_root.join("coupled-forward-parity.json"))?
+            == g.expected_forward_parity_sha256
+            && forward["all_before_any_backward"] == true
+            && forward["physical_frames"] == 31
+            && forward["raw_G_Copy_U_donor_post_full_alias_pool"] == true,
+        "retained factual prebackward parity authority incomplete",
+    )?;
+    let receipt_file = g.retained_failed_root.join("coupled-gradient-receipt.json");
+    replay_require(
+        sha256_file(&receipt_file)? == g.expected_gradient_receipt_sha256,
+        "retained gradient receipt identity differs",
+    )?;
+    let receipt = read(&receipt_file)?;
+    replay_require(
+        receipt["physical_backward_calls"] == 31
+            && receipt["weighted_roles"] == 32
+            && receipt["extracted_families"] == json!([PREFIX, GENERATE])
+            && frames.len() == 31,
+        "retained gradient family/term population differs",
+    )?;
+    let terms = receipt["perterm"]
+        .as_array()
+        .ok_or_else(|| bad("retained perterm gradients absent"))?;
+    replay_require(
+        terms.len() == 31,
+        "retained weighted physical terms incomplete",
+    )?;
+    let mut ps = vec![0f32; COUNT];
+    let mut gs = vec![0f32; COUNT];
+    let mut copied = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (i, (term, f)) in terms.iter().zip(frames).enumerate() {
+        replay_require(
+            term["physical_index"] == i
+                && term["input_index"] == f.input
+                && term["position"] == f.position
+                && term["target"] == f.target
+                && term["weight"].as_f64() == Some(f.weight),
+            "retained weighted term identity differs",
+        )?;
+        let families = term["families"]
+            .as_array()
+            .ok_or_else(|| bad("retained term family arrays absent"))?;
+        replay_require(families.len() == 2, "retained term both families missing")?;
+        for (name, sum) in [(PREFIX, &mut ps), (GENERATE, &mut gs)] {
+            let e = families
+                .iter()
+                .find(|e| e["family"] == name)
+                .ok_or_else(|| bad("retained term family missing"))?;
+            let leaf = e["file"]
+                .as_str()
+                .ok_or_else(|| bad("retained raw gradient file missing"))?;
+            replay_require(
+                e["shape"] == json!([960])
+                    && e["bytes"] == 3840
+                    && e["status"] == "PRESENT"
+                    && e["missing_gradient_filled_zero"] == false
+                    && seen.insert(leaf.to_owned()),
+                "retained raw family receipt invalid",
+            )?;
+            validate_inherited_leaf(leaf)?;
+            let source = g.retained_failed_root.join(leaf);
+            replay_require(
+                sha256_file(&source)?
+                    == e["sha256"]
+                        .as_str()
+                        .ok_or_else(|| bad("raw gradient hash absent"))?,
+                "retained raw gradient hash differs",
+            )?;
+            let values = shared::floats(&source)?;
+            replay_require(
+                values.len() == COUNT && values.iter().all(|v| v.is_finite()),
+                "retained raw gradient shape/nonfinite",
+            )?;
+            replay_require(
+                e["all_zero"] == values.iter().all(|v| *v == 0.),
+                "retained zero gradient presence differs",
+            )?;
+            for (a, b) in sum.iter_mut().zip(values) {
+                *a += b;
+            }
+            copied.push(copy_inherited_file(a, &source, leaf)?);
+        }
+    }
+    let files = receipt["files"]
+        .as_array()
+        .ok_or_else(|| bad("retained aggregate/master files absent"))?;
+    replay_require(
+        files.len() == 4,
+        "retained aggregate/master inventory differs",
+    )?;
+    let mut loaded: BTreeMap<(String, String), Vec<f32>> = BTreeMap::new();
+    for e in files {
+        let family = e["family"]
+            .as_str()
+            .ok_or_else(|| bad("retained aggregate family absent"))?;
+        let kind = e["kind"]
+            .as_str()
+            .ok_or_else(|| bad("retained aggregate kind absent"))?;
+        let leaf = e["file"]
+            .as_str()
+            .ok_or_else(|| bad("retained aggregate filename absent"))?;
+        replay_require(
+            [PREFIX, GENERATE].contains(&family)
+                && ["gradient", "initial-master"].contains(&kind)
+                && e["shape"] == json!([960])
+                && e["bytes"] == 3840
+                && seen.insert(leaf.to_owned()),
+            "retained aggregate/master receipt invalid",
+        )?;
+        validate_inherited_leaf(leaf)?;
+        let source = g.retained_failed_root.join(leaf);
+        replay_require(
+            sha256_file(&source)?
+                == e["sha256"]
+                    .as_str()
+                    .ok_or_else(|| bad("aggregate hash absent"))?,
+            "retained aggregate/master hash differs",
+        )?;
+        let values = shared::floats(&source)?;
+        replay_require(
+            values.len() == COUNT && values.iter().all(|v| v.is_finite()),
+            "retained aggregate/master shape/nonfinite",
+        )?;
+        replay_require(
+            loaded
+                .insert((family.into(), kind.into()), values)
+                .is_none(),
+            "retained duplicate aggregate family",
+        )?;
+        copied.push(copy_inherited_file(a, &source, leaf)?);
+    }
+    let take = |family: &str, kind: &str| {
+        loaded
+            .get(&(family.to_owned(), kind.to_owned()))
+            .cloned()
+            .ok_or_else(|| bad("retained aggregate/master family absent"))
+    };
+    let pm = take(PREFIX, "initial-master")?;
+    let pg = take(PREFIX, "gradient")?;
+    let gm = take(GENERATE, "initial-master")?;
+    let gg = take(GENERATE, "gradient")?;
+    replay_require(
+        pg.iter().zip(&ps).all(|(a, b)| a.to_bits() == b.to_bits())
+            && gg.iter().zip(&gs).all(|(a, b)| a.to_bits() == b.to_bits()),
+        "retained ordered f32 perterm sums differ",
+    )?;
+    let pbytes = fs::read(a.checkpoint.join("prefix/prefix-source-f32.bin"))?;
+    let gbytes = fs::read(a.checkpoint.join("generate-source/generate.unary.f32le"))?;
+    replay_require(
+        pm.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>() == pbytes
+            && gm.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>() == gbytes,
+        "retained gradient original fractional master bits differ",
+    )?;
+    for (leaf, pin) in [
+        (
+            "coupled-gradient-receipt.json",
+            &g.expected_gradient_receipt_sha256,
+        ),
+        (
+            "coupled-forward-parity.json",
+            &g.expected_forward_parity_sha256,
+        ),
+        (
+            "coupled-coordinate-order.json",
+            &g.expected_coordinate_order_sha256,
+        ),
+    ] {
+        let source = g.retained_failed_root.join(leaf);
+        replay_require(
+            sha256_file(&source)? == *pin,
+            "retained completed scientific file differs",
+        )?;
+        copied.push(copy_inherited_file(a, &source, leaf)?);
+    }
+    // Existing normalized inputs were reconstructed from immutable authorities,
+    // not an encoder. They must stay byte-identical to the completed learning inputs.
+    for entry in fs::read_dir(&g.retained_failed_root)? {
+        let entry = entry?;
+        let leaf = entry.file_name().to_string_lossy().into_owned();
+        if leaf.starts_with("original-") && leaf.ends_with(".json") {
+            replay_require(
+                fs::read(entry.path())? == fs::read(a.out.join(&leaf))?,
+                "retained normalized original witness differs",
+            )?;
+            copied.push(
+                json!({"source_file":entry.path(),"file":leaf,"bytes":entry.metadata()?.len(),
+                "sha256":sha256_file(&entry.path())?}),
+            );
+        }
+    }
+    let partial = g.retained_failed_root.join("coupled-construction.json");
+    replay_require(
+        sha256_file(&partial)? == g.expected_partial_journal_sha256,
+        "retained incomplete construction journal differs",
+    )?;
+    copied.push(copy_inherited_file(
+        a,
+        &partial,
+        "inherited-partial-construction.json",
+    )?);
+    for (source, leaf) in [
+        (
+            g.retained_failed_root.join("report.json"),
+            "inherited-learning-report.json",
+        ),
+        (
+            g.retained_failed_root.join("manifest.json"),
+            "inherited-learning-manifest.json",
+        ),
+        (
+            g.retained_failed_root.join("config.json"),
+            "inherited-learning-config.json",
+        ),
+        (
+            g.retained_failed_root.join("external-config-binding.json"),
+            "inherited-learning-external-config-binding.json",
+        ),
+        (
+            g.retained_learning_observation_root.join("launch.json"),
+            "inherited-learning-launch.json",
+        ),
+        (
+            g.retained_learning_observation_root.join("execution.json"),
+            "inherited-learning-execution.json",
+        ),
+    ] {
+        copied.push(copy_inherited_file(a, &source, leaf)?);
+    }
+    let authority = json!({"root":g.retained_failed_root,"report_sha256":g.expected_report_sha256,
+        "manifest_sha256":g.expected_manifest_sha256,"source_commit":g.expected_learning_source_commit,
+        "config_sha256":g.expected_learning_config_sha256,"binary_sha256":g.expected_learning_binary_sha256,
+        "runtime_identity":runtime,"recorded_launch":launch,"recorded_execution":execution,
+        "observations":g.retained_learning_observation_root,
+        "observation_manifest_sha256":g.expected_learning_observation_manifest_sha256,
+        "gradient_receipt_sha256":g.expected_gradient_receipt_sha256,"order_sha256":g.expected_coordinate_order_sha256,
+        "raw_family_files":62,"physical_backward_calls":31,"new_training_graph_forwards":0,"new_backward_calls":0,
+        "new_gradient_context_encoder_calls":0,"copied_scientific_files":copied,
+        "original_partial":{"coordinate_records":g.inherited_partial_coordinate_records,
+            "alternatives":g.inherited_partial_alternatives,"commits":g.inherited_partial_commits,
+            "raw_journal_sha256":g.expected_partial_journal_sha256,"format":"INCOMPLETE_JSON",
+            "scope":"retained and charged owner-authenticated partial counters; not parsed as a resumable incumbent"},
+        "constructor_restart_from_original":true,"order_scope":"original frozen order verified from saved f32 gradients/master bits; no new gradient/rank selection",
+        "completion_source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),
+        "completion_attempt":read(&a.out.join("attempt.json"))?,
+        "completion_external_config_binding":read(&a.out.join("external-config-binding.json"))?});
+    verify_inherited_copies(a, &authority)?;
+    write(a, "inherited-gradient-authority.json", &authority)?;
+    Ok((pm, pg, gm, gg, authority))
+}
+
 struct Replacement {
     cache: GeneratePatchCache,
     post: Vec<H4Code>,
@@ -590,23 +1021,8 @@ fn replacement(
     legal: &[u32],
     oldpost: &[H4Code],
 ) -> Result<Replacement> {
-    let trace = f
-        .prefix_trace
-        .as_ref()
-        .ok_or_else(|| bad("Prefix incidence trace missing"))?;
-    replay_require(
-        trace.angular_indices.len() == 8
-            && trace.angular_indices.iter().all(|v| v.len() == f.ids.len()),
-        "Prefix unmasked lane/physical key count",
-    )?;
-    let keys = (0..f.ids.len())
-        .map(|j| {
-            (0..8)
-                .map(|lane| Some(lane * 120 + usize::from(trace.angular_indices[lane][j])))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    let base = shared::staged_base(&f.base_copy, &keys, parent_prefix, prefix)?;
+    let keys = validated_prefix_keys(f.ids.len(), &f.cue_keys)?;
+    let base = shared::staged_base(&f.base_copy, keys, parent_prefix, prefix)?;
     let donor = earliest(&base)?;
     let post = postcache.get(row, donor, f, p)?;
     let mut generate = vec![0i64; VOCAB];
@@ -690,18 +1106,28 @@ fn replacement_objective(
         "phases":phases,"objective_masses":masses,"all_phase_winners":phases.iter().all(|p|p["target"]==p["chosen"])}),
     )
 }
+fn validated_prefix_keys<'a>(
+    physical: usize,
+    keys: &'a [Vec<Option<usize>>],
+) -> Result<&'a [Vec<Option<usize>>]> {
+    replay_require(
+        keys.len() == physical
+            && keys.iter().all(|row| {
+                row.len() == 8
+                    && row.iter().enumerate().all(|(lane, key)| {
+                        key.is_some_and(|k| k >= lane * 120 && k < (lane + 1) * 120)
+                    })
+            }),
+        "retained Prefix physical/lane keys invalid",
+    )?;
+    Ok(keys)
+}
 fn prefix_affected(frames: &[shared::Frame], key: usize) -> Result<Vec<usize>> {
+    replay_require(key < COUNT, "Prefix coordinate domain")?;
     let mut rows = Vec::new();
     for (row, f) in frames.iter().enumerate() {
-        let trace = f
-            .prefix_trace
-            .as_ref()
-            .ok_or_else(|| bad("guard Prefix trace missing"))?;
-        replay_require(trace.angular_indices.len() == 8, "Prefix lane count")?;
-        if trace.angular_indices[key / 120]
-            .iter()
-            .any(|bin| usize::from(*bin) == key % 120)
-        {
+        let keys = validated_prefix_keys(f.ids.len(), &f.cue_keys)?;
+        if keys.iter().any(|physical| physical[key / 120] == Some(key)) {
             rows.push(row);
         }
     }
@@ -734,9 +1160,9 @@ fn construct(
     incidences: &mut [RowIncidence],
     legal: &[u32],
     red: &mut NativeVocabularyActions,
+    ranked: &[Coordinate],
 ) -> Result<(Vec<f32>, Vec<f32>, Value, Value)> {
     use std::io::Write as _;
-    let ranked = order(pm, pg, gm, gg)?;
     write(a, "coupled-coordinate-order.json", &json!(ranked))?;
     let baseline = generate::objective(frames, map, spec, caches, &generate::Patches::new())?;
     let mut current = baseline.clone();
@@ -1132,11 +1558,11 @@ fn pregradient_projection(a: &Args, c: &Config, frames: &[shared::Frame]) -> Res
         + 57780353
         + 48 * 1024 * 1024
         + 32 * 1024 * 1024;
-    let v = json!({"stage":"BEFORE_ANY_BACKWARD","capacity":cap,"typed_guard_frame_bound":typed,
+    let v = json!({"stage":if c.retained_gradient.is_some(){"BEFORE_RETAINED_GRADIENT_ADMISSION_AND_FINITE_RESTART"}else{"BEFORE_ANY_BACKWARD"},"capacity":cap,"typed_guard_frame_bound":typed,
         "actual31_full_serialized_native_bytes":full,"numeric_upper_bound":numeric,"numeric_cap":512*1024*1024u64,
         "process_ram_projection_bytes":process,"process_ram_cap":4*1024*1024*1024u64,
         "report_upper_bound":report,"report_cap":a.maximum_report_bytes,"streamed_journal_reserve":journal,
-        "native391_snapshot_max_measured_bytes":reload_max,"fresh_family_gradient_bytes":2*32*3840,
+        "native391_snapshot_max_measured_bytes":reload_max,"fresh_family_gradient_bytes":if c.retained_gradient.is_some(){0}else{2*32*3840},"retained_family_gradient_bytes":if c.retained_gradient.is_some(){2*32*3840}else{0},
         "graph_lifetime":"31 sequential joint graphs; original377 authority dropped before graph; all device graph/prepared Generate dropped before380 guards",
         "constructor_lifetime":"full Pool buffers consumed/dropped before incidence/staging; replacement row incidence only, no global CSR clone",
         "role_count":32,"physical_graph_count":31,"episode_length":15,"fresh_backward_calls_completed":0,
@@ -1164,11 +1590,15 @@ fn cache_mass_parity(cache: &GeneratePatchCache, pool: &shared::Pool) -> Result<
 }
 pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     validate_settings(a)?;
-    replay_require(!d.is_cpu(), "coupled fresh gradient requires CUDA")?;
+
     let c = a
         .coupled_episode_learning
         .as_ref()
         .ok_or_else(|| bad("coupled config absent"))?;
+    replay_require(
+        c.retained_gradient.is_some() || !d.is_cpu(),
+        "coupled fresh gradient requires CUDA",
+    )?;
     let original = ContinuationParent::from_checkpoint(&a.checkpoint)?;
     replay_require(
         original.binding.metadata_sha256 == shared::SOURCE
@@ -1204,7 +1634,20 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     let baseline_full = shared::objective_for_spec(&objectives, &objective_pools, &spec)?;
     write(a, "initial-original-objective.json", &baseline_full)?;
     pregradient_projection(a, c, &objectives)?;
-    let (pm, pg, gm, gg) = gradients(a, start, &original, &objectives, &objective_pools, d)?;
+    let (pm, pg, gm, gg, inherited_learning) = if let Some(g) = &c.retained_gradient {
+        retained_gradients(a, c, g, &objectives)?
+    } else {
+        let (pm, pg, gm, gg) = gradients(a, start, &original, &objectives, &objective_pools, d)?;
+        (pm, pg, gm, gg, Value::Null)
+    };
+    let ranked = order(&pm, &pg, &gm, &gg)?;
+    if let Some(g) = &c.retained_gradient {
+        replay_require(
+            sha256_bytes(&serde_json::to_vec(&json!(ranked))?)
+                == g.expected_coordinate_order_sha256,
+            "retained frozen order verification differs",
+        )?;
+    }
     generate::slim(&mut objectives)?;
     for p in &mut objective_pools {
         generate::compact_pool(p);
@@ -1249,6 +1692,9 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
                 == UNION,
         "coupled391 unique union differs",
     )?;
+    for f in &frames {
+        validated_prefix_keys(f.ids.len(), &f.cue_keys)?;
+    }
     let rows=frames.iter().enumerate().map(|(i,f)|json!({"row":i,"input_index":f.input,"position":f.position,
         "id":f.id,"actual_prefix_ids":f.prefix,"target_label_only":f.target,"zero_weight_guard":i<GUARDS,
         "guard_weight":0.,"coalesced_objective_weight":f.weight,"donor":pools[i].donor,
@@ -1270,7 +1716,7 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         a,
         "coupled-constructor-resource-projection.json",
         &json!({"capacity":cap,
-        "stage":"AFTER31_BACKWARDS_BEFORE_CONSTRUCTOR","actual_max_copy_aliases":max_copy,
+        "stage":if c.retained_gradient.is_some(){"AFTER_INHERITED31_BACKWARDS_BEFORE_FINITE_RESTART"}else{"AFTER31_BACKWARDS_BEFORE_CONSTRUCTOR"},"actual_max_copy_aliases":max_copy,
         "model_graph_and_prepared_device_tensors_dropped":true,"all380_authority_complete":true,
         "pool_actions":"OMITTED_RECONSTRUCTIBLE_FROM_COMPLETE_SCORES"}),
     )?;
@@ -1338,7 +1784,11 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         &mut incidences,
         &legal,
         &mut reducer,
+        &ranked,
     )?;
+    if !inherited_learning.is_null() {
+        verify_inherited_copies(a, &inherited_learning)?;
+    }
     let all_guards = (0..GUARDS).all(|i| caches[i].summary().chosen_token_id == frames[i].target);
     let gate = generate::final_gate(&initial, &value, all_guards)?;
     write(a, "final-objective.json", &value)?;
@@ -1378,11 +1828,19 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         json!({"schema":"uor-r4.coupled-episode-report/1","status":"COMPLETED","mode":"coupled_episode_learning",
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"policy":policy(),"selected_model":false,
         "finite_episode_positive":gate["passed"],"final_gate":gate,"baseline_objective":initial,"candidate_objective":value,
-        "construction_summary":construction,"candidate_receipt":receipt,"all_original380_preserved":all_guards,
+        "construction_summary":construction,"inherited_learning":inherited_learning,
+        "constructor_restart_from_original":c.retained_gradient.is_some(),
+        "new_training_graph_forwards":if c.retained_gradient.is_some(){0}else{62},
+        "new_backward_calls":if c.retained_gradient.is_some(){0}else{31},
+        "new_gradient_context_encoder_calls":0,
+        "prior_partial_alternatives_charged":c.retained_gradient.as_ref().map(|g|g.inherited_partial_alternatives),
+        "candidate_receipt":receipt,"all_original380_preserved":all_guards,
         "weighted_roles":32,"unique_objective_frames":31,"episode_length":15,"state_width":8,
         "active_scalars_per_family":960,"physical_backward_calls":31,"prebackward_native_parity_graph_forwards":31,"gradient_graph_forwards":31,"extracted_family_gradients":2,
         "optimizer_updates":0,"candidate_native_steps":391,"expected_final_pool_reductions":391,
         "gradient_context_encoder_calls":0,"new_captured_objective_encoder_calls":0,
+        "logical_gradient_producer":c.retained_gradient.as_ref().map(|g|&g.expected_learning_source_commit),
+        "fresh_gradient_files":if c.retained_gradient.is_some(){0}else{62},
         "native_reload_context_encoding":"normal native generator during391 independent steps",
         "saved_query_token_count_range":[min_query,max_query],
         "source_physical_candidate_count_range":[frames.iter().map(|f|f.ids.len()).min(),max_copy],
@@ -1551,6 +2009,21 @@ fn export_reload(
         receipt["optimizer_updates"] = json!(0);
         receipt["new_gradients"] = json!(1);
         receipt["coefficient_backward_calls"] = json!(31);
+        let inherited = a
+            .coupled_episode_learning
+            .as_ref()
+            .and_then(|c| c.retained_gradient.as_ref());
+        receipt["new_gradients"] = json!(if inherited.is_some() { 0 } else { 1 });
+        receipt["new_backward_calls"] = json!(if inherited.is_some() { 0 } else { 31 });
+        receipt["new_training_graph_forwards"] = json!(if inherited.is_some() { 0 } else { 62 });
+        receipt["inherited_learning_source_commit"] =
+            json!(inherited.map(|g| &g.expected_learning_source_commit));
+        receipt["gradient_scope"] = json!(if inherited.is_some() {
+            "31 inherited completed joint backwards, zero fresh graphs/backwards; original-seed finite constructor restart"
+        } else {
+            "31 fresh joint backwards"
+        });
+
         receipt["extracted_family_gradients"] = json!(2);
         receipt["credit_scope"]=json!("one31 factual fullaliasloss joint pullback: Prefix direct gather plus detached conditional donor contrast and factual Generate unary coefficient STE; only two960 gradients extracted/proposed; no Context/Cue/U extraction");
         receipt["frozen_numerical_scope"]=json!("all Source/Context/Potential/map/Cue angular+joint/Generate pair+bias+prototype/bridge/U masters frozen; Prefix960 and Generate unary960 only");
@@ -2121,6 +2594,28 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn compact_prefix_keys_survive_trace_discard_and_reject_mask_or_lane_erasure() -> Result<()> {
+        let keys = vec![(0..8).map(|lane| Some(lane * 120 + 17)).collect::<Vec<_>>(); 2];
+        assert_eq!(validated_prefix_keys(2, &keys)?, keys.as_slice());
+        let mut masked = keys.clone();
+        masked[1][7] = None;
+        assert!(validated_prefix_keys(2, &masked).is_err());
+        let mut wrong_lane = keys.clone();
+        wrong_lane[1][7] = Some(17);
+        assert!(validated_prefix_keys(2, &wrong_lane).is_err());
+        assert!(validated_prefix_keys(3, &keys).is_err());
+        let scores = shared::staged_base(
+            &[10, 11],
+            &keys,
+            &vec![0.; 960],
+            &(0..960)
+                .map(|i| if i == 7 * 120 + 17 { 0.25 } else { 0. })
+                .collect::<Vec<_>>(),
+        )?;
+        assert_eq!(scores, vec![10 + (1 << 22), 11 + (1 << 22)]);
+        Ok(())
+    }
     #[test]
     fn full_cache_bounds_charge_both_prefix_cache_and_incidence() -> Result<()> {
         let v = capacity_projection(512, 4096)?;
