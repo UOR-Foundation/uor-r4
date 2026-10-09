@@ -70,3 +70,5 @@ Implementation, tests and original-parent execution are pending. No result or
 promotion is claimed in this prospective record.
 
 Resource admission clarification before execution: the constructor caps its process projection at 8 GiB (numeric live data 512 MiB), within the claimed 16 GiB pod envelope. This accounts for 380 retained typed Prefix traces, sequential guard graphs, the 64 MiB donor cache, 2,918,400 raw Jacobian bytes and report overhead. It does not retain 380 device graphs. The prior 4 GiB constructor cap is increased explicitly for this mode.
+
+Setup correction before any gradient work: source `09d6546c1` passes 30 focused tests. The first process stopped at inherited Prefix validation because the orchestration config requested 2 GiB while the accepted constructor cap remains 512 MiB; it created no model report root. The fresh second attempt retains 512 MiB, subject to the complete new-mode projection before backward. The missing legacy supervisor sealer is restored from the verified prior runtime. This is an execution setup failure, not a model negative; the first config, launch, log and observation remain retained.

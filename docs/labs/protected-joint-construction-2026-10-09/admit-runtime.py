@@ -10,7 +10,7 @@ def h(p):
 def read(p):return json.loads(p.read_text())
 def write(p,v):
  with p.open('x') as f:json.dump(v,f,indent=2);f.write('\n')
-s=read(R/'source.json');b=R/'runtime/geometric-frozen-map-fit';c=R/'configs/protected-joint-0001-attempt1.json'
+s=read(R/'source.json');b=R/'runtime/geometric-frozen-map-fit';c=R/'configs/protected-joint-0001-attempt2.json'
 checks=read(R/'evidence/source-bound-build/checks.json')
 assert len(checks)==2 and all(x['exit_code']==0 for x in checks)
 assert (R/'evidence/source-bound-build/source.commit').read_text().strip()==s['commit']

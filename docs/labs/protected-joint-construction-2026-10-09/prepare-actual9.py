@@ -11,16 +11,16 @@ import sys
 import time
 
 BASE = pathlib.Path('/workspace/uor-r4/codex/sol-protected-joint-20261009')
-CONFIG = BASE / 'configs/protected-joint-0001-attempt1.json'
+CONFIG = BASE / 'configs/protected-joint-0001-attempt2.json'
 SOURCE = json.loads((BASE / 'source.json').read_text())['commit']
 # The admission receipt is authored after exact input verification and before model execution.
 EXPECTED_CONFIG_SHA = json.loads((BASE / 'evidence/input-verification.json').read_text())['config_sha256']
 BINARY = BASE / 'runtime/geometric-frozen-map-fit'
-MODEL = BASE / 'runs/protected-joint-0001-attempt1'
-OBSERVATION = BASE / 'observations/protected-joint-0001-attempt1'
+MODEL = BASE / 'runs/protected-joint-0001-attempt2'
+OBSERVATION = BASE / 'observations/protected-joint-0001-attempt2'
 CHECKPOINT = MODEL / 'checkpoint-0001'
-OUTCONFIG = BASE / 'configs/actual9-0001-attempt1.json'
-OUTPUT = BASE / 'qualifications/actual9-0001-attempt1'
+OUTCONFIG = BASE / 'configs/actual9-0001-attempt2.json'
+OUTPUT = BASE / 'qualifications/actual9-0001-attempt2'
 DECISION = BASE / 'evidence/actual9-config-decision.json'
 VERIFIER = pathlib.Path('/workspace/uor-r4/codex/sol-intermediate-word-boundary/publications/runtime-76e10b53f7-attempt2/native-reached-prefix-attribution')
 VERIFIER_SHA = 'd90411116c702dc4149fc055706f34c276c1ead29c5b0ec95600c30cc976326d'

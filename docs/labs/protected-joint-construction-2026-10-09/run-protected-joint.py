@@ -15,11 +15,11 @@ import time
 BASE = pathlib.Path('/workspace/uor-r4/codex/sol-protected-joint-20261009')
 SOURCE = json.loads((BASE / 'source.json').read_text())['commit']
 BINARY = BASE / 'runtime/geometric-frozen-map-fit'
-CONFIG = BASE / 'configs/protected-joint-0001-attempt1.json'
+CONFIG = BASE / 'configs/protected-joint-0001-attempt2.json'
 FACTORY = BASE / 'prepare-actual9.py'
-MODEL = BASE / 'runs/protected-joint-0001-attempt1'
-OBSERVATION = BASE / 'observations/protected-joint-0001-attempt1'
-ACTUAL_OBSERVATION = BASE / 'observations/actual9-0001-attempt1'
+MODEL = BASE / 'runs/protected-joint-0001-attempt2'
+OBSERVATION = BASE / 'observations/protected-joint-0001-attempt2'
+ACTUAL_OBSERVATION = BASE / 'observations/actual9-0001-attempt2'
 SUPERVISOR = pathlib.Path('/workspace/uor-r4/codex/sol-sequence-progress-causal/capture-supervise.py')
 SUPERVISOR_SHA = '393532acefc51e80d52952f3a1a367785523fade6a755b16439ffc902d836115'
 
@@ -56,7 +56,7 @@ def main():
     input_verification = read(BASE / 'evidence/input-verification.json')
     need(input_verification['status'] == 'PASS' and input_verification['config_sha256'] == config_sha,
          'authenticated input recovery incomplete')
-    need(type(config['maximum_report_bytes']) is int and 0 < config['maximum_report_bytes'] <= 2 << 30,
+    need(type(config['maximum_report_bytes']) is int and 0 < config['maximum_report_bytes'] <= 512 << 20,
          'model report cap differs')
     # Whole-task storage admission is recorded by the owner before invocation.
     # This additional live check protects the next report, temporary files and stop margin.
