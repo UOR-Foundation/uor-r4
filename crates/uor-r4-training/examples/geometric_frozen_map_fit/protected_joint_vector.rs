@@ -355,6 +355,21 @@ pub(super) fn resource_projection(
         "protected complete resource projection exceeded",
     )
 }
+fn decode_jacobian(bytes: &[u8]) -> Result<Vec<f32>> {
+    replay_require(
+        bytes.len() == DIM * 4,
+        "protected Jacobian byte shape differs",
+    )?;
+    let values = bytes
+        .chunks_exact(4)
+        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect::<Vec<_>>();
+    replay_require(
+        values.iter().all(|x| x.is_finite()),
+        "protected Jacobian nonfinite",
+    )?;
+    Ok(values)
+}
 fn jacobians(root: &Path) -> Result<Vec<Vec<f32>>> {
     let receipt = read(&root.join("protected-margin-receipt.json"))?;
     replay_require(
@@ -378,7 +393,7 @@ fn jacobians(root: &Path) -> Result<Vec<Vec<f32>>> {
                     && sha256_file(&root.join(&leaf))? == t["sha256"],
                 "protected Jacobian identity",
             )?;
-            shared::floats(&root.join(leaf))
+            decode_jacobian(&fs::read(root.join(leaf))?)
         })
         .collect()
 }
@@ -935,6 +950,23 @@ pub(super) fn authenticate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn joint_jacobian_reader_checks_1920_finite_gradients_without_weight_domain() -> Result<()> {
+        let mut expected = vec![0.0f32; DIM];
+        expected[0] = -3.0;
+        expected[DIM - 1] = 2.0;
+        let mut bytes = expected
+            .iter()
+            .flat_map(|x| x.to_le_bytes())
+            .collect::<Vec<_>>();
+        assert_eq!(decode_jacobian(&bytes)?, expected);
+        assert!(decode_jacobian(&bytes[..COUNT * 4]).is_err());
+        assert!(decode_jacobian(&bytes[..bytes.len() - 1]).is_err());
+        bytes[..4].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert!(decode_jacobian(&bytes).is_err());
+        Ok(())
+    }
+
     #[test]
     fn cyclic_projection_rechecks_later_opposition_zero_rows_and_scale() -> Result<()> {
         let mut gradient = vec![0.; DIM];

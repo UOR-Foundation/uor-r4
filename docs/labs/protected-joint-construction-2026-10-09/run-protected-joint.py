@@ -15,11 +15,11 @@ import time
 BASE = pathlib.Path('/workspace/uor-r4/codex/sol-protected-joint-20261009')
 SOURCE = json.loads((BASE / 'source.json').read_text())['commit']
 BINARY = BASE / 'runtime/geometric-frozen-map-fit'
-CONFIG = BASE / 'configs/protected-joint-0001-attempt2.json'
+CONFIG = BASE / 'configs/protected-joint-0001-attempt3.json'
 FACTORY = BASE / 'prepare-actual9.py'
-MODEL = BASE / 'runs/protected-joint-0001-attempt2'
-OBSERVATION = BASE / 'observations/protected-joint-0001-attempt2'
-ACTUAL_OBSERVATION = BASE / 'observations/actual9-0001-attempt2'
+MODEL = BASE / 'runs/protected-joint-0001-attempt3'
+OBSERVATION = BASE / 'observations/protected-joint-0001-attempt3'
+ACTUAL_OBSERVATION = BASE / 'observations/actual9-0001-attempt3'
 SUPERVISOR = pathlib.Path('/workspace/uor-r4/codex/sol-sequence-progress-causal/capture-supervise.py')
 SUPERVISOR_SHA = '393532acefc51e80d52952f3a1a367785523fade6a755b16439ffc902d836115'
 

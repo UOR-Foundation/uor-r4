@@ -37,11 +37,11 @@ for key in ['training_inputs','training_labels','development_inputs','developmen
  p=Path(a[key]);expected=reference[key];need(str(p)==expected['file'] and h(p)==expected['sha256'] and p.stat().st_size==expected['bytes'],'original file '+key);receipt[key]=expected
 for key in ['checkpoint','categorical','saved_fit']:need(a[key]==pair[key] and Path(a[key]).is_dir(),'original parent '+key)
 e=a['coupled_episode_learning']['original_inputs']['episode'];need(h(Path(e['typed_authority']))==e['expected_typed_authority_sha256'],'typed episode authority')
-a['coupled_episode_learning']['donor_credit']='full_pool_utility';a['coupled_episode_learning']['prefix_transaction']='protected_joint_vector';a['out']=str(R/'runs/protected-joint-0001-attempt2');a['maximum_report_bytes']=512<<20
+a['coupled_episode_learning']['donor_credit']='full_pool_utility';a['coupled_episode_learning']['prefix_transaction']='protected_joint_vector';a['out']=str(R/'runs/protected-joint-0001-attempt3');a['maximum_report_bytes']=512<<20
 need(not Path(a['out']).exists(),'exclusive fresh model root')
 reference_config=read(S/'docs/labs/full-donor-run-2026-10-09/model-config.json')
 comparison=json.loads(json.dumps(a));comparison['out']=reference_config['out'];comparison['maximum_report_bytes']=reference_config['maximum_report_bytes'];comparison['coupled_episode_learning'].pop('prefix_transaction')
 need(comparison==reference_config,'unexpected config delta beyond joint policy/out/report cap')
-config=R/'configs/protected-joint-0001-attempt2.json';write(config,a)
+config=R/'configs/protected-joint-0001-attempt3.json';write(config,a)
 receipt.update(status='PASS',seconds=time.monotonic()-start,config=str(config),config_sha256=h(config),source=SOURCE,scope='fourteen original sealed roots plus corrected donor comparison root; no backward or model execution')
 write(R/'evidence/input-verification.json',receipt);print(json.dumps({'status':'PASS','roots':len(roots),'config_sha256':h(config),'seconds':receipt['seconds']}),flush=True)
