@@ -2,7 +2,7 @@
 
 The [fresh v69 source review](../labs/spiralcore-live-review-2026-10-09/README.md) confirms 240 actual 8D E8 roots and Clifford-derived signed-permutation actions, with labelled within-orbit BFS and inverse replay. Browser observation executed 0→86→1 (two hops; intrinsic length/trace 4) and rejected 0→4 across orbits. The 256/256 badge is application-reported fixture health, not independent exhaustive replication. These route APIs also exist in preserved v68. For raw ±½ roots, sign Hamming equals squared Euclidean distance; that contract does not cover arbitrary root IDs or unconverted icosian coefficients. KEEP exact action contracts as consolidation input; native integration and language benefit NOT YET PROMOTED. No model run or accepted 8/512 change.
 
-**Next:** Consolidate task/protected-margin credit through the existing native Generate/Copy pool before new learning. Current 380 guards veto proposals but do not shape gradients. Preserve all native acceptance conditions; require an explicit basis/metric and caller gap before transferring SpiralCore E8 actions to H4/icosian state.
+**Next:** Consolidate task/protected-margin credit through the existing native Generate/Copy pool before new learning. The protected guard role adds no gradient credit; overlapping task/reference roles still contribute their declared weights. Preserve all native acceptance conditions; require an explicit basis/metric and caller gap before transferring SpiralCore E8 actions to H4/icosian state.
 
 ## XOR/Hamming proposal overlaps existing geometry metrics; learning repair remains open — October 9
 
