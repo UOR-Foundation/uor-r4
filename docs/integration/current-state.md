@@ -1,3 +1,9 @@
+## Quarter rounding dominates saved protection-screen error — October 9
+
+The [saved quantized-protection attribution](../labs/quantized-protection-attribution-2026-10-09/README.md) authenticates all1,676 source files and exactly reconstructs7,680 destination bits for #2101's four measured vectors; it runs no model or new candidate. Quarter rounding accounts for90.41–96.33% of the adverse conversion-stage sums on each vector's violated guard set, while the top10 coordinates account for14.37–41.41% of adverse coordinate pressure; both statistics retain opposing contributions and are not fractions of net native failure. Most violated rows retain positive *linearized* original margins (101/104,164/170,94/98,90/93), which establishes neither native retention nor permission to weaken guards. **KEEP** this diagnostic, with protection-aware discrete learning **NOT YET PROMOTED**, zero new native proposals and accepted8/512 unchanged.
+
+**Next:** Specify a bounded joint discrete transaction against actual-displacement protection constraints and original task descent, with a prospective finite policy/cost and every native acceptance condition retained; no unchanged radius/pass sweep, coordinate exceptions or guard weakening. The evidence supports the mechanism question, not a particular solver or feasibility claim.
+
 ## 2026-10-09 — A deterministic sub-reading for the open reply panel: 88 row checks, and a canned reply cannot pass one (deepseek, #2029)
 
 The fix for the instrument defect Results 4-7 measured. Record:
