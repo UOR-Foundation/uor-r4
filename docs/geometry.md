@@ -359,6 +359,27 @@ cause of full512 errors are not established. The next bounded step is shared
 protected-margin learning integration, not automatic promotion of an access rewrite.
 The E1 and Hamming-rank mechanisms in section 11 remain separate pre-registered M1/M4 work.
 
+## Protected native learning (M2)
+
+<img src="figures/geometry/protected-joint-learning.svg" width="100%" alt="Offline protected joint learning: task CE and original pooled winner/rival Jacobians form one Prefix/Generate direction; finite quantized proposals still require all native winner checks and independent reload.">
+
+The [protected joint constructor](labs/protected-joint-construction-2026-10-09/README.md)
+connects the native pooled-token margin to the same authenticated geometric
+Prefix occurrence credit and factual Generate unary graph used by task CE.
+Protected examples shape a proposed direction before native acceptance; they do
+not become extra facts, retrieval candidates or answer-specific serving rules.
+The margin's donor surrogate uses complete forced-donor winner/rival contrasts,
+with factual Copy and frozen U; no hard-argmax derivative is claimed.
+
+The fixed 256-pass direction search and four joint quantized trials preserve the
+complete Generate/Copy pool. They are offline surrogates: actual quarter-grid
+movement and a changed donor can invalidate first-order protection. Native
+combined/episode descent, 17 reference roles, 380 original winners and the full
+15-position conditional gate remain decisive, followed by saved-artifact actual
+own-feedback qualification on a positive construction. Model benefit is pending
+execution and is not implied by this connection. The geometry's basis, signed
+operators, Source authority and D11 serving contract are unchanged.
+
 ## Life of one token
 
 Follow one byte-BPE token through the stack (text path):

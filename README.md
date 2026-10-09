@@ -147,6 +147,10 @@ memory protections. In the [original-parent run](docs/labs/prefix-vector-run-202
 all four Prefix proposals lower loss but violate a reference or protected winner.
 The final candidate reaches 6/15 conditional positions and remains unselected;
 accepted whole-answer performance stays 8/512.
+The opt-in [protected joint constructor](docs/labs/protected-joint-construction-2026-10-09/README.md)
+adds original winner/rival credit before proposing coordinated Prefix/Generate
+updates. It uses the same full native token pool and retains every native
+acceptance check; implementation and model qualification are recorded separately.
 
 **Models trained**
 
