@@ -50,15 +50,15 @@ set -euo pipefail
 
 UOR_POD_CONFIG=${UOR_POD_CONFIG:-$HOME/.config/uor-pod/config}
 # shellcheck disable=SC1090  # the user's own config file
-if [ -f "$UOR_POD_CONFIG" ]; then . "$UOR_POD_CONFIG"; fi
+if [ -f "$UOR_POD_CONFIG" ]; then . "$UOR_POD_CONFIG"; echo "uor-pod: config $UOR_POD_CONFIG loaded" >&2; fi
 REPO_SLUG=${UOR_POD_REPO_SLUG:-UOR-Foundation/uor-r4}
 DEFAULT_REPO_URL=https://github.com/UOR-Foundation/uor-r4.git
 REPO_URL=${UOR_POD_REPO_URL:-https://github.com/$REPO_SLUG.git}
 STATE=${UOR_POD_STATE:-$HOME/.local/share/uor-r4/compute}
 DRY=${UOR_POD_DRY_RUN:-0}
-BOARD=${UOR_POD_BOARD:-2037}
+BOARD=${UOR_POD_BOARD-2037}   # set but empty means none, like UOR_POD_BOARD=none
 SSH_KEY=${UOR_POD_SSH_KEY:-$HOME/.ssh/uor_compute}
-TEMPLATE_ID=${UOR_POD_TEMPLATE:-h15vb984sw}
+TEMPLATE_ID=${UOR_POD_TEMPLATE-h15vb984sw}   # set but empty means none (create from UOR_POD_IMAGE)
 # Placement order: the network-volume datacenters that list RTX 5090 stock.
 # EUR-NO-1's volume is the canonical store; the others get uor-shared-<DC> lazily.
 VOLUME_DCS=${UOR_POD_VOLUME_DCS:-EUR-NO-1 EU-RO-1 EUR-IS-1}
@@ -71,6 +71,8 @@ VOLUME_DCS=${UOR_POD_VOLUME_DCS:-EUR-NO-1 EU-RO-1 EUR-IS-1}
 EXTRA_VOLUME_DCS="US-CO-1 US-NC-2 US-IL-1 US-KS-2 US-TX-3 CA-MTL-1"
 [ -z "${UOR_POD_VOLUME_DCS+set}" ] || EXTRA_VOLUME_DCS=''
 CANONICAL_DC=${UOR_POD_CANONICAL_DC:-EUR-NO-1}
+case " $VOLUME_DCS " in *" $CANONICAL_DC "*) ;; *)
+  echo "uor-pod: warning: canonical DC $CANONICAL_DC is not in UOR_POD_VOLUME_DCS ($VOLUME_DCS); up may create volumes there" >&2;; esac
 VOLUME_ID=${UOR_POD_VOLUME_ID:-lmd1pfah3y}
 NEW_VOLUME_GB=${UOR_POD_NEW_VOLUME_GB:-100}
 # Public image the project's private template h15vb984sw wraps; used when
@@ -1334,8 +1336,8 @@ bootstrap_args() {  # SHA POD OFF-VOLUME(true|false) [CANONICAL(true|false)] -> 
   if [ "$OLLAMA" = 1 ]; then BOOT_ARGS+=(--with-ollama); fi
   if [ "$3" = true ]; then BOOT_ARGS+=(--off-volume); fi
   if [ "${4:-true}" = false ]; then BOOT_ARGS+=(--non-canonical); fi
-  # A fork's URL reaches the pod; a laptop path (a local stand-in for --ref
-  # checks) cannot be fetched from the pod, so it is not passed.
+  # A fork's URL reaches the pod. A plain laptop path (/..., the tests' stand-in
+  # for --ref checks) is not passed; a file:// URL is, and fails to fetch on the pod.
   case $REPO_URL in "$DEFAULT_REPO_URL"|/*) ;; *) BOOT_ARGS+=(--repo-url "$REPO_URL");; esac
   if [ -n "${UOR_HF_STORE:-}" ]; then BOOT_ARGS+=(--hf-store "$UOR_HF_STORE"); fi
 }

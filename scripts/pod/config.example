@@ -26,6 +26,7 @@
 : "${UOR_POD_SSH_KEY:=$HOME/.ssh/id_ed25519}"
 
 # No GitHub comments on the project's compute board (the local ledger is still written).
+# `none` and an empty value both turn comments off.
 : "${UOR_POD_BOARD:=none}"
 # For a fork: the repository pods clone and the repository for board comments.
 # : "${UOR_POD_REPO_SLUG:=you/uor-r4}"
