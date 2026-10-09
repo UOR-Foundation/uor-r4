@@ -4,7 +4,7 @@ from pathlib import Path
 import hashlib,json,subprocess,time
 R=Path('/workspace/uor-r4/codex/sol-protected-joint-20261009')
 SOURCE=json.loads((R/'source.json').read_text())['commit']
-S=Path('/root/build/src-'+SOURCE)
+S=Path(json.loads((R/'source.json').read_text())['build_path'])
 OLD=S/'docs/labs/full-donor-run-2026-10-09/model-config.json'
 VERIFIER=Path('/workspace/uor-r4/codex/sol-intermediate-word-boundary/publications/runtime-76e10b53f7-attempt2/native-reached-prefix-attribution')
 def h(p):

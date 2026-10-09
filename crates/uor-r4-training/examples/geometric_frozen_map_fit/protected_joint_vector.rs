@@ -1100,7 +1100,7 @@ mod tests {
             .collect::<Vec<_>>();
         let mut posts = vec![b.clone(), b.clone()];
         let mut donors = vec![2, 1];
-        let mut incidence = vec![original_inc.clone(), original_inc];
+        let mut incidence = vec![RowIncidence::new(&native, &b, &legal)?, original_inc];
         let keys = |n: usize| {
             (0..n)
                 .map(|i| {
@@ -1181,7 +1181,7 @@ mod tests {
         for (i, c) in caches.iter().enumerate() {
             assert_eq!(c.generate_scores(), original[i].0);
             assert_eq!(c.copy_scores(), original[i].1);
-            assert_eq!(c.summary(), &original[i].2);
+            assert_eq!(c.summary(), original[i].2);
         }
         assert_eq!(donors, vec![2, 1]);
         assert_eq!(incidence[0].digest()?, original_digest);
@@ -1243,7 +1243,7 @@ mod tests {
             &mut incidence
         )
         .is_err());
-        assert_eq!(caches[0].summary(), &before);
+        assert_eq!(caches[0].summary(), before);
         assert_eq!(donors, vec![0]);
         Ok(())
     }

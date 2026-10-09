@@ -3,7 +3,7 @@ from pathlib import Path
 import os,subprocess,time,resource,json,hashlib,shutil
 R=Path('/workspace/uor-r4/codex/sol-protected-joint-20261009')
 SOURCE=json.loads((R/'source.json').read_text())['commit']
-S=Path('/root/build/src-'+SOURCE)
+S=Path(json.loads((R/'source.json').read_text())['build_path'])
 T=Path('/root/build/target-sm120')
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 identity=json.loads((R/'source.json').read_text())
