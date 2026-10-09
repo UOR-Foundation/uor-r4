@@ -4,6 +4,7 @@ use super::native_proposals as np;
 use super::prefix_fragment_learning as prefix;
 use super::*;
 use uor_r4_integer::geometric_vocabulary_actions::{GeneratePatchCache, PendingGeneratePatch};
+use uor_r4_training::geometric_generate_learning::vocabulary_marginal_loss_with_credit;
 const NAME: &str = "generate.unary";
 const COUNT: usize = 960;
 const VOCAB: usize = 4096;
