@@ -124,18 +124,25 @@ bf16 activations with f32 master weights on CUDA. Final inference does not depen
 | 19.9M chat stack | 19,929,136 | chat-v0-p2, 150M tokens, 12,207 steps | 1 x RTX 5090, 164k tok/s | 0.877 BPB float; 0.933 BPB served multiplier-free (11.9 MB) |
 | 20M / 29M ladder | 20M / 29M | 300M / 434M tokens | not recorded | Dev NLL 1.388 / 1.286 to 1.299 (like-for-like step) |
 | ~96M chat | ~96M | chat plus balanced curriculum | not recorded | Recall panel 26/40; open panel 20/232 |
-| 214M base (Step 8) | 214M (16 layers, width 1536, 24 heads) | 1.85B tokens, TinyStories-like | 2 x RTX 5090, about 12 h | Recall panel 31/40; open panel 36/232 |
-| 214M base (Plan A) | 214M | about 2B tokens (150k steps at 46.8k tok/s) from a 4.8B-token prepared SmolLM-Corpus | 1 x RTX PRO 6000, about 12 h | Dev NLL 2.55 to 2.073 |
+| 214M base (Step 8) | 214M (16 layers, width 1536, 24 heads) | 1.85B tokens: TinyStories 0.7, TinyDialogues 0.1, chat-v0-p2 0.2 | 2 x RTX 5090, about 12 h | TinyStories val NLL 1.032; recall panel 31/40; open panel 36/232 |
+| 214M base (Plan A) | 214M, initialised from the Step 8 base | 1.84B tokens (150k steps, batch 32, context 384) from SmolLM-Corpus (FineWeb-Edu and Cosmopedia-v2 shards) | 1 x RTX PRO 6000, 11.8 h | FineWeb dev NLL 2.90 to 2.073 |
 
 NLL rows use different corpora and are not one curve; the 20M to 29M step is the
 only like-for-like comparison. BPB and NLL are different metrics. The 214M models
 gain on recall panels, not on code or arithmetic.
 
-**Data sources, licenses as recorded.** SmolTalk (Apache-2.0 per lab notes; verify upstream);
-SmolLM-Corpus and TinyStories (license not recorded in the repository, to be checked before any
-release); SmolLM2 weights (Apache-2.0, offline comparator or teacher only, never a serving
-path); chat-v0-p2 and the balp/drv2 sets (project-built or teacher-paraphrased; terms not
-recorded). See [Models and data](#models-and-data).
+**Data sources and licenses** (checked against each source's Hugging Face card, 9 October 2026):
+
+| Source | Used for | License |
+| --- | --- | --- |
+| [SmolLM-Corpus](https://huggingface.co/datasets/HuggingFaceTB/smollm-corpus) (FineWeb-Edu, Cosmopedia-v2) | Plan A pretraining | ODC-BY |
+| [TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) | 8M–214M ladder pretraining | CDLA-Sharing-1.0 |
+| [TinyDialogues](https://huggingface.co/datasets/styfeng/TinyDialogues) | 214M Step 8 pretraining | MIT |
+| [SmolTalk](https://huggingface.co/datasets/HuggingFaceTB/smoltalk) (magpie-ultra) and [UltraChat 200k](https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k), prepared as `chat-v0-p2` | chat pretraining share and fine-tunes | Apache-2.0 (new SmolTalk subsets; others follow their sources), MIT |
+| Project-generated memory dialogues (`mw-balp`, `mw-orcp`, dialogue-recall) | memory fine-tunes, recall panels | MIT (this project) |
+
+SmolLM2 weights (Apache-2.0) were used only as an offline comparator, never on a serving path.
+Third-party text is not republished; the project-generated sets are. See [Models and data](#models-and-data).
 
 **Compute.** GPU pods through `scripts/pod/uor-pod` only: 2 x RTX 5090, RTX 4090 and RTX PRO 6000,
 under caps of 4 pods and $8 per hour for all labs together. Total GPU-hours and cost are not
@@ -171,7 +178,7 @@ Every row holds at its exact artifact, data, operator and budget.
 | --- | --- | --- |
 | 19.9M chat stack | 0.877 BPB float, 0.933 BPB served multiplier-free | 11.9 MB artifact; lab chat evaluation |
 | Sealed 8M stack | 1.1199 BPB | Sealed report; Kneser-Ney 5-gram 1.2803 BPB |
-| 214M Plan A base | Dev NLL 2.55 to 2.073 | Open development split; rewrite and summarize usable, code and math wrong |
+| 214M Plan A base | FineWeb dev NLL 2.90 to 2.073 | Open development split; rewrite and summarize usable, code and math wrong |
 | Recall panel | 31/40 at 214M, 26/40 at 96M | 40 tasks; one training family |
 | Native grounded learner | 8/512 complete replies; best conditional gate 9/15 | Frozen 512-episode panel; about 40 later candidates kept 8 |
 | D11 serving engine | Bit-exact with the float path | NLL equal on 3,072 targets |
@@ -223,14 +230,24 @@ do not rent compute by hand. New contributors: read [CONTRIBUTING.md](CONTRIBUTI
 
 ## Models and data
 
-These links are being created and may not resolve yet.
+Released publicly on Hugging Face (9 October 2026). The labs' working store stays private.
 
-- Models: <https://huggingface.co/caseyallard/uor-r4-geometric-214m>
-- Data card: <https://huggingface.co/datasets/caseyallard/uor-r4-data>
+**[caseyallard/uor-r4-geometric-214m](https://huggingface.co/caseyallard/uor-r4-geometric-214m)**: four 214M geometric-stack checkpoints, with configs, sanitized run reports and the byte-BPE tokenizer.
 
-The labs' working store remains private. The 214M Plan A base, two 214M chat fine-tunes and the
-19.9M served artifact are the release candidates; licenses of the training data must be checked
-before release.
+| Checkpoint | What it is | Result |
+| --- | --- | --- |
+| `base-tinystories/` | Step 8 base: TinyStories, TinyDialogues and chat-v0-p2 | TinyStories val NLL 1.032; recall 31/40 |
+| `base-planA/` | The base above, continued for 1.84B SmolLM-Corpus tokens | FineWeb dev NLL 2.90 to 2.073 |
+| `chat-planA-b8/` | Plan A base plus an assistant fine-tune (173M-token mix, 8k steps) | Rewrite and summarize usable; code and arithmetic wrong |
+| `chat-smoltalk-b16/` | Step 8 base plus the same fine-tune mix (16k steps) | Rewrite and summarize usable |
+
+**[datasets/caseyallard/uor-r4-data](https://huggingface.co/datasets/caseyallard/uor-r4-data)**: the project-generated data.
+- The tokenizer.
+- Memory-dialogue sets (`mw-balp`, `mw-orcp`), plus a manifest describing the full fine-tune mix.
+- The dev split.
+- The project-authored conversational panels.
+
+Third-party corpora are linked above, not republished. Weights are MIT; the data each checkpoint saw keeps its source license.
 
 ## How the project is run
 
