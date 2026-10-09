@@ -1,0 +1,33 @@
+# Coordinated Prefix transactions — 9 October 2026
+
+**Decision: NOT YET PROMOTED.** This piece changes the offline native learner's finite proposal mechanism. It adds no model parameters or serving cases. The accepted Source48/Generate64 artifact still completes **8/512** replies on the frozen development panel; the corrected donor candidate's **9/15** is a separate, unselected conditional result. Actual-parent vector construction and complete generated replies are **NOT_RUN** in this implementation record.
+
+## Question and evidence
+
+The [corrected donor run](../full-donor-run-2026-10-09/README.md) changed Prefix credit but retained the legacy candidate's correct-position set. [Saved attribution](../donor-residual-attribution-2026-10-09/README.md) found no winning offer at five residual positions. [Pooled competition](../residual-pool-competition-2026-10-09/README.md) showed useful adjacent Prefix movement that remained short of the earliest residual's required local contrast. Those findings justify testing coordinated finite movement; they do not establish its feasibility, necessity or a capacity limit.
+
+The prospective question is whether a generic vector derived from the **complete joint episode gradient** can offer a protected improvement missed by the adjacent-coordinate policy. It uses the original selected initializer, not the negative endpoint or a composition of candidates. The [claim](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6087615293) fixed the policy before implementation. No inspected token, position, desired donor or named feature key chooses a proposal.
+
+## Fixed transaction policy
+
+For each radius `r` in `[1, 2, 4, 7]`, normalize the entire 960-element Prefix gradient by its maximum absolute value. In f64, set `eta = (r * 0.25) / max_abs_gradient`, form `original_master - eta * gradient`, and clamp to `[-1.75, 1.75]`. Cast to f32 and apply the existing ties-away native Q4 projection. An unchanged native code retains the original fractional master's exact bits; a changed code uses canonical `code / 4`. Zero gradient yields an explicit NOOP. The radius bounds the continuous proposed displacement in quarter-master quanta; quantized actual master displacement is recorded separately.
+
+A vector must have a negative sum of original gradient times **actual** master displacement to reach native evaluation. This is a prospective filter, not a proof that skipped vectors cannot improve the nonlinear model. All four vectors use the same original epoch, including original Generate coefficients. Stage the union of every changed key's physical incidences, preserving aliases and multiplicities; recompute BASE Copy, earliest donor, its bridge/post-state, native Generate plus frozen U, and downstream incidence. Native acceptance requires strict current combined CE descent, all seventeen reference winners and all 380 protected winners. Unaffected rows retain their original caches; affected guards are checked in original order with the first veto reported.
+
+Select the passing vector with the lowest CE, breaking exact ties by radius order; otherwise retain the parent. At most one Prefix transaction commits. Keeping incumbent, best and current complete replacement batches would exceed the 256 MiB cache cap, so retain only a compact best receipt and master vector, discard each trial batch, then stage the selected vector again against the original epoch. Require identical objective, guard outcomes, donor/post/incidence identities and staged digest before any mutation. Count this verification work separately from the four policy alternatives.
+
+After the optional Prefix commit, use the existing Generate constructor: 960 coordinates in their original frozen relative gradient order, all fourteen other legal codes at each current incumbent, unchanged objective and protections. There is no Prefix singleton pass in this mode, reranking or revisit. The upper policy count is 13,444 alternatives; restaging is additional measured work. Final construction still requires all fifteen conditional winners, objective improvement, seventeen references, 380 guards and 391 independent native reloads. Only a positive full conditional gate admits the existing immediate actual-artifact whole-answer/EOS qualification.
+
+## Compatibility and evidence boundary
+
+Set `coupled_episode_learning.prefix_transaction` to `"gradient_vector_prefix"` together with `donor_credit: "full_pool_utility"`. Omitted `prefix_transaction` preserves the historical `coordinate_adjacent` Prefix policy and its serialization. The vector mode requires fresh `full_pool_utility` gradients and rejects historical retained-gradient and retained-export recovery. Its policy, journal and positive artifact authority distinguish vector observations and Generate records from the historical 1,920-coordinate journal. The shared typed Prefix lookup and native bounded integer serving code are unchanged.
+
+Validation identities, executed fixture results and review findings will be recorded with the completed source. A native fixture establishes an arithmetic or transaction boundary; it is not a development, held-out or language result. There is no new model artifact, dataset draw, optimizer run, GPU lease or paid compute in this piece. The original-parent comparison remains a separately admitted successor after protected delivery and cleanup.
+
+## Resources
+
+[Prospective resources](resource-projection.json) include preparation, source changes, cold build, native fixtures, reviews, preservation, protected merge and cleanup: 7,200 seconds, two local build workers, 8 GiB peak RAM and 8 GiB incremental storage, with a 30 GiB free-space floor and 128 MiB stop margin. The lab projection continues 649,770 to 656,970 seconds. The relocated shared ledger was read and extended by 7,200,000 ms under standing owner authorization; prior charges remain intact. Actual source/build/test time is reported separately from actual-parent model compute, which is NOT_RUN.
+
+## Next
+
+After verified merge and cleanup, admit one original-parent vector run with a complete resource projection and exact data/config/executable identities. Retain the fixed four radii, complete episode and all protections; compare offered crossings, CE rejection, first guard veto and accepted changes against the retained adjacent-policy result. A positive complete conditional gate immediately triggers actual-artifact whole-answer/EOS qualification. A negative remains a bounded result of this finite policy and must change the next causal question; it does not authorize an unchanged larger sweep.
