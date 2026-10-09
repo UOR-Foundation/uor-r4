@@ -219,7 +219,8 @@ fn prepare_trajectory_guards(
             == "fcde63e9fc12f218b866b71323601485db7f93fd1b69a54beec91e87a7b84fad",
         "trajectory original377 pool pin differs",
     )?;
-    let full: Vec<Value> = shared::dec(&read(&fullfile)?)?;
+    // Deserialize once: no intermediate Value clone of the full377 tree.
+    let full: Vec<Value> = serde_json::from_reader(fs::File::open(&fullfile)?)?;
     replay_require(full.len() == 377, "trajectory original377 count differs")?;
     let mut saved = BTreeMap::new();
     for row in full {
@@ -340,7 +341,7 @@ fn prepare_trajectory_guards(
                     "original full guard pool replay differs",
                 )?;
                 (
-                    json!({"bank_trace":full["bank_trace"],"bridge":full["bridge"],"generate_q24":g,"copy_q24":copy,"copy_ids":ids,"pool":trace,
+                    json!({"bank_trace":full["bank_trace"],"bridge":full["bridge"],"generate_q24":g,"copy_q24":copy,"copy_ids":ids,"pool":{"summary":trace.summary,"token_masses":trace.token_masses},
                  "continuation":{"state_codes":raw["generation"][position]["continuation"]["state_codes"],"query_tokens":raw["generation"][position]["continuation"]["query_tokens"],"actual_prefix_tokens":raw["generation"][position]["continuation"]["actual_prefix_tokens"],"delta_scores_q24":full["frozen_u_q24"]}}),
                     "retained_full377",
                 )
@@ -352,6 +353,11 @@ fn prepare_trajectory_guards(
                     "retained_addition",
                 )
             };
+            native["pool"]
+                .as_object_mut()
+                .ok_or_else(|| bad("guard pool authority absent"))?
+                .remove("actions");
+            native["pool_action_trace"] = json!("OMITTED_RECONSTRUCTIBLE_FROM_COMPLETE_SCORES; complete raw scores/masses/summary retained; no action-record Value allocation");
             replay_require(
                 native["pool"]["summary"]["chosen_token_id"] == target
                     && native["pool"]["summary"] == raw["generation"][position]["pool"]["summary"],
@@ -389,7 +395,8 @@ fn prepare_trajectory_guards(
             replay_require(
                 json!(pool.generate) == native["generate_q24"]
                     && json!(pool.copy) == native["copy_q24"]
-                    && json!(pool.trace) == native["pool"]
+                    && json!(pool.trace.summary) == native["pool"]["summary"]
+                    && json!(pool.trace.token_masses) == native["pool"]["token_masses"]
                     && pool.trace.summary.chosen_token_id == target,
                 "guard baseline donor/native fullvector parity differs",
             )?;
@@ -502,7 +509,7 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         retained_probe_root: c.retained_probe_root.clone(),
         retained_finite_root: c.retained_probe_root.clone(),
     };
-    let (frames, baseline) = shared::prepare_frames(a, &seed, &original, &original, true)?;
+    let (mut frames, baseline) = shared::prepare_frames(a, &seed, &original, &original, true)?;
     let ng = NativeGeometricGenerate::from_bytes(&original.generate, original.integer.binding())?;
     let field = NativeContinuationField::from_bytes(
         &fs::read(a.checkpoint.join("continuation-field.bin"))?,
@@ -549,7 +556,7 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
   "threads":2,"donor_cache_cap":shared::CACHE_LIMIT,"scope":"saved nativeframes/rawvectors/stagedpools/cache; model/autodiff tensors charged separately to process RAM"}),
     )?;
     let mut cache = if c.trajectory.is_some() {
-        shared::DonorCache::with_limit(&original, 256 * 1024 * 1024)?
+        shared::DonorCache::with_limit(&original, 128 * 1024 * 1024)?
     } else {
         shared::DonorCache::new(&original)
     };
@@ -566,6 +573,28 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "Prefix ORIGINAL native initial objective differs",
     )?;
     write(a, "initial-original-objective.json", &initial)?;
+    // Check complete original objective hard pools before discarding duplicate
+    // action-record JSON; retain the typed full traces for final task reload.
+    if c.trajectory.is_some() {
+        for (f, pool) in frames.iter().zip(&pools) {
+            replay_require(
+                json!(pool.generate) == f.native["generate_q24"]
+                    && json!(pool.copy) == f.native["copy_q24"]
+                    && json!(pool.trace) == f.native["pool"],
+                "trajectory original18 full rawpool parity differs before authority compaction",
+            )?;
+        }
+        for f in &mut frames {
+            f.native["pool"]
+                .as_object_mut()
+                .ok_or_else(|| bad("objective pool authority absent"))?
+                .remove("actions");
+            f.native["pool_action_trace"] = json!("OMITTED_RECONSTRUCTIBLE_FROM_COMPLETE_SCORES; typed objective traces and complete raw vectors/masses retained");
+        }
+    }
+    let retained_objective_bytes = frames.iter().try_fold(0u64, |sum, f| {
+        Ok::<_, Box<dyn std::error::Error>>(sum + serde_json::to_vec(&f.native)?.len() as u64)
+    })?;
 
     let (guard_frames, mut guard_pools, guard_authority) = if let Some(tc) = &c.trajectory {
         prepare_trajectory_guards(
@@ -596,10 +625,11 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
                     + 4096
             })
             .sum::<u64>();
-        let numerical = 256 * 1024 * 1024u64
+        let numerical = cache.limit as u64
             + 2 * pool_bytes
             + typed_frames
-            + saved_bytes * 8
+            + retained_objective_bytes * 8
+            + pools_numeric_bytes(&pools)
             + 32 * 1024 * 1024;
         let original_native = guard_authority["original_native_serialized_bytes"]
             .as_u64()
@@ -609,14 +639,14 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
             + 380 * (4096 * 64 + 65536)
             + saved_bytes
             + 64 * 1024 * 1024;
-        replay_require(
-            numerical <= 512 * 1024 * 1024 && projection + 1048576 < a.maximum_report_bytes,
-            "trajectory cached numerical/export serialization projection exceeded",
-        )?;
         write(
             a,
             "trajectory-resource-projection.json",
-            &json!({"actual_retained_guard_pool_bytes":pool_bytes,"typed_guard_frame_bound":typed_frames,"original_serialized_guard_native_bytes":original_native,"numeric_upper_bound":numerical,"report_projection_bytes":projection,"donor_cache_cap":268435456,"numeric_cap":536870912,"report_cap":a.maximum_report_bytes,"process_ram_cap":4294967296u64,"temporary_cap":536870912,"export_projection_margin_per_guard":327680,"scope":"coexisting current/staged380 numericalpools, slim retainedframe authority, cache/metadata/allocator margin; no autodiff tensors in trajectorymode"}),
+            &json!({"actual_retained_guard_pool_bytes":pool_bytes,"typed_guard_frame_bound":typed_frames,"original_serialized_guard_native_bytes":original_native,"numeric_upper_bound":numerical,"report_projection_bytes":projection,"donor_cache_cap":cache.limit,"owner_donor_cache_cap":268435456,"original_objective_serialized_bytes_before_omission":saved_bytes,"retained_objective_serialized_bytes_after_omission":retained_objective_bytes,"objective_typed_pool_bytes":pools_numeric_bytes(&pools),"metadata_allocator_margin":33554432,"original18_full_raw_pool_parity_before_omission":true,"original377_complete_raw_summary_mass_parity_before_retention":true,"numeric_pass":numerical<=536870912,"report_pass":projection+1048576<a.maximum_report_bytes,"numeric_cap":536870912,"report_cap":a.maximum_report_bytes,"process_ram_cap":4294967296u64,"temporary_cap":536870912,"export_projection_margin_per_guard":327680,"scope":"coexisting current/staged380 numericalpools, slim retainedframe authority, cache/metadata/allocator margin; no autodiff tensors in trajectorymode"}),
+        )?;
+        replay_require(
+            numerical <= 512 * 1024 * 1024 && projection + 1048576 < a.maximum_report_bytes,
+            "trajectory cached numerical/export serialization projection exceeded; persisted projection components",
         )?;
         write(a, "trajectory-protected-population.json", &guard_authority)?;
         write(
