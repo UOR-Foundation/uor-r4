@@ -93,6 +93,13 @@ pub(super) fn policy() -> Value {
         "native_score_unit_q24":1i64<<20,"frozen":"all other Generate masters/Source/Cue/Prefix/bridge/U coefficient bits",
         "gradient_context_encoder_calls":0,"captured_objective_encoder_calls":0,"native_reload_steps":391,"new_context_gradients":0,"new_prefix_gradients":0,"optimizer_updates":0})
 }
+// Strictly decode both authorities through the same schema. Omitted optional
+// defaults and explicit null are equivalent; every typed nested identity remains
+// part of the equality and unknown fields are rejected by Config.
+fn inherited_inputs_match(raw: &Value, current: &prefix::Config) -> Result<bool> {
+    let retained: prefix::Config = serde_json::from_value(raw.clone())?;
+    Ok(serde_json::to_value(retained)? == serde_json::to_value(current)?)
+}
 fn code(m: f32) -> Result<i8> {
     replay_require(
         m.is_finite() && (-1.75..=1.75).contains(&m),
@@ -705,8 +712,10 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "Generate retained episode authority differs",
     )?;
     replay_require(
-        read(&c.retained_episode_root.join("config.json"))?["prefix_fragment_learning"]
-            == serde_json::to_value(&c.original_inputs)?,
+        inherited_inputs_match(
+            &read(&c.retained_episode_root.join("config.json"))?["prefix_fragment_learning"],
+            &c.original_inputs,
+        )?,
         "Generate inherited original inputs differ from sealed episode",
     )?;
     let original = ContinuationParent::from_checkpoint(&a.checkpoint)?;
@@ -1314,6 +1323,33 @@ pub(super) fn authenticate_positive_artifact(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inherited_inputs_defaults_match_but_nested_authority_change_is_rejected() -> Result<()> {
+        let raw = json!({
+            "retained_intermediate_root":"/original",
+            "retained_probe_root":"/probe",
+            "joint":{
+                "p5_capture":{"root":"/p5","expected_report_sha256":"report5","expected_manifest_sha256":"seal5"},
+                "p6_conditional_capture":{"root":"/p6","expected_report_sha256":"report6","expected_manifest_sha256":"seal6"},
+                "retained_supplement_root":"/supplement",
+                "expected_supplement_report_sha256":"supplement-report",
+                "expected_supplement_manifest_sha256":"supplement-seal"
+            }
+        });
+        let typed: prefix::Config = serde_json::from_value(raw.clone())?;
+        let explicit = serde_json::to_value(&typed)?;
+        assert_ne!(raw, explicit);
+        assert!(inherited_inputs_match(&raw, &typed)?);
+        assert!(inherited_inputs_match(&explicit, &typed)?);
+        let mut changed = explicit.clone();
+        changed["joint"]["p5_capture"]["expected_report_sha256"] = json!("different-report");
+        let changed: prefix::Config = serde_json::from_value(changed)?;
+        assert!(!inherited_inputs_match(&raw, &changed)?);
+        let mut unknown = raw;
+        unknown["unrecognized_authority"] = json!(true);
+        assert!(inherited_inputs_match(&unknown, &typed).is_err());
+        Ok(())
+    }
     #[test]
     fn full_legal_order_uses_fractional_delta_and_keeps_zero_coordinates() -> Result<()> {
         let mut m = vec![0.; COUNT];
