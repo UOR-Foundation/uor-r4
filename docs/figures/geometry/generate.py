@@ -925,7 +925,101 @@ def fig_vsa():
     fg.save()
 
 
+def fig_connections():
+    fg = Fig("connections.svg", "How the geometric pieces connect",
+             "A map of how the project's geometric structures are derived from one another: six primes give 15 semiprimes and the complete graph K6, which matches the 15 two-fold axes of the icosahedron. Cl(0,6) bivectors, octonions and quaternions lead to the 120 icosians of 2I, which carry Z[phi] coordinates, the E8 roots, the Hopf map and the VSA bit codes. Edge colours mark verified mathematics, parts used in a model, pre-registered tests and a labelling choice.",
+             ["Each arrow reads as derived from or realised in. The map shows structure, not a measured advantage for the model.",
+              "Blue: verified mathematics. Green: used in a model. Dashed: pre-registered, not yet run. Dotted: a labelling choice."])
+    VER, USED, PRE, LAB = BLUE, GREEN, ORANGE, PURPLE
+    N = {}
+
+    def node(key, cx, cy, w, lines, fill="#f6f9fc", stroke=FAINT, sw=1.3):
+        h = 18 + 16 * len(lines)
+        fg.rect(cx - w / 2, cy - h / 2, w, h, fill, stroke, sw, 10)
+        for i, s in enumerate(lines):
+            fg.text(cx, cy - h / 2 + 17 + 16 * i, s, 12.5 if i == 0 else 11, INK if i == 0 else MUTED, "middle", weight="bold" if i == 0 else "normal")
+        N[key] = (cx, cy, w, h)
+
+    def P(key, side, off=0):
+        cx, cy, w, h = N[key]
+        return {"t": (cx + off, cy - h / 2), "b": (cx + off, cy + h / 2), "l": (cx - w / 2, cy + off), "r": (cx + w / 2, cy + off)}[side]
+
+    def edge(pts, color, dash=None, w=1.9):
+        (x1, y1), (x2, y2) = pts[-2], pts[-1]
+        L = math.hypot(x2 - x1, y2 - y1) or 1
+        ux, uy = (x2 - x1) / L, (y2 - y1) / L
+        head = 10
+        fg.poly(pts[:-1] + [(x2 - ux * head * 0.6, y2 - uy * head * 0.6)], stroke=color, w=w, dash=dash)
+        px, py = -uy, ux
+        fg.add(f'<polygon points="{f(x2)},{f(y2)} {f(x2 - ux * head + px * head * .38)},{f(y2 - uy * head + py * head * .38)} {f(x2 - ux * head - px * head * .38)},{f(y2 - uy * head - py * head * .38)}" fill="{color}"/>')
+
+    def lab(x, y, lines, anchor="middle", bg=True, color=MUTED):
+        for i, s in enumerate(lines):
+            yy = y + 13 * i
+            wd = 5.9 * len(s) + 8
+            if bg:
+                x0 = x - wd / 2 if anchor == "middle" else (x - wd + 4 if anchor == "end" else x - 4)
+                fg.rect(x0, yy - 10, wd, 14, "#ffffff", "none", 0, 3, fop=0.92)
+            fg.text(x, yy, s, 11, color, anchor)
+
+    R1, R2, R3, R4, R5 = 105, 200, 295, 400, 505
+    c1, c2, c3 = 165, 465, 830
+    node("pr", c1, R1, 190, ["Six primes", "{5, 7, 11, 13, 17, 19}"])
+    node("sp", c1, R2, 190, ["15 semiprimes", "p·q"])
+    node("k6", c1, R3, 190, ["K6", "6 vertices, 15 edges"])
+    node("ax", c1, R4, 190, ["Icosahedral axes", "6 five-fold · 10 three-fold", "15 two-fold"])
+    node("bv", c2, R2, 190, ["Cl(0,6) bivectors B_ij", "SpiralCore v63"])
+    node("oc", c2, R3, 190, ["Octonions / Fano", "7 lines = signed XOR"])
+    node("qu", c3, R3, 190, ["Quaternions S³", "stack transport, icosian snap"])
+    node("ic", c2, R4, 200, ["2I / 600-cell", "120 icosians", "shells 1,12,20,12,30,12,20,12,1"], "#eef6fc", BLUE, 1.8)
+    node("zp", 150, R5, 150, ["Exact Z[φ]"])
+    node("hp", 360, R5, 200, ["Hopf S²", "2I → 30 points, fibres of 4"])
+    node("vs", 600, R5, 180, ["VSA bit codes", "via token → icosian"])
+    node("e8", 840, R5, 200, ["E8", "240 roots = 2I ∪ φ·2I"])
+
+    # prime chain
+    edge([P("pr", "b"), P("sp", "t")], VER); lab(176, 152, ["pairs"], "start", False)
+    edge([P("sp", "b"), P("k6", "t")], VER); lab(176, 247, ["edge (p,q)"], "start", False)
+    edge([P("k6", "b"), P("ax", "t")], VER); lab(176, 346, ["15 edges ↔ 15 half-turns"], "start", False)
+    # labelling choice: dotted curve on the left, label rotated
+    a, b2 = P("pr", "l"), P("ax", "l")
+    pts = []
+    for i in range(25):
+        t = i / 24
+        m = 1 - t
+        pts.append((m**3 * a[0] + 3 * m * m * t * 22 + 3 * m * t * t * 22 + t**3 * b2[0], m**3 * a[1] + 3 * m * m * t * a[1] + 3 * m * t * t * b2[1] + t**3 * b2[1]))
+    edge(pts, LAB, "1 5", 2.2)
+    fg.add(f'<text transform="rotate(-90 52 252)" x="52" y="252" font-size="11" fill="{LAB}" text-anchor="middle">labelling: 12 inequivalent choices</text>')
+    # axes -> 2I
+    edge([P("ax", "r"), P("ic", "l")], VER); lab(313, 374, ["rotations", "(2I/±1 = A5)"], bg=False)
+    # semiprimes -> bivectors -> octonions
+    edge([P("sp", "r"), P("bv", "l")], VER); lab(315, 192, ["B_ij ↔ p_i p_j"], bg=False)
+    edge([P("bv", "b"), P("oc", "t")], VER); lab(475, 252, ["Cl(0,6) on octonions"], "start", False)
+    # octonions -> quaternions: Fano (verified) and signed binding (pre-registered)
+    edge([P("oc", "r", -10), P("qu", "l", -10)], VER); lab(648, 278, ["each Fano line ⊃ H"], bg=False)
+    edge([P("oc", "r", 13), P("qu", "l", 13)], PRE, "7 5"); lab(648, 335, ["octonion-signed binding"], bg=False, color="#9a6700")
+    # quaternions -> 2I (used) and 2I -> quaternions (pre-registered E1 lanes)
+    q1 = (c3 - 60, R3 + N["qu"][3] / 2)
+    edge([q1, P("ic", "r", -22)], USED); lab(668, 351, ["unit icosians"], color="#00704f")
+    edge([P("ic", "r", 10), (c3 + 10, R4 + 10), (c3 + 10, R3 + N["qu"][3] / 2)], PRE, "7 5"); lab(700, 424, ["E1 exact lanes"], bg=False, color="#9a6700")
+    # 2I outputs
+    edge([P("ic", "b", -80), P("hp", "t", 40)], VER); lab(406, 459, ["S³ → S²"])
+    edge([P("ic", "b", -30), P("vs", "t", -10)], USED); lab(556, 462, ["learned assignment"], color="#00704f")
+    edge([P("ic", "b", 70), P("e8", "t", -50)], VER); lab(700, 459, ["with φ·2I"])
+    edge([P("ic", "b", -95), P("zp", "t")], VER); lab(262, 454, ["coordinates", "in Z[φ]/2"])
+    # bivectors -> E8 along the top and right edge
+    edge([P("bv", "r"), (965, R2), (965, R5), P("e8", "r")], VER); lab(765, 192, ["preserve the 240 roots"], bg=False)
+    # legend
+    fg.rect(40, 566, 920, 40, "#f6f9fc", FAINT, 1.2, 12)
+    lx = 58
+    for col, dash, txt, wd in ((VER, None, "verified mathematics", 190), (USED, None, "used in a model", 170), (PRE, "7 5", "pre-registered, not yet run", 230), (LAB, "1 5", "labelling choice", 160)):
+        fg.line(lx, 586, lx + 38, 586, col, 2.6, 1, dash)
+        fg.text(lx + 48, 591, txt, 12.5, INK)
+        lx += wd + 40
+    fg.save()
+
+
 if __name__ == "__main__":
-    for fn in (fig_quaternion, fig_s3, fig_hopf, fig_600cell, fig_golden, fig_zeta, fig_primes, fig_next_token, fig_vsa):
+    for fn in (fig_quaternion, fig_s3, fig_hopf, fig_600cell, fig_golden, fig_zeta, fig_primes, fig_next_token, fig_vsa, fig_connections):
         fn()
-    print("wrote 9 figures to", OUT)
+    print("wrote 10 figures to", OUT)
