@@ -46,22 +46,22 @@
     {
       "finding": "Net-score affected predicate excluded cancelling rows although the fixed policy declares changed-key incidence union",
       "source": "parent and mathematics review",
-      "disposition": "Engineering changed affected traversal to all changed-key incidences; final validation pending"
+      "disposition": "Repaired in frozen f6d5afd5060948cd9cd1c8c515c2904adabba725; both final source reviews pass, see review.json"
     },
     {
       "finding": "Positive authority trusted ranking JSON masters/gradients without binding authenticated aggregate/master files",
       "source": "adversarial draft review",
-      "disposition": "Repair required before final approval"
+      "disposition": "Repaired in frozen f6d5afd5060948cd9cd1c8c515c2904adabba725; both final source reviews pass, see review.json"
     },
     {
       "finding": "Claimed feasible receipt could give empty guard coverage rather than derived complete affected union",
       "source": "adversarial draft review",
-      "disposition": "Repair required before final approval"
+      "disposition": "Repaired in frozen f6d5afd5060948cd9cd1c8c515c2904adabba725; both final source reviews pass, see review.json"
     },
     {
       "finding": "Vector journal Generate records lacked exact frozen relative order and epoch binding",
       "source": "adversarial draft review",
-      "disposition": "Repair required before final approval"
+      "disposition": "Repaired in frozen f6d5afd5060948cd9cd1c8c515c2904adabba725; both final source reviews pass, see review.json"
     }
   ]
 }
