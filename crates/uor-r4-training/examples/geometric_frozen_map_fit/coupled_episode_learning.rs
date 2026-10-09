@@ -1390,7 +1390,8 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "training_context_window":"fixed authenticated saved query/source/prefix inputs; no newly chosen token window",
         "evaluation_scope":"actual9 typed ownfeedback/EOS plus original8 only if positive; no full512",
         "actual9":"NOT_RUN_SEPARATE_ARTIFACT_CHECK","full512":"NOT_RUN","useful_candidate":false,
-        "parent_master_bits_restored":true,"original_episode_authority":c.original_inputs.episode}),
+        "parent_master_bits_restored":true,"original_episode_authority":c.original_inputs.episode,
+        "episode_request":c.original_inputs.episode}),
     )
 }
 
