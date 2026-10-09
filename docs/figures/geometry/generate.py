@@ -1016,10 +1016,229 @@ def fig_connections():
         fg.line(lx, 586, lx + 38, 586, col, 2.6, 1, dash)
         fg.text(lx + 48, 591, txt, 12.5, INK)
         lx += wd + 40
+def _badge(fg):
+    fg.rect(720, 34, 240, 28, "#fff4cf", ORANGE, 1.4, 14)
+    fg.text(840, 53, "pre-registered, not yet measured", 12.5, "#7a4f00", "middle", weight="bold")
+
+
+def _legend(fg, items, y=566):
+    fg.rect(40, y, 920, 40, "#f6f9fc", FAINT, 1.2, 12)
+    lx = 58
+    for col, lab, w in items:
+        fg.rect(lx, y + 14, 14, 14, col, "#fff", 1, 3)
+        fg.text(lx + 22, y + 26, lab, 12.5, INK)
+        lx += w + 30
+
+
+def fig_exact_lanes():
+    fg = Fig("exact-2i-lanes.svg", "Exact icosian holonomy lanes (E1)",
+             "Each token maps to one of the 120 binary icosians. A lane state is updated by one read of a 120 by 120 multiplication table, h_t = u_t h_{t-1}. To read an earlier position j, the relative element h_j inverse times h_t gets a shell index 0 to 8 and is weighted by a rank table. Pre-registered, not yet measured.",
+             ["Exact, order-preserving lane: one table read per step, then a shell-index lookup; the rank table replaces softmax.",
+              "A pure product never decays, so it is designed to run beside the learned r-layer, not replace it."])
+    _badge(fg)
+    for x, t in ((40, "1  token → icosian"), (330, "2  lane update"), (640, "3  read an earlier position")):
+        fg.text(x, 100, t, 16, INK, weight="bold")
+    # left: tokens and 120-dot ring
+    for i, lab in enumerate(("x_1", "x_2", "…", "x_t")):
+        y = 118 + 36 * i
+        if lab != "…":
+            fg.rect(40, y, 56, 28, "#f6f9fc", FAINT, 1.2, 8)
+            fg.text(68, y + 19, lab, 13.5, INK, "middle", weight="bold")
+        else:
+            fg.text(68, y + 20, lab, 16, MUTED, "middle")
+    rcx, rcy, rr = 205, 330, 62
+    hits = {9: TEN[0], 41: TEN[1], 77: TEN[2], 103: TEN[3]}
+    for i in range(120):
+        a = 2 * pi * i / 120 - pi / 2
+        x, y = rcx + rr * cos(a), rcy + rr * sin(a)
+        if i in hits:
+            fg.circle(x, y, 5, hits[i], "#fff", 1.2)
+        else:
+            fg.circle(x, y, 2.2, BLUE, fop=0.55)
+    for k, (i, c) in enumerate(hits.items()):
+        a = 2 * pi * i / 120 - pi / 2
+        fg.line(98, 132 + 36 * k, rcx + rr * cos(a), rcy + rr * sin(a), c, 1.2, 0.55)
+    fg.text(rcx, rcy + 4, "2I", 15, INK, "middle", weight="bold")
+    fg.text(rcx, rcy + 19, "120", 11.5, MUTED, "middle")
+    fg.text(40, 424, "u_t ∈ 2I (binary icosians)", 13.5, INK, weight="bold")
+    fg.text(40, 443, "one of 120 dots per token;", 12.5, MUTED)
+    fg.text(40, 460, "learned assignment, exact group", 12.5, MUTED)
+    # middle: lane update
+    fg.rect(330, 118, 120, 34, "#eef6fc", BLUE, 1.4, 8)
+    fg.text(390, 140, "h_{t−1}", 14, INK, "middle", weight="bold")
+    fg.rect(470, 118, 70, 34, "#f2faf6", GREEN, 1.4, 8)
+    fg.text(505, 140, "u_t", 14, INK, "middle", weight="bold")
+    fg.arrow(390, 154, 390, 196, GRID, 2, 9)
+    fg.arrow(505, 154, 505, 196, GRID, 2, 9)
+    gx, gy, cs = 340, 202, 8
+    for r in range(12):
+        for c in range(12):
+            fg.rect(gx + c * cs, gy + r * cs, cs - 0.6, cs - 0.6, "#dfe6ee", fop=0.9)
+    fg.rect(gx + 4 * cs, gy + 7 * cs, cs - 0.6, cs - 0.6, VERM)
+    fg.rect(gx, gy, 12 * cs - 0.6, 12 * cs - 0.6, stroke=INK, sw=1.2)
+    fg.text(gx + 12 * cs + 14, gy + 30, "120×120 table,", 13, INK, weight="bold")
+    fg.text(gx + 12 * cs + 14, gy + 48, "7-bit state", 13, INK, weight="bold")
+    fg.text(gx + 12 * cs + 14, gy + 68, "one read", 12.5, MUTED)
+    fg.arrow(390, gy + 12 * cs + 4, 390, gy + 12 * cs + 36, GRID, 2, 9)
+    fg.rect(330, 346, 210, 40, "#fff4cf", INK, 1.4, 10)
+    fg.text(435, 372, "h_t = u_t · h_{t−1}", 14.5, INK, "middle", weight="bold")
+    fg.text(330, 410, "left-multiplication in 2I:", 12.5, MUTED)
+    fg.text(330, 427, "the state is the ordered product", 12.5, MUTED)
+    fg.text(330, 444, "of every token's icosian", 12.5, MUTED)
+    # right: read
+    fg.rect(640, 118, 320, 40, "#eef6fc", BLUE, 1.4, 10)
+    fg.text(800, 143, "r = h_j⁻¹ · h_t   (earlier position j)", 13.5, INK, "middle", weight="bold")
+    fg.arrow(800, 160, 800, 188, GRID, 2, 9)
+    fg.text(640, 206, "shell index s ∈ {0…8} of r", 13, INK, weight="bold")
+    sizes = (1, 12, 20, 12, 30, 12, 20, 12, 1)
+    for s, n in enumerate(sizes):
+        h = 2.2 * n
+        x = 646 + s * 34
+        fg.rect(x, 300 - h, 28, h, TEN[s % 4 if s < 5 else 8 - s], "#fff", 1, 3, fop=0.8)
+        fg.text(x + 14, 316, str(n), 12, INK, "middle", weight="bold")
+        fg.text(x + 14, 332, f"s={s}", 10.5, MUTED, "middle")
+    fg.text(640, 352, "shell sizes 1, 12, 20, 12, 30, 12, 20, 12, 1 (sum 120)", 12, MUTED)
+    fg.arrow(800, 362, 800, 386, GRID, 2, 9)
+    fg.rect(640, 390, 320, 56, "#f2faf6", GREEN, 1.4, 10)
+    fg.text(800, 412, "rank table: w ∝ 1 / (rank + 1)", 13.5, "#00704f", "middle", weight="bold")
+    fg.text(800, 432, "sort positions by shell index, weight, sum values", 12, INK, "middle")
+    # notes
+    fg.rect(40, 486, 920, 30, "#f6f9fc", FAINT, 1.2, 10)
+    fg.text(500, 506, "order-preserving (non-commutative), exactly invertible, no float, no multiplier, no softmax", 13.5, INK, "middle", weight="bold")
+    fg.rect(40, 524, 920, 30, "#fdf3ea", VERM, 1.2, 10)
+    fg.text(500, 544, "caveat: a pure product never decays — runs beside the learned r-layer", 13.5, "#8a3a00", "middle", weight="bold")
+    _legend(fg, ((BLUE, "icosian in 2I", 130), (VERM, "table cell read", 150), (GREEN, "rank-table weight", 170), (ORANGE, "shell bar (size = count)", 220)), 572)
+    fg.save()
+
+
+def fig_signed_binding():
+    fg = Fig("octonion-signed-binding.svg", "Octonion-signed binding vs XOR",
+             "The Fano plane has 7 points labelled 1 to 7 and 7 lines, each line being a, b, a xor b. Binding two basis units gives plus or minus the third unit on their line, the sign set by orientation. XOR binding is commutative and associative so it loses order and grouping; signed binding is anticommutative and non-associative for 168 of 210 triples, so it keeps both. Pre-registered, not yet measured.",
+             ["Signed binding = XOR on the labels plus one sign-table read; sign flips with orientation and grouping.",
+              "Costs add/subtract and table reads only; no multiplier, no float."])
+    _badge(fg)
+    for x, t in ((40, "1  Fano plane: 7 points, 7 lines"), (350, "2  oriented product"), (660, "3  XOR vs signed")):
+        fg.text(x, 100, t, 16, INK, weight="bold")
+    P = {1: (200, 150), 2: (80, 360), 4: (320, 360)}
+    mid = lambda a, b: ((P[a][0] + P[b][0]) / 2, (P[a][1] + P[b][1]) / 2)
+    P[3], P[5], P[6] = mid(1, 2), mid(1, 4), mid(2, 4)
+    P[7] = ((P[1][0] + P[2][0] + P[4][0]) / 3, (P[1][1] + P[2][1] + P[4][1]) / 3)
+    lines = [(1, 2, 3), (1, 4, 5), (2, 4, 6), (1, 6, 7), (2, 5, 7), (3, 4, 7)]
+    cols = [BLUE, BLUE, BLUE, GREEN, GREEN, GREEN]
+    for (a, b, c), col in zip(lines, cols):
+        pts = sorted((a, b, c), key=lambda k: (P[k][0], P[k][1]))
+        fg.line(P[pts[0]][0], P[pts[0]][1], P[pts[-1]][0], P[pts[-1]][1], col, 2, 0.75)
+    cr = math.hypot(P[3][0] - P[7][0], P[3][1] - P[7][1])
+    fg.circle(P[7][0], P[7][1], cr, stroke=ORANGE, w=2, op=0.85)
+    for k, (x, y) in P.items():
+        fg.circle(x, y, 13, "#fff", INK, 1.6)
+        fg.text(x, y + 5, str(k), 14, INK, "middle", weight="bold")
+    fg.text(40, 404, "every line is {a, b, a⊕b}:", 13, INK, weight="bold")
+    fg.text(40, 424, "123 · 145 · 167 · 246 · 257 · 347 · 356", 12.5, MUTED)
+    fg.text(40, 443, "(356 is the circle)", 12.5, MUTED)
+    # middle: oriented product on line {1,2,3}
+    T = {1: (460, 160), 2: (380, 290), 3: (540, 290)}
+    for a, b in ((1, 2), (2, 3), (3, 1)):
+        (x1, y1), (x2, y2) = T[a], T[b]
+        L = math.hypot(x2 - x1, y2 - y1)
+        ux, uy = (x2 - x1) / L, (y2 - y1) / L
+        fg.arrow(x1 + ux * 20, y1 + uy * 20, x2 - ux * 22, y2 - uy * 22, GREEN, 2.5, 11)
+    for k, (x, y) in T.items():
+        fg.circle(x, y, 17, "#f2faf6", GREEN, 1.8)
+        fg.text(x, y + 5, f"e{k}", 14, INK, "middle", weight="bold")
+    fg.text(350, 340, "e_a · e_b = ± e_{a⊕b}", 14, INK, weight="bold")
+    fg.text(350, 366, "e_1 · e_2 = +e_3  (along the arrow)", 13, "#00704f", weight="bold")
+    fg.text(350, 388, "e_2 · e_1 = −e_3  (against the arrow)", 13, "#8a3a00", weight="bold")
+    fg.text(350, 412, "label of the result = a ⊕ b (XOR);", 12.5, MUTED)
+    fg.text(350, 430, "the sign comes from one table read", 12.5, MUTED)
+    # right: comparison
+    fg.rect(660, 118, 300, 140, "#f4f5f7", FAINT, 1.2, 12)
+    fg.text(676, 142, "XOR binding", 14, MUTED, weight="bold")
+    fg.text(676, 168, "a⊕b = b⊕a", 14, INK, weight="bold")
+    fg.text(676, 187, "order lost", 12.5, MUTED)
+    fg.text(676, 214, "(a⊕b)⊕c = a⊕(b⊕c)", 14, INK, weight="bold")
+    fg.text(676, 233, "grouping lost", 12.5, MUTED)
+    fg.rect(660, 274, 300, 170, "#eef6fc", BLUE, 1.6, 12)
+    fg.text(676, 298, "signed binding", 14, "#0b4f7c", weight="bold")
+    fg.text(676, 324, "a·b = −b·a", 14, INK, weight="bold")
+    fg.text(676, 343, "order kept", 12.5, "#0b4f7c")
+    fg.text(676, 370, "(a·b)·c ≠ a·(b·c)", 14, INK, weight="bold")
+    fg.text(676, 389, "for 168 of 210 triples", 12.5, INK)
+    fg.text(676, 407, "(ordered, distinct units): grouping kept", 12.5, "#0b4f7c")
+    fg.rect(40, 486, 920, 30, "#f6f9fc", FAINT, 1.2, 10)
+    fg.text(500, 506, "cost: XOR + one sign-table read: add/subtract only", 13.5, INK, "middle", weight="bold")
+    _legend(fg, ((BLUE, "triangle side (line)", 190), (GREEN, "median (line)", 140), (ORANGE, "circle (line)", 140), (VERM, "sign flips on swap", 180)), 572)
+    fg.save()
+
+
+def fig_hamming_read():
+    import random
+    rng = random.Random(11)
+    nb, n = 16, 5
+    q = [rng.choice((1, -1)) for _ in range(nb)]
+    ks = [[(-b if rng.random() < 0.15 + 0.12 * j else b) for b in q] for j in range(n)]
+    rng.shuffle(ks)
+    ages = [4, 1, 3, 0, 2]
+    d = [sum(1 for a, b in zip(q, k) if a != b) + ag for k, ag in zip(ks, ages)]
+    order = sorted(range(n), key=lambda j: (d[j], j))
+    fg = Fig("hamming-rank-read.svg", "Hamming-rank read (softmax-free)",
+             "Query and keys are binarized to sign bits. Each key gets a distance d_j, the popcount of query xor key plus an age term. Keys are sorted by d_j and weighted by a rank table w_i proportional to 1 over i plus 1, and the values are summed. This replaces the exp-table-emulated softmax over Lorentz or dot scores. Pre-registered, not yet measured.",
+             ["Rank weights come from a fixed table indexed by rank; the sign-bit codes use the shared BitCode primitive (planned).",
+              "Contrast: today's read uses exp-table-emulated softmax over Lorentz/Dot scores."])
+    _badge(fg)
+    for x, t in ((40, "1  binarize q and keys"), (390, "2  distance per key"), (680, "3  rank, weight, sum")):
+        fg.text(x, 100, t, 16, INK, weight="bold")
+    pc = lambda v: BLUE if v > 0 else ORANGE
+    cw = 12
+    fg.text(40, 128, "query q (sign bits)", 12.5, MUTED)
+    for i, v in enumerate(q):
+        fg.rect(40 + i * cw, 136, cw - 1, 18, pc(v), "#fff", 0.6, 1.5, fop=0.85)
+    for j, k in enumerate(ks):
+        y = 190 + 46 * j
+        fg.text(40, y - 6, f"key k_{j + 1}", 12.5, MUTED)
+        for i, v in enumerate(k):
+            diff = v != q[i]
+            fg.rect(40 + i * cw, y, cw - 1, 18, pc(v), VERM if diff else "#fff", 1.4 if diff else 0.6, 1.5, fop=0.85)
+    fg.text(40, 428, "red outline = bit differs from q", 12, MUTED)
+    fg.text(40, 446, "blue = +1, orange = −1", 12, MUTED)
+    # middle
+    fg.rect(390, 118, 250, 44, "#fff4cf", INK, 1.4, 10)
+    fg.text(515, 139, "d_j = popcount(q ⊕ k_j) + age_j", 13.5, INK, "middle", weight="bold")
+    fg.text(515, 155, "integer add, no multiply", 12, MUTED, "middle")
+    for j in range(n):
+        y = 190 + 46 * j
+        ham = d[j] - ages[j]
+        fg.rect(390, y - 2, 250, 24, "#f6f9fc", FAINT, 1, 6)
+        fg.text(402, y + 15, f"k_{j + 1}:  {ham} + {ages[j]}  =", 13, INK)
+        fg.text(630, y + 15, str(d[j]), 14, "#0b4f7c", "end", weight="bold")
+    fg.text(390, 428, "age term: older entries pay a larger", 12, MUTED)
+    fg.text(390, 446, "distance (illustrative values)", 12, MUTED)
+    # right
+    fg.text(680, 128, "sorted by d_j  →  weight  w_i ∝ 1/(i+1)", 12.5, INK, weight="bold")
+    for i, j in enumerate(order):
+        y = 140 + 46 * i
+        w = 1 / (i + 1)
+        fg.rect(680, y, 24, 28, "#f2faf6", GREEN, 1.2, 6)
+        fg.text(692, y + 19, f"{i + 1}", 13, INK, "middle", weight="bold")
+        fg.rect(712, y + 4, 150 * w, 20, GREEN, "#fff", 1, 4, fop=0.8)
+        fg.text(712 + 150 * w + 8, y + 19, f"k_{j + 1}  w=1/{i + 1}", 12, INK)
+    fg.rect(680, 380, 280, 40, "#eef6fc", BLUE, 1.4, 10)
+    fg.text(820, 405, "output = Σ_i w_i · v_(i)", 13.5, INK, "middle", weight="bold")
+    # notes
+    fg.rect(40, 466, 454, 34, "#fdf3ea", VERM, 1.2, 10)
+    fg.text(267, 488, "vs today: exp-table-emulated softmax over Lorentz/Dot scores", 12.5, "#8a3a00", "middle", weight="bold")
+    fg.rect(506, 466, 454, 34, "#f6f9fc", FAINT, 1.2, 10)
+    fg.text(733, 488, "uses the shared BitCode primitive (planned)", 12.5, INK, "middle", weight="bold")
+    fg.rect(40, 512, 920, 30, "#f6f9fc", FAINT, 1.2, 10)
+    fg.text(500, 532, "no float, no multiplier, no softmax; ordering by integer distance only", 13.5, INK, "middle", weight="bold")
+    _legend(fg, ((BLUE, "+1 bit", 80), (ORANGE, "−1 bit", 80), (VERM, "differing bit (outline)", 190), (GREEN, "rank-table weight", 170)), 572)
     fg.save()
 
 
 if __name__ == "__main__":
-    for fn in (fig_quaternion, fig_s3, fig_hopf, fig_600cell, fig_golden, fig_zeta, fig_primes, fig_next_token, fig_vsa, fig_connections):
+    figures = (fig_quaternion, fig_s3, fig_hopf, fig_600cell, fig_golden, fig_zeta, fig_primes,
+               fig_next_token, fig_vsa, fig_connections,
+               fig_exact_lanes, fig_signed_binding, fig_hamming_read)
+    for fn in figures:
         fn()
-    print("wrote 10 figures to", OUT)
+    print("wrote", len(figures), "figures to", OUT)
