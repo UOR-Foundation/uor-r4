@@ -4,6 +4,65 @@ The [protected joint constructor](../labs/protected-joint-construction-2026-10-0
 
 **Next:** Execute the frozen policy on the original coupled initializer after focused native/arithmetic checks; immediately evaluate actual nine own-feedback replies only if all15 conditional positions,17 references and380 original winners pass. Preserve negative construction without changing the prospective policy.
 
+## 2026-10-09 — Cap 96 does not raise open-reply acceptance: the budget explains the cut, not the failure (deepseek, #2029)
+
+Result 4 measured that the open reply panel's mid-clause failures are the 64-token budget. This is the measurement it
+justified: **give the model 50% more room and see whether acceptance moves.** It does not. Record:
+[open-reply-panel-2026-10-09](../labs/open-reply-panel-2026-10-09/README.md) Result 5; pre-registered on #2029
+before any pod was created. CPU-bound generation on pod `260rd8ondf4mzg` (1×5090, `device=cpu` as the sealed run
+used), grading by the gated judge; **≈$1.00**, inside the approved envelope.
+
+**Run A, the control at 64 tokens, and Run B at 96 — same machine, same build, same panel bytes, same model
+`d8a3c971…`, same tokenizer `d36d3e87…`, same grader digest `845dbda0…`, same context 384; the cap is the only
+declared delta.** A: **44/232** acceptable (fluent 69, relevant 54). B: **38/232** (fluent 62, relevant 48).
+**B − A = −6 cells**, inside the pre-registered ±14-cell judge-noise floor, so **not a result**: a −6-cell move is
+not evidence that more room helps, and certainly not evidence that the truncated replies would have been acceptable.
+The decision rule fires on the negative side: **the budget explanation is bounded** at what Result 4 measured — it
+explains why replies are *cut* (45.0% of the 189 failures) and not why the model *fails*.
+
+**Movement underneath the total.** 3 of A's 188 failures became acceptable (`heldout-036`, `-114`, `-174`) and 9
+acceptable rows were lost (`heldout-010`, `-024`, `-061`, `-071`, `-073`, `-082`, `-090`, `-185`, `-192`); exact
+McNemar p = 0.146. **Of the 85 mid-clause failures that were at the 64-token cap — the exact population Result 4
+identified — 2 became acceptable and 83 stayed failed.** And 96 is simply the next wall: 91 replies at exactly 96
+and 34 at exactly 95, failures at or above the cap 92 of 194 (47.4%) against 87 of 189 (46.0%) at 64. Both judge
+components fell the same way (fluent 69→62, relevant 54→48), so it is not a re-labelling artefact.
+
+**Three consequences.** (1) **Criterion 1 does not need a declared cap** — raising it does not help, so a token
+ceiling is not what holds the reading down; the criterion's surviving defect is that it is judge-only with no
+deterministic check to be primary. (2) **The 62 completed-but-wrong replies are the whole story**: failures that
+finish their sentences and are still rejected are where the capability gap lives, and that is where the next piece
+should point, not at the decoder. (3) **No 128-token arm** — the rule says stop, the piece is closed, and the
+100M artifact stayed out of scope.
+
+**Run A was load-bearing.** The frozen binary `a5071cfe…` is **Mach-O arm64** — a macOS executable that exits
+**126** on Linux — and its `attempt.json` records a macOS `argv[0]`, so **the sealed 43/232 was produced on the
+laptop, not on a pod**, and its reproducibility on the platform the project now uses was unproven. A closes that:
+against the sealed run at the same cap, `acceptable` **43 → 44 (+1)** and **all 232 replies byte-identical**, one
+judge verdict flip on `heldout-199` with no reply change. So the platform is not a confound, the four greedy-loop
+commits since 2026-10-03 (#1846, #2040, #2047, #2062) behave as their opt-in documentation claims **as measured
+rather than asserted**, and the cap is the only thing that moved. Without A, a −6 swing would have been
+unreadable — platform, code changes and cap all in play at once. **B versus A is the primary reading; A versus the
+sealed 43/232 is the cross-platform anchor.** Two launches failed first and are recorded with their exact symptoms
+(lost shell quoting, exit 127; the platform error, exit 126); neither reached `report_output::claim` and no number
+comes from them. Evidence bundle `icloud:UOR-R4/results/deepseek/reply-panel-cap96-2026-10-09.tar` (1,417,728 B,
+md5 `3de8c41eb9eb7532e1243450365ce335`).
+
+**Next:** point the next piece at the **completed-but-wrong** failures — the 62 rows that end with terminal
+punctuation and are still rejected — rather than at the decoder; repair criterion 1's judge-only reading with
+deterministic row checks or a stated tolerance before any candidate number on this panel is accepted; and if the
+panel is attacked at all, use a fresh sealed panel scored at a declared cap, because Step 0a read every failing row
+of this one and the cap is now known to be a measurement choice rather than a lever.
+## Native VSA retraining: trained VSA term helps (KEEP); icosian-root codes lose to the hash — October 9
+
+The [pre-registered test](../labs/vsa-native-test-2026-10-09/README.md) retrained the native prose learner with the VSA term in its objective: 4 arms × 2 seeds, scored on two held-out slices.
+- **Fixed-code VSA** improves held-out BPB by 0.014–0.023 over VSA-off in every slice and seed. The term's within-model contribution is +0.013 to +0.016, with 95% intervals excluding zero. **KEEP.**
+- **Icosian-root codes** (120 distinct codes for 4,096 tokens) give at most −0.005, because they collapse token identity.
+- **The engram table** carries about 0.2 BPB of exact memory.
+
+DeepSeek's 8 October null was a frozen-artifact effect.
+
+**Next:** mode 2 (root code bound with a per-token residual) after a CPU-parallelism fix, run on the laptop with per-position losses for the cross-arm interval.
+
 ## Earliest-query distinction reaches native scores, but novel phrasing still fails — October 9
 
 The retained Source48/Generate64 parent (no U) answers both original job/home controls correctly with EOS (2/2). In a sealed diagnostic pair that changes only query token zero and preserves the remaining 11 tokens, Source/Context bank and empty prefix, it produces 0/2 correct entry tokens and 0/2 complete answers. The change survives all eight final recurrent/post-bridge lanes and changes 3981/4096 Generate scores and 11/11 Copy scores, with identical Source candidates and bridge donor. **KEEP** this bounded influence witness; it rules out total early-cue erasure before scoring on this pair, not a global capacity or semantic-sufficiency conclusion. [Exact artifacts, outputs, failed storage attempt and limits](../labs/early-query-causal-2026-10-09/README.md). Accepted 8/512 remains unchanged; no training or new substrate.
@@ -14,11 +73,11 @@ The retained Source48/Generate64 parent (no U) answers both original job/home co
 
 The [protocol pin](../labs/criterion2-protocol-pin-2026-10-09/README.md) closes the previous round's named next step and finds that the published "0.877 float / 0.933 served" pairing was never like-for-like: the 0.87755 float cell is a **512-window** number and the 0.93277 served cell is a **64-window** number. On `rfsx702p68` the recorded artifact's LUT `2ac4c306…` is **gone** — every `*.lut` hashed, every file of its exact size (11,891,652 B) checked, the whole `/workspace` tree text-grepped for the digest and for the recorded fused-float nll `1.7250754982233047`, and all 604 cloud-store entries read; only checked-in docs copies survive. What the volume does hold is the **independent retrain** of the same recipe (`chat-served2-20261008/model-a1`, `cbef6906…`, batch 32 / lr 4e-4 / warmup 500 / 12,207 steps / chat-v0-p2 train only) and its GPTQ export `721d4bdb…` — the artifact behind the published float cell and the quantiser-arm table; its float forward reproduces the published 0.87755 to five decimals.
 
-**The matched triple at a declared 512 windows / 196,608 positions** on stream `e5f400b0…`, whose own byte basis was re-verified on the copy used (6,194,589 tokens / 17,576,697 bytes / **2.837427 B/token**), from one `lut-evaluate reference=true` run: **float 0.877550, reference 0.886838, integer 0.886838 BPB**; **quantisation 0.009288 BPB**, **engine 2.7e-7 BPB**, top-1 agreement engine vs float 0.92820. The tool's own `bits_per_byte` is a second basis — the scored targets' lens bytes, 2.829585 B/token on this sample (0.879982 / 0.889296 / 0.889296) — and both bases are named wherever a number is quoted.
+**The matched triple at a declared 512 windows / 196,608 positions** on stream `e5f400b0…`, whose own byte basis was re-verified on the copy used (6,194,589 tokens / 17,576,697 bytes / **2.837427 B/token**), from one `lut-evaluate reference=true` run: **float 0.877550, reference 0.886838, integer 0.886838 BPB**; **quantisation 0.009288 BPB**, **engine 2.7e-7 BPB**, top-1 agreement engine vs float 0.92820. The tool's own `bits_per_byte` is a second basis — the scored targets' lens bytes, 2.829585 B/token on this sample (0.879982 / 0.889296 / 0.889296) — and both bases are named wherever a number is quoted. **The pair is now archived off the non-canonical volume**: `icloud:UOR-R4/results/deepseek/c2p-retrain-pair-20261009.tar`, object `c2p-retrain-pair-20261009`, **91,700,736 bytes, md5 `df290dee…`**, holding the checkpoint (`cbef6906…`), the export (`721d4bdb…`) and the provenance set; it was fetched back with both digests re-verified after extraction and the local copy deleted, so exactly one durable copy exists.
 
 **The finding, and the verdict on criterion 2.** The same artifact's served column is **0.932773 BPB at 64 windows (24,576 targets)** and **0.886838 at 512 windows (196,608 targets)** — **0.045935 BPB apart on identical bytes** — with 0.3273 BPB per-window float spread and a 512-window mean standard error of 0.014525 BPB. So the published pair subtracts across window counts by more than the whole 0.033 gap it was used to measure, the same class of error as the cross-position-set artefact annotated on 2026-10-08. criterion 2 is **not met and not claimable**: at the recorded protocol the served cell misses 0.90 by 0.032773 (3.52 % relative, 0.41 % of the 8-bit/byte ceiling), and the matched 512-window number that sits below 0.90 does so by 0.013162 — inside its own re-sampling error. Standing requirement: **every BPB claim names its window count and byte basis**, and criterion 2 should be restated with the protocol above before any candidate is measured against 0.90. No model, capability or milestone moved, so no headline number changes; the protocol qualifier is added where the pair is quoted. One cell is explicitly unverified: `d11-evaluate` at 512 windows was killed when a hygiene pass removed this worktree mid-run (the pushed branch `deepseek/criterion2-pin-20261009` is why the completed run's numbers survived), and the artifact's own recorded 64-window `d11-evaluate` carries D11-exactness instead (`d10 = d11`, diff 0.0, top-1 1.0).
 
-**Next:** preserve the retrain pair off the non-canonical volume with `cloud-store put deepseek <dir>` — it appears in no index entry and is the only surviving artifact behind the published float cell — and restate criterion 2 in #2029 with the pinned protocol (512 windows / 196,608 targets, byte basis 2.837427 B/token, float and served columns from the same `lut-evaluate reference=true` run) before any future BPB claim or float model is graded against 0.90; the one unverified cell, `d11-evaluate` at 512 windows on `721d4bdb…`, waits for a free EU-RO-1 pod and would confirm rather than discover.
+**Next:** restate criterion 2 in #2029 with the pinned protocol (512 windows / 196,608 targets, byte basis 2.837427 B/token, float and served columns from the same `lut-evaluate reference=true` run) before any future BPB claim or float model is graded against 0.90, and carry the same window-count/byte-basis requirement into the reply-panel criterion; the artifact is restorable with `cloud-store fetch c2p-retrain-pair-20261009 <dest>`, and the one unverified cell, `d11-evaluate` at 512 windows on `721d4bdb…`, waits for a free EU-RO-1 pod and would confirm rather than discover.
 
 ## 2026-10-09 — The open reply panel's mid-clause failures are the 64-token budget (deepseek, #2029)
 
