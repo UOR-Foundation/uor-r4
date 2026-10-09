@@ -2417,7 +2417,7 @@ fn export_reload(
             &np::snapshot(&prefix.parameters())?,
         )?;
         rebound_prefix.rebind_cue(&loaded.frozen, &root.join("cue"), &carrier)?;
-        publish_rebound_prefix(&root, |staged| rebound_prefix.save(staged))?;
+        publish_rebound_prefix(&root, |staged| Ok(rebound_prefix.save(staged)?))?;
 
         generate::exact_frozen_directory(&a.checkpoint.join("source"), &root.join("source"))?;
         for leaf in [
