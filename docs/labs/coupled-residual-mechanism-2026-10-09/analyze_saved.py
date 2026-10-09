@@ -136,10 +136,15 @@ def main():
                         'after_winner':chosen['objective']['objective_masses'][p][2],
                         'before_ce':current['combined'],'after_ce':chosen['objective']['combined']})
             current=chosen['objective']
-    require(current==journal['summary']['final']==report['candidate_objective'], 'journal selected endpoint matches native report')
+    require(journal['summary']['final']==report['candidate_objective'], 'two complete endpoint reports agree')
+    require(all(current[k] == report['candidate_objective'][k] for k in current), 'every selected endpoint numeric field matches')
+    require([{'chosen':p['winner'], 'position':p['position'], 'target':p['target'],
+              'target_mass':p['target_mass']['weight_q31'],
+              'total_mass':current['objective_masses'][p['position']][1]} for p in phases]
+            == report['candidate_objective']['phases'], 'native per-phase endpoint fields match')
     require(sum(v for k,v in counters.items() if ':alternative:' in k)==14292, 'all saved alternatives counted')
     result={'schema':'uor-r4.saved-residual-diagnosis/1','status':'PASS',
-            'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+            'execution_checkout_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
             'analyzer_sha256':sha(pathlib.Path(__file__)), 'input_report_sha256':RUN_REPORT,
             'input_manifest_sha256':RUN_MANIFEST,'rust_file_verification':'PASS',
             'snapshot_inputs':inputs, 'journal_sha256':sha(args.run/'coupled-construction.json'),
