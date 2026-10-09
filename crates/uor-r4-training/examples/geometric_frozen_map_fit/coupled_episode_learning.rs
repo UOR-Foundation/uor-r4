@@ -1030,11 +1030,15 @@ fn journal_upper_bound() -> Result<u64> {
     let p = serde_json::to_vec(&pref)?.len() as u64;
     Ok(g * 13440 + p * 960 + 1920 * 2048 + 16 * 1024 * 1024)
 }
+#[derive(Deserialize)]
+struct Aliases {
+    copy_ids: Vec<u32>,
+}
+fn flat_saved_alias_count(reader: impl std::io::Read) -> Result<usize> {
+    let row: Aliases = serde_json::from_reader(reader)?;
+    Ok(row.copy_ids.len())
+}
 fn original_guard_alias_bound(c: &Config) -> Result<usize> {
-    #[derive(Deserialize)]
-    struct Aliases {
-        copy_ids: Vec<u32>,
-    }
     let file = c
         .original_inputs
         .retained_intermediate_root
@@ -1047,10 +1051,6 @@ fn original_guard_alias_bound(c: &Config) -> Result<usize> {
         serde_json::from_reader(std::io::BufReader::new(fs::File::open(&file)?))?;
     replay_require(rows.len() == 377, "coupled retained guard count differs")?;
 
-    #[derive(Deserialize)]
-    struct Snapshot {
-        native: Aliases,
-    }
     let e = c
         .original_inputs
         .episode
@@ -1066,10 +1066,10 @@ fn original_guard_alias_bound(c: &Config) -> Result<usize> {
     )?;
     let mut max = rows.iter().map(|r| r.copy_ids.len()).max().unwrap_or(0);
     for leaf in ["frame-0003-position-01.json", "frame-0455-position-00.json"] {
-        let n: Snapshot = serde_json::from_reader(std::io::BufReader::new(fs::File::open(
+        let count = flat_saved_alias_count(std::io::BufReader::new(fs::File::open(
             e.retained_supplement_root.join(leaf),
         )?))?;
-        max = max.max(n.native.copy_ids.len());
+        max = max.max(count);
     }
     Ok(max)
 }
@@ -2105,6 +2105,22 @@ mod tests {
         assert!(report + 1024 * 1024 < 512 * 1024 * 1024);
         Ok(())
     }
+    #[test]
+    fn sealed_supplement_alias_count_uses_flat_frame_and_rejects_missing_identity() -> Result<()> {
+        let flat = br#"{"schema":"uor-r4.native-reached-prefix-frame/3","copy_ids":[617,617,2097],"bank_trace":{"ignored":"retained elsewhere"}}"#;
+        assert_eq!(flat_saved_alias_count(flat.as_slice())?, 3);
+        assert!(flat_saved_alias_count(
+            br#"{"schema":"uor-r4.native-reached-prefix-frame/3","native":{"copy_ids":[617]}}"#
+                .as_slice()
+        )
+        .is_err());
+        assert!(flat_saved_alias_count(
+            br#"{"schema":"uor-r4.native-reached-prefix-frame/3"}"#.as_slice()
+        )
+        .is_err());
+        Ok(())
+    }
+
     #[test]
     fn full_cache_bounds_charge_both_prefix_cache_and_incidence() -> Result<()> {
         let v = capacity_projection(512, 4096)?;
