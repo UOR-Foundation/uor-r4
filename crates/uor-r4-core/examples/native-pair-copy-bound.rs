@@ -16,6 +16,7 @@ use uor_r4_core::{
 };
 use uor_r4_integer::{
     geometric_source_actions::SourceActionBinding,
+    geometric_source_realizer::NativeArtifactBinding,
     geometric_vocabulary_actions::{NativeVocabularyActions, SCORE_CLIP_Q24},
     h4_tables::H4Code,
 };
@@ -181,9 +182,14 @@ fn analyze(run: &Path) -> Result<Value> {
     let cp = run.join("checkpoint-0001");
     let binding = SourceActionBinding::new(&fs::read(cp.join("native/tokenizer.json"))?)?;
     let g = NativeGeometricGenerate::from_bytes(&fs::read(cp.join("generate.bin"))?, &binding)?;
+    let source_metadata = cp.join("native/metadata.json");
+    let source_binding = NativeArtifactBinding {
+        metadata_sha256: hash(&source_metadata)?,
+        identity: serde_json::from_value(read(&source_metadata)?["identity"].clone())?,
+    };
     let field = NativeContinuationField::from_bytes(
         &fs::read(cp.join("continuation-field.bin"))?,
-        &binding,
+        &source_binding,
         &g,
     )?;
     let mut reducer =
