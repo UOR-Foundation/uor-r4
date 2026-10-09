@@ -1105,8 +1105,15 @@ mod tests {
         pm[0] = -1.7;
         pg[0] = 1.;
         pg[1] = -1.;
+        pm[2] = -1.6;
+        pg[2] = 1.;
         let result = proposals(&pm, &pg)?;
-        assert!(result.iter().all(|p| p.masters[0] == -1.75));
+        // -1.7 already has native code -7: saturation is a fractional NOOP.
+        assert!(result
+            .iter()
+            .all(|p| p.masters[0].to_bits() == pm[0].to_bits()));
+        // -1.6 has code -6, so the clamped changed code becomes canonical -7.
+        assert!(result.iter().all(|p| p.masters[2] == -1.75));
         for p in result {
             let delta = pg
                 .iter()
