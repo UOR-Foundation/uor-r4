@@ -637,6 +637,14 @@ fn compact_numeric_projection(prior: &Value) -> Result<u64> {
         .and_then(|x| x.checked_add(additions))
         .ok_or_else(|| bad("Generate numeric phase bound overflow"))
 }
+fn regular_file_bytes(path: &Path) -> Result<u64> {
+    let metadata = fs::metadata(path)?;
+    replay_require(
+        metadata.is_file(),
+        "Generate report projection expected a regular file",
+    )?;
+    Ok(metadata.len())
+}
 fn resource_projection(a: &Args, c: &Config, frames: &[shared::Frame]) -> Result<()> {
     let previous = read(
         &c.retained_episode_root
@@ -655,7 +663,8 @@ fn resource_projection(a: &Args, c: &Config, frames: &[shared::Frame]) -> Result
         .ok_or_else(|| bad("retained measured phase RAM projection absent"))?;
     let process = phase_ram + 64 * 1024 * 1024;
     let previous_total = size(&c.retained_episode_root)?;
-    let removed_report = size(&c.retained_episode_root.join("prefix-construction.json"))?;
+    let removed_report =
+        regular_file_bytes(&c.retained_episode_root.join("prefix-construction.json"))?;
     let report = previous_total
         .checked_sub(removed_report)
         .and_then(|n| n.checked_add(64 * 1024 * 1024 + 16 * 1024 * 1024))
@@ -1323,6 +1332,24 @@ pub(super) fn authenticate_positive_artifact(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn report_projection_file_length_rejects_directory_and_missing_file() -> Result<()> {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-generate-projection-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&root)?;
+        let file = root.join("prefix-construction.json");
+        fs::write(&file, b"{\"summary\":{}}")?;
+        assert_eq!(regular_file_bytes(&file)?, 14);
+        assert!(regular_file_bytes(&root).is_err());
+        assert!(regular_file_bytes(&root.join("missing.json")).is_err());
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
     #[test]
     fn inherited_inputs_defaults_match_but_nested_authority_change_is_rejected() -> Result<()> {
         let raw = json!({
