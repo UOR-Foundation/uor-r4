@@ -167,6 +167,52 @@ mod tests {
     }
 
     #[test]
+    fn vsa_and_engram_switches_remove_their_terms() {
+        // VSA native test (M1 #2029): the off switches must hold the VSA scale at 0
+        // through training, export it as 0, and drop the engram table from export.
+        let text =
+            b"Once upon a time there was a little girl who lived in a forest. She had a kind cat.";
+        let tokens: Vec<usize> = text.iter().map(|&b| b as usize).collect();
+        let base = JepaTrainerConfig {
+            vocab_size: 257,
+            num_lanes: 2,
+            context_window: 16,
+            learning_rate: 0.05,
+            jepa_weight: 0.2,
+            weight_decay: 1e-4,
+            grad_clip: 1.0,
+            ..JepaTrainerConfig::default()
+        };
+
+        let mut on = JepaTrainer::new(base.clone(), 999);
+        let mut off = JepaTrainer::new(
+            JepaTrainerConfig {
+                vsa_enabled: false,
+                engram_enabled: false,
+                ..base
+            },
+            999,
+        );
+        for _ in 0..5 {
+            on.train_sequence(&tokens);
+            off.train_sequence(&tokens);
+        }
+
+        assert_eq!(off.model.vsa_scale, 0.0, "disabled VSA scale must stay 0");
+        assert_ne!(
+            on.model.vsa_scale, 0.0,
+            "enabled VSA scale is trained away from 0"
+        );
+        let off_export = off.export_discrete();
+        assert_eq!(off_export.vsa_scale_q15, 0);
+        assert!(
+            off_export.engram_table.is_none(),
+            "disabled engram must not be exported"
+        );
+        assert!(on.export_discrete().engram_table.is_some());
+    }
+
+    #[test]
     fn test_jepa_trainer_learns_and_reduces_bpb() {
         let text =
             b"Once upon a time there was a little girl who lived in a forest. She had a kind cat.";

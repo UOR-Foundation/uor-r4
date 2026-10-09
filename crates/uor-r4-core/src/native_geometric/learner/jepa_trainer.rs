@@ -227,6 +227,10 @@ pub fn default_vsa_seed() -> u64 {
     DEFAULT_VSA_SEED
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Configuration for the Native Geometric JEPA Trainer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JepaTrainerConfig {
@@ -249,6 +253,15 @@ pub struct JepaTrainerConfig {
     pub total_steps: usize,
     #[serde(default)]
     pub min_lr: f64,
+    /// Experiment switch (VSA native test, M1 #2029): when false the VSA term is
+    /// held at scale 0, receives no update and exports `vsa_scale_q15 = 0`.
+    #[serde(default = "default_true")]
+    pub vsa_enabled: bool,
+    /// Experiment switch: when false the exact engram n-gram table is not used in
+    /// evaluation and is not exported, removing the exact-lookup term that could
+    /// mask a VSA effect.
+    #[serde(default = "default_true")]
+    pub engram_enabled: bool,
 }
 
 impl Default for JepaTrainerConfig {
@@ -267,6 +280,8 @@ impl Default for JepaTrainerConfig {
             warmup_steps: 0,
             total_steps: 0,
             min_lr: 0.0,
+            vsa_enabled: true,
+            engram_enabled: true,
         }
     }
 }
@@ -1426,7 +1441,11 @@ impl JepaTrainer {
             config.num_lanes,
             seed,
             config.vsa_seed,
-            config.vsa_weight,
+            if config.vsa_enabled {
+                config.vsa_weight
+            } else {
+                0.0
+            },
         );
         let v_size = config.vocab_size;
         let num_lanes = config.num_lanes;
@@ -2238,7 +2257,11 @@ impl JepaTrainer {
 
     /// Evaluates bits-per-byte on a held-out evaluation sequence without updating weights.
     pub fn evaluate_bpb<T: AsTokenIndex>(&self, tokens: &[T]) -> f64 {
-        let engram_table = self.collocations.build_engram_table();
+        let engram_table = if self.config.engram_enabled {
+            self.collocations.build_engram_table()
+        } else {
+            EngramTable::default()
+        };
         self.evaluate_bpb_with_engram(tokens, &engram_table)
     }
 
@@ -2632,12 +2655,16 @@ impl JepaTrainer {
             *b = (*b).clamp(-2.0, 2.0);
         }
 
-        // 6. Update VSA context scale
-        let mut vsa_p = [self.model.vsa_scale];
-        let vsa_g = [self.model.grad_vsa_scale];
-        self.adam_vsa
-            .update(&mut vsa_p, &vsa_g, lr, beta1, beta2, wd, step);
-        self.model.vsa_scale = vsa_p[0];
+        // 6. Update VSA context scale (held at 0 when the VSA term is switched off)
+        if self.config.vsa_enabled {
+            let mut vsa_p = [self.model.vsa_scale];
+            let vsa_g = [self.model.grad_vsa_scale];
+            self.adam_vsa
+                .update(&mut vsa_p, &vsa_g, lr, beta1, beta2, wd, step);
+            self.model.vsa_scale = vsa_p[0];
+        } else {
+            self.model.vsa_scale = 0.0;
+        }
 
         // 7. Update continuous hierarchical lattice tables
         if let Some(lattice) = &mut self.continuous_lattice {
@@ -2755,7 +2782,11 @@ impl JepaTrainer {
             vsa_scale_q15,
             vsa_code_mode: 1,
             hierarchical_codebook: Some(hierarchical),
-            engram_table: Some(engram_table),
+            engram_table: if self.config.engram_enabled {
+                Some(engram_table)
+            } else {
+                None
+            },
             hierarchical_lattice,
         }
     }

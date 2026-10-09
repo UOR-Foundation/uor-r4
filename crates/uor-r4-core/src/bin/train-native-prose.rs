@@ -484,6 +484,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut lr = 0.01;
     let mut lanes = 4;
     let mut run_benchmark = false;
+    // VSA native test switches (M1 #2029): seed, corpus offset, and term on/off.
+    let mut seed: u64 = 2026_09_17;
+    let mut corpus_offset: usize = 0;
+    let mut vsa_enabled = true;
+    let mut engram_enabled = true;
 
     let mut idx = 1;
     while idx < args.len() {
@@ -569,6 +574,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--benchmark" => {
                 run_benchmark = true;
             }
+            "--seed" => {
+                idx += 1;
+                if idx < args.len() {
+                    seed = args[idx].parse().unwrap_or(2026_09_17);
+                }
+            }
+            "--offset" => {
+                idx += 1;
+                if idx < args.len() {
+                    corpus_offset = args[idx].parse().unwrap_or(0);
+                }
+            }
+            "--no-vsa" => {
+                vsa_enabled = false;
+            }
+            "--no-engram" => {
+                engram_enabled = false;
+            }
             "--help" | "-h" => {
                 println!(
                     "train-native-prose [OPTIONS]\n\
@@ -576,6 +599,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                      --data PATH         Path to raw text slice\n\
                      --tokenizer PATH    Path to tokenizer.json\n\
                      --tokens INT        Token budget (default: 1,000,000)\n\
+                     --offset INT        Start of the training window in the corpus (default: 0)\n\
+                     --seed INT          Trainer seed (default: 2026_09_17)\n\
+                     --no-vsa            Hold the VSA term at scale 0 (no update, exports 0)\n\
+                     --no-engram         Disable the exact engram n-gram table in eval and export\n\
                      --epochs INT        Number of epochs (default: 1)\n\
                      --threads INT       Rayon worker threads (default: 8)\n\
                      --batch-size INT    Batch size (default: 256)\n\
@@ -623,9 +650,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (corpus_slice.len() * 2) as f64 / (1024.0 * 1024.0)
         );
 
-        let target_tokens = token_budget.unwrap_or(1_000_000).min(total_corpus_tokens);
+        let corpus_offset = corpus_offset.min(total_corpus_tokens);
+        let corpus_slice = &corpus_slice[corpus_offset..];
+        let target_tokens = token_budget
+            .unwrap_or(1_000_000)
+            .min(total_corpus_tokens - corpus_offset);
         let eval_token_count = 64_000.min(target_tokens / 5);
         let _train_token_count = target_tokens - eval_token_count;
+        println!(
+            "Window: corpus offset {}, seed {}, vsa_enabled {}, engram_enabled {}",
+            corpus_offset, seed, vsa_enabled, engram_enabled
+        );
 
         let eval_tokens = &corpus_slice[..eval_token_count];
         let train_tokens = &corpus_slice[eval_token_count..target_tokens];
@@ -682,10 +717,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             jepa_weight: 0.25,
             weight_decay: 1e-4,
             grad_clip: 1.0,
+            vsa_enabled,
+            engram_enabled,
             ..JepaTrainerConfig::default()
         };
 
-        let mut trainer = JepaTrainer::new(config, 2026_09_17);
+        let mut trainer = JepaTrainer::new(config, seed);
 
         // Curriculum Stage 1: Fast Empirical Lattice Fitting & Collocations
         println!("\n=== Curriculum Stage 1: Fast Empirical Lattice Fitting & Collocations ===");
