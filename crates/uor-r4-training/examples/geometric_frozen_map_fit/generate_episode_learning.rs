@@ -1376,7 +1376,7 @@ mod tests {
         let mut caches = (0..GUARDS)
             .map(|_| {
                 reducer.prepare_generate_patch_cache(
-                    vec![-4 << 24, -4 << 24, -4 << 24, -4 << 24, 0, -1 << 19],
+                    vec![-4 << 24, -4 << 24, -4 << 24, -4 << 24, 0, -1 << 20],
                     vec![4, 4],
                     vec![-3 << 24, -3 << 24],
                 )
@@ -1388,13 +1388,18 @@ mod tests {
             .collect::<Vec<_>>();
         let mut changes = BTreeMap::new();
         for row in 0..GUARDS {
-            changes.insert(row, vec![(5, 1 << 20)]);
+            // The final guard alone changes winner. Generate5 moves from
+            // -1 to +2 native units: exp(.125) exceeds 1+2*exp(-3), while
+            // the three-unit displacement remains inside legal Q4 bounds.
+            let token = if row + 1 == GUARDS { 5 } else { 4 };
+            changes.insert(row, vec![(token, 2 << 20)]);
         }
         let mut staged = Patches::new();
         for row in 0..GUARDS {
             stage_row(row, &changes, &caches, &mut staged, &mut reducer)?;
         }
         assert_eq!(staged.len(), GUARDS);
+        assert!((0..GUARDS - 1).all(|row| staged[&row].summary().chosen_token_id == 4));
         assert_eq!(staged[&(GUARDS - 1)].summary().chosen_token_id, 5);
         drop(staged);
         assert!(caches
