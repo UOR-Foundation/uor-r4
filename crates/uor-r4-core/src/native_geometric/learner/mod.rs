@@ -280,6 +280,29 @@ mod tests {
     }
 
     #[test]
+    fn vsa_explicit_fixed_codes_export_fixed_mode() {
+        // Experiment arms need training and serving to use the same codes: an explicit
+        // fixed-code run must export mode 0, not the historical mode-1 default.
+        let text = b"Once upon a time there was a little girl who lived in a forest.";
+        let tokens: Vec<usize> = text.iter().map(|&b| b as usize).collect();
+        let config = JepaTrainerConfig {
+            vocab_size: 257,
+            num_lanes: 2,
+            context_window: 16,
+            learning_rate: 0.05,
+            jepa_weight: 0.2,
+            weight_decay: 1e-4,
+            grad_clip: 1.0,
+            vsa_code_mode: 0,
+            vsa_export_follows_training: true,
+            ..JepaTrainerConfig::default()
+        };
+        let mut trainer = JepaTrainer::new(config, 999);
+        trainer.train_sequence(&tokens);
+        assert_eq!(trainer.export_discrete().vsa_code_mode, 0);
+    }
+
+    #[test]
     fn vsa_mode_zero_export_is_unchanged() {
         let (mut trainer, tokens) = vsa_code_test_setup(0);
         for _ in 0..3 {

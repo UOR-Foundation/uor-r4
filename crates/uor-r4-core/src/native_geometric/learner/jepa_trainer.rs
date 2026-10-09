@@ -266,6 +266,11 @@ pub struct JepaTrainerConfig {
     /// `1` = learned icosian-root codes, `2` = root codes bound with the readout-hash residual.
     #[serde(default)]
     pub vsa_code_mode: u8,
+    /// When true the artifact declares the code mode it trained with (experiment arms need
+    /// training and serving to use the same codes). When false (default) a mode-0 trainer
+    /// keeps the historical export: declared mode 1 with a root-space hierarchy.
+    #[serde(default)]
+    pub vsa_export_follows_training: bool,
     /// In modes 1 and 2, rebuild the codebook (and everything derived from it) from the current
     /// token-to-root assignment every this many training steps.
     #[serde(default = "default_vsa_code_refresh")]
@@ -295,6 +300,7 @@ impl Default for JepaTrainerConfig {
             vsa_enabled: true,
             engram_enabled: true,
             vsa_code_mode: 0,
+            vsa_export_follows_training: false,
             vsa_code_refresh: default_vsa_code_refresh(),
         }
     }
@@ -2822,11 +2828,12 @@ impl JepaTrainer {
         // than silently incoherent.
         // A mode-0 trainer keeps the historical export (declared mode 1, root-space hierarchy);
         // runs trained with learned codes (1, 2) export the mode they trained with.
-        let export_mode = if self.config.vsa_code_mode == 0 {
-            1
-        } else {
-            self.config.vsa_code_mode
-        };
+        let export_mode =
+            if self.config.vsa_code_mode == 0 && !self.config.vsa_export_follows_training {
+                1
+            } else {
+                self.config.vsa_code_mode
+            };
         let vsa_codebook = if export_mode == 2 {
             build_readout_codebook(
                 self.config.vocab_size,

@@ -490,6 +490,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut vsa_enabled = true;
     let mut engram_enabled = true;
     let mut vsa_code_mode: u8 = 0;
+    let mut vsa_codes_explicit = false;
     let mut vsa_code_refresh: usize = 1000;
 
     let mut idx = 1;
@@ -589,6 +590,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             "--vsa-codes" => {
+                vsa_codes_explicit = true;
                 idx += 1;
                 vsa_code_mode = match args.get(idx).map(String::as_str) {
                     Some("fixed") => 0,
@@ -747,6 +749,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             vsa_enabled,
             engram_enabled,
             vsa_code_mode,
+            vsa_export_follows_training: vsa_codes_explicit,
             vsa_code_refresh,
             ..JepaTrainerConfig::default()
         };
