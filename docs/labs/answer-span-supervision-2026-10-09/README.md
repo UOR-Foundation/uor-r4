@@ -75,7 +75,8 @@ head**, so it cannot have produced these arms at all. arm-ptr was trained **from
 recorded this correction publicly as their own error, not this round's.
 
 **2. The labels sidecar does not exist for this corpus.** `mixed-cp` is `mix-chat-corpus` of
-`chatstore` (label `chat`, 82,248,461 tokens) + `dcopy` (label `copy`, 57,229 response tokens).
+`chatstore` (label `chat`, 82,248,461 tokens) + `dcopy` (label `copy`, 57,229 tokens, of which 10,757
+response tokens).
 
 ```
 find /workspace/uor-r4 -maxdepth 5 -name 'binding_labels*'   → nothing
