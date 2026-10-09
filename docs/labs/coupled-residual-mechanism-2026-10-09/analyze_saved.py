@@ -11,6 +11,10 @@ import time
 
 RUN_MANIFEST = 'e7667312b7d18b502e72b0fc41bf2d7d52a4977a020501ecd527da6ef628f9aa'
 RUN_REPORT = '0aa9b3c0c2d1defaaa6d93611a78fb348be0016aefe5d7548563250b9a687b8c'
+CLAIM = pathlib.Path('/workspace/uor-r4/codex/sol-prefix-margin-boundary/claim-report')
+CLAIM_SHA = '394ad004859ae8d9baaf04510f230fb725bbc2f7caabe3c7abe26b1cf70ea208'
+SEAL = pathlib.Path('/root/codex/prototype-target/release/examples/native_historical_version')
+SEAL_SHA = '2691e33e5b1ce9c29b12ddbf5e30a3d857d30185d69db49402ed1a53f7c4320a'
 VERIFIER_SHA = 'd90411116c702dc4149fc055706f34c276c1ead29c5b0ec95600c30cc976326d'
 
 def sha(path):
@@ -37,7 +41,9 @@ def main():
     parser.add_argument('output', type=pathlib.Path)
     args = parser.parse_args()
     started = time.monotonic()
-    args.output.mkdir(parents=True, exist_ok=False)
+    require(sha(CLAIM) == CLAIM_SHA, 'Rust exclusive claimant identity')
+    subprocess.run([str(CLAIM), str(args.output)], check=True)
+    require(sha(SEAL) == SEAL_SHA, 'Rust sealer identity')
     require(sha(args.run/'manifest.json') == RUN_MANIFEST, 'pinned completed manifest')
     require(sha(args.run/'report.json') == RUN_REPORT, 'pinned completed report')
     require(sha(args.verifier) == VERIFIER_SHA, 'actual Rust report verifier')
@@ -74,12 +80,15 @@ def main():
         delta = n['continuation']['delta_scores_q24']
         phases.append({'position':pos, 'target':target, 'winner':winner, 'correct':target == winner,
                        'target_mass': masses[target], 'winner_mass':masses[winner],
+                       'native_total_mass':n['pool']['summary']['total_weight_q31'],
                        'donor_ordinal':n['bridge']['selected_ordinal'], 'post_state':n['post_state'],
                        'generate_vector_sha256':digest(n['generate_q24']),
                        'response_state':n['bank_trace']['prefix']['response'],
                        'target_copy_ordinals':target_aliases, 'rival_copy_ordinals':rival_aliases,
                        'prefix_target_rival_distinct_lanes':prefix_differences,
-                       'generate_target_minus_rival_q24':n['generate_q24'][target]-n['generate_q24'][winner],
+                       'Generate_plus_U_target_minus_rival_q24':n['generate_q24'][target]-n['generate_q24'][winner],
+                       'base_Generate_target_minus_rival_q24':n['generate_q24'][target]-n['generate_q24'][winner]-(delta[target]-delta[winner]),
+                       'token_winner_changed_by_clip':n['pool']['summary']['token_winner_changed_by_clip'],
                        'U_target_minus_rival_q24':delta[target]-delta[winner],
                        'clipped_low':n['pool']['summary']['clipped_low_actions'],
                        'clipped_high':n['pool']['summary']['clipped_high_actions']})
@@ -92,6 +101,7 @@ def main():
     journal = read(args.run/'coupled-construction.json')
     stats = {p:{'winning_alternatives':0, 'winning_feasible':0,
                 'winning_objective_rejected':0, 'winning_guard_vetoed':0,
+                'winning_CE_not_strict':0, 'winning_reference_fail':0, 'first_veto_counts':{},
                 'committed_gains':[], 'committed_losses':[], 'feasible_but_not_selected':[],
                 'first_winning_alternative':None} for p in residuals}
     counters = collections.Counter()
@@ -124,7 +134,12 @@ def main():
                     st['winning_feasible']+=1
                     if not is_selected and len(st['feasible_but_not_selected'])<5:st['feasible_but_not_selected'].append(event)
                 elif alt['guard_status']=='FIRST_VETO':st['winning_guard_vetoed']+=1
-                else:st['winning_objective_rejected']+=1
+                    key=str(alt['first_failure']['guard_index'])
+                    st['first_veto_counts'][key]=st['first_veto_counts'].get(key,0)+1
+                else:
+                    st['winning_objective_rejected']+=1
+                    st['winning_CE_not_strict']+=int(current['combined']-objective['combined'] <= 1e-10*(1+abs(current['combined'])))
+                    st['winning_reference_fail']+=int(objective['correct_reference_frames'] != 17)
         if chosen:
             for p in residuals:
                 before=current['objective_masses'][p][2]==targets[p]
@@ -140,7 +155,7 @@ def main():
     require(all(current[k] == report['candidate_objective'][k] for k in current), 'every selected endpoint numeric field matches')
     require([{'chosen':p['winner'], 'position':p['position'], 'target':p['target'],
               'target_mass':p['target_mass']['weight_q31'],
-              'total_mass':current['objective_masses'][p['position']][1]} for p in phases]
+              'total_mass':p['native_total_mass']} for p in phases]
             == report['candidate_objective']['phases'], 'native per-phase endpoint fields match')
     require(sum(v for k,v in counters.items() if ':alternative:' in k)==14292, 'all saved alternatives counted')
     result={'schema':'uor-r4.saved-residual-diagnosis/1','status':'PASS',
@@ -154,7 +169,9 @@ def main():
             'scope':'Saved-data attribution only. Reuses prior full numerical audit; no new model, gradient, proposal or encoder. Equal current post states constrain Generate at that donor only; different states or Prefix keys do not prove global feasibility. Rejected-objective guards may be unexamined. Per-position feasible alternatives cannot be combined across epochs.',
             'elapsed_seconds':time.monotonic()-started,'peak_rss_kib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
     (args.output/'report.json').write_text(json.dumps(result,indent=2)+'\n')
-    print(json.dumps({'status':'PASS','seconds':result['elapsed_seconds'], 'max_correct':best_count,
+    subprocess.run([str(SEAL), 'seal', str(args.output)], check=True)
+    subprocess.run([str(args.verifier), 'verify-report', str(args.output)], check=True)
+    print(json.dumps({'status':'PASS', 'output_rust_seal_and_verify':'PASS','seconds':result['elapsed_seconds'], 'max_correct':best_count,
                       'residuals':{p:{k:v for k,v in s.items() if not isinstance(v,(list,dict))} for p,s in stats.items()}}))
 
 if __name__=='__main__':main()
