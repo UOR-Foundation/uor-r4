@@ -2,7 +2,7 @@
 
 The [coordinated transaction implementation](../labs/prefix-vector-transaction-2026-10-09/README.md) adds explicit `prefix_transaction: "gradient_vector_prefix"` to the coupled learner. It proposes four fixed, quantized vectors from the complete original Prefix gradient, accepts at most one under strict native combined-CE descent and all seventeen references/380 guards, then runs the existing Generate pass. Donor, post-state and incidence changes commit together after the selected vector is restaged and verified; the legacy adjacent policy remains the default. This is a generic offline proposal change, with no new serving cases or parameter families.
 
-Actual-parent vector construction and complete-answer benefit remain NOT_RUN. The accepted development result stays **8/512**; corrected donor **9/15** is a separate, unselected conditional result.
+The integrated source passes 25 focused tests, including a native two-row/six-token transaction fixture; source reviews pass. Actual-parent vector construction and complete-answer benefit remain NOT_RUN. The accepted development result stays **8/512**; corrected donor **9/15** is a separate, unselected conditional result.
 
 **Next:** After protected delivery and cleanup, execute the prospectively fixed four-radius policy from the original selected initializer with fresh complete donor credit and exact run authorities. Compare offered crossings and objective/guard rejection with the retained adjacent policy. Preserve all fifteen-position, seventeen-reference and 380-guard requirements; immediately check actual-artifact whole-answer/EOS behavior only if the complete conditional gate passes. A negative changes the causal question rather than authorizing an unchanged sweep.
 

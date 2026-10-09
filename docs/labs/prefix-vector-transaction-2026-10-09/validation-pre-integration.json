@@ -34,5 +34,14 @@
   "test_binary": {
     "sha256": "7828509bb89013fda926224e74b94824c59a2e1ece6205db5759216e31bc85fe",
     "bytes": 8318384
+  },
+  "production_build": {
+    "status": "PASS",
+    "wall_seconds": 39.11,
+    "max_rss_bytes": 1054572544,
+    "binary_sha256": "f4f5fffc95634ae14d60bb8ae680b459a82ba3ee273ea597d1bef2c9053949b4",
+    "binary_bytes": 10615504,
+    "log_sha256": "06e6f02fcdf334465c2d8d589632988cb26e18c007b44fa72180fe2634d2e53d",
+    "command": "cargo build --offline --locked --release --jobs 2 -p uor-r4-training --example geometric-frozen-map-fit"
   }
 }

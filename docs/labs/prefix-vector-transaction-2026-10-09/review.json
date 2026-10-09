@@ -35,5 +35,13 @@
     ],
     "status": "PASS_SOURCE_ONLY",
     "patch": "test-correction.patch"
+  },
+  "integration_review": {
+    "head": "df613c194d6c17c91517dc5a1bb4e2c22acab8da",
+    "upstream_main": "86134d980",
+    "reviewer": "emission_adversarial",
+    "status": "PASS_SOURCE_ONLY",
+    "scope": "Reviewed3Rustblobs unchanged; intended13pathdiff againstfreshmain; peerentriespreserved; modelNOT_RUN and8/512/9/15 scopesretained",
+    "integrated_test_execution": "Recorded separately in final validation; not claimed by review"
   }
 }
