@@ -1399,11 +1399,16 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
         "execution_lane":"CPU host saved arithmetic and native391 only","new_backward_calls":0,
         "new_proposals":0,"new_rankings":0,"new_optimizer_updates":0}),
     )?;
-    let failed = shared::sealed(
-        &c.retained_failed_root,
-        &c.expected_report_sha256,
-        &c.expected_manifest_sha256,
+    // This authority is intentionally a sealed FAILED export attempt. The
+    // historical completed-authority loader remains strict for its callers.
+    report_output::verify(&c.retained_failed_root)?;
+    replay_require(
+        sha256_file(&c.retained_failed_root.join("report.json"))? == c.expected_report_sha256
+            && sha256_file(&c.retained_failed_root.join("manifest.json"))?
+                == c.expected_manifest_sha256,
+        "completion failed learning report/seal identity differs",
     )?;
+    let failed = read(&c.retained_failed_root.join("report.json"))?;
     replay_require(
         failed["status"] == "FAILED"
             && failed["error"] == "Generate frozen sidecar numerical/native metadata differs",
