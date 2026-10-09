@@ -133,7 +133,8 @@ def main():
                 if alt['feasible']:
                     st['winning_feasible']+=1
                     if not is_selected and len(st['feasible_but_not_selected'])<5:st['feasible_but_not_selected'].append(event)
-                elif alt['guard_status']=='FIRST_VETO':st['winning_guard_vetoed']+=1
+                elif alt['guard_status']=='FIRST_VETO':
+                    st['winning_guard_vetoed']+=1
                     key=str(alt['first_failure']['guard_index'])
                     st['first_veto_counts'][key]=st['first_veto_counts'].get(key,0)+1
                 else:
