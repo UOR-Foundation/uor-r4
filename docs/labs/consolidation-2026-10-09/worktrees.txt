@@ -45,4 +45,3 @@ branch refs/heads/codex/distance-curriculum
 worktree /Users/casey.allard/uor-r4/.worktrees/entry-isolation
 HEAD b7541b9f91bd37069ed4994088ae338a50314a24
 branch refs/heads/deepseek/gate-floor-impl
-
