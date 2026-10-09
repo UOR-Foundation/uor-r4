@@ -282,6 +282,38 @@ Matthew (SpiralCore v63/v69); the octonion and Fano material to Mark (N3mesis, N
 A further fact: the icosahedron's five orthogonal frames of two-fold axes form a *synthematic total* of
 K6, five perfect matchings that together cover all 15 edges.
 
+## 11. Pre-registered mechanisms (not yet measured)
+
+These three mechanisms follow from the connections above and are pre-registered with fixed thresholds on M1
+[#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) and M4
+[#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032). **None has a measured result yet.**
+Each is integer-only and softmax-free by construction.
+
+<img src="figures/geometry/exact-2i-lanes.svg" width="100%" alt="Exact icosian holonomy lanes: tokens map to icosians, a lane state is a product in the 120-element group updated by a 120 by 120 table, and earlier positions are ranked by the shell index of the relative product">
+
+**Exact icosian holonomy lanes (E1).**
+- **How it works:** each token maps to an icosian u_t, and a lane carries the exact product h_t = u_t·h_{t−1}. The state is 7 bits, updated by one read of a 120×120 table. A read ranks earlier positions by the shell index (0–8) of h_j⁻¹·h_t, using rank-table weights.
+- **Why it's interesting:** the product keeps route order, because the group is not commutative, and it is exactly invertible.
+- **Caveat:** it never decays, so it runs beside the learned r-layer rather than replacing it.
+- **Source:** Matthew's SpiralCore v69 peer-shell catalogue.
+
+<img src="figures/geometry/octonion-signed-binding.svg" width="100%" alt="Octonion-signed binding: on the Fano plane every line is a, b, a xor b, and e_a times e_b equals plus or minus e_(a xor b), so the order of the operands changes the sign, unlike plain XOR">
+
+**Octonion-signed binding.** Binding by XOR of the 3-bit Fano indices plus the Fano sign gives
+e_a·e_b = ±e_{a⊕b}, with e_a·e_b = −e_b·e_a.
+- Plain XOR binding loses the order of its operands; the sign keeps it.
+- Non-associativity keeps grouping: (a·b)·c ≠ a·(b·c) for 168 of 210 ordered unit triples (verified).
+- **Cost:** add, subtract and one sign-table read.
+- **Source:** Mark (N3mesis)'s octonion/Fano material and the SpiralCore v63 table.
+
+<img src="figures/geometry/hamming-rank-read.svg" width="100%" alt="Hamming-rank read: binarized query and keys, distance equals popcount of query xor key plus an age term, positions sorted and weighted by a fixed rank table, with no softmax">
+
+**Hamming-rank read.**
+- **How it works:** binarize the learned query and keys, score each earlier position by popcount(q ⊕ k_j) plus an age term, sort the positions, and weight them with the flock rank table w_i ∝ 1/(i+1).
+- **Why it's interesting:** it would replace today's exp-table-emulated softmax with XOR, popcount and a table.
+- **Status:** arm D of the softmax-free read experiment. It will use the shared `BitCode` primitive.
+- **Source:** motivated by Mark (N3mesis)'s XOR/Hamming sketch.
+
 ## Life of one token
 
 Follow one byte-BPE token through the stack (text path):

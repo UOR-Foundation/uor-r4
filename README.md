@@ -226,7 +226,7 @@ Every row holds at its exact artifact, data, operator and budget.
   phase binding, constant learning rate, abstention) were null or rejected.
 - Native learner: child fits lowered cross-entropy but complete replies stayed at 8/512.
 - Track A1 stopped (D18); the transformer-conversion track is parked after the parity failure
-  in #1518. VSA codebooks were inert; the LUT-4 shortlist was retracted; the broad-prose and
+  in #1518. DeepSeek's VSA codebook nulls were re-scoped as inconclusive (codes swapped into a frozen artifact, no retraining; #2070, #2071), and a native retraining test is running (#2077); the LUT-4 shortlist was retracted; the broad-prose and
   complete-roadmap claims of 8 September were retracted by audit.
 - `uor-chat --stack` (#2050) records a measured negative for the bundle route.
 
@@ -241,6 +241,19 @@ Sources: [current state](docs/integration/current-state.md), [evidence index](do
 
 Plan of record: [project-track.md](docs/integration/project-track.md). Dependency view: [ROADMAP.md](ROADMAP.md).
 Compute board: [#2037](https://github.com/UOR-Foundation/uor-r4/issues/2037).
+
+**Experiments in flight (pre-registered with thresholds fixed in advance):**
+
+| Experiment | Milestone | Status | Question |
+| --- | --- | --- | --- |
+| Native VSA retraining (4 arms × 2 seeds) | M1 [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) | **running** (code #2077) | Do VSA codes help once trained into the model, with codes from the learned icosian-root assignment? |
+| Softmax-free reads: soft (A), flock rank (B), B + prime-route copy (C), Hamming-rank (D) | M4 [#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032) | pre-registered | Can served reads drop the table-emulated softmax with no loss? |
+| Route-holonomy read | M1 #2029 | pre-registered | Can the angle of h_j⁻¹·h_t rank earlier positions, order-aware and softmax-free? |
+| Exact icosian holonomy lanes (E1) | M1 #2029 | pre-registered | Does an exact 2I group product beside the r-layer help, beyond a shuffled-geometry control? |
+| Octonion-signed binding, then transport | M1 #2029 | pre-registered | Does a Fano-signed XOR keep order and grouping that plain XOR loses? |
+| Shared `BitCode` primitive | M4 #2032 | planned (engineering) | One Hamming/popcount type for the native learner, R4G1 and the integer engine |
+
+Pictures of the pre-registered mechanisms are in [docs/geometry.md § 11](docs/geometry.md#11-pre-registered-mechanisms-not-yet-measured); none of them has a measured result yet.
 
 ## Quick start
 
