@@ -323,7 +323,7 @@ It encodes every admitted Source/Context token, the full query and actual respon
 The query also has its own H4 cue carrier and, when configured, a query-plus-prefix continuation field.
 However, its direct occurrence read compares the final query snapshot only against **Source** positions;
 those same candidates supply Copy IDs and optional bridge donors. Processing an early query token into
-state does not make that position an independently selectable key. The combined128-token admission cap
+state does not make that position an independently selectable key. The combined 128-token admission cap
 is specific to this reader and rejects overflow; it is not a project-wide context limit.
 
 A read-only history role could expose retained input positions without granting Source/Copy authority.
@@ -331,7 +331,7 @@ It is **not yet integrated or qualified**, and source inspection does not establ
 causes the current language errors. The [caller trace and causal comparison](labs/input-access-trace-2026-10-09/README.md)
 keep input influence, explicit read access, donor selection and emission distinct. Existing H4 operators
 can support the comparison; no conversion to E8 is inherently required for this access boundary.
-The E1 and Hamming-rank mechanisms in section11 remain separate pre-registered M1/M4 work.
+The E1 and Hamming-rank mechanisms in section 11 remain separate pre-registered M1/M4 work.
 
 ## Life of one token
 
