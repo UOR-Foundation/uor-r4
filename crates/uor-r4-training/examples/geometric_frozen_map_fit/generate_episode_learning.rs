@@ -1593,6 +1593,10 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
         a.out.join("learning-external-config-binding.json"),
     )?;
     copy_directory(&source_cp, &a.out.join("checkpoint-0001"))?;
+    fs::copy(
+        source_cp.join("receipt.json"),
+        a.out.join("learning-partial-checkpoint-receipt.json"),
+    )?;
     let mut repair = Vec::new();
     for family in ["cue", "prefix"] {
         let dest = a.out.join("checkpoint-0001").join(family);
@@ -1752,6 +1756,31 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
         &objective_frames,
         &spec,
     )?;
+    // Normalization helpers may emit receipts. Inherited scientific evidence
+    // must remain byte-identical after those helpers, not merely at initial copy.
+    for copied in &copies {
+        let leaf = copied["file"]
+            .as_str()
+            .ok_or_else(|| bad("inherited scientific filename missing"))?;
+        let path = a.out.join(leaf);
+        replay_require(
+            regular_file_bytes(&path)?
+                == copied["bytes"]
+                    .as_u64()
+                    .ok_or_else(|| bad("inherited scientific length missing"))?
+                && sha256_file(&path)?
+                    == copied["sha256"]
+                        .as_str()
+                        .ok_or_else(|| bad("inherited scientific SHA missing"))?,
+            "completion normalization changed inherited scientific evidence",
+        )?;
+    }
+    write(
+        a,
+        "completion-inherited-file-verification.json",
+        &json!({"stage":"after objective/guard normalization before candidate scoring",
+            "all_copied_scientific_files_byte_identical":true,"files":copies}),
+    )?;
     let mut map = Vec::new();
     for (frame, pool) in objective_frames.into_iter().zip(objective_pools) {
         if let Some(row) = frames
@@ -1863,7 +1892,7 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
                     .ok_or_else(|| bad("completion Generate/U overflow"))
             })
             .collect::<Result<Vec<_>>>()?;
-        let mut trace = reducer.reduce_trace(&generate, &frames[i].copy_ids, &pool.copy)?;
+        let mut trace = reducer.reduce_trace(&generate, &frames[i].ids, &pool.copy)?;
         trace.actions.clear();
         trace.actions.shrink_to_fit();
         pool.generate = generate;
@@ -1914,7 +1943,11 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
     receipt["inherited_learning_alternatives"] = json!(13440);
     receipt["learning_source_commit"] = json!(LEARNING_SOURCE);
     receipt["completion_source_commit"] = json!(option_env!("UOR_BUILD_SOURCE_COMMIT"));
-    receipt["candidate_native_steps"] = json!(UNION);
+    receipt["candidate_native_steps"] = json!(0);
+    receipt["native_independently_reloaded"] = json!(false);
+    receipt["fresh_adam"] = json!(false);
+    receipt["new_gradients"] = json!(0);
+    receipt["coefficient_backward_calls"] = json!(0);
     receipt["optimizer_updates"] = json!(0);
     receipt["credit_scope"] = json!(
         "completion only; no gradients/ranking/search; recorded original unary learning preserved"
@@ -1927,6 +1960,14 @@ pub(super) fn run_completion(a: &Args, start: Instant) -> Result<Value> {
     }
     let cp = ContinuationParent::from_checkpoint(&a.out.join("checkpoint-0001"))?;
     shared::reload_guard_candidate(a, &cp, &u, &frames, &pools)?;
+    receipt["candidate_native_steps"] = json!(UNION);
+    receipt["native_independently_reloaded"] = json!(true);
+    for leaf in [
+        "checkpoint-0001/receipt.json",
+        "checkpoint-0001/continuation-source/metadata.json",
+    ] {
+        fs::write(a.out.join(leaf), serde_json::to_vec_pretty(&receipt)?)?;
+    }
     Ok(
         json!({"schema":"uor-r4.generate-episode-completion/1","status":"COMPLETED","mode":"generate_episode_completion",
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"learning_source_commit":LEARNING_SOURCE,
