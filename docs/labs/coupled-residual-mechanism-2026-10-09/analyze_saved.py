@@ -144,7 +144,7 @@ def main():
             == report['candidate_objective']['phases'], 'native per-phase endpoint fields match')
     require(sum(v for k,v in counters.items() if ':alternative:' in k)==14292, 'all saved alternatives counted')
     result={'schema':'uor-r4.saved-residual-diagnosis/1','status':'PASS',
-            'execution_checkout_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+            'measured_model_source_commit':report['source_commit'],
             'analyzer_sha256':sha(pathlib.Path(__file__)), 'input_report_sha256':RUN_REPORT,
             'input_manifest_sha256':RUN_MANIFEST,'rust_file_verification':'PASS',
             'snapshot_inputs':inputs, 'journal_sha256':sha(args.run/'coupled-construction.json'),
