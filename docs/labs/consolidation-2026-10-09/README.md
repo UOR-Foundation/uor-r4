@@ -45,3 +45,19 @@ comparators, superseding source and unfinished implementation. Those records are
 retained source, not fresh compile or capability results. Resolve an applicable
 implementation or record its reasoned retirement before proceeding past that
 dependency. The active native geometric research path remains the current plan.
+
+## Restore retained source
+
+The tracked `preserved-source.bundle` is SHA-256 bound by
+`source-bundle-receipt.json`. Its prerequisites are commits already in main.
+In a checkout of main, run:
+
+```sh
+git bundle verify docs/labs/consolidation-2026-10-09/preserved-source.bundle
+git fetch docs/labs/consolidation-2026-10-09/preserved-source.bundle HEAD
+```
+
+Read any exact head from `preserve-heads.json` with `git show <sha>:<path>`.
+The thin bundle pack passed strict object validation against main prerequisites.
+It retains the recorded source histories relative to the main base, including
+the pod-only coupled source. Recovering a commit does not adopt its code.

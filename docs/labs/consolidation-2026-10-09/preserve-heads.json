@@ -1194,5 +1194,6 @@
   "local:codex/wide-relation-corpus": "2d0d62199c2c41dfc231064a41b02f32925943b4",
   "local:codex/writer-lexical-context": "e7ac7285186d624141f7de21145a02d7001f4e2d",
   "local:codex/writer-nowrite-reuse": "7a103c64a12984bababc17c22e305f161b48a9aa",
-  "local:codex/writer-role-transfer": "5ef516d2210abab69c29cf1434c86e6d70076371"
+  "local:codex/writer-role-transfer": "5ef516d2210abab69c29cf1434c86e6d70076371",
+  "pod:codex/sol-coupled-episode-learning-20261009": "80eb132f4f554af5a775d1fbbfb8d3c7dcdbf0d7"
 }
