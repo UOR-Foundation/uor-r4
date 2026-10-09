@@ -1,0 +1,41 @@
+branch: deepseek/aa-dispatch
+  unmerged patches (git cherry): 2
+    1b13d1d92 2026-10-05 addressed_attention: arithmetic reachability probe — the zero was the legal mask, not the objective
+    c83c25e57 2026-10-05 addressed_attention: arithmetic oracle — the operator computes exactly; the emission head cannot say it
+  patch: deepseek-aa-dispatch.patch  (    2361 lines,   101569 bytes)
+
+branch: deepseek/bf16-phase2b-gate
+  unmerged patches (git cherry): 3
+    9bd02e34c 2026-10-05 Freeze the Phase 2b flash-read gate: recipe, parity, acceptance and speed rule (References #820)
+    f917318e3 2026-10-05 Hand off the bf16 tensor-core work: state, evidence, Phase 2b design and environment (References #820)
+    10e2577f6 2026-10-05 Phase 2b gate: run the frozen read A/B and print the decision
+  patch: deepseek-bf16-phase2b-gate.patch  (     553 lines,    30207 bytes)
+
+branch: deepseek/d20-control
+  unmerged patches (git cherry): 2
+    5a37b9814 2026-10-06 mqar-bench: ordinary parameter-matched control arm (D20 s2 conditions 1 and 3)
+    cf1a807c8 2026-10-07 Preserve the D20 matched-control battery and its analysis
+  patch: deepseek-d20-control.patch  (    1586 lines,    77796 bytes)
+
+branch: deepseek/d20-run
+  unmerged patches (git cherry): 4
+    5a37b9814 2026-10-06 mqar-bench: ordinary parameter-matched control arm (D20 s2 conditions 1 and 3)
+    a4c37aa3b 2026-10-06 D20 s2: pre-registration, run report, and the two holes in the battery
+    ece47fc7a 2026-10-06 D20 s2: complete the pre-registered 3x3 -- verdict INCONCLUSIVE
+    d5172e7f6 2026-10-07 Preserve the D20 matched-control run products
+  patch: deepseek-d20-run.patch  (    3859 lines,   187686 bytes)
+
+branch: deepseek/entry-ceiling
+  unmerged patches (git cherry): 4
+    ebf97e779 2026-10-07 Add a zero-update entry-ceiling mode that removes the Copy channel
+    09b0c0a9e 2026-10-07 Measure the prediction-control artifact on the panel it was selected from
+    469a0075d 2026-10-07 Report the gold rank in the ordered emission at the entry position
+    e56c1fc74 2026-10-07 Add the one-token-prefix rank control to the entry ceiling
+  patch: deepseek-entry-ceiling.patch  (     265 lines,    13482 bytes)
+
+branch: deepseek/entry-isolation
+  unmerged patches (git cherry): 2
+    1212d82de 2026-10-07 Add an opt-in entry-only loss scope and declared dose to the frozen-map fit
+    1d98faaea 2026-10-07 Retract the drowned-entry diagnosis in the 2026-10-07 handoff
+  patch: deepseek-entry-isolation.patch  (     304 lines,    16018 bytes)
+
