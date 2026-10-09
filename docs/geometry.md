@@ -6,7 +6,7 @@ objects (unit quaternions, a fixed 120-element icosian table, exact golden-ratio
 addresses) rather than on a transformer's dense attention and MLP blocks at run time. The target
 serving path (decision D11) uses no floating point and no multiplier instruction. Everything below
 describes the mechanisms as built; a measured advantage over ordinary controls is not yet
-established (see [README, Results](../README.md)).
+established (see [README, Results](../README.md#results-so-far)).
 
 Two overview figures first: the [architecture](figures/architecture.svg) and the stack of geometric
 mechanisms.
