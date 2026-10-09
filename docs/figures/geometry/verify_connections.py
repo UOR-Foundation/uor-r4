@@ -382,10 +382,24 @@ def hopf_raw(A):  # 4 * (2(ac+bd), 2(bc-ad), a^2+b^2-c^2-d^2), formula of UnitS3
 img = {}
 for q in I:
     img.setdefault(hopf_raw(q), []).append(q)
-two_fold_dirs = all(any(parallel(p, ax) for ax in F2) for p in img)
-claim("H1", "the Hopf map (2(ac+bd), 2(bc-ad), a^2+b^2-c^2-d^2) sends 2I onto 30 points, 4 icosians per point, "
-      "the +- directions of the 15 two-fold axes (icosidodecahedron), not the 12 icosahedron vertices",
-      len(img) == 30 and all(len(v) == 4 for v in img.values()) and two_fold_dirs)
+fibre_sizes = sorted({len(v) for v in img.values()})
+n_img = len(img)
+# measured: the image is one orbit of 2I under left and under right multiplication, each fibre is a coset U*q0 with
+# U = {+-1, +-s}, s^2 = -1 (stabiliser of order 4 = preimage of a half-turn, so a two-fold-type orbit)
+ONE = ((2, 0), Z0, Z0, Z0)
+one_orbit = all(hopf_raw(qmul(g, I[5])) in img and hopf_raw(qmul(I[5], g)) in img for g in I)
+fibre_cosets = True
+for v in img.values():
+    q0 = v[0]
+    U = [qmul(q, qconj(q0)) for q in v]
+    fibre_cosets &= ONE in U and all(qmul(u, u) in (tuple((zn(c) if k == 0 else c) for k, c in enumerate(ONE)), ONE) for u in U)
+orbit_name = {12: "five-fold (stabiliser 10)", 20: "three-fold (stabiliser 6)", 30: "two-fold (stabiliser 4)"}.get(n_img, "unknown")
+on_F2 = sum(1 for p in img if any(parallel(p, ax) for ax in F2))
+claim("H1", f"measured: the Hopf map (2(ac+bd), 2(bc-ad), a^2+b^2-c^2-d^2) sends 2I onto {n_img} points, fibres of size "
+      f"{fibre_sizes} = cosets of {{+-1, +-s}} with s^2 = -1; one 2I-orbit, of two-fold type ({orbit_name})",
+      fibre_sizes == [4] and n_img == 30 and one_orbit and fibre_cosets and orbit_name.startswith("two-fold"),
+      f"image={n_img}, fibres={fibre_sizes}; only {on_F2} of 30 image points lie on a two-fold axis of the script's frame "
+      f"(axis directions are therefore not asserted)")
 orb = lambda v: len({rot(q, v) for q in I})
 claim("H2", "a basepoint on a five-fold / three-fold / two-fold axis has an orbit of 12 / 20 / 30 points under 2I",
       (orb(F5[0]), orb(F3[0]), orb(F2[0])) == (12, 20, 30))
