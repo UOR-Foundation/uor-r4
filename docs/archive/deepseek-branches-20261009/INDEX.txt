@@ -39,3 +39,38 @@ branch: deepseek/entry-isolation
     1d98faaea 2026-10-07 Retract the drowned-entry diagnosis in the 2026-10-07 handoff
   patch: deepseek-entry-isolation.patch  (     304 lines,    16018 bytes)
 
+================================================================================
+RESTORATION — VERIFIED
+================================================================================
+The patch files above record each branch's changes as DIFFS. A clean apply is NOT
+guaranteed: the branches were cut from older merge bases, main has moved since, and
+some of their content is already on main. A restoration test on 2026-10-09 applied
+0 of 6 as plain patches and 1 of 6 with a three-way apply (itself inconclusive,
+because three-way needs the original blobs present).
+
+deepseek-branches.bundle is the RELIABLE form and is verified:
+
+    git bundle verify deepseek-branches.bundle
+      -> "The bundle records a complete history."
+
+    git fetch <path>/deepseek-branches.bundle 'refs/remotes/origin/deepseek/*:refs/heads/restored/*'
+
+Tested 2026-10-09 in a scratch clone: all six branches restored, with tips matching
+the originals (entry-isolation = 1d98faaea, d20-run = d5172e7f6, ...). Use the bundle
+to restore; keep the patches as a readable per-branch record of what changed.
+
+SIZE, STATED PLAINLY: the bundle is ~115 MB because it carries the complete object
+closure of the six branches, which is what makes it restorable without this
+repository's history. That is the cost of the guarantee.
+
+GitHub rejects any single file above 100 MB, and this bundle is ~115 MB, so it is
+stored SPLIT. Reassemble before verifying or fetching:
+
+    cat ds-bundle.part* > deepseek-branches.bundle
+    git bundle verify deepseek-branches.bundle
+      -> "The bundle records a complete history."
+    git fetch ./deepseek-branches.bundle 'refs/remotes/origin/deepseek/*:refs/heads/restored/*'
+
+Parts (split -b 90m): ds-bundle.part00, ds-bundle.part01. Concatenation in name
+order reconstructs the exact bundle that was verified in a scratch clone on
+2026-10-09.
