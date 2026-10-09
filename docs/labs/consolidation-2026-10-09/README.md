@@ -7,10 +7,13 @@ require reconciliation (one already ancestral, one patch-equivalent, and 65
 with unmatched patches). A squash merge can preserve delivered behavior while
 leaving its original commits outside main ancestry.
 
-The consolidation retains original Codex source histories as ancestors of main,
-without replacing the current implementation with historical branch snapshots.
+The protected merge queue requires SQUASH and this account has no administrator
+permission to change it. Consequently a restorable Git source bundle is retained
+in main, preserving the exact original histories without replacing the current
+implementation with historical branch snapshots.
 This is preservation, not validation or promotion of unfinished code. Use
-`git show <recorded-head>:<path>` to recover the exact original source or record.
+the source-bundle restoration instructions below, then
+`git show <recorded-head>:<path>` to recover exact original source or records.
 The JSON inventory binds names, exact heads, PR status and unmatched patch commits.
 
 The live `codex/lab-state` coordination branch is excluded from branch retirement:
@@ -32,3 +35,13 @@ merge verification and preservation. An open PR, pushed branch or merge queue
 entry is not completion. Accepted and negative artifacts, dirty source and other
 labs' active material must survive cleanup. Storage receipts are updated after
 physical free-space measurement; apparent directory sizes are not reclaimed bytes.
+
+## Pending implementation inventory
+
+The file triage found 143 distinct absent paths, including 59 Rust files, across
+32 historical heads. Absence is not proof that a mechanism should be activated.
+The attached pending summary distinguishes missing diagnostics, historical
+comparators, superseding source and unfinished implementation. Those records are
+retained source, not fresh compile or capability results. Resolve an applicable
+implementation or record its reasoned retirement before proceeding past that
+dependency. The active native geometric research path remains the current plan.
