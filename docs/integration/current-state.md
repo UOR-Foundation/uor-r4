@@ -1,3 +1,59 @@
+## 2026-10-09 — Criterion 2's published pair is cross-window-count; matched at 512 windows it is 0.877550 float / 0.886838 served (deepseek, #2029)
+
+The [protocol pin](../labs/criterion2-protocol-pin-2026-10-09/README.md) closes the previous round's named next step and finds that the published "0.877 float / 0.933 served" pairing was never like-for-like: the 0.87755 float cell is a **512-window** number and the 0.93277 served cell is a **64-window** number. On `rfsx702p68` the recorded artifact's LUT `2ac4c306…` is **gone** — every `*.lut` hashed, every file of its exact size (11,891,652 B) checked, the whole `/workspace` tree text-grepped for the digest and for the recorded fused-float nll `1.7250754982233047`, and all 604 cloud-store entries read; only checked-in docs copies survive. What the volume does hold is the **independent retrain** of the same recipe (`chat-served2-20261008/model-a1`, `cbef6906…`, batch 32 / lr 4e-4 / warmup 500 / 12,207 steps / chat-v0-p2 train only) and its GPTQ export `721d4bdb…` — the artifact behind the published float cell and the quantiser-arm table; its float forward reproduces the published 0.87755 to five decimals.
+
+**The matched triple at a declared 512 windows / 196,608 positions** on stream `e5f400b0…`, whose own byte basis was re-verified on the copy used (6,194,589 tokens / 17,576,697 bytes / **2.837427 B/token**), from one `lut-evaluate reference=true` run: **float 0.877550, reference 0.886838, integer 0.886838 BPB**; **quantisation 0.009288 BPB**, **engine 2.7e-7 BPB**, top-1 agreement engine vs float 0.92820. The tool's own `bits_per_byte` is a second basis — the scored targets' lens bytes, 2.829585 B/token on this sample (0.879982 / 0.889296 / 0.889296) — and both bases are named wherever a number is quoted.
+
+**The finding, and the verdict on criterion 2.** The same artifact's served column is **0.932773 BPB at 64 windows (24,576 targets)** and **0.886838 at 512 windows (196,608 targets)** — **0.045935 BPB apart on identical bytes** — with 0.3273 BPB per-window float spread and a 512-window mean standard error of 0.014525 BPB. So the published pair subtracts across window counts by more than the whole 0.033 gap it was used to measure, the same class of error as the cross-position-set artefact annotated on 2026-10-08. criterion 2 is **not met and not claimable**: at the recorded protocol the served cell misses 0.90 by 0.032773 (3.52 % relative, 0.41 % of the 8-bit/byte ceiling), and the matched 512-window number that sits below 0.90 does so by 0.013162 — inside its own re-sampling error. Standing requirement: **every BPB claim names its window count and byte basis**, and criterion 2 should be restated with the protocol above before any candidate is measured against 0.90. No model, capability or milestone moved, so no headline number changes; the protocol qualifier is added where the pair is quoted. One cell is explicitly unverified: `d11-evaluate` at 512 windows was killed when a hygiene pass removed this worktree mid-run (the pushed branch `deepseek/criterion2-pin-20261009` is why the completed run's numbers survived), and the artifact's own recorded 64-window `d11-evaluate` carries D11-exactness instead (`d10 = d11`, diff 0.0, top-1 1.0).
+
+**Next:** preserve the retrain pair off the non-canonical volume with `cloud-store put deepseek <dir>` — it appears in no index entry and is the only surviving artifact behind the published float cell — and restate criterion 2 in #2029 with the pinned protocol (512 windows / 196,608 targets, byte basis 2.837427 B/token, float and served columns from the same `lut-evaluate reference=true` run) before any future BPB claim or float model is graded against 0.90; the one unverified cell, `d11-evaluate` at 512 windows on `721d4bdb…`, waits for a free EU-RO-1 pod and would confirm rather than discover.
+
+## 2026-10-09 — The open reply panel's mid-clause failures are the 64-token budget (deepseek, #2029)
+
+The question the previous round could not settle was whether the largest text marker on the open reply panel —
+`no_terminal`, 125 of 189 failures — is the `max_new_tokens=64` cap or a voluntary stop mid-sentence. It decides
+what the panel measures: a termination failure in the served stack, or a failure to complete thoughts the model
+chose to start. Amendment: [open-reply-panel-2026-10-09](../labs/open-reply-panel-2026-10-09/README.md) Result 4.
+
+**The tokenizer the report names was found on the laptop**, not missing: `d36d3e87…` at
+`~/uor-r4-local/workspace/uor-r4-lab/claude-t4-1433-resume/bundle-learned-1/tokenizer.json`. The sealed report
+root's own `attempt.json` names that bundle path; the file's sha256 equals the report's `tokenizer_sha256`; and
+`crates/uor-r4-tokenizer/examples/token-counts.rs`, built on the crate's own engine, reproduces the
+`chat-grade check` worst cases already recorded on main for `context=384` — 336 (`conv-v3-mem-16`) and 347
+(`conv-v4-mem-23`) — exactly. The counts are therefore the frozen instrument's counts.
+
+**Answer: CAP-TRUNCATION, split 85 / 34 / 6.** Of the 125 mid-clause failures on the 29M artifact, **85 (68.0%)
+are at 64 tokens or more**, 34 sit at exactly 63 — the band the trimmed stored text and pre-token-boundary
+effects live in, so they spent at least 61 of the 64 steps — and **6 (4.8%) are genuine voluntary stops
+mid-sentence** (`heldout-020` 19 tokens, `heldout-130` 22, `heldout-156` 38, `heldout-060` 55, `heldout-135`
+and `heldout-176` 56). **119 of 125 (95.2%) end within one token of the budget.** Coverage of the 189: 85
+(45.0%) at the cap, 124 (65.6%) within one token, 125 (66.1%) mid-clause in total, and 64 (33.9%) not
+budget-limited at all — 62 of those end with terminal punctuation, i.e. completed replies graded wrong.
+
+**The well-posed/ill-posed asymmetry is the same budget.** Among `K-clean` failures 73 of 115 (63.5%) are at
+the cap, against 14 of 51 (27.5%) for `K-ill-posed`; over all rows 82 of 133 `K-clean` rows (61.7%) reach 64
+tokens against 18 of 67 `K-ill-posed` (26.9%), and the `everyday` tier never reaches it (0 of 32). A well-posed
+request makes the model write until the budget cuts it off; an unanswerable one makes it stop early — which is
+the `fluent_only` concentration in `K-ill-posed`. So the 86.5% versus 76.1% failure rates are a budget effect,
+not a knowledge effect. Acceptance is cap-sensitive too: 13 of 100 at the cap are `acceptable` (13.0%) against
+30 of 132 below it (22.7%). The 96M `chat-100m-C` artifact replicates the shape: 86 of 117 mid-clause failures
+(73.5%) at the cap, one below it, `K-clean` 65.5% against `K-ill-posed` 17.4%.
+
+**What it does not say, and what follows.** It does not say the cut replies would have been *correct* with more
+room — nothing here regenerates a reply. It explains 45.0% of the 189 failures and leaves the rest diffuse, so
+the no-Phase-2 decision stands unchanged; the budget is a decoder setting, not a mechanism. What it adds is one
+bounded, cheap measurement that was believed unavailable: a declared run of the same sealed panel at
+`max_new_tokens` 96 or 128, same artifacts, same grader, the cap as the only pre-registered delta, before any
+corpus/knowledge spend — the 43→46/232 plateau may be partly a plateau at 64 tokens. Also unchanged and still
+first: criterion 1 on this panel is judge-only and needs either deterministic row checks or a stated tolerance.
+CPU only: no model, no generation, no grading, no pod, zero spend; scripts
+`scripts/open_reply_panel_token_counts.py` and `crates/uor-r4-tokenizer/examples/token-counts.rs` carry the
+whole pipeline.
+
+**Next:** run the declared larger-cap measurement on the open reply panel — same sealed panel, same two
+artifacts, same grader digest, `max_new_tokens` the only delta, pre-registered before it runs — to decide
+whether the budget-cut replies become correct or only longer; and repair criterion 1's judge-only reading with
+deterministic row checks or a stated tolerance before any candidate number on that panel is accepted.
 ## Octonion substrate draft has exact sign and projection counterexamples — October 9
 
 **KEEP** typed separation of algebra, state, routing and identity; **REJECT** direct adoption of the supplied orientation/projected route; a new substrate remains **NOT YET PROMOTED**. Full review of Mark (N3mesis)'s 16-slide architecture and 31-page discussion, with a standalone Rust arithmetic witness, finds 176/224 mixed-unit left-alternativity cases for the draft versus 224/224 for the table parsed from existing SpiralCore source; both pass all 64 repeated-basis cases, showing why the draft's basis-only sketch is insufficient. The literal proposed table also fails quadratic norm multiplicativity, the projected route loses the fourth coordinate, and the packing sketch hashes empty input; these are draft defects, not model results. [Record, exact identities and limitations](../labs/octonion-substrate-review-2026-10-09/README.md); canonical Rust operators and accepted 8/512 remain unchanged.
@@ -202,7 +258,7 @@ The [criterion-2 separation](../labs/chat-served-gap-attribution-2026-10-09/READ
 
 **What this corrects.** The recorded "float 0.877 / served 0.933 / quantisation 0.00883" pair is a cross-position-set comparison: 0.0552 BPB is 0.0088 of quantisation on identical positions plus 0.0464 of position-set difference, and the engine contributes ~1e-6 BPB, not the 0.0464 the [serving-mode audit](../evidence/serving_mode_audit_2026-10-08.txt) inferred from a cross-set subtraction. The absolute score is strongly position-dependent here — per-window float spread is 0.50 BPB (64 w) and 0.44 BPB (512 w), and the two window sets on the same model differ by 0.029 BPB — while the quantisation term is ~50× less sensitive (0.00409 ± 0.00141 BPB and 0.00384 ± 0.00049 BPB). On identical positions the serving path is within 0.4 % of its own float model, so **the residual to the 0.90 target is the float model, not protocol or export**. criterion 2 is not met and is not claimed; STATUS/ROADMAP/#2028 are unchanged because no served model, BPB headline or milestone moved. Limitation, stated in the record: the artifact that produced the recorded 0.877/0.933 pair (batch 32, lr 4e-4, chat-v0-p2 train only) is **not in the cloud-store index** and is not on this laptop, so the measured artifact is the same-architecture term-weight 19.9 M family at a much worse absolute level (1.77–1.80 BPB), and the record's own 0.00883 remains the comparable quantisation cell for its artifact. Evidence: [chat_served_gap_attribution_2026-10-09.txt](../evidence/chat_served_gap_attribution_2026-10-09.txt).
 
-**Next:** criterion 2's protocol is unpinned and should be pinned before any candidate is measured against it — restore the recorded artifact from the pod volume `rfsx702p68` (`uor-shared-EU-RO-1`, non-canonical, not mounted by a EUR-NO-1 pod) or re-export it, then score the *same* checkpoint at a fixed window count and byte basis under `lut-evaluate reference=true` so the 0.877 float cell is replaced by a matched float/served pair; and, because export work provably cannot close the gap, treat the float model at this scale or a larger one as the only lever, not the quantiser.
+**Next:** criterion 2's protocol is unpinned and should be pinned before any candidate is measured against it — restore the recorded artifact from the pod volume `rfsx702p68` (`uor-shared-EU-RO-1`, non-canonical, not mounted by a EUR-NO-1 pod) or re-export it, then score the *same* checkpoint at a fixed window count and byte basis under `lut-evaluate reference=true` so the 0.877 float cell is replaced by a matched float/served pair; and, because export work provably cannot close the gap, treat the float model at this scale or a larger one as the only lever, not the quantiser. *(Executed 2026-10-09 by the [protocol pin](../labs/criterion2-protocol-pin-2026-10-09/README.md): the recorded artifact `2ac4c306…` is NOT on that volume and is unrecoverable; the volume holds the independent retrain `cbef6906…` / export `721d4bdb…`, measured matched at 512 windows as float 0.877550 / served 0.886838 BPB. No re-export was run.)*
 
 
 ## Corrected-donor earliest residual: useful local credit, insufficient adjacent displacement — October 9
