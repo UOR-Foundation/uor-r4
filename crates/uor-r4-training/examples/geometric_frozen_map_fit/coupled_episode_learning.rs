@@ -2904,7 +2904,8 @@ mod tests {
             &vec![0; binding.vocab_size().div_ceil(2)],
             energy.clone(),
         )?;
-        let field = NativeContinuationField::compile_shared(&nb, &original, &vec![0; 8 * 60])?;
+        let field =
+            NativeContinuationField::compile_shared_action(&nb, &original, &vec![0; 8 * 60])?;
         energy.set_unary(0, 1, 1)?;
         let changed = NativeGeometricGenerate::compile(
             &binding,

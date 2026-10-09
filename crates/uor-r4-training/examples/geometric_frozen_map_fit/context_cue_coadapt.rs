@@ -378,7 +378,7 @@ fn earliest(v: &[i64]) -> Result<usize> {
     }
     Ok(winner)
 }
-fn native_code(v: f32) -> Result<i8> {
+pub(super) fn native_code(v: f32) -> Result<i8> {
     replay_require(
         v.is_finite() && (-1.75..=1.75).contains(&v),
         "Cue Q4 master out of range",
