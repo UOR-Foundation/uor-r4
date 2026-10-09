@@ -212,6 +212,97 @@ mod tests {
         assert!(on.export_discrete().engram_table.is_some());
     }
 
+    fn vsa_code_test_setup(mode: u8) -> (JepaTrainer, Vec<usize>) {
+        let text =
+            b"Once upon a time there was a little girl who lived in a forest. She had a kind cat.";
+        let tokens: Vec<usize> = text.iter().map(|&b| b as usize).collect();
+        let config = JepaTrainerConfig {
+            vocab_size: 257,
+            num_lanes: 2,
+            context_window: 16,
+            learning_rate: 0.05,
+            jepa_weight: 0.2,
+            weight_decay: 1e-4,
+            grad_clip: 1.0,
+            vsa_code_mode: mode,
+            vsa_code_refresh: 2,
+            ..JepaTrainerConfig::default()
+        };
+        (JepaTrainer::new(config, 999), tokens)
+    }
+
+    #[test]
+    fn vsa_root_codes_are_used_in_training() {
+        let (mut trainer, tokens) = vsa_code_test_setup(1);
+        for _ in 0..5 {
+            trainer.train_sequence(&tokens);
+        }
+        trainer.refresh_vsa_codes();
+        let token_to_root: Vec<u8> = (0..257)
+            .map(|t| trainer.model.embeddings.nearest_h4_root(t) as u8)
+            .collect();
+        let expected = vsa_codes::build_root_codebook(257, &token_to_root, trainer.config.vsa_seed);
+        for t in [0u32, 32, 79, 97, 101, 256] {
+            assert_eq!(trainer.model.vsa_codebook.get(t), expected.get(t));
+        }
+        // Mode 0 keeps the fixed hash codes.
+        let (fixed, _) = vsa_code_test_setup(0);
+        let on_demand =
+            crate::native_geometric::vsa::Codebook::<64>::on_demand(257, fixed.config.vsa_seed);
+        for t in [0u32, 32, 79, 256] {
+            assert_eq!(fixed.model.vsa_codebook.get(t), on_demand.get(t));
+        }
+    }
+
+    #[test]
+    fn vsa_learned_codes_round_trip_to_serving() {
+        for mode in [1u8, 2] {
+            let (mut trainer, tokens) = vsa_code_test_setup(mode);
+            for _ in 0..3 {
+                trainer.train_sequence(&tokens);
+            }
+            trainer.refresh_vsa_codes();
+            let exported = trainer.export_discrete();
+            assert_eq!(exported.vsa_code_mode, mode);
+            let bytes = exported.to_binary().expect("serialize");
+            let mut loaded = ExportedGeometricModel::from_binary(&bytes).expect("deserialize");
+            assert_eq!(loaded.vsa_code_mode, mode);
+            loaded.prepare_vsa_code_mode().expect("prepare");
+            let serving = loaded.vsa_codebook();
+            for t in [0u32, 32, 79, 97, 101, 256] {
+                assert_eq!(
+                    serving.get(t),
+                    trainer.model.vsa_codebook.get(t),
+                    "mode {mode} token {t}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn vsa_mode_zero_export_is_unchanged() {
+        let (mut trainer, tokens) = vsa_code_test_setup(0);
+        for _ in 0..3 {
+            trainer.train_sequence(&tokens);
+        }
+        let exported = trainer.export_discrete();
+        // Historical export behaviour: a fixed-code trainer still declares the learned-root mode.
+        assert_eq!(exported.vsa_code_mode, 1);
+        let expected =
+            vsa_codes::build_root_codebook(257, &exported.token_to_root, trainer.config.vsa_seed);
+        let mut as_fixed = exported.clone();
+        for t in [0u32, 79, 256] {
+            assert_eq!(exported.vsa_codebook().get(t), expected.get(t));
+        }
+        // Declaring mode 0 still selects the fixed on-demand hash.
+        as_fixed.vsa_code_mode = 0;
+        let on_demand =
+            crate::native_geometric::vsa::Codebook::<64>::on_demand(257, trainer.config.vsa_seed);
+        for t in [0u32, 79, 256] {
+            assert_eq!(as_fixed.vsa_codebook().get(t), on_demand.get(t));
+        }
+    }
+
     #[test]
     fn test_jepa_trainer_learns_and_reduces_bpb() {
         let text =

@@ -917,7 +917,7 @@ impl Session {
 
         let (vsa_codebook, prose_vsa) = if let Some(tables) = &model.geometric_prose_tables {
             if tables.vsa_scale_q15 != 0 && self.length > 0 {
-                let codebook = Codebook::<64>::on_demand(tables.vocab_size, tables.vsa_seed);
+                let codebook = tables.vsa_codebook();
                 let vsa_vec =
                     tables.context_vsa_from_ring(&codebook, &self.ring, self.cursor, self.length);
                 (Some(codebook), Some(vsa_vec))

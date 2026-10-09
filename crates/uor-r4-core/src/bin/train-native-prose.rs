@@ -489,6 +489,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut corpus_offset: usize = 0;
     let mut vsa_enabled = true;
     let mut engram_enabled = true;
+    let mut vsa_code_mode: u8 = 0;
+    let mut vsa_code_refresh: usize = 1000;
 
     let mut idx = 1;
     while idx < args.len() {
@@ -586,6 +588,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     corpus_offset = args[idx].parse().unwrap_or(0);
                 }
             }
+            "--vsa-codes" => {
+                idx += 1;
+                vsa_code_mode = match args.get(idx).map(String::as_str) {
+                    Some("fixed") => 0,
+                    Some("root") => 1,
+                    Some("readout") => 2,
+                    other => {
+                        eprintln!("--vsa-codes expects fixed|root|readout, got {other:?}");
+                        std::process::exit(2);
+                    }
+                };
+            }
+            "--vsa-code-refresh" => {
+                idx += 1;
+                if idx < args.len() {
+                    vsa_code_refresh = args[idx].parse().unwrap_or(1000);
+                }
+            }
             "--no-vsa" => {
                 vsa_enabled = false;
             }
@@ -601,6 +621,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                      --tokens INT        Token budget (default: 1,000,000)\n\
                      --offset INT        Start of the training window in the corpus (default: 0)\n\
                      --seed INT          Trainer seed (default: 2026_09_17)\n\
+                     --vsa-codes M       VSA code source: fixed (default), root, readout\n\
+                     --vsa-code-refresh N  Rebuild learned codes every N steps (default 1000)\n\
                      --no-vsa            Hold the VSA term at scale 0 (no update, exports 0)\n\
                      --no-engram         Disable the exact engram n-gram table in eval and export\n\
                      --epochs INT        Number of epochs (default: 1)\n\
@@ -658,8 +680,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let eval_token_count = 64_000.min(target_tokens / 5);
         let _train_token_count = target_tokens - eval_token_count;
         println!(
-            "Window: corpus offset {}, seed {}, vsa_enabled {}, engram_enabled {}",
-            corpus_offset, seed, vsa_enabled, engram_enabled
+            "Window: corpus offset {}, seed {}, vsa_enabled {}, engram_enabled {}, vsa_codes {} (refresh {})",
+            corpus_offset,
+            seed,
+            vsa_enabled,
+            engram_enabled,
+            ["fixed", "root", "readout"][vsa_code_mode as usize],
+            vsa_code_refresh
         );
 
         let eval_tokens = &corpus_slice[..eval_token_count];
@@ -719,6 +746,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             grad_clip: 1.0,
             vsa_enabled,
             engram_enabled,
+            vsa_code_mode,
+            vsa_code_refresh,
             ..JepaTrainerConfig::default()
         };
 
