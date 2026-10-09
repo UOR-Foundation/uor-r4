@@ -150,7 +150,9 @@ accepted whole-answer performance stays 8/512.
 The opt-in [protected joint constructor](docs/labs/protected-joint-construction-2026-10-09/README.md)
 adds original winner/rival credit before proposing coordinated Prefix/Generate
 updates. It uses the same full native token pool and retains every native
-acceptance check; implementation and model qualification are recorded separately.
+acceptance check. In the original-parent run, the continuous direction passes
+protection but all four quantized displacements fail the surrogate screen, so no
+update is committed. Native proposal quality is unmeasured; accepted 8/512 is unchanged.
 
 **Models trained**
 

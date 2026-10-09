@@ -331,6 +331,9 @@ fn policy_for_modes(credit: DonorCredit, transaction: PrefixTransaction) -> Valu
     if transaction == PrefixTransaction::ProtectedJointVector {
         p["prefix_transaction"] = json!(transaction);
         p["protected_direction"] = protected_joint_vector::policy();
+        p["prefix"] = json!("joint protected1920 direction; originalm+eta*d; clamp/castf32/nativequantize; unchangedcodes retain originalfractional bits; actualdelta constraints and CE descent required");
+        p["generate"] = json!("same joint transaction as Prefix; no follow-on coordinate pass");
+        p["objective_graph_count_scope"] = json!("physical_backward_calls and prebackward_native_parity_graph_forwards and gradient_graph_forwards describe the31 CE graphs; protected380 and totals are separate");
         p["rank"] = json!("joint1920 objective gradient and original380 winner/strongest-other margin Jacobians; no coordinate sweep");
         p["maximum_alternatives"] = json!(4);
         p["protected_margin_backward_calls"] = json!(380);
@@ -3042,7 +3045,13 @@ fn export_reload(
         receipt["fresh_adam"] = json!(false);
         receipt["optimizer_updates"] = json!(0);
         receipt["new_gradients"] = json!(1);
-        receipt["coefficient_backward_calls"] = json!(31);
+        receipt["coefficient_backward_calls"] = json!(if transaction_mode(a)
+            == PrefixTransaction::ProtectedJointVector
+        {
+            411
+        } else {
+            31
+        });
         let inherited = a
             .coupled_episode_learning
             .as_ref()
@@ -3080,6 +3089,8 @@ fn export_reload(
             "31 inherited completed joint backwards; all final codes inherited from completed constructor; zero new graphs/backwards/order/proposals/constructor"
         } else if inherited.is_some() {
             "31 inherited completed joint backwards, zero fresh graphs/backwards; original-seed finite constructor restart"
+        } else if transaction_mode(a) == PrefixTransaction::ProtectedJointVector {
+            "31 fresh task/reference CE backwards plus380 protected-margin backwards;411 total,822 graph forwards"
         } else {
             "31 fresh joint backwards"
         });

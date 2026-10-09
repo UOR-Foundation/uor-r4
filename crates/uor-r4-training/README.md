@@ -55,7 +55,10 @@ common-scale quarter-grid radii with actual-displacement checks, complete native
 staging and exact restaging before commit; no subsequent Generate sweep runs.
 It requires fresh `full_pool_utility` credit and rejects inherited gradients or
 exports. Defaults retain their historical behavior. Native acceptance and actual
-model qualification remain separate from this surrogate direction search.
+model qualification remain separate from this surrogate direction search. The
+original-parent run passes the continuous screen but rejects all four quantized
+displacements before native proposal scoring; it commits no update. The record
+retains the execution failures and the negative, without a response-gain claim.
 
 ## Complete-prefix native dialogue learning
 

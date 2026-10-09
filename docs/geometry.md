@@ -355,8 +355,8 @@ that influence on one novel job/home pair: 8/8 final state lanes, 3981/4096 Gene
 scores and 11/11 Copy scores differ, with the same Source candidates and donor;
 both novel replies fail, while both original controls complete. Thus total early-cue
 erasure before scoring is excluded for this pair; semantic sufficiency and the
-cause of full512 errors are not established. The next bounded step is shared
-protected-margin learning integration, not automatic promotion of an access rewrite.
+cause of full512 errors are not established. Protected-margin learning is now integrated below; this influence witness alone
+does not justify an access rewrite.
 The E1 and Hamming-rank mechanisms in section 11 remain separate pre-registered M1/M4 work.
 
 ## Protected native learning (M2)
@@ -376,8 +376,11 @@ complete Generate/Copy pool. They are offline surrogates: actual quarter-grid
 movement and a changed donor can invalidate first-order protection. Native
 combined/episode descent, 17 reference roles, 380 original winners and the full
 15-position conditional gate remain decisive, followed by saved-artifact actual
-own-feedback qualification on a positive construction. Model benefit is pending
-execution and is not implied by this connection. The geometry's basis, signed
+own-feedback qualification on a positive construction. The original-parent run
+passes the continuous constraints, but all four quantized displacements fail
+the surrogate screen (104/170/98/93 violated rows out of 380). No native proposal
+is scored or committed; this does not measure native winner loss or establish
+global infeasibility. Accepted whole-answer performance remains 8/512. The geometry's basis, signed
 operators, Source authority and D11 serving contract are unchanged.
 
 ## Life of one token

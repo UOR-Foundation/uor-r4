@@ -1031,6 +1031,20 @@ mod tests {
     }
     #[test]
     fn projection_preserves_fractional_bits_and_rejects_reverse_recovery() -> Result<()> {
+        let declared = policy_for_modes(
+            DonorCredit::FullPoolUtility,
+            PrefixTransaction::ProtectedJointVector,
+        );
+        assert_eq!(declared["total_fresh_backward_calls"], 411);
+        assert_eq!(declared["total_training_graph_forwards"], 822);
+        assert_eq!(
+            declared["generate"],
+            "same joint transaction as Prefix; no follow-on coordinate pass"
+        );
+        assert!(declared["prefix"]
+            .as_str()
+            .unwrap_or("")
+            .contains("originalm+eta*d"));
         let pm = vec![0.124f32; COUNT];
         let gm = vec![-0.124f32; COUNT];
         let (p, _) = proposals(
