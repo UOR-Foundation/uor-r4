@@ -1,8 +1,9 @@
-//! Offline Q4 learning of a shared signed-H4 continuation unary field.
+//! Offline Q4 learning of shared signed-H4 unary or cross-state continuation fields.
 //!
 //! The caller owns a separate causal ContextQ4(query || actual emitted prefix)
 //! replay from identity. It must supply that replay's retained states; this
 //! scorer cannot infer query/prefix provenance from IDs or tensor shapes.
+//! Cross-state fields also require the actual frozen post-bridge factual state.
 //! No labels, source records, answer lengths or first-token gates enter here.
 //!
 //! Authenticated packed coefficients and frozen Generate prototypes supply
@@ -37,7 +38,7 @@ use crate::{
 pub const COEFFICIENT_CREDIT_SCOPE: &str = "authenticated-native-Q24-continuation-delta;shared-full120-unary-selected-quarter-grid-STE;frozen-causal-local-state-and-existing-token-prototypes;all-Generate-IDs-every-step;one-final-common-clip-and-token-alias-loss/1";
 pub const STATE_CREDIT_SCOPE: &str = "authenticated-native-Q24-continuation-delta;selected-quarter-grid-STE-once;hard-retained-onehot120-local-state-utility;detached-unary-full120-conditional-utilities;frozen-existing-token-prototypes;no-input-renormalization;local-conditional-surrogate-not-global-posterior/1";
 const Q24: f64 = 16_777_216.;
-// V1 quarter shadow times1/4 is nibble<<20; v2 times1 is nibble<<22.
+// V1 quarter shadow times1/4 is nibble<<20; v2/v3 times1 is nibble<<22.
 const QUARTER_TO_NATS: f64 = 0.25;
 
 pub struct ContinuationLearningWeights {
@@ -48,8 +49,7 @@ pub struct ContinuationLearningWeights {
     cross_state: bool,
     /// Legacy unary masters, or compact [lane, factual_relative * 120 + local_relative]
     /// cross-state masters. The public field name remains for v1/v2 compatibility.
-    /// Shared [lane, inv(local_state) * existing_token_prototype] masters.
-    /// There are exactly 960 coefficients at eight lanes, with no token bias.
+    /// At eight lanes: 960 unary or 115200 cross-state coefficients, no token bias.
     pub unary: Var,
 }
 
@@ -66,7 +66,7 @@ struct ContinuationDeviceCache {
     // Rows are state IDs, columns prototype IDs; entries are inv(state)*proto.
     relative: Tensor,
     prototypes: Vec<Tensor>,
-    // Frozen authenticated native nibble coefficients, already shifted by20.
+    // Frozen authenticated native nibble coefficients, shifted by policy20/22.
     hard_unary_q24: Tensor,
     staged_index_bytes: usize,
     staged_factor_bytes: usize,

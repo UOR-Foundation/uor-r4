@@ -187,7 +187,7 @@ impl PreparedFixedContinuationBank {
         }))
     }
 
-    /// Refresh the960 field snapshot after each optimizer update, using the
+    /// Refresh the field snapshot after each optimizer update, using the
     /// actual frozen Generate and parent rather than a caller replacement.
     pub fn prepare_field(
         &self,
