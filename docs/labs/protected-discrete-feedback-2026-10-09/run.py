@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Supervise the source-bound Rust saved-credit constructor, without implementing a model."""
 from pathlib import Path
+import sys
 import datetime,hashlib,json,os,resource,shutil,subprocess,time
 W=Path(__file__).resolve().parents[3];R=W/'local/discrete-feedback'
-B=W/'local/build/release/examples/geometric-frozen-map-fit';C=R/'config.json'
+B=W/'local/build/release/examples/geometric-frozen-map-fit';C=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else R/'config.json'
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 config=json.loads(C.read_text());out=Path(config['out']);assert not out.exists()
 assert config['coupled_episode_learning']['prefix_transaction']=='protected_discrete_feedback'

@@ -67,6 +67,14 @@ sealed roots. [`run.py`](run.py) binds the Rust source/configuration/binary and
 records local process execution; neither implements the model. Exact restoration
 receipts and complete run outputs are preserved with the delivery record.
 
+The first attempt stopped after13.113 report seconds at resource admission,
+before importing derivatives or offering a candidate. Its574,605,465-byte report
+projection incorrectly retained the historical14,400-coordinate-alternative
+journal. The repaired new-mode bound is an exclusive16MiB for32 joint-round
+records, with a worst-width serialization test; the512MiB report cap and every
+model acceptance condition are unchanged. The sealed failed attempt is retained
+as a setup defect, not a negative model result.
+
 ## Next
 
 Execute the fixed saved-credit constructor and distinguish no eligible discrete

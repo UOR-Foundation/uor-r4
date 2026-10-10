@@ -2328,18 +2328,19 @@ fn capacity_for_mode(max_copy: usize, legal: usize, mode: PrefixTransaction) -> 
     Ok(cap)
 }
 fn journal_bound_for_mode(mode: PrefixTransaction) -> Result<u64> {
+    // This mode emits32 compact joint rounds, not the historical14400
+    // coordinate alternatives. Each round contains1920 destination bits/deltas,
+    // 380 residuals, at most391 compact donor/post/incidence tuples,31 objective
+    // masses and two380-index guard lists. One selected receipt/projection and
+    // JSON indentation are included in the16MiB bound exercised below.
+    if mode == PrefixTransaction::ProtectedDiscreteFeedback {
+        return Ok(16 * 1024 * 1024);
+    }
     let legacy = journal_upper_bound()?;
     // Legacy reserves960 full Prefix records. Four vector records each add960
     // projectedu32 bits and all391 change tuples, plus one selected receipt;
     // a4MiB explicit reserve covers these additions without subtracting legacy.
-    Ok(legacy
-        + if mode.legacy() {
-            0
-        } else if mode == PrefixTransaction::ProtectedDiscreteFeedback {
-            32 * 1024 * 1024
-        } else {
-            4 * 1024 * 1024
-        })
+    Ok(legacy + if mode.legacy() { 0 } else { 4 * 1024 * 1024 })
 }
 fn journal_objective(v: &Value) -> Value {
     json!({"combined":v["combined"],"task":v["task"],"reference":v["reference"],
@@ -3834,6 +3835,28 @@ mod tests {
             .collect::<Vec<_>>();
         let red = NativeVocabularyActions::new(binding, &exp)?;
         Ok((native, weights, factual, changed, red))
+    }
+    #[test]
+    fn discrete_journal_bound_covers32_full_rounds_without_legacy_coordinate_records() -> Result<()>
+    {
+        let bound = journal_bound_for_mode(PrefixTransaction::ProtectedDiscreteFeedback)?;
+        assert_eq!(bound, 16 * 1024 * 1024);
+        assert_eq!(
+            journal_bound_for_mode(PrefixTransaction::CoordinateAdjacent)?,
+            journal_upper_bound()?
+        );
+        assert_eq!(
+            journal_bound_for_mode(PrefixTransaction::ProtectedJointVector)?,
+            journal_upper_bound()? + 4 * 1024 * 1024
+        );
+        let objective = json!({"combined":-f64::MAX,"task":-f64::MAX,"reference":-f64::MAX,"correct_reference_frames":17,"all_phase_winners":true,"objective_masses":vec![json!([u64::MAX,u64::MAX,u32::MAX]);31]});
+        let native = json!({"round":31,"incumbent_epoch":0,"objective":objective,"strict_current_CE_and17":true,"affected_guard_indices":vec![u64::MAX;380],"checked_guard_indices":vec![u64::MAX;380],"first_failure":{"guard_index":379,"required":u32::MAX,"chosen":u32::MAX},"guard_status":"NOT_CHECKED_OBJECTIVE_GATE_FALSE","feasible":true,"changed_rows":vec![json!([u64::MAX,u64::MAX,vec![119;8],"f".repeat(64)]);391],"staged_summary_digest":"f".repeat(64),"staged_rows_count":391});
+        let round = json!({"round":31,"destination_master_bits":vec![u32::MAX;1920],"actual_delta":vec![-f64::MAX;1920],"quantized_margin_residuals":vec![-f64::MAX;380],"quantized_tolerance":f64::MAX,"actual_CE_linear_delta":-f64::MAX,"quantized_constraints_passed":true,"eligible":true,"feedback_norm":f64::MAX,"primal_norm":f64::MAX,"duplicate_of":31,"incumbent_epoch":0,"native":native});
+        let journal = json!({"schema":"uor-r4.protected-discrete-feedback/1","policy":policy_for_modes(DonorCredit::FullPoolUtility,PrefixTransaction::ProtectedDiscreteFeedback),"protected_margin_receipt_sha256":"f".repeat(64),"joint_vectors":vec![round;32],"coordinate_records":[],"selected":{"status":"committed","round":31,"incumbent_epoch":0,"epoch_after":1,"selected_receipt":native,"selected_restage_exact":true},"projection":{"feedback_target":vec![-f64::MAX;1920],"unit_row_zero":vec![false;380],"residuals":vec![-f64::MAX;380]},"summary":{"initial":objective,"final":objective}});
+        // Pretty encoding is larger than the compact scientific writer. Reserve
+        // a further2MiB for scalar projection/summary fields and policy wording.
+        assert!(serde_json::to_vec_pretty(&journal)?.len() as u64 + 2 * 1024 * 1024 < bound);
+        Ok(())
     }
     #[test]
     fn discrete_saved_mode_is_protected_but_not_legacy_recovery() {
