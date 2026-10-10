@@ -34,10 +34,10 @@ model.
 
 | Milestone | Issue | Status | Latest result |
 | --- | --- | --- | --- |
-| M1 Language base | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) | in progress | 214M base dev NLL 2.073; 19.9M chat stack 0.933 BPB served at 64 windows (0.877550 float / 0.886838 served matched at 512 windows — [protocol-dependent](docs/labs/criterion2-protocol-pin-2026-10-09/README.md)) |
+| M1 Language base | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) | in progress | 29M chat line: v5 memory 10/40 → 20/40 with a 10 % recall mix at no measurable reply cost (reply 43 → 37/232, #2151; adopted as base under D22), against targets 34/40 and 116/232; served 1.20–1.24 BPB, bit-exact D11 (#2163); product-key memory now trains into a saved model (#2168). 19.9M chat stack 0.877550 float / 0.886838 served BPB at 512 windows ([protocol](docs/labs/criterion2-protocol-pin-2026-10-09/README.md)); 214M base dev NLL 2.073 |
 | M2 Grounded reply from exact memory | [#2030](https://github.com/UOR-Foundation/uor-r4/issues/2030) | in progress | 437/512 complete replies; development target 256 passed; fresh qualification 0/128 (52 required), failed |
 | M3 Durable conversation memory | [#2031](https://github.com/UOR-Foundation/uor-r4/issues/2031) | in progress | Evaluator and session delivered (#1568, #1578); not qualified |
-| M4 One served model (D11 and CLI) | [#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032) | in progress | D11 engine bit-exact; `uor-chat --stack` serves the stack (#2050, 9 Oct) |
+| M4 One served model (D11 and CLI) | [#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032) | in progress | Softmax at runtime: **still yes**. D11 now also serves softmax-free flock reads (rank, Hamming-rank and learned rank tables; #2144, #2153), but every trained configuration so far misses the 0.01 BPB bar (best: learned tables, +0.0172 to +0.0185); `uor-chat --stack` serves the stack (#2050) |
 | M5 Laptop cost (D5) | [#2033](https://github.com/UOR-Foundation/uor-r4/issues/2033) | not started | No M1 energy measurement yet |
 | M6 Reasoning and coding | [#2034](https://github.com/UOR-Foundation/uor-r4/issues/2034) | not started | Exact arithmetic is the visible gap |
 | M7 Distribution (API, WASM, Studio) | [#2035](https://github.com/UOR-Foundation/uor-r4/issues/2035) | not started | Local API only |
@@ -51,6 +51,7 @@ Tracker: [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028). Measured
 | --- | --- | --- |
 | Train, evaluate and export a geometric stack language model | Works, 8M to 214M parameters, offline Rust autodiff | `geometric-stack` example in `uor-r4-training` |
 | Serve an exported stack artifact with no float and no multiplier instruction | Works; bit-exact against the float path on a 3,072-target check | `uor-r4-stack generate`, and `uor-chat --stack <ARTIFACT.lut>` (greedy decoding only) |
+| Train and serve softmax-free flock reads (rank table, Hamming rank via `BitCode`, learned per-head rank tables) | Works end to end (artifact schema `uor-r4.lut-stack/3`, D11 audit FULL PASS); not yet as good as the softmax read | `geometric-stack train select=flock:W:K read_weighting=` (`rank`, `hamming_rank` or `learned_rank`), then `export` and `d11-evaluate reference=none` |
 | Native grounded-reply learner (compiler, exact store, emitter) | Runs; completes 437/512 exposed development replies, 0/128 fresh replies | `crates/uor-r4-core/src/native_geometric/` |
 | Native chat CLI | Exists | `crates/uor-r4-api/src/bin/r4-native-chat.rs` |
 
@@ -227,6 +228,13 @@ comparators only. Costs stay honest: dense layer maps and the vocabulary head st
 weights for every token, and a measured product-table emulator used 4.3 times the energy of its
 float comparator, so no general energy advantage is established.
 
+**Softmax-free reads (October 10).** The D11 engine can also serve a read with no softmax at all:
+- **The flock:** each row keeps a sink, the last `W` positions and the top `K` of the rest, using an allocation-free insertion selector with no library sort.
+- **The weights:** a constant Q31 rank table, either the fixed `1/(r+1)` or a per-head table learned in training.
+- **Hamming scores:** for the Hamming-rank read, scores come from `BitCode` sign codes (XOR plus a multiplier-free popcount).
+- **Artifacts:** they use schema `uor-r4.lut-stack/3`, which the frozen D10 engine refuses.
+- **Not the default yet:** the served model still uses the exp-table softmax read, because the softmax-free reads trained so far cost 0.017–0.04 BPB ([record](docs/labs/softmax-free-read-2026-10-10/README.md), [brief](docs/mechanisms/flock-rank-reads.md)).
+
 ```sh
 # Serve an exported stack artifact (multiplier-free engine)
 cargo build --release -p uor-r4-integer --bin uor-r4-stack --bin uor-chat
@@ -247,6 +255,8 @@ Every row holds at its exact artifact, data, operator and budget.
 | v4 memory panel (frozen `exact` check pass) | 31/40 at 214M, 26/40 at 96M | 40 memory rows of `conversational-v4*`; Step 7d fine-tunes, one seed; chat-grade `acceptable` is 27/40 at 214M |
 | Native grounded learner | **437/512 complete replies**, up from177; 260 gained, none lost, 177 retained | [Native pooled-token ranking](docs/labs/m2-pooled-rank-2026-10-10/README.md), frozen exposed 512-episode panel; development threshold 256 passed, fresh qualification 0/128 (52 required), failed; panel fitting under D22, not an M2 move |
 | D11 serving engine | Bit-exact with the float path | NLL equal on 3,072 targets |
+| Softmax-free flock reads (M4 recipe, 2 seeds each) | Δ float BPB against softmax 0.877198: fixed rank `flock:8:8` +0.040; Hamming rank +0.259; learned rank tables `flock:8:8` +0.0185; learned `flock:32:32` +0.0172 | Bar 0.01; all served by D11 at equal speed. Widening the support 17 → 66 sources buys 0.0013, so the remaining cost is the rank weighting or its training, not the support ([record](docs/labs/softmax-free-read-2026-10-10/README.md)) |
+| M1 memory (29M chat line, frozen v5 panel) | 10/40 → 20/40 with a 10 % recall mix; read binding moves bound mass 0.73 → 0.90 and wrong-value failures 17 → 12 | One seed per arm; ±3/40 is panel noise (#2151, #2155) |
 | MQAR toy (1.37M) | 0.99919 in-class vs 0.2534 control | Synthetic task; advantage confined to a learning-rate band |
 
 **Negatives and retractions (kept as evidence)**
@@ -262,6 +272,7 @@ Every row holds at its exact artifact, data, operator and budget.
   in #1518. DeepSeek's VSA codebook nulls were re-scoped as a frozen-artifact effect: retrained into the native learner, the VSA term improves held-out BPB by 0.014–0.023, while icosian-root codes do not, because they collapse token identity (#2077, [record](docs/labs/vsa-native-test-2026-10-09/README.md)); the LUT-4 shortlist was retracted; the broad-prose and
   complete-roadmap claims of 8 September were retracted by audit.
 - `uor-chat --stack` (#2050) records a measured negative for the bundle route.
+- **How to read these negatives ([D22](docs/integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened), 10 October):** a negative closes the tested configuration, not the mechanism. Several 9–10 October closures were reopened because their tests could not judge the mechanism: the Codex constructor, native Context learning, DeepSeek's identity pointer and read binding. Each mechanism's idea, history and fair test is in [docs/mechanisms/](docs/mechanisms/README.md).
 
 Sources: [current state](docs/integration/current-state.md), [evidence index](docs/integration/EVIDENCE.md),
 [decisions](docs/integration/DECISIONS.md), [mechanism admissibility](docs/integration/mechanism-admissibility-2026-10.md).
