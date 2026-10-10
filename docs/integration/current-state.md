@@ -1,3 +1,22 @@
+## 2026-10-10 — The memory's half-steps gain was the shorter fit, not the memory: the step-matched control reads the same 22/40 (deepseek, #2029, D22 order 2)
+
+Cycle 9 closes the loose end of the [addressed-memory round](../labs/addressed-memory-2026-10-10/README.md) with the control the
+previous cycle named. The product-key memory fitted at **1,000 steps** read **22/40** with the line's best wrong-value count (11),
+while the same memory at **2,000 steps** read **19/40** on both seeds — two explanations, the memory or the shorter fit. The
+**no-memory control at the identical recipe and 1,000 steps** reads **22/40** as well (wrong-value 12, unknowable 3/24,
+derangement 0): **the gain was the shorter fit.** The memory configuration therefore contributes nothing measurable on this panel
+at either step count, and at the anchor's steps it sits one row below the no-memory anchor while costing **+0.026 BPB** on the chat
+held-out stream — a rejected *configuration*, not a closed mechanism (D22 §1).
+
+**Two measurements worth keeping.** The control's two seeds are **bit-identical** (`90c382d6…`, 63 s wall each) because without an
+added memory `seed=` has nothing to initialise and every weight comes from the checkpoint — so the memory arms' seed variation is
+entirely the added memory's. And the memory's host bridge costs **≈ 0.13 s/step** (1,000 steps: 63 s without it, ~190 s with it),
+which is small next to the trunk and is why the *kernel* remains the honest follow-up rather than a claim that the bridge is free.
+
+**Next:** configuration variation at the anchor's steps — the memory at a **read** layer (`a` of `rrarrarrar`) and with a larger
+sub-key set, one seed each against the same frozen panel and bar — then the brief's **exact-key arm** (prime/semiprime addressed
+store) with the tagger-versus-read split the brief asks for.
+
 ## 2026-10-10 — A rank-consistent training read (`softsort_rank`) for the learned rank table (claude, #2032)
 
 Preparation for arm S ([record](../labs/softmax-free-read-2026-10-10/README.md#rank-consistent-training-arm-s-preparation-read_weightingsoftsort_rank)):

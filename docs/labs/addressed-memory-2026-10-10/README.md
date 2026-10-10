@@ -119,3 +119,38 @@ the exact-key (prime/semiprime addressed store) arm of the same brief, which thi
   [#2029 comment 6101635064](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6101635064);
   the previous cycle's record and its carry-forward:
   [#2029 comment 6101562834](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6101562834).
+
+## Cycle 9: the step-matched control, and what the half-steps reading really was
+
+The half-steps reading above (memory at 1,000 steps on CPU: 22/40, wrong-value 11) had two candidate
+explanations — the memory, or the shorter fit. The control is the identical recipe with **no memory** at
+**1,000 steps**, `device=cuda`, and it settles it:
+
+| arm | memory | steps | device | v5 memory `check_pass` | unknowable | **wrong-value** | derangement |
+|---|---|---|---:|---:|---:|---:|---:|
+| **C1 / C2 (control, no memory)** | — | 1,000 | GPU | **22/40** | 3/24 | **12** | 0 |
+| cpuM1 (memory) | yes | 1,000 | CPU | 22/40 | 2/24 | 11 | 2 |
+| G1 / G2 (memory) | yes | 2,000 | GPU | 19/40 | 0/24 | 17 / 15 | 1 / 2 |
+| D10 (adopted base, no memory) | — | 2,000 | GPU | 20/40 | 0/24 | 17 | 0 |
+
+**The 22/40 was the shorter fit.** The matched control reads the same two rows and one wrong-value row away,
+so the memory configuration contributes **nothing measurable on this panel at either step count** — and at the
+anchor's steps it reads one row *below* the no-memory anchor while costing **+0.026 BPB** on the chat held-out
+stream. The mechanism is untouched by that (D22 §1: a configuration, not a mechanism); the *configuration* is
+what is rejected.
+
+**A measured note on the control's two seeds.** C1 and C2 are **bit-identical** (`model.sha256`
+`90c382d6…`, dev 0.4274, 63 s wall each): without a memory to draw, `seed=` has nothing to initialise, since
+every weight comes from the checkpoint and the data order is fixed by `data_seed`. The memory arms' seed
+variation therefore comes entirely from the added memory — the property [#2170](https://github.com/UOR-Foundation/uor-r4/pull/2170)
+restored — and the control is one run reported twice.
+
+**Cost of the memory's host bridge, measured:** 1,000 steps took **63 s** without the memory and **~190 s**
+with it (the CUDA arms), i.e. **≈ 0.13 s/step** of transfer and host compute for the op — real, small next to
+the trunk, and the reason the *kernel* remains the honest follow-up rather than a claim that the bridge is
+free.
+
+**What the next cycle does, decided by this reading:** the memory's *placement and size* at the anchor's steps
+(a **read** layer `a` of `rrarrarrar`, and a larger sub-key set), one seed each against the same frozen panel
+and bar; then the brief's **exact-key arm** (prime/semiprime addressed store) with the tagger-versus-read split
+the brief asks for.
