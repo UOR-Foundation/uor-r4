@@ -1479,16 +1479,16 @@ mod tests {
         const TOK: &str = r#"{"pre_tokenizer":{"type":"ByteLevel","add_prefix_space":false},"model":{"type":"BPE","vocab":{"<|bos|>":0,"<|eos|>":1,"<|unk|>":2,".":3,"a":4,"b":5,"Ġ":6,"Ġa":7},"merges":["Ġ a"]},"added_tokens":[{"id":0,"content":"<|bos|>"},{"id":1,"content":"<|eos|>"},{"id":2,"content":"<|unk|>"}]}"#;
         let binding =
             uor_r4_integer::geometric_source_actions::SourceActionBinding::new(TOK.as_bytes())
-                .map_err(|e| bad(e.to_string()))?;
+                .map_err(|e| bad(&e.to_string()))?;
         let exp = (0..uor_r4_integer::geometric_read::EXP_TABLE_LEN)
             .flat_map(|i| {
                 (((-(i as f64) / 256.).exp() * (1u64 << 31) as f64).round() as u32).to_le_bytes()
             })
             .collect::<Vec<_>>();
         NativeVocabularyActions::new(binding, &exp)
-            .map_err(|e| bad(e.to_string()))?
+            .map_err(|e| bad(&e.to_string()))?
             .reduce_trace(&[0; 8], copy_ids, copy_scores)
-            .map_err(|e| bad(e.to_string()))
+            .map_err(|e| bad(&e.to_string()))
     }
     fn rank_grad(loss: &Tensor, var: &Var) -> Result<Tensor> {
         loss.backward()?
