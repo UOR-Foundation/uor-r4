@@ -54,6 +54,8 @@ use uor_r4_training::{
     },
     sha256_bytes, sha256_file,
 };
+#[path = "geometric_frozen_map_fit/bank_mixture.rs"]
+mod bank_mixture;
 #[path = "geometric_frozen_map_fit/categorical_proposals.rs"]
 mod categorical_proposals;
 #[path = "geometric_frozen_map_fit/constrained_context.rs"]
@@ -525,6 +527,8 @@ struct Args {
     #[serde(default)]
     cross_state_pooled_rank: bool,
     #[serde(default)]
+    cross_state_bank_mixture: Option<bank_mixture::Config>,
+    #[serde(default)]
     joint_continuation: Option<JointContinuationConfig>,
     #[serde(default)]
     reference_replay: Option<ReferenceReplayConfig>,
@@ -801,6 +805,7 @@ fn args() -> Result<(Args, Vec<u8>)> {
     let a: Args = serde_json::from_slice(&raw)?;
     reply_completion::settings(&a)?;
     cross_state_completion::settings(&a)?;
+    bank_mixture::settings(&a)?;
     control_settings(&a)?;
     continuation_settings(&a)?;
     joint_continuation_settings(&a)?;
@@ -841,6 +846,14 @@ fn validate_input_output_paths(a: &Args) -> Result<()> {
     .chain(a.baseline.iter())
     .chain(a.prediction_control_resume.iter())
     .chain(a.cross_state_resume.iter().map(|c| &c.root))
+    .chain(a.cross_state_bank_mixture.iter().flat_map(|c| {
+        [
+            &c.recomposition_root,
+            &c.diagnostic_root,
+            &c.diagnostic_baseline_root,
+            &c.preparation_audit,
+        ]
+    }))
     .chain(a.retained_context_root.iter())
     .chain(
         a.prefix_context_credit
@@ -4899,7 +4912,7 @@ fn continuation_checkpoint(
             "continuation independent masters/native reload differs",
         ));
     }
-    let receipt = json!({"step":step,"lineage_step":resume.map_or(step, |r| r.profile.lineage_after(step)),
+    let mut receipt = json!({"step":step,"lineage_step":resume.map_or(step, |r| r.profile.lineage_after(step)),
         "cross_state_resume":resume.map(|r|&r.provenance),
         "parent":reloaded.source_binding(),"generate_sha256":p.generate_sha256,
         "frozen_model_root":fs::canonicalize(&a.saved_fit)?,"frozen_model_report_sha256":CONTINUATION_PARENT_REPORT_SHA,
@@ -4910,6 +4923,9 @@ fn continuation_checkpoint(
         "upstream_training":"all Context/Source/Potential/Generate/prototype/bridge/cue/prefix frozen; no old Vars loaded",
         "fresh_adam":"zero moments; not optimizer-state continuation",
         "pooled_rank_policy":cross_state_completion::rank_policy(a),"cross_state_pooled_rank":a.cross_state_pooled_rank,"cross_state_bottleneck":a.cross_state_bottleneck,"training_objective":cross_state_completion::objective_policy(a)});
+    if let Some(config) = &a.cross_state_bank_mixture {
+        receipt["bank_mixture"] = json!({"policy":bank_mixture::POLICY,"config":config,"original_inputs_sha256":INPUT_SHA,"original_labels_sha256":LABEL_SHA});
+    }
     fs::write(
         root.join("continuation-source/metadata.json"),
         serde_json::to_vec_pretty(&receipt)?,
@@ -6080,7 +6096,7 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         .iter()
         .copied()
         .collect::<BTreeSet<_>>();
-    let train = load_panel(
+    let mut train = load_panel(
         &a.training_inputs,
         &a.training_labels,
         &p.integer,
@@ -6101,6 +6117,10 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     }
     pairs(&train)?;
     pairs(&dev)?;
+    let mut mixture = bank_mixture::load(a, &p, &legal, &train)?;
+    if let Some(data) = &mut mixture {
+        train.append(&mut data.additional);
+    }
     let native = p.generator()?;
     if native.generate_model().lanes() != 8 || native.generate_model().vocab_size() != 4096 {
         return Err(bad("continuation parent8-lane/full4096 mismatch"));
@@ -6149,12 +6169,17 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     {
         return Err(bad("continuation field parameter admission"));
     }
-    let schedule = order(a.seed, train.len());
+    let schedule = if mixture.is_some() {
+        bank_mixture::schedule(a.seed)
+    } else {
+        order(a.seed, train.len())
+    };
     write(
         a,
         "order.json",
         &json!({"seed":a.seed,"order":schedule,"batch":BATCH,"updates":a.updates,
-        "policy":"existing full512 SplitMix64/Fisher-Yates cyclic batches; previous supervised tokens only; all answer positions including EOS"}),
+        "policy":if mixture.is_some() {bank_mixture::POLICY} else {"existing full512 SplitMix64/Fisher-Yates cyclic batches; previous supervised tokens only; all answer positions including EOS"},
+        "partition_offsets":if mixture.is_some() {json!([0,512])} else {json!([0])},"mixture":mixture.as_ref().map(|m|&m.receipt)}),
     )?;
     let projected_tensor_bytes = train.iter().try_fold(0u64, |sum, e| -> Result<u64> {
         let copy = e
@@ -6178,7 +6203,7 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "admission.json",
         &json!({"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"mode":mode_name,
         "parent":p.receipt,"parent_report_sha256":CONTINUATION_PARENT_REPORT_SHA,"parent_manifest_sha256":CONTINUATION_PARENT_MANIFEST_SHA,
-        "training_input_sha256":INPUT_SHA,"training_labels_sha256":LABEL_SHA,"construction_panel_overlap":"train=open-development512; no new held-out claim",
+        "training_input_sha256":INPUT_SHA,"training_labels_sha256":LABEL_SHA,"construction_panel_overlap":if mixture.is_some() {"original512 + separately sealed new512 training; opened128 diagnostic bank-disjoint from new512; no fresh qualification"} else {"train=open-development512; no new held-out claim"},"bank_mixture":mixture.as_ref().map(|m|&m.receipt),
         "active_parameter_names":params.keys().collect::<Vec<_>>(),"shared_coefficients":expected_coefficients,"learning_rate":c.learning_rate,
         "continuation_policy":zero.metadata().policy,"continuation_score_shift":zero.metadata().score_shift,
         "continuation_action_support":"same token energy on Generate and every physical Copy before the sole common clip",
@@ -6240,9 +6265,13 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         cache_rows.push(json!({"id":e.packet.id,"packet_sha256":sha256_bytes(&serde_json::to_vec(&e.packet)?),"positions":provenance}));
         cache.push(row);
     }
-    if cross_state && positions != 6664 {
+    let expected_positions = 6664
+        + a.cross_state_bank_mixture
+            .as_ref()
+            .map_or(0, |c| c.expected_recomposition_target_positions);
+    if cross_state && positions != expected_positions {
         return Err(bad(
-            "cross-state frozen512 target-position coverage differs",
+            "cross-state pinned partition target-position coverage differs",
         ));
     }
     d.synchronize()?;
@@ -6271,6 +6300,14 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
             resume.as_ref().map(|r| (&r.prior_final, r.profile)),
         )?;
     }
+    let initial_diagnostic = if let Some(data) = &mixture {
+        let result =
+            bank_mixture::evaluate(a, "opened-diagnostic-0000", &p, &initial_field, data, start)?;
+        bank_mixture::baseline(data, &result)?;
+        Some(result)
+    } else {
+        None
+    };
     write(a, "metrics-0000.json", &initial_metrics)?;
     evaluation_seconds += clock.elapsed().as_secs_f64();
     let mut opt = optimizer(&params, c.learning_rate)?;
@@ -6283,7 +6320,11 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         deadline(a, start)?;
         disk_floor(a)?;
         let prepared = owner.prepare_field(&weights)?;
-        let indices = cross_state_completion::schedule_indices(&schedule, update);
+        let indices = if mixture.is_some() {
+            bank_mixture::indices(&schedule, update)?
+        } else {
+            cross_state_completion::schedule_indices(&schedule, update)
+        };
         let mut sums = BTreeMap::<String, Tensor>::new();
         let mut loss_sum = 0.;
         let mut count = 0usize;
@@ -6478,6 +6519,25 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         &dev,
         start,
     )?;
+    let final_diagnostic = if let Some(data) = &mixture {
+        Some(bank_mixture::evaluate(
+            a,
+            "opened-diagnostic-0256",
+            &p,
+            &final_field,
+            data,
+            start,
+        )?)
+    } else {
+        None
+    };
+    let mixture_outcome = final_diagnostic
+        .as_ref()
+        .map(|d| bank_mixture::outcome(&final_eval, d))
+        .transpose()?;
+    if let Some(outcome) = &mixture_outcome {
+        write(a, "bank-mixture-outcomes.json", outcome)?;
+    }
     let final_metrics = metrics(a, &final_eval, &dev)?;
     write(a, &format!("metrics-{:04}", a.updates), &final_metrics)?;
     evaluation_seconds += clock.elapsed().as_secs_f64();
@@ -6497,7 +6557,8 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"device":"cuda:0","updates":a.updates,"batch":BATCH,
         "prior_updates":resume.as_ref().map_or(0, |r| r.profile.lineage_step),"lineage_step":resume.as_ref().map_or(a.updates, |r| r.profile.lineage_after(a.updates)),
         "cross_state_resume":resume.as_ref().map(|r|&r.provenance),"fresh_adam":true,"pooled_rank_policy":cross_state_completion::rank_policy(a),"cross_state_pooled_rank":a.cross_state_pooled_rank,"cross_state_bottleneck":a.cross_state_bottleneck,
-        "training_row_draws":a.updates*BATCH,
+        "training_row_draws":a.updates*BATCH,"training_cases":train.len(),
+        "bank_mixture":mixture.as_ref().map(|m|&m.receipt),"bank_mixture_outcome":mixture_outcome,"initial_opened_diagnostic":initial_diagnostic,"final_opened_diagnostic":final_diagnostic,
         "target_position_draws":target_position_draws,
         "loss_scope":"all","phase_policy":cross_state_completion::phase_policy(a),"training_objective":cross_state_completion::objective_policy(a),"credit":a.credit.name(),"order_seed":a.seed,
         "initial_receipt":initial_receipt,"final_receipt":final_receipt,"initial_metrics":initial_metrics,"final_metrics":final_metrics,
@@ -6507,7 +6568,7 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "checkpoint_seconds":checkpoint_seconds,"evaluation_seconds":evaluation_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),
         "control":if let Some(r) = &resume {format!("checkpoint0000 is exact saved{} native field plus restored fractional masters; independently matched all512 outputs; cache separately uses zero field; no carrier ablation performed",r.profile.complete)} else if cross_state {"checkpoint0000 is exact accepted parent with zero joint factual/local field; no carrier ablation performed".to_string()} else {"checkpoint0000 is the same native parent with a null U field; constant-carrier control remains a prospective matched full-output evaluation".to_string()},
         "common_pool_backend":"cpu-authenticated-native-alias-reducer; full score/anchor/loss transfers retained; not fully resident CUDA alias reduction",
-        "scope":if let Some(r) = &resume {format!("saved{} cross-state parameter continuation with fresh Adam moments; frozen48/64 upstream;115200 Q4 coefficients, four exposed512 passes; fixed endpoint local256/lineage{}; developmental KEEP netcomplete>{}; no held-out transfer/chat/geometry/energy qualification",r.profile.complete,r.profile.lineage_after(a.updates),r.profile.complete)} else if cross_state {"frozen48/64 parent; only115200 joint factual/local signed-H4 Q4 coefficients learned on exposed512 all-answer positions; independently loaded own-prefix outputs; developmental KEEP netcomplete>8; no held-out transfer/chat/geometry/energy qualification".to_string()} else {"frozen48/64 parent; only960 continuation coefficients learned on exposed512 all-answer positions; independently loaded own-feedback outputs; no held-out transfer/chat/geometry/energy qualification".to_string()}}),
+        "scope":if mixture.is_some() {"saved437 parameter continuation on original512 plus expanded-bank512; two passes each at fixed2048episode draws; same pooled-rank/bottleneck objective; opened128 diagnostic is not fresh; prospective qualification-candidate bar development>=256 and diagnostic>=52; saved437 retained; fresh NOT_RUN".to_string()} else if let Some(r) = &resume {format!("saved{} cross-state parameter continuation with fresh Adam moments; frozen48/64 upstream;115200 Q4 coefficients, four exposed512 passes; fixed endpoint local256/lineage{}; developmental KEEP netcomplete>{}; no held-out transfer/chat/geometry/energy qualification",r.profile.complete,r.profile.lineage_after(a.updates),r.profile.complete)} else if cross_state {"frozen48/64 parent; only115200 joint factual/local signed-H4 Q4 coefficients learned on exposed512 all-answer positions; independently loaded own-prefix outputs; developmental KEEP netcomplete>8; no held-out transfer/chat/geometry/energy qualification".to_string()} else {"frozen48/64 parent; only960 continuation coefficients learned on exposed512 all-answer positions; independently loaded own-feedback outputs; no held-out transfer/chat/geometry/energy qualification".to_string()}}),
     )
 }
 
@@ -6868,6 +6929,84 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bank_mixture_inputs_and_audit_cannot_be_reused_as_output_before_claim() -> Result<()> {
+        struct OwnedRoot(PathBuf);
+        impl Drop for OwnedRoot {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        fs::create_dir_all("local")?;
+        let root = PathBuf::from("local").join(format!(
+            "bank-mixture-path-test-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&root)?;
+        let owned = OwnedRoot(root);
+        let safe = owned.0.join("other-inputs");
+        fs::create_dir(&safe)?;
+        let mut config = json!({"mode":"cross_state_continuation","credit":"raw_identity","seed":1001,
+            "checkpoint":safe,"saved_fit":safe,"categorical":safe,"parent_config":safe,
+            "training_inputs":safe,"training_labels":safe,"development_inputs":safe,
+            "development_labels":safe,"maximum_seconds":3600,"maximum_report_bytes":1073741824,
+            "out":owned.0.join("new-output"),"cross_state_bank_mixture":{
+                "recomposition_root":"pending","diagnostic_root":"pending","diagnostic_baseline_root":"pending",
+                "preparation_audit":"pending","expected_preparation_audit_sha256":"d".repeat(64),
+                "expected_recomposition_manifest_sha256":"a".repeat(64),
+                "expected_recomposition_inputs_sha256":"b".repeat(64),
+                "expected_recomposition_labels_sha256":"c".repeat(64),
+                "expected_recomposition_target_positions":6664}});
+        let mut roots = Vec::new();
+        for key in [
+            "recomposition_root",
+            "diagnostic_root",
+            "diagnostic_baseline_root",
+            "preparation_audit",
+        ] {
+            let parent = owned.0.join(format!("retained-{key}"));
+            fs::create_dir(&parent)?;
+            let input = parent.join(if key == "preparation_audit" {
+                "audit.json"
+            } else {
+                "input"
+            });
+            if key == "preparation_audit" {
+                fs::write(&input, b"{\"retained\":true}")?;
+            } else {
+                fs::create_dir(&input)?;
+            }
+            config["cross_state_bank_mixture"][key] = json!(input);
+            roots.push((key, parent, input));
+        }
+        validate_input_output_paths(&serde_json::from_value(config.clone())?)?;
+        assert!(!owned.0.join("new-output").exists());
+        for (key, parent, input) in roots {
+            let outputs = if key == "preparation_audit" {
+                vec![input.clone(), parent]
+            } else {
+                vec![input.clone(), input.join("new-run"), parent]
+            };
+            for output in outputs {
+                let mut changed = config.clone();
+                changed["out"] = json!(output);
+                assert!(
+                    validate_input_output_paths(&serde_json::from_value(changed)?).is_err(),
+                    "{key}"
+                );
+            }
+            if key != "preparation_audit" {
+                assert!(!input.join("new-run").exists());
+            } else {
+                assert_eq!(fs::read(input)?, b"{\"retained\":true}");
+            }
+        }
+        Ok(())
+    }
+
     fn reference_row_fixture(phases: Vec<usize>, eligible: Vec<bool>) -> ReferenceRow {
         ReferenceRow {
             index: 0,
