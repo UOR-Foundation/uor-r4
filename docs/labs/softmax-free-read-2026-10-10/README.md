@@ -133,3 +133,23 @@ Same protocol as arm group 1: held-out e5f400b0, 512 windows × 384 = 196,608 ta
 - **Code:** L trained at `383e49410` (the trainer head of #2153, code-equal to its merge `bc0a6937` for training). Export and D11 ran at `bc0a6937`.
 - **Pod:** `583vvwhk05yy1p` (2×5090, about 1.9 h, about \$4.50), deleted.
 - **Results:** cloud-store `claude/learned-rank-20261010` (184,948,736 bytes, MD5 `516294b0cad9c4f33540e6226151a32d`), plus the EU-RO-1 volume `uor-r4/claude/softmax-free-20261010/L-s*`.
+
+## New line (owner-funded): wide learned flock — arm W, REJECT
+
+After the line above stopped, the owner funded a new softmax-free read line ("Fund a new read line now", 10 October, recorded on #2032). Its one decisive run tested **support size**: arm W is `select=flock:32:32 read_weighting=learned_rank` (up to 66 kept sources against L's 17). Same M4 recipe, seeds 1 and 2. Trained on 2×4090 in EU-RO-1 (sm89; no 5090 was available), from `main` 4ae040cb.
+
+| arm (seed) | float BPB | served BPB (D11) | top-1 D11/float | v4 memory |
+|---|---:|---:|---:|---:|
+| W (s1) | 0.894703 | 0.903271 | 0.9187 | 3/40 |
+| W (s2) | 0.894072 | 0.903509 | 0.9171 | 6/40 |
+
+- **Against A (seed means):**
+  - float **+0.0172 BPB**, served **+0.0166 BPB**, against the 0.01 bar;
+  - v4 4.5, equal to A;
+  - served speed **195.2 against A's 228.4 tok/s** (D11, 8 threads, 32 windows, the two timed back to back on the same machine and load): **15 % slower**.
+- **REJECT** on both the BPB bar and the cost clause.
+- **What it settles:** widening the support from 17 to 66 sources buys only **0.0013 BPB** over L. So the remaining gap is **not support size**: it is the rank weighting itself, or how it is trained. At context 384, a wider flock's selection work also costs more than the reads it saves.
+- **Under [D22](../../integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened):** this closes the `flock:32:32` configuration, not the mechanism. The next lever in the [brief](../../mechanisms/flock-rank-reads.md) is a **rank-consistent training gradient**, replacing the flock-softmax straight-through surrogate, with hyperparameters re-tuned for the read.
+- **Provenance and cost:**
+  - Pod `5wtzfmr0z0y3t0` (about 2.4 h, about \$4.30), deleted, plus a 3-minute data-pull pod.
+  - Checkpoints in cloud-store `claude/wide-flock-20261010`; evaluations (replies, grades, artifacts, D11 reports, timings) in `claude/wide-flock-eval-20261010`. The chat-v0-p2 streams are now in cloud-store as `claude/chat-data-control-20261008`, so later laptop evaluations do not need a pod.
