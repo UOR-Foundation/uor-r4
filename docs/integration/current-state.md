@@ -1,6 +1,201 @@
 ## 2026-10-09 — Pod dry-run suite: two timing-dependent checks made deterministic (claude, #2037)
 
 The reap check expected `idle 30 min` against an idle clock set when the suite started. The build-lock check raced its no-progress exit against the stale-heartbeat exit. Both are now independent of how fast the machine runs. Under full CPU load the fixed suite passed 10/10 runs, while main failed the reap check in 6/6. Test file only. Record: [pod-test-deflake-2026-10-09](../labs/pod-test-deflake-2026-10-09/README.md).
+## 2026-10-09 — Plan: making a numeric value addressable — Options A and B costed, with the test and its falsifier (deepseek, #2029)
+
+**PLANNING ONLY: $0, no pod, no training, no model run, CPU only.** Record:
+[numeric-addressability-plan-2026-10-09](../labs/numeric-addressability-plan-2026-10-09/README.md).
+The plan is the deliverable; nothing in it is started.
+
+**THE THREE READINGS ARE PRESERVED AT THEIR OWN STRENGTH, because two of them died.** *REFUTED:* token
+count explains the cluster — numbers tokenize in **2 tokens against 3.74 for words**. *REFUTED:*
+minimal pairs / digit order — `mem-040`'s distractor `74` is a **transposition** of its expected `84`
+and it PASSES, and **0 of 12 numeric failures name the distractor**. *OPEN, with a replicated control:*
+value addressability — `mem-037`/`mem-040` share a key, kind and history and differ only in the value,
+with opposite outcomes, replicated within-key. Both refuted readings survive in the record because the
+third is only worth acting on because they were killed.
+
+**A CORRECTION TO THE FRAMING, from the mapping:** `¹ ² ³` are **byte tokens** for bytes `0xB9`,
+`0xB2`, `0xB3` — all 256 byte tokens are present, so they are **not reclaimable digit slots** and
+cannot fund Option A without breaking byte-level coverage. Option A must instead be funded by
+**measured merge retirement** (3837 merges, retire the unused tail) or by growing the vocabulary
+(100 two-digit slots ≈ 115k parameters at this config, 0.4 % of 29M).
+
+**OPTION A — number-aware tokenizer.** Scope: vocabulary and merges. Needs **100 slots** for two-digit
+coverage, plus one/three/four-digit coverage **measured from the corpus, not assumed**. **Invalidates
+every artifact trained on `d36d3e87…`** — `chat-29m-B-lr5e-4`, the whole `chat-100m-*` family, and the
+comparability (not the validity) of every sealed result citing it, including the reply panel's 43/232
+and v5's 10 of 40. It is a **full retrain of every rung you want to compare**, not a fine-tune. Purely
+additive to non-numeric encoding **only** if funded by appending tokens; funding by retiring merges
+**does** change the encoding of non-numeric text and that must be measured per corpus.
+
+**OPTION B — explicit numeric slot in the memory path.** Scope: how a numeric value is written and read,
+not the tokenizer or embedding. **Existing artifacts stay valid.** The decoder still emits digits; the
+memory read returns the value as an ordered unit. **Testable in part without training**: whether the
+memory path carries a two-digit value as an ordered unit is a CPU-only write/read probe, while whether a
+*model* uses the slot needs training, because the operators are learned.
+
+**RECOMMENDATION AND THE SMALLEST DECISIVE VERSION:** build the **untrained memory write/read probe**
+first — one two-digit value, write `84`, read it back, report whether the run is `8`,`4`, whether order
+is preserved, and whether `74` is distinguishable from `84`. **CPU only, no GPU, no training**, and it
+decides between A and B. If the probe shows the value is lost, take Option B's smallest form: **one
+value type at the existing 29M rung** against a fresh sealed panel. **Option A is held** until the probe
+reports.
+
+**THE TEST — A FRESH SEALED PANEL, never a v5 re-run** (v5 is development evidence and its 10 of 40
+stands). It must contain: numeric and word rows in **matched pairs with the same key, kind and history**
+(the `mem-037`/`mem-040` control built in by construction); **value held fixed with the distractor
+varied, and the reverse**; **magnitude spread** one- to four-digit, since the diagnosis could not test
+magnitude on an all-two-digit panel; **position spread** first/middle/last turn; **leading zeros and
+repeated digits**; both value types in one conversation; deterministic checks with per-row provenance and
+the v5 control set verified **before sealing**; and **the binding swaps actually embedded and asserted
+non-vacuous** — the v5 control was vacuous for its whole life because the file was never added to
+`EMBEDDED_SWAPS`.
+
+**PRE-DECLARED TARGET, frozen before the panel is drawn:** primary **≥ 34 of 40** numeric rows at
+`check_pass`; and the one that actually tests the mechanism — **≥ 30 of 40 numeric rows emit a digit run
+equal to the stored value** (string equality on the reply's digit run), because the diagnosis says the
+failure is **emission, not selection**, and `check_pass` alone could rise if the model learns to guess.
+Control, non-negotiable: `binding_swap` **40 checked rows and 0 passes**, `expected_value` **40 of 40**,
+or the panel is void.
+
+**FALSIFICATION, STATED IN ADVANCE — the fix is the wrong lever if:** the untrained probe shows order is
+preserved and `84` is distinguishable from `74`; or `check_pass` rises while the digit-run-emission
+number does not (the model is guessing); or numeric and word rows improve together (not
+value-type-specific); or the numeric deficit fails to track magnitude or leading zeros on the fresh
+panel. Each is a result, and none needs a v5 re-run.
+
+**COST.** CPU calibrated from measured runs tonight: panel draw and seal **minutes**, `chat-grade check`
+**seconds**, 64-row generation at 29M **2m04s**, 64-row grading **9m46s**; the untrained probe is CPU-only
+and small. GPU via `uor-pod` (caps ≤ 4 pods, ≤ $8/h): **the ladder's training throughput is not recorded
+at a level this plan can cite, so a short timed calibration run is required first and the projection is
+stated as a formula rather than a number** — inventing it would be the error this line has been avoiding.
+**The economic point: Option B leaves every artifact valid and needs one retrain at one rung; Option A
+invalidates the whole ladder and needs each rung rebuilt before any comparison.**
+
+**Criterion 1 remains NOT MET on both halves and 43/232 is unchanged. Nothing in this plan changes that,
+and no step of it would.** STATUS/ROADMAP/#2028 unchanged — checked, not assumed.
+
+**Next:** build the untrained memory write/read probe (one two-digit value, CPU only, no GPU, no
+training) — it is the smallest decisive step and it decides between Options A and B. If it shows the
+value is lost, take Option B's smallest form: one value type, the existing 29M rung, the fresh sealed
+panel above, target declared before the draw. **Never re-run v5.**
+
+## 2026-10-09 — Why the numeric memory rows fail: the value is not DELIVERED, and it is not confusion (deepseek, #2029)
+
+Diagnosis of the v5 run's clustered failure. Record:
+[v5-numeric-diagnosis-2026-10-09](../labs/v5-numeric-diagnosis-2026-10-09/README.md). **No model run, no
+v5 re-run, CPU only, no pod, $0** — every number recomputed from the sealed v5 replies, the frozen
+checks file and the frozen tokenizer.
+
+**THE LEDGER, AT THE STRENGTH EACH CLAIM EARNED.** *MEASURED:* the frozen tokenizer has **4096 tokens,
+10 pure single-digit tokens, 0 multi-digit tokens, and 3 superscript digit slots** — three of thirteen
+digit slots idle while no multi-digit token exists. *MEASURED:* numeric-value rows fail **12 of 13
+(92.3 %)** against word rows **18 of 27 (66.7 %)**; `expected_value` passes 40/40, so the check is not
+the obstacle. *MEASURED CONTROL, REPLICATED:* within-key comparisons hold context, kind and history
+fixed — `brother|brother's` **1/6 numeric**, `grandpa|grandpa's` **2/3 word**, `piano|piano's` **0/3
+numeric**, `treehouse|treehouse's` **0/2 numeric**; the same key carries opposite outcomes by value
+type, and numeric totals 1 of 11 by two independent computations. *REFUTED:* "token count explains the
+cluster" — numbers tokenize in **2 tokens against 3.74 for words**, so length runs the wrong way.
+*REFUTED:* "minimal pairs / digit order" — `mem-040`'s distractor `74` is a **transposition** of its
+expected `84` and it PASSES, while `mem-037` (`98` vs `76`, no shared digit position) fails.
+
+**THE DECISIVE CUT, and it is free:** of the **12 failing numeric rows, 10 emit NO digit at all**,
+**2 emit a digit that was never stored** (`mem-008` and `mem-024` both answer "Your sister's locker
+number is 1."), and **0 name the planted distractor**. **All 8 planted-distractor confusions are WORD
+rows.** Meanwhile the **one passing numeric row emits the stored value exactly** — `mem-040`: "Your
+sister's locker number is 84." And the expected value was in the context for **40 of 40 rows (13 of 13
+numeric)**, so this is not context loss. The failing replies are fluent, correctly framed sentences
+**with the value slot empty or filled by something never stored**: the value does not arrive.
+
+**The six keyless rows are NOT a panel defect and not an independent cause.** They are `mem-011/012/
+013/027/028/029`, **all 3-turn**, four word and **two numeric**; `expected_value` passes all six, so
+none is unpassable, and they fail for their value type's reason (2 emit no number, 4 name no value).
+**The no-key set OVERLAPS the numeric set (2 of 6)** — do not add 1-of-11 and 0-of-6 as disjoint
+causes. The clean statement is: numeric 92.3 % against word 66.7 %, keyless splitting 4 word / 2
+numeric.
+
+**It is a REPRESENTATION finding, not training volume and not token count:** a two-digit value has no
+single token and therefore no single address, and the behaviour shows the value not arriving rather
+than arriving wrong — the project's own principle that more scalar features cannot recover distinctions
+erased by representation. The deficit is **not magnitude** (every numeric value on the panel is
+two-digit, so there is no multi-digit contrast to measure) and **not position** (the value is in an
+earlier turn for all 40 rows, and the 3-turn keyless rows split by type, not length).
+
+**TWO NAMED OPTIONS, NEITHER STARTED:** a **number-aware tokenizer** giving a value one token and
+therefore **one address** — now the *direct* fix rather than the cheap one, with the three idle
+superscript slots and the absent multi-digit tokens as its budget — or an **explicit numeric slot in
+the memory path**, the more native version that addresses a value *as a value*. The `mem-040` specimen
+decides which to try first, and either gets its own pre-registered piece on a **FRESH sealed panel**.
+Criterion 1 remains NOT MET on both halves and 43/232 is unchanged. STATUS/ROADMAP/#2028 unchanged —
+checked, not assumed.
+
+**Next:** build a fresh sealed numeric panel with value, distractor, magnitude, digit overlap and
+position all controlled, using `mem-040` as the template, to test addressability directly; then try
+ONE of the two options on it. **Do not re-run v5** — it is development evidence now, and its 10 of 40
+stands as its declared reading.
+
+## 2026-10-09 — VSA mode 2 is worse than fixed codes: not KEEP (claude, #2029)
+
+Pre-registered on #2029 and run on the owner's laptop CPU, at main `c7fce45b1`. Mode 2 binds root codes with a per-token readout residual. Its held-out BPB is 1.8629 / 1.8491 and 1.8707 / 1.8566 (seeds × slices A / B), against 1.8366 / 1.8214 and 1.8582 / 1.8427 for fixed codes rerun on the same machine; those reruns match the pod run to every digit. Its own VSA ablation Δ is −0.002 to −0.005 (CIs below 0). Fixed codes stay the default. Record: [vsa-native-test-2026-10-09](../labs/vsa-native-test-2026-10-09/README.md) Result 2. About 50 min of laptop CPU, no pod.
+## 2026-10-09 — The v5 declared acceptance run EXECUTED and MISSES: 10 of 40 against a declared >= 34 (deepseek, #2029)
+
+The run the v5 freeze declared and deliberately did not take. Record:
+[v5-declared-acceptance-2026-10-09](../labs/v5-declared-acceptance-2026-10-09/README.md). **CPU only on
+the laptop, no pod, $0** (generation 2m04s, grading 9m46s).
+
+**RESULT: `check_pass` 10 of 40 in `multi_turn_memory` against the frozen target of >= 34. IT MISSES,
+by 24 rows.** Unknowable 1 of 24; whole panel 11 of 64 `check_pass`, 4 of 64 `acceptable`, unparsed 0.
+No adjustment, no re-draw, no second sample.
+
+**Identities all matching the frozen values, so the run is NOT void:** binary
+`62aa67b76764cd48170d0e90ff168a176b471e5d3f4a84c0748e399659e83984`, **grader digest
+`845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e` (the frozen judge)**, artifact
+`model.safetensors` `d8a3c971…`, tokenizer `d36d3e87…`, protocol 2, cap 64, context 384, `check_panel`
+**pass**, **64 of 64 rows checked**, worst case `conv-v5-mem-031` **358 of 384**.
+
+**Controls all as frozen — with ONE control finding that outranks the headline: the v5 binding-swap
+control was VACUOUS from the freeze until now.** `EMBEDDED_SWAPS` held only the v3 and v4 swaps files;
+`conversational-v5-swaps.tsv` was committed on main (`8917b3b6…`) but never added, so `swap_replies()`
+had no `conv-v5-*` id and the control reported **`checked_rows: 0`** while the v5 record claimed
+`binding_swap 0/40` — **a false statement of verification sitting on main.** Fixed in this delivery: a
+third array entry, a v5 test asserting 40 checked rows (the v4 assertion at 40 is exactly why no test
+caught it), and **the v5 record corrected in place** rather than quietly made true. After the fix the
+control reports **0 pass / 40 checked**, binary `a08c38e0a5f5e2cd…`, **19 passed, 0 failed**. The
+acceptance run stands and was not re-run: the swap control is check-only and does not touch `check_pass`.
+Every other control was as frozen: `expected_value` 40/40, `copy_first/last` 20/40, `echo_last/history`
+0/40, memory constants 0/0/0, unknowable constants 24/0/0, adversarial abstentions 0, derangement 0.
+
+**The miss, broken down so someone else can decide what it means** (a 24-row shortfall is either the
+model or the target, and this run does not settle which): **failures cluster by mechanism.** `exact`
+with distractor keys and a WORD value **9/23 (39.1 %)**; with a NUMBER value **1/11 (9.1 %)**; with no
+distractor keys **0/6**. All six no-key rows fail; numeric values are four times harder. By failure mode
+over the 30 failures: **22 name neither the expected value nor the planted distractor**, **8 name the
+planted distractor** — the exact mode the key column exists to catch, so that column is doing real work
+— 0 empty, 0 other. **No row is unpassable: the `expected_value` control passes 40/40**, so the check is
+not the obstacle and the 10 of 40 is a model reading.
+
+**The declared command could not run as written.** `grade-replies` defaults `grader=` to
+`qwen2.5:1.5b`, which is not installed, so the first attempt 404'd in **0.063 s with no report root** —
+**a crash, not a sample.** The invocation was corrected (`grader=qwen2.5:7b`) and the run executed once;
+the v5 record's command is corrected, and this is the second documented command tonight that silently
+selected the wrong thing. **A crash was kept apart from a miss**, which is why re-running was
+legitimate: had the first attempt produced a report with a bad number, re-running would have been
+exactly what the pre-registration forbids.
+
+**CRITERION 1 IS NOT MET ON EITHER HALF, each for a stated and measured reason:** the memory half is
+measured and **missed** (10 of 40 against >= 34, on the one instrument in this line that cannot move
+between identical runs); the reply half cannot carry the criterion as instrumented (43/232, failures
+diffuse, the cap not the constraint, 62.1 % of rows with no judge-free answer, a deterministic
+sub-reading over 88 rows that scores 2). **The unknowable category is won by a constant** (24/24 and 14
+acceptable against the model's 1 and 0, McNemar p = 2.4e-07), so that half is not a model measurement.
+STATUS/ROADMAP/#2028 unchanged — checked, not assumed.
+
+**Next:** fix nothing else on this panel and **do not re-run it for a better sample** — it is
+development evidence now, exactly as v4 became. The measured target is explicit and unmet: **10 of 40
+memory rows at `check_pass`**, with the failing rows named in the sealed report, clustered on numeric
+values (1 of 11) and on the six no-key rows (0 of 6). That clustering is what the next piece should
+attack, and a fresh acceptance would need a fresh sealed panel.
 
 ## 2026-10-09 — `clarify`: the first deterministic target whose correct behaviour is absent, scored 0 of 27 (deepseek, #2029)
 
