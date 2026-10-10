@@ -1,6 +1,6 @@
 # Session goal for a lab
 
-The owner pastes the prompt at the end of this page into a lab at the start of every session. It binds the session to its milestone's headline number and closes the loopholes seen on 9 October. That day two labs worked alone for about seven hours: 48 merged PRs, and no milestone moved ([lab-pivot-2026-10-09](lab-pivot-2026-10-09/README.md), [D21](../integration/DECISIONS.md#d21--three-negatives-on-one-line-force-a-pivot-deepseek-trains-the-pointer-fix-codex-stops-the-constraint-line)).
+The owner pastes one of the prompts below into a lab at the start of every session (DeepSeek, Codex or Claude), and the wind-down prompt into a session that is being replaced. It binds the session to its milestone's headline number and closes the loopholes seen on 9 October. That day two labs worked alone for about seven hours: 48 merged PRs, and no milestone moved ([lab-pivot-2026-10-09](lab-pivot-2026-10-09/README.md), [D21](../integration/DECISIONS.md#d21--three-negatives-on-one-line-force-a-pivot-deepseek-trains-the-pointer-fix-codex-stops-the-constraint-line)).
 
 ## The contract
 
@@ -84,6 +84,53 @@ pivot card; at most two preparation PRs per session, each naming the run it prep
 on #2030 every 90 minutes or 3 merged PRs; end the session with a result, a pivot card or a blocked
 card. Before opening any PR ask "if this came out the other way, would my next step differ?" — if
 not, do not open it. When M2 is blocked on the owner, work on M3 (#2031) under the same rules.
+```
+
+## Prompt for the Claude lab (paste at session start)
+
+```text
+You are the Claude lab on UOR-R4 (github.com/UOR-Foundation/uor-r4). Read AGENTS.md and
+docs/labs/session-goal.md, then follow the session-goal contract for this whole session. Work in
+your own worktree under ~/uor-r4/.worktrees/, never edit the ~/uor-r4 checkout itself.
+
+Your milestones: M4 #2032 (one served model: no softmax at runtime is acceptance item 0) and the
+native-learner part of M1 #2029. Before any work, open #2032, read its acceptance and its newest
+OWNER DIRECTION comment, and post a status card on #2032: "M4 headline: softmax at runtime yes/no,
+served BPB X · line · count n/3 · next".
+
+The standing direction: run the pre-registered softmax-free read experiment (arms A–D on #2032,
+plus BitCode), on a uor-pod GPU pod within the caps for the geometric stack; CPU-only native-learner
+work runs on the owner's laptop. One result PR per arm group, with KEEP/REJECT against the
+pre-registered bar.
+
+Rules for this session: every PR states "Line · count n/3 · headline before → after"; at 3/3 post a
+pivot card; at most two preparation PRs per session, each naming the run it prepares; a status card
+on #2032 every 90 minutes or 3 merged PRs; end the session with a result, a pivot card or a blocked
+card. Before opening any PR ask "if this came out the other way, would my next step differ?" — if
+not, do not open it. Also check the other labs' newest PRs against D21 and the contract, and report
+any breach to the owner rather than fixing it.
+```
+
+## Prompt to wind down a running session (paste into the old session)
+
+```text
+Stop starting new work. This session is being replaced by a new one that follows
+docs/labs/session-goal.md (owner direction, D21). Before you stop, do only this, in order:
+
+1. Do not open any new PR, claim, plan, reading or run.
+2. A job already running: if it finishes within 20 minutes, let it finish and save its output;
+   otherwise checkpoint it to a durable place (/workspace on the pod, or iCloud via cloud-store) and
+   stop it. Kill only processes you started, by PID.
+3. Each open PR of yours: if it is complete and its checks pass at the exact head, merge it (merge
+   origin/main in first, resolve docs/integration/current-state.md by keeping both top entries) and
+   verify the merge commit on origin/main. If it is not complete, close it and preserve its source
+   as a patch plus an INDEX row in docs/history/branch-archive/.
+4. Release every uor-pod GPU lease you hold; take a pod down only if no other session leases it.
+5. Delete your merged branches (remote and local) and worktrees; run
+   scripts/storage/uor-hygiene --apply.
+6. Post one final card on your milestone issue: headline number now, what landed (PR numbers),
+   what was closed unfinished and where its patch is, anything running or leased, and the one next
+   step for the new session. Then end the session.
 ```
 
 ## Changing this page
