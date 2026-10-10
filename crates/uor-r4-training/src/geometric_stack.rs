@@ -241,6 +241,33 @@ pub enum ReadWeighting {
     /// Arm D: queries and keys binarized to +-1 by a straight-through sign
     /// before a [`Self::Rank`] read with the model's own score.
     HammingRank,
+    /// A [`Self::Rank`] read whose rank weights are learned: per read layer
+    /// and head, `read.rank_logits` `[heads, M]` (`M = window + k + 2`)
+    /// give a row of support `m` the weights softmax(logits[..m])
+    /// ([`learned_rank_table`], [`fused_read_learned_rank`]). They start at
+    /// `ln(1/(r+1))`, i.e. exactly the [`Self::Rank`] table.
+    LearnedRank,
+}
+
+/// The per-head logits of [`ReadWeighting::LearnedRank`] in each read layer.
+pub const READ_RANK_LOGITS: &str = "read.rank_logits";
+
+/// The [`READ_RANK_LOGITS`] variables of a configuration: `[heads, M]` per
+/// read layer, `M = window + k + 2` of its flock selection.
+fn learned_rank_shapes(config: &StackConfig) -> Result<Vec<(String, Vec<usize>)>> {
+    let select = config
+        .select
+        .ok_or_else(|| invalid("a learned rank read needs a flock selection"))?;
+    let side = select.window + select.k + 2;
+    Ok((0..config.layers())
+        .filter(|&layer| config.pattern.as_bytes()[layer] == b'a')
+        .map(|layer| {
+            (
+                layer_name(layer, READ_RANK_LOGITS),
+                vec![config.heads, side],
+            )
+        })
+        .collect())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2133,6 +2160,15 @@ impl StackModel {
                 "a softmax-free read weighting needs a flock selection",
             ));
         }
+        let side = |select: Option<FlockSelect>| select.map(|s| s.window + s.k);
+        if self.read_weighting == ReadWeighting::LearnedRank
+            && side(select) != side(self.config.select)
+        {
+            return Err(invalid(
+                "a learned rank read's logits are sized by the flock's window and k; \
+                 clear the weighting before changing them",
+            ));
+        }
         self.config.select = select;
         Ok(())
     }
@@ -2598,18 +2634,37 @@ impl StackModel {
             _ => None,
         };
         let (value, value_width) = self.read_binding_values(value, layer, binding)?;
-        let read = fused_read_weighted(
-            &query,
-            &key,
-            &value,
-            &aux,
-            self.config.read,
-            true,
-            true,
-            false,
-            self.config.select,
-            self.read_weighting != ReadWeighting::Softmax,
-        )?;
+        let read = if self.read_weighting == ReadWeighting::LearnedRank {
+            let select = self
+                .config
+                .select
+                .ok_or_else(|| invalid("a learned rank read needs a flock selection"))?;
+            let table = learned_rank_table(p.layer(layer, READ_RANK_LOGITS)?)?;
+            fused_read_learned_rank(
+                &query,
+                &key,
+                &value,
+                &aux,
+                self.config.read,
+                true,
+                true,
+                select,
+                &table,
+            )?
+        } else {
+            fused_read_weighted(
+                &query,
+                &key,
+                &value,
+                &aux,
+                self.config.read,
+                true,
+                true,
+                false,
+                self.config.select,
+                self.read_weighting != ReadWeighting::Softmax,
+            )?
+        };
         self.finish_geometric_read(p, layer, &read, value_width, capture, binding, bound)
     }
 
@@ -3153,6 +3208,12 @@ impl StackModel {
     /// mode is allowed. [`Self::save`] records them as [`READ_WEIGHTING_FIELD`]
     /// and [`Self::load`] restores them; a softmax model keeps its config
     /// bytes. The integer export refuses them through the flock selection.
+    ///
+    /// [`ReadWeighting::LearnedRank`] has the same requirements and adds one
+    /// variable per read layer, [`READ_RANK_LOGITS`] `[heads, window + k + 2]`
+    /// at `ln(1/(r+1))` (not weight-decayed), so set it before creating the
+    /// optimizer. Setting it again keeps the logits; any other weighting
+    /// removes them; [`Self::set_select`] then refuses a new window or k.
     pub fn set_read_weighting(&mut self, weighting: ReadWeighting) -> Result<()> {
         if weighting != ReadWeighting::Softmax {
             if self.config.arch != StackArch::Geometric || !self.config.pattern.contains('a') {
@@ -3176,6 +3237,23 @@ impl StackModel {
             if self.precision.is_bf16() {
                 return Err(invalid("a softmax-free read weighting needs f32 precision"));
             }
+        }
+        let shapes = learned_rank_shapes(&self.config).unwrap_or_default();
+        if weighting == ReadWeighting::LearnedRank {
+            for (name, shape) in shapes {
+                if self.variables.contains_key(&name) {
+                    continue;
+                }
+                let side = shape[1];
+                let row: Vec<f32> = (0..side).map(|r| -((r + 1) as f32).ln()).collect();
+                let logits = Tensor::from_vec(row, (1, side), &self.device)?
+                    .repeat((shape[0], 1))?
+                    .contiguous()?;
+                self.variables.insert(name, Var::from_tensor(&logits)?);
+            }
+        } else {
+            self.variables
+                .retain(|name, _| !name.ends_with(&format!(".{READ_RANK_LOGITS}")));
         }
         self.read_weighting = weighting;
         Ok(())
@@ -8882,8 +8960,9 @@ impl StackModel {
             None if config.get(READ_WEIGHTING_FIELD).is_none() => Ok(ReadWeighting::Softmax),
             Some("rank") => Ok(ReadWeighting::Rank),
             Some("hamming_rank") => Ok(ReadWeighting::HammingRank),
+            Some("learned_rank") => Ok(ReadWeighting::LearnedRank),
             _ => Err(invalid(format!(
-                "config.json's {READ_WEIGHTING_FIELD} must be absent, \"rank\" or \"hamming_rank\""
+                "config.json's {READ_WEIGHTING_FIELD} must be absent, \"rank\", \"hamming_rank\" or \"learned_rank\""
             ))),
         }
     }
@@ -9166,6 +9245,11 @@ impl StackModel {
         if let Some(lineage) = read_lineage {
             shapes.extend(read_lineage_shapes(&config, lineage));
         }
+        let read_weighting = Self::saved_read_weighting(directory)?;
+        if read_weighting == ReadWeighting::LearnedRank {
+            // Restored, not re-initialised, by set_read_weighting below.
+            shapes.extend(learned_rank_shapes(&config)?);
+        }
         if tensors.len() != shapes.len() {
             return Err(invalid("saved stack tensors differ from the configuration"));
         }
@@ -9217,7 +9301,7 @@ impl StackModel {
             }
             model.read_lineage = Some(lineage);
         }
-        model.set_read_weighting(Self::saved_read_weighting(directory)?)?;
+        model.set_read_weighting(read_weighting)?;
         Ok(model)
     }
 
@@ -11269,8 +11353,8 @@ impl CustomOp2 for QuaternionScan {
 pub const READ_KEY_SHIFT_FIELD: &str = "read_key_shift";
 
 /// The `config.json` field that records a softmax-free read weighting
-/// ([`StackModel::set_read_weighting`]): `"rank"` or `"hamming_rank"`,
-/// written only when it is not [`ReadWeighting::Softmax`].
+/// ([`StackModel::set_read_weighting`]): `"rank"`, `"hamming_rank"` or
+/// `"learned_rank"`, written only when it is not [`ReadWeighting::Softmax`].
 pub const READ_WEIGHTING_FIELD: &str = "read_weighting";
 
 /// Left multiplication by the unit quaternion `j` of every four-channel lane
@@ -21651,6 +21735,150 @@ mod tests {
             .sum_all()?
             .to_scalar::<f32>()?;
         assert!(grad.is_finite() && grad > 0.0);
+        Ok(())
+    }
+
+    fn read_weighting_learned_model() -> Result<(StackModel, StackConfig)> {
+        let mut config = tiny(StackArch::Geometric, "rra", ReadScore::L2, true);
+        config.select = Some(FlockSelect {
+            sink: 0,
+            window: 2,
+            k: 2,
+        });
+        Ok((StackModel::new(config.clone(), &cpu())?, config))
+    }
+
+    fn read_weighting_learned_logit_values(model: &StackModel) -> Vec<(String, Vec<f32>)> {
+        model
+            .variables()
+            .iter()
+            .filter(|(name, _)| name.ends_with(READ_RANK_LOGITS))
+            .map(|(name, var)| {
+                let values = var
+                    .as_tensor()
+                    .flatten_all()
+                    .and_then(|t| t.to_vec1::<f32>());
+                (name.clone(), values.unwrap_or_default())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn read_weighting_learned_save_load_round_trips() -> Result<()> {
+        let root = std::env::temp_dir().join(format!(
+            "stack-read-weighting-learned-{}",
+            std::process::id()
+        ));
+        let (plain_dir, touched_dir, learned_dir) = (
+            root.join("plain"),
+            root.join("touched"),
+            root.join("learned"),
+        );
+        let (plain, _) = read_weighting_learned_model()?;
+        plain.save(&plain_dir)?;
+        let (mut model, config) = read_weighting_learned_model()?;
+        let base = model.variables().len();
+        model.set_read_weighting(ReadWeighting::LearnedRank)?;
+        // One [heads, window + k + 2] logit row per read layer, at ln(1/(r+1)).
+        let logits = read_weighting_learned_logit_values(&model);
+        assert_eq!(logits.len(), 1);
+        assert_eq!(model.variables().len(), base + 1);
+        assert_eq!(
+            model.variables()[&logits[0].0].dims(),
+            &[config.heads, 2 + 2 + 2]
+        );
+        let start: Vec<f32> = (0..6).map(|r| -((r + 1) as f32).ln()).collect();
+        assert_eq!(logits[0].1, start.repeat(config.heads));
+        assert!(!decayed(&logits[0].0, 2));
+        // The window/k that size the logits are fixed while the mode is set.
+        assert!(model
+            .set_select(Some(FlockSelect {
+                sink: 0,
+                window: 3,
+                k: 2,
+            }))
+            .is_err());
+        assert!(model.set_select(config.select).is_ok());
+        // Distinct logits, so the round trip is not the initial value.
+        let name = logits[0].0.clone();
+        let trained: Vec<f32> = (0..config.heads * 6)
+            .map(|i| 0.25 * i as f32 - 1.0)
+            .collect();
+        model.variables()[&name].set(&Tensor::from_vec(
+            trained.clone(),
+            (config.heads, 6),
+            &cpu(),
+        )?)?;
+        let ids = [1u32, 2, 3, 4, 5, 6, 7, 8];
+        let expected = bits(&model.forward(&ids, 1, ids.len())?)?;
+        model.save(&learned_dir)?;
+        let saved: serde_json::Value =
+            serde_json::from_slice(&fs::read(learned_dir.join("config.json"))?)?;
+        assert_eq!(
+            saved[READ_WEIGHTING_FIELD],
+            serde_json::json!("learned_rank")
+        );
+        let loaded = StackModel::load(&learned_dir, &cpu())?;
+        assert_eq!(loaded.read_weighting(), ReadWeighting::LearnedRank);
+        let reloaded = read_weighting_learned_logit_values(&loaded);
+        assert_eq!(
+            reloaded[0]
+                .1
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>(),
+            trained.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+        );
+        assert_eq!(bits(&loaded.forward(&ids, 1, ids.len())?)?, expected);
+        // A config claiming learned_rank without the logits, or logits
+        // without the field, is refused.
+        let mut altered = saved.clone();
+        altered[READ_WEIGHTING_FIELD] = serde_json::json!("rank");
+        fs::write(
+            learned_dir.join("config.json"),
+            serde_json::to_vec_pretty(&altered)?,
+        )?;
+        assert!(StackModel::load(&learned_dir, &cpu()).is_err());
+        let mut rank = StackModel::load(&plain_dir, &cpu())?;
+        rank.set_read_weighting(ReadWeighting::Rank)?;
+        rank.save(&learned_dir)?;
+        altered = serde_json::from_slice(&fs::read(learned_dir.join("config.json"))?)?;
+        altered[READ_WEIGHTING_FIELD] = serde_json::json!("learned_rank");
+        fs::write(
+            learned_dir.join("config.json"),
+            serde_json::to_vec_pretty(&altered)?,
+        )?;
+        assert!(StackModel::load(&learned_dir, &cpu()).is_err());
+        // Switching away removes the logits: the softmax bytes stay legacy.
+        model.set_read_weighting(ReadWeighting::Softmax)?;
+        assert_eq!(model.variables().len(), base);
+        model.save(&touched_dir)?;
+        assert_eq!(
+            fs::read(touched_dir.join("config.json"))?,
+            fs::read(plain_dir.join("config.json"))?
+        );
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn read_weighting_learned_logits_are_trained() -> Result<()> {
+        let (mut model, _) = read_weighting_learned_model()?;
+        model.set_read_weighting(ReadWeighting::LearnedRank)?;
+        let before = read_weighting_learned_logit_values(&model);
+        let mut optimizer = StackAdamW::new(&model, 0.1, 1.0)?;
+        let ids = [1u32, 2, 3, 4, 5, 6, 7, 8];
+        let targets = [2u32, 3, 4, 5, 6, 7, 8, 9];
+        let loss = model.loss(&ids, &targets, 1, ids.len())?;
+        let grads = loss.backward()?;
+        optimizer.update(&model, &grads, 1e-2)?;
+        let after = read_weighting_learned_logit_values(&model);
+        assert_eq!(before.len(), after.len());
+        assert!(!after.is_empty());
+        for ((name, b), (_, a)) in before.iter().zip(&after) {
+            assert_ne!(a, b, "{name} was not updated");
+            assert!(a.iter().all(|v| v.is_finite()));
+        }
         Ok(())
     }
 
