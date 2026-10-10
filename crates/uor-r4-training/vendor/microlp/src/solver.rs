@@ -1576,17 +1576,25 @@ impl Solver {
                 .ok_or_else(|| Error::InternalError("missing actual pivot".into()))?;
             let row = *self.row_coeffs.get(pivot_info.col);
             let scale = col.abs().max(row.abs()).max(e.coeff.abs());
-            if !col.is_finite()
-                || !row.is_finite()
-                || !e.coeff.is_finite()
-                || scale == 0.0
-                || (col - row).abs() > 128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
+            if !col.is_finite() || !row.is_finite() || !e.coeff.is_finite() || scale == 0.0 {
+                return Err(Error::InternalError(
+                    "nonfinite or zero pivot evidence".into(),
+                ));
+            }
+            if (col - row).abs() > 128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
                 || (col - e.coeff).abs()
                     > 128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
             {
-                return Err(Error::InternalError(
-                    "uncertified row/column pivot agreement".into(),
-                ));
+                let boundary = format!(
+                    "uncertified row/column pivot agreement: row={} col={} column={:.17e} row_value={:.17e} selected={:.17e} scale={:.17e} threshold={:.17e}",
+                    e.row, pivot_info.col, col, row, e.coeff, scale,
+                    128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
+                );
+                return self.pivot_by_original_basis(pivot_info).map_err(|e| {
+                    Error::InternalError(format!(
+                        "{boundary}; proposed-basis rebuild rejected: {e}"
+                    ))
+                });
             }
         }
         let mut candidate = self.clone();
@@ -1594,6 +1602,61 @@ impl Solver {
         // Both actual primal RHS and current objective RHS must survive the update.
         candidate.recalc_basic_var_vals()?;
         candidate.recalc_working_obj_coeffs()?;
+        *self = candidate;
+        Ok(())
+    }
+
+    /// An ambiguous coefficient never enters an eta update. Treat the selected
+    /// variable exchange as a proposal only, rebuild from original columns,
+    /// recompute both actual RHS solutions, and check the feasibility required
+    /// by the current simplex phase before committing the clone.
+    fn pivot_by_original_basis(&mut self, info: &PivotInfo) -> Result<(), Error> {
+        let elem = info.elem.as_ref().ok_or_else(|| {
+            Error::InternalError("proposed-basis rebuild requires an exchange".into())
+        })?;
+        let mut candidate = self.clone();
+        let entering = candidate.nb_vars[info.col];
+        let leaving = candidate.basic_vars[elem.row];
+        let value = crate::repair::finite(elem.leaving_new_val)?;
+        if value < candidate.orig_var_mins[leaving] - EPS
+            || value > candidate.orig_var_maxs[leaving] + EPS
+        {
+            return Err(Error::InternalError(
+                "proposed nonbasic value violates bounds".into(),
+            ));
+        }
+        candidate.basic_vars[elem.row] = entering;
+        candidate.var_states[entering] = VarState::Basic(elem.row);
+        candidate.basic_var_mins[elem.row] = candidate.orig_var_mins[entering];
+        candidate.basic_var_maxs[elem.row] = candidate.orig_var_maxs[entering];
+        candidate.nb_vars[info.col] = leaving;
+        candidate.var_states[leaving] = VarState::NonBasic(info.col);
+        candidate.nb_var_vals[info.col] = value;
+        candidate.nb_var_states[info.col] = NonBasicVarState {
+            at_min: float_eq(value, candidate.orig_var_mins[leaving]),
+            at_max: float_eq(value, candidate.orig_var_maxs[leaving]),
+        };
+        candidate
+            .basis_solver
+            .reset(&candidate.orig_constraints_csc, &candidate.basic_vars)?;
+        candidate.recalc_basic_var_vals()?;
+        candidate.recalc_working_obj_coeffs()?;
+        let primal = candidate.calc_primal_infeasibility().0 == 0;
+        let dual = candidate.calc_dual_infeasibility().0 == 0;
+        if (self.is_primal_feasible && !primal)
+            || ((!self.is_primal_feasible || self.is_dual_feasible) && !dual)
+            || (self.is_primal_feasible && candidate.cur_obj_val > self.cur_obj_val + EPS)
+        {
+            return Err(Error::InternalError(
+                "proposed basis does not preserve phase feasibility/descent".into(),
+            ));
+        }
+        if candidate.enable_primal_steepest_edge {
+            candidate.recalc_primal_sq_norms()?;
+        }
+        if candidate.enable_dual_steepest_edge {
+            candidate.dual_edge_sq_norms.fill(1.0);
+        }
         *self = candidate;
         Ok(())
     }
@@ -2642,6 +2705,54 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                     && eta_before == solver.basis_solver.eta_matrices.len(),
                 "failed pivot changed numerical basis",
             )
+        }
+        "disagreeing_pivot_rebuilds_original_basis" | "disagreeing_pivot_rollback" => {
+            let (row, value) = solver
+                .choose_pivot_row_dual()
+                .ok_or_else(|| Error::InternalError("fixture has no infeasible row".into()))?;
+            solver.calc_row_coeffs(row)?;
+            let info = solver.choose_entering_col_dual(row, value)?;
+            solver.calc_col_coeffs(info.col)?;
+            // The candidate exchange remains meaningful, but this coefficient
+            // must never enter an eta or reduced-cost update.
+            *solver.row_coeffs.get_mut(info.col) += 1e-6;
+            let rollback = kind == "disagreeing_pivot_rollback";
+            if rollback {
+                solver.working_obj_coeffs.fill(f64::NAN);
+            }
+            let before = format!("{:?}", solver);
+            let working = solver.working_obj_coeffs.clone();
+            let factors = crate::repair::stats().fresh_factors;
+            let result = solver.pivot(&info);
+            require(
+                crate::repair::stats().fresh_factors > factors,
+                "ambiguous pivot did not rebuild original columns",
+            )?;
+            if rollback {
+                require(result.is_err(), "nonfinite rebuilt objective admitted")?;
+                require(
+                    before == format!("{:?}", solver),
+                    "rejected rebuilt pivot changed old state",
+                )
+            } else {
+                result?;
+                require(
+                    solver.basis_solver.eta_matrices.len() == 0,
+                    "ambiguous pivot retained eta arithmetic",
+                )?;
+                require(
+                    solver.working_obj_coeffs == working,
+                    "rebuilt pivot changed phase objective",
+                )?;
+                require(
+                    solver.calc_dual_infeasibility().0 == 0,
+                    "rebuilt pivot lost required dual feasibility",
+                )?;
+                require(
+                    (*solver.get_value(0) - 1.0).abs() < 1e-12,
+                    "rebuilt pivot did not solve original constraint",
+                )
+            }
         }
         "refresh_preserves_artificial_objective" => {
             let mut artificial = Solver::try_new(

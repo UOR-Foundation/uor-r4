@@ -64,4 +64,12 @@ mod tests {
     fn refresh_does_not_switch_artificial_objective() -> Result<(), String> {
         repair::transaction_fixture("refresh_preserves_artificial_objective")
     }
+    #[test]
+    fn disagreeing_pivot_uses_original_basis_and_phase_checks() -> Result<(), String> {
+        repair::transaction_fixture("disagreeing_pivot_rebuilds_original_basis")
+    }
+    #[test]
+    fn rejected_disagreeing_pivot_preserves_whole_state() -> Result<(), String> {
+        repair::transaction_fixture("disagreeing_pivot_rollback")
+    }
 }
