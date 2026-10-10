@@ -131,9 +131,11 @@ does not imply measured predictive advantage.
   `StackModel::add_memory_layers` gives the named layers fresh memories whose weights are
   exactly a fresh construction's, so the mechanism is trained **in** from the first step of
   a fine-tune rather than bolted onto a finished model
-  ([preparation](docs/labs/addressed-memory-2026-10-10/README.md)). Measured limit: the
-  memory is a CPU custom op with no CUDA path, so a memory-equipped stack fits on CPU
-  (~3.7 s/step at 29M) until that op is implemented for the served device.
+  ([record](docs/labs/addressed-memory-2026-10-10/README.md)). Its CUDA forward is its exact
+  CPU forward on host copies (#2175), so a memory-equipped 29M stack fits at **0.19 s/step**
+  on the GPU (2,000 steps in 387 s) instead of 7.4 s/step on CPU. First trained-in
+  configuration: two seeds, D10's recipe, **19/40 and 19/40** on the frozen v5 memory half
+  against the mechanism brief's 27/40 bar — a rejected configuration, not a closed mechanism.
 - **Lorentz and dot-product reads.** The stack's read layers (`a` layers) score earlier
   positions with a Lorentz or dot product plus an age term and a NoRead slot. Status: trained;
   the Lorentz read has its own packed serving contract.
@@ -264,6 +266,7 @@ Every row holds at its exact artifact, data, operator and budget.
 | 19.9M chat stack | 0.877550 BPB float / 0.886838 BPB served multiplier-free, matched at 512 windows (196,608 positions, byte basis 2.837427 B/token) | 11.9 MB artifact; lab chat evaluation; the earlier 0.933 served was a 64-window number, so the pair is quoted with its [pinned protocol](docs/labs/criterion2-protocol-pin-2026-10-09/README.md) |
 | Sealed 8M stack | 1.1199 BPB | Sealed report; Kneser-Ney 5-gram 1.2803 BPB |
 | 214M Plan A base | FineWeb dev NLL 2.90 to 2.073 | Open development split; rewrite and summarize usable, code and math wrong |
+| Product-key memory trained into the M1 stack (`memory_layers=4`, 2,000 steps, 2 seeds) | **19/40** and **19/40** `check_pass` against the mechanism brief's 27/40 bar (anchor 20/40); the same memory at half the steps reads 22/40 with the line's best wrong-value count (11/40) | [Addressed memory](docs/labs/addressed-memory-2026-10-10/README.md); configuration rejected, mechanism open (D22 §1) |
 | M1 v5 memory panel (frozen, 40 rows) | 20/40 `check_pass` at a 10 % recall share, the adopted M1 base; 10/40 with no recall data; 22/40 at 55 % with the reply panel down to 22/232 | [Mixture dose](docs/labs/mixture-dose-2026-10-10/README.md); one seed per dose, panel noise ±3 rows |
 | Open reply panel (232 rows, `fluent_and_relevant`) | 43/232 sealed base, **37/232** at the adopted 10 % dose (p = 0.42, inside noise), 39/232 with read-binding supervision | [Mixture dose](docs/labs/mixture-dose-2026-10-10/README.md), [Read binding](docs/labs/read-binding-2026-10-10/README.md) |
 | Criterion 2, 29M M1 artifacts served under D11 | **1.20138 BPB** (base) / 1.24402 / 1.24233 against a ≤ 0.90 target, engine **bit-exact** (`d11 − d10 nll = 0.0`, `max |Δlogit| = 0` on 64 windows) | [D11 serving](docs/labs/d11-serving-2026-10-10/README.md); byte basis 2.837427 B/token |
