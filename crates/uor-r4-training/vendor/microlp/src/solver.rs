@@ -38,6 +38,18 @@ pub const EPS: f64 = 1e-10;
 /// worst-case overshoot to about a thousand pivots.
 pub(crate) const DEADLINE_CHECK_INTERVAL: u64 = 1000;
 
+fn numerical_progress(event: &str, basis: &[usize], iterations: u64) {
+    if std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        basis.hash(&mut h);
+        let s = crate::repair::stats();
+        eprintln!("d22-numerics event={event} basis_tag={:016x} rows={} iterations={iterations} fresh={} exact={} singular={} refreshes={}",
+            h.finish(), basis.len(), s.fresh_factors, s.exact_fallbacks,
+            s.exact_singular, s.old_basis_refreshes);
+    }
+}
+
 /// Threshold-pivoting stability coefficient passed to [`lu_factorize`] for
 /// every LU (re)factorization the simplex performs: a candidate pivot is
 /// accepted only if its magnitude is at least this fraction of the column's
@@ -860,7 +872,7 @@ impl Solver {
                 self.calc_row_coeffs(row)?;
                 let pivot_info = self.choose_entering_col_dual(row, val)?;
                 self.calc_col_coeffs(pivot_info.col)?;
-                self.pivot(&pivot_info)?;
+                self.pivot(&pivot_info, NumericalPhase::FixVariable)?;
                 pivot_info.col
             }
 
@@ -941,13 +953,44 @@ impl Solver {
         Ok(StopReason::Finished)
     }
 
-    fn refresh_numerics(&mut self) -> Result<(), Error> {
+    fn require_numerical_phase(&self, phase: NumericalPhase) -> Result<(), Error> {
+        let valid = match phase {
+            NumericalPhase::Primal => self.calc_primal_infeasibility().0 == 0,
+            NumericalPhase::Dual | NumericalPhase::FixVariable => self
+                .nb_vars
+                .iter()
+                .zip(&self.nb_var_obj_coeffs)
+                .zip(&self.nb_var_states)
+                .all(|((&var, &cost), state)| {
+                    state.at_min && cost > -EPS
+                        || state.at_max && cost < EPS
+                        || (!state.at_min
+                            && !state.at_max
+                            && self.orig_var_mins[var] == f64::NEG_INFINITY
+                            && self.orig_var_maxs[var] == f64::INFINITY
+                            && cost.abs() <= EPS)
+                }),
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(Error::InternalError(format!(
+                "recomputed state violates required {phase:?} phase"
+            )))
+        }
+    }
+    fn refresh_numerics(&mut self, phase: NumericalPhase) -> Result<(), Error> {
+        numerical_progress("refresh-begin", &self.basic_vars, self.lp_iterations);
         let mut refreshed = self.clone();
         refreshed
             .basis_solver
             .reset(&refreshed.orig_constraints_csc, &refreshed.basic_vars)?;
         refreshed.recalc_basic_var_vals()?;
         refreshed.recalc_working_obj_coeffs()?;
+        // Feasibility flags describe the original objective, while an
+        // artificial phase can have a different working objective. Validate
+        // what the caller needs without silently changing either flag.
+        refreshed.require_numerical_phase(phase)?;
         if refreshed.enable_primal_steepest_edge {
             refreshed.recalc_primal_sq_norms()?;
         }
@@ -956,12 +999,14 @@ impl Solver {
         }
         *self = refreshed;
         crate::repair::count(|s| s.old_basis_refreshes += 1);
+        numerical_progress("refresh-commit", &self.basic_vars, self.lp_iterations);
         Ok(())
     }
     fn optimize(&mut self) -> Result<StopReason, Error> {
         for iter in 0.. {
             self.lp_iterations += 1;
             if iter % DEADLINE_CHECK_INTERVAL == 0 {
+                numerical_progress("primal-loop", &self.basic_vars, self.lp_iterations);
                 if check_deadline(&self.deadline) == StopReason::Limit {
                     return Ok(StopReason::Limit);
                 }
@@ -977,7 +1022,7 @@ impl Solver {
             let moved = loop {
                 let result = (|| -> Result<bool, Error> {
                     if let Some(p) = self.choose_pivot()? {
-                        self.pivot(&p)?;
+                        self.pivot(&p, NumericalPhase::Primal)?;
                         Ok(true)
                     } else {
                         Ok(false)
@@ -985,7 +1030,7 @@ impl Solver {
                 })();
                 match result {
                     Err(Error::InternalError(_)) if attempt == 0 => {
-                        self.refresh_numerics()?;
+                        self.refresh_numerics(NumericalPhase::Primal)?;
                         attempt += 1;
                     }
                     other => break other?,
@@ -1020,6 +1065,7 @@ impl Solver {
         for iter in 0.. {
             self.lp_iterations += 1;
             if iter % DEADLINE_CHECK_INTERVAL == 0 {
+                numerical_progress("dual-loop", &self.basic_vars, self.lp_iterations);
                 if check_deadline(&self.deadline) == StopReason::Limit {
                     return Ok(StopReason::Limit);
                 }
@@ -1056,14 +1102,14 @@ impl Solver {
                              refreshing basis before declaring infeasibility",
                                     iter, row,
                                 );
-                                self.refresh_numerics()?;
+                                self.refresh_numerics(NumericalPhase::Dual)?;
                                 refreshed_since_pivot = true;
                                 return Ok(true);
                             }
                             Err(e) => return Err(e),
                         };
                         self.calc_col_coeffs(pivot_info.col)?;
-                        self.pivot(&pivot_info)?;
+                        self.pivot(&pivot_info, NumericalPhase::Dual)?;
                         // Any successful pivot is progress: re-arm the valve.
                         refreshed_since_pivot = false;
                     } else {
@@ -1079,7 +1125,7 @@ impl Solver {
                 })();
                 match result {
                     Err(Error::InternalError(_)) if attempt == 0 => {
-                        self.refresh_numerics()?;
+                        self.refresh_numerics(NumericalPhase::Dual)?;
                         attempt += 1;
                     }
                     other => break other?,
@@ -1566,7 +1612,7 @@ impl Solver {
         }
     }
 
-    fn pivot(&mut self, pivot_info: &PivotInfo) -> Result<(), Error> {
+    fn pivot(&mut self, pivot_info: &PivotInfo, phase: NumericalPhase) -> Result<(), Error> {
         if let Some(e) = &pivot_info.elem {
             let col = *self
                 .col_coeffs
@@ -1590,11 +1636,13 @@ impl Solver {
                     e.row, pivot_info.col, col, row, e.coeff, scale,
                     128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
                 );
-                return self.pivot_by_original_basis(pivot_info).map_err(|e| {
-                    Error::InternalError(format!(
-                        "{boundary}; proposed-basis rebuild rejected: {e}"
-                    ))
-                });
+                return self
+                    .pivot_by_original_basis(pivot_info, phase)
+                    .map_err(|e| {
+                        Error::InternalError(format!(
+                            "{boundary}; proposed-basis rebuild rejected: {e}"
+                        ))
+                    });
             }
         }
         let mut candidate = self.clone();
@@ -1610,7 +1658,16 @@ impl Solver {
     /// variable exchange as a proposal only, rebuild from original columns,
     /// recompute both actual RHS solutions, and check the feasibility required
     /// by the current simplex phase before committing the clone.
-    fn pivot_by_original_basis(&mut self, info: &PivotInfo) -> Result<(), Error> {
+    fn pivot_by_original_basis(
+        &mut self,
+        info: &PivotInfo,
+        phase: NumericalPhase,
+    ) -> Result<(), Error> {
+        numerical_progress(
+            "ambiguous-exchange-rebuild",
+            &self.basic_vars,
+            self.lp_iterations,
+        );
         let elem = info.elem.as_ref().ok_or_else(|| {
             Error::InternalError("proposed-basis rebuild requires an exchange".into())
         })?;
@@ -1636,16 +1693,23 @@ impl Solver {
             at_min: float_eq(value, candidate.orig_var_mins[leaving]),
             at_max: float_eq(value, candidate.orig_var_maxs[leaving]),
         };
+        if matches!(phase, NumericalPhase::FixVariable) {
+            // fix_var will mark this nonbasic value fixed immediately after
+            // the exchange. Its requested value can be an interior point of
+            // the original bounds and may require primal restoration.
+            candidate.nb_var_states[info.col] = NonBasicVarState {
+                at_min: true,
+                at_max: true,
+            };
+            candidate.nb_var_is_fixed[info.col] = true;
+        }
         candidate
             .basis_solver
             .reset(&candidate.orig_constraints_csc, &candidate.basic_vars)?;
         candidate.recalc_basic_var_vals()?;
         candidate.recalc_working_obj_coeffs()?;
-        let primal = candidate.calc_primal_infeasibility().0 == 0;
-        let dual = candidate.calc_dual_infeasibility().0 == 0;
-        if (self.is_primal_feasible && !primal)
-            || ((!self.is_primal_feasible || self.is_dual_feasible) && !dual)
-            || (self.is_primal_feasible && candidate.cur_obj_val > self.cur_obj_val + EPS)
+        candidate.require_numerical_phase(phase)?;
+        if matches!(phase, NumericalPhase::Primal) && candidate.cur_obj_val > self.cur_obj_val + EPS
         {
             return Err(Error::InternalError(
                 "proposed basis does not preserve phase feasibility/descent".into(),
@@ -1928,6 +1992,13 @@ struct PivotInfo {
     elem: Option<PivotElem>,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum NumericalPhase {
+    Primal,
+    Dual,
+    FixVariable,
+}
+
 #[derive(Debug)]
 struct PivotElem {
     row: usize,
@@ -1960,6 +2031,7 @@ impl BasisSolver {
     }
 
     fn reset(&mut self, orig_constraints_csc: &CsMat, basic_vars: &[usize]) -> Result<(), Error> {
+        numerical_progress("factor-begin", basic_vars, 0);
         // No old factor, eta chain or scratch state changes on a failed refactor.
         let n = basic_vars.len();
         let current_basis = crate::repair::Basis::new(n, |c| {
@@ -1986,6 +2058,7 @@ impl BasisSolver {
         self.scratch = scratch;
         self.eta_matrices.clear_and_resize(n);
         self.rhs.clear_and_resize(n);
+        numerical_progress("factor-commit", basic_vars, 0);
         Ok(())
     }
 
@@ -2695,7 +2768,10 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
             let before = format!("{:?}", solver);
             let basis_before = solver.basis_solver.current_basis.columns.clone();
             let eta_before = solver.basis_solver.eta_matrices.len();
-            require(solver.pivot(&info).is_err(), "nonfinite candidate accepted")?;
+            require(
+                solver.pivot(&info, NumericalPhase::Dual).is_err(),
+                "nonfinite candidate accepted",
+            )?;
             require(
                 before == format!("{:?}", solver),
                 "failed pivot changed solver state",
@@ -2723,7 +2799,7 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
             let before = format!("{:?}", solver);
             let working = solver.working_obj_coeffs.clone();
             let factors = crate::repair::stats().fresh_factors;
-            let result = solver.pivot(&info);
+            let result = solver.pivot(&info, NumericalPhase::Dual);
             require(
                 crate::repair::stats().fresh_factors > factors,
                 "ambiguous pivot did not rebuild original columns",
@@ -2754,6 +2830,60 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 )
             }
         }
+        "refresh_rejects_lost_primal" | "refresh_rejects_lost_working_dual" => {
+            let phase = if kind == "refresh_rejects_lost_primal" {
+                solver.basic_var_vals.fill(0.0);
+                solver.is_primal_feasible = true;
+                NumericalPhase::Primal
+            } else {
+                solver.working_obj_coeffs[0] = 1.0;
+                NumericalPhase::Dual
+            };
+            let before = format!("{:?}", solver);
+            require(
+                solver.refresh_numerics(phase).is_err(),
+                "refresh resumed with lost phase invariant",
+            )?;
+            require(
+                before == format!("{:?}", solver),
+                "phase-invalid refresh changed old state",
+            )
+        }
+        "fix_variable_ambiguous_exchange" => {
+            require(
+                solver.initial_solve()? == StopReason::Finished,
+                "fix-variable fixture did not optimize",
+            )?;
+            let row = match solver.var_states[0] {
+                VarState::Basic(row) => row,
+                _ => return Err(Error::InternalError("fixture variable is not basic".into())),
+            };
+            solver.calc_row_coeffs(row)?;
+            let info = solver.choose_entering_col_dual(row, 0.5)?;
+            solver.calc_col_coeffs(info.col)?;
+            *solver.row_coeffs.get_mut(info.col) += 1e-6;
+            let old_objective = solver.cur_obj_val;
+            solver.pivot(&info, NumericalPhase::FixVariable)?;
+            require(
+                solver.cur_obj_val > old_objective,
+                "fixture did not exercise permitted fixing cost increase",
+            )?;
+            require(
+                solver.nb_var_states[info.col].at_min
+                    && solver.nb_var_states[info.col].at_max
+                    && solver.nb_var_is_fixed[info.col],
+                "interior fixed value lost fixed nonbasic semantics",
+            )?;
+            solver.is_primal_feasible = false;
+            require(
+                solver.restore_feasibility()? == StopReason::Finished,
+                "fixed exchange could not restore primal state",
+            )?;
+            require(
+                (*solver.get_value(0) - 0.5).abs() < 1e-12,
+                "fixed value was not retained",
+            )
+        }
         "refresh_preserves_artificial_objective" => {
             let mut artificial = Solver::try_new(
                 &[1.0],
@@ -2768,11 +2898,25 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 working != artificial.orig_obj_coeffs,
                 "fixture has no artificial objective",
             )?;
-            artificial.refresh_numerics()?;
+            artificial.refresh_numerics(NumericalPhase::Dual)?;
             require(
                 artificial.working_obj_coeffs == working,
                 "refresh changed phase objective",
-            )
+            )?;
+            for cost in [-1.0, 1.0] {
+                let mut invalid = artificial.clone();
+                invalid.working_obj_coeffs[0] = cost;
+                let before = format!("{invalid:?}");
+                require(
+                    invalid.refresh_numerics(NumericalPhase::Dual).is_err(),
+                    "free nonbasic nonzero reduced cost was admitted",
+                )?;
+                require(
+                    format!("{invalid:?}") == before,
+                    "rejected free-variable refresh mutated solver",
+                )?;
+            }
+            Ok(())
         }
         _ => Err(Error::InternalError("unknown numerical fixture".into())),
     }

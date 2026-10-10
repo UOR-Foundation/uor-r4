@@ -72,4 +72,16 @@ mod tests {
     fn rejected_disagreeing_pivot_preserves_whole_state() -> Result<(), String> {
         repair::transaction_fixture("disagreeing_pivot_rollback")
     }
+    #[test]
+    fn refresh_rejects_recomputed_primal_infeasibility() -> Result<(), String> {
+        repair::transaction_fixture("refresh_rejects_lost_primal")
+    }
+    #[test]
+    fn refresh_rejects_recomputed_working_dual_infeasibility() -> Result<(), String> {
+        repair::transaction_fixture("refresh_rejects_lost_working_dual")
+    }
+    #[test]
+    fn fixing_basic_variable_allows_cost_increase_and_interior_bound() -> Result<(), String> {
+        repair::transaction_fixture("fix_variable_ambiguous_exchange")
+    }
 }

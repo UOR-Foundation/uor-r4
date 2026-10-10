@@ -12,8 +12,12 @@ import time
 root = Path(sys.argv[1]).resolve()
 attempt = root / sys.argv[2]
 attempt.mkdir(exist_ok=False)
-source = root / "docs/labs/d22-constructor-2026-10-10/numerical-tests"
+source_root = Path(os.environ.get("D22_NUMERICAL_SOURCE_ROOT", str(root))).resolve()
+source = source_root / "docs/labs/d22-constructor-2026-10-10/numerical-tests"
 manifest = source / "source-manifest.json"
+jobs = int(os.environ.get("D22_NUMERICAL_BUILD_JOBS", "2"))
+address_limit = int(os.environ.get("D22_NUMERICAL_ADDRESS_LIMIT", str(6 * 1024**3)))
+assert jobs in (1, 2) and 0 < address_limit <= 6 * 1024**3
 
 
 def sha(path):
@@ -21,16 +25,18 @@ def sha(path):
 
 
 for name, entry in json.loads(manifest.read_text())["files"].items():
-    assert sha(root / name) == entry["sha256"], name
+    assert sha(source_root / name) == entry["sha256"], name
 env = os.environ.copy()
-env.update(CARGO_TARGET_DIR=str(root / "numerical-target"), CARGO_BUILD_JOBS="2",
+env.update(CARGO_TARGET_DIR=str(root / "numerical-target"), CARGO_BUILD_JOBS=str(jobs),
            CARGO_INCREMENTAL="0", CARGO_PROFILE_RELEASE_DEBUG="0",
-           OMP_NUM_THREADS="2", D22_BASIS_ADMISSION_ROOT=str(root / "qualification-attempt2"))
+           OMP_NUM_THREADS=str(jobs), UOR_MICROLP_PROGRESS="1",
+           D22_BASIS_ADMISSION_ROOT=str(root / "qualification-attempt2"))
 record = {"schema": "uor-r4.d22-saved-replay-process/1",
           "started_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
           "source_manifest_sha256": sha(manifest), "runner_sha256": sha(Path(__file__)),
-          "basis_attempt": "qualification-attempt2", "build_jobs": 2,
-          "address_space_limit_bytes": 6 * 1024**3, "operations": []}
+          "basis_attempt": "qualification-attempt2", "build_jobs": jobs,
+          "source_root": str(source_root), "progress_logging": True,
+          "address_space_limit_bytes": address_limit, "operations": []}
 
 
 def save():
@@ -38,7 +44,7 @@ def save():
 
 
 def limit():
-    resource.setrlimit(resource.RLIMIT_AS, (6 * 1024**3, 6 * 1024**3))
+    resource.setrlimit(resource.RLIMIT_AS, (address_limit, address_limit))
 
 
 def run(name, argv):
