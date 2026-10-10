@@ -21425,6 +21425,62 @@ mod tests {
     }
 
     #[test]
+    fn read_weighting_learned_multi_head_gradient_is_exact() -> Result<()> {
+        // Two heads: the second head's logits sit at a nonzero offset in the
+        // read's auxiliary gradient, which a one-head case never exercises.
+        let mut config = tiny(StackArch::Geometric, "ra", ReadScore::L2, true);
+        config.select = Some(FlockSelect {
+            sink: 0,
+            window: 2,
+            k: 2,
+        });
+        let mut model = StackModel::new(config, &cpu())?;
+        model.set_read_weighting(ReadWeighting::LearnedRank)?;
+        let name = "layers.01.read.rank_logits";
+        let var = model.variables()[name].clone();
+        let (heads, side) = var.as_tensor().dims2()?;
+        assert_eq!(heads, 2);
+        let start: Vec<f32> = (0..heads * side)
+            .map(|i| ((i as f32) * 0.71).sin() * 0.8)
+            .collect();
+        var.set(&Tensor::from_vec(start.clone(), (heads, side), &cpu())?)?;
+        let ids = [3u32, 9, 4, 12, 7, 1, 30, 5, 22, 8];
+        let targets = [9u32, 4, 12, 7, 1, 30, 5, 22, 8, 3];
+        let loss =
+            |model: &StackModel| -> Result<Tensor> { model.loss(&ids, &targets, 1, ids.len()) };
+        let grads = loss(&model)?.backward()?;
+        let analytic = grads
+            .get(var.as_tensor())
+            .ok_or_else(|| invalid("no rank-logit gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let eps = 1e-2f32;
+        let mut checked = 0;
+        for i in side..2 * side {
+            let mut value = |delta: f32| -> Result<f32> {
+                let mut v = start.clone();
+                v[i] += delta;
+                var.set(&Tensor::from_vec(v, (heads, side), &cpu())?)?;
+                Ok(loss(&model)?.to_scalar::<f32>()?)
+            };
+            let numeric = (value(eps)? - value(-eps)?) / (2.0 * eps);
+            let scale = analytic[i].abs().max(numeric.abs()).max(1e-4);
+            if scale > 1e-4 {
+                assert!(
+                    (analytic[i] - numeric).abs() / scale < 5e-2,
+                    "head 1 logit {}: analytic {} numeric {numeric}",
+                    i - side,
+                    analytic[i]
+                );
+                checked += 1;
+            }
+        }
+        var.set(&Tensor::from_vec(start, (heads, side), &cpu())?)?;
+        assert!(checked > 0, "no head-1 logit carried a gradient");
+        Ok(())
+    }
+
+    #[test]
     fn read_weighting_learned_logit_gradient_is_exact() -> Result<()> {
         let case = read_weighting_case()?;
         let (query, key, value, aux, select) = &case;

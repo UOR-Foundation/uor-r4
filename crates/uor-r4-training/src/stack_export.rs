@@ -820,6 +820,9 @@ pub fn export_stack(
             if logits.len() != c.heads * side {
                 return Err(invalid(format!("{name} is not [heads, window + k + 2]")));
             }
+            if logits.iter().any(|v| !v.is_finite()) {
+                return Err(invalid(format!("{name} holds a non-finite logit")));
+            }
             let values = learned_rank_q31(&logits, c.heads, side);
             table(
                 &mut builder,
