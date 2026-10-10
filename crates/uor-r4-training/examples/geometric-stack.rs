@@ -761,6 +761,11 @@ struct Settings {
     key_shift: KeyShift,
     /// `read_weighting=`; `None` keeps the model's own.
     read_weighting: Option<ReadWeighting>,
+    /// `softsort_tau_start=`/`softsort_tau_end=` for `read_weighting=softsort_rank`
+    /// (defaults 1.0 and 0.01): the SoftSort temperature falls geometrically
+    /// from start to end over the run and is set only around each optimizer
+    /// step, so every evaluation, sample and save reads the hard form.
+    softsort_tau: Option<(f64, f64)>,
     steps: usize,
     batch: usize,
     lr: f64,
@@ -1223,6 +1228,7 @@ impl Settings {
             "key_shift": self.key_shift.name(),
             "select": self.config.select,
             "read_weighting": self.read_weighting,
+            "softsort_tau": self.softsort_tau.map(|(start, end)| json!({"start": start, "end": end, "schedule": "geometric over steps, training forward only"})),
             "steps": self.steps, "batch": self.batch, "lr": self.lr,
             "warmup": self.warmup, "min_lr": self.min_lr, "weight_decay": self.weight_decay,
             "clip": self.clip, "eval_every": self.eval_every, "eval_windows": self.eval_windows,
@@ -1252,6 +1258,9 @@ impl Settings {
         // Only when set, so earlier runs' checkpoints still resume.
         if self.key_shift.enabled() {
             lineage["key_shift"] = json!(self.key_shift.name());
+        }
+        if let Some((start, end)) = self.softsort_tau {
+            lineage["softsort_tau"] = json!({"start": start, "end": end});
         }
         if let Some(weighting) = self.read_weighting {
             lineage["read_weighting"] = json!(weighting);
@@ -1580,10 +1589,43 @@ fn read_weighting_arg(args: &Args) -> Result<Option<ReadWeighting>> {
         Some("rank") => Ok(Some(ReadWeighting::Rank)),
         Some("hamming_rank") => Ok(Some(ReadWeighting::HammingRank)),
         Some("learned_rank") => Ok(Some(ReadWeighting::LearnedRank)),
+        Some("softsort_rank") => Ok(Some(ReadWeighting::SoftsortRank)),
         Some(other) => Err(invalid(format!(
-            "invalid read_weighting={other} (softmax, rank, hamming_rank or learned_rank)"
+            "invalid read_weighting={other} (softmax, rank, hamming_rank, learned_rank or softsort_rank)"
         ))),
     }
+}
+
+/// `softsort_tau_start=`/`softsort_tau_end=`, only with
+/// `read_weighting=softsort_rank` (defaults 1.0 and 0.01; both finite, positive,
+/// start >= end).
+fn softsort_tau_arg(args: &Args) -> Result<Option<(f64, f64)>> {
+    let asked = read_weighting_arg(args)? == Some(ReadWeighting::SoftsortRank);
+    let given = args.optional("softsort_tau_start").is_some()
+        || args.optional("softsort_tau_end").is_some();
+    if !asked {
+        if given {
+            return Err(invalid(
+                "softsort_tau_start=/softsort_tau_end= need read_weighting=softsort_rank",
+            ));
+        }
+        return Ok(None);
+    }
+    let start: f64 = args.number("softsort_tau_start", 1.0)?;
+    let end: f64 = args.number("softsort_tau_end", 0.01)?;
+    if !(start.is_finite() && end.is_finite() && end > 0.0 && start >= end) {
+        return Err(invalid(
+            "softsort_tau_start >= softsort_tau_end > 0, both finite",
+        ));
+    }
+    Ok(Some((start, end)))
+}
+
+/// The SoftSort temperature at `step` of `steps`: geometric from start to end.
+fn softsort_tau_at(schedule: (f64, f64), step: usize, steps: usize) -> f64 {
+    let (start, end) = schedule;
+    let fraction = step as f64 / (steps.max(2) - 1) as f64;
+    start * (end / start).powf(fraction.min(1.0))
 }
 
 /// Sets `read_weighting=` on an `init=` or new model; absent keeps its own.
@@ -1671,6 +1713,7 @@ fn train_settings(args: &Args) -> Result<Settings> {
         transport_snap,
         key_shift,
         read_weighting: read_weighting_arg(args)?,
+        softsort_tau: softsort_tau_arg(args)?,
         steps: args.number("steps", 7324)?,
         batch: args.number("batch", 16)?,
         lr: args.number("lr", 0.002)?,
@@ -2233,7 +2276,7 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
     model.set_transport_snap(settings.transport_snap)?;
     // data_parallel=2: a replica on GPU 1 with the primary's current weights
     // (after init= or a resume alike).
-    let replica = if settings.data_parallel == 2 {
+    let mut replica = if settings.data_parallel == 2 {
         let mut replica = StackModel::new(model.config.clone(), &Device::new_cuda(1)?)?;
         replica.set_precision(settings.precision);
         replica.set_read_key_shift(model.read_key_shift())?;
@@ -2290,6 +2333,13 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
             ids.extend_from_slice(&stream[start..start + time]);
             targets.extend_from_slice(&stream[start + 1..start + time + 1]);
         }
+        let softsort_tau = settings
+            .softsort_tau
+            .map(|schedule| softsort_tau_at(schedule, progress.step, settings.steps));
+        model.set_softsort_temperature(softsort_tau)?;
+        if let Some(replica) = replica.as_mut() {
+            replica.set_softsort_temperature(softsort_tau)?;
+        }
         let served_before = model.served_statistics()?;
         let (value, grads) = match &replica {
             None => {
@@ -2324,6 +2374,11 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
                 ((local.0 + remote.0) / 2.0, grads)
             }
         };
+        // The temperature is for the training forward only.
+        model.set_softsort_temperature(None)?;
+        if let Some(replica) = replica.as_mut() {
+            replica.set_softsort_temperature(None)?;
+        }
         if !value.is_finite() {
             let site = if nan_trace {
                 first_nonfinite_site(&model, &ids, settings.batch, time)?
@@ -6335,6 +6390,8 @@ fn main() -> Result<()> {
                     "key_shift",
                     "select",
                     "read_weighting",
+                    "softsort_tau_start",
+                    "softsort_tau_end",
                     "data_parallel",
                     "tf32",
                     "precision",

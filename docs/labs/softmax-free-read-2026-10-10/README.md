@@ -153,3 +153,20 @@ After the line above stopped, the owner funded a new softmax-free read line ("Fu
 - **Provenance and cost:**
   - Pod `5wtzfmr0z0y3t0` (about 2.4 h, about \$4.30), deleted, plus a 3-minute data-pull pod.
   - Checkpoints in cloud-store `claude/wide-flock-20261010`; evaluations (replies, grades, artifacts, D11 reports, timings) in `claude/wide-flock-eval-20261010`. The chat-v0-p2 streams are now in cloud-store as `claude/chat-data-control-20261008`, so later laptop evaluations do not need a pod.
+
+## Rank-consistent training (arm S, preparation): `read_weighting=softsort_rank`
+
+W showed the remaining gap is not support size. So the next run fixes the **training mismatch**: until now q, k and aux learned from the flock-softmax gradient while the forward used the hard rank table.
+- **New weighting, `softsort_rank`:** it has `learned_rank`'s parameters, table and served form.
+- **Training forward:** while a temperature τ is set, it weights the flock-kept sources through **SoftSort**. The soft permutation `P[r,i] = softmax_i(−|sort(s)_r − s_i| / τ)` maps scores onto ranks, and the learned table `W[h][m−1]` gives the weights `a = Wᵀ·P`.
+  - It is written as tensor operations, so autograd gives exact gradients to q, k, NoRead, age, scale/offset, the values and the rank logits.
+  - It runs on CPU and CUDA alike, with no host-only path.
+- **Limit:** as τ → 0, `P` becomes the sorting permutation and the read becomes the hard learned rank read. That is exactly what export writes and D11 serves, so serving is unchanged.
+- **Schedule:** `train … read_weighting=softsort_rank softsort_tau_start=1.0 softsort_tau_end=0.01` lowers τ geometrically over the steps. The train loop sets it **only around each optimizer step**, so every evaluation, sample, save and export reads the hard form. τ is never saved.
+- **Checks:**
+  - At τ = 1e-5 the soft read equals the hard read to < 1e-3, for L2, Dot and Lorentz scores.
+  - A function-level finite-difference check on two heads covers > 10 query entries and the second head's logits, within 5 %.
+  - Negative gate: detaching the items inside the sort fails the gradient check.
+  - Save/load keeps `softsort_rank` and drops τ.
+  - CLI smoke: the report records the schedule.
+  - `read_weighting` 13 tests, `fused_read` 2, `stack_softmax_free_export` 4.

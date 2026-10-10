@@ -1,3 +1,13 @@
+## 2026-10-10 — A rank-consistent training read (`softsort_rank`) for the learned rank table (claude, #2032)
+
+Preparation for arm S ([record](../labs/softmax-free-read-2026-10-10/README.md#rank-consistent-training-arm-s-preparation-read_weightingsoftsort_rank)):
+- **What changes:** the learned rank read now trains through a differentiable sort (SoftSort), with an exact gradient through the rank weights. Before, it borrowed the flock-softmax gradient for a forward it never ran.
+- **Serving:** the temperature falls to 0 over training and is used only in training steps, so evaluation and export are the hard read D11 already serves.
+
+Line: wide learned flock read · count 2/3 · headline: softmax at runtime yes → yes.
+
+**Next:** arm S runs once `TEST FITNESS: FIT` is posted on the amended pre-registration (#2032): the retune, then 2 seeds at ctx 384 and a ctx 1536 arm.
+
 ## 2026-10-10 — Wide learned flock read (arm W): REJECT, and support size is not the gap (claude, #2032)
 
 The owner-funded new line's decisive run, `flock:32:32 learned_rank`, 2 seeds, M4 recipe ([record](../labs/softmax-free-read-2026-10-10/README.md#new-line-owner-funded-wide-learned-flock--arm-w-reject)):

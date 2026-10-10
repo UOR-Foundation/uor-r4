@@ -247,6 +247,22 @@ pub enum ReadWeighting {
     /// ([`learned_rank_table`], [`fused_read_learned_rank`]). They start at
     /// `ln(1/(r+1))`, i.e. exactly the [`Self::Rank`] table.
     LearnedRank,
+    /// [`Self::LearnedRank`]'s parameters, table and served form, trained with
+    /// a rank-consistent gradient: while a SoftSort temperature is set
+    /// ([`StackModel::set_softsort_temperature`]) the training forward weights
+    /// the flock-kept sources through a differentiable sort
+    /// ([`softsort_learned_read`]), whose limit as the temperature falls to 0
+    /// is exactly the hard learned rank read. Without a temperature (every
+    /// evaluation, generation, save and export) it is the hard read.
+    SoftsortRank,
+}
+
+impl ReadWeighting {
+    /// Whether the read has learned per-head rank tables
+    /// ([`READ_RANK_LOGITS`]): [`Self::LearnedRank`] and [`Self::SoftsortRank`].
+    pub fn uses_learned_table(self) -> bool {
+        matches!(self, Self::LearnedRank | Self::SoftsortRank)
+    }
 }
 
 /// The per-head logits of [`ReadWeighting::LearnedRank`] in each read layer.
@@ -1997,6 +2013,10 @@ pub struct StackModel {
     /// How the geometric reads weight their kept sources
     /// ([`Self::set_read_weighting`]).
     read_weighting: ReadWeighting,
+    /// The SoftSort temperature of a [`ReadWeighting::SoftsortRank`] read's
+    /// training forward; `None` is the hard (served) read. A runtime setting,
+    /// never saved.
+    softsort_tau: Option<f64>,
     /// A research-only read-lineage control ([`Self::set_read_lineage`]).
     read_lineage: Option<ReadLineage>,
     /// The fixed block-diagonal SO(4) map of [`ReadLineage::RandomSo4`].
@@ -2061,6 +2081,7 @@ impl StackModel {
             geometric_span: None,
             read_key_shift: false,
             read_weighting: ReadWeighting::Softmax,
+            softsort_tau: None,
             read_lineage: None,
             read_lineage_so4: None,
             pointer_key_fold: None,
@@ -2249,9 +2270,7 @@ impl StackModel {
             ));
         }
         let side = |select: Option<FlockSelect>| select.map(|s| s.window + s.k);
-        if self.read_weighting == ReadWeighting::LearnedRank
-            && side(select) != side(self.config.select)
-        {
+        if self.read_weighting.uses_learned_table() && side(select) != side(self.config.select) {
             return Err(invalid(
                 "a learned rank read's logits are sized by the flock's window and k; \
                  clear the weighting before changing them",
@@ -2687,7 +2706,7 @@ impl StackModel {
             .layer(layer, "read.age")?
             .narrow(1, 0, time)?
             .flatten_all()?;
-        let mut aux = vec![null, age];
+        let mut aux = vec![null.clone(), age.clone()];
         if self.config.read.scaled() {
             aux.push(p.layer(layer, "read.log_beta")?.exp()?);
             aux.push(p.layer(layer, "read.offset")?.clone());
@@ -2722,7 +2741,37 @@ impl StackModel {
             _ => None,
         };
         let (value, value_width) = self.read_binding_values(value, layer, binding)?;
-        let read = if self.read_weighting == ReadWeighting::LearnedRank {
+        let soft_tau = match (self.read_weighting, self.softsort_tau) {
+            (ReadWeighting::SoftsortRank, Some(tau)) => Some(tau),
+            _ => None,
+        };
+        let read = if let Some(tau) = soft_tau {
+            let select = self
+                .config
+                .select
+                .ok_or_else(|| invalid("a learned rank read needs a flock selection"))?;
+            let table = learned_rank_table(p.layer(layer, READ_RANK_LOGITS)?)?;
+            let scale = if self.config.read.scaled() {
+                Some((
+                    p.layer(layer, "read.log_beta")?.exp()?,
+                    p.layer(layer, "read.offset")?.clone(),
+                ))
+            } else {
+                None
+            };
+            softsort_learned_read(
+                &query,
+                &key,
+                &value,
+                &null,
+                &age,
+                self.config.read,
+                scale.as_ref().map(|(b, o)| (b, o)),
+                select,
+                &table,
+                tau,
+            )?
+        } else if self.read_weighting.uses_learned_table() {
             let select = self
                 .config
                 .select
@@ -3327,7 +3376,7 @@ impl StackModel {
             }
         }
         let shapes = learned_rank_shapes(&self.config).unwrap_or_default();
-        if weighting == ReadWeighting::LearnedRank {
+        if weighting.uses_learned_table() {
             for (name, shape) in shapes {
                 if self.variables.contains_key(&name) {
                     continue;
@@ -3350,6 +3399,26 @@ impl StackModel {
     /// How every geometric read weights its kept sources.
     pub fn read_weighting(&self) -> ReadWeighting {
         self.read_weighting
+    }
+
+    /// Set (`Some(tau)`, `tau > 0`) or clear (`None`) the SoftSort
+    /// temperature of a [`ReadWeighting::SoftsortRank`] read's training
+    /// forward. The train loop sets it around each optimizer step only, so
+    /// every evaluation, generation, save and export reads the hard (served)
+    /// learned rank form. Any other weighting ignores it.
+    pub fn set_softsort_temperature(&mut self, tau: Option<f64>) -> Result<()> {
+        if let Some(tau) = tau {
+            if !(tau.is_finite() && tau > 0.0) {
+                return Err(invalid("a SoftSort temperature is finite and positive"));
+            }
+        }
+        self.softsort_tau = tau;
+        Ok(())
+    }
+
+    /// The SoftSort temperature in force, if any.
+    pub fn softsort_temperature(&self) -> Option<f64> {
+        self.softsort_tau
     }
 
     /// Opt into a research-only read-lineage control (Step 2 parity bench,
@@ -9049,6 +9118,7 @@ impl StackModel {
             Some("rank") => Ok(ReadWeighting::Rank),
             Some("hamming_rank") => Ok(ReadWeighting::HammingRank),
             Some("learned_rank") => Ok(ReadWeighting::LearnedRank),
+            Some("softsort_rank") => Ok(ReadWeighting::SoftsortRank),
             _ => Err(invalid(format!(
                 "config.json's {READ_WEIGHTING_FIELD} must be absent, \"rank\", \"hamming_rank\" or \"learned_rank\""
             ))),
@@ -9334,7 +9404,7 @@ impl StackModel {
             shapes.extend(read_lineage_shapes(&config, lineage));
         }
         let read_weighting = Self::saved_read_weighting(directory)?;
-        if read_weighting == ReadWeighting::LearnedRank {
+        if read_weighting.uses_learned_table() {
             // Restored, not re-initialised, by set_read_weighting below.
             shapes.extend(learned_rank_shapes(&config)?);
         }
@@ -9364,6 +9434,7 @@ impl StackModel {
             geometric_span,
             read_key_shift: false,
             read_weighting: ReadWeighting::Softmax,
+            softsort_tau: None,
             read_lineage: None,
             read_lineage_so4: None,
             pointer_key_fold: None,
@@ -13986,6 +14057,172 @@ pub fn fused_read_learned_rank(
         true,
         Some(table),
     )
+}
+
+/// The training form of a [`ReadWeighting::SoftsortRank`] read: the learned
+/// rank read with a rank-consistent gradient, written as tensor operations so
+/// autograd gives exact gradients to the scores (query, key, NoRead, age and
+/// the scale/offset of a scaled score), the values and the rank logits.
+///
+/// Per row `t` and head, the flock-kept positions (the shared selector on the
+/// detached total scores, exactly as the hard read keeps them) and the NoRead
+/// slot are the `m` items, in the selector's order with NoRead last. Their
+/// scores `s` are sorted descending (a stable sort, so ties keep the hard
+/// rule: lower position first, NoRead last), and SoftSort
+/// `P[r, i] = softmax_i(-|sort(s)_r - s_i| / tau)` maps items to ranks. Item
+/// `i` gets `a_i = sum_r P[r, i] W[h][m-1][r]` from the learned table
+/// ([`learned_rank_table`]), and the output is `sum_i a_i v_i` (NoRead's value
+/// is zero). As `tau -> 0`, `P` is the sorting permutation and the read is
+/// [`fused_read_learned_rank`]. `null` is `[batch, heads, time]` flattened,
+/// `age` `[heads, time]` flattened (the fused read's auxiliary layout);
+/// `scale` is `(beta, offset)` per head for a scaled score.
+#[allow(clippy::too_many_arguments)]
+pub fn softsort_learned_read(
+    query: &Tensor,
+    key: &Tensor,
+    value: &Tensor,
+    null: &Tensor,
+    age: &Tensor,
+    score: ReadScore,
+    scale: Option<(&Tensor, &Tensor)>,
+    select: FlockSelect,
+    table: &Tensor,
+    tau: f64,
+) -> Result<Tensor> {
+    if !(tau.is_finite() && tau > 0.0) {
+        return Err(invalid("a SoftSort temperature is finite and positive"));
+    }
+    validate_flock(&select)?;
+    let (batch, heads, time, width) = query.dims4()?;
+    let value_width = value.dim(3)?;
+    let device = query.device().clone();
+    let side = select.window + select.k + 2;
+    if table.dims() != [heads, side, side] {
+        return Err(invalid(
+            "the learned rank table is not [heads, window + k + 2, window + k + 2]",
+        ));
+    }
+    let (query, key, value) = (
+        query.to_dtype(DType::F32)?,
+        key.to_dtype(DType::F32)?,
+        value.to_dtype(DType::F32)?,
+    );
+    // Total scores [batch, heads, time, time], as the fused read forms them.
+    let inner = query.matmul(&key.transpose(2, 3)?.contiguous()?)?;
+    let mut scores = match score {
+        ReadScore::Dot => inner.affine(1.0 / (width as f64).sqrt(), 0.0)?,
+        ReadScore::Lorentz | ReadScore::L2 => {
+            let (beta, offset) =
+                scale.ok_or_else(|| invalid("a scaled read score needs its beta and offset"))?;
+            let square = |x: &Tensor| -> Result<Tensor> { Ok(x.sqr()?.sum_keepdim(3)?) };
+            let (qs, ks) = (square(&query)?, square(&key)?.transpose(2, 3)?);
+            let distance = if score == ReadScore::Lorentz {
+                let (ql, kl) = (qs.affine(1.0, 1.0)?.sqrt()?, ks.affine(1.0, 1.0)?.sqrt()?);
+                let e = ql
+                    .broadcast_mul(&kl)?
+                    .sub(&inner)?
+                    .affine(1.0, -1.0)?
+                    .clamp(LORENTZ_MIN_EXCESS as f32, f32::MAX)?;
+                e.add(&e.mul(&e.affine(1.0, 2.0)?)?.sqrt()?)?
+                    .affine(1.0, 1.0)?
+                    .log()?
+            } else {
+                qs.broadcast_add(&ks)?
+                    .sub(&inner.affine(2.0, 0.0)?)?
+                    .clamp(L2_MIN_SQUARED as f32, f32::MAX)?
+                    .sqrt()?
+            };
+            distance
+                .broadcast_sub(&offset.reshape((1, heads, 1, 1))?)?
+                .broadcast_mul(&beta.reshape((1, heads, 1, 1))?)?
+                .neg()?
+        }
+    };
+    let mut ages = vec![0u32; time * time];
+    for t in 0..time {
+        for j in 0..=t {
+            ages[t * time + j] = (t - j) as u32;
+        }
+    }
+    let ages = Tensor::from_vec(ages, time * time, &device)?;
+    let age_table = age
+        .reshape((heads, age.elem_count() / heads))?
+        .narrow(1, 0, time)?
+        .index_select(&ages, 1)?
+        .reshape((1, heads, time, time))?;
+    scores = scores.broadcast_add(&age_table)?;
+    // Selection on the detached scores, row by row (positions 0..=t).
+    let host = scores.detach().flatten_all()?.to_vec1::<f32>()?;
+    let kept = side - 1;
+    let rows = batch * heads * time;
+    let mut positions = vec![0u32; rows * kept];
+    let mut flat = vec![0u32; rows * kept];
+    let mut live = vec![0f32; rows * kept];
+    let mut table_rows = vec![0u32; rows];
+    for row in 0..rows {
+        let (index, t) = (row / time, row % time);
+        let head = index % heads;
+        let base = row * time;
+        let selection = flock::flock_select(&host[base..base + t + 1], t, select)?;
+        if selection.len() > kept {
+            return Err(invalid(
+                "a flock row keeps more sources than its table has ranks",
+            ));
+        }
+        for (slot, entry) in selection.entries.iter().enumerate() {
+            positions[row * kept + slot] = entry.position as u32;
+            flat[row * kept + slot] = (index * time + entry.position) as u32;
+            live[row * kept + slot] = 1.0;
+        }
+        // Support m = kept + NoRead; the table row W[h][m - 1].
+        table_rows[row] = (head * side + selection.len()) as u32;
+    }
+    let shape = (batch, heads, time, kept);
+    let positions = Tensor::from_vec(positions, shape, &device)?;
+    let live = Tensor::from_vec(live, shape, &device)?;
+    // Kept scores (padding pushed far below every real score) and NoRead last.
+    let kept_scores = scores
+        .gather(&positions, 3)?
+        .mul(&live)?
+        .add(&live.affine(1e4, -1e4)?)?;
+    let items = Tensor::cat(&[&kept_scores, &null.reshape((batch, heads, time, 1))?], 3)?;
+    let order = items.detach().arg_sort_last_dim(false)?;
+    let sorted = items.gather(&order, 3)?;
+    let gap = sorted
+        .unsqueeze(4)?
+        .broadcast_sub(&items.unsqueeze(3)?)?
+        .abs()?
+        .affine(-1.0 / tau, 0.0)?;
+    let permutation = candle_nn_softmax_last_dim(&gap)?; // [b, h, t, rank, item]
+    let weights_by_rank = table
+        .reshape((heads * side, side))?
+        .index_select(&Tensor::from_vec(table_rows, rows, &device)?, 0)?
+        .reshape((rows, 1, side))?;
+    let item_weights = weights_by_rank.matmul(&permutation.reshape((rows, side, side))?)?;
+    // Values of the kept positions (padding zeroed) and NoRead's zero value.
+    let kept_values = value
+        .reshape((batch * heads * time, value_width))?
+        .index_select(&Tensor::from_vec(flat, rows * kept, &device)?, 0)?
+        .reshape((rows, kept, value_width))?
+        .broadcast_mul(&live.reshape((rows, kept, 1))?)?;
+    let values = Tensor::cat(
+        &[
+            &kept_values,
+            &Tensor::zeros((rows, 1, value_width), DType::F32, &device)?,
+        ],
+        1,
+    )?;
+    Ok(item_weights
+        .matmul(&values)?
+        .reshape((batch, heads, time, value_width))?)
+}
+
+/// Softmax over the last dimension, from tensor operations (exact autograd).
+fn candle_nn_softmax_last_dim(x: &Tensor) -> Result<Tensor> {
+    let last = x.rank() - 1;
+    let shifted = x.broadcast_sub(&x.max_keepdim(last)?.detach())?;
+    let exp = shifted.exp()?;
+    Ok(exp.broadcast_div(&exp.sum_keepdim(last)?)?)
 }
 
 /// The `[heads, M, M]` learned rank-weight table of `[heads, M]` logits:
@@ -21512,6 +21749,212 @@ mod tests {
         Ok(())
     }
 
+    fn softsort_model(score: ReadScore) -> Result<StackModel> {
+        let mut config = tiny(StackArch::Geometric, "ra", score, true);
+        config.select = Some(FlockSelect {
+            sink: 0,
+            window: 2,
+            k: 2,
+        });
+        let mut model = StackModel::new(config, &cpu())?;
+        model.set_read_weighting(ReadWeighting::SoftsortRank)?;
+        let var = model.variables()["layers.01.read.rank_logits"].clone();
+        let (heads, side) = var.as_tensor().dims2()?;
+        let start: Vec<f32> = (0..heads * side)
+            .map(|i| ((i as f32) * 0.71).sin() * 1.5)
+            .collect();
+        var.set(&Tensor::from_vec(start, (heads, side), &cpu())?)?;
+        Ok(model)
+    }
+
+    #[test]
+    fn read_weighting_softsort_tiny_temperature_is_the_hard_read() -> Result<()> {
+        let ids = [3u32, 9, 4, 12, 7, 1, 30, 5, 22, 8];
+        for score in [ReadScore::L2, ReadScore::Dot, ReadScore::Lorentz] {
+            let mut model = softsort_model(score)?;
+            let hard = model
+                .forward(&ids, 1, ids.len())?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            model.set_softsort_temperature(Some(1e-5))?;
+            let soft = model
+                .forward(&ids, 1, ids.len())?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            let gap = hard
+                .iter()
+                .zip(&soft)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0f32, f32::max);
+            assert!(
+                gap < 1e-3,
+                "{score:?}: soft at tau 1e-5 differs from hard by {gap}"
+            );
+            // A warm temperature is a different read.
+            model.set_softsort_temperature(Some(1.0))?;
+            let warm = model
+                .forward(&ids, 1, ids.len())?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            assert!(hard.iter().zip(&warm).any(|(a, b)| (a - b).abs() > 1e-4));
+            // Clearing the temperature is the hard (served) read again.
+            model.set_softsort_temperature(None)?;
+            assert_eq!(bits(&model.forward(&ids, 1, ids.len())?)?, {
+                let mut learned = softsort_model(score)?;
+                learned.set_read_weighting(ReadWeighting::LearnedRank)?;
+                bits(&learned.forward(&ids, 1, ids.len())?)?
+            });
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_weighting_softsort_gradient_is_exact_on_two_heads() -> Result<()> {
+        // Function-level check with a random cotangent (the tiny model's own
+        // loss is too flat to difference in f32). Two heads, an L2 score with
+        // its scale and offset, NoRead and age, a flock of window 2 and k 2.
+        let (batch, heads, time, width) = (1usize, 2usize, 7usize, 4usize);
+        let select = FlockSelect {
+            sink: 0,
+            window: 2,
+            k: 2,
+        };
+        let side = select.window + select.k + 2;
+        let wave = |n: usize, a: f32, b: f32| -> Vec<f32> {
+            (0..n).map(|i| ((i as f32) * a + b).sin()).collect()
+        };
+        let q0 = wave(batch * heads * time * width, 0.37, 0.1);
+        let k0 = wave(batch * heads * time * width, 0.53, 0.7);
+        let v0 = wave(batch * heads * time * width, 0.29, 1.3);
+        let l0 = wave(heads * side, 0.71, 0.2);
+        let null = Tensor::from_vec(
+            wave(batch * heads * time, 0.9, 0.4),
+            batch * heads * time,
+            &cpu(),
+        )?;
+        let age = Tensor::from_vec(wave(heads * time, 0.41, 2.0), heads * time, &cpu())?;
+        let beta = Tensor::from_vec(vec![1.3f32, 0.8], heads, &cpu())?;
+        let offset = Tensor::from_vec(vec![0.2f32, -0.1], heads, &cpu())?;
+        let cot = Tensor::from_vec(
+            wave(batch * heads * time * width, 0.61, 0.9),
+            (batch, heads, time, width),
+            &cpu(),
+        )?;
+        let shape = (batch, heads, time, width);
+        let loss = |q: &[f32], logits: &[f32]| -> Result<Tensor> {
+            let (qv, lv) = (
+                Var::from_tensor(&Tensor::from_vec(q.to_vec(), shape, &cpu())?)?,
+                Var::from_tensor(&Tensor::from_vec(logits.to_vec(), (heads, side), &cpu())?)?,
+            );
+            let out = softsort_learned_read(
+                qv.as_tensor(),
+                &Tensor::from_vec(k0.clone(), shape, &cpu())?,
+                &Tensor::from_vec(v0.clone(), shape, &cpu())?,
+                &null,
+                &age,
+                ReadScore::L2,
+                Some((&beta, &offset)),
+                select,
+                &learned_rank_table(lv.as_tensor())?,
+                0.5,
+            )?;
+            Ok(out.mul(&cot)?.sum_all()?)
+        };
+        let qv = Var::from_tensor(&Tensor::from_vec(q0.clone(), shape, &cpu())?)?;
+        let lv = Var::from_tensor(&Tensor::from_vec(l0.clone(), (heads, side), &cpu())?)?;
+        let out = softsort_learned_read(
+            qv.as_tensor(),
+            &Tensor::from_vec(k0.clone(), shape, &cpu())?,
+            &Tensor::from_vec(v0.clone(), shape, &cpu())?,
+            &null,
+            &age,
+            ReadScore::L2,
+            Some((&beta, &offset)),
+            select,
+            &learned_rank_table(lv.as_tensor())?,
+            0.5,
+        )?;
+        let grads = out.mul(&cot)?.sum_all()?.backward()?;
+        let dq = grads
+            .get(qv.as_tensor())
+            .ok_or_else(|| invalid("no query gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let dl = grads
+            .get(lv.as_tensor())
+            .ok_or_else(|| invalid("no logit gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let eps = 1e-2f32;
+        let mut checked = (0, 0);
+        for (i, &analytic) in dq.iter().enumerate() {
+            let (mut plus, mut minus) = (q0.clone(), q0.clone());
+            plus[i] += eps;
+            minus[i] -= eps;
+            let numeric = (loss(&plus, &l0)?.to_scalar::<f32>()?
+                - loss(&minus, &l0)?.to_scalar::<f32>()?)
+                / (2.0 * eps);
+            let scale = analytic.abs().max(numeric.abs());
+            if scale > 1e-3 {
+                assert!(
+                    (analytic - numeric).abs() / scale < 5e-2,
+                    "query[{i}]: analytic {analytic} numeric {numeric}"
+                );
+                checked.0 += 1;
+            }
+        }
+        // Second head's logits: a nonzero per-head offset.
+        for i in side..2 * side {
+            let (mut plus, mut minus) = (l0.clone(), l0.clone());
+            plus[i] += eps;
+            minus[i] -= eps;
+            let numeric = (loss(&q0, &plus)?.to_scalar::<f32>()?
+                - loss(&q0, &minus)?.to_scalar::<f32>()?)
+                / (2.0 * eps);
+            let analytic = dl[i];
+            let scale = analytic.abs().max(numeric.abs());
+            if scale > 1e-3 {
+                assert!(
+                    (analytic - numeric).abs() / scale < 5e-2,
+                    "logit[{i}]: analytic {analytic} numeric {numeric}"
+                );
+                checked.1 += 1;
+            }
+        }
+        assert!(
+            checked.0 > 10 && checked.1 > 2,
+            "too few measurable gradients: {checked:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn read_weighting_softsort_saves_as_softsort_and_refuses_a_bad_temperature() -> Result<()> {
+        let mut model = softsort_model(ReadScore::L2)?;
+        assert!(model.set_softsort_temperature(Some(0.0)).is_err());
+        assert!(model.set_softsort_temperature(Some(f64::NAN)).is_err());
+        model.set_softsort_temperature(Some(0.3))?;
+        let dir = std::env::temp_dir().join(format!("softsort-save-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir)?;
+        model.save(&dir)?;
+        let config: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.join("config.json"))?)?;
+        assert_eq!(
+            config[READ_WEIGHTING_FIELD],
+            serde_json::json!("softsort_rank")
+        );
+        let loaded = StackModel::load(&dir, &cpu())?;
+        assert_eq!(loaded.read_weighting(), ReadWeighting::SoftsortRank);
+        // The temperature is a runtime setting, never saved.
+        assert_eq!(loaded.softsort_temperature(), None);
+        assert!(loaded
+            .variables()
+            .contains_key("layers.01.read.rank_logits"));
+        fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
+
     #[test]
     fn read_weighting_learned_multi_head_gradient_is_exact() -> Result<()> {
         // Two heads: the second head's logits sit at a nonzero offset in the
@@ -23491,7 +23934,10 @@ mod tests {
         again.add_memory_layers(memory.clone(), plain.seed)?;
         assert!(!again.add_memory_layers(memory, plain.seed)?);
         let mut other = StackModel::new(plain.clone(), &device)?;
-        other.add_memory_layers(extended.config.memory.clone().expect("a memory"), plain.seed)?;
+        other.add_memory_layers(
+            extended.config.memory.clone().expect("a memory"),
+            plain.seed,
+        )?;
         let different = MemoryConfig {
             top_k: 4,
             ..extended.config.memory.clone().expect("a memory")

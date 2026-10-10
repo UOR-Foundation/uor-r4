@@ -799,7 +799,7 @@ pub fn export_stack(
     {
         table(&mut builder, "arcosh", TableValues::U32(&arcosh_table()))?;
     }
-    if model.read_weighting() == ReadWeighting::LearnedRank {
+    if model.read_weighting().uses_learned_table() {
         // One Q31 table per read layer, W[h][m-1][r] for every support size m.
         let select = c
             .select
@@ -841,7 +841,7 @@ pub fn export_stack(
             select.window,
             select.k,
             model.read_weighting() == ReadWeighting::HammingRank,
-            if model.read_weighting() == ReadWeighting::LearnedRank {
+            if model.read_weighting().uses_learned_table() {
                 "learned"
             } else {
                 "rank"
