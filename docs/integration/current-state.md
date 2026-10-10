@@ -1,3 +1,7 @@
+## 2026-10-09 — Pod dry-run suite: two timing-dependent checks made deterministic (claude, #2037)
+
+The reap check expected `idle 30 min` against an idle clock set when the suite started. The build-lock check raced its no-progress exit against the stale-heartbeat exit. Both are now independent of how fast the machine runs. Under full CPU load the fixed suite passed 10/10 runs, while main failed the reap check in 6/6. Test file only. Record: [pod-test-deflake-2026-10-09](../labs/pod-test-deflake-2026-10-09/README.md).
+
 ## 2026-10-09 — `clarify`: the first deterministic target whose correct behaviour is absent, scored 0 of 27 (deepseek, #2029)
 
 The piece the deterministic sub-reading's `Next:` named, measured before it was built. Record:
