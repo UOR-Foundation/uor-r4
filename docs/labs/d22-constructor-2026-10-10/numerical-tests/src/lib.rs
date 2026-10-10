@@ -85,3 +85,43 @@ mod tests {
         repair::transaction_fixture("fix_variable_ambiguous_exchange")
     }
 }
+
+#[test]
+fn regular_pivot_rejects_phase_loss_transactionally() -> Result<(), String> {
+    microlp::repair::transaction_fixture("regular_pivot_phase_rollback")
+}
+
+#[test]
+fn compensated_cost_and_original_transpose_refinement() -> Result<(), String> {
+    microlp::repair::transaction_fixture("compensated_cost_and_refinement")
+}
+
+#[test]
+fn signed_ratio_reselection_avoids_harris_double_allowance() -> Result<(), String> {
+    microlp::repair::transaction_fixture("signed_ratio_avoids_double_allowance")
+}
+
+#[test]
+fn step_interval_includes_leaving_ineligible_and_free_columns() -> Result<(), String> {
+    microlp::repair::transaction_fixture("step_interval_covers_all_columns")
+}
+
+#[test]
+fn zero_phase_direct_caller_restores_original_objective() -> Result<(), String> {
+    microlp::repair::transaction_fixture("zero_phase_direct_restore")
+}
+
+#[test]
+fn zero_phase_limit_before_feasibility_resumes_honestly() -> Result<(), String> {
+    microlp::repair::transaction_fixture("zero_phase_limit_before_feasibility")
+}
+
+#[test]
+fn zero_phase_limit_during_original_optimization_resumes_honestly() -> Result<(), String> {
+    microlp::repair::transaction_fixture("zero_phase_limit_during_original_optimize")
+}
+
+#[test]
+fn zero_phase_keeps_interior_fixed_variable() -> Result<(), String> {
+    microlp::repair::transaction_fixture("zero_phase_preserves_fixed_interior")
+}

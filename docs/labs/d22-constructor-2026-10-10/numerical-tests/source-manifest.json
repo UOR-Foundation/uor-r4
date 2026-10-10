@@ -1,13 +1,9 @@
 {
   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
-  "status": "NINE_SYNTHETIC_PASS_QUALIFICATION_BUILD_SETUP_REPAIRED",
-  "preparation_only": true,
-  "admission": "NOT_FIT_PENDING_OWNER_FRESH_PANEL_SCOPE",
-  "builds": 4,
-  "fixture_executions": 18,
-  "solver_replays": 0,
-  "actual_basis_qualifications": 0,
+  "status": "TWENTY_TWO_SYNTHETIC_TWO_ADMISSION_PASS_SAVED_REPLAY_RUNNING",
+  "preparation_only": false,
+  "admission": "FIT_ADMITTED_OWNED_POD_CPU_EXCEPTION",
   "model_runs": 0,
   "upstream_identity_sha256": "33fce14dc040c31ac8004ce33e0e307a3fb3db784b6ac32b2e5a84f061af483f",
   "modified_upstream_files": {
@@ -17,7 +13,7 @@
     },
     "Cargo.toml": {
       "upstream_sha256": "268bffc88ba782bd7040c56a0397cfec2383c57cdf01a4dbf9916af6bc090576",
-      "vendor_sha256": "aaa3dea307f7ade5f8610d08eaab1c9d98c4d35aea129cc068f5bf72fe0c1689"
+      "vendor_sha256": "117be31f57b71e0b1e82a1f424280d1657af3b624cd2075cbfabcc4394b05585"
     },
     "src/lib.rs": {
       "upstream_sha256": "b939401e62247115270739758909f4e67777f8b105aa70f713a62334dc7a1dc0",
@@ -29,7 +25,7 @@
     },
     "src/solver.rs": {
       "upstream_sha256": "1863f76f5b1f59a53812e54d0a35b6d4bffdf30f694997ca0d25cb90cc49cb88",
-      "vendor_sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85"
+      "vendor_sha256": "2ae69de143b99529c6af42f09f7b3bb1db4b6bd52ae7cdbe89f5362f9ed80461"
     },
     "src/sparse.rs": {
       "upstream_sha256": "f7dd3686eadb2d1a924222f391ca7974c2e0d81ff6b44e756fb2875858241246",
@@ -64,8 +60,8 @@
       "bytes": 38160
     },
     "crates/uor-r4-training/vendor/microlp/Cargo.toml": {
-      "sha256": "aaa3dea307f7ade5f8610d08eaab1c9d98c4d35aea129cc068f5bf72fe0c1689",
-      "bytes": 2170
+      "sha256": "117be31f57b71e0b1e82a1f424280d1657af3b624cd2075cbfabcc4394b05585",
+      "bytes": 2158
     },
     "crates/uor-r4-training/vendor/microlp/Cargo.toml.orig": {
       "sha256": "4d186af780a1d78a3d8ab0ab965e65d710c7c0b6a9c3ede4eab0cb62bd4c644d",
@@ -128,8 +124,8 @@
       "bytes": 6148
     },
     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
-      "sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85",
-      "bytes": 100816
+      "sha256": "2ae69de143b99529c6af42f09f7b3bb1db4b6bd52ae7cdbe89f5362f9ed80461",
+      "bytes": 143011
     },
     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
@@ -268,8 +264,8 @@
       "bytes": 376
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/README.md": {
-      "sha256": "13a178adb389ea3453194bc59ad0b7b7f87badb98db1747c322187606c17129d",
-      "bytes": 3305
+      "sha256": "04cd118fd87e51757df3e31976d9d5dcc6107a0def870350d8698c09cd9ffff6",
+      "bytes": 11439
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/arrayref/Cargo.toml": {
       "sha256": "281a9aec42712546c4205d13fdb84da504a787bee056349bd4e3ff8620c39027",
@@ -292,19 +288,34 @@
       "bytes": 19713
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs": {
-      "sha256": "83b0bc12b05373dda3be8b102d16e6d497f87d87dc6ebf6e2e7d0aa86b89b8b5",
-      "bytes": 2498
+      "sha256": "ca9fe693b7cfe9f765cdb34cdb429f5f1366323de512d9b9a2bb51e51bf9f664",
+      "bytes": 4747
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
-      "sha256": "7cc555f3e7e6b31a2e4939a1ff5d4a7bd2380623068fef2e4de71a9d29f942a1",
-      "bytes": 11711
+      "sha256": "5679ac5fc5d7e1bb013cbb5a13a3b5114e094c44dfdb9ef7753af5376f430a81",
+      "bytes": 14482
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/report_output.rs": {
       "sha256": "cda30f9ba4ef8ff3e245ae352cd28932f9a24ab78598f683607e6996598fa810",
       "bytes": 9726
+    },
+    "crates/uor-r4-training/vendor/microlp/UOR-PATCH.md": {
+      "sha256": "466966c89f3fcef8b959d6c0ce994e1aaeb2895fdc22c88e46b369815952587c",
+      "bytes": 2997
     }
   },
   "previous_manifest_sha256": "5fe58ca634273d368b29887f73cd6f2fc9b067dcbbf043b2c10371216be5447b",
   "repair": "Qualification CLI offline build attempt1 missing arrayref. Copied exact existing main arrayref patch into standalone harness; numerical production unchanged.",
-  "synthetic_final_pass": 9
+  "synthetic_final_pass": 9,
+  "execution_receipts": "Owned remote numerical root process receipts preserve synthetic attempts1..3, qualification1..2 and replay1..11, including setup/test failures and no-assignment numerical outcomes. Replay11 remains RUNNING; no model runs.",
+  "integrated_manifest_note": "Local vendored Cargo omits empty nested workspace; standalone remote copy retains it. Numerical Rust files are hash-bound separately.",
+  "latest_execution": {
+    "attempt": "replay-attempt11-phase-recovery",
+    "solver_sha256": "2ae69de143b99529c6af42f09f7b3bb1db4b6bd52ae7cdbe89f5362f9ed80461",
+    "standalone_manifest_sha256": "08e022f8898707b12de10ad5523a5725cdb530142c65f9e57f77b8361072b471",
+    "binary_sha256": "0b9bda431d226adf011fd5ce000d1d6aa8e9dc0f3e7142cb9b9e740af6e8353d",
+    "synthetic_tests_passed": 22,
+    "admission_tests_passed": 2,
+    "saved_replay": "RUNNING"
+  }
 }

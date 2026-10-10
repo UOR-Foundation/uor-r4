@@ -14,6 +14,26 @@ and transactional replacement of factors and solver state. An unusable basis is
 rejected without treating that numerical result as LP infeasibility. A previous
 basis may be refreshed before pivot selection is recomputed.
 
+Each pivot is transactional and must preserve the numerical phase it serves:
+primal feasibility during objective optimization, working dual feasibility
+during feasibility restoration, or fixed-variable exchange semantics. Ambiguous
+row/column pivot agreement uses a freshly factored candidate basis rather than
+an unchecked division. Original-basis residual checks remain mandatory.
+
+When refreshed Harris selection fails those checks, a signed reduced-cost
+step is screened against every nonfixed column and the leaving variable's
+future bound. An empty admissible interval is a numerical failure, not an
+infeasibility proof. Compensated cost sums and bounded iterative refinement
+preserve the existing numerical tolerance.
+
+One explicit feasibility recovery may restart the current basis with a temporary
+zero working objective. Its persistent state survives interruption and cloning.
+No successful return from that recovery is permitted until the original
+objective is restored and optimized, actual original bounds and rows are
+checked, and both primal and dual phase certificates pass. Interior fixed values
+are preserved. These checks do not establish finite convergence or exact
+arithmetic optimality of the floating-point optimizer.
+
 Exact arithmetic uses Rust `num-bigint`, `num-rational` and `num-traits`.
 The fallback is bounded to 512 rows and 16,384-bit rationals; crossing either
 limit is a numerical resource failure. Rounded factors must still pass the

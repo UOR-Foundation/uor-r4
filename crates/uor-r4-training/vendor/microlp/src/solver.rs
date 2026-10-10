@@ -50,6 +50,29 @@ fn numerical_progress(event: &str, basis: &[usize], iterations: u64) {
     }
 }
 
+/// Compensate product rounding and accumulation in deterministic input order.
+/// Offline arithmetic only; callers still certify the original system/phase.
+fn compensated_products(terms: impl IntoIterator<Item = (f64, f64)>) -> Result<f64, Error> {
+    let mut sum = 0.0_f64;
+    let mut correction = 0.0_f64;
+    for (a, b) in terms {
+        let a = crate::repair::finite(a)?;
+        let b = crate::repair::finite(b)?;
+        let product = crate::repair::finite(a * b)?;
+        let product_error = crate::repair::finite(a.mul_add(b, -product))?;
+        let next = crate::repair::finite(sum + product)?;
+        let sum_error = if sum.abs() >= product.abs() {
+            (sum - next) + product
+        } else {
+            (product - next) + sum
+        };
+        correction =
+            crate::repair::finite(correction + crate::repair::finite(sum_error + product_error)?)?;
+        sum = next;
+    }
+    Ok(crate::repair::finite(sum + correction)?)
+}
+
 /// Threshold-pivoting stability coefficient passed to [`lu_factorize`] for
 /// every LU (re)factorization the simplex performs: a candidate pivot is
 /// accepted only if its magnitude is at least this fraction of the column's
@@ -220,6 +243,9 @@ pub(crate) struct Solver {
 
     orig_obj_coeffs: Vec<f64>,
     working_obj_coeffs: Vec<f64>,
+    // Persists through deadline interruption until the original objective is
+    // restored and certified; never confuse zero-cost feasibility with optimum.
+    numerical_feasibility_restart_active: bool,
     orig_var_mins: Vec<f64>,
     orig_var_maxs: Vec<f64>,
     pub(crate) orig_var_domains: Vec<VarDomain>,
@@ -304,6 +330,12 @@ impl std::fmt::Debug for Solver {
             self.is_primal_feasible,
             self.is_dual_feasible,
         )?;
+        writeln!(
+            f,
+            "numerical_feasibility_restart_active: {}",
+            self.numerical_feasibility_restart_active
+        )?;
+        writeln!(f, "working_obj_coeffs:\n{:?}", self.working_obj_coeffs)?;
         writeln!(f, "orig_obj_coeffs:\n{:?}", self.orig_obj_coeffs)?;
         writeln!(f, "orig_var_mins:\n{:?}", self.orig_var_mins)?;
         writeln!(f, "orig_var_maxs:\n{:?}", self.orig_var_maxs)?;
@@ -529,6 +561,7 @@ impl Solver {
             num_vars,
             orig_obj_coeffs,
             working_obj_coeffs,
+            numerical_feasibility_restart_active: false,
             orig_var_mins,
             orig_var_maxs,
             orig_constraints,
@@ -716,7 +749,7 @@ impl Solver {
                 return Ok(StopReason::Limit);
             }
         }
-        Ok(StopReason::Finished)
+        self.finish_numerical_feasibility_restart()
     }
 
     pub(crate) fn snapshot_basis(&self) -> Basis {
@@ -950,35 +983,127 @@ impl Solver {
         // are unlikely after the initial solve.
         self.enable_primal_steepest_edge = false;
 
-        Ok(StopReason::Finished)
+        self.finish_numerical_feasibility_restart()
     }
 
     fn require_numerical_phase(&self, phase: NumericalPhase) -> Result<(), Error> {
-        let valid = match phase {
-            NumericalPhase::Primal => self.calc_primal_infeasibility().0 == 0,
-            NumericalPhase::Dual | NumericalPhase::FixVariable => self
-                .nb_vars
-                .iter()
-                .zip(&self.nb_var_obj_coeffs)
-                .zip(&self.nb_var_states)
-                .all(|((&var, &cost), state)| {
-                    state.at_min && cost > -EPS
-                        || state.at_max && cost < EPS
-                        || (!state.at_min
-                            && !state.at_max
-                            && self.orig_var_mins[var] == f64::NEG_INFINITY
-                            && self.orig_var_maxs[var] == f64::INFINITY
-                            && cost.abs() <= EPS)
+        let violation = match phase {
+            NumericalPhase::Primal => self.basic_vars.iter().enumerate().find_map(|(row, &var)| {
+                let value = self.basic_var_vals[row];
+                let min = self.basic_var_mins[row];
+                let max = self.basic_var_maxs[row];
+                (value < min - EPS || value > max + EPS).then(|| format!(
+                    "row={row} var={var} value={value:.17e} bounds=[{min:.17e},{max:.17e}]"))
+            }),
+            NumericalPhase::Dual | NumericalPhase::FixVariable => self.nb_vars.iter()
+                .zip(&self.nb_var_obj_coeffs).zip(&self.nb_var_states).enumerate()
+                .find_map(|(col, ((&var, &cost), state))| {
+                    let min = self.orig_var_mins[var];
+                    let max = self.orig_var_maxs[var];
+                    let valid = state.at_min && cost > -EPS || state.at_max && cost < EPS
+                        || (!state.at_min && !state.at_max && min == f64::NEG_INFINITY
+                            && max == f64::INFINITY && cost.abs() <= EPS);
+                    (!valid).then(|| format!(
+                        "col={col} var={var} cost={cost:.17e} value={:.17e} bounds=[{min:.17e},{max:.17e}] at_min={} at_max={} fixed={}",
+                        self.nb_var_vals[col], state.at_min, state.at_max, self.nb_var_is_fixed[col]))
                 }),
         };
-        if valid {
-            Ok(())
-        } else {
+        if let Some(detail) = violation {
             Err(Error::InternalError(format!(
-                "recomputed state violates required {phase:?} phase"
+                "recomputed state violates required {phase:?} phase: {detail}; EPS={EPS:.17e}; iterations={}", self.lp_iterations
             )))
+        } else {
+            Ok(())
         }
     }
+
+    fn certify_phase_with_refinement(&mut self, phase: NumericalPhase) -> Result<(), Error> {
+        match self.require_numerical_phase(phase) {
+            Ok(()) => Ok(()),
+            Err(before) if matches!(phase, NumericalPhase::Dual | NumericalPhase::FixVariable) => {
+                if std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
+                    eprintln!("d22-numerics reduced-cost-refine-before: {before}");
+                }
+                self.recalc_working_obj_coeffs_impl(true)?;
+                let result = self.require_numerical_phase(phase);
+                if std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
+                    eprintln!("d22-numerics reduced-cost-refine-after: {result:?}");
+                }
+                result
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn restart_zero_objective_feasibility(&mut self) -> Result<(), Error> {
+        if self.numerical_feasibility_restart_active {
+            return Err(Error::InternalError(
+                "numerical feasibility restart already active".into(),
+            ));
+        }
+        let mut candidate = self.clone();
+        candidate
+            .basis_solver
+            .reset(&candidate.orig_constraints_csc, &candidate.basic_vars)?;
+        candidate.recalc_basic_var_vals()?;
+        candidate.working_obj_coeffs.fill(0.0);
+        candidate.recalc_working_obj_coeffs()?;
+        candidate.require_numerical_phase(NumericalPhase::Dual)?;
+        candidate.is_primal_feasible = candidate.calc_primal_infeasibility().0 == 0;
+        candidate.is_dual_feasible = false; // original objective is not yet optimized
+        candidate.numerical_feasibility_restart_active = true;
+        if candidate.enable_dual_steepest_edge {
+            candidate.dual_edge_sq_norms.fill(1.0);
+        }
+        if candidate.enable_primal_steepest_edge {
+            candidate.recalc_primal_sq_norms()?;
+        }
+        *self = candidate;
+        numerical_progress(
+            "zero-objective-feasibility-restart",
+            &self.basic_vars,
+            self.lp_iterations,
+        );
+        Ok(())
+    }
+
+    fn finish_numerical_feasibility_restart(&mut self) -> Result<StopReason, Error> {
+        if !self.numerical_feasibility_restart_active {
+            return Ok(StopReason::Finished);
+        }
+        self.recalc_basic_var_vals()?;
+        self.require_numerical_phase(NumericalPhase::Primal)?;
+        self.recalc_obj_coeffs()?;
+        self.is_dual_feasible = false;
+        if self.require_numerical_phase(NumericalPhase::Dual).is_err()
+            && self.optimize()? == StopReason::Limit
+        {
+            return Ok(StopReason::Limit);
+        }
+        self.recalc_basic_var_vals()?;
+        self.recalc_obj_coeffs()?;
+        self.require_numerical_phase(NumericalPhase::Primal)?;
+        self.certify_phase_with_refinement(NumericalPhase::Dual)?;
+        let values: Vec<f64> = (0..self.num_vars).map(|v| *self.get_value(v)).collect();
+        if values.iter().enumerate().any(|(var, &x)| {
+            !x.is_finite() || x < self.orig_var_mins[var] - EPS || x > self.orig_var_maxs[var] + EPS
+        }) || !self.check_constraints(&values, EPS)
+        {
+            return Err(Error::InternalError(
+                "restored original objective failed original bounds/constraints".into(),
+            ));
+        }
+        self.is_primal_feasible = true;
+        self.is_dual_feasible = true;
+        self.numerical_feasibility_restart_active = false;
+        numerical_progress(
+            "original-objective-restored",
+            &self.basic_vars,
+            self.lp_iterations,
+        );
+        Ok(StopReason::Finished)
+    }
+
     fn refresh_numerics(&mut self, phase: NumericalPhase) -> Result<(), Error> {
         numerical_progress("refresh-begin", &self.basic_vars, self.lp_iterations);
         let mut refreshed = self.clone();
@@ -990,7 +1115,7 @@ impl Solver {
         // Feasibility flags describe the original objective, while an
         // artificial phase can have a different working objective. Validate
         // what the caller needs without silently changing either flag.
-        refreshed.require_numerical_phase(phase)?;
+        refreshed.certify_phase_with_refinement(phase)?;
         if refreshed.enable_primal_steepest_edge {
             refreshed.recalc_primal_sq_norms()?;
         }
@@ -1082,7 +1207,16 @@ impl Solver {
                 let result = (|| -> Result<bool, Error> {
                     if let Some((row, leaving_new_val)) = self.choose_pivot_row_dual() {
                         self.calc_row_coeffs(row)?;
-                        let pivot_info = match self.choose_entering_col_dual(row, leaving_new_val) {
+                        let pivot_info = match self.choose_entering_col_dual_policy(
+                            row,
+                            leaving_new_val,
+                            attempt == 2,
+                        ) {
+                            Err(error) if attempt == 2 => {
+                                return Err(Error::InternalError(format!(
+                                    "strict numerical reselection failed: {error}"
+                                )))
+                            }
                             Ok(pivot_info) => pivot_info,
                             Err(Error::Infeasible) if !refreshed_since_pivot => {
                                 // "No eligible entering column" is a proof of primal
@@ -1128,6 +1262,18 @@ impl Solver {
                         self.refresh_numerics(NumericalPhase::Dual)?;
                         attempt += 1;
                     }
+                    Err(Error::InternalError(_)) if attempt == 1 => {
+                        // A refreshed Harris proposal still failed the full
+                        // certificate. Try one actual signed minimum ratio.
+                        attempt = 2;
+                    }
+                    Err(Error::InternalError(_))
+                        if attempt == 2 && !self.numerical_feasibility_restart_active =>
+                    {
+                        self.restart_zero_objective_feasibility()?;
+                        refreshed_since_pivot = false;
+                        attempt = 0;
+                    }
                     other => break other?,
                 }
             };
@@ -1137,7 +1283,7 @@ impl Solver {
         }
 
         self.is_primal_feasible = true;
-        Ok(StopReason::Finished)
+        self.finish_numerical_feasibility_restart()
     }
 
     pub(crate) fn add_constraint(
@@ -1513,8 +1659,135 @@ impl Solver {
         row: usize,
         leaving_new_val: f64,
     ) -> Result<PivotInfo, Error> {
+        self.choose_entering_col_dual_policy(row, leaving_new_val, false)
+    }
+
+    /// Proposal interval over every actual column, including ineligible/small
+    /// coefficients and the leaving variable. Final candidate certification is
+    /// independent of this floating-point filter.
+    fn dual_step_interval(&self, row: usize, leaving_new_val: f64) -> Result<(f64, f64), Error> {
+        let direction = if leaving_new_val > self.basic_var_vals[row] {
+            1.0
+        } else {
+            -1.0
+        };
+        let mut lower = f64::NEG_INFINITY;
+        let mut upper = f64::INFINITY;
+        let mut restrict =
+            |cost: f64, slope: f64, state: &NonBasicVarState, free: bool| -> Result<(), Error> {
+                crate::repair::finite(cost)?;
+                crate::repair::finite(slope)?;
+                if state.at_min && state.at_max {
+                    return Ok(());
+                }
+                if !state.at_min && !state.at_max && !free {
+                    return Err(Error::InternalError(
+                        "nonbasic interior state has no certified step interval".into(),
+                    ));
+                }
+                // Upper inequalities v+k*t<EPS, or <=EPS for truly free vars.
+                for (is_upper, v, k) in [(true, cost, slope), (false, -cost, -slope)] {
+                    let active = if is_upper {
+                        state.at_max || free
+                    } else {
+                        state.at_min || free
+                    };
+                    if !active {
+                        continue;
+                    }
+                    if k == 0.0 {
+                        if v > EPS || (v == EPS && !free) {
+                            return Err(Error::InternalError(
+                                "constant reduced cost excludes every step".into(),
+                            ));
+                        }
+                    } else {
+                        let bound = crate::repair::finite((EPS - v) / k)?;
+                        if k > 0.0 {
+                            upper = upper.min(bound);
+                        } else {
+                            lower = lower.max(bound);
+                        }
+                    }
+                }
+                Ok(())
+            };
+        for (col, &var) in self.nb_vars.iter().enumerate() {
+            let state = &self.nb_var_states[col];
+            let free = !state.at_min
+                && !state.at_max
+                && self.orig_var_mins[var] == f64::NEG_INFINITY
+                && self.orig_var_maxs[var] == f64::INFINITY;
+            restrict(
+                self.nb_var_obj_coeffs[col],
+                direction * *self.row_coeffs.get(col),
+                state,
+                free,
+            )?;
+        }
+        let var = self.basic_vars[row];
+        let leaving = NonBasicVarState {
+            at_min: float_eq(leaving_new_val, self.orig_var_mins[var]),
+            at_max: float_eq(leaving_new_val, self.orig_var_maxs[var]),
+        };
+        restrict(0.0, direction, &leaving, false)?;
+        if lower > upper {
+            return Err(Error::InternalError(format!(
+                "empty reduced-cost step interval [{lower:.17e},{upper:.17e}]"
+            )));
+        }
+        Ok((lower, upper))
+    }
+
+    fn affine_dual_step_valid(
+        &self,
+        row: usize,
+        leaving_new_val: f64,
+        step: f64,
+    ) -> Result<bool, Error> {
+        let direction = if leaving_new_val > self.basic_var_vals[row] {
+            1.0
+        } else {
+            -1.0
+        };
+        let valid = |var: usize, cost: f64, state: &NonBasicVarState| {
+            state.at_min && cost > -EPS
+                || state.at_max && cost < EPS
+                || (!state.at_min
+                    && !state.at_max
+                    && self.orig_var_mins[var] == f64::NEG_INFINITY
+                    && self.orig_var_maxs[var] == f64::INFINITY
+                    && cost.abs() <= EPS)
+        };
+        for (col, &var) in self.nb_vars.iter().enumerate() {
+            let cost = crate::repair::finite(
+                (direction * *self.row_coeffs.get(col)).mul_add(step, self.nb_var_obj_coeffs[col]),
+            )?;
+            if !valid(var, cost, &self.nb_var_states[col]) {
+                return Ok(false);
+            }
+        }
+        let var = self.basic_vars[row];
+        let state = NonBasicVarState {
+            at_min: float_eq(leaving_new_val, self.orig_var_mins[var]),
+            at_max: float_eq(leaving_new_val, self.orig_var_maxs[var]),
+        };
+        Ok(valid(var, crate::repair::finite(direction * step)?, &state))
+    }
+
+    fn choose_entering_col_dual_policy(
+        &self,
+        row: usize,
+        leaving_new_val: f64,
+        strict_signed_ratio: bool,
+    ) -> Result<PivotInfo, Error> {
         // True if the new obj. coeff. must be nonnegative in a dual-feasible configuration.
         let leaving_diff_sign = leaving_new_val > self.basic_var_vals[row];
+        let interval = if strict_signed_ratio {
+            self.dual_step_interval(row, leaving_new_val)?
+        } else {
+            (f64::NEG_INFINITY, f64::INFINITY)
+        };
 
         fn clamp_obj_coeff(mut obj_coeff: f64, var_state: &NonBasicVarState) -> f64 {
             if var_state.at_min && obj_coeff < 0.0 {
@@ -1571,6 +1844,7 @@ impl Solver {
         let mut entering_c = None;
         let mut pivot_coeff_abs = f64::NEG_INFINITY;
         let mut pivot_coeff = 0.0;
+        let mut best_signed_ratio = f64::INFINITY;
         for (c, &coeff) in self.row_coeffs.iter() {
             let var_state = &self.nb_var_states[c];
             if !is_eligible_var(coeff, var_state) {
@@ -1583,17 +1857,43 @@ impl Solver {
             // obj. coeff if the current variable will reach the bound of dual infeasibility.
             // Variable with the tightest such bound is the entering variable.
             let cur_step = obj_coeff.abs() / coeff.abs();
-            if cur_step <= max_step {
-                let coeff_abs = coeff.abs();
-                if coeff_abs > pivot_coeff_abs {
+            let coeff_abs = coeff.abs();
+            if strict_signed_ratio {
+                // c'_j = c_j + d*t*a_j, d=sign(leaving_new-old).
+                // The zero crossing is t=-d*c_j/a_j. Keep its actual
+                // sign: a pre-existing within-EPS violation may yield a
+                // negative tolerance-scale step. The complete recomputed
+                // candidate must still pass the unchanged phase certificate.
+                let direction = if leaving_diff_sign { 1.0 } else { -1.0 };
+                let ratio = crate::repair::finite(-direction * self.nb_var_obj_coeffs[c] / coeff)?;
+                if ratio < interval.0
+                    || ratio > interval.1
+                    || !self.affine_dual_step_valid(row, leaving_new_val, ratio)?
+                {
+                    continue;
+                }
+                if ratio < best_signed_ratio
+                    || (ratio == best_signed_ratio
+                        && (coeff_abs > pivot_coeff_abs
+                            || (coeff_abs == pivot_coeff_abs
+                                && entering_c.is_none_or(|old| c < old))))
+                {
+                    best_signed_ratio = ratio;
                     entering_c = Some(c);
                     pivot_coeff_abs = coeff_abs;
                     pivot_coeff = coeff;
                 }
+            } else if cur_step <= max_step && coeff_abs > pivot_coeff_abs {
+                entering_c = Some(c);
+                pivot_coeff_abs = coeff_abs;
+                pivot_coeff = coeff;
             }
         }
 
         if let Some(col) = entering_c {
+            if strict_signed_ratio && std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
+                eprintln!("d22-numerics strict-signed-ratio row={row} col={col} ratio={best_signed_ratio:.17e} interval=[{:.17e},{:.17e}] tolerance_qualified_only=true", interval.0, interval.1);
+            }
             let entering_diff = (self.basic_var_vals[row] - leaving_new_val) / pivot_coeff;
             let entering_new_val = self.nb_var_vals[col] + entering_diff;
 
@@ -1607,6 +1907,10 @@ impl Solver {
                     coeff: pivot_coeff,
                 }),
             })
+        } else if strict_signed_ratio {
+            Err(Error::InternalError(
+                "no admissible signed zero crossing in reduced-cost interval".into(),
+            ))
         } else {
             Err(Error::Infeasible)
         }
@@ -1650,6 +1954,14 @@ impl Solver {
         // Both actual primal RHS and current objective RHS must survive the update.
         candidate.recalc_basic_var_vals()?;
         candidate.recalc_working_obj_coeffs()?;
+        if matches!(phase, NumericalPhase::FixVariable) {
+            candidate.nb_var_states[pivot_info.col] = NonBasicVarState {
+                at_min: true,
+                at_max: true,
+            };
+            candidate.nb_var_is_fixed[pivot_info.col] = true;
+        }
+        candidate.certify_phase_with_refinement(phase)?;
         *self = candidate;
         Ok(())
     }
@@ -1708,7 +2020,7 @@ impl Solver {
             .reset(&candidate.orig_constraints_csc, &candidate.basic_vars)?;
         candidate.recalc_basic_var_vals()?;
         candidate.recalc_working_obj_coeffs()?;
-        candidate.require_numerical_phase(phase)?;
+        candidate.certify_phase_with_refinement(phase)?;
         if matches!(phase, NumericalPhase::Primal) && candidate.cur_obj_val > self.cur_obj_val + EPS
         {
             return Err(Error::InternalError(
@@ -1926,6 +2238,70 @@ impl Solver {
         self.recalc_working_obj_coeffs()
     }
     fn recalc_working_obj_coeffs(&mut self) -> Result<(), Error> {
+        self.recalc_working_obj_coeffs_impl(false)
+    }
+
+    fn refine_transpose_multipliers(
+        &mut self,
+        rhs: &[f64],
+        values: &mut Vec<f64>,
+    ) -> Result<(), Error> {
+        fn residual(
+            basis: &crate::repair::Basis,
+            rhs: &[f64],
+            values: &[f64],
+        ) -> Result<Vec<f64>, Error> {
+            basis
+                .columns
+                .iter()
+                .zip(rhs)
+                .map(|((rows, coefficients), &b)| {
+                    compensated_products(
+                        std::iter::once((b, 1.0)).chain(
+                            rows.iter()
+                                .zip(coefficients)
+                                .map(|(&row, &a)| (-a, values[row])),
+                        ),
+                    )
+                })
+                .collect()
+        }
+        self.basis_solver.current_basis.check(rhs, values, true)?;
+        let mut r = residual(&self.basis_solver.current_basis, rhs, values)?;
+        let mut norm = r.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
+        let before = norm;
+        let mut accepted = 0;
+        for _ in 0..3 {
+            if norm == 0.0 {
+                break;
+            }
+            let mut delta = r.clone();
+            self.basis_solver.solve_transp_dense_with_etas(&mut delta)?;
+            let proposed: Vec<f64> = values
+                .iter()
+                .zip(delta)
+                .map(|(&x, dx)| crate::repair::finite(x + dx))
+                .collect::<Result<_, _>>()?;
+            self.basis_solver
+                .current_basis
+                .check(rhs, &proposed, true)?;
+            let next = residual(&self.basis_solver.current_basis, rhs, &proposed)?;
+            let next_norm = next.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
+            if next_norm >= norm {
+                break;
+            }
+            *values = proposed;
+            r = next;
+            norm = next_norm;
+            accepted += 1;
+        }
+        if std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
+            eprintln!("d22-numerics transpose-refine residual_before={before:.17e} residual_after={norm:.17e} accepted={accepted}");
+        }
+        Ok(())
+    }
+
+    fn recalc_working_obj_coeffs_impl(&mut self, refine: bool) -> Result<(), Error> {
         // Same as recalc_basic_var_vals: pending etas participate in the
         // (transposed) dense solve instead of forcing a refactorization.
         let multipliers = {
@@ -1933,7 +2309,11 @@ impl Solver {
             for (c, &var) in self.basic_vars.iter().enumerate() {
                 rhs[c] = self.working_obj_coeffs[var];
             }
+            let original_rhs = rhs.clone();
             self.basis_solver.solve_transp_dense_with_etas(&mut rhs)?;
+            if refine {
+                self.refine_transpose_multipliers(&original_rhs, &mut rhs)?;
+            }
             rhs
         };
 
@@ -1941,14 +2321,21 @@ impl Solver {
         for &var in &self.nb_vars {
             //guaranteed to be a valid index
             let col = self.orig_constraints_csc.outer_view(var).unwrap();
-            let mut dot_prod = 0.0;
-            for (r, &val) in col.iter() {
-                dot_prod =
-                    crate::repair::finite(dot_prod + crate::repair::finite(val * multipliers[r])?)?;
-            }
-            self.nb_var_obj_coeffs.push(crate::repair::finite(
-                self.working_obj_coeffs[var] - dot_prod,
-            )?);
+            let cost = if refine {
+                compensated_products(
+                    std::iter::once((self.working_obj_coeffs[var], 1.0))
+                        .chain(col.iter().map(|(r, &val)| (-val, multipliers[r]))),
+                )?
+            } else {
+                let mut dot_prod = 0.0;
+                for (r, &val) in col.iter() {
+                    dot_prod = crate::repair::finite(
+                        dot_prod + crate::repair::finite(val * multipliers[r])?,
+                    )?;
+                }
+                crate::repair::finite(self.working_obj_coeffs[var] - dot_prod)?
+            };
+            self.nb_var_obj_coeffs.push(cost);
         }
 
         self.cur_obj_val = 0.0;
@@ -2882,6 +3269,315 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
             require(
                 (*solver.get_value(0) - 0.5).abs() < 1e-12,
                 "fixed value was not retained",
+            )
+        }
+        "zero_phase_direct_restore" => {
+            let mut case = Solver::try_new(
+                &[-0.4 * EPS, 1.5 * EPS, -EPS + 1e-18],
+                &[0.0; 3],
+                &[1.0; 3],
+                &[(
+                    CsVec::new(3, vec![0, 1, 2], vec![-0.5, -1.0, 1e-6]),
+                    ComparisonOp::Le,
+                    -0.5,
+                )],
+                &vec![VarDomain::Real; 3],
+                None,
+            )?;
+            case.nb_var_vals.fill(0.0);
+            case.nb_var_states.fill(NonBasicVarState {
+                at_min: true,
+                at_max: false,
+            });
+            case.recalc_basic_var_vals()?;
+            case.recalc_working_obj_coeffs()?;
+            case.is_primal_feasible = false;
+            case.is_dual_feasible = true;
+            case.require_numerical_phase(NumericalPhase::Dual)?;
+            require(
+                case.restore_feasibility()? == StopReason::Finished,
+                "direct restore did not finish",
+            )?;
+            require(
+                !case.numerical_feasibility_restart_active
+                    && case.working_obj_coeffs == case.orig_obj_coeffs,
+                "direct restore left artificial objective active",
+            )?;
+            case.require_numerical_phase(NumericalPhase::Primal)?;
+            case.require_numerical_phase(NumericalPhase::Dual)?;
+            let values: Vec<f64> = (0..3).map(|v| *case.get_value(v)).collect();
+            require(
+                case.check_constraints(&values, EPS)
+                    && (case.cur_obj_val - case.objective_of(&values)).abs() < 1e-20,
+                "direct restore returned wrong original objective or rows",
+            )
+        }
+        "zero_phase_limit_before_feasibility" => {
+            solver.restart_zero_objective_feasibility()?;
+            solver.deadline = Some(Instant::now());
+            require(
+                solver.restore_feasibility()? == StopReason::Limit,
+                "deadline did not interrupt zero phase",
+            )?;
+            require(
+                solver.numerical_feasibility_restart_active
+                    && solver.working_obj_coeffs.iter().all(|&x| x == 0.0),
+                "interruption lost pending original objective",
+            )?;
+            let mut resumed = solver.clone();
+            resumed.deadline = None;
+            require(
+                resumed.initial_solve()? == StopReason::Finished,
+                "zero phase resume failed",
+            )?;
+            require(
+                !resumed.numerical_feasibility_restart_active
+                    && resumed.working_obj_coeffs == resumed.orig_obj_coeffs
+                    && *resumed.get_value(0) == 1.0
+                    && resumed.cur_obj_val == -1.0,
+                "resume did not restore original optimum",
+            )
+        }
+        "zero_phase_limit_during_original_optimize" => {
+            solver.nb_var_vals.fill(0.0);
+            solver.nb_var_states.fill(NonBasicVarState {
+                at_min: true,
+                at_max: false,
+            });
+            solver.recalc_basic_var_vals()?;
+            solver.restart_zero_objective_feasibility()?;
+            solver.deadline = Some(Instant::now());
+            require(
+                solver.finish_numerical_feasibility_restart()? == StopReason::Limit,
+                "deadline did not interrupt restored-original optimization",
+            )?;
+            require(
+                solver.numerical_feasibility_restart_active
+                    && solver.working_obj_coeffs == solver.orig_obj_coeffs
+                    && !solver.is_dual_feasible,
+                "interrupted original optimization lost phase state",
+            )?;
+            solver.deadline = None;
+            require(
+                solver.initial_solve()? == StopReason::Finished,
+                "original optimize resume failed",
+            )?;
+            require(
+                !solver.numerical_feasibility_restart_active
+                    && *solver.get_value(0) == 1.0
+                    && solver.cur_obj_val == -1.0,
+                "original optimize resume returned zero objective solution",
+            )
+        }
+        "zero_phase_preserves_fixed_interior" => {
+            require(
+                solver.initial_solve()? == StopReason::Finished,
+                "fixed fixture initial solve failed",
+            )?;
+            require(
+                solver.fix_var(0, 0.5)? == StopReason::Finished,
+                "fixed fixture fixing failed",
+            )?;
+            solver.restart_zero_objective_feasibility()?;
+            require(
+                solver.restore_feasibility()? == StopReason::Finished,
+                "fixed zero phase restore failed",
+            )?;
+            let col = match solver.var_states[0] {
+                VarState::NonBasic(col) => col,
+                _ => return Err(Error::InternalError("fixed variable became basic".into())),
+            };
+            require(
+                *solver.get_value(0) == 0.5
+                    && solver.nb_var_is_fixed[col]
+                    && solver.nb_var_states[col].at_min
+                    && solver.nb_var_states[col].at_max
+                    && !solver.numerical_feasibility_restart_active
+                    && solver.working_obj_coeffs == solver.orig_obj_coeffs,
+                "zero restart discarded fixed interior value or original objective",
+            )
+        }
+        "step_interval_covers_all_columns" => {
+            let mut case = Solver::try_new(
+                &[-0.4 * EPS, 1.5 * EPS, -0.3 * EPS, 0.0, 0.0],
+                &[0.0, 0.0, 0.0, 0.0, f64::NEG_INFINITY],
+                &[1.0, 1.0, 1.0, 1.0, f64::INFINITY],
+                &[(
+                    CsVec::new(5, vec![0, 1, 2, 3, 4], vec![-0.5, -1.0, -1e-6, 1e-6, 1e-12]),
+                    ComparisonOp::Le,
+                    -0.5,
+                )],
+                &vec![VarDomain::Real; 5],
+                None,
+            )?;
+            case.nb_var_vals.fill(0.0);
+            case.nb_var_states.fill(NonBasicVarState {
+                at_min: true,
+                at_max: false,
+            });
+            case.nb_var_states[4] = NonBasicVarState {
+                at_min: false,
+                at_max: false,
+            };
+            case.recalc_basic_var_vals()?;
+            case.recalc_working_obj_coeffs()?;
+            case.require_numerical_phase(NumericalPhase::Dual)?;
+            let (row, value) = case
+                .choose_pivot_row_dual()
+                .ok_or_else(|| Error::InternalError("missing interval fixture row".into()))?;
+            case.calc_row_coeffs(row)?;
+            let interval = case.dual_step_interval(row, value)?;
+            require(
+                interval.0 >= -EPS,
+                "leaving reduced cost did not constrain negative step",
+            )?;
+            let selected = case.choose_entering_col_dual_policy(row, value, true)?;
+            require(
+                selected.col == 0,
+                "small coefficient amplified negative ratio despite leaving bound",
+            )?;
+            let mut accepted = case.clone();
+            accepted.calc_col_coeffs(selected.col)?;
+            accepted.pivot(&selected, NumericalPhase::Dual)?;
+            accepted.require_numerical_phase(NumericalPhase::Dual)?;
+            for (var, cost) in [(3, -EPS + 1e-18), (4, -EPS)] {
+                let mut blocked = case.clone();
+                blocked.working_obj_coeffs[var] = cost;
+                blocked.recalc_working_obj_coeffs()?;
+                blocked.require_numerical_phase(NumericalPhase::Dual)?;
+                // col3 is opposite-direction/ineligible; col4 is truly free
+                // and below EPS pivot eligibility. Both still constrain t.
+                require(
+                    blocked.dual_step_interval(row, value)?.0 > -0.8 * EPS,
+                    "ineligible/free coefficient omitted from step interval",
+                )?;
+                require(
+                    matches!(
+                        blocked.choose_entering_col_dual_policy(row, value, true),
+                        Err(Error::InternalError(_))
+                    ),
+                    "no crossing was admitted or misclassified infeasible",
+                )?;
+            }
+            let mut empty = case;
+            empty.working_obj_coeffs[0] = -2.0 * EPS;
+            empty.recalc_working_obj_coeffs()?;
+            require(
+                matches!(
+                    empty.dual_step_interval(row, value),
+                    Err(Error::InternalError(_))
+                ),
+                "empty interval was admitted or misclassified infeasible",
+            )
+        }
+        "signed_ratio_avoids_double_allowance" => {
+            let mut case = Solver::try_new(
+                &[-0.4 * EPS, 1.5 * EPS],
+                &[0.0, 0.0],
+                &[1.0, 1.0],
+                &[(
+                    CsVec::new(2, vec![0, 1], vec![-0.5, -1.0]),
+                    ComparisonOp::Le,
+                    -0.5,
+                )],
+                &[VarDomain::Real, VarDomain::Real],
+                None,
+            )?;
+            // A real feasible-within-EPS dual state with both variables at
+            // lower bounds, but primal slack=-0.5 requiring restoration.
+            case.nb_var_vals.fill(0.0);
+            case.nb_var_states.fill(NonBasicVarState {
+                at_min: true,
+                at_max: false,
+            });
+            case.recalc_basic_var_vals()?;
+            case.recalc_working_obj_coeffs()?;
+            case.require_numerical_phase(NumericalPhase::Dual)?;
+            let (row, value) = case
+                .choose_pivot_row_dual()
+                .ok_or_else(|| Error::InternalError("no fixture leaving row".into()))?;
+            case.calc_row_coeffs(row)?;
+            let relaxed = case.choose_entering_col_dual(row, value)?;
+            require(
+                relaxed.col == 1,
+                "fixture did not choose larger Harris coefficient",
+            )?;
+            case.calc_col_coeffs(relaxed.col)?;
+            let before = format!("{case:?}");
+            require(
+                case.pivot(&relaxed, NumericalPhase::Dual).is_err(),
+                "double-allowance Harris pivot passed",
+            )?;
+            require(
+                format!("{case:?}") == before,
+                "rejected Harris pivot mutated state",
+            )?;
+            let strict = case.choose_entering_col_dual_policy(row, value, true)?;
+            require(
+                strict.col == 0,
+                "strict policy clamped/absolutized signed ratio",
+            )?;
+            case.calc_col_coeffs(strict.col)?;
+            case.pivot(&strict, NumericalPhase::Dual)?;
+            case.require_numerical_phase(NumericalPhase::Dual)?;
+            require(
+                *case.get_value(0) == 1.0 && *case.get_value(1) == 0.0,
+                "strict certified candidate violates known primal solution",
+            )
+        }
+        "compensated_cost_and_refinement" => {
+            require(
+                compensated_products([(1e16, 1.0), (1.0, 1.0), (-1e16, 1.0)])? == 1.0,
+                "compensated cost lost cancellation residual",
+            )?;
+            require(
+                compensated_products([(f64::INFINITY, 1.0)]).is_err(),
+                "nonfinite product admitted",
+            )?;
+            // Nonsymmetric B=[[2,1],[0,3]], B^T*[1,2]=[2,7]. A
+            // certified but inaccurate multiplier must use the transpose,
+            // and the residual correction must have the right sign.
+            let matrix = CsMat::new_csc((2, 2), vec![0, 1, 3], vec![0, 0, 1], vec![2.0, 1.0, 3.0]);
+            solver.basis_solver.reset(&matrix, &[0, 1])?;
+            let rhs = vec![2.0, 7.0];
+            let mut values = vec![1.0 + 1e-14, 2.0 - 1e-14];
+            solver.refine_transpose_multipliers(&rhs, &mut values)?;
+            require(
+                values == vec![1.0, 2.0],
+                "transpose refinement did not correct known residual",
+            )?;
+            let mut nonfinite = vec![f64::NAN, 2.0];
+            require(
+                solver
+                    .refine_transpose_multipliers(&rhs, &mut nonfinite)
+                    .is_err(),
+                "nonfinite multiplier admitted",
+            )
+        }
+        "regular_pivot_phase_rollback" => {
+            let (row, value) = solver
+                .choose_pivot_row_dual()
+                .ok_or_else(|| Error::InternalError("fixture has no infeasible row".into()))?;
+            solver.calc_row_coeffs(row)?;
+            let info = solver.choose_entering_col_dual(row, value)?;
+            solver.calc_col_coeffs(info.col)?;
+            // Selection still uses the original valid costs; alter only the
+            // actual working objective to make the recomputed candidate invalid.
+            solver.working_obj_coeffs[0] = 1.0;
+            let before = format!("{solver:?}");
+            let error = solver
+                .pivot(&info, NumericalPhase::Dual)
+                .err()
+                .ok_or_else(|| {
+                    Error::InternalError("regular pivot lost phase but committed".into())
+                })?;
+            require(
+                error.to_string().contains("required Dual phase"),
+                "wrong rejection boundary",
+            )?;
+            require(
+                format!("{solver:?}") == before,
+                "regular phase rejection mutated solver",
             )
         }
         "refresh_preserves_artificial_objective" => {
