@@ -108,4 +108,3 @@ version = "0.4"
 version = "0.2"
 
 # Independently source-owned numerical dependency; not a workspace member.
-[workspace]
