@@ -2985,6 +2985,12 @@ impl StackModel {
     /// Repeating the same mode is a no-op; changing modes is explicit research
     /// in another model, not a silent reinterpretation of saved parameters.
     pub fn set_read_identity_latch(&mut self, mode: ReadIdentityLatch) -> Result<()> {
+        if self.read_weighting != ReadWeighting::Softmax {
+            return Err(invalid(
+                "a read identity latch replaces the ordinary read, which a softmax-free read weighting needs; \
+                 clear the weighting first",
+            ));
+        }
         if self.geometric_span.is_some() {
             return Err(invalid(
                 "geometric span production replaces the scalar identity latch",
@@ -3040,6 +3046,12 @@ impl StackModel {
     /// The value/output maps, full causal support, age and NoRead stay in use.
     /// This first implementation is an offline CPU float-training prototype.
     pub fn set_geometric_address(&mut self, config: GeometricAddressConfig) -> Result<()> {
+        if self.read_weighting != ReadWeighting::Softmax {
+            return Err(invalid(
+                "geometric addressing replaces the ordinary read, which a softmax-free read weighting needs; \
+                 clear the weighting first",
+            ));
+        }
         self.validate_geometric_address(&config)?;
         if matches!(self.read_lineage, Some(ReadLineage::PhaseBinding { .. })) {
             return Err(invalid(
@@ -3198,6 +3210,14 @@ impl StackModel {
     /// mode and the integer export refuse a model with one. F2
     /// ([`Self::set_read_key_shift`]) is the saveable form and excludes these.
     pub fn set_read_lineage(&mut self, lineage: Option<ReadLineage>) -> Result<()> {
+        if lineage.is_some() {
+            if self.read_weighting != ReadWeighting::Softmax {
+                return Err(invalid(
+                    "a read lineage replaces the ordinary read, which a softmax-free read weighting needs; \
+                     clear the weighting first",
+                ));
+            }
+        }
         if lineage.is_some() {
             if self.config.arch != StackArch::Geometric || !self.config.pattern.contains('a') {
                 return Err(invalid(
@@ -3661,6 +3681,12 @@ impl StackModel {
     /// training labels never enter this API. Existing scalar-latch artifacts
     /// retain their original behavior and tensor inventory.
     pub fn set_geometric_span(&mut self, config: GeometricSpanConfig) -> Result<()> {
+        if self.read_weighting != ReadWeighting::Softmax {
+            return Err(invalid(
+                "a geometric span replaces the ordinary read, which a softmax-free read weighting needs; \
+                 clear the weighting first",
+            ));
+        }
         config.validate(self.config.width)?;
         if let Some(existing) = &self.geometric_span {
             return if existing == &config {
@@ -21291,8 +21317,15 @@ mod tests {
         let mut model = StackModel::new(config, &cpu())?;
         let ids = [1u32, 2, 3, 4, 5, 6, 7, 8];
         let targets = [2u32, 3, 4, 5, 6, 7, 8, 9];
+        let softmax = bits(&model.forward(&ids, 1, ids.len())?)?;
         model.set_read_weighting(ReadWeighting::Rank)?;
         let rank = bits(&model.forward(&ids, 1, ids.len())?)?;
+        // The whole model reads through the rank weights, not the softmax.
+        assert_ne!(rank, softmax);
+        // A setter that would replace the ordinary read is refused afterwards.
+        assert!(model
+            .set_read_lineage(Some(ReadLineage::IdentityShift))
+            .is_err());
         model.set_read_weighting(ReadWeighting::HammingRank)?;
         assert_ne!(bits(&model.forward(&ids, 1, ids.len())?)?, rank);
         let loss = model.loss(&ids, &targets, 1, ids.len())?;
