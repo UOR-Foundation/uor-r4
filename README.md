@@ -125,6 +125,15 @@ does not imply measured predictive advantage.
 - **Exact addressed memory.** An addressed store keyed by entity and relation tokens,
   intended as an index into an exact log of the conversation. Status: inside the native
   learner; not yet in the served stack model.
+- **Product-key memory in the stack (`memory_layers=`).** The LM trainer has replaced a
+  layer's MLP with a sparse product-key memory since the matched-ablation rounds; since
+  10 October the dialogue trainer takes the same fields beside `init=` and
+  `StackModel::add_memory_layers` gives the named layers fresh memories whose weights are
+  exactly a fresh construction's, so the mechanism is trained **in** from the first step of
+  a fine-tune rather than bolted onto a finished model
+  ([preparation](docs/labs/addressed-memory-2026-10-10/README.md)). Measured limit: the
+  memory is a CPU custom op with no CUDA path, so a memory-equipped stack fits on CPU
+  (~3.7 s/step at 29M) until that op is implemented for the served device.
 - **Lorentz and dot-product reads.** The stack's read layers (`a` layers) score earlier
   positions with a Lorentz or dot product plus an age term and a NoRead slot. Status: trained;
   the Lorentz read has its own packed serving contract.
@@ -252,6 +261,9 @@ Every row holds at its exact artifact, data, operator and budget.
 | 19.9M chat stack | 0.877550 BPB float / 0.886838 BPB served multiplier-free, matched at 512 windows (196,608 positions, byte basis 2.837427 B/token) | 11.9 MB artifact; lab chat evaluation; the earlier 0.933 served was a 64-window number, so the pair is quoted with its [pinned protocol](docs/labs/criterion2-protocol-pin-2026-10-09/README.md) |
 | Sealed 8M stack | 1.1199 BPB | Sealed report; Kneser-Ney 5-gram 1.2803 BPB |
 | 214M Plan A base | FineWeb dev NLL 2.90 to 2.073 | Open development split; rewrite and summarize usable, code and math wrong |
+| M1 v5 memory panel (frozen, 40 rows) | 20/40 `check_pass` at a 10 % recall share, the adopted M1 base; 10/40 with no recall data; 22/40 at 55 % with the reply panel down to 22/232 | [Mixture dose](docs/labs/mixture-dose-2026-10-10/README.md); one seed per dose, panel noise ±3 rows |
+| Open reply panel (232 rows, `fluent_and_relevant`) | 43/232 sealed base, **37/232** at the adopted 10 % dose (p = 0.42, inside noise), 39/232 with read-binding supervision | [Mixture dose](docs/labs/mixture-dose-2026-10-10/README.md), [Read binding](docs/labs/read-binding-2026-10-10/README.md) |
+| Criterion 2, 29M M1 artifacts served under D11 | **1.20138 BPB** (base) / 1.24402 / 1.24233 against a ≤ 0.90 target, engine **bit-exact** (`d11 − d10 nll = 0.0`, `max |Δlogit| = 0` on 64 windows) | [D11 serving](docs/labs/d11-serving-2026-10-10/README.md); byte basis 2.837427 B/token |
 | v4 memory panel (frozen `exact` check pass) | 31/40 at 214M, 26/40 at 96M | 40 memory rows of `conversational-v4*`; Step 7d fine-tunes, one seed; chat-grade `acceptable` is 27/40 at 214M |
 | Native grounded learner | **437/512 complete replies**, up from177; 260 gained, none lost, 177 retained | [Native pooled-token ranking](docs/labs/m2-pooled-rank-2026-10-10/README.md), frozen exposed 512-episode panel; development threshold 256 passed, fresh qualification 0/128 (52 required), failed; panel fitting under D22, not an M2 move |
 | D11 serving engine | Bit-exact with the float path | NLL equal on 3,072 targets |
