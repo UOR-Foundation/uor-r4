@@ -2499,6 +2499,116 @@ impl BasisSolver {
         Ok(())
     }
 
+    // Raw correction solve only. Callers certify the reconstructed solution
+    // against current_basis; never recurse through checked correction solves.
+    fn raw_dense_solve(&mut self, values: &mut [f64], transpose: bool) {
+        if transpose {
+            for idx in (0..self.eta_matrices.len()).rev() {
+                let mut coeff = 0.0;
+                for (i, &val) in self.eta_matrices.coeff_cols.col_iter(idx) {
+                    coeff += val * values[i];
+                }
+                values[self.eta_matrices.leaving_rows[idx]] -= coeff;
+            }
+            self.lu_factors_transp
+                .solve_dense(values, &mut self.scratch);
+        } else {
+            self.lu_factors.solve_dense(values, &mut self.scratch);
+            for idx in 0..self.eta_matrices.len() {
+                let coeff = values[self.eta_matrices.leaving_rows[idx]];
+                if coeff != 0.0 {
+                    for (r, &val) in self.eta_matrices.coeff_cols.col_iter(idx) {
+                        values[r] -= coeff * val;
+                    }
+                }
+            }
+        }
+    }
+
+    fn actual_residual(&self, b: &[f64], x: &[f64], transpose: bool) -> Result<Vec<f64>, Error> {
+        let n = self.current_basis.columns.len();
+        if b.len() != n || x.len() != n {
+            return Err(Error::InternalError("actual RHS shape mismatch".into()));
+        }
+        if transpose {
+            self.current_basis
+                .columns
+                .iter()
+                .zip(b)
+                .map(|((rows, coeffs), &rhs)| {
+                    compensated_products(
+                        std::iter::once((rhs, 1.0))
+                            .chain(rows.iter().zip(coeffs).map(|(&row, &a)| (-a, x[row]))),
+                    )
+                })
+                .collect()
+        } else {
+            let mut terms: Vec<Vec<(f64, f64)>> = b.iter().map(|&rhs| vec![(rhs, 1.0)]).collect();
+            for (col, (rows, coeffs)) in self.current_basis.columns.iter().enumerate() {
+                for (&row, &a) in rows.iter().zip(coeffs) {
+                    terms[row].push((-a, x[col]));
+                }
+            }
+            terms.into_iter().map(compensated_products).collect()
+        }
+    }
+
+    // Arbitrary RHS can expose cancellation absent from unit-RHS factor tests.
+    // Correction is bounded and only tried after the original certificate fails.
+    // Final acceptance uses exactly the same original-basis certificate.
+    fn certify_actual_solution(
+        &mut self,
+        b: &[f64],
+        x: &mut [f64],
+        transpose: bool,
+    ) -> Result<(), Error> {
+        if self.current_basis.check(b, x, transpose).is_ok() {
+            return Ok(());
+        }
+        let original_error = self.current_basis.error(b, x, transpose)?;
+        let mut candidate = x.to_vec();
+        let mut residual = self.actual_residual(b, &candidate, transpose)?;
+        let norm = |v: &[f64]| v.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
+        let initial_norm = norm(&residual);
+        let mut residual_norm = initial_norm;
+        let mut error = original_error;
+        let mut accepted = 0;
+        for _ in 0..3 {
+            if residual_norm == 0.0 {
+                break;
+            }
+            let mut delta = residual.clone();
+            self.raw_dense_solve(&mut delta, transpose);
+            let proposed = candidate
+                .iter()
+                .zip(delta)
+                .map(|(&value, correction)| crate::repair::finite(value + correction))
+                .collect::<Result<Vec<_>, _>>()?;
+            let proposed_residual = self.actual_residual(b, &proposed, transpose)?;
+            let proposed_norm = norm(&proposed_residual);
+            let proposed_error = self.current_basis.error(b, &proposed, transpose)?;
+            if proposed_norm >= residual_norm || proposed_error >= error {
+                break;
+            }
+            candidate = proposed;
+            residual = proposed_residual;
+            residual_norm = proposed_norm;
+            error = proposed_error;
+            accepted += 1;
+            if self.current_basis.check(b, &candidate, transpose).is_ok() {
+                break;
+            }
+        }
+        let qualified = self.current_basis.check(b, &candidate, transpose);
+        if std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
+            eprintln!("d22-numerics actual-rhs-refine transpose={transpose} etas={} normalized_before={original_error:.17e} normalized_after={error:.17e} residual_before={initial_norm:.17e} residual_after={residual_norm:.17e} rhs_norm={:.17e} solution_norm={:.17e} accepted={accepted} qualified={}", self.eta_matrices.len(), norm(b), norm(&candidate), qualified.is_ok());
+        }
+        qualified.map_err(|e| Error::InternalError(format!(
+            "actual RHS certificate failed: transpose={transpose} etas={} normalized_before={original_error:.17e} normalized_after={error:.17e} residual_before={initial_norm:.17e} residual_after={residual_norm:.17e} accepted={accepted}: {e}", self.eta_matrices.len())))?;
+        x.copy_from_slice(&candidate);
+        Ok(())
+    }
+
     fn solve<'a>(
         &mut self,
         rhs: impl Iterator<Item = (usize, &'a f64)>,
@@ -2506,77 +2616,79 @@ impl BasisSolver {
         self.rhs.set(rhs);
         let original_rhs = self.rhs.values.clone();
         self.lu_factors.solve(&mut self.rhs, &mut self.scratch);
-
-        // apply eta matrices (Vanderbei p.139)
         for idx in 0..self.eta_matrices.len() {
-            let r_leaving = self.eta_matrices.leaving_rows[idx];
-            let coeff = *self.rhs.get(r_leaving);
+            let coeff = *self.rhs.get(self.eta_matrices.leaving_rows[idx]);
             for (r, &val) in self.eta_matrices.coeff_cols.col_iter(idx) {
                 *self.rhs.get_mut(r) -= coeff * val;
             }
         }
-
-        self.current_basis
-            .check(&original_rhs, &self.rhs.values, false)?;
+        if self
+            .current_basis
+            .check(&original_rhs, &self.rhs.values, false)
+            .is_ok()
+        {
+            return Ok(&self.rhs);
+        }
+        let mut solved = self.rhs.values.clone();
+        if let Err(error) = self.certify_actual_solution(&original_rhs, &mut solved, false) {
+            self.rhs
+                .set(original_rhs.iter().enumerate().filter(|(_, v)| **v != 0.0));
+            return Err(error);
+        }
+        // Refinement may create nonzeros outside the initial sparse support.
+        self.rhs
+            .set(solved.iter().enumerate().filter(|(_, v)| **v != 0.0));
         Ok(&self.rhs)
     }
 
-    /// Dense counterpart of [`Self::solve`]: LU solve plus the forward eta
-    /// application, so callers with dense right-hand sides (the recalcs) no
-    /// longer need a full refactorization just because etas are pending.
     fn solve_dense_with_etas(&mut self, rhs: &mut [f64]) -> Result<(), Error> {
         let original_rhs = rhs.to_vec();
-        self.lu_factors.solve_dense(rhs, &mut self.scratch);
-        for idx in 0..self.eta_matrices.len() {
-            let coeff = rhs[self.eta_matrices.leaving_rows[idx]];
-            if coeff != 0.0 {
-                for (r, &val) in self.eta_matrices.coeff_cols.col_iter(idx) {
-                    rhs[r] -= coeff * val;
-                }
-            }
-        }
-        self.current_basis.check(&original_rhs, rhs, false)?;
+        let mut solved = original_rhs.clone();
+        self.raw_dense_solve(&mut solved, false);
+        self.certify_actual_solution(&original_rhs, &mut solved, false)?;
+        rhs.copy_from_slice(&solved);
         Ok(())
     }
 
-    /// Dense counterpart of [`Self::solve_transp`]: the reverse eta
-    /// application, then the transposed LU solve.
     fn solve_transp_dense_with_etas(&mut self, rhs: &mut [f64]) -> Result<(), Error> {
         let original_rhs = rhs.to_vec();
-        for idx in (0..self.eta_matrices.len()).rev() {
-            let mut coeff = 0.0;
-            for (i, &val) in self.eta_matrices.coeff_cols.col_iter(idx) {
-                coeff += val * rhs[i];
-            }
-            rhs[self.eta_matrices.leaving_rows[idx]] -= coeff;
-        }
-        self.lu_factors_transp.solve_dense(rhs, &mut self.scratch);
-        self.current_basis.check(&original_rhs, rhs, true)?;
+        let mut solved = original_rhs.clone();
+        self.raw_dense_solve(&mut solved, true);
+        self.certify_actual_solution(&original_rhs, &mut solved, true)?;
+        rhs.copy_from_slice(&solved);
         Ok(())
     }
 
-    /// Pass right-hand side via self.rhs
     fn solve_transp<'a>(
         &mut self,
         rhs: impl Iterator<Item = (usize, &'a f64)>,
     ) -> Result<&ScatteredVec, Error> {
         self.rhs.set(rhs);
         let original_rhs = self.rhs.values.clone();
-        // apply eta matrices in reverse (Vanderbei p.139)
         for idx in (0..self.eta_matrices.len()).rev() {
             let mut coeff = 0.0;
-            // eta col `dot` rhs_transp
             for (i, &val) in self.eta_matrices.coeff_cols.col_iter(idx) {
                 coeff += val * self.rhs.get(i);
             }
-            let r_leaving = self.eta_matrices.leaving_rows[idx];
-            *self.rhs.get_mut(r_leaving) -= coeff;
+            *self.rhs.get_mut(self.eta_matrices.leaving_rows[idx]) -= coeff;
         }
-
         self.lu_factors_transp
             .solve(&mut self.rhs, &mut self.scratch);
-        self.current_basis
-            .check(&original_rhs, &self.rhs.values, true)?;
+        if self
+            .current_basis
+            .check(&original_rhs, &self.rhs.values, true)
+            .is_ok()
+        {
+            return Ok(&self.rhs);
+        }
+        let mut solved = self.rhs.values.clone();
+        if let Err(error) = self.certify_actual_solution(&original_rhs, &mut solved, true) {
+            self.rhs
+                .set(original_rhs.iter().enumerate().filter(|(_, v)| **v != 0.0));
+            return Err(error);
+        }
+        self.rhs
+            .set(solved.iter().enumerate().filter(|(_, v)| **v != 0.0));
         Ok(&self.rhs)
     }
 }
@@ -3319,6 +3431,113 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
             require(
                 (*solver.get_value(0) - 0.5).abs() < 1e-12,
                 "fixed value was not retained",
+            )
+        }
+        "actual_rhs_refinement_and_rollback" => {
+            let a = CsMat::new_csc(
+                (2, 2),
+                vec![0, 2, 4],
+                vec![0, 1, 0, 1],
+                vec![2.0, 1.0, 3.0, 4.0],
+            );
+            solver.basis_solver.reset(&a, &[0, 1])?;
+            for (transpose, rhs) in [(false, [8.0, 9.0]), (true, [4.0, 11.0])] {
+                let mut x = [1.01, 1.98];
+                solver
+                    .basis_solver
+                    .certify_actual_solution(&rhs, &mut x, transpose)?;
+                require(
+                    (x[0] - 1.0).abs() < 1e-12 && (x[1] - 2.0).abs() < 1e-12,
+                    "actual RHS correction sign/orientation wrong",
+                )?;
+                solver
+                    .basis_solver
+                    .current_basis
+                    .check(&rhs, &x, transpose)?;
+            }
+            // Retain a nonidentity eta: column0 doubled relative to factored A.
+            solver
+                .basis_solver
+                .eta_matrices
+                .push(0, [(0, 0.5)].into_iter());
+            let current = CsMat::new_csc(
+                (2, 2),
+                vec![0, 2, 4],
+                vec![0, 1, 0, 1],
+                vec![4.0, 2.0, 3.0, 4.0],
+            );
+            solver.basis_solver.current_basis = crate::repair::Basis::new(2, |c| {
+                current.outer_view(c).unwrap().into_raw_storage()
+            })?;
+            for (transpose, rhs) in [(false, [10.0, 10.0]), (true, [8.0, 11.0])] {
+                let mut x = [1.01, 0.0]; // correction must introduce missing support
+                solver
+                    .basis_solver
+                    .certify_actual_solution(&rhs, &mut x, transpose)?;
+                require(
+                    (x[0] - 1.0).abs() < 1e-12 && (x[1] - 2.0).abs() < 1e-12,
+                    "pending-eta refinement lost orientation or missing support",
+                )?;
+                let dense = if transpose {
+                    let mut result = rhs;
+                    solver
+                        .basis_solver
+                        .solve_transp_dense_with_etas(&mut result)?;
+                    result
+                } else {
+                    let mut result = rhs;
+                    solver.basis_solver.solve_dense_with_etas(&mut result)?;
+                    result
+                };
+                let sparse = if transpose {
+                    solver
+                        .basis_solver
+                        .solve_transp(rhs.iter().enumerate())?
+                        .values
+                        .clone()
+                } else {
+                    solver
+                        .basis_solver
+                        .solve(rhs.iter().enumerate())?
+                        .values
+                        .clone()
+                };
+                require(
+                    dense
+                        .iter()
+                        .zip(&sparse)
+                        .all(|(a, b)| (a - b).abs() < 1e-12)
+                        && sparse
+                            .iter()
+                            .zip([1.0, 2.0])
+                            .all(|(a, b)| (a - b).abs() < 1e-12),
+                    "pending-eta dense/sparse solve mismatch",
+                )?;
+            }
+            // A deliberately wrong correction operator must not authorize an
+            // unchanged or worse iterate, or leak it to the supplied output.
+            solver.basis_solver.reset(&a, &[0, 1])?;
+            solver
+                .basis_solver
+                .eta_matrices
+                .push(0, [(0, 2.0)].into_iter());
+            let mut x = [0.0, 0.0];
+            let before = x;
+            require(
+                solver
+                    .basis_solver
+                    .certify_actual_solution(&[2.0, 1.0], &mut x, false)
+                    .is_err()
+                    && x == before,
+                "nonimproving correction was accepted/mutated output",
+            )?;
+            let mut x = [f64::INFINITY, 0.0];
+            require(
+                solver
+                    .basis_solver
+                    .certify_actual_solution(&[2.0, 1.0], &mut x, false)
+                    .is_err(),
+                "nonfinite correction input accepted",
             )
         }
         "basis_load_resets_pending_phase" => {

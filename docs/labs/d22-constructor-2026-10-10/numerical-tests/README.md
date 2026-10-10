@@ -8,7 +8,7 @@ The existing exposed 128 rows are an owner-authorized diagnostic, not a new
 fresh qualification panel.
 
 The adjacent standalone Cargo manifest uses the source-owned microlp vendor
-copy and enables only its numerical fixture interface. Twenty-five synthetic test
+copy and enables only its numerical fixture interface. Twenty-six synthetic test
 functions cover small/rescaled pivots, exact-dyadic fallback, exact singularity,
 nonsymmetric normal/transpose dense/sparse solves, malformed/nonfinite input,
 transactional reset/pivot, corrupt-eta refresh/reselection and preservation of
@@ -16,7 +16,7 @@ the artificial phase objective, ambiguous-pivot reconstruction, phase loss, and
 fixing a basic variable at an interior value, compensated reduced costs and
 transpose refinement, and signed pivot reselection constrained by all reduced-cost
 step bounds. The latest corrected source passed
-all twenty-five tests and both saved-basis admission tests on the owned pod. These
+all twenty-six tests and both saved-basis admission tests on the owned pod. These
 are numerical fixtures, not model evaluations.
 
 Execution uses an owned per-lab Cargo target and the standalone manifest, never
@@ -188,11 +188,48 @@ attempt 12 stopped during compilation because its new fixture repeated a non-Cop
 `VarDomain` in an array (E0277, 1.088 s). No tests or replay ran. The fixture-only
 correction uses a repeated Vec; production is unchanged. Corrected solver
 `172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1`
-is running attempt 13 through tests, build and saved replay.
+was used for attempt 13 tests, build and saved replay.
 
 Attempt 13 passed all 25 synthetic fixtures (6.900 s including compilation),
 both admission checks (4.045 s), and release build (4.891 s). The saved replay
-started at 19:09:25 UTC on 2026-10-10 and remains RUNNING. Its immutable standalone
+started at 19:09:25 UTC on 2026-10-10 and terminated after 169.632 s process
+wall time (167.640 s constructor internal time) with no assignment: `Original-basis
+solve verification failed` at iteration 14499. Its immutable standalone
 manifest is `bf94169b534ff3e24f362ccf16a95492f725395f3f68de3350a273c70f114e4b`,
 binary `4f32a1699b8aba3d477ab42649937e17f99a6f16046b95fa4cf3848a35b6083a`.
 The three new fixture passes do not qualify the saved problem or a model.
+
+Attempt 13 recorded 261 certified factors, 532951 certified solves, 54 refreshes,
+10 rejected solves and no exact fallback. Ten zero-objective phases were entered,
+eight original-objective restorations completed, and two explicit basis loads
+were observed. This clears neither the saved numerical gate nor model admission.
+Report SHA256 `9a2074b0ac21f1f3bce20bfb316d875ac35cc591a0f7b911afa4c0193d02923b`;
+seal `97b3019ccdde03d7f656a080f78e435eb6be77306717c4c81a6bdd9f8d079b3d`;
+source archive `208476c9196aab022e5aa1facbd0fc0bd7bafcd55b04dd511a9cb2fef1ec37bd`.
+
+Attempt 14 adds bounded actual-RHS refinement after a failed original-basis
+certificate. It computes compensated residuals against the stored original B,
+uses raw LU/eta correction solves with the proper normal/transposed ordering,
+and adopts at most three strictly improved residual/error iterates. The final
+unchanged certificate remains decisive. Dense outputs commit only after success;
+sparse correction rebuilds every nonzero, while the successful fast path keeps
+its original sparse ordering. Failed correction preserves the supplied RHS.
+Peer source review passed solver
+`04a11ea691451750835cc971d1c7afce33a6d7328d4945b5c4a90924ad35df79`;
+26 synthetic tests, two admission tests, build and saved replay are pending.
+LU/repair and their captured-basis qualification identities remain unchanged.
+
+Attempt 14 stopped at compilation (E0599, 1.211 s): its shape guard used a
+LU-specific error variant in the public solver error type. No tests or saved replay
+ran. The one-line correction returns the existing public internal error; numerical
+behavior is unchanged. Corrected solver
+`6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561`
+is under attempt 15 checks/replay. The failed source archive is
+`bb476aa845aafa2ae12f89d160840da380370bb132c31992e650e5cc020cf332`.
+
+Attempt 15 passed all 26 fixtures (7.015 s including compilation), the two
+admission tests (4.077 s) and release build (5.207 s). The saved replay is RUNNING
+with executable `e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35`
+and standalone manifest
+`3991d69f1029b473eb8f4f4ed0f157e0655b621c2bfde959a154cee9155f3faa`.
+The source is held fixed pending its terminal receipt.

@@ -34,6 +34,13 @@ checked, and both primal and dual phase certificates pass. Interior fixed values
 are preserved. These checks do not establish finite convergence or exact
 arithmetic optimality of the floating-point optimizer.
 
+Actual right-hand-side solves also receive bounded iterative refinement when
+their original-basis certificate fails. Normal and transposed dense/sparse paths
+use compensated residuals and at most three factor/eta corrections, accepting
+only strict residual and normalized-error improvement. The final certificate
+and tolerance are unchanged. Failed corrections preserve the caller input;
+sparse corrections retain newly introduced nonzero entries.
+
 Exact arithmetic uses Rust `num-bigint`, `num-rational` and `num-traits`.
 The fallback is bounded to 512 rows and 16,384-bit rationals; crossing either
 limit is a numerical resource failure. Rounded factors must still pass the

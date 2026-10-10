@@ -1,7 +1,7 @@
 {
   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
-  "status": "TWENTY_FIVE_SYNTHETIC_TWO_ADMISSION_PASS_SAVED_REPLAY_RUNNING",
+  "status": "TWENTY_SIX_SYNTHETIC_TWO_ADMISSION_PASS_SAVED_REPLAY_RUNNING",
   "preparation_only": false,
   "admission": "FIT_ADMITTED_OWNED_POD_CPU_EXCEPTION",
   "model_runs": 0,
@@ -25,14 +25,14 @@
     },
     "src/solver.rs": {
       "upstream_sha256": "1863f76f5b1f59a53812e54d0a35b6d4bffdf30f694997ca0d25cb90cc49cb88",
-      "vendor_sha256": "172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1"
+      "vendor_sha256": "6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561"
     },
     "src/sparse.rs": {
       "upstream_sha256": "f7dd3686eadb2d1a924222f391ca7974c2e0d81ff6b44e756fb2875858241246",
       "vendor_sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca"
     }
   },
-  "total_bytes": 929975,
+  "total_bytes": 942403,
   "files": {
     "crates/uor-r4-training/vendor/microlp/.cargo_vcs_info.json": {
       "sha256": "9acbfcda1ff08b814e6d668472c58d8d24930ed5ffd218533fa8a1af5d8c5a4f",
@@ -123,8 +123,8 @@
       "bytes": 6148
     },
     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
-      "sha256": "172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1",
-      "bytes": 148714
+      "sha256": "6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561",
+      "bytes": 158162
     },
     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
@@ -263,8 +263,8 @@
       "bytes": 376
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/README.md": {
-      "sha256": "1de66a928acfd18d3de0d03be89cacfd75f55e5f60a9d59e9eb87a2f32435db3",
-      "bytes": 13543
+      "sha256": "9311ea32b1a63b99d15cedb13528fb1a7273532f3986aefaa158d4800ab86261",
+      "bytes": 15920
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/arrayref/Cargo.toml": {
       "sha256": "281a9aec42712546c4205d13fdb84da504a787bee056349bd4e3ff8620c39027",
@@ -287,8 +287,8 @@
       "bytes": 19713
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs": {
-      "sha256": "2aa51b5fe8b835d87b4026ad804ee2b7d548f9b6c3ff37ef0c5ff80d87dabd5d",
-      "bytes": 5223
+      "sha256": "7cf98535258bd31efbfc93e5ccdf6726f76356eda8751c2bc10d71559fe0e5c3",
+      "bytes": 5377
     },
     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
       "sha256": "5679ac5fc5d7e1bb013cbb5a13a3b5114e094c44dfdb9ef7753af5376f430a81",
@@ -299,8 +299,8 @@
       "bytes": 9726
     },
     "crates/uor-r4-training/vendor/microlp/UOR-PATCH.md": {
-      "sha256": "466966c89f3fcef8b959d6c0ce994e1aaeb2895fdc22c88e46b369815952587c",
-      "bytes": 2997
+      "sha256": "c3ab54d6ce92be6c03f4c7e67def59492a6c68ba3e705c9a58c22b5fe6f92b7e",
+      "bytes": 3446
     }
   },
   "previous_manifest_sha256": "5fe58ca634273d368b29887f73cd6f2fc9b067dcbbf043b2c10371216be5447b",
@@ -308,18 +308,18 @@
   "execution_receipts": "Owned remote numerical root process receipts preserve synthetic attempts1..3, qualification1..2 and replay1..11, including setup/test failures and no-assignment numerical outcomes. Replay11 terminated with no assignment and a numerical blocker; no model runs.",
   "integrated_manifest_note": "Local vendored Cargo omits empty nested workspace; standalone remote copy retains it. Numerical Rust files are hash-bound separately.",
   "latest_execution": {
-    "attempt": "replay-attempt13-basis-epoch-fixture",
-    "solver_sha256": "172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1",
-    "source_manifest_sha256": "bf94169b534ff3e24f362ccf16a95492f725395f3f68de3350a273c70f114e4b",
-    "binary_sha256": "4f32a1699b8aba3d477ab42649937e17f99a6f16046b95fa4cf3848a35b6083a",
-    "synthetic_tests_passed": 25,
+    "attempt": "replay-attempt15-actual-rhs-error-type",
+    "solver_sha256": "6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561",
+    "source_manifest_sha256": "3991d69f1029b473eb8f4f4ed0f157e0655b621c2bfde959a154cee9155f3faa",
+    "binary_sha256": "e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35",
+    "synthetic_tests_passed": 26,
     "admission_tests_passed": 2,
     "saved_replay": "RUNNING"
   },
   "initial_synthetic_test_functions": 9,
   "initial_synthetic_pass": 9,
-  "prepared_synthetic_test_functions": 25,
-  "prepared_solver_sha256": "172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1",
+  "prepared_synthetic_test_functions": 26,
+  "prepared_solver_sha256": "6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561",
   "attempt12": {
     "status": "COMPILE_FAILED_FIXTURE_E0277_NON_COPY_ARRAY",
     "seconds": 1.088380697881803,
@@ -336,5 +336,23 @@
     "constructor_wall_seconds": 160.8368224380538,
     "report_sha256": "d58028da73bc86ce774a294582b6093330cc069cbb3a947cb0b63b81db14e0b8",
     "manifest_sha256": "c0ca997295b60c1e56722892904dc1ae8eedc96d2ccf27a74ccf1e3a4a1c69bd"
-  }
+  },
+  "attempt14": {
+    "status": "COMPILE_FAILED_E0599_ERROR_VARIANT",
+    "seconds": 1.2105756481178105,
+    "source_archive_sha256": "bb476aa845aafa2ae12f89d160840da380370bb132c31992e650e5cc020cf332"
+  },
+  "attempt13_execution": {
+    "attempt": "replay-attempt13-basis-epoch-fixture",
+    "solver_sha256": "172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1",
+    "source_manifest_sha256": "bf94169b534ff3e24f362ccf16a95492f725395f3f68de3350a273c70f114e4b",
+    "binary_sha256": "4f32a1699b8aba3d477ab42649937e17f99a6f16046b95fa4cf3848a35b6083a",
+    "synthetic_tests_passed": 25,
+    "admission_tests_passed": 2,
+    "saved_replay": "BACKEND_NUMERIC_OR_NO_INCUMBENT",
+    "constructor_wall_seconds": 169.63241350185126,
+    "report_sha256": "9a2074b0ac21f1f3bce20bfb316d875ac35cc591a0f7b911afa4c0193d02923b",
+    "manifest_sha256": "97b3019ccdde03d7f656a080f78e435eb6be77306717c4c81a6bdd9f8d079b3d"
+  },
+  "local_documentation_note": "UOR-PATCH.md updated after immutable replay15 producer snapshot; numerical executable source unchanged."
 }

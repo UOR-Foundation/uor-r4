@@ -140,3 +140,8 @@ fn both_infeasible_entry_uses_zero_phase() -> Result<(), String> {
 fn dual_refresh_recovery_keeps_factor_errors() -> Result<(), String> {
     microlp::repair::transaction_fixture("dual_refresh_recovery_keeps_factor_errors")
 }
+
+#[test]
+fn actual_rhs_refinement_and_rollback() -> Result<(), String> {
+    microlp::repair::transaction_fixture("actual_rhs_refinement_and_rollback")
+}
