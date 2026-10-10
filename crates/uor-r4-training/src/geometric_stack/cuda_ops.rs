@@ -1,7 +1,9 @@
 //! CUDA forward and backward paths of the geometric stack ops.
 //!
 //! Each op's `cuda_fwd` and its backward's `Device::Cuda` branch call into
-//! this module. Configurations without a kernel (a transport snap, RoPE or a
+//! this module (the product-key memory of [`crate::stack_memory`] included,
+//! which has no kernel yet and runs its CPU forward on host copies through
+//! [`via_host3`]). Configurations without a kernel (a transport snap, RoPE or a
 //! flock selection in the read, a selected or prime-routed pointer mixture,
 //! non-contiguous inputs)
 //! run the exact CPU forward on host copies ([`via_host1`] and friends), and
@@ -59,7 +61,7 @@ pub(super) fn via_host2(
 
 /// Runs a three-input op's exact CPU forward on host copies of its CUDA
 /// inputs; used where no CUDA kernel covers the op's configuration.
-pub(super) fn via_host3(op: &impl CustomOp3, inputs: [(&CudaStorage, &Layout); 3]) -> Forward {
+pub(crate) fn via_host3(op: &impl CustomOp3, inputs: [(&CudaStorage, &Layout); 3]) -> Forward {
     let [(s1, l1), (s2, l2), (s3, l3)] = inputs;
     let (out, shape) = op.cpu_fwd(
         &s1.to_cpu_storage()?,
