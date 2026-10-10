@@ -1,0 +1,7 @@
+{
+  "stage": "initial independent reconstruction",
+  "failure": "git apply discovered enclosing project repository, skipped outside-current-prefix patch paths; subsequent missing-file assertion failed",
+  "tracked_source_status_after": "git status --short empty",
+  "repair": "Set GIT_CEILING_DIRECTORIES to staging parent so apply operates in an independent nonrepository directory",
+  "model_or_build_execution": false
+}

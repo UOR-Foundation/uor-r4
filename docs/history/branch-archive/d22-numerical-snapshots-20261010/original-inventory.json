@@ -1,0 +1,166 @@
+{
+  "schema": "uor-r4.numerical-source-archive-inventory/1",
+  "archives": [
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/qualification-attempt1/source-before-repair.tar.gz",
+      "sha256": "2343e9bc849e2845ebfad099555edf3427b1553caef5ca67e2a5bc0ea8ac2aa5",
+      "bytes": 222242,
+      "solver_sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85",
+      "rust_tree_sha256": "26b6a236e8f0ab0ec0bf52d68aa2ecfdc0c21342b0e7165e7a8f7286873e6ec5",
+      "full_tree_sha256": "60defb591f5b2cf0cb1b3b03d26cd003b9561b737c7b4f796f07d87fdea6d584"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/qualification-attempt2/source.tar.gz",
+      "sha256": "1e73198c6732ba28a434f62a0bce91a530b168b09f9e4fa4129dc2f94230152e",
+      "bytes": 224065,
+      "solver_sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85",
+      "rust_tree_sha256": "e652171fe74f592863dea314bb2c4945fe7df3fe5bd0978d9f7fb8d0c287b937",
+      "full_tree_sha256": "d3abfbe379dbb076227e2456e180519f2f23dae90c9a8433a80a14fc65dfc701"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt1/source.tar.gz",
+      "sha256": "42ceb7b11e081b015fddbe386b9ef997a9503a111c552410b0073d6c0b0e7dca",
+      "bytes": 225890,
+      "solver_sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85",
+      "rust_tree_sha256": "3441c165ca75b2f19aee5585d120e4d1b5796d62d25c16859964fd9110da6521",
+      "full_tree_sha256": "9e9f3a4666c42fbb18f0bc6478601d30de12dd091c5d380b93d5d9e32132c980"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt10-step-interval/source.tar.gz",
+      "sha256": "1ba112f8c55ce47d32147885464375cdbfdcd967a4ab611b3dbd6537a5caa432",
+      "bytes": 233145,
+      "solver_sha256": "a89c9f9806837c57356b00bc7dc11107670c1b57c603fdd3a197fb39f5f78870",
+      "rust_tree_sha256": "b151a8af670d31a076c9d90058fb33c675f164a3a86ac76c579a47644681af86",
+      "full_tree_sha256": "10f012465b2772d62783646c7b536e45829e5bd9f36db028ef1d9ee9a4996796"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt11-phase-recovery/source.tar.gz",
+      "sha256": "a53426142e59cf56279a83c37eb549edd75bb94cddd39a6c888694a51e6f3feb",
+      "bytes": 234696,
+      "solver_sha256": "2ae69de143b99529c6af42f09f7b3bb1db4b6bd52ae7cdbe89f5362f9ed80461",
+      "rust_tree_sha256": "ab5114e6f39cf44423c95a88c55e300a398a18d59e140f6e4ec29356117ac718",
+      "full_tree_sha256": "37cb5f5a4b2c5a4a327c85f67fab768235c84f9f92b0dff074ae52656225cb16"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt12-basis-epoch/source.tar.gz",
+      "sha256": "616ba4dcaafdbdbefb7693961dd4464ee91d3060d6c40697b773822bb9ec74fa",
+      "bytes": 235689,
+      "solver_sha256": "e778f8dfaffff55b965aab5474730f2e5904f6c0b4da0b25a08fdb100ba7bfde",
+      "rust_tree_sha256": "c96d3e462ed6a081f6878121a3c9fc7048dc84a8c5c5ae5a2af9367976ac6960",
+      "full_tree_sha256": "83d6f41261646e67089de99aa546286a0d461749e89569180dd0bb469ab89ad3"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt13-basis-epoch-fixture/source.tar.gz",
+      "sha256": "208476c9196aab022e5aa1facbd0fc0bd7bafcd55b04dd511a9cb2fef1ec37bd",
+      "bytes": 235693,
+      "solver_sha256": "172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1",
+      "rust_tree_sha256": "e84fee1f77c53c7df22bbed719a138d1bab80059f54c6cb465f0bb492b5cb6dc",
+      "full_tree_sha256": "777ecfb46fe586effd07f7f31e5d4315b3576c61147d754da5e62117a2aa1170"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt14-actual-rhs/source.tar.gz",
+      "sha256": "bb476aa845aafa2ae12f89d160840da380370bb132c31992e650e5cc020cf332",
+      "bytes": 237233,
+      "solver_sha256": "04a11ea691451750835cc971d1c7afce33a6d7328d4945b5c4a90924ad35df79",
+      "rust_tree_sha256": "24022914016cb6d1e62869a79e0627ea569f3ef734f3644e8080ad2de45cce35",
+      "full_tree_sha256": "837f9711b1c2ab9641e0081c7d922349e17fcee3972bf9e63d749bf91f448cf9"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt15-actual-rhs-error-type/source.tar.gz",
+      "sha256": "82986a7eebbed1f26bfe945226b38326ac2e238494f7e6a7956b021db2725be9",
+      "bytes": 237248,
+      "solver_sha256": "6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561",
+      "rust_tree_sha256": "e9631ef6a237a171931e8ff9560822859917c88185acef81b643176043430419",
+      "full_tree_sha256": "0af001734e2bb74645c430d51b66b8fdf304ea35ab154ed8b4db1071f1a1eb3f"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt2-boundary/source.tar.gz",
+      "sha256": "5ac2255f0fa5da80ff834783a5ca6d1471ce92138fdd3b3690d377f179be8e04",
+      "bytes": 226130,
+      "solver_sha256": "f2bd3662ebf827371414f1f0d4b9e714cb3bc12e7b653ff7bfd4df2f936a1aa6",
+      "rust_tree_sha256": "4a94aed31606a5a15087f6703c81d27f49294217d6cfe7e19fbfdc324de83603",
+      "full_tree_sha256": "52f6e64fdb861c978f305fdcc4af06b1fb01be1896fe3177c438b63e86bd7c8b"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt3-rebuild/source.tar.gz",
+      "sha256": "d4b729d1f489d97a5fcaabffd98a07ce2dd71b46a865253c75828bc6a4a42784",
+      "bytes": 227132,
+      "solver_sha256": "3c96f7043d7129e12d83879b5df473b60631ad295e76b0fdc133b9275e87904f",
+      "rust_tree_sha256": "e75296032feb24c55d7d37c21091ec70fa5e1763553d52775e890dbef23dec3a",
+      "full_tree_sha256": "78c78da453191b5c1f45ebbd4c4c994eccbc8f962ace6cf44e80aec91a851b0f"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt4-phase/source.tar.gz",
+      "sha256": "a1af0abf54e9867e31e378b43340932783d7c866d5f5b7531782d7a62e32ce30",
+      "bytes": 228358,
+      "solver_sha256": "aeccd8a87a50e80e471e76e0566f2ce8c8049ef4165f961f282e1b3dc190bb40",
+      "rust_tree_sha256": "fe966961e9e1977cae28d17d4a351516d6c7faf18c625f8fa7798a60048ebf0a",
+      "full_tree_sha256": "3e3fbf9227bc064c34e7b7ea053d3b8e53df0d7561af408086c3734b3ffb5d19"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt5-phase-free/source.tar.gz",
+      "sha256": "b02e0963a87c2b45325f120282d9019496a7878404d6c097a96ae1ceaef8ecb8",
+      "bytes": 228586,
+      "solver_sha256": "50abce2c6d33812fffbcac2484ee7c958ad7ec8c7456e4e996ab1d10ee58e7aa",
+      "rust_tree_sha256": "a410c079a079849f76161d9a86ebcc76fd7553322cd75dae7d8df1dea86d10be",
+      "full_tree_sha256": "e4c6b0f7189ec0d623decde3365b80deaa624dc9bffa696d00797b9540c21bbb"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt6-every-pivot/source.tar.gz",
+      "sha256": "f439b60343c1138d475a2e52f333e0c7da1c245d26ad204f82f815084c309db1",
+      "bytes": 228954,
+      "solver_sha256": "68dd7bf9f78159a56b7ef75b16d79230e184982b2ccabb6342d9d6973f1af128",
+      "rust_tree_sha256": "8cf29cace91b21ec12f904f900d022380430faaa87f362f1fbbb0ece61b924d7",
+      "full_tree_sha256": "23ec7168b3934d383d58275fb1820d1169575444936ac988414a1c3f2956cfd2"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt7-refinement/source.tar.gz",
+      "sha256": "b6c9aec16327c1cfaccff847279eeff18b6455e10fd0b3d6f2d5e0ffe5ff6247",
+      "bytes": 230371,
+      "solver_sha256": "dd518d5500c6b5dcd4555e95729c199e810f31d1e8eef160e109d8fe94f012a8",
+      "rust_tree_sha256": "3bcdcf5e42596c137671c8a55a780d6a998b3c0b4c99c61602885eb14c457b75",
+      "full_tree_sha256": "5a56d78883fea02e657718ba011cd9ab1d55dc669afa013a7dc69370b97b0f5d"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt8-signed-ratio/source.tar.gz",
+      "sha256": "10c68b7c3f76daed57c111250a0a2b0c422f4455d2df9a6d7c39e1b32f9ab0ff",
+      "bytes": 231501,
+      "solver_sha256": "4bf590279a3437f48691d839de62b12c700fd5ce88e855d4d8adeb1d42411086",
+      "rust_tree_sha256": "a3c54bca466d55dabe06bfa99c903c82d5bd5b8c2ab14cdf631e3bb46d926bc8",
+      "full_tree_sha256": "b34247943a4249f5f88a02564c4c53b6110383a32e2b01a8cab27cedfb00fb9f"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt9-signed-ratio/source.tar.gz",
+      "sha256": "12e61afdfb5d57da8afb9f45f88c1a349d271e24a16830026d785f557c688617",
+      "bytes": 231512,
+      "solver_sha256": "5c692a446ddb3ad0bd13c34bf769902f0b3eb26e6b81b2a0efd0aba83ffed24d",
+      "rust_tree_sha256": "9865f12a59b7968a2c4dfbb6820cc9e95cc85b5dbc19345bdf6707939df1a1d7",
+      "full_tree_sha256": "44668cf193b802fab94dc81374bd519e5becca5ee360ebec611db7995c94027b"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/synthetic-attempt1/source-before-repair.tar.gz",
+      "sha256": "54613bf656aa6ea2b9db3fa4a2c9df2dabc980d61593099ee6dad68838e0ad29",
+      "bytes": 209442,
+      "solver_sha256": "eaf7d3555259ecd4e575479e122d66ee623cea16d3d56df2f55559d694522cd2",
+      "rust_tree_sha256": "c0c628ad97cc9bba3d641c3bf583fefed74067f1719ffadd396142cc60b54281",
+      "full_tree_sha256": "34dcc0fdbb22ff6ae7d690f6fb93fceb007f8d0e77677a4d2fc37a699301361a"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/synthetic-attempt2/source-before-repair.tar.gz",
+      "sha256": "2c6349ccf982786f9b7484eb7a493a3373f55ed15d60a4fafb167235f2dc7326",
+      "bytes": 210766,
+      "solver_sha256": "e33a765c60ea8b48d24978a7a9b120a86ec126da881b0278bfd3f096382e4a2f",
+      "rust_tree_sha256": "a80c74bf75c3e1476ad4c341d30bcd0bc6f884e0a90c2ad6a999c3a412656ea0",
+      "full_tree_sha256": "7dd1be7ff02e9b9d96a8ddd2aee0012af4ca9e4e4393447c7b7d220fbd1e7d72"
+    },
+    {
+      "path": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/synthetic-attempt3/source.tar.gz",
+      "sha256": "f55c6619d2a73cc86a006532cf6f474569353ee0d1dc6f76f0857a982a9c7624",
+      "bytes": 210854,
+      "solver_sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85",
+      "rust_tree_sha256": "10c4d4bcaf06593042ea295e07c8c01c60e4a61a9d2f177956135158d3fe62cb",
+      "full_tree_sha256": "b78efa9a26bdceb2d19696366fc80cd63296767e320eca7b60f39166c858f9fa"
+    }
+  ],
+  "note": "Read-only archive identities; includes pre-repair compile/setup snapshots. No patch conversion. Live attempt15 source immutable; result pending. Equal solver hashes do not imply equal harness/docs/manifest bytes."
+}

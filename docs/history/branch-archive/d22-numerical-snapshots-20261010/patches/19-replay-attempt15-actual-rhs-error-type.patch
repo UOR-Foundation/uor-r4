@@ -1,0 +1,46 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index 606093b4507d932bd29f9d6ba451381f40e64e1a..2f932ea7a1c7d7bda597c4063907c0dd7fe9d2ec 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -2528,7 +2528,7 @@ impl BasisSolver {
+     fn actual_residual(&self, b: &[f64], x: &[f64], transpose: bool) -> Result<Vec<f64>, Error> {
+         let n = self.current_basis.columns.len();
+         if b.len() != n || x.len() != n {
+-            return Err(Error::UnreliableFactorization);
++            return Err(Error::InternalError("actual RHS shape mismatch".into()));
+         }
+         if transpose {
+             self.current_basis
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index ab73bd5d5951ce4160a6de7de599e0800c3c047c..89e36f8e971885d1f62418793447bb552cc87ccb 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "PREPARED_REPLAY14_ACTUAL_RHS",
++  "status": "PREPARED_REPLAY15_ACTUAL_RHS_ERROR_TYPE",
+   "preparation_only": false,
+   "admission": "FIT_ADMITTED_CPU_NUMERICAL_EXCEPTION",
+   "builds": 9,
+@@ -37,7 +37,7 @@
+     }
+   },
+   "synthetic_test_functions": 26,
+-  "total_bytes": 930119,
++  "total_bytes": 930145,
+   "files": {
+     "crates/uor-r4-training/vendor/microlp/.cargo_vcs_info.json": {
+       "sha256": "9acbfcda1ff08b814e6d668472c58d8d24930ed5ffd218533fa8a1af5d8c5a4f",
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "04a11ea691451750835cc971d1c7afce33a6d7328d4945b5c4a90924ad35df79",
+-      "bytes": 158136
++      "sha256": "6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561",
++      "bytes": 158162
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",

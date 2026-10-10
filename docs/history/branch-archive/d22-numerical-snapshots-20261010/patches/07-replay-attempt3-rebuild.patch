@@ -1,0 +1,268 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index de7321464a57b39eed90edcce0f345c7cbf09d64..6864c3048566db70bb672b912ee466112ab75daf 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -1576,19 +1576,25 @@ impl Solver {
+                 .ok_or_else(|| Error::InternalError("missing actual pivot".into()))?;
+             let row = *self.row_coeffs.get(pivot_info.col);
+             let scale = col.abs().max(row.abs()).max(e.coeff.abs());
+-            if !col.is_finite()
+-                || !row.is_finite()
+-                || !e.coeff.is_finite()
+-                || scale == 0.0
+-                || (col - row).abs() > 128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
++            if !col.is_finite() || !row.is_finite() || !e.coeff.is_finite() || scale == 0.0 {
++                return Err(Error::InternalError(
++                    "nonfinite or zero pivot evidence".into(),
++                ));
++            }
++            if (col - row).abs() > 128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
+                 || (col - e.coeff).abs()
+                     > 128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
+             {
+-                return Err(Error::InternalError(format!(
++                let boundary = format!(
+                     "uncertified row/column pivot agreement: row={} col={} column={:.17e} row_value={:.17e} selected={:.17e} scale={:.17e} threshold={:.17e}",
+                     e.row, pivot_info.col, col, row, e.coeff, scale,
+                     128.0 * self.basic_vars.len() as f64 * f64::EPSILON * scale
+-                )));
++                );
++                return self.pivot_by_original_basis(pivot_info).map_err(|e| {
++                    Error::InternalError(format!(
++                        "{boundary}; proposed-basis rebuild rejected: {e}"
++                    ))
++                });
+             }
+         }
+         let mut candidate = self.clone();
+@@ -1599,6 +1605,61 @@ impl Solver {
+         *self = candidate;
+         Ok(())
+     }
++
++    /// An ambiguous coefficient never enters an eta update. Treat the selected
++    /// variable exchange as a proposal only, rebuild from original columns,
++    /// recompute both actual RHS solutions, and check the feasibility required
++    /// by the current simplex phase before committing the clone.
++    fn pivot_by_original_basis(&mut self, info: &PivotInfo) -> Result<(), Error> {
++        let elem = info.elem.as_ref().ok_or_else(|| {
++            Error::InternalError("proposed-basis rebuild requires an exchange".into())
++        })?;
++        let mut candidate = self.clone();
++        let entering = candidate.nb_vars[info.col];
++        let leaving = candidate.basic_vars[elem.row];
++        let value = crate::repair::finite(elem.leaving_new_val)?;
++        if value < candidate.orig_var_mins[leaving] - EPS
++            || value > candidate.orig_var_maxs[leaving] + EPS
++        {
++            return Err(Error::InternalError(
++                "proposed nonbasic value violates bounds".into(),
++            ));
++        }
++        candidate.basic_vars[elem.row] = entering;
++        candidate.var_states[entering] = VarState::Basic(elem.row);
++        candidate.basic_var_mins[elem.row] = candidate.orig_var_mins[entering];
++        candidate.basic_var_maxs[elem.row] = candidate.orig_var_maxs[entering];
++        candidate.nb_vars[info.col] = leaving;
++        candidate.var_states[leaving] = VarState::NonBasic(info.col);
++        candidate.nb_var_vals[info.col] = value;
++        candidate.nb_var_states[info.col] = NonBasicVarState {
++            at_min: float_eq(value, candidate.orig_var_mins[leaving]),
++            at_max: float_eq(value, candidate.orig_var_maxs[leaving]),
++        };
++        candidate
++            .basis_solver
++            .reset(&candidate.orig_constraints_csc, &candidate.basic_vars)?;
++        candidate.recalc_basic_var_vals()?;
++        candidate.recalc_working_obj_coeffs()?;
++        let primal = candidate.calc_primal_infeasibility().0 == 0;
++        let dual = candidate.calc_dual_infeasibility().0 == 0;
++        if (self.is_primal_feasible && !primal)
++            || ((!self.is_primal_feasible || self.is_dual_feasible) && !dual)
++            || (self.is_primal_feasible && candidate.cur_obj_val > self.cur_obj_val + EPS)
++        {
++            return Err(Error::InternalError(
++                "proposed basis does not preserve phase feasibility/descent".into(),
++            ));
++        }
++        if candidate.enable_primal_steepest_edge {
++            candidate.recalc_primal_sq_norms()?;
++        }
++        if candidate.enable_dual_steepest_edge {
++            candidate.dual_edge_sq_norms.fill(1.0);
++        }
++        *self = candidate;
++        Ok(())
++    }
+     fn pivot_inner(&mut self, pivot_info: &PivotInfo) -> Result<(), Error> {
+         // TODO: periodically (say, every 1000 pivots) recalc basic vars and object coeffs
+         // from scratch for numerical stability.
+@@ -2645,6 +2706,54 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+                 "failed pivot changed numerical basis",
+             )
+         }
++        "disagreeing_pivot_rebuilds_original_basis" | "disagreeing_pivot_rollback" => {
++            let (row, value) = solver
++                .choose_pivot_row_dual()
++                .ok_or_else(|| Error::InternalError("fixture has no infeasible row".into()))?;
++            solver.calc_row_coeffs(row)?;
++            let info = solver.choose_entering_col_dual(row, value)?;
++            solver.calc_col_coeffs(info.col)?;
++            // The candidate exchange remains meaningful, but this coefficient
++            // must never enter an eta or reduced-cost update.
++            *solver.row_coeffs.get_mut(info.col) += 1e-6;
++            let rollback = kind == "disagreeing_pivot_rollback";
++            if rollback {
++                solver.working_obj_coeffs.fill(f64::NAN);
++            }
++            let before = format!("{:?}", solver);
++            let working = solver.working_obj_coeffs.clone();
++            let factors = crate::repair::stats().fresh_factors;
++            let result = solver.pivot(&info);
++            require(
++                crate::repair::stats().fresh_factors > factors,
++                "ambiguous pivot did not rebuild original columns",
++            )?;
++            if rollback {
++                require(result.is_err(), "nonfinite rebuilt objective admitted")?;
++                require(
++                    before == format!("{:?}", solver),
++                    "rejected rebuilt pivot changed old state",
++                )
++            } else {
++                result?;
++                require(
++                    solver.basis_solver.eta_matrices.len() == 0,
++                    "ambiguous pivot retained eta arithmetic",
++                )?;
++                require(
++                    solver.working_obj_coeffs == working,
++                    "rebuilt pivot changed phase objective",
++                )?;
++                require(
++                    solver.calc_dual_infeasibility().0 == 0,
++                    "rebuilt pivot lost required dual feasibility",
++                )?;
++                require(
++                    (*solver.get_value(0) - 1.0).abs() < 1e-12,
++                    "rebuilt pivot did not solve original constraint",
++                )
++            }
++        }
+         "refresh_preserves_artificial_objective" => {
+             let mut artificial = Solver::try_new(
+                 &[1.0],
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py b/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py
+index defff45d6a4e42a2528f5e02b4d3807f6bf2cdf6..6b0fc39383225e769dac8f047f34acf13abd2bd1 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py
+@@ -60,7 +60,9 @@ def run(name, argv):
+ cargo = ["/root/.cargo/bin/cargo"]
+ common = ["--offline", "--release", "--manifest-path", str(source / "Cargo.toml"),
+           "--bin", "d22-numerical-fixtures"]
+-for name, argv in [("gate-tests", cargo + ["test"] + common + ["replay_gate_", "--", "--test-threads=1"]),
++for name, argv in [("synthetic-tests", cargo + ["test", "--offline", "--release", "--manifest-path",
++                                             str(source / "Cargo.toml"), "--lib", "--", "--test-threads=1"]),
++                   ("gate-tests", cargo + ["test"] + common + ["replay_gate_", "--", "--test-threads=1"]),
+                    ("build", cargo + ["build"] + common)]:
+     if run(name, argv):
+         record["status"] = name.upper() + "_FAILED"
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index 051522ea1e0423fb9ee74cc2913d38934329cf28..e8e11b344713ca7eb4ee72c6578710ab599ea572 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,12 +1,12 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "SAVED_REPLAY_NUMERICAL_BLOCKER_BOUNDARY_CAPTURE",
++  "status": "PROPOSED_BASIS_TRANSACTION_REPAIR_UNTESTED",
+   "preparation_only": false,
+   "admission": "FIT_6100164233;exact_singular_gate_clarification_by_root",
+-  "builds": 7,
+-  "fixture_executions": 20,
+-  "solver_replays": 1,
++  "builds": 9,
++  "fixture_executions": 22,
++  "solver_replays": 2,
+   "actual_basis_qualifications": 4,
+   "model_runs": 0,
+   "upstream_identity_sha256": "33fce14dc040c31ac8004ce33e0e307a3fb3db784b6ac32b2e5a84f061af483f",
+@@ -29,15 +29,15 @@
+     },
+     "src/solver.rs": {
+       "upstream_sha256": "1863f76f5b1f59a53812e54d0a35b6d4bffdf30f694997ca0d25cb90cc49cb88",
+-      "vendor_sha256": "f2bd3662ebf827371414f1f0d4b9e714cb3bc12e7b653ff7bfd4df2f936a1aa6"
++      "vendor_sha256": "3c96f7043d7129e12d83879b5df473b60631ad295e76b0fdc133b9275e87904f"
+     },
+     "src/sparse.rs": {
+       "upstream_sha256": "f7dd3686eadb2d1a924222f391ca7974c2e0d81ff6b44e756fb2875858241246",
+       "vendor_sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca"
+     }
+   },
+-  "synthetic_test_functions": 9,
+-  "total_bytes": 869527,
++  "synthetic_test_functions": 11,
++  "total_bytes": 875295,
+   "files": {
+     "crates/uor-r4-training/vendor/microlp/.cargo_vcs_info.json": {
+       "sha256": "9acbfcda1ff08b814e6d668472c58d8d24930ed5ffd218533fa8a1af5d8c5a4f",
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "f2bd3662ebf827371414f1f0d4b9e714cb3bc12e7b653ff7bfd4df2f936a1aa6",
+-      "bytes": 101064
++      "sha256": "3c96f7043d7129e12d83879b5df473b60631ad295e76b0fdc133b9275e87904f",
++      "bytes": 106268
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
+@@ -288,16 +288,16 @@
+       "bytes": 17199
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py": {
+-      "sha256": "56ba046789908428491bfe06754bfcba5993529cdce458dedbf9d8b03adbfebd",
+-      "bytes": 3150
++      "sha256": "71ad3d705bc6db0ee991b08ab784f629b1713f37136712724c0845aa11274cdd",
++      "bytes": 3361
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/constructor.rs": {
+       "sha256": "f0242836d08dbadbb5659cd8f158d79c8de9420c9de2fb213de9ef149510c24b",
+       "bytes": 19713
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs": {
+-      "sha256": "83b0bc12b05373dda3be8b102d16e6d497f87d87dc6ebf6e2e7d0aa86b89b8b5",
+-      "bytes": 2498
++      "sha256": "1c3af008dffc00d67264b54f94954e7d46970d63d104a49d9782dc6181a631c5",
++      "bytes": 2851
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
+       "sha256": "5679ac5fc5d7e1bb013cbb5a13a3b5114e094c44dfdb9ef7753af5376f430a81",
+@@ -308,7 +308,7 @@
+       "bytes": 9726
+     }
+   },
+-  "previous_manifest_sha256": "b13b313eb61ddfbca3e289b535eea658d080b502d0f724785cf3d6e641f81ad0",
+-  "repair": "Error detail only for observed row/column agreement blocker; thresholds and all numerical arithmetic unchanged. Reuse unchanged LU/repair basis checks.",
++  "previous_manifest_sha256": "05571cd0fe14be8235c7e15aff7d26fabdb940c8a2683ac0f3d6f379ef439c83",
++  "repair": "Keep agreement threshold; ambiguous exchange rebuilt from original columns with actual RHS, current objective and phase-feasibility checks, transactional rollback. LU/repair unchanged.",
+   "synthetic_final_pass": 9
+ }
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+index b6ded0c975ff99e2b8ba9b4ee799671b14d66da6..77ed912ee5614691d19efad54bc5d54209aeb86b 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+@@ -64,4 +64,12 @@ mod tests {
+     fn refresh_does_not_switch_artificial_objective() -> Result<(), String> {
+         repair::transaction_fixture("refresh_preserves_artificial_objective")
+     }
++    #[test]
++    fn disagreeing_pivot_uses_original_basis_and_phase_checks() -> Result<(), String> {
++        repair::transaction_fixture("disagreeing_pivot_rebuilds_original_basis")
++    }
++    #[test]
++    fn rejected_disagreeing_pivot_preserves_whole_state() -> Result<(), String> {
++        repair::transaction_fixture("disagreeing_pivot_rollback")
++    }
+ }

@@ -1,0 +1,156 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index 2b809e451b2303952b058e5443de6bd1d5091a1f..a3c2e419d55529c98c6abb590a288431fa4aa765 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -954,31 +954,36 @@ impl Solver {
+     }
+ 
+     fn require_numerical_phase(&self, phase: NumericalPhase) -> Result<(), Error> {
+-        let valid = match phase {
+-            NumericalPhase::Primal => self.calc_primal_infeasibility().0 == 0,
+-            NumericalPhase::Dual | NumericalPhase::FixVariable => self
+-                .nb_vars
+-                .iter()
+-                .zip(&self.nb_var_obj_coeffs)
+-                .zip(&self.nb_var_states)
+-                .all(|((&var, &cost), state)| {
+-                    state.at_min && cost > -EPS
+-                        || state.at_max && cost < EPS
+-                        || (!state.at_min
+-                            && !state.at_max
+-                            && self.orig_var_mins[var] == f64::NEG_INFINITY
+-                            && self.orig_var_maxs[var] == f64::INFINITY
+-                            && cost.abs() <= EPS)
++        let violation = match phase {
++            NumericalPhase::Primal => self.basic_vars.iter().enumerate().find_map(|(row, &var)| {
++                let value = self.basic_var_vals[row];
++                let min = self.basic_var_mins[row];
++                let max = self.basic_var_maxs[row];
++                (value < min - EPS || value > max + EPS).then(|| format!(
++                    "row={row} var={var} value={value:.17e} bounds=[{min:.17e},{max:.17e}]"))
++            }),
++            NumericalPhase::Dual | NumericalPhase::FixVariable => self.nb_vars.iter()
++                .zip(&self.nb_var_obj_coeffs).zip(&self.nb_var_states).enumerate()
++                .find_map(|(col, ((&var, &cost), state))| {
++                    let min = self.orig_var_mins[var];
++                    let max = self.orig_var_maxs[var];
++                    let valid = state.at_min && cost > -EPS || state.at_max && cost < EPS
++                        || (!state.at_min && !state.at_max && min == f64::NEG_INFINITY
++                            && max == f64::INFINITY && cost.abs() <= EPS);
++                    (!valid).then(|| format!(
++                        "col={col} var={var} cost={cost:.17e} value={:.17e} bounds=[{min:.17e},{max:.17e}] at_min={} at_max={} fixed={}",
++                        self.nb_var_vals[col], state.at_min, state.at_max, self.nb_var_is_fixed[col]))
+                 }),
+         };
+-        if valid {
+-            Ok(())
+-        } else {
++        if let Some(detail) = violation {
+             Err(Error::InternalError(format!(
+-                "recomputed state violates required {phase:?} phase"
++                "recomputed state violates required {phase:?} phase: {detail}; EPS={EPS:.17e}; iterations={}", self.lp_iterations
+             )))
++        } else {
++            Ok(())
+         }
+     }
++
+     fn refresh_numerics(&mut self, phase: NumericalPhase) -> Result<(), Error> {
+         numerical_progress("refresh-begin", &self.basic_vars, self.lp_iterations);
+         let mut refreshed = self.clone();
+@@ -1650,6 +1655,14 @@ impl Solver {
+         // Both actual primal RHS and current objective RHS must survive the update.
+         candidate.recalc_basic_var_vals()?;
+         candidate.recalc_working_obj_coeffs()?;
++        if matches!(phase, NumericalPhase::FixVariable) {
++            candidate.nb_var_states[pivot_info.col] = NonBasicVarState {
++                at_min: true,
++                at_max: true,
++            };
++            candidate.nb_var_is_fixed[pivot_info.col] = true;
++        }
++        candidate.require_numerical_phase(phase)?;
+         *self = candidate;
+         Ok(())
+     }
+@@ -2884,6 +2897,32 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+                 "fixed value was not retained",
+             )
+         }
++        "regular_pivot_phase_rollback" => {
++            let (row, value) = solver
++                .choose_pivot_row_dual()
++                .ok_or_else(|| Error::InternalError("fixture has no infeasible row".into()))?;
++            solver.calc_row_coeffs(row)?;
++            let info = solver.choose_entering_col_dual(row, value)?;
++            solver.calc_col_coeffs(info.col)?;
++            // Selection still uses the original valid costs; alter only the
++            // actual working objective to make the recomputed candidate invalid.
++            solver.working_obj_coeffs[0] = 1.0;
++            let before = format!("{solver:?}");
++            let error = solver
++                .pivot(&info, NumericalPhase::Dual)
++                .err()
++                .ok_or_else(|| {
++                    Error::InternalError("regular pivot lost phase but committed".into())
++                })?;
++            require(
++                error.to_string().contains("required Dual phase"),
++                "wrong rejection boundary",
++            )?;
++            require(
++                format!("{solver:?}") == before,
++                "regular phase rejection mutated solver",
++            )
++        }
+         "refresh_preserves_artificial_objective" => {
+             let mut artificial = Solver::try_new(
+                 &[1.0],
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index 9df6ff1513fff3ee0ca49d97d8aff5f29f7d108c..c80b19088b3344616ff0344345eedb907e93e453 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "CORRECTED_PHASE_FREE_VARIABLE_CERTIFICATION_PENDING_TESTS",
++  "status": "EVERY_PIVOT_PHASE_CERTIFICATE_PENDING_TESTS",
+   "preparation_only": false,
+   "admission": "FIT_ADMITTED_CPU_NUMERICAL_EXCEPTION",
+   "builds": 9,
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "50abce2c6d33812fffbcac2484ee7c958ad7ec8c7456e4e996ab1d10ee58e7aa",
+-      "bytes": 112528
++      "sha256": "68dd7bf9f78159a56b7ef75b16d79230e184982b2ccabb6342d9d6973f1af128",
++      "bytes": 114723
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
+@@ -296,8 +296,8 @@
+       "bytes": 19713
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs": {
+-      "sha256": "d933733795ad0d3e8af64e55d25a9f35f1c83e97d020b22c7a99cb12341a69ea",
+-      "bytes": 3379
++      "sha256": "046669501c9c9e40fda53f3e5eba9165fe7cfc0ba3a418d4529acce55bc671a3",
++      "bytes": 3541
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
+       "sha256": "5679ac5fc5d7e1bb013cbb5a13a3b5114e094c44dfdb9ef7753af5376f430a81",
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+index e3d089ad0df02938297ee1084ae60e33960f1b8e..f44b8563d7c4885180683a56cbf15a8e7c33f08d 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+@@ -85,3 +85,8 @@ mod tests {
+         repair::transaction_fixture("fix_variable_ambiguous_exchange")
+     }
+ }
++
++#[test]
++fn regular_pivot_rejects_phase_loss_transactionally() -> Result<(), String> {
++    microlp::repair::transaction_fixture("regular_pivot_phase_rollback")
++}

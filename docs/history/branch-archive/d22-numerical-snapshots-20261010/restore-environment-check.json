@@ -1,0 +1,131 @@
+{
+  "schema": "uor-r4.numerical-archive-restore-environment-check/1",
+  "status": "PASS",
+  "inherited_git_variables": [
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_KEY_0",
+    "GIT_CONFIG_VALUE_0",
+    "GIT_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_WORK_TREE"
+  ],
+  "child_git_environment_policy": "Remove every inherited GIT_* variable, then set only own GIT_CEILING_DIRECTORIES",
+  "snapshots_verified": 20,
+  "decoy_file_tree_before": {
+    "sentinel.txt": {
+      "sha256": "fe179afd0057bd0710efd8ef1f3991127eabac6c2c81a1a126971f5a587a7372",
+      "mode": 420
+    },
+    ".git/config": {
+      "sha256": "cae33efdb02cf774435c1ff9cb16bcc1014606908530c6e1dc727615fe3e8cda",
+      "mode": 420
+    },
+    ".git/HEAD": {
+      "sha256": "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80",
+      "mode": 420
+    },
+    ".git/description": {
+      "sha256": "85ab6c163d43a17ea9cf7788308bca1466f1b0a8d1cc92e26e9bf63da4062aee",
+      "mode": 420
+    },
+    ".git/index": {
+      "sha256": "4a1a4894750f0233ef6883e42e83c44cbbab7341bca4bf859cb4c04d57c9460b",
+      "mode": 420
+    },
+    ".git/objects/c9/039abba9f5968066450db5ac7301c39d12b1d0": {
+      "sha256": "27b9095532cbd2af3159b954cf213d7cb19bb8a4eadb80f80bea3d196991c59f",
+      "mode": 292
+    },
+    ".git/info/exclude": {
+      "sha256": "6671fe83b7a07c8932ee89164d1f2793b2318058eb8b98dc5c06ee0a5a3b0ec1",
+      "mode": 420
+    },
+    ".git/hooks/commit-msg.sample": {
+      "sha256": "efc1401b0e99d1ff51494d154d98b46c1e99059bcd8bf9f73cecde19fd3eb23b",
+      "mode": 493
+    },
+    ".git/hooks/pre-rebase.sample": {
+      "sha256": "4febce867790052338076f4e66cc47efb14879d18097d1d61c8261859eaaa7b3",
+      "mode": 493
+    },
+    ".git/hooks/sendemail-validate.sample": {
+      "sha256": "44ebfc923dc5466bc009602f0ecf067b9c65459abfe8868ddc49b78e6ced7a92",
+      "mode": 493
+    },
+    ".git/hooks/pre-commit.sample": {
+      "sha256": "57185b7b9f05239d7ab52db045f5b89eb31348d7b2177eab214f5eb872e1971b",
+      "mode": 493
+    },
+    ".git/hooks/applypatch-msg.sample": {
+      "sha256": "0223497a0b8b033aa58a3a521b8629869386cf7ab0e2f101963d328aa62193f7",
+      "mode": 493
+    },
+    ".git/hooks/fsmonitor-watchman.sample": {
+      "sha256": "9159720099ad5595b8e66645cbfd47763c1e920f46e0b50ae75e642bbec57ef0",
+      "mode": 493
+    },
+    ".git/hooks/pre-receive.sample": {
+      "sha256": "a4c3d2b9c7bb3fd8d1441c31bd4ee71a595d66b44fcf49ddb310252320169989",
+      "mode": 493
+    },
+    ".git/hooks/prepare-commit-msg.sample": {
+      "sha256": "e9ddcaa4189fddd25ed97fc8c789eca7b6ca16390b2392ae3276f0c8e1aa4619",
+      "mode": 493
+    },
+    ".git/hooks/post-update.sample": {
+      "sha256": "81765af2daef323061dcbc5e61fc16481cb74b3bac9ad8a174b186523586f6c5",
+      "mode": 493
+    },
+    ".git/hooks/pre-merge-commit.sample": {
+      "sha256": "d3825a70337940ebbd0a5c072984e13245920cdf8898bd225c8d27a6dfc9cb53",
+      "mode": 493
+    },
+    ".git/hooks/pre-applypatch.sample": {
+      "sha256": "e15c5b469ea3e0a695bea6f2c82bcf8e62821074939ddd85b77e0007ff165475",
+      "mode": 493
+    },
+    ".git/hooks/pre-push.sample": {
+      "sha256": "ecce9c7e04d3f5dd9d8ada81753dd1d549a9634b26770042b58dda00217d086a",
+      "mode": 493
+    },
+    ".git/hooks/update.sample": {
+      "sha256": "8d5f2fa83e103cf08b57eaa67521df9194f45cbdbcb37da52ad586097a14d106",
+      "mode": 493
+    },
+    ".git/hooks/push-to-checkout.sample": {
+      "sha256": "a53d0741798b287c6dd7afa64aee473f305e65d3f49463bb9d7408ec3b12bf5f",
+      "mode": 493
+    }
+  },
+  "decoy_after_equals_before": true,
+  "historical_identity_files_unchanged": {
+    "manifest.json": "44a19c1519dce7688ebc4514a2f75bd3017e14018096abfc1ed2ec278c717d2a",
+    "original-inventory.json": "438cb61eae3c90f2eef81411c13b8ca2ababb775f76f2b4ff44f4fb1c0939267",
+    "patches/00-synthetic-attempt1.patch": "1cd8f9b5e6099cf777b9f8cb57c9f96072b208bfd5dd2049f7755fed1ce758a4",
+    "patches/01-synthetic-attempt2.patch": "75d3555daaf891ec206034075b4e98d8db9672a2b3fb807dd26c8b8a21df67a1",
+    "patches/02-synthetic-attempt3.patch": "a031350057ee563ae2408e7cf95bd59e67b0eee43247f1e2e72a40adbf6e8064",
+    "patches/03-qualification-attempt1.patch": "f33015541e5e59e825385ae1761df863791340d9de762ae34bfe1088f639686e",
+    "patches/04-qualification-attempt2.patch": "2241902a542610eaf12004ab61daef7158dcf29bb165df058278523982d5edc1",
+    "patches/05-replay-attempt1.patch": "930a55ea299eaa16d725d7385db7c8242a3832eb6645adfa7468f5a37f0c6b31",
+    "patches/06-replay-attempt2-boundary.patch": "bf2c0ef49c12fa87faee76a21de59c8e3b4fac5d0b280015accf36e1b31e1e08",
+    "patches/07-replay-attempt3-rebuild.patch": "ae206c163d5e6f98104c82f2dfa09300e0f04c5a40de12df1c313925cda45f4b",
+    "patches/08-replay-attempt4-phase.patch": "643784d966bbd0e3db4fe661994024cfec9d29f8f000aa44e0436b95d93ab9ed",
+    "patches/09-replay-attempt5-phase-free.patch": "30d932ede4ffd52899472742972579e94ef79e894e30bd48c449a3a10fc3dcf4",
+    "patches/10-replay-attempt6-every-pivot.patch": "16f7ca6a0954409f580c0677820d6adc2312f6a39825271ec525d93a0711af51",
+    "patches/11-replay-attempt7-refinement.patch": "11852653bff9b8646ac2b95cea27924c4d18ef6eef7c086d0e54d79bac352e8f",
+    "patches/12-replay-attempt8-signed-ratio.patch": "ca3f6e69079ee4bccb272b232bf357f16df3588446ef2ac2d72686eade9100ca",
+    "patches/13-replay-attempt9-signed-ratio.patch": "eb6173e68643b7089fe680ba076a1170ee54a72a8e50c7a1969f685644fe6fbc",
+    "patches/14-replay-attempt10-step-interval.patch": "c395d877ab89a8f534124124bbbbc7c2c5dd3ce86f5b9ec0617110eef6fdb671",
+    "patches/15-replay-attempt11-phase-recovery.patch": "06c5a8502dbdd0ddd82e465e12a5362ac03c96d53c17d39b1d41e355ea746f04",
+    "patches/16-replay-attempt12-basis-epoch.patch": "b2e8358624b0bd22f94b4f5844535836a5d80e99a7e123baf15efcd90df3faf4",
+    "patches/17-replay-attempt13-basis-epoch-fixture.patch": "fe697046209ae06dc013edfc1a739e92090b50fb20f9323d3dbfe48bdd76b163",
+    "patches/18-replay-attempt14-actual-rhs.patch": "6acafe1fae3772748f6f172c141211b3f545f66a2a2e6712161b344fce4f78a3",
+    "patches/19-replay-attempt15-actual-rhs-error-type.patch": "d541dc90a562d8db84345c07e05e1e3b90dc7fce9310982d03b3c0313e7ea039"
+  },
+  "superseded_package_sha256": "244c3ac16b46d6d0ea2d7fe790163025e7b87a42791a56bdba8a28b967ef23c8",
+  "superseded_package_bytes": 291425,
+  "model_build_execution": false
+}
