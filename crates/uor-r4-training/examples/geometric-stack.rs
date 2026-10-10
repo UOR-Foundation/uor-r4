@@ -20,7 +20,8 @@
 //!   out=NEW_REPORT_ROOT [prompts=3] [prompt_tokens=64] [sample_tokens=128] [temperature=0.8] [top_k=40] \
 //!   [seed=1]
 //! geometric-stack evaluate model=ROOT/model tokens=DEV.u16 out=NEW_REPORT_ROOT [tune_blocks=64] \
-//!   [lens=LENS.u16]
+//!   [lens=LENS.u16] [max_blocks=N] [softsort_tau=T]
+//!   (softsort_tau=T: a softsort_rank model scored with its SoftSort training forward at T)
 //! geometric-stack encode merges=MERGES.txt input=TEXT out=TOKENS.u16
 //! geometric-stack corpus registry=CARGO_REGISTRY_SRC_INDEX out=TEXT [max_file_bytes=200000]
 //! geometric-stack export model=ROOT/model out=NEW_REPORT_ROOT [calibration=TRAIN.u16] \
@@ -2591,17 +2592,45 @@ fn sample_mode(arguments: &[String]) -> Result<()> {
 fn evaluate_mode(arguments: &[String]) -> Result<()> {
     let args = Args::parse(
         arguments,
-        &["model", "tokens", "out", "tune_blocks", "lens"],
+        &[
+            "model",
+            "tokens",
+            "out",
+            "tune_blocks",
+            "lens",
+            "max_blocks",
+            "softsort_tau",
+        ],
     )?;
     let model_dir = PathBuf::from(args.required("model")?);
     let tokens_path = PathBuf::from(args.required("tokens")?);
     let lens_path = args.optional("lens").map(PathBuf::from);
     let out = PathBuf::from(args.required("out")?);
     let tune_blocks: usize = args.number("tune_blocks", 64)?;
+    let max_blocks: Option<usize> = args
+        .optional("max_blocks")
+        .map(|_| args.number("max_blocks", 0))
+        .transpose()?;
+    let softsort_tau: Option<f64> = args
+        .optional("softsort_tau")
+        .map(|_| args.number("softsort_tau", 0.0))
+        .transpose()?;
     report_output::claim(&out)?;
     let result = (|| -> Result<()> {
         // `evaluate` runs the artifact as saved: the load restores its transport snap by design.
-        let model = StackModel::load(&model_dir, &Device::Cpu)?;
+        let mut model = StackModel::load(&model_dir, &Device::Cpu)?;
+        // `softsort_tau=T` scores a `softsort_rank` model with its SoftSort
+        // training forward at temperature T instead of the hard (served) rank
+        // read: the soft-versus-hard gap shows whether training converged onto
+        // the hard table, and the T where the two part shows the score scale.
+        if let Some(tau) = softsort_tau {
+            if model.read_weighting() != ReadWeighting::SoftsortRank {
+                return Err(invalid(
+                    "softsort_tau= needs a read_weighting=softsort_rank model",
+                ));
+            }
+            model.set_softsort_temperature(Some(tau))?;
+        }
         let time = model.config.context;
         let tokens = read_tokens(&tokens_path, model.config.vocab_size)?;
         let lens = lens_path
@@ -2609,6 +2638,7 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
             .map(|path| read_tokens(path, u16::MAX as usize + 1))
             .transpose()?;
         let blocks = (tokens.len() - 1) / time;
+        let blocks = max_blocks.map_or(blocks, |limit| blocks.min(limit));
         if blocks <= tune_blocks {
             return Err(invalid("fewer blocks than tune_blocks"));
         }
@@ -2650,6 +2680,7 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
                 "config": model.config,
                 "tokens": identity(&tokens_path)?,
                 "lens": lens_path.as_ref().map(|p| identity(p)).transpose()?,
+                "softsort_tau": softsort_tau,
                 "tune": summary(0..tune_blocks),
                 "comparison": summary(tune_blocks..blocks),
                 "full": summary(0..blocks),

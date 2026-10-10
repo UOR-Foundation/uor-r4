@@ -14159,24 +14159,36 @@ pub fn softsort_learned_read(
     let mut flat = vec![0u32; rows * kept];
     let mut live = vec![0f32; rows * kept];
     let mut table_rows = vec![0u32; rows];
-    for row in 0..rows {
-        let (index, t) = (row / time, row % time);
-        let head = index % heads;
-        let base = row * time;
-        let selection = flock::flock_select(&host[base..base + t + 1], t, select)?;
-        if selection.len() > kept {
-            return Err(invalid(
-                "a flock row keeps more sources than its table has ranks",
-            ));
-        }
-        for (slot, entry) in selection.entries.iter().enumerate() {
-            positions[row * kept + slot] = entry.position as u32;
-            flat[row * kept + slot] = (index * time + entry.position) as u32;
-            live[row * kept + slot] = 1.0;
-        }
-        // Support m = kept + NoRead; the table row W[h][m - 1].
-        table_rows[row] = (head * side + selection.len()) as u32;
-    }
+    // Rows are independent, so the host selection runs in parallel (a serial
+    // loop held a whole CUDA step on one core); each row writes only its own
+    // slots, so the result is identical to the serial order.
+    positions
+        .par_chunks_mut(kept)
+        .zip(flat.par_chunks_mut(kept))
+        .zip(live.par_chunks_mut(kept))
+        .zip(table_rows.par_iter_mut())
+        .enumerate()
+        .try_for_each(
+            |(row, (((positions, flat), live), table_row))| -> Result<()> {
+                let (index, t) = (row / time, row % time);
+                let head = index % heads;
+                let base = row * time;
+                let selection = flock::flock_select(&host[base..base + t + 1], t, select)?;
+                if selection.len() > kept {
+                    return Err(invalid(
+                        "a flock row keeps more sources than its table has ranks",
+                    ));
+                }
+                for (slot, entry) in selection.entries.iter().enumerate() {
+                    positions[slot] = entry.position as u32;
+                    flat[slot] = (index * time + entry.position) as u32;
+                    live[slot] = 1.0;
+                }
+                // Support m = kept + NoRead; the table row W[h][m - 1].
+                *table_row = (head * side + selection.len()) as u32;
+                Ok(())
+            },
+        )?;
     let shape = (batch, heads, time, kept);
     let positions = Tensor::from_vec(positions, shape, &device)?;
     let live = Tensor::from_vec(live, shape, &device)?;
