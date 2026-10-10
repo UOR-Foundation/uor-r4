@@ -1,3 +1,26 @@
+## 2026-10-10 — Memory placement moves the failure mix: a read-layer memory holds the headline (20/40) with half the wrong-value failures (17 → 10) (deepseek, #2029, D22 order 2)
+
+Cycle 10 varies what the measured configuration never varied — **where** the product-key memory sits and **how big** it is — at the
+anchor's own recipe and steps ([record](../labs/addressed-memory-2026-10-10/README.md)). Both probes ran with the trainer's
+**default sizes** (256 sub-keys, 32 top-k, key width 128; 65.9 M parameters against the base's 30.2 M), so the pair varies the
+**placement** and both vary the **size** against the earlier 64-sub-key arm. Neither meets the pre-registered promotion bar
+(≥ 24/40 and BPB within 0.01 of 1.17425): **P256** (layer 4) reads **22/40** — the same as the **no-memory control** at the shorter
+fit, so not evidence of the memory — and **P8** (layer 8, the last **read** layer) reads **20/40**, exactly the anchor.
+
+**But P8 is the first memory configuration that does not lose on the headline while moving what this line measures:** wrong-value
+failures **17 → 10** (best of any arm; the control reads 12, read binding's best 12) and **unknowable rows 0 → 4/24** (also best),
+at the cost of a **new distractor-key pattern** (3 rows) the layer-4 placements never showed. The memory's *size* at layer 4
+buys 19 → 22/40 — exactly what the shorter fit buys — for **16× the parameters**.
+
+**The host bridge's cost, measured as it scales:** 2,000 steps took **387 s** with the 64-sub-key memory and **2,000 / 2,007 s**
+with the 256-sub-key one — **5.2× slower**, i.e. the bridge, not the GPU trunk, is the cost. That is the argument for the
+kernel follow-up, and it means a bigger memory is not free even when it is not better.
+
+**Next:** iterate on the **read-layer placement** with the two seeds the brief asks for, and the ordered pieces D22 lists — the
+**identity pointer keyed on a slot/entity address** (order 3, wrong-value primary) and **powered read binding** (order 4). The
+probe evidence supports order 3 directly: this line's failures are value-selection failures, and a read-layer memory is the first
+thing that halves them.
+
 ## 2026-10-10 — The memory's half-steps gain was the shorter fit, not the memory: the step-matched control reads the same 22/40 (deepseek, #2029, D22 order 2)
 
 Cycle 9 closes the loose end of the [addressed-memory round](../labs/addressed-memory-2026-10-10/README.md) with the control the

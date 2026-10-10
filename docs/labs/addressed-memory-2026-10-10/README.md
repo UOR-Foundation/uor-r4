@@ -154,3 +154,45 @@ free.
 (a **read** layer `a` of `rrarrarrar`, and a larger sub-key set), one seed each against the same frozen panel
 and bar; then the brief's **exact-key arm** (prime/semiprime addressed store) with the tagger-versus-read split
 the brief asks for.
+
+## Cycle 10: placement and size probes at the anchor's steps
+
+The measured configuration sat at **layer 4** with **64 sub-keys**; the two things it never varied are *where* the
+memory sits and *how big* it is. Both probes use the anchor's own recipe and one seed (`20261010`), and are
+**probes**, not decisive runs — the pre-registration promotes one to a two-seed run only if it beats the no-memory
+anchor's **20/40 by ≥ 4 rows** *and* stays within **0.01 BPB** of 1.17425.
+
+| arm | placement | size | steps | params | v5 memory `check_pass` | unknowable | wrong-value | derangement | wall |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| G1 (measured configuration) | layer 4 (an `r` layer) | 64 sub-keys, 16 top-k | 2,000 | 32.6 M | 19/40 | 0/24 | 17 | 1 | 387 s |
+| **P256** | layer 4 | **256 sub-keys, 32 top-k, key width 128** | 2,000 | 65.9 M | **22/40** | 1/24 | 14 | 3 | 2,007 s |
+| **P8** | **layer 8** — the last **read** layer (`a`) | 256 sub-keys, 32 top-k, key width 128 | 2,000 | 65.9 M | **20/40** | **4/24** | **10** | 1 | 2,000 s |
+| C1 (control, **no memory**) | — | — | 1,000 | 30.2 M | 22/40 | 3/24 | 12 | 0 | 63 s |
+| anchor D10 (**no memory**) | — | — | 2,000 | 30.2 M | **20/40** | 0/24 | 17 | 0 | — |
+
+**Both probes ran with the trainer's default memory sizes** (256 sub-keys, 32 top-k, key width 128, 65.9 M
+parameters against the base's 30.2 M): the intended 64-sub-key P8 arm took the defaults too, so the pair varies
+the **placement** (layer 8, a read layer, against layer 4, a recurrence layer) and both vary the **size**
+against the previously measured 64-sub-key configuration. That is stated rather than glossed: the two
+variations are not orthogonal in this pair.
+
+**No promotion, and the first configuration that moves the failure mix without losing the head-line.** The
+pre-registered promotion bar — **≥ 24/40** *and* BPB within 0.01 of 1.17425 — is met by neither probe: P256
+reads **22/40**, which the **no-memory control** at the shorter fit also read, so it is not evidence of the
+memory; P8 reads **20/40**, exactly the anchor. But P8 is the first memory configuration that does not *lose* on
+the headline while moving what this line actually measures: **wrong-value failures 17 → 10** (the best of any
+arm, against the control's 12 and the read-binding arm's 12) and **unknowable rows 0 → 4/24** (also the best),
+at the cost of a new **distractor-key** pattern (3 rows) the layer-4 placements never showed. The read-layer
+placement is therefore the configuration worth a two-seed run; the memory's *size* at layer 4 (64 → 256
+sub-keys) buys 19 → 22/40 — exactly what the shorter fit buys — for **16× the parameters**.
+
+**The bridge's cost scales with the memory's size, measured.** A 2,000-step fit of the 64-sub-key configuration
+took **387 s** with both arms in parallel; the same fits with the 256-sub-key memory took **2,000 s and 2,007 s**
+— **5.2× slower** — so the host bridge, not the GPU trunk, is now the cost. That is the concrete argument for
+the kernel follow-up, and it also means a bigger memory is not free even when it is not better.
+
+**What the next cycle does:** iterate on the **read-layer placement** with the two seeds the brief asks for, and then the ordered pieces D22
+lists: the **identity pointer keyed on a slot/entity address** (order 3, wrong-value primary, ≥ 2 seeds) and
+**powered read binding** (order 4, ≥ 3 seeds or ≥ 200 fresh rows). The probe evidence supports order 3's framing
+directly: this line's failures are *value-selection* failures, and a memory on a read layer is the first thing
+that halves them.
