@@ -108,6 +108,10 @@ Changes to these stable goals require owner direction and protected delivery.
 A task template, stale skill or agent judgment cannot silently change them.
 <!-- agent-execution-policy:end -->
 
+**Mechanism briefs (owner request, October 10):**
+- Work from [docs/mechanisms/](docs/mechanisms/README.md), which has one page per novel mechanism: the idea, what was tried, and what a fair test needs.
+- Every mechanism pre-registration gets a `TEST FITNESS: FIT` review on its milestone before compute.
+
 ## Progress control — mandatory before more model compute
 
 **Owner direction, October 10 — a negative closes a configuration, never a mechanism ([D22](docs/integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened)).**
