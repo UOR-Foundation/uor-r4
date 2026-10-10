@@ -1551,7 +1551,23 @@ mod tests {
                 let e = z.exp();
                 e / (1. + e)
             };
-            assert!((rank_grad(&loss, &var)?.to_scalar::<f32>()? as f64 + sigmoid).abs() < 1e-6);
+            if sigmoid == 0. {
+                // Only this artificial extreme underflows exp(-1000) to exact
+                // zero. Candle 0.9.2 prunes Affine(mul=0) during backward graph
+                // traversal; absent credit is correct for this zero derivative.
+                assert_eq!(d, 1000.);
+                assert_eq!(value, 0.);
+                assert_eq!(expected, 0.);
+                if let Some(gradient) = loss.backward()?.get(var.as_tensor()) {
+                    assert_eq!(gradient.to_scalar::<f32>()?, 0.);
+                }
+            } else {
+                // Missing credit remains an error for every nonzero case and
+                // for the admitted native pooled-margin tests below.
+                assert!(
+                    (rank_grad(&loss, &var)?.to_scalar::<f32>()? as f64 + sigmoid).abs() < 1e-6
+                );
+            }
         }
         let raw = [5_592_405i64, 9 << 24, -(9 << 24)];
         let trace = rank_fixture(&[4, 4, 5], &raw)?;
