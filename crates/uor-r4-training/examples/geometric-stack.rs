@@ -4954,6 +4954,12 @@ fn init_extended_config(args: &Args, saved: &StackConfig) -> Result<(StackConfig
         (Some(_), None) => {}
         (None, Some(asked)) => {
             config.memory = Some(asked);
+            // The added memory draws from the run's `seed=` (the saved model's
+            // by default), the way `pointer=DIM` does, so two runs of the same
+            // configuration differ in the memory and not only in the data
+            // order. Nothing else is initialised at load time, so the seed
+            // reaches no weight that came out of the checkpoint.
+            config.seed = args.number("seed", saved.seed)?;
             config.validate()?;
             memory_added = true;
         }
@@ -5131,7 +5137,7 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                             .memory
                             .clone()
                             .ok_or_else(|| invalid("an added memory records its configuration"))?;
-                        model.add_memory_layers(memory)?;
+                        model.add_memory_layers(memory, config.seed)?;
                     }
                     if let Some(pointer) = config.pointer {
                         // A saved head keeps its weights, its recorded seed and
@@ -6513,6 +6519,22 @@ mod tests {
         .expect("an added memory");
         assert!(!added);
         assert!(memory_added);
+        // The run's seed reaches the added memory (and nothing else is
+        // initialised at load time), so two seeds are two mechanisms.
+        let (seeded, _, _) = init_extended_config(
+            &args(&[
+                "memory_layers=1",
+                "seed=7",
+                "memory_sub_keys=8",
+                "memory_top_k=3",
+                "memory_heads=2",
+                "memory_key_dim=8",
+            ]),
+            &saved,
+        )
+        .expect("a seeded memory");
+        assert_eq!(seeded.seed, 7);
+        assert_eq!(saved.seed, 5);
         let memory = config.memory.clone().expect("a memory");
         assert_eq!(memory.layers, vec![1]);
         assert_eq!((memory.sub_keys, memory.top_k, memory.heads), (8, 3, 2));

@@ -2110,15 +2110,15 @@ impl StackModel {
     }
 
     /// Give the listed layers a product-key memory in place of their MLP
-    /// ([`MemoryConfig`]) whose weights are initialised fresh from the model's
-    /// seed — the weights a model built with that configuration and seed would
-    /// start with — so a memory can be trained **into** a model saved without
+    /// ([`MemoryConfig`]) whose weights are initialised fresh from `seed` —
+    /// the weights a model built with that configuration and seed would start
+    /// with — so a memory can be trained **into** a model saved without
     /// one (`Ok(true)`, the layers' `mlp.gate/up/down` variables are dropped
     /// and replaced by the memory's own). `Ok(false)` if the model already
     /// carries exactly this memory (its weights are untouched); a different
     /// memory configuration is refused, as is a model with a served
     /// representation. The optimizer of a model must be built after this.
-    pub fn add_memory_layers(&mut self, memory: MemoryConfig) -> Result<bool> {
+    pub fn add_memory_layers(&mut self, memory: MemoryConfig, seed: u64) -> Result<bool> {
         if self.served.is_some() {
             return Err(invalid(
                 "add the memory layers before setting a served representation",
@@ -2135,11 +2135,14 @@ impl StackModel {
         }
         let mut config = self.config.clone();
         config.memory = Some(memory.clone());
+        // The seed is part of the configuration the run records: two runs
+        // differ in the memory, and a resume keeps the one it was drawn from.
+        config.seed = seed;
         config.validate()?;
         // The initialiser advances through every shape in order, exactly as
         // `new` does (the pointer head has its own stream and draws nothing
         // here), so the added memory lands on a fresh construction's values.
-        let mut rng = Initializer(config.seed ^ 0x6765_6F6D_5354_4143);
+        let mut rng = Initializer(seed ^ 0x6765_6F6D_5354_4143);
         let residual_std = INITIAL_STD / (2.0 * config.layers() as f64).sqrt();
         let lanes = config.width / 4;
         let mut added: Vec<(String, Var)> = Vec::new();
@@ -23457,7 +23460,7 @@ mod tests {
             codebook: None,
         };
         let mut extended = StackModel::new(plain.clone(), &device)?;
-        assert!(extended.add_memory_layers(memory.clone())?);
+        assert!(extended.add_memory_layers(memory.clone(), plain.seed)?);
         assert_eq!(extended.config.memory, Some(memory.clone()));
         // The named layer's MLP is gone and the memory's own variables are in
         // its place: (heads * 2 * sub_keys) sub-keys, slots() values and the
@@ -23485,15 +23488,15 @@ mod tests {
         }
         // Idempotent for the same memory, refused for a different one.
         let mut again = StackModel::new(plain.clone(), &device)?;
-        again.add_memory_layers(memory.clone())?;
-        assert!(!again.add_memory_layers(memory)?);
+        again.add_memory_layers(memory.clone(), plain.seed)?;
+        assert!(!again.add_memory_layers(memory, plain.seed)?);
         let mut other = StackModel::new(plain.clone(), &device)?;
-        other.add_memory_layers(extended.config.memory.clone().expect("a memory"))?;
+        other.add_memory_layers(extended.config.memory.clone().expect("a memory"), plain.seed)?;
         let different = MemoryConfig {
             top_k: 4,
             ..extended.config.memory.clone().expect("a memory")
         };
-        assert!(other.add_memory_layers(different).is_err());
+        assert!(other.add_memory_layers(different, plain.seed).is_err());
         Ok(())
     }
 
