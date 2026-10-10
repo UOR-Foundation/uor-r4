@@ -4895,7 +4895,7 @@ fn continuation_checkpoint(
             "continuation independent masters/native reload differs",
         ));
     }
-    let receipt = json!({"step":step,"lineage_step":resume.map_or(step, |r| r.profile.lineage_after(step)),
+    let receipt = json!({"step":step,"lineage_step":step+if resume.is_some(){64}else{0},
         "cross_state_resume":resume.map(|r|&r.provenance),
         "parent":reloaded.source_binding(),"generate_sha256":p.generate_sha256,
         "frozen_model_root":fs::canonicalize(&a.saved_fit)?,"frozen_model_report_sha256":CONTINUATION_PARENT_REPORT_SHA,
@@ -6179,8 +6179,8 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "continuation_action_support":"same token energy on Generate and every physical Copy before the sole common clip",
         "phase_policy":loss_weight_policy(true,LossScope::All),"loss_scope":"all","credit":a.credit.name(),"fresh_adam":true,
         "cross_state_resume":resume.as_ref().map(|r|&r.provenance),
-        "local_updates":a.updates,"prior_updates":resume.as_ref().map_or(0, |r| r.profile.lineage_step),
-        "final_lineage_step":resume.as_ref().map_or(a.updates, |r| r.profile.lineage_after(a.updates)),
+        "local_updates":a.updates,"prior_updates":if resume.is_some(){64}else{0},
+        "final_lineage_step":a.updates+if resume.is_some(){64}else{0},
         "initial_active_masters":identities(&params)?,
         "teacher_forcing":"native cache receives complete input packet and target[..t] only; current/future target used after common pool",
         "local_carrier":"ContextQ4 from identity over query || prior supervised prefix; independent of facts",
@@ -6259,10 +6259,7 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     let initial = continuation_evaluate(a, "development-0000", &p, &initial_field, &dev, start)?;
     let initial_metrics = metrics(a, &initial, &dev)?;
     if cross_state {
-        cross_state_completion::baseline(
-            &initial,
-            resume.as_ref().map(|r| (&r.prior_final, r.profile)),
-        )?;
+        cross_state_completion::baseline(&initial, resume.as_ref().map(|r| &r.prior_final))?;
     }
     write(a, "metrics-0000.json", &initial_metrics)?;
     evaluation_seconds += clock.elapsed().as_secs_f64();
@@ -6354,7 +6351,7 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         weights.project_shadow_range()?;
         d.synchronize()?;
         target_position_draws += count;
-        updates.push(json!({"step":update+1,"lineage_step":resume.as_ref().map_or(update+1, |r| r.profile.lineage_after(update+1)),"indices":indices,"answer_positions_including_eos":count,"phase_balanced_loss":loss_sum,
+        updates.push(json!({"step":update+1,"lineage_step":update+1+if resume.is_some(){64}else{0},"indices":indices,"answer_positions_including_eos":count,"phase_balanced_loss":loss_sum,
             "global_active_gradient_norm":norm,"active_gradient_names":sums.keys().collect::<Vec<_>>(),
             "native_field_master_download_bytes":prepared.downloaded_master_bytes,
             "field_snapshot_and_per_position_costs":field_costs,
@@ -6401,11 +6398,19 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
             cross_state_completion::ORIGINAL8.to_vec()
         };
         let early = early_indices.iter().map(|&i| &dev[i]).collect::<Vec<_>>();
-        let early_name = resume.as_ref().map_or_else(
-            || "endpoint-original8".to_string(),
-            |r| format!("endpoint-prior{}", r.profile.complete),
-        );
-        continuation_evaluate_rows_impl(a, &early_name, &p, &final_field, &early, start, false)?;
+        continuation_evaluate_rows_impl(
+            a,
+            if resume.is_some() {
+                "endpoint-prior22"
+            } else {
+                "endpoint-original8"
+            },
+            &p,
+            &final_field,
+            &early,
+            start,
+            false,
+        )?;
     }
     let final_eval = continuation_evaluate(
         a,
@@ -6422,7 +6427,7 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         let outcome = cross_state_completion::outcomes(
             &initial,
             &final_eval,
-            resume.as_ref().map(|r| (&r.prior_final, r.profile)),
+            resume.as_ref().map(|r| &r.prior_final),
         )?;
         write(a, "cross-state-outcomes.json", &outcome)?;
         Some(outcome)
@@ -6432,7 +6437,7 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     Ok(
         json!({"schema":"uor-r4.geometric-frozen-map-fit/1","status":"COMPLETED","mode":mode_name,
         "source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"device":"cuda:0","updates":a.updates,"batch":BATCH,
-        "prior_updates":resume.as_ref().map_or(0, |r| r.profile.lineage_step),"lineage_step":resume.as_ref().map_or(a.updates, |r| r.profile.lineage_after(a.updates)),
+        "prior_updates":if resume.is_some(){64}else{0},"lineage_step":a.updates+if resume.is_some(){64}else{0},
         "cross_state_resume":resume.as_ref().map(|r|&r.provenance),"fresh_adam":true,
         "training_row_draws":a.updates*BATCH,
         "target_position_draws":target_position_draws,
@@ -6442,9 +6447,9 @@ fn run_continuation(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         "final_active_masters":identities(&params)?,"shared_coefficients":expected_coefficients,"cache_positions":positions,
         "cache_preparation_seconds":cache_seconds,"fit_loop_seconds_excluding_checkpoints":fit_seconds,
         "checkpoint_seconds":checkpoint_seconds,"evaluation_seconds":evaluation_seconds,"elapsed_seconds":start.elapsed().as_secs_f64(),
-        "control":if let Some(r) = &resume {format!("checkpoint0000 is exact saved{} native field plus restored fractional masters; independently matched all512 outputs; cache separately uses zero field; no carrier ablation performed",r.profile.complete)} else if cross_state {"checkpoint0000 is exact accepted parent with zero joint factual/local field; no carrier ablation performed".to_string()} else {"checkpoint0000 is the same native parent with a null U field; constant-carrier control remains a prospective matched full-output evaluation".to_string()},
+        "control":if resume.is_some() {"checkpoint0000 is exact saved22 native field plus restored fractional masters; independently matched all512 outputs; cache separately uses zero field; no carrier ablation performed"} else if cross_state {"checkpoint0000 is exact accepted parent with zero joint factual/local field; no carrier ablation performed"} else {"checkpoint0000 is the same native parent with a null U field; constant-carrier control remains a prospective matched full-output evaluation"},
         "common_pool_backend":"cpu-authenticated-native-alias-reducer; full score/anchor/loss transfers retained; not fully resident CUDA alias reduction",
-        "scope":if let Some(r) = &resume {format!("saved{} cross-state parameter continuation with fresh Adam moments; frozen48/64 upstream;115200 Q4 coefficients, four exposed512 passes; fixed endpoint local256/lineage{}; developmental KEEP netcomplete>{}; no held-out transfer/chat/geometry/energy qualification",r.profile.complete,r.profile.lineage_after(a.updates),r.profile.complete)} else if cross_state {"frozen48/64 parent; only115200 joint factual/local signed-H4 Q4 coefficients learned on exposed512 all-answer positions; independently loaded own-prefix outputs; developmental KEEP netcomplete>8; no held-out transfer/chat/geometry/energy qualification".to_string()} else {"frozen48/64 parent; only960 continuation coefficients learned on exposed512 all-answer positions; independently loaded own-feedback outputs; no held-out transfer/chat/geometry/energy qualification".to_string()}}),
+        "scope":if resume.is_some() {"saved22 cross-state parameter continuation with fresh Adam moments; frozen48/64 upstream;115200 Q4 coefficients, four exposed512 passes; fixed endpoint local256/lineage320; developmental KEEP netcomplete>22; no held-out transfer/chat/geometry/energy qualification"} else if cross_state {"frozen48/64 parent; only115200 joint factual/local signed-H4 Q4 coefficients learned on exposed512 all-answer positions; independently loaded own-prefix outputs; developmental KEEP netcomplete>8; no held-out transfer/chat/geometry/energy qualification"} else {"frozen48/64 parent; only960 continuation coefficients learned on exposed512 all-answer positions; independently loaded own-feedback outputs; no held-out transfer/chat/geometry/energy qualification"}}),
     )
 }
 
