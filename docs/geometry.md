@@ -402,6 +402,17 @@ protection screen; no native proposal was scored. Original 5/15 conditional
 winners and all 17/380 checks survived independent reload, with accepted 8/512
 unchanged. The candidate is rejected, not evidence of global infeasibility.
 
+The [direct legal-set constructor](labs/direct-legal-construction-2026-10-09/README.md)
+adds a separate offline alternative using the same saved credit: jointly choose
+among all 15 legal destinations for each of 1920 Prefix/Generate coordinates with
+pinned pure-Rust mixed-integer search. The backend targets all 380 unit-J residuals
+at zero or above, a stricter construction target than the existing norm-tolerant
+screen; actual reconstructed bits must still pass that unchanged screen and
+strict objective descent before the same native transaction. Noop preserves
+original fractional bits, not a new quarter rounding. Backend work is bounded
+at 4096 branch nodes, with no mathematical optimality/infeasibility claim or serving
+dependency. Execution/promotion is pending; prior negatives and accepted 8/512 stand.
+
 ## Life of one token
 
 Follow one byte-BPE token through the stack (text path):
