@@ -308,21 +308,21 @@ pub fn check_export_config_weighted(config: &StackConfig, weighting: ReadWeighti
         }
     }
     if let Some(select) = config.select {
-        if weighting != ReadWeighting::Softmax {
-            if select.sink != 0 {
-                return Err(invalid(format!(
-                    "the softmax-free read's flock sink is position {}, but the D11 engine's \
-                     sink is always position 0, so no export writes this model",
-                    select.sink
-                )));
-            }
-            return Ok(());
-        }
-        return Err(invalid(format!(
-            "the model was trained with flock selection (window {}, k {}), which no integer \
+        // A softmax-free read is exported; every later check still applies.
+        if weighting == ReadWeighting::Softmax {
+            return Err(invalid(format!(
+                "the model was trained with flock selection (window {}, k {}), which no integer \
              export or engine implements yet, so no export writes this model",
-            select.window, select.k
-        )));
+                select.window, select.k
+            )));
+        }
+        if select.sink != 0 {
+            return Err(invalid(format!(
+                "the softmax-free read's flock sink is position {}, but the D11 engine's \
+                 sink is always position 0, so no export writes this model",
+                select.sink
+            )));
+        }
     }
     if config.rotation_group != RotationGroup::Quaternion {
         return Err(invalid(

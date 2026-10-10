@@ -9,7 +9,7 @@ use uor_r4_integer::stack::IntegerStackModel;
 use uor_r4_lut::format::StackArtifact;
 use uor_r4_training::flock::FlockSelect;
 use uor_r4_training::geometric_stack::{
-    ReadScore, ReadWeighting, StackArch, StackConfig, StackModel,
+    ReadScore, ReadWeighting, RotationGroup, StackArch, StackConfig, StackModel,
 };
 use uor_r4_training::stack_export::export_stack;
 
@@ -184,4 +184,30 @@ fn a_softmax_read_over_a_flock_is_refused_and_a_plain_softmax_stack_exports_as_b
     // Both engines still serve it.
     StackArtifact::parse(bytes.clone()).expect("D10 parse");
     IntegerStackModel::parse(&bytes).expect("D11 parse");
+}
+
+#[test]
+fn a_softmax_free_read_on_the_u1_transport_control_is_still_refused() {
+    let mut config = StackConfig::transformer_control(5);
+    config.arch = StackArch::Geometric;
+    config.vocab_size = VOCAB;
+    config.width = 64;
+    config.heads = 2;
+    config.mlp_hidden = 40;
+    config.context = CONTEXT;
+    config.pattern = "rarr".to_owned();
+    config.read = ReadScore::Dot;
+    config.rotation = true;
+    config.rotation_group = RotationGroup::U1;
+    config.select = Some(FlockSelect {
+        sink: 0,
+        window: 2,
+        k: 2,
+    });
+    let mut model = StackModel::new(config, &Device::Cpu).expect("u1 stack");
+    model
+        .set_read_weighting(ReadWeighting::Rank)
+        .expect("rank weighting");
+    let refusal = export_stack(&model, json!({}), None, None).expect_err("u1 + rank");
+    assert!(refusal.to_string().contains("U(1)"), "{refusal}");
 }
