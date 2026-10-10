@@ -33,5 +33,12 @@
     "source_commit": "6bd8017cdf4f849a17fa3b83c58f7bf9b707e721",
     "coupled_sha256": "ec07db50849cdbeb18e3e69ae759643dabfdefd502ba21284e1cf626d0c7477d",
     "scope": "Exclusive16MiB bound for32joint records; historicalmode formulas unchanged; worst-width serialization fixture plus2MiB reserve; no model-policy change."
+  },
+  "relocation_repair_review": {
+    "status": "PASS_SOURCE_ONLY",
+    "reviewer": "emission_adversarial",
+    "source_commit": "7381d670735acddb0fac1f7abc0d83498aed04fc",
+    "importer_sha256": "9f62e87a6e618b1094e211f5d6578953e85589f1d2372ca4401f48c88f65f8c0",
+    "scope": "Exact declared inverse-phase capture-root relocation only; all remaining parsed values equal; original/current witness bytes and hashes retained and postverified."
   }
 }
