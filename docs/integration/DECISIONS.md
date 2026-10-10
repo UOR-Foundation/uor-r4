@@ -1088,3 +1088,52 @@ The next DeepSeek piece on this line is that supervised fine-tune:
 ### 4. Scope
 
 D21 changes no acceptance criterion, serving contract or spending cap. It is prospective: earlier records keep their scope.
+
+## D22 — A negative closes a configuration, never a mechanism; five closures reopened
+
+Owner: Casey · Drafted by: Claude lab (agent) · Date: 2026-10-10 · **Owner decision, 2026-10-10** (chosen in the Claude lab session: "D22 + reopen orders").
+
+**Why.** An audit of every closure since D21 (DeepSeek M1, Codex M2, Claude M4) found that the records were honest and scoped, but the test design and the D21 count closed novel mechanisms on tests that could not judge them:
+- **Codex:** the protected/discrete constructor was **never scored on the panel**. It stopped on solver numerics (LU pivots 9e-11 and 7e-12 against an absolute 1e-10).
+- **Codex:** native Context and prototype learning was judged on 24 rows with the loss that later proved to be the fault.
+- **DeepSeek:** the token-identity pointer was keyed on the wrong context, which is why its hit rate was 0.003, and the line was archived on that run.
+- **DeepSeek:** read-binding supervision met its own target (bound mass 0.73 → 0.90, wrong values 17 → 12) and was counted as a negative because a 40-row panel moved one row.
+- **DeepSeek:** a 10 % recall dose doubled memory at no measurable cost and was rejected by one row.
+- **Claude:** the learned rank table closed 54 % of its gap and was prescribed a stop.
+- **Meanwhile,** what was kept leaned to ordinary levers: a frozen-upstream adapter reached 437/512 on the development panel and 0/128 on fresh rows.
+
+D21 stays. These rules amend how it counts and what may be closed.
+
+### 1. What a negative closes
+
+- **A negative result closes the tested configuration only:** the recipe, dose, window, key, objective, base and steps. It never closes the mechanism. Records state the configuration as the scope.
+- **Stopping a novel project mechanism** (prime/zeta/R4/H4/icosian geometry, exact addressed memory, pointer/copy, read binding, flock or softmax-free reads, protected or discrete constructors, native geometric operators) needs an **owner decision** posted on the milestone. The pivot card proposes it; it does not decide it.
+- **A tooling, numerical or infrastructure failure** (a solver tolerance, a crash, a missing CLI field) is a **blocker to fix**, not a negative. It does not count toward the three.
+
+### 2. What resets the count
+
+- A run that **meets its own pre-registered mechanism target** (for example bound mass, wrong-value failures, transfer) **without a significant headline loss** is **KEEP and iterate**. It resets the line's count, as a headline move does.
+- A result that **improves the headline but misses its bar** (for example within the bar's noise, or more than halfway to it) is kept as the line's new base. It is not discarded.
+
+### 3. Minimum test power
+
+- Every pre-registration states the panel's noise (seed-to-seed spread or a binomial standard error). **No bar is narrower than that noise; no single-row bars.**
+- A decisive run uses **≥ 2 seeds**, or a panel of **≥ 200 fresh rows**, or both.
+- A mechanism is **trained in, not bolted on**: from pretraining, or a full fine-tune long enough for the base to adapt. A 2,000-step add-on to a base never trained with the mechanism is a probe, not a decisive run.
+- **Ordinary levers** (data dose, learning rate, rows, updates, seeds) **cannot serve as a novel line's decisive run.**
+
+### 4. Transfer before KEEP
+
+- Every KEEP that raises a development-panel number also reports a **fresh, held-out transfer** number. On M2 that is fresh rows of new combinations, as in #2164. A development gain with zero transfer is recorded as **panel fitting**, not a milestone move.
+
+### 5. Reopened (orders posted on the milestones)
+
+- **Codex, M2 #2030:**
+  - **(a) The protected/discrete constructor (D21 §3 reversed).** Fix the pivot rule (scale-aware, or an exact refactor of the two failing bases) and score at least one legal displacement on the frozen 512 panel and the fresh 128.
+  - **(b) Joint Context + prototype learning.** Train from the saved parent with the objective that works (pooled ranking), on all 512 rows, ≥ 2 seeds, scored on the 512 and the fresh 128.
+- **DeepSeek, M1 #2029:**
+  - **(c) Exact addressed memory.** Add the memory fields to `DialogueSettings` (source work, not an owner blocker) and train a memory-equipped stack in, not bolted on.
+  - **(d) The identity pointer, with a real key** (the slot or entity address, for example a prime/UOR address, not the six tokens around the value), trained from the start of the dialogue fine-tune with ≥ 2 seeds.
+  - **(e) Read-binding supervision, powered** (≥ 3 seeds or ≥ 200 fresh rows, wrong-value rate as the primary metric).
+  - **(f) Adopt the 10 % recall dose (#2151) as the M1 base.**
+- **Claude, M4 #2032:** the softmax-free read continues on its new line (arm W, wide learned flock). A next step on it fixes the training mismatch: a straight-through gradient that matches the rank forward, and hyperparameters tuned for the read.

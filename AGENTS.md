@@ -114,6 +114,14 @@ A task template, stale skill or agent judgment cannot silently change them.
 
 ## Progress control — mandatory before more model compute
 
+**Owner direction, October 10 — a negative closes a configuration, never a mechanism ([D22](docs/integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened)).**
+- Stopping a novel mechanism needs an owner decision.
+- A tooling or numerical failure is a blocker to fix, not a negative.
+- A run that meets its own mechanism target without a significant headline loss is KEEP and iterate, and it resets the count.
+- Bars are never narrower than the panel's noise. Decisive runs use ≥ 2 seeds or ≥ 200 fresh rows, and train the mechanism in rather than bolting it on.
+- Every development KEEP also reports fresh transfer.
+- Five closures are reopened (D22 §5).
+
 **Owner direction, October 9 — three negatives force a pivot ([D21](docs/integration/DECISIONS.md#d21--three-negatives-on-one-line-force-a-pivot-deepseek-trains-the-pointer-fix-codex-stops-the-constraint-line)).**
 After three consecutive merged PRs on one line that do not move the owning milestone's
 headline acceptance number, the next action on that line is a pivot card on the milestone
