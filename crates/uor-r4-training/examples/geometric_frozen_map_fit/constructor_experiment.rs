@@ -437,8 +437,9 @@ fn export(
             .packed_cross_state()
             .ok_or_else(|| bad("cross bytes absent"))?
     ));
-    receipt["active_master_identities"] = identities(&parameters(pw, l)?)?;
-    receipt["frozen_source_master_identities"] = identities(&l.source.parameters())?;
+    receipt["active_master_identities"] = serde_json::to_value(identities(&parameters(pw, l)?)?)?;
+    receipt["frozen_source_master_identities"] =
+        serde_json::to_value(identities(&l.source.parameters())?)?;
     receipt["scope"]=json!("saved native legal candidate; transaction/quality decisions are separate in report; original Source/Context/Cue/prototypes/cross coefficients frozen");
     fs::write(
         root.join("receipt.json"),
