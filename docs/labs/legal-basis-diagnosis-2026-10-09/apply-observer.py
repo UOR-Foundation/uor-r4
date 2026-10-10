@@ -61,7 +61,14 @@ def main():
     s=before['src/mip/mod.rs']
     s=replace(s,'    if state.solver.initial_solve()? == StopReason::Limit {','    crate::diagnostics::phase("root_initial_solve");\n    if state.solver.initial_solve()? == StopReason::Limit {')
     s=replace(s,'fn solve_node_lp(state: &mut MipState) -> Result<NodeLp, Error> {','fn solve_node_lp(state: &mut MipState) -> Result<NodeLp, Error> {\n    crate::diagnostics::phase(&format!("branch_lp_nodes_solved={}",state.stats.nodes_solved));')
-    s=s.replace('    let slack = state.solver.slack_basis();','    crate::diagnostics::phase(&format!("branch_slack_retry_nodes_solved={}",state.stats.nodes_solved));\n    let slack = state.solver.slack_basis();',1)
+    s=s.replace('    let slack = state.solver.slack_basis();','    crate::diagnostics::phase(&format!("integral_candidate_slack_retry_nodes_solved={}",state.stats.nodes_solved));\n    let slack = state.solver.slack_basis();',1)
+    # Bind the internal-error fallback in its exact function, not the first slack call.
+    begin=s.index('fn solve_node_lp(state:')
+    end=s.index('/// Pop policy:',begin)
+    body=s[begin:end]
+    body=replace(body,'    let slack = state.solver.slack_basis();',
+        '    crate::diagnostics::phase(&format!("branch_slack_retry_nodes_solved={}",state.stats.nodes_solved));\n    let slack = state.solver.slack_basis();')
+    s=s[:begin]+body+s[end:]
     s=replace(s,'fn visit_node(state: &mut MipState, node: Node, domains: &[VarDomain]) -> Result<NodeVisit, Error> {','fn visit_node(state: &mut MipState, node: Node, domains: &[VarDomain]) -> Result<NodeVisit, Error> {\n    crate::diagnostics::phase(&format!("branch_basis_load_nodes_solved={} depth={} bound_changes={:?}",state.stats.nodes_solved,node.depth,node.bound_changes));')
     # Scope warm-start subsolver explicitly at its entry; no bound handling is altered.
     start=s.index('fn try_warm_start(');pos=s.index(' {',start)+2

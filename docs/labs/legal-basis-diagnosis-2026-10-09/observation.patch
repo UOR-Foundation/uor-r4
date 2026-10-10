@@ -141,7 +141,7 @@
      }
  
      debug!("exactly integral candidate failed guard; retrying from slack basis");
-+    crate::diagnostics::phase(&format!("branch_slack_retry_nodes_solved={}",state.stats.nodes_solved));
++    crate::diagnostics::phase(&format!("integral_candidate_slack_retry_nodes_solved={}",state.stats.nodes_solved));
      let slack = state.solver.slack_basis();
      state
          .solver
@@ -153,7 +153,15 @@
      state.solver.deadline = state.deadline;
      let err = match state.solver.reoptimize() {
          Ok(StopReason::Finished) => return Ok(NodeLp::Solved),
-@@ -842,6 +844,7 @@
+@@ -789,6 +791,7 @@
+         "node LP reoptimize failed ({}); retrying from slack basis",
+         err
+     );
++    crate::diagnostics::phase(&format!("branch_slack_retry_nodes_solved={}",state.stats.nodes_solved));
+     let slack = state.solver.slack_basis();
+     state
+         .solver
+@@ -842,6 +845,7 @@
      state: &mut MipState,
      hints: &[(crate::Variable, f64)],
  ) -> Result<Option<TerminationReason>, Error> {
@@ -161,7 +169,7 @@
      let domains = state.solver.orig_var_domains.clone();
      let root_basis = state.solver.snapshot_basis();
      let mut applied: Vec<usize> = Vec::new();
-@@ -948,6 +951,7 @@
+@@ -948,6 +952,7 @@
          return Ok(None);
      }
  
@@ -169,7 +177,7 @@
      if state.solver.initial_solve()? == StopReason::Limit {
          return Ok(Some(TerminationReason::TimeLimit));
      }
-@@ -1005,6 +1009,7 @@
+@@ -1005,6 +1010,7 @@
  
  /// Reconstruct and process one node selected by the outer search policy.
  fn visit_node(state: &mut MipState, node: Node, domains: &[VarDomain]) -> Result<NodeVisit, Error> {
