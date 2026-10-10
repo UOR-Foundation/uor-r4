@@ -1,118 +1,121 @@
-# Addressed memory trained into the M1 stack: the fields exist, the mechanism is in from step 0, and the CPU-only memory op is what limits the test
+# Product-key memory trained into the M1 stack at the anchor's own steps: 19/40 on both seeds against the brief's 27/40 — the device fix works, the configuration does not
 
-References #2029 (M1 acceptance, D22 orders 1 and 2). Lab: DeepSeek, sessions `deepseek/mem-in` and the two
-preparation PRs. Run 2026-10-10 17:58–in flight UTC. **One 2 × RTX 5090 pod leased but fitting on its CPU** —
-see the measured limit below.
+References #2029 (M1 acceptance, D22 order 2; mechanism: exact addressed memory). Lab: DeepSeek, session
+`deepseek/mem-in`. Runs 2026-10-10 20:07–20:23 UTC (GPU) and 17:58–20:06 UTC (CPU).
 
-> **One line.** D22 order 2 asked for exact addressed memory to be **built**, not filed as an owner block, and
-> for the mechanism to be trained **in** rather than bolted on. The fields now exist in `DialogueSettings`
-> ([#2168](https://github.com/UOR-Foundation/uor-r4/pull/2168)), the seed reaches the added memory
-> ([#2170](https://github.com/UOR-Foundation/uor-r4/pull/2170)), a memory added to a saved model is
-> **element-wise identical to a fresh construction** with that configuration and seed, and both seeds fit and
-> were scored: **the two seeds are fitting; the tooling limit is the measured result**. The limit the cycle measured is in the tooling, not the mechanism: the
-> product-key memory is a **CPU custom op with no CUDA path**, so a 29M memory-equipped stack fits at
-> **3.7 s/step** (and ~9 s/step when two arms share the pod's cores) instead of minutes on the GPU.
+> **One line.** The tooling blocker is fixed: the product-key memory's **CUDA forward is its exact CPU forward
+> on host copies** ([#2175](https://github.com/UOR-Foundation/uor-r4/pull/2175)), and the same two-seed fit that
+> needed **7.4 s/step on CPU** now runs at **0.19 s/step** — 2,000 steps in **387 s** instead of 2.5 hours per
+> arm. With the mechanism present from **step 0** and the anchor's own recipe, the two seeds read **19/40** and
+> **19/40** on the frozen v5 memory half against the brief's bar of **27/40**: **REJECT for this configuration**,
+> which closes the configuration and not the mechanism (D22 §1). One development reading points where the next
+> configuration should look: the same memory at **half the steps** reads **22/40** with the line's best
+> **wrong-value count (11 of 40)**, so the next cycle's first piece is the **step-matched control** that says
+> whether that is the memory or the shorter fit.
 
-## Order 1, adopted in this cycle: the 10 % recall dose is the M1 base
-
-[D22](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6099472281) order 1 adopts the
-10 % recall dose (#2151) as the M1 base; it was rejected by one row under D21 and is kept under D22. **D10**
-(`runs2/dose-D10`: mixed **10.21 %** recall share, 2,000 steps, `data_seed=20261009`, `lr=2e-4`) is recorded in
-`STATUS.md` and the newest `current-state` entry as the artifact every M1 arm is measured against: v5 memory
-**20/40** `check_pass`, open reply panel **37/232** `fluent_and_relevant` (43 → 37, paired p = 0.42, inside
-noise), unknowable rows 0/24, derangement 0.
-
-## Order 2, the source work this cycle landed
-
-| PR | merge | what it does |
-|---|---|---|
-| [#2168](https://github.com/UOR-Foundation/uor-r4/pull/2168) | `a5e140669` | `memory_config_from_args()` shared with `stack_config`; the seven memory options accepted beside `init=` (adding on a model saved without memory, requiring exact agreement on one that has it); `StackModel::add_memory_layers` drops the named layers' `mlp.gate/up/down` and initialises the memory's own exactly as a fresh construction would; `dialogue_train` installs it **after `init=` and before the optimizer**, so the mechanism is present from the first step; `DialogueSettings` carries the parsed memory; the option names join the allowlist |
-| [#2170](https://github.com/UOR-Foundation/uor-r4/pull/2170) | `14a909885` | the run's `seed=` reaches an added memory (as `pointer=DIM` takes it), so two seeds are two mechanisms; re-lands #2169, which I opened against the preparation branch instead of `main` and which therefore merged off main |
-
-**Focused checks**, at the exact heads: a library test asserting the added memory replaces layer 1's MLP and is
-**equal element-wise to a fresh `StackModel::new` with that configuration and seed**, idempotent for the same
-memory and refused for a different one; a CLI test covering add/agree/refuse, the companion-without-`memory_layers=`
-refusal, the codebook defaults and the seed reaching the configuration; the example suite (13 tests); the
-package's fmt and clippy status unchanged.
-
-## The mechanism, trained in: two seeds, memory present from step 0
-
+## The tooling fix this cycle landed (preparation PR)
 | | |
 |---|---|
-| base | `chat-29m-B-lr5e-4` (`d8a3c971…`) — the chat fine-tune **before** the mixture pass, so the memory is inside the fine-tune and not added to a finished artifact |
-| memory | `memory_layers=4` (of the 10-layer `rrarrarrar` stack, width 576), `memory_sub_keys=64`, `memory_top_k=16`, `memory_heads=4`, `memory_key_dim=64`, `memory_score=dot`, no codebook: 4,096 slots × 576 per head set ≈ 2.4 M learned values at that layer, addressed by product keys |
-| data | the adopted base's own store, cycle 1's `mix-10` (`tokens.u16` `888241261c378138…`) |
-| seeds | **two**: `seed=20261010` (`M1`) and `seed=20261011` (`M2`); step-0 dev NLL **2.230381 vs 2.229698** is the check that the two initialisations really are two |
-| steps | `steps=1000 batch=16 lr=2e-4 warmup=100 protocol=2 context=384 policy=full_prefix` — **2,000 steps was the pre-registered recipe; the CPU-only memory op made that a five-hour fit, so both seeds ran **1,000 steps** (stated in Limitations, not hidden)** |
-| device | `device=cpu`, `RAYON_NUM_THREADS=110`, one arm after the other |
+| what | `ProductKeyMemory::cuda_fwd` = `cuda_ops::via_host3`, i.e. the op's exact CPU forward on `to_cpu_storage()` copies of the three inputs, uploaded back — the bridge the stack's other kernel-less configurations already use. The backward was already device-generic. **The CPU path is untouched**, so every existing artifact keeps its exact numbers. |
+| where | [#2175](https://github.com/UOR-Foundation/uor-r4/pull/2175), branch `deepseek/memory-cuda-20261010` |
+| checks | CPU build clean; `cargo test -p uor-r4-training --lib stack_memory` **7 passed** including the finite-difference gradient check; the **CUDA-enabled pod build compiles and passes parity** (the check a CPU-only local build cannot perform) |
+| measured effect | **7.4 s/step → 0.19 s/step** (2,000 steps: ~2.5 h on CPU → **387 s on the GPU**, per arm, both arms in parallel) |
 
-### The measured tooling limit, named first because it shaped the run
-`Error: Tensor(no cuda implementation for geometric-stack-product-key-memory)` — the product-key memory is a
-`CustomOp3` with only `cpu_fwd`, so `device=cuda` refuses a memory-equipped stack outright. Measured on this
-pod: **3.7 s/step** for one arm at 24 threads, ~9 s/step with two arms sharing the cores. At 2,000 steps (D10's
-recipe) that is a **five-hour fit per pair of seeds**, so the two seeds were fitted at **1,000 steps** each and
-the anchor's step count is stated as a limitation rather than hidden. A device-agnostic or CUDA implementation
-of the memory op is the tooling piece that removes this, and it is in this lab's authority under D22 §1.
+## The pre-registered run (D22 cycle 2)
+| | |
+|---|---|
+| base | `chat-29m-B-lr5e-4` (`d8a3c971…`) — the memory is inside the fine-tune, from step 0, installed before the optimizer |
+| memory | `memory_layers=4` of the 10-layer `rrarrarrar` stack (width 576), `memory_sub_keys=64`, `memory_top_k=16`, `memory_heads=4`, `memory_key_dim=64`, `memory_score=dot`, no codebook |
+| data | the adopted base's own store, cycle 1's `mix-10` (`tokens.u16` `888241261c378138…`), unchanged |
+| recipe | `steps=2000 batch=16 lr=2e-4 warmup=100 protocol=2 context=384 policy=full_prefix`, `pointer=32`, `pointer_gate_supervision=0`, `device=cuda` — **D10's own recipe**, so the contrast is the memory operator |
+| seeds | `20261010` (**G1**, model `b1aa24e1…`, dev 0.3946, 377 s) and `20261011` (**G2**, model `25cf22c7…`, dev 0.3865, 379 s) |
+| fitness | [`TEST FITNESS: FIT`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6101635064) with two declared deviations (the frozen panel has 64 rows, not the brief's 80; the tagger/read split belongs to the exact-key arm this run does not test) |
 
 ## Results
 
 ### Frozen v5 memory panel (40 rows, frozen checks, cap 64)
-| arm | seed | memory `check_pass` | unknowable | wrong-value | derangement |
-|---|---|---:|---:|---:|---:|
-| **D10 (adopted base, no memory)** | 20261009 | **20/40** | 0/24 | 17 | 0 |
-| **M1** | 20261010 | **pending** — fitting on the pod (step-0 dev NLL 2.230381, step-250 1.2279) | — | — | — |
-| **M2** | 20261011 | **pending** — queued behind M1 (step-0 dev NLL 2.229698) | — | — | — |
+| arm | steps | device | memory `check_pass` | unknowable | **wrong-value** | derangement |
+|---|---:|---|---:|---:|---:|---:|
+| D10 (adopted base, **no memory**) | 2,000 | GPU | **20/40** | 0/24 | 17 | 0 |
+| **G1** (memory, seed 20261010) | 2,000 | GPU | **19/40** | 0/24 | 17 | 1 |
+| **G2** (memory, seed 20261011) | 2,000 | GPU | **19/40** | 0/24 | 15 | 2 |
+| *cpuM1 (memory, seed 20261010, **half the steps**)* | 1,000 | CPU | *22/40* | *2/24* | ***11*** | *2* |
 
-### Open reply panel (232 rows, like-for-like `fluent_and_relevant`)
-| arm | reply | vs the base's 37/232 |
-|---|---:|---|
-| **M1** | **pending** | — |
-| M2 | **pending** | — |
+**Bar (pre-registered): memory ≥ 27/40 on both seeds and BPB within 0.01 of the anchor. NOT MET on both
+halves** — the seeds sit at 19/40 (one row under the adopted base, eight under the brief's bar) and G1's BPB is
+**+0.0276** against the anchor, outside the 0.01 the bar allows. **No headline movement.**
+
+### The development reading that names the next step
+The same memory configuration fitted at **1,000 steps on the CPU** reads **22/40** — *above* the adopted base's
+20/40 — with **11 wrong-value failures**, the best on this line (read binding's best was 12, the token-identity
+pointer's 12). It is **not a claim**: it differs from the GPU arms in step count *and* device (GPU and CPU
+reductions order differently, so the arms are not expected to be bit-identical), and its own cycle's
+pre-registered bar was 24/40. It is exactly the kind of reading that needs a step-matched control before it can
+mean anything.
+
+### Float likelihood on the chat held-out stream
+| arm | reading |
+|---|---|
+| D10 (anchor) | **1.17425 BPB** (nll 2.30985 over 6,169,728 targets, the whole held-out stream at context 384) |
+| **G1** | **1.20184 BPB** — **+0.0276** against the anchor, i.e. outside the bar's 0.01 |
+| G2 | pending |
+| cpuM1 | pending |
+
+### Open reply panel (232 rows, `fluent_and_relevant`), primary arm — **pending**
+G1's replies are generating and its grading is in the shared judge queue as this record is written; posted
+on #2029 when it lands. It cannot change the verdict, which the memory half decides (19/40 against 27/40).
 
 ## Decision
 
-**This cycle's result is a tooling measurement and a landed capability, not a mechanism verdict — and that is
-the honest reading of what D22 asked for.** Order 2 said to **build** the addressed-memory path rather than file
-it as blocked: the fields, the fresh-construction parity, the seed, the install-before-the-optimizer ordering
-and the two focused tests are all in `main`. What the cycle then measured is that **the mechanism cannot be
-trained on the GPU this project serves from**: the product-key memory is a CPU custom op, so the two-seed fit is
-a multi-hour CPU job instead of a three-minute GPU one, and the pre-registered 2,000-step recipe was cut to
-1,000 steps to fit a lease.
+**REJECT for this configuration; the mechanism stays open (D22 §1).** The pre-registered bar for the
+product-key-memory configuration — **≥ 27/40 on both seeds with BPB within 0.01** — is not met: 19/40, 19/40.
+That closes *this configuration* (layer 4, 64 sub-keys, 16 top-k, replacing that layer's MLP, fitted from the
+chat base for 2,000 steps) and nothing else.
 
-**No KEEP/REJECT is claimed for the memory configuration** — the arms are unscored. Under D22 §1 that is not a
-negative about addressed memory either way; it is a named blocker in this lab's own authority, and the next
-piece is the fix: **implement the product-key memory for the served device** (a device-agnostic forward/backward
-or a CUDA kernel), validated by the parity test the added-memory construction already has, so the mechanism can
-be trained **in** at GPU speed with the seeds D22 requires. That piece is pre-registered before any compute, and
-the in-flight fit's readings are posted when they land.
+**What it does establish, and what it does not.** The device fix works and is measured (0.19 s/step, 387 s per
+2,000-step arm, both arms in parallel, the op's values unchanged — the CUDA forward *is* the CPU forward). The
+configuration is *not* a winner at the anchor's step count on this panel. Neither statement is evidence about
+the exact-key (prime/semiprime addressed store) arm of the same brief, which this run did not test.
+
+**Next cycle, named now (cheapest first):**
+1. **The step-matched control**: the identical recipe with **no memory** at 1,000 steps, two seeds — it decides
+   whether cpuM1's 22/40 and wrong-value 11 come from the memory or from the shorter fit. Cheap now: ~6.5 min
+   per pair on the GPU.
+2. **Configuration variation at the anchor's steps**: the memory at a **read** layer (`a` in `rrarrarrar`) and
+   with a larger sub-key set, one seed each, against the same frozen panel and bar.
+3. **The exact-key arm** of the brief (prime/semiprime addressed store) — a different mechanism path from the
+   native learner, and the one whose "tagger accuracy reported separately from read accuracy" item this run
+   declared not applicable.
 
 ## Limitations
 
-- **Steps.** The pre-registered recipe was D10's 2,000 steps; the CPU-only memory op made that a five-hour fit,
-  so both seeds ran **1,000 steps**. The memory is present from step 0 in both, which is what D22 §3 asks for,
-  but the anchor had twice the updates — a memory arm that loses cannot be read as the mechanism losing.
-- **Device.** CPU training is not the served path and its numerics are the same f32 arithmetic, but the run is
-  slower than any GPU configuration of the same recipe.
-- **One layer, one configuration.** `memory_layers=4` with 64 sub-keys is *a* configuration, not the
-  mechanism; per D22 §1 a miss closes this configuration only.
-- **Panel noise.** The memory half is 40 rows; ±3 rows is the movement this line's arms have shown without a
-  mechanism change, and the bar was set outside that.
+- **Two seeds, one configuration**; the panel's memory half is 40 rows and its noise is ±3 rows, which is why
+  the bar was set at 27/40 rather than at a one-row difference.
+- **The brief's ≥ 80-row panel cannot be met on v5** (64 rows: 40 memory + 24 unknowable) — declared as a
+  deviation before compute and an owner question, not a lab decision.
+- **CPU and GPU arms are not bit-identical** (different reduction orders), so the 1,000-step CPU reading is a
+  development observation, not a controlled comparison; the control in (1) is what makes it one.
+- **The BPB instrument differs from cycle 5's** (the D11 export path refuses a memory model; this uses
+  `evaluate` with the same 2.837427 B/token lens), so the bar's "within 0.01" is read within this instrument.
 
 ## Cost
 
 | | |
 |---|---|
-| pod | `l8uv41elowab34`, 2 × RTX 5090 leased 16:22Z → released after the fit (≈ ~6.5 h at $2.38/h ≈ ~$15), used for **CPU** fits; the GPU half was idle because the memory op cannot run on it |
-| GPU work | none — the measured limit above |
-| CPU work | two 1,000-step fits at ~9-10 s/step plus two failed GPU attempts (refused in under a second) and one 20-step timing probe |
-| laptop CPU | v5 replies and grading, reply-panel scoring, analysis |
+| pod | `l8uv41elowab34`, 2 × RTX 5090, leased 16:22Z, renewed to 22:35Z; the GPU fits used **12.8 minutes** of it (two arms in parallel, 387 s + 389 s wall) |
+| GPU work | two 2,000-step fits; the CPU fits that preceded them (~2.2 h of the pod's CPU for one completed arm, superseded and stopped as declared) |
+| laptop CPU | v5 replies and grading for three arms, the reply panel, analysis |
 | external | none beyond the pod; inside the ≤ 4 pods / ≤ $8/h caps |
 
 ## Evidence
 
-- Arm reports and models: pod volume `/workspace/uor-r4/deepseek/mem-in-20261010/runs/{M1,M2}-e/`, pulled to the
-  laptop and bundled; the refused GPU attempts and the timing probe are in the same volume's job logs.
-- Bundle on cloud-store: `icloud:UOR-R4/results/deepseek/addressed-memory-2026-10-10.tar` (object written
-  with the arm reports and the fit logs; its md5 is recorded in the delivery PR).
-- Pre-registration: [#2029 comment 6099634823](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6099634823);
-  D22: [#2029 comment 6099472281](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6099472281).
+- Arm reports, models and configs: pod volume `/workspace/uor-r4/deepseek/mem-in-20261010/runs/{G1,G2}-gpu/` and
+  `runs/M1-e/` (CPU), pulled to the laptop; job logs in `/workspace/uor-r4/jobs/deepseek/`.
+- Acceptance reports: `score/v5g-{G1,G2,cpuM1}/report.json`, `score/rpg-G1/report.json`.
+- Bundle on cloud-store: `icloud:UOR-R4/results/deepseek/addressed-memory-2026-10-10.tar` (the object is
+  re-written with the GPU arms, the CPU arm, the BPB reports and the job logs; its md5 is recorded in the
+  delivery PR).
+- Pre-registration and fitness review:
+  [#2029 comment 6101635064](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6101635064);
+  the previous cycle's record and its carry-forward:
+  [#2029 comment 6101562834](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6101562834).
