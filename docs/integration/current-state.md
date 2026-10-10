@@ -1,3 +1,14 @@
+## 2026-10-10 — Wide learned flock read (arm W): REJECT, and support size is not the gap (claude, #2032)
+
+The owner-funded new line's decisive run, `flock:32:32 learned_rank`, 2 seeds, M4 recipe ([record](../labs/softmax-free-read-2026-10-10/README.md#new-line-owner-funded-wide-learned-flock--arm-w-reject)):
+- **BPB:** float **0.894703 / 0.894072**, served 0.903271 / 0.903509 at 512 windows. That is +0.0172 float and +0.0166 served against softmax arm A, against a 0.01 bar.
+- **v4:** equal to A.
+- **Speed:** 15 % slower than A, timed back to back.
+
+REJECT. Widening the support 17 → 66 sources buys only 0.0013 BPB over the learned `flock:8:8`, so the remaining gap is the rank weighting or its training, not support size. Line "wide learned flock read" · count 1/3 · headline: softmax at runtime yes → yes. The configuration is closed; the mechanism is not (D22).
+
+**Next:** a rank-consistent training gradient for the rank read (the brief's first open question), pre-registered with a test-fitness review before compute.
+
 ## 2026-10-10 — D22: a negative closes a configuration, never a mechanism; five closures reopened (claude, owner decision)
 
 The owner asked whether the labs were using D21 to rule out novel mechanisms on weak tests. An audit of every closure since D21 found the records honest but the tests unfit:
