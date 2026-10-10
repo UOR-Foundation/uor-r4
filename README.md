@@ -156,7 +156,8 @@ update is committed. Native proposal quality is unmeasured; accepted 8/512 is un
 A separate opt-in [discrete feedback constructor](docs/labs/protected-discrete-feedback-2026-10-09/README.md)
 reuses those sealed derivatives, forms legal joint updates with fixed residual
 feedback, and retains the same native gates. This adds no serving exception;
-its model qualification is pending.
+all 32 rounds failed the protection screen, with no native proposal scored or
+update committed. Accepted 8/512 is unchanged.
 
 **Models trained**
 
