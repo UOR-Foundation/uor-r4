@@ -284,10 +284,14 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
             "reply completion changed frozen Cue/Prefix/exp payloads",
         ));
     }
-    let final_generate =
-        NativeGeometricGenerate::from_bytes(&final_parent.generate, &final_parent.binding)?;
-    let final_bridge =
-        NativeGeometricReadStateBridge::from_bytes(&final_parent.bridge, &final_parent.binding)?;
+    let final_generate = NativeGeometricGenerate::from_bytes(
+        &final_parent.generate,
+        final_parent.integer.binding(),
+    )?;
+    let final_bridge = NativeGeometricReadStateBridge::from_bytes(
+        &final_parent.bridge,
+        final_parent.integer.binding(),
+    )?;
     let eval_start = Instant::now();
     let final_eval = evaluate(
         a,
