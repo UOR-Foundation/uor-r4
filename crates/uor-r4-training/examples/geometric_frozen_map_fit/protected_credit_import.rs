@@ -68,6 +68,29 @@ fn relocated_inputs(config: &prefix::Config) -> Result<Value> {
     }
     Ok(v)
 }
+// Permit only the authenticated phase's declared capture-root relocation.
+// Scientific values and every other provenance field remain exact JSON values.
+fn verify_relocated_witness(
+    old: &Value,
+    current: &Value,
+    old_root: &Path,
+    current_root: &Path,
+) -> Result<()> {
+    replay_require(
+        old.pointer("/original_derivation/capture_root") == Some(&json!(old_root))
+            && current.pointer("/original_derivation/capture_root") == Some(&json!(current_root)),
+        "normalized witness capture root is not the declared input authority",
+    )?;
+    let mut aligned = current.clone();
+    let slot = aligned
+        .pointer_mut("/original_derivation/capture_root")
+        .ok_or_else(|| bad("normalized witness capture-root provenance absent"))?;
+    *slot = json!(old_root);
+    replay_require(
+        &aligned == old,
+        "normalized witness scientific/provenance values differ beyond declared capture root",
+    )
+}
 fn copy_file(a: &Args, source: &Path, leaf: &str) -> Result<Value> {
     validate_inherited_leaf(leaf)?;
     let bytes = fs::read(source)?;
@@ -108,6 +131,34 @@ pub(super) fn verify_copies(a: &Args, inherited: &Value) -> Result<()> {
                         .ok_or_else(|| bad("saved-credit copy size missing"))?,
             "saved-credit scientific copy changed after preparation",
         )?;
+    }
+    if let Some(relocations) = inherited["witness_relocations"].as_array() {
+        for r in relocations {
+            let old_leaf = r["producer_file"]
+                .as_str()
+                .ok_or_else(|| bad("relocated producer witness absent"))?;
+            let new_leaf = r["file"]
+                .as_str()
+                .ok_or_else(|| bad("relocated current witness absent"))?;
+            validate_inherited_leaf(old_leaf)?;
+            validate_inherited_leaf(new_leaf)?;
+            let old = read(&a.out.join(old_leaf))?;
+            let current = read(&a.out.join(new_leaf))?;
+            verify_relocated_witness(
+                &old,
+                &current,
+                Path::new(
+                    r["producer_capture_root"]
+                        .as_str()
+                        .ok_or_else(|| bad("producer capture root absent"))?,
+                ),
+                Path::new(
+                    r["current_capture_root"]
+                        .as_str()
+                        .ok_or_else(|| bad("current capture root absent"))?,
+                ),
+            )?;
+        }
     }
     Ok(())
 }
@@ -415,15 +466,52 @@ pub(super) fn load(
         "retained gradient original fractional master bits differ",
     )?;
 
+    let mut witness_relocations = Vec::new();
     for entry in fs::read_dir(&authority.root)? {
         let e = entry?;
         let leaf = e.file_name().to_string_lossy().into_owned();
         if leaf.starts_with("original-") && leaf.ends_with(".json") {
-            replay_require(
-                fs::read(e.path())? == fs::read(a.out.join(&leaf))?,
-                "saved normalized original frame differs",
-            )?;
-            copied.push(copy_file(a, &e.path(), &leaf)?);
+            let current_path = a.out.join(&leaf);
+            let old_bytes = fs::read(e.path())?;
+            let current_bytes = fs::read(&current_path)?;
+            if old_bytes == current_bytes {
+                copied.push(copy_file(a, &e.path(), &leaf)?);
+            } else {
+                let old_episode = expected
+                    .episode
+                    .as_ref()
+                    .ok_or_else(|| bad("saved original episode absent"))?;
+                let current_episode = current
+                    .episode
+                    .as_ref()
+                    .ok_or_else(|| bad("current original episode absent"))?;
+                let phase = old_episode
+                    .phases
+                    .iter()
+                    .find(|p| {
+                        p.original_prefix_inverse
+                            && leaf == format!("original-joint-phase-{:02}.json", p.position)
+                    })
+                    .ok_or_else(|| {
+                        bad("normalized witness mismatch is not a declared inverse phase")
+                    })?;
+                let current_phase = current_episode
+                    .phases
+                    .iter()
+                    .find(|p| p.position == phase.position && p.original_prefix_inverse)
+                    .ok_or_else(|| bad("relocated inverse phase authority missing"))?;
+                verify_relocated_witness(
+                    &serde_json::from_slice(&old_bytes)?,
+                    &serde_json::from_slice(&current_bytes)?,
+                    &phase.capture.root,
+                    &current_phase.capture.root,
+                )?;
+                let preserved = format!("imported-producer-{leaf}");
+                copied.push(copy_file(a, &e.path(), &preserved)?);
+                // Keep the current preparer's witness at its normal filename.
+                copied.push(copy_file(a, &current_path, &leaf)?);
+                witness_relocations.push(json!({"file":leaf,"producer_file":preserved,"position":phase.position,"producer_capture_root":phase.capture.root,"current_capture_root":current_phase.capture.root,"producer_sha256":sha256_bytes(&old_bytes),"current_sha256":sha256_bytes(&current_bytes),"equivalence":"all parsed scientific/provenance values exact except declared original_derivation.capture_root"}));
+            }
         }
     }
     let margins = read(&authority.root.join("protected-margin-receipt.json"))?;
@@ -575,7 +663,7 @@ pub(super) fn load(
     ] {
         copied.push(copy_file(a, &source, dest)?);
     }
-    let inheritance = json!({"schema":"uor-r4.saved-protected-credit-import/1","authority":authority,"source_commit":SOURCE,"binary_sha256":BINARY,"config_sha256":CONFIG,"report_sha256":REPORT,"manifest_sha256":MANIFEST,"inherited_objective_backward_calls":31,"inherited_protected_backward_calls":380,"new_training_graph_forwards":0,"new_backward_calls":0,"copied_files":copied});
+    let inheritance = json!({"schema":"uor-r4.saved-protected-credit-import/1","authority":authority,"source_commit":SOURCE,"binary_sha256":BINARY,"config_sha256":CONFIG,"report_sha256":REPORT,"manifest_sha256":MANIFEST,"inherited_objective_backward_calls":31,"inherited_protected_backward_calls":380,"new_training_graph_forwards":0,"new_backward_calls":0,"copied_files":copied,"witness_relocations":witness_relocations});
     verify_copies(a, &inheritance)?;
     write(a, "saved-protected-credit-import.json", &inheritance)?;
     Ok((pm, pg, gm, gg, inheritance))
@@ -584,6 +672,50 @@ pub(super) fn load(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inverse_witness_accepts_only_exact_declared_capture_relocation() {
+        let old = json!({"original_derivation":{"capture_root":"/old/capture","method":"audited inverse","sha":"fixed"},"pool":{"mass":123},"copy":[4,4]});
+        let mut current = old.clone();
+        current["original_derivation"]["capture_root"] = json!("/new/capture");
+        assert!(verify_relocated_witness(
+            &old,
+            &current,
+            Path::new("/old/capture"),
+            Path::new("/new/capture")
+        )
+        .is_ok());
+        assert!(verify_relocated_witness(
+            &old,
+            &current,
+            Path::new("/wrong"),
+            Path::new("/new/capture")
+        )
+        .is_err());
+        assert!(verify_relocated_witness(
+            &old,
+            &current,
+            Path::new("/old/capture"),
+            Path::new("/wrong")
+        )
+        .is_err());
+        current["pool"]["mass"] = json!(124);
+        assert!(verify_relocated_witness(
+            &old,
+            &current,
+            Path::new("/old/capture"),
+            Path::new("/new/capture")
+        )
+        .is_err());
+        current["pool"]["mass"] = json!(123);
+        current["original_derivation"]["sha"] = json!("changed");
+        assert!(verify_relocated_witness(
+            &old,
+            &current,
+            Path::new("/old/capture"),
+            Path::new("/new/capture")
+        )
+        .is_err());
+    }
     #[test]
     fn relocation_normalizes_only_named_locations_and_keeps_identity_fields() {
         let a: prefix::Config = serde_json::from_value(

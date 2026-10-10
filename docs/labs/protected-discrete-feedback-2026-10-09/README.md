@@ -75,6 +75,14 @@ records, with a worst-width serialization test; the512MiB report cap and every
 model acceptance condition are unchanged. The sealed failed attempt is retained
 as a setup defect, not a negative model result.
 
+The second attempt stopped after 265.623 report seconds during saved-credit
+authentication. Exactly one original witness differed only in its declared
+`original_derivation.capture_root` relocation from the old pod to this worktree;
+all scientific fields matched. No solver round or native candidate was produced.
+Both sealed failure roots and their external execution receipts are retained.
+The importer repair binds the two exact configured roots, preserves both
+witnesses, and continues to reject undeclared paths or scientific differences.
+
 ## Next
 
 Execute the fixed saved-credit constructor and distinguish no eligible discrete
