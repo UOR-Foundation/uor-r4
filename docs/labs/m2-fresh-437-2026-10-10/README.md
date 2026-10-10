@@ -161,13 +161,14 @@ The package includes all run roots, restored models and exposure inputs,
 configuration files, independent readers, setup failures, build/test logs, four
 producer executables, and a restorable source bundle plus source patch. The
 source is activated on main; this patch is a reproducibility copy, not a closed
-negative model-source archive. Final-head/delivery receipts are retained in the
-separate closeout package and posted on #2030.
+negative model-source archive. Final-head/delivery receipts will be retained in a
+separate closeout package and posted on #2030 at verified closeout.
 
 Fetch with `cloud-store fetch codex-m2-fresh-437-20261010 <owned-local-destination>`.
 The package's `evidence.tar.gz` recreates the local evidence layout. Rebind only
-absolute root paths in configs to the restored location; all file and manifest
-hashes must remain unchanged. Original producer commands, exit codes and resource
+absolute root paths in separate rebound configs to the restored location; retain
+the original configs and record new hashes for the rebound copies. All pinned
+model/data/sealed-report hashes must remain unchanged. Original producer commands, exit codes and resource
 observations are retained in the execution receipts. The principal commands are:
 
 ```text
