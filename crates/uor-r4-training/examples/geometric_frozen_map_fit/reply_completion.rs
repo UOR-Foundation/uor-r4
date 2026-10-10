@@ -275,6 +275,15 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     }
     let fit_seconds_including_checkpoints = fit_start.elapsed().as_secs_f64();
     let final_parent = ContinuationParent::from_checkpoint(&a.out.join("checkpoint-0064"))?;
+    if final_parent.cue != parent.cue
+        || final_parent.joint != parent.joint
+        || final_parent.prefix != parent.prefix
+        || final_parent.exp != parent.exp
+    {
+        return Err(bad(
+            "reply completion changed frozen Cue/Prefix/exp payloads",
+        ));
+    }
     let final_generate =
         NativeGeometricGenerate::from_bytes(&final_parent.generate, &final_parent.binding)?;
     let final_bridge =
