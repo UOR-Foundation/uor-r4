@@ -107,23 +107,23 @@ fn step_interval_includes_leaving_ineligible_and_free_columns() -> Result<(), St
 }
 
 #[test]
-fn zero_phase_direct_caller_restores_original_objective() -> Result<(), String> {
-    microlp::repair::transaction_fixture("zero_phase_direct_restore")
+fn signed_phase_direct_caller_restores_original_objective() -> Result<(), String> {
+    microlp::repair::transaction_fixture("signed_phase_direct_restore")
 }
 
 #[test]
-fn zero_phase_limit_before_feasibility_resumes_honestly() -> Result<(), String> {
-    microlp::repair::transaction_fixture("zero_phase_limit_before_feasibility")
+fn signed_phase_limit_before_feasibility_resumes_honestly() -> Result<(), String> {
+    microlp::repair::transaction_fixture("signed_phase_limit_before_feasibility")
 }
 
 #[test]
-fn zero_phase_limit_during_original_optimization_resumes_honestly() -> Result<(), String> {
-    microlp::repair::transaction_fixture("zero_phase_limit_during_original_optimize")
+fn signed_phase_limit_during_original_optimization_resumes_honestly() -> Result<(), String> {
+    microlp::repair::transaction_fixture("signed_phase_limit_during_original_optimize")
 }
 
 #[test]
-fn zero_phase_keeps_interior_fixed_variable() -> Result<(), String> {
-    microlp::repair::transaction_fixture("zero_phase_preserves_fixed_interior")
+fn signed_phase_keeps_interior_fixed_variable() -> Result<(), String> {
+    microlp::repair::transaction_fixture("signed_phase_preserves_fixed_interior")
 }
 
 #[test]
@@ -132,8 +132,8 @@ fn basis_load_resets_pending_phase() -> Result<(), String> {
 }
 
 #[test]
-fn both_infeasible_entry_uses_zero_phase() -> Result<(), String> {
-    microlp::repair::transaction_fixture("both_infeasible_entry_uses_zero_phase")
+fn both_infeasible_entry_uses_signed_phase() -> Result<(), String> {
+    microlp::repair::transaction_fixture("both_infeasible_entry_uses_signed_phase")
 }
 
 #[test]
@@ -144,4 +144,14 @@ fn dual_refresh_recovery_keeps_factor_errors() -> Result<(), String> {
 #[test]
 fn actual_rhs_refinement_and_rollback() -> Result<(), String> {
     microlp::repair::transaction_fixture("actual_rhs_refinement_and_rollback")
+}
+
+#[test]
+fn signed_phase_mixed_states_and_objective() -> Result<(), String> {
+    microlp::repair::transaction_fixture("signed_phase_mixed_states_and_objective")
+}
+
+#[test]
+fn signed_phase_vector_fixed_across_pivot() -> Result<(), String> {
+    microlp::repair::transaction_fixture("signed_phase_vector_fixed_across_pivot")
 }

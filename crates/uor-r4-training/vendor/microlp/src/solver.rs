@@ -244,7 +244,7 @@ pub(crate) struct Solver {
     orig_obj_coeffs: Vec<f64>,
     working_obj_coeffs: Vec<f64>,
     // Persists through deadline interruption until the original objective is
-    // restored and certified; never confuse zero-cost feasibility with optimum.
+    // restored and certified; never confuse temporary-objective feasibility with optimum.
     numerical_feasibility_restart_active: bool,
     orig_var_mins: Vec<f64>,
     orig_var_maxs: Vec<f64>,
@@ -1053,7 +1053,7 @@ impl Solver {
         }
     }
 
-    fn restart_zero_objective_feasibility(&mut self) -> Result<(), Error> {
+    fn restart_signed_objective_feasibility(&mut self) -> Result<(), Error> {
         if self.numerical_feasibility_restart_active {
             return Err(Error::InternalError(
                 "numerical feasibility restart already active".into(),
@@ -1064,7 +1064,31 @@ impl Solver {
             .basis_solver
             .reset(&candidate.orig_constraints_csc, &candidate.basic_vars)?;
         candidate.recalc_basic_var_vals()?;
+        // Fixed variable-indexed auxiliary objective for this recovery epoch.
+        // Current basic costs are zero. These signs are never regenerated
+        // after pivots: newly basic variables retain their assigned costs.
         candidate.working_obj_coeffs.fill(0.0);
+        for (col, &var) in candidate.nb_vars.iter().enumerate() {
+            let state = &candidate.nb_var_states[col];
+            let value = crate::repair::finite(candidate.nb_var_vals[col])?;
+            let min = candidate.orig_var_mins[var];
+            let max = candidate.orig_var_maxs[var];
+            let fixed = candidate.nb_var_is_fixed[col];
+            if value < min - EPS || value > max + EPS {
+                return Err(Error::InternalError(
+                    "signed recovery nonbasic value outside bounds".into(),
+                ));
+            }
+            let cost = match (state.at_min, state.at_max) {
+                (true, true) if fixed || (min.is_finite() && min == max && float_eq(value, min)) => 0.0,
+                (true, false) if !fixed && min.is_finite() && float_eq(value, min) => 1.0,
+                (false, true) if !fixed && max.is_finite() && float_eq(value, max) => -1.0,
+                (false, false) if !fixed && min == f64::NEG_INFINITY && max == f64::INFINITY => 0.0,
+                _ => return Err(Error::InternalError(format!(
+                    "signed recovery unsupported/inconsistent nonbasic state: var={var} value={value:.17e} bounds=[{min:.17e},{max:.17e}] at_min={} at_max={} fixed={fixed}", state.at_min, state.at_max))),
+            };
+            candidate.working_obj_coeffs[var] = cost;
+        }
         candidate.recalc_working_obj_coeffs()?;
         candidate.require_numerical_phase(NumericalPhase::Dual)?;
         candidate.is_primal_feasible = candidate.calc_primal_infeasibility().0 == 0;
@@ -1078,7 +1102,7 @@ impl Solver {
         }
         *self = candidate;
         numerical_progress(
-            "zero-objective-feasibility-restart",
+            "signed-objective-feasibility-restart",
             &self.basic_vars,
             self.lp_iterations,
         );
@@ -1129,7 +1153,7 @@ impl Solver {
     fn refresh_numerics_impl(
         &mut self,
         phase: NumericalPhase,
-        allow_zero_restart: bool,
+        allow_signed_restart: bool,
     ) -> Result<(), Error> {
         numerical_progress("refresh-begin", &self.basic_vars, self.lp_iterations);
         let mut refreshed = self.clone();
@@ -1142,14 +1166,14 @@ impl Solver {
         // artificial phase can have a different working objective. Validate
         // what the caller needs without silently changing either flag.
         if !refreshed.phase_certified_with_refinement(phase)? {
-            if allow_zero_restart
+            if allow_signed_restart
                 && matches!(phase, NumericalPhase::Dual)
                 && !refreshed.numerical_feasibility_restart_active
             {
                 // Only a phase-certificate failure after successful factor/RHS
                 // reconstruction takes this path. Factor/solve errors above
                 // remain numerical errors, not fabricated infeasibility.
-                refreshed.restart_zero_objective_feasibility()?;
+                refreshed.restart_signed_objective_feasibility()?;
             } else {
                 refreshed.require_numerical_phase(phase)?;
             }
@@ -1223,7 +1247,7 @@ impl Solver {
             if admitted.numerical_feasibility_restart_active {
                 admitted.require_numerical_phase(NumericalPhase::Dual)?;
             }
-            admitted.restart_zero_objective_feasibility()?;
+            admitted.restart_signed_objective_feasibility()?;
         }
         *self = admitted;
         let obj_str = if self.is_dual_feasible {
@@ -1320,7 +1344,7 @@ impl Solver {
                     Err(Error::InternalError(_))
                         if attempt == 2 && !self.numerical_feasibility_restart_active =>
                     {
-                        self.restart_zero_objective_feasibility()?;
+                        self.restart_signed_objective_feasibility()?;
                         refreshed_since_pivot = false;
                         attempt = 0;
                     }
@@ -3433,6 +3457,121 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 "fixed value was not retained",
             )
         }
+        "signed_phase_mixed_states_and_objective" => {
+            let mut case = Solver::try_new(
+                &[3.0, -2.0, 1.0, 0.0, 5.0, 2.0],
+                &[2.0, -4.0, 0.0, f64::NEG_INFINITY, 0.0, 1.25],
+                &[5.0, 3.0, 10.0, f64::INFINITY, 10.0, 1.25],
+                &[
+                    (
+                        CsVec::new(6, vec![0, 1, 2, 4], vec![1.0, 1.0, 1.0, 3.0]),
+                        ComparisonOp::Le,
+                        20.0,
+                    ),
+                    (CsVec::new(6, vec![4], vec![1.0]), ComparisonOp::Le, 100.0),
+                ],
+                &vec![VarDomain::Real; 6],
+                None,
+            )?;
+            case.load_basis(&Basis(vec![
+                VarStatus::AtLower,
+                VarStatus::AtUpper,
+                VarStatus::AtLower,
+                VarStatus::Free,
+                VarStatus::Basic,
+                VarStatus::AtLower,
+                VarStatus::AtLower,
+                VarStatus::Basic,
+            ]))?;
+            let col = match case.var_states[2] {
+                VarState::NonBasic(c) => c,
+                _ => unreachable!(),
+            };
+            case.nb_var_vals[col] = 0.5;
+            case.nb_var_states[col] = NonBasicVarState {
+                at_min: true,
+                at_max: true,
+            };
+            case.nb_var_is_fixed[col] = true;
+            let original = (
+                case.orig_obj_coeffs.clone(),
+                case.orig_constraints.clone(),
+                case.orig_rhs.clone(),
+                case.orig_var_mins.clone(),
+                case.orig_var_maxs.clone(),
+            );
+            case.restart_signed_objective_feasibility()?;
+            require(
+                case.working_obj_coeffs == vec![1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                "mixed lower/upper/fixed/free/basic artificial costs wrong",
+            )?;
+            require(
+                case.cur_obj_val == -1.0 && *case.get_value(2) == 0.5,
+                "actual temporary objective or fixed-interior value wrong",
+            )?;
+            require(
+                original
+                    == (
+                        case.orig_obj_coeffs.clone(),
+                        case.orig_constraints.clone(),
+                        case.orig_rhs.clone(),
+                        case.orig_var_mins.clone(),
+                        case.orig_var_maxs.clone(),
+                    ),
+                "signed recovery changed original problem",
+            )?;
+            case.require_numerical_phase(NumericalPhase::Dual)?;
+            // A new candidate with a bounded, nonfixed interior value cannot
+            // be silently relabeled free/fixed or moved to a different bound.
+            case.numerical_feasibility_restart_active = false;
+            let col = match case.var_states[0] {
+                VarState::NonBasic(c) => c,
+                _ => unreachable!(),
+            };
+            case.nb_var_vals[col] = 3.0;
+            case.nb_var_states[col] = NonBasicVarState {
+                at_min: false,
+                at_max: false,
+            };
+            let before = format!("{case:?}");
+            require(
+                case.restart_signed_objective_feasibility().is_err()
+                    && format!("{case:?}") == before,
+                "bounded interior state admitted or rejection mutated solver",
+            )
+        }
+        "signed_phase_vector_fixed_across_pivot" => {
+            solver.restart_signed_objective_feasibility()?;
+            let costs = solver.working_obj_coeffs.clone();
+            require(costs[0] == -1.0, "upper-bound entry cost is not negative")?;
+            let (row, value) = solver.choose_pivot_row_dual().ok_or_else(|| {
+                Error::InternalError("signed pivot fixture has no infeasible row".into())
+            })?;
+            solver.calc_row_coeffs(row)?;
+            let info = solver.choose_entering_col_dual(row, value)?;
+            let entering = solver.nb_vars[info.col];
+            solver.calc_col_coeffs(info.col)?;
+            solver.pivot(&info, NumericalPhase::Dual)?;
+            require(
+                matches!(solver.var_states[entering], VarState::Basic(_))
+                    && solver.working_obj_coeffs == costs
+                    && solver.working_obj_coeffs[entering] == -1.0,
+                "new basic variable lost its fixed artificial cost",
+            )?;
+            let actual: f64 = (0..solver.num_total_vars())
+                .map(|v| costs[v] * *solver.get_value(v))
+                .sum();
+            require(
+                (solver.cur_obj_val - actual).abs() < 1e-12,
+                "temporary objective was not recomputed from fixed coefficients",
+            )?;
+            require(
+                solver.restore_feasibility()? == StopReason::Finished
+                    && solver.working_obj_coeffs == solver.orig_obj_coeffs
+                    && !solver.numerical_feasibility_restart_active,
+                "signed phase did not finish original objective",
+            )
+        }
         "actual_rhs_refinement_and_rollback" => {
             let a = CsMat::new_csc(
                 (2, 2),
@@ -3541,7 +3680,7 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
             )
         }
         "basis_load_resets_pending_phase" => {
-            solver.restart_zero_objective_feasibility()?;
+            solver.restart_signed_objective_feasibility()?;
             let slack = solver.slack_basis();
             solver.load_basis(&slack)?;
             require(
@@ -3555,7 +3694,7 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                     && solver.cur_obj_val == -1.0,
                 "loaded basis did not restore original optimum",
             )?;
-            solver.restart_zero_objective_feasibility()?;
+            solver.restart_signed_objective_feasibility()?;
             let malformed = Basis(vec![]);
             require(
                 solver.load_basis(&malformed).is_err()
@@ -3563,7 +3702,7 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 "failed explicit load falsely cleared pending restoration",
             )
         }
-        "both_infeasible_entry_uses_zero_phase" => {
+        "both_infeasible_entry_uses_signed_phase" => {
             let mut case = Solver::try_new(
                 &[-1.0, 1.0],
                 &[0.0; 2],
@@ -3607,8 +3746,9 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
             solver.refresh_numerics_impl(NumericalPhase::Dual, true)?;
             require(
                 solver.numerical_feasibility_restart_active
-                    && solver.working_obj_coeffs.iter().all(|&x| x == 0.0),
-                "refresh did not enter certified zero phase",
+                    && solver.working_obj_coeffs[0] == 1.0
+                    && solver.working_obj_coeffs[1..].iter().all(|&x| x == 0.0),
+                "refresh did not enter certified signed phase",
             )?;
             solver.require_numerical_phase(NumericalPhase::Dual)?;
             solver.working_obj_coeffs.fill(f64::NAN);
@@ -3621,7 +3761,7 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 "nonfinite objective error was swallowed or mutated state",
             )
         }
-        "zero_phase_direct_restore" => {
+        "signed_phase_direct_restore" => {
             let mut case = Solver::try_new(
                 &[-0.4 * EPS, 1.5 * EPS, -EPS + 1e-18],
                 &[0.0; 3],
@@ -3662,23 +3802,24 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 "direct restore returned wrong original objective or rows",
             )
         }
-        "zero_phase_limit_before_feasibility" => {
-            solver.restart_zero_objective_feasibility()?;
+        "signed_phase_limit_before_feasibility" => {
+            solver.restart_signed_objective_feasibility()?;
             solver.deadline = Some(Instant::now());
             require(
                 solver.restore_feasibility()? == StopReason::Limit,
-                "deadline did not interrupt zero phase",
+                "deadline did not interrupt signed phase",
             )?;
             require(
                 solver.numerical_feasibility_restart_active
-                    && solver.working_obj_coeffs.iter().all(|&x| x == 0.0),
+                    && solver.working_obj_coeffs[0] == -1.0
+                    && solver.working_obj_coeffs[1..].iter().all(|&x| x == 0.0),
                 "interruption lost pending original objective",
             )?;
             let mut resumed = solver.clone();
             resumed.deadline = None;
             require(
                 resumed.initial_solve()? == StopReason::Finished,
-                "zero phase resume failed",
+                "signed phase resume failed",
             )?;
             require(
                 !resumed.numerical_feasibility_restart_active
@@ -3688,14 +3829,14 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 "resume did not restore original optimum",
             )
         }
-        "zero_phase_limit_during_original_optimize" => {
+        "signed_phase_limit_during_original_optimize" => {
             solver.nb_var_vals.fill(0.0);
             solver.nb_var_states.fill(NonBasicVarState {
                 at_min: true,
                 at_max: false,
             });
             solver.recalc_basic_var_vals()?;
-            solver.restart_zero_objective_feasibility()?;
+            solver.restart_signed_objective_feasibility()?;
             solver.deadline = Some(Instant::now());
             require(
                 solver.finish_numerical_feasibility_restart()? == StopReason::Limit,
@@ -3716,10 +3857,10 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 !solver.numerical_feasibility_restart_active
                     && *solver.get_value(0) == 1.0
                     && solver.cur_obj_val == -1.0,
-                "original optimize resume returned zero objective solution",
+                "original optimize resume returned temporary objective solution",
             )
         }
-        "zero_phase_preserves_fixed_interior" => {
+        "signed_phase_preserves_fixed_interior" => {
             require(
                 solver.initial_solve()? == StopReason::Finished,
                 "fixed fixture initial solve failed",
@@ -3728,10 +3869,10 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                 solver.fix_var(0, 0.5)? == StopReason::Finished,
                 "fixed fixture fixing failed",
             )?;
-            solver.restart_zero_objective_feasibility()?;
+            solver.restart_signed_objective_feasibility()?;
             require(
                 solver.restore_feasibility()? == StopReason::Finished,
-                "fixed zero phase restore failed",
+                "fixed signed phase restore failed",
             )?;
             let col = match solver.var_states[0] {
                 VarState::NonBasic(col) => col,
@@ -3744,7 +3885,7 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
                     && solver.nb_var_states[col].at_max
                     && !solver.numerical_feasibility_restart_active
                     && solver.working_obj_coeffs == solver.orig_obj_coeffs,
-                "zero restart discarded fixed interior value or original objective",
+                "signed restart discarded fixed interior value or original objective",
             )
         }
         "step_interval_covers_all_columns" => {

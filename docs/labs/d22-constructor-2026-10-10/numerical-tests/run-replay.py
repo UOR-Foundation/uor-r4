@@ -76,6 +76,11 @@ for name, argv in [("synthetic-tests", cargo + ["test", "--offline", "--release"
         sys.exit(1)
 binary = root / "numerical-target/release/d22-numerical-fixtures"
 record.update(binary_sha256=sha(binary), cargo_lock_sha256=sha(source / "Cargo.lock"))
+if os.environ.get("D22_NUMERICAL_QUALIFICATION_ONLY") == "1":
+    record["status"] = "QUALIFICATION_PASSED_NO_REPLAY"
+    save()
+    print(json.dumps(record), flush=True)
+    sys.exit(0)
 code = run("constructor", [str(binary), "--input", str(root / "restored/input.json"),
            "--expected-sha256", "0fe91060f10c0d6107be3565f9ae0746c30e742a00d02935398f6764b84b974d",
            "--output", str(attempt / "constructor")])
