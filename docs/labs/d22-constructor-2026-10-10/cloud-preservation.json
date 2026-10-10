@@ -1,0 +1,14 @@
+{
+  "schema": "uor-r4.owner-winddown-cloud/1",
+  "name": "m2-constructor-d22-winddown-20261010",
+  "remote": "icloud:UOR-R4/results/codex/m2-constructor-d22-winddown-20261010.tar",
+  "index": "icloud:UOR-R4/index/m2-constructor-d22-winddown-20261010.tsv",
+  "uploaded_utc": "2026-10-10T21:01:33Z",
+  "bytes": 62228480,
+  "md5": "2887a3bae4f7a3ee78e443e343855f84",
+  "sha256": "981846276988c33c0df8614fc71126a7ba67244ab525273e0d05b196bf8680fb",
+  "readback": "PASS complete bytes/MD5/SHA256 plus exact index",
+  "local_bulk_staging": false,
+  "why_streamed": "local below disk floor; same authorized iCloud provider and cloud-store index/checksum contract",
+  "terminal_numeric_result": "inspect separately; storage verification is not numerical/model qualification"
+}

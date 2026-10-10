@@ -1,0 +1,297 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index e4179bf61c87ed9a622e679ef22803025b9ca355..f9383215c99c85923403850db329cfebe2a762a6 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -1577,6 +1577,119 @@ impl Solver {
+         self.choose_entering_col_dual_policy(row, leaving_new_val, false)
+     }
+ 
++    /// Proposal interval over every actual column, including ineligible/small
++    /// coefficients and the leaving variable. Final candidate certification is
++    /// independent of this floating-point filter.
++    fn dual_step_interval(&self, row: usize, leaving_new_val: f64) -> Result<(f64, f64), Error> {
++        let direction = if leaving_new_val > self.basic_var_vals[row] {
++            1.0
++        } else {
++            -1.0
++        };
++        let mut lower = f64::NEG_INFINITY;
++        let mut upper = f64::INFINITY;
++        let mut restrict =
++            |cost: f64, slope: f64, state: &NonBasicVarState, free: bool| -> Result<(), Error> {
++                crate::repair::finite(cost)?;
++                crate::repair::finite(slope)?;
++                if state.at_min && state.at_max {
++                    return Ok(());
++                }
++                if !state.at_min && !state.at_max && !free {
++                    return Err(Error::InternalError(
++                        "nonbasic interior state has no certified step interval".into(),
++                    ));
++                }
++                // Upper inequalities v+k*t<EPS, or <=EPS for truly free vars.
++                for (is_upper, v, k) in [(true, cost, slope), (false, -cost, -slope)] {
++                    let active = if is_upper {
++                        state.at_max || free
++                    } else {
++                        state.at_min || free
++                    };
++                    if !active {
++                        continue;
++                    }
++                    if k == 0.0 {
++                        if v > EPS || (v == EPS && !free) {
++                            return Err(Error::InternalError(
++                                "constant reduced cost excludes every step".into(),
++                            ));
++                        }
++                    } else {
++                        let bound = crate::repair::finite((EPS - v) / k)?;
++                        if k > 0.0 {
++                            upper = upper.min(bound);
++                        } else {
++                            lower = lower.max(bound);
++                        }
++                    }
++                }
++                Ok(())
++            };
++        for (col, &var) in self.nb_vars.iter().enumerate() {
++            let state = &self.nb_var_states[col];
++            let free = !state.at_min
++                && !state.at_max
++                && self.orig_var_mins[var] == f64::NEG_INFINITY
++                && self.orig_var_maxs[var] == f64::INFINITY;
++            restrict(
++                self.nb_var_obj_coeffs[col],
++                direction * *self.row_coeffs.get(col),
++                state,
++                free,
++            )?;
++        }
++        let var = self.basic_vars[row];
++        let leaving = NonBasicVarState {
++            at_min: float_eq(leaving_new_val, self.orig_var_mins[var]),
++            at_max: float_eq(leaving_new_val, self.orig_var_maxs[var]),
++        };
++        restrict(0.0, direction, &leaving, false)?;
++        if lower > upper {
++            return Err(Error::InternalError(format!(
++                "empty reduced-cost step interval [{lower:.17e},{upper:.17e}]"
++            )));
++        }
++        Ok((lower, upper))
++    }
++
++    fn affine_dual_step_valid(
++        &self,
++        row: usize,
++        leaving_new_val: f64,
++        step: f64,
++    ) -> Result<bool, Error> {
++        let direction = if leaving_new_val > self.basic_var_vals[row] {
++            1.0
++        } else {
++            -1.0
++        };
++        let valid = |var: usize, cost: f64, state: &NonBasicVarState| {
++            state.at_min && cost > -EPS
++                || state.at_max && cost < EPS
++                || (!state.at_min
++                    && !state.at_max
++                    && self.orig_var_mins[var] == f64::NEG_INFINITY
++                    && self.orig_var_maxs[var] == f64::INFINITY
++                    && cost.abs() <= EPS)
++        };
++        for (col, &var) in self.nb_vars.iter().enumerate() {
++            let cost = crate::repair::finite(
++                (direction * *self.row_coeffs.get(col)).mul_add(step, self.nb_var_obj_coeffs[col]),
++            )?;
++            if !valid(var, cost, &self.nb_var_states[col]) {
++                return Ok(false);
++            }
++        }
++        let var = self.basic_vars[row];
++        let state = NonBasicVarState {
++            at_min: float_eq(leaving_new_val, self.orig_var_mins[var]),
++            at_max: float_eq(leaving_new_val, self.orig_var_maxs[var]),
++        };
++        Ok(valid(var, crate::repair::finite(direction * step)?, &state))
++    }
++
+     fn choose_entering_col_dual_policy(
+         &self,
+         row: usize,
+@@ -1585,6 +1698,11 @@ impl Solver {
+     ) -> Result<PivotInfo, Error> {
+         // True if the new obj. coeff. must be nonnegative in a dual-feasible configuration.
+         let leaving_diff_sign = leaving_new_val > self.basic_var_vals[row];
++        let interval = if strict_signed_ratio {
++            self.dual_step_interval(row, leaving_new_val)?
++        } else {
++            (f64::NEG_INFINITY, f64::INFINITY)
++        };
+ 
+         fn clamp_obj_coeff(mut obj_coeff: f64, var_state: &NonBasicVarState) -> f64 {
+             if var_state.at_min && obj_coeff < 0.0 {
+@@ -1663,6 +1781,12 @@ impl Solver {
+                 // candidate must still pass the unchanged phase certificate.
+                 let direction = if leaving_diff_sign { 1.0 } else { -1.0 };
+                 let ratio = crate::repair::finite(-direction * self.nb_var_obj_coeffs[c] / coeff)?;
++                if ratio < interval.0
++                    || ratio > interval.1
++                    || !self.affine_dual_step_valid(row, leaving_new_val, ratio)?
++                {
++                    continue;
++                }
+                 if ratio < best_signed_ratio
+                     || (ratio == best_signed_ratio
+                         && (coeff_abs > pivot_coeff_abs
+@@ -1683,7 +1807,7 @@ impl Solver {
+ 
+         if let Some(col) = entering_c {
+             if strict_signed_ratio && std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
+-                eprintln!("d22-numerics strict-signed-ratio row={row} col={col} ratio={best_signed_ratio:.17e} tolerance_qualified_only=true");
++                eprintln!("d22-numerics strict-signed-ratio row={row} col={col} ratio={best_signed_ratio:.17e} interval=[{:.17e},{:.17e}] tolerance_qualified_only=true", interval.0, interval.1);
+             }
+             let entering_diff = (self.basic_var_vals[row] - leaving_new_val) / pivot_coeff;
+             let entering_new_val = self.nb_var_vals[col] + entering_diff;
+@@ -1698,6 +1822,10 @@ impl Solver {
+                     coeff: pivot_coeff,
+                 }),
+             })
++        } else if strict_signed_ratio {
++            Err(Error::InternalError(
++                "no admissible signed zero crossing in reduced-cost interval".into(),
++            ))
+         } else {
+             Err(Error::Infeasible)
+         }
+@@ -3058,6 +3186,79 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+                 "fixed value was not retained",
+             )
+         }
++        "step_interval_covers_all_columns" => {
++            let mut case = Solver::try_new(
++                &[-0.4 * EPS, 1.5 * EPS, -0.3 * EPS, 0.0, 0.0],
++                &[0.0, 0.0, 0.0, 0.0, f64::NEG_INFINITY],
++                &[1.0, 1.0, 1.0, 1.0, f64::INFINITY],
++                &[(
++                    CsVec::new(5, vec![0, 1, 2, 3, 4], vec![-0.5, -1.0, -1e-6, 1e-6, 1e-12]),
++                    ComparisonOp::Le,
++                    -0.5,
++                )],
++                &vec![VarDomain::Real; 5],
++                None,
++            )?;
++            case.nb_var_vals.fill(0.0);
++            case.nb_var_states.fill(NonBasicVarState {
++                at_min: true,
++                at_max: false,
++            });
++            case.nb_var_states[4] = NonBasicVarState {
++                at_min: false,
++                at_max: false,
++            };
++            case.recalc_basic_var_vals()?;
++            case.recalc_working_obj_coeffs()?;
++            case.require_numerical_phase(NumericalPhase::Dual)?;
++            let (row, value) = case
++                .choose_pivot_row_dual()
++                .ok_or_else(|| Error::InternalError("missing interval fixture row".into()))?;
++            case.calc_row_coeffs(row)?;
++            let interval = case.dual_step_interval(row, value)?;
++            require(
++                interval.0 >= -EPS,
++                "leaving reduced cost did not constrain negative step",
++            )?;
++            let selected = case.choose_entering_col_dual_policy(row, value, true)?;
++            require(
++                selected.col == 0,
++                "small coefficient amplified negative ratio despite leaving bound",
++            )?;
++            let mut accepted = case.clone();
++            accepted.calc_col_coeffs(selected.col)?;
++            accepted.pivot(&selected, NumericalPhase::Dual)?;
++            accepted.require_numerical_phase(NumericalPhase::Dual)?;
++            for (var, cost) in [(3, -EPS + 1e-18), (4, -EPS)] {
++                let mut blocked = case.clone();
++                blocked.working_obj_coeffs[var] = cost;
++                blocked.recalc_working_obj_coeffs()?;
++                blocked.require_numerical_phase(NumericalPhase::Dual)?;
++                // col3 is opposite-direction/ineligible; col4 is truly free
++                // and below EPS pivot eligibility. Both still constrain t.
++                require(
++                    blocked.dual_step_interval(row, value)?.0 > -0.8 * EPS,
++                    "ineligible/free coefficient omitted from step interval",
++                )?;
++                require(
++                    matches!(
++                        blocked.choose_entering_col_dual_policy(row, value, true),
++                        Err(Error::InternalError(_))
++                    ),
++                    "no crossing was admitted or misclassified infeasible",
++                )?;
++            }
++            let mut empty = case;
++            empty.working_obj_coeffs[0] = -2.0 * EPS;
++            empty.recalc_working_obj_coeffs()?;
++            require(
++                matches!(
++                    empty.dual_step_interval(row, value),
++                    Err(Error::InternalError(_))
++                ),
++                "empty interval was admitted or misclassified infeasible",
++            )
++        }
+         "signed_ratio_avoids_double_allowance" => {
+             let mut case = Solver::try_new(
+                 &[-0.4 * EPS, 1.5 * EPS],
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index 3224898855b078939877f987e08158b40758b37e..03a3689fc823ee489fa1484ad3867170f9a2ad04 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "SIGNED_RATIO_SCALED_FIXTURE_CORRECTED_PENDING_TESTS",
++  "status": "ALL_COLUMN_STEP_INTERVAL_PENDING_TESTS",
+   "preparation_only": false,
+   "admission": "FIT_ADMITTED_CPU_NUMERICAL_EXCEPTION",
+   "builds": 9,
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "5c692a446ddb3ad0bd13c34bf769902f0b3eb26e6b81b2a0efd0aba83ffed24d",
+-      "bytes": 125379
++      "sha256": "a89c9f9806837c57356b00bc7dc11107670c1b57c603fdd3a197fb39f5f78870",
++      "bytes": 133865
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
+@@ -296,8 +296,8 @@
+       "bytes": 19713
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs": {
+-      "sha256": "7caaf578546418e3faefc168309515487826a991969b2e61f799ea9f039676f4",
+-      "bytes": 3885
++      "sha256": "6d68908c069973e3f500fd0bc116b4382f1dba4f8ff55dae248e7218149d22e5",
++      "bytes": 4061
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
+       "sha256": "5679ac5fc5d7e1bb013cbb5a13a3b5114e094c44dfdb9ef7753af5376f430a81",
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+index e4f00973aac7c29b268468b900ee1619d74a5d12..a0a1360aa8b19fff85f6704c1b5f690371e76026 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+@@ -100,3 +100,8 @@ fn compensated_cost_and_original_transpose_refinement() -> Result<(), String> {
+ fn signed_ratio_reselection_avoids_harris_double_allowance() -> Result<(), String> {
+     microlp::repair::transaction_fixture("signed_ratio_avoids_double_allowance")
+ }
++
++#[test]
++fn step_interval_includes_leaving_ineligible_and_free_columns() -> Result<(), String> {
++    microlp::repair::transaction_fixture("step_interval_covers_all_columns")
++}

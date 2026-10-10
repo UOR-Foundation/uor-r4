@@ -1,0 +1,78 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index aed64826c8a637262eb9fed8dc9bc36bd3983e43..2b809e451b2303952b058e5443de6bd1d5091a1f 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -956,9 +956,20 @@ impl Solver {
+     fn require_numerical_phase(&self, phase: NumericalPhase) -> Result<(), Error> {
+         let valid = match phase {
+             NumericalPhase::Primal => self.calc_primal_infeasibility().0 == 0,
+-            NumericalPhase::Dual | NumericalPhase::FixVariable => {
+-                self.calc_dual_infeasibility().0 == 0
+-            }
++            NumericalPhase::Dual | NumericalPhase::FixVariable => self
++                .nb_vars
++                .iter()
++                .zip(&self.nb_var_obj_coeffs)
++                .zip(&self.nb_var_states)
++                .all(|((&var, &cost), state)| {
++                    state.at_min && cost > -EPS
++                        || state.at_max && cost < EPS
++                        || (!state.at_min
++                            && !state.at_max
++                            && self.orig_var_mins[var] == f64::NEG_INFINITY
++                            && self.orig_var_maxs[var] == f64::INFINITY
++                            && cost.abs() <= EPS)
++                }),
+         };
+         if valid {
+             Ok(())
+@@ -2891,7 +2902,21 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+             require(
+                 artificial.working_obj_coeffs == working,
+                 "refresh changed phase objective",
+-            )
++            )?;
++            for cost in [-1.0, 1.0] {
++                let mut invalid = artificial.clone();
++                invalid.working_obj_coeffs[0] = cost;
++                let before = format!("{invalid:?}");
++                require(
++                    invalid.refresh_numerics(NumericalPhase::Dual).is_err(),
++                    "free nonbasic nonzero reduced cost was admitted",
++                )?;
++                require(
++                    format!("{invalid:?}") == before,
++                    "rejected free-variable refresh mutated solver",
++                )?;
++            }
++            Ok(())
+         }
+         _ => Err(Error::InternalError("unknown numerical fixture".into())),
+     }
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index 5fcefa52f79340141aa8c58bed0a62cb2e543b93..9df6ff1513fff3ee0ca49d97d8aff5f29f7d108c 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,9 +1,9 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "EXPLICIT_PHASE_REPAIR_UNTESTED",
++  "status": "CORRECTED_PHASE_FREE_VARIABLE_CERTIFICATION_PENDING_TESTS",
+   "preparation_only": false,
+-  "admission": "FIT_6100164233;exact_singular_gate_clarification_by_root",
++  "admission": "FIT_ADMITTED_CPU_NUMERICAL_EXCEPTION",
+   "builds": 9,
+   "fixture_executions": 22,
+   "solver_replays": 2,
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "aeccd8a87a50e80e471e76e0566f2ce8c8049ef4165f961f282e1b3dc190bb40",
+-      "bytes": 111406
++      "sha256": "50abce2c6d33812fffbcac2484ee7c958ad7ec8c7456e4e996ab1d10ee58e7aa",
++      "bytes": 112528
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",

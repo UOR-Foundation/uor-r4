@@ -1,0 +1,21 @@
+{"snapshot": "synthetic-attempt1", "files": 61, "status": "PASS"}
+{"snapshot": "synthetic-attempt2", "files": 61, "status": "PASS"}
+{"snapshot": "synthetic-attempt3", "files": 61, "status": "PASS"}
+{"snapshot": "qualification-attempt1", "files": 64, "status": "PASS"}
+{"snapshot": "qualification-attempt2", "files": 67, "status": "PASS"}
+{"snapshot": "replay-attempt1", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt2-boundary", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt3-rebuild", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt4-phase", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt5-phase-free", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt6-every-pivot", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt7-refinement", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt8-signed-ratio", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt9-signed-ratio", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt10-step-interval", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt11-phase-recovery", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt12-basis-epoch", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt13-basis-epoch-fixture", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt14-actual-rhs", "files": 68, "status": "PASS"}
+{"snapshot": "replay-attempt15-actual-rhs-error-type", "files": 68, "status": "PASS"}
+Restored replay-attempt15-actual-rhs-error-type to /Users/casey.allard/.codex/worktrees/m2-constructor-d22-20261010/local/archive-staging/numerical-snapshots/restore-env-check

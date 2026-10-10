@@ -1,0 +1,297 @@
+{
+  "schema": "uor-r4.d22-owner-winddown-interruption/1",
+  "started_utc": "2026-10-10T21:00:06.756938+00:00",
+  "authority": "Explicit owner session replacement wind-down; root authorized stop no earlier than 2026-10-10T20:59:43Z",
+  "classification": "UNFINISHED_NOT_NEGATIVE",
+  "reason_not": "Not numerical failure, divergence, or a self-imposed budget cutoff",
+  "before_child": {
+    "pid": 15365,
+    "live": true,
+    "cmdline": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/numerical-target/release/d22-numerical-fixtures --input /workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/restored/input.json --expected-sha256 0fe91060f10c0d6107be3565f9ae0746c30e742a00d02935398f6764b84b974d --output /workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt15-actual-rhs-error-type/constructor ",
+    "stat": "15365 (d22-numerical-f) R 15108 15107 15107 0 -1 4194560 226268 0 0 0 611845 1106 0 0 20 0 1 0 166166871 125173760 22817 18446744073709551615 110524987864576 110524988766912 140734430961088 0 0 0 0 4103 1088 0 0 0 17 70 0 0 0 0 0 110524988804136 110524988806672 110525699776512 140734430968528 140734430968933 140734430968933 140734430969738 0\n",
+    "status": "Name:\td22-numerical-f\nUmask:\t0022\nState:\tR (running)\nTgid:\t15365\nNgid:\t0\nPid:\t15365\nPPid:\t15108\nTracerPid:\t0\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t64\nGroups:\t0 \nNStgid:\t15365\nNSpid:\t15365\nNSpgid:\t15107\nNSsid:\t15107\nKthread:\t0\nVmPeak:\t  122600 kB\nVmSize:\t  122240 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t  112896 kB\nVmRSS:\t   91268 kB\nRssAnon:\t   88376 kB\nRssFile:\t    2892 kB\nRssShmem:\t       0 kB\nVmData:\t  117340 kB\nVmStk:\t     132 kB\nVmExe:\t     884 kB\nVmLib:\t    2400 kB\nVmPTE:\t     284 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t1\nSigQ:\t0/3869768\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000001007\nSigCgt:\t0000000000000440\nCapInh:\t0000000000000000\nCapPrm:\t00000000a80425fb\nCapEff:\t00000000a80425fb\nCapBnd:\t00000000a80425fb\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffff,ffffffff,ffffffff,ffffffff\nCpus_allowed_list:\t0-119\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000003\nMems_allowed_list:\t0-1\nvoluntary_ctxt_switches:\t886421\nnonvoluntary_ctxt_switches:\t33144\nx86_Thread_features:\t\nx86_Thread_features_locked:\t\n",
+    "exe_sha256": "e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35"
+  },
+  "before_wrapper": {
+    "pid": 15108,
+    "live": true,
+    "cmdline": "python3 /workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py /workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical replay-attempt15-actual-rhs-error-type ",
+    "stat": "15108 (python3) S 1 15107 15107 0 -1 4194560 3387 240298 0 127 3 3 1239 137 20 0 1 0 166165214 24395776 4093 18446744073709551615 4325376 7348333 140732679107136 0 0 0 0 16781319 0 1 0 0 17 16 0 0 0 0 0 10653128 12217344 944091136 140732679113980 140732679114238 140732679114238 140732679114727 0\n",
+    "status": "Name:\tpython3\nUmask:\t0022\nState:\tS (sleeping)\nTgid:\t15108\nNgid:\t0\nPid:\t15108\nPPid:\t1\nTracerPid:\t0\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t64\nGroups:\t0 \nNStgid:\t15108\nNSpid:\t15108\nNSpgid:\t15107\nNSsid:\t15107\nKthread:\t0\nVmPeak:\t   24420 kB\nVmSize:\t   23824 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t   17488 kB\nVmRSS:\t   16372 kB\nRssAnon:\t    6564 kB\nRssFile:\t    9808 kB\nRssShmem:\t       0 kB\nVmData:\t    8184 kB\nVmStk:\t     132 kB\nVmExe:\t    2956 kB\nVmLib:\t    5776 kB\nVmPTE:\t      84 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t1\nSigQ:\t0/3869768\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000001001007\nSigCgt:\t0000000000000000\nCapInh:\t0000000000000000\nCapPrm:\t00000000a80425fb\nCapEff:\t00000000a80425fb\nCapBnd:\t00000000a80425fb\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffff,ffffffff,ffffffff,ffffffff\nCpus_allowed_list:\t0-119\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000003\nMems_allowed_list:\t0-1\nvoluntary_ctxt_switches:\t806\nnonvoluntary_ctxt_switches:\t1\nx86_Thread_features:\t\nx86_Thread_features_locked:\t\n",
+    "exe_sha256": "1d3cf64f97cadc79fdc6fe2496a21b7b456cb94211978cfef5a65f616af74fd5"
+  },
+  "before_process": {
+    "schema": "uor-r4.d22-saved-replay-process/1",
+    "started_utc": "2026-10-10T19:16:57.779944+00:00",
+    "source_manifest_sha256": "3991d69f1029b473eb8f4f4ed0f157e0655b621c2bfde959a154cee9155f3faa",
+    "runner_sha256": "acab73d2d752a438bb8d83dd9f1d64b85c2d328b5fce6d29d4515461f7a560dd",
+    "basis_attempt": "qualification-attempt2",
+    "build_jobs": 1,
+    "source_root": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source",
+    "progress_logging": true,
+    "address_space_limit_bytes": 5368709120,
+    "operations": [
+      {
+        "name": "synthetic-tests",
+        "command": [
+          "/root/.cargo/bin/cargo",
+          "test",
+          "--offline",
+          "--release",
+          "--manifest-path",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml",
+          "--lib",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-10T19:16:57.784607+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 7.014774122973904,
+        "peak_child_rss_bytes_cumulative_max": 252231680,
+        "log_sha256": "4840e5ca2b2d19057617536b1ebe20fcad9609edcaf1226b4c525bca7b11477e"
+      },
+      {
+        "name": "gate-tests",
+        "command": [
+          "/root/.cargo/bin/cargo",
+          "test",
+          "--offline",
+          "--release",
+          "--manifest-path",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml",
+          "--bin",
+          "d22-numerical-fixtures",
+          "replay_gate_",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-10T19:17:04.810891+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 4.076923196902499,
+        "peak_child_rss_bytes_cumulative_max": 252231680,
+        "log_sha256": "6e50a6bb312d56bace2b8e7b98079ba09bcf3d5c49420e0d15099e5bcc54d910"
+      },
+      {
+        "name": "build",
+        "command": [
+          "/root/.cargo/bin/cargo",
+          "build",
+          "--offline",
+          "--release",
+          "--manifest-path",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml",
+          "--bin",
+          "d22-numerical-fixtures"
+        ],
+        "started_utc": "2026-10-10T19:17:08.898879+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 5.207405424909666,
+        "peak_child_rss_bytes_cumulative_max": 252231680,
+        "log_sha256": "7e489666afc637e7031234ff1f19248772c526e4a23d90dd46e768fbb32d3d8f"
+      },
+      {
+        "name": "constructor",
+        "command": [
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/numerical-target/release/d22-numerical-fixtures",
+          "--input",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/restored/input.json",
+          "--expected-sha256",
+          "0fe91060f10c0d6107be3565f9ae0746c30e742a00d02935398f6764b84b974d",
+          "--output",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt15-actual-rhs-error-type/constructor"
+        ],
+        "started_utc": "2026-10-10T19:17:14.127725+00:00"
+      }
+    ],
+    "binary_sha256": "e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35",
+    "cargo_lock_sha256": "e2e5740fd7001ed7509f1763436b6a19a8a1c5682034ef6134d0a95baa02461a"
+  },
+  "before_files": {
+    "d22-numerical-fixtures": {
+      "bytes": 1657848,
+      "sha256": "e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35"
+    },
+    "source.tar.gz": {
+      "bytes": 237248,
+      "sha256": "82986a7eebbed1f26bfe945226b38326ac2e238494f7e6a7956b021db2725be9"
+    },
+    "constructor.log": {
+      "bytes": 2006517,
+      "sha256": "1bfbac2707ca052ce8490110286d33d7a41b1be2ae394fdbdf450446e9d3f232"
+    },
+    "build.log": {
+      "bytes": 679,
+      "sha256": "7e489666afc637e7031234ff1f19248772c526e4a23d90dd46e768fbb32d3d8f"
+    },
+    "gate-tests.log": {
+      "bytes": 1063,
+      "sha256": "6e50a6bb312d56bace2b8e7b98079ba09bcf3d5c49420e0d15099e5bcc54d910"
+    },
+    "synthetic-tests.log": {
+      "bytes": 2229,
+      "sha256": "4840e5ca2b2d19057617536b1ebe20fcad9609edcaf1226b4c525bca7b11477e"
+    },
+    "process.json": {
+      "bytes": 3390,
+      "sha256": "37c6258fb922fc3b1df19347f4aebcb2678fc028d6546de4e19450f3d3661a4a"
+    },
+    "constructor/model-mapping.json": {
+      "bytes": 421414,
+      "sha256": "51d62f8fd2135ee7c1479b2351d0c9ddb7c19a6b63377e57ceadc3c2a6eb9794"
+    },
+    "constructor/attempt.json": {
+      "bytes": 634,
+      "sha256": "cc6973da622067abe1ced74b4144116fe3de58406d75b22ea97776173d750e48"
+    }
+  },
+  "solver_checkpoint_available": false,
+  "restart_requires": "New exclusive attempt from pinned input; no serialized in-flight resume",
+  "signed_qualification_build_replay16": "NOT_RUN",
+  "signal": {
+    "pid": 15365,
+    "signal": "SIGTERM",
+    "sent_utc": "2026-10-10T21:00:06.836489+00:00"
+  },
+  "after_process": {
+    "schema": "uor-r4.d22-saved-replay-process/1",
+    "started_utc": "2026-10-10T19:16:57.779944+00:00",
+    "source_manifest_sha256": "3991d69f1029b473eb8f4f4ed0f157e0655b621c2bfde959a154cee9155f3faa",
+    "runner_sha256": "acab73d2d752a438bb8d83dd9f1d64b85c2d328b5fce6d29d4515461f7a560dd",
+    "basis_attempt": "qualification-attempt2",
+    "build_jobs": 1,
+    "source_root": "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source",
+    "progress_logging": true,
+    "address_space_limit_bytes": 5368709120,
+    "operations": [
+      {
+        "name": "synthetic-tests",
+        "command": [
+          "/root/.cargo/bin/cargo",
+          "test",
+          "--offline",
+          "--release",
+          "--manifest-path",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml",
+          "--lib",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-10T19:16:57.784607+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 7.014774122973904,
+        "peak_child_rss_bytes_cumulative_max": 252231680,
+        "log_sha256": "4840e5ca2b2d19057617536b1ebe20fcad9609edcaf1226b4c525bca7b11477e"
+      },
+      {
+        "name": "gate-tests",
+        "command": [
+          "/root/.cargo/bin/cargo",
+          "test",
+          "--offline",
+          "--release",
+          "--manifest-path",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml",
+          "--bin",
+          "d22-numerical-fixtures",
+          "replay_gate_",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-10T19:17:04.810891+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 4.076923196902499,
+        "peak_child_rss_bytes_cumulative_max": 252231680,
+        "log_sha256": "6e50a6bb312d56bace2b8e7b98079ba09bcf3d5c49420e0d15099e5bcc54d910"
+      },
+      {
+        "name": "build",
+        "command": [
+          "/root/.cargo/bin/cargo",
+          "build",
+          "--offline",
+          "--release",
+          "--manifest-path",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/phase-repair-source/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml",
+          "--bin",
+          "d22-numerical-fixtures"
+        ],
+        "started_utc": "2026-10-10T19:17:08.898879+00:00",
+        "exit_code": 0,
+        "elapsed_seconds": 5.207405424909666,
+        "peak_child_rss_bytes_cumulative_max": 252231680,
+        "log_sha256": "7e489666afc637e7031234ff1f19248772c526e4a23d90dd46e768fbb32d3d8f"
+      },
+      {
+        "name": "constructor",
+        "command": [
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/numerical-target/release/d22-numerical-fixtures",
+          "--input",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/restored/input.json",
+          "--expected-sha256",
+          "0fe91060f10c0d6107be3565f9ae0746c30e742a00d02935398f6764b84b974d",
+          "--output",
+          "/workspace/uor-r4/codex/m2-constructor-d22-20261010/numerical/replay-attempt15-actual-rhs-error-type/constructor"
+        ],
+        "started_utc": "2026-10-10T19:17:14.127725+00:00",
+        "exit_code": -15,
+        "elapsed_seconds": 6172.724284547148,
+        "peak_child_rss_bytes_cumulative_max": 252231680,
+        "log_sha256": "1bfbac2707ca052ce8490110286d33d7a41b1be2ae394fdbdf450446e9d3f232"
+      }
+    ],
+    "binary_sha256": "e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35",
+    "cargo_lock_sha256": "e2e5740fd7001ed7509f1763436b6a19a8a1c5682034ef6134d0a95baa02461a",
+    "status": "SAVED_REPLAY_PROCESS_FAILED"
+  },
+  "after_child": {
+    "pid": 15365,
+    "live": false
+  },
+  "after_wrapper": {
+    "pid": 15108,
+    "live": false
+  },
+  "last_progress": "d22-numerics event=dual-loop basis_tag=ff53ea237e919761 rows=440 iterations=474418 fresh=2622 exact=0 singular=0 refreshes=40",
+  "original_objective_restored_count": 8,
+  "actual_rhs_refinement_count": 3582,
+  "actual_rhs_failed_count": 0,
+  "after_files": {
+    "d22-numerical-fixtures": {
+      "bytes": 1657848,
+      "sha256": "e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35"
+    },
+    "source.tar.gz": {
+      "bytes": 237248,
+      "sha256": "82986a7eebbed1f26bfe945226b38326ac2e238494f7e6a7956b021db2725be9"
+    },
+    "constructor.log": {
+      "bytes": 2006517,
+      "sha256": "1bfbac2707ca052ce8490110286d33d7a41b1be2ae394fdbdf450446e9d3f232"
+    },
+    "build.log": {
+      "bytes": 679,
+      "sha256": "7e489666afc637e7031234ff1f19248772c526e4a23d90dd46e768fbb32d3d8f"
+    },
+    "gate-tests.log": {
+      "bytes": 1063,
+      "sha256": "6e50a6bb312d56bace2b8e7b98079ba09bcf3d5c49420e0d15099e5bcc54d910"
+    },
+    "synthetic-tests.log": {
+      "bytes": 2229,
+      "sha256": "4840e5ca2b2d19057617536b1ebe20fcad9609edcaf1226b4c525bca7b11477e"
+    },
+    "process.json": {
+      "bytes": 3645,
+      "sha256": "e01d129ba9cf0d1dd251a4f7e0a5c7bf329bd8b2de148af7a05a16871c52eb33"
+    },
+    "constructor/model-mapping.json": {
+      "bytes": 421414,
+      "sha256": "51d62f8fd2135ee7c1479b2351d0c9ddb7c19a6b63377e57ceadc3c2a6eb9794"
+    },
+    "constructor/attempt.json": {
+      "bytes": 634,
+      "sha256": "cc6973da622067abe1ced74b4144116fe3de58406d75b22ea97776173d750e48"
+    }
+  },
+  "completed_utc": "2026-10-10T21:00:06.992023+00:00"
+}

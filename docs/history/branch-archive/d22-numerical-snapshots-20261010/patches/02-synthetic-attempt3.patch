@@ -1,0 +1,75 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index 4d3725a5605301fffbeecd0d1b105fe5b3f59f74..a3249662b57a683e307fe18f43b38833a429b945 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -2621,9 +2621,12 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+             )
+         }
+         "failed_pivot_is_transactional" => {
+-            let info = solver
+-                .choose_pivot()?
+-                .ok_or_else(|| Error::InternalError("fixture has no pivot".into()))?;
++            let (row, value) = solver
++                .choose_pivot_row_dual()
++                .ok_or_else(|| Error::InternalError("fixture has no infeasible row".into()))?;
++            solver.calc_row_coeffs(row)?;
++            let info = solver.choose_entering_col_dual(row, value)?;
++            solver.calc_col_coeffs(info.col)?;
+             // Failure occurs during candidate recalculation, after inner mutation.
+             solver.working_obj_coeffs.fill(f64::NAN);
+             let before = format!("{:?}", solver);
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index 9402c065ab54a5cf28fc1c0bc72562cfdcf5fbe5..0a6cb5660f6f9d27390bc777b03b75de5c5173a2 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,10 +1,10 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "ATTEMPT1_COMPILE_FAILED_FIXTURE_REPAIRED_UNQUALIFIED",
++  "status": "ATTEMPT2_FIXTURE_SETUP_REPAIRED_UNQUALIFIED",
+   "preparation_only": true,
+   "admission": "NOT_FIT_PENDING_OWNER_FRESH_PANEL_SCOPE",
+-  "builds": 1,
++  "builds": 2,
+   "fixture_executions": 0,
+   "solver_replays": 0,
+   "actual_basis_qualifications": 0,
+@@ -29,7 +29,7 @@
+     },
+     "src/solver.rs": {
+       "upstream_sha256": "1863f76f5b1f59a53812e54d0a35b6d4bffdf30f694997ca0d25cb90cc49cb88",
+-      "vendor_sha256": "e33a765c60ea8b48d24978a7a9b120a86ec126da881b0278bfd3f096382e4a2f"
++      "vendor_sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85"
+     },
+     "src/sparse.rs": {
+       "upstream_sha256": "f7dd3686eadb2d1a924222f391ca7974c2e0d81ff6b44e756fb2875858241246",
+@@ -37,7 +37,7 @@
+     }
+   },
+   "synthetic_test_functions": 9,
+-  "total_bytes": 800497,
++  "total_bytes": 800680,
+   "files": {
+     "crates/uor-r4-training/vendor/microlp/.cargo_vcs_info.json": {
+       "sha256": "9acbfcda1ff08b814e6d668472c58d8d24930ed5ffd218533fa8a1af5d8c5a4f",
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "e33a765c60ea8b48d24978a7a9b120a86ec126da881b0278bfd3f096382e4a2f",
+-      "bytes": 100633
++      "sha256": "55c960ae173888ea423240bb53844c22ecbf403ec9c815c3531d4276c4247a85",
++      "bytes": 100816
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
+@@ -276,6 +276,6 @@
+       "bytes": 2498
+     }
+   },
+-  "previous_manifest_sha256": "06b8a6fef9b8ddb7ee0db11ecb60f0c177069be6437251587c9de3102f7e44e3",
+-  "repair": "Attempt1 fixture-only E0277: array.into_iter(), production unchanged"
++  "previous_manifest_sha256": "a5f54de8b13e56d5d5cb48f5ed8fb89392af05f199b79c1bfd11fcb32aea129d",
++  "repair": "Attempt2 8/9 synthetic PASS; rollback fixture now selects actual dual-feasibility pivot instead of absent primal pivot; production unchanged"
+ }

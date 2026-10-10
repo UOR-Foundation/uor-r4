@@ -1,0 +1,13 @@
+{
+  "session": "m2-constructor-d22-20261010",
+  "cutoff_utc": "2026-10-10T21:01:13.567609+00:00",
+  "started_utc": "2026-10-10T16:55:15.130034+00:00",
+  "elapsed_wall_ms_through_preservation": 14758437,
+  "scope": "ALL cycle preparation, failed setups, compilation, numerical execution/retries, reviews, waiting and preservation through cutoff; delivery/cleanup tail added at final closeout",
+  "model_training_updates": 0,
+  "model_scoring": "NOT_RUN",
+  "cumulative_before_ms": 1506772756,
+  "admitted_limit_ms": 1528372756,
+  "final_charge_status": "PENDING whole-cycle single charge after protected delivery/cleanup",
+  "no_retry_budget_reset": true
+}

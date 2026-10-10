@@ -22,6 +22,8 @@
 //! the memory by fixed geometric codes; only the query map and the values learn.
 
 use candle_core::{CpuStorage, CustomOp3, Layout, Shape, Tensor};
+#[cfg(feature = "cuda")]
+use candle_core::CudaStorage;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -467,6 +469,27 @@ impl CustomOp3 for ProductKeyMemory {
                 }
             });
         Ok((CpuStorage::F32(out), Shape::from((self.rows, width))))
+    }
+
+    /// The memory has no CUDA kernel yet, so its CUDA forward is the exact CPU
+    /// forward on host copies of the three inputs, uploaded back to the device
+    /// ([`crate::geometric_stack::cuda_ops::via_host3`]) — the same rule the
+    /// stack's other kernel-less configurations follow, so CUDA training
+    /// computes what the CPU computes. The backward is already device-generic
+    /// (`bwd` reads host copies and rebuilds its gradients on the input's
+    /// device). Costs the three transfers per call; measured in the record
+    /// that enabled it.
+    #[cfg(feature = "cuda")]
+    fn cuda_fwd(
+        &self,
+        s1: &CudaStorage,
+        l1: &Layout,
+        s2: &CudaStorage,
+        l2: &Layout,
+        s3: &CudaStorage,
+        l3: &Layout,
+    ) -> candle_core::Result<(CudaStorage, Shape)> {
+        crate::geometric_stack::cuda_ops::via_host3(self, [(s1, l1), (s2, l2), (s3, l3)])
     }
 
     fn bwd(

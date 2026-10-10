@@ -1,0 +1,71 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index 18def3a1656f19b0183831b05d0482b6a7afbcdf..4d3725a5605301fffbeecd0d1b105fe5b3f59f74 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -2603,7 +2603,10 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+         }
+         "corrupt_eta_refreshes_and_reselects" => {
+             crate::repair::reset_stats();
+-            solver.basis_solver.eta_matrices.push(0, [(0, 0.5)]);
++            solver
++                .basis_solver
++                .eta_matrices
++                .push(0, [(0, 0.5)].into_iter());
+             require(
+                 solver.initial_solve()? == StopReason::Finished,
+                 "fixture did not finish",
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index 4c5475798a3d27a881e4cca2956d4e7ba8e0b513..9402c065ab54a5cf28fc1c0bc72562cfdcf5fbe5 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,10 +1,10 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "UNCOMPILED_UNQUALIFIED",
++  "status": "ATTEMPT1_COMPILE_FAILED_FIXTURE_REPAIRED_UNQUALIFIED",
+   "preparation_only": true,
+   "admission": "NOT_FIT_PENDING_OWNER_FRESH_PANEL_SCOPE",
+-  "builds": 0,
++  "builds": 1,
+   "fixture_executions": 0,
+   "solver_replays": 0,
+   "actual_basis_qualifications": 0,
+@@ -29,7 +29,7 @@
+     },
+     "src/solver.rs": {
+       "upstream_sha256": "1863f76f5b1f59a53812e54d0a35b6d4bffdf30f694997ca0d25cb90cc49cb88",
+-      "vendor_sha256": "eaf7d3555259ecd4e575479e122d66ee623cea16d3d56df2f55559d694522cd2"
++      "vendor_sha256": "e33a765c60ea8b48d24978a7a9b120a86ec126da881b0278bfd3f096382e4a2f"
+     },
+     "src/sparse.rs": {
+       "upstream_sha256": "f7dd3686eadb2d1a924222f391ca7974c2e0d81ff6b44e756fb2875858241246",
+@@ -37,7 +37,7 @@
+     }
+   },
+   "synthetic_test_functions": 9,
+-  "total_bytes": 800434,
++  "total_bytes": 800497,
+   "files": {
+     "crates/uor-r4-training/vendor/microlp/.cargo_vcs_info.json": {
+       "sha256": "9acbfcda1ff08b814e6d668472c58d8d24930ed5ffd218533fa8a1af5d8c5a4f",
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "eaf7d3555259ecd4e575479e122d66ee623cea16d3d56df2f55559d694522cd2",
+-      "bytes": 100570
++      "sha256": "e33a765c60ea8b48d24978a7a9b120a86ec126da881b0278bfd3f096382e4a2f",
++      "bytes": 100633
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
+@@ -275,5 +275,7 @@
+       "sha256": "83b0bc12b05373dda3be8b102d16e6d497f87d87dc6ebf6e2e7d0aa86b89b8b5",
+       "bytes": 2498
+     }
+-  }
++  },
++  "previous_manifest_sha256": "06b8a6fef9b8ddb7ee0db11ecb60f0c177069be6437251587c9de3102f7e44e3",
++  "repair": "Attempt1 fixture-only E0277: array.into_iter(), production unchanged"
+ }

@@ -1,0 +1,223 @@
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py b/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..defff45d6a4e42a2528f5e02b4d3807f6bf2cdf6
+--- /dev/null
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py
+@@ -0,0 +1,77 @@
++"""Saved numerical replay only; no model, gradients, or panel evaluation."""
++import datetime
++import hashlib
++import json
++import os
++from pathlib import Path
++import resource
++import subprocess
++import sys
++import time
++
++root = Path(sys.argv[1]).resolve()
++attempt = root / sys.argv[2]
++attempt.mkdir(exist_ok=False)
++source = root / "docs/labs/d22-constructor-2026-10-10/numerical-tests"
++manifest = source / "source-manifest.json"
++
++
++def sha(path):
++    return hashlib.sha256(path.read_bytes()).hexdigest()
++
++
++for name, entry in json.loads(manifest.read_text())["files"].items():
++    assert sha(root / name) == entry["sha256"], name
++env = os.environ.copy()
++env.update(CARGO_TARGET_DIR=str(root / "numerical-target"), CARGO_BUILD_JOBS="2",
++           CARGO_INCREMENTAL="0", CARGO_PROFILE_RELEASE_DEBUG="0",
++           OMP_NUM_THREADS="2", D22_BASIS_ADMISSION_ROOT=str(root / "qualification-attempt2"))
++record = {"schema": "uor-r4.d22-saved-replay-process/1",
++          "started_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
++          "source_manifest_sha256": sha(manifest), "runner_sha256": sha(Path(__file__)),
++          "basis_attempt": "qualification-attempt2", "build_jobs": 2,
++          "address_space_limit_bytes": 6 * 1024**3, "operations": []}
++
++
++def save():
++    (attempt / "process.json").write_text(json.dumps(record, indent=2) + "\n")
++
++
++def limit():
++    resource.setrlimit(resource.RLIMIT_AS, (6 * 1024**3, 6 * 1024**3))
++
++
++def run(name, argv):
++    item = {"name": name, "command": argv,
++            "started_utc": datetime.datetime.now(datetime.timezone.utc).isoformat()}
++    record["operations"].append(item)
++    save()
++    start = time.monotonic()
++    with (attempt / (name + ".log")).open("wb") as log:
++        p = subprocess.run(argv, cwd=root, env=env, stdout=log,
++                           stderr=subprocess.STDOUT, preexec_fn=limit)
++    item.update(exit_code=p.returncode, elapsed_seconds=time.monotonic() - start,
++                peak_child_rss_bytes_cumulative_max=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss * 1024,
++                log_sha256=sha(attempt / (name + ".log")))
++    save()
++    return p.returncode
++
++
++cargo = ["/root/.cargo/bin/cargo"]
++common = ["--offline", "--release", "--manifest-path", str(source / "Cargo.toml"),
++          "--bin", "d22-numerical-fixtures"]
++for name, argv in [("gate-tests", cargo + ["test"] + common + ["replay_gate_", "--", "--test-threads=1"]),
++                   ("build", cargo + ["build"] + common)]:
++    if run(name, argv):
++        record["status"] = name.upper() + "_FAILED"
++        save()
++        sys.exit(1)
++binary = root / "numerical-target/release/d22-numerical-fixtures"
++record.update(binary_sha256=sha(binary), cargo_lock_sha256=sha(source / "Cargo.lock"))
++code = run("constructor", [str(binary), "--input", str(root / "restored/input.json"),
++           "--expected-sha256", "0fe91060f10c0d6107be3565f9ae0746c30e742a00d02935398f6764b84b974d",
++           "--output", str(attempt / "constructor")])
++record["status"] = "SAVED_REPLAY_COMPLETED_INSPECT_RECEIPT" if code == 0 else "SAVED_REPLAY_PROCESS_FAILED"
++save()
++print(json.dumps(record), flush=True)
++sys.exit(code)
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index fc82115859fcf180dd80f892644e7e886e525387..383ea991db0f1aae5fbfad46e6354fc79ee88d7c 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,13 +1,13 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "NINE_SYNTHETIC_PASS_QUALIFICATION_BUILD_SETUP_REPAIRED",
+-  "preparation_only": true,
+-  "admission": "NOT_FIT_PENDING_OWNER_FRESH_PANEL_SCOPE",
+-  "builds": 4,
++  "status": "BASIS_REGRESSION_COMPLETE_REPLAY_PREPARED",
++  "preparation_only": false,
++  "admission": "FIT_6100164233;exact_singular_gate_clarification_by_root",
++  "builds": 5,
+   "fixture_executions": 18,
+   "solver_replays": 0,
+-  "actual_basis_qualifications": 0,
++  "actual_basis_qualifications": 4,
+   "model_runs": 0,
+   "upstream_identity_sha256": "33fce14dc040c31ac8004ce33e0e307a3fb3db784b6ac32b2e5a84f061af483f",
+   "modified_upstream_files": {
+@@ -37,7 +37,7 @@
+     }
+   },
+   "synthetic_test_functions": 9,
+-  "total_bytes": 863358,
++  "total_bytes": 868822,
+   "files": {
+     "crates/uor-r4-training/vendor/microlp/.cargo_vcs_info.json": {
+       "sha256": "9acbfcda1ff08b814e6d668472c58d8d24930ed5ffd218533fa8a1af5d8c5a4f",
+@@ -287,6 +287,10 @@
+       "sha256": "b74872c9bb2b836132817e024a3f9205f83a6864de1a9bfb46acc1bfbbc1873a",
+       "bytes": 17199
+     },
++    "docs/labs/d22-constructor-2026-10-10/numerical-tests/run-replay.py": {
++      "sha256": "56ba046789908428491bfe06754bfcba5993529cdce458dedbf9d8b03adbfebd",
++      "bytes": 3150
++    },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/constructor.rs": {
+       "sha256": "f0242836d08dbadbb5659cd8f158d79c8de9420c9de2fb213de9ef149510c24b",
+       "bytes": 19713
+@@ -296,15 +300,15 @@
+       "bytes": 2498
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
+-      "sha256": "7cc555f3e7e6b31a2e4939a1ff5d4a7bd2380623068fef2e4de71a9d29f942a1",
+-      "bytes": 11711
++      "sha256": "5325943165f262f085ac4857eda97670c60d8cc68dd87bcb237ba83cdd9f9f19",
++      "bytes": 14025
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/report_output.rs": {
+       "sha256": "cda30f9ba4ef8ff3e245ae352cd28932f9a24ab78598f683607e6996598fa810",
+       "bytes": 9726
+     }
+   },
+-  "previous_manifest_sha256": "5fe58ca634273d368b29887f73cd6f2fc9b067dcbbf043b2c10371216be5447b",
+-  "repair": "Qualification CLI offline build attempt1 missing arrayref. Copied exact existing main arrayref patch into standalone harness; numerical production unchanged.",
++  "previous_manifest_sha256": "868f9a7086264990a3c2e74ce79d7531a75dc60d7656d4b09f417e2682ae45bb",
++  "repair": "Harness replay gate accepts residual-qualified bases or exactly singular later captures only. Solver Rust unchanged.",
+   "synthetic_final_pass": 9
+ }
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs
+index 68412e5d704f83fc934da910f37bdec3e443da9e..84dfa255ae81d60f0406b9f094654fc40492bc7d 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs
+@@ -32,6 +32,58 @@ fn stats_json() -> serde_json::Value {
+ fn source_json() -> serde_json::Value {
+     serde_json::json!({"repair_sha256":hash(REPAIR),"lu_sha256":hash(LU),"solver_sha256":hash(SOLVER),"constructor_sha256":hash(SOURCE)})
+ }
++fn basis_outcome_admits_replay(index: usize, r: &serde_json::Value) -> bool {
++    let qualified = r["status"] == "QUALIFIED"
++        && r["error"].is_null()
++        && r["numerics"]["certified_factors"] == 1
++        && r["numerics"]["certified_solves"] == 1760
++        && r["numerics"]["exact_singular"] == 0;
++    // A genuinely singular later capture cannot be soundly admitted as a
++    // factorization. Its exact rejection qualifies the numerical boundary;
++    // replay must still test whether transactional refresh/reselection works.
++    let exact_singular = (2..4).contains(&index)
++        && r["status"] == "NUMERICALLY_REJECTED"
++        && r["error"] == "Singular matrix"
++        && r["numerics"]["exact_fallbacks"] == 1
++        && r["numerics"]["exact_singular"] == 1
++        && r["numerics"]["certified_factors"] == 0
++        && r["numerics"]["certified_solves"] == 0;
++    index < 4 && (qualified || exact_singular)
++}
++
++#[cfg(test)]
++mod replay_gate_tests {
++    use super::basis_outcome_admits_replay;
++
++    #[test]
++    fn replay_gate_accepts_exact_later_rejection_only() {
++        let mut r = serde_json::json!({"status":"NUMERICALLY_REJECTED",
++            "error":"Singular matrix","numerics":{"exact_fallbacks":1,
++            "exact_singular":1,"certified_factors":0,"certified_solves":0}});
++        assert!(!basis_outcome_admits_replay(0, &r));
++        assert!(!basis_outcome_admits_replay(1, &r));
++        assert!(basis_outcome_admits_replay(2, &r));
++        assert!(basis_outcome_admits_replay(3, &r));
++        assert!(!basis_outcome_admits_replay(4, &r));
++        r["numerics"]["exact_singular"] = 0.into();
++        assert!(!basis_outcome_admits_replay(2, &r));
++        r["numerics"]["exact_singular"] = 1.into();
++        r["error"] = "Exact resource limit".into();
++        assert!(!basis_outcome_admits_replay(2, &r));
++    }
++
++    #[test]
++    fn replay_gate_requires_all_residual_checks() {
++        let mut r = serde_json::json!({"status":"QUALIFIED","error":null,
++            "numerics":{"certified_factors":1,"certified_solves":1760,
++            "exact_singular":0}});
++        for i in 0..4 {
++            assert!(basis_outcome_admits_replay(i, &r));
++        }
++        r["numerics"]["certified_solves"] = 1759.into();
++        assert!(!basis_outcome_admits_replay(0, &r));
++    }
++}
+ #[derive(Deserialize)]
+ #[serde(deny_unknown_fields)]
+ struct Input {
+@@ -267,11 +319,11 @@ fn main() -> Result<(), Box<dyn Error>> {
+             report_output::verify(&root)?;
+             let r: serde_json::Value =
+                 serde_json::from_slice(&fs::read(root.join("report.json"))?)?;
+-            if r["status"] != "QUALIFIED"
++            if !basis_outcome_admits_replay(i, &r)
+                 || r["basis_sha256"] != *pin
+                 || r["source"] != source_json()
+             {
+-                return Err("four exact same-source bases have not qualified".into());
++                return Err("four exact same-source basis outcomes do not admit replay".into());
+             }
+         }
+     }

@@ -1,0 +1,210 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index 6b0976d2855bcae0053b07e8e50ad85aa7ab68af..36381e7fb0d0b879417e27aac4add393bdad6bb6 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -1128,7 +1128,16 @@ impl Solver {
+                 let result = (|| -> Result<bool, Error> {
+                     if let Some((row, leaving_new_val)) = self.choose_pivot_row_dual() {
+                         self.calc_row_coeffs(row)?;
+-                        let pivot_info = match self.choose_entering_col_dual(row, leaving_new_val) {
++                        let pivot_info = match self.choose_entering_col_dual_policy(
++                            row,
++                            leaving_new_val,
++                            attempt == 2,
++                        ) {
++                            Err(error) if attempt == 2 => {
++                                return Err(Error::InternalError(format!(
++                                    "strict numerical reselection failed: {error}"
++                                )))
++                            }
+                             Ok(pivot_info) => pivot_info,
+                             Err(Error::Infeasible) if !refreshed_since_pivot => {
+                                 // "No eligible entering column" is a proof of primal
+@@ -1174,6 +1183,12 @@ impl Solver {
+                         self.refresh_numerics(NumericalPhase::Dual)?;
+                         attempt += 1;
+                     }
++                    Err(Error::InternalError(_)) if attempt == 1 => {
++                        // A refreshed Harris proposal still failed the full
++                        // certificate. Try one actual signed minimum ratio;
++                        // another failure remains numerical, not infeasible.
++                        attempt = 2;
++                    }
+                     other => break other?,
+                 }
+             };
+@@ -1558,6 +1573,15 @@ impl Solver {
+         &self,
+         row: usize,
+         leaving_new_val: f64,
++    ) -> Result<PivotInfo, Error> {
++        self.choose_entering_col_dual_policy(row, leaving_new_val, false)
++    }
++
++    fn choose_entering_col_dual_policy(
++        &self,
++        row: usize,
++        leaving_new_val: f64,
++        strict_signed_ratio: bool,
+     ) -> Result<PivotInfo, Error> {
+         // True if the new obj. coeff. must be nonnegative in a dual-feasible configuration.
+         let leaving_diff_sign = leaving_new_val > self.basic_var_vals[row];
+@@ -1617,6 +1641,7 @@ impl Solver {
+         let mut entering_c = None;
+         let mut pivot_coeff_abs = f64::NEG_INFINITY;
+         let mut pivot_coeff = 0.0;
++        let mut best_signed_ratio = f64::INFINITY;
+         for (c, &coeff) in self.row_coeffs.iter() {
+             let var_state = &self.nb_var_states[c];
+             if !is_eligible_var(coeff, var_state) {
+@@ -1629,17 +1654,37 @@ impl Solver {
+             // obj. coeff if the current variable will reach the bound of dual infeasibility.
+             // Variable with the tightest such bound is the entering variable.
+             let cur_step = obj_coeff.abs() / coeff.abs();
+-            if cur_step <= max_step {
+-                let coeff_abs = coeff.abs();
+-                if coeff_abs > pivot_coeff_abs {
++            let coeff_abs = coeff.abs();
++            if strict_signed_ratio {
++                // c'_j = c_j + d*t*a_j, d=sign(leaving_new-old).
++                // The zero crossing is t=-d*c_j/a_j. Keep its actual
++                // sign: a pre-existing within-EPS violation may yield a
++                // negative tolerance-scale step. The complete recomputed
++                // candidate must still pass the unchanged phase certificate.
++                let direction = if leaving_diff_sign { 1.0 } else { -1.0 };
++                let ratio = crate::repair::finite(-direction * self.nb_var_obj_coeffs[c] / coeff)?;
++                if ratio < best_signed_ratio
++                    || (ratio == best_signed_ratio
++                        && (coeff_abs > pivot_coeff_abs
++                            || (coeff_abs == pivot_coeff_abs
++                                && entering_c.is_none_or(|old| c < old))))
++                {
++                    best_signed_ratio = ratio;
+                     entering_c = Some(c);
+                     pivot_coeff_abs = coeff_abs;
+                     pivot_coeff = coeff;
+                 }
++            } else if cur_step <= max_step && coeff_abs > pivot_coeff_abs {
++                entering_c = Some(c);
++                pivot_coeff_abs = coeff_abs;
++                pivot_coeff = coeff;
+             }
+         }
+ 
+         if let Some(col) = entering_c {
++            if strict_signed_ratio && std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
++                eprintln!("d22-numerics strict-signed-ratio row={row} col={col} ratio={best_signed_ratio:.17e} tolerance_qualified_only=true");
++            }
+             let entering_diff = (self.basic_var_vals[row] - leaving_new_val) / pivot_coeff;
+             let entering_new_val = self.nb_var_vals[col] + entering_diff;
+ 
+@@ -3013,6 +3058,61 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+                 "fixed value was not retained",
+             )
+         }
++        "signed_ratio_avoids_double_allowance" => {
++            let mut case = Solver::try_new(
++                &[-0.9 * EPS, 1.8 * EPS],
++                &[0.0, 0.0],
++                &[1.0, 1.0],
++                &[(
++                    CsVec::new(2, vec![0, 1], vec![-1.0, -2.0]),
++                    ComparisonOp::Le,
++                    -1.0,
++                )],
++                &[VarDomain::Real, VarDomain::Real],
++                None,
++            )?;
++            // A real feasible-within-EPS dual state with both variables at
++            // lower bounds, but primal slack=-1 requiring restoration.
++            case.nb_var_vals.fill(0.0);
++            case.nb_var_states.fill(NonBasicVarState {
++                at_min: true,
++                at_max: false,
++            });
++            case.recalc_basic_var_vals()?;
++            case.recalc_working_obj_coeffs()?;
++            case.require_numerical_phase(NumericalPhase::Dual)?;
++            let (row, value) = case
++                .choose_pivot_row_dual()
++                .ok_or_else(|| Error::InternalError("no fixture leaving row".into()))?;
++            case.calc_row_coeffs(row)?;
++            let relaxed = case.choose_entering_col_dual(row, value)?;
++            require(
++                relaxed.col == 1,
++                "fixture did not choose larger Harris coefficient",
++            )?;
++            case.calc_col_coeffs(relaxed.col)?;
++            let before = format!("{case:?}");
++            require(
++                case.pivot(&relaxed, NumericalPhase::Dual).is_err(),
++                "double-allowance Harris pivot passed",
++            )?;
++            require(
++                format!("{case:?}") == before,
++                "rejected Harris pivot mutated state",
++            )?;
++            let strict = case.choose_entering_col_dual_policy(row, value, true)?;
++            require(
++                strict.col == 0,
++                "strict policy clamped/absolutized signed ratio",
++            )?;
++            case.calc_col_coeffs(strict.col)?;
++            case.pivot(&strict, NumericalPhase::Dual)?;
++            case.require_numerical_phase(NumericalPhase::Dual)?;
++            require(
++                *case.get_value(0) == 1.0 && *case.get_value(1) == 0.0,
++                "strict certified candidate violates known primal solution",
++            )
++        }
+         "compensated_cost_and_refinement" => {
+             require(
+                 compensated_products([(1e16, 1.0), (1.0, 1.0), (-1e16, 1.0)])? == 1.0,
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index dbd99d5ca2479464b736853bdefd2949643b01ef..a65d6f428bc0ddca9fdae7160852e4708126c231 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "COMPENSATED_COST_TRANSPOSE_REFINEMENT_PENDING_TESTS",
++  "status": "SIGNED_RATIO_RESELECTION_PENDING_TESTS",
+   "preparation_only": false,
+   "admission": "FIT_ADMITTED_CPU_NUMERICAL_EXCEPTION",
+   "builds": 9,
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "dd518d5500c6b5dcd4555e95729c199e810f31d1e8eef160e109d8fe94f012a8",
+-      "bytes": 120693
++      "sha256": "4bf590279a3437f48691d839de62b12c700fd5ce88e855d4d8adeb1d42411086",
++      "bytes": 125377
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",
+@@ -296,8 +296,8 @@
+       "bytes": 19713
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs": {
+-      "sha256": "6a453e0984de59cdf886ba263de1cbd853179c67680471a3ff75731f4b8b784e",
+-      "bytes": 3708
++      "sha256": "7caaf578546418e3faefc168309515487826a991969b2e61f799ea9f039676f4",
++      "bytes": 3885
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
+       "sha256": "5679ac5fc5d7e1bb013cbb5a13a3b5114e094c44dfdb9ef7753af5376f430a81",
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+index a02fe629fc8032796b8715783c4fba2969419e20..e4f00973aac7c29b268468b900ee1619d74a5d12 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs
+@@ -95,3 +95,8 @@ fn regular_pivot_rejects_phase_loss_transactionally() -> Result<(), String> {
+ fn compensated_cost_and_original_transpose_refinement() -> Result<(), String> {
+     microlp::repair::transaction_fixture("compensated_cost_and_refinement")
+ }
++
++#[test]
++fn signed_ratio_reselection_avoids_harris_double_allowance() -> Result<(), String> {
++    microlp::repair::transaction_fixture("signed_ratio_avoids_double_allowance")
++}

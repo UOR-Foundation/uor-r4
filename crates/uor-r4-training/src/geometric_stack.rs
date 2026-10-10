@@ -135,7 +135,7 @@ use crate::{invalid, Result};
 use uor_r4_integer::geometric_span::SpanAction;
 
 #[cfg(feature = "cuda")]
-mod cuda_ops;
+pub(crate) mod cuda_ops;
 #[cfg(feature = "cuda")]
 mod cuda_ops_bf16;
 

@@ -1,0 +1,52 @@
+diff --git a/crates/uor-r4-training/vendor/microlp/src/solver.rs b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+index 36381e7fb0d0b879417e27aac4add393bdad6bb6..e4179bf61c87ed9a622e679ef22803025b9ca355 100644
+--- a/crates/uor-r4-training/vendor/microlp/src/solver.rs
++++ b/crates/uor-r4-training/vendor/microlp/src/solver.rs
+@@ -3060,19 +3060,19 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
+         }
+         "signed_ratio_avoids_double_allowance" => {
+             let mut case = Solver::try_new(
+-                &[-0.9 * EPS, 1.8 * EPS],
++                &[-0.4 * EPS, 1.5 * EPS],
+                 &[0.0, 0.0],
+                 &[1.0, 1.0],
+                 &[(
+-                    CsVec::new(2, vec![0, 1], vec![-1.0, -2.0]),
++                    CsVec::new(2, vec![0, 1], vec![-0.5, -1.0]),
+                     ComparisonOp::Le,
+-                    -1.0,
++                    -0.5,
+                 )],
+                 &[VarDomain::Real, VarDomain::Real],
+                 None,
+             )?;
+             // A real feasible-within-EPS dual state with both variables at
+-            // lower bounds, but primal slack=-1 requiring restoration.
++            // lower bounds, but primal slack=-0.5 requiring restoration.
+             case.nb_var_vals.fill(0.0);
+             case.nb_var_states.fill(NonBasicVarState {
+                 at_min: true,
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index a65d6f428bc0ddca9fdae7160852e4708126c231..3224898855b078939877f987e08158b40758b37e 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "SIGNED_RATIO_RESELECTION_PENDING_TESTS",
++  "status": "SIGNED_RATIO_SCALED_FIXTURE_CORRECTED_PENDING_TESTS",
+   "preparation_only": false,
+   "admission": "FIT_ADMITTED_CPU_NUMERICAL_EXCEPTION",
+   "builds": 9,
+@@ -128,8 +128,8 @@
+       "bytes": 6148
+     },
+     "crates/uor-r4-training/vendor/microlp/src/solver.rs": {
+-      "sha256": "4bf590279a3437f48691d839de62b12c700fd5ce88e855d4d8adeb1d42411086",
+-      "bytes": 125377
++      "sha256": "5c692a446ddb3ad0bd13c34bf769902f0b3eb26e6b81b2a0efd0aba83ffed24d",
++      "bytes": 125379
+     },
+     "crates/uor-r4-training/vendor/microlp/src/sparse.rs": {
+       "sha256": "25d342d379193e9de6975e750172023cf9468d7771b22156b4410f1bacd284ca",

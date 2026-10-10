@@ -1,0 +1,1169 @@
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml b/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml
+index 7ae1c7d77d56cb9e5f104675ec72a974530bd2ae..5764906e22ee1dca5d56120e8410df70f9ab61df 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml
+@@ -8,3 +8,8 @@ publish = false
+ 
+ [dependencies]
+ microlp = { path = "../../../../crates/uor-r4-training/vendor/microlp", features = ["numerical-fixtures"] }
++
++serde = { version = "1", features = ["derive"] }
++serde_json = "1"
++sha2 = "0.10"
++blake3 = "1"
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+index 0a6cb5660f6f9d27390bc777b03b75de5c5173a2..bf1d3a273565e73700ac0eec6c663dcc64e99244 100644
+--- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
+@@ -1,11 +1,11 @@
+ {
+   "schema": "uor-r4.d22-numerical-source-checkpoint/1",
+   "source_base": "fa2c255a339eba1d6504b0b5dda1da1245efefbe",
+-  "status": "ATTEMPT2_FIXTURE_SETUP_REPAIRED_UNQUALIFIED",
++  "status": "NINE_SYNTHETIC_FIXTURES_PASS_BASIS_QUALIFICATION_NOT_RUN",
+   "preparation_only": true,
+   "admission": "NOT_FIT_PENDING_OWNER_FRESH_PANEL_SCOPE",
+-  "builds": 2,
+-  "fixture_executions": 0,
++  "builds": 3,
++  "fixture_executions": 18,
+   "solver_replays": 0,
+   "actual_basis_qualifications": 0,
+   "model_runs": 0,
+@@ -37,7 +37,7 @@
+     }
+   },
+   "synthetic_test_functions": 9,
+-  "total_bytes": 800680,
++  "total_bytes": 841924,
+   "files": {
+     "crates/uor-r4-training/vendor/microlp/.cargo_vcs_info.json": {
+       "sha256": "9acbfcda1ff08b814e6d668472c58d8d24930ed5ffd218533fa8a1af5d8c5a4f",
+@@ -264,18 +264,31 @@
+       "bytes": 7879
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/Cargo.toml": {
+-      "sha256": "7798f9b841225e2b7101e789f3c67dfce4dd085e51fe331d99b5809229d8cd52",
+-      "bytes": 230
++      "sha256": "c473df7588c3d9379210265277af933fcea5b75c58fcf533ae129c1f619dd68c",
++      "bytes": 324
+     },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/README.md": {
+       "sha256": "13a178adb389ea3453194bc59ad0b7b7f87badb98db1747c322187606c17129d",
+       "bytes": 3305
+     },
++    "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/constructor.rs": {
++      "sha256": "f0242836d08dbadbb5659cd8f158d79c8de9420c9de2fb213de9ef149510c24b",
++      "bytes": 19713
++    },
+     "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/lib.rs": {
+       "sha256": "83b0bc12b05373dda3be8b102d16e6d497f87d87dc6ebf6e2e7d0aa86b89b8b5",
+       "bytes": 2498
++    },
++    "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs": {
++      "sha256": "7cc555f3e7e6b31a2e4939a1ff5d4a7bd2380623068fef2e4de71a9d29f942a1",
++      "bytes": 11711
++    },
++    "docs/labs/d22-constructor-2026-10-10/numerical-tests/src/report_output.rs": {
++      "sha256": "cda30f9ba4ef8ff3e245ae352cd28932f9a24ab78598f683607e6996598fa810",
++      "bytes": 9726
+     }
+   },
+-  "previous_manifest_sha256": "a5f54de8b13e56d5d5cb48f5ed8fb89392af05f199b79c1bfd11fcb32aea129d",
+-  "repair": "Attempt2 8/9 synthetic PASS; rollback fixture now selects actual dual-feasibility pivot instead of absent primal pivot; production unchanged"
++  "previous_manifest_sha256": "16926dcef55c3918297308bd1221e3b38cd37630316de4ea6402514d7d54ef90",
++  "repair": "Two fixture-only repairs; production unchanged. Added sealed same-source four-basis CLI and gated historical replay, copying exact retained constructor/report output.",
++  "synthetic_final_pass": 9
+ }
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/constructor.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/constructor.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..c4af966a936611ab4830cdb9a5341bafbd5dcca8
+--- /dev/null
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/constructor.rs
+@@ -0,0 +1,530 @@
++//! Offline compact mixed-integer legal destinations. Backend statuses are not proofs.
++use microlp::{ComparisonOp, LinearExpr, OptimizationDirection, Problem, SolveOptions, Variable};
++use serde::{Deserialize, Serialize};
++pub(super) const NODE_LIMIT: u64 = 4096;
++const INTEGER_TOL: f64 = 1e-6;
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub(super) enum LegalError {
++    Shape,
++    NonFinite,
++    MasterRange,
++    NonUnitRow,
++    NumericDecode,
++    Overflow,
++}
++impl std::fmt::Display for LegalError {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(f, "legal-set {:?}", self)
++    }
++}
++impl std::error::Error for LegalError {}
++type Result<T> = std::result::Result<T, LegalError>;
++#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
++#[serde(deny_unknown_fields)]
++pub(super) struct Receipt {
++    pub backend: String,
++    pub encoding: String,
++    pub node_limit: u64,
++    pub time_limit: Option<u64>,
++    pub termination: String,
++    pub status: String,
++    pub nodes_solved: Option<u64>,
++    pub lp_iterations: Option<u64>,
++    pub variables: usize,
++    pub fractional_coordinates: usize,
++    pub constraints: usize,
++    pub backend_objective: Option<f64>,
++    pub objective_constant: f64,
++    pub raw_displacement_assignment: Option<Vec<[f64; 3]>>,
++    pub destination_master_bits: Option<Vec<u32>>,
++    pub actual_delta: Option<Vec<f64>>,
++    pub construction_residuals: Option<Vec<f64>>,
++    pub recomputed_zero_margin_target_passed: bool,
++    pub gradient_dot: Option<f64>,
++    pub residual_tolerance: Option<f64>,
++    pub unchanged_screen_passed: bool,
++    pub eligible: bool,
++}
++fn finite_dot(a: &[f64], b: &[f64]) -> Result<f64> {
++    if a.len() != b.len() {
++        return Err(LegalError::Shape);
++    }
++    let mut s = 0.;
++    for (a, b) in a.iter().zip(b) {
++        s += a * b;
++        if !s.is_finite() {
++            return Err(LegalError::Overflow);
++        }
++    }
++    Ok(s)
++}
++fn norm(x: &[f64]) -> Result<f64> {
++    Ok(finite_dot(x, x)?.sqrt())
++}
++fn code(m: f32) -> i8 {
++    (m * 4.).round() as i8
++}
++fn canonical(m: f32) -> bool {
++    m == f32::from(code(m)) * 0.25
++}
++fn destination(m: f32, q: i8) -> f32 {
++    if q == code(m) {
++        m
++    } else {
++        f32::from(q) * 0.25
++    }
++}
++fn integer(x: f64) -> Result<i8> {
++    if !x.is_finite() || (x - x.round()).abs() > INTEGER_TOL || !(-14. ..=14.).contains(&x.round())
++    {
++        return Err(LegalError::NumericDecode);
++    }
++    Ok(x.round() as i8)
++}
++fn decode(m: f32, raw: [f64; 3]) -> Result<f32> {
++    let k = integer(raw[0])?;
++    let q = i16::from(k) + i16::from(code(m));
++    if !(-7..=7).contains(&q) {
++        return Err(LegalError::NumericDecode);
++    }
++    let q = q as i8;
++    let l = integer(raw[1])?;
++    let r = integer(raw[2])?;
++    let q0 = code(m);
++    if canonical(m) {
++        if l != 0 || r != 0 {
++            return Err(LegalError::NumericDecode);
++        }
++    } else if !(0..=1).contains(&l)
++        || !(0..=1).contains(&r)
++        || l + r > 1
++        || q < i8::try_from(i16::from(q0) + i16::from(r) - (i16::from(q0) + 7) * i16::from(l))
++            .map_err(|_| LegalError::NumericDecode)?
++        || q > i8::try_from(i16::from(q0) - i16::from(l) + (7 - i16::from(q0)) * i16::from(r))
++            .map_err(|_| LegalError::NumericDecode)?
++    {
++        return Err(LegalError::NumericDecode);
++    }
++    Ok(destination(m, q))
++}
++fn validate(m: &[f32], g: &[f32], rows: &[Vec<f64>]) -> Result<()> {
++    if m.is_empty() || m.len() != g.len() || rows.iter().any(|r| r.len() != m.len()) {
++        return Err(LegalError::Shape);
++    }
++    if m.iter().chain(g).any(|x| !x.is_finite()) || rows.iter().flatten().any(|x| !x.is_finite()) {
++        return Err(LegalError::NonFinite);
++    }
++    if m.iter().any(|x| !(-1.75..=1.75).contains(x)) {
++        return Err(LegalError::MasterRange);
++    }
++    for row in rows {
++        let n = norm(row)?;
++        if n != 0. && (n - 1.).abs() > 1e-10 {
++            return Err(LegalError::NonUnitRow);
++        }
++    }
++    Ok(())
++}
++#[derive(Clone, Copy)]
++struct Vars {
++    k: Variable,
++    side: Option<(Variable, Variable)>,
++}
++fn expr(vars: &[Vars], m: &[f32], coeff: &[f64]) -> LinearExpr {
++    let mut e = LinearExpr::empty();
++    for ((v, m), c) in vars.iter().zip(m).zip(coeff) {
++        let q0 = f64::from(code(*m));
++        e.add(v.k, *c * 0.25);
++        if let Some((l, r)) = v.side {
++            let f = q0 * 0.25 - f64::from(*m);
++            e.add(l, c * f);
++            e.add(r, c * f);
++        }
++    }
++    e
++}
++/// One call, no resumes. Root excluded from node limit; no wall-clock limit.
++pub(super) fn run(m: &[f32], g: &[f32], rows: &[Vec<f64>]) -> Result<Receipt> {
++    run_with_limit(m, g, rows, NODE_LIMIT)
++}
++fn run_with_limit(m: &[f32], g: &[f32], rows: &[Vec<f64>], limit: u64) -> Result<Receipt> {
++    validate(m, g, rows)?;
++    let mut p = Problem::new(OptimizationDirection::Minimize);
++    let mut vars = Vec::new();
++    let mut warm = Vec::new();
++    for (&m, &g) in m.iter().zip(g) {
++        let q0 = code(m);
++        let k = p.add_integer_var(f64::from(g) * 0.25, (-7 - i32::from(q0), 7 - i32::from(q0)));
++        warm.push((k, 0.));
++        let side = if canonical(m) {
++            None
++        } else {
++            let c = f64::from(g) * (f64::from(q0) * 0.25 - f64::from(m));
++            let l = p.add_binary_var(c);
++            let r = p.add_binary_var(c);
++            warm.extend([(l, 0.), (r, 0.)]);
++            p.add_constraint([(l, 1.), (r, 1.)], ComparisonOp::Le, 1.);
++            p.add_constraint(
++                [(k, 1.), (r, -1.), (l, f64::from(q0) + 7.)],
++                ComparisonOp::Ge,
++                0.,
++            );
++            p.add_constraint(
++                [(k, 1.), (l, 1.), (r, f64::from(q0) - 7.)],
++                ComparisonOp::Le,
++                0.,
++            );
++            Some((l, r))
++        };
++        vars.push(Vars { k, side });
++    }
++    for row in rows {
++        p.add_constraint(expr(&vars, m, row), ComparisonOp::Ge, 0.);
++    }
++    let fractional = vars.iter().filter(|v| v.side.is_some()).count();
++    let constant = 0.;
++    let mut receipt = Receipt {
++        backend: "microlp=0.6.0".into(),
++        encoding: "centered_integer_displacement_k=q-q0/1".into(),
++        node_limit: limit,
++        time_limit: None,
++        termination: String::new(),
++        status: String::new(),
++        nodes_solved: None,
++        lp_iterations: None,
++        variables: m.len() + 2 * fractional,
++        fractional_coordinates: fractional,
++        constraints: rows.len() + 3 * fractional,
++        backend_objective: None,
++        objective_constant: constant,
++        raw_displacement_assignment: None,
++        destination_master_bits: None,
++        actual_delta: None,
++        construction_residuals: None,
++        recomputed_zero_margin_target_passed: false,
++        gradient_dot: None,
++        residual_tolerance: None,
++        unchanged_screen_passed: false,
++        eligible: false,
++    };
++    let mut options = SolveOptions::default();
++    options.node_limit = Some(limit);
++    options.time_limit = None;
++    options.warm_start = Some(warm);
++    let outcome = match p.solve_with(options) {
++        Ok(v) => v,
++        Err(e) => {
++            receipt.termination = format!("{e:?}");
++            receipt.status = "BACKEND_NUMERIC_OR_NO_INCUMBENT".into();
++            return Ok(receipt);
++        }
++    };
++    let stats = outcome.stats();
++    receipt.nodes_solved = Some(stats.nodes_solved);
++    receipt.lp_iterations = Some(stats.lp_iterations);
++    receipt.termination = format!("{:?}", outcome.termination_reason());
++    if receipt.nodes_solved.is_some_and(|n| n > limit) {
++        return Err(LegalError::Overflow);
++    }
++    let Some(solution) = outcome.solution() else {
++        receipt.status = "NODE_LIMIT_NO_INCUMBENT".into();
++        return Ok(receipt);
++    };
++    receipt.backend_objective = Some(solution.objective());
++    if !solution.objective().is_finite() {
++        return Err(LegalError::NonFinite);
++    }
++    let raw = vars
++        .iter()
++        .map(|v| {
++            let (l, r) = v
++                .side
++                .map(|(l, r)| (solution.var_value_raw(l), solution.var_value_raw(r)))
++                .unwrap_or((0., 0.));
++            [solution.var_value_raw(v.k), l, r]
++        })
++        .collect::<Vec<_>>();
++    match populate(&mut receipt, m, g, rows, raw.clone()) {
++        Ok(()) => {}
++        Err(LegalError::NumericDecode) => {
++            receipt.raw_displacement_assignment = Some(raw);
++            receipt.status = "INTEGER_DECODE_REJECTED".into();
++        }
++        Err(e) => return Err(e),
++    }
++    Ok(receipt)
++}
++fn populate(
++    receipt: &mut Receipt,
++    m: &[f32],
++    g: &[f32],
++    rows: &[Vec<f64>],
++    raw: Vec<[f64; 3]>,
++) -> Result<()> {
++    if raw.len() != m.len() {
++        return Err(LegalError::Shape);
++    }
++    let destination = m
++        .iter()
++        .zip(&raw)
++        .map(|(&m, &r)| decode(m, r))
++        .collect::<Result<Vec<_>>>()?;
++    let delta = destination
++        .iter()
++        .zip(m)
++        .map(|(d, m)| f64::from(*d) - f64::from(*m))
++        .collect::<Vec<_>>();
++    let residual = rows
++        .iter()
++        .map(|r| finite_dot(r, &delta))
++        .collect::<Result<Vec<_>>>()?;
++    let gd = finite_dot(&g.iter().map(|g| f64::from(*g)).collect::<Vec<_>>(), &delta)?;
++    let tolerance = 1e-10 * norm(&delta)?;
++    let construction = residual.iter().all(|r| *r >= 0.);
++    let screen = residual.iter().all(|r| *r >= -tolerance);
++    receipt.status = if gd >= 0. {
++        "NO_DESCENDING_INCUMBENT"
++    } else if !screen {
++        "ACTUAL_SCREEN_REJECTED"
++    } else if receipt.termination == "NodeLimit" {
++        "NODE_LIMIT_DESCENDING_INCUMBENT"
++    } else {
++        "DESCENDING_INCUMBENT"
++    }
++    .into();
++    receipt.raw_displacement_assignment = Some(raw);
++    receipt.destination_master_bits = Some(destination.iter().map(|x| x.to_bits()).collect());
++    receipt.actual_delta = Some(delta);
++    receipt.construction_residuals = Some(residual);
++    receipt.recomputed_zero_margin_target_passed = construction;
++    receipt.gradient_dot = Some(gd);
++    receipt.residual_tolerance = Some(tolerance);
++    receipt.unchanged_screen_passed = screen;
++    receipt.eligible = gd < 0. && screen;
++    Ok(())
++}
++/// Validate a saved solution without re-solving, reranking or trusting a backend proof.
++pub(super) fn authenticate(
++    m: &[f32],
++    g: &[f32],
++    rows: &[Vec<f64>],
++    receipt: &Receipt,
++) -> Result<()> {
++    validate(m, g, rows)?;
++    let fractional = m.iter().filter(|m| !canonical(**m)).count();
++    if receipt.backend != "microlp=0.6.0"
++        || receipt.encoding != "centered_integer_displacement_k=q-q0/1"
++        || receipt.node_limit != NODE_LIMIT
++        || receipt.time_limit.is_some()
++        || receipt.nodes_solved.is_some_and(|n| n > NODE_LIMIT)
++        || receipt.variables != m.len() + 2 * fractional
++        || receipt.fractional_coordinates != fractional
++        || receipt.constraints != rows.len() + 3 * fractional
++    {
++        return Err(LegalError::Shape);
++    }
++    let constant = 0.;
++    if receipt.objective_constant != constant {
++        return Err(LegalError::NumericDecode);
++    }
++    let mut expected = receipt.clone();
++    if let Some(raw) = &receipt.raw_displacement_assignment {
++        if receipt.nodes_solved.is_none() || receipt.lp_iterations.is_none() {
++            return Err(LegalError::NumericDecode);
++        }
++        if receipt.status == "INTEGER_DECODE_REJECTED" {
++            if raw.len() != m.len()
++                || raw.iter().flatten().any(|v| !v.is_finite())
++                || !m.iter().zip(raw).any(|(&m, &v)| decode(m, v).is_err())
++                || receipt.destination_master_bits.is_some()
++                || receipt.actual_delta.is_some()
++                || receipt.construction_residuals.is_some()
++                || receipt.gradient_dot.is_some()
++                || receipt.residual_tolerance.is_some()
++                || receipt.eligible
++                || receipt.unchanged_screen_passed
++                || receipt.recomputed_zero_margin_target_passed
++            {
++                return Err(LegalError::NumericDecode);
++            }
++            return Ok(());
++        }
++        if !receipt.backend_objective.is_some_and(|x| x.is_finite()) {
++            return Err(LegalError::NonFinite);
++        }
++        populate(&mut expected, m, g, rows, raw.clone())?;
++        if &expected != receipt {
++            return Err(LegalError::NumericDecode);
++        }
++    } else if receipt.destination_master_bits.is_some()
++        || receipt.actual_delta.is_some()
++        || receipt.construction_residuals.is_some()
++        || receipt.gradient_dot.is_some()
++        || receipt.residual_tolerance.is_some()
++        || receipt.eligible
++        || receipt.recomputed_zero_margin_target_passed
++        || receipt.unchanged_screen_passed
++        || receipt.backend_objective.is_some()
++        || !matches!(
++            receipt.status.as_str(),
++            "NODE_LIMIT_NO_INCUMBENT" | "BACKEND_NUMERIC_OR_NO_INCUMBENT"
++        )
++    {
++        return Err(LegalError::NumericDecode);
++    }
++    Ok(())
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn exact_domain_fractional_endpoints_and_signed_zero() -> Result<()> {
++        for m in [-1.75, -1.7, -1.6, -0.01, -0.0, 0.0, 0.13, 1.6, 1.7, 1.75] {
++            let mut bits = std::collections::BTreeSet::new();
++            for q in -7..=7 {
++                for l in 0..=1 {
++                    for r in 0..=1 {
++                        if let Ok(v) = decode(m, [(q - code(m)) as f64, l as f64, r as f64]) {
++                            bits.insert(v.to_bits());
++                        }
++                    }
++                }
++            }
++            let expected = (-7..=7)
++                .map(|q| destination(m, q).to_bits())
++                .collect::<std::collections::BTreeSet<_>>();
++            assert_eq!(bits, expected);
++            assert_eq!(decode(m, [0., 0., 0.])?.to_bits(), m.to_bits());
++        }
++        Ok(())
++    }
++    #[test]
++    fn centered_domain_matches_absolute_constraints_for_every_code_and_side() -> Result<()> {
++        for m in [-1.75, -1.7, -1.6, -0.01, -0.0, 0.0, 0.13, 1.6, 1.7, 1.75] {
++            let q0 = i16::from(code(m));
++            for q in -7i16..=7 {
++                for l in 0i16..=1 {
++                    for r in 0i16..=1 {
++                        let absolute_legal = if canonical(m) {
++                            l == 0 && r == 0
++                        } else {
++                            l + r <= 1 && q >= q0 + r - (q0 + 7) * l && q <= q0 - l + (7 - q0) * r
++                        };
++                        let decoded = decode(m, [f64::from(q - q0), f64::from(l), f64::from(r)]);
++                        assert_eq!(decoded.is_ok(), absolute_legal);
++                        if absolute_legal {
++                            assert_eq!(decoded?.to_bits(), destination(m, q as i8).to_bits());
++                        }
++                    }
++                }
++            }
++            assert!(decode(m, [f64::from(-8 - q0), 1., 0.]).is_err());
++            assert!(decode(m, [f64::from(8 - q0), 0., 1.]).is_err());
++        }
++        Ok(())
++    }
++    #[test]
++    fn translated_guard_and_objective_expressions_preserve_legal_deltas() -> Result<()> {
++        let masters = [-1.7f32, -0.0, 0.13, 1.75];
++        let coeff = [0.6f64, -0.2, 0.3, -0.7];
++        for q in -7i8..=7 {
++            let mut absolute_lhs = 0.;
++            let mut absolute_rhs = 0.;
++            let mut centered_lhs = 0.;
++            let mut actual = 0.;
++            for (&m, &c) in masters.iter().zip(&coeff) {
++                let q0 = code(m);
++                let moved = q != q0;
++                let side = if canonical(m) || !moved { 0. } else { 1. };
++                let correction = f64::from(q0) * 0.25 - f64::from(m);
++                absolute_lhs += c * (f64::from(q) * 0.25 + side * correction);
++                absolute_rhs += c * f64::from(q0) * 0.25;
++                centered_lhs += c * (f64::from(q - q0) * 0.25 + side * correction);
++                actual += c * (f64::from(destination(m, q)) - f64::from(m));
++            }
++            assert!((absolute_lhs - absolute_rhs - centered_lhs).abs() < 1e-14);
++            assert!((centered_lhs - actual).abs() < 1e-14);
++        }
++        // Noop is now a literal all-zero expression, including fractional masters.
++        assert_eq!(masters.iter().map(|m| 0. * f64::from(*m)).sum::<f64>(), 0.);
++        let receipt = run(&masters, &[0.; 4], &[])?;
++        assert_eq!(receipt.objective_constant, 0.);
++        assert_eq!(receipt.encoding, "centered_integer_displacement_k=q-q0/1");
++        authenticate(&masters, &[0.; 4], &[], &receipt)?;
++        let mut mislabeled = receipt;
++        mislabeled.encoding = "absolute_q/1".into();
++        assert!(authenticate(&masters, &[0.; 4], &[], &mislabeled).is_err());
++        Ok(())
++    }
++    #[test]
++    fn true_joint_repair_single_moves_fail() -> Result<()> {
++        let s = 2f64.sqrt().recip();
++        let r = vec![vec![s, -s], vec![-s, s]];
++        let result = run(&[0., 0.], &[1., 1.], &r)?;
++        assert!(result.eligible);
++        let d = result.actual_delta.as_ref().ok_or(LegalError::Shape)?;
++        assert!(d[0] < 0. && d[1] < 0.);
++        assert_eq!(d[0], d[1]);
++        assert!(r
++            .iter()
++            .any(|row| finite_dot(row, &[d[0], 0.]).is_ok_and(|v| v < 0.)));
++        assert!(r
++            .iter()
++            .any(|row| finite_dot(row, &[0., d[1]]).is_ok_and(|v| v < 0.)));
++        authenticate(&[0., 0.], &[1., 1.], &r, &result)?;
++        Ok(())
++    }
++    #[test]
++    fn noop_not_promoted_and_constraints_respected() -> Result<()> {
++        let r = run(&[-0.0], &[1.], &[vec![1.]])?;
++        assert!(!r.eligible);
++        assert_eq!(r.status, "NO_DESCENDING_INCUMBENT");
++        assert_eq!(r.destination_master_bits, Some(vec![(-0f32).to_bits()]));
++        Ok(())
++    }
++    #[test]
++    fn invalid_decode_and_nonfinite_rejected() {
++        assert_eq!(decode(0.13, [0., 1., 0.]), Err(LegalError::NumericDecode));
++        assert_eq!(decode(0.13, [0.5, 0., 0.]), Err(LegalError::NumericDecode));
++        assert_eq!(run(&[0.], &[f32::NAN], &[]), Err(LegalError::NonFinite));
++    }
++    #[test]
++    fn backend_zero_target_is_not_a_stricter_actual_admission_gate() -> Result<()> {
++        let rows = vec![vec![-5e-11, (1.0 - 25e-22f64).sqrt()]];
++        let m = [0., 0.];
++        let g = [-1., 0.];
++        let mut receipt = run(&m, &g, &rows)?;
++        populate(
++            &mut receipt,
++            &m,
++            &g,
++            &rows,
++            vec![[1., 0., 0.], [0., 0., 0.]],
++        )?;
++        assert!(!receipt.recomputed_zero_margin_target_passed);
++        assert!(receipt.unchanged_screen_passed && receipt.eligible);
++        authenticate(&m, &g, &rows, &receipt)?;
++        Ok(())
++    }
++    #[test]
++    fn zero_branch_budget_keeps_noop_incumbent_not_root_relaxation() -> Result<()> {
++        let n = 5f64.sqrt();
++        let r = run_with_limit(&[0., 0.], &[3., 4.], &[vec![1. / n, 2. / n]], 0)?;
++        assert_eq!(r.termination, "NodeLimit");
++        assert_eq!(r.nodes_solved, Some(0));
++        assert!(!r.eligible);
++        assert_eq!(r.gradient_dot, Some(0.));
++        assert_eq!(r.destination_master_bits, Some(vec![0f32.to_bits(); 2]));
++        Ok(())
++    }
++    #[test]
++    fn fixed_node_limit_and_receipt_tamper() -> Result<()> {
++        let r = run_with_limit(&[0.13, 0.17], &[1., -1.], &[vec![0.6, 0.8]], 0)?;
++        assert_eq!(r.nodes_solved, Some(0));
++        assert!(!r.eligible || r.gradient_dot.is_some_and(|x| x < 0.));
++        let mut a = run(&[0.13], &[1.], &[])?;
++        a.destination_master_bits = Some(vec![0.1f32.to_bits()]);
++        assert!(authenticate(&[0.13], &[1.], &[], &a).is_err());
++        Ok(())
++    }
++}
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..68412e5d704f83fc934da910f37bdec3e443da9e
+--- /dev/null
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/main.rs
+@@ -0,0 +1,297 @@
++//! Saved constructor with an explicitly patched, residual-qualified local LU backend.
++use serde::{Deserialize, Serialize};
++use sha2::{Digest, Sha256};
++use std::{
++    error::Error,
++    fs,
++    io::BufReader,
++    path::{Path, PathBuf},
++    time::Instant,
++};
++#[path = "constructor.rs"]
++mod constructor;
++#[path = "report_output.rs"]
++mod report_output;
++const SOURCE: &[u8] = include_bytes!("constructor.rs");
++const SOURCE_SHA: &str = "f0242836d08dbadbb5659cd8f158d79c8de9420c9de2fb213de9ef149510c24b";
++const BASIS_PINS: [&str; 4] = [
++    "c5c73e1b9f7baf598cdda33e4a458f9208f0c943b4d471ba646eb129c495a794",
++    "55d8c2eadbcfc072d86a6310602184603030a318986ebeb2a2d885958f10ae05",
++    "337e0917af3a3c397ce70db1d096f24adc07c054de32a5cf6e1ed6c23491e221",
++    "4b5abc63cc98cde36c8ff1ba47f1e9388548f81dad3cb26bf15e73bfb2fbd2b6",
++];
++const REPAIR: &[u8] =
++    include_bytes!("../../../../../crates/uor-r4-training/vendor/microlp/src/repair.rs");
++const LU: &[u8] = include_bytes!("../../../../../crates/uor-r4-training/vendor/microlp/src/lu.rs");
++const SOLVER: &[u8] =
++    include_bytes!("../../../../../crates/uor-r4-training/vendor/microlp/src/solver.rs");
++fn stats_json() -> serde_json::Value {
++    let s = microlp::repair::stats();
++    serde_json::json!({"fresh_factors":s.fresh_factors,"exact_fallbacks":s.exact_fallbacks,"exact_singular":s.exact_singular,"certified_factors":s.certified_factors,"certified_solves":s.certified_solves,"rejected_solves":s.rejected_solves,"old_basis_refreshes":s.old_basis_refreshes})
++}
++fn source_json() -> serde_json::Value {
++    serde_json::json!({"repair_sha256":hash(REPAIR),"lu_sha256":hash(LU),"solver_sha256":hash(SOLVER),"constructor_sha256":hash(SOURCE)})
++}
++#[derive(Deserialize)]
++#[serde(deny_unknown_fields)]
++struct Input {
++    schema: String,
++    master_bits: Vec<u32>,
++    gradient_bits: Vec<u32>,
++    jacobian_bits: Vec<Vec<u32>>,
++    provenance: serde_json::Value,
++}
++#[derive(Serialize)]
++struct VariableMapping {
++    backend_variable: usize,
++    coordinate: usize,
++    family: &'static str,
++    family_index: usize,
++    component: &'static str,
++    lower: i32,
++    upper: i32,
++}
++fn hash(b: &[u8]) -> String {
++    format!("{:x}", Sha256::digest(b))
++}
++fn write(p: &Path, v: &impl Serialize) -> Result<(), Box<dyn Error>> {
++    use std::io::Write;
++    let mut f = fs::OpenOptions::new()
++        .write(true)
++        .create_new(true)
++        .open(p)?;
++    serde_json::to_writer_pretty(&mut f, v)?;
++    f.write_all(b"\n")?;
++    Ok(())
++}
++fn unit_rows(j: &[Vec<f32>]) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
++    j.iter()
++        .map(|v| {
++            if v.len() != 1920 || v.iter().any(|x| !x.is_finite()) {
++                return Err("malformed J row".into());
++            }
++            let mut r = v.iter().map(|x| f64::from(*x)).collect::<Vec<_>>();
++            let n = r.iter().map(|x| x * x).sum::<f64>().sqrt();
++            if !n.is_finite() {
++                return Err("J norm overflow".into());
++            }
++            if n > 0. {
++                for x in &mut r {
++                    *x /= n;
++                }
++            }
++            Ok(r)
++        })
++        .collect()
++}
++fn mapping(m: &[f32]) -> (Vec<VariableMapping>, Vec<serde_json::Value>) {
++    let mut vars = Vec::new();
++    let mut rows = Vec::new();
++    for (i, &m) in m.iter().enumerate() {
++        let q0 = (m * 4.).round() as i32;
++        let family = if i < 960 { "prefix" } else { "generate.unary" };
++        let fi = i % 960;
++        vars.push(VariableMapping {
++            backend_variable: vars.len(),
++            coordinate: i,
++            family,
++            family_index: fi,
++            component: "k=q-q0",
++            lower: -7 - q0,
++            upper: 7 - q0,
++        });
++        if m != (q0 as f32) * 0.25 {
++            for component in ["lower_branch_l", "upper_branch_r"] {
++                vars.push(VariableMapping {
++                    backend_variable: vars.len(),
++                    coordinate: i,
++                    family,
++                    family_index: fi,
++                    component,
++                    lower: 0,
++                    upper: 1,
++                });
++            }
++            for kind in ["side_sum_le1", "centered_lower_ge0", "centered_upper_le0"] {
++                rows.push(
++                    serde_json::json!({"model_constraint":rows.len(),"kind":kind,"coordinate":i}),
++                );
++            }
++        }
++    }
++    for i in 0..380 {
++        rows.push(serde_json::json!({"model_constraint":rows.len(),"kind":"unit_guard_ge0","guard_index":i}));
++    }
++    (vars, rows)
++}
++fn execute(input: &Path, expected: &str, out: &Path) -> Result<serde_json::Value, Box<dyn Error>> {
++    let started = Instant::now();
++    if hash(SOURCE) != SOURCE_SHA {
++        return Err("constructor source identity differs".into());
++    }
++    let meta = fs::metadata(input)?;
++    if !meta.is_file() || meta.len() > 16 * 1024 * 1024 {
++        return Err("input must be regular file <=16MiB".into());
++    }
++    let bytes = fs::read(input)?;
++    if hash(&bytes) != expected {
++        return Err("saved input SHA mismatch".into());
++    }
++    let x: Input = serde_json::from_reader(BufReader::new(bytes.as_slice()))?;
++    if x.schema != "uor-r4.legal-basis-input/1"
++        || x.master_bits.len() != 1920
++        || x.gradient_bits.len() != 1920
++        || x.jacobian_bits.len() != 380
++    {
++        return Err("input shape/schema differs".into());
++    }
++    let m = x
++        .master_bits
++        .iter()
++        .map(|x| f32::from_bits(*x))
++        .collect::<Vec<_>>();
++    let g = x
++        .gradient_bits
++        .iter()
++        .map(|x| f32::from_bits(*x))
++        .collect::<Vec<_>>();
++    let j = x
++        .jacobian_bits
++        .iter()
++        .map(|r| r.iter().map(|x| f32::from_bits(*x)).collect::<Vec<_>>())
++        .collect::<Vec<_>>();
++    let rows = unit_rows(&j)?;
++    let (variables, constraints) = mapping(&m);
++    write(
++        &out.join("model-mapping.json"),
++        &serde_json::json!({"variables":variables,"constraints":constraints,"source_sha256":SOURCE_SHA,"internal_row_mapping":"model order is authoritative; backend context contains row scales and full internal basic/nonbasic/slack mapping; no assumption of identity without inspection"}),
++    )?;
++    microlp::repair::reset_stats();
++    let receipt = constructor::run(&m, &g, &rows)?;
++    constructor::authenticate(&m, &g, &rows, &receipt)?;
++
++    write(&out.join("constructor-receipt.json"), &receipt)?;
++    Ok(
++        serde_json::json!({"status":"COMPLETED_SAVED_CONSTRUCTOR_REPLAY","schema":"uor-r4.d22-saved-constructor/1","input_sha256":expected,"producer_provenance":x.provenance,"source":source_json(),"numerics":stats_json(),"backend_status":receipt.status,"backend_termination":receipt.termination,"elapsed_seconds":started.elapsed().as_secs_f64(),"scope":"Historical saved input regression only; zero new gradients/native scoring/model acceptance; wrapper completion is not a returned assignment"}),
++    )
++}
++
++fn execute_basis(
++    input: &Path,
++    expected: &str,
++    out: &Path,
++) -> Result<serde_json::Value, Box<dyn Error>> {
++    let started = Instant::now();
++    let bytes = fs::read(input)?;
++    if hash(&bytes) != expected || bytes.len() > 16 * 1024 * 1024 {
++        return Err("basis identity/size differs".into());
++    }
++    let text = std::str::from_utf8(&bytes)?;
++    let mut columns: Vec<Vec<(usize, f64)>> = Vec::new();
++    let mut sizes = Vec::new();
++    for line in text.lines() {
++        if line.starts_with('#') || line.is_empty() {
++            continue;
++        }
++        let fields = line.split('\t').collect::<Vec<_>>();
++        match fields.as_slice() {
++            ["COLUMN", c, count] => {
++                if c.parse::<usize>()? != columns.len() {
++                    return Err("column order differs".into());
++                }
++                columns.push(Vec::new());
++                sizes.push(count.parse::<usize>()?);
++            }
++            ["ENTRY", c, r, bits] => {
++                let c = c.parse::<usize>()?;
++                let r = r.parse::<usize>()?;
++                if columns.is_empty() || c != columns.len() - 1 || r >= 440 {
++                    return Err("entry coordinate differs".into());
++                }
++                let x = f64::from_bits(u64::from_str_radix(bits, 16)?);
++                if !x.is_finite() || columns[c].iter().any(|(row, _)| *row == r) {
++                    return Err("invalid or duplicate entry".into());
++                }
++                columns[c].push((r, x));
++            }
++            _ => return Err("unknown basis line".into()),
++        }
++    }
++    if columns.len() != 440 || columns.iter().zip(sizes).any(|(c, n)| c.len() != n) {
++        return Err("basis dimensions/counts differ".into());
++    }
++    microlp::repair::reset_stats();
++    let result = microlp::repair::qualify(
++        columns
++            .iter()
++            .map(|col| col.iter().copied().unzip())
++            .collect(),
++    );
++    Ok(serde_json::json!({
++        "schema":"uor-r4.d22-saved-basis-qualification/1",
++        "status":if result.is_ok() {"QUALIFIED"} else {"NUMERICALLY_REJECTED"},
++        "basis_sha256":expected,"dimension":440,"stored_entries":columns.iter().map(Vec::len).sum::<usize>(),
++        "error":result.as_ref().err(),"numerics":stats_json(),"source":source_json(),
++        "elapsed_seconds":started.elapsed().as_secs_f64(),
++        "scope":"Original stored basis; all unit RHS normal/transpose dense/sparse. Exact fallback concerns stored dyadics; no LP feasibility/model claim."
++    }))
++}
++
++fn main() -> Result<(), Box<dyn Error>> {
++    let args = std::env::args().skip(1).collect::<Vec<_>>();
++    if args.len() == 2 && args[0] == "--verify-report" {
++        report_output::verify(Path::new(&args[1]))?;
++        return Ok(());
++    }
++    if args.len() != 6
++        || !["--input", "--basis"].contains(&args[0].as_str())
++        || args[2] != "--expected-sha256"
++        || args[4] != "--output"
++        || args[3].len() != 64
++        || !args[3].bytes().all(|x| x.is_ascii_hexdigit())
++    {
++        return Err(
++            "usage: --input/--basis FILE --expected-sha256 HEX --output EXCLUSIVE_DIR".into(),
++        );
++    }
++    if args[0] == "--basis" && !BASIS_PINS.contains(&args[3].as_str()) {
++        return Err("basis is not one of four registered captures".into());
++    }
++    if args[0] == "--input" {
++        if args[3] != "0fe91060f10c0d6107be3565f9ae0746c30e742a00d02935398f6764b84b974d" {
++            return Err("wrong historical input".into());
++        }
++        let gate = PathBuf::from(std::env::var("D22_BASIS_ADMISSION_ROOT")?);
++        for (i, pin) in BASIS_PINS.iter().enumerate() {
++            let root = gate.join(format!("basis{i}"));
++            report_output::verify(&root)?;
++            let r: serde_json::Value =
++                serde_json::from_slice(&fs::read(root.join("report.json"))?)?;
++            if r["status"] != "QUALIFIED"
++                || r["basis_sha256"] != *pin
++                || r["source"] != source_json()
++            {
++                return Err("four exact same-source bases have not qualified".into());
++            }
++        }
++    }
++    let input = PathBuf::from(&args[1]);
++    let out = PathBuf::from(&args[5]);
++    if out.exists() {
++        return Err("output already exists".into());
++    }
++    report_output::claim(&out)?;
++    let result = if args[0] == "--basis" {
++        execute_basis(&input, &args[3], &out)
++    } else {
++        execute(&input, &args[3], &out)
++    };
++    let report = match &result {
++        Ok(v) => v.clone(),
++        Err(e) => serde_json::json!({"status":"FAILED","error":e.to_string()}),
++    };
++    write(&out.join("report.json"), &report)?;
++    report_output::seal(&out)?;
++    report_output::verify(&out)?;
++    result.map(|_| ())
++}
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/report_output.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/report_output.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..a098799943df7f076586b354995e9b4a494518fa
+--- /dev/null
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/src/report_output.rs
+@@ -0,0 +1,247 @@
++//! Exclusive report directories for experiment drivers.
++//!
++//! A report root is claimed once, with exclusive creation semantics, before any
++//! model work; an existing path fails instead of being reused or overwritten.
++//! A completed attempt is sealed with a manifest naming every file and its
++//! BLAKE3 digest, so retries and interrupted attempts keep distinct directories,
++//! logs and charges. This is a small executable guard, not an evidence framework.
++use std::fs;
++use std::io;
++use std::path::{Path, PathBuf};
++
++/// Sentinel written into a freshly claimed report directory.
++pub const ATTEMPT_FILE: &str = "attempt.json";
++/// Manifest written once when an attempt is sealed.
++pub const MANIFEST_FILE: &str = "manifest.json";
++
++/// Create `path` exclusively as a new report directory and write its attempt
++/// sentinel. Parents are created as containers; the leaf must not exist. An
++/// existing leaf, including an existing completed report, fails before any
++/// caller work and is left byte-identical.
++pub fn claim(path: &Path) -> io::Result<()> {
++    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
++        fs::create_dir_all(parent)?;
++    }
++    fs::create_dir(path).map_err(|e| {
++        io::Error::new(
++            e.kind(),
++            format!(
++                "report directory {} was not created exclusively ({e}); choose a new attempt path instead of reusing or overwriting an existing report",
++                path.display()
++            ),
++        )
++    })?;
++    let argv: Vec<String> = std::env::args().collect();
++    let sentinel = serde_json::json!({
++        "schema": "uor-r4.report-attempt/1",
++        "claimed_at": humantime_now(),
++        "pid": std::process::id(),
++        "argv": argv,
++        "rule": "exclusively created before model work; never reused for a retry"
++    });
++    let mut file = fs::File::create_new(path.join(ATTEMPT_FILE))?;
++    io::Write::write_all(
++        &mut file,
++        serde_json::to_string_pretty(&sentinel)?.as_bytes(),
++    )?;
++    Ok(())
++}
++
++/// Seal a completed attempt: write `manifest.json` (exclusively) listing every
++/// regular file below `path` with its size and BLAKE3 digest. Sealing twice fails.
++pub fn seal(path: &Path) -> io::Result<PathBuf> {
++    let manifest_path = path.join(MANIFEST_FILE);
++    if manifest_path.exists() {
++        return Err(io::Error::new(
++            io::ErrorKind::AlreadyExists,
++            format!("{} is already sealed", path.display()),
++        ));
++    }
++    let mut files = Vec::new();
++    collect(path, path, &mut files)?;
++    files.sort();
++    let mut entries = Vec::with_capacity(files.len());
++    for relative in files {
++        let bytes = fs::read(path.join(&relative))?;
++        entries.push(serde_json::json!({
++            "path": relative,
++            "bytes": bytes.len(),
++            "blake3": blake3::hash(&bytes).to_hex().to_string(),
++        }));
++    }
++    let manifest = serde_json::json!({
++        "schema": "uor-r4.report-manifest/1",
++        "sealed_at": humantime_now(),
++        "root": path,
++        "files": entries,
++    });
++    let mut file = fs::File::create_new(&manifest_path)?;
++    io::Write::write_all(
++        &mut file,
++        serde_json::to_string_pretty(&manifest)?.as_bytes(),
++    )?;
++    Ok(manifest_path)
++}
++
++/// Verify a sealed attempt: every listed file must exist with its recorded size and
++/// BLAKE3 digest, and the directory must hold no unlisted regular file besides the
++/// manifest. Returns the sorted list of unlisted files on success (empty) or an error
++/// naming the first listed mismatch; unlisted files are reported as an error too, so
++/// a complete file set is checked, not only the listed hashes.
++pub fn verify(path: &Path) -> io::Result<Vec<String>> {
++    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(path.join(MANIFEST_FILE))?)?;
++    let listed = manifest["files"]
++        .as_array()
++        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "manifest without files"))?;
++    let mut names = std::collections::BTreeSet::new();
++    for entry in listed {
++        let relative = entry["path"].as_str().ok_or_else(|| {
++            io::Error::new(io::ErrorKind::InvalidData, "manifest entry without path")
++        })?;
++        let bytes = fs::read(path.join(relative))?;
++        if entry["bytes"].as_u64() != Some(bytes.len() as u64)
++            || entry["blake3"].as_str() != Some(blake3::hash(&bytes).to_hex().as_str())
++        {
++            return Err(io::Error::new(
++                io::ErrorKind::InvalidData,
++                format!("sealed file changed: {relative}"),
++            ));
++        }
++        names.insert(relative.to_owned());
++    }
++    let mut actual = Vec::new();
++    collect(path, path, &mut actual)?;
++    let unlisted: Vec<String> = actual
++        .into_iter()
++        .filter(|f| f != MANIFEST_FILE && !names.contains(f))
++        .collect();
++    if !unlisted.is_empty() {
++        return Err(io::Error::new(
++            io::ErrorKind::InvalidData,
++            format!(
++                "sealed directory holds unlisted files: {}",
++                unlisted.join(", ")
++            ),
++        ));
++    }
++    Ok(unlisted)
++}
++
++fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) -> io::Result<()> {
++    for entry in fs::read_dir(dir)? {
++        let entry = entry?;
++        let kind = entry.file_type()?;
++        let path = entry.path();
++        if kind.is_dir() {
++            collect(root, &path, out)?;
++        } else if kind.is_file() {
++            let relative = path
++                .strip_prefix(root)
++                .map_err(|e| io::Error::other(e.to_string()))?;
++            out.push(relative.to_string_lossy().into_owned());
++        }
++    }
++    Ok(())
++}
++
++fn humantime_now() -> String {
++    let now = std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)
++        .map(|d| d.as_secs())
++        .unwrap_or(0);
++    format!("{now}")
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn scratch(name: &str) -> PathBuf {
++        let dir = std::env::temp_dir().join(format!(
++            "uor-r4-report-output-{}-{}-{name}",
++            std::process::id(),
++            std::time::SystemTime::now()
++                .duration_since(std::time::UNIX_EPOCH)
++                .unwrap()
++                .as_nanos()
++        ));
++        fs::create_dir_all(&dir).unwrap();
++        dir
++    }
++
++    #[test]
++    fn report_output_new_path_is_claimed_and_sealed_normally() {
++        let base = scratch("new");
++        let out = base.join("candidate-a").join("evaluate").join("attempt-1");
++        claim(&out).unwrap();
++        assert!(out.join(ATTEMPT_FILE).is_file());
++        fs::write(out.join("result.json"), b"{\"exact\":1}").unwrap();
++        fs::create_dir(out.join("nested")).unwrap();
++        fs::write(out.join("nested").join("rows.jsonl"), b"{}\n").unwrap();
++        let manifest_path = seal(&out).unwrap();
++        let manifest: serde_json::Value =
++            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
++        let files = manifest["files"].as_array().unwrap();
++        let names: Vec<_> = files.iter().map(|f| f["path"].as_str().unwrap()).collect();
++        assert_eq!(
++            names,
++            vec![ATTEMPT_FILE, "nested/rows.jsonl", "result.json"]
++        );
++        assert_eq!(
++            files[2]["blake3"],
++            blake3::hash(b"{\"exact\":1}").to_hex().to_string()
++        );
++        assert!(seal(&out).is_err(), "sealing twice must fail");
++        assert!(
++            verify(&out).unwrap().is_empty(),
++            "a complete sealed set verifies"
++        );
++        // A file added beneath a sealed directory is detected as unlisted.
++        fs::write(out.join("derived-input.json"), b"[]").unwrap();
++        let error = verify(&out).unwrap_err().to_string();
++        assert!(
++            error.contains("unlisted") && error.contains("derived-input.json"),
++            "{error}"
++        );
++        fs::remove_file(out.join("derived-input.json")).unwrap();
++        // A changed listed file is detected before the file set is judged.
++        fs::write(out.join("result.json"), b"{\"exact\":0}").unwrap();
++        assert!(verify(&out)
++            .unwrap_err()
++            .to_string()
++            .contains("result.json"));
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn report_output_existing_report_fails_before_work_and_stays_byte_identical() {
++        let base = scratch("collision");
++        let out = base.join("evaluate").join("attempt-1");
++        claim(&out).unwrap();
++        let report = out.join("result.json");
++        fs::write(&report, b"original rejected-candidate rows").unwrap();
++        let sentinel_before = fs::read(out.join(ATTEMPT_FILE)).unwrap();
++        let error = claim(&out).unwrap_err();
++        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
++        assert!(error.to_string().contains("new attempt path"));
++        assert_eq!(
++            fs::read(&report).unwrap(),
++            b"original rejected-candidate rows"
++        );
++        assert_eq!(fs::read(out.join(ATTEMPT_FILE)).unwrap(), sentinel_before);
++        // A plain pre-existing directory without a sentinel is also refused.
++        let plain = base.join("plain");
++        fs::create_dir(&plain).unwrap();
++        fs::write(plain.join("result.json"), b"keep").unwrap();
++        assert_eq!(
++            claim(&plain).unwrap_err().kind(),
++            io::ErrorKind::AlreadyExists
++        );
++        assert_eq!(fs::read(plain.join("result.json")).unwrap(), b"keep");
++        // A distinct attempt path beside it completes normally.
++        let next = base.join("evaluate").join("attempt-2");
++        claim(&next).unwrap();
++        assert!(next.join(ATTEMPT_FILE).is_file());
++        fs::remove_dir_all(base).unwrap();
++    }
++}

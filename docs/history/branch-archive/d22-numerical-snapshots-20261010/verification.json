@@ -1,0 +1,153 @@
+{
+  "schema": "uor-r4.numerical-archive-verification/1",
+  "status": "PASS",
+  "snapshot_count": 20,
+  "download_transport_bytes": 4587520,
+  "compressed_source_bytes": 4549507,
+  "verification": "Sequential git apply from empty tree; every path, byte and file mode compared directly to original immutable tar member; explicit directories restored.",
+  "snapshots": [
+    {
+      "snapshot": "synthetic-attempt1",
+      "files_verified": 61,
+      "empty_files_verified": 0,
+      "restored_bytes": 820784,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "synthetic-attempt2",
+      "files_verified": 61,
+      "empty_files_verified": 0,
+      "restored_bytes": 821059,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "synthetic-attempt3",
+      "files_verified": 61,
+      "empty_files_verified": 0,
+      "restored_bytes": 821305,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "qualification-attempt1",
+      "files_verified": 64,
+      "empty_files_verified": 0,
+      "restored_bytes": 863191,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "qualification-attempt2",
+      "files_verified": 67,
+      "empty_files_verified": 0,
+      "restored_bytes": 877446,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt1",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 883061,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt2-boundary",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 883807,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt3-rebuild",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 889604,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt4-phase",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 895703,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt5-phase-free",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 896832,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt6-every-pivot",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 899175,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt7-refinement",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 905320,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt8-signed-ratio",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 910168,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt9-signed-ratio",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 910183,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt10-step-interval",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 918832,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt11-phase-recovery",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 928670,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt12-basis-epoch",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 934830,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt13-basis-epoch-fixture",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 934842,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt14-actual-rhs",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 944409,
+      "status": "BYTE_EXACT_PASS"
+    },
+    {
+      "snapshot": "replay-attempt15-actual-rhs-error-type",
+      "files_verified": 68,
+      "empty_files_verified": 0,
+      "restored_bytes": 944446,
+      "status": "BYTE_EXACT_PASS"
+    }
+  ],
+  "generation_verification_seconds": 2.238933208,
+  "threads": 1,
+  "model_or_build_execution": false
+}
