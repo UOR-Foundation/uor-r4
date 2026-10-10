@@ -21,6 +21,11 @@ Every lab's track, including the Claude lab's, is audited against this contract 
    - A PR that does not move the headline adds one to the count.
    - At 3/3 the next action on that line is a pivot card (D21 §1).
    - Only a moved headline resets the count. Renaming, splitting or "re-scoping" a line does not.
+   - [D22](../integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened) amends the count:
+     - A run that meets its own pre-registered mechanism target without a significant headline loss also resets it.
+     - A negative closes the configuration, never the mechanism: stopping a novel mechanism needs the owner.
+     - Tooling failures are blockers, not negatives.
+     - Bars are never narrower than the panel noise; decisive runs use ≥ 2 seeds or ≥ 200 fresh rows and train the mechanism in.
 4. **Pre-register before compute.** Post the bar, the base artifact, the data split, the steps and the cost on the milestone issue before any run. GPU work goes through `uor-pod` within the caps; CPU work runs on the owner's laptop.
 5. **Check in.**
    - Every **90 minutes or 3 merged PRs**, whichever comes first, post a status card on the milestone issue: `headline · line · count · next step and how it moves the headline`.

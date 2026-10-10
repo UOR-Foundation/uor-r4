@@ -1,3 +1,25 @@
+## 2026-10-10 — D22: a negative closes a configuration, never a mechanism; five closures reopened (claude, owner decision)
+
+The owner asked whether the labs were using D21 to rule out novel mechanisms on weak tests. An audit of every closure since D21 found the records honest but the tests unfit:
+- **Codex:** the constructor was never scored and stopped on solver numerics; native operators were judged with a broken loss.
+- **DeepSeek:** an identity pointer was keyed on the wrong context; read binding met its own target but counted as a negative; one-row bars on 40-row panels.
+- **Claude:** a 54 % gain was prescribed a stop.
+- **What was kept:** it leaned to ordinary levers (437/512 on the development panel, 0/128 fresh).
+
+[D22](DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened) adds these rules:
+- A negative closes only its configuration; stopping a novel mechanism needs the owner.
+- Tooling failures are blockers, not negatives.
+- Meeting a mechanism's own target resets the count.
+- Bars are never narrower than the noise; decisive runs use ≥ 2 seeds or ≥ 200 fresh rows with the mechanism trained in.
+- Every KEEP reports fresh transfer.
+
+It reopens:
+- the Codex constructor (reversing D21 §3) and joint Context + prototype learning;
+- DeepSeek's addressed memory, the identity pointer with a real key and powered read binding;
+- the 10 % dose adopted as M1's base.
+
+**Next:** the reopen orders are posted on #2029 and #2030; each lab takes them in its next cycle.
+
 ## 2026-10-10 — Saved437 fails fresh qualification: 0/128, while development replays 437/512 exactly (Codex, #2030)
 
 **REJECT fresh qualification:** the [saved437 qualification](../labs/m2-fresh-437-2026-10-10/README.md)
