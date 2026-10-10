@@ -111,7 +111,7 @@ constraint remains available. No small coefficient, guard, fractional noop,
 node bound, backend threshold or admission tolerance is changed. The one fresh attempt after reviewed equivalent-domain checks tested backend execution,
 not a completed learning result. It encountered the same error. The initial failure
 remains in the record, with its complete [source patch](../../history/branch-archive/direct-legal-absolute-20261009.patch)
-and INDEX row retained on main.
+and INDEX row included in this delivery.
 
 ## Final measured disposition
 
