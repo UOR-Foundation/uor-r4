@@ -129,3 +129,20 @@ complete-reply intervention and score the same512 panel; no constructor,
 attribution or solver work is reopened. No successor compute is started here.
 Held-out, general conversation, durable memory and complete-path energy remain
 unqualified by this result. M3 was not owner-blocked work and is unchanged.
+
+## Durable evidence
+
+The full sealed baseline/candidate reports, checkpoints0/32/64, exact executable,
+setup/compile failures, telemetry and actual parent/panel are preserved in
+`icloud:UOR-R4/results/codex/codex-m2-reply-gradient-20261010.tar`.
+`cloud-store put` verifies the uploaded tar by MD5 download round-trip before
+publishing its index. [Package hashes](PACKAGE.json) bind the compressed components;
+[source history](cloud-put.txt) is included as a Git bundle with published main
+prerequisites, so precompile failed source is recoverable after branch deletion.
+Restore using `cloud-store fetch codex-m2-reply-gradient-20261010 <destination>`;
+extract the two compressed input/run archives and remap the config's local paths.
+Do not reuse a sealed report root for a rerun.
+
+The final PR check, exact-head review, merge verification, pod shutdown and complete
+session-cost/ledger closeout are posted on the result PR and #2030. They remain
+separate from this measured producer identity and do not rerun training.
