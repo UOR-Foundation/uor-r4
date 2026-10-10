@@ -30,14 +30,6 @@ const RESUME177_FIELD_SHA: &str =
     "dfb945d567ce25f5c200967ce1f9e5e31740f9cfaa8f6a1a6d6dd11d156a2e13";
 const RESUME177_MASTER_SHA: &str =
     "0c7dec5f627b8c9c44557922a4d17d30846796381d26a055edc84551f8149acc";
-const RESUME437_REPORT_SHA: &str =
-    "787f1a694dd894f8dcf636e158b2470fd88a824f3dd73535749bc4f36f05a165";
-const RESUME437_MANIFEST_SHA: &str =
-    "2f630ad56a6abd09271681fcb514d22caefac8af918321224bc173446c20a84c";
-const RESUME437_FIELD_SHA: &str =
-    "de4a3234d6e92f4b12a657cc195425687bc67c243d9eded9a1df0797b9942a61";
-const RESUME437_MASTER_SHA: &str =
-    "af5e263c2e3dca56232ba7d43f52514c0a4fbfd5c79956df0cfa0ebe1567fc88";
 const POOLED_RANK_OBJECTIVE: &str = "equal-episode-logmeanexp-native-pooled-strongest-wrong-softplus-negative-log-mass-margin/1;margin0;temperature1;smallest-token-ID-ties;all-targets-including-EOS;existing-raw-identity-STE;no-phase-weighting";
 const BOTTLENECK_OBJECTIVE: &str = "equal-episode-logmeanexp-unweighted-native-token-CE/1;temperature1;all-targets-including-EOS;existing-raw-identity-STE;no-phase-weighting";
 
@@ -82,14 +74,6 @@ const SAVED177: ResumeProfile = ResumeProfile {
     lineage_step: 832,
     complete: 177,
 };
-const SAVED437: ResumeProfile = ResumeProfile {
-    report_sha: RESUME437_REPORT_SHA,
-    manifest_sha: RESUME437_MANIFEST_SHA,
-    field_sha: RESUME437_FIELD_SHA,
-    checkpoint_step: 256,
-    lineage_step: 1088,
-    complete: 437,
-};
 impl ResumeProfile {
     pub fn lineage_after(self, local_step: usize) -> usize {
         self.lineage_step + local_step
@@ -125,26 +109,12 @@ impl ResumeProfile {
             {
                 return Err(bad("cross-state saved145 lineage/provenance differs"));
             }
-        } else if matches!(self, SAVED175 | SAVED177 | SAVED437) {
-            let ancestor = if self == SAVED437 {
-                SAVED177
-            } else if self == SAVED177 {
-                SAVED175
-            } else {
-                SAVED145
-            };
-            let master_sha = if self == SAVED437 {
-                RESUME437_MASTER_SHA
-            } else if self == SAVED177 {
+        } else if self == SAVED175 || self == SAVED177 {
+            let ancestor = if self == SAVED177 { SAVED175 } else { SAVED145 };
+            let master_sha = if self == SAVED177 {
                 RESUME177_MASTER_SHA
             } else {
                 RESUME175_MASTER_SHA
-            };
-            let ranked_parent = self == SAVED437;
-            let expected_phase = if ranked_parent {
-                "none;all-target-pooled-rank-logmeanexp"
-            } else {
-                "none;all-target-token-logmeanexp"
             };
             let prior = &report["cross_state_resume"];
             let initial = &report["initial_receipt"];
@@ -166,7 +136,7 @@ impl ResumeProfile {
                 || initial["parameters"] != prior["source_master_inventory"]
                 || report["initial"]["continuation_sha256"] != ancestor.field_sha
                 || report["initial"]["complete"] != ancestor.complete
-                || report["phase_policy"] != expected_phase
+                || report["phase_policy"] != "none;all-target-token-logmeanexp"
                 || receipt["parameters"]["continuation.cross_state"]["sha256"] != master_sha
                 || report["final_active_masters"]["continuation.cross_state"] != master_sha
             {
@@ -174,34 +144,16 @@ impl ResumeProfile {
                     "cross-state bottleneck parent lineage/ancestry/master identity differs",
                 ));
             }
-            if ranked_parent
-                && (initial["parameters"]["continuation.cross_state"]["sha256"]
-                    != RESUME177_MASTER_SHA
-                    || receipt["parameters"]["continuation.cross_state"]["shape"]
-                        != json!([8, 14400])
-                    || receipt["parameters"]["continuation.cross_state"]["bytes"] != 460800)
-            {
-                return Err(bad(
-                    "cross-state ranked parent fractional-master identity differs",
-                ));
-            }
             for policy in [report, initial, receipt] {
-                let objective_matches = if ranked_parent {
-                    policy["cross_state_pooled_rank"] == true
-                        && policy["training_objective"] == POOLED_RANK_OBJECTIVE
-                        && policy["pooled_rank_policy"] == pooled_rank_policy()
-                } else {
-                    !policy
-                        .get("cross_state_pooled_rank")
-                        .is_some_and(|v| v != false)
-                        && policy["training_objective"] == BOTTLENECK_OBJECTIVE
-                };
-                if !objective_matches
+                if policy
+                    .get("cross_state_pooled_rank")
+                    .is_some_and(|v| v != false)
                     || policy["cross_state_bottleneck"] != true
+                    || policy["training_objective"] != BOTTLENECK_OBJECTIVE
                     || policy["loss_scope"] != "all"
                     || policy["credit"] != "raw_identity"
                 {
-                    return Err(bad("cross-state parent objective policy differs"));
+                    return Err(bad("cross-state parent bottleneck policy differs"));
                 }
             }
         } else {
@@ -221,7 +173,7 @@ pub(super) struct ResumeConfig {
 
 impl ResumeConfig {
     fn profile(&self) -> Result<ResumeProfile> {
-        [SAVED22, SAVED145, SAVED175, SAVED177, SAVED437]
+        [SAVED22, SAVED145, SAVED175, SAVED177]
             .into_iter()
             .find(|p| {
                 self.expected_report_sha256 == p.report_sha
@@ -377,7 +329,6 @@ fn validate_rows(endpoint: &Value, expected: usize) -> Result<()> {
 pub(super) fn settings(a: &Args) -> Result<()> {
     if a.mode != Mode::CrossStateContinuation {
         return if a.cross_state_resume.is_some()
-            || a.cross_state_bank_mixture.is_some()
             || a.cross_state_bottleneck
             || a.cross_state_pooled_rank
         {
@@ -393,14 +344,12 @@ pub(super) fn settings(a: &Args) -> Result<()> {
         .as_ref()
         .map(ResumeConfig::profile)
         .transpose()?;
-    // Saved437 is admitted only for the registered bank-mixture intervention;
-    // neither an unchanged ranking continuation nor a mixture on older parents.
-    if a.cross_state_bottleneck
-        != matches!(profile, Some(SAVED145 | SAVED175 | SAVED177 | SAVED437))
-        || a.cross_state_pooled_rank != matches!(profile, Some(SAVED177 | SAVED437))
-        || a.cross_state_bank_mixture.is_some() != (profile == Some(SAVED437))
+    // Saved177 is admitted only for the registered ranking intervention; no
+    // unchanged CE continuation or rank objective on a different parent.
+    if a.cross_state_bottleneck != matches!(profile, Some(SAVED145 | SAVED175 | SAVED177))
+        || a.cross_state_pooled_rank != (profile == Some(SAVED177))
     {
-        return Err(bad("saved437 requires bank-mixture+pooled-rank+bottleneck; saved177 requires pooled-rank+bottleneck without mixture; saved145/175 require bottleneck CE; other combinations unavailable"));
+        return Err(bad("saved177 requires pooled-rank+bottleneck; saved145/175 require bottleneck CE; phase-CE continuation and other rank parents unavailable"));
     }
     if a.updates
         != if a.cross_state_resume.is_some() {
@@ -579,10 +528,6 @@ pub(super) fn rank_policy(a: &Args) -> Value {
     if !a.cross_state_pooled_rank {
         return Value::Null;
     }
-    pooled_rank_policy()
-}
-
-fn pooled_rank_policy() -> Value {
     json!({"margin":0,"temperature":1,"rival_selection":"greatest-native-pooled-u64-mass-excluding-target;smallest-token-ID-ties;refreshed-every-forward;detached",
         "token_loss":"softplus(-native-log-target-over-rival-mass);stable-F64-scalar-cast-F32;anchored-first-order-sigmoid",
         "alias_scope":"all-Generate-and-physical-Copy;common-native-clip-and-pool",
@@ -1113,247 +1058,6 @@ mod tests {
         let mut unsupported = profile_config(SAVED145);
         unsupported.expected_field_sha256 = "0".repeat(64);
         assert!(unsupported.profile().is_err());
-        Ok(())
-    }
-
-    fn mixture_config() -> Value {
-        json!({"recomposition_root":"new512",
-            "expected_recomposition_manifest_sha256":"a".repeat(64),
-            "expected_recomposition_inputs_sha256":"b".repeat(64),
-            "expected_recomposition_labels_sha256":"c".repeat(64),
-            "expected_recomposition_target_positions":6664,
-            "preparation_audit":"preparation-audit.json",
-            "expected_preparation_audit_sha256":"d".repeat(64),
-            "diagnostic_root":"opened128",
-            "diagnostic_baseline_root":"saved-fresh437-eval"})
-    }
-
-    #[test]
-    fn cross_state_saved437_requires_ranked_mixture_and_complete_hash_triple() -> Result<()> {
-        let mut admitted = config();
-        admitted["updates"] = json!(256);
-        admitted["cross_state_resume"] = serde_json::to_value(profile_config(SAVED437))?;
-        admitted["cross_state_bottleneck"] = json!(true);
-        admitted["cross_state_pooled_rank"] = json!(true);
-        admitted["cross_state_bank_mixture"] = mixture_config();
-        let args: Args = serde_json::from_value(admitted.clone())?;
-        settings(&args)?;
-        continuation_settings(&args)?;
-        assert_eq!(profile_config(SAVED437).profile()?, SAVED437);
-        assert_eq!(objective_policy(&args), POOLED_RANK_OBJECTIVE);
-        assert_eq!(rank_policy(&args), pooled_rank_policy());
-        for (key, wrong) in [
-            ("cross_state_bank_mixture", Value::Null),
-            ("cross_state_bottleneck", json!(false)),
-            ("cross_state_pooled_rank", json!(false)),
-            ("mode", json!("continuation_only")),
-            ("updates", json!(1088)),
-            ("seed", json!(1002)),
-        ] {
-            let mut changed = admitted.clone();
-            changed[key] = wrong;
-            assert!(
-                settings(&serde_json::from_value(changed)?).is_err(),
-                "{key}"
-            );
-        }
-        let mut wrong_rate = admitted.clone();
-        wrong_rate["continuation"]["learning_rate"] = json!(0.01);
-        assert!(settings(&serde_json::from_value(wrong_rate)?).is_err());
-        for old in [SAVED22, SAVED145, SAVED175, SAVED177] {
-            let mut wrong_parent = admitted.clone();
-            wrong_parent["cross_state_resume"] = serde_json::to_value(profile_config(old))?;
-            assert!(settings(&serde_json::from_value(wrong_parent)?).is_err());
-            for key in [
-                "expected_report_sha256",
-                "expected_manifest_sha256",
-                "expected_field_sha256",
-            ] {
-                let mut mixed = admitted.clone();
-                mixed["cross_state_resume"][key] =
-                    serde_json::to_value(profile_config(old))?[key].clone();
-                assert!(settings(&serde_json::from_value(mixed)?).is_err(), "{key}");
-            }
-        }
-        let mut fresh = config();
-        fresh["cross_state_bank_mixture"] = mixture_config();
-        assert!(settings(&serde_json::from_value(fresh)?).is_err());
-        Ok(())
-    }
-
-    fn saved437_lineage_fixture() -> Result<(Value, Value)> {
-        // Actual published initial/final receipts: ranking was already active
-        // throughout this saved run, even though its saved177 ancestor used CE.
-        let artifacts: Value = serde_json::from_str(include_str!(
-            "../../../../docs/labs/m2-pooled-rank-2026-10-10/artifact-receipts.json"
-        ))?;
-        let receipt = artifacts["final"].clone();
-        let report = json!({"updates":256,"prior_updates":832,"lineage_step":1088,
-            "fresh_adam":true,"cross_state_bottleneck":receipt["cross_state_bottleneck"],
-            "cross_state_pooled_rank":receipt["cross_state_pooled_rank"],
-            "pooled_rank_policy":receipt["pooled_rank_policy"],
-            "training_objective":receipt["training_objective"],"loss_scope":"all","credit":"raw_identity",
-            "phase_policy":"none;all-target-pooled-rank-logmeanexp",
-            "cross_state_resume":receipt["cross_state_resume"],"initial_receipt":artifacts["initial"],
-            "initial":{"continuation_sha256":artifacts["initial"]["continuation_sha256"],"complete":177},
-            "final_active_masters":{"continuation.cross_state":receipt["parameters"]["continuation.cross_state"]["sha256"]}});
-        Ok((report, receipt))
-    }
-
-    #[test]
-    fn cross_state_saved437_authenticates_ranked_parent_lineage_policy_and_masters() -> Result<()> {
-        let (report, receipt) = saved437_lineage_fixture()?;
-        SAVED437.validate_lineage(&report, &receipt)?;
-        assert!(SAVED177.validate_lineage(&report, &receipt).is_err());
-        assert_eq!(SAVED437.checkpoint_step, 256);
-        assert_eq!(SAVED437.lineage_after(0), 1088);
-        assert_eq!(SAVED437.lineage_after(256), 1344);
-        for path in [
-            "/updates",
-            "/prior_updates",
-            "/lineage_step",
-            "/fresh_adam",
-            "/phase_policy",
-            "/initial_receipt/step",
-            "/initial_receipt/lineage_step",
-            "/initial_receipt/continuation_sha256",
-            "/initial_receipt/parameters",
-            "/initial/continuation_sha256",
-            "/initial/complete",
-            "/final_active_masters/continuation.cross_state",
-        ] {
-            let mut altered = report.clone();
-            *altered
-                .pointer_mut(path)
-                .ok_or_else(|| bad("saved437 fixture report field absent"))? = Value::Null;
-            assert!(
-                SAVED437.validate_lineage(&altered, &receipt).is_err(),
-                "{path}"
-            );
-        }
-        for path in [
-            "/step",
-            "/lineage_step",
-            "/parameters/continuation.cross_state/sha256",
-            "/parameters/continuation.cross_state/shape",
-            "/parameters/continuation.cross_state/bytes",
-        ] {
-            let mut altered = receipt.clone();
-            *altered
-                .pointer_mut(path)
-                .ok_or_else(|| bad("saved437 fixture receipt field absent"))? = Value::Null;
-            assert!(
-                SAVED437.validate_lineage(&report, &altered).is_err(),
-                "{path}"
-            );
-        }
-        // Mutate all ancestry copies consistently: agreeing metadata is not a
-        // substitute for the pinned saved177 identity and fractional masters.
-        for key in [
-            "report_sha256",
-            "manifest_sha256",
-            "field_sha256",
-            "prior_step",
-            "prior_lineage_step",
-            "prior_complete",
-            "source_master_inventory",
-        ] {
-            let mut changed_report = report.clone();
-            let mut changed_receipt = receipt.clone();
-            let mut prior = report["cross_state_resume"].clone();
-            prior[key] = Value::Null;
-            changed_report["cross_state_resume"] = prior.clone();
-            changed_report["initial_receipt"]["cross_state_resume"] = prior.clone();
-            changed_receipt["cross_state_resume"] = prior;
-            if key == "source_master_inventory" {
-                changed_report["initial_receipt"]["parameters"] = Value::Null;
-            }
-            assert!(
-                SAVED437
-                    .validate_lineage(&changed_report, &changed_receipt)
-                    .is_err(),
-                "{key}"
-            );
-        }
-        for key in [
-            "cross_state_pooled_rank",
-            "cross_state_bottleneck",
-            "training_objective",
-            "pooled_rank_policy",
-            "loss_scope",
-            "credit",
-        ] {
-            for location in 0..3 {
-                let mut changed_report = report.clone();
-                let mut changed_receipt = receipt.clone();
-                match location {
-                    0 => changed_report[key] = Value::Null,
-                    1 => changed_report["initial_receipt"][key] = Value::Null,
-                    _ => changed_receipt[key] = Value::Null,
-                }
-                assert!(
-                    SAVED437
-                        .validate_lineage(&changed_report, &changed_receipt)
-                        .is_err(),
-                    "{location}/{key}"
-                );
-            }
-        }
-        // Even consistently changed ranked policies must match the native
-        // pooled ranking contract, not just each other or an objective label.
-        for key in pooled_rank_policy()
-            .as_object()
-            .ok_or_else(|| bad("rank policy object"))?
-            .keys()
-        {
-            let mut changed_report = report.clone();
-            let mut changed_receipt = receipt.clone();
-            changed_report["pooled_rank_policy"][key] = Value::Null;
-            changed_report["initial_receipt"]["pooled_rank_policy"][key] = Value::Null;
-            changed_receipt["pooled_rank_policy"][key] = Value::Null;
-            assert!(
-                SAVED437
-                    .validate_lineage(&changed_report, &changed_receipt)
-                    .is_err(),
-                "{key}"
-            );
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn cross_state_saved437_baseline_requires_every_output_not_only_count() -> Result<()> {
-        let mut prior = endpoint(&(0..437).collect::<Vec<_>>());
-        prior["continuation_sha256"] = json!(SAVED437.field_sha);
-        baseline(&prior, Some((&prior, SAVED437)))?;
-        assert!(baseline(&prior, Some((&prior, SAVED177))).is_err());
-        for (index, key, wrong) in [
-            (500, "generated_ids", json!([999])),
-            (500, "id", json!("different-row")),
-            (100, "complete", json!(false)),
-        ] {
-            let mut changed = prior.clone();
-            changed["rows"][index][key] = wrong;
-            assert!(
-                baseline(&changed, Some((&prior, SAVED437))).is_err(),
-                "{key}"
-            );
-        }
-        let mut reordered = prior.clone();
-        reordered["rows"]
-            .as_array_mut()
-            .ok_or_else(|| bad("baseline rows"))?
-            .swap(499, 500);
-        assert!(baseline(&reordered, Some((&prior, SAVED437))).is_err());
-        let mut wrong_field = prior.clone();
-        wrong_field["continuation_sha256"] = json!(SAVED177.field_sha);
-        assert!(baseline(&wrong_field, Some((&prior, SAVED437))).is_err());
-        // The historical net-development diagnostic remains available; mixture
-        // candidate qualification is a separate caller-owned prospective bar.
-        assert_eq!(
-            outcomes(&prior, &prior, Some((&prior, SAVED437)))?["keep"],
-            false
-        );
         Ok(())
     }
 
