@@ -389,6 +389,16 @@ weakening. Positive linearized original margins remain surrogate diagnostics, wi
 no native proposal scored. Accepted whole-answer performance remains 8/512. The geometry's basis, signed
 operators, Source authority and D11 serving contract are unchanged.
 
+The [saved-credit discrete feedback constructor](labs/protected-discrete-feedback-2026-10-09/README.md)
+adds an offline formation alternative: retain the original protected direction,
+fix one quarter-scale target, and feed discrete protection residuals through
+32 fixed rounds with32 cyclic corrections each. Legal destinations preserve
+original fractional bits for unchanged codes. Only unique actual displacements
+passing the same Jacobian and descent screens reach native391-row evaluation.
+It imports the original derivatives without new training graphs; this finite
+heuristic does not establish convergence, feasibility or a geometric advantage.
+Execution and model qualification are pending.
+
 ## Life of one token
 
 Follow one byte-BPE token through the stack (text path):
