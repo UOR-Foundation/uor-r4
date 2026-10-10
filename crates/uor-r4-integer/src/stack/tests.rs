@@ -1715,7 +1715,7 @@ fn read_schema_plain_and_pointer_artifacts_parse_as_before() {
 }
 
 #[test]
-fn read_schema_rank_reads_parse_under_schema_3_and_are_not_served_yet() {
+fn read_schema_rank_reads_parse_under_schema_3_and_binary_is_not_served_yet() {
     for binary in [false, true] {
         for pointer in [false, true] {
             let bytes = read_schema_artifact(super::STACK_READ_SCHEMA, |shape| {
@@ -1735,13 +1735,17 @@ fn read_schema_rank_reads_parse_under_schema_3_and_are_not_served_yet() {
                 super::stack_schema_for(&container.shape),
                 super::STACK_READ_SCHEMA
             );
-            // No engine serves a rank read yet, so the model refuses it.
-            match IntegerStackModel::parse(&bytes) {
-                Err(StackError::Shape(reason)) => {
-                    assert_eq!(reason, "softmax-free reads are not served yet")
+            // The rank read is served; the binary read is not yet.
+            // The fixture has no pointer sections, so a served rank read with
+            // a pointer head passes the read check and stops at them.
+            match (binary, pointer, IntegerStackModel::parse(&bytes)) {
+                (false, false, Ok(_)) => {}
+                (false, true, Err(other)) if other.to_string().contains("pointer_query") => {}
+                (true, _, Err(StackError::Shape(reason))) => {
+                    assert_eq!(reason, "binary reads are not served yet")
                 }
-                Err(other) => panic!("refused for another reason: {other}"),
-                Ok(_) => panic!("served a softmax-free read"),
+                (_, _, Err(other)) => panic!("refused for another reason: {other}"),
+                (_, _, Ok(_)) => panic!("served a binary read or a missing pointer"),
             }
         }
     }
@@ -1824,4 +1828,110 @@ fn read_schema_invalid_read_fields_are_refused() {
             "validated {label}"
         );
     }
+}
+
+/// The normalized Q31 rank table of `m` slots.
+fn rank_table(m: usize) -> Vec<u32> {
+    let mut table = vec![0u32; m];
+    super::rank_table_q31(m, &mut table).expect("rank table");
+    table
+}
+
+/// Checks one head's served read weights against the flock rank rule: zero
+/// off the flock support, and on it the rank table of `kept + 1` slots by
+/// descending score (ties to the lowest position) with exactly one rank,
+/// NoRead's, skipped. Returns NoRead's rank.
+fn check_rank_read(scores: &[i64], weights: &[u64], window: usize, k: usize) -> usize {
+    let position = scores.len() - 1;
+    let mut scratch = super::FlockScratch::new(scores.len());
+    super::flock_select_integer(
+        scores,
+        position,
+        super::FlockSelect::new(0, window, k),
+        &mut scratch,
+    )
+    .expect("select");
+    let kept: Vec<usize> = scratch.entries.iter().map(|e| e.position).collect();
+    for (j, &w) in weights.iter().enumerate() {
+        if !kept.contains(&j) {
+            assert_eq!(w, 0, "position {j} off the support has weight {w}");
+        }
+    }
+    let table = rank_table(kept.len() + 1);
+    let skipped: Vec<usize> = (0..=kept.len())
+        .filter(|&null_rank| {
+            kept.iter().enumerate().all(|(index, &j)| {
+                let slot = if index >= null_rank { index + 1 } else { index };
+                weights[j] == u64::from(table[slot])
+            })
+        })
+        .collect();
+    assert!(
+        !skipped.is_empty(),
+        "weights {weights:?} are not the rank table {table:?} over {kept:?}"
+    );
+    skipped[0]
+}
+
+#[test]
+fn read_rank_weights_place_noread_by_the_tie_rule() {
+    // Window 2, k 1 and sink 0 at position 5 of [9, 4, 7, 7, 2, 7] keep the
+    // sink 0, the window 4 and 5, and the top-1 of 1..=3: position 2 (its
+    // tie with 3 goes to the lowest). Descending, ties to the lowest
+    // position: 0 (9), 2 (7), 5 (7), 4 (2); NoRead follows every kept score
+    // at least its own.
+    let scores = [9i64, 4, 7, 7, 2, 7];
+    for (null_score, null_rank) in [(10, 0), (9, 1), (8, 1), (7, 3), (3, 3), (2, 4), (1, 4)] {
+        let (weights, null) =
+            super::session::rank_weights_for_test(2, 1, &scores, null_score).expect("weights");
+        let table = rank_table(5);
+        assert_eq!(null, u64::from(table[null_rank]), "null {null_score}");
+        assert_eq!(
+            check_rank_read(&scores, &weights, 2, 1),
+            null_rank,
+            "null {null_score}"
+        );
+        // Unkept positions 1 and 3 (top-1 of 1..=3 is 2: the tie's lowest).
+        assert_eq!((weights[1], weights[3]), (0, 0));
+        assert_ne!(weights[2], 0);
+        assert_eq!(
+            weights.iter().sum::<u64>() + null,
+            table.iter().map(|&w| u64::from(w)).sum::<u64>()
+        );
+    }
+}
+
+/// Steps a rank-read model of `window` and `k` over the whole context and
+/// checks every position and head against the flock rank rule.
+fn check_served_rank_read(window: usize, k: usize) -> usize {
+    let bytes = read_schema_artifact(super::STACK_READ_SCHEMA, |shape| {
+        shape["read_select"] = json!({"window": window, "k": k});
+        shape["read_weights"] = json!("rank");
+    });
+    let model = IntegerStackModel::parse(&bytes).expect("a rank read is served");
+    let mut session = model.session();
+    let mut unkept = 0usize;
+    for (position, id) in (0..CONTEXT as u32).map(|i| (i as usize, (i * 7 + 3) % VOCAB as u32)) {
+        session.step(id).expect("step");
+        for head in 0..HEADS {
+            let (scores, weights) = session.last_read(head);
+            assert_eq!(scores.len(), position + 1);
+            check_rank_read(scores, weights, window, k);
+            unkept += weights.iter().filter(|&&w| w == 0).count();
+        }
+    }
+    unkept
+}
+
+#[test]
+fn read_rank_serving_weights_are_the_flock_rank_table() {
+    // Window 2 and k 1 leave positions off the support from position 4 on.
+    assert!(check_served_rank_read(2, 1) > 0);
+}
+
+#[test]
+fn read_rank_window_covering_every_position_still_reads_by_rank() {
+    // Window 8 covers the whole context of 6: every position is kept, and the
+    // weights are still the rank table, not the softmax.
+    assert_eq!(check_served_rank_read(8, 8), 0);
 }

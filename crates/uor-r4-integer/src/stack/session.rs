@@ -27,6 +27,9 @@
 
 use std::path::{Path, PathBuf};
 
+use super::flock::{
+    flock_select_integer, rank_table_q31, FlockScratch, FlockSelect, MAX_FLOCK_CONTEXT,
+};
 use super::format::{
     Container, Fixed, MatrixView, StackNumerics, StackPointer, StackShape, StackTransportSnap,
 };
@@ -115,6 +118,47 @@ struct Layer {
     down: PackedMatrix,
 }
 
+/// A softmax-free flock rank read: the selection (sink 0, the `window` most
+/// recent positions and the `k` best others) and, for every support size `m`
+/// in `1..=window + k + 2` (the kept positions and NoRead), the normalized Q31
+/// rank table `rank_table_q31(m)` at `tables[table_at[m]..table_at[m] + m]`,
+/// so that a step neither divides nor builds a table, and its sum `totals[m]`:
+/// every slot takes one rank, so the sum is a step's softmax-free total.
+struct RankRead {
+    select: FlockSelect,
+    tables: Vec<u32>,
+    table_at: Vec<usize>,
+    totals: Vec<u64>,
+}
+
+impl RankRead {
+    fn new(window: usize, k: usize) -> Result<Self, StackError> {
+        let largest = window + k + 2;
+        let mut tables = Vec::new();
+        let mut table_at = vec![0usize; largest + 1];
+        let mut totals = vec![0u64; largest + 1];
+        for (m, (at, total)) in table_at.iter_mut().zip(&mut totals).enumerate().skip(1) {
+            *at = tables.len();
+            tables.resize(*at + m, 0);
+            rank_table_q31(m, &mut tables[*at..])
+                .map_err(|e| StackError::Numerics(format!("rank table {m}: {e}")))?;
+            *total = tables[*at..].iter().map(|&w| u64::from(w)).sum();
+        }
+        Ok(Self {
+            select: FlockSelect::new(0, window, k),
+            tables,
+            table_at,
+            totals,
+        })
+    }
+
+    /// The normalized Q31 rank table of `m` slots.
+    fn table(&self, m: usize) -> Option<&[u32]> {
+        let at = *self.table_at.get(m)?;
+        self.tables.get(at..at + m)
+    }
+}
+
 /// A validated stack artifact repacked for multiplier-free integer serving.
 pub struct IntegerStackModel {
     shape: StackShape,
@@ -141,6 +185,8 @@ pub struct IntegerStackModel {
     silu_table: Vec<i32>,
     gelu_table: Vec<i32>,
     arcosh: Vec<u32>,
+    /// The softmax-free flock rank read; `None` reads by softmax.
+    rank: Option<RankRead>,
     weights_per_token: u64,
     /// Threads that a step's weight maps run on (1: the calling thread only).
     threads: usize,
@@ -200,11 +246,20 @@ impl IntegerStackModel {
     /// creating a session cannot abort on allocation.
     pub fn parse(bytes: &[u8]) -> Result<Self, StackError> {
         let artifact = Container::parse(bytes)?;
-        if artifact.shape.read_select.is_some() {
-            // Removed by the engine change that serves rank reads; until then
-            // a softmax-free artifact must not be served as softmax.
-            return Err(StackError::Shape("softmax-free reads are not served yet"));
+        if artifact.shape.read_binary() {
+            // Hamming-rank selection over sign bits is a later engine change.
+            return Err(StackError::Shape("binary reads are not served yet"));
         }
+        let rank = match artifact.shape.read_rank() {
+            None => None,
+            // The selector's scratch and position bound.
+            Some(_) if artifact.shape.context > MAX_FLOCK_CONTEXT => {
+                return Err(StackError::Shape(
+                    "a rank read's context exceeds the flock selector's 4096 positions",
+                ));
+            }
+            Some(select) => Some(RankRead::new(select.window, select.k)?),
+        };
         let shape = artifact.shape.clone();
         let numerics = artifact.numerics.clone();
         let (d, heads, mlp) = (shape.width, shape.heads, shape.mlp);
@@ -366,6 +421,7 @@ impl IntegerStackModel {
             silu_table,
             gelu_table,
             arcosh,
+            rank,
             weights_per_token: weights,
             threads: 1,
             pool: None,
@@ -494,6 +550,13 @@ impl IntegerStackModel {
                 scores: vec![0; s.heads * context],
                 weights: vec![0; s.heads * context],
                 pointer_weights: vec![0; context],
+                flock: if self.rank.is_some() {
+                    (0..s.heads)
+                        .map(|_| Box::new(FlockScratch::new(context)))
+                        .collect()
+                } else {
+                    Vec::new()
+                },
                 mix: vec![0; d],
                 proj: vec![0; d],
                 gate: vec![0; s.mlp],
@@ -644,6 +707,12 @@ struct Buffers {
     /// Per read head (`[head][context]`; the pointer head uses the first row).
     scores: Vec<i64>,
     weights: Vec<u64>,
+    /// Per read head, the flock selector's scratch of a rank read (empty on a
+    /// softmax read): one per head, so that heads split over worker threads
+    /// never share one and a step never allocates. Boxed for a power-of-two
+    /// stride, like the layers.
+    #[allow(clippy::vec_box)]
+    flock: Vec<Box<FlockScratch>>,
     /// Per read head (`[head][head_dim]`).
     mix: Vec<i128>,
     proj: Vec<i32>,
@@ -1960,6 +2029,7 @@ fn stack_read(
         query_tables: &mut b.query_tables[..d],
         scores: &mut b.scores,
         weights: &mut b.weights,
+        flock: &mut b.flock,
         mix: &mut b.mix[..d],
         pointer_weights: if capture_pointer {
             Some(&mut b.pointer_weights)
@@ -2001,6 +2071,8 @@ struct HeadParts<'a> {
     query_tables: &'a mut [[i64; 16]],
     scores: &'a mut [i64],
     weights: &'a mut [u64],
+    /// The heads' flock scratch on a rank read (one per head), else empty.
+    flock: &'a mut [Box<FlockScratch>],
     mix: &'a mut [i128],
     pointer_weights: Option<&'a mut [u64]>,
 }
@@ -2027,6 +2099,7 @@ fn split_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
         query_tables,
         scores,
         weights,
+        flock,
         mix,
         pointer_weights,
     } = parts;
@@ -2044,6 +2117,7 @@ fn split_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
     let (mix_low, mix_high) = mix.split_at_mut(head_at);
     let (scores_low, scores_high) = scores.split_at_mut(row_at);
     let (weights_low, weights_high) = weights.split_at_mut(row_at);
+    let (flock_low, flock_high) = flock.split_at_mut(low.min(flock.len()));
     let (high_first, high_count) = (first + low, count - low);
     let mut low = HeadTask {
         read,
@@ -2054,6 +2128,7 @@ fn split_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
             query_tables: tables_low,
             scores: scores_low,
             weights: weights_low,
+            flock: flock_low,
             mix: mix_low,
             pointer_weights,
         }),
@@ -2067,6 +2142,7 @@ fn split_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
             query_tables: tables_high,
             scores: scores_high,
             weights: weights_high,
+            flock: flock_high,
             mix: mix_high,
             pointer_weights: None,
         }),
@@ -2113,6 +2189,7 @@ fn stack_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
         query_tables,
         scores,
         weights,
+        flock,
         mix,
         mut pointer_weights,
     } = parts;
@@ -2120,7 +2197,7 @@ fn stack_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
     let head_at = stack_mul_u64(first as u64, hd as u64) as usize;
     let age_at = stack_mul_u64(first as u64, context as u64) as usize;
     let (mut head_at, mut age_at, mut local_at, mut row_at) = (head_at, age_at, 0usize, 0usize);
-    for h in first..first + count {
+    for (local_head, h) in (first..first + count).enumerate() {
         let (
             Some(query),
             Some(query_tables),
@@ -2186,22 +2263,34 @@ fn stack_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
             key_at += d;
             lift_index += heads;
         }
-        // Softmax over NoRead (value zero) and the positions, weights in Q31.
-        let mut total = stack_exp_neg(
-            max.wrapping_sub(null_score),
-            SCORE_EXP,
-            &model.exp_table,
-            n.exp_step_log2,
-        );
-        for (w, &score) in weights.iter_mut().zip(scores.iter()) {
-            *w = stack_exp_neg(
-                max.wrapping_sub(score),
+        let total = if let Some(rank) = &model.rank {
+            // Flock rank weights over NoRead and the kept positions, Q31.
+            let Some(total) = flock.get_mut(local_head).and_then(|scratch| {
+                stack_rank_weights(rank, scores, null_score, position, scratch, weights)
+            }) else {
+                debug_assert!(false, "stack_heads: the rank read failed to select");
+                return;
+            };
+            total
+        } else {
+            // Softmax over NoRead (value zero) and the positions, weights in Q31.
+            let mut total = stack_exp_neg(
+                max.wrapping_sub(null_score),
                 SCORE_EXP,
                 &model.exp_table,
                 n.exp_step_log2,
             );
-            total = total.wrapping_add(*w);
-        }
+            for (w, &score) in weights.iter_mut().zip(scores.iter()) {
+                *w = stack_exp_neg(
+                    max.wrapping_sub(score),
+                    SCORE_EXP,
+                    &model.exp_table,
+                    n.exp_step_log2,
+                );
+                total = total.wrapping_add(*w);
+            }
+            total
+        };
         mix.fill(0);
         let mut value_at = head_at;
         for &w in weights.iter() {
@@ -2227,6 +2316,73 @@ fn stack_heads(read: &HeadRead<'_>, parts: HeadParts<'_>) {
         age_at += context;
         row_at += context;
     }
+}
+
+/// One head's flock rank weights (Q31) over `scores[0..=position]` with
+/// NoRead at `null_score`, written into `weights` (zero off the support);
+/// returns the total over NoRead and the support (the table's sum). The trainer's `rank_weights` rule: the kept
+/// entries in descending score (ties to the lowest position), NoRead ranked
+/// after every kept entry whose score is at least its own (NoRead loses ties),
+/// and rank `i` of the `m = kept + 1` slots weighted `rank_table_q31(m)[i]`.
+fn stack_rank_weights(
+    rank: &RankRead,
+    scores: &[i64],
+    null_score: i64,
+    position: usize,
+    scratch: &mut FlockScratch,
+    weights: &mut [u64],
+) -> Option<u64> {
+    flock_select_integer(scores, position, rank.select, scratch).ok()?;
+    let entries = &scratch.entries;
+    let null_rank = entries
+        .iter()
+        .filter(|entry| scores.get(entry.position).is_some_and(|&s| s >= null_score))
+        .count();
+    let table = rank.table(entries.len() + 1)?;
+    weights.fill(0);
+    for (index, entry) in entries.iter().enumerate() {
+        let slot = if index >= null_rank { index + 1 } else { index };
+        *weights.get_mut(entry.position)? = u64::from(*table.get(slot)?);
+    }
+    rank.totals.get(table.len()).copied()
+}
+
+/// Test hooks over the rank read.
+#[cfg(test)]
+impl IntegerStackSession<'_> {
+    /// The last read layer's scores and weights of `head` over the positions
+    /// stepped so far.
+    pub(super) fn last_read(&self, head: usize) -> (&[i64], &[u64]) {
+        let at = head * self.model.shape.context;
+        (
+            &self.b.scores[at..at + self.position],
+            &self.b.weights[at..at + self.position],
+        )
+    }
+}
+
+/// [`stack_rank_weights`] for crafted scores: the weights and NoRead's
+/// weight (the total less the weights).
+#[cfg(test)]
+pub(super) fn rank_weights_for_test(
+    window: usize,
+    k: usize,
+    scores: &[i64],
+    null_score: i64,
+) -> Option<(Vec<u64>, u64)> {
+    let rank = RankRead::new(window, k).ok()?;
+    let mut scratch = FlockScratch::new(scores.len());
+    let mut weights = vec![u64::MAX; scores.len()];
+    let null = stack_rank_weights(
+        &rank,
+        scores,
+        null_score,
+        scores.len() - 1,
+        &mut scratch,
+        &mut weights,
+    )?;
+    let kept: u64 = weights.iter().sum();
+    Some((weights, null - kept))
 }
 
 /// The pointer head's cache and where this position writes.
