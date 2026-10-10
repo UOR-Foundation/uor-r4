@@ -60,6 +60,12 @@ mod categorical_proposals;
 mod constrained_context;
 #[path = "geometric_frozen_map_fit/constrained_emission.rs"]
 mod constrained_emission;
+#[path = "geometric_frozen_map_fit/constructor_current_model.rs"]
+mod constructor_current_model;
+#[path = "geometric_frozen_map_fit/constructor_diagnostic.rs"]
+mod constructor_diagnostic;
+#[path = "geometric_frozen_map_fit/constructor_experiment.rs"]
+mod constructor_experiment;
 #[path = "geometric_frozen_map_fit/context_constraints.rs"]
 mod context_constraints;
 #[path = "geometric_frozen_map_fit/context_cue_coadapt.rs"]
@@ -112,6 +118,7 @@ enum Mode {
     ReplyCompletion,
     ReplyQualification,
     ReplyPrototypeQualification,
+    ConstructorCurrent,
 }
 
 const REPLAY_REPORT_SHA: &str = "9582f56c8d285920cd67977fd23d36e8a96beabe7c5f27ea45ad4b1113d3503c";
@@ -463,6 +470,8 @@ enum ControlTrainable {
 #[serde(deny_unknown_fields)]
 struct Args {
     mode: Mode,
+    #[serde(default)]
+    constructor: Option<constructor_experiment::Config>,
     credit: Credit,
     #[serde(default)]
     read_state_pullback: ReadStatePullback,
@@ -805,6 +814,11 @@ fn args() -> Result<(Args, Vec<u8>)> {
     continuation_settings(&a)?;
     joint_continuation_settings(&a)?;
     reference_replay_settings(&a)?;
+    constructor_experiment::settings(&a)?;
+    if a.mode == Mode::ConstructorCurrent {
+        validate_input_output_paths(&a)?;
+        return Ok((a, raw));
+    }
     if ![1001, 1002, 1003].contains(&a.seed)
         || a.maximum_seconds == 0
         || a.maximum_report_bytes < (64 << 20)
@@ -841,6 +855,7 @@ fn validate_input_output_paths(a: &Args) -> Result<()> {
     .chain(a.baseline.iter())
     .chain(a.prediction_control_resume.iter())
     .chain(a.cross_state_resume.iter().map(|c| &c.root))
+    .chain(a.constructor.iter().flat_map(|c| c.input_roots()))
     .chain(a.retained_context_root.iter())
     .chain(
         a.prefix_context_credit
@@ -4656,7 +4671,9 @@ struct ContinuationParent {
 }
 impl ContinuationParent {
     fn load(a: &Args) -> Result<Self> {
-        if reply_completion::is_mode(a.mode) {
+        if a.mode == Mode::ConstructorCurrent {
+            constructor_experiment::settings(a)?;
+        } else if reply_completion::is_mode(a.mode) {
             reply_completion::settings(a)?;
         } else if a.mode == Mode::JointContinuation {
             joint_continuation_settings(a)?
@@ -6534,6 +6551,9 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
         return context_path_credit::run(a, start);
     }
     let d = cuda()?;
+    if a.mode == Mode::ConstructorCurrent {
+        return constructor_experiment::run(a, start, &d);
+    }
     if reply_completion::is_mode(a.mode) {
         return reply_completion::run(a, start, &d);
     }
@@ -6807,6 +6827,9 @@ fn run(a: &Args, start: Instant) -> Result<Value> {
 }
 fn main() -> Result<()> {
     let cli = std::env::args().collect::<Vec<_>>();
+    if cli.len() == 3 && cli[1] == "constructor-diagnostic" {
+        return constructor_diagnostic::run(Path::new(&cli[2]));
+    }
     if cli.len() == 3 && cli[1] == "prepare-reference-replay" {
         return prepare_reference_replay(Path::new(&cli[2]), false);
     }
@@ -6817,7 +6840,8 @@ fn main() -> Result<()> {
     report_output::claim(&a.out)?;
     let start = Instant::now();
     let result = (|| -> Result<Value> {
-        if reply_completion::is_mode(a.mode)
+        if a.mode == Mode::ConstructorCurrent
+            || reply_completion::is_mode(a.mode)
             || a.context_path_credit.is_some()
             || a.prefix_artifact_check.is_some()
             || a.prefix_fragment_learning.is_some()

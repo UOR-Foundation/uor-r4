@@ -1,0 +1,18 @@
+[package]
+name = "d22-numerical-fixtures"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+microlp = { path = "../../../../crates/uor-r4-training/vendor/microlp", features = ["numerical-fixtures"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+blake3 = "1"
+
+[patch.crates-io]
+arrayref = { path = "arrayref" }

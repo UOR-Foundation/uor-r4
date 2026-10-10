@@ -1,0 +1,8 @@
+/target
+/.idea
+/.vscode
+**/*.rs.bk
+
+# Design documents and agent task ledgers
+/docs/superpowers/
+/.superpowers/
