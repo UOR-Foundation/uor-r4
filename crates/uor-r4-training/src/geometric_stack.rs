@@ -12438,6 +12438,10 @@ struct FusedRead {
     /// instead of the softmax; the backward is straight-through (see
     /// [`fused_read_weighted`]). Needs `select`.
     rank: bool,
+    /// [`ReadWeighting::LearnedRank`]: the side `M` of each head's learned
+    /// rank-weight table, appended to `aux` after [`fused_aux_len`] as
+    /// `heads * M * M` values (`W[h][m-1][r]`); 0 for the fixed rank table.
+    learned: usize,
 }
 
 /// One (window, head) block: queries and keys (rotated with RoPE) in row
@@ -12450,6 +12454,7 @@ struct Block<'a> {
     value_columns: Vec<f32>,
     null: Option<&'a [f32]>,
     age: Option<&'a [f32]>,
+    learned: Option<&'a [f32]>,
     /// Lifts sqrt(1 + |x|^2) of queries and keys, for Lorentz; for L2 the
     /// squared norms |x|^2.
     query_lift: Vec<f64>,
@@ -12467,6 +12472,9 @@ struct Scratch {
     dp: Vec<f32>,
     /// Which sources of the current row its flock selection keeps.
     keep: Vec<bool>,
+    /// [`ReadWeighting::LearnedRank`]: per tile row and position, `0` when
+    /// unkept, else `1 + (m - 1) * M + r` (support size `m`, rank `r`).
+    slots: Vec<u32>,
 }
 
 impl Scratch {
@@ -12476,6 +12484,7 @@ impl Scratch {
             distance: vec![0f64; TILE * time],
             dp: vec![0f32; TILE * time],
             keep: Vec::new(),
+            slots: Vec::new(),
         }
     }
 }
@@ -12525,7 +12534,9 @@ fn rank_weights(
     scores: &[f32],
     null: Option<f32>,
     weights: &mut [f32],
-) {
+    learned: Option<(&[f32], usize)>,
+    slots: Option<&mut [u32]>,
+) -> candle_core::Result<()> {
     weights.fill(0.0);
     let null_rank = null.map(|null| {
         selection
@@ -12534,14 +12545,35 @@ fn rank_weights(
             .filter(|entry| scores[entry.position] >= null)
             .count()
     });
-    let table = flock::rank_table(selection.len() + usize::from(null_rank.is_some()));
+    let support = selection.len() + usize::from(null_rank.is_some());
+    let fixed;
+    let table = match learned {
+        Some((table, side)) => {
+            if support == 0 || support > side {
+                candle_core::bail!("a learned rank read's support exceeds its table");
+            }
+            &table[(support - 1) * side..support * side]
+        }
+        None => {
+            fixed = flock::rank_table(support);
+            &fixed[..]
+        }
+    };
+    let mut slots = slots;
+    if let Some(slots) = slots.as_deref_mut() {
+        slots.fill(0);
+    }
     for (index, entry) in selection.entries.iter().enumerate() {
         let rank = match null_rank {
             Some(null_rank) if index >= null_rank => index + 1,
             _ => index,
         };
         weights[entry.position] = table[rank];
+        if let (Some(slots), Some((_, side))) = (slots.as_deref_mut(), learned) {
+            slots[entry.position] = (1 + (support - 1) * side + rank) as u32;
+        }
     }
+    Ok(())
 }
 
 /// Rows of a register tile of the read's products.
@@ -12811,6 +12843,13 @@ impl FusedRead {
             value_columns,
             null,
             age,
+            learned: (self.learned > 0).then(|| {
+                let size = self.learned * self.learned;
+                let base = fused_aux_len(
+                    self.batch, self.heads, time, self.score, self.null, self.age,
+                ) + head * size;
+                &aux[base..base + size]
+            }),
             query_lift,
             key_lift,
             beta,
@@ -12837,6 +12876,7 @@ impl FusedRead {
         distance: &mut [f64],
         keep: &mut Vec<bool>,
         rank: Option<&mut [f32]>,
+        slots: Option<&mut [u32]>,
     ) -> candle_core::Result<f32> {
         let row = &mut row[..=t];
         let scale = 1.0 / (self.key as f32).sqrt();
@@ -12871,7 +12911,9 @@ impl FusedRead {
             let selection = flock::flock_select(&*row, t, select).map_err(selection_error)?;
             if let Some(weights) = rank {
                 let null = block.null.map(|null| null[t]);
-                rank_weights(&selection, row, null, &mut weights[..=t]);
+                let learned = block.learned.map(|table| (table, self.learned));
+                let slots = slots.map(|slots| &mut slots[..=t]);
+                rank_weights(&selection, row, null, &mut weights[..=t], learned, slots)?;
             }
             if drop_unkept(&selection, row, keep) {
                 maximum = block.null.map_or(f32::NEG_INFINITY, |null| null[t]);
@@ -12922,8 +12964,12 @@ impl FusedRead {
             time,
         );
         let mut null = [0f32; TILE];
+        if self.learned > 0 {
+            scratch.slots.resize(TILE * time, 0);
+        }
         for (r, null) in null.iter_mut().enumerate().take(rows) {
             let span = r * time..(r + 1) * time;
+            let span_slots = span.clone();
             let weights = rank
                 .as_deref_mut()
                 .map(|weights| &mut weights[span.clone()]);
@@ -12935,6 +12981,7 @@ impl FusedRead {
                 &mut scratch.distance[span],
                 &mut scratch.keep,
                 weights,
+                (self.learned > 0).then(|| &mut scratch.slots[span_slots]),
             )?;
         }
         Ok(null)
@@ -13451,6 +13498,7 @@ impl CustomOp3 for FusedRead {
             dage: Vec<f64>,
             dbeta: f64,
             doffset: f64,
+            dtable: Vec<f64>,
         }
         let partials: Vec<Partial> = dq
             .par_chunks_mut(time * key)
@@ -13464,6 +13512,7 @@ impl CustomOp3 for FusedRead {
                     dage: vec![0.0; if self.age { time } else { 0 }],
                     dbeta: 0.0,
                     doffset: 0.0,
+                    dtable: vec![0.0; self.learned * self.learned],
                 };
                 let mut scratch = Scratch::new(time);
                 // The whole block's probabilities and inner-product gradients,
@@ -13513,6 +13562,14 @@ impl CustomOp3 for FusedRead {
                             .sum();
                         if self.null {
                             partial.dnull[t] = -f64::from(null_probability[r]) * row_dot;
+                        }
+                        if self.learned > 0 {
+                            // dL/dW[m-1][r] = sum over kept j of rank r: dOut_t . v_j.
+                            for (&slot, &d) in scratch.slots[span.clone()].iter().zip(dp) {
+                                if slot > 0 {
+                                    partial.dtable[slot as usize - 1] += f64::from(d);
+                                }
+                            }
                         }
                         let (excess, distance) = (
                             &scratch.excess[span.clone()],
@@ -13629,6 +13686,15 @@ impl CustomOp3 for FusedRead {
                 d_aux[null_len + age_len + head] += partial.dbeta;
                 d_aux[null_len + age_len + self.heads + head] += partial.doffset;
             }
+            if self.learned > 0 {
+                let size = self.learned * self.learned;
+                let base = fused_aux_len(
+                    self.batch, self.heads, time, self.score, self.null, self.age,
+                ) + head * size;
+                for (i, &v) in partial.dtable.iter().enumerate() {
+                    d_aux[base + i] += v;
+                }
+            }
         }
         let device = query.device();
         let d_aux: Vec<f32> = d_aux.into_iter().map(|v| v as f32).collect();
@@ -13711,6 +13777,76 @@ pub fn fused_read_weighted(
     select: Option<FlockSelect>,
     rank: bool,
 ) -> Result<Tensor> {
+    fused_read_ranked(
+        query, key, value, aux, score, null, age, rope, select, rank, None,
+    )
+}
+
+/// [`fused_read_weighted`]'s rank read with [`ReadWeighting::LearnedRank`]
+/// weights: the same flock support, rank order, NoRead placement and
+/// straight-through query/key/auxiliary gradients, but a row of support `m`
+/// (kept sources plus NoRead) weights rank `r` by `table[h][m-1][r]`
+/// (`table` is f32 `[heads, M, M]`, `M >= window + k + 2`). The gradient to
+/// `table` is exact: `dOut_t . v_j` added to the slot of every kept `j`
+/// (NoRead's value is zero, so its slot receives none).
+#[allow(clippy::too_many_arguments)]
+pub fn fused_read_learned_rank(
+    query: &Tensor,
+    key: &Tensor,
+    value: &Tensor,
+    aux: &Tensor,
+    score: ReadScore,
+    null: bool,
+    age: bool,
+    select: FlockSelect,
+    table: &Tensor,
+) -> Result<Tensor> {
+    fused_read_ranked(
+        query,
+        key,
+        value,
+        aux,
+        score,
+        null,
+        age,
+        false,
+        Some(select),
+        true,
+        Some(table),
+    )
+}
+
+/// The `[heads, M, M]` learned rank-weight table of `[heads, M]` logits:
+/// `W[h][m-1][r] = exp(l_r) / sum_{i<m} exp(l_i)` for `r < m`, else 0.
+pub fn learned_rank_table(logits: &Tensor) -> Result<Tensor> {
+    let (_, side) = logits.dims2()?;
+    let mut mask = vec![0f32; side * side];
+    for m in 0..side {
+        for r in 0..=m {
+            mask[m * side + r] = 1.0;
+        }
+    }
+    let mask = Tensor::from_vec(mask, (1, side, side), logits.device())?;
+    let shifted = logits.broadcast_sub(&logits.max_keepdim(1)?.detach())?;
+    let numerator = shifted.exp()?.unsqueeze(1)?.broadcast_mul(&mask)?;
+    let denominator = numerator.sum_keepdim(2)?;
+    Ok(numerator.broadcast_div(&denominator)?)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fused_read_ranked(
+    query: &Tensor,
+    key: &Tensor,
+    value: &Tensor,
+    aux: &Tensor,
+    score: ReadScore,
+    null: bool,
+    age: bool,
+    rope: bool,
+    select: Option<FlockSelect>,
+    rank: bool,
+    table: Option<&Tensor>,
+) -> Result<Tensor> {
     if rank && select.is_none() {
         return Err(invalid("a rank read needs a flock selection"));
     }
@@ -13745,6 +13881,24 @@ pub fn fused_read_weighted(
     if aux.rank() != 1 || aux.dim(0)? != expected.max(1) {
         return Err(invalid("fused read auxiliary input has the wrong length"));
     }
+    let learned = match table {
+        Some(table) => {
+            let (h, side, side2) = table.dims3()?;
+            let floor = select.map_or(usize::MAX, |s| s.window + s.k + 2);
+            if h != heads || side != side2 || side < floor || table.dtype() != DType::F32 {
+                return Err(invalid(
+                    "a learned rank table must be f32 [heads, M, M] with M >= window + k + 2",
+                ));
+            }
+            side
+        }
+        None => 0,
+    };
+    let aux = match table {
+        Some(table) if expected > 0 => Tensor::cat(&[aux, &table.flatten_all()?], 0)?,
+        Some(table) => table.flatten_all()?,
+        None => aux.clone(),
+    };
     let op = FusedRead {
         batch,
         heads,
@@ -13757,6 +13911,7 @@ pub fn fused_read_weighted(
         rope,
         select,
         rank,
+        learned,
     };
     if rope && key_width % 2 != 0 {
         return Err(invalid("RoPE needs an even head width"));
@@ -21134,6 +21289,163 @@ mod tests {
                 k: 2,
             },
         ))
+    }
+
+    fn read_weighting_learned_logits(values: &[f32]) -> Result<Var> {
+        Ok(Var::from_tensor(&Tensor::from_vec(
+            values.to_vec(),
+            (1, values.len()),
+            &cpu(),
+        )?)?)
+    }
+
+    fn read_weighting_learned_read(
+        (query, key, value, aux, select): &(Var, Var, Var, Var, FlockSelect),
+        logits: &Tensor,
+    ) -> Result<Tensor> {
+        fused_read_learned_rank(
+            query.as_tensor(),
+            key.as_tensor(),
+            value.as_tensor(),
+            aux.as_tensor(),
+            ReadScore::Dot,
+            true,
+            true,
+            *select,
+            &learned_rank_table(logits)?,
+        )
+    }
+
+    #[test]
+    fn read_weighting_learned_fresh_equals_rank() -> Result<()> {
+        let case = read_weighting_case()?;
+        let (query, key, value, aux, select) = &case;
+        let fresh: Vec<f32> = (0..6).map(|r| (1.0 / (r as f32 + 1.0)).ln()).collect();
+        let learned =
+            read_weighting_learned_read(&case, read_weighting_learned_logits(&fresh)?.as_tensor())?;
+        let rank = fused_read_weighted(
+            query.as_tensor(),
+            key.as_tensor(),
+            value.as_tensor(),
+            aux.as_tensor(),
+            ReadScore::Dot,
+            true,
+            true,
+            false,
+            Some(*select),
+            true,
+        )?;
+        let gap = learned.sub(&rank)?.abs()?.max_all()?.to_scalar::<f32>()?;
+        assert!(gap < 1e-6, "fresh learned rank differs from rank by {gap}");
+        Ok(())
+    }
+
+    #[test]
+    fn read_weighting_learned_logit_gradient_is_exact() -> Result<()> {
+        let case = read_weighting_case()?;
+        let (query, key, value, aux, select) = &case;
+        let start = [0.4f32, -0.3, 0.2, 0.9, -0.6, 0.1];
+        let logits = read_weighting_learned_logits(&start)?;
+        let cotangent = Tensor::from_vec(
+            (0..100)
+                .map(|i| ((i as f32) * 0.377).cos())
+                .collect::<Vec<f32>>(),
+            (1, 1, 10, 10),
+            &cpu(),
+        )?;
+        let loss = |logits: &Tensor| -> Result<Tensor> {
+            Ok(read_weighting_learned_read(&case, logits)?
+                .mul(&cotangent)?
+                .sum_all()?)
+        };
+        let grads = loss(logits.as_tensor())?.backward()?;
+        let analytic = grads
+            .get(logits.as_tensor())
+            .ok_or_else(|| invalid("no rank-logit gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let eps = 1e-2f32;
+        for i in 0..start.len() {
+            let mut plus = start;
+            plus[i] += eps;
+            let mut minus = start;
+            minus[i] -= eps;
+            let f = |v: [f32; 6]| -> Result<f32> {
+                Ok(loss(&Tensor::from_vec(v.to_vec(), (1, 6), &cpu())?)?.to_scalar::<f32>()?)
+            };
+            let numeric = (f(plus)? - f(minus)?) / (2.0 * eps);
+            let scale = analytic[i].abs().max(numeric.abs()).max(1e-3);
+            assert!(
+                (analytic[i] - numeric).abs() / scale < 1e-2,
+                "logit {i}: analytic {} numeric {numeric}",
+                analytic[i]
+            );
+        }
+        assert!(analytic.iter().any(|g| g.abs() > 1e-3));
+        let rank = fused_read_weighted(
+            query.as_tensor(),
+            key.as_tensor(),
+            value.as_tensor(),
+            aux.as_tensor(),
+            ReadScore::Dot,
+            true,
+            true,
+            false,
+            Some(*select),
+            true,
+        )?;
+        let rank_grads = rank.mul(&cotangent)?.sum_all()?.backward()?;
+        for var in [query, key, aux] {
+            let (a, b) = (
+                grads
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("no grad"))?,
+                rank_grads
+                    .get(var.as_tensor())
+                    .ok_or_else(|| invalid("no grad"))?,
+            );
+            let gap = a.sub(b)?.abs()?.max_all()?.to_scalar::<f32>()?;
+            assert!(gap < 1e-6, "straight-through gradient differs by {gap}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn read_weighting_learned_sharp_profile_matches_closed_form() -> Result<()> {
+        let case = read_weighting_case()?;
+        let logits = read_weighting_learned_logits(&[5.0, 0.0, 0.0, 0.0, 0.0, 0.0])?;
+        let out = read_weighting_learned_read(&case, logits.as_tensor())?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let time = 10;
+        let (mut sizes, mut null_first, mut null_later) = (BTreeSet::new(), 0, 0);
+        for t in 0..time {
+            let row = &out[t * time..(t + 1) * time];
+            let mut weights: Vec<f32> = row.iter().copied().filter(|&w| w != 0.0).collect();
+            let null = 1.0 - weights.iter().sum::<f32>();
+            let support = weights.len() + 1;
+            let top = 5f32.exp() / (5f32.exp() + (support - 1) as f32);
+            let rest = 1.0 / (5f32.exp() + (support - 1) as f32);
+            if (null - top).abs() < 1e-5 {
+                null_first += 1;
+            } else {
+                null_later += 1;
+            }
+            weights.push(null);
+            weights.sort_by(|a, b| b.total_cmp(a));
+            assert!(
+                (weights[0] - top).abs() < 1e-5,
+                "row {t}: top {} vs {top}",
+                weights[0]
+            );
+            for &w in &weights[1..] {
+                assert!((w - rest).abs() < 1e-5, "row {t}: weight {w} vs {rest}");
+            }
+            sizes.insert(support);
+        }
+        assert!(sizes.len() >= 2, "support sizes {sizes:?}");
+        assert!(null_first + null_later == time);
+        Ok(())
     }
 
     #[test]
