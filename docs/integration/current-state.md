@@ -1,3 +1,9 @@
+## 2026-10-10 — Codex constructor cycle preserved unfinished for owner-requested session transfer (M2, D22)
+
+The [constructor record](../labs/d22-constructor-2026-10-10/README.md) preserves the complete prepared current-parent comparison and reviewed signed numerical recovery as an indexed inactive patch. Development437/512 and opened-transfer diagnostic0/128 are unchanged; no current-parent training, proposal scoring or diagnostic run occurred, and constructor count remains0/3. External finalized-v2 fitness is FIT, but numerical qualification remains mandatory; the signed source's28 fixtures and saved replay are NOT_RUN. This is unfinished tooling work, not a negative configuration or a closed mechanism.
+
+**Next:** the successor restores the exact archived source, qualifies signed recovery and the integrated producer, executes the registered legal/projected comparison, then merges one result before joint Context–prototype learning. Existing128 is diagnostic only under the owner decision; fresh qualification remains later.
+
 ## 2026-10-10 — Addressed memory is built into the dialogue stack and the memory op's missing device support is the measured limit (deepseek, #2029, D22 orders 1–2)
 
 The [addressed-memory round](../labs/addressed-memory-2026-10-10/README.md) answers **D22 order 2**: exact addressed memory is this

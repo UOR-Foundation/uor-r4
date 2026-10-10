@@ -1,99 +1,41 @@
-# D22 constructor: current-parent legal displacement
+# D22 constructor — owner-requested session transfer
 
-**Work in progress; no current-parent model result yet.** This is the integrated
-repair and experiment record for the owner-reopened protected/discrete
-constructor. Numerical failures are execution blockers, not model negatives.
-The mechanism remains open under D22.
+**UNFINISHED_NOT_NEGATIVE. No current-parent model result.** The owner requested finishing the current run and handing the work to a new Codex window to reduce session spend. This preservation delivery does not activate the prepared model or solver source, close a mechanism, or satisfy M2.
 
-Line: protected/discrete constructor · count 0/3 · headline before:
-437/512 development and 0/128 opened transfer diagnostic. After: NOT_RUN.
+Line: protected/discrete constructor (D22 reopened) · count 0/3 · headline before → after: development437/512 + opened transfer diagnostic0/128 → unchanged. Tooling interruptions do not increment the count.
 
-## Decision and scope
+## What is preserved
 
-The saved cross-state model completes 437 of the exposed 512 development
-replies but none of the previously opened 128 transfer replies. That is panel
-fitting. This experiment asks whether native-scored legal Q4 displacements can
-provide repeatable guarded descent and improve complete replies from that
-current parent. The paired projected control receives identical initial
-masters, gradients and guard Jacobians.
+The complete prepared implementation is an [inactive source patch](../../history/branch-archive/d22-constructor-unfinished-20261010.patch), based on `69905327e168264d5c3d47c31b3895855084d9b6`, source tip `ce23db11d91197de1d15c2d3ce5b877d4c93ccd3`. Its SHA256 is `db3e553212441c30115f60d8378b887382e38a207cd29f7d4a8d4421260c116c`; size1,133,074B. An isolated index restored from that exact base applied the patch and matched every nonarchive tracked path of the preserved tip. Existing native Rust/Cargo source in this delivery equals origin/main; the patch is preservation, not admission. [Restoration receipt](source-preservation.json).
 
-The owner explicitly authorized reuse of the existing 128 for **transfer
-diagnostics**, reserving new qualification for later. Neither improvement on
-this panel nor this result alone can meet M2's fresh qualification requirement.
+Twenty earlier numerical source snapshots, including compile/setup failures and superseded variants, are retained separately as [chronological patches and verified inventories](../../history/branch-archive/d22-numerical-snapshots-20261010/README.md). Their frozen snapshot manifest correctly records replay15 as running at that earlier time. Terminal disposition belongs below, not in a rewritten historical manifest.
 
-- [Preregistration v2](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100142868)
-- [Codex numerical/model fitness reviews](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100164233)
-- [External finalized-v2 TEST FITNESS: FIT](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6101790487)
-- [Owner panel decision recorded](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100130871)
-- [Parent master and diagnostic-phase clarification](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100331116)
-- [Singular-basis admission clarification](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100396303)
+The prepared implementation trains Prefix960 and Generate960 unary masters on the full512 pooled-ranking/EOS objective. It fixes Source, Context, Cue, prototypes and cross-state coefficients; recomputes native forced-donor utility; restores saved Generate fractions and Prefix Q4 quarter centres; selects paired380 original437 guard positions with96 entry/96 EOS/188 interior; and compares legal construction with projected/quantized credit. Every valid nonzero Q4 offer is exported, independently reloaded and scored, including vetoed offers. Only sampled-native-guard preservation plus strict full512 objective descent permits a transaction. Full437 retention is measured separately. Nomination uses all valid Q4 offers, keeping domain validity, native veto and committed descent distinct.
 
-## Mechanism and comparison
+## Governing decisions and next experiment
 
-Both arms train 960 Prefix and 960 Generate unary coordinates. Source, Context,
-Cue, prototypes and the cross-state coefficient payload stay fixed. Prefix
-starts at the authoritative saved Q4 quarter centres because the selected
-checkpoint has no fractional Prefix source; Generate restores its saved
-fractional masters. No-op coordinates preserve their existing master bits.
+Read live #2030 and its newest OWNER DIRECTION before restoring source. D22 and the newest origin/main session-goal.md govern; do not reuse older D21 closure prompts. The saved437 model is panel fitting:437/512 development and0/128 previously fresh. M2 needs saved own-prefix≥256/512 and≥40% on a separately qualified fresh draw. The owner chose **existing128 for transfer diagnostics; new qualification later** ([decision6100130871](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100130871)). Do not redraw, alter criteria or count the opened128 as fresh qualification.
 
-The objective includes every canonical target position, including EOS, across
-all 512 rows. It pools Generate and every Copy alias before ranking the target
-against the strongest wrong token, aggregates with an episode bottleneck and
-then weights episodes equally. Forced-donor utility is recomputed from the
-current native model and local state. This is local straight-through credit;
-it does not claim an unsupported state adjoint.
+The design is already pre-registered as [v2/6100142868](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100142868), with [clarification6100331116](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100331116) and [explicit differences6101484044](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6101484044). **External TEST FITNESS: FIT** is bound to finalized v2 ([6101790487](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6101790487)). It remains conditional on successful numerical producer and saved-problem qualification; no model compute was launched.
 
-Seeds 1001 and 2001 each run two epochs per arm. They start from the same
-saved437 initialization and vary guard sampling; their spread measures
-guard-sampling variance. Each seed and epoch selects
-380 distinct positions from the original parent's successful own-prefix
-trajectories: 96 entry, 96 EOS and 188 interior. The legal arm uses the centered
-15-destination Q4 encoding and 4,096 branch nodes per epoch. The control uses
-256 continuous projection passes and fixed radii 1, 2, 4 and 7. This is a
-matched-credit functional comparison, not an equal-total-compute comparison.
+Seeds1001/2001 start from the same saved437 parent and vary guard sampling, so report their spread as guard-sampling variance, not independent initialization variance. Two epochs per arm;4096 legal branch nodes per epoch; projected256 passes and radii1/2/4/7. Matched gradient/Jacobian credit is not equal total compute. Practical bar:≥461/512 development (+24) and≥12/128 diagnostic across≥4/8 banks, replicated by both seed nominations. Mechanism target: native-scored nonzero legal displacement for each seed; two successive committed guarded descents without≥24 net development loss support KEEP+iterate. Dev-only gains remain panel fitting. No bounded no-incumbent result proves infeasibility or closes the mechanism.
 
-Every nonzero valid Q4 proposal is exported, independently reloaded and scored
-on 512 own-prefix replies, including proposals vetoed by a transaction check.
-A transaction commits only when the linear screen passes, the selected native
-winners remain correct and the full objective strictly descends. Full original
-437-row retention is measured separately rather than imposed as another veto.
+All four training reports must seal before producing any opened128 diagnostic prediction. Authenticate paired initial master, gradient and normalized Jacobian bits, choose by the registered development/objective/epoch/arm/radius order, save selection first, then score the diagnostic. After constructor delivery, the next ordered mechanism is joint Context+prototype learning on all512 pooled-ranking rows with at least two seeds. Do not switch to that successor before constructor delivery, or close either mechanism without the owner.
 
-All four training reports must seal before the diagnostic phase starts. That
-phase authenticates paired initial master, gradient and normalized Jacobian
-bits, chooses candidates from development results under the registered order,
-and writes its selection before producing any opened-128 prediction. It reports
-both seed nominations, endpoints, first proposals and bank/stratum breakdowns.
+## Numerical execution and limitations
 
-## Registered interpretation
+The original basis qualification checked normal/transposed dense/sparse unit solves. Bases0/1 qualified (1760 checks each); basis2 was exactly singular and rejected; basis3 qualified through exact fallback (1760 checks). No EPS, original objective, original constraints or native acceptance threshold was relaxed.
 
-The practical headline bar is at least 24 additional development successes
-(461/512) and at least 12/128 diagnostic successes spanning at least four of
-eight bank blocks. Both seed nominations are needed for a replicated claim;
-a single successful seed supports only a narrower observation. Reference
-binomial errors contextualize these bars; the authored panel is correlated and
-is not an independent-sample significance test.
+Integrated producer `fbbb46e7dfb9f18bb42c83561810a456c5a2d06f`: CUDA release build298.193s; test compile51.428s; **23 focused constructor tests PASS**, zero failed/ignored. Release binary SHA256 `bbad4be0b58ab6cf56eac7a16f4443133e69990eb5e8651cf2c4a7cd0b04897f`; test binary `7e6be22ec2904dbe4c7c7f2d0e1a423559a9d55fff33f9083d72c113d501e09a`. This producer used solver `6c4fcb1ab3778a07d9b4a9b5bdccb5098e248646c7427fc14341ee34f1de5561`. Standalone replay15 passed26 numerical fixtures and two admission tests before execution. Whole-workspace fmt found12 untouched baseline files; no blanket formatting was performed. Actual changed paths and claim wording were checked.
 
-The mechanism target is native scoring of a nonzero legal displacement for
-each seed, with two successive guarded descents and no development loss of
-24 or more supporting KEEP and further iteration. Development gains without
-transfer remain development-only panel fitting. A bounded search with no
-incumbent is not a proof of infeasibility. Neither such a result nor a numerical
-failure closes the mechanism without the owner.
+Replay15 used source archive `82986a7eebbed1f26bfe945226b38326ac2e238494f7e6a7956b021db2725be9` and immutable binary `e76a909fa1dfc991d1c6d2a414f19934d629b66ea4e2758de34a7f36742c9c35`. It remained in its ninth zero-objective feasibility phase, with eight completed original-objective restorations. Qualified RHS corrections and factor activity do not establish convergence. The sampled trace did not demonstrate cycling or a state-machine bug, and provides no monotone primal-infeasibility/node/incumbent metric. There is **no serialized in-flight solver checkpoint**: interrupted replay requires a new exclusive attempt from pinned input, not a claimed current-iteration resume.
 
-## Evidence and costs
+A prospective signed artificial recovery repair was registered [6101886750](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6101886750). At restart, construct fixed per-variable costs once: basic0, lower-only+1, upper-only−1, fixed/truly-free0. Keep that vector across pivots; recompute the actual temporary objective; preserve original-cost restoration through Limit/resume; reject inconsistent/interior bound states transactionally; admit only after original objective optimization and original certificates. Independent exact-source review is **SOURCE FIT**, not measured qualification. Signed solverSHA256 `89418e6dcffb499e67ad601398db837a7ad84c8762c2ce2538d24163473695b2`; fixture library `2a006ce7260a88bf95e4ceab9d39daf1ae7ec7d81ba5320c203f3af6ad583c45`. **28 proposed fixtures, two admission tests, build and signed saved replay are NOT_RUN.** The newest source differs from tested fbbb46e7 and must be rebuilt/retested. No convergence guarantee is claimed.
 
-Numerical source, qualification fixtures and retained-problem replay are
-recorded in [numerical-tests](numerical-tests/README.md). Exact integrated
-producer, artifact/config identities, training outcomes, costs and delivery
-verification will be added after execution. The external v2 fitness review
-approved the design, conditional on successful numerical producer qualification
-and saved-problem replay with unchanged EPS, objective and constraints.
-Until those gates pass, model training,
-current-parent proposal scoring and opened-128 diagnostics are **NOT_RUN**.
+## Durable recovery and operating limits
 
-The admitted projection is six hours for the whole cycle, including preparation,
-failed setup, compilation, review and delivery. One leased RTX 5090 pod at
-$1.19/hour supplies CUDA credit and, under the recorded local disk-ceiling
-exception, compilation and numerical replay. Actual elapsed work and paid
-uptime are recorded separately from model work and charged cumulatively at
-cycle closeout.
+Detailed final process, storage, cost and cleanup receipts accompany this record's completion. All predecessor data/model artifacts are already in verified iCloud, including `codex-m2-fresh-437-20261010` (87,185,408B, MD5e1477906e3d640012702ebd14005b4b5), checkpoint9 (3,287,552B, MD5b7483285866454d8753550316edf2ad4), and complete20-snapshot numerical sources (6,807,040B, MD58b3bf128a28b85125ae59caa488a035d). The final wind-down archive will contain pinned configs, runner, numeric inputs/receipts/binaries and signed source; do not rely on the deleted local worktree or pod build cache.
+
+Local disk fell below the30GiB+128MiB floor (32,346,472,448B). Hygiene preserved unique/live other-lab data and moved stale temporary folders to Trash without emptying it; Trash relocation did not reclaim physical capacity. Do not perform local builds/bulk restores until the floor is restored; do not delete another lab's work. Numerical admission was2CPU/6GiB and512MiB durable storage. Actual whole-cycle elapsed preparation, failures, reviews, waiting and delivery is charged once to the cumulative ledger; budgets are not reset per retry. External compute only through uor-pod, global≤4pods/≤$8h; no new spending class.
+
+**Next:** restore the inactive patch in a fresh owned worktree; verify newest live authority and disk/pod admission; qualify signed recovery's28 numerical fixtures/two admission tests and identical saved problem; rebuild/exercise the integrated CUDA producer; then execute the registered four legal/projected training reports and opened128 diagnostic. Deliver one integrated result through exact-head checks/review, protected queue, fresh-main/tree verification, branch/worktree deletion and hygiene. Numerical failure is a blocker to repair, never a model negative.

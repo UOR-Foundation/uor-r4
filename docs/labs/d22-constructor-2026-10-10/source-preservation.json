@@ -1,0 +1,10 @@
+{
+  "base": "69905327e168264d5c3d47c31b3895855084d9b6",
+  "tip": "ce23db11d91197de1d15c2d3ce5b877d4c93ccd3",
+  "patch": "docs/history/branch-archive/d22-constructor-unfinished-20261010.patch",
+  "bytes": 1133074,
+  "sha256": "db3e553212441c30115f60d8378b887382e38a207cd29f7d4a8d4421260c116c",
+  "state": "UNFINISHED_NOT_NEGATIVE",
+  "active_source_admitted": false,
+  "restoration": "PASS: isolated index from exact origin/main; every nonarchive tracked path equals preserved tip"
+}

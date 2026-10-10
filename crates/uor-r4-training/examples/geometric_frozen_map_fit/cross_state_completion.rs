@@ -610,7 +610,7 @@ pub(super) fn pooled_rank_loss(
         target,
     )
 }
-pub(super) fn rank_loss_from_pool(
+fn rank_loss_from_pool(
     trace: &uor_r4_integer::geometric_vocabulary_actions::VocabularyActionTrace,
     generate: &Tensor,
     copy: Option<&Tensor>,

@@ -153,7 +153,8 @@ stopped on an absolute LU-pivot tolerance before native panel scoring; that is a
 numerical blocker to fix, not evidence against the mechanism. The earlier joint
 24-row/96-update configuration used the loss subsequently replaced by pooled
 ranking. The ordered work is to repair the constructor and score a legal
-displacement on development512 and fresh128, then train Context and prototypes
+displacement on development512 and the owner-authorized opened128 diagnostic,
+with new fresh qualification reserved for later; then train Context and prototypes
 with pooled ranking on all512 rows and at least two seeds. Historical source and
 reports remain in the [branch archive](docs/history/branch-archive/INDEX.md).
 
@@ -188,7 +189,9 @@ not an M2 milestone move. An expanded-bank replay preparation was interrupted
 by the owner-directed priority change before any optimizer update; its
 [unfinished source and evidence](docs/labs/m2-bank-transfer-interrupted-2026-10-10/README.md)
 are preserved without a KEEP or negative verdict. The next work follows the
-reopened constructor and joint-learning orders. This establishes no general-chat,
+reopened constructor and joint-learning orders. Its [prepared constructor cycle](docs/labs/d22-constructor-2026-10-10/README.md)
+is retained inactive for an owner-requested session transfer; numerical qualification
+and model scoring remain pending, without a negative count. This establishes no general-chat,
 geometric advantage or full-path energy claim.
 
 **Models trained**
