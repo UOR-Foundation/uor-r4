@@ -143,6 +143,11 @@ trained or saved, no knob set, criterion 1 remains **NOT MET** on both halves, 4
 was not re-run, and **STATUS/ROADMAP/#2028 are unchanged** — no capability, served model or milestone
 moved.
 
+**Where this leaves the decision:** the owner reviewed this line while the piece was in flight and, in
+[D21](../../integration/DECISIONS.md#d21--three-negatives-on-one-line-force-a-pivot-deepseek-trains-the-pointer-fix-codex-stops-the-constraint-line),
+directed the **supervised pointer-target fine-tune** as DeepSeek's next M1 piece. This record is the
+read-out that run should be judged by, and its three checks are the acceptance gate for quoting it.
+
 ## Limitations
 
 1. **One artifact, one arm, 13 numeric rows and 27 word rows.** The control arm at default knobs, one
