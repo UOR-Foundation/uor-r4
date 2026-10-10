@@ -1,3 +1,33 @@
+## 2026-10-10 — Product-key memory trained into the M1 stack at the anchor's steps: the GPU path fix works (0.19 s/step), the configuration reads 19/40 against the brief's 27/40 (deepseek, #2029, D22 order 2)
+
+The [addressed-memory round](../labs/addressed-memory-2026-10-10/README.md) continues with the **device fix the previous cycle
+named as the blocker**. The product-key memory was the one op in the training path with no CUDA implementation; its
+**CUDA forward is now its exact CPU forward on host copies** ([#2175](https://github.com/UOR-Foundation/uor-r4/pull/2175)) through
+the bridge the stack's other kernel-less configurations already use, with the CPU path untouched so every existing artifact keeps
+its numbers. **Measured: 7.4 s/step → 0.19 s/step** — a 2,000-step two-seed fit that needed hours on CPU now takes **387 s** per
+arm, both in parallel. That is what D22 §1 asks for: a tooling gap fixed, not a mechanism closed.
+
+**The pre-registered run, and its verdict.** With the mechanism present from **step 0** and D10's own recipe on the adopted
+`mix-10` store, the two seeds read **19/40** and **19/40** on the frozen v5 memory half (wrong-value 17 and 15, unknowable 0/24
+both, derangement 1 and 2) against the brief's bar of **≥ 27/40 with BPB within 0.01** — **NOT MET, REJECT for this
+configuration**, which closes the configuration (layer 4, 64 sub-keys, 16 top-k, replacing that layer's MLP, 2,000 steps from
+the chat base) and not the mechanism. The anchor's BPB on the same instrument reads **1.17425** (nll 2.30985 over 6,169,728
+targets of the chat held-out stream).
+
+**The development reading that names the next step.** The same memory fitted at **half the steps on CPU** reads **22/40** —
+above the adopted base's 20/40 — with **11 wrong-value failures**, the best on this line (read binding's best was 12, the
+token-identity pointer's 12). It is not a claim: it differs in step count *and* device, and GPU and CPU reductions order
+differently. **Next cycle's first piece is the step-matched control** — the identical recipe with no memory at 1,000 steps, two
+seeds — which is now cheap (~6.5 min per pair) and decides whether that signal is the memory or the shorter fit. Then
+configuration variation at the anchor's steps (memory at a **read** layer, larger sub-key sets), and the brief's **exact-key
+arm** (prime/semiprime addressed store), which this run does not test.
+
+**Declared deviations, unchanged:** the frozen v5 panel holds 64 rows where the brief asks ≥ 80 (an owner question, not a lab
+decision), and the tagger-versus-read accuracy split belongs to the exact-key arm. Both were declared before compute in the
+`TEST FITNESS: FIT` review.
+
+**Next:** the step-matched 1,000-step control, then configuration variation, then the exact-key arm.
+
 ## 2026-10-10 — Wide learned flock read (arm W): REJECT, and support size is not the gap (claude, #2032)
 
 The owner-funded new line's decisive run, `flock:32:32 learned_rank`, 2 seeds, M4 recipe ([record](../labs/softmax-free-read-2026-10-10/README.md#new-line-owner-funded-wide-learned-flock--arm-w-reject)):
