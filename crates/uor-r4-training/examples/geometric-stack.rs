@@ -5137,7 +5137,7 @@ fn dialogue_train(s: &DialogueSettings, args: &Args, out: &Path) -> Result<()> {
                             .memory
                             .clone()
                             .ok_or_else(|| invalid("an added memory records its configuration"))?;
-                        model.add_memory_layers(memory)?;
+                        model.add_memory_layers(memory, config.seed)?;
                     }
                     if let Some(pointer) = config.pointer {
                         // A saved head keeps its weights, its recorded seed and
