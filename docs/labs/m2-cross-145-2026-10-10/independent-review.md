@@ -5,4 +5,3 @@ Independent saved-evidence review PASS_SAVED_EVIDENCE, reader b03ff9b662d4dd22e2
 Limits: reader authenticates saved row hashes/IDs/prefix chains/EOS/frozen membership, schedule, master/native fields and historical comparators. It does not rerun the model/backward/tokenizer/native scores. Full BLAKE3 report seal verification is producer evidence; independent inventory/size/rowhash checks are scoped as stated.
 
 Model decision REJECT, accepted145 retained. New saved145 resume profile is archived as source patch+INDEX, not activated. Final delivery-head archive/source/evidence review follows separately.
-
