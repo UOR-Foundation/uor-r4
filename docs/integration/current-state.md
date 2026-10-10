@@ -1,3 +1,49 @@
+## 2026-10-10 — Mixture dose: a 10 % recall share doubles the memory half at no measurable reply cost; abstention needs 25 % (deepseek, #2029)
+
+The [mixture-dose response](../labs/mixture-dose-2026-10-10/README.md) is **cycle 1** of the standing goal adopted
+from `docs/labs/session-goal.md` @ `8421e605f`. Four recall shares (0 / 10 / 25 / 55.06 % of response episodes), one
+recipe, `pointer_gate_supervision=0` everywhere, pre-registered on #2029 before any pod existed and executed exactly
+as pre-registered: one 2 × RTX 5090 pod, **~11 minutes, ≈ $0.52** including a short evidence-fetch pod, four arms at
+≈105 s each, every acceptance reading on the laptop CPU.
+
+**The frontier.** v5 memory `check_pass`: base **10/40** → D0 **5/40** → D10 **20/40** → D25 **20/40** → D55
+**22/40**; unknowable rows 1/24 → 0/24 → 0/24 → **15/24** → 19/24; open reply panel `fluent_and_relevant`: base
+**43/232** → D10 **37/232** → D25 **28/232** → D55 **22/232**, with paired exact McNemar **p = 0.42** (D10, not
+significant), **p = 0.0081** (D25) and **p = 0.0002** (D55). Per category the loss is concentrated in
+`heldout_first_turn` (34 → 28 → 23 → 17). Every derangement control is 0 on v5 and discriminates on the reply panel.
+**D55 re-ran bit-identically to #2145's matched control** (`f76c8bc0…`), which is why its panels transfer without
+re-scoring.
+
+**Decision: REJECT (no keeper), with the frontier as the result.** The pre-registered KEEP bar needs one arm to hold
+reply ≥ 29/232 **and** memory ≥ 21/40 at once; D10 and D25 are one memory row short (20/40) and D55's reply half is
+22/232. The line's count increments to **1/3** under the rule stated on #2029 before the reply numbers existed. The
+cycle establishes three things: a **10 % dose doubles the memory half at a reply panel statistically
+indistinguishable from the base's**; **abstention is bought separately** (0/24 at 10 %, 15/24 at 25 %) and costs
+reply cells when it is; and **more training on the base's own store destroys memory rather than preserving it**
+(10/40 → 5/40, 1/24 → 0/24), so the mixture and not the step budget is the lever. Criterion 1 remains NOT MET on
+both halves (20/40 against ≥ 34/40; 37/232 against ≥ 116/232) and the base artifact is unchanged.
+
+**Limitations.** One seed per arm; the 40-row memory panel makes one row 2.5 points; the zero-dose arm's reply
+panel was dropped from the shared single-slot judge queue **after being declared on #2029 before its number
+existed** (D0 already fails the memory half at 5/40) and is pending, not guessed; D55's panels are inherited on a
+byte-identical checkpoint; the artifact still has no memory operator, so nothing here is evidence about addressed
+memory.
+
+**Next:** the same four-arm pattern on an **abstention slice** — the abstention family (13.6 % of the recall
+corpus's replies) dosed on its own on top of a 10 % recall mixture — with the reply panel pre-registered as the
+guard, aiming at the first artifact that holds memory ≥ 21/40 **and** reply ≥ 29/232 at the same time.
+
+## 2026-10-10 — Softmax-free reads, arm group 1: REJECT for rank and Hamming-rank (claude, #2032)
+
+The pre-registered run ([record](../labs/softmax-free-read-2026-10-10/README.md#result-arm-group-1-reject-for-b-and-d)): the M4 chat-stack recipe, 12,207 steps, two seeds per arm, 512-window held-out BPB on the stream basis.
+- **Arm A (softmax):** float 0.877118 / 0.877277, served 0.886817 / 0.886702, v4 6/40 and 3/40.
+- **Arm B (fixed rank table over `flock:8:8`):** float **0.917017 / 0.917037**, served 0.925884 / 0.925945, v4 3/40 and 6/40. That is +0.040 BPB, about 4× the 0.01 bar.
+- **Arm D (Hamming-rank):** float 1.162600 / 1.108824, v4 0/40. That is +0.259 BPB.
+- **Served speed:** equal within noise (A 151.8, B 146.0, D 148.2 tok/s on D11, 8 threads), because the dense weights dominate at context 384.
+
+Both are REJECTED, and the served model keeps its softmax read. Line "softmax-free served read" reaches 3/3. Headline: softmax at runtime yes → yes.
+
+**Next:** a pivot card on #2032 naming the one decisive run, pre-registered before compute: rank weights learned in training and served as a constant table. Arm C (prime-route copy head) stays as group 2.
 ## 2026-10-10 — Joint Context–prototype reply learning: 0/512; ordinary 24/96 recipe closed (Codex, #2030)
 
 The [single D21 decisive continuation](../labs/m2-joint-reply-2026-10-10/README.md)
