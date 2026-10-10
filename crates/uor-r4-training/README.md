@@ -78,7 +78,9 @@ stricter than the unchanged norm-tolerant actual-bit screen; all native gates an
 positive-only own-feedback qualification still apply. Solver termination is not
 a mathematical certificate. See the [direct construction record](../../docs/labs/direct-legal-construction-2026-10-09/README.md)
 for the fixed mechanism, exact evidence and execution status. It adds no serving
-dependency or new gradient pass.
+dependency or new gradient pass. The centered integer-displacement encoding preserves
+the original legal domain. Both tested encodings returned a backend singular-matrix
+error with no native proposal; this constructor remains operationally unqualified.
 
 ## Complete-prefix native dialogue learning
 

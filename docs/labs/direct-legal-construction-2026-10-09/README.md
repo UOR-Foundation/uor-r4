@@ -10,7 +10,7 @@ This changes proposal formation, not gradients, Source authority, memory access,
 serving operators, native acceptance or model capacity.
 
 [Prospective M2 claim](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6092186833).
-**Initial execution encountered a backend numerical failure; a representation-only repair is pending. No model result or promotion.** Accepted
+**KEEP the implementation and execution evidence; constructor NOT YET PROMOTED. Both absolute and centered representations encountered the same backend numerical failure. No model-quality result or promotion.** Accepted
 Source48/Generate64 remains 8/512 complete development replies; separate conditional
 9/15 is not this original 5/15 epoch and cannot be combined with it.
 
@@ -108,17 +108,62 @@ delta = k/4+(l+r)(q0/4-m)
 The guard right-hand sides and noop variables are then exactly zero, and the
 objective has no original-code constant. Every original legal destination and
 constraint remains available. No small coefficient, guard, fractional noop,
-node bound, backend threshold or admission tolerance is changed. One fresh attempt
-after reviewed equivalent-domain checks will test backend execution, not repeat a
-completed learning result. The initial failure remains in the record.
+node bound, backend threshold or admission tolerance is changed. The one fresh attempt after reviewed equivalent-domain checks tested backend execution,
+not a completed learning result. It encountered the same error. The initial failure
+remains in the record, with its complete [source patch](../../history/branch-archive/direct-legal-absolute-20261009.patch)
+and INDEX row retained on main.
+
+## Final measured disposition
+
+The centered source `ebd6ecaa41bd1a3ae90e0f8af3b8363724fb3e82` also returned
+`InternalError("Singular matrix")`, without an assignment or proposal. Centering
+alone did not make this backend usable on the admitted saved problem. The exact
+failing basis, pivot magnitude and phase remain **UNAVAILABLE**; no optimal noop,
+infeasibility, native veto, model-capacity or language-quality result follows.
+
+| Complete enclosing attempt | Absolute codes | Centered displacement |
+| --- | ---: | ---: |
+| Seconds, including unchanged export/reload | 145.492 | 143.247 |
+| Peak child RSS, bytes | 1,663,795,200 | 1,795,555,328 |
+| Solver variables / constraints | 1,960 / 440 | 1,960 / 440 |
+| Returned assignments / proposed native updates | 0 / 0 | 0 / 0 |
+| New backward / training-graph calls | 0 / 0 | 0 / 0 |
+| Retained original input245 conditional winners | 5/15 | 5/15 |
+| Retained reference roles / original guard winners | 17/17 / 380/380 | 17/17 / 380/380 |
+
+Initial and final objective records are exactly equal within and across attempts.
+Both completed the 391-row unchanged-artifact native reload; neither staged a new
+native proposal. Actual-nine, full512, fresh and multi-turn qualification remain
+**NOT_RUN**. The original 5/15 is not the separate 9/15 candidate. Accepted
+Source48/Generate64 remains 8/512 complete replies on its frozen development panel.
+
+Exact report, manifest, executable and configuration identities are in
+[attempt1-result.json](attempt1-result.json) and [attempt2-result.json](attempt2-result.json).
+The centered runtime SHA256 is
+`2eb0101455163c16e0e18ae0913d43a0a01e8c330387a50848d49fc47774522e`.
+The complete sealed attempts, observations and executables are separately
+MD5-round-trip verified in iCloud; [storage.json](storage.json) is the restoration
+index. Original input/derivative archives remain independently retained rather
+than duplicated. Source-only mathematical and adversarial reviews plus saved-result
+review are recorded in [source-review.json](source-review.json).
+
+The next discriminator is the exact failing LP basis on this saved problem:
+structural singularity versus a small-pivot failure, initialization/root/later
+phase, implicated columns/rows and pivot threshold. Do not prune small coefficients,
+relax protection, change node bounds, or repeat this constructor unchanged.
 
 ## Checks and resources
 
-Before actual execution: exact legal-domain fixtures including fractional/noop/
+Executed before actual execution: exact legal-domain fixtures including fractional/noop/
 signed-zero/endpoints, small constrained problems, joint repair where
 single moves fail, no-descending/no-incumbent distinctions, numerical decoding and
 unchanged native stage/rollback fixtures; source review and exact-head build.
-Use scoped tests, claim wording, geometry connection checks and regenerated figures.
+The final focused suite passed 53/53, including affine-equivalence tests. Exact-source
+optimized builds and test receipts are [initial](exact-source-checks.json) and
+[centered](centered-exact-checks.json). Preparatory fixture expectation, incomplete
+fixture update and fixture index-type failures were corrected before the actual
+attempts; all failed logs remain preserved. Claim wording and 29/29 geometry
+connections pass; figures regenerated. These component tests do not qualify a model.
 
 Complete projection: 90 minutes, two CPU threads, 6 GiB constructor process RAM (existing 3.56 GiB
 transaction projection plus 2 GiB solver reserve), 3 GiB compile estimate, 6 GiB transient disk,
@@ -128,5 +173,6 @@ cumulative 1,456,254,279 ms and continuing charges since 01:24:55.251810Z. No GP
 paid compute, Python model or new serving dependency. A healthy run is not cancelled
 at a self-estimated wall time; the solver's fixed node bound defines this mechanism.
 
-**Next:** Finish and review the constructor, run the single declared saved-credit
-construction and preserve its native disposition before choosing any successor.
+**Next:** Instrument the exact failing LP basis and factorization context from the
+saved problem before choosing a narrowly justified numerical/backend repair; no
+third blind retry and no new gradients or model scoring for that diagnosis.

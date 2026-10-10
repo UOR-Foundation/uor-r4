@@ -163,7 +163,8 @@ An opt-in [direct legal-set constructor](docs/labs/direct-legal-construction-202
 uses the same saved credit to choose joint legal parameter values under protected
 linear constraints. Its bounded mixed-integer solver is offline training tooling;
 actual destination bits and native behavior still face the existing checks.
-This constructor is not yet qualified as a model improvement.
+Both absolute-code and equivalent centered formulations encountered a backend
+singular-matrix error before returning a candidate; model qualification is unavailable.
 
 **Models trained**
 

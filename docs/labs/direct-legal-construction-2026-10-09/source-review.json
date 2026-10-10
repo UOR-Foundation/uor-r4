@@ -41,6 +41,19 @@
     "kernel_sha256": "f0242836d08dbadbb5659cd8f158d79c8de9420c9de2fb213de9ef149510c24b",
     "integration_sha256": "b00700fe5f38033fa850a58159ba8def523cec6c0bbadff024633303c45f7355",
     "scope": "Affine k=q-q0 encoding preserves every legal destination, fractional original bits, objective values and guard inequalities. Raw displacement and schema explicit; same node bound/admission/native gates.",
-    "limits": "No reviewer solver, build, test or model execution. Does not establish that centering resolves backend basis failure."
+    "limits": "No reviewer solver, build, test or model execution. Does not establish that centering resolves backend basis failure.",
+    "source_commit": "ebd6ecaa41bd1a3ae90e0f8af3b8363724fb3e82"
+  },
+  "attempt2_saved_result_review": {
+    "agent": "emission_adversarial",
+    "verdict": "PASS_SAVED_EXECUTION_SCOPE",
+    "findings": "Same backend InternalError(\"Singular matrix\"), no assignment/proposal/stage/restage/update. Initial/final objective exactly equal within/across attempts. Unchanged5/15,17/380 and391-row reload,zero freshgraphs/backwards. Centering did not resolve failure; exactbasis/phase unavailable.",
+    "limits": "No reviewer solver/model/arithmetic rerun."
+  },
+  "next_mechanism_review": {
+    "agent": "emission_math",
+    "verdict": "SAVED_BASIS_DIAGNOSTIC_JUSTIFIED",
+    "scope": "Distinguish structurally singular selected basis from numerical small pivot, locate phase and implicated rows/columns before more changes. No third blind retry.",
+    "limits": "No solver/model run; no global infeasibility or capacity inference."
   }
 }

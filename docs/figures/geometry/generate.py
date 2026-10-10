@@ -1271,7 +1271,7 @@ def fig_protected_joint_learning():
     fg = Fig("protected-joint-learning.svg", "M2: learning with protected token competition",
              "Offline joint Prefix and Generate learning uses native pooled token margins; native finite checks remain authoritative.",
              ["Prior measured: four rounded offers and 28 distinct feedback updates fail protection.",
-              "Direct legal-set construction: 4096 branch nodes, zero-margin target; execution pending."])
+              "Direct legal-set construction: both encodings hit backend singular-matrix failure; no proposal."])
     def box(x, y, w, title, lines, color):
         fg.rect(x, y, w, 116, "#f6f9fc", color, 1.5, 10)
         fg.text(x + 14, y + 27, title, 17, color, weight="bold")

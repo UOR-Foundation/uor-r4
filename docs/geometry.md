@@ -411,7 +411,10 @@ screen; actual reconstructed bits must still pass that unchanged screen and
 strict objective descent before the same native transaction. Noop preserves
 original fractional bits, not a new quarter rounding. Backend work is bounded
 at 4096 branch nodes, with no mathematical optimality/infeasibility claim or serving
-dependency. Execution/promotion is pending; prior negatives and accepted 8/512 stand.
+dependency. Absolute-code and equivalent centered-displacement executions both
+returned a backend singular-matrix error with no assignment or native proposal;
+this is unavailable model-quality evidence. Original 5/15 plus 17/380 survived
+unchanged reload; prior negatives and accepted 8/512 stand.
 
 ## Life of one token
 
