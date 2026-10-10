@@ -55,8 +55,7 @@ Source-only independent review found no blocking defect. Focused tests cover mod
 admission, excluding frozen gradients from clipping, and rejecting a candidate
 whose gains accompany losses. The zero-update admission also computes and discards
 one eight-episode gradient batch; this preparation cost is additional to the64
-optimizer batches. Runtime results and exact validation receipts are recorded below
-when execution finishes.
+optimizer batches. The completed result and exact validation receipts follow.
 
 ## Resources and preservation
 
@@ -78,3 +77,55 @@ repaired transport. Neither setup fault is model-quality evidence.
 Closed-line source remains on main or in the branch archive. The indexed absolute
 legal representation, initial observer labels and unpromoted residual-backend patch
 remain preserved; D21 closes their next-step recommendations without deleting evidence.
+
+## Result: REJECT the candidate; accepted headline unchanged
+
+**Line: ordinary full-panel reply-completion gradient learning · count 1/3 ·
+M2 headline 8/512 → 8/512 (candidate 8/512 → 2/512).** Zero preparation PRs;
+this integrated source/result is the session deliverable.
+
+| Frozen open-development measurement | Accepted parent | Saved update64 |
+| --- | ---: | ---: |
+| Complete exact accepted reply with EOS | 8/512 | 2/512 |
+| Complete source-swap pairs | 4/256 | 0/256 |
+| Correct entry token | 8/512 | 7/512 |
+| Any EOS emitted | 11/512 | 3/512 |
+| Equal-episode native teacher-prefix CE | 6.1992635176344875 | 5.4545225648632965 |
+
+Two original successes survive, six are lost and zero are gained. All remaining
+complete replies are `length2-00-swap1`, forward-home queries q0 and q3.
+510/512 generated token sequences change. The [machine summary](result-summary.json)
+contains every retained/lost ID and additional conditional metrics; they do not
+replace the complete-reply headline. The saved-row reader authenticates all1,024
+row hashes/IDs, own-prefix feedback, chosen tokens, EOS and exact frozen answer
+membership. It does not independently rerun the tokenizer, native scores or backwards.
+The producer independently reloads checkpoint64 and seals/verifies the whole report.
+
+The run completes64 updates,512 episode draws and6,664 target positions including
+EOS. Baseline evaluation takes206.302s; fit including checkpoints1,139.810s;
+final evaluation301.867s. The full process takes1,680.353s (28.01min), peak RSS
+1,467,840KiB and sampled GPU maximum2,015MiB at10-second sampling. These are
+training/evaluation costs, not served performance or energy measurements.
+
+Producer commit `9a1394f4efb480fbabe95c2c8c80b3c4ad24dce0`; executable SHA256
+`dbcf785773136115ececb066a828b6e3102edf5bb1b12d19accd1194ea253b8e`.
+Report SHA256 `678f4ff4d8b97559260076607f6168b7d5f4317cc1472bd9fe5e253ca76bdbb7`;
+manifest SHA256 `3e5407ada60dc04f3188ab946136ad2c68021c1c0500bbcdb16c287ffa2adda1`.
+CPU and CUDA-feature focused tests each pass3/3 with zero ignored; the initial
+CUDA bootstrap parity suite separately passed37 tests with3 ignored. The corrected
+producer CUDA build takes114.731s and its focused-test command25.075s; failed
+compile211.189s is charged separately. Source review includes the main integration
+at `afebac942d0553ed73c6ea729634c0fbb5c0bb3e`.
+
+**Counterfactual PR question:** if the result came out the other way, would the
+next step differ? Yes: a retained complete-reply gain would justify wider
+qualification; this regression rejects the candidate and disallows an unchanged
+run or dose/rate/seed sweep. Lower CE does not justify promotion. This one fixed
+intervention does not establish an architectural capacity limit.
+
+**Next:** retain the accepted8/512 parent; stop this fixed Potential/Generate
+full-panel recipe. Any successor must pre-register a distinct model-changing
+complete-reply intervention and score the same512 panel; no constructor,
+attribution or solver work is reopened. No successor compute is started here.
+Held-out, general conversation, durable memory and complete-path energy remain
+unqualified by this result. M3 was not owner-blocked work and is unchanged.

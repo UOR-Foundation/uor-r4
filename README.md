@@ -144,7 +144,9 @@ under D21. Their source and reports remain available; none improved the accepted
 The [ordinary reply-completion run](docs/labs/m2-reply-gradient-2026-10-10/README.md)
 trains the accepted learner's Potential and Generate coefficients on complete
 answers, while retaining Context, prototypes, bridge, Cue and Prefix. Its fixed
-64-update endpoint uses the unchanged native own-prefix 512-reply evaluator.
+64-update endpoint uses the unchanged native own-prefix 512-reply evaluator:
+complete replies regress8/512→2/512 despite lower teacher-prefix CE. The candidate
+is rejected; the accepted parent remains8/512.
 
 **Models trained**
 
