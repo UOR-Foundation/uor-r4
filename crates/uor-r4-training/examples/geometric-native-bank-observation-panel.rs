@@ -47,6 +47,8 @@ struct Args {
     curriculum_root: PathBuf,
     curriculum_manifest_sha256: String,
     exposed_roots: Vec<BoundRoot>,
+    #[serde(default)]
+    expanded_concrete_donors: Option<role_diversity::ExpandedDonorConfig>,
     native_artifact: PathBuf,
     trusted_binding: PathBuf,
     trusted_binding_sha256: String,
@@ -635,9 +637,39 @@ fn validate_matched_runtime(plan: &Plan, runtime: &[Value], context: &[Value]) -
         json!({"pairs":matched,"scope":"identical numerical Context/Source token arrays and answer targets; occurrence/address metadata differs across independently constructed stores"}),
     )
 }
+fn validate_expanded_binding(
+    expected: &Value,
+    configured: &Value,
+    report: &Value,
+    donor_bytes: &[u8],
+) -> Result<()> {
+    let recorded: Value = serde_json::from_slice(donor_bytes)?;
+    if recorded != *expected
+        || report["expanded_concrete_donors_sha256"] != sha256_bytes(donor_bytes)
+        || report["expanded_concrete_donors"] != *configured
+        || report["id_namespace"] != "bank-transfer-"
+    {
+        return Err(invalid("expanded author/panel donor provenance binding differs").into());
+    }
+    Ok(())
+}
+
 fn run(a: &Args, t: Instant) -> Result<Value> {
     verify_root(&a.construction_plan, &a.construction_manifest_sha256)?;
     verify_root(&a.curriculum_root, &a.curriculum_manifest_sha256)?;
+    let expanded = a
+        .expanded_concrete_donors
+        .as_ref()
+        .map(|config| {
+            role_diversity::load_expanded_donors(
+                config,
+                &a.exposed_roots
+                    .iter()
+                    .map(|r| (r.root.clone(), r.manifest_sha256.clone()))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .transpose()?;
     let rawplan = fs::read(a.construction_plan.join("plan.json"))?;
     let plan: Plan = serde_json::from_slice(&rawplan)?;
     if matches!(
@@ -708,6 +740,30 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     );
     let derived_origin = if a.assertion_query_policy == AssertionQueryPolicy::SupportedCurrentRole {
         let report = read_json(&a.construction_plan.join("report.json"))?;
+        if let Some(donors) = &expanded {
+            let donor_bytes = fs::read(a.construction_plan.join("expanded-concrete-donors.json"))?;
+            validate_expanded_binding(
+                &donors.receipt,
+                &serde_json::to_value(&a.expanded_concrete_donors)?,
+                &report,
+                &donor_bytes,
+            )?;
+            if plan
+                .histories
+                .iter()
+                .any(|h| !h.id.starts_with("bank-transfer-"))
+            {
+                return Err(
+                    invalid("expanded author/panel donor provenance or namespace differs").into(),
+                );
+            }
+        } else if report.get("expanded_concrete_donors").is_some()
+            || report.get("expanded_concrete_donors_sha256").is_some()
+        {
+            return Err(
+                invalid("expanded construction requires identical panel donor opt-in").into(),
+            );
+        }
         let bytes = fs::read(a.construction_plan.join("derived-source-origin.json"))?;
         let digest = sha256_bytes(&bytes);
         if report["derived_source_origin_sha256"] != digest
@@ -742,10 +798,20 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
                 invalid("authorer transfer profile/novelty/matched-group receipt absent").into(),
             );
         }
-        let pool=opened["training"].as_array().ok_or_else(||invalid("training absent"))?.iter()
+        let mut pool=opened["training"].as_array().ok_or_else(||invalid("training absent"))?.iter()
             .chain(opened["development"].as_array().ok_or_else(||invalid("development absent"))?)
             .chain(repeats).map(|v|serde_json::from_value::<WireExample>(json!({"text":v["text"],"relation":v["relation"],"act":v["act"],"template":v["template"]})))
             .collect::<std::result::Result<Vec<_>,_>>()?;
+        if let Some(donors) = &expanded {
+            pool.extend(
+                donors
+                    .wires
+                    .iter()
+                    .cloned()
+                    .map(serde_json::from_value::<WireExample>)
+                    .collect::<std::result::Result<Vec<_>, _>>()?,
+            );
+        }
         validate_supported_origins_profile(
             &plan,
             &origin,
@@ -760,7 +826,10 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     let mut excluded_fingerprints = BTreeSet::new();
     let mut exposure_receipts = Vec::new();
     let mut exposed_bank_values = BTreeSet::new();
-    let mut exposed_literal_banks = BTreeSet::new();
+    let mut exposed_literal_banks = expanded
+        .as_ref()
+        .map(|d| d.bank_keys.clone())
+        .unwrap_or_default();
     for exposed in &a.exposed_roots {
         verify_root(&exposed.root, &exposed.manifest_sha256)?;
         // Explicit known schemas; never silently ignore an unparsed exposure root.
@@ -892,7 +961,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
         }
     }
     if diverse
-        && a.split == "fresh"
+        && (a.split == "fresh" || expanded.is_some())
         && role_diversity::bank_keys(&serde_json::from_slice::<Value>(&rawplan)?)?
             .iter()
             .any(|k| exposed_literal_banks.contains(k))
@@ -1024,7 +1093,7 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
             if diverse {
                 role_diversity::validate_all_sources(&packet)?;
             }
-            if (transfer_shape.is_some() || (diverse && a.split == "fresh"))
+            if (transfer_shape.is_some() || (diverse && (a.split == "fresh" || expanded.is_some())))
                 && numerical_bank_values(&packet)?
                     .is_some_and(|bank| exposed_bank_values.contains(&bank))
             {
@@ -1038,7 +1107,8 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
                 .next()
                 .ok_or_else(|| invalid("semantic fingerprint absent"))?;
             if !semantic.insert(fp.clone())
-                || (a.split == "fresh" && excluded_fingerprints.contains(&fp))
+                || ((a.split == "fresh" || expanded.is_some())
+                    && excluded_fingerprints.contains(&fp))
             {
                 return Err(invalid("duplicate/exposed actual bank+query packet").into());
             }
@@ -1113,9 +1183,14 @@ fn run(a: &Args, t: Instant) -> Result<Value> {
     {
         return Err(invalid("native input changed during preparation").into());
     }
-    Ok(
-        json!({"schema":"uor-r4.native-bank-observation-panel/1","status":"COMPLETED","split":a.split,"cases":histories*2,"samebank_query_pairs":histories,"single_record_episode_count":0,"multi_record_episode_count":histories*2,"query_counts":{"job":histories,"where":histories},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"tokenizer_sha256":tokenizer_sha,"native_parent_manifest_sha256":parent_manifest_sha,"construction_plan_manifest_sha256":a.construction_manifest_sha256,"construction_plan_sha256":sha256_bytes(&rawplan),"curriculum_manifest_sha256":a.curriculum_manifest_sha256,"exposed_roots":exposure_receipts,"semantic_packet_fingerprints":semantic,"assertion_query_policy":a.assertion_query_policy,"transfer_profile":a.transfer_profile,"transfer_shape_control":transfer_shape,"prospective_diversity_control":diversity_control,"matched_runtime_control":matched_runtime,"source_policy":plan.source_policy,"derived_source_origin_sha256":derived_origin.as_ref().map(|(_,sha)|sha),"source_origin":if diverse {"retained exact donor literal bytes in prospectively authored current-role frames; disjoint bank compositions with familiar questions; no unseen-literal/word/paraphrase claim"}else if transfer_shape.is_some(){"prospectively authored new literal compositions/questions;bound original opened frame donors;not original donor utterance bytes"}else if derived_origin.is_some(){"prospectively authored explicit-current-role utterances;retained donor literal bytes/chronology;not original donor utterance bytes"}else{"retained original assertion/question bytes"},"fresh_payload_novelty_claimed":a.transfer_profile==TransferProfile::SupportedUntouchedComposition && a.split=="fresh","cue_origin_policy":if derived_origin.is_some(){"prospectively-authored-current-role-bytes/bound-byteBPE/2"}else{"original-assertion-bytes/bound-byteBPE/1"},"raw_cue_provenance_sha256":sha256_file(&a.out.join("raw-cue-provenance.json"))?,"inputs_sha256":sha256_file(&a.out.join("inputs.json"))?,"labels_sha256":sha256_file(&a.out.join("labels.json"))?,"context_data_sha256":sha256_file(&a.out.join("context-data.json"))?,"trusted_binding_sha256":a.trusted_binding_sha256,"native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE;source-preparation-only","fresh_scope":if diverse {"prospectively partitioned whole role/value banks across all query/order variants; known full literals and familiar question forms; complete declared exposure exclusions; not unseen words/literals or universal pretraining exclusion"}else if transfer_shape.is_some(){"four predeclared new role/value banks; eight chronological write histories matched across familiar/unseen-order questions; exact declared exposure exclusion; no global pretraining exclusion claim"}else{"separate preauthored prospective histories;exact source/semantic-packet exclusion;no global pretraining exclusion claim"},"elapsed_seconds":t.elapsed().as_secs_f64()}),
-    )
+    let mut report = json!({"schema":"uor-r4.native-bank-observation-panel/1","status":"COMPLETED","split":a.split,"cases":histories*2,"samebank_query_pairs":histories,"single_record_episode_count":0,"multi_record_episode_count":histories*2,"query_counts":{"job":histories,"where":histories},"source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"tokenizer_sha256":tokenizer_sha,"native_parent_manifest_sha256":parent_manifest_sha,"construction_plan_manifest_sha256":a.construction_manifest_sha256,"construction_plan_sha256":sha256_bytes(&rawplan),"curriculum_manifest_sha256":a.curriculum_manifest_sha256,"exposed_roots":exposure_receipts,"semantic_packet_fingerprints":semantic,"assertion_query_policy":a.assertion_query_policy,"transfer_profile":a.transfer_profile,"transfer_shape_control":transfer_shape,"prospective_diversity_control":diversity_control,"matched_runtime_control":matched_runtime,"source_policy":plan.source_policy,"derived_source_origin_sha256":derived_origin.as_ref().map(|(_,sha)|sha),"source_origin":if diverse {"retained exact donor literal bytes in prospectively authored current-role frames; disjoint bank compositions with familiar questions; no unseen-literal/word/paraphrase claim"}else if transfer_shape.is_some(){"prospectively authored new literal compositions/questions;bound original opened frame donors;not original donor utterance bytes"}else if derived_origin.is_some(){"prospectively authored explicit-current-role utterances;retained donor literal bytes/chronology;not original donor utterance bytes"}else{"retained original assertion/question bytes"},"fresh_payload_novelty_claimed":a.transfer_profile==TransferProfile::SupportedUntouchedComposition && a.split=="fresh","cue_origin_policy":if derived_origin.is_some(){"prospectively-authored-current-role-bytes/bound-byteBPE/2"}else{"original-assertion-bytes/bound-byteBPE/1"},"raw_cue_provenance_sha256":sha256_file(&a.out.join("raw-cue-provenance.json"))?,"inputs_sha256":sha256_file(&a.out.join("inputs.json"))?,"labels_sha256":sha256_file(&a.out.join("labels.json"))?,"context_data_sha256":sha256_file(&a.out.join("context-data.json"))?,"trusted_binding_sha256":a.trusted_binding_sha256,"native_predictions":"NOT_RUN","learning_seed":"NOT_APPLICABLE;source-preparation-only","fresh_scope":if diverse {"prospectively partitioned whole role/value banks across all query/order variants; known full literals and familiar question forms; complete declared exposure exclusions; not unseen words/literals or universal pretraining exclusion"}else if transfer_shape.is_some(){"four predeclared new role/value banks; eight chronological write histories matched across familiar/unseen-order questions; exact declared exposure exclusion; no global pretraining exclusion claim"}else{"separate preauthored prospective histories;exact source/semantic-packet exclusion;no global pretraining exclusion claim"},"elapsed_seconds":t.elapsed().as_secs_f64()});
+    if let Some(donors) = &expanded {
+        report["expanded_concrete_donors_sha256"] =
+            json!(sha256_bytes(&serde_json::to_vec_pretty(&donors.receipt)?));
+        report["expanded_concrete_donors"] = serde_json::to_value(&a.expanded_concrete_donors)?;
+        report["id_namespace"] = json!("bank-transfer-");
+    }
+    Ok(report)
 }
 fn main() -> Result<()> {
     let path = std::env::args()
@@ -1132,6 +1207,19 @@ fn main() -> Result<()> {
         || a.maximum_report_bytes > 64 * 1024 * 1024
     {
         return Err(invalid("panel arguments/bounds invalid").into());
+    }
+    if let Some(config) = &a.expanded_concrete_donors {
+        if a.transfer_profile != TransferProfile::SupportedProspectiveRoleDiversity
+            || a.assertion_query_policy != AssertionQueryPolicy::SupportedCurrentRole
+        {
+            return Err(invalid("expanded panel requires diversity/current-role policy").into());
+        }
+        config.validate(
+            &a.exposed_roots
+                .iter()
+                .map(|r| (r.root.clone(), r.manifest_sha256.clone()))
+                .collect::<Vec<_>>(),
+        )?;
     }
     let out = output_support::prospective_output(&a.out)?;
     for p in [
@@ -1181,6 +1269,28 @@ mod supported_current_role_panel_tests {
         json!({"ordinal":0,"donor_construction_wire":donor,"authored_wire":authored,
             "donor_text_sha256":sha256_bytes(donor.text.as_bytes()),
             "origin":"prospectively authored explicit-current-role frame/question;not retained original assertion bytes"})
+    }
+    #[test]
+    fn expanded_panel_reconstructs_provenance_not_only_a_supplied_hash() -> Result<()> {
+        let expected =
+            json!({"witnesses":[{"json_pointer":"/training/0","wire":{"text":"original"}}]});
+        let config = json!({"roots":[{"root":"pinned-bundle","manifest_sha256":"pinned"}]});
+        let bytes = serde_json::to_vec_pretty(&expected)?;
+        let report = json!({"expanded_concrete_donors_sha256":sha256_bytes(&bytes),"expanded_concrete_donors":config,"id_namespace":"bank-transfer-"});
+        validate_expanded_binding(&expected, &config, &report, &bytes)?;
+        let mut forged = expected.clone();
+        forged["witnesses"][0]["json_pointer"] = json!("/reference_templates_control_only/0");
+        let forged_bytes = serde_json::to_vec_pretty(&forged)?;
+        let mut forged_report = report.clone();
+        forged_report["expanded_concrete_donors_sha256"] = json!(sha256_bytes(&forged_bytes));
+        assert!(
+            validate_expanded_binding(&expected, &config, &forged_report, &forged_bytes).is_err()
+        );
+        assert!(validate_expanded_binding(&expected, &Value::Null, &report, &bytes).is_err());
+        forged_report = report.clone();
+        forged_report["id_namespace"] = json!("development-diverse-");
+        assert!(validate_expanded_binding(&expected, &config, &forged_report, &bytes).is_err());
+        Ok(())
     }
     #[test]
     fn opt_in_preserves_legacy_default_and_rejects_unknown_policy() -> Result<()> {
