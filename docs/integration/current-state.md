@@ -1,3 +1,233 @@
+## 2026-10-09 — Decoding the pointer's selections: it attends the sentence FRAME and never the varying slot (deepseek, #2029)
+
+Read on the **control arm**, CPU only, no pod, no training, no knob, $0. Record:
+[pointer-selected-ids-decode-2026-10-09](../labs/pointer-selected-ids-decode-2026-10-09/README.md). No v5
+re-run. **Structural qualifier: this artifact has NO MEMORY READER.**
+
+**INDEX CHECK FIRST: vocabulary 4096, max id 4095, every selected id in range (223 … 2728)** — so the
+trace's indexing is sound and the last three pieces' window readings are **not** in question.
+
+**THE DECODE.** `223 → 'Ġ'` — **a bare space, and it carries the highest attention in both tables
+(0.9202, 0.9064)**; `1498 → 'Ġbrother'`, `2369 → 'Ġtakes'`, `1156 → 'Ġbus'`, `2728 → 'ser'`,
+`1044 → 'ĠWh'`, `754 → 'Ġtake'`, `772 → 'ĠC'`, `1790 → 'ass'`. **The value's own ids are single digits**
+(`22 → '4'`, `19 → '1'`, `27 → '9'`, `26 → '8'`, `24 → '6'`) — which is the whole reason the value is a
+run. **The structural candidates are never selected:** `<|bos|>` (0), `<|eos|>` (1), `.` (16), `:` (28)
+appear in no step of either table.
+
+**THE ANSWER: NEITHER "STRUCTURAL" NOR "ARBITRARY" — IT IS THE FRAME, AND THE VARIABLE SLOT IS SKIPPED.**
+The selected ids are **content subwords, not role markers**, so the structural answer is not what the
+data gives — but they are not arbitrary either: they are the **recurring sentence frame** of the panel's
+own construction, since the two rows compared **share the key `brother|brother's`** and the panel builds
+rows on a shared frame per key.
+
+**THAT CORRECTS MY OWN PREVIOUS PIECE, and the record says so: the phrase "history-insensitive" was
+overstated.** The invariance I measured is **the frame's** invariance, not a demonstration that the head
+ignores history. **The correction strengthens the finding:** the two rows differ in **exactly one respect
+— the value (`41` against `98`)** — and the pointer attends the frame they share and **never the slot
+that differs.** The highest-attention selection in both tables is the **bare space token `'Ġ'`**.
+
+**SO THE SMALLEST TRUE STATEMENT THIS LINE HAS REACHED: the pointer attends the sentence frame and never
+the varying slot.** The digits — the only tokens distinguishing the two rows — are selected on **0 of 13
+rows for the second digit, 3 of 13 for the first, and never both.**
+
+**AGAINST THE PRE-REGISTERED OPTIONS:** STRUCTURAL — **NO** (content subwords, structural candidates
+never selected); CONTENT AT A FIXED OFFSET — **PARTLY, and it is the frame's offset**, since the
+positions recur because the frame recurs; NEITHER/arbitrary — **NO**, the recurrence is explained by the
+shared frame; ids not decoding or out of range — **NO**. **The implication is the owner-level one, not a
+knob:** the head attends the sentence frame and never the varying slot, which is a **training-target**
+property — the targets did not require it to look at the slot that changes. Per the pre-registered
+mapping that belongs to the owner **with a timed calibration run first**, and it is **not** addressed by
+`TopK`, the gate, or a wider keep set.
+
+**WHAT IT DOES NOT SETTLE:** it does **not** prove the head was trained on frame-only targets — it
+measures attention on 13 rows of one artifact; the training-target reading is the natural explanation
+and it is **not** measured here. It says nothing about the reply half or the addressed-memory path, and
+no capability change is claimed: no judge was run and v5's `check_pass` was not re-measured.
+
+**THE LEDGER:** token count REFUTED; minimal pairs / digit order REFUTED; value addressability REFUTED;
+the pointer's single-source shape REFUTED IN ITS SIMPLE FORM AND REPLACED; **"history-insensitive"
+CORRECTED — the invariance is the frame's**; and **"the pointer attends the frame and never the varying
+slot" MEASURED on 13 rows**, the smallest true statement this line has reached.
+
+**Criterion 1 remains NOT MET on both halves and 43/232 is unchanged.** v5 was not re-run;
+STATUS/ROADMAP/#2028 unchanged — checked, not assumed.
+
+**Next: a training decision for the owner, not another measurement and not a knob.** The head must be
+given targets that require the varying slot rather than the frame it already attends — a
+**pre-registered training piece with a fresh sealed panel** (a retrained artifact cannot be compared to
+v5's 10 of 40) and a **timed calibration run before any estimate**.
+
+## 2026-10-09 — The positional read: the value's position is KEPT and the attention never lands on it (deepseek, #2029)
+
+Read on the **CONTROL arm** (default knobs, byte-for-byte 13 of 13, split 10/2/1), so this is a
+statement about the artifact and not about a modified decoder. Record:
+[pointer-positional-read-2026-10-09](../labs/pointer-positional-read-2026-10-09/README.md). **CPU only,
+no pod, no training, no new knob, $0.** No v5 re-run.
+
+**ANSWER: (b), in a stronger form.** At default knobs the pointer's `select` is `None`, which the code
+documents as keeping **every source** — so **the keep set is the whole window and the second digit's
+position is not excluded from it; the attention simply never places its mass there.** Measured over all
+13 rows: **the value's FIRST digit is the pointer's argmax on only 3 of 13 rows** (attention 0.8533,
+0.5141, 0.4743) and **the value's SECOND digit on 0 of 13 — never**. On the 10 READER rows **neither
+digit is attended at any step**: it is not that the first is attended while the second is dropped;
+**neither is attended.**
+
+**THE FINDING THE PER-STEP TABLES GIVE FOR FREE: THE PATTERN IS NEARLY IDENTICAL ACROSS ROWS.** Two rows
+with different values, keys and histories (`mem-005` value `41` vs `mem-037` value `98`) choose **the
+same source positions in the same order** — `8, 5, 6, 5, 47, 8, 43, 5, 45, 67, 51, 5, …` — with
+attention values tracking closely (0.3779 vs 0.3505; 0.7675 vs 0.8009; 0.9202 vs 0.9064). **The
+pointer's positional behaviour is essentially history-insensitive on this artifact: it is not failing to
+find the value, it is looking at a fixed pattern of positions and the value is not one of them.** The
+selected window ids (`223`, `1498`, `2369`, `1156`, `2728`, …) are none of them the value's, and the
+full per-step tables are in the record.
+
+**IT ALSO EXPLAINS THE KNOB RESULT.** `TopK(2)` + a 0.9 gate floor moved coverage to **exactly 3 of 13**
+— precisely the three rows where the argmax already landed on the first digit — because **raising the
+gate does not change where the pointer looks, only how much the copy distribution counts once it is
+there.**
+
+**WHAT IT DOES NOT ANSWER:** why the attention pattern is positional and row-invariant — whether the
+head was trained on targets that never required a two-token run, or whether the mask/window geometry
+penalises it. **That is the next read, not another knob.** It claims no capability change: no judge was
+run, v5's `check_pass` was not re-measured, and the treatment arm's unmeasured distribution is not used
+here.
+
+**THE LEDGER:** token count REFUTED; minimal pairs / digit order REFUTED; value addressability REFUTED;
+**the pointer's single-source shape REFUTED IN ITS SIMPLE FORM AND REPLACED** — single-source selection
+is not the binding constraint, the **attention's positional target** is; the learned read/emit path
+stays **SPLIT**, now localized to **attention placement rather than keep-set coverage**.
+
+**Criterion 1 remains NOT MET on both halves and 43/232 is unchanged.** v5 was not re-run.
+STATUS/ROADMAP/#2028 unchanged — checked, not assumed.
+
+**Next:** read **why the attention pattern is positional and row-invariant** — decode the selected window
+ids (`223`, `1498`, `2369`, …) and establish whether they are **structural tokens (role markers,
+separators) rather than content**. If they are, the head is attending the scaffold rather than the
+conversation, and the fix is a training-target question for the owner with a timed calibration run
+first — **not another knob, and not a wider keep set.**
+
+## 2026-10-09 — The inference-path change moves the pointer 0 → 3 of 13 and FAILS its pre-declared condition (deepseek, #2029)
+
+Record: [inference-path-fix-result-2026-10-09](../labs/inference-path-fix-result-2026-10-09/README.md).
+**CPU only, no pod, no training, $0. Weights unchanged.** No v5 re-run. **Structural qualifier: this
+artifact has NO MEMORY READER — a pointer fix is a pointer fix.**
+
+**APPLIED, exactly as planned: `PointerSelect::TopK(2)`** (the plan's §2a — `TopK(1)` is the
+single-source pointer) **and `set_pointer_gate_floor(0.9)`** (§2b — `p_copy` is exactly 0 with no floor),
+both **serving-time knobs on unchanged weights**. The trace bin gained `select=` and `gate_floor=`.
+
+**TWO ARMS.** **ARM A — control, default knobs: 0 of 13 rows with both stored digits selected; classes
+EMITTER 2 / PARTIAL 1 / READER 10; byte-for-byte vs the sealed replies 13 of 13** — the instrument's
+validity control holds with the same binary. **ARM B — TopK(2), gate floor 0.9: 3 of 13 rows with both
+digits selected; classes DELIVERED 3 / PARTIAL 6 / READER 4; byte-for-byte 0 of 13**, which is expected
+and not a defect — the knobs change decoding by construction, so the treatment arm cannot reproduce
+replies produced without them. The two-token assertion held in both.
+
+**THE PRE-DECLARED CONDITION FAILED ON ITS PRIMARY.** All 13 rows showing both digits selected was the
+bar; the measurement is **3 of 13**. The other three conditions passed: **`mem-040` still emits the
+stored `84`** (emitted ids contain `26, 22` in order), **`mem-008` and `mem-024` no longer emit `19`**,
+and the instrument's conditions hold in the arm where they are meaningful. **Reported as a miss, not
+averaged into a story: this setting is insufficient on its own.**
+
+**THE FALSIFICATION DID NOT FIRE IN ITS STATED FORM.** It was: *if both digits are selected and the
+reply still lacks the value, the fix is in the wrong place and the emitter is the real problem.* Where
+both digits were selected — the **3 DELIVERED rows** — the value **was** emitted. **So on these 13 rows
+the failure is coverage, not emission: selection and emission agree wherever selection happens.** That
+is the one thing this run adds to the diagnosis. It does **not** license widening the same change.
+
+**THE EMITTER ROWS ARE A SEPARATE EFFECT WITH ITS OWN EVIDENCE.** `mem-008`/`mem-024` both emitted `19`
+in arm A and **neither does in arm B** — the gate knob acting on the mechanism that implicated it, a
+**selected-then-dropped** failure. Reported separately from the reader fix and not counted as its
+success: `mem-008` arm B emits the distractor's `9` and the stored `8` but not the value's run, while
+`mem-024` emits `23, 22` in order — the stored `54`. They keep their own piece and pass condition.
+
+**WHAT THIS DOES NOT SETTLE:** arm B's replies are a different distribution and **their quality was not
+measured** — no judge was run, the gate floor of 0.9 forces copying at 90 % weight, and the id sequences
+show heavy repetition (`2605` repeated). **This is not a capability improvement and must not be read as
+one.** It classifies 13 rows on this artifact only and says nothing about the reply half.
+
+**THE LEDGER:** token count REFUTED; minimal pairs / digit order REFUTED; value addressability REFUTED;
+**the pointer's single-source shape is NOT REFUTED AND NOT CONFIRMED** — the knobs move both-digits
+coverage 0 → 3 of 13, so the shape is *a* constraint and at this setting not the whole one; the learned
+read/emit path stays **SPLIT**, with selection and emission agreeing wherever selection happens.
+
+**Criterion 1 remains NOT MET on both halves and 43/232 is unchanged.** v5 was not re-run.
+STATUS/ROADMAP/#2028 unchanged — checked, not assumed.
+
+**Next: do not widen this change and do not try a third knob.** The question is **why coverage stops at
+3** — whether the pointer's kept sources reach the value's second digit at all on the other 10 rows —
+which the trace answers directly by reporting **which window positions the kept sources occupy** at the
+step where the value should be emitted. **That is a read, not a knob.** A training-path change stays
+with the owner and still needs a timed calibration run first.
+
+## 2026-10-09 — Plan: a reader-side fix for the two-token run, CPU-only first (deepseek, #2029)
+
+**PLANNING ONLY: $0, no pod, no training, CPU only.** Record:
+[reader-side-fix-plan-2026-10-09](../labs/reader-side-fix-plan-2026-10-09/README.md). The plan is the
+deliverable; nothing is started.
+
+**WHAT IT PLANS AGAINST:** from #2123 — **READER 10, EMITTER 2, PARTIAL 1** on an instrument that
+reproduces the sealed replies 13 of 13 byte for byte, with **0 of 13 rows having BOTH stored digits
+selected**, including `mem-040`, which nevertheless emits the value correctly.
+
+**1. WHY THE POINTER NEVER SELECTS BOTH — the code path.** It is a **single-source pointer by
+construction**, documented in `geometric_stack.rs`: the attention is a softmax over the sources
+`PointerConfig::select` keeps, "**`TopK(1)` being the single-source pointer**"; `PointerSelection.source`
+is "**the lowest source index whose attention is the largest**" — **one index per step**, and
+`CopyTraceStep` records exactly that one per step; and `p_copy(v|t) = sum_j a_tj [x_j = v]` mixes over
+**single attended positions**. A two-token value therefore needs **two consecutive steps landing on
+consecutive positions**, and **nothing rejects the second — the head is shaped to put its mass on one
+source per step**. The same expression explains the EMITTER rows: `p(v|t) = (1-g_t) softmax(z_t)[v] +
+g_t p_copy(v|t)`, **`p_copy` exactly 0 when no kept source holds the target and no probability floor**
+— so a selected digit does not have to win if the gate is low, which is how `19` (`1`) is emitted while
+the pointer sits on `24` (`6`).
+
+**2. THE SMALLEST CHANGE, and it is NOT a training change.** The selection and gate are **serving-time
+knobs on unchanged weights**: "Training may stay soft (`select: None`); `StackModel::set_pointer_select`
+applies a selection to the same weights afterwards." So (a) **widen the kept source set**
+(`PointerSelect::TopK(k)`, `k >= 2`) so a run is reachable within one step's mixture, and (b) **raise the
+copy gate** so `p_copy` can win at the second digit instead of being outvoted by `softmax(z_t)` — the
+mechanism that produced `19`. **CPU-only, testable tonight.** Only if that fails: (c) a **training-path**
+change making the head's target a run — **GPU**, and it needs the owner.
+
+**3. THE SUCCESS TEST is the same trace on the same 13 rows.** Pre-declared pass condition: **all 13
+rows show BOTH stored digits selected** (currently 0 of 13); **`mem-040` still emits `84`**; **`mem-008`
+and `mem-024` no longer emit `19`**; and the instrument's own conditions hold again (byte-for-byte
+reproduction re-established, `digit_ids` exactly two tokens or VOID). **FALSIFICATION, in advance: if
+both digits are selected and the reply STILL lacks the value, the fix is in the wrong place and the
+emitter is the real problem after all** — go to §4, do not widen the same change.
+
+**4. THE 2 EMITTER ROWS ARE A SEPARATE PIECE.** `mem-008`/`mem-024` **selected one stored digit and
+emitted `19`** — a **selected-then-dropped** failure, mechanically distinct from the 10 READER rows
+where nothing was selected at all. The reader fix would touch them only incidentally, so **they get
+their own pass condition and are reported separately even if they move**: their question is
+gate/mixture, not selection coverage.
+
+**5. COST.** The inference-path change and its test are **CPU only, tonight** (rebuild ~2 min warm, one
+12-second trace run). A training-path change is **GPU via `uor-pod`** under the caps, and **no
+throughput number is given because none is citable** — a timed calibration run comes first, the same
+refusal the last plan made. A retrain produces a new artifact, so **the v5 comparison does not survive
+as a comparison**: v5's 10 of 40 is a reading of `chat-29m-B-lr5e-4`, and a retrained artifact needs a
+fresh sealed panel. **The tokenizer is untouched either way**, so every result citing `d36d3e87…` stays
+valid.
+
+**6. THE LIMIT THAT BOUNDS EVERYTHING: THIS ARTIFACT HAS NO MEMORY READER.** A **pointer fix is a
+pointer fix**; it says nothing about the addressed-memory path, whose `/3`–`/5` readers belong to
+different artifacts. What would have to be measured separately — **and never has been** — is whether a
+memory-reader artifact selects a two-token value as one unit, using `memory_read_diagnostic`'s
+`predicted_token` and `target_routes` instead of the pointer trace.
+
+**THE LEDGER:** token count REFUTED; minimal pairs / digit order REFUTED; value addressability REFUTED;
+**the learned read/emit path SPLIT (READER 10, EMITTER 2, PARTIAL 1)**, with this plan targeting the
+reader side first. **Criterion 1 remains NOT MET on both halves and 43/232 is unchanged.** v5 was not
+re-run. STATUS/ROADMAP/#2028 unchanged — checked, not assumed.
+
+**Next:** take the **inference-path** change — widen the kept source set and raise the copy gate on
+unchanged weights — rebuild and re-run the same trace on the same 13 rows against the pre-declared pass
+condition. **CPU only, $0, tonight.** If both digits are selected and the reply still lacks the value,
+**stop and go to the emitter** rather than widening the same change. **No training, no pod and no v5
+re-run is authorised by this plan.**
+
 ## 2026-10-09 — The missing control is FIXED: the probe reproduces the sealed v5 replies 13 of 13 byte for byte, and the split is still VOID (deepseek, #2029)
 
 Record: [numeric-trace-reproduction-2026-10-09](../labs/numeric-trace-reproduction-2026-10-09/README.md).
