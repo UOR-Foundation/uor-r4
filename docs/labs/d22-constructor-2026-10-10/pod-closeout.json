@@ -1,0 +1,10 @@
+{
+  "recorded_utc": "2026-10-10T21:04:18.789732+00:00",
+  "session": "m2-constructor-d22-20261010",
+  "pod": "q5wtcy7dr3rrd7",
+  "processes": "child15365 and wrapper15108 absent after owner-requested winddown",
+  "lease": "RELEASED",
+  "pod_delivery": "DELETED after verified iCloud preservation; other sessions not touched",
+  "release_stdout": "Released codex/m2-constructor-d22-20261010's lease on q5wtcy7dr3rrd7. If nobody else holds it, 'uor-pod down q5wtcy7dr3rrd7 --lab codex --session m2-constructor-d22-20261010' now (the reaper deletes it after 20 idle min).\n",
+  "down_stdout": "Deleted q5wtcy7dr3rrd7\n"
+}
