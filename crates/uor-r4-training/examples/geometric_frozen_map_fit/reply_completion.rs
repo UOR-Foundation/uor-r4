@@ -680,16 +680,18 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         if final_parent.integer.context_config() != config {
             return Err(bad("joint reply exported Context config changed"));
         }
-        let count = config.coefficient_count().map_err(|e| bad(e.to_string()))?;
+        let count = config
+            .coefficient_count()
+            .map_err(|e| bad(&e.to_string()))?;
         let before = fs::read(a.out.join("checkpoint-0000/native/consumer/context-q4.bin"))?;
         let after = fs::read(a.out.join(format!(
             "checkpoint-{:04}/native/consumer/context-q4.bin",
             a.updates
         )))?;
         let old_codes = uor_r4_integer::geometric_context_q4::unpack_coefficients(count, &before)
-            .map_err(|e| bad(e.to_string()))?;
+            .map_err(|e| bad(&e.to_string()))?;
         let new_codes = uor_r4_integer::geometric_context_q4::unpack_coefficients(count, &after)
-            .map_err(|e| bad(e.to_string()))?;
+            .map_err(|e| bad(&e.to_string()))?;
         Some(json!({"coefficient_count":count,
             "changed_codes":old_codes.iter().zip(&new_codes).filter(|(x,y)|x!=y).count(),
             "initial_packed_sha256":sha256_bytes(&before),"final_packed_sha256":sha256_bytes(&after),
