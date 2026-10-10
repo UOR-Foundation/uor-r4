@@ -23,6 +23,7 @@ type Result<T> = std::result::Result<T, LegalError>;
 #[serde(deny_unknown_fields)]
 pub(super) struct Receipt {
     pub backend: String,
+    pub encoding: String,
     pub node_limit: u64,
     pub time_limit: Option<u64>,
     pub termination: String,
@@ -34,7 +35,7 @@ pub(super) struct Receipt {
     pub constraints: usize,
     pub backend_objective: Option<f64>,
     pub objective_constant: f64,
-    pub raw_assignment: Option<Vec<[f64; 3]>>,
+    pub raw_displacement_assignment: Option<Vec<[f64; 3]>>,
     pub destination_master_bits: Option<Vec<u32>>,
     pub actual_delta: Option<Vec<f64>>,
     pub construction_residuals: Option<Vec<f64>>,
@@ -74,13 +75,19 @@ fn destination(m: f32, q: i8) -> f32 {
     }
 }
 fn integer(x: f64) -> Result<i8> {
-    if !x.is_finite() || (x - x.round()).abs() > INTEGER_TOL || !(-7. ..=7.).contains(&x.round()) {
+    if !x.is_finite() || (x - x.round()).abs() > INTEGER_TOL || !(-14. ..=14.).contains(&x.round())
+    {
         return Err(LegalError::NumericDecode);
     }
     Ok(x.round() as i8)
 }
 fn decode(m: f32, raw: [f64; 3]) -> Result<f32> {
-    let q = integer(raw[0])?;
+    let k = integer(raw[0])?;
+    let q = i16::from(k) + i16::from(code(m));
+    if !(-7..=7).contains(&q) {
+        return Err(LegalError::NumericDecode);
+    }
+    let q = q as i8;
     let l = integer(raw[1])?;
     let r = integer(raw[2])?;
     let q0 = code(m);
@@ -120,23 +127,21 @@ fn validate(m: &[f32], g: &[f32], rows: &[Vec<f64>]) -> Result<()> {
 }
 #[derive(Clone, Copy)]
 struct Vars {
-    q: Variable,
+    k: Variable,
     side: Option<(Variable, Variable)>,
 }
-fn expr(vars: &[Vars], m: &[f32], coeff: &[f64]) -> (LinearExpr, f64) {
+fn expr(vars: &[Vars], m: &[f32], coeff: &[f64]) -> LinearExpr {
     let mut e = LinearExpr::empty();
-    let mut rhs = 0.;
     for ((v, m), c) in vars.iter().zip(m).zip(coeff) {
         let q0 = f64::from(code(*m));
-        e.add(v.q, *c * 0.25);
-        rhs += c * q0 * 0.25;
+        e.add(v.k, *c * 0.25);
         if let Some((l, r)) = v.side {
             let f = q0 * 0.25 - f64::from(*m);
             e.add(l, c * f);
             e.add(r, c * f);
         }
     }
-    (e, rhs)
+    e
 }
 /// One call, no resumes. Root excluded from node limit; no wall-clock limit.
 pub(super) fn run(m: &[f32], g: &[f32], rows: &[Vec<f64>]) -> Result<Receipt> {
@@ -149,8 +154,8 @@ fn run_with_limit(m: &[f32], g: &[f32], rows: &[Vec<f64>], limit: u64) -> Result
     let mut warm = Vec::new();
     for (&m, &g) in m.iter().zip(g) {
         let q0 = code(m);
-        let q = p.add_integer_var(f64::from(g) * 0.25, (-7, 7));
-        warm.push((q, f64::from(q0)));
+        let k = p.add_integer_var(f64::from(g) * 0.25, (-7 - i32::from(q0), 7 - i32::from(q0)));
+        warm.push((k, 0.));
         let side = if canonical(m) {
             None
         } else {
@@ -160,37 +165,27 @@ fn run_with_limit(m: &[f32], g: &[f32], rows: &[Vec<f64>], limit: u64) -> Result
             warm.extend([(l, 0.), (r, 0.)]);
             p.add_constraint([(l, 1.), (r, 1.)], ComparisonOp::Le, 1.);
             p.add_constraint(
-                [(q, 1.), (r, -1.), (l, f64::from(q0) + 7.)],
+                [(k, 1.), (r, -1.), (l, f64::from(q0) + 7.)],
                 ComparisonOp::Ge,
-                f64::from(q0),
+                0.,
             );
             p.add_constraint(
-                [(q, 1.), (l, 1.), (r, f64::from(q0) - 7.)],
+                [(k, 1.), (l, 1.), (r, f64::from(q0) - 7.)],
                 ComparisonOp::Le,
-                f64::from(q0),
+                0.,
             );
             Some((l, r))
         };
-        vars.push(Vars { q, side });
+        vars.push(Vars { k, side });
     }
     for row in rows {
-        let (e, rhs) = expr(&vars, m, row);
-        if !rhs.is_finite() {
-            return Err(LegalError::Overflow);
-        }
-        p.add_constraint(e, ComparisonOp::Ge, rhs);
+        p.add_constraint(expr(&vars, m, row), ComparisonOp::Ge, 0.);
     }
     let fractional = vars.iter().filter(|v| v.side.is_some()).count();
-    let constant = -m
-        .iter()
-        .zip(g)
-        .map(|(m, g)| f64::from(code(*m)) * 0.25 * f64::from(*g))
-        .sum::<f64>();
-    if !constant.is_finite() {
-        return Err(LegalError::Overflow);
-    }
+    let constant = 0.;
     let mut receipt = Receipt {
         backend: "microlp=0.6.0".into(),
+        encoding: "centered_integer_displacement_k=q-q0/1".into(),
         node_limit: limit,
         time_limit: None,
         termination: String::new(),
@@ -202,7 +197,7 @@ fn run_with_limit(m: &[f32], g: &[f32], rows: &[Vec<f64>], limit: u64) -> Result
         constraints: rows.len() + 3 * fractional,
         backend_objective: None,
         objective_constant: constant,
-        raw_assignment: None,
+        raw_displacement_assignment: None,
         destination_master_bits: None,
         actual_delta: None,
         construction_residuals: None,
@@ -246,13 +241,13 @@ fn run_with_limit(m: &[f32], g: &[f32], rows: &[Vec<f64>], limit: u64) -> Result
                 .side
                 .map(|(l, r)| (solution.var_value_raw(l), solution.var_value_raw(r)))
                 .unwrap_or((0., 0.));
-            [solution.var_value_raw(v.q), l, r]
+            [solution.var_value_raw(v.k), l, r]
         })
         .collect::<Vec<_>>();
     match populate(&mut receipt, m, g, rows, raw.clone()) {
         Ok(()) => {}
         Err(LegalError::NumericDecode) => {
-            receipt.raw_assignment = Some(raw);
+            receipt.raw_displacement_assignment = Some(raw);
             receipt.status = "INTEGER_DECODE_REJECTED".into();
         }
         Err(e) => return Err(e),
@@ -297,7 +292,7 @@ fn populate(
         "DESCENDING_INCUMBENT"
     }
     .into();
-    receipt.raw_assignment = Some(raw);
+    receipt.raw_displacement_assignment = Some(raw);
     receipt.destination_master_bits = Some(destination.iter().map(|x| x.to_bits()).collect());
     receipt.actual_delta = Some(delta);
     receipt.construction_residuals = Some(residual);
@@ -318,6 +313,7 @@ pub(super) fn authenticate(
     validate(m, g, rows)?;
     let fractional = m.iter().filter(|m| !canonical(**m)).count();
     if receipt.backend != "microlp=0.6.0"
+        || receipt.encoding != "centered_integer_displacement_k=q-q0/1"
         || receipt.node_limit != NODE_LIMIT
         || receipt.time_limit.is_some()
         || receipt.nodes_solved.is_some_and(|n| n > NODE_LIMIT)
@@ -327,16 +323,12 @@ pub(super) fn authenticate(
     {
         return Err(LegalError::Shape);
     }
-    let constant = -m
-        .iter()
-        .zip(g)
-        .map(|(m, g)| f64::from(code(*m)) * 0.25 * f64::from(*g))
-        .sum::<f64>();
+    let constant = 0.;
     if receipt.objective_constant != constant {
         return Err(LegalError::NumericDecode);
     }
     let mut expected = receipt.clone();
-    if let Some(raw) = &receipt.raw_assignment {
+    if let Some(raw) = &receipt.raw_displacement_assignment {
         if receipt.nodes_solved.is_none() || receipt.lp_iterations.is_none() {
             return Err(LegalError::NumericDecode);
         }
@@ -392,7 +384,7 @@ mod tests {
             for q in -7..=7 {
                 for l in 0..=1 {
                     for r in 0..=1 {
-                        if let Ok(v) = decode(m, [q as f64, l as f64, r as f64]) {
+                        if let Ok(v) = decode(m, [(q - code(m)) as f64, l as f64, r as f64]) {
                             bits.insert(v.to_bits());
                         }
                     }
@@ -402,8 +394,66 @@ mod tests {
                 .map(|q| destination(m, q).to_bits())
                 .collect::<std::collections::BTreeSet<_>>();
             assert_eq!(bits, expected);
-            assert_eq!(decode(m, [code(m) as f64, 0., 0.])?.to_bits(), m.to_bits());
+            assert_eq!(decode(m, [0., 0., 0.])?.to_bits(), m.to_bits());
         }
+        Ok(())
+    }
+    #[test]
+    fn centered_domain_matches_absolute_constraints_for_every_code_and_side() -> Result<()> {
+        for m in [-1.75, -1.7, -1.6, -0.01, -0.0, 0.0, 0.13, 1.6, 1.7, 1.75] {
+            let q0 = i16::from(code(m));
+            for q in -7i16..=7 {
+                for l in 0i16..=1 {
+                    for r in 0i16..=1 {
+                        let absolute_legal = if canonical(m) {
+                            l == 0 && r == 0
+                        } else {
+                            l + r <= 1 && q >= q0 + r - (q0 + 7) * l && q <= q0 - l + (7 - q0) * r
+                        };
+                        let decoded = decode(m, [f64::from(q - q0), f64::from(l), f64::from(r)]);
+                        assert_eq!(decoded.is_ok(), absolute_legal);
+                        if absolute_legal {
+                            assert_eq!(decoded?.to_bits(), destination(m, q as i8).to_bits());
+                        }
+                    }
+                }
+            }
+            assert!(decode(m, [f64::from(-8 - q0), 1., 0.]).is_err());
+            assert!(decode(m, [f64::from(8 - q0), 0., 1.]).is_err());
+        }
+        Ok(())
+    }
+    #[test]
+    fn translated_guard_and_objective_expressions_preserve_legal_deltas() -> Result<()> {
+        let masters = [-1.7f32, -0.0, 0.13, 1.75];
+        let coeff = [0.6f64, -0.2, 0.3, -0.7];
+        for q in -7i8..=7 {
+            let mut absolute_lhs = 0.;
+            let mut absolute_rhs = 0.;
+            let mut centered_lhs = 0.;
+            let mut actual = 0.;
+            for (&m, &c) in masters.iter().zip(&coeff) {
+                let q0 = code(m);
+                let moved = q != q0;
+                let side = if canonical(m) || !moved { 0. } else { 1. };
+                let correction = f64::from(q0) * 0.25 - f64::from(m);
+                absolute_lhs += c * (f64::from(q) * 0.25 + side * correction);
+                absolute_rhs += c * f64::from(q0) * 0.25;
+                centered_lhs += c * (f64::from(q - q0) * 0.25 + side * correction);
+                actual += c * (f64::from(destination(m, q)) - f64::from(m));
+            }
+            assert!((absolute_lhs - absolute_rhs - centered_lhs).abs() < 1e-14);
+            assert!((centered_lhs - actual).abs() < 1e-14);
+        }
+        // Noop is now a literal all-zero expression, including fractional masters.
+        assert_eq!(masters.iter().map(|m| 0. * f64::from(*m)).sum::<f64>(), 0.);
+        let receipt = run(&masters, &[0.; 4], &[])?;
+        assert_eq!(receipt.objective_constant, 0.);
+        assert_eq!(receipt.encoding, "centered_integer_displacement_k=q-q0/1");
+        authenticate(&masters, &[0.; 4], &[], &receipt)?;
+        let mut mislabeled = receipt;
+        mislabeled.encoding = "absolute_q/1".into();
+        assert!(authenticate(&masters, &[0.; 4], &[], &mislabeled).is_err());
         Ok(())
     }
     #[test]
@@ -434,7 +484,7 @@ mod tests {
     }
     #[test]
     fn invalid_decode_and_nonfinite_rejected() {
-        assert_eq!(decode(0.13, [1., 1., 0.]), Err(LegalError::NumericDecode));
+        assert_eq!(decode(0.13, [0., 1., 0.]), Err(LegalError::NumericDecode));
         assert_eq!(decode(0.13, [0.5, 0., 0.]), Err(LegalError::NumericDecode));
         assert_eq!(run(&[0.], &[f32::NAN], &[]), Err(LegalError::NonFinite));
     }

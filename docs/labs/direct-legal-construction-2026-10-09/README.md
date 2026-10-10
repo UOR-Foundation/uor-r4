@@ -10,7 +10,7 @@ This changes proposal formation, not gradients, Source authority, memory access,
 serving operators, native acceptance or model capacity.
 
 [Prospective M2 claim](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6092186833).
-**Implementation and execution pending. No model result or promotion.** Accepted
+**Initial execution encountered a backend numerical failure; a representation-only repair is pending. No model result or promotion.** Accepted
 Source48/Generate64 remains 8/512 complete development replies; separate conditional
 9/15 is not this original 5/15 epoch and cannot be combined with it.
 
@@ -69,6 +69,48 @@ Source eligibility, parameters outside Prefix/Generate unary, or canonical data.
 - No descending offer is unresolved bounded search under the zero-margin target,
   not a global infeasibility result or permission to enlarge the bound afterward.
 - Numerical/setup failures remain execution evidence, not model-quality negatives.
+
+## Initial execution and representation repair
+
+Frozen source `dd69a64965ce4563f7967309b377a065d666bb71` compiled and passed
+51 focused coupled tests. The first actual attempt completed the enclosing
+transaction in 145.492 seconds with peak child RSS 1,663,795,200 bytes, but the
+solver returned `InternalError("Singular matrix")`. It returned no assignment,
+proposal or node/iteration statistics. No proposed update was scored or committed.
+The unchanged artifact independently reloaded with the same 5/15 conditional
+winners, 17/17 references and all 380 protected winners; its full objective record
+exactly equals the initial record. Zero new backward or training-graph calls.
+Actual-nine, full512 and fresh qualification were not run.
+
+This is **UNAVAILABLE model-quality evidence**, not a negative candidate,
+infeasibility result or optimal noop. The outer `COMPLETED`/exit0 records completed
+export/reload, not successful solver execution. The original qualification helper's
+`NOT_RUN_CONSTRUCTION_NEGATIVE` is its generic skipped-gate label; the more specific
+reason is backend execution failure. The helper now records that distinction.
+See [attempt1-result.json](attempt1-result.json) and [source-review.json](source-review.json).
+The complete failed attempt and executable are preserved separately before retry.
+
+Read-only source and saved-row reviews found no zero or exactly duplicated guard
+row. Microlp's singular error can arise from a numerically unusable selected basis;
+the exact pivot and phase are unavailable in this receipt. Absolute-code equations
+also represent the original noop through cancellation against translated right-hand
+sides. This motivates one mathematically equivalent repair, without claiming the
+cancellation caused the observed error: center integer variables at `k=q-q0`.
+
+```text
+-7-q0 <= k <= 7-q0
+l+r <= 1
+k >= r-(q0+7)l
+k <= -l+(7-q0)r
+delta = k/4+(l+r)(q0/4-m)
+```
+
+The guard right-hand sides and noop variables are then exactly zero, and the
+objective has no original-code constant. Every original legal destination and
+constraint remains available. No small coefficient, guard, fractional noop,
+node bound, backend threshold or admission tolerance is changed. One fresh attempt
+after reviewed equivalent-domain checks will test backend execution, not repeat a
+completed learning result. The initial failure remains in the record.
 
 ## Checks and resources
 

@@ -25,9 +25,9 @@ pub(super) fn discrete_policy() -> Value {
 }
 pub(super) fn legal_policy() -> Value {
     json!({"backend":"microlp=0.6.0","branch_node_limit":4096,"root_counts_as_node":false,"time_limit":null,"warm_start":"original noop; advisory backend hint",
-        "coordinates":1920,"legal":"compact q integer[-7,7]; fractional original noop bits or14 canonical changed quarter codes; signedzero preserved",
-        "fractional_encoding":"l,r binary; l+r<=1; q>=q0+r-(q0+7)l; q<=q0-l+(7-q0)r; delta=(q-q0)/4+(l+r)(q0/4-m)",
-        "canonical_encoding":"q integer[-7,7], no side binaries; original bits retained at unchanged code",
+        "coordinates":1920,"legal":"centered k=q-q0 integer[-7-q0,7-q0]; fractional original noop bits or14 canonical changed quarter codes; signedzero preserved",
+        "fractional_encoding":"l,r binary; l+r<=1; k>=r-(q0+7)l; k<=-l+(7-q0)r; delta=k/4+(l+r)(q0/4-m)",
+        "canonical_encoding":"k=q-q0 integer[-7-q0,7-q0], no side binaries; original bits retained at unchanged code",
         "integer_decode":"raw backend values within1e-6 of a unique integer; reject illegal side/code combination; exact f32 destination bits then independent screens","objective":"minimize original gdotactualdelta","construction_target":"all380 original unitJdelta>=0; prospectively stricter than norm-tolerant admission",
         "screen":"recompute actual legal-bit delta, all380 unitJdelta>=-1e-10*deltaL2 and strict gdotdelta<0",
         "maximum_alternatives":1,"no_follow_on_coordinate_pass":true,"backend_status":"observational bounded floating search, not a mathematical optimality/infeasibility certificate"})
@@ -46,7 +46,7 @@ fn discrete_mode(mode: PrefixTransaction) -> bool {
 }
 fn schema(mode: PrefixTransaction) -> &'static str {
     if mode == PrefixTransaction::ProtectedLegalSet {
-        "uor-r4.protected-legal-set/1"
+        "uor-r4.protected-legal-set-centered/1"
     } else if discrete_mode(mode) {
         "uor-r4.protected-discrete-feedback/1"
     } else {

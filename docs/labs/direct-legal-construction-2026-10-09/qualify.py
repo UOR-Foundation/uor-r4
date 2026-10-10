@@ -15,7 +15,9 @@ c=read(C);root=Path(c['out']);subprocess.run([str(V),'verify-report',str(root)],
 r=read(root/'report.json');assert r['status']=='COMPLETED'
 assert r['new_backward_calls']==0 and r['new_training_graph_forwards']==0 and r['all_original380_preserved']
 assert r['finite_episode_positive']==r['final_gate']['passed']
-decision=dict(candidate_report_sha256=sha(root/'report.json'),candidate_manifest_sha256=sha(root/'manifest.json'),binary_sha256=sha(B),config_sha256=sha(C),actual9='NOT_RUN_CONSTRUCTION_NEGATIVE',full512='NOT_RUN',fresh='NOT_RUN',multi_turn='NOT_RUN')
+solver=read(root/'coupled-construction.json')['projection']['legal_solver']
+not_run='NOT_RUN_BACKEND_EXECUTION_FAILURE' if solver['status']=='BACKEND_NUMERIC_OR_NO_INCUMBENT' else 'NOT_RUN_CONSTRUCTION_NEGATIVE'
+decision=dict(candidate_report_sha256=sha(root/'report.json'),candidate_manifest_sha256=sha(root/'manifest.json'),binary_sha256=sha(B),config_sha256=sha(C),actual9=not_run,full512='NOT_RUN',fresh='NOT_RUN',multi_turn='NOT_RUN')
 if r['finite_episode_positive']:
  assert all(r['final_gate'][k] for k in ['strict_combined_descent','strict_episode_descent','all15_conditional_winners','all17_references','all380_original_winners','passed'])
  cp=root/'checkpoint-0001';actual=copy.deepcopy(c);learning=actual.pop('coupled_episode_learning')
