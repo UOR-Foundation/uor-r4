@@ -22,7 +22,8 @@ diagnostics**, reserving new qualification for later. Neither improvement on
 this panel nor this result alone can meet M2's fresh qualification requirement.
 
 - [Preregistration v2](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100142868)
-- [Independent TEST FITNESS admission](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100164233)
+- [Codex numerical/model fitness reviews](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100164233)
+- [External finalized-v2 TEST FITNESS: FIT](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6101790487)
 - [Owner panel decision recorded](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100130871)
 - [Parent master and diagnostic-phase clarification](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100331116)
 - [Singular-basis admission clarification](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6100396303)
@@ -42,7 +43,9 @@ then weights episodes equally. Forced-donor utility is recomputed from the
 current native model and local state. This is local straight-through credit;
 it does not claim an unsupported state adjoint.
 
-Seeds 1001 and 2001 each run two epochs per arm. Each seed and epoch selects
+Seeds 1001 and 2001 each run two epochs per arm. They start from the same
+saved437 initialization and vary guard sampling; their spread measures
+guard-sampling variance. Each seed and epoch selects
 380 distinct positions from the original parent's successful own-prefix
 trajectories: 96 entry, 96 EOS and 188 interior. The legal arm uses the centered
 15-destination Q4 encoding and 4,096 branch nodes per epoch. The control uses
@@ -82,7 +85,10 @@ failure closes the mechanism without the owner.
 Numerical source, qualification fixtures and retained-problem replay are
 recorded in [numerical-tests](numerical-tests/README.md). Exact integrated
 producer, artifact/config identities, training outcomes, costs and delivery
-verification will be added after execution. Until then, model training,
+verification will be added after execution. The external v2 fitness review
+approved the design, conditional on successful numerical producer qualification
+and saved-problem replay with unchanged EPS, objective and constraints.
+Until those gates pass, model training,
 current-parent proposal scoring and opened-128 diagnostics are **NOT_RUN**.
 
 The admitted projection is six hours for the whole cycle, including preparation,
