@@ -29,7 +29,7 @@ default-members = [
     "crates/uor-r4-proof-model",
     "crates/uor-r4-graph-runtime",
 ]
-exclude = ["uor_standards", "crates/uor-r4-graph-format/fuzz", "research", "third_party/arrayref", "third_party/candle-core-0.9.2"]
+exclude = ["uor_standards", "crates/uor-r4-graph-format/fuzz", "research", "third_party/arrayref", "third_party/candle-core-0.9.2", "crates/uor-r4-training/vendor/microlp", "docs/labs/d22-constructor-2026-10-10/numerical-tests"]
 resolver = "2"
 
 [package]
