@@ -103,10 +103,18 @@ impl BitCode {
         let len = usize::from(self.len.min(other.len));
         let mut total = 0;
         for w in 0..WORDS {
-            total += popcount_swar((self.words[w] ^ other.words[w]) & lane_mask(len, w));
+            total += word_distance(self.words[w], other.words[w], lane_mask(len, w));
         }
         total
     }
+}
+
+/// The lanes under `mask` where `a` and `b` differ. Not inlined: inlined, the
+/// four-word loop of [`BitCode::distance`] is SLP-vectorized into NEON
+/// registers on arm64 (`fmov`), outside the D11 serving instruction set.
+#[inline(never)]
+fn word_distance(a: u64, b: u64, mask: u64) -> u32 {
+    popcount_swar((a ^ b) & mask)
 }
 
 /// The bits of word `w` that hold lanes below `len`.

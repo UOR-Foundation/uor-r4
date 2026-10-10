@@ -1715,7 +1715,7 @@ fn read_schema_plain_and_pointer_artifacts_parse_as_before() {
 }
 
 #[test]
-fn read_schema_rank_reads_parse_under_schema_3_and_binary_is_not_served_yet() {
+fn read_schema_rank_and_binary_reads_parse_and_are_served_under_schema_3() {
     for binary in [false, true] {
         for pointer in [false, true] {
             let bytes = read_schema_artifact(super::STACK_READ_SCHEMA, |shape| {
@@ -1735,17 +1735,14 @@ fn read_schema_rank_reads_parse_under_schema_3_and_binary_is_not_served_yet() {
                 super::stack_schema_for(&container.shape),
                 super::STACK_READ_SCHEMA
             );
-            // The rank read is served; the binary read is not yet.
-            // The fixture has no pointer sections, so a served rank read with
-            // a pointer head passes the read check and stops at them.
-            match (binary, pointer, IntegerStackModel::parse(&bytes)) {
-                (false, false, Ok(_)) => {}
-                (false, true, Err(other)) if other.to_string().contains("pointer_query") => {}
-                (true, _, Err(StackError::Shape(reason))) => {
-                    assert_eq!(reason, "binary reads are not served yet")
-                }
-                (_, _, Err(other)) => panic!("refused for another reason: {other}"),
-                (_, _, Ok(_)) => panic!("served a binary read or a missing pointer"),
+            // The rank and binary reads are served. The fixture has no
+            // pointer sections, so a served read with a pointer head passes
+            // the read check and stops at them.
+            match (pointer, IntegerStackModel::parse(&bytes)) {
+                (false, Ok(_)) => {}
+                (true, Err(other)) if other.to_string().contains("pointer_query") => {}
+                (_, Err(other)) => panic!("refused for another reason: {other}"),
+                (true, Ok(_)) => panic!("served a missing pointer"),
             }
         }
     }
@@ -1934,4 +1931,114 @@ fn read_rank_window_covering_every_position_still_reads_by_rank() {
     // Window 8 covers the whole context of 6: every position is kept, and the
     // weights are still the rank table, not the softmax.
     assert_eq!(check_served_rank_read(8, 8), 0);
+}
+
+/// A binary (Hamming-rank) read of `window` and `k` over a `read` score kind.
+fn binary_read(read: &'static str, window: usize, k: usize) -> IntegerStackModel {
+    let bytes = with_header(
+        &read_schema_artifact(super::STACK_READ_SCHEMA, |shape| {
+            shape["read_select"] = json!({"window": window, "k": k});
+            shape["read_weights"] = json!("rank");
+            shape["read_binary"] = json!(true);
+        }),
+        |header| header["shape"]["read"] = json!(read),
+    );
+    IntegerStackModel::parse(&bytes).expect("a binary read is served")
+}
+
+#[test]
+fn read_binary_table_is_the_dense_score_of_plus_minus_one_vectors() {
+    let one = 1i32 << 16;
+    let hd = WIDTH / HEADS;
+    for read in ["l2", "dot", "lorentz"] {
+        let model = binary_read(read, 8, 8);
+        for head in 0..HEADS {
+            let table = model.binary_table(head).expect("a binary table");
+            assert_eq!(table.len(), hd + 1);
+            // A sign pattern unlike the table's first-h construction: the
+            // query has mixed signs, and the key differs in h strided lanes.
+            let query: Vec<i32> = (0..hd)
+                .map(|i| if i % 3 == 0 { -one } else { one })
+                .collect();
+            for h in [0usize, 1, 2, 5, 9, hd - 1, hd] {
+                let mut key = query.clone();
+                for lane in (0..hd).map(|i| (i * 5 + 3) % hd).take(h) {
+                    key[lane] = -key[lane];
+                }
+                let dense = model.dense_score(head, &query, &key).expect("a score");
+                assert_eq!(table[h], dense, "{read} head {head} h {h}");
+            }
+            // More differing signs never score higher.
+            assert!(
+                table.windows(2).all(|w| w[0] >= w[1]) && table[0] > table[hd],
+                "{read} head {head}: {table:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn read_binary_artifact_steps_by_the_table_and_a_key_sign_flip_changes_the_logits() {
+    for read in ["l2", "dot"] {
+        let model = binary_read(read, 8, 8);
+        let mut session = model.session();
+        let ids = [3u32, 39, 0, 17, 8];
+        for (position, &id) in ids.iter().enumerate() {
+            session.step(id).expect("a binary read steps");
+            for head in 0..HEADS {
+                let (table, ages) = (
+                    model.binary_table(head).expect("table"),
+                    model.read_ages(head).expect("ages"),
+                );
+                let (scores, _) = session.last_read(head);
+                for (j, &score) in scores.iter().enumerate() {
+                    // Every served score is a table entry plus its age.
+                    let bare = score - i64::from(ages[position - j]);
+                    assert!(
+                        table.contains(&bare),
+                        "{read} head {head} position {j}: {bare} is not in {table:?}"
+                    );
+                }
+            }
+        }
+        // Flip the signs of position 1's key in every read layer, restore
+        // (the sign codes follow from the keys), and step once more.
+        let saved = session.save_state();
+        let mut flipped = saved.clone();
+        for layer in &mut flipped.layers {
+            if let super::SerializedStackLayerState::Read { keys, .. } = layer {
+                for key in &mut keys[WIDTH..2 * WIDTH] {
+                    *key = !*key;
+                }
+            }
+        }
+        let next = |state: &super::SerializedStackSession| {
+            let mut session = model.session();
+            session.restore_state(state).expect("restore");
+            session.step(5).expect("step").to_vec()
+        };
+        assert_eq!(next(&saved), session.step(5).expect("step").to_vec());
+        assert_ne!(
+            next(&saved),
+            next(&flipped),
+            "{read}: a key's signs do not read"
+        );
+    }
+}
+
+#[test]
+fn read_binary_head_weights_are_zero_off_the_flock_support() {
+    let model = binary_read("l2", 2, 1);
+    let mut session = model.session();
+    let mut unkept = 0usize;
+    for (position, id) in (0..CONTEXT as u32).map(|i| (i as usize, (i * 7 + 3) % VOCAB as u32)) {
+        session.step(id).expect("step");
+        for head in 0..HEADS {
+            let (scores, weights) = session.last_read(head);
+            assert_eq!(scores.len(), position + 1);
+            check_rank_read(scores, weights, 2, 1);
+            unkept += weights.iter().filter(|&&w| w == 0).count();
+        }
+    }
+    assert!(unkept > 0, "window 2 and k 1 keep every position");
 }
