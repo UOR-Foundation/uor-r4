@@ -73,5 +73,15 @@ retaining prior cumulative1467760243ms. Full elapsed session starts04:40UTC.
 Exact source review at30c7d018825dcd4b3f2d2e7791af66ab4c192635 passed with no
 blocking finding. It covers strict schedule/ID admission, legacy64 preservation,
 active-only clipping/frozen families, saved native reload and full512 scoring
-before the subset decision. Executed validation and model outcomes follow in
-this record after completion; source review alone is not a model result.
+before the subset decision. Optimized CUDA build passed in232.170s (peak3,576,160KiB); all6 focused tests
+passed with0ignored in25.234s command time. Bootstrap separately took200s
+(build132s,parity52s:37pass/3ignored). Producer executable SHA256
+`71fe01d312bd37549c68a03d9d54d01bf063817fc5c8b67aebe4b06f88a27713`.
+Actual model outcome follows after execution; checks alone are not a result.
+
+A concurrent local storage decrease crossed the floor before model launch. Hash-verified
+redundant restored cloud components were removed, and Git sparse checkout omits only
+the tracked research/ tree from this owned worktree; full native source/current docs
+remain present and omitted tracked material remains on main. This routine reversible
+workspace adjustment restores the floor without touching another lab's material.
+The admission hygiene pass completed and preserved other labs' active folders.
