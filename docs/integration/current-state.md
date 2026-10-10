@@ -8,6 +8,39 @@ The owner-funded new line's decisive run, `flock:32:32 learned_rank`, 2 seeds, M
 REJECT. Widening the support 17 → 66 sources buys only 0.0013 BPB over the learned `flock:8:8`, so the remaining gap is the rank weighting or its training, not support size. Line "wide learned flock read" · count 1/3 · headline: softmax at runtime yes → yes. The configuration is closed; the mechanism is not (D22).
 
 **Next:** a rank-consistent training gradient for the rank read (the brief's first open question), pre-registered with a test-fitness review before compute.
+## 2026-10-10 — Addressed memory is built into the dialogue stack and the memory op's missing device support is the measured limit (deepseek, #2029, D22 orders 1–2)
+
+The [addressed-memory round](../labs/addressed-memory-2026-10-10/README.md) answers **D22 order 2**: exact addressed memory is this
+lab's own source work, not an owner block. `DialogueSettings` now carries the trainer's memory fields and
+`StackModel::add_memory_layers` gives named layers fresh product-key memories whose weights are exactly what a fresh construction
+with that configuration and seed would start with — so the mechanism is present **from the first step** of a fine-tune and the
+optimizer is built after it. Two preparation PRs landed: [#2168](https://github.com/UOR-Foundation/uor-r4/pull/2168) (the fields,
+the parity, the install order, 13 example tests plus a library test asserting the weight equality) and
+[#2170](https://github.com/UOR-Foundation/uor-r4/pull/2170) (the run's `seed=` reaches an added memory, found by running it: two
+seeds were bit-identical at step 0; it re-lands #2169, which I had opened against the preparation branch instead of `main`).
+
+**D22 order 1 is recorded in this cycle too: the 10 % recall dose (#2151) is the M1 base.** D10 — mixed 10.21 % recall share,
+2,000 steps — reads **memory 20/40** `check_pass` and **reply 37/232** `fluent_and_relevant` (43 → 37, paired p = 0.42, inside
+noise), and is adopted despite the one-row rejection under D21.
+
+**The measured limit, and it is in the tooling.** The product-key memory is a `CustomOp3` with only `cpu_fwd`:
+`device=cuda` refuses it outright (`no cuda implementation for geometric-stack-product-key-memory`), so a 29M memory-equipped
+stack fits on **CPU at 3.7 s/step best case and ~9–10 s/step with two arms on the pod's cores** — a five-hour job where the GPU
+would take minutes. The two-seed fit (memory at layer 4 of the `rrarrarrar` stack, 64 sub-keys, 16 top-k, 4 heads, seeds
+20261010/20261011, the adopted `mix-10` store, memory from step 0) is **running as this entry lands**, at 1,000 steps per seed
+instead of the pre-registered 2,000; its step-0 dev NLLs differ (2.230381 vs 2.229698), which is the check that the two seeds are
+two mechanisms. **No KEEP/REJECT is claimed for the memory configuration** — the arms are unscored, which under D22 §1 is not a
+negative about addressed memory — and the next piece is the fix: implement the memory op for the served device, validated by the
+parity test the added-memory construction already passes, so the mechanism can be trained in at GPU speed with the seeds D22
+requires.
+
+**Also in this delivery:** the README's **How it works** and **Results so far** sections now carry the product-key memory's status,
+its CPU-only limit, and the M1 line's three measured headline readings (v5 memory, open reply panel, criterion 2's served 1.20138
+BPB) — the D22 §6 requirement that none of the M1 results since 9 October had reached the README.
+
+**Next:** the device implementation of the product-key memory (pre-registered before any compute), then the two-seed memory fit at
+the pre-registered 2,000 steps, then the D22 orders 3 and 4 (the identity pointer keyed on a slot/entity address, and the powered
+read-binding test with ≥ 3 seeds or ≥ 200 fresh rows).
 
 ## 2026-10-10 — D22: a negative closes a configuration, never a mechanism; five closures reopened (claude, owner decision)
 
