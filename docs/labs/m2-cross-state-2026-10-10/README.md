@@ -163,3 +163,7 @@ and [preservation package](PACKAGE.json) and [verified iCloud receipt](preservat
 retain the evidence and restoration
 identities. Final exact-head checks and protected merge verification are posted
 on the result PR; final accounting/cleanup are posted on #2030.
+
+Restore through `cloud-store fetch codex-m2-cross-state-20261010 <absolute-owned-destination>`.
+The canonical package descriptor clarifies the original embedded restore prose;
+the verified archive bytes and component identities are unchanged.

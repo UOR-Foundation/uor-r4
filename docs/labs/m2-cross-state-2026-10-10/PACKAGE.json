@@ -30,9 +30,10 @@
       "sha256": "d519932a3669b73aa771ad2f527bba9ffc41a3aa3f7b92fd34f21d0eaae757a2"
     }
   },
-  "restore": "cloud-store fetch codex package destination; extract parent and run archives; remap recorded config and reader paths; producer source bundle requires published base ce08d10d8aa8063fb08576b3432a17e934bee294; native payloads are saved with checkpoint64; source and runtime permit reproduction, not a cross-backend bitwise-training claim",
+  "restore": "cloud-store fetch codex-m2-cross-state-20261010 <absolute-owned-destination>; extract parent and run archives; remap recorded config and reader paths; producer source bundle requires published base ce08d10d8aa8063fb08576b3432a17e934bee294; native payloads are saved with checkpoint64; source and runtime permit reproduction, not a cross-backend bitwise-training claim",
   "source_commit": "920e4201770e282975eb0340c83f3fa296ca08e7",
   "destination": "icloud:UOR-R4/results/codex/codex-m2-cross-state-20261010.tar",
   "prior_u64_archive_sha256": "08dca6fea4e8c5185b3159579a1b7e46d0ecf7484e70f0d5a45a63b667dbc52d",
-  "delivery_closeout": "Final exact-head checks, merge, cleanup and full cumulative accounting are a separate closeout package/comment."
+  "delivery_closeout": "Final exact-head checks, merge, cleanup and full cumulative accounting are a separate closeout package/comment.",
+  "metadata_note": "This canonical record clarifies the restore command in the original embedded package prose. Verified archive bytes and component identities are unchanged."
 }
