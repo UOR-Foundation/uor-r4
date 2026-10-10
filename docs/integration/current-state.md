@@ -1,3 +1,129 @@
+## 2026-10-09 — VSA mode 2 is worse than fixed codes: not KEEP (claude, #2029)
+
+Pre-registered on #2029 and run on the owner's laptop CPU, at main `c7fce45b1`. Mode 2 binds root codes with a per-token readout residual. Its held-out BPB is 1.8629 / 1.8491 and 1.8707 / 1.8566 (seeds × slices A / B), against 1.8366 / 1.8214 and 1.8582 / 1.8427 for fixed codes rerun on the same machine; those reruns match the pod run to every digit. Its own VSA ablation Δ is −0.002 to −0.005 (CIs below 0). Fixed codes stay the default. Record: [vsa-native-test-2026-10-09](../labs/vsa-native-test-2026-10-09/README.md) Result 2. About 50 min of laptop CPU, no pod.
+## 2026-10-09 — The v5 declared acceptance run EXECUTED and MISSES: 10 of 40 against a declared >= 34 (deepseek, #2029)
+
+The run the v5 freeze declared and deliberately did not take. Record:
+[v5-declared-acceptance-2026-10-09](../labs/v5-declared-acceptance-2026-10-09/README.md). **CPU only on
+the laptop, no pod, $0** (generation 2m04s, grading 9m46s).
+
+**RESULT: `check_pass` 10 of 40 in `multi_turn_memory` against the frozen target of >= 34. IT MISSES,
+by 24 rows.** Unknowable 1 of 24; whole panel 11 of 64 `check_pass`, 4 of 64 `acceptable`, unparsed 0.
+No adjustment, no re-draw, no second sample.
+
+**Identities all matching the frozen values, so the run is NOT void:** binary
+`62aa67b76764cd48170d0e90ff168a176b471e5d3f4a84c0748e399659e83984`, **grader digest
+`845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e` (the frozen judge)**, artifact
+`model.safetensors` `d8a3c971…`, tokenizer `d36d3e87…`, protocol 2, cap 64, context 384, `check_panel`
+**pass**, **64 of 64 rows checked**, worst case `conv-v5-mem-031` **358 of 384**.
+
+**Controls all as frozen — with ONE control finding that outranks the headline: the v5 binding-swap
+control was VACUOUS from the freeze until now.** `EMBEDDED_SWAPS` held only the v3 and v4 swaps files;
+`conversational-v5-swaps.tsv` was committed on main (`8917b3b6…`) but never added, so `swap_replies()`
+had no `conv-v5-*` id and the control reported **`checked_rows: 0`** while the v5 record claimed
+`binding_swap 0/40` — **a false statement of verification sitting on main.** Fixed in this delivery: a
+third array entry, a v5 test asserting 40 checked rows (the v4 assertion at 40 is exactly why no test
+caught it), and **the v5 record corrected in place** rather than quietly made true. After the fix the
+control reports **0 pass / 40 checked**, binary `a08c38e0a5f5e2cd…`, **19 passed, 0 failed**. The
+acceptance run stands and was not re-run: the swap control is check-only and does not touch `check_pass`.
+Every other control was as frozen: `expected_value` 40/40, `copy_first/last` 20/40, `echo_last/history`
+0/40, memory constants 0/0/0, unknowable constants 24/0/0, adversarial abstentions 0, derangement 0.
+
+**The miss, broken down so someone else can decide what it means** (a 24-row shortfall is either the
+model or the target, and this run does not settle which): **failures cluster by mechanism.** `exact`
+with distractor keys and a WORD value **9/23 (39.1 %)**; with a NUMBER value **1/11 (9.1 %)**; with no
+distractor keys **0/6**. All six no-key rows fail; numeric values are four times harder. By failure mode
+over the 30 failures: **22 name neither the expected value nor the planted distractor**, **8 name the
+planted distractor** — the exact mode the key column exists to catch, so that column is doing real work
+— 0 empty, 0 other. **No row is unpassable: the `expected_value` control passes 40/40**, so the check is
+not the obstacle and the 10 of 40 is a model reading.
+
+**The declared command could not run as written.** `grade-replies` defaults `grader=` to
+`qwen2.5:1.5b`, which is not installed, so the first attempt 404'd in **0.063 s with no report root** —
+**a crash, not a sample.** The invocation was corrected (`grader=qwen2.5:7b`) and the run executed once;
+the v5 record's command is corrected, and this is the second documented command tonight that silently
+selected the wrong thing. **A crash was kept apart from a miss**, which is why re-running was
+legitimate: had the first attempt produced a report with a bad number, re-running would have been
+exactly what the pre-registration forbids.
+
+**CRITERION 1 IS NOT MET ON EITHER HALF, each for a stated and measured reason:** the memory half is
+measured and **missed** (10 of 40 against >= 34, on the one instrument in this line that cannot move
+between identical runs); the reply half cannot carry the criterion as instrumented (43/232, failures
+diffuse, the cap not the constraint, 62.1 % of rows with no judge-free answer, a deterministic
+sub-reading over 88 rows that scores 2). **The unknowable category is won by a constant** (24/24 and 14
+acceptable against the model's 1 and 0, McNemar p = 2.4e-07), so that half is not a model measurement.
+STATUS/ROADMAP/#2028 unchanged — checked, not assumed.
+
+**Next:** fix nothing else on this panel and **do not re-run it for a better sample** — it is
+development evidence now, exactly as v4 became. The measured target is explicit and unmet: **10 of 40
+memory rows at `check_pass`**, with the failing rows named in the sealed report, clustered on numeric
+values (1 of 11) and on the six no-key rows (0 of 6). That clustering is what the next piece should
+attack, and a fresh acceptance would need a fresh sealed panel.
+
+## 2026-10-09 — `clarify`: the first deterministic target whose correct behaviour is absent, scored 0 of 27 (deepseek, #2029)
+
+The piece the deterministic sub-reading's `Next:` named, measured before it was built. Record:
+[reply-panel-deterministic-checks-2026-10-09](../labs/reply-panel-deterministic-checks-2026-10-09/README.md).
+**CPU only, no pod, $0.**
+
+**THE MEASUREMENT, two readings on two denominators that agree.** Every panel reply flagged as asking
+a question (the Lead's reading from `verdicts-29m.tsv`, only **two** of which are ill-posed): a bare
+generic question, three that **invent** a specific ("What type of boat are you interested in?"), one
+that parrots the request back (`heldout-119` — so **the flag over-counts clarify behaviour and cannot
+be the basis of a kind**), and `heldout-189` which **is** `Hello! How can I help you today?`. The 8
+**ill-posed** rows whose reply asks (this piece's reading): **five are the canned greeting verbatim**
+(`heldout-006/009/019/102/131`), the rest are `heldout-107` ("What specific area of information do you
+need?"), `heldout-118` and `heldout-189`. **Zero of the eight name the missing material — and zero of
+the 67 ill-posed rows demonstrate the behaviour at all.**
+
+**THE TRAP IS NOW LIVE, NOT HYPOTHETICAL:** `heldout-189` is the canned greeting sitting on an
+ill-posed row and flagged as asking a question, so a `question`-kind check would pass the
+most-memorised string in the panel exactly where it must fail.
+
+**WHAT THE 27 FABRICATED-SPECIFIC REPLIES DO** (the failure mode the model actually exhibits): 15
+invent a capitalised name the request never gave (`heldout-105` invents "the capital of China" for a
+passage that was never supplied), 4 invent a value for a `[placeholder]`, 4 echo the placeholder
+verbatim, 4 invent a number. So "asked for the missing thing" vs "invented a specific" is a real,
+deterministic distinction — and `abstain_exact`'s built-in `fabricated_specifics` rule already
+catches the negative half.
+
+**WHAT WAS BUILT: `CheckKind::Clarify`**, same six sites as `reply_exact`. It passes only when the
+reply **asks a question AND contains a row-specific phrase naming the missing material** ("which
+city", "which text", "which words") and contains no forbidden term or key. **27 of the 67 ill-posed
+rows got a key** — the rows whose missing material has a name; the other 40 keep **`abstain_exact`,
+not replaced**, because a bare salutation or constraint-only stub has nothing to name and inventing a
+phrase key for them would be loosening the key. The focused test caught a real defect (a clarify term
+that is also forbidden made the check unsatisfiable) and the parser now refuses it.
+
+**THE CONTROLS THAT MUST FAIL, AND DO — run by the grader's own `RowCheck::passes` through
+`chat-grade check constants=`, against all 88 checks:** the canned greeting **0 of 88**; "Could you
+clarify?" **0**; a bare "?" **0**; "What type of boat are you interested in?" (invents a specific,
+the sealed reply on `follow-03`) **0**; and the 13 observed memorised strings **0**. Nothing was
+loosened to make that true — the key is a phrase the request does not contain, so it cannot be
+satisfied by asking in general.
+
+**THE READING, AND WHAT THIS KIND IS FOR:** `any` 1/16, `reply_exact` 1/5, **`clarify` 0/27**,
+`abstain_exact` 0/40 — **2 of 88, unchanged.** Only 1 of the 27 clarify-row replies even asks a
+question. **So the `clarify` kind is a TARGET, NOT A SCOREBOARD: building it does not raise the score,
+it creates the ability to measure a behaviour the model does not have.** 27 previously unscorable rows
+are now scorable and all 27 fail. It must not be described as coverage won or as rows that might now
+pass.
+
+**Sealed and re-validated:** checks sha256 `aba96550fb89cbb0…`, kinds `any` 16 / `reply_exact` 5 /
+`clarify` 27 / `abstain_exact` 40, still **88 checked rows (37.9 %)**, `check_panel` **pass**,
+worst-case context position **168** of 384, `checks_without_loaded_request: []`, `shasum -a 256 -c
+MANIFEST.sha256` from `data/panels/` → **30 files, 30 OK**, both novelty checkers **pass**, and the
+bin's focused tests **18 passed, 0 failed**.
+
+**Criterion 1 remains NOT MET and 43/232 is unchanged.** STATUS/ROADMAP/#2028 unchanged — checked, not
+assumed.
+
+**Next:** the measured target is now "an ill-posed request answered by asking for the missing
+material", scored **0 of 27** — the first deterministic target in this line whose correct behaviour is
+absent rather than rare, so a bounded intervention can be scored against it. The remaining instrument
+gap is the 40 ill-posed rows with no nameable missing material; the honest options are a request-form
+clarify variant with a control proving a canned greeting cannot pass it, or leaving them unscored.
+
 ## 2026-10-09 — `reply_exact`: discrimination becomes expressible on a single-turn row, and it changes no verdict (deepseek, #2029)
 
 Follow-up to the deterministic sub-reading, and the piece its `Next:` named. Record:
