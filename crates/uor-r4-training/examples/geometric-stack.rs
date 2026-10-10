@@ -4714,6 +4714,13 @@ fn dialogue_train_mode(arguments: &[String]) -> Result<()> {
             "read_binding_labels",
             "read_binding_source",
             "read_binding_layer",
+            "memory_layers",
+            "memory_sub_keys",
+            "memory_top_k",
+            "memory_heads",
+            "memory_key_dim",
+            "memory_score",
+            "memory_codebook",
         ],
     )?;
     // Validate the A1 options before anything is claimed or loaded.
