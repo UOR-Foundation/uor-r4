@@ -125,3 +125,18 @@ fn zero_phase_limit_during_original_optimization_resumes_honestly() -> Result<()
 fn zero_phase_keeps_interior_fixed_variable() -> Result<(), String> {
     microlp::repair::transaction_fixture("zero_phase_preserves_fixed_interior")
 }
+
+#[test]
+fn basis_load_resets_pending_phase() -> Result<(), String> {
+    microlp::repair::transaction_fixture("basis_load_resets_pending_phase")
+}
+
+#[test]
+fn both_infeasible_entry_uses_zero_phase() -> Result<(), String> {
+    microlp::repair::transaction_fixture("both_infeasible_entry_uses_zero_phase")
+}
+
+#[test]
+fn dual_refresh_recovery_keeps_factor_errors() -> Result<(), String> {
+    microlp::repair::transaction_fixture("dual_refresh_recovery_keeps_factor_errors")
+}

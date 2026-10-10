@@ -891,6 +891,15 @@ impl Solver {
 
         self.is_primal_feasible = self.calc_primal_infeasibility().0 == 0;
         self.is_dual_feasible = self.calc_dual_infeasibility().0 == 0;
+        // An explicit successful basis load discards the previous solve epoch.
+        // Original costs have been reconstructed above; ordinary Limit/resume
+        // does not load a basis and retains its pending restoration obligation.
+        self.numerical_feasibility_restart_active = false;
+        numerical_progress(
+            "basis-loaded-original-objective",
+            &self.basic_vars,
+            self.lp_iterations,
+        );
         Ok(())
     }
 
@@ -1017,9 +1026,10 @@ impl Solver {
         }
     }
 
-    fn certify_phase_with_refinement(&mut self, phase: NumericalPhase) -> Result<(), Error> {
+    // Arithmetic errors propagate separately from a finite phase violation.
+    fn phase_certified_with_refinement(&mut self, phase: NumericalPhase) -> Result<bool, Error> {
         match self.require_numerical_phase(phase) {
-            Ok(()) => Ok(()),
+            Ok(()) => Ok(true),
             Err(before) if matches!(phase, NumericalPhase::Dual | NumericalPhase::FixVariable) => {
                 if std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
                     eprintln!("d22-numerics reduced-cost-refine-before: {before}");
@@ -1029,9 +1039,17 @@ impl Solver {
                 if std::env::var_os("UOR_MICROLP_PROGRESS").is_some() {
                     eprintln!("d22-numerics reduced-cost-refine-after: {result:?}");
                 }
-                result
+                Ok(result.is_ok())
             }
-            Err(error) => Err(error),
+            Err(_) => Ok(false),
+        }
+    }
+
+    fn certify_phase_with_refinement(&mut self, phase: NumericalPhase) -> Result<(), Error> {
+        if self.phase_certified_with_refinement(phase)? {
+            Ok(())
+        } else {
+            self.require_numerical_phase(phase)
         }
     }
 
@@ -1105,6 +1123,14 @@ impl Solver {
     }
 
     fn refresh_numerics(&mut self, phase: NumericalPhase) -> Result<(), Error> {
+        self.refresh_numerics_impl(phase, false)
+    }
+
+    fn refresh_numerics_impl(
+        &mut self,
+        phase: NumericalPhase,
+        allow_zero_restart: bool,
+    ) -> Result<(), Error> {
         numerical_progress("refresh-begin", &self.basic_vars, self.lp_iterations);
         let mut refreshed = self.clone();
         refreshed
@@ -1115,7 +1141,19 @@ impl Solver {
         // Feasibility flags describe the original objective, while an
         // artificial phase can have a different working objective. Validate
         // what the caller needs without silently changing either flag.
-        refreshed.certify_phase_with_refinement(phase)?;
+        if !refreshed.phase_certified_with_refinement(phase)? {
+            if allow_zero_restart
+                && matches!(phase, NumericalPhase::Dual)
+                && !refreshed.numerical_feasibility_restart_active
+            {
+                // Only a phase-certificate failure after successful factor/RHS
+                // reconstruction takes this path. Factor/solve errors above
+                // remain numerical errors, not fabricated infeasibility.
+                refreshed.restart_zero_objective_feasibility()?;
+            } else {
+                refreshed.require_numerical_phase(phase)?;
+            }
+        }
         if refreshed.enable_primal_steepest_edge {
             refreshed.recalc_primal_sq_norms()?;
         }
@@ -1176,6 +1214,18 @@ impl Solver {
     }
 
     fn restore_feasibility(&mut self) -> Result<StopReason, Error> {
+        // Bound edits and explicit basis loads can invalidate both primal and
+        // dual feasibility. Dual simplex needs the actual working-cost
+        // certificate, not the original-objective flag.
+        let mut admitted = self.clone();
+        admitted.recalc_working_obj_coeffs()?;
+        if !admitted.phase_certified_with_refinement(NumericalPhase::Dual)? {
+            if admitted.numerical_feasibility_restart_active {
+                admitted.require_numerical_phase(NumericalPhase::Dual)?;
+            }
+            admitted.restart_zero_objective_feasibility()?;
+        }
+        *self = admitted;
         let obj_str = if self.is_dual_feasible {
             "obj."
         } else {
@@ -1236,7 +1286,7 @@ impl Solver {
                              refreshing basis before declaring infeasibility",
                                     iter, row,
                                 );
-                                self.refresh_numerics(NumericalPhase::Dual)?;
+                                self.refresh_numerics_impl(NumericalPhase::Dual, true)?;
                                 refreshed_since_pivot = true;
                                 return Ok(true);
                             }
@@ -1259,7 +1309,7 @@ impl Solver {
                 })();
                 match result {
                     Err(Error::InternalError(_)) if attempt == 0 => {
-                        self.refresh_numerics(NumericalPhase::Dual)?;
+                        self.refresh_numerics_impl(NumericalPhase::Dual, true)?;
                         attempt += 1;
                     }
                     Err(Error::InternalError(_)) if attempt == 1 => {
@@ -3269,6 +3319,87 @@ pub(crate) fn d22_fixture(kind: &str) -> Result<(), Error> {
             require(
                 (*solver.get_value(0) - 0.5).abs() < 1e-12,
                 "fixed value was not retained",
+            )
+        }
+        "basis_load_resets_pending_phase" => {
+            solver.restart_zero_objective_feasibility()?;
+            let slack = solver.slack_basis();
+            solver.load_basis(&slack)?;
+            require(
+                !solver.numerical_feasibility_restart_active
+                    && solver.working_obj_coeffs == solver.orig_obj_coeffs,
+                "successful explicit load retained prior pending phase",
+            )?;
+            require(
+                solver.reoptimize()? == StopReason::Finished
+                    && *solver.get_value(0) == 1.0
+                    && solver.cur_obj_val == -1.0,
+                "loaded basis did not restore original optimum",
+            )?;
+            solver.restart_zero_objective_feasibility()?;
+            let malformed = Basis(vec![]);
+            require(
+                solver.load_basis(&malformed).is_err()
+                    && solver.numerical_feasibility_restart_active,
+                "failed explicit load falsely cleared pending restoration",
+            )
+        }
+        "both_infeasible_entry_uses_zero_phase" => {
+            let mut case = Solver::try_new(
+                &[-1.0, 1.0],
+                &[0.0; 2],
+                &[2.0; 2],
+                &[(
+                    CsVec::new(2, vec![0, 1], vec![1.0, 1.0]),
+                    ComparisonOp::Ge,
+                    1.0,
+                )],
+                &vec![VarDomain::Real; 2],
+                None,
+            )?;
+            case.load_basis(&case.slack_basis())?;
+            require(
+                !case.is_primal_feasible && !case.is_dual_feasible,
+                "fixture did not create both-infeasible original state",
+            )?;
+            require(
+                case.reoptimize()? == StopReason::Finished,
+                "both-infeasible reoptimization failed",
+            )?;
+            case.require_numerical_phase(NumericalPhase::Primal)?;
+            case.require_numerical_phase(NumericalPhase::Dual)?;
+            require(
+                !case.numerical_feasibility_restart_active
+                    && case.working_obj_coeffs == case.orig_obj_coeffs
+                    && *case.get_value(0) == 2.0
+                    && *case.get_value(1) == 0.0
+                    && case.cur_obj_val == -2.0,
+                "both-infeasible solve did not return original optimum",
+            )
+        }
+        "dual_refresh_recovery_keeps_factor_errors" => {
+            solver.load_basis(&solver.slack_basis())?;
+            require(
+                solver
+                    .require_numerical_phase(NumericalPhase::Dual)
+                    .is_err(),
+                "refresh fixture was already dual feasible",
+            )?;
+            solver.refresh_numerics_impl(NumericalPhase::Dual, true)?;
+            require(
+                solver.numerical_feasibility_restart_active
+                    && solver.working_obj_coeffs.iter().all(|&x| x == 0.0),
+                "refresh did not enter certified zero phase",
+            )?;
+            solver.require_numerical_phase(NumericalPhase::Dual)?;
+            solver.working_obj_coeffs.fill(f64::NAN);
+            let before = format!("{solver:?}");
+            require(
+                solver
+                    .refresh_numerics_impl(NumericalPhase::Dual, true)
+                    .is_err()
+                    && format!("{solver:?}") == before,
+                "nonfinite objective error was swallowed or mutated state",
             )
         }
         "zero_phase_direct_restore" => {

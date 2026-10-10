@@ -2,13 +2,13 @@
 
 **Numerical qualification in progress; no model result.** Owner clarification
 and TEST FITNESS admitted this numerical work. The four captured basis checks
-are complete. The corrected saved-problem replay is running; no legal assignment
+are complete. The corrected saved-problem replay ended with a numerical error; no legal assignment
 or model-quality conclusion is claimed. The root lab controls model admission.
 The existing exposed 128 rows are an owner-authorized diagnostic, not a new
 fresh qualification panel.
 
 The adjacent standalone Cargo manifest uses the source-owned microlp vendor
-copy and enables only its numerical fixture interface. Twenty-two synthetic test
+copy and enables only its numerical fixture interface. Twenty-five synthetic test
 functions cover small/rescaled pivots, exact-dyadic fallback, exact singularity,
 nonsymmetric normal/transpose dense/sparse solves, malformed/nonfinite input,
 transactional reset/pivot, corrupt-eta refresh/reselection and preservation of
@@ -16,7 +16,7 @@ the artificial phase objective, ambiguous-pivot reconstruction, phase loss, and
 fixing a basic variable at an interior value, compensated reduced costs and
 transpose refinement, and signed pivot reselection constrained by all reduced-cost
 step bounds. The latest corrected source passed
-all twenty-two tests and both saved-basis admission tests on the owned pod. These
+all twenty-five tests and both saved-basis admission tests on the owned pod. These
 are numerical fixtures, not model evaluations.
 
 Execution uses an owned per-lab Cargo target and the standalone manifest, never
@@ -110,7 +110,7 @@ Subsequent numerical attempts preserve every failure and source:
 | 8, signed ratio | 16/17 fixtures passed | Replay NOT_RUN; new fixture failed because its row equilibration doubled the intended negative ratio; production correctly rejected it |
 | 9, corrected stored-coefficient fixture | 17 + 2 PASS | 22.043 s; unfiltered signed minimum ratio `-1.76859802026159849e-5` amplified a small wrong-sign cost; full candidate certificate rejected it |
 | 10, all-column step interval | 18 + 2 PASS | 22.750 s; no admissible signed zero crossing in the reduced-cost interval, no assignment |
-| 11, persistent feasibility-phase recovery | 22 + 2 PASS | RUNNING; no assignment or gate completion claimed |
+| 11, persistent feasibility-phase recovery | 22 + 2 PASS | 160.837 s; no assignment, lower-bound reduced cost −0.00740452 at iteration 13924 |
 
 Attempt 10 uses solver SHA256
 `a89c9f9806837c57356b00bc7dc11107670c1b57c603fdd3a197fb39f5f78870`,
@@ -164,7 +164,35 @@ standalone source manifest
 executable `0b9bda431d226adf011fd5ce000d1d6aa8e9dc0f3e7142cb9b9e740af6e8353d`.
 Its 22 synthetic tests passed in 6.549 s including compilation, the two admission
 tests in 4.081 s, and release build in 4.869 s. It was launched at 18:59:55 UTC
-on 2026-10-10. These are focused numerical checks; saved replay is still RUNNING
-at this source checkpoint. The integrated source manifest below additionally
+on 2026-10-10. The saved replay terminated after 160.837 s with
+`BACKEND_NUMERIC_OR_NO_INCUMBENT`: nine temporary-objective recoveries were
+entered and eight original-objective restorations completed. The final lower-bound
+reduced cost was −0.007404518779 at iteration 13924; the unchanged dual certificate
+rejected it. The receipt contains no assignment, objective or node count. Report
+SHA256 `d58028da73bc86ce774a294582b6093330cc069cbb3a947cb0b63b81db14e0b8`,
+seal `c0ca997295b60c1e56722892904dc1ae8eedc96d2ccf27a74ccf1e3a4a1c69bd`.
+The numerical gate remains blocked; this is not model-quality evidence. The integrated source manifest below additionally
 binds this updated documentation and `UOR-PATCH.md`; it does not rewrite the
 immutable standalone execution manifest.
+
+The next scoped repair separates explicit basis replacement from interrupted
+continuation. A successful `load_basis` reconstructs original costs and clears
+the obsolete phase flag; a failed load does not clear it. Before dual simplex,
+the actual working costs are recomputed and certified. A finite phase violation
+can enter the temporary zero objective once; arithmetic/factor/solve errors remain
+errors. The same distinction applies after a successful basis refresh. Three new
+fixtures cover a pending-phase reload, both primal and dual infeasibility, and
+refresh recovery with numerical-error propagation. Peer source review passed
+solver `e778f8dfaffff55b965aab5474730f2e5904f6c0b4da0b25a08fdb100ba7bfde`;
+attempt 12 stopped during compilation because its new fixture repeated a non-Copy
+`VarDomain` in an array (E0277, 1.088 s). No tests or replay ran. The fixture-only
+correction uses a repeated Vec; production is unchanged. Corrected solver
+`172225af4bcd433109cf5221dac8a505051e00cbf8199bdf9df32296d0f6d0d1`
+is running attempt 13 through tests, build and saved replay.
+
+Attempt 13 passed all 25 synthetic fixtures (6.900 s including compilation),
+both admission checks (4.045 s), and release build (4.891 s). The saved replay
+started at 19:09:25 UTC on 2026-10-10 and remains RUNNING. Its immutable standalone
+manifest is `bf94169b534ff3e24f362ccf16a95492f725395f3f68de3350a273c70f114e4b`,
+binary `4f32a1699b8aba3d477ab42649937e17f99a6f16046b95fa4cf3848a35b6083a`.
+The three new fixture passes do not qualify the saved problem or a model.
