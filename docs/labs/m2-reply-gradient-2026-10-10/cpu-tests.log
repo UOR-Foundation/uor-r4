@@ -149,4 +149,3 @@ test reply_completion::tests::reply_completion_frozen_gradient_cannot_change_act
 test reply_completion::tests::reply_completion_gain_does_not_hide_original_reply_loss ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.00s
-

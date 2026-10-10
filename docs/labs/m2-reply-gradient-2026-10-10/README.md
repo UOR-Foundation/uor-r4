@@ -137,7 +137,8 @@ setup/compile failures, telemetry and actual parent/panel are preserved in
 `icloud:UOR-R4/results/codex/codex-m2-reply-gradient-20261010.tar`.
 `cloud-store put` verifies the uploaded tar by MD5 download round-trip before
 publishing its index. [Package hashes](PACKAGE.json) bind the compressed components;
-[source history](cloud-put.txt) is included as a Git bundle with published main
+[preservation receipt](cloud-put.txt) records the verified package. Source history
+is included as a Git bundle with published main
 prerequisites, so precompile failed source is recoverable after branch deletion.
 Restore using `cloud-store fetch codex-m2-reply-gradient-20261010 <destination>`;
 extract the two compressed input/run archives and remap the config's local paths.
