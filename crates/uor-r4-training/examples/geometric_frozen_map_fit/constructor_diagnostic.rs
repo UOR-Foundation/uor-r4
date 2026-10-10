@@ -218,6 +218,31 @@ fn selection(runs: &[Run]) -> Result<Value> {
         "diagnostic_predictions":"NOT_RUN","all_four_training_reports_sealed_before_selection":true}),
     )
 }
+fn initial_credit_identity(v: &Value, width: usize, guards: usize) -> Result<Value> {
+    let gradient: Vec<f32> = serde_json::from_value(v["effective_gradient_f32"].clone())?;
+    let masters: Vec<f32> = serde_json::from_value(v["original_masters"].clone())?;
+    let rows: Vec<Vec<f64>> = serde_json::from_value(v["unit_rows"].clone())?;
+    replay_require(
+        gradient.len() == width
+            && masters.len() == width
+            && rows.len() == guards
+            && gradient.iter().chain(&masters).all(|x| x.is_finite())
+            && rows
+                .iter()
+                .all(|r| r.len() == width && r.iter().all(|x| x.is_finite())),
+        "paired initial credit shape/nonfinite; comparison setup failure",
+    )?;
+    Ok(json!({"width":width,"guards":guards,
+        "effective_gradient_f32_bits_sha256":sha256_bytes(&gradient.into_iter().flat_map(f32::to_le_bytes).collect::<Vec<_>>()),
+        "original_masters_f32_bits_sha256":sha256_bytes(&masters.into_iter().flat_map(f32::to_le_bytes).collect::<Vec<_>>()),
+        "unit_rows_f64_bits_sha256":sha256_bytes(&rows.into_iter().flatten().flat_map(f64::to_le_bytes).collect::<Vec<_>>())}))
+}
+fn paired_initial_credit(a: &Value, b: &Value, width: usize, guards: usize) -> Result<Value> {
+    let left = initial_credit_identity(a, width, guards)?;
+    let right = initial_credit_identity(b, width, guards)?;
+    replay_require(left==right,"paired epoch0 effective gradient/guards/masters differ; comparison setup failure, not a model negative")?;
+    Ok(left)
+}
 fn validate_training_roots(c: &Config) -> Result<Vec<Run>> {
     let mut runs = Vec::new();
     let mut combinations = BTreeSet::new();
@@ -298,13 +323,28 @@ fn validate_training_roots(c: &Config) -> Result<Vec<Run>> {
         "diagnostic paired seed/arm matrix incomplete",
     )?;
     for seed in [1001, 2001] {
-        let pair = runs.iter().filter(|r| r.seed == seed).collect::<Vec<_>>();
+        let pair = runs
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.seed == seed)
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
         replay_require(
             pair.len() == 2
-                && fs::read(pair[0].root.join("guard-identities.json"))?
-                    == fs::read(pair[1].root.join("guard-identities.json"))?,
+                && fs::read(runs[pair[0]].root.join("guard-identities.json"))?
+                    == fs::read(runs[pair[1]].root.join("guard-identities.json"))?,
             "paired sampled guard identities differ",
         )?;
+        let left = runs[pair[0]].root.join("epoch-0-credit.json");
+        let right = runs[pair[1]].root.join("epoch-0-credit.json");
+        let identity = paired_initial_credit(&read(&left)?, &read(&right)?, 1920, 380)?;
+        let receipt = json!({"seed":seed,"epoch":0,"exact_decoded_bits_equal":true,"fields":identity,
+            "reports":[{"arm":runs[pair[0]].arm,"credit_file_sha256":sha256_file(&left)?},
+                       {"arm":runs[pair[1]].arm,"credit_file_sha256":sha256_file(&right)?}],
+            "scope":"matched initial credit; later accepted parents may differ; failure is comparison setup, never model quality"});
+        for i in pair {
+            runs[i].pins["paired_initial_credit"] = receipt.clone();
+        }
     }
     // Stable order makes report-list input ordering irrelevant to nomination.
     runs.sort_by_key(|r| (r.seed, r.arm));
@@ -382,6 +422,12 @@ fn execute(c: &Config, start: Instant) -> Result<Value> {
     a.out = c.out.clone();
     a.maximum_seconds = c.maximum_seconds;
     a.maximum_report_bytes = c.maximum_report_bytes;
+    write(
+        &a,
+        "paired-initial-credit.json",
+        &json!({"schema":"uor-r4.d22-paired-initial-credit/1",
+        "pairs":runs.iter().filter(|r|r.arm==0).map(|r|&r.pins["paired_initial_credit"]).collect::<Vec<_>>()}),
+    )?;
     let selected = selection(&runs)?;
     write(&a, "selection-before-diagnostic.json", &selected)?;
     write(
@@ -629,6 +675,33 @@ mod tests {
         );
         assert!(checkpoint_path(Path::new("owned/report"), 0).is_err());
         assert!(checkpoint_path(Path::new("owned/report"), usize::MAX).is_err());
+        Ok(())
+    }
+    #[test]
+    fn constructor_diagnostic_requires_exact_initial_credit_bits_in_both_arms() -> Result<()> {
+        let initial = json!({"effective_gradient_f32":[0.,1.],"unit_rows":[[0.,1.]],"original_masters":[0.1,0.25]});
+        let identity = paired_initial_credit(&initial, &initial, 2, 1)?;
+        assert_eq!(identity["width"], 2);
+        for field in ["effective_gradient_f32", "original_masters"] {
+            let mut changed = initial.clone();
+            changed[field][0] = json!(0.2);
+            assert!(paired_initial_credit(&initial, &changed, 2, 1).is_err());
+        }
+        let mut changed = initial.clone();
+        changed["unit_rows"][0][0] = json!(1e-300);
+        assert!(paired_initial_credit(&initial, &changed, 2, 1).is_err());
+        // Ordinary numeric equality would hide this change; exact master/credit
+        // identity is deliberately bitwise, including the sign of zero.
+        changed = initial.clone();
+        changed["effective_gradient_f32"][0] = json!(-0.0);
+        assert!(paired_initial_credit(&initial, &changed, 2, 1).is_err());
+        assert!(paired_initial_credit(&initial, &initial, 3, 1).is_err());
+        changed = initial.clone();
+        changed
+            .as_object_mut()
+            .ok_or_else(|| bad("fixture object"))?
+            .remove("unit_rows");
+        assert!(paired_initial_credit(&initial, &changed, 2, 1).is_err());
         Ok(())
     }
 }

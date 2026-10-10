@@ -1683,10 +1683,11 @@ dependencies = [
 [[package]]
 name = "microlp"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8f19803f918039a07f3c32b23716824d8f073543417bdac5b1b8619817e3674"
 dependencies = [
  "log",
+ "num-bigint 0.4.8",
+ "num-rational",
+ "num-traits",
  "sprs",
  "web-time",
 ]
