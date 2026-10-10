@@ -200,6 +200,11 @@ impl IntegerStackModel {
     /// creating a session cannot abort on allocation.
     pub fn parse(bytes: &[u8]) -> Result<Self, StackError> {
         let artifact = Container::parse(bytes)?;
+        if artifact.shape.read_select.is_some() {
+            // Removed by the engine change that serves rank reads; until then
+            // a softmax-free artifact must not be served as softmax.
+            return Err(StackError::Shape("softmax-free reads are not served yet"));
+        }
         let shape = artifact.shape.clone();
         let numerics = artifact.numerics.clone();
         let (d, heads, mlp) = (shape.width, shape.heads, shape.mlp);

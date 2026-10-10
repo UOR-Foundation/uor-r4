@@ -274,6 +274,9 @@ fn shapes_whose_read_caches_exceed_the_bound_are_rejected_before_allocation() {
         rotation: false,
         context: 1 << 16,
         pointer: None,
+        read_select: None,
+        read_weights: None,
+        read_binary: false,
     };
     // Dot reads cache an i32 key and value row per position: 2^28 bytes per
     // layer at this width and context, so sixteen layers reach the bound.
@@ -365,6 +368,9 @@ fn the_l2_read_serves_its_scale_and_offset_without_lifts_or_arcosh() {
         rotation: false,
         context: 1 << 16,
         pointer: None,
+        read_select: None,
+        read_weights: None,
+        read_binary: false,
     };
     assert_eq!(
         shape("l2").read_cache_bytes(),
@@ -1652,4 +1658,170 @@ fn stack_chat_reset_and_seed_start_a_fresh_conversation() -> ChatTest {
         "a fresh conversation with the same history serves the same ids"
     );
     Ok(())
+}
+
+/// `artifact(seed)` with the schema set and the shape edited.
+fn read_schema_artifact(schema: &str, edit: impl FnOnce(&mut Value)) -> Vec<u8> {
+    with_header(&artifact(5), |header| {
+        header["schema"] = json!(schema);
+        edit(&mut header["shape"]);
+    })
+}
+
+fn rank_read(shape: &mut Value) {
+    shape["read_select"] = json!({"window": 8, "k": 8});
+    shape["read_weights"] = json!("rank");
+}
+
+fn a_pointer(shape: &mut Value) {
+    shape["pointer"] = json!({"dim": 16, "score": "dot", "score_scale_q30": 1 << 28});
+}
+
+#[test]
+fn read_schema_plain_and_pointer_artifacts_parse_as_before() {
+    let plain = read_schema_artifact(super::STACK_SCHEMA, |_| {});
+    let container = super::format::Container::parse(&plain).expect("schema /1");
+    assert_eq!(container.shape.read_rank(), None);
+    assert!(!container.shape.read_binary());
+    assert_eq!(
+        super::stack_schema_for(&container.shape),
+        super::STACK_SCHEMA
+    );
+    assert!(IntegerStackModel::parse(&plain).is_ok());
+    let pointer = read_schema_artifact(super::STACK_POINTER_SCHEMA, a_pointer);
+    let container = super::format::Container::parse(&pointer).expect("schema /2");
+    assert_eq!(
+        super::stack_schema_for(&container.shape),
+        super::STACK_POINTER_SCHEMA
+    );
+    // The pointer head stays on /2, and a plain shape stays on /1.
+    for (schema, edit) in [
+        (
+            super::STACK_POINTER_SCHEMA,
+            (|_: &mut Value| {}) as fn(&mut Value),
+        ),
+        (super::STACK_SCHEMA, a_pointer),
+        (super::STACK_READ_SCHEMA, |_: &mut Value| {}),
+        (super::STACK_READ_SCHEMA, a_pointer),
+    ] {
+        assert!(
+            matches!(
+                super::format::Container::parse(&read_schema_artifact(schema, edit)),
+                Err(StackError::Schema(_))
+            ),
+            "accepted {schema} for the wrong shape"
+        );
+    }
+}
+
+#[test]
+fn read_schema_rank_reads_parse_under_schema_3_and_are_not_served_yet() {
+    for binary in [false, true] {
+        for pointer in [false, true] {
+            let bytes = read_schema_artifact(super::STACK_READ_SCHEMA, |shape| {
+                rank_read(shape);
+                shape["read_binary"] = json!(binary);
+                if pointer {
+                    a_pointer(shape);
+                }
+            });
+            let container = super::format::Container::parse(&bytes).expect("a rank read under /3");
+            assert_eq!(
+                container.shape.read_rank(),
+                Some(super::StackReadSelect { window: 8, k: 8 })
+            );
+            assert_eq!(container.shape.read_binary(), binary);
+            assert_eq!(
+                super::stack_schema_for(&container.shape),
+                super::STACK_READ_SCHEMA
+            );
+            // No engine serves a rank read yet, so the model refuses it.
+            match IntegerStackModel::parse(&bytes) {
+                Err(StackError::Shape(reason)) => {
+                    assert_eq!(reason, "softmax-free reads are not served yet")
+                }
+                Err(other) => panic!("refused for another reason: {other}"),
+                Ok(_) => panic!("served a softmax-free read"),
+            }
+        }
+    }
+    // The selection's bound: window + k + 2 <= 256 slots.
+    let largest = read_schema_artifact(super::STACK_READ_SCHEMA, |shape| {
+        rank_read(shape);
+        shape["read_select"] = json!({"window": 127, "k": 127});
+    });
+    assert!(super::format::Container::parse(&largest).is_ok());
+}
+
+#[test]
+fn read_schema_rank_reads_under_schema_1_or_2_are_refused() {
+    for (schema, pointer) in [
+        (super::STACK_SCHEMA, false),
+        (super::STACK_POINTER_SCHEMA, true),
+    ] {
+        let bytes = read_schema_artifact(schema, |shape| {
+            rank_read(shape);
+            if pointer {
+                a_pointer(shape);
+            }
+        });
+        assert!(
+            matches!(
+                super::format::Container::parse(&bytes),
+                Err(StackError::Schema(_))
+            ),
+            "accepted a rank read under {schema}"
+        );
+    }
+}
+
+#[test]
+fn read_schema_invalid_read_fields_are_refused() {
+    let cases: [(&str, fn(&mut Value)); 7] = [
+        ("softmax weights", |shape| {
+            rank_read(shape);
+            shape["read_weights"] = json!("softmax");
+        }),
+        ("rank weights without a selection", |shape| {
+            shape["read_weights"] = json!("rank");
+        }),
+        ("a selection without rank weights", |shape| {
+            shape["read_select"] = json!({"window": 8, "k": 8});
+        }),
+        ("binary without a selection", |shape| {
+            shape["read_binary"] = json!(true);
+        }),
+        ("window 0", |shape| {
+            rank_read(shape);
+            shape["read_select"] = json!({"window": 0, "k": 8});
+        }),
+        ("k 0", |shape| {
+            rank_read(shape);
+            shape["read_select"] = json!({"window": 8, "k": 0});
+        }),
+        ("window + k + 2 > 256", |shape| {
+            rank_read(shape);
+            shape["read_select"] = json!({"window": 128, "k": 127});
+        }),
+    ];
+    for (label, edit) in cases {
+        for schema in [super::STACK_SCHEMA, super::STACK_READ_SCHEMA] {
+            let bytes = read_schema_artifact(schema, edit);
+            assert!(
+                super::format::Container::parse(&bytes).is_err(),
+                "accepted {label} under {schema}"
+            );
+        }
+        // The shape rule itself refuses it, whatever the schema.
+        let mut shape = serde_json::json!({
+            "vocab": 40, "width": 64, "heads": 2, "mlp": 32, "pattern": "ra",
+            "read": "dot", "rotation": false, "context": 8,
+        });
+        edit(&mut shape);
+        let shape: StackShape = serde_json::from_value(shape).expect("shape");
+        assert!(
+            matches!(shape.validate(), Err(StackError::Shape(_))),
+            "validated {label}"
+        );
+    }
 }
