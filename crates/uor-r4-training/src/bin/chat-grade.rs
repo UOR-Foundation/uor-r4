@@ -1560,6 +1560,13 @@ struct Answered {
 
 /// Answer every request greedily (`reply_panel` over `greedy_reply`) and
 /// record each reply's generated ids and seconds.
+/// `pointer_gate_floor`: the serving-time copy-gate floor
+/// ([`StackModel::set_pointer_gate_floor`]) applied after the model loads and
+/// before any reply is generated. `0.0`, the default, leaves every reply bit
+/// for bit as it was; a positive floor makes the copy branch participate in the
+/// mixture even where the learned gate is shut, which is the forced-copy oracle
+/// of the pointer mechanism brief (a read-out change: no parameter, no gradient,
+/// no training path).
 fn answer(
     model_dir: &Path,
     tokenizer_path: &Path,
@@ -1569,12 +1576,14 @@ fn answer(
     exclude: Option<&IdList>,
     device: &Device,
     cycle_repeats: usize,
+    pointer_gate_floor: f64,
 ) -> Result<Answered, Error> {
     let tokenizer = load_tokenizer(tokenizer_path)?;
     let protocol = DialogueProtocol::literal_roles_version(&tokenizer, version)?;
     let encoder = protocol.bind(&tokenizer)?;
     let requests = load_panels(request_paths, exclude)?.0;
-    let model = StackModel::load(model_dir, device)?;
+    let mut model = StackModel::load(model_dir, device)?;
+    model.set_pointer_gate_floor(pointer_gate_floor)?;
     let mut costs = Vec::new();
     let clock = Instant::now();
     let mut panel = reply_panel(
@@ -1620,6 +1629,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             "exclude",
             "device",
             "cycle_repeats",
+            "pointer_gate_floor",
         ],
     )?;
     let out = PathBuf::from(args.required("out")?);
@@ -1633,6 +1643,10 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
     let request_paths = split_paths(&args.required("requests")?);
     let version: u8 = args.number("protocol", 2)?;
     let max_new_tokens: usize = args.number("max_new_tokens", 64)?;
+    let pointer_gate_floor: f64 = args.number("pointer_gate_floor", 0.0)?;
+    if !pointer_gate_floor.is_finite() || !(0.0..=1.0).contains(&pointer_gate_floor) {
+        return Err("pointer_gate_floor must be a probability in [0, 1]".into());
+    }
     let (device_label, device) = args.device()?;
     report_output::claim(&out)?;
     let result = (|| -> Result<(), Error> {
@@ -1645,6 +1659,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             exclude.as_ref(),
             &device,
             cycle_repeats,
+            pointer_gate_floor,
         )?;
         let mut report = json!({
             "schema": "uor-r4.chat-grade-reply/1",
@@ -1655,6 +1670,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             "protocol": answered.protocol.schema,
             "requests": request_paths.iter().map(|p| json!({"path": p.display().to_string(), "sha256": sha256_file(p).ok()})).collect::<Vec<_>>(),
             "max_new_tokens": max_new_tokens,
+            "pointer_gate_floor": pointer_gate_floor,
             "decoding": "greedy over the float model's next-token scores (a pointer model's mixture), ties to the lower id; each step recomputes the whole window",
             "device": device_record(device_label),
             "panel": answered.panel,
@@ -1716,6 +1732,7 @@ fn grade_into(
         exclude,
         device,
         3,
+        0.0,
     )?;
     let judged = judging.judge(&panel)?;
     let mut report = json!({
