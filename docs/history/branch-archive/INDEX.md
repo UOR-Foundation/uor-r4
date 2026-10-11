@@ -298,3 +298,9 @@ SHA256: 39ef8a574a492a9857bf8fda7bb1993aaebfafae3c569877e5204d5f4984cb0a.
 No patch is carried because no unique branch source exists: the four records' commands are the reproducible
 form of the line, their acceptance reports are in the cloud-store bundles named in each record, and the pivot
 card that closed it is [#2029 comment 6097789124](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6097789124).
+
+## Claude SoftSort CUDA speed fix — paused by owner stop, October 11
+
+| Source | Base | Disposition | Evidence |
+| --- | --- | --- | --- |
+| [`claude_softsort-gather-20261011.patch`](claude_softsort-gather-20261011.patch), branch `claude/softsort-gather` tip `1b1d11f50` | `main` `d97fe3989` (applies cleanly on `6e3c4553c`) | **PAUSED, not a negative.** `softsort_learned_read` fetches the kept values with `gather` along time and each row's rank-table row with a one-hot matmul, in place of two `index_select`s. candle 0.9.2's CUDA `index_add` (their backward) runs `left×right` threads, each looping over every index. Measured on a 5090 with the same config: 5,315 → 17,415 tok/s (×3.3). The forward and gradient are unchanged, and the softsort tests pass 3/3. Arm S, the run it served, was stopped by owner direction before its decisive pair. Restore with `git apply` if a SoftSort-trained read resumes | [Record](../../labs/softsort-s-2026-10-11/README.md) · [#2032 owner direction](https://github.com/UOR-Foundation/uor-r4/issues/2032) |

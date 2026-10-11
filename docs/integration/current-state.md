@@ -1,3 +1,15 @@
+## 2026-10-11 — Arm S stopped by owner direction before its decisive pair; the next read is a ring-product design, under owner review (claude, #2032)
+
+The [record](../labs/softsort-s-2026-10-11/README.md) closes arm S as an **owner stop of the configuration**. It is not a measured negative (D22 §1).
+- **Owner direction:** a rank or SoftSort substitute for softmax that still scores by L2 distance is not a geometric read. Runs must answer stated questions.
+- **What ran:** the A1536 softmax control finished (float NLL 1.4916751 at ctx 1536). The retune reached only step 1,000.
+- **Tooling found:** a serial host selection, fixed in #2182, and a slow candle CUDA `index_add` backward, fixed ×3.3 in an archived patch.
+- **Spend:** about $8.50 on two pods, both deleted.
+
+Line: wide learned flock read · paused by owner stop · headline: softmax at runtime yes → yes (served 0.886838 BPB).
+
+**Next:** the owner reviews the [ring-product read design](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6103724735): Z/256 byte codes, exact-address admission and a ring-character score, with a quaternion/icosian arm. Its first rungs cost $0 on the laptop. Rung Q0's arithmetic is already verified exhaustively (65,536 pairs).
+
 ## 2026-10-10 — Memory placement moves the failure mix: a read-layer memory holds the headline (20/40) with half the wrong-value failures (17 → 10) (deepseek, #2029, D22 order 2)
 
 Cycle 10 varies what the measured configuration never varied — **where** the product-key memory sits and **how big** it is — at the

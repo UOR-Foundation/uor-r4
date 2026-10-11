@@ -1,0 +1,96 @@
+diff --git a/crates/uor-r4-training/src/geometric_stack.rs b/crates/uor-r4-training/src/geometric_stack.rs
+index 08c2bcf2d..c3db852b9 100644
+--- a/crates/uor-r4-training/src/geometric_stack.rs
++++ b/crates/uor-r4-training/src/geometric_stack.rs
+@@ -14156,7 +14156,6 @@ pub fn softsort_learned_read(
+     let kept = side - 1;
+     let rows = batch * heads * time;
+     let mut positions = vec![0u32; rows * kept];
+-    let mut flat = vec![0u32; rows * kept];
+     let mut live = vec![0f32; rows * kept];
+     let mut table_rows = vec![0u32; rows];
+     // Rows are independent, so the host selection runs in parallel (a serial
+@@ -14164,31 +14163,27 @@ pub fn softsort_learned_read(
+     // slots, so the result is identical to the serial order.
+     positions
+         .par_chunks_mut(kept)
+-        .zip(flat.par_chunks_mut(kept))
+         .zip(live.par_chunks_mut(kept))
+         .zip(table_rows.par_iter_mut())
+         .enumerate()
+-        .try_for_each(
+-            |(row, (((positions, flat), live), table_row))| -> Result<()> {
+-                let (index, t) = (row / time, row % time);
+-                let head = index % heads;
+-                let base = row * time;
+-                let selection = flock::flock_select(&host[base..base + t + 1], t, select)?;
+-                if selection.len() > kept {
+-                    return Err(invalid(
+-                        "a flock row keeps more sources than its table has ranks",
+-                    ));
+-                }
+-                for (slot, entry) in selection.entries.iter().enumerate() {
+-                    positions[slot] = entry.position as u32;
+-                    flat[slot] = (index * time + entry.position) as u32;
+-                    live[slot] = 1.0;
+-                }
+-                // Support m = kept + NoRead; the table row W[h][m - 1].
+-                *table_row = (head * side + selection.len()) as u32;
+-                Ok(())
+-            },
+-        )?;
++        .try_for_each(|(row, ((positions, live), table_row))| -> Result<()> {
++            let (index, t) = (row / time, row % time);
++            let head = index % heads;
++            let base = row * time;
++            let selection = flock::flock_select(&host[base..base + t + 1], t, select)?;
++            if selection.len() > kept {
++                return Err(invalid(
++                    "a flock row keeps more sources than its table has ranks",
++                ));
++            }
++            for (slot, entry) in selection.entries.iter().enumerate() {
++                positions[slot] = entry.position as u32;
++                live[slot] = 1.0;
++            }
++            // Support m = kept + NoRead; the table row W[h][m - 1].
++            *table_row = (head * side + selection.len()) as u32;
++            Ok(())
++        })?;
+     let shape = (batch, heads, time, kept);
+     let positions = Tensor::from_vec(positions, shape, &device)?;
+     let live = Tensor::from_vec(live, shape, &device)?;
+@@ -14206,15 +14201,27 @@ pub fn softsort_learned_read(
+         .abs()?
+         .affine(-1.0 / tau, 0.0)?;
+     let permutation = candle_nn_softmax_last_dim(&gap)?; // [b, h, t, rank, item]
+-    let weights_by_rank = table
+-        .reshape((heads * side, side))?
+-        .index_select(&Tensor::from_vec(table_rows, rows, &device)?, 0)?
++                                                         // Each row's table row W[h][m - 1], as a one-hot matmul: candle's CUDA
++                                                         // `index_add` (the backward of `index_select`) runs one thread per output
++                                                         // column over every index, which held a whole training step.
++    let table_rows = Tensor::from_vec(table_rows, (rows, 1), &device)?
++        .broadcast_eq(&Tensor::arange(0u32, (heads * side) as u32, &device)?.unsqueeze(0)?)?
++        .to_dtype(DType::F32)?;
++    let weights_by_rank = table_rows
++        .matmul(&table.reshape((heads * side, side))?)?
+         .reshape((rows, 1, side))?;
+     let item_weights = weights_by_rank.matmul(&permutation.reshape((rows, side, side))?)?;
+-    // Values of the kept positions (padding zeroed) and NoRead's zero value.
++    // Values of the kept positions (padding zeroed) and NoRead's zero value,
++    // gathered along time: the gather's backward is a scatter-add over
++    // `batch * heads * value_width` threads, where `index_select`'s ran on
++    // `value_width` threads over every index.
++    let index = positions
++        .reshape((batch, heads, time * kept, 1))?
++        .broadcast_as((batch, heads, time * kept, value_width))?
++        .contiguous()?;
+     let kept_values = value
+-        .reshape((batch * heads * time, value_width))?
+-        .index_select(&Tensor::from_vec(flat, rows * kept, &device)?, 0)?
++        .contiguous()?
++        .gather(&index, 2)?
+         .reshape((rows, kept, value_width))?
+         .broadcast_mul(&live.reshape((rows, kept, 1))?)?;
+     let values = Tensor::cat(
