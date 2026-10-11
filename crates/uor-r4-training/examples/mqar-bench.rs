@@ -1066,7 +1066,11 @@ impl ContextArm for StackArm {
         Ok(Some(hits as f64 / total.max(1) as f64))
     }
 
-    fn starling_oracle_accuracy(&self, sequences: &[Sequence], context: usize) -> Result<Option<f64>> {
+    fn starling_oracle_accuracy(
+        &self,
+        sequences: &[Sequence],
+        context: usize,
+    ) -> Result<Option<f64>> {
         if self.model.read_route().is_none() {
             return Ok(None);
         }
@@ -2789,7 +2793,9 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     eprintln!("{line}");
     writeln!(log, "{line}")?;
     if let Some(oracle) = arm.starling_oracle_accuracy(&in_class_set, s.context)? {
-        let natural = arm.starling_hit_rate(&in_class_set, s.context)?.unwrap_or(f64::NAN);
+        let natural = arm
+            .starling_hit_rate(&in_class_set, s.context)?
+            .unwrap_or(f64::NAN);
         let line = format!(
             "starling oracle (D1): in-class acc with the true source forced into every head's kept set {oracle:.4}; natural hit rate {natural:.4}"
         );

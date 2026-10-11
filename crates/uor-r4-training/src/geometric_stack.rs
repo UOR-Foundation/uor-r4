@@ -31772,7 +31772,10 @@ mod tests {
             content: false,
         }))?;
         let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
-        let natural = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        let natural = model
+            .forward(&ids, 2, 12)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
         let mut oracle = std::collections::HashMap::new();
         oracle.insert((1usize, 11usize), 0usize);
         starling_oracle_set(Some(oracle));
@@ -31786,10 +31789,15 @@ mod tests {
             .filter(|(_, row, _, t, _)| *row == 1 && *t == 11)
             .collect();
         assert_eq!(at.len(), model.config.heads);
-        assert!(at.iter().all(|(_, _, _, _, kept)| kept.contains(&0) && kept.len() <= 2));
+        assert!(at
+            .iter()
+            .all(|(_, _, _, _, kept)| kept.contains(&0) && kept.len() <= 2));
         assert_ne!(natural, forced);
         // Cleared, the read is the natural one again.
-        let again = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        let again = model
+            .forward(&ids, 2, 12)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
         assert_eq!(natural, again);
         Ok(())
     }
