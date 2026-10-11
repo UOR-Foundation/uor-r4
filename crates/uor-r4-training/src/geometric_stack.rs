@@ -476,20 +476,54 @@ fn icosian_snap_values(compact: &Tensor, pair: bool, pow2_norm: bool) -> Result<
     icosian_snap_values_with(compact, pair, norm)
 }
 
+thread_local! {
+    /// The snap's constant tables per device, built once instead of uploaded
+    /// on every call; keyed by device location and table name.
+    static SNAP_TABLES: std::cell::RefCell<std::collections::HashMap<String, Tensor>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// The last activation snapped: (input id, mode) and the result.
+    static LAST_ACTIVATION_SNAP: std::cell::RefCell<
+        Option<((candle_core::TensorId, ActivationSnap), Tensor)>,
+    > = const { std::cell::RefCell::new(None) };
+}
+
+/// A constant snap table on `device`, built by `build` on first use.
+fn snap_table(
+    device: &Device,
+    name: &str,
+    build: impl FnOnce() -> Result<Tensor>,
+) -> Result<Tensor> {
+    let key = format!("{:?}/{name}", device.location());
+    if let Some(table) = SNAP_TABLES.with(|tables| tables.borrow().get(&key).cloned()) {
+        return Ok(table);
+    }
+    let table = build()?;
+    SNAP_TABLES.with(|tables| tables.borrow_mut().insert(key, table.clone()));
+    Ok(table)
+}
+
 fn icosian_snap_values_with(compact: &Tensor, pair: bool, norm_set: NormSet) -> Result<Tensor> {
     let device = compact.device();
     let shape = compact.dims().to_vec();
     let x = compact.to_dtype(DType::F32)?.reshape(((), 4))?;
-    let roots: Vec<f32> = icosian_roots()
-        .iter()
-        .flat_map(|r| r.iter().copied())
-        .collect();
-    let table = Tensor::from_vec(roots, (120, 4), device)?;
-    let table_t = table.t()?.contiguous()?;
-    let powers: Vec<f32> = (-SNAP_EXPONENT..=SNAP_EXPONENT)
-        .map(|e| 2f32.powi(e))
-        .collect();
-    let powers = Tensor::from_vec(powers, 2 * SNAP_EXPONENT as usize + 1, device)?;
+    let table = snap_table(device, "icosians", || {
+        let roots: Vec<f32> = icosian_roots()
+            .iter()
+            .flat_map(|r| r.iter().copied())
+            .collect();
+        Ok(Tensor::from_vec(roots, (120, 4), device)?)
+    })?;
+    let table_t = snap_table(device, "icosians_t", || Ok(table.t()?.contiguous()?))?;
+    let powers = snap_table(device, "powers", || {
+        let powers: Vec<f32> = (-SNAP_EXPONENT..=SNAP_EXPONENT)
+            .map(|e| 2f32.powi(e))
+            .collect();
+        Ok(Tensor::from_vec(
+            powers,
+            2 * SNAP_EXPONENT as usize + 1,
+            device,
+        )?)
+    })?;
     let pow2 = |v: &Tensor| -> Result<Tensor> {
         let e = v
             .log()?
@@ -540,10 +574,14 @@ fn icosian_snap_values_with(compact: &Tensor, pair: bool, norm_set: NormSet) -> 
                 .index_select(&e.flatten_all()?, 0)?
                 .reshape(ratio.dims())?;
             let steps = 1usize << bits;
-            let mantissas: Vec<f32> = (0..=steps).map(|k| 1.0 + k as f32 / steps as f32).collect();
-            let log_mantissas: Vec<f32> = mantissas.iter().map(|m| m.ln()).collect();
-            let mantissas = Tensor::from_vec(mantissas, steps + 1, device)?;
-            let log_mantissas = Tensor::from_vec(log_mantissas, (1, steps + 1), device)?;
+            let grid: Vec<f32> = (0..=steps).map(|k| 1.0 + k as f32 / steps as f32).collect();
+            let mantissas = snap_table(device, &format!("mantissas{bits}"), || {
+                Ok(Tensor::from_vec(grid.clone(), steps + 1, device)?)
+            })?;
+            let log_mantissas = snap_table(device, &format!("log_mantissas{bits}"), || {
+                let logs: Vec<f32> = grid.iter().map(|m| m.ln()).collect();
+                Ok(Tensor::from_vec(logs, (1, steps + 1), device)?)
+            })?;
             let fraction = ratio.div(&base)?.log()?;
             let nearest = fraction.broadcast_sub(&log_mantissas)?.abs()?.argmin(1)?;
             let m = mantissas.index_select(&nearest, 0)?.reshape(ratio.dims())?;
@@ -3337,8 +3375,22 @@ impl StackModel {
             } else {
                 NormSet::F32
             };
+            // Several maps read the same input (MLP gate and up, read query,
+            // key and value): snap each input tensor once. Tensor ids are
+            // never reused, so a hit is the same tensor.
+            let key = (input.id(), self.activation_snap);
+            if let Some(hit) = LAST_ACTIVATION_SNAP.with(|last| {
+                last.borrow()
+                    .as_ref()
+                    .filter(|(id, _)| *id == key)
+                    .map(|(_, t)| t.clone())
+            }) {
+                return Ok(hit);
+            }
             let snapped = icosian_snap_values_with(input, true, norm)?;
-            return Ok(input.add(&snapped.sub(input)?.detach())?);
+            let out = input.add(&snapped.sub(input)?.detach())?;
+            LAST_ACTIVATION_SNAP.with(|last| *last.borrow_mut() = Some((key, out.clone())));
+            return Ok(out);
         }
         let dtype = input.dtype();
         let values = input
