@@ -3597,13 +3597,15 @@ impl StackModel {
         };
         let beta = p.layer(layer, STARLING_BETA)?.reshape((1, heads, 1, 1))?;
         let gamma = p.layer(layer, STARLING_GAMMA)?.reshape((1, heads, 1, 1))?;
-        let gate = dot
-            .broadcast_mul(&beta)?
-            .broadcast_add(&gamma)?
-            .neg()?
-            .exp()?
-            .affine(1.0, 1.0)?
-            .recip()?;
+        let logit = dot.broadcast_mul(&beta)?.broadcast_add(&gamma)?;
+        let gate = if content.is_some() {
+            // The content dot is unbounded, so 1/(1+exp(-x)) overflows (inf/inf
+            // gradients); the tanh form has finite gradients everywhere. The
+            // address route keeps its exact form (its dot is in [-1, 1]).
+            logit.affine(0.5, 0.0)?.tanh()?.affine(0.5, 0.5)?
+        } else {
+            logit.neg()?.exp()?.affine(1.0, 1.0)?.recip()?
+        };
         let table = p
             .layer(layer, STARLING_RANK)?
             .reshape((1, heads, 1, side * side))?
@@ -31770,12 +31772,35 @@ mod tests {
             .ok_or_else(|| invalid("missing key address gradient"))?;
         assert!(g.abs()?.sum_all()?.to_scalar::<f32>()? > 0.0);
         model.set_starling_dense(None)?;
+        // Large content scores keep finite gradients (the gate saturates
+        // instead of overflowing).
+        let beta = model.variables()["layers.01.read.starling.beta"].clone();
+        beta.set(&beta.as_tensor().affine(0.0, 1.0e4)?)?;
+        let grads = model
+            .forward(&ids, 2, 12)?
+            .mul(&weights)?
+            .sum_all()?
+            .backward()?;
+        for var in &vars {
+            let g = grads
+                .get(var.as_tensor())
+                .ok_or_else(|| invalid("missing gradient"))?;
+            assert!(g
+                .flatten_all()?
+                .to_vec1::<f32>()?
+                .iter()
+                .all(|v| v.is_finite()));
+        }
         // The route name round-trips through parse and save/load.
         assert_eq!(
             parse_read_route("starling:2:3:content")?,
             Some(route(true))
         );
         assert!(parse_read_route("starling:2:3:other").is_err());
+        let content = model
+            .forward(&ids, 2, 12)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
         let root = std::env::temp_dir().join(format!("starling-content-{}", std::process::id()));
         model.save(&root)?;
         let loaded = StackModel::load(&root, &cpu())?;
