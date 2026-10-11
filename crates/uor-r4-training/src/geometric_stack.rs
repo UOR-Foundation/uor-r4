@@ -10042,8 +10042,6 @@ impl StackModel {
             with_field[READ_ROUTE_FIELD] = serde_json::Value::String(route.name());
             config = serde_json::to_vec_pretty(&with_field)?;
         }
-        if self.quaternion_snap {
-
         if self.quaternion_snap != QuaternionSnap::None {
             let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
             with_field[QUATERNION_SNAP_FIELD] =
@@ -31345,6 +31343,8 @@ mod tests {
             "analytic {analytic} numeric {numeric}"
         );
         assert!(model.set_starling_dense(Some(-1.0)).is_err());
+        Ok(())
+    }
 
     #[test]
     fn the_icosian_snap_is_straight_through_and_round_trips() -> Result<()> {
