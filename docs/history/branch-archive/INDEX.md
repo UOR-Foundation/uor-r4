@@ -29,7 +29,7 @@ deleted after verified cloud custody. No solver checkpoint exists.
 
 | Inactive Source | Pinned Restore Base | Patch SHA256 | Evidence Scope |
 |---|---|---|---|
-| [Source3 dirty recovery](codex-d22-source3-inactive-20261011.patch) | `586af8da9682e6ab8efacef25582732c058fa789` | `687f3e4630641d5273c1a9f31f3497545a5884792ab5bd27c4c47a04b719dd5d` | Exact retained dirty source, not the later source6 and not qualified by the historical23 tests. |
+| [Source3 dirty recovery](codex-d22-source3-inactive-20261011.patch) | `586af8da9682e6ab8efacef25582732c058fa789` | `48e29e61fd61dca32572710de09d46b055a0e42f6e0e3c07e1d4af6d6dd4aac9` | Exact retained dirty source and untracked numerical examples, not the later source6 and not qualified by the historical23 tests. Archival tree `cb864fdb38ecb603f6d54fde9eb53803879f3953`. |
 | [Source6 integer exact-cost recovery](codex-d22-source6-inactive-20261011.patch) | `586af8da9682e6ab8efacef25582732c058fa789` | `d0cbc93b9c2d715a27b7ad5250e0d7df2948f631d0ca343e29433bdf76df28c9` | 53 fixtures,2 replay gates,4 original basis captures and1960 captured exact costs qualified; full savedLP replay unfinished, not a mechanism negative. Archival tree `c3d49b94a1b68a3d48353ccf3d84bb13e42e055c`. |
 | [Source7 CUDA numerical prototype](codex-d22-source7-inactive-20261011.patch) | Empty index; creates only `local/cuda-numerical-source7/` | `688d982a5f3015cdc1c15c778a690f642b2b13568ad6a59568aed5293eeb31e5` |9 short host fixtures and CUDA-feature Rust check only; device/NVRTC/fullLP/integrated producer/model NOT_RUN. Archival tree `1ec8a66be19ea7fead317408f7c3117b0b0cb53a`. Not a geometric-model mechanism. |
 

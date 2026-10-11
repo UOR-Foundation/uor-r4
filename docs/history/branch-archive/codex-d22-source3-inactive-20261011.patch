@@ -430,6 +430,85 @@ index 2c2783094..b5c83759c 100644
 +    })();
 +    result.map_err(|e: Error| e.to_string())
 +}
+diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/examples/embedded-capacity.rs b/docs/labs/d22-constructor-2026-10-10/numerical-tests/examples/embedded-capacity.rs
+new file mode 100644
+index 000000000..2f3487833
+--- /dev/null
++++ b/docs/labs/d22-constructor-2026-10-10/numerical-tests/examples/embedded-capacity.rs
+@@ -0,0 +1,73 @@
++//! Derived numerical basis regression, not an LP or model evaluation.
++use sha2::{Digest, Sha256};
++use std::{error::Error, fs, time::Instant};
++
++fn main() -> Result<(), Box<dyn Error>> {
++    let path = std::env::args()
++        .nth(1)
++        .ok_or("expected pinned basis path")?;
++    let bytes = fs::read(path)?;
++    let sha = format!("{:x}", Sha256::digest(&bytes));
++    if sha != "4b5abc63cc98cde36c8ff1ba47f1e9388548f81dad3cb26bf15e73bfb2fbd2b6"
++        || bytes.len() > 16 * 1024 * 1024
++    {
++        return Err("pinned basis identity/size differs".into());
++    }
++    let mut columns: Vec<Vec<(usize, f64)>> = Vec::new();
++    let mut counts = Vec::new();
++    for line in std::str::from_utf8(&bytes)?.lines() {
++        if line.starts_with('#') || line.is_empty() {
++            continue;
++        }
++        let fields = line.split('\t').collect::<Vec<_>>();
++        match fields.as_slice() {
++            ["COLUMN", c, n] => {
++                if c.parse::<usize>()? != columns.len() {
++                    return Err("column order differs".into());
++                }
++                columns.push(Vec::new());
++                counts.push(n.parse::<usize>()?);
++            }
++            ["ENTRY", c, r, bits] => {
++                let c = c.parse::<usize>()?;
++                let r = r.parse::<usize>()?;
++                if columns.is_empty() || c != columns.len() - 1 || r >= 440 {
++                    return Err("entry coordinate differs".into());
++                }
++                let value = f64::from_bits(u64::from_str_radix(bits, 16)?);
++                if !value.is_finite() || columns[c].last().is_some_and(|&(last, _)| last >= r) {
++                    return Err("invalid or unsorted entry".into());
++                }
++                columns[c].push((r, value));
++            }
++            _ => return Err("unknown basis line".into()),
++        }
++    }
++    if columns.len() != 440 || columns.iter().zip(counts).any(|(c, n)| c.len() != n) {
++        return Err("basis dimension/count differs".into());
++    }
++    let mut derived = columns
++        .into_iter()
++        .map(|column| column.into_iter().unzip())
++        .collect::<Vec<_>>();
++    for r in 440..1040 {
++        derived.push((vec![r], vec![1.0]));
++    }
++    microlp::repair::reset_stats();
++    let started = Instant::now();
++    let result = microlp::repair::qualify_exact_capacity(derived);
++    let stats = microlp::repair::stats();
++    println!(
++        "{}",
++        serde_json::json!({
++            "schema":"uor-r4.d22-embedded-capacity-regression/1",
++            "basis_sha256":sha,"original_dimension":440,"derived_dimension":1040,
++            "augmentation":"block diagonal with600 exact identity rows/columns",
++            "status":if result.is_ok(){"QUALIFIED"}else{"NUMERICALLY_REJECTED"},
++            "error":result.as_ref().err(),"certified_solves":stats.certified_solves,
++            "exact_singular":stats.exact_singular,"elapsed_seconds":started.elapsed().as_secs_f64(),
++            "scope":"Forced exact factor plus original-basis residual checks; derived numerical basis, no LP/model inference"
++        })
++    );
++    result.map_err(Into::into)
++}
 diff --git a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json b/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
 index 419414320..ee452862a 100644
 --- a/docs/labs/d22-constructor-2026-10-10/numerical-tests/source-manifest.json
