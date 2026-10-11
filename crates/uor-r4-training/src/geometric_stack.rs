@@ -355,6 +355,12 @@ pub enum QuaternionSnap {
     /// The residual pair's direction with the f32 norm (separates the
     /// direction cost from the power-of-two norm's).
     IcosianPairF32,
+    /// The residual pair with a 1-bit-mantissa norm `2^e x {1, 1.5}`: one more
+    /// shifted add than a power of two, still no multiplier on the weight side.
+    IcosianPairM1,
+    /// The residual pair with a 2-bit-mantissa norm `2^e x {1, 1.25, 1.5,
+    /// 1.75}`: at most two more shifted adds.
+    IcosianPairM2,
 }
 
 impl QuaternionSnap {
@@ -365,8 +371,10 @@ impl QuaternionSnap {
             "icosian_f32" => Ok(Self::IcosianF32),
             "icosian_pair" => Ok(Self::IcosianPair),
             "icosian_pair_f32" => Ok(Self::IcosianPairF32),
+            "icosian_pair_m1" => Ok(Self::IcosianPairM1),
+            "icosian_pair_m2" => Ok(Self::IcosianPairM2),
             other => Err(invalid(format!(
-                "invalid quaternion_snap={other} (none, icosian, icosian_f32, icosian_pair or icosian_pair_f32)"
+                "invalid quaternion_snap={other} (none, icosian, icosian_f32, icosian_pair, icosian_pair_f32, icosian_pair_m1 or icosian_pair_m2)"
             ))),
         }
     }
@@ -378,6 +386,8 @@ impl QuaternionSnap {
             Self::IcosianF32 => "icosian_f32",
             Self::IcosianPair => "icosian_pair",
             Self::IcosianPairF32 => "icosian_pair_f32",
+            Self::IcosianPairM1 => "icosian_pair_m1",
+            Self::IcosianPairM2 => "icosian_pair_m2",
         }
     }
 }
@@ -399,6 +409,22 @@ pub fn icosian_pair_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> 
     Ok(compact.add(&snapped.sub(compact)?.detach())?)
 }
 
+/// The residual pair snap with a `bits`-bit-mantissa norm (`2^e x m`, `m` in
+/// `{1, 1 + 2^-bits, ..}`, nearest in log), straight-through, on the tensor's
+/// own device.
+pub fn icosian_pair_mantissa_snap_straight_through(compact: &Tensor, bits: u32) -> Result<Tensor> {
+    let snapped = icosian_snap_values_with(compact, true, NormSet::Mantissa(bits))?;
+    Ok(compact.add(&snapped.sub(compact)?.detach())?)
+}
+
+/// How a snapped quaternion's norm (over its direction's own norm) is stored.
+#[derive(Clone, Copy)]
+enum NormSet {
+    F32,
+    PowerOfTwo,
+    Mantissa(u32),
+}
+
 /// Exponent range of the power-of-two scales: 2^-40 .. 2^40 (trained norms
 /// span 2^-9 .. 2^-2).
 const SNAP_EXPONENT: i32 = 40;
@@ -410,6 +436,15 @@ const SNAP_EXPONENT: i32 = 40;
 /// non-finite quaternions stay unchanged. Bit-identical to the host loops it
 /// replaced on the tested inputs (they remain as the test reference).
 fn icosian_snap_values(compact: &Tensor, pair: bool, pow2_norm: bool) -> Result<Tensor> {
+    let norm = if pow2_norm {
+        NormSet::PowerOfTwo
+    } else {
+        NormSet::F32
+    };
+    icosian_snap_values_with(compact, pair, norm)
+}
+
+fn icosian_snap_values_with(compact: &Tensor, pair: bool, norm_set: NormSet) -> Result<Tensor> {
     let device = compact.device();
     let shape = compact.dims().to_vec();
     let x = compact.to_dtype(DType::F32)?.reshape(((), 4))?;
@@ -455,7 +490,34 @@ fn icosian_snap_values(compact: &Tensor, pair: bool, pow2_norm: bool) -> Result<
     } else {
         (g1, safe.clone())
     };
-    let scale = if pow2_norm { pow2(&ratio)? } else { ratio };
+    let scale = match norm_set {
+        NormSet::F32 => ratio,
+        NormSet::PowerOfTwo => pow2(&ratio)?,
+        NormSet::Mantissa(bits) => {
+            // e = floor(log2 r) from the exact table; the mantissa f = r / 2^e
+            // in [1, 2) goes to the nearest (in log) of 1 + k / 2^bits,
+            // k = 0..=2^bits; the product of two short binary numbers is exact.
+            let e = ratio
+                .log()?
+                .affine(1.0 / std::f64::consts::LN_2, 0.0)?
+                .floor()?
+                .clamp(-(SNAP_EXPONENT as f64), SNAP_EXPONENT as f64)?
+                .affine(1.0, SNAP_EXPONENT as f64)?
+                .to_dtype(DType::U32)?;
+            let base = powers
+                .index_select(&e.flatten_all()?, 0)?
+                .reshape(ratio.dims())?;
+            let steps = 1usize << bits;
+            let mantissas: Vec<f32> = (0..=steps).map(|k| 1.0 + k as f32 / steps as f32).collect();
+            let log_mantissas: Vec<f32> = mantissas.iter().map(|m| m.ln()).collect();
+            let mantissas = Tensor::from_vec(mantissas, steps + 1, device)?;
+            let log_mantissas = Tensor::from_vec(log_mantissas, (1, steps + 1), device)?;
+            let fraction = ratio.div(&base)?.log()?;
+            let nearest = fraction.broadcast_sub(&log_mantissas)?.abs()?.argmin(1)?;
+            let m = mantissas.index_select(&nearest, 0)?.reshape(ratio.dims())?;
+            base.mul(&m)?
+        }
+    };
     let snapped = direction.broadcast_mul(&scale)?;
     let keep = finite.broadcast_as(snapped.shape())?;
     let out = keep.where_cond(&snapped, &x)?;
@@ -549,6 +611,8 @@ pub fn quaternion_snap_straight_through(compact: &Tensor, mode: QuaternionSnap) 
         QuaternionSnap::IcosianF32 => icosian_snap_straight_through(compact, false),
         QuaternionSnap::IcosianPair => icosian_pair_snap_straight_through(compact, true),
         QuaternionSnap::IcosianPairF32 => icosian_pair_snap_straight_through(compact, false),
+        QuaternionSnap::IcosianPairM1 => icosian_pair_mantissa_snap_straight_through(compact, 1),
+        QuaternionSnap::IcosianPairM2 => icosian_pair_mantissa_snap_straight_through(compact, 2),
     }
 }
 
@@ -32389,6 +32453,47 @@ mod tests {
     }
 
     #[test]
+    fn a_mantissa_snap_is_an_exact_short_float_times_the_pair_direction() -> Result<()> {
+        let mut rng = Initializer(19);
+        let n = 4000;
+        let values: Vec<f32> = (0..4 * n).map(|_| rng.normal() as f32 * 0.07).collect();
+        let compact = Tensor::from_vec(values.clone(), (n, 4), &cpu())?;
+        let direction = icosian_pair_snap_straight_through(&compact, false)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for bits in [1u32, 2] {
+            let snapped = icosian_pair_mantissa_snap_straight_through(&compact, bits)?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            let steps = 1u32 << bits;
+            let mut worst = 0f64;
+            for i in 0..n {
+                let (q, d, v) = (
+                    &values[4 * i..4 * i + 4],
+                    &direction[4 * i..4 * i + 4],
+                    &snapped[4 * i..4 * i + 4],
+                );
+                let norm = |x: &[f32]| x.iter().map(|a| f64::from(*a).powi(2)).sum::<f64>().sqrt();
+                // Same direction as the f32-norm pair (which has |q|).
+                let ratio = norm(v) / norm(d);
+                for c in 0..4 {
+                    assert!((f64::from(v[c]) - ratio * f64::from(d[c])).abs() < 1e-6);
+                }
+                // The snapped norm stays within half a mantissa step of |q|.
+                worst = worst.max((norm(v) / norm(q) - 1.0).abs());
+            }
+            // Half a mantissa step in log, as a relative norm error bound.
+            let bound = (1.0 + 1.0 / f64::from(steps)).sqrt() - 1.0 + 1e-6;
+            assert!(worst <= bound, "bits {bits}: worst {worst} > {bound}");
+        }
+        assert_eq!(
+            QuaternionSnap::parse("icosian_pair_m2")?,
+            QuaternionSnap::IcosianPairM2
+        );
+        Ok(())
+    }
+
+    #[test]
     fn the_device_snap_equals_the_host_loops_bit_for_bit() -> Result<()> {
         let mut rng = Initializer(91);
         let n = 20_000;
@@ -32485,6 +32590,8 @@ mod tests {
             QuaternionSnap::IcosianF32,
             QuaternionSnap::IcosianPair,
             QuaternionSnap::IcosianPairF32,
+            QuaternionSnap::IcosianPairM1,
+            QuaternionSnap::IcosianPairM2,
         ] {
             let mut float = StackModel::new(config.clone(), &cpu())?;
             float.set_quaternion_weights(QuaternionWeights::All)?;
