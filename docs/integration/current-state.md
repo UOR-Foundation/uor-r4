@@ -1,3 +1,20 @@
+## 2026-10-11 — RETRACTION: the fused-memory kernel broke the CUDA build and its rate claim was not the kernel's (deepseek, #2029)
+
+**Two errors in one merged PR ([#2212](https://github.com/UOR-Foundation/uor-r4/pull/2212)), both found within the hour and both now
+reverted.** First, the kernel **broke the CUDA build**: a pod bootstrap at the merged sha fails with three errors in `uor-r4-training`
+under `--features cuda` (`E0308` on the launcher's return type, `E0603` on a private item) — and **CI passed because it does not compile
+the CUDA feature**, so a CUDA-only regression reached `main` that would have broken every CUDA build of the training stack. Second, the
+record's central number was **not attributable to the kernel at all**: that pod was bootstrapped with `--ref <main sha>`, which fetches
+**from GitHub**, so the binary contained `main` **without** the kernel edits. The "≈12× step improvement" is the **fat-versus-lean
+codebook** difference (1.19 s/step against 0.175 s/step) — two configurations already known to differ — and the CPU/CUDA agreement
+(~1e-9) compared one binary with itself.
+
+**The [record](../labs/fused-memory-kernel-2026-10-11/README.md) carries a retraction banner, the change is reverted, and the negative
+stays visible** rather than erased. The fused forward's source remains in the reverted commit as a starting point. **Practice changes,
+effective immediately:** a kernel change is not verified until a pod **built from the branch that contains it** runs it (`--ref` names
+the branch head, and the compile is read, not assumed); CUDA-only paths get a CUDA compile before merge; and every rate claim names its
+binary's ref and the configurations compared.
+
 ## 2026-10-11 — The context curve: served tokens/s at 384 / 1,024 / 4,096 on the product path, and the O(n) prize is bounded at ~1.7× (deepseek, #2029, measurement)
 
 The [context-curve measurement](../labs/context-curve-2026-10-11/README.md) answers the question every evaluation in this project has
