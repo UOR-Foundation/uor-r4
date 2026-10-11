@@ -638,22 +638,41 @@ pub fn parse_read_route(text: &str) -> Result<Option<StarlingRoute>> {
 /// Evaluation-time record of the starling read's kept sources
 /// ([`starling_record_start`], [`starling_record_take`]): per call, the
 /// layer, batch row, head, query position and kept positions. Off unless started.
+/// Thread-local: the record is started, filled and taken on the thread that
+/// runs the forward pass, so concurrent models (or tests) never mix records.
 type StarlingRecord = Vec<(usize, usize, usize, usize, Vec<usize>)>;
-static STARLING_RECORD: std::sync::Mutex<Option<StarlingRecord>> = std::sync::Mutex::new(None);
+thread_local! {
+    static STARLING_RECORD: std::cell::RefCell<Option<StarlingRecord>> =
+        const { std::cell::RefCell::new(None) };
+}
 
-/// Start recording the starling read's kept sources (clears any record).
+/// Evaluation-only oracle for the starling read: `(batch row, position) ->
+/// source position`. While set, every head's kept set at that position holds
+/// the source (replacing its lowest-ranked entry when absent). A diagnostic
+/// that separates selection from readout; never used in training.
+/// Thread-local, like the record.
+type StarlingOracle = std::collections::HashMap<(usize, usize), usize>;
+thread_local! {
+    static STARLING_ORACLE: std::cell::RefCell<Option<StarlingOracle>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Set (or with `None` clear) the starling read's evaluation oracle on this
+/// thread.
+pub fn starling_oracle_set(oracle: Option<StarlingOracle>) {
+    STARLING_ORACLE.with(|slot| *slot.borrow_mut() = oracle);
+}
+
+/// Start recording the starling read's kept sources on this thread (clears
+/// any record).
 pub fn starling_record_start() {
-    if let Ok(mut record) = STARLING_RECORD.lock() {
-        *record = Some(Vec::new());
-    }
+    STARLING_RECORD.with(|record| *record.borrow_mut() = Some(Vec::new()));
 }
 
 /// Stop recording and return `(layer, batch_row, head, position, kept)` rows.
 pub fn starling_record_take() -> StarlingRecord {
     STARLING_RECORD
-        .lock()
-        .ok()
-        .and_then(|mut record| record.take())
+        .with(|record| record.borrow_mut().take())
         .unwrap_or_default()
 }
 
@@ -3546,15 +3565,33 @@ impl StackModel {
                 )
             })
             .collect::<Result<_>>()?;
-        if let Ok(mut record) = STARLING_RECORD.lock() {
-            if let Some(record) = record.as_mut() {
+        let mut selections = selections;
+        STARLING_ORACLE.with(|oracle| {
+            if let Some(oracle) = oracle.borrow().as_ref() {
+                for (row, kept) in selections.iter_mut().enumerate() {
+                    for (t, sources) in kept.iter_mut().enumerate() {
+                        if let Some(&j) = oracle.get(&(row / heads, t)) {
+                            if j <= t && !sources.contains(&j) {
+                                if sources.len() < k {
+                                    sources.push(j);
+                                } else if let Some(last) = sources.last_mut() {
+                                    *last = j;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        STARLING_RECORD.with(|record| {
+            if let Some(record) = record.borrow_mut().as_mut() {
                 for (row, kept) in selections.iter().enumerate() {
                     for (t, sources) in kept.iter().enumerate() {
                         record.push((layer, row / heads, row % heads, t, sources.clone()));
                     }
                 }
             }
-        }
+        });
         for (row, kept) in selections.iter().enumerate() {
             for (t, sources) in kept.iter().enumerate() {
                 let base = (row * time + t) * k;
@@ -31720,6 +31757,40 @@ mod tests {
         // A plain model keeps its config without the field and refuses export.
         assert!(parse_read_route("none")?.is_none());
         assert!(parse_read_route("starling:0:7").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn the_starling_oracle_forces_the_source_into_every_heads_kept_set() -> Result<()> {
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::L2, true),
+            &cpu(),
+        )?;
+        model.set_read_route(Some(StarlingRoute {
+            m: 1,
+            k: 2,
+            content: false,
+        }))?;
+        let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
+        let natural = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        let mut oracle = std::collections::HashMap::new();
+        oracle.insert((1usize, 11usize), 0usize);
+        starling_oracle_set(Some(oracle));
+        starling_record_start();
+        let forced = model.forward(&ids, 2, 12);
+        let record = starling_record_take();
+        starling_oracle_set(None);
+        let forced = forced?.flatten_all()?.to_vec1::<f32>()?;
+        let at: Vec<_> = record
+            .iter()
+            .filter(|(_, row, _, t, _)| *row == 1 && *t == 11)
+            .collect();
+        assert_eq!(at.len(), model.config.heads);
+        assert!(at.iter().all(|(_, _, _, _, kept)| kept.contains(&0) && kept.len() <= 2));
+        assert_ne!(natural, forced);
+        // Cleared, the read is the natural one again.
+        let again = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        assert_eq!(natural, again);
         Ok(())
     }
 

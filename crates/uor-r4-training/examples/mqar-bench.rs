@@ -10,7 +10,7 @@
 //!   [dump_scores=false|true] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
-//!   [read_route=none|starling:M:K[:content]] [starling_anneal=FRACTION] \
+//!   [read_route=none|starling:M:K[:content]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
 //!   [lineage=none|f2|qk|qk_jj|identity|so4|conv|wprev|conv8|carrier|rot] [learned_init=lag1|zero]
 //! arm=transformer: [layers=<pattern length>] [width=128] [heads=4] [mlp=matched|<n>] \
@@ -371,6 +371,15 @@ trait ContextArm {
     /// position `q - d + 1`, whose shifted key carries the queried key) is
     /// kept by some read head at the query position. `None` otherwise.
     fn starling_hit_rate(&self, _sequences: &[Sequence], _context: usize) -> Result<Option<f64>> {
+        Ok(None)
+    }
+    /// For a starling read: recall with every head's kept set forced to hold
+    /// each query's true source (diagnostic D1, #2032). `None` otherwise.
+    fn starling_oracle_accuracy(
+        &self,
+        _sequences: &[Sequence],
+        _context: usize,
+    ) -> Result<Option<f64>> {
         Ok(None)
     }
     /// Context positions the arm scores for the token at `position`, summed
@@ -1055,6 +1064,45 @@ impl ContextArm for StackArm {
             }
         }
         Ok(Some(hits as f64 / total.max(1) as f64))
+    }
+
+    fn starling_oracle_accuracy(&self, sequences: &[Sequence], context: usize) -> Result<Option<f64>> {
+        if self.model.read_route().is_none() {
+            return Ok(None);
+        }
+        let (mut correct, mut total) = (0usize, 0usize);
+        for chunk in sequences.chunks(8) {
+            let (ids, _, _) = batch_arrays(chunk, context);
+            let mut oracle = std::collections::HashMap::new();
+            for (b, sequence) in chunk.iter().enumerate() {
+                for query in &sequence.queries {
+                    oracle.insert((b, query.position), query.position - query.distance + 1);
+                }
+            }
+            uor_r4_training::geometric_stack::starling_oracle_set(Some(oracle));
+            let logits = self.model.forward(&ids, chunk.len(), context);
+            uor_r4_training::geometric_stack::starling_oracle_set(None);
+            let logits = logits?.to_device(&Device::Cpu)?.to_vec2::<f32>()?;
+            for (b, sequence) in chunk.iter().enumerate() {
+                for query in &sequence.queries {
+                    let scores = &logits[b * context + query.position];
+                    let argmax = scores
+                        .iter()
+                        .enumerate()
+                        .fold((0usize, f32::NEG_INFINITY), |best, (i, &v)| {
+                            if v > best.1 {
+                                (i, v)
+                            } else {
+                                best
+                            }
+                        })
+                        .0;
+                    total += 1;
+                    correct += usize::from(argmax == query.value as usize);
+                }
+            }
+        }
+        Ok(Some(correct as f64 / total.max(1) as f64))
     }
 
     fn kind(&self) -> &'static str {
@@ -2298,6 +2346,9 @@ struct Common {
     vocab: usize,
     /// Save the trained weights under `model/` of the report root.
     save_model: bool,
+    /// `starling_oracle_train=true`: diagnostic D1 (#2032). Every training
+    /// batch's true sources are forced into the starling read's kept sets.
+    starling_oracle_train: bool,
     context: usize,
     pairs_per_bucket: usize,
     batch: usize,
@@ -2361,6 +2412,7 @@ impl Common {
             "context": self.context,
             "vocab": self.vocab,
             "save_model": self.save_model,
+            "starling_oracle_train": self.starling_oracle_train,
             "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
             "pairing_split": {
                 "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
@@ -2408,6 +2460,7 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
         device_name: args.take("device").unwrap_or_else(|| "cpu".into()),
         vocab: VOCAB,
         save_model: args.parsed("save_model", false)?,
+        starling_oracle_train: args.parsed("starling_oracle_train", false)?,
         context: args.parsed(
             "context",
             if fact_layout {
@@ -2654,7 +2707,18 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
             .collect::<Result<_>>()?;
         let (ids, targets, weights) = batch_arrays(&batch, s.context);
         arm.begin_step(step, s.steps)?;
-        let loss = arm.loss(&ids, &targets, &weights, s.batch, s.context)?;
+        if s.starling_oracle_train {
+            let mut oracle = std::collections::HashMap::new();
+            for (b, sequence) in batch.iter().enumerate() {
+                for query in &sequence.queries {
+                    oracle.insert((b, query.position), query.position - query.distance + 1);
+                }
+            }
+            uor_r4_training::geometric_stack::starling_oracle_set(Some(oracle));
+        }
+        let loss = arm.loss(&ids, &targets, &weights, s.batch, s.context);
+        uor_r4_training::geometric_stack::starling_oracle_set(None);
+        let loss = loss?;
         let value = f64::from(loss.to_scalar::<f32>()?);
         if !value.is_finite() {
             return Err(invalid(format!("nonfinite loss at step {step}")));
@@ -2724,6 +2788,14 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     );
     eprintln!("{line}");
     writeln!(log, "{line}")?;
+    if let Some(oracle) = arm.starling_oracle_accuracy(&in_class_set, s.context)? {
+        let natural = arm.starling_hit_rate(&in_class_set, s.context)?.unwrap_or(f64::NAN);
+        let line = format!(
+            "starling oracle (D1): in-class acc with the true source forced into every head's kept set {oracle:.4}; natural hit rate {natural:.4}"
+        );
+        eprintln!("{line}");
+        writeln!(log, "{line}")?;
+    }
     // Save the trained weights BEFORE the stage-0 readout swap: the diagnostic
     // is the memory-heaviest phase here, and a failure in it must not lose the
     // trained model (which `main` otherwise saves only after `run` returns).
