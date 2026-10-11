@@ -1577,6 +1577,7 @@ fn answer(
     device: &Device,
     cycle_repeats: usize,
     pointer_gate_floor: f64,
+    pointer_gate_ceiling: f64,
 ) -> Result<Answered, Error> {
     let tokenizer = load_tokenizer(tokenizer_path)?;
     let protocol = DialogueProtocol::literal_roles_version(&tokenizer, version)?;
@@ -1584,6 +1585,7 @@ fn answer(
     let requests = load_panels(request_paths, exclude)?.0;
     let mut model = StackModel::load(model_dir, device)?;
     model.set_pointer_gate_floor(pointer_gate_floor)?;
+    model.set_pointer_gate_ceiling(pointer_gate_ceiling)?;
     let mut costs = Vec::new();
     let clock = Instant::now();
     let mut panel = reply_panel(
@@ -1630,6 +1632,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             "device",
             "cycle_repeats",
             "pointer_gate_floor",
+            "pointer_gate_ceiling",
         ],
     )?;
     let out = PathBuf::from(args.required("out")?);
@@ -1647,6 +1650,13 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
     if !pointer_gate_floor.is_finite() || !(0.0..=1.0).contains(&pointer_gate_floor) {
         return Err("pointer_gate_floor must be a probability in [0, 1]".into());
     }
+    let pointer_gate_ceiling: f64 = args.number("pointer_gate_ceiling", 1.0)?;
+    if !pointer_gate_ceiling.is_finite() || !(0.0..=1.0).contains(&pointer_gate_ceiling) {
+        return Err("pointer_gate_ceiling must be a probability in [0, 1]".into());
+    }
+    if pointer_gate_ceiling < pointer_gate_floor {
+        return Err("pointer_gate_ceiling must not be below pointer_gate_floor".into());
+    }
     let (device_label, device) = args.device()?;
     report_output::claim(&out)?;
     let result = (|| -> Result<(), Error> {
@@ -1660,6 +1670,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             &device,
             cycle_repeats,
             pointer_gate_floor,
+            pointer_gate_ceiling,
         )?;
         let mut report = json!({
             "schema": "uor-r4.chat-grade-reply/1",
@@ -1671,6 +1682,7 @@ fn reply(arguments: &[String]) -> Result<(), Error> {
             "requests": request_paths.iter().map(|p| json!({"path": p.display().to_string(), "sha256": sha256_file(p).ok()})).collect::<Vec<_>>(),
             "max_new_tokens": max_new_tokens,
             "pointer_gate_floor": pointer_gate_floor,
+            "pointer_gate_ceiling": pointer_gate_ceiling,
             "decoding": "greedy over the float model's next-token scores (a pointer model's mixture), ties to the lower id; each step recomputes the whole window",
             "device": device_record(device_label),
             "panel": answered.panel,
@@ -1733,6 +1745,7 @@ fn grade_into(
         device,
         3,
         0.0,
+        1.0,
     )?;
     let judged = judging.judge(&panel)?;
     let mut report = json!({

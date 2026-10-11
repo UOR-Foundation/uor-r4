@@ -2029,6 +2029,11 @@ pub struct StackModel {
     /// `max(gate, floor)` in place of the head's own gate. `0.0`, the default,
     /// is the head's gate exactly. Not saved.
     pointer_gate_floor: f64,
+    /// Serving-time **ceiling** on the copy gate
+    /// ([`Self::set_pointer_gate_ceiling`]): the mirror of the floor, so the
+    /// copy branch can be switched *off* at read-out. `1.0`, the default,
+    /// leaves every reply as it was.
+    pointer_gate_ceiling: f64,
     /// Serving-time copy-stop rule on the pointer branch
     /// ([`Self::set_pointer_copy_stop`]): `None`, the default, is the
     /// historical decoder exactly. Not saved. What the rule did over one reply
@@ -2086,6 +2091,7 @@ impl StackModel {
             read_lineage_so4: None,
             pointer_key_fold: None,
             pointer_gate_floor: 0.0,
+            pointer_gate_ceiling: 1.0,
             pointer_copy_stop: None,
             pointer_copy_trace: false,
             pointer_span_extract: None,
@@ -3784,6 +3790,34 @@ impl StackModel {
         Ok(())
     }
 
+    /// Cap the pointer's copy gate at `ceiling` on the **read-out** path: both
+    /// serving mixtures use `min(max(gate, floor), ceiling)` in place of the
+    /// head's own gate, so `0.0` switches the copy branch off entirely and
+    /// `1.0`, the default, leaves every reply bit for bit as it was. Like the
+    /// floor this is a read-out change only: no parameter, no gradient, no
+    /// training path, and it is not saved. Refused outside `0..=1`, and refused
+    /// below the floor a caller has already set.
+    pub fn set_pointer_gate_ceiling(&mut self, ceiling: f64) -> Result<()> {
+        if !ceiling.is_finite() || !(0.0..=1.0).contains(&ceiling) {
+            return Err(invalid(format!(
+                "the pointer gate ceiling {ceiling} is not a probability in 0..=1"
+            )));
+        }
+        if ceiling < self.pointer_gate_floor {
+            return Err(invalid(format!(
+                "the pointer gate ceiling {ceiling} is below the floor {}",
+                self.pointer_gate_floor
+            )));
+        }
+        self.pointer_gate_ceiling = ceiling;
+        Ok(())
+    }
+
+    /// The copy gate's serving-time ceiling ([`Self::set_pointer_gate_ceiling`]).
+    pub fn pointer_gate_ceiling(&self) -> f64 {
+        self.pointer_gate_ceiling
+    }
+
     /// The serving-time pointer gate floor, `0.0` when unset
     /// ([`Self::set_pointer_gate_floor`]).
     pub fn pointer_gate_floor(&self) -> f64 {
@@ -3894,11 +3928,8 @@ impl StackModel {
     /// is positive. A floor of zero returns the sigmoid unchanged.
     fn floored_gate(&self, logit: f64) -> f64 {
         let gate = sigmoid_f64(logit);
-        if self.pointer_gate_floor > 0.0 {
-            gate.max(self.pointer_gate_floor)
-        } else {
-            gate
-        }
+        gate.max(self.pointer_gate_floor)
+            .min(self.pointer_gate_ceiling)
     }
 
     /// The ids a routed pointer matches its keys on, when a fold is set and
@@ -8798,11 +8829,10 @@ impl StackModel {
         ));
         // The gate the mixture uses, from the same sigmoid value
         // [`Self::floored_gate`] returns for this logit.
-        let gate = if self.pointer_gate_floor > 0.0 {
-            raw_gate.max(self.pointer_gate_floor)
-        } else {
-            raw_gate
-        };
+        let gate = self
+            .floored_gate(f64::from(
+                side[(time - 1) * (2 * pointer.dim + 1) + 2 * pointer.dim],
+            ));
         let lse = row_log_sum_exp(&logits);
         let mut mixture: Vec<f64> = logits
             .iter()
@@ -9422,6 +9452,7 @@ impl StackModel {
             variables.insert(name, Var::from_tensor(tensor)?);
         }
         let mut model = Self {
+            pointer_gate_ceiling: 1.0,
             config,
             variables,
             device: device.clone(),
