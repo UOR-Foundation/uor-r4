@@ -1,3 +1,38 @@
+## 2026-10-11 — Geometry audit: the trained stack's geometric operations are 0.05 % of its arithmetic, and the project's own ledger rule is missing from the model line (deepseek, owner question of 10 October)
+
+The owner asked why the project keeps becoming matrix wrappers with 1–2 % gains. The
+[audit](../integration/geometry-audit-2026-10-11/README.md) answers with the artifact's own numbers. The deployed 29M stack
+(width 576, 8 heads, 10 layers, `rrarrarrar`, MLP 732, context 384) spends **30,270,720 MACs per token**, of which **MLP 39.6 %**,
+**recurrence projections 31.0 %**, **softmax reads 16.6 %** (16.6 % at the trained context of 384, **40.5 % at 4,096**) and the
+**output head 7.4 %**. The **quaternion transport rotations — the geometry — are 16,128 multiplies, 0.05 %**; the exact addressed
+store, prime/UOR addressing, zeta phases and icosian arithmetic are **0 lookups, 0 %** in the stack (they live in
+`crates/uor-r4-core/src/native_geometric/`, which is not the family the ladder scales or serves). The honest description of the
+artifact is a transformer with a quaternion-mixed residual and a 0.1 % copy head.
+
+**Five connection bugs, each with evidence.** (B1) Every acceptance criterion is quality-only, so a mechanism that halves the
+arithmetic and ties on quality is invisible — while the repository's own transformerless line already wrote the rule (*"a
+throughput number never travels without its quality number"*, [COMPARISON.md](../transformerless/COMPARISON.md), with
+`multiplies/token` in the table). (B2) The geometry is parameterisation, not computation: each rotation is wrapped in 1.4 M dense
+weights per layer. (B3) Novel mechanisms entered as options beside matched controls, and the control won — the base runs
+`read=l2`, the flat Euclidean ablation. (B4) Novelty and critical path are disjoint: the exact addressed machinery is in a family
+that is unscaled and unserved, and that family's own win does not transfer (437/512 development, 0/128 fresh, #2164).
+(B5) Serving substituted operations without reducing work and measured **slower**: multiplier-free D11 runs **68.0 tok/s** against
+float's **127.5** on the same artifact, windows and NLL.
+
+**Consequences named, not just criticised.** The only three things that reduce work per token are **fewer weights touched**,
+**less search** (addressing, where attention's share grows to 40 % at 4 K) and **less state**; the product-key memory already in the
+tree removes **86 %** of a replaced layer's multiplies (1,264,896 → 173,056) and sat inside the panel's noise when bolted on for
+2,000 steps, which a quality-only metric cannot distinguish from failure. Two candidate load-bearing mechanisms are stated with
+their compute claims (address-and-copy output path; exact icosian weights), and the cheapest decisive test is named: a
+**forced-copy oracle** that supplies the pointer the true span — this session's order-3 read (hit rate 0.377 → 0.54 at zero
+likelihood cost, panel flat) already implicates the emit path rather than the address.
+
+**Decision requested from the owner:** adopt the compute ledger (MACs/token, weights touched, lookups, bytes, wall-time at fixed
+quality, artifact size) as a required field of every experiment; choose the first load-bearing mechanism; and state which family is
+the project — promote the native machinery onto the served path or port it into the stack.
+
+**Next:** the forced-copy oracle (no owner decision needed), then the chosen load-bearing mechanism.
+
 ## 2026-10-11 — The exact content-route pointer raises its own metric 44 % at no likelihood cost, and the answers do not follow (deepseek, #2029, D22 order 3)
 
 Order 3 reopens the identity pointer **with a real key** — the slot/entity address rather than the six tokens around the value
