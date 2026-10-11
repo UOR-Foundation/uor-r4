@@ -373,6 +373,12 @@ trait ContextArm {
     fn starling_hit_rate(&self, _sequences: &[Sequence], _context: usize) -> Result<Option<f64>> {
         Ok(None)
     }
+    /// For a ranked starling read: among (query, read head) cells whose kept
+    /// set holds the true source, the share where the source is the top
+    /// content match. `None` otherwise.
+    fn starling_top_rate(&self, _sequences: &[Sequence], _context: usize) -> Result<Option<f64>> {
+        Ok(None)
+    }
     /// For a starling read: recall with every head's kept set forced to hold
     /// each query's true source (diagnostic D1, #2032). `None` otherwise.
     fn starling_oracle_accuracy(
@@ -1064,6 +1070,40 @@ impl ContextArm for StackArm {
             }
         }
         Ok(Some(hits as f64 / total.max(1) as f64))
+    }
+
+    fn starling_top_rate(&self, sequences: &[Sequence], context: usize) -> Result<Option<f64>> {
+        if !self.model.read_route().is_some_and(|route| route.ranked) {
+            return Ok(None);
+        }
+        let (mut first, mut held) = (0usize, 0usize);
+        for chunk in sequences.chunks(8) {
+            let (ids, _, _) = batch_arrays(chunk, context);
+            uor_r4_training::geometric_stack::starling_record_start();
+            uor_r4_training::geometric_stack::starling_top_start();
+            let forward = self.model.forward(&ids, chunk.len(), context);
+            let kept = uor_r4_training::geometric_stack::starling_record_take();
+            let top = uor_r4_training::geometric_stack::starling_top_take();
+            forward?;
+            let top: std::collections::HashMap<(usize, usize, usize, usize), usize> = top
+                .into_iter()
+                .map(|(layer, b, h, t, j)| ((layer, b, h, t), j))
+                .collect();
+            for (b, sequence) in chunk.iter().enumerate() {
+                for query in &sequence.queries {
+                    let source = query.position - query.distance + 1;
+                    for (layer, row, head, t, sources) in &kept {
+                        if *row == b && *t == query.position && sources.contains(&source) {
+                            held += 1;
+                            if top.get(&(*layer, b, *head, *t)) == Some(&source) {
+                                first += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Some(first as f64 / held.max(1) as f64))
     }
 
     fn starling_oracle_accuracy(
@@ -2805,8 +2845,12 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
         let natural = arm
             .starling_hit_rate(&in_class_set, s.context)?
             .unwrap_or(f64::NAN);
+        let top = match arm.starling_top_rate(&in_class_set, s.context)? {
+            Some(rate) => format!("; source ranked first when kept {rate:.4}"),
+            None => String::new(),
+        };
         let line = format!(
-            "starling oracle (D1): in-class acc with the true source forced into every head's kept set {oracle:.4}; natural hit rate {natural:.4}"
+            "starling oracle (D1): in-class acc with the true source forced into every head's kept set {oracle:.4}; natural hit rate {natural:.4}{top}"
         );
         eprintln!("{line}");
         writeln!(log, "{line}")?;

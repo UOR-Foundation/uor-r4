@@ -703,6 +703,35 @@ pub fn starling_record_start() {
     STARLING_RECORD.with(|record| *record.borrow_mut() = Some(Vec::new()));
 }
 
+/// The live slots of one (row, head, position) cell in descending content
+/// score; ties go to the earlier slot. A ranked starling read weights slot
+/// `order[r]` by the rank table's column `r`.
+pub fn content_order(score: &[f32], alive: &[f32]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..score.len()).filter(|&r| alive[r] > 0.0).collect();
+    order.sort_by(|&x, &y| score[y].total_cmp(&score[x]).then(x.cmp(&y)));
+    order
+}
+
+/// Evaluation-time record of a ranked starling read's top content match:
+/// `(layer, batch_row, head, position, source position ranked first)`.
+type StarlingTopRecord = Vec<(usize, usize, usize, usize, usize)>;
+thread_local! {
+    static STARLING_TOP: std::cell::RefCell<Option<StarlingTopRecord>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Start recording a ranked starling read's top content match on this thread.
+pub fn starling_top_start() {
+    STARLING_TOP.with(|record| *record.borrow_mut() = Some(Vec::new()));
+}
+
+/// Stop recording and return the top-match rows.
+pub fn starling_top_take() -> StarlingTopRecord {
+    STARLING_TOP
+        .with(|record| record.borrow_mut().take())
+        .unwrap_or_default()
+}
+
 /// Stop recording and return `(layer, batch_row, head, position, kept)` rows.
 pub fn starling_record_take() -> StarlingRecord {
     STARLING_RECORD
@@ -3660,6 +3689,11 @@ impl StackModel {
             }
         }
         let device = identity.device();
+        let index_host = if route.ranked {
+            index.clone()
+        } else {
+            Vec::new()
+        };
         let index = Tensor::from_vec(index, (batch, heads, time * slots), device)?;
         let live = Tensor::from_vec(live, (batch, heads, time, slots), device)?;
         let rank = Tensor::from_vec(rank, (batch, heads, time, slots), device)?;
@@ -3705,15 +3739,24 @@ impl StackModel {
             let scores = dot.detach().flatten_all()?.to_vec1::<f32>()?;
             let alive = live.flatten_all()?.to_vec1::<f32>()?;
             let mut ranks = vec![0u32; scores.len()];
+            let mut top: Vec<(usize, usize, usize, usize, usize)> = Vec::new();
             for (cell, (score, alive)) in scores.chunks(slots).zip(alive.chunks(slots)).enumerate()
             {
-                let mut order: Vec<usize> = (0..slots).filter(|&r| alive[r] > 0.0).collect();
+                let order = content_order(score, alive);
                 let count = order.len();
-                order.sort_by(|&x, &y| score[y].total_cmp(&score[x]).then(x.cmp(&y)));
                 for (position, &slot) in order.iter().enumerate() {
                     ranks[cell * slots + slot] = (count.min(k) * side + position.min(k)) as u32;
                 }
+                if let Some(&first) = order.first() {
+                    let (b, h, t) = (cell / (heads * time), (cell / time) % heads, cell % time);
+                    top.push((layer, b, h, t, index_host[cell * slots + first] as usize));
+                }
             }
+            STARLING_TOP.with(|record| {
+                if let Some(record) = record.borrow_mut().as_mut() {
+                    record.extend(top);
+                }
+            });
             Tensor::from_vec(ranks, (batch, heads, time, slots), device)?
         } else {
             rank
@@ -31989,6 +32032,14 @@ mod tests {
         let uniform = 1.0 / (fresh.config.heads * 3) as f32;
         assert!(table.iter().all(|&v| v == uniform));
         Ok(())
+    }
+
+    #[test]
+    fn content_order_is_descending_skips_dead_slots_and_breaks_ties_early() {
+        let score = [0.5, 2.0, -1.0, 2.0, 9.0];
+        let alive = [1.0, 1.0, 1.0, 1.0, 0.0];
+        assert_eq!(content_order(&score, &alive), vec![1, 3, 0, 2]);
+        assert!(content_order(&[1.0], &[0.0]).is_empty());
     }
 
     #[test]
