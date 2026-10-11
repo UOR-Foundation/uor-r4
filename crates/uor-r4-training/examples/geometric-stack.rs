@@ -347,10 +347,10 @@ use uor_r4_training::dialogue_episodes::{EpisodeIndex, PrefixPolicy, EPISODE_CON
 use uor_r4_training::flock::FlockSelect;
 use uor_r4_training::geometric_stack::{
     average_replica_gradients, logits_cross_entropy, parse_flock_select, parse_pointer_route,
-    parse_pointer_select, quaternion_served_refusal, D11Interim, MapCodec, PointerConfig,
-    PointerIdentity, PointerSelect, Precision, PrimeRoute, QuaternionWeights, ReadLineage,
-    ReadScore, ReadWeighting, RotationGroup, ServedStatistics, StackAdamW, StackArch, StackConfig,
-    StackModel, TransportSnap, TransportUsage,
+    parse_pointer_select, quaternion_served_refusal, ActivationSnap, D11Interim, MapCodec,
+    PointerConfig, PointerIdentity, PointerSelect, Precision, PrimeRoute, QuaternionWeights,
+    ReadLineage, ReadScore, ReadWeighting, RotationGroup, ServedStatistics, StackAdamW, StackArch,
+    StackConfig, StackModel, TransportSnap, TransportUsage,
 };
 use uor_r4_training::lut_export::export_llama;
 use uor_r4_training::stack_dialogue::{
@@ -2706,10 +2706,12 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
         // the hard table, and the T where the two part shows the score scale.
         match args.optional("activation_snap").as_deref() {
             None | Some("none") => {}
-            Some("icosian") => model.set_activation_snap(true),
+            Some("icosian") => model.set_activation_snap(ActivationSnap::Icosian),
+            Some("direction") => model.set_activation_snap(ActivationSnap::Direction),
+            Some("scale") => model.set_activation_snap(ActivationSnap::Scale),
             Some(other) => {
                 return Err(invalid(format!(
-                    "invalid activation_snap={other} (none or icosian)"
+                    "invalid activation_snap={other} (none, icosian, direction or scale)"
                 )))
             }
         }

@@ -273,6 +273,18 @@ impl ReadWeighting {
 /// left-multiplication matrix of the quaternion `Q[i, j] = (a, b, c, d)`
 /// ([`quaternion_dense_weight`]), so the map holds a quarter of the
 /// parameters. A training study only: it has no served form yet.
+/// The evaluation-only activation snap of [`StackModel::set_activation_snap`]:
+/// `Icosian` snaps each quaternion-map input 4-lane to the nearest unit
+/// icosian times `2^round(log2 |x|)`; `Direction` keeps the exact norm;
+/// `Scale` keeps the exact direction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActivationSnap {
+    None,
+    Icosian,
+    Direction,
+    Scale,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QuaternionWeights {
@@ -2220,7 +2232,7 @@ pub struct StackModel {
     quaternion_weights: QuaternionWeights,
     /// Evaluation-only probe ([`Self::set_activation_snap`]): every projection input lane is
     /// snapped to its nearest unit icosian times a power of two. Never saved.
-    activation_snap: bool,
+    activation_snap: ActivationSnap,
 }
 
 impl StackModel {
@@ -2256,7 +2268,7 @@ impl StackModel {
             geometric_address: None,
             geometric_span: None,
             read_key_shift: false,
-            activation_snap: false,
+            activation_snap: ActivationSnap::None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
             read_lineage: None,
@@ -2672,14 +2684,14 @@ impl StackModel {
     /// `2^round(log2 |x|) * nearest_icosian(x / |x|)` before the product (zero
     /// lanes stay zero). With icosian-snapped quaternion weights this is the
     /// arithmetic of a table-lookup product. A probe, never trained or saved.
-    pub fn set_activation_snap(&mut self, enabled: bool) {
-        self.activation_snap = enabled;
+    pub fn set_activation_snap(&mut self, mode: ActivationSnap) {
+        self.activation_snap = mode;
     }
 
     fn snap_activation(&self, input: &Tensor) -> Result<Tensor> {
         let dims = input.dims().to_vec();
         let features = dims[dims.len() - 1];
-        if !self.activation_snap || !features.is_multiple_of(4) {
+        if self.activation_snap == ActivationSnap::None || !features.is_multiple_of(4) {
             return Ok(input.clone());
         }
         let dtype = input.dtype();
@@ -2701,16 +2713,27 @@ impl StackModel {
                 lane[2] / norm,
                 lane[3] / norm,
             ];
-            let root = roots[nearest_root(unit, roots)];
-            let scale = norm.log2().round().exp2();
-            out.extend(root.iter().map(|r| r * scale));
+            let direction = match self.activation_snap {
+                ActivationSnap::Scale => unit,
+                _ => roots[nearest_root(unit, roots)],
+            };
+            let scale = match self.activation_snap {
+                ActivationSnap::Direction => norm,
+                _ => norm.log2().round().exp2(),
+            };
+            out.extend(direction.iter().map(|r| r * scale));
         }
         Ok(Tensor::from_vec(out, dims, input.device())?.to_dtype(dtype)?)
     }
 
     fn linear(&self, input: &Tensor, weight: &Tensor) -> Result<Tensor> {
         let snapped;
-        let input = if self.activation_snap {
+        // Only the quaternion maps' inputs: not the tied head ([vocab, width])
+        // and not the NoRead map ([heads, width]), the two other linear calls
+        // of a plain quaternion-weight geometric stack.
+        let quaternion_map = weight.dim(0)? != self.config.vocab_size
+            && weight.dims() != [self.config.heads, self.config.width];
+        let input = if self.activation_snap != ActivationSnap::None && quaternion_map {
             snapped = self.snap_activation(input)?;
             &snapped
         } else {
@@ -9835,7 +9858,7 @@ impl StackModel {
             geometric_address,
             geometric_span,
             read_key_shift: false,
-            activation_snap: false,
+            activation_snap: ActivationSnap::None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
             read_lineage: None,
@@ -30384,7 +30407,7 @@ mod tests {
                 .to_vec1::<f32>()?,
             values
         );
-        model.set_activation_snap(true);
+        model.set_activation_snap(ActivationSnap::Icosian);
         let out = model
             .snap_activation(&input)?
             .flatten_all()?
@@ -30397,6 +30420,18 @@ mod tests {
             );
         }
         assert_eq!(&out[4..], &[0.0, 0.0, 0.0, 0.0]);
+        // linear snaps only quaternion-map inputs: a head-shaped
+        // ([vocab, width]) or NoRead-shaped ([heads, width]) map is untouched.
+        let config = model.config.clone();
+        let x = random(&mut Initializer(7), &[3, config.width], 1.0);
+        for rows in [config.vocab_size, config.heads, 8] {
+            let w = random(&mut Initializer(9), &[rows, config.width], 1.0);
+            model.set_activation_snap(ActivationSnap::None);
+            let plain = model.linear(&x, &w)?.flatten_all()?.to_vec1::<f32>()?;
+            model.set_activation_snap(ActivationSnap::Icosian);
+            let snapped = model.linear(&x, &w)?.flatten_all()?.to_vec1::<f32>()?;
+            assert_eq!(plain == snapped, rows != 8, "rows {rows}");
+        }
         Ok(())
     }
 }
