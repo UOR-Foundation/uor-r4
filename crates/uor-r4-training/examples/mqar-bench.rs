@@ -2606,8 +2606,14 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     )?;
     let chunk = s.batch;
     let mut curve = Vec::new();
+    let hit_rate_0 = arm.starling_hit_rate(&curve_in_class, s.context)?;
+    if let Some(rate) = hit_rate_0 {
+        eprintln!("step 0 starling hit rate {rate:.4}");
+        writeln!(log, "step 0 starling hit rate {rate:.4}")?;
+    }
     curve.push(json!({
         "step": 0,
+        "starling_hit_rate": hit_rate_0,
         "in_class": evaluate(&*arm, &curve_in_class, s.context, &buckets, chunk)?,
         "held_out": evaluate(&*arm, &curve_held_out, s.context, &buckets, chunk)?,
     }));
