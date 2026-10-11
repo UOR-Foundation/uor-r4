@@ -283,6 +283,12 @@ pub enum ActivationSnap {
     Icosian,
     Direction,
     Scale,
+    /// Each 4-lane of a quaternion map's input to m 2^e (g1 + g2/4), the
+    /// weights' exact set (residual icosian pair, 2-bit-mantissa norm), with
+    /// a straight-through gradient, on the tensor's device.
+    IcosianPair,
+    /// The residual pair direction with the f32 norm (locates the cost).
+    IcosianPairF32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -336,6 +342,32 @@ pub const QUATERNION_MAPS: [&str; 10] = [
 pub const QUATERNION_WEIGHTS_FIELD: &str = "quaternion_weights";
 /// `config.json` field of the trained-in icosian snap ([`StackModel::set_quaternion_snap`]).
 pub const QUATERNION_SNAP_FIELD: &str = "quaternion_snap";
+/// `config.json` field of a trained-in activation snap (pair modes only).
+pub const ACTIVATION_SNAP_FIELD: &str = "activation_snap";
+
+impl ActivationSnap {
+    /// The trained-in modes by name (`icosian_pair`, `icosian_pair_f32`);
+    /// `none` is no snap. The evaluation-only probe modes are not parsed here.
+    pub fn parse_trained(text: &str) -> Result<Self> {
+        match text {
+            "none" => Ok(Self::None),
+            "icosian_pair" => Ok(Self::IcosianPair),
+            "icosian_pair_f32" => Ok(Self::IcosianPairF32),
+            other => Err(invalid(format!(
+                "invalid activation_snap={other} (none, icosian_pair or icosian_pair_f32)"
+            ))),
+        }
+    }
+
+    /// The name of a trained-in mode, `None` for the probe modes.
+    pub fn trained_name(self) -> Option<&'static str> {
+        match self {
+            Self::IcosianPair => Some("icosian_pair"),
+            Self::IcosianPairF32 => Some("icosian_pair_f32"),
+            _ => None,
+        }
+    }
+}
 
 /// The trained-in icosian snap of [`StackModel::set_quaternion_snap`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3296,6 +3328,18 @@ impl StackModel {
         if self.activation_snap == ActivationSnap::None || !features.is_multiple_of(4) {
             return Ok(input.clone());
         }
+        if matches!(
+            self.activation_snap,
+            ActivationSnap::IcosianPair | ActivationSnap::IcosianPairF32
+        ) {
+            let norm = if self.activation_snap == ActivationSnap::IcosianPair {
+                NormSet::Mantissa(2)
+            } else {
+                NormSet::F32
+            };
+            let snapped = icosian_snap_values_with(input, true, norm)?;
+            return Ok(input.add(&snapped.sub(input)?.detach())?);
+        }
         let dtype = input.dtype();
         let values = input
             .to_dtype(DType::F32)?
@@ -4697,6 +4741,10 @@ impl StackModel {
     }
 
     /// Whether the quaternion maps are icosian-snapped.
+    pub fn activation_snap(&self) -> ActivationSnap {
+        self.activation_snap
+    }
+
     pub fn quaternion_snap(&self) -> QuaternionSnap {
         self.quaternion_snap
     }
@@ -10591,6 +10639,11 @@ impl StackModel {
             with_field[READ_ROUTE_FIELD] = serde_json::Value::String(route.name());
             config = serde_json::to_vec_pretty(&with_field)?;
         }
+        if let Some(name) = self.activation_snap.trained_name() {
+            let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
+            with_field[ACTIVATION_SNAP_FIELD] = serde_json::Value::String(name.into());
+            config = serde_json::to_vec_pretty(&with_field)?;
+        }
         if self.quaternion_snap != QuaternionSnap::None {
             let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
             with_field[QUATERNION_SNAP_FIELD] =
@@ -11076,6 +11129,17 @@ impl StackModel {
                 Some(_) => {
                     return Err(invalid(format!(
                         "config.json's {QUATERNION_SNAP_FIELD} must be a string"
+                    )))
+                }
+            }
+            match saved.get(ACTIVATION_SNAP_FIELD) {
+                None => {}
+                Some(serde_json::Value::String(text)) => {
+                    model.set_activation_snap(ActivationSnap::parse_trained(text)?)
+                }
+                Some(_) => {
+                    return Err(invalid(format!(
+                        "config.json's {ACTIVATION_SNAP_FIELD} must be a string"
                     )))
                 }
             }
@@ -32490,6 +32554,58 @@ mod tests {
             QuaternionSnap::parse("icosian_pair_m2")?,
             QuaternionSnap::IcosianPairM2
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_trained_in_activation_snap_is_straight_through_and_round_trips() -> Result<()> {
+        let mut config = tiny(StackArch::Geometric, "ra", ReadScore::L2, true);
+        config.mlp_hidden = 24;
+        let ids: Vec<u32> = (0..16u32).map(|i| (i * 5 + 1) % 37).collect();
+        let mut model = StackModel::new(config, &cpu())?;
+        model.set_quaternion_weights(QuaternionWeights::All)?;
+        model.set_quaternion_snap(QuaternionSnap::IcosianPairM2)?;
+        let float = model.forward(&ids, 2, 8)?.flatten_all()?.to_vec1::<f32>()?;
+        model.set_activation_snap(ActivationSnap::IcosianPair);
+        let snapped = model.forward(&ids, 2, 8)?.flatten_all()?.to_vec1::<f32>()?;
+        assert_ne!(float, snapped);
+        // Straight-through: the gradient reaches the input as if unsnapped.
+        let x = Var::from_tensor(&Tensor::from_vec(
+            (0..8).map(|i| i as f32 * 0.3 - 1.0).collect::<Vec<_>>(),
+            (1, 2, 4),
+            &cpu(),
+        )?)?;
+        let w = Tensor::from_vec(
+            (0..8).map(|i| i as f32 - 3.0).collect::<Vec<_>>(),
+            (1, 2, 4),
+            &cpu(),
+        )?;
+        let grads = model
+            .snap_activation(x.as_tensor())?
+            .mul(&w)?
+            .sum_all()?
+            .backward()?;
+        let g = grads
+            .get(x.as_tensor())
+            .ok_or_else(|| invalid("missing gradient"))?;
+        assert_eq!(
+            g.flatten_all()?.to_vec1::<f32>()?,
+            w.flatten_all()?.to_vec1::<f32>()?
+        );
+        // Saved and reloaded, the snap comes back with the same logits.
+        let root = std::env::temp_dir().join(format!("activation-snap-{}", std::process::id()));
+        model.save(&root)?;
+        let loaded = StackModel::load(&root, &cpu())?;
+        assert_eq!(loaded.activation_snap(), ActivationSnap::IcosianPair);
+        assert_eq!(
+            loaded
+                .forward(&ids, 2, 8)?
+                .flatten_all()?
+                .to_vec1::<f32>()?,
+            snapped
+        );
+        fs::remove_dir_all(&root)?;
+        assert!(ActivationSnap::parse_trained("icosian").is_err());
         Ok(())
     }
 
