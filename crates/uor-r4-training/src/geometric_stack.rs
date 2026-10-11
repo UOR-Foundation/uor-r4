@@ -388,6 +388,75 @@ impl QuaternionSnap {
 /// map, the gradient reaches the float map as if unsnapped. Zero quaternions
 /// stay zero.
 pub fn icosian_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Result<Tensor> {
+    let snapped = icosian_snap_values(compact, false, pow2_norm)?;
+    Ok(compact.add(&snapped.sub(compact)?.detach())?)
+}
+
+/// The same pair snap as [`icosian_pair_snap_straight_through`], on the
+/// tensor's own device.
+pub fn icosian_pair_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Result<Tensor> {
+    let snapped = icosian_snap_values(compact, true, pow2_norm)?;
+    Ok(compact.add(&snapped.sub(compact)?.detach())?)
+}
+
+/// Exponent range of the power-of-two scales: 2^-40 .. 2^40 (trained norms
+/// span 2^-9 .. 2^-2).
+const SNAP_EXPONENT: i32 = 40;
+
+/// The snapped values of a compact map `[.., 4]` (no gradient path), on the
+/// tensor's device: the icosian (or residual icosian pair) nearest each
+/// quaternion's direction, times its norm, or the power of two nearest the
+/// norm (over the pair's own norm) read from an exact table. Zero and
+/// non-finite quaternions stay unchanged. Bit-identical to the host loops it
+/// replaced on the tested inputs (they remain as the test reference).
+fn icosian_snap_values(compact: &Tensor, pair: bool, pow2_norm: bool) -> Result<Tensor> {
+    let device = compact.device();
+    let shape = compact.dims().to_vec();
+    let x = compact.to_dtype(DType::F32)?.reshape(((), 4))?;
+    let roots: Vec<f32> = icosian_roots().iter().flat_map(|r| r.iter().copied()).collect();
+    let table = Tensor::from_vec(roots, (120, 4), device)?;
+    let table_t = table.t()?.contiguous()?;
+    let powers: Vec<f32> = (-SNAP_EXPONENT..=SNAP_EXPONENT)
+        .map(|e| 2f32.powi(e))
+        .collect();
+    let powers = Tensor::from_vec(powers, 2 * SNAP_EXPONENT as usize + 1, device)?;
+    let pow2 = |v: &Tensor| -> Result<Tensor> {
+        let e = v
+            .log()?
+            .affine(1.0 / std::f64::consts::LN_2, 0.0)?
+            .round()?
+            .clamp(-(SNAP_EXPONENT as f64), SNAP_EXPONENT as f64)?
+            .affine(1.0, SNAP_EXPONENT as f64)?
+            .to_dtype(DType::U32)?;
+        Ok(powers.index_select(&e.flatten_all()?, 0)?.reshape(v.dims())?)
+    };
+    let norm = x.sqr()?.sum_keepdim(1)?.sqrt()?;
+    let finite = norm.ge(0.0)?.mul(&norm.le(f32::MAX as f64)?)?.mul(&norm.gt(0.0)?)?;
+    let safe = finite.where_cond(&norm, &norm.ones_like()?)?;
+    let unit = x.broadcast_div(&safe)?;
+    let nearest = |v: &Tensor| -> Result<Tensor> {
+        let index = v.matmul(&table_t)?.argmax(1)?;
+        Ok(table.index_select(&index, 0)?)
+    };
+    let g1 = nearest(&unit)?;
+    let (direction, ratio) = if pair {
+        let g2 = nearest(&unit.sub(&g1)?)?;
+        let pair = g1.add(&g2.affine(0.25, 0.0)?)?;
+        let pair_norm = pair.sqr()?.sum_keepdim(1)?.sqrt()?;
+        (pair, safe.div(&pair_norm)?)
+    } else {
+        (g1, safe.clone())
+    };
+    let scale = if pow2_norm { pow2(&ratio)? } else { ratio };
+    let snapped = direction.broadcast_mul(&scale)?;
+    let keep = finite.broadcast_as(snapped.shape())?;
+    let out = keep.where_cond(&snapped, &x)?;
+    Ok(out.reshape(shape)?.to_dtype(compact.dtype())?)
+}
+
+/// The host loop the device snap replaced (test reference).
+#[cfg(test)]
+fn icosian_snap_host(compact: &Tensor, pow2_norm: bool) -> Result<Tensor> {
     let values = compact
         .to_dtype(DType::F32)?
         .flatten_all()?
@@ -416,7 +485,9 @@ pub fn icosian_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Resul
 /// [`QuaternionSnap::IcosianPair`] of every quaternion of a compact map
 /// `[.., 4]`, straight-through like [`icosian_snap_straight_through`]. Zero
 /// quaternions stay zero.
-pub fn icosian_pair_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Result<Tensor> {
+/// The pair host loop the device snap replaced (test reference).
+#[cfg(test)]
+fn icosian_pair_snap_host(compact: &Tensor, pow2_norm: bool) -> Result<Tensor> {
     let values = compact
         .to_dtype(DType::F32)?
         .flatten_all()?
@@ -32306,6 +32377,33 @@ mod tests {
             logits
         );
         fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn the_device_snap_equals_the_host_loops_bit_for_bit() -> Result<()> {
+        let mut rng = Initializer(91);
+        let n = 20_000;
+        let mut values: Vec<f32> = (0..4 * n)
+            .map(|i| (rng.normal() * (0.001 + (i % 97) as f64 * 0.003)) as f32)
+            .collect();
+        values[4..8].copy_from_slice(&[0.0; 4]); // a zero quaternion stays zero
+        let compact = Tensor::from_vec(values, (n / 2, 2, 4), &cpu())?;
+        let bits = |t: &Tensor| -> Result<Vec<u32>> {
+            Ok(t.flatten_all()?.to_vec1::<f32>()?.iter().map(|v| v.to_bits()).collect())
+        };
+        for pow2 in [true, false] {
+            assert_eq!(
+                bits(&icosian_snap_straight_through(&compact, pow2)?)?,
+                bits(&icosian_snap_host(&compact, pow2)?)?,
+                "single, pow2 {pow2}"
+            );
+            assert_eq!(
+                bits(&icosian_pair_snap_straight_through(&compact, pow2)?)?,
+                bits(&icosian_pair_snap_host(&compact, pow2)?)?,
+                "pair, pow2 {pow2}"
+            );
+        }
         Ok(())
     }
 
