@@ -2838,8 +2838,15 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
                 "tokens": identity(&tokens_path)?,
                 "lens": lens_path.as_ref().map(|p| identity(p)).transpose()?,
                 "softsort_tau": softsort_tau,
-                "activation_snap": args.optional("activation_snap").unwrap_or_else(|| "none".into()),
+                // The snap actually applied: a trained-in mode from the model, else
+                // the probe mode named on the command line.
+                "activation_snap": model
+                    .activation_snap()
+                    .trained_name()
+                    .map(String::from)
+                    .unwrap_or_else(|| args.optional("activation_snap").unwrap_or_else(|| "none".into())),
                 "device": args.optional("device").unwrap_or_else(|| "cpu".into()),
+                "tf32": args.optional("tf32").unwrap_or_else(|| "false".into()),
                 "e8_usage": if model.e8_memory().is_some() { uor_r4_training::e8_memory::e8_usage_take() } else { serde_json::Value::Null },
                 "tune": summary(0..tune_blocks),
                 "comparison": summary(tune_blocks..blocks),
