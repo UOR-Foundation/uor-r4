@@ -349,8 +349,12 @@ pub enum QuaternionSnap {
     /// A residual icosian pair `2^e (g1 + g2/4)`: `g1` the nearest unit
     /// icosian, `g2` the icosian nearest the residual direction, `e` the
     /// power of two nearest the norm over `|g1 + g2/4|`. A block product is
-    /// two Cayley-table reads, a shift and an add: still no multiplier.
+    /// on the weight side two icosian table entries, a shift and an add
+    /// (table reads once activations are snapped too).
     IcosianPair,
+    /// The residual pair's direction with the f32 norm (separates the
+    /// direction cost from the power-of-two norm's).
+    IcosianPairF32,
 }
 
 impl QuaternionSnap {
@@ -360,8 +364,9 @@ impl QuaternionSnap {
             "icosian" => Ok(Self::Icosian),
             "icosian_f32" => Ok(Self::IcosianF32),
             "icosian_pair" => Ok(Self::IcosianPair),
+            "icosian_pair_f32" => Ok(Self::IcosianPairF32),
             other => Err(invalid(format!(
-                "invalid quaternion_snap={other} (none, icosian, icosian_f32 or icosian_pair)"
+                "invalid quaternion_snap={other} (none, icosian, icosian_f32, icosian_pair or icosian_pair_f32)"
             ))),
         }
     }
@@ -372,6 +377,7 @@ impl QuaternionSnap {
             Self::Icosian => "icosian",
             Self::IcosianF32 => "icosian_f32",
             Self::IcosianPair => "icosian_pair",
+            Self::IcosianPairF32 => "icosian_pair_f32",
         }
     }
 }
@@ -410,7 +416,7 @@ pub fn icosian_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Resul
 /// [`QuaternionSnap::IcosianPair`] of every quaternion of a compact map
 /// `[.., 4]`, straight-through like [`icosian_snap_straight_through`]. Zero
 /// quaternions stay zero.
-pub fn icosian_pair_snap_straight_through(compact: &Tensor) -> Result<Tensor> {
+pub fn icosian_pair_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Result<Tensor> {
     let values = compact
         .to_dtype(DType::F32)?
         .flatten_all()?
@@ -444,7 +450,11 @@ pub fn icosian_pair_snap_straight_through(compact: &Tensor) -> Result<Tensor> {
             .ok_or_else(|| invalid("no icosians"))?;
         let pair: [f32; 4] = std::array::from_fn(|c| g1[c] + 0.25 * g2[c]);
         let pair_norm = pair.iter().map(|v| v * v).sum::<f32>().sqrt();
-        let scale = (norm / pair_norm).log2().round().exp2();
+        let scale = if pow2_norm {
+            (norm / pair_norm).log2().round().exp2()
+        } else {
+            norm / pair_norm
+        };
         snapped.extend(pair.iter().map(|p| p * scale));
     }
     let snapped =
@@ -458,7 +468,8 @@ pub fn quaternion_snap_straight_through(compact: &Tensor, mode: QuaternionSnap) 
         QuaternionSnap::None => Ok(compact.clone()),
         QuaternionSnap::Icosian => icosian_snap_straight_through(compact, true),
         QuaternionSnap::IcosianF32 => icosian_snap_straight_through(compact, false),
-        QuaternionSnap::IcosianPair => icosian_pair_snap_straight_through(compact),
+        QuaternionSnap::IcosianPair => icosian_pair_snap_straight_through(compact, true),
+        QuaternionSnap::IcosianPairF32 => icosian_pair_snap_straight_through(compact, false),
     }
 }
 
@@ -31759,6 +31770,10 @@ mod tests {
                 .to_vec1::<f32>()?,
             logits
         );
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
     #[test]
     fn the_icosian_pair_snap_is_two_icosians_and_a_power_of_two_and_closer() -> Result<()> {
         let roots = icosian_roots();
@@ -31766,7 +31781,7 @@ mod tests {
         let n = 2000;
         let values: Vec<f32> = (0..4 * n).map(|_| rng.normal() as f32).collect();
         let compact = Tensor::from_vec(values.clone(), (n, 4), &cpu())?;
-        let pair = icosian_pair_snap_straight_through(&compact)?
+        let pair = icosian_pair_snap_straight_through(&compact, true)?
             .flatten_all()?
             .to_vec1::<f32>()?;
         let single = icosian_snap_straight_through(&compact, false)?
@@ -31812,10 +31827,6 @@ mod tests {
         Ok(())
     }
 
-        fs::remove_dir_all(&root)?;
-        Ok(())
-    }
-
     #[test]
     fn the_snap_changes_the_logits_to_those_of_the_snapped_weights() -> Result<()> {
         // Pins that the forward pass really uses the snapped maps: a snapped
@@ -31828,6 +31839,7 @@ mod tests {
             QuaternionSnap::Icosian,
             QuaternionSnap::IcosianF32,
             QuaternionSnap::IcosianPair,
+            QuaternionSnap::IcosianPairF32,
         ] {
             let mut float = StackModel::new(config.clone(), &cpu())?;
             float.set_quaternion_weights(QuaternionWeights::All)?;
