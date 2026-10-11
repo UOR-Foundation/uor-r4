@@ -413,7 +413,10 @@ fn icosian_snap_values(compact: &Tensor, pair: bool, pow2_norm: bool) -> Result<
     let device = compact.device();
     let shape = compact.dims().to_vec();
     let x = compact.to_dtype(DType::F32)?.reshape(((), 4))?;
-    let roots: Vec<f32> = icosian_roots().iter().flat_map(|r| r.iter().copied()).collect();
+    let roots: Vec<f32> = icosian_roots()
+        .iter()
+        .flat_map(|r| r.iter().copied())
+        .collect();
     let table = Tensor::from_vec(roots, (120, 4), device)?;
     let table_t = table.t()?.contiguous()?;
     let powers: Vec<f32> = (-SNAP_EXPONENT..=SNAP_EXPONENT)
@@ -428,10 +431,15 @@ fn icosian_snap_values(compact: &Tensor, pair: bool, pow2_norm: bool) -> Result<
             .clamp(-(SNAP_EXPONENT as f64), SNAP_EXPONENT as f64)?
             .affine(1.0, SNAP_EXPONENT as f64)?
             .to_dtype(DType::U32)?;
-        Ok(powers.index_select(&e.flatten_all()?, 0)?.reshape(v.dims())?)
+        Ok(powers
+            .index_select(&e.flatten_all()?, 0)?
+            .reshape(v.dims())?)
     };
     let norm = x.sqr()?.sum_keepdim(1)?.sqrt()?;
-    let finite = norm.ge(0.0)?.mul(&norm.le(f32::MAX as f64)?)?.mul(&norm.gt(0.0)?)?;
+    let finite = norm
+        .ge(0.0)?
+        .mul(&norm.le(f32::MAX as f64)?)?
+        .mul(&norm.gt(0.0)?)?;
     let safe = finite.where_cond(&norm, &norm.ones_like()?)?;
     let unit = x.broadcast_div(&safe)?;
     let nearest = |v: &Tensor| -> Result<Tensor> {
@@ -32390,7 +32398,11 @@ mod tests {
         values[4..8].copy_from_slice(&[0.0; 4]); // a zero quaternion stays zero
         let compact = Tensor::from_vec(values, (n / 2, 2, 4), &cpu())?;
         let bits = |t: &Tensor| -> Result<Vec<u32>> {
-            Ok(t.flatten_all()?.to_vec1::<f32>()?.iter().map(|v| v.to_bits()).collect())
+            Ok(t.flatten_all()?
+                .to_vec1::<f32>()?
+                .iter()
+                .map(|v| v.to_bits())
+                .collect())
         };
         for pow2 in [true, false] {
             assert_eq!(
