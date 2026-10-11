@@ -337,10 +337,6 @@ pub const QUATERNION_WEIGHTS_FIELD: &str = "quaternion_weights";
 /// `config.json` field of the trained-in icosian snap ([`StackModel::set_quaternion_snap`]).
 pub const QUATERNION_SNAP_FIELD: &str = "quaternion_snap";
 
-/// Snap every quaternion of a compact map `[.., 4]` to its norm times the
-/// nearest of the 120 unit icosians, with a straight-through gradient: the
-/// forward value is the snapped map, the gradient reaches the float map as if
-/// unsnapped. Zero quaternions stay zero.
 /// The trained-in icosian snap of [`StackModel::set_quaternion_snap`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QuaternionSnap {
@@ -373,6 +369,11 @@ impl QuaternionSnap {
     }
 }
 
+/// Snap every quaternion of a compact map `[.., 4]` to the nearest of the
+/// 120 unit icosians times its norm (`pow2_norm`: the norm's nearest power of
+/// two), with a straight-through gradient: the forward value is the snapped
+/// map, the gradient reaches the float map as if unsnapped. Zero quaternions
+/// stay zero.
 pub fn icosian_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Result<Tensor> {
     let values = compact
         .to_dtype(DType::F32)?

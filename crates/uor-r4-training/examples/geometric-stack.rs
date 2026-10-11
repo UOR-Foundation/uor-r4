@@ -2342,6 +2342,9 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
             (model, optimizer, progress, Some(state))
         }
     };
+    if model.quaternion_snap() != QuaternionSnap::None && settings.data_parallel != 1 {
+        return Err(invalid("quaternion_snap runs with data_parallel=1"));
+    }
     model.set_precision(settings.precision);
     // After the precision, so a bf16 run with a rank weighting (asked, from
     // `init=` or resumed) is refused; setting the same weighting again keeps
