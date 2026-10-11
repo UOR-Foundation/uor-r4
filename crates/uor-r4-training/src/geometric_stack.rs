@@ -5093,7 +5093,9 @@ impl StackModel {
             ));
         }
         if !margin.is_finite() || !(0.0..1.0).contains(&margin) {
-            return Err(invalid("the competing-mass margin must be a mass in 0..1"));
+            return Err(invalid(
+                "the competing-mass margin must be a mass in 0..1",
+            ));
         }
         self.read_binding_competing_weight = weight;
         self.read_binding_competing_margin = margin;
@@ -9897,7 +9899,9 @@ impl StackModel {
         };
         let total = language.add(&binding.affine(weight, 0.0)?)?;
         let total = if self.read_binding_competing_weight > 0.0 {
-            total.add(&competing_margin.affine(self.read_binding_competing_weight, 0.0)?)?
+            total.add(
+                &competing_margin.affine(self.read_binding_competing_weight, 0.0)?,
+            )?
         } else {
             total
         };
