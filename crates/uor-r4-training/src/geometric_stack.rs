@@ -602,6 +602,10 @@ pub struct StarlingRoute {
     /// Every head reads the union of all heads' kept positions (at most
     /// heads x K), so a source any head's address finds is readable by all.
     pub shared: bool,
+    /// (Content routes.) Rank the kept slots by their content score q.k and
+    /// weight them through the rank table by that rank: competition among the
+    /// candidates by sorting, no exponential and no normalisation.
+    pub ranked: bool,
 }
 
 impl StarlingRoute {
@@ -613,28 +617,44 @@ impl StarlingRoute {
         if self.shared {
             name += ":shared";
         }
+        if self.ranked {
+            name += ":ranked";
+        }
         name
     }
 }
 
-/// Parse `read_route=`: `none` or `starling:M:K[:content][:shared]` (M and K
-/// positive).
+/// Parse `read_route=`: `none` or `starling:M:K[:content][:shared][:ranked]`
+/// (M and K positive; `ranked` needs `content`).
 pub fn parse_read_route(text: &str) -> Result<Option<StarlingRoute>> {
     if text == "none" {
         return Ok(None);
     }
     let bad = || {
         invalid(format!(
-            "invalid read_route={text} (none or starling:M:K[:content][:shared])"
+            "invalid read_route={text} (none or starling:M:K[:content][:shared][:ranked])"
         ))
     };
-    let (m, k, content, shared) = match text.split(':').collect::<Vec<_>>().as_slice() {
-        ["starling", m, k] => (*m, *k, false, false),
-        ["starling", m, k, "content"] => (*m, *k, true, false),
-        ["starling", m, k, "shared"] => (*m, *k, false, true),
-        ["starling", m, k, "content", "shared"] => (*m, *k, true, true),
+    let parts: Vec<&str> = text.split(':').collect();
+    let (m, k, flags) = match parts.as_slice() {
+        ["starling", m, k, flags @ ..] => (*m, *k, flags),
         _ => return Err(bad()),
     };
+    // Flags in this order, each at most once.
+    let mut order = ["content", "shared", "ranked"].iter();
+    for flag in flags {
+        if !order.any(|known| known == flag) {
+            return Err(bad());
+        }
+    }
+    let (content, shared, ranked) = (
+        flags.contains(&"content"),
+        flags.contains(&"shared"),
+        flags.contains(&"ranked"),
+    );
+    if ranked && !content {
+        return Err(bad());
+    }
     let m: usize = m.parse().map_err(|_| bad())?;
     let k: usize = k.parse().map_err(|_| bad())?;
     if m == 0 || k == 0 {
@@ -645,6 +665,7 @@ pub fn parse_read_route(text: &str) -> Result<Option<StarlingRoute>> {
         k,
         content,
         shared,
+        ranked,
     }))
 }
 
@@ -3678,6 +3699,25 @@ impl StackModel {
         } else {
             logit.neg()?.exp()?.affine(1.0, 1.0)?.recip()?
         };
+        let rank = if route.ranked {
+            // Content rank: per (row, head, position), the live slots sorted
+            // by descending content score (ties to the earlier slot).
+            let scores = dot.detach().flatten_all()?.to_vec1::<f32>()?;
+            let alive = live.flatten_all()?.to_vec1::<f32>()?;
+            let mut ranks = vec![0u32; scores.len()];
+            for (cell, (score, alive)) in scores.chunks(slots).zip(alive.chunks(slots)).enumerate()
+            {
+                let mut order: Vec<usize> = (0..slots).filter(|&r| alive[r] > 0.0).collect();
+                let count = order.len();
+                order.sort_by(|&x, &y| score[y].total_cmp(&score[x]).then(x.cmp(&y)));
+                for (position, &slot) in order.iter().enumerate() {
+                    ranks[cell * slots + slot] = (count.min(k) * side + position.min(k)) as u32;
+                }
+            }
+            Tensor::from_vec(ranks, (batch, heads, time, slots), device)?
+        } else {
+            rank
+        };
         let table = p
             .layer(layer, STARLING_RANK)?
             .reshape((1, heads, 1, side * side))?
@@ -4283,6 +4323,14 @@ impl StackModel {
                 {
                     (0..count)
                         .map(|_| (rng.normal() * INITIAL_STD) as f32)
+                        .collect()
+                } else if name.ends_with(STARLING_RANK) && route.ranked {
+                    // Content-ranked: favour the best match from the start,
+                    // w_r = (1/(r+1)) / sum_i 1/(i+1) over the K+1 columns.
+                    let side = route.k + 1;
+                    let harmonic: f32 = (0..side).map(|i| 1.0 / (i + 1) as f32).sum();
+                    (0..count)
+                        .map(|i| 1.0 / ((i % side) + 1) as f32 / harmonic)
                         .collect()
                 } else if name.ends_with(STARLING_RANK) && route.shared {
                     // A shared set can hold heads x K slots, and every slot
@@ -5045,9 +5093,7 @@ impl StackModel {
             ));
         }
         if !margin.is_finite() || !(0.0..1.0).contains(&margin) {
-            return Err(invalid(
-                "the competing-mass margin must be a mass in 0..1",
-            ));
+            return Err(invalid("the competing-mass margin must be a mass in 0..1"));
         }
         self.read_binding_competing_weight = weight;
         self.read_binding_competing_margin = margin;
@@ -9851,9 +9897,7 @@ impl StackModel {
         };
         let total = language.add(&binding.affine(weight, 0.0)?)?;
         let total = if self.read_binding_competing_weight > 0.0 {
-            total.add(
-                &competing_margin.affine(self.read_binding_competing_weight, 0.0)?,
-            )?
+            total.add(&competing_margin.affine(self.read_binding_competing_weight, 0.0)?)?
         } else {
             total
         };
@@ -31668,6 +31712,7 @@ mod tests {
                 k: 3,
                 content: false,
                 shared: false,
+                ranked: false,
             };
             let kept = starling_select(&query, &key, time, route)?;
             let vector = |v: &[f32], t: usize| [v[4 * t], v[4 * t + 1], v[4 * t + 2], v[4 * t + 3]];
@@ -31707,6 +31752,7 @@ mod tests {
             k: 4,
             content: false,
             shared: false,
+            ranked: false,
         }))?;
         Ok(model)
     }
@@ -31791,6 +31837,7 @@ mod tests {
                 k: 4,
                 content: false,
                 shared: false,
+                ranked: false,
             })
         );
         let again = loaded
@@ -31816,6 +31863,7 @@ mod tests {
             k: 2,
             content: false,
             shared: false,
+            ranked: false,
         }))?;
         let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
         let natural = model
@@ -31855,6 +31903,7 @@ mod tests {
             k: 3,
             content: true,
             shared,
+            ranked: false,
         };
         let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
         let mut model = StackModel::new(
@@ -31939,12 +31988,70 @@ mod tests {
     }
 
     #[test]
+    fn the_ranked_starling_read_weights_kept_slots_by_content_rank() -> Result<()> {
+        let route = |ranked| StarlingRoute {
+            m: 2,
+            k: 3,
+            content: true,
+            shared: true,
+            ranked,
+        };
+        let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::L2, true),
+            &cpu(),
+        )?;
+        // Built ranked, so the table is the competitive harmonic one; the same
+        // table read in address order (unranked) gives a different read.
+        model.set_read_route(Some(route(true)))?;
+        let ranked = model
+            .forward(&ids, 2, 12)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        model.read_route = Some(route(false));
+        let unranked = model
+            .forward(&ids, 2, 12)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        model.read_route = Some(route(true));
+        assert_ne!(unranked, ranked);
+        // A permutation of the slots does not change a content-ranked read:
+        // the weight follows the score's rank, not the slot's position. Check
+        // it through the gradient being exact (ranks are piecewise constant).
+        let weights = random(&mut Initializer(43), &[24, 37], 1.0);
+        let vars: Vec<Var> = [
+            "layers.01.read.query.weight",
+            "layers.01.read.key.weight",
+            "layers.01.read.value.weight",
+            "layers.01.read.starling.rank",
+        ]
+        .iter()
+        .map(|name| model.variables()[*name].clone())
+        .collect();
+        check_gradient(
+            &vars,
+            || Ok(model.forward(&ids, 2, 12)?.mul(&weights)?.sum_all()?),
+            5e-3,
+        )?;
+        assert_eq!(
+            parse_read_route("starling:2:3:content:shared:ranked")?,
+            Some(route(true))
+        );
+        assert_eq!(route(true).name(), "starling:2:3:content:shared:ranked");
+        assert!(parse_read_route("starling:2:3:ranked").is_err());
+        assert!(parse_read_route("starling:2:3:shared:content").is_err());
+        assert!(parse_read_route("starling:2:3:content:content").is_err());
+        Ok(())
+    }
+
+    #[test]
     fn the_starling_content_gate_scores_kept_sources_by_query_and_key() -> Result<()> {
         let route = |content| StarlingRoute {
             m: 2,
             k: 3,
             content,
             shared: false,
+            ranked: false,
         };
         let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
         let mut model = StackModel::new(
@@ -32043,6 +32150,7 @@ mod tests {
             k: 1,
             content: false,
             shared: false,
+            ranked: false,
         }))?;
         let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
         let weights = random(&mut Initializer(23), &[24, 37], 1.0);
