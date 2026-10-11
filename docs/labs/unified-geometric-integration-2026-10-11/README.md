@@ -2,7 +2,8 @@
 
 **Status:** source preparation in progress, not a model result or completed delivery.
 **Milestone:** M2 [#2030](https://github.com/UOR-Foundation/uor-r4/issues/2030).
-**Line:** unified geometric route/action/learning integration; count 0/3.
+**Line:** unified geometric route/action/learning integration; preparation delivery count 1/3 (pending protected merge).
+**Run:** `unified-geometric-carrier-437-20261011`.
 **Headline before -> after:** dev437/512 plus opened diagnostic0/128 -> unchanged; panel fitting. Genuinely fresh qualification is NOT_RUN.
 **Owner pivot:** [6111898445](https://github.com/UOR-Foundation/uor-r4/issues/2030#issuecomment-6111898445). The unfinished generic constructor is deferred, preserved and not a mechanism negative.
 
