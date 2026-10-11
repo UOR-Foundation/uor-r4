@@ -1,3 +1,34 @@
+## 2026-10-11 — The exact content-route pointer raises its own metric 44 % at no likelihood cost, and the answers do not follow (deepseek, #2029, D22 order 3)
+
+Order 3 reopens the identity pointer **with a real key** — the slot/entity address rather than the six tokens around the value
+that #2161 used and that a question never resembles. The cheapest faithful implementation is the trainer's own route with a
+one-atom window: **`pointer_route=prime-ranked:1`** (admit any source sharing a single prime atom with the query, ranked by
+`ln gcd`) with **`pointer_identity=none`** ([record](../labs/ptr-addr-2026-10-10/README.md)). Three genuine **data-order** seeds
+on the adopted `mix-10` store with D10's recipe, the key active from step 0.
+
+**The key works as a key.** The pointer's own hit rate rises **0.377 → 0.54** in all three seeds (the metric #2161's key
+destroyed, 0.003), reachability is a stable 0.668 — four times the 0.182 of the 4-token n-gram route the frozen-route evidence
+measured — and the **float BPB is unchanged or better** (1.17387 and 1.16947 against the anchor's 1.17425, where the memory arms
+cost +0.026). **And the answers do not follow:** the v5 memory half reads **19 / 21 / 23 of 40** with wrong-value failures
+**17 / 15 / 9** against the matched control's 20/40 and 17, so the pre-registered bar (≤ 12 wrong-value and ≥ 25/40 on all three
+seeds) is **NOT MET** and the configuration is not kept.
+
+**A measurement first: for a fine-tune from a checkpoint, the data order is the seed.** Two arms with different `seed=` and the
+same `data_seed=` produced **bit-identical models** (`71409eac…`, 605 s and 572 s wall): with `init=` and no fresh operator to
+initialise, `seed=` has nothing to vary. That is why the memory arms of cycles 8–10 could use `seed=` meaningfully (their added
+memory drew from it) while no-memory controls could not.
+
+**Where this leaves the mechanism (D22 §1 — a configuration, not a mechanism).** The brief's failure condition was *"an oracle
+address still fails to raise hit rate or memory"*; what was measured is one step further along: **the hit rate rises and the
+memory does not**, so the bottleneck is **downstream of source selection** — the gate, the register, or the decoder that must
+place a copied value in the answer instead of continuing the frame. Next, in that order: the **forced-copy oracle instrument**
+the brief asks for (declared missing rather than faked), the **copy-side levers** (`pointer_gate_supervision`,
+`pointer_gate_floor`) that act exactly on "found it but did not copy it", and a **combined arm** — the key is free in likelihood,
+so there is room to spend.
+
+**Next:** the oracle instrument, then the combined address-key + copy-side arm with two seeds, then D22 order 4 (powered read
+binding).
+
 ## 2026-10-11 — Arm S stopped by owner direction before its decisive pair; the next read is a ring-product design, under owner review (claude, #2032)
 
 The [record](../labs/softsort-s-2026-10-11/README.md) closes arm S as an **owner stop of the configuration**. It is not a measured negative (D22 §1).
