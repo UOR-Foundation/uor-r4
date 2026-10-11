@@ -367,6 +367,12 @@ trait ContextArm {
     fn end_step(&mut self) -> Result<()> {
         Ok(())
     }
+    /// For a starling read: the share of queries whose true source (the value
+    /// position `q - d + 1`, whose shifted key carries the queried key) is
+    /// kept by some read head at the query position. `None` otherwise.
+    fn starling_hit_rate(&self, _sequences: &[Sequence], _context: usize) -> Result<Option<f64>> {
+        Ok(None)
+    }
     /// Context positions the arm scores for the token at `position`, summed
     /// over its layers and heads (a recurrence scores none; a full causal read
     /// head scores `position + 1`).
@@ -1024,6 +1030,31 @@ impl ContextArm for StackArm {
 
     fn end_step(&mut self) -> Result<()> {
         self.model.set_starling_dense(None)
+    }
+
+    fn starling_hit_rate(&self, sequences: &[Sequence], context: usize) -> Result<Option<f64>> {
+        if self.model.read_route().is_none() {
+            return Ok(None);
+        }
+        let (mut hits, mut total) = (0usize, 0usize);
+        for chunk in sequences.chunks(8) {
+            let (ids, _, _) = batch_arrays(chunk, context);
+            uor_r4_training::geometric_stack::starling_record_start();
+            self.model.forward(&ids, chunk.len(), context)?;
+            let record = uor_r4_training::geometric_stack::starling_record_take();
+            for (b, sequence) in chunk.iter().enumerate() {
+                for query in &sequence.queries {
+                    let source = query.position - query.distance + 1;
+                    total += 1;
+                    if record.iter().any(|(_, row, _, t, kept)| {
+                        *row == b && *t == query.position && kept.contains(&source)
+                    }) {
+                        hits += 1;
+                    }
+                }
+            }
+        }
+        Ok(Some(hits as f64 / total.max(1) as f64))
     }
 
     fn kind(&self) -> &'static str {
@@ -2631,6 +2662,11 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
         if step % s.eval_every == 0 || step == s.steps {
             let in_class = evaluate(&*arm, &curve_in_class, s.context, &buckets, chunk)?;
             let held_out = evaluate(&*arm, &curve_held_out, s.context, &buckets, chunk)?;
+            let hit_rate = arm.starling_hit_rate(&curve_in_class, s.context)?;
+            if let Some(rate) = hit_rate {
+                eprintln!("step {step} starling hit rate {rate:.4}");
+                writeln!(log, "step {step} starling hit rate {rate:.4}")?;
+            }
             let train_loss = window_loss / window_steps.max(1) as f64;
             let line = format!(
                 "step {step} lr {lr:.2e} train query NLL {train_loss:.4} grad {grad_norm:.3} in-class acc {:.3} {} | held-out acc {:.3} ({:.0}s)",
@@ -2644,6 +2680,7 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
             curve.push(json!({
                 "step": step, "lr": lr, "train_query_nll": train_loss,
                 "grad_norm": grad_norm, "in_class": in_class, "held_out": held_out,
+                "starling_hit_rate": hit_rate,
                 "elapsed_seconds": started.elapsed().as_secs_f64(),
             }));
             window_loss = 0.0;

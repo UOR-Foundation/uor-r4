@@ -463,6 +463,28 @@ pub fn parse_read_route(text: &str) -> Result<Option<StarlingRoute>> {
     }
 }
 
+/// Evaluation-time record of the starling read's kept sources
+/// ([`starling_record_start`], [`starling_record_take`]): per call, the
+/// layer, batch row, head, query position and kept positions. Off unless started.
+type StarlingRecord = Vec<(usize, usize, usize, usize, Vec<usize>)>;
+static STARLING_RECORD: std::sync::Mutex<Option<StarlingRecord>> = std::sync::Mutex::new(None);
+
+/// Start recording the starling read's kept sources (clears any record).
+pub fn starling_record_start() {
+    if let Ok(mut record) = STARLING_RECORD.lock() {
+        *record = Some(Vec::new());
+    }
+}
+
+/// Stop recording and return `(layer, batch_row, head, position, kept)` rows.
+pub fn starling_record_take() -> StarlingRecord {
+    STARLING_RECORD
+        .lock()
+        .ok()
+        .and_then(|mut record| record.take())
+        .unwrap_or_default()
+}
+
 /// `config.json` field of the starling read route, written only when set.
 pub const READ_ROUTE_FIELD: &str = "read_route";
 // Separate query and key address maps: with one shared map the key shift's
@@ -3321,6 +3343,15 @@ impl StackModel {
                 )
             })
             .collect::<Result<_>>()?;
+        if let Ok(mut record) = STARLING_RECORD.lock() {
+            if let Some(record) = record.as_mut() {
+                for (row, kept) in selections.iter().enumerate() {
+                    for (t, sources) in kept.iter().enumerate() {
+                        record.push((layer, row / heads, row % heads, t, sources.clone()));
+                    }
+                }
+            }
+        }
         for (row, kept) in selections.iter().enumerate() {
             for (t, sources) in kept.iter().enumerate() {
                 let base = (row * time + t) * k;
