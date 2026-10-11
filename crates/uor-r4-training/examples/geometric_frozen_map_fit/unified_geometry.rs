@@ -504,6 +504,11 @@ fn batch(
 pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     settings(a)?;
     replay_require(
+        option_env!("UOR_BUILD_SOURCE_COMMIT")
+            .is_some_and(|head| head.len() == 40 && head.bytes().all(|b| b.is_ascii_hexdigit())),
+        "unified runner requires a pinned UOR_BUILD_SOURCE_COMMIT at build time",
+    )?;
+    replay_require(
         d.is_cuda(),
         "unified long runs require CUDA; no CPU fallback",
     )?;
