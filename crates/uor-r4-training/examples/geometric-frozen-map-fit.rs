@@ -848,6 +848,16 @@ fn validate_input_output_paths(a: &Args) -> Result<()> {
     .chain(a.prediction_control_resume.iter())
     .chain(a.cross_state_resume.iter().map(|c| &c.root))
     .chain(a.unified_geometry.iter().map(|c| &c.saved437))
+    .chain(
+        a.unified_geometry
+            .iter()
+            .filter_map(|c| c.opened_diagnostic.as_ref())
+            .flat_map(|d| {
+                d.sealed_development_reports
+                    .iter()
+                    .chain([&d.inputs, &d.labels])
+            }),
+    )
     .chain(a.retained_context_root.iter())
     .chain(
         a.prefix_context_credit

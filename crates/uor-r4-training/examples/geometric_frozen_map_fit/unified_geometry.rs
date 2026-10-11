@@ -18,6 +18,16 @@ pub(super) struct Config {
     pub field_carrier_credit: bool,
     pub context_learning_rate: f64,
     pub prototype_learning_rate: f64,
+    #[serde(default)]
+    pub opened_diagnostic: Option<OpenedDiagnostic>,
+}
+
+#[derive(Clone, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct OpenedDiagnostic {
+    pub sealed_development_reports: [PathBuf; 4],
+    pub inputs: PathBuf,
+    pub labels: PathBuf,
 }
 
 pub(super) fn settings(a: &Args) -> Result<()> {
@@ -417,6 +427,9 @@ fn batch(
         let mut sums = BTreeMap::<String, Tensor>::new();
         let mut total = 0.;
         let mut positions = 0;
+        let mut forward_seconds = 0.;
+        let mut backward_seconds = 0.;
+        let mut first_position_costs = Value::Null;
         for &index in indices {
             let e = eps
                 .get(index)
@@ -430,7 +443,12 @@ fn batch(
             let mut aggregate = cross_state_completion::EpisodeBottleneck::default();
             for (t, &target) in e.target.iter().enumerate() {
                 deadline(a, start)?;
+                let clock = Instant::now();
                 let out = forward(learner, e, supervised_prefix(&e.target, t)?, cue, prefix)?;
+                forward_seconds += clock.elapsed().as_secs_f64();
+                if first_position_costs.is_null() {
+                    first_position_costs = json!({"generate":out.generate.costs,"continuation":out.continuation.as_ref().map(|c| &c.field.costs),"scope":"one sampled actual position, not aggregate cost; host preparation/alias reduction remain"});
+                }
                 replay_require(
                     out.copy_token_ids.iter().copied().collect::<BTreeSet<_>>() == union,
                     "unified all-source Copy union differs",
@@ -442,7 +460,9 @@ fn batch(
                     target,
                 )?;
                 let value = loss.to_scalar::<f32>()? as f64;
+                let clock = Instant::now();
                 let gradients = loss.backward()?;
+                backward_seconds += clock.elapsed().as_secs_f64();
                 let mut token = BTreeMap::new();
                 for (name, var) in &parameters {
                     let g = match gradients.get(var.as_tensor()) {
@@ -476,7 +496,7 @@ fn batch(
         }
         Ok((
             sums,
-            json!({"indices":indices,"positions":positions,"objective":total,"field_carrier_credit":credit,"objective_policy":OBJECTIVE,"token_backward_chunk":1,"snapshot":"fresh current Source/Generate/U once per batch; no state survives update"}),
+            json!({"indices":indices,"positions":positions,"objective":total,"field_carrier_credit":credit,"objective_policy":OBJECTIVE,"token_backward_chunk":1,"snapshot":"fresh current Source/Generate/U once per batch; no state survives update","forward_host_cuda_wall_seconds":forward_seconds,"backward_enqueue_wall_seconds":backward_seconds,"first_position_costs":first_position_costs,"timing_scope":"compatibility forward includes score downloads; backward wall is not isolated synchronized device time; update wall includes synchronization"}),
         ))
     })
 }
@@ -487,6 +507,12 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
         d.is_cuda(),
         "unified long runs require CUDA; no CPU fallback",
     )?;
+    if a.unified_geometry
+        .as_ref()
+        .is_some_and(|c| c.opened_diagnostic.is_some())
+    {
+        return run_opened_diagnostic(a, start, d);
+    }
     let config = a
         .unified_geometry
         .as_ref()
@@ -642,8 +668,284 @@ pub(super) fn run(a: &Args, start: Instant, d: &Device) -> Result<Value> {
     )?;
     let comparison = joint_row_comparison(&initial, &final_eval)?;
     write(a, "complete-row-comparison.json", &comparison)?;
+    let movement = hard_choice_movement(a, &initial, &final_eval, &initial_parent, &final_parent)?;
+    write(a, "hard-choice-movement.json", &movement)?;
     Ok(
-        json!({"schema":"uor-r4.unified-geometric-learning/1","status":"COMPLETED","mode":"unified_geometry","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"config":config,"order_seed":a.seed,"updates":128,"epochs":2,"objective":OBJECTIVE,"initial":initial,"final":final_eval,"rowwise":comparison,"final_receipt":final_parent.receipt,"final_active_masters":identities(&active)?,"frozen_masters":frozen,"elapsed_seconds":start.elapsed().as_secs_f64(),"scope":"exposed512 live Context/prototype geometric learning; opened diagnostics and genuinely fresh qualification NOT_RUN; no whole-path energy or general chat claim"}),
+        json!({"schema":"uor-r4.unified-geometric-learning/1","status":"COMPLETED","mode":"unified_geometry","source_commit":option_env!("UOR_BUILD_SOURCE_COMMIT"),"config":config,"order_seed":a.seed,"updates":128,"epochs":2,"objective":OBJECTIVE,"initial":initial,"final":final_eval,"rowwise":comparison,"hard_choice_movement":movement,"final_receipt":final_parent.receipt,"final_active_masters":identities(&active)?,"frozen_masters":frozen,"elapsed_seconds":start.elapsed().as_secs_f64(),"scope":"exposed512 live Context/prototype geometric learning; opened diagnostics and genuinely fresh qualification NOT_RUN; no whole-path energy or general chat claim"}),
+    )
+}
+
+fn hard_choice_movement(
+    a: &Args,
+    initial: &Value,
+    final_eval: &Value,
+    before: &ContinuationParent,
+    after: &ContinuationParent,
+) -> Result<Value> {
+    let bg = before.generator()?;
+    let ag = after.generator()?;
+    let bp = bg.generate_model().prototypes();
+    let ap = ag.generate_model().prototypes();
+    replay_require(bp.len() == ap.len(), "prototype movement shape differs")?;
+    let mut factual = 0;
+    let mut local = 0;
+    let mut positions = 0;
+    let rows = |v: &Value| -> Result<Vec<Value>> {
+        Ok(v["rows"]
+            .as_array()
+            .ok_or_else(|| bad("movement rows absent"))?
+            .clone())
+    };
+    let old_rows = rows(initial)?;
+    let new_rows = rows(final_eval)?;
+    replay_require(
+        old_rows.len() == new_rows.len(),
+        "movement row inventory differs",
+    )?;
+    for (old, new) in old_rows.iter().zip(&new_rows) {
+        replay_require(old["id"] == new["id"], "movement row ID differs")?;
+        let load = |row: &Value| -> Result<Value> {
+            let path = a.out.join(
+                row["row_file"]
+                    .as_str()
+                    .ok_or_else(|| bad("movement row path absent"))?,
+            );
+            replay_require(
+                sha256_file(&path)? == row["row_sha256"],
+                "movement row hash differs",
+            )?;
+            read(&path)
+        };
+        let old = load(old)?;
+        let new = load(new)?;
+        let oc = old["canonical"]
+            .as_array()
+            .ok_or_else(|| bad("movement canonical absent"))?;
+        let nc = new["canonical"]
+            .as_array()
+            .ok_or_else(|| bad("movement canonical absent"))?;
+        replay_require(oc.len() == nc.len(), "movement position inventory differs")?;
+        for (o, n) in oc.iter().zip(nc) {
+            for (pointer, count) in [
+                ("/native/post_state_codes", &mut factual),
+                ("/native/continuation/state_codes", &mut local),
+            ] {
+                let left = o
+                    .pointer(pointer)
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| bad("movement codes absent"))?;
+                let right = n
+                    .pointer(pointer)
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| bad("movement codes absent"))?;
+                replay_require(
+                    left.len() == 8 && right.len() == 8,
+                    "movement lane shape differs",
+                )?;
+                *count += left.iter().zip(right).filter(|(l, r)| l != r).count();
+            }
+            positions += 1;
+        }
+    }
+    Ok(
+        json!({"prototype_codes_changed":bp.iter().zip(ap).filter(|(b,a)|b!=a).count(),"prototype_codes_total":bp.len(),"canonical_positions":positions,"factual_lane_codes_changed":factual,"local_lane_codes_changed":local,"scope":"matched teacher-prefix hard-choice movement; not own-prefix success or gradient correctness"}),
+    )
+}
+
+const OPENED_INPUT: &str = "c5a643ff9ef86f5f16f15b420f42fe8b1921c5c8c7df5a7bbb88f7759cda5bda";
+const OPENED_LABEL: &str = "b70f57761238ad4044ebdc158e465e978cfd098c9dfbe5b2b4d4a79e582aec77";
+
+fn diagnostic_bank(id: &str) -> Result<&str> {
+    let bank = id
+        .strip_prefix("fresh-diverse-")
+        .and_then(|s| s.split_once("-swap").map(|(bank, _)| bank))
+        .ok_or_else(|| bad("opened diagnostic bank identity absent"))?;
+    replay_require(
+        [
+            "length2-00",
+            "length2-01",
+            "length4-00",
+            "length4-01",
+            "length8-00",
+            "length8-01",
+            "reassert-00",
+            "update-00",
+        ]
+        .contains(&bank),
+        "opened diagnostic bank differs",
+    )?;
+    Ok(bank)
+}
+
+fn run_opened_diagnostic(a: &Args, start: Instant, d: &Device) -> Result<Value> {
+    let config = a
+        .unified_geometry
+        .as_ref()
+        .ok_or_else(|| bad("unified config absent"))?;
+    let diag = config
+        .opened_diagnostic
+        .as_ref()
+        .ok_or_else(|| bad("opened config absent"))?;
+    let mut parents = Vec::new();
+    let mut reports = Vec::new();
+    let mut roles = BTreeSet::new();
+    let mut roots = BTreeSet::new();
+    // Every development attempt must be complete and sealed before even the
+    // diagnostic input is authenticated or loaded. No fit is run in this mode.
+    for root in &diag.sealed_development_reports {
+        replay_require(
+            roots.insert(fs::canonicalize(root)?),
+            "duplicate development report",
+        )?;
+        report_output::verify(root)?;
+        let report = read(&root.join("report.json"))?;
+        let seed = report["order_seed"]
+            .as_u64()
+            .ok_or_else(|| bad("development seed absent"))?;
+        let credit = report["config"]["field_carrier_credit"]
+            .as_bool()
+            .ok_or_else(|| bad("development arm absent"))?;
+        let parent = ContinuationParent::from_checkpoint(&root.join("checkpoint-0128"))?;
+        replay_require(
+            report["schema"] == "uor-r4.unified-geometric-learning/1"
+                && report["status"] == "COMPLETED"
+                && report["mode"] == "unified_geometry"
+                && report["updates"] == 128
+                && report["epochs"] == 2
+                && report["objective"] == OBJECTIVE
+                && report["initial"]["complete"] == 437
+                && report["initial"]["cases"] == 512
+                && report["final"]["cases"] == 512
+                && report["config"]["context_learning_rate"] == 0.002
+                && report["config"]["prototype_learning_rate"] == 0.01
+                && report["config"]["opened_diagnostic"].is_null()
+                && report["final_receipt"] == parent.receipt
+                && parent.receipt["saved437_report_sha256"] == REPORT
+                && report["source_commit"].as_str().is_some()
+                && [1001, 2001].contains(&seed)
+                && roles.insert((seed, credit)),
+            "sealed development recipe/role/endpoint identity differs",
+        )?;
+        reports.push(report);
+        parents.push(parent);
+    }
+    replay_require(
+        roles == BTreeSet::from([(1001, false), (1001, true), (2001, false), (2001, true)]),
+        "four matched development roles required",
+    )?;
+    replay_require(
+        reports.iter().all(|r| {
+            r["source_commit"] == reports[0]["source_commit"]
+                && r["frozen_masters"] == reports[0]["frozen_masters"]
+        }),
+        "development source/frozen inventory differs",
+    )?;
+    for (path, hash) in [(&diag.inputs, OPENED_INPUT), (&diag.labels, OPENED_LABEL)] {
+        report_output::verify(&seal_for(path)?)?;
+        replay_require(
+            sha256_file(path)? == hash,
+            "opened128 immutable input identity differs",
+        )?;
+    }
+    let base = ContinuationParent::load(a)?;
+    let legal = NativeVocabularyActions::new(base.integer.binding().clone(), &base.exp)?
+        .legal_token_ids()
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let eps = load_panel(
+        &diag.inputs,
+        &diag.labels,
+        &base.integer,
+        &base.tokenizer,
+        &legal,
+        128,
+    )?;
+    let mut inventory = BTreeMap::<String, usize>::new();
+    for e in &eps {
+        *inventory
+            .entry(diagnostic_bank(&e.packet.id)?.into())
+            .or_default() += 1;
+    }
+    replay_require(
+        inventory.len() == 8 && inventory.values().all(|n| *n == 16),
+        "opened128 complete bank inventory differs",
+    )?;
+    let mut outcomes = Vec::new();
+    for (index, (root, parent)) in diag
+        .sealed_development_reports
+        .iter()
+        .zip(parents.iter())
+        .enumerate()
+    {
+        disk_floor(a)?;
+        let report = &reports[index];
+        let mut reload_args = a.clone();
+        reload_args.checkpoint = root.join("checkpoint-0128");
+        let loaded = load_joint_continuation(&reload_args, parent, d)?;
+        let bytes = fs::read(reload_args.checkpoint.join("continuation-field.bin"))?;
+        replay_require(
+            sha256_bytes(&bytes) == parent.receipt["continuation_sha256"],
+            "diagnostic endpoint field digest differs",
+        )?;
+        let generator = parent.generator()?;
+        let field = NativeContinuationField::from_bytes(
+            &bytes,
+            &parent.binding,
+            generator.generate_model(),
+        )?;
+        let u = ContinuationLearningWeights::from_native(
+            &field,
+            generator.generate_model(),
+            parent.integer.binding(),
+            d,
+        )?;
+        restore(
+            &reload_args.checkpoint.join("continuation-source"),
+            &parent.receipt["continuation_parameters"],
+            &u.parameters(),
+            d,
+        )?;
+        replay_require(
+            u.export_native(&parent.binding, generator.generate_model())?
+                .to_bytes()?
+                == bytes
+                && identities(&active_parameters(&loaded)?)?
+                    == serde_json::from_value::<BTreeMap<String, String>>(
+                        report["final_active_masters"].clone(),
+                    )?
+                && frozen_parameters(&loaded, &u)?
+                    == serde_json::from_value::<BTreeMap<String, String>>(
+                        report["frozen_masters"].clone(),
+                    )?,
+            "diagnostic native/master endpoint reload differs",
+        )?;
+        let mut evaluation = evaluate_cuda(
+            a,
+            &format!("opened128-arm-{index}"),
+            &loaded,
+            &u,
+            &eps,
+            d,
+            start,
+        )?;
+        let mut banks = BTreeMap::<String, usize>::new();
+        for row in evaluation["rows"]
+            .as_array()
+            .ok_or_else(|| bad("diagnostic rows absent"))?
+        {
+            if row["complete"] == true {
+                let id = row["id"]
+                    .as_str()
+                    .ok_or_else(|| bad("diagnostic row ID absent"))?;
+                *banks.entry(diagnostic_bank(id)?.into()).or_default() += 1;
+            }
+        }
+        evaluation["scope"] = json!("fixed previously opened128 diagnostic; NOT genuinely fresh qualification; no endpoint selection from this draw");
+        outcomes.push(json!({"seed":report["order_seed"],"field_carrier_credit":report["config"]["field_carrier_credit"],"development_report_sha256":sha256_file(&root.join("report.json"))?,"development_manifest_sha256":sha256_file(&root.join("manifest.json"))?,"evaluation":evaluation,"complete_by_bank":banks,"banks_with_complete":banks.len()}));
+    }
+    Ok(
+        json!({"schema":"uor-r4.unified-geometric-opened-diagnostic/1","status":"COMPLETED","mode":"unified_geometry_opened_diagnostic","optimizer_updates":0,"inputs_sha256":OPENED_INPUT,"labels_sha256":OPENED_LABEL,"bank_inventory":inventory,"outcomes":outcomes,"elapsed_seconds":start.elapsed().as_secs_f64(),"scope":"previously opened128; all four development reports sealed first; genuinely fresh qualification NOT_RUN; no M2 acceptance or D22 fresh-transfer KEEP"}),
     )
 }
 
@@ -705,6 +1007,26 @@ mod tests {
         let mut unknown = config_value();
         unknown["unified_geometry"]["change_panel"] = json!(true);
         assert!(serde_json::from_value::<Args>(unknown).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn opened_bank_identity_is_exact_and_not_a_redraw() -> Result<()> {
+        assert_eq!(
+            diagnostic_bank("fresh-diverse-length2-00-swap0-q0-forward-job")?,
+            "length2-00"
+        );
+        assert_eq!(
+            diagnostic_bank("fresh-diverse-reassert-00-swap1-q4-reverse-home")?,
+            "reassert-00"
+        );
+        for id in [
+            "other-length2-00-swap0",
+            "fresh-diverse-length2-02-swap0",
+            "fresh-diverse-length2-00",
+        ] {
+            assert!(diagnostic_bank(id).is_err());
+        }
         Ok(())
     }
 
