@@ -30420,6 +30420,29 @@ mod tests {
             );
         }
         assert_eq!(&out[4..], &[0.0, 0.0, 0.0, 0.0]);
+        // Direction keeps |x|; Scale keeps x / |x|.
+        let lane = Tensor::from_vec(vec![0.3f32, -1.1, 0.7, 2.9], (1, 4), &cpu())?;
+        let norm = (0.3f32 * 0.3 + 1.1 * 1.1 + 0.7 * 0.7 + 2.9 * 2.9).sqrt();
+        model.set_activation_snap(ActivationSnap::Direction);
+        let d = model
+            .snap_activation(&lane)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert!((d.iter().map(|v| v * v).sum::<f32>().sqrt() - norm).abs() < 1e-5);
+        assert!(icosian_roots()
+            .iter()
+            .any(|r| (0..4).all(|c| (d[c] / norm - r[c]).abs() < 1e-5)));
+        model.set_activation_snap(ActivationSnap::Scale);
+        let sc = model
+            .snap_activation(&lane)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let k = sc[3] / 2.9;
+        assert!((k - norm.log2().round().exp2() / norm).abs() < 1e-5);
+        assert!([0.3f32, -1.1, 0.7, 2.9]
+            .iter()
+            .zip(&sc)
+            .all(|(a, b)| (a * k - b).abs() < 1e-5));
         // linear snaps only quaternion-map inputs: a head-shaped
         // ([vocab, width]) or NoRead-shaped ([heads, width]) map is untouched.
         let config = model.config.clone();
