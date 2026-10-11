@@ -1167,9 +1167,18 @@ impl ContextArm for StackArm {
         match self.model.read_route() {
             // The starling read scores the candidates of its own cell and the
             // 12 adjacent cells (at most 13 * M, never more than position + 1)
-            // and mixes at most K values; no other position is touched.
+            // and mixes at most K values; no other position is touched. A
+            // content gate also scores each kept slot (K per head, or the
+            // heads x K union of a shared set).
             Some(route) => {
-                self.read_layers() * self.model.config.heads * (13 * route.m).min(position + 1)
+                let heads = self.model.config.heads;
+                let candidates = (13 * route.m).min(position + 1);
+                let gated = match (route.content, route.shared) {
+                    (false, _) => 0,
+                    (true, false) => route.k.min(position + 1),
+                    (true, true) => (heads * route.k).min(position + 1),
+                };
+                self.read_layers() * heads * (candidates + gated)
             }
             None => self.read_layers() * self.model.config.heads * (position + 1),
         }
@@ -1177,7 +1186,7 @@ impl ContextArm for StackArm {
 
     fn access_note(&self) -> String {
         match self.model.config.arch {
-            StackArch::Geometric if self.model.read_route().is_some() => "starling read: read layers x heads x min(13 * M, position + 1): only the candidates in the query's 600-cell vertex and its 12 neighbours are scored (a cell lookup, no all-pairs score); at most K values are mixed".into(),
+            StackArch::Geometric if self.model.read_route().is_some() => "starling read: read layers x heads x min(13 * M, position + 1): only the candidates in the query's 600-cell vertex and its 12 neighbours are scored (a cell lookup, no all-pairs score); a content route adds one q.k per kept slot (K, or heads x K when shared); at most K (or heads x K) values are mixed".into(),
             StackArch::Geometric => "read layers x heads x (position + 1): every causal position is scored by each read head (plus one NoRead slot, not counted); recurrence layers score no positions".into(),
             StackArch::Hybrid => "recurrence layers score no positions; 'a' layers run ordinary causal-softmax attention (every causal position scored by each head, no NoRead slot) -- the read-attribution control".into(),
             StackArch::Transformer => "attention layers x heads x (position + 1): every causal position is scored by each head of the ordinary causal-softmax control; no NoRead slot".into(),
