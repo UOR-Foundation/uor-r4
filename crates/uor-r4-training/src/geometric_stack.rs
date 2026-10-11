@@ -4284,6 +4284,12 @@ impl StackModel {
                     (0..count)
                         .map(|_| (rng.normal() * INITIAL_STD) as f32)
                         .collect()
+                } else if name.ends_with(STARLING_RANK) && route.shared {
+                    // A shared set can hold heads x K slots, and every slot
+                    // past K shares the table's last entry: start every
+                    // entry equal (1/(heads K)) so no union slot is silenced
+                    // at initialisation and the gate does the choosing.
+                    vec![1.0 / (self.config.heads * route.k) as f32; count]
                 } else if name.ends_with(STARLING_RANK) {
                     let side = route.k + 1;
                     (0..count)
@@ -31916,6 +31922,19 @@ mod tests {
             Some(route(true))
         );
         assert_eq!(route(true).name(), "starling:2:3:content:shared");
+        // A fresh shared route starts with a uniform rank table, so slots past
+        // K (which share the last entry) are not silenced at initialisation.
+        let mut fresh = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::L2, true),
+            &cpu(),
+        )?;
+        fresh.set_read_route(Some(route(true)))?;
+        let table = fresh.variables()["layers.01.read.starling.rank"]
+            .as_tensor()
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let uniform = 1.0 / (fresh.config.heads * 3) as f32;
+        assert!(table.iter().all(|&v| v == uniform));
         Ok(())
     }
 
