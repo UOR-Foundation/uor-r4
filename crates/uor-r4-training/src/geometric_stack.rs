@@ -346,6 +346,11 @@ pub enum QuaternionSnap {
     Icosian,
     /// Direction to the nearest unit icosian, f32 norm (locates the cost).
     IcosianF32,
+    /// A residual icosian pair `2^e (g1 + g2/4)`: `g1` the nearest unit
+    /// icosian, `g2` the icosian nearest the residual direction, `e` the
+    /// power of two nearest the norm over `|g1 + g2/4|`. A block product is
+    /// two Cayley-table reads, a shift and an add: still no multiplier.
+    IcosianPair,
 }
 
 impl QuaternionSnap {
@@ -354,8 +359,9 @@ impl QuaternionSnap {
             "none" => Ok(Self::None),
             "icosian" => Ok(Self::Icosian),
             "icosian_f32" => Ok(Self::IcosianF32),
+            "icosian_pair" => Ok(Self::IcosianPair),
             other => Err(invalid(format!(
-                "invalid quaternion_snap={other} (none, icosian or icosian_f32)"
+                "invalid quaternion_snap={other} (none, icosian, icosian_f32 or icosian_pair)"
             ))),
         }
     }
@@ -365,6 +371,7 @@ impl QuaternionSnap {
             Self::None => "none",
             Self::Icosian => "icosian",
             Self::IcosianF32 => "icosian_f32",
+            Self::IcosianPair => "icosian_pair",
         }
     }
 }
@@ -398,6 +405,61 @@ pub fn icosian_snap_straight_through(compact: &Tensor, pow2_norm: bool) -> Resul
     let snapped =
         Tensor::from_vec(snapped, compact.dims(), compact.device())?.to_dtype(compact.dtype())?;
     Ok(compact.add(&snapped.sub(compact)?.detach())?)
+}
+
+/// [`QuaternionSnap::IcosianPair`] of every quaternion of a compact map
+/// `[.., 4]`, straight-through like [`icosian_snap_straight_through`]. Zero
+/// quaternions stay zero.
+pub fn icosian_pair_snap_straight_through(compact: &Tensor) -> Result<Tensor> {
+    let values = compact
+        .to_dtype(DType::F32)?
+        .flatten_all()?
+        .to_vec1::<f32>()?;
+    let roots = icosian_roots();
+    let mut snapped = Vec::with_capacity(values.len());
+    for q in values.chunks_exact(4) {
+        let norm = q.iter().map(|v| v * v).sum::<f32>().sqrt();
+        if norm == 0.0 || !norm.is_finite() {
+            snapped.extend_from_slice(q);
+            continue;
+        }
+        let unit = [q[0] / norm, q[1] / norm, q[2] / norm, q[3] / norm];
+        let g1 = roots[nearest_root(unit, roots)];
+        let residual = [
+            unit[0] - g1[0],
+            unit[1] - g1[1],
+            unit[2] - g1[2],
+            unit[3] - g1[3],
+        ];
+        // The icosian with the largest dot product with the residual (its
+        // direction; the residual's own norm does not change the argmax).
+        let g2 = roots
+            .iter()
+            .max_by(|a, b| {
+                let da: f32 = (0..4).map(|c| a[c] * residual[c]).sum();
+                let db: f32 = (0..4).map(|c| b[c] * residual[c]).sum();
+                da.total_cmp(&db)
+            })
+            .copied()
+            .ok_or_else(|| invalid("no icosians"))?;
+        let pair: [f32; 4] = std::array::from_fn(|c| g1[c] + 0.25 * g2[c]);
+        let pair_norm = pair.iter().map(|v| v * v).sum::<f32>().sqrt();
+        let scale = (norm / pair_norm).log2().round().exp2();
+        snapped.extend(pair.iter().map(|p| p * scale));
+    }
+    let snapped =
+        Tensor::from_vec(snapped, compact.dims(), compact.device())?.to_dtype(compact.dtype())?;
+    Ok(compact.add(&snapped.sub(compact)?.detach())?)
+}
+
+/// The straight-through snap of a compact map in `mode` (`None` is the map).
+pub fn quaternion_snap_straight_through(compact: &Tensor, mode: QuaternionSnap) -> Result<Tensor> {
+    match mode {
+        QuaternionSnap::None => Ok(compact.clone()),
+        QuaternionSnap::Icosian => icosian_snap_straight_through(compact, true),
+        QuaternionSnap::IcosianF32 => icosian_snap_straight_through(compact, false),
+        QuaternionSnap::IcosianPair => icosian_pair_snap_straight_through(compact),
+    }
 }
 
 /// Mixed into the seed of the compact quaternion maps' initializer.
@@ -2899,14 +2961,10 @@ impl StackModel {
                 let mut dense = BTreeMap::new();
                 for (name, var) in &self.variables {
                     if let Some(weight) = quaternion_dense_name(name) {
-                        let compact = if self.quaternion_snap != QuaternionSnap::None {
-                            icosian_snap_straight_through(
-                                var.as_tensor(),
-                                self.quaternion_snap == QuaternionSnap::Icosian,
-                            )?
-                        } else {
-                            var.as_tensor().clone()
-                        };
+                        let compact = quaternion_snap_straight_through(
+                            var.as_tensor(),
+                            self.quaternion_snap,
+                        )?;
                         dense.insert(weight, quaternion_dense_weight(&compact)?);
                     }
                 }
@@ -31701,6 +31759,59 @@ mod tests {
                 .to_vec1::<f32>()?,
             logits
         );
+    #[test]
+    fn the_icosian_pair_snap_is_two_icosians_and_a_power_of_two_and_closer() -> Result<()> {
+        let roots = icosian_roots();
+        let mut rng = Initializer(77);
+        let n = 2000;
+        let values: Vec<f32> = (0..4 * n).map(|_| rng.normal() as f32).collect();
+        let compact = Tensor::from_vec(values.clone(), (n, 4), &cpu())?;
+        let pair = icosian_pair_snap_straight_through(&compact)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let single = icosian_snap_straight_through(&compact, false)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let cosine = |a: &[f32], b: &[f32]| {
+            let dot: f32 = (0..4).map(|c| a[c] * b[c]).sum();
+            let na: f32 = a.iter().map(|v| v * v).sum::<f32>().sqrt();
+            let nb: f32 = b.iter().map(|v| v * v).sum::<f32>().sqrt();
+            dot / (na * nb)
+        };
+        let (mut cos_pair, mut cos_single) = (0f64, 0f64);
+        for i in 0..n {
+            let (q, p) = (&values[4 * i..4 * i + 4], &pair[4 * i..4 * i + 4]);
+            cos_pair += f64::from(cosine(q, p));
+            cos_single += f64::from(cosine(q, &single[4 * i..4 * i + 4]));
+            // p = 2^e (g1 + g2/4) for some icosians g1, g2 and integer e.
+            let found = roots.iter().any(|g1| {
+                roots.iter().any(|g2| {
+                    let raw: [f32; 4] = std::array::from_fn(|c| g1[c] + 0.25 * g2[c]);
+                    let ratio = p[0].abs().max(p[1].abs()).max(p[2].abs()).max(p[3].abs())
+                        / raw[0]
+                            .abs()
+                            .max(raw[1].abs())
+                            .max(raw[2].abs())
+                            .max(raw[3].abs());
+                    let e = ratio.log2();
+                    (e - e.round()).abs() < 1e-4
+                        && (0..4).all(|c| (p[c] - raw[c] * ratio).abs() < 1e-5)
+                })
+            });
+            assert!(found, "quaternion {i} is not 2^e (g1 + g2/4)");
+        }
+        let (cos_pair, cos_single) = (cos_pair / n as f64, cos_single / n as f64);
+        assert!(
+            cos_pair > 0.99 && cos_pair > cos_single + 0.02,
+            "{cos_pair} vs {cos_single}"
+        );
+        assert_eq!(
+            QuaternionSnap::parse("icosian_pair")?,
+            QuaternionSnap::IcosianPair
+        );
+        Ok(())
+    }
+
         fs::remove_dir_all(&root)?;
         Ok(())
     }
@@ -31713,9 +31824,10 @@ mod tests {
         let mut config = tiny(StackArch::Geometric, "ra", ReadScore::L2, true);
         config.mlp_hidden = 24;
         let ids: Vec<u32> = (0..16u32).map(|i| (i * 5 + 1) % 37).collect();
-        for (mode, pow2) in [
-            (QuaternionSnap::Icosian, true),
-            (QuaternionSnap::IcosianF32, false),
+        for mode in [
+            QuaternionSnap::Icosian,
+            QuaternionSnap::IcosianF32,
+            QuaternionSnap::IcosianPair,
         ] {
             let mut float = StackModel::new(config.clone(), &cpu())?;
             float.set_quaternion_weights(QuaternionWeights::All)?;
@@ -31730,7 +31842,7 @@ mod tests {
             assert_ne!(plain, on, "{mode:?}");
             for (name, var) in float.variables() {
                 if name.ends_with(".quaternion") {
-                    var.set(&icosian_snap_straight_through(var.as_tensor(), pow2)?.detach())?;
+                    var.set(&quaternion_snap_straight_through(var.as_tensor(), mode)?.detach())?;
                 }
             }
             let held = float.forward(&ids, 2, 8)?.flatten_all()?.to_vec1::<f32>()?;
