@@ -2680,6 +2680,7 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
             "lens",
             "max_blocks",
             "softsort_tau",
+            "activation_snap",
         ],
     )?;
     let model_dir = PathBuf::from(args.required("model")?);
@@ -2703,6 +2704,15 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
         // training forward at temperature T instead of the hard (served) rank
         // read: the soft-versus-hard gap shows whether training converged onto
         // the hard table, and the T where the two part shows the score scale.
+        match args.optional("activation_snap").as_deref() {
+            None | Some("none") => {}
+            Some("icosian") => model.set_activation_snap(true),
+            Some(other) => {
+                return Err(invalid(format!(
+                    "invalid activation_snap={other} (none or icosian)"
+                )))
+            }
+        }
         if let Some(tau) = softsort_tau {
             if model.read_weighting() != ReadWeighting::SoftsortRank {
                 return Err(invalid(
@@ -2761,6 +2771,7 @@ fn evaluate_mode(arguments: &[String]) -> Result<()> {
                 "tokens": identity(&tokens_path)?,
                 "lens": lens_path.as_ref().map(|p| identity(p)).transpose()?,
                 "softsort_tau": softsort_tau,
+                "activation_snap": args.optional("activation_snap").unwrap_or_else(|| "none".into()),
                 "tune": summary(0..tune_blocks),
                 "comparison": summary(tune_blocks..blocks),
                 "full": summary(0..blocks),

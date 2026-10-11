@@ -2218,6 +2218,9 @@ pub struct StackModel {
     /// Whether the projection maps are quaternion-valued
     /// ([`Self::set_quaternion_weights`]).
     quaternion_weights: QuaternionWeights,
+    /// Evaluation-only probe ([`Self::set_activation_snap`]): every projection input lane is
+    /// snapped to its nearest unit icosian times a power of two. Never saved.
+    activation_snap: bool,
 }
 
 impl StackModel {
@@ -2253,6 +2256,7 @@ impl StackModel {
             geometric_address: None,
             geometric_span: None,
             read_key_shift: false,
+            activation_snap: false,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
             read_lineage: None,
@@ -2663,7 +2667,55 @@ impl StackModel {
     /// producing a bf16 activation. The weight's gradient flows back through
     /// its cast, so the master weight and the gradient that reaches it stay
     /// f32.
+    /// Evaluation-only spin-snap probe: when on, every [`Self::linear`] input
+    /// whose width divides by 4 has each 4-lane replaced by
+    /// `2^round(log2 |x|) * nearest_icosian(x / |x|)` before the product (zero
+    /// lanes stay zero). With icosian-snapped quaternion weights this is the
+    /// arithmetic of a table-lookup product. A probe, never trained or saved.
+    pub fn set_activation_snap(&mut self, enabled: bool) {
+        self.activation_snap = enabled;
+    }
+
+    fn snap_activation(&self, input: &Tensor) -> Result<Tensor> {
+        let dims = input.dims().to_vec();
+        let features = dims[dims.len() - 1];
+        if !self.activation_snap || !features.is_multiple_of(4) {
+            return Ok(input.clone());
+        }
+        let dtype = input.dtype();
+        let values = input
+            .to_dtype(DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let roots = icosian_roots();
+        let mut out = Vec::with_capacity(values.len());
+        for lane in values.chunks_exact(4) {
+            let norm = lane.iter().map(|v| v * v).sum::<f32>().sqrt();
+            if norm == 0.0 || !norm.is_finite() {
+                out.extend_from_slice(lane);
+                continue;
+            }
+            let unit = [
+                lane[0] / norm,
+                lane[1] / norm,
+                lane[2] / norm,
+                lane[3] / norm,
+            ];
+            let root = roots[nearest_root(unit, roots)];
+            let scale = norm.log2().round().exp2();
+            out.extend(root.iter().map(|r| r * scale));
+        }
+        Ok(Tensor::from_vec(out, dims, input.device())?.to_dtype(dtype)?)
+    }
+
     fn linear(&self, input: &Tensor, weight: &Tensor) -> Result<Tensor> {
+        let snapped;
+        let input = if self.activation_snap {
+            snapped = self.snap_activation(input)?;
+            &snapped
+        } else {
+            input
+        };
         let dims = input.dims().to_vec();
         let (rows, features) = (
             dims[..dims.len() - 1].iter().product::<usize>(),
@@ -9783,6 +9835,7 @@ impl StackModel {
             geometric_address,
             geometric_span,
             read_key_shift: false,
+            activation_snap: false,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
             read_lineage: None,
@@ -30312,6 +30365,38 @@ mod tests {
                 || error.to_string().contains("mlp.gate.weight"),
             "{error}"
         );
+        Ok(())
+    }
+    #[test]
+    fn activation_snap_keeps_icosian_lanes_and_snaps_scale_to_a_power_of_two() -> Result<()> {
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::L2, true),
+            &cpu(),
+        )?;
+        let root = icosian_roots()[5];
+        let mut values: Vec<f32> = root.iter().map(|r| 3.0 * r).collect();
+        values.extend([0.0, 0.0, 0.0, 0.0]);
+        let input = Tensor::from_vec(values.clone(), (1, 8), &cpu())?;
+        assert_eq!(
+            model
+                .snap_activation(&input)?
+                .flatten_all()?
+                .to_vec1::<f32>()?,
+            values
+        );
+        model.set_activation_snap(true);
+        let out = model
+            .snap_activation(&input)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for c in 0..4 {
+            assert!(
+                (out[c] - 4.0 * root[c]).abs() < 1e-6,
+                "lane 0: {:?}",
+                &out[..4]
+            );
+        }
+        assert_eq!(&out[4..], &[0.0, 0.0, 0.0, 0.0]);
         Ok(())
     }
 }
