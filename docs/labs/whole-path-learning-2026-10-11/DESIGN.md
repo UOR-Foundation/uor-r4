@@ -198,7 +198,8 @@ learned. A statement's value must influence credit when a later query uses or
 fails to use it. Training episodes therefore contain writes, distractors,
 corrections/reassertions and delayed queries, not independent compiler rows.
 
-Let z be all sampled hard choices for one episode: retained H4 transitions,
+Let z be all sampled hard choices for one episode: retained H4 right actions,
+observed roots/categories,
 compiler acts/relations/spans/views, record roots, orbit admissions, bounded
 read/donor choices, Generate prototype codes and, in a free rollout, token IDs.
 Each conditional distribution uses the relevant current native integer logits
@@ -258,9 +259,17 @@ law on its native score units, with a preregistered positive exploration mixture
 derivative is the derivative of this MIXTURE, not of softmax alone. Never mask
 missing answers into existence. Orbit/record selection samples sequentially
 without replacement with the actual masked conditional law at each rank;
-greedy mode repeats highest-score removal with the bound tie policy. Retained
-Context states sample valid120-state destinations from the current native
-transition scores and execute subsequent recurrence on the selected states.
+greedy mode repeats highest-score removal with the bound tie policy. Context
+samples120 RIGHT ACTIONS from the actual token/OLD-own/OLD-neighbor transition
+scores, then executes `h_next=h_old*action` by the native table. All lane actions
+are computed from the same OLD state vector and committed synchronously.
+Retained destination probabilities are its group-product pushforward, not raw
+action logits mislabelled as destination logits. Separate token/NEW-own/
+NEW-neighbor heads sample observed root120 and category33; category0 emits
+Absent observation without erasing retained state or exact store content.
+These root/category policies have their own log terms and downstream credit;
+they cannot be trained by an energy coefficient partial through a frozen
+observation. Both sampling and greedy modes obey this same causal phase order.
 
 Prototype code choices are global shared parameters, not context-dependent
 experts. Sample one complete token/lane prototype table per batch and reuse it
@@ -281,12 +290,13 @@ posterior. Greedy native outcomes and actual reload are the selection authority.
 
 | Parameter owner | Credit and boundary |
 |---|---|
-| E transition tables | Their categorical state log-probabilities receive compiler, later memory, route and complete-reply suffix credit; shared traces accumulate once |
+| E transition tables | Right-action log-probabilities receive compiler, later memory, route and complete-reply suffix credit; synchronous old-state order and shared traces accumulate once |
 | C heads | Native act/relation/span/view logits get auxiliary plus downstream score-function credit; exact slices/store writes have no fake derivative |
 | K source-root heads | Later route/reply suffix credit reaches the earlier record-root assignment; fixed group actions receive none |
 | Q family/admission heads | Actual candidate-inclusion outcomes receive downstream loss; no gold-candidate admission or softmax-over-kept surrogate for missing candidates |
 | R donor/bridge policies | Their actual consumed branch gets suffix credit; clipped token-score gradient is a separate coefficient partial |
-| O observation/Copy/Cue/P factors | Native-anchored coefficient partial with categorical inputs detached; do not freeze factors trained on an old E representation |
+| O observation heads | Root120/category33 log-probabilities get downstream credit, including presence; Absent observation is not payload eviction |
+| O Copy/Cue/P factors | Native-anchored coefficient partial with categorical inputs detached; do not freeze factors trained on an old E representation |
 | G prototype choices | Prototype policy/finite alternative utility affects all Copy/Generate/U consumers that use it; fixed codebook is not optimized |
 | G/U energy coefficients | Native-anchored coefficient partial through shared final clip/pool, no second per-branch normalization |
 
