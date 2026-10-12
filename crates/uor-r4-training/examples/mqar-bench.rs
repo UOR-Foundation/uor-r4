@@ -10,7 +10,7 @@
 //!   [dump_scores=false|true] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
-//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] \
+//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
 //!   [lineage=none|f2|qk|qk_jj|identity|so4|conv|wprev|conv8|carrier|rot] [learned_init=lag1|zero]
 //! arm=transformer: [layers=<pattern length>] [width=128] [heads=4] [mlp=matched|<n>] \
@@ -2460,6 +2460,10 @@ struct Common {
     /// `starling_distill=WEIGHT`: training-only selector distillation for a
     /// content starling route (KL from a dense content teacher).
     starling_distill: Option<f64>,
+    /// `starling_distill_start=FRACTION`: the distillation term is off before
+    /// this fraction of the steps (the address helper trains the selector
+    /// first), then on at `starling_distill`'s weight. Default 0.
+    starling_distill_start: f64,
     context: usize,
     pairs_per_bucket: usize,
     batch: usize,
@@ -2526,6 +2530,7 @@ impl Common {
             "starling_oracle_train": self.starling_oracle_train,
             "starling_surrogate": self.starling_surrogate,
             "starling_distill": self.starling_distill,
+            "starling_distill_start": self.starling_distill_start,
             "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
             "pairing_split": {
                 "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
@@ -2582,6 +2587,7 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
                     .map_err(|_| invalid(format!("invalid starling_distill={text}")))
             })
             .transpose()?,
+        starling_distill_start: args.parsed("starling_distill_start", 0.0f64)?,
         context: args.parsed(
             "context",
             if fact_layout {
@@ -2625,6 +2631,12 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
         stage0_dump: args.take("stage0_dump").map(PathBuf::from),
     };
     let mut common = common;
+    if !(0.0..1.0).contains(&common.starling_distill_start) {
+        return Err(invalid("starling_distill_start is a fraction in [0, 1)"));
+    }
+    if common.starling_distill_start > 0.0 && common.starling_distill.is_none() {
+        return Err(invalid("starling_distill_start needs starling_distill"));
+    }
     let probe_text = args
         .take("probe_steps")
         // The fact layout probes once, after training (or never: `none`).
@@ -2830,6 +2842,10 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
             .collect::<Result<_>>()?;
         let (ids, targets, weights) = batch_arrays(&batch, s.context);
         arm.begin_step(step, s.steps)?;
+        if s.starling_distill.is_some() && s.starling_distill_start > 0.0 {
+            let on = step as f64 >= s.starling_distill_start * s.steps as f64;
+            arm.set_starling_distill(s.starling_distill.filter(|_| on))?;
+        }
         if s.starling_oracle_train {
             let mut oracle = std::collections::HashMap::new();
             for (b, sequence) in batch.iter().enumerate() {
@@ -3301,6 +3317,10 @@ mod tests {
             // added them, and the test target must compile.
             init: None,
             stage0_dump: None,
+            starling_oracle_train: false,
+            starling_surrogate: false,
+            starling_distill: None,
+            starling_distill_start: 0.0,
         };
         let spec = ArmSpec::Stack {
             pattern: "rar".into(),
