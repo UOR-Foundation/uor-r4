@@ -3321,6 +3321,7 @@ mod tests {
             starling_surrogate: false,
             starling_distill: None,
             starling_distill_start: 0.0,
+            select: None,
         };
         let spec = ArmSpec::Stack {
             pattern: "rar".into(),
@@ -3492,6 +3493,14 @@ mod tests {
             probe_steps: Vec::new(),
             probe_sequences: 1,
             dump_scores: false,
+            select: None,
+            stage0: false,
+            init: None,
+            stage0_dump: None,
+            starling_oracle_train: false,
+            starling_surrogate: false,
+            starling_distill: None,
+            starling_distill_start: 0.0,
         }
     }
 
