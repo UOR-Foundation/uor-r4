@@ -3133,6 +3133,7 @@ pub struct StackModel {
     starling_rank_distill: Option<f64>,
     starling_teacher_helper: bool,
     starling_teacher_read: bool,
+    starling_teacher_age: bool,
     /// Layers whose MLP is an E8 orbit memory ([`Self::set_e8_memory`]).
     e8_memory: Option<crate::e8_memory::E8MemoryConfig>,
     /// How the geometric reads weight their kept sources
@@ -3249,6 +3250,7 @@ impl StackModel {
             starling_rank_distill: None,
             starling_teacher_helper: false,
             starling_teacher_read: false,
+            starling_teacher_age: false,
             e8_memory: None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
@@ -4484,18 +4486,39 @@ impl StackModel {
                 // `set_starling_teacher_read`, the L2 read's own learned score
                 // -beta (|q - k| - offset), the attention the L2 control uses.
                 let scores = if self.starling_teacher_read {
+                    let l2;
                     let beta = p.layer(layer, "read.log_beta")?.exp()?.reshape((1, heads, 1, 1))?;
                     let offset = p.layer(layer, "read.offset")?.reshape((1, heads, 1, 1))?;
                     let qs = query.sqr()?.sum_keepdim(3)?;
                     let ks = key.sqr()?.sum_keepdim(3)?.transpose(2, 3)?;
-                    qs.broadcast_add(&ks)?
+                    l2 = qs.broadcast_add(&ks)?
                         .sub(&inner.affine(2.0, 0.0)?)?
                         .clamp(L2_MIN_SQUARED as f32, f32::MAX)?
                         .sqrt()?
                         .broadcast_sub(&offset)?
                         .broadcast_mul(&beta)?
                         .neg()?
-                        .broadcast_add(&causal)?
+                        .broadcast_add(&causal)?;
+                    // With `set_starling_teacher_age`, also the L2 read's own
+                    // learned age table (per head, per distance), as the L2
+                    // control adds it.
+                    if self.starling_teacher_age {
+                        let mut ages = vec![0u32; time * time];
+                        for t in 0..time {
+                            for j in 0..=t {
+                                ages[t * time + j] = (t - j) as u32;
+                            }
+                        }
+                        let ages = Tensor::from_vec(ages, time * time, identity.device())?;
+                        let age = p.layer(layer, "read.age")?;
+                        let table = age
+                            .narrow(1, 0, time)?
+                            .index_select(&ages, 1)?
+                            .reshape((1, heads, time, time))?;
+                        l2.broadcast_add(&table)?
+                    } else {
+                        l2
+                    }
                 } else {
                     inner
                         .affine(1.0 / (d as f64).sqrt(), 0.0)?
@@ -5315,6 +5338,17 @@ impl StackModel {
             return Err(invalid("the read-score teacher needs a content route on an L2 read"));
         }
         self.starling_teacher_read = on;
+        Ok(())
+    }
+
+    /// With the read-score teacher, also add the L2 read's learned age table
+    /// (per head, per distance), so the teacher is the L2 control's
+    /// attention except for its null slot (training only).
+    pub fn set_starling_teacher_age(&mut self, on: bool) -> Result<()> {
+        if on && !self.starling_teacher_read {
+            return Err(invalid("the teacher age table needs the read-score teacher"));
+        }
+        self.starling_teacher_age = on;
         Ok(())
     }
 
@@ -11935,6 +11969,7 @@ impl StackModel {
             starling_rank_distill: None,
             starling_teacher_helper: false,
             starling_teacher_read: false,
+            starling_teacher_age: false,
             e8_memory: None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
