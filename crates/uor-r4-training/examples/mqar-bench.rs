@@ -118,7 +118,7 @@ struct Bucket {
     high: usize,
 }
 
-const ALL_BUCKETS: [Bucket; 5] = [
+const ALL_BUCKETS: [Bucket; 6] = [
     Bucket {
         name: "d16",
         low: 12,
@@ -143,6 +143,13 @@ const ALL_BUCKETS: [Bucket; 5] = [
         name: "d1000",
         low: 1000,
         high: 1100,
+    },
+    // Long-context recall (context 4096, murmuration ladder step 2); shorter
+    // windows filter it out, so their draws are unchanged.
+    Bucket {
+        name: "d3000",
+        low: 3000,
+        high: 3600,
     },
 ];
 
@@ -3469,6 +3476,18 @@ mod tests {
         assert_eq!(last_logits(&a, &ids), last_logits(&b, &ids));
         // ...while a recurrence layer does take rotation rows.
         assert_ne!(small("ra", true).shapes(), small("ra", false).shapes());
+    }
+
+    #[test]
+    fn long_context_buckets_leave_short_windows_unchanged() {
+        let names = |context| buckets_for(context).iter().map(|b| b.name).collect::<Vec<_>>();
+        assert_eq!(names(512), ["d16", "d64", "d200", "d400"]);
+        assert_eq!(names(1536), ["d16", "d64", "d200", "d400", "d1000"]);
+        assert_eq!(names(4096), ["d16", "d64", "d200", "d400", "d1000", "d3000"]);
+        // Every bucket's queries fit the window that admits it.
+        for context in [512, 1536, 4096] {
+            assert!(buckets_for(context).iter().all(|b| b.high < context));
+        }
     }
 
     fn common_for(out: &str, context: usize) -> Common {
