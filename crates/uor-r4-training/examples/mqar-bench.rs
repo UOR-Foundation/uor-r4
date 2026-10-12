@@ -837,6 +837,11 @@ impl ArmSpec {
                 starling_anneal,
                 ..
             } => {
+                if starling_anneal.is_some() && common.starling_bootstrap.is_some() {
+                    return Err(invalid(
+                        "starling_bootstrap sets the helper itself; drop starling_anneal",
+                    ));
+                }
                 if starling_anneal.is_some() && route.is_none() {
                     return Err(invalid("starling_anneal needs read_route=starling"));
                 }
@@ -2995,6 +3000,11 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
                 Some(start) => {
                     let span = (s.starling_handover * s.steps as f64).max(1.0);
                     let alpha = (1.0 - (step - start) as f64 / span).max(0.0);
+                    if step + 1 == s.steps && alpha > 0.0 {
+                        let line = format!("step {step} bootstrap: the handover did not finish (helper weight {alpha:.3} at the last step)");
+                        eprintln!("{line}");
+                        writeln!(log, "{line}")?;
+                    }
                     arm.set_starling_phase(
                         (alpha > 0.0).then_some(alpha),
                         alpha > 0.0,
