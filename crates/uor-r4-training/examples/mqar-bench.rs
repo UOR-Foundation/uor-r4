@@ -10,7 +10,7 @@
 //!   [dump_scores=false|true] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
-//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] \
+//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
 //!   [lineage=none|f2|qk|qk_jj|identity|so4|conv|wprev|conv8|carrier|rot] [learned_init=lag1|zero]
 //! arm=transformer: [layers=<pattern length>] [width=128] [heads=4] [mlp=matched|<n>] \
@@ -383,6 +383,13 @@ trait ContextArm {
     fn set_starling_surrogate(&mut self, on: bool) -> Result<()> {
         if on {
             return Err(invalid("starling_surrogate needs a starling stack arm"));
+        }
+        Ok(())
+    }
+    /// Training-only selector distillation for a content starling route.
+    fn set_starling_distill(&mut self, weight: Option<f64>) -> Result<()> {
+        if weight.is_some() {
+            return Err(invalid("starling_distill needs a starling stack arm"));
         }
         Ok(())
     }
@@ -1117,6 +1124,10 @@ impl ContextArm for StackArm {
         self.model.set_starling_surrogate(on)
     }
 
+    fn set_starling_distill(&mut self, weight: Option<f64>) -> Result<()> {
+        self.model.set_starling_distill(weight)
+    }
+
     fn starling_oracle_accuracy(
         &self,
         sequences: &[Sequence],
@@ -1202,11 +1213,19 @@ impl ContextArm for StackArm {
         batch: usize,
         time: usize,
     ) -> Result<Tensor> {
-        self.model.weighted_loss(ids, targets, weights, batch, time)
+        uor_r4_training::geometric_stack::starling_aux_take();
+        let language = self.model.weighted_loss(ids, targets, weights, batch, time)?;
+        // Training-only starling selector distillation, when set.
+        match uor_r4_training::geometric_stack::starling_aux_take() {
+            Some(aux) => Ok(language.add(&aux)?),
+            None => Ok(language),
+        }
     }
 
     fn logits(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
-        self.model.forward(ids, batch, time)
+        let logits = self.model.forward(ids, batch, time);
+        uor_r4_training::geometric_stack::starling_aux_take();
+        logits
     }
 
     fn update(&mut self, loss: &Tensor, lr: f64) -> Result<f64> {
@@ -2416,6 +2435,9 @@ struct Common {
     /// `starling_surrogate=true`: training-only softmax-over-kept gradient for a
     /// content starling route (the forward stays softmax-free).
     starling_surrogate: bool,
+    /// `starling_distill=WEIGHT`: training-only selector distillation for a
+    /// content starling route (KL from a dense content teacher).
+    starling_distill: Option<f64>,
     context: usize,
     pairs_per_bucket: usize,
     batch: usize,
@@ -2481,6 +2503,7 @@ impl Common {
             "save_model": self.save_model,
             "starling_oracle_train": self.starling_oracle_train,
             "starling_surrogate": self.starling_surrogate,
+            "starling_distill": self.starling_distill,
             "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
             "pairing_split": {
                 "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
@@ -2530,6 +2553,13 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
         save_model: args.parsed("save_model", false)?,
         starling_oracle_train: args.parsed("starling_oracle_train", false)?,
         starling_surrogate: args.parsed("starling_surrogate", false)?,
+        starling_distill: args
+            .take("starling_distill")
+            .map(|text| {
+                text.parse::<f64>()
+                    .map_err(|_| invalid(format!("invalid starling_distill={text}")))
+            })
+            .transpose()?,
         context: args.parsed(
             "context",
             if fact_layout {
@@ -2702,6 +2732,7 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     use std::io::Write;
     let started = Instant::now();
     arm.set_starling_surrogate(s.starling_surrogate)?;
+    arm.set_starling_distill(s.starling_distill)?;
     let buckets = buckets_for(s.context);
     let line = format!(
         "{} {}: {} parameters, context {}, buckets {:?}",
