@@ -3,7 +3,7 @@
 The [source result](../labs/whole-path-implementation-2026-10-12/README.md) joins
 real packed compiler spans/views, staged exact memory, bounded Claude E8/SpiralCore
 routes and native pooled emission with one shared parameter/credit inventory.
-Eleven tiny whole-path fixtures and seven native-bank regressions pass, including
+Fifteen tiny whole-path fixtures and seven native-bank regressions pass, including
 actual greedy reload, shared coefficient/branch credit, all-component rebinding,
 fractional masters and atomic frame/store/index restoration; no optimizer or
 training was run. CUDA producer, sampled checkpoint/optimizer and batch/data/FIT

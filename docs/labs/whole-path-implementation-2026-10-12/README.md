@@ -14,10 +14,11 @@ not permission for a third preparation loop or automatic compute.
 **KEEP the connected source reference; NOT TRAINING READY.**
 `whole_path_learning` joins the real packed native compiler, staged exact store,
 bounded E8 record index, native donor/action/Copy/Generate/EOS path and a shared
-credit tape. Eleven focused fixtures pass, including actual predicted writes,
+credit tape. Fifteen focused fixtures pass, including actual predicted writes,
 correction and initial/current queries, actual emitted IDs after independent
 reload, nonzero finite credit in the connected owners, exact frame roundtrip,
-all-component rebinding and fractional-master restoration. These use a tiny
+all-component rebinding, fractional-master restoration, finite pooled sampling
+under underflow and additive/shift quarter-profile arithmetic. These use a tiny
 eight-token, one-lane, manually specified source fixture. They do not fit labels,
 run an optimizer, qualify language/transfer or establish compute/energy savings.
 
@@ -71,7 +72,10 @@ All active owners refer to the same original Vars, not detached copies. Context,
 Potential, compiler, key/family/rank, donor/bridge, Generate/prototypes,
 Cue/Prefix, optional joint Cue, continuation and status have one inventory and
 master digest. Period/NoRead are retained inactive source components, not falsely
-called trained by this bank path. The joint source compile API is separate from
+called trained by this bank path. Potential content/age channels are also
+inactive under the existing absent-content/zero-age bank policy; the one-lane
+fixture has no Generate pair edges. Nonzero credit is not claimed for inactive
+slots. The joint source compile API is separate from
 the old frozen-observation API, whose guards stay intact.
 
 Rebinding exclusively claims a fresh root, compiles/saves/reloads E and source,
@@ -87,7 +91,12 @@ A sampled failure closes that trajectory, rather than silently continuing RNG.
 
 SpiralCore's already-qualified64-action Cl(0,6) composition table transports
 Claude's exact240 E8 addresses; exact record handles and payload hashes survive
-collisions and transport. This is the concrete adapter from #2225, not a new
+collisions and transport. Learned family consumption pulls physical profiles
+back to the revision's canonical frame. All64 actions preserve these consumed
+profiles, and a nonzero-family-weight fixture preserves actual native output
+and raw scores after transport. Exact E8 coordinates/order, orbit membership,
+action images and Cl(0,6) composition bind the revision's geometry SHA256.
+This is the concrete adapter from #2225, not a new
 universal converter, semantic metric on SHA bits, H4-to-E8 cast or proof of a
 reversible Hopf projection. The hands-on SpiralCore source/codec/action receipts
 remain in the [audit](../unified-geometric-integration-2026-10-11/AUDIT.md).
@@ -102,7 +111,7 @@ eviction. A tree is not silently substituted for this registered design.
 
 ## Qualification And Cost
 
-Scoped offline Rust library compilation and the eleven whole-path fixtures
+Scoped offline Rust library compilation and the fifteen whole-path fixtures
 passed; the seven ordinary native-bank regressions passed. Final exact-head
 checks/review and focused integer/compiler/store regressions are recorded on
 the protected PR. Queue acknowledgements are not test evidence. Source API,

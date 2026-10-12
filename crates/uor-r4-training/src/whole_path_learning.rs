@@ -46,6 +46,40 @@ use crate::{invalid, sha256_bytes, Result};
 pub const SCHEMA: &str = "uor-r4.whole-path/1";
 const Q24: f64 = 16777216.;
 
+fn route_geometry_sha256() -> Result<String> {
+    let tables = crate::e8_memory::e8_tables()?;
+    let group = uor_r4_core::spiralcore_operator::cl06_finite_composition_table()
+        .map_err(|e| invalid(e.to_string()))?;
+    if group.identity_index() != 0 {
+        return Err(invalid("route frame identity differs from schema1"));
+    }
+    let roots = (0..240)
+        .map(|r| tables.exact_root_key(r))
+        .collect::<Result<Vec<_>>>()?;
+    let mut images = Vec::with_capacity(64 * 240);
+    let mut products = Vec::with_capacity(64 * 64);
+    for a in 0..64 {
+        for root in 0..240 {
+            images.push(tables.transport_root(root, a)?);
+        }
+        for b in 0..64 {
+            products.push(
+                group
+                    .compose_index(a, b)
+                    .ok_or_else(|| invalid("frame composition absent"))?,
+            );
+        }
+    }
+    Ok(sha256_bytes(&serde_json::to_vec(&(
+        "exact-2x-E8-coordinates;canonical-key;Cl06-left-frame-action/1",
+        roots,
+        &tables.orbit_of,
+        &tables.members,
+        images,
+        products,
+    ))?))
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RouteLimits {
@@ -134,6 +168,24 @@ fn anchor(hard: &[f32], graph: Tensor) -> Result<Tensor> {
 fn log_sum_exp(values: &Tensor) -> Result<Tensor> {
     let shift = values.max(0)?.detach();
     Ok((values.broadcast_sub(&shift)?.exp()?.sum_all()?.log()? + shift)?)
+}
+fn quarter_scale(coefficient: i8, value: i32) -> Result<i64> {
+    if !(-7..=7).contains(&coefficient) {
+        return Err(invalid("profile coefficient outside signed-q4"));
+    }
+    let magnitude = coefficient.unsigned_abs();
+    let value = i64::from(value);
+    let mut out = 0;
+    if magnitude & 1 != 0 {
+        out += value;
+    }
+    if magnitude & 2 != 0 {
+        out += value << 1;
+    }
+    if magnitude & 4 != 0 {
+        out += value << 2;
+    }
+    Ok(if coefficient < 0 { -out } else { out })
 }
 fn head_count(c: TurnHeadConfig) -> Result<usize> {
     if c.classes == 1 {
@@ -533,6 +585,7 @@ impl<'a> WholePathWeights<'a> {
             schema: SCHEMA.into(),
             source: binding.clone(),
             parameters_sha256: digest,
+            geometry_sha256: route_geometry_sha256()?,
             mode,
             limits: self.limits.clone(),
             lanes: self.lanes,
@@ -575,6 +628,7 @@ struct Manifest {
     schema: String,
     source: NativeArtifactBinding,
     parameters_sha256: String,
+    geometry_sha256: String,
     mode: Mode,
     limits: RouteLimits,
     lanes: usize,
@@ -607,7 +661,10 @@ impl WholePathRevision {
         }
         let m: Manifest = serde_json::from_slice(&bytes)?;
         m.limits.validate()?;
-        if m.schema != SCHEMA || !(1..=8).contains(&m.lanes) {
+        if m.schema != SCHEMA
+            || !(1..=8).contains(&m.lanes)
+            || m.geometry_sha256 != route_geometry_sha256()?
+        {
             return Err(invalid("whole-path revision schema/lanes invalid"));
         }
         for (name, sha) in &m.files {
@@ -922,12 +979,25 @@ impl RouteIndex {
         Ok(())
     }
     fn profiles(&self) -> Result<[[i32; 9]; 15]> {
+        self.profiles_after(0)
+    }
+    fn canonical_profiles(&self) -> Result<[[i32; 9]; 15]> {
+        let group = uor_r4_core::spiralcore_operator::cl06_finite_composition_table()
+            .map_err(|e| invalid(e.to_string()))?;
+        self.profiles_after(
+            group
+                .inverse_index(self.frame)
+                .ok_or_else(|| invalid("profile frame inverse absent"))?,
+        )
+    }
+    fn profiles_after(&self, action: u8) -> Result<[[i32; 9]; 15]> {
         let tables = crate::e8_memory::e8_tables()?;
         let mut out = [[0i32; 9]; 15];
         for r in self.records.values() {
             let orbit = usize::from(tables.orbit_of[r.root as usize]);
             out[orbit][0] += 1;
-            for (i, x) in tables.exact_root_key(r.root)?.iter().enumerate() {
+            let root = tables.transport_root(r.root, action)?;
+            for (i, x) in tables.exact_root_key(root)?.iter().enumerate() {
                 out[orbit][i + 1] += i32::from(*x);
             }
         }
@@ -1055,14 +1125,17 @@ impl WholePathSession<'_> {
                         | u8::from(read.value().is_some_and(|v| v.conflict))
                 });
                 let query = revision.encode(tokenizer, source)?;
-                let profiles = index.profiles()?;
+                // Q is learned in the revision's canonical coordinates.
+                // Transported roots are pulled back, not compared against
+                // untransported coefficients in a different frame.
+                let profiles = index.canonical_profiles()?;
                 let mut orbit_scores = Vec::new();
                 for (o, profile) in profiles.iter().enumerate() {
                     let mut sum = 0i64;
                     for (lane, &h) in query.iter().enumerate() {
                         let at = ((o * revision.manifest.lanes + lane) * 120 + usize::from(h)) * 9;
                         for (d, &x) in profile.iter().enumerate() {
-                            sum += i64::from(revision.family[at + d]) * i64::from(x);
+                            sum += quarter_scale(revision.family[at + d], x)?;
                         }
                     }
                     orbit_scores.push(sum);
@@ -2208,6 +2281,18 @@ mod tests {
     use uor_r4_integer::geometric_cue_carrier::CueScoreMode;
     use uor_r4_integer::geometric_prefix_transport::PrefixScoreMode;
 
+    #[test]
+    fn whole_path_profile_quarters_use_exact_add_shift_scale() -> Result<()> {
+        for q in -7..=7 {
+            for x in [-2147483648, -31, 0, 31, 2147483647] {
+                assert_eq!(quarter_scale(q, x)?, i64::from(q) * i64::from(x));
+            }
+        }
+        assert!(quarter_scale(-8, 1).is_err());
+        assert!(quarter_scale(8, 1).is_err());
+        Ok(())
+    }
+
     struct Parts {
         fixture: Fixture,
         parent: NativeSourceRealizer,
@@ -2892,6 +2977,47 @@ mod tests {
             .to_vec1::<f32>()?
             .iter()
             .all(|x| x.is_finite()));
+        Ok(())
+    }
+
+    #[test]
+    fn whole_path_family_consumption_pulls_transported_profiles_back_to_the_same_frame(
+    ) -> Result<()> {
+        let p = parts()?;
+        let w = weights(&p)?;
+        let tok = tokenizer()?;
+        set(
+            &w.family,
+            (0..w.family.elem_count())
+                .map(|i| (i % 7) as f32 * 0.25 - 0.75)
+                .collect(),
+        )?;
+        let revision = w.rebind(&p.parent, &p.fixture.path.join("covariant"), Mode::Greedy)?;
+        let mut session = revision.session(&tok, TOK.as_bytes(), scope(), limits(), 740, 16)?;
+        session.turn("a b", one())?;
+        session.turn("a a", one())?;
+        let snapshot = session.snapshot()?;
+        let canonical = session.index.canonical_profiles()?;
+        for action in 0..64 {
+            let mut transformed = session.index.clone();
+            transformed.transport(action)?;
+            assert_eq!(canonical, transformed.canonical_profiles()?);
+        }
+        let loaded = WholePathRevision::load(&revision.root, revision.sha256())?;
+        let mut framed = loaded.session(&tok, TOK.as_bytes(), scope(), limits(), 740, 16)?;
+        framed.restore(&snapshot, &sha256_bytes(&snapshot))?;
+        framed.transport_routes(7)?;
+        let a = session.turn("a", one())?;
+        let b = framed.turn("a", one())?;
+        assert_eq!(a.generation.generated_ids, b.generation.generated_ids);
+        assert_eq!(
+            a.generation.steps[0].copy_token_ids,
+            b.generation.steps[0].copy_token_ids
+        );
+        assert_eq!(
+            a.generation.steps[0].generate_raw_scores_q24,
+            b.generation.steps[0].generate_raw_scores_q24
+        );
         Ok(())
     }
 }

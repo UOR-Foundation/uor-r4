@@ -48,7 +48,7 @@ is activated by this design; the owner training hold stays. The [source result](
 now joins actual native compiler/store/E8/emitter decisions with one shared Var
 inventory, pooled complete-answer/EOS and terminal episode credit, actual
 stochastic branch laws, fresh whole-revision bindings and greedy snapshots.
-Eleven tiny fixtures exercise these connections, not language or efficiency.
+Fifteen tiny fixtures exercise these connections, not language or efficiency.
 CUDA, sampled checkpoint/optimizer, multi-episode batch and full-instrument
 qualification remain blocking; no training loop or run is activated.
 
