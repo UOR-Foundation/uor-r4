@@ -1,3 +1,22 @@
+## 2026-10-12 — The rank-margin objective: D23's first softmax-free training loss, with its CUDA kernel (kimi, #2029)
+
+The [record](../labs/margin-objective-2026-10-12/README.md) delivers the census's largest gap: a training
+objective with no softmax anywhere. `Objective::MarginHinge` is a rank hinge `mean_k relu(1 − z_t + z_k)`
+over each row's strongest rivals — no exponential of any kind in the forward or the gradient — with CPU
+and CUDA f32 forward/backward kernels (one warp per row, ties to the CPU's stable-sort order), a
+`StackConfig::objective` field that leaves every existing config byte-identical, and the trainer flag
+`objective=hinge|hinge8`. Nine focused tests (hand computation, finite-difference gradient, Ce
+bit-exactness, refusals, a serving-compliance witness that a non-pointer model's `next_scores` are the raw
+last logits); the full lib suite **938 passed / 0 failed**. The pointer's own objective, the rank read's
+CUDA kernel and the score-gradient stop are rung 0b's named work. The revised
+[learning-law design](../labs/d23-learning-law-design-2026-10-12/README.md) carries the replacement program
+and the owner-supplied SpiralCore/murmurations review.
+
+Line: evaluation integrity · count 1/3 (preparation PR, names its run) · headline: unchanged (M1 v5 memory
+20/40, reply 37/232).
+
+**Next:** TEST FITNESS on rung 0 (#2029 comment 6124773996 as amended), then the M1/M8 arms on one pod.
+
 ## 2026-10-12 — D23 replacement learning law: design and rung-0 pre-registration (kimi, #2029)
 
 The [design](../labs/d23-learning-law-design-2026-10-12/README.md) answers the owner-named next source task
