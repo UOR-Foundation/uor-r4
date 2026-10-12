@@ -32451,13 +32451,19 @@ mod tests {
         assert_ne!(plain_grad, surrogate_grad, "the surrogate must add a gradient");
         // The values keep the softmax-free read's gradient exactly.
         assert_eq!(plain_value, surrogate_value, "the surrogate must not touch values");
-        model.set_read_route(Some(StarlingRoute {
+        // An address (non-content) route refuses the surrogate; a model's
+        // route is fixed once set, so check on a fresh model.
+        let mut address = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::L2, true),
+            &cpu(),
+        )?;
+        address.set_read_route(Some(StarlingRoute {
             content: false,
             ranked: false,
             shared: false,
             ..route
         }))?;
-        assert!(model.set_starling_surrogate(true).is_err());
+        assert!(address.set_starling_surrogate(true).is_err());
         Ok(())
     }
 
