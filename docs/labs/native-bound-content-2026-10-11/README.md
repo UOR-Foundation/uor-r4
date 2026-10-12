@@ -25,6 +25,8 @@ learned numerical channel, and full history can still influence Generate.
 Preparation is immutable; failed/empty generation cannot commit a staged write
 or partial conversation. Snapshots retain exact generated IDs and store/spans;
 reload replays recorded compiler predictions to verify their connection.
+Reload also requires a separately trusted snapshot digest; internal replay
+alone does not establish that supplied reply IDs were actually generated.
 Compiler bytes, tokenizer content, label order, encoder/model/algebra, scope and
 limits are checked. Source, Generate, bridge, Cue/joint, Prefix, continuation
 and read selection jointly bind the native consumer/session. Integrity is not

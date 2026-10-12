@@ -547,9 +547,11 @@ impl<'a, C: TurnCompiler> NativeGroundedSession<'a, C> {
         }
         Ok(bytes)
     }
-    pub fn restore(&mut self, bytes: &[u8]) -> Result<()> {
+    /// The expected digest comes from separately trusted custody, not a field
+    /// inside this snapshot. Inner replay checks do not authenticate reply IDs.
+    pub fn restore(&mut self, bytes: &[u8], trusted_sha256: &str) -> Result<()> {
         self.check_compiler()?;
-        if bytes.len() > self.limits.max_snapshot_bytes {
+        if bytes.len() > self.limits.max_snapshot_bytes || sha256_bytes(bytes) != trusted_sha256 {
             return Err(invalid("native snapshot admission exceeded"));
         }
         let s: Snapshot = serde_json::from_slice(bytes)?;

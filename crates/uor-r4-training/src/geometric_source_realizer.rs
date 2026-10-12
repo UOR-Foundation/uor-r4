@@ -6798,7 +6798,8 @@ mod tests {
             77,
             4,
         )?;
-        resumed.restore(&bytes)?;
+        resumed.restore(&bytes, &sha256_bytes(&bytes))?;
+        assert!(resumed.restore(&bytes, &"0".repeat(64)).is_err());
         let left = session.turn("b b", output)?;
         let right = resumed.turn("b b", output)?;
         assert_eq!(
@@ -6829,7 +6830,10 @@ mod tests {
         assert_eq!(resumed.snapshot()?, before);
         let mut bad: serde_json::Value = serde_json::from_slice(&bytes)?;
         bad["turns"][0]["record"] = serde_json::json!(99);
-        assert!(resumed.restore(&serde_json::to_vec(&bad)?).is_err());
+        let bad_bytes = serde_json::to_vec(&bad)?;
+        assert!(resumed
+            .restore(&bad_bytes, &sha256_bytes(&bad_bytes))
+            .is_err());
         assert_eq!(resumed.snapshot()?, before);
         Ok(())
     }
