@@ -393,6 +393,10 @@ trait ContextArm {
         }
         Ok(())
     }
+    /// The last training step's auxiliary (distillation) loss term, 0 if none.
+    fn last_aux(&self) -> f64 {
+        0.0
+    }
     /// For a starling read: recall with every head's kept set forced to hold
     /// each query's true source (diagnostic D1, #2032). `None` otherwise.
     fn starling_oracle_accuracy(
@@ -1008,6 +1012,7 @@ impl ArmSpec {
                     age: *age,
                     lineage: *lineage,
                     starling_anneal: *starling_anneal,
+                    last_aux: std::cell::Cell::new(0.0),
                 }))
             }
             ArmSpec::Transformer { .. } => {
@@ -1022,6 +1027,7 @@ impl ArmSpec {
                     age: AgeInit::Default,
                     lineage: LineageArm::None,
                     starling_anneal: None,
+                    last_aux: std::cell::Cell::new(0.0),
                 }))
             }
         }
@@ -1034,6 +1040,9 @@ struct StackArm {
     age: AgeInit,
     lineage: LineageArm,
     starling_anneal: Option<f64>,
+    /// The last training step's starling distillation term (0 without it),
+    /// logged separately so the reported NLL stays language-only.
+    last_aux: std::cell::Cell<f64>,
 }
 
 impl StackArm {
@@ -1128,6 +1137,10 @@ impl ContextArm for StackArm {
         self.model.set_starling_distill(weight)
     }
 
+    fn last_aux(&self) -> f64 {
+        self.last_aux.get()
+    }
+
     fn starling_oracle_accuracy(
         &self,
         sequences: &[Sequence],
@@ -1217,8 +1230,14 @@ impl ContextArm for StackArm {
         let language = self.model.weighted_loss(ids, targets, weights, batch, time)?;
         // Training-only starling selector distillation, when set.
         match uor_r4_training::geometric_stack::starling_aux_take() {
-            Some(aux) => Ok(language.add(&aux)?),
-            None => Ok(language),
+            Some(aux) => {
+                self.last_aux.set(f64::from(aux.detach().to_scalar::<f32>()?));
+                Ok(language.add(&aux)?)
+            }
+            None => {
+                self.last_aux.set(0.0);
+                Ok(language)
+            }
         }
     }
 
@@ -2781,7 +2800,7 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
         seconds: 0.0,
     };
     prober.run(&*arm, 0, log)?;
-    let (mut window_loss, mut window_steps) = (0f64, 0usize);
+    let (mut window_loss, mut window_aux, mut window_steps) = (0f64, 0f64, 0usize);
     let mut step_seconds = Vec::new();
     let mut stopped_early = false;
     let mut step = 0;
@@ -2828,7 +2847,10 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
         arm.end_step()?;
         step += 1;
         step_seconds.push(clock.elapsed().as_secs_f64());
-        window_loss += value;
+        // Language-only NLL; the distillation term is logged on its own.
+        let aux = arm.last_aux();
+        window_loss += value - aux;
+        window_aux += aux;
         window_steps += 1;
         if step % s.eval_every == 0 || step == s.steps {
             let in_class = evaluate(&*arm, &curve_in_class, s.context, &buckets, chunk)?;
@@ -2839,6 +2861,11 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
                 writeln!(log, "step {step} starling hit rate {rate:.4}")?;
             }
             let train_loss = window_loss / window_steps.max(1) as f64;
+            let train_aux = window_aux / window_steps.max(1) as f64;
+            if s.starling_distill.is_some() {
+                eprintln!("step {step} distill KL term {train_aux:.5}");
+                writeln!(log, "step {step} distill KL term {train_aux:.5}")?;
+            }
             let line = format!(
                 "step {step} lr {lr:.2e} train query NLL {train_loss:.4} grad {grad_norm:.3} in-class acc {:.3} {} | held-out acc {:.3} ({:.0}s)",
                 in_class["accuracy"].as_f64().unwrap_or(f64::NAN),
@@ -2852,9 +2879,11 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
                 "step": step, "lr": lr, "train_query_nll": train_loss,
                 "grad_norm": grad_norm, "in_class": in_class, "held_out": held_out,
                 "starling_hit_rate": hit_rate,
+                "distill_kl_term": train_aux,
                 "elapsed_seconds": started.elapsed().as_secs_f64(),
             }));
             window_loss = 0.0;
+            window_aux = 0.0;
             window_steps = 0;
         }
         prober.run(&*arm, step, log)?;
@@ -3527,6 +3556,8 @@ mod tests {
                 optimizer,
                 age: AgeInit::Default,
                 lineage: LineageArm::None,
+                starling_anneal: None,
+                last_aux: std::cell::Cell::new(0.0),
             };
             let reach = context_reachability(&arm, &sequences, 64).expect("reachability");
             let queries = sequences
