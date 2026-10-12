@@ -142,6 +142,9 @@ these using shared typed H4 query/record features and content score factors;
 keep K records shared across emitting heads, preserving stable ordinal ties.
 All their physical Source offsets enter the common emitter pool.
 
+These families select exact MEMORY RECORDS, not expert neural networks or
+separately learned value-table responses. There is no MoE/expert serving gate.
+
 This chooses the E8 orbit-index route for the first implementation, rather than
 combining multiple unrelated routers. Claude's600-cell neighbour reader remains
 an independently owned alternative/comparator; its bounded/shared-candidate and
