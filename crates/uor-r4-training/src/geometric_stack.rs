@@ -4686,12 +4686,6 @@ impl StackModel {
         Ok(())
     }
 
-    /// Set (`Some(alpha)`, `0 <= alpha`) or clear the training-only weight of
-    /// the starling read's dense helper: the read adds `alpha` times a causal
-    /// mean over every earlier position of `sigmoid(beta <a_t, b_j> + gamma)
-    /// v_j`, so key addresses outside the kept neighbours still learn. A train
-    /// loop sets it around each step and anneals it to zero; evaluation and
-    /// export read the pure starling form. Any model without a route ignores it.
     /// Training-only softmax-surrogate gradient for a content starling route
     /// (the forward value is unchanged; never saved).
     pub fn set_starling_surrogate(&mut self, on: bool) -> Result<()> {
@@ -4702,6 +4696,12 @@ impl StackModel {
         Ok(())
     }
 
+    /// Set (`Some(alpha)`, `0 <= alpha`) or clear the training-only weight of
+    /// the starling read's dense helper: the read adds `alpha` times a causal
+    /// mean over every earlier position of `sigmoid(beta <a_t, b_j> + gamma)
+    /// v_j`, so key addresses outside the kept neighbours still learn. A train
+    /// loop sets it around each step and anneals it to zero; evaluation and
+    /// export read the pure starling form. Any model without a route ignores it.
     pub fn set_starling_dense(&mut self, alpha: Option<f64>) -> Result<()> {
         if let Some(alpha) = alpha {
             if !(alpha.is_finite() && alpha >= 0.0) {
