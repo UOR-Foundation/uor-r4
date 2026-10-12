@@ -17,22 +17,40 @@ Line: evaluation integrity · count 1/3 (preparation PR, names its run) · headl
 
 **Next:** TEST FITNESS on rung 0 (#2029 comment 6124773996 as amended), then the M1/M8 arms on one pod.
 
-## 2026-10-12 — D23 replacement learning law: design and rung-0 pre-registration (kimi, #2029)
+## 2026-10-12 — D23 replacement learning law: the geometric replacement program (kimi, #2029)
 
-The [design](../labs/d23-learning-law-design-2026-10-12/README.md) answers the owner-named next source task
-after the [verified incident note](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6124719596):
-the starling/murmuration machinery is intact in-tree; the drift was the training method (softmax surrogate,
-distillation, dense bootstrap), and the structural cause is that no wired non-softmax objective exists in
-Line A ([census](../softmax-census-2026-10-12/README.md)). The proposed law: a **rank/margin objective**
-(hard hinge or the in-tree `rank_softplus`, no normalized exponential), **sparsemax** as the only normalized
-operator where a simplex is required (piecewise-linear, exp-free), and **rank-margin address credit** for the
-murmuration read — no teacher of any kind. Rung 0 is pre-registered on
-[#2029 comment 6124773996](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6124773996)
-(M1/M8/M1s arms × 2 seeds, one pod ≤ $3, bars fixed in advance, no CE arm per D24) and waits for TEST FITNESS.
+The revised [design](../labs/d23-learning-law-design-2026-10-12/README.md) — under the owner's no-softplus /
+no-softmax-shaped rule and the geometric-replacements-on-GPU direction — replaces softmax's three jobs with
+geometric processes: a **rank-margin objective** (hard hinge, no exponential at all — implemented, this
+PR's sibling), the **rank-table read** with a score-gradient stop (its CUDA kernel next), **exact hard
+selection over the 600-cell with rank-margin address credit** for the murmuration read (teacher-free), and
+**raw-score greedy output** (clean for non-pointer models). Basis deep-reviewed this session: the
+SpiralCore v69 site (600-cell/H4 addressing, Cl(0,6) E8 operator orbits, H2 decagons, FBS binder, Kuramoto
+phase coupling) and the elliptic-curve murmurations paper (role recoverable from trace-oscillation
+patterns). Rung 0 (recurrence-only, hinge-only) is pre-registered and amended on #2029 and waits for TEST
+FITNESS.
 
 Line: evaluation integrity · count 1/3 · headline: unchanged (M1 v5 memory 20/40, reply 37/232).
 
-**Next:** TEST FITNESS on the rung; the objective implementation as the preparation PR; the run on one pod.
+**Next:** TEST FITNESS on the rung; the margin-objective prep PR; rung 0 on one pod.
+## 2026-10-12 — D23 softmax census: every active executed path computes a normalized exponential; the compliance checker lands (kimi, #2028)
+
+The [census](../labs/softmax-census-2026-10-12/README.md) answers D23's inspection requirement for the whole
+project, and [`scripts/softmax_path_check.py`](../../scripts/softmax_path_check.py) is the executable
+instrument for it (`--path` per executed path; `--self-test` passes). Current verdict at this head: the Line A
+objective (14 sites — LSE forward, `exp(v−lse)` backward, CPU/CUDA/Metal), the stack serving mixture (14 — the
+head's `softmax(z)` and the pointer mixture), the D11 engine (7 — read, head and mixture normalize from the
+sealed exp table; the sampler itself is clean but softmax-fed), the native learner (21) and the training aids
+(63 — every surrogate, distillation and teacher) all compute a normalized exponential. **Already softmax-free
+in-tree:** the rank-family reads and their Q31 D11 serving path plus the export gate (a configuration, not the
+default), greedy decoding, the copy-span oracle's uniform forced attention, hard native bank generation, the
+A3 sieve, E8 gate mixing, VSA rectified-quadratic scoring, and rank/margin objectives (diagnostics only).
+The replacement learning law needs an objective (the largest gap), an output distribution, the read (solved
+as a configuration), sampling (clean) and the aids, in one design.
+
+Line: evaluation integrity · count 1/3 (instrument PR; prepares the D23-compliant runs) · headline: unchanged.
+Kimi's span-oracle and bench runs remain held until a compliant objective exists (blocked cards posted).
+
 
 ## October 12: no CPU model compute, and the softmax rule gets an interlock
 
