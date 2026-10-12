@@ -58,6 +58,7 @@ pub mod geometric_span;
 pub mod geometric_span_native;
 pub mod geometric_stack;
 pub mod geometric_turn_compiler;
+pub mod native_grounded_session;
 pub mod geometric_value_native;
 pub mod geometric_value_producer;
 pub mod geometric_value_producer_native;

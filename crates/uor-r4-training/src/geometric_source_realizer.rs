@@ -129,6 +129,15 @@ struct NativeMetadata {
 }
 
 impl SourceRealizerWeights {
+    /// Trainable transition families for retained Copy utility. Root/category
+    /// readout coefficients are fixed by that policy, not silently updated with
+    /// another branch's partial gradient.
+    pub fn context_transition_parameters(&self) -> BTreeMap<String, Var> {
+        self.context_state_parameters()
+            .into_iter()
+            .filter(|(name, _)| name.ends_with("transition"))
+            .collect()
+    }
     /// Consume the admitted consumer source and initialize only the additional
     /// Period coefficients. The explicit seed has no answer/data dependence.
     pub fn new(
@@ -6169,6 +6178,32 @@ mod tests {
             )?;
             let copy_only =
                 prepared.forward_bank_composed_copy(&segments, &[5], own, &cue, &prefix)?;
+            let finite_copy = prepared.forward_bank_composed_copy_with_retained_utility(
+                &segments,
+                &[5],
+                own,
+                &cue,
+                &prefix,
+            )?;
+            assert_eq!(finite_copy.trace, copy_only.trace);
+            assert_eq!(
+                finite_copy.copy_raw.to_vec1::<f32>()?,
+                copy_only.copy_raw.to_vec1::<f32>()?
+            );
+            for name in ["contextual_copy", "cue_copy", "prefix_copy"] {
+                let gradients = finite_copy.state_credit_components[name]
+                    .sum_all()?
+                    .backward()?;
+                for var in fixture.weights.context_transition_parameters().values() {
+                    if let Some(g) = gradients.get(var.as_tensor()) {
+                        assert!(g
+                            .flatten_all()?
+                            .to_vec1::<f32>()?
+                            .iter()
+                            .all(|v| v.is_finite()));
+                    }
+                }
+            }
             assert_eq!(copy_only.trace, factual.prefix_bank);
             assert!(context_replay_matches(
                 &factual.prefix_bank.cue_bank.bank.context,
@@ -6201,6 +6236,17 @@ mod tests {
                 &prepared, &generate, &snapshot, &exp,
             )?;
             let joint = unified.forward_bank(&segments, &[5], own, &cue, &prefix)?;
+            let mut finite_unified = crate::geometric_bank_generate::PreparedBankGenerate::new(
+                &prepared, &generate, &snapshot, &exp,
+            )?
+            .with_retained_copy_utility();
+            let finite_joint = finite_unified.forward_bank(&segments, &[5], own, &cue, &prefix)?;
+            assert_eq!(finite_joint.copy_scores_q24, joint.copy_scores_q24);
+            assert_eq!(finite_joint.generate.scores_q24, joint.generate.scores_q24);
+            assert_eq!(
+                serde_json::to_value(&finite_joint.actions)?,
+                serde_json::to_value(&joint.actions)?
+            );
             // The emission compiler preserves the leading-space token identity:
             // the original [a,a] becomes [space-a,a], not two raw a aliases.
             assert_eq!(joint.copy_token_ids, view.emitted_token_ids());
@@ -6471,6 +6517,315 @@ mod tests {
             .is_err());
         Ok(())
     }
+    #[test]
+    fn native_compiler_store_bank_session_reloads_actual_ids_and_rejects_stale_work() -> Result<()>
+    {
+        use crate::native_grounded_session::{NativeGroundedSession, NativeSessionLimits};
+        use crate::stack_grounded_session::{
+            CompiledAction, CompilerIdentity, EncoderIdentity, GroundedSessionError, RelationLabel,
+            SourceSpan, TurnCompiler,
+        };
+        use uor_r4_core::native_geometric::learner::native_bank_generate::{
+            BoundNativeBytes, GenerationLimits, NativeBankArtifacts, NativeBankGenerator,
+        };
+        // An explicitly scripted compiler fixture tests the consumer boundary,
+        // not learned parsing. The native emitter is loaded from real bytes.
+        struct Compiler {
+            id: CompilerIdentity,
+        }
+        impl TurnCompiler for Compiler {
+            fn identity(&self) -> &CompilerIdentity {
+                &self.id
+            }
+            fn artifact_bytes(&self) -> &[u8] {
+                b"scripted compiler boundary fixture"
+            }
+            fn compile(
+                &self,
+                s: &str,
+            ) -> std::result::Result<CompiledAction, GroundedSessionError> {
+                Ok(match s {
+                    "a a" => CompiledAction::Assert {
+                        relation: 1,
+                        span: SourceSpan { start: 2, end: 3 },
+                    },
+                    "b b" => CompiledAction::Correct {
+                        relation: 1,
+                        span: SourceSpan { start: 2, end: 3 },
+                    },
+                    _ => CompiledAction::QueryCurrent { relation: 1 },
+                })
+            }
+        }
+        let fixture = Fixture::new()?;
+        let path = fixture.path.join("native-session-parent");
+        fixture
+            .weights
+            .compile(fixture.identity.clone())?
+            .save(&path)?;
+        let native = NativeSourceRealizer::load(&path, &fixture.weights, &fixture.identity)?;
+        let parent = native.artifact_binding()?;
+        let cue = native.compile_cue_carrier(
+            CueAngularQ4::new(
+                CueAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 1,
+                    mode: CueScoreMode::DirectedRelative,
+                },
+                &vec![0; 60],
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let prefix = native.compile_prefix_transport(
+            &cue,
+            PrefixAngularQ4::new(
+                PrefixAngularConfig {
+                    heads: 1,
+                    lanes_per_head: 1,
+                    mode: PrefixScoreMode::DirectedRelative,
+                },
+                &vec![0; 60],
+            )
+            .map_err(|e| invalid(e.to_string()))?,
+        )?;
+        let generate = crate::geometric_generate_learning::GenerateLearningWeights::seeded(
+            fixture.weights.binding().clone(),
+            1,
+            77,
+            &Device::Cpu,
+        )?
+        .export_native()?
+        .to_bytes()
+        .map_err(|e| invalid(e.to_string()))?;
+        let exp = fs::read(path.join("consumer/exp-q31.bin"))?;
+        let generator = || -> Result<NativeBankGenerator> {
+            NativeBankGenerator::load(NativeBankArtifacts {
+                native_directory: &path,
+                source_binding: &parent,
+                generate: BoundNativeBytes {
+                    bytes: &generate,
+                    sha256: &sha256_bytes(&generate),
+                },
+                bridge: None,
+                cue_packed: cue.packed_coefficients(),
+                cue_joint_packed: None,
+                cue_metadata: cue.metadata(),
+                prefix_packed: prefix.packed_coefficients(),
+                prefix_metadata: prefix.metadata(),
+                exp: BoundNativeBytes {
+                    bytes: &exp,
+                    sha256: &sha256_bytes(&exp),
+                },
+            })
+            .map_err(|e| invalid(e.to_string()))
+        };
+        let algebra = uor_r4_integer::h4_tables::TRUSTED_MATHEMATICAL_SHA256
+            .ok_or_else(|| invalid("H4 binding"))?;
+        let compiler = || Compiler {
+            id: CompilerIdentity {
+                schema: crate::geometric_turn_compiler::SCHEMA.into(),
+                artifact_sha256: sha256_bytes(b"scripted compiler boundary fixture"),
+                tokenizer_sha256: parent.identity.tokenizer_sha256.clone(),
+                label_schema: "ordered-relation-ids-1-based;assert-update-query-none/1".into(),
+                relations: vec![RelationLabel {
+                    id: 1,
+                    name: "job".into(),
+                }],
+                encoder: Some(EncoderIdentity {
+                    config_sha256: parent.identity.parent_config_sha256.clone(),
+                    model_sha256: parent.metadata_sha256.clone(),
+                    transport_sha256: Some(algebra.into()),
+                }),
+            },
+        };
+        let tokenizer =
+            uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(TOK.as_bytes())
+                .ok_or_else(|| invalid("fixture tokenizer"))?;
+        let scope = crate::stack_grounded_session::SessionScope {
+            scope: b"fixture".to_vec(),
+            entity: vec![4],
+        };
+        let limits = NativeSessionLimits {
+            max_turns: 8,
+            max_source_bytes: 32,
+            max_store_records: 8,
+            max_snapshot_bytes: 65536,
+        };
+        let mut session = NativeGroundedSession::new(
+            compiler(),
+            generator()?,
+            &tokenizer,
+            TOK.as_bytes(),
+            scope.clone(),
+            limits.clone(),
+            77,
+            4,
+        )?;
+        let output = GenerationLimits {
+            maximum_tokens: 2,
+            maximum_retained_steps: 2,
+        };
+        let pending = session.prepare_turn("a a")?;
+        assert_eq!(session.store().commit(), 0);
+        let source_ids: Vec<_> = pending
+            .bank()
+            .borrowed_segments()
+            .map_err(|e| invalid(e.to_string()))?
+            .iter()
+            .filter_map(|s| match s {
+                SourceBankSegment::Source { frame, .. } => Some(frame.token_ids.to_vec()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(source_ids, [vec![4]]);
+        // The same admitted inputs enter learning; no reauthored training bank.
+        let prepared_source = fixture.weights.prepare(&native)?;
+        let weights = crate::geometric_generate_learning::GenerateLearningWeights::seeded(
+            fixture.weights.binding().clone(),
+            1,
+            77,
+            &Device::Cpu,
+        )?;
+        let prepared_generate = weights.prepare_native()?;
+        let mut learner = crate::geometric_bank_generate::PreparedBankGenerate::new(
+            &prepared_source,
+            &weights,
+            &prepared_generate,
+            &exp,
+        )?
+        .with_retained_copy_utility();
+        let learned = learner.forward_admitted_bank(pending.bank(), &[], &cue, &prefix)?;
+        let served = generator()?
+            .step(pending.bank(), &[])
+            .map_err(|e| invalid(e.to_string()))?;
+        assert_eq!(
+            serde_json::to_value(&learned.actions)?,
+            serde_json::to_value(&served.actions)?
+        );
+        // A changed bound encoder cannot consume the old admitted packet.
+        let mut wrong = compiler();
+        wrong
+            .id
+            .encoder
+            .as_mut()
+            .ok_or_else(|| invalid("fixture encoder"))?
+            .model_sha256 = "f".repeat(64);
+        assert!(NativeGroundedSession::new(
+            wrong,
+            generator()?,
+            &tokenizer,
+            TOK.as_bytes(),
+            scope.clone(),
+            limits.clone(),
+            77,
+            4
+        )
+        .is_err());
+        let stale = session.prepare_turn("a a")?;
+        let first = session.emit_prepared(pending, output)?;
+        assert_eq!(session.store().commit(), 1);
+        let route = session.bind_spiral_route(1, 0)?;
+        let spin = uor_r4_core::spiralcore_operator::cl06_finite_composition_table()
+            .map_err(|e| invalid(e.to_string()))?;
+        let spun = route.transport(3)?;
+        assert_eq!(session.read_spiral_route(&spun)?, &[4]);
+        let inverse = spin
+            .inverse_index(3)
+            .ok_or_else(|| invalid("Spiral inverse"))?;
+        assert_eq!(spun.transport(inverse)?, route);
+        let same_bucket = session.bind_spiral_route(1, spun.root())?;
+        assert_eq!(
+            session.read_spiral_route(&same_bucket)?,
+            session.read_spiral_route(&route)?
+        );
+        assert!(!first.generation.generated_ids.is_empty());
+        assert!(session.emit_prepared(stale, output).is_err());
+        let bytes = session.snapshot()?;
+        let mut resumed = NativeGroundedSession::new(
+            compiler(),
+            generator()?,
+            &tokenizer,
+            TOK.as_bytes(),
+            scope,
+            limits,
+            77,
+            4,
+        )?;
+        resumed.restore(&bytes)?;
+        let left = session.turn("b b", output)?;
+        let right = resumed.turn("b b", output)?;
+        assert_eq!(
+            left.generation.generated_ids,
+            right.generation.generated_ids
+        );
+        assert_eq!(session.snapshot()?, resumed.snapshot()?);
+        let corrected = session.bind_spiral_route(2, route.root())?;
+        assert_eq!(corrected.root(), route.root());
+        assert_ne!(corrected.record(), route.record());
+        assert_eq!(session.read_spiral_route(&route)?, &[4]);
+        assert_eq!(session.read_spiral_route(&corrected)?, &[5]);
+        let a = session.turn("a", output)?;
+        let b = resumed.turn("a", output)?;
+        assert_eq!(a.generation.generated_ids, b.generation.generated_ids);
+        assert_eq!(session.snapshot()?, resumed.snapshot()?);
+        let before = resumed.snapshot()?;
+        let pending = resumed.prepare_turn("b b")?;
+        assert!(resumed
+            .emit_prepared(
+                pending,
+                GenerationLimits {
+                    maximum_tokens: 0,
+                    maximum_retained_steps: 0
+                }
+            )
+            .is_err());
+        assert_eq!(resumed.snapshot()?, before);
+        let mut bad: serde_json::Value = serde_json::from_slice(&bytes)?;
+        bad["turns"][0]["record"] = serde_json::json!(99);
+        assert!(resumed.restore(&serde_json::to_vec(&bad)?).is_err());
+        assert_eq!(resumed.snapshot()?, before);
+        Ok(())
+    }
+
+    #[test]
+    fn finite_copy_transition_rebound_rejects_observation_and_coefficient_drift() -> Result<()> {
+        let fixture = Fixture::new()?;
+        let path = fixture.path.join("transition-parent");
+        fixture
+            .weights
+            .compile(fixture.identity.clone())?
+            .save(&path)?;
+        let native = NativeSourceRealizer::load(&path, &fixture.weights, &fixture.identity)?;
+        let allowed = fixture.weights.context_transition_parameters();
+        assert_eq!(allowed.len(), 2); // no neighbor family in the single-lane fixture
+        assert!(allowed.keys().all(|n| n.ends_with("transition")));
+        fixture
+            .weights
+            .compile_context_transition_rebound(&native)?;
+        let transition = &allowed["consumer.context.token_transition"];
+        let values = Tensor::ones_like(transition.as_tensor())?.affine(0.25, 0.)?;
+        transition.set(&values)?;
+        fixture
+            .weights
+            .compile_context_transition_rebound(&native)?;
+        let observation = &fixture.weights.parameters()["consumer.context.self_root"];
+        observation.set(&Tensor::ones_like(observation.as_tensor())?.affine(0.25, 0.)?)?;
+        assert!(fixture
+            .weights
+            .compile_context_transition_rebound(&native)
+            .is_err());
+        observation.set(&Tensor::zeros_like(observation.as_tensor())?)?;
+        fixture
+            .weights
+            .compile_context_transition_rebound(&native)?;
+        let coefficient = &fixture.weights.parameters()["consumer.potential.context_unary"];
+        coefficient.set(&Tensor::ones_like(coefficient.as_tensor())?.affine(0.25, 0.)?)?;
+        assert!(fixture
+            .weights
+            .compile_context_transition_rebound(&native)
+            .is_err());
+        Ok(())
+    }
 }
 
 // Active full-bank geometric Generate integration; exact retained source bodies.
@@ -6480,6 +6835,33 @@ impl SourceRealizerWeights {
             .into_iter()
             .filter(|(name, _)| context_state_parameter(name))
             .collect()
+    }
+
+    /// Stronger rebound for finite retained Copy credit: transitions may move,
+    /// while all native observation and downstream coefficient families freeze.
+    pub fn compile_context_transition_rebound(
+        &self,
+        frozen_parent: &NativeSourceRealizer,
+    ) -> Result<NativeSourceRealizer> {
+        let current = parameter_identities(self)?;
+        let frozen = &frozen_parent.metadata.source_parameters;
+        if current.keys().ne(frozen.keys()) {
+            return Err(invalid("transition rebound inventory differs"));
+        }
+        for (name, receipt) in frozen {
+            let now = current
+                .get(name)
+                .ok_or_else(|| invalid("transition rebound family absent"))?;
+            if now.shape != receipt.shape
+                || (!(context_state_parameter(name) && name.ends_with("transition"))
+                    && now != receipt)
+            {
+                return Err(invalid(
+                    "transition rebound changed frozen observation/coefficient family",
+                ));
+            }
+        }
+        self.compile_context_state_rebound(frozen_parent)
     }
 
     pub fn compile_context_state_rebound(
@@ -6906,6 +7288,7 @@ impl PreparedSourceRealizer<'_> {
         prefix: &NativePrefixTransport<'_>,
         trace: &uor_r4_integer::geometric_source_realizer::PrefixBankRealizerTrace,
         prefix_temporal_utility: bool,
+        retained_copy_utility: bool,
     ) -> Result<ComposedCopyAssembly> {
         let bank = &trace.cue_bank.bank;
         let carrier = &trace.cue_bank.carrier;
@@ -6953,12 +7336,22 @@ impl PreparedSourceRealizer<'_> {
                 key: position as usize,
             })
             .collect::<Vec<_>>();
-        let copy = frozen_potential_selected_forward(
-            &self.source.consumer.potential,
-            &vec![absent; time * width],
-            &context,
-            &selected_pairs,
-        )?;
+        let copy = if retained_copy_utility {
+            crate::geometric_context_credit::frozen_potential_selected_retained_forward(
+                &self.source.consumer.potential,
+                self.native.consumer.context.native(),
+                &context,
+                ids,
+                &selected_pairs,
+            )?
+        } else {
+            frozen_potential_selected_forward(
+                &self.source.consumer.potential,
+                &vec![absent; time * width],
+                &context,
+                &selected_pairs,
+            )?
+        };
         let coefficient_credit = if self.potential_coefficient_credit {
             let mut pairs = Vec::with_capacity(c.heads * count);
             for h in 0..c.heads {
@@ -7025,14 +7418,26 @@ impl PreparedSourceRealizer<'_> {
                     .forward(token_ids, 1, token_ids.len(), false)?,
             );
         }
-        let cue_credit = frozen_cue_state_forward(
-            carrier.metadata.potential,
-            cue.packed_coefficients(),
-            cue.joint(),
-            carrier,
-            &query_output,
-            &cues,
-        )?;
+        let cue_credit = if retained_copy_utility {
+            crate::geometric_context_credit::frozen_cue_retained_forward(
+                carrier.metadata.potential,
+                cue.packed_coefficients(),
+                cue.joint(),
+                carrier,
+                self.native.consumer.context.native(),
+                &query_output,
+                &cues,
+            )?
+        } else {
+            frozen_cue_state_forward(
+                carrier.metadata.potential,
+                cue.packed_coefficients(),
+                cue.joint(),
+                carrier,
+                &query_output,
+                &cues,
+            )?
+        };
         if cue_credit.scores_q24 != carrier.copy_q24 {
             return Err(invalid("composed cue hard scores differ"));
         }
@@ -7128,6 +7533,7 @@ impl PreparedSourceRealizer<'_> {
             cue,
             prefix,
             false,
+            false,
         )
     }
 
@@ -7146,6 +7552,29 @@ impl PreparedSourceRealizer<'_> {
             cue,
             prefix,
             true,
+            false,
+        )
+    }
+
+    /// All observed Copy endpoints are credited through the retained finite
+    /// state and native observation, including neighbor-dependent readouts.
+    /// Readout parameters freeze; their legacy ambient pullback is not added.
+    pub fn forward_bank_composed_copy_with_retained_utility(
+        &self,
+        segments: &[SourceBankSegment<'_>],
+        query: &[u32],
+        actual_prefix: &[u32],
+        cue: &NativeCueCarrier<'_>,
+        prefix: &NativePrefixTransport<'_>,
+    ) -> Result<ComposedCopyBankOutput> {
+        self.forward_bank_composed_copy_with_credit(
+            segments,
+            query,
+            actual_prefix,
+            cue,
+            prefix,
+            true,
+            true,
         )
     }
 
@@ -7157,6 +7586,7 @@ impl PreparedSourceRealizer<'_> {
         cue: &NativeCueCarrier<'_>,
         prefix: &NativePrefixTransport<'_>,
         prefix_temporal_utility: bool,
+        retained_copy_utility: bool,
     ) -> Result<ComposedCopyBankOutput> {
         let trace = self.native.read_bank_with_prefix_transport(
             segments,
@@ -7173,6 +7603,7 @@ impl PreparedSourceRealizer<'_> {
             prefix,
             &trace,
             prefix_temporal_utility,
+            retained_copy_utility,
         )?;
         // Bind the factual forward to the native integer sum once. Summing
         // separately converted components can round differently, while the
