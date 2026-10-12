@@ -10,7 +10,7 @@
 //!   [dump_scores=false|true] [reachability=true|false] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
-//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] \
+//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] [track_bootstrap=false|true] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
 //!   [lineage=none|f2|qk|qk_jj|identity|so4|conv|wprev|conv8|carrier|rot] [learned_init=lag1|zero]
 //! arm=transformer: [layers=<pattern length>] [width=128] [heads=4] [mlp=matched|<n>] \
@@ -2503,6 +2503,11 @@ struct Common {
     /// `starling_rank_distill=WEIGHT`: training-only readout self-distillation
     /// (active in the distillation's training forwards).
     starling_rank_distill: Option<f64>,
+    /// `track_bootstrap=true` (starling arms): at each evaluation point, log
+    /// the dense helper's weight on the true source and the source's share
+    /// of its mass (measured in the preceding training forward), and recall
+    /// with the true source forced into the kept sets. Observation only.
+    track_bootstrap: bool,
     context: usize,
     pairs_per_bucket: usize,
     batch: usize,
@@ -2577,6 +2582,7 @@ impl Common {
             "starling_distill_start": self.starling_distill_start,
             "starling_salience": self.starling_salience,
             "starling_rank_distill": self.starling_rank_distill,
+            "track_bootstrap": self.track_bootstrap,
             "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
             "pairing_split": {
                 "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
@@ -2635,6 +2641,7 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
             })
             .transpose()?,
         starling_distill_start: args.parsed("starling_distill_start", 0.0f64)?,
+        track_bootstrap: args.parsed("track_bootstrap", false)?,
         starling_rank_distill: args
             .take("starling_rank_distill")
             .map(|text| {
@@ -2890,6 +2897,7 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     };
     prober.run(&*arm, 0, log)?;
     let (mut window_loss, mut window_aux, mut window_steps) = (0f64, 0f64, 0usize);
+    let mut bootstrap_probe: Option<(f64, f64)> = None;
     let mut step_seconds = Vec::new();
     let mut stopped_early = false;
     let mut step = 0;
@@ -2929,7 +2937,20 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
             }
             uor_r4_training::geometric_stack::starling_oracle_set(Some(oracle));
         }
+        let probing = s.track_bootstrap && ((step + 1) % s.eval_every == 0 || step + 1 == s.steps);
+        if probing {
+            let mut sources = std::collections::HashMap::new();
+            for (b, sequence) in batch.iter().enumerate() {
+                for query in &sequence.queries {
+                    sources.insert((b, query.position), query.position - query.distance + 1);
+                }
+            }
+            uor_r4_training::geometric_stack::starling_probe_set(sources);
+        }
         let loss = arm.loss(&ids, &targets, &weights, s.batch, s.context);
+        if probing {
+            bootstrap_probe = uor_r4_training::geometric_stack::starling_probe_take();
+        }
         uor_r4_training::geometric_stack::starling_oracle_set(None);
         let loss = loss?;
         let value = f64::from(loss.to_scalar::<f32>()?);
@@ -2955,6 +2976,18 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
             }
             let train_loss = window_loss / window_steps.max(1) as f64;
             let train_aux = window_aux / window_steps.max(1) as f64;
+            if s.track_bootstrap {
+                let forced = arm.starling_oracle_accuracy(&curve_in_class, s.context)?;
+                let line = format!(
+                    "step {step} bootstrap: helper weight on source {} share {} forced-in recall {}",
+                    bootstrap_probe.map_or("-".into(), |(w, _)| format!("{w:.6}")),
+                    bootstrap_probe.map_or("-".into(), |(_, z)| format!("{z:.5}")),
+                    forced.map_or("-".into(), |f| format!("{f:.4}")),
+                );
+                eprintln!("{line}");
+                writeln!(log, "{line}")?;
+                bootstrap_probe = None;
+            }
             if s.starling_distill.is_some() {
                 eprintln!("step {step} distill KL term {train_aux:.5}");
                 writeln!(log, "step {step} distill KL term {train_aux:.5}")?;
@@ -3429,6 +3462,7 @@ mod tests {
             starling_distill_start: 0.0,
             starling_salience: None,
             starling_rank_distill: None,
+            track_bootstrap: false,
             select: None,
         };
         let spec = ArmSpec::Stack {
@@ -3634,6 +3668,7 @@ mod tests {
             starling_distill_start: 0.0,
             starling_salience: None,
             starling_rank_distill: None,
+            track_bootstrap: false,
         }
     }
 
