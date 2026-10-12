@@ -6678,6 +6678,36 @@ mod tests {
             })
             .collect();
         assert_eq!(source_ids, [vec![4]]);
+        let mut smaller_limits = limits.clone();
+        smaller_limits.max_store_records = 1;
+        let mut foreign_limits = NativeGroundedSession::new(
+            compiler(),
+            generator()?,
+            &tokenizer,
+            TOK.as_bytes(),
+            scope.clone(),
+            smaller_limits,
+            77,
+            4,
+        )?;
+        assert!(foreign_limits
+            .emit_prepared(session.prepare_turn("a a")?, output)
+            .is_err());
+        let mut foreign_capacity = NativeGroundedSession::new(
+            compiler(),
+            generator()?,
+            &tokenizer,
+            TOK.as_bytes(),
+            scope.clone(),
+            limits.clone(),
+            77,
+            1,
+        )?;
+        assert!(foreign_capacity
+            .emit_prepared(session.prepare_turn("a a")?, output)
+            .is_err());
+        let mut foreign_selection = generator()?.with_query_conditioned_selection(true);
+        assert!(foreign_selection.step(pending.bank(), &[]).is_err());
         // The same admitted inputs enter learning; no reauthored training bank.
         let prepared_source = fixture.weights.prepare(&native)?;
         let weights = crate::geometric_generate_learning::GenerateLearningWeights::seeded(
@@ -6702,6 +6732,23 @@ mod tests {
             serde_json::to_value(&learned.actions)?,
             serde_json::to_value(&served.actions)?
         );
+        let transition =
+            &fixture.weights.context_transition_parameters()["consumer.context.token_transition"];
+        transition.set(&Tensor::ones_like(transition.as_tensor())?.affine(0.25, 0.)?)?;
+        let rebound = fixture
+            .weights
+            .compile_context_transition_rebound(&native)?;
+        let current_source = fixture.weights.prepare(&rebound)?;
+        let mut stale_learner = crate::geometric_bank_generate::PreparedBankGenerate::new(
+            &current_source,
+            &weights,
+            &prepared_generate,
+            &exp,
+        )?;
+        assert!(stale_learner
+            .forward_admitted_bank(pending.bank(), &[], &cue, &prefix)
+            .is_err());
+        transition.set(&Tensor::zeros_like(transition.as_tensor())?)?;
         // A changed bound encoder cannot consume the old admitted packet.
         let mut wrong = compiler();
         wrong
