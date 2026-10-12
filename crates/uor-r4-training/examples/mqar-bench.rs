@@ -3332,6 +3332,7 @@ mod tests {
             mlp_hidden: 16,
             age: AgeInit::Flat,
             lineage: LineageArm::F2,
+            attn_reads: false,
             route: None,
             starling_anneal: None,
         };
@@ -3546,6 +3547,7 @@ mod tests {
             mlp_hidden: 384,
             age: AgeInit::Default,
             lineage: LineageArm::None,
+            attn_reads: false,
             route: None,
             starling_anneal: None,
         };
