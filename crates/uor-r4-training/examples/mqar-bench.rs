@@ -1227,7 +1227,10 @@ impl ContextArm for StackArm {
         time: usize,
     ) -> Result<Tensor> {
         uor_r4_training::geometric_stack::starling_aux_take();
-        let language = self.model.weighted_loss(ids, targets, weights, batch, time)?;
+        uor_r4_training::geometric_stack::starling_training_forward(true);
+        let language = self.model.weighted_loss(ids, targets, weights, batch, time);
+        uor_r4_training::geometric_stack::starling_training_forward(false);
+        let language = language?;
         // Training-only starling selector distillation, when set.
         match uor_r4_training::geometric_stack::starling_aux_take() {
             Some(aux) => {

@@ -917,6 +917,20 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+thread_local! {
+    /// Whether this thread's current forward is a training-loss forward:
+    /// starling distillation runs only then, so evaluation forwards never
+    /// build (or retain) its teacher graph.
+    static STARLING_TRAINING_FORWARD: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+/// Mark this thread's forwards as training-loss forwards (`true`) or not.
+/// A train loop sets it around the loss forward only.
+pub fn starling_training_forward(on: bool) {
+    STARLING_TRAINING_FORWARD.with(|flag| flag.set(on));
+}
+
 /// Take (and clear) the starling reads' auxiliary loss from this thread's
 /// last forward pass, if any.
 pub fn starling_aux_take() -> Option<Tensor> {
@@ -4062,7 +4076,8 @@ impl StackModel {
             read = read.add(&read_soft.sub(&read_soft.detach())?)?;
         }
         // Training-only selector distillation and dense content teacher.
-        let teacher = match (self.starling_distill, content) {
+        let training = STARLING_TRAINING_FORWARD.with(|flag| flag.get());
+        let teacher = match (self.starling_distill.filter(|_| training), content) {
             (Some(weight), Some((query, key))) => {
                 let d = query.dim(3)?;
                 let mut causal = vec![0f32; time * time];
@@ -32520,7 +32535,13 @@ mod tests {
         let plain = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
         assert!(starling_aux_take().is_none());
         model.set_starling_distill(Some(0.5))?;
-        let logits = model.forward(&ids, 2, 12)?;
+        // Outside a training-loss forward, nothing is computed or stored.
+        model.forward(&ids, 2, 12)?;
+        assert!(starling_aux_take().is_none());
+        starling_training_forward(true);
+        let logits = model.forward(&ids, 2, 12);
+        starling_training_forward(false);
+        let logits = logits?;
         // With the dense helper off, the forward value is unchanged.
         assert_eq!(logits.flatten_all()?.to_vec1::<f32>()?, plain);
         let aux = starling_aux_take().ok_or_else(|| invalid("no distillation loss"))?;
