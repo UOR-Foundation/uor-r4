@@ -4018,10 +4018,15 @@ impl StackModel {
         let values = gather_rows(&value, value_width)?;
         let mut read = weights.unsqueeze(4)?.broadcast_mul(&values)?.sum(3)?;
         if self.starling_surrogate && content.is_some() {
-            // Zero in the forward value, softmax-over-kept in the backward.
+            // Zero in the forward value, softmax-over-kept in the backward,
+            // through q and k only: the values are detached, so their
+            // gradient stays the softmax-free read's.
             let masked = dot.add(&live.affine(1e4, -1e4)?)?;
             let soft = candle_nn_softmax_last_dim(&masked)?.mul(&live)?;
-            let read_soft = soft.unsqueeze(4)?.broadcast_mul(&values)?.sum(3)?;
+            let read_soft = soft
+                .unsqueeze(4)?
+                .broadcast_mul(&values.detach())?
+                .sum(3)?;
             read = read.add(&read_soft.sub(&read_soft.detach())?)?;
         }
         let Some(alpha) = self.starling_dense.filter(|alpha| *alpha > 0.0) else {
@@ -32414,7 +32419,8 @@ mod tests {
         model.set_read_route(Some(route))?;
         let weights = random(&mut Initializer(47), &[24, 37], 1.0);
         let query = model.variables()["layers.01.read.query.weight"].clone();
-        let run = |model: &StackModel| -> Result<(Vec<u32>, Vec<f32>)> {
+        let value = model.variables()["layers.01.read.value.weight"].clone();
+        let run = |model: &StackModel| -> Result<(Vec<u32>, Vec<f32>, Vec<u32>)> {
             let logits = model.forward(&ids, 2, 12)?;
             let bits = logits
                 .flatten_all()?
@@ -32428,13 +32434,23 @@ mod tests {
                 .ok_or_else(|| invalid("missing query gradient"))?
                 .flatten_all()?
                 .to_vec1::<f32>()?;
-            Ok((bits, g))
+            let v = grads
+                .get(value.as_tensor())
+                .ok_or_else(|| invalid("missing value gradient"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?
+                .iter()
+                .map(|x| x.to_bits())
+                .collect();
+            Ok((bits, g, v))
         };
-        let (plain_logits, plain_grad) = run(&model)?;
+        let (plain_logits, plain_grad, plain_value) = run(&model)?;
         model.set_starling_surrogate(true)?;
-        let (surrogate_logits, surrogate_grad) = run(&model)?;
+        let (surrogate_logits, surrogate_grad, surrogate_value) = run(&model)?;
         assert_eq!(plain_logits, surrogate_logits, "the forward must not change");
         assert_ne!(plain_grad, surrogate_grad, "the surrogate must add a gradient");
+        // The values keep the softmax-free read's gradient exactly.
+        assert_eq!(plain_value, surrogate_value, "the surrogate must not touch values");
         model.set_read_route(Some(StarlingRoute {
             content: false,
             ranked: false,
