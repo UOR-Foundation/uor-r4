@@ -1333,12 +1333,28 @@ impl WholePathSession<'_> {
             || answer_with_eos.is_empty()
             || answer_with_eos.len() > 128
             || answer_with_eos.last() != Some(&self.revision.encoder.binding().eos_token_id())
+            || !baseline.is_finite()
+            || (!answer_with_eos.is_empty()
+                && answer_with_eos[..answer_with_eos.len() - 1]
+                    .contains(&self.revision.encoder.binding().eos_token_id()))
             || answer_with_eos
                 .iter()
                 .any(|&id| !self.revision.encoder.binding().admits_token(id))
         {
             return Err(invalid("teacher complete-answer/EOS binding differs"));
         }
+        let result = self.teacher_ranking_inner(prepared, answer_with_eos, baseline);
+        // Once replay starts, either outcome closes this trajectory. A failed
+        // teacher replay cannot quietly append a second RNG/credit history.
+        self.failed = true;
+        result
+    }
+    fn teacher_ranking_inner(
+        &mut self,
+        prepared: &WholePreparedTurn,
+        answer_with_eos: &[u32],
+        baseline: f32,
+    ) -> Result<Tensor> {
         let tape = self
             .tape
             .as_ref()
@@ -1402,7 +1418,6 @@ impl WholePathSession<'_> {
         } else {
             rank
         };
-        self.failed = true; // completed offline trajectory: cannot be emitted/reused
         Ok(objective)
     }
     pub fn transport_routes(&mut self, action: u8) -> Result<()> {
@@ -2722,6 +2737,9 @@ mod tests {
         let pending = session.prepare_turn("a b")?;
         assert!(session
             .teacher_ranking_objective(&pending, &[5], 0.)
+            .is_err());
+        assert!(session
+            .teacher_ranking_objective(&pending, &[1, 5, 1], 0.)
             .is_err());
         let loss = session.teacher_ranking_objective(&pending, &[5, 1], 0.)?;
         assert!(loss.to_scalar::<f32>()?.is_finite());
