@@ -1080,6 +1080,42 @@ fn starling_adjacency() -> Result<&'static [[usize; 12]]> {
         .map_err(|message| invalid(message.clone()))
 }
 
+/// Measured candidates per starling query (observation only): the sum,
+/// count and maximum over every query since [`starling_cost_reset`], across
+/// threads. Cheap (one atomic add per selection call).
+static STARLING_COST: [std::sync::atomic::AtomicU64; 3] = [
+    std::sync::atomic::AtomicU64::new(0),
+    std::sync::atomic::AtomicU64::new(0),
+    std::sync::atomic::AtomicU64::new(0),
+];
+
+/// Clears the starling candidate counters ([`starling_cost_take`]).
+pub fn starling_cost_reset() {
+    for counter in &STARLING_COST {
+        counter.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The mean and maximum candidates scored per starling query since the last
+/// [`starling_cost_reset`]; `None` if no query ran.
+pub fn starling_cost_take() -> Option<(f64, u64)> {
+    use std::sync::atomic::Ordering::Relaxed;
+    let count = STARLING_COST[1].load(Relaxed);
+    (count > 0).then(|| {
+        (
+            STARLING_COST[0].load(Relaxed) as f64 / count as f64,
+            STARLING_COST[2].load(Relaxed),
+        )
+    })
+}
+
+fn starling_cost_add(sum: u64, count: u64, max: u64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    STARLING_COST[0].fetch_add(sum, Relaxed);
+    STARLING_COST[1].fetch_add(count, Relaxed);
+    STARLING_COST[2].fetch_max(max, Relaxed);
+}
+
 /// One vertex's store under [`StarlingRoute::tree`]: its ring of the last `m`
 /// keys, the pending evictions, and the base-3 levels of salient blocks.
 #[derive(Default)]
@@ -1162,6 +1198,7 @@ fn starling_select(
     let mut buffers: Vec<std::collections::VecDeque<usize>> =
         vec![std::collections::VecDeque::new(); roots.len()];
     let mut kept = Vec::with_capacity(time);
+    let mut cost = (0u64, 0u64);
     for t in 0..time {
         let cell = nearest_root(vector(key, t), roots);
         if buffers[cell].len() == route.m {
@@ -1178,9 +1215,12 @@ fn starling_select(
                 ((0..4).map(|c| q[c] * b[c]).sum::<f32>(), j)
             })
             .collect();
+        cost.0 += candidates.len() as u64;
+        cost.1 = cost.1.max(candidates.len() as u64);
         candidates.sort_by(|x, y| y.0.total_cmp(&x.0).then(y.1.cmp(&x.1)));
         kept.push(candidates.iter().take(route.k).map(|&(_, j)| j).collect());
     }
+    starling_cost_add(cost.0, time as u64, cost.1);
     Ok(kept)
 }
 
@@ -1206,6 +1246,7 @@ fn starling_select_tree(
     };
     let mut cells: Vec<StarlingTreeCell> = (0..roots.len()).map(|_| Default::default()).collect();
     let mut kept = Vec::with_capacity(time);
+    let mut cost = (0u64, 0u64);
     for t in 0..time {
         let cell = nearest_root(vector(key, t), roots);
         cells[cell].push(t, route.m, salience);
@@ -1223,9 +1264,12 @@ fn starling_select_tree(
                 ((0..4).map(|c| q[c] * b[c]).sum::<f32>(), j)
             })
             .collect();
+        cost.0 += candidates.len() as u64;
+        cost.1 = cost.1.max(candidates.len() as u64);
         candidates.sort_by(|x, y| y.0.total_cmp(&x.0).then(y.1.cmp(&x.1)));
         kept.push(candidates.iter().take(route.k).map(|&(_, j)| j).collect());
     }
+    starling_cost_add(cost.0, time as u64, cost.1);
     Ok(kept)
 }
 

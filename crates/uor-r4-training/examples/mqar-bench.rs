@@ -2960,7 +2960,14 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
         s.final_sequences,
         Pairing::Train,
     )?;
+    uor_r4_training::geometric_stack::starling_cost_reset();
     let in_class = evaluate(&*arm, &in_class_set, s.context, &buckets, chunk)?;
+    let starling_cost = uor_r4_training::geometric_stack::starling_cost_take();
+    if let Some((mean, max)) = starling_cost {
+        let line = format!("starling candidates scored per query (final in-class panel): mean {mean:.1} max {max}");
+        eprintln!("{line}");
+        writeln!(log, "{line}")?;
+    }
     let held_out_set = sequences(
         s,
         &buckets,
@@ -3077,6 +3084,8 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
             "positions_scored_per_query_token_mean": in_class["positions_scored_per_query_token_mean"],
             "positions_scored_per_token_mean_over_window": mean_positions,
             "positions_scored_at_last_position": arm.positions_scored(s.context - 1),
+            "starling_candidates_per_query_measured": starling_cost
+                .map(|(mean, max)| json!({"mean": mean, "max": max})),
             "counts": arm.access_note(),
         },
         "steps_completed": step,
