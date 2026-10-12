@@ -4069,10 +4069,7 @@ impl StackModel {
             // gradient stays the softmax-free read's.
             let masked = dot.add(&live.affine(1e4, -1e4)?)?;
             let soft = candle_nn_softmax_last_dim(&masked)?.mul(&live)?;
-            let read_soft = soft
-                .unsqueeze(4)?
-                .broadcast_mul(&values.detach())?
-                .sum(3)?;
+            let read_soft = soft.unsqueeze(4)?.broadcast_mul(&values.detach())?.sum(3)?;
             read = read.add(&read_soft.sub(&read_soft.detach())?)?;
         }
         // Training-only selector distillation and dense content teacher.

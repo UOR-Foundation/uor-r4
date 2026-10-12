@@ -1234,7 +1234,8 @@ impl ContextArm for StackArm {
         // Training-only starling selector distillation, when set.
         match uor_r4_training::geometric_stack::starling_aux_take() {
             Some(aux) => {
-                self.last_aux.set(f64::from(aux.detach().to_scalar::<f32>()?));
+                self.last_aux
+                    .set(f64::from(aux.detach().to_scalar::<f32>()?));
                 Ok(language.add(&aux)?)
             }
             None => {
