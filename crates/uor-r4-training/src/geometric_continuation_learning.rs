@@ -149,8 +149,14 @@ fn packed_unary(var: &Var) -> Result<Vec<u8>> {
 
 impl ContinuationLearningWeights {
     pub(crate) fn shared(&self) -> Self {
-        Self { binding: self.binding.clone(), native_binding: self.native_binding.clone(), lanes: self.lanes,
-            shared_action: self.shared_action, cross_state: self.cross_state, unary: self.unary.clone() }
+        Self {
+            binding: self.binding.clone(),
+            native_binding: self.native_binding.clone(),
+            lanes: self.lanes,
+            shared_action: self.shared_action,
+            cross_state: self.cross_state,
+            unary: self.unary.clone(),
+        }
     }
     pub fn zeroed(
         binding: &SourceActionBinding,

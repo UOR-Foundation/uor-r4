@@ -52,7 +52,12 @@ pub struct PotentialQ4Weights {
 }
 impl PotentialQ4Weights {
     pub(crate) fn shared(&self) -> Self {
-        Self { config: self.config, parent: self.parent.clone(), parameters: self.parameters.clone(), algebra: self.algebra.clone() }
+        Self {
+            config: self.config,
+            parent: self.parent.clone(),
+            parameters: self.parameters.clone(),
+            algebra: self.algebra.clone(),
+        }
     }
 }
 pub struct PotentialQ4Output {

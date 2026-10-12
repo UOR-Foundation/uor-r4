@@ -388,8 +388,8 @@ impl Drop for ContextChoiceGuard {
     fn drop(&mut self) {
         if let Ok(mut control) = self.slot.control.lock() {
             *control = None;
+            self.slot.enabled.store(false, Ordering::Release);
         }
-        self.slot.enabled.store(false, Ordering::Release);
     }
 }
 /// Per-instance offline capture. Drop always detaches, including error paths.
@@ -618,6 +618,11 @@ impl NativeContextTables {
     /// score vectors are at most 120 i64 values/event. Allocation/cap failures
     /// poison this capture's result rather than returning a truncated success.
     pub fn capture_decisions(&self, max_events: usize) -> ContextResult<ContextDecisionCapture> {
+        let _choice = self
+            .choice_control
+            .control
+            .lock()
+            .map_err(|_| ContextError::ChoiceControl)?;
         if self.choice_control.enabled.load(Ordering::Acquire) {
             return Err(ContextError::ChoiceControl);
         }
@@ -701,39 +706,62 @@ impl NativeContextTables {
         &self,
         control: Arc<dyn ContextChoiceControl>,
     ) -> ContextResult<ContextChoiceGuard> {
-        if self.recorder.enabled.load(Ordering::Acquire)
-            || control.identity().len() != 64
+        if control.identity().len() != 64
             || !control.identity().bytes().all(|b| b.is_ascii_hexdigit())
         {
             return Err(ContextError::ChoiceControl);
         }
-        let mut slot = self.choice_control.control.lock().map_err(|_| ContextError::ChoiceControl)?;
-        if slot.is_some() {
+        let mut slot = self
+            .choice_control
+            .control
+            .lock()
+            .map_err(|_| ContextError::ChoiceControl)?;
+        if slot.is_some() || self.recorder.enabled.load(Ordering::Acquire) {
             return Err(ContextError::ChoiceControl);
         }
         *slot = Some(control);
         self.choice_control.enabled.store(true, Ordering::Release);
-        Ok(ContextChoiceGuard { slot: self.choice_control.clone() })
+        Ok(ContextChoiceGuard {
+            slot: self.choice_control.clone(),
+        })
     }
 
     pub fn choice_control_identity(&self) -> ContextResult<Option<String>> {
         if !self.choice_control.enabled.load(Ordering::Acquire) {
             return Ok(None);
         }
-        Ok(self.choice_control.control.lock().map_err(|_| ContextError::ChoiceControl)?
-            .as_ref().map(|c| c.identity().to_owned()))
+        Ok(self
+            .choice_control
+            .control
+            .lock()
+            .map_err(|_| ContextError::ChoiceControl)?
+            .as_ref()
+            .map(|c| c.identity().to_owned()))
     }
 
-    fn controlled_choice(&self, token: usize, lane: usize, family: ContextDecisionFamily,
-        own: H4Code, neighbor: H4Code, greedy: usize) -> ContextResult<usize> {
+    fn controlled_choice(
+        &self,
+        token: usize,
+        lane: usize,
+        family: ContextDecisionFamily,
+        own: H4Code,
+        neighbor: H4Code,
+        greedy: usize,
+    ) -> ContextResult<usize> {
         if !self.choice_control.enabled.load(Ordering::Acquire) {
             return Ok(greedy);
         }
         let (_, scores) = self.decision_scores(token, lane, family, own, neighbor)?;
-        let slot = self.choice_control.control.lock().map_err(|_| ContextError::ChoiceControl)?;
+        let slot = self
+            .choice_control
+            .control
+            .lock()
+            .map_err(|_| ContextError::ChoiceControl)?;
         let control = slot.as_ref().ok_or(ContextError::ChoiceControl)?;
         let chosen = usize::from(control.select(token, lane, family, own, neighbor, &scores)?);
-        if chosen >= scores.len() { return Err(ContextError::ChoiceControl); }
+        if chosen >= scores.len() {
+            return Err(ContextError::ChoiceControl);
+        }
         Ok(chosen)
     }
 
@@ -911,8 +939,14 @@ impl NativeContextState {
             let selected =
                 lane.transition
                     .select(token, old[index], old[lane.neighbor_index], 7, ROOT_COUNT);
-            let selected = tables.controlled_choice(token_id, index, ContextDecisionFamily::Transition,
-                old[index], old[lane.neighbor_index], selected)?;
+            let selected = tables.controlled_choice(
+                token_id,
+                index,
+                ContextDecisionFamily::Transition,
+                old[index],
+                old[lane.neighbor_index],
+                selected,
+            )?;
             actions[index] = tables.codes[selected];
             next[index] = geometry.compose(old[index], actions[index]);
         }
@@ -970,8 +1004,14 @@ impl NativeContextState {
             let selected =
                 lane.root
                     .select(root, next[index], next[lane.neighbor_index], 7, ROOT_COUNT);
-            let selected = tables.controlled_choice(token_id, index, ContextDecisionFamily::Root,
-                next[index], next[lane.neighbor_index], selected)?;
+            let selected = tables.controlled_choice(
+                token_id,
+                index,
+                ContextDecisionFamily::Root,
+                next[index],
+                next[lane.neighbor_index],
+                selected,
+            )?;
             readout_roots[index] = tables.codes[selected];
             let category = lane.category.select(
                 category,
@@ -980,8 +1020,14 @@ impl NativeContextState {
                 6,
                 CATEGORY_COUNT,
             );
-            let category = tables.controlled_choice(token_id, index, ContextDecisionFamily::Category,
-                next[index], next[lane.neighbor_index], category)?;
+            let category = tables.controlled_choice(
+                token_id,
+                index,
+                ContextDecisionFamily::Category,
+                next[index],
+                next[lane.neighbor_index],
+                category,
+            )?;
             categories[index] = category as u8;
             if category != 0 {
                 output[index] =

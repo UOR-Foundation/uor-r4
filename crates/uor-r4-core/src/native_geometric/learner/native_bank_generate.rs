@@ -140,11 +140,15 @@ pub struct AdmittedBank {
 }
 impl AdmittedBank {
     pub fn with_status(mut self, code: u8) -> Result<Self> {
-        if code >= 32 { return Err(execution("typed status/view/conflict exceeds32")); }
+        if code >= 33 {
+            return Err(execution("typed status/view/conflict/unresolved exceeds33"));
+        }
         self.status_code = Some(code);
         Ok(self)
     }
-    pub fn status_code(&self) -> Option<u8> { self.status_code }
+    pub fn status_code(&self) -> Option<u8> {
+        self.status_code
+    }
     pub fn source_metadata_sha256(&self) -> &str {
         &self.source_metadata_sha256
     }
@@ -240,8 +244,20 @@ pub struct NativeBankGenerator {
 }
 pub trait BankChoiceControl: std::fmt::Debug + Send + Sync {
     fn identity(&self) -> &str;
-    fn donor(&self, trace: &PrefixBankRealizerTrace, scores_q24: &[i64], greedy: usize) -> Result<usize>;
-    fn action(&self, lane: usize, query: H4Code, source: H4Code, scores_q24: &[i64], greedy: u8) -> Result<u8>;
+    fn donor(
+        &self,
+        trace: &PrefixBankRealizerTrace,
+        scores_q24: &[i64],
+        greedy: usize,
+    ) -> Result<usize>;
+    fn action(
+        &self,
+        lane: usize,
+        query: H4Code,
+        source: H4Code,
+        scores_q24: &[i64],
+        greedy: u8,
+    ) -> Result<u8>;
 }
 /// Independently encoded query followed by actual emitted tokens. Fact text
 /// never enters this register; factual transport and Copy remain available.
@@ -508,15 +524,29 @@ impl NativeBankGenerator {
         ))
         .map_err(execution)?;
         let ordinary = hash(&bytes);
-        let control = self.model.context_encoder_parts().0.choice_control_identity().map_err(execution)?;
+        let control = self
+            .model
+            .context_encoder_parts()
+            .0
+            .choice_control_identity()
+            .map_err(execution)?;
         let read = self.choice_control.as_ref().map(|c| c.identity());
         let status = self.status_field.as_ref().map(|(_, sha)| sha);
-        if control.is_none() && read.is_none() && status.is_none() { Ok(ordinary) } else {
-            Ok(hash(&serde_json::to_vec(&(ordinary, control, read, status)).map_err(execution)?))
+        if control.is_none() && read.is_none() && status.is_none() {
+            Ok(ordinary)
+        } else {
+            Ok(hash(
+                &serde_json::to_vec(&(ordinary, control, read, status)).map_err(execution)?,
+            ))
         }
     }
-    pub fn with_choice_control(mut self, control: std::sync::Arc<dyn BankChoiceControl>) -> Result<Self> {
-        if control.identity().len() != 64 || !control.identity().bytes().all(|b| b.is_ascii_hexdigit()) {
+    pub fn with_choice_control(
+        mut self,
+        control: std::sync::Arc<dyn BankChoiceControl>,
+    ) -> Result<Self> {
+        if control.identity().len() != 64
+            || !control.identity().bytes().all(|b| b.is_ascii_hexdigit())
+        {
             return Err(artifact("bank choice control identity invalid"));
         }
         self.choice_control = Some(control);
@@ -524,8 +554,11 @@ impl NativeBankGenerator {
     }
     pub fn with_status_field(mut self, bytes: BoundNativeBytes<'_>) -> Result<Self> {
         verify_bytes(bytes.bytes, bytes.sha256)?;
-        let q = uor_r4_integer::geometric_potential_q4::unpack_coefficients(32 * self.generate.vocab_size(), bytes.bytes)
-            .map_err(artifact)?;
+        let q = uor_r4_integer::geometric_potential_q4::unpack_coefficients(
+            33 * self.generate.vocab_size(),
+            bytes.bytes,
+        )
+        .map_err(artifact)?;
         self.status_field = Some((q, bytes.sha256.into()));
         Ok(self)
     }
@@ -557,7 +590,11 @@ impl NativeBankGenerator {
         &self,
         control: std::sync::Arc<dyn uor_r4_integer::geometric_context::ContextChoiceControl>,
     ) -> Result<uor_r4_integer::geometric_context::ContextChoiceGuard> {
-        self.model.context_encoder_parts().0.control_choices(control).map_err(execution)
+        self.model
+            .context_encoder_parts()
+            .0
+            .control_choices(control)
+            .map_err(execution)
     }
     /// Install a separately authenticated factor bound to this exact Generate
     /// snapshot and native source identity. No output phase selects this field.
@@ -744,11 +781,20 @@ impl NativeBankGenerator {
             if let Some(control) = &self.choice_control {
                 let algebra = bridge.algebra().map_err(execution)?;
                 for lane in 0..codes.len() {
-                    let chosen = control.action(lane, query[lane], source[lane],
-                        &action_scores[lane * 120..(lane + 1) * 120], actions[lane].index())?;
+                    let chosen = control.action(
+                        lane,
+                        query[lane],
+                        source[lane],
+                        &action_scores[lane * 120..(lane + 1) * 120],
+                        actions[lane].index(),
+                    )?;
                     actions[lane] = H4Code::try_from(chosen).map_err(execution)?;
-                    codes[lane] = H4Code::try_from(algebra.compose_counted(query[lane].index(), chosen, &mut counts.algebra)
-                        .map_err(execution)?).map_err(execution)?;
+                    codes[lane] = H4Code::try_from(
+                        algebra
+                            .compose_counted(query[lane].index(), chosen, &mut counts.algebra)
+                            .map_err(execution)?,
+                    )
+                    .map_err(execution)?;
                 }
             }
             Some(NativeBridgeWitness {
@@ -810,9 +856,15 @@ impl NativeBankGenerator {
             None
         };
         if let Some((field, _)) = &self.status_field {
-            let code = usize::from(bank.status_code.ok_or_else(|| execution("status field requires a typed store signal"))?);
+            let code = usize::from(
+                bank.status_code
+                    .ok_or_else(|| execution("status field requires a typed store signal"))?,
+            );
             let n = self.generate.vocab_size();
-            let delta = field[code * n..(code + 1) * n].iter().map(|&q| i64::from(q) << 22).collect::<Vec<_>>();
+            let delta = field[code * n..(code + 1) * n]
+                .iter()
+                .map(|&q| i64::from(q) << 22)
+                .collect::<Vec<_>>();
             add_continuation_scores(&mut gen_scores, &delta)?;
             add_continuation_copy_scores(&mut scores, &copy_ids, &delta)?;
         } else if bank.status_code.is_some() {
@@ -840,7 +892,9 @@ impl NativeBankGenerator {
         bank: &AdmittedBank,
         limits: GenerationLimits,
     ) -> Result<NativeBankGeneration> {
-        self.generate_with_choice(bank, limits, |step| Ok(step.actions.summary.chosen_token_id))
+        self.generate_with_choice(bank, limits, |step| {
+            Ok(step.actions.summary.chosen_token_id)
+        })
     }
 
     /// Offline token selection/replay, still feeding back actual chosen IDs.
@@ -858,7 +912,12 @@ impl NativeBankGenerator {
             own_prefix_loop(bank.base_tokens, limits.maximum_tokens, eos, |actual| {
                 let step = self.step(bank, actual)?;
                 let id = choose(&step)?;
-                if !step.actions.token_masses.iter().any(|m| m.token_id == id && m.weight_q31 != 0) {
+                if !step
+                    .actions
+                    .token_masses
+                    .iter()
+                    .any(|m| m.token_id == id && m.weight_q31 != 0)
+                {
                     return Err(execution("offline chosen token is not in the actual pool"));
                 }
                 if steps.len() < limits.maximum_retained_steps {

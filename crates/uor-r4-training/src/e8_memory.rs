@@ -147,7 +147,10 @@ fn build_tables() -> Result<E8Tables> {
 
 impl E8Tables {
     pub fn exact_root_key(&self, root: u16) -> Result<[i8; 8]> {
-        self.exact_keys.get(usize::from(root)).copied().ok_or_else(|| invalid("E8 exact root outside240"))
+        self.exact_keys
+            .get(usize::from(root))
+            .copied()
+            .ok_or_else(|| invalid("E8 exact root outside240"))
     }
     /// Apply an existing SpiralCore action to an existing Claude E8 address.
     /// These are distinct typed domains: an action index is not a root index.
