@@ -2996,9 +2996,7 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     let starling_cost = uor_r4_training::geometric_stack::starling_cost_take();
     let readout_slots = uor_r4_training::geometric_stack::starling_readout_take();
     if let Some(slots) = readout_slots {
-        let line = format!(
-            "starling readout effective slots (final in-class panel): {slots:.2}"
-        );
+        let line = format!("starling readout effective slots (final in-class panel): {slots:.2}");
         eprintln!("{line}");
         writeln!(log, "{line}")?;
     }
