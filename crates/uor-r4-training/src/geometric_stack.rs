@@ -1103,7 +1103,8 @@ thread_local! {
 /// source of each (batch row, query position) and, once measured, the mean
 /// over those queries and heads of the dense helper's weight on the source
 /// and of the source's share of the helper's mass at that query.
-type StarlingProbe = (std::collections::HashMap<(usize, usize), usize>, Option<(f64, f64)>);
+/// The sums are over every read layer's (query, head) pairs.
+type StarlingProbe = (std::collections::HashMap<(usize, usize), usize>, (f64, f64, u64));
 
 thread_local! {
     static STARLING_PROBE: std::cell::RefCell<Option<StarlingProbe>> =
@@ -1112,7 +1113,7 @@ thread_local! {
 
 /// Arms the bootstrap probe for the next forward with the true sources.
 pub fn starling_probe_set(sources: std::collections::HashMap<(usize, usize), usize>) {
-    STARLING_PROBE.with(|probe| *probe.borrow_mut() = Some((sources, None)));
+    STARLING_PROBE.with(|probe| *probe.borrow_mut() = Some((sources, (0.0, 0.0, 0))));
 }
 
 /// The probe's (helper weight on the source, source share of helper mass),
@@ -1120,7 +1121,7 @@ pub fn starling_probe_set(sources: std::collections::HashMap<(usize, usize), usi
 pub fn starling_probe_take() -> Option<(f64, f64)> {
     STARLING_PROBE
         .with(|probe| probe.borrow_mut().take())
-        .and_then(|(_, result)| result)
+        .and_then(|(_, (weight, share, n))| (n > 0).then(|| (weight / n as f64, share / n as f64)))
 }
 
 /// Starts measuring the starling readout's effective slot count.
@@ -4573,17 +4574,18 @@ impl StackModel {
                 .index_select(&picks, 0)?
                 .to_vec1::<f32>()?;
             let total = totals.flatten_all()?.index_select(&rows, 0)?.to_vec1::<f32>()?;
-            let n = count as f64;
-            let mean_weight = weight.iter().map(|&w| w as f64).sum::<f64>() / n;
-            let mean_share = weight
+            let sum_weight = weight.iter().map(|&w| w as f64).sum::<f64>();
+            let sum_share = weight
                 .iter()
                 .zip(&total)
                 .map(|(&w, &z)| (w as f64) / (z as f64).max(1e-12))
-                .sum::<f64>()
-                / n;
+                .sum::<f64>();
+            // Accumulated over every read layer of the forward.
             STARLING_PROBE.with(|probe| {
-                if let Some((_, result)) = probe.borrow_mut().as_mut() {
-                    *result = Some((mean_weight, mean_share));
+                if let Some((_, (w, z, n))) = probe.borrow_mut().as_mut() {
+                    *w += sum_weight;
+                    *z += sum_share;
+                    *n += count as u64;
                 }
             });
         }
