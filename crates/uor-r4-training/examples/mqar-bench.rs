@@ -2805,7 +2805,9 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     arm.set_starling_surrogate(s.starling_surrogate)?;
     arm.set_starling_distill(s.starling_distill)?;
     if s.starling_salience.is_some() && s.starling_distill.is_none() {
-        return Err(invalid("starling_salience needs starling_distill (its teacher)"));
+        return Err(invalid(
+            "starling_salience needs starling_distill (its teacher)",
+        ));
     }
     arm.set_starling_salience(s.starling_salience)?;
     let buckets = buckets_for(s.context);
@@ -2964,7 +2966,9 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
     let in_class = evaluate(&*arm, &in_class_set, s.context, &buckets, chunk)?;
     let starling_cost = uor_r4_training::geometric_stack::starling_cost_take();
     if let Some((mean, max)) = starling_cost {
-        let line = format!("starling candidates scored per query (final in-class panel): mean {mean:.1} max {max}");
+        let line = format!(
+            "starling candidates scored per query (final in-class panel): mean {mean:.1} max {max}"
+        );
         eprintln!("{line}");
         writeln!(log, "{line}")?;
     }

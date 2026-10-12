@@ -4308,7 +4308,10 @@ impl StackModel {
                     let centre = |x: &Tensor| -> Result<Tensor> {
                         Ok(x.broadcast_sub(&x.mean_keepdim(2)?)?)
                     };
-                    let error = centre(salience)?.sub(&centre(&target)?)?.sqr()?.mean_all()?;
+                    let error = centre(salience)?
+                        .sub(&centre(&target)?)?
+                        .sqr()?
+                        .mean_all()?;
                     starling_aux_add(error.affine(weight, 0.0)?)?;
                 }
                 Some(attention)
@@ -5003,7 +5006,10 @@ impl StackModel {
             if !(weight.is_finite() && weight > 0.0) {
                 return Err(invalid("a salience weight is finite and positive"));
             }
-            if !self.read_route.is_some_and(|route| route.tree && route.content) {
+            if !self
+                .read_route
+                .is_some_and(|route| route.tree && route.content)
+            {
                 return Err(invalid("salience training needs a content tree read route"));
             }
         }
@@ -32799,9 +32805,16 @@ mod tests {
             let (r0, r1) = (0usize, adjacency[0][0]);
             let mut key = Vec::with_capacity(4 * time);
             for t in 0..time {
-                let root = if (rng.normal() > 0.0) || t % 5 == 0 { roots[r0] } else { roots[r1] };
+                let root = if (rng.normal() > 0.0) || t % 5 == 0 {
+                    roots[r0]
+                } else {
+                    roots[r1]
+                };
                 // Small noise keeps the vertex but breaks score ties.
-                let noisy: Vec<f32> = root.iter().map(|&x| x + 0.01 * rng.normal() as f32).collect();
+                let noisy: Vec<f32> = root
+                    .iter()
+                    .map(|&x| x + 0.01 * rng.normal() as f32)
+                    .collect();
                 let norm = noisy.iter().map(|x| x * x).sum::<f32>().sqrt();
                 key.extend(noisy.iter().map(|x| x / norm));
             }
@@ -32815,13 +32828,14 @@ mod tests {
                 tree: true,
             };
             let kept = starling_select(&query, &key, Some(&salience), time, route)?;
-            let cells: Vec<usize> = (0..time).map(|t| nearest_root(vector(&key, t), roots)).collect();
+            let cells: Vec<usize> = (0..time)
+                .map(|t| nearest_root(vector(&key, t), roots))
+                .collect();
             let mut merged_somewhere = false;
             for t in 0..time {
                 let home = nearest_root(vector(&query, t), roots);
-                let arrivals = |cell: usize| -> Vec<usize> {
-                    (0..=t).filter(|&j| cells[j] == cell).collect()
-                };
+                let arrivals =
+                    |cell: usize| -> Vec<usize> { (0..=t).filter(|&j| cells[j] == cell).collect() };
                 let home_store = tree_reference_store(&arrivals(home), m, &salience);
                 merged_somewhere |= home_store.len() < arrivals(home).len();
                 let mut candidates: Vec<(f32, usize)> = home_store
@@ -32895,10 +32909,16 @@ mod tests {
             &cpu(),
         )?;
         model.set_read_route(Some(route))?;
-        let before = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        let before = model
+            .forward(&ids, 2, 12)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
         let salience = model.variables()["layers.01.read.starling.salience.weight"].clone();
         salience.set(&salience.as_tensor().affine(-3.0, 1.0)?)?;
-        let after = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        let after = model
+            .forward(&ids, 2, 12)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
         assert_eq!(before, after);
         Ok(())
     }
@@ -32918,10 +32938,29 @@ mod tests {
             tree: false,
         };
         let ring = starling_select(&query, &key, None, time, route)?;
-        let tree = starling_select(&query, &key, Some(&salience), time, StarlingRoute { tree: true, ..route })?;
+        let tree = starling_select(
+            &query,
+            &key,
+            Some(&salience),
+            time,
+            StarlingRoute {
+                tree: true,
+                ..route
+            },
+        )?;
         assert_eq!(ring, tree);
         // A tree route without salience is refused.
-        assert!(starling_select(&query, &key, None, time, StarlingRoute { tree: true, ..route }).is_err());
+        assert!(starling_select(
+            &query,
+            &key,
+            None,
+            time,
+            StarlingRoute {
+                tree: true,
+                ..route
+            }
+        )
+        .is_err());
         // The route name round-trips through the parser.
         let parsed = parse_read_route("starling:4:7:content:shared:ranked:tree")?
             .ok_or_else(|| invalid("no route"))?;
