@@ -3168,9 +3168,7 @@ fn test_margin_objective_parity() -> uor_r4_training::Result<()> {
             let mut variable_grads = Vec::new();
             for (name, var) in model.variables() {
                 if name.starts_with("embedding.") || name.starts_with("head.") {
-                    let grad = grads
-                        .get(var.as_tensor())
-                        .ok_or_else(|| format!("no margin gradient for {name}"))?;
+                    let grad = grads.get(var.as_tensor()).expect("margin gradient");
                     variable_grads.push((name.clone(), values(grad)?));
                 }
             }
