@@ -8,6 +8,8 @@
 
 Line: bench maintenance (no line count) · headline: unchanged.
 
+**Next:** run the test at the PR head on a `uor-pod` pod. The owner decides whether `arm=transformer` is retired.
+
 ## 2026-10-12 — Starling selector distillation: from step 0 it stops learning; started half-way it lifts the hit rate to 0.61–0.68 (claude, #2032)
 
 The [record](../labs/starling-distill-2026-10-12/README.md) is murmuration-read ladder step 1: a training-only KL from the dense content teacher onto the 600-cell addresses.
