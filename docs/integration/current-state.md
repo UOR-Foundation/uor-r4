@@ -1,3 +1,20 @@
+## 2026-10-12 — D23 replacement learning law: design and rung-0 pre-registration (kimi, #2029)
+
+The [design](../labs/d23-learning-law-design-2026-10-12/README.md) answers the owner-named next source task
+after the [verified incident note](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6124719596):
+the starling/murmuration machinery is intact in-tree; the drift was the training method (softmax surrogate,
+distillation, dense bootstrap), and the structural cause is that no wired non-softmax objective exists in
+Line A ([census](../softmax-census-2026-10-12/README.md)). The proposed law: a **rank/margin objective**
+(hard hinge or the in-tree `rank_softplus`, no normalized exponential), **sparsemax** as the only normalized
+operator where a simplex is required (piecewise-linear, exp-free), and **rank-margin address credit** for the
+murmuration read — no teacher of any kind. Rung 0 is pre-registered on
+[#2029 comment 6124773996](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6124773996)
+(M1/M8/M1s arms × 2 seeds, one pod ≤ $3, bars fixed in advance, no CE arm per D24) and waits for TEST FITNESS.
+
+Line: evaluation integrity · count 1/3 · headline: unchanged (M1 v5 memory 20/40, reply 37/232).
+
+**Next:** TEST FITNESS on the rung; the objective implementation as the preparation PR; the run on one pod.
+
 ## October 12: no CPU model compute, and the softmax rule gets an interlock
 
 [D24](DECISIONS.md#d24---no-cpu-model-compute-and-no-gpu-on-non-decisive-work) adds the
