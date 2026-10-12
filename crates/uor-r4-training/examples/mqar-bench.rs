@@ -10,7 +10,7 @@
 //!   [dump_scores=false|true] [reachability=true|false] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
-//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] [track_bootstrap=false|true] [starling_bootstrap=ACCURACY] [starling_handover=FRACTION] \
+//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] [track_bootstrap=false|true] [starling_bootstrap=NLL] [starling_handover=FRACTION] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
 //!   [lineage=none|f2|qk|qk_jj|identity|so4|conv|wprev|conv8|carrier|rot] [learned_init=lag1|zero]
 //! arm=transformer: [layers=<pattern length>] [width=128] [heads=4] [mlp=matched|<n>] \
@@ -2530,9 +2530,9 @@ struct Common {
     /// of its mass (measured in the preceding training forward), and recall
     /// with the true source forced into the kept sets. Observation only.
     track_bootstrap: bool,
-    /// `starling_bootstrap=ACCURACY`: a dense bootstrap schedule. Until the
-    /// curve's in-class accuracy reaches ACCURACY (at the latest half the
-    /// steps), the dense helper is the content teacher read at full weight
+    /// `starling_bootstrap=NLL`: a dense bootstrap schedule. Until the
+    /// training query NLL over an evaluation window (with the helper on)
+    /// falls to NLL (at the latest half the steps), the dense helper is the content teacher read at full weight
     /// and the distillation is off; from that trigger the helper anneals to
     /// zero over `starling_handover` of the steps while the distillation
     /// (with salience and readout terms) is on. Training only.
@@ -2745,9 +2745,9 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
         return Err(invalid("starling_distill_start is a fraction in [0, 1)"));
     }
     if let Some(threshold) = common.starling_bootstrap {
-        if !(0.0..=1.0).contains(&threshold) || common.starling_distill.is_none() {
+        if !(threshold.is_finite() && threshold > 0.0) || common.starling_distill.is_none() {
             return Err(invalid(
-                "starling_bootstrap is an accuracy in [0, 1] and needs starling_distill",
+                "starling_bootstrap is a positive NLL threshold and needs starling_distill",
             ));
         }
         if common.starling_distill_start > 0.0 {
@@ -3047,16 +3047,6 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
         window_steps += 1;
         if step % s.eval_every == 0 || step == s.steps {
             let in_class = evaluate(&*arm, &curve_in_class, s.context, &buckets, chunk)?;
-            if let (Some(threshold), None) = (s.starling_bootstrap, bootstrap_trigger) {
-                if in_class["accuracy"].as_f64().unwrap_or(0.0) >= threshold {
-                    bootstrap_trigger = Some(step);
-                    let line = format!(
-                        "step {step} bootstrap handover starts (in-class accuracy reached {threshold})"
-                    );
-                    eprintln!("{line}");
-                    writeln!(log, "{line}")?;
-                }
-            }
             let held_out = evaluate(&*arm, &curve_held_out, s.context, &buckets, chunk)?;
             let hit_rate = arm.starling_hit_rate(&curve_in_class, s.context)?;
             if let Some(rate) = hit_rate {
@@ -3064,6 +3054,18 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
                 writeln!(log, "step {step} starling hit rate {rate:.4}")?;
             }
             let train_loss = window_loss / window_steps.max(1) as f64;
+            // The escape signal is the training NLL with the helper on (the
+            // curve evaluation runs without it).
+            if let (Some(threshold), None) = (s.starling_bootstrap, bootstrap_trigger) {
+                if train_loss <= threshold {
+                    bootstrap_trigger = Some(step);
+                    let line = format!(
+                        "step {step} bootstrap handover starts (train NLL {train_loss:.4} <= {threshold})"
+                    );
+                    eprintln!("{line}");
+                    writeln!(log, "{line}")?;
+                }
+            }
             let train_aux = window_aux / window_steps.max(1) as f64;
             if s.track_bootstrap {
                 let forced = arm.starling_oracle_accuracy(&curve_in_class, s.context)?;
