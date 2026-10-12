@@ -3132,6 +3132,7 @@ pub struct StackModel {
     starling_salience: Option<f64>,
     starling_rank_distill: Option<f64>,
     starling_teacher_helper: bool,
+    starling_teacher_read: bool,
     /// Layers whose MLP is an E8 orbit memory ([`Self::set_e8_memory`]).
     e8_memory: Option<crate::e8_memory::E8MemoryConfig>,
     /// How the geometric reads weight their kept sources
@@ -3247,6 +3248,7 @@ impl StackModel {
             starling_salience: None,
             starling_rank_distill: None,
             starling_teacher_helper: false,
+            starling_teacher_read: false,
             e8_memory: None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
@@ -4475,11 +4477,30 @@ impl StackModel {
                     }
                 }
                 let causal = Tensor::from_vec(causal, (1, 1, time, time), identity.device())?;
-                let scores = query
+                let inner = query
                     .contiguous()?
-                    .matmul(&key.transpose(2, 3)?.contiguous()?)?
-                    .affine(1.0 / (d as f64).sqrt(), 0.0)?
-                    .broadcast_add(&causal)?;
+                    .matmul(&key.transpose(2, 3)?.contiguous()?)?;
+                // The teacher's score: by default q.k/sqrt(d); with
+                // `set_starling_teacher_read`, the L2 read's own learned score
+                // -beta (|q - k| - offset), the attention the L2 control uses.
+                let scores = if self.starling_teacher_read {
+                    let beta = p.layer(layer, "read.log_beta")?.exp()?.reshape((1, heads, 1, 1))?;
+                    let offset = p.layer(layer, "read.offset")?.reshape((1, heads, 1, 1))?;
+                    let qs = query.sqr()?.sum_keepdim(3)?;
+                    let ks = key.sqr()?.sum_keepdim(3)?.transpose(2, 3)?;
+                    qs.broadcast_add(&ks)?
+                        .sub(&inner.affine(2.0, 0.0)?)?
+                        .clamp(L2_MIN_SQUARED as f32, f32::MAX)?
+                        .sqrt()?
+                        .broadcast_sub(&offset)?
+                        .broadcast_mul(&beta)?
+                        .neg()?
+                        .broadcast_add(&causal)?
+                } else {
+                    inner
+                        .affine(1.0 / (d as f64).sqrt(), 0.0)?
+                        .broadcast_add(&causal)?
+                };
                 let log_teacher = log_softmax_last_dim(&scores)?;
                 if let Some(weight) = distill_weight {
                     let student = a
@@ -5280,6 +5301,20 @@ impl StackModel {
             return Err(invalid("the teacher helper needs a content read route"));
         }
         self.starling_teacher_helper = on;
+        Ok(())
+    }
+
+    /// The dense content teacher scores with the L2 read's own learned score
+    /// `-beta (|q - k| - offset)` instead of `q.k/sqrt(d)` (training only;
+    /// needs a content route on an L2 read).
+    pub fn set_starling_teacher_read(&mut self, on: bool) -> Result<()> {
+        if on
+            && (!self.read_route.is_some_and(|route| route.content)
+                || self.config.read != ReadScore::L2)
+        {
+            return Err(invalid("the read-score teacher needs a content route on an L2 read"));
+        }
+        self.starling_teacher_read = on;
         Ok(())
     }
 
@@ -11899,6 +11934,7 @@ impl StackModel {
             starling_salience: None,
             starling_rank_distill: None,
             starling_teacher_helper: false,
+            starling_teacher_read: false,
             e8_memory: None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,

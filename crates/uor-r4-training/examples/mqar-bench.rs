@@ -10,7 +10,7 @@
 //!   [dump_scores=false|true] [reachability=true|false] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
-//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] [track_bootstrap=false|true] [starling_bootstrap=NLL] [starling_handover=FRACTION] \
+//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] [track_bootstrap=false|true] [starling_bootstrap=NLL] [starling_handover=FRACTION] [starling_teacher_read=false|true] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
 //!   [lineage=none|f2|qk|qk_jj|identity|so4|conv|wprev|conv8|carrier|rot] [learned_init=lag1|zero]
 //! arm=transformer: [layers=<pattern length>] [width=128] [heads=4] [mlp=matched|<n>] \
@@ -404,6 +404,13 @@ trait ContextArm {
     fn set_starling_salience(&mut self, weight: Option<f64>) -> Result<()> {
         if weight.is_some() {
             return Err(invalid("starling_salience needs a starling stack arm"));
+        }
+        Ok(())
+    }
+    /// The teacher scores with the L2 read's own learned score.
+    fn set_starling_teacher_read(&mut self, on: bool) -> Result<()> {
+        if on {
+            return Err(invalid("starling_teacher_read needs a starling stack arm"));
         }
         Ok(())
     }
@@ -1183,6 +1190,10 @@ impl ContextArm for StackArm {
 
     fn set_starling_rank_distill(&mut self, weight: Option<f64>) -> Result<()> {
         self.model.set_starling_rank_distill(weight)
+    }
+
+    fn set_starling_teacher_read(&mut self, on: bool) -> Result<()> {
+        self.model.set_starling_teacher_read(on)
     }
 
     fn set_starling_phase(
@@ -2544,6 +2555,9 @@ struct Common {
     starling_bootstrap: Option<f64>,
     /// `starling_handover=FRACTION`: the bootstrap's anneal length (default 0.25).
     starling_handover: f64,
+    /// `starling_teacher_read=true`: the teacher scores with the L2 read's own
+    /// learned score (the L2 control's attention). Training only.
+    starling_teacher_read: bool,
     context: usize,
     pairs_per_bucket: usize,
     batch: usize,
@@ -2621,6 +2635,7 @@ impl Common {
             "track_bootstrap": self.track_bootstrap,
             "starling_bootstrap": self.starling_bootstrap,
             "starling_handover": self.starling_handover,
+            "starling_teacher_read": self.starling_teacher_read,
             "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
             "pairing_split": {
                 "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
@@ -2688,6 +2703,7 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
             })
             .transpose()?,
         starling_handover: args.parsed("starling_handover", 0.25f64)?,
+        starling_teacher_read: args.parsed("starling_teacher_read", false)?,
         starling_rank_distill: args
             .take("starling_rank_distill")
             .map(|text| {
@@ -2909,6 +2925,9 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
         ));
     }
     arm.set_starling_rank_distill(s.starling_rank_distill)?;
+    if s.starling_teacher_read {
+        arm.set_starling_teacher_read(true)?;
+    }
     let buckets = buckets_for(s.context);
     let line = format!(
         "{} {}: {} parameters, context {}, buckets {:?}",
@@ -3566,6 +3585,7 @@ mod tests {
             track_bootstrap: false,
             starling_bootstrap: None,
             starling_handover: 0.25,
+            starling_teacher_read: false,
             select: None,
         };
         let spec = ArmSpec::Stack {
@@ -3774,6 +3794,7 @@ mod tests {
             track_bootstrap: false,
             starling_bootstrap: None,
             starling_handover: 0.25,
+            starling_teacher_read: false,
         }
     }
 
