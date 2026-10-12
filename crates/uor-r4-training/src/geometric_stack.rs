@@ -1104,7 +1104,10 @@ thread_local! {
 /// over those queries and heads of the dense helper's weight on the source
 /// and of the source's share of the helper's mass at that query.
 /// The sums are over every read layer's (query, head) pairs.
-type StarlingProbe = (std::collections::HashMap<(usize, usize), usize>, (f64, f64, u64));
+type StarlingProbe = (
+    std::collections::HashMap<(usize, usize), usize>,
+    (f64, f64, u64),
+);
 
 thread_local! {
     static STARLING_PROBE: std::cell::RefCell<Option<StarlingProbe>> =
@@ -4487,11 +4490,15 @@ impl StackModel {
                 // -beta (|q - k| - offset), the attention the L2 control uses.
                 let scores = if self.starling_teacher_read {
                     let l2;
-                    let beta = p.layer(layer, "read.log_beta")?.exp()?.reshape((1, heads, 1, 1))?;
+                    let beta = p
+                        .layer(layer, "read.log_beta")?
+                        .exp()?
+                        .reshape((1, heads, 1, 1))?;
                     let offset = p.layer(layer, "read.offset")?.reshape((1, heads, 1, 1))?;
                     let qs = query.sqr()?.sum_keepdim(3)?;
                     let ks = key.sqr()?.sum_keepdim(3)?.transpose(2, 3)?;
-                    l2 = qs.broadcast_add(&ks)?
+                    l2 = qs
+                        .broadcast_add(&ks)?
                         .sub(&inner.affine(2.0, 0.0)?)?
                         .clamp(L2_MIN_SQUARED as f32, f32::MAX)?
                         .sqrt()?
@@ -4629,7 +4636,10 @@ impl StackModel {
                 .flatten_all()?
                 .index_select(&picks, 0)?
                 .to_vec1::<f32>()?;
-            let total = totals.flatten_all()?.index_select(&rows, 0)?.to_vec1::<f32>()?;
+            let total = totals
+                .flatten_all()?
+                .index_select(&rows, 0)?
+                .to_vec1::<f32>()?;
             let sum_weight = weight.iter().map(|&w| w as f64).sum::<f64>();
             let sum_share = weight
                 .iter()
@@ -5335,7 +5345,9 @@ impl StackModel {
             && (!self.read_route.is_some_and(|route| route.content)
                 || self.config.read != ReadScore::L2)
         {
-            return Err(invalid("the read-score teacher needs a content route on an L2 read"));
+            return Err(invalid(
+                "the read-score teacher needs a content route on an L2 read",
+            ));
         }
         self.starling_teacher_read = on;
         Ok(())
@@ -5346,7 +5358,9 @@ impl StackModel {
     /// attention except for its null slot (training only).
     pub fn set_starling_teacher_age(&mut self, on: bool) -> Result<()> {
         if on && !self.starling_teacher_read {
-            return Err(invalid("the teacher age table needs the read-score teacher"));
+            return Err(invalid(
+                "the teacher age table needs the read-score teacher",
+            ));
         }
         self.starling_teacher_age = on;
         Ok(())
