@@ -34,8 +34,13 @@ Lab: Kimi, session `kimi/s1`, 2026-10-12. Source work only: no training, no pane
 - `cargo test -p uor-r4-training --lib` (with `UOR_BUILD_SOURCE_COMMIT` set): **938 passed, 0 failed**.
 - `cargo check -p uor-r4-training --examples --bins`: clean; `cargo fmt --check`: clean;
   `check_claim_wording.py`: PASS.
-- **CUDA feature compile on a pod** (the #2212 lesson — a CUDA path is not verified until a pod built
-  from the branch runs it): [POD RECEIPT — filled at merge].
+- **CUDA feature compile + parity on a pod** (the #2212 lesson — a CUDA path is not verified until a
+  pod built from the branch runs it): **PASS** on an RTX 4090 (pod `zkjg238gzdhyv3`, cap 89, nvcc 12.8,
+  rustc 1.97.1) at `f1e9acb7a`: the full CUDA parity suite **38 passed / 0 failed**, including
+  `test_margin_objective_parity ... ok` (BUILD.json on the pod volume; bootstrap log in
+  `~/.local/share/uor-r4/compute/logs/`). Two defects were caught by this gate before merge: an
+  out-of-bounds read in the selection merge's tie-break on small vocabularies, and the CUDA-only test
+  build's missing `objective` fields — both fixed and re-verified.
 
 ## Design and basis
 
