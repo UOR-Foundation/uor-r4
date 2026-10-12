@@ -10,7 +10,7 @@
 //!   [dump_scores=false|true] [reachability=true|false] \
 //!   [mode=train|task-baselines] [layout=synthetic|fact] FACT OPTIONS [arm=stack] ARM OPTIONS
 //! arm=stack: [pattern=aaaaaa] [read=l2|dot|lorentz] [rotation=true|false] [width=128] [heads=4] \
-//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] [track_bootstrap=false|true] [starling_bootstrap=NLL] [starling_handover=FRACTION] [starling_teacher_read=false|true] \
+//!   [read_route=none|starling:M:K[:content][:shared][:ranked]] [starling_anneal=FRACTION] [starling_oracle_train=false|true] [starling_surrogate=false|true] [starling_distill=WEIGHT] [starling_distill_start=FRACTION] [starling_salience=WEIGHT] [starling_rank_distill=WEIGHT] [track_bootstrap=false|true] [starling_bootstrap=NLL] [starling_handover=FRACTION] [starling_teacher_read=false|true] [starling_bootstrap_kl=false|true] \
 //!   [mlp=384] [age=default|flat|spread] [key_shift=false|true] \
 //!   [lineage=none|f2|qk|qk_jj|identity|so4|conv|wprev|conv8|carrier|rot] [learned_init=lag1|zero]
 //! arm=transformer: [layers=<pattern length>] [width=128] [heads=4] [mlp=matched|<n>] \
@@ -2558,6 +2558,10 @@ struct Common {
     /// `starling_teacher_read=true`: the teacher scores with the L2 read's own
     /// learned score (the L2 control's attention). Training only.
     starling_teacher_read: bool,
+    /// `starling_bootstrap_kl=true`: the distillation KL (with salience and
+    /// readout terms) is on during the dense bootstrap phase too, so the
+    /// addresses learn before the handover. Training only.
+    starling_bootstrap_kl: bool,
     context: usize,
     pairs_per_bucket: usize,
     batch: usize,
@@ -2636,6 +2640,7 @@ impl Common {
             "starling_bootstrap": self.starling_bootstrap,
             "starling_handover": self.starling_handover,
             "starling_teacher_read": self.starling_teacher_read,
+            "starling_bootstrap_kl": self.starling_bootstrap_kl,
             "token_ranges": {"filler": FILLER, "keys": KEYS, "values": VALUES},
             "pairing_split": {
                 "classes": CLASSES, "held_out_class": HELD_OUT_CLASS,
@@ -2704,6 +2709,7 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
             .transpose()?,
         starling_handover: args.parsed("starling_handover", 0.25f64)?,
         starling_teacher_read: args.parsed("starling_teacher_read", false)?,
+        starling_bootstrap_kl: args.parsed("starling_bootstrap_kl", false)?,
         starling_rank_distill: args
             .take("starling_rank_distill")
             .map(|text| {
@@ -2775,6 +2781,9 @@ fn settings(mut args: Args) -> Result<(Common, ArmSpec, Mode, Option<fact::FactT
             return Err(invalid(
                 "starling_bootstrap sets its own distillation start; drop starling_distill_start",
             ));
+        }
+        if common.starling_bootstrap_kl && common.starling_bootstrap.is_none() {
+            return Err(invalid("starling_bootstrap_kl needs starling_bootstrap"));
         }
         if !(common.starling_handover > 0.0 && common.starling_handover <= 1.0) {
             return Err(invalid("starling_handover is a fraction in (0, 1]"));
@@ -3015,7 +3024,11 @@ fn run(s: &Common, arm: &mut dyn ContextArm, log: &mut fs::File) -> Result<Value
                 writeln!(log, "{line}")?;
             }
             match bootstrap_trigger {
-                None => arm.set_starling_phase(Some(1.0), true, None)?,
+                None => arm.set_starling_phase(
+                    Some(1.0),
+                    true,
+                    s.starling_distill.filter(|_| s.starling_bootstrap_kl),
+                )?,
                 Some(start) => {
                     let span = (s.starling_handover * s.steps as f64).max(1.0);
                     let alpha = (1.0 - (step - start) as f64 / span).max(0.0);
@@ -3586,6 +3599,7 @@ mod tests {
             starling_bootstrap: None,
             starling_handover: 0.25,
             starling_teacher_read: false,
+            starling_bootstrap_kl: false,
             select: None,
         };
         let spec = ArmSpec::Stack {
@@ -3795,6 +3809,7 @@ mod tests {
             starling_bootstrap: None,
             starling_handover: 0.25,
             starling_teacher_read: false,
+            starling_bootstrap_kl: false,
         }
     }
 
