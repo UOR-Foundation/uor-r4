@@ -101,9 +101,10 @@ universal converter, semantic metric on SHA bits, H4-to-E8 cast or proof of a
 reversible Hopf projection. The hands-on SpiralCore source/codec/action receipts
 remain in the [audit](../unified-geometric-integration-2026-10-11/AUDIT.md).
 
-Implementation began at main0c61858ee after #2231. Claude's newer #2239/#2240
+Implementation began at main0c61858ee after #2231. Claude's newer #2239/#2240/#2241
 were inspected during qualification: its persistent base3 FBS/600-cell tree
-retains stream keys but does not fix its readout; those synthetic M4 results and
+retains stream keys but does not fix readout reliably across seeds. #2241 improves
+one seed's readout without establishing learning reliability; those M4 results and
 learned salience remain peer-owned. This M2 path reuses exact E8 tables and
 SpiralCore actions, not the peer stack's token-age slots, teacher or optimizer.
 Its own exact store already distinguishes historical availability from physical
