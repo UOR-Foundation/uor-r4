@@ -824,8 +824,9 @@ pub struct StarlingRoute {
     /// a pending list; every `m` evictions form a level-0 block; a level holds
     /// at most two blocks, and a third merges the three, keeps the `m` most
     /// salient (learned `read.starling.salience`) and carries them up one
-    /// level. A query also reads its home vertex's pending list and every
-    /// level, so old salient keys stay readable at O(m log3 n) candidates.
+    /// level. A query reads every stored key of its home vertex and the 12
+    /// adjacent ones, so old salient keys stay readable at O(m log3 n)
+    /// candidates per vertex.
     pub tree: bool,
 }
 
@@ -1224,9 +1225,10 @@ fn starling_select(
     Ok(kept)
 }
 
-/// [`starling_select`] under [`StarlingRoute::tree`]: the home vertex
-/// contributes every stored key ([`StarlingTreeCell::all`]); the 12 adjacent
-/// vertices contribute their rings, as without the tree.
+/// [`starling_select`] under [`StarlingRoute::tree`]: the home vertex and its
+/// 12 adjacent vertices each contribute every stored key
+/// ([`StarlingTreeCell::all`]), so a key evicted from any read vertex's ring
+/// stays readable while it remains salient.
 fn starling_select_tree(
     query: &[f32],
     key: &[f32],
@@ -1252,13 +1254,9 @@ fn starling_select_tree(
         cells[cell].push(t, route.m, salience);
         let q = vector(query, t);
         let home = nearest_root(q, roots);
-        let mut candidates: Vec<(f32, usize)> = cells[home]
-            .all()
-            .chain(
-                adjacency[home]
-                    .iter()
-                    .flat_map(|&c| cells[c].ring.iter().copied()),
-            )
+        let mut candidates: Vec<(f32, usize)> = std::iter::once(home)
+            .chain(adjacency[home].iter().copied())
+            .flat_map(|c| cells[c].all())
             .map(|j| {
                 let b = vector(key, j);
                 ((0..4).map(|c| q[c] * b[c]).sum::<f32>(), j)
@@ -4076,7 +4074,9 @@ impl StackModel {
         // heads, time]`, used by the selection only through a hard sort.
         let salience = if route.tree {
             Some(
-                self.linear(identity, p.layer(layer, STARLING_SALIENCE)?)?
+                // From the detached stream: salience is only sorted, and its
+                // training-only regression must not train the shared trunk.
+                self.linear(&identity.detach(), p.layer(layer, STARLING_SALIENCE)?)?
                     .to_dtype(DType::F32)?
                     .transpose(1, 2)?
                     .contiguous()?,
@@ -4292,14 +4292,23 @@ impl StackModel {
                 starling_aux_add(kl.affine(weight, 0.0)?)?;
                 let attention = log_teacher.exp()?;
                 // Tree routes: regress each position's salience on the log of
-                // the teacher's total future attention into it (training only).
+                // the teacher's mean attention into it per later query (so
+                // early positions are not favoured for having more readers),
+                // both centred per row since only the order is used. Training
+                // only.
                 if let (Some(salience), Some(weight)) = (&salience, self.starling_salience) {
+                    let readers: Vec<f32> = (0..time).map(|j| (time - j) as f32).collect();
+                    let readers = Tensor::from_vec(readers, (1, 1, time), identity.device())?;
                     let target = attention
                         .detach()
                         .sum(2)?
+                        .broadcast_div(&readers)?
                         .affine(1.0, 1e-6)?
                         .log()?;
-                    let error = salience.sub(&target)?.sqr()?.mean_all()?;
+                    let centre = |x: &Tensor| -> Result<Tensor> {
+                        Ok(x.broadcast_sub(&x.mean_keepdim(2)?)?)
+                    };
+                    let error = centre(salience)?.sub(&centre(&target)?)?.sqr()?.mean_all()?;
                     starling_aux_add(error.affine(weight, 0.0)?)?;
                 }
                 Some(attention)
@@ -32791,7 +32800,10 @@ mod tests {
             let mut key = Vec::with_capacity(4 * time);
             for t in 0..time {
                 let root = if (rng.normal() > 0.0) || t % 5 == 0 { roots[r0] } else { roots[r1] };
-                key.extend_from_slice(&root);
+                // Small noise keeps the vertex but breaks score ties.
+                let noisy: Vec<f32> = root.iter().map(|&x| x + 0.01 * rng.normal() as f32).collect();
+                let norm = noisy.iter().map(|x| x * x).sum::<f32>().sqrt();
+                key.extend(noisy.iter().map(|x| x / norm));
             }
             let salience: Vec<f32> = (0..time).map(|_| rng.normal() as f32).collect();
             let route = StarlingRoute {
@@ -32814,10 +32826,11 @@ mod tests {
                 merged_somewhere |= home_store.len() < arrivals(home).len();
                 let mut candidates: Vec<(f32, usize)> = home_store
                     .into_iter()
-                    .chain(adjacency[home].iter().flat_map(|&c| {
-                        let a = arrivals(c);
-                        a[a.len().saturating_sub(m)..].to_vec()
-                    }))
+                    .chain(
+                        adjacency[home]
+                            .iter()
+                            .flat_map(|&c| tree_reference_store(&arrivals(c), m, &salience)),
+                    )
                     .map(|j| {
                         let (q, b) = (vector(&query, t), vector(&key, j));
                         ((0..4).map(|c| q[c] * b[c]).sum::<f32>(), j)
@@ -32851,6 +32864,42 @@ mod tests {
         assert_eq!(sorted, reference);
         // Logarithmic: 120 arrivals at m = 2 keep far fewer than 120.
         assert!(stored.len() <= 2 + 1 + 2 * 2 * 5, "stored {}", stored.len());
+        // Ties keep the later position: with equal salience every merge keeps
+        // its block's latest keys.
+        let flat = vec![0.0f32; 9];
+        let mut cell = StarlingTreeCell::default();
+        for t in 0..9 {
+            cell.push(t, 1, &flat);
+        }
+        // Ring [8]; evicted 0..=7 form blocks [0]..[7]; level 0 merges
+        // {0,1,2} -> [2] and {3,4,5} -> [5], keeps [6],[7]; level 1 holds [2],[5].
+        let mut stored: Vec<usize> = cell.all().collect();
+        stored.sort_unstable();
+        assert_eq!(stored, vec![2, 5, 6, 7, 8]);
+        Ok(())
+    }
+
+    #[test]
+    fn starling_salience_does_not_change_logits_without_merges() -> Result<()> {
+        let route = StarlingRoute {
+            m: 64,
+            k: 3,
+            content: true,
+            shared: true,
+            ranked: true,
+            tree: true,
+        };
+        let ids: Vec<u32> = (0..24u32).map(|i| (i * 7 + 3) % 37).collect();
+        let mut model = StackModel::new(
+            tiny(StackArch::Geometric, "ra", ReadScore::L2, true),
+            &cpu(),
+        )?;
+        model.set_read_route(Some(route))?;
+        let before = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        let salience = model.variables()["layers.01.read.starling.salience.weight"].clone();
+        salience.set(&salience.as_tensor().affine(-3.0, 1.0)?)?;
+        let after = model.forward(&ids, 2, 12)?.flatten_all()?.to_vec1::<f32>()?;
+        assert_eq!(before, after);
         Ok(())
     }
 
