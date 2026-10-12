@@ -4280,9 +4280,20 @@ impl StackModel {
             training,
             self.starling_distill.is_some(),
         ) {
-            let masked = dot.detach().add(&live.affine(1e4, -1e4)?)?;
+            let fixed = dot.detach();
+            let masked = fixed.add(&live.affine(1e4, -1e4)?)?;
             let target = candle_nn_softmax_last_dim(&masked)?.mul(&live)?;
-            let error = weights.sub(&target)?.sqr()?.sum(3)?.mean_all()?;
+            // The readout only: the gate is recomputed from the detached
+            // score, so this term trains the rank table, beta and gamma and
+            // never the content selection (q.k).
+            let gate_readout = fixed
+                .broadcast_mul(&beta)?
+                .broadcast_add(&gamma)?
+                .affine(0.5, 0.0)?
+                .tanh()?
+                .affine(0.5, 0.5)?;
+            let readout = table.mul(&gate_readout)?.mul(&live)?;
+            let error = readout.sub(&target)?.sqr()?.sum(3)?.mean_all()?;
             starling_aux_add(error.affine(weight, 0.0)?)?;
         }
         if STARLING_READOUT.with(|cell| cell.get().is_some()) {
@@ -33119,8 +33130,9 @@ mod tests {
         assert!(both.is_finite() && both >= kl, "kl {kl} both {both}");
         let rank = model.variables()["layers.01.read.starling.rank"].clone();
         let beta = model.variables()["layers.01.read.starling.beta"].clone();
+        let gamma = model.variables()["layers.01.read.starling.gamma"].clone();
         let grads = aux.backward()?;
-        for var in [&rank, &beta] {
+        for var in [&rank, &beta, &gamma] {
             let g = grads
                 .get(var.as_tensor())
                 .ok_or_else(|| invalid("no readout gradient"))?;
