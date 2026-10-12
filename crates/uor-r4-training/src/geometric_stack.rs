@@ -9609,7 +9609,20 @@ impl StackModel {
             )?;
             return self.finish_hooked(p, hidden, capture);
         }
-        self.layers_hooked(p, x, capture)
+        let source = ReadSource {
+            ids: Some(ids),
+            ..ReadSource::default()
+        };
+        let hidden = self.layer_range_with_source(
+            p,
+            x,
+            0..self.config.layers(),
+            capture,
+            &mut None,
+            LatchGates::Soft,
+            source,
+        )?;
+        self.finish_hooked(p, hidden, capture)
     }
 
     /// The token embeddings [batch, time, width] that the first layer reads.
