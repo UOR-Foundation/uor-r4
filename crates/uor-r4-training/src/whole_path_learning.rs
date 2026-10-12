@@ -1081,6 +1081,7 @@ impl WholePathRevision {
             capacity,
         )?;
         Ok(WholePathSession {
+            owner: Arc::new(()),
             revision: self,
             native,
             scope: scope.clone(),
@@ -1366,12 +1367,14 @@ impl WholePathBatch<'_> {
 }
 
 pub struct WholePreparedTurn {
+    owner: Arc<()>,
     native: NativePreparedTurn,
     index: RouteIndex,
     revision_sha256: String,
     source: String,
 }
 pub struct WholePathSession<'a> {
+    owner: Arc<()>,
     revision: &'a WholePathRevision,
     native: NativeGroundedSession<'a, NativeTurnCompiler<'a>>,
     scope: SessionScope,
@@ -1504,6 +1507,7 @@ impl WholePathSession<'_> {
     }
     fn prepare_inner(&self, source: &str) -> Result<WholePreparedTurn> {
         Self::prepare_policy(
+            &self.owner,
             self.revision,
             &self.native,
             self.tokenizer,
@@ -1517,6 +1521,7 @@ impl WholePathSession<'_> {
         )
     }
     fn prepare_policy<C: crate::stack_grounded_session::TurnCompiler>(
+        owner: &Arc<()>,
         revision: &WholePathRevision,
         native: &NativeGroundedSession<'_, C>,
         tokenizer: &ByteBpeTokenizer,
@@ -1681,6 +1686,7 @@ impl WholePathSession<'_> {
             })?
             .with_status(signal)?;
         Ok(WholePreparedTurn {
+            owner: owner.clone(),
             native: pending,
             index,
             revision_sha256: revision.sha256.clone(),
@@ -1693,7 +1699,10 @@ impl WholePathSession<'_> {
         limits: GenerationLimits,
     ) -> Result<NativeTurnOutcome> {
         self.valid()?;
-        if prepared.revision_sha256 != self.revision.sha256 {
+        if !self.pending
+            || !Arc::ptr_eq(&self.owner, &prepared.owner)
+            || prepared.revision_sha256 != self.revision.sha256
+        {
             return Err(invalid("whole-path prepared revision differs"));
         }
         let tape = self.tape.clone();
@@ -1750,7 +1759,9 @@ impl WholePathSession<'_> {
         baseline: f32,
     ) -> Result<Tensor> {
         self.valid()?;
-        if prepared.revision_sha256 != self.revision.sha256
+        if !self.pending
+            || !Arc::ptr_eq(&self.owner, &prepared.owner)
+            || prepared.revision_sha256 != self.revision.sha256
             || answer_with_eos.is_empty()
             || answer_with_eos.len() > 128
             || answer_with_eos.last() != Some(&self.revision.encoder.binding().eos_token_id())
@@ -1884,7 +1895,7 @@ impl WholePathSession<'_> {
     pub fn snapshot(&self) -> Result<Vec<u8>> {
         self.valid()?;
         if matches!(self.revision.manifest.mode, Mode::Sampled(_)) {
-            return Err(invalid("sampled trajectory checkpoint NOT_QUALIFIED; export greedy revision for serving custody"));
+            return Err(invalid("sampled sessions require sampled_checkpoint; serving snapshots require a greedy revision"));
         }
         let bytes = self.native.snapshot()?;
         Ok(serde_json::to_vec(&(
@@ -3203,6 +3214,191 @@ mod tests {
     }
 
     #[test]
+    fn whole_path_device_nonzero_shared_factors_match_native_q24() -> Result<()> {
+        let p = parts()?;
+        let w = weights(&p)?;
+        for (name, var) in w.parameters()? {
+            if [
+                "consumer.potential.",
+                "cue.",
+                "prefix.",
+                "read_state_bridge.",
+                "generate.",
+                "continuation.",
+                "memory.signal",
+            ]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+            {
+                set(
+                    &var,
+                    (0..var.elem_count())
+                        .map(|i| (i % 15) as f32 * 0.25 - 1.75)
+                        .collect(),
+                )?;
+            }
+        }
+        let tok = tokenizer()?;
+        let revision = w.rebind(
+            &p.parent,
+            &p.fixture.path.join("device-nonzero"),
+            Mode::Greedy,
+        )?;
+        let mut native = revision.session(&tok, TOK.as_bytes(), scope(), limits(), 790, 16)?;
+        native.turn("a b", one())?;
+        let pending = native.prepare_turn("b")?;
+        let Mode::Sampled(sampling) = sampled() else {
+            return Err(invalid("sampled fixture absent"));
+        };
+        let mut producer =
+            device::WholePathCudaProducer::admit(&revision, w.parameters()?, sampling)?;
+        producer.greedy = true;
+        for prefix in [vec![], vec![5], vec![5, 4]] {
+            let expected = native.native.teacher_step(&pending.native, &prefix)?;
+            let got = producer.bank_step(pending.native.bank(), &prefix)?;
+            assert_eq!(got.copy_ids, expected.copy_token_ids);
+            assert_eq!(
+                got.generated_native_q24.to_vec1::<f64>()?,
+                expected
+                    .generate_raw_scores_q24
+                    .iter()
+                    .map(|&v| v as f64)
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                got.copied_native_q24.to_vec1::<f64>()?,
+                expected
+                    .copy_raw_scores_q24
+                    .iter()
+                    .map(|&v| v as f64)
+                    .collect::<Vec<_>>()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn whole_path_device_reference_credit_reaches_shared_owners() -> Result<()> {
+        let p = parts()?;
+        let mut w = weights(&p)?;
+        // Admit both occupied families so rank credit is exercised regardless
+        // of which family the tiny stochastic fixture selects first.
+        w.limits.families = 15;
+        let tok = tokenizer()?;
+        let revision = w.rebind(&p.parent, &p.fixture.path.join("device-credit"), sampled())?;
+        let Mode::Sampled(sampling) = sampled() else {
+            return Err(invalid("sampled fixture absent"));
+        };
+        let mut producer =
+            device::WholePathCudaProducer::admit(&revision, w.parameters()?, sampling)?;
+        producer.restore_prototype_credit(&revision)?;
+        let mut session = device::CudaWholePathSession::from_producer(
+            &revision,
+            &tok,
+            TOK.as_bytes(),
+            producer,
+            EpisodeSpec {
+                scope: scope(),
+                limits: limits(),
+                lineage: 796,
+                capacity: 16,
+            },
+        )?;
+        for source in ["a b", "a a", "b a", "a"] {
+            session.turn(source, one())?;
+        }
+        let gradients = session.terminal_objective(1., 0.)?.backward()?;
+        for name in [
+            "compiler.act",
+            "compiler.relation",
+            "compiler.span",
+            "route.key",
+            "route.family",
+            "route.rank",
+            "read_state_bridge.bias",
+            "generate.bias",
+            "generate.prototype_choices",
+            "memory.signal",
+            "consumer.context.token_transition",
+            "consumer.potential.context_unary",
+            "cue.coefficients",
+            "prefix.coefficients",
+            "continuation.cross_state",
+        ] {
+            let parameters = w.parameters()?;
+            let var = &parameters[name];
+            let gradient = gradients
+                .get(var.as_tensor())
+                .ok_or_else(|| invalid(format!("device credit absent:{name}")))?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            assert!(gradient.iter().all(|v| v.is_finite()), "{name}");
+            assert!(
+                gradient.iter().any(|v| *v != 0.),
+                "zero device credit:{name}"
+            );
+        }
+        assert_eq!(w.parameter_sha256()?, revision.parameter_sha256());
+        Ok(())
+    }
+
+    #[test]
+    fn whole_path_device_teacher_rejects_foreign_prepared_episode() -> Result<()> {
+        let p = parts()?;
+        let w = weights(&p)?;
+        let tok = tokenizer()?;
+        let revision = w.rebind(&p.parent, &p.fixture.path.join("device-foreign"), sampled())?;
+        let Mode::Sampled(sampling) = sampled() else {
+            return Err(invalid("sampled fixture absent"));
+        };
+        let mut sessions = Vec::new();
+        // Even identical durable snapshots must have separate live credit owners.
+        for lineage in [797, 797] {
+            let producer =
+                device::WholePathCudaProducer::admit(&revision, w.parameters()?, sampling.clone())?;
+            sessions.push(device::CudaWholePathSession::from_producer(
+                &revision,
+                &tok,
+                TOK.as_bytes(),
+                producer,
+                EpisodeSpec {
+                    scope: scope(),
+                    limits: limits(),
+                    lineage,
+                    capacity: 16,
+                },
+            )?);
+        }
+        let own = sessions[0].prepare_turn("a b")?;
+        let foreign = sessions[1].prepare_turn("b a")?;
+        assert!(sessions[0]
+            .teacher_ranking_objective(&foreign, &[5, 1], 0.)
+            .is_err());
+        // Refusal must not consume the pending packet or poison its graph.
+        sessions[0].teacher_ranking_objective(&own, &[5, 1], 0.)?;
+        assert_eq!(sessions[0].store().commit(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn whole_path_cpu_teacher_rejects_foreign_identical_snapshot() -> Result<()> {
+        let p = parts()?;
+        let w = weights(&p)?;
+        let tok = tokenizer()?;
+        let revision = w.rebind(&p.parent, &p.fixture.path.join("cpu-foreign"), sampled())?;
+        let left = revision.fork_episode(1001)?;
+        let right = revision.fork_episode(2001)?;
+        let mut a = left.session(&tok, TOK.as_bytes(), scope(), limits(), 799, 16)?;
+        let mut b = right.session(&tok, TOK.as_bytes(), scope(), limits(), 799, 16)?;
+        let own = a.prepare_turn("a b")?;
+        let foreign = b.prepare_turn("b a")?;
+        assert!(a.teacher_ranking_objective(&foreign, &[5, 1], 0.).is_err());
+        a.teacher_ranking_objective(&own, &[5, 1], 0.)?;
+        assert_eq!(a.store().commit(), 0);
+        Ok(())
+    }
+
+    #[test]
     fn whole_path_device_reference_recovery_rebuilds_shared_credit_without_updates() -> Result<()> {
         let p = parts()?;
         let w = weights(&p)?;
@@ -3343,8 +3539,25 @@ mod tests {
             build()?,
             &episodes,
         )?;
+        let mut corrupted: serde_json::Value = serde_json::from_slice(&saved)?;
+        let rng = corrupted["rng"]
+            .as_u64()
+            .ok_or_else(|| invalid("missing saved RNG"))?;
+        corrupted["rng"] = serde_json::json!(rng ^ 1);
+        let corrupted = serde_json::to_vec(&corrupted)?;
+        assert!(fresh
+            .recover_episode(1, TOK.as_bytes(), &corrupted, &sha256_bytes(&corrupted))
+            .is_err());
+        assert_eq!(fresh.episode_mut(1)?.store().commit(), 0);
         fresh.recover_episode(1, TOK.as_bytes(), &saved, &sha256_bytes(&saved))?;
         assert_eq!(saved, fresh.episode_mut(1)?.sampled_checkpoint()?);
+        let a = batch.episode_mut(1)?.turn("b a", one())?;
+        let b = fresh.episode_mut(1)?.turn("b a", one())?;
+        assert_eq!(outcome_digest(&a)?, outcome_digest(&b)?);
+        assert_eq!(
+            batch.episode_mut(1)?.sampled_checkpoint()?,
+            fresh.episode_mut(1)?.sampled_checkpoint()?
+        );
         batch.episode_mut(0)?.turn("a a", one())?;
         assert!(batch.objective(&credits).is_err());
         Ok(())
@@ -4042,20 +4255,26 @@ mod tests {
             assert_eq!(canonical, transformed.canonical_profiles()?);
         }
         let loaded = WholePathRevision::load(&revision.root, revision.sha256())?;
-        let mut framed = loaded.session(&tok, TOK.as_bytes(), scope(), limits(), 740, 16)?;
-        framed.restore(&snapshot, &sha256_bytes(&snapshot))?;
-        framed.transport_routes(7)?;
         let a = session.turn("a", one())?;
-        let b = framed.turn("a", one())?;
-        assert_eq!(a.generation.generated_ids, b.generation.generated_ids);
-        assert_eq!(
-            a.generation.steps[0].copy_token_ids,
-            b.generation.steps[0].copy_token_ids
-        );
-        assert_eq!(
-            a.generation.steps[0].generate_raw_scores_q24,
-            b.generation.steps[0].generate_raw_scores_q24
-        );
+        for action in 0..64 {
+            let mut framed = loaded.session(&tok, TOK.as_bytes(), scope(), limits(), 740, 16)?;
+            framed.restore(&snapshot, &sha256_bytes(&snapshot))?;
+            framed.transport_routes(action)?;
+            let b = framed.turn("a", one())?;
+            assert_eq!(outcome_digest(&a)?, outcome_digest(&b)?, "frame {action}");
+            assert_eq!(
+                a.generation.steps[0].copy_token_ids,
+                b.generation.steps[0].copy_token_ids
+            );
+            assert_eq!(
+                a.generation.steps[0].generate_raw_scores_q24,
+                b.generation.steps[0].generate_raw_scores_q24
+            );
+            assert_eq!(
+                a.generation.steps[0].copy_raw_scores_q24,
+                b.generation.steps[0].copy_raw_scores_q24
+            );
+        }
         Ok(())
     }
 }

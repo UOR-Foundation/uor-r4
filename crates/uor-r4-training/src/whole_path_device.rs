@@ -173,6 +173,7 @@ impl RouteDecisions for DeviceRoutePolicy {
 /// original source witnesses, bounded E8 index and atomic commit machinery.
 /// Only bounded compiler/route/output metadata crosses the device boundary.
 pub struct CudaWholePathSession<'a> {
+    owner: Arc<()>,
     revision: &'a WholePathRevision,
     native: NativeGroundedSession<'a, DeviceCompiler<'a>>,
     producer: Arc<Mutex<WholePathCudaProducer>>,
@@ -186,7 +187,7 @@ pub struct CudaWholePathSession<'a> {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct DeviceCheckpoint {
+pub(super) struct DeviceCheckpoint {
     schema: String,
     revision: String,
     parameters: String,
@@ -387,6 +388,7 @@ impl<'a> CudaWholePathSession<'a> {
         Ok(Self {
             revision,
             native,
+            owner: Arc::new(()),
             producer,
             tokenizer,
             index: RouteIndex::new(revision.manifest.limits.clone()),
@@ -586,6 +588,7 @@ impl<'a> CudaWholePathSession<'a> {
             producer: self.producer.clone(),
         };
         match WholePathSession::prepare_policy(
+            &self.owner,
             self.revision,
             &self.native,
             self.tokenizer,
@@ -609,7 +612,11 @@ impl<'a> CudaWholePathSession<'a> {
         prepared: WholePreparedTurn,
         limits: GenerationLimits,
     ) -> Result<NativeTurnOutcome> {
-        if self.failed || !self.pending || prepared.revision_sha256 != self.revision.sha256 {
+        if self.failed
+            || !self.pending
+            || !Arc::ptr_eq(&self.owner, &prepared.owner)
+            || prepared.revision_sha256 != self.revision.sha256
+        {
             return Err(invalid("device prepared binding/state differs"));
         }
         let producer = self.producer.clone();
@@ -670,9 +677,14 @@ impl<'a> CudaWholePathSession<'a> {
         answer: &[u32],
         baseline: f32,
     ) -> Result<Tensor> {
-        if self.failed || !self.pending || prepared.revision_sha256 != self.revision.sha256 {
+        if self.failed
+            || !self.pending
+            || !Arc::ptr_eq(&self.owner, &prepared.owner)
+            || prepared.revision_sha256 != self.revision.sha256
+        {
             return Err(invalid("device teacher binding/state differs"));
         }
+        self.native.validate_prepared_turn(&prepared.native)?;
         let result = self
             .producer
             .lock()
