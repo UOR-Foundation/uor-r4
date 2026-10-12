@@ -1,5 +1,14 @@
 # Native geometric AI execution policy
 
+> **October 12 owner rule: no softmax anywhere ever no matter what.**
+> D23 supersedes earlier allowances for softmax in training, serving, sampling,
+> objectives, auxiliary losses, teachers and comparators. Log-softmax, implicit
+> softmax objectives and equivalent normalized-exponential table implementations
+> are not exceptions. Audit the entire executed objective/output/gradient path,
+> not just the attention/read operator. Historical evidence remains preserved but
+> inactive. Existing source is not thereby compliant; this is mandatory policy,
+> not a comprehensive executable interlock. Existing compute holds remain.
+
 > **Current owner direction, October 1 — D19:** grounded conversation and durable
 > memory lead the active canonical plan. Codex rejoins Claude and OpenCode–DeepSeek
 > for the owner-authorized continuation; other historical lab assignments are
@@ -192,6 +201,25 @@ shrink that authorization. Coordinate file ownership and deliver through protect
 branch or isolated worktree is optional for development. Verify each deliverable
 on fresh origin/main and clear its redundant workspace and delivery branches
 before starting its successor (owner direction, October 9).
+
+### No CPU model compute, no non-decisive GPU work (owner rule, 2026-10-12)
+
+D23 bans softmax. This adds the two clauses stated with it.
+
+**Model compute never runs on the CPU.** Training, evaluation, and every part of
+the forward that scoring, normalization or the value mix touches are GPU work. A
+host-side fallback - as a routed read takes today when `cuda_covered()` is false -
+is a **defect**: fix it with a kernel. An execution that fell back is not evidence
+for the mechanism it was meant to test, because both the arithmetic and the step
+time are wrong.
+
+**GPU time goes only where it can change a decision.** A configuration the rules
+already exclude, or a comparison whose baseline they forbid, does not get a run.
+
+**Interlock.** `scripts/check_no_softmax.py` ratchets the executable tree against
+`scripts/no-softmax-baseline.json`: a softmax site may not be added and the
+baseline may only decrease. D23 recorded that no interlock existed; this is it. It
+does not claim project-wide removal is complete.
 
 ## Learning and budget
 

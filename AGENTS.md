@@ -1,5 +1,29 @@
 # AGENTS.md — UOR-R4 Geometric Language Model
 
+> **Owner direction, October 12: no softmax anywhere ever no matter what.**
+> [D23](docs/integration/DECISIONS.md#d23---no-softmax-anywhere-in-the-active-project)
+> prohibits softmax in training, serving, sampling, objectives, auxiliary losses,
+> teachers and new comparator runs. This includes log-softmax, implicit softmax
+> inside cross-entropy, and mathematically equivalent table/renamed implementations.
+> There is no training-only, bootstrap or runtime-only exception. Trace the entire
+> executed learning/output path before claiming compliance. Preserve historical
+> source and measurements as inactive evidence, not permission to execute them.
+> Codex's #2246 sampled producer is blocked under this rule. This policy is not a
+> claim that existing source is compliant or a comprehensive runtime interlock.
+> Existing owner training/pod holds remain; no replacement law is approved here.
+>
+> **Owner rule, October 12 (same session, stated again) - no CPU model compute,
+> and no GPU on work that cannot change a decision ([D24](docs/integration/DECISIONS.md#d24---no-cpu-model-compute-and-no-gpu-on-non-decisive-work)).**
+> Model compute never runs on the CPU: training, evaluation and every part of the
+> forward that scoring, normalization or the value mix touches are GPU work, and a
+> host-side fallback is a defect to fix with a kernel - not a cost to report and
+> not mechanism evidence. A configuration these rules already exclude, or a
+> comparison whose baseline they forbid, does not get a run. Every prohibited
+> softmax site is replaced by a designed geometric mechanism (exact `Z[phi]`/
+> zeta-phase interference, typed H4/icosian pairing, Lorentz or address geometry,
+> or exact hard selection by address) with a prospective TEST FITNESS review. The
+> interlock is `scripts/check_no_softmax.py`; dated `docs/` records keep their text.
+
 > **Owner direction, October 9 — main consolidation and workspace cleanup:**
 > `origin/main` is the shared source of truth for every participant. Finish and
 > verify the protected merge of each deliverable before starting its successor,
