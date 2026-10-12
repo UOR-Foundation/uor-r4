@@ -49,6 +49,17 @@ three seeds, unevenly, while the softmax-free forward stays unchanged. This
 is meaningful scoped content-selection evidence and is credited; it still
 contains none of the paper's arithmetic objects and does not test them.
 
+Fresh main also includes Claude's #2224 at dca29a80b, explicitly named
+murmuration-read ladder step1. It adds training-only distillation from a
+detached dense content teacher onto the600-cell addresses. Starting that KL
+at step0 prevented learning; starting at step900 lifted source-kept hit rates
+to0.61/0.68/0.66 and MQAR recall mean to0.188 (surrogate baseline0.141).
+Claude records this as partial row3 progress, with readout still limiting two
+seeds. This is relevant address-learning work to reuse, not a test of
+elliptic-curve trace averaging. A murmuration-inspired geometric analogue is
+also a legitimate design direction; it needs its own explicit operator map
+and cannot inherit the arithmetic paper's results by name alone.
+
 ## Connection To Preserve
 
 **Inference/design direction, not a paper theorem:** maintain a bounded
