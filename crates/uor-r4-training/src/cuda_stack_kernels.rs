@@ -506,7 +506,7 @@ __device__ __forceinline__ void margin_select_impl(
             uint bi = 0xffffffffu;
             for (uint j = 0; j < 256; j++) {
                 if (shared_gaps[j] > best ||
-                    (shared_gaps[j] == best && shared_indices[j] < shared_indices[bi])) {
+                    (bi != 0xffffffffu && shared_gaps[j] == best && shared_indices[j] < shared_indices[bi])) {
                     best = shared_gaps[j]; bi = j;
                 }
             }
