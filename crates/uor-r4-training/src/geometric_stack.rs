@@ -3131,6 +3131,7 @@ pub struct StackModel {
     starling_distill: Option<f64>,
     starling_salience: Option<f64>,
     starling_rank_distill: Option<f64>,
+    starling_teacher_helper: bool,
     /// Layers whose MLP is an E8 orbit memory ([`Self::set_e8_memory`]).
     e8_memory: Option<crate::e8_memory::E8MemoryConfig>,
     /// How the geometric reads weight their kept sources
@@ -3245,6 +3246,7 @@ impl StackModel {
             starling_distill: None,
             starling_salience: None,
             starling_rank_distill: None,
+            starling_teacher_helper: false,
             e8_memory: None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
@@ -4457,8 +4459,14 @@ impl StackModel {
         }
         // Training-only selector distillation and dense content teacher.
         let training = STARLING_TRAINING_FORWARD.with(|flag| flag.get());
-        let teacher = match (self.starling_distill.filter(|_| training), content) {
-            (Some(weight), Some((query, key))) => {
+        // The teacher is built for the distillation KL, or (training only)
+        // as the dense bootstrap helper on its own ([`StackModel::
+        // set_starling_teacher_helper`]); the KL and the salience regression
+        // need the distillation weight.
+        let distill_weight = self.starling_distill.filter(|_| training);
+        let want_teacher = training && (distill_weight.is_some() || self.starling_teacher_helper);
+        let teacher = match (want_teacher, content) {
+            (true, Some((query, key))) => {
                 let d = query.dim(3)?;
                 let mut causal = vec![0f32; time * time];
                 for t in 0..time {
@@ -4473,25 +4481,29 @@ impl StackModel {
                     .affine(1.0 / (d as f64).sqrt(), 0.0)?
                     .broadcast_add(&causal)?;
                 let log_teacher = log_softmax_last_dim(&scores)?;
-                let student = a
-                    .matmul(&b.transpose(2, 3)?.contiguous()?)?
-                    .affine(STARLING_DISTILL_TAU, 0.0)?
-                    .broadcast_add(&causal)?;
-                let log_student = log_softmax_last_dim(&student)?;
-                let target = log_teacher.detach();
-                let kl = target
-                    .exp()?
-                    .mul(&target.sub(&log_student)?)?
-                    .sum_keepdim(3)?
-                    .mean_all()?;
-                starling_aux_add(kl.affine(weight, 0.0)?)?;
+                if let Some(weight) = distill_weight {
+                    let student = a
+                        .matmul(&b.transpose(2, 3)?.contiguous()?)?
+                        .affine(STARLING_DISTILL_TAU, 0.0)?
+                        .broadcast_add(&causal)?;
+                    let log_student = log_softmax_last_dim(&student)?;
+                    let target = log_teacher.detach();
+                    let kl = target
+                        .exp()?
+                        .mul(&target.sub(&log_student)?)?
+                        .sum_keepdim(3)?
+                        .mean_all()?;
+                    starling_aux_add(kl.affine(weight, 0.0)?)?;
+                }
                 let attention = log_teacher.exp()?;
                 // Tree routes: regress each position's salience on the log of
                 // the teacher's mean attention into it per later query (so
                 // early positions are not favoured for having more readers),
                 // both centred per row since only the order is used. Training
                 // only.
-                if let (Some(salience), Some(weight)) = (&salience, self.starling_salience) {
+                if let (Some(salience), Some(weight), true) =
+                    (&salience, self.starling_salience, distill_weight.is_some())
+                {
                     let readers: Vec<f32> = (0..time).map(|j| (time - j) as f32).collect();
                     let readers = Tensor::from_vec(readers, (1, 1, time), identity.device())?;
                     let target = attention
@@ -5255,6 +5267,19 @@ impl StackModel {
             }
         }
         self.starling_salience = weight;
+        Ok(())
+    }
+
+    /// Training-only dense bootstrap for a content starling route: in training
+    /// forwards the dense content teacher (softmax of q.k/sqrt(d) over every
+    /// earlier position) is built even without the distillation KL, so the
+    /// dense helper ([`StackModel::set_starling_dense`]) is the teacher read,
+    /// a concentrated read like the L2 control's. Never saved or served.
+    pub fn set_starling_teacher_helper(&mut self, on: bool) -> Result<()> {
+        if on && !self.read_route.is_some_and(|route| route.content) {
+            return Err(invalid("the teacher helper needs a content read route"));
+        }
+        self.starling_teacher_helper = on;
         Ok(())
     }
 
@@ -11873,6 +11898,7 @@ impl StackModel {
             starling_distill: None,
             starling_salience: None,
             starling_rank_distill: None,
+            starling_teacher_helper: false,
             e8_memory: None,
             read_weighting: ReadWeighting::Softmax,
             softsort_tau: None,
