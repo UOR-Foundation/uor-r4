@@ -1,11 +1,4 @@
 {
-  "codex/archive-s1-s2-float-20261013": {
-    "branch": "codex/archive-s1-s2-float-20261013",
-    "claimed_at": "2026-10-13T16:32:16-04:00",
-    "head": "9c5838251",
-    "lab": "codex",
-    "note": "Resolve preservation PR conflict with newer shared records"
-  },
   "codex/count-reference-closeout-20261013": {
     "branch": "codex/count-reference-closeout-20261013",
     "claimed_at": "2026-10-13T09:34:41-04:00",
