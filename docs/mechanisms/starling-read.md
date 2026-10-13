@@ -19,7 +19,7 @@ SpiralCore v69 runs an unnormalised Kuramoto phase coupling, `dθᵢ/dt = ωᵢ 
   - Kernel K1 selects neighbours on the GPU. It is built ahead of time by nvcc into its own module (`build.rs`; no NVRTC).
   - The read is a hard rank read over the kept slots, with a learned null score.
   - Its declared credit, injected in backward (`CreditCapture`): a pairwise hinge over utility-ordered kept, exploration and null candidates, and an address margin toward an off-home helpful candidate.
-- **Murmuration S1 (level-0 flock transport mean):** `crates/uor-r4-training/src/starling_native/murmuration.rs` (`relative_table`, `murmuration_read`, `AddressCapture`). It is not wired into the trunk yet; the wiring follows Codex's native-file extraction.
+- **Murmuration read:** S1, the level-0 flock transport mean, is in `crates/uor-r4-training/src/starling_native/murmuration.rs` (`relative_table`, `murmuration_read`, `AddressCapture`). S2, the causal FBS tree, is in `.../starling_native/murmuration_tree.rs` (`TreePlan`, `build_levels`, `murmuration_tree_read`), with the kernels `murm_nearest_cells` and `murm_tree_select` in `starling_native.cu`. It is not wired into the trunk yet; the wiring follows Codex's native-file extraction.
 
 ## Tried
 
