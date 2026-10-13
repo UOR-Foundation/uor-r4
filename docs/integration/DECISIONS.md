@@ -1213,7 +1213,7 @@ Historical records keep their text as evidence; they are not rewritten.
 **Authority, October 12:** the owner's decisions recorded on
 [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6133330776),
 amended by the [late owner clarification](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6135511346),
-followed by the owner's explicit instruction in Codex chat to reconcile the
+and the owner's explicit instruction in Codex chat to reconcile the
 instructions and tracker, fix the operator plan, protected-merge it, keep the
 training hold and preserve everyone's work. The reconciliation claim is
 [#2029 comment 6135490872](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6135490872).

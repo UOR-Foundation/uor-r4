@@ -53,10 +53,14 @@ partial instruments; this record establishes no runtime compliance.
 
 ## Validation and resources
 
-Documentation/JSON-only change. Required exact-head checks: whitespace, claim
+Documentation/JSON plus isolation of an existing harness warning-test fixture.
+That test assumed a live historical line count stayed1/3; it now supplies its
+own1/3 registry fixture while the cache truthfully retains the historical2/3.
+No production harness or Rust/model code changes. Required exact-head checks: whitespace, claim
 wording, existing no-softmax ratchet, policy field consistency, relative-link
 file targets, source-diff preservation and review of all active permission/next
-clauses. Rust compilation/model tests are not applicable: no Rust path changes,
+clauses. The existing harness suite checks prompt/registry compatibility. Rust compilation/
+model tests are not applicable: no Rust path changes,
 and no CPU model checks are executed. The exact-head receipt is posted on the PR;
 queue compatibility acknowledgements are transport only.
 
