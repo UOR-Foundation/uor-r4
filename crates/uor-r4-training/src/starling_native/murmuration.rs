@@ -791,7 +791,7 @@ fn address_credit(state: &CaptureState, dots: &Tensor, grad: &Tensor) -> Result<
 
 #[cfg(test)]
 #[allow(clippy::needless_range_loop, clippy::type_complexity)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::starling_native::{unit_address, Credit};
     use candle_core::{Device, Var};
@@ -868,6 +868,32 @@ mod tests {
     }
 
     // ---- GPU controls (run on the pod; ignored where CUDA is absent) ----
+
+    /// Central secant of `sum(weights * Delta)` from the two perturbed reads.
+    /// The Deltas are differenced elementwise in F64 first (identical
+    /// elements cancel exactly), then weighted and summed on the device, so
+    /// the small derivative is not lost to F32 rounding of two large global
+    /// sums (Codex 6153771140). Test-only measurement: the read itself stays
+    /// F32, and h, weights, fixtures and the frozen bar are unchanged.
+    pub(crate) fn secant(plus: &Tensor, minus: &Tensor, weights: &Tensor, h: f64) -> Result<f64> {
+        Ok(plus
+            .to_dtype(DType::F64)?
+            .sub(&minus.to_dtype(DType::F64)?)?
+            .mul(&weights.to_dtype(DType::F64)?)?
+            .sum_all()?
+            .to_scalar::<f64>()?
+            / (2.0 * h))
+    }
+
+    /// The frozen secant bar: pass iff
+    /// `|secant - analytic| <= 2e-3 * max(|secant|, |analytic|, 1e-3)`.
+    pub(crate) fn check_secant(analytic: f32, secant: f64, what: &str) {
+        let bound = 2e-3 * secant.abs().max(analytic.abs() as f64).max(1e-3);
+        assert!(
+            (secant - analytic as f64).abs() <= bound,
+            "{what}: analytic {analytic} secant {secant}"
+        );
+    }
 
     fn cuda() -> Result<Device> {
         Ok(Device::new_cuda(0)?)
@@ -1220,17 +1246,10 @@ mod tests {
             .to_vec1::<f32>()?;
         let h = 1e-3f64;
         let n = rows * time * 4;
-        let check = |analytic: f32, plus: f32, minus: f32, what: &str| {
-            let secant = (plus - minus) as f64 / (2.0 * h);
-            let scale = secant.abs().max(analytic.abs() as f64).max(1e-3);
-            let rel = (secant - analytic as f64).abs() / scale;
-            assert!(
-                rel <= 2e-3,
-                "{what}: analytic {analytic} secant {secant} rel {rel}"
-            );
-        };
+        let delta_of =
+            |v: &Tensor, k: &Tensor| -> Result<Tensor> { Ok(run(&s, &f, v, k, false)?.delta) };
         for idx in [0usize, 5, 37, 70, 101, 130, 199, 255] {
-            let bump = |sign: f64| -> Result<f32> {
+            let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
                     (0..n)
                         .map(|i| if i == idx { sign * h } else { 0.0 } as f32)
@@ -1238,12 +1257,13 @@ mod tests {
                     (rows, time, 4),
                     &device,
                 )?;
-                Ok(loss_of(&f.value.add(&e)?, coupling.as_tensor())?.to_scalar::<f32>()?)
+                delta_of(&f.value.add(&e)?, coupling.as_tensor())
             };
-            check(gv[idx], bump(1.0)?, bump(-1.0)?, &format!("value[{idx}]"));
+            let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
+            check_secant(gv[idx], sec, &format!("value[{idx}]"));
         }
         for head in 0..2 {
-            let bump = |sign: f64| -> Result<f32> {
+            let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
                     (0..2)
                         .map(|i| if i == head { sign * h } else { 0.0 } as f32)
@@ -1251,14 +1271,10 @@ mod tests {
                     2,
                     &device,
                 )?;
-                Ok(loss_of(&f.value, &coupling.as_tensor().add(&e)?)?.to_scalar::<f32>()?)
+                delta_of(&f.value, &coupling.as_tensor().add(&e)?)
             };
-            check(
-                gk[head],
-                bump(1.0)?,
-                bump(-1.0)?,
-                &format!("coupling[{head}]"),
-            );
+            let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
+            check_secant(gk[head], sec, &format!("coupling[{head}]"));
         }
         Ok(())
     }
@@ -1605,7 +1621,7 @@ mod tests {
             (rows, time, 4),
             &device,
         )?;
-        let loss_of = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
+        let delta_of = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
             Ok(murmuration_read(
                 &s,
                 &MurmurationInputs {
@@ -1620,13 +1636,14 @@ mod tests {
                 false,
                 None,
             )?
-            .delta
-            .mul(&weights)?
-            .sum_all()?)
+            .delta)
         };
         let value = Var::from_tensor(&f.value)?;
         let coupling = Var::from_tensor(&Tensor::new(&[0.8f32, -0.6], &device)?)?;
-        let grads = loss_of(value.as_tensor(), coupling.as_tensor())?.backward()?;
+        let grads = delta_of(value.as_tensor(), coupling.as_tensor())?
+            .mul(&weights)?
+            .sum_all()?
+            .backward()?;
         let gv = grads
             .get(value.as_tensor())
             .ok_or_else(|| invalid("no value gradient"))?
@@ -1638,14 +1655,6 @@ mod tests {
             .to_vec1::<f32>()?;
         let h = 1e-3f64;
         let n = rows * time * 4;
-        let check = |a: f32, p: f32, m: f32, what: &str| {
-            let s = (p - m) as f64 / (2.0 * h);
-            let bound = 2e-3 * s.abs().max(a.abs() as f64).max(1e-3);
-            assert!(
-                (s - a as f64).abs() <= bound,
-                "{what}: analytic {a} secant {s}"
-            );
-        };
         // Elements of the right rows (rows 1 and 3).
         for idx in [
             time * 4 + 3,
@@ -1653,7 +1662,7 @@ mod tests {
             3 * time * 4 + 10,
             3 * time * 4 + 47,
         ] {
-            let bump = |sign: f64| -> Result<f32> {
+            let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
                     (0..n)
                         .map(|i| if i == idx { (sign * h) as f32 } else { 0.0 })
@@ -1661,15 +1670,17 @@ mod tests {
                     (rows, time, 4),
                     &device,
                 )?;
-                Ok(loss_of(&f.value.add(&e)?, coupling.as_tensor())?.to_scalar::<f32>()?)
+                delta_of(&f.value.add(&e)?, coupling.as_tensor())
             };
-            check(gv[idx], bump(1.0)?, bump(-1.0)?, &format!("value[{idx}]"));
+            let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
+            check_secant(gv[idx], sec, &format!("value[{idx}]"));
         }
-        let bump = |sign: f64| -> Result<f32> {
+        let bump = |sign: f64| -> Result<Tensor> {
             let e = Tensor::new(&[0.0f32, (sign * h) as f32], &device)?;
-            Ok(loss_of(&f.value, &coupling.as_tensor().add(&e)?)?.to_scalar::<f32>()?)
+            delta_of(&f.value, &coupling.as_tensor().add(&e)?)
         };
-        check(gk[1], bump(1.0)?, bump(-1.0)?, "coupling[right head]");
+        let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
+        check_secant(gk[1], sec, "coupling[right head]");
         Ok(())
     }
 

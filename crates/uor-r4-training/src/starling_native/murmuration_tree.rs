@@ -533,6 +533,7 @@ pub fn murmuration_tree_read(
 #[allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 mod tests {
     use super::*;
+    use crate::starling_native::murmuration::tests::{check_secant, secant};
     use crate::starling_native::murmuration::{
         murmuration_read, murmuration_select, selection_spec, MurmurationInputs,
     };
@@ -930,11 +931,12 @@ mod tests {
                     chirality: Chirality::Left,
                 },
             )?
-            .delta
-            .mul(&weights)?
-            .sum_all()?)
+            .delta)
         };
-        let grads = loss(v.as_tensor(), k.as_tensor())?.backward()?;
+        let grads = loss(v.as_tensor(), k.as_tensor())?
+            .mul(&weights)?
+            .sum_all()?
+            .backward()?;
         let gv = grads
             .get(v.as_tensor())
             .ok_or_else(|| invalid("no value grad"))?
@@ -946,16 +948,8 @@ mod tests {
             .flatten_all()?
             .to_vec1::<f32>()?;
         let h = 1e-3f64;
-        let check = |a: f32, p: f32, m: f32, what: &str| {
-            let s = (p - m) as f64 / (2.0 * h);
-            let bound = 2e-3 * s.abs().max(a.abs() as f64).max(1e-3);
-            assert!(
-                (s - a as f64).abs() <= bound,
-                "{what}: analytic {a} secant {s}"
-            );
-        };
         for idx in [0usize, 9, 30, 47, 66, 90, 107] {
-            let bump = |sign: f64| -> Result<f32> {
+            let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
                     (0..28 * 4)
                         .map(|i| if i == idx { (sign * h) as f32 } else { 0.0 })
@@ -963,12 +957,16 @@ mod tests {
                     (1, 28, 4),
                     &device,
                 )?;
-                Ok(loss(&value.add(&e)?, k.as_tensor())?.to_scalar::<f32>()?)
+                loss(&value.add(&e)?, k.as_tensor())
             };
-            check(gv[idx], bump(1.0)?, bump(-1.0)?, &format!("value[{idx}]"));
+            check_secant(
+                gv[idx],
+                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
+                &format!("value[{idx}]"),
+            );
         }
         for l in 0..3 {
-            let bump = |sign: f64| -> Result<f32> {
+            let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
                     (0..3)
                         .map(|i| if i == l { (sign * h) as f32 } else { 0.0 })
@@ -976,9 +974,13 @@ mod tests {
                     (3, 1),
                     &device,
                 )?;
-                Ok(loss(&value, &k.as_tensor().add(&e)?)?.to_scalar::<f32>()?)
+                loss(&value, &k.as_tensor().add(&e)?)
             };
-            check(gk[l], bump(1.0)?, bump(-1.0)?, &format!("coupling[{l}]"));
+            check_secant(
+                gk[l],
+                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
+                &format!("coupling[{l}]"),
+            );
         }
         Ok(())
     }
@@ -1356,11 +1358,12 @@ mod tests {
                 k,
                 Chirality::Paired,
             )?
-            .delta
-            .mul(&weights)?
-            .sum_all()?)
+            .delta)
         };
-        let grads = loss(v.as_tensor(), k.as_tensor())?.backward()?;
+        let grads = loss(v.as_tensor(), k.as_tensor())?
+            .mul(&weights)?
+            .sum_all()?
+            .backward()?;
         let gv = grads
             .get(v.as_tensor())
             .ok_or_else(|| invalid("no value grad"))?
@@ -1372,16 +1375,8 @@ mod tests {
             .flatten_all()?
             .to_vec1::<f32>()?;
         let h = 1e-3f64;
-        let check = |a: f32, p: f32, m: f32, what: &str| {
-            let s = (p - m) as f64 / (2.0 * h);
-            let bound = 2e-3 * s.abs().max(a.abs() as f64).max(1e-3);
-            assert!(
-                (s - a as f64).abs() <= bound,
-                "{what}: analytic {a} secant {s}"
-            );
-        };
         for idx in [28 * 4 + 1, 28 * 4 + 30, 28 * 4 + 61, 28 * 4 + 99] {
-            let bump = |sign: f64| -> Result<f32> {
+            let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
                     (0..2 * 28 * 4)
                         .map(|i| if i == idx { (sign * h) as f32 } else { 0.0 })
@@ -1389,13 +1384,17 @@ mod tests {
                     (2, 28, 4),
                     &device,
                 )?;
-                Ok(loss(&value.add(&e)?, k.as_tensor())?.to_scalar::<f32>()?)
+                loss(&value.add(&e)?, k.as_tensor())
             };
-            check(gv[idx], bump(1.0)?, bump(-1.0)?, &format!("value[{idx}]"));
+            check_secant(
+                gv[idx],
+                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
+                &format!("value[{idx}]"),
+            );
         }
         for l in 0..3 {
             let at = l * 2 + 1; // the right head's coupling at level l
-            let bump = |sign: f64| -> Result<f32> {
+            let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
                     (0..6)
                         .map(|i| if i == at { (sign * h) as f32 } else { 0.0 })
@@ -1403,12 +1402,11 @@ mod tests {
                     (3, 2),
                     &device,
                 )?;
-                Ok(loss(&value, &k.as_tensor().add(&e)?)?.to_scalar::<f32>()?)
+                loss(&value, &k.as_tensor().add(&e)?)
             };
-            check(
+            check_secant(
                 gk[at],
-                bump(1.0)?,
-                bump(-1.0)?,
+                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
                 &format!("coupling[level {l}, right]"),
             );
         }
