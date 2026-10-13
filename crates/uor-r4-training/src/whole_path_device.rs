@@ -2383,6 +2383,8 @@ pub fn native_vector_channel(
 pub struct DeviceVectorStoreValue {
     pub record: u64,
     pub commit: u64,
+    pub update: crate::stack_store::Update,
+    pub conflict: bool,
     pub tokens: Vec<crate::native_vector_writer::CarriedVectorToken>,
 }
 pub enum DeviceVectorStoreRead {
@@ -2400,6 +2402,8 @@ pub fn carry_native_store_read(
             DeviceVectorStoreRead::Found(DeviceVectorStoreValue {
                 record: value.record,
                 commit: value.commit,
+                update: value.update,
+                conflict: value.conflict,
                 tokens: channel.compile_tokens(&value.tokens, 0, value.commit)?,
             })
         }

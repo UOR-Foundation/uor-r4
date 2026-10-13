@@ -3,7 +3,9 @@
 //! a semantic distance inferred from token numbers. Geometry scores displacement
 //! in learned vectors; fixed SpiralCore atlas ports admit a bounded candidate set.
 use crate::{invalid, sha256_bytes, Result};
-use candle_core::{DType, IndexOp, Tensor};
+#[cfg(test)]
+use candle_core::IndexOp;
+use candle_core::{DType, Tensor, TensorId};
 use serde::{Deserialize, Serialize};
 
 pub const SCHEMA: &str = "uor-r4.shared-native-vector-writer/1";
@@ -61,7 +63,56 @@ pub struct VectorCandidates {
     pub cell_ids: Tensor,
     pub address_scores: Tensor,
     query: Tensor,
-    table_id: usize,
+    table_id: TensorId,
+}
+pub struct VectorMargin {
+    pub token_margin: Tensor,
+    pub address_margin: Tensor,
+}
+impl VectorMargin {
+    pub fn total(&self) -> Result<Tensor> {
+        Ok(self.token_margin.add(&self.address_margin)?)
+    }
+}
+impl VectorCandidates {
+    /// Ranked kept token list for recall@K: bounded candidates only, smallest
+    /// exact token identity on a tie, no target-aware insertion.
+    pub fn top_token_ids(&self, k: usize) -> Result<Tensor> {
+        if k == 0
+            || k > self.raw_scores.dim(1)?
+            || self
+                .valid
+                .to_dtype(DType::U32)?
+                .sum(1)?
+                .ge(k as u32)?
+                .min_all()?
+                .to_scalar::<u8>()?
+                == 0
+        {
+            return Err(invalid(
+                "requested token shortlist exceeds admitted identities",
+            ));
+        }
+        let mut scores = self.raw_scores.detach();
+        let mut result = Vec::new();
+        for _ in 0..k {
+            let tied = scores
+                .broadcast_eq(&scores.max_keepdim(1)?)?
+                .mul(&self.valid)?;
+            let id = tied
+                .where_cond(
+                    &self.token_ids,
+                    &Tensor::full(u32::MAX, self.token_ids.shape(), self.token_ids.device())?,
+                )?
+                .min_keepdim(1)?;
+            scores = self.token_ids.broadcast_eq(&id)?.where_cond(
+                &Tensor::full(ABSENT_SCORE, scores.shape(), scores.device())?,
+                &scores,
+            )?;
+            result.push(id);
+        }
+        Ok(Tensor::cat(&result, 1)?)
+    }
 }
 /// Exact occurrence/version identity stays separate from its geometric vector.
 #[derive(Clone)]
@@ -70,7 +121,7 @@ pub struct CarriedVectorToken {
     pub occurrence: u64,
     pub version: u64,
     vector: Tensor,
-    table_id: usize,
+    table_id: TensorId,
 }
 impl CarriedVectorToken {
     pub fn vector(&self) -> &Tensor {
@@ -125,7 +176,7 @@ impl NativeVectorWriter {
     pub fn table(&self) -> &Tensor {
         &self.table
     }
-    pub fn table_id(&self) -> usize {
+    pub fn table_id(&self) -> TensorId {
         self.table.id()
     }
     fn check(&self, value: &Tensor) -> Result<()> {
@@ -171,7 +222,7 @@ impl NativeVectorWriter {
     pub fn read_carried(&self, token: &CarriedVectorToken) -> Result<Tensor> {
         if token.table_id != self.table.id() || token.token_id as usize >= self.spec.vocabulary {
             return Err(invalid(
-                "carried token belongs to another shared parameter revision",
+                "carried token belongs to another shared parameter allocation",
             ));
         }
         self.check(&token.vector)?;
@@ -272,7 +323,12 @@ impl NativeVectorWriter {
     }
     /// Native loss explicitly scores an omitted target but never changes admission.
     /// Admission margin supplies a labelled auxiliary surrogate, not hard-topK's derivative.
-    pub fn margin(&self, c: &VectorCandidates, targets: &[u32], rivals: usize) -> Result<Tensor> {
+    pub fn margin_components(
+        &self,
+        c: &VectorCandidates,
+        targets: &[u32],
+        rivals: usize,
+    ) -> Result<VectorMargin> {
         let rows = c.query.dim(0)?;
         if c.table_id != self.table.id() || targets.len() != rows || !(1..=8).contains(&rivals) {
             return Err(invalid(
@@ -348,9 +404,13 @@ impl NativeVectorWriter {
             .sub(&target_address)?
             .affine(1., 1.)?
             .maximum(&Tensor::zeros((rows, 1), DType::F32, self.table.device())?)?;
-        Ok(Tensor::cat(&losses, 1)?
-            .mean_all()?
-            .add(&address_loss.mean_all()?)?)
+        Ok(VectorMargin {
+            token_margin: Tensor::cat(&losses, 1)?.mean_all()?,
+            address_margin: address_loss.mean_all()?,
+        })
+    }
+    pub fn margin(&self, c: &VectorCandidates, targets: &[u32], rivals: usize) -> Result<Tensor> {
+        self.margin_components(c, targets, rivals)?.total()
     }
 }
 
@@ -498,6 +558,10 @@ mod cuda_tests {
             vec![0, 1, 2, 3, 4, 5, 6, 7]
         );
         assert_eq!(w.write(&q)?.to_vec1::<u32>()?, vec![0]);
+        assert_eq!(
+            c.top_token_ids(8)?.to_vec2::<u32>()?[0],
+            vec![0, 1, 2, 3, 4, 5, 6, 7]
+        );
         // Repeated identities at collision slots survive; padding never emits.
         assert_eq!(c.token_ids.to_vec2::<u32>()?[0][1], 256);
         assert_eq!(c.valid.to_vec2::<u8>()?[0][3], 0);
@@ -553,6 +617,29 @@ mod cuda_tests {
         let loss = w.margin(&c, &[target], 1)?;
         assert!(loss.to_scalar::<f32>()?.is_finite());
         let gradients = loss.backward()?;
+        let address = w.margin_components(&c, &[target], 1)?.address_margin;
+        let address_grads = address.backward()?;
+        assert!(
+            address_grads
+                .get(q.as_tensor())
+                .ok_or_else(|| invalid("address credit absent"))?
+                .abs()?
+                .sum_all()?
+                .to_scalar::<f32>()?
+                > 0.
+        );
+        assert_eq!(
+            w.compatibility_scores(q.as_tensor())?
+                .i((0, first))?
+                .to_scalar::<f32>()?,
+            -0.5
+        );
+        assert_eq!(
+            w.compatibility_scores(q.as_tensor())?
+                .i((0, target as usize))?
+                .to_scalar::<f32>()?,
+            ABSENT_SCORE
+        );
         assert!(
             gradients
                 .get(table.as_tensor())
@@ -585,6 +672,101 @@ mod cuda_tests {
             .is_err());
         assert!(w.encode(&[256]).is_err());
         assert!(w.encode(&[]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn actual_stack_store_channel_and_artifact_identity() -> Result<()> {
+        use crate::geometric_stack::{QuaternionWeights, StackArch, StackConfig, StackModel};
+        use crate::whole_path_learning::device::{
+            carry_native_store_read, native_vector_channel, DeviceVectorStoreRead,
+        };
+        let dev = Device::new_cuda(0)?;
+        let mut config = StackConfig::transformer_control(3);
+        config.arch = StackArch::Geometric;
+        config.pattern = "r".into();
+        config.width = 16;
+        config.heads = 2;
+        config.mlp_hidden = 32;
+        config.vocab_size = 256;
+        config.context = 4;
+        let mut model = StackModel::new(config, &dev)?; // Parameter preparation only.
+        model.set_quaternion_weights(QuaternionWeights::SpiralcoreFbs)?;
+        model.set_native_vector_head(8)?;
+        let writer = model.native_vector_writer()?;
+        let channel = native_vector_channel(&model)?;
+        assert_eq!(writer.table_id(), channel.writer().table_id());
+        let vectors = model.embed(&[0, 1], 1, 2)?.reshape((2, 16))?;
+        assert_eq!(
+            vectors.to_vec2::<f32>()?,
+            writer.encode(&[0, 1])?.to_vec2::<f32>()?
+        );
+        assert_eq!(
+            model.head(&vectors)?.to_vec2::<f32>()?,
+            writer.compatibility_scores(&vectors)?.to_vec2::<f32>()?
+        );
+        assert_eq!(
+            channel.emit(&vectors)?.to_vec1::<u32>()?,
+            writer.write(&vectors)?.to_vec1::<u32>()?
+        );
+        let stored = crate::stack_store::StoreRead::Found(crate::stack_store::StoreValue {
+            tokens: vec![7, 7],
+            record: 42,
+            commit: 9,
+            update: crate::stack_store::Update::Correct,
+            conflict: true,
+        });
+        let DeviceVectorStoreRead::Found(carried) = carry_native_store_read(&channel, &stored)?
+        else {
+            return Err(invalid("found record lost"));
+        };
+        assert_eq!((carried.record, carried.commit), (42, 9));
+        assert!(carried.conflict);
+        assert_eq!(carried.update, crate::stack_store::Update::Correct);
+        assert_eq!(
+            carried
+                .tokens
+                .iter()
+                .map(|t| t.occurrence)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+        assert!(matches!(
+            carry_native_store_read(&channel, &crate::stack_store::StoreRead::Evicted)?,
+            DeviceVectorStoreRead::Evicted
+        ));
+        let root = std::path::PathBuf::from(
+            std::env::var_os("CARGO_TARGET_DIR")
+                .ok_or_else(|| invalid("owned artifact directory required"))?,
+        )
+        .join(format!(
+            "vector-artifact-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| invalid(e.to_string()))?
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root)?;
+        model.save(&root)?;
+        let restored = StackModel::load(&root, &dev)?;
+        assert_eq!(restored.native_vector_writer()?.spec(), writer.spec());
+        assert_eq!(
+            restored
+                .native_vector_writer()?
+                .encode(&[0, 1])?
+                .to_vec2::<f32>()?,
+            vectors.to_vec2::<f32>()?
+        );
+        let file = root.join("config.json");
+        let original = std::fs::read(&file)?;
+        let mut saved: serde_json::Value = serde_json::from_slice(&original)?;
+        saved
+            .as_object_mut()
+            .ok_or_else(|| invalid("config object absent"))?
+            .remove("native_vector_head");
+        std::fs::write(&file, serde_json::to_vec(&saved)?)?;
+        assert!(StackModel::load(&root, &dev).is_err());
+        std::fs::write(&file, original)?;
         Ok(())
     }
 }

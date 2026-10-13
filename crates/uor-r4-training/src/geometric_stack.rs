@@ -11836,6 +11836,7 @@ impl StackModel {
                     spiralcore_fbs_binding(&self.spiralcore_fbs_plans);
             }
             if let Some(spec) = &self.native_vector_head {
+                with_field["head"] = serde_json::json!("spiralcore_product");
                 with_field["native_vector_head"] = spec.binding()?;
             }
             config = serde_json::to_vec_pretty(&with_field)?;
@@ -12363,7 +12364,13 @@ impl StackModel {
         model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
         let saved: serde_json::Value =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
-        if let Some(binding) = saved.get("native_vector_head") {
+        if saved.get("head").is_some() {
+            if saved.get("head").and_then(|v| v.as_str()) != Some("spiralcore_product") {
+                return Err(invalid("unknown native head artifact mode"));
+            }
+            let binding = saved
+                .get("native_vector_head")
+                .ok_or_else(|| invalid("native vector head geometry binding missing"))?;
             let spec: crate::native_vector_writer::WriterSpec =
                 serde_json::from_value(binding["spec"].clone())?;
             if binding != &spec.binding()?
@@ -12375,6 +12382,8 @@ impl StackModel {
                 ));
             }
             model.set_native_vector_head(spec.kept_cells)?;
+        } else if saved.get("native_vector_head").is_some() {
+            return Err(invalid("undeclared native vector head binding"));
         }
         model.set_read_identity_carry(Self::saved_read_identity_carry(directory)?)?;
         model.set_read_key_shift(Self::saved_read_key_shift(directory)?)?;
