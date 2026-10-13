@@ -14366,6 +14366,7 @@ fn cuda_gradient_clip(tensors: &[&Tensor], clip: f64) -> Result<(Tensor, Tensor)
         })
         || !clip.is_finite()
         || clip < 0.0
+        || (clip > 0.0 && clip < f32::MIN_POSITIVE as f64)
         || clip > f64::from(f32::MAX)
         || (clip > 0.0 && clip as f32 == 0.0)
     {
@@ -14379,9 +14380,8 @@ fn cuda_gradient_clip(tensors: &[&Tensor], clip: f64) -> Result<(Tensor, Tensor)
         .collect::<candle_core::Result<Vec<_>>>()?;
     let norm = Tensor::cat(&squares, 0)?.sum_all()?.sqrt()?;
     let scale = if clip > 0.0 {
-        norm.clamp(clip, f32::MAX as f64)?
-            .recip()?
-            .affine(clip, 0.0)?
+        Tensor::full(clip as f32, (), first.device())?
+            .broadcast_div(&norm.clamp(clip, f32::MAX as f64)?)?
     } else {
         Tensor::ones((), DType::F32, first.device())?
     };
@@ -22418,6 +22418,7 @@ mod tests {
         assert!(cuda_gradient_clip(&[&host_constant], 2.5).is_err());
         assert!(cuda_gradient_clip(&[&first], f64::NAN).is_err());
         assert!(cuda_gradient_clip(&[&first], 1e-100).is_err());
+        assert!(cuda_gradient_clip(&[&zeros], 1e-40).is_err());
         assert!(cuda_gradient_clip(&[&first], f64::from(f32::MAX) * 2.0).is_err());
         Ok(())
     }
