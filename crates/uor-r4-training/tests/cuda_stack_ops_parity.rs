@@ -3378,8 +3378,3 @@ fn test_bf16_hamilton_gate_model_parity() -> uor_r4_training::Result<()> {
     }
     Ok(())
 }
-
-/// The fused Hamilton projection: the same tensors give the same forward and
-/// the same weight and activation gradients on the CPU (f64 accumulation) and
-/// on CUDA (f32 accumulation), so the quaternion-valued maps execute the same
-/// math without any dense matrix product.
