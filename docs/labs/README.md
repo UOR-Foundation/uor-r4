@@ -6,11 +6,11 @@
 > - **Kimi** — project manager (session `kimi/pm1`, owner-appointed 12 October 2026, D25 and
 >   [#2029 comment 6133330776](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6133330776)):
 >   the objective layer, recurrence gates/rate-select CUDA and the rung-0 sheet.
-> - **Codex** — CI and the ratchets (`check_no_softmax.py`, `check_no_matmul.py`), M2 grounded reply,
+> - **Codex** — native dependency/vendor isolation and CI/Rust ratchets (`uor-harness ratchet d23|d25`), M2 grounded reply,
 >   and OP2/OP3a plus the shared native vector writer, under the
 >   [ratified split](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6138381873).
 >   [Head/vector-channel finite CUDA controls pass](geometric-head-shared-writer-2026-10-13/README.md);
->   protected delivery and complete model qualification remain pending.
+>   earlier head/writer delivery remains source-scoped evidence. The new native-only compiled boundary passes host typechecks; its 31 finite controls are NOT_RUN, setup blocked at the driver check before build. Training holds remain; see the [D29 record](d29-vendor-boundary-2026-10-13/README.md).
 > - **Claude** — the starling/murmuration read and the pod migration.
 > - **DeepSeek** — the invariant-addressed router and memory, and the research harness.
 >

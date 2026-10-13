@@ -63,3 +63,11 @@ The [reverse patch](../../history/branch-archive/d29-native-dependency-originals
 Protected delivery and successor CUDA qualification are pending. Freeze the composed graph, lock, source and PTX inventory; obtain Claude's confirmation; then execute only the FIT-reviewed 31 controls through the admitted Rust runner. Preserve exact source/executable/module identities and publish the verdict to Claude and Kimi. S1 runtime integration remains Claude-owned. The owner alone releases training; full M2/shared intent and D11 serving remain unqualified.
 
 Line: existing complete geometric learning/output integration; no headline change, count reset, model-quality verdict or fresh-transfer result.
+
+## Successor setup and driver recovery
+
+The reviewed native extraction was committed at `5bc03c604` and composed with main at `f43fe4e10c5c9b1b78f3ec70bcef43523fadc60c`. Its successor setup on owned `vast-55777904` stopped before compilation: two `nvidia-smi` identity/status queries remained in uninterruptible `D` state, with wait channel `uvm_va_space_destroy`. No numerical control ran. The setup parent and job shell were terminated after the observed driver failure; the killed orphan driver process retained the GPU lock descriptor, requiring explicit failed-driver retirement after preservation. This is infrastructure failure, not a model negative.
+
+All existing pod job receipts, including the earlier build and this blocked attempt, were archived and remote/local SHA256 verified: `codex-d29-failed-driver-receipts.tar.gz`, `195ccadf27625ca5f47f57ee351974a254b2c23f0a1d69c53e8d16271522361d`. The current API/archive scope includes no corpus, training artifacts or other lab work. Build caches/executables are reconstructable from their recorded source/compiler pins and hashes.
+
+The setup identity query now has a bounded native `timeout`; the pod probe retains bounded failed receipts and reports unknown GPU state instead of hanging or advertising it as free. Explicit forced retirement requires a complete failed-GPU probe, sole valid current-session lease and confirmed preservation. Healthy busy GPUs remain protected. The permitted RTX4090 tier is the recovery placement, with its actual nvcc architecture captured before the same unchanged 31 controls. Training remains HELD.

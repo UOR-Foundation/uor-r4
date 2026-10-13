@@ -494,8 +494,11 @@ fn setup(c: &Config) -> Result<()> {
     run(
         c,
         "gpu-identity",
-        "nvidia-smi",
+        "timeout",
         &[
+            "--kill-after=2s",
+            "20s",
+            "nvidia-smi",
             "--query-gpu=name,driver_version,pci.bus_id,compute_cap",
             "--format=csv",
         ],
