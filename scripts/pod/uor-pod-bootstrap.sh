@@ -399,8 +399,13 @@ REG_FROM_STORE=0
 if [ ! -s "$REG_TAR" ] && store_get toolchain/cargo-registry.tar "$REG_TAR"; then REG_FROM_STORE=1; log "crate cache from the HF store"; fi
 if [ -s "$REG_TAR" ] && [ ! -d "$CARGO_HOME/registry" ]; then tar -C "$CARGO_HOME" -xf "$REG_TAR"; fi
 RUSTC_VERSION=$(rustc "+$RUST_VERSION" --version)
-# the pod's CPU quota, not the host's core count (nproc reports the host)
+# the pod's CPU quota, not the host's core count (nproc reports the host): Runpod
+# names it; elsewhere (Vast) the cgroup's cpu.max "quota period" holds it (on
+# 13 October a 16-CPU Vast pod saw nproc=128 and built 2x slower with 128 jobs)
 JOBS=$(tr '\0' '\n' < /proc/1/environ | sed -n 's/^RUNPOD_CPU_COUNT=//p' | head -1)
+if [ -z "$JOBS" ] && read -r CPU_Q CPU_P < /sys/fs/cgroup/cpu.max 2>/dev/null && [ "$CPU_Q" != max ] && [ "${CPU_P:-0}" -gt 0 ]; then
+  JOBS=$(( (CPU_Q + CPU_P - 1) / CPU_P ))
+fi
 export CARGO_BUILD_JOBS=${JOBS:-$(nproc)}
 log "Rust: $RUSTC_VERSION (local, $CARGO_BUILD_JOBS build jobs)"
 
