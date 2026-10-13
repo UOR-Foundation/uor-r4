@@ -61,10 +61,12 @@ pub struct Credit {
 }
 
 impl Credit {
-    /// The constants of the card's finite fixtures (A1 section B).
+    /// The constants of the card's finite fixtures (A1 section B, with the
+    /// FIT review's binding correction 6148141029: delta = 0.125, exactly
+    /// representable, so the strict boundary case is exact in F32).
     pub const FIXTURE: Credit = Credit {
         margin: 1.0,
-        delta: 0.1,
+        delta: 0.125,
         address_margin: 0.1,
         rank: 1.0,
         address: 1.0,
@@ -244,6 +246,19 @@ pub fn select(
         &reset.contiguous()?,
         &Select { spec: *spec, heads },
     )?)
+}
+
+/// Unit 4-d addresses `raw / sqrt(|raw|^2 + 1e-12)` over the last axis: the
+/// normalisation the read layer applies to its FBS address maps, shared with
+/// the composed credit control so both run the same arithmetic.
+pub fn unit_address(raw: &Tensor) -> Result<Tensor> {
+    let raw = raw.to_dtype(DType::F32)?;
+    let last = raw
+        .rank()
+        .checked_sub(1)
+        .ok_or_else(|| invalid("address needs an axis"))?;
+    let norm = raw.sqr()?.sum_keepdim(last)?.affine(1.0, 1e-12)?.sqrt()?;
+    Ok(raw.broadcast_div(&norm)?.contiguous()?)
 }
 
 /// The document-start mask of `ids` (`[batch * time]`): 1 where the token is
@@ -916,17 +931,19 @@ mod cuda_tests {
         }
     }
 
-    /// K3a: the active hinge of A1, including the exact delta boundary
-    /// (C over B at u_C - u_B = delta is not a pair), the null pairs, and the
-    /// chain rule into q (-0.06), k and the null score (+0.6).
+    /// K3a, as corrected by the FIT review (6148141029): delta = 0.125 and
+    /// v_C = -0.625, so u_C - u_B = delta exactly and (C, B) is not a pair;
+    /// (C, A) has gap 0.425. Five pairs, loss 1.12, the chain rule into q
+    /// (-0.06), k and the null score (+0.6), and the read's gradient passed
+    /// through bit-exactly.
     #[test]
     fn k3a_active_hinge_known_answers() -> Result<()> {
         let device = cuda()?;
         let sink: CreditSink = Arc::new(Mutex::new(Vec::new()));
-        // v_A, v_B, v_C = -0.2, -0.5, -0.6 with g = 1: u = 0.2, 0.5, 0.6.
+        // v_A, v_B, v_C = -0.2, -0.5, -0.625 with g = 1: u = 0.2, 0.5, 0.625.
         let state = state(
             &device,
-            vec![-0.2, -0.5, -0.6],
+            vec![-0.2, -0.5, -0.625],
             vec![0.0, 1.0, 2.0],
             vec![0.0; 3],
             Some(Arc::clone(&sink)),
@@ -963,18 +980,42 @@ mod cuda_tests {
         Ok(())
     }
 
-    /// K3b: equal utilities and gaps to the null within delta: no pair, zero
-    /// loss and exactly zero credit.
+    /// The capture returns the read's incoming gradient bit-exactly, for an
+    /// arbitrary g: credit can add nothing to the value or rank-table
+    /// gradients that flow through the read.
     #[test]
-    fn k3b_tie_and_empty_pair_set_give_zero() -> Result<()> {
+    fn credit_capture_passes_the_read_gradient_bit_exactly() -> Result<()> {
         let device = cuda()?;
         let state = state(
             &device,
-            vec![-0.05, -0.05],
-            vec![0.0, 1.0],
-            vec![0.0; 2],
+            vec![-0.3, 0.7, -1.1],
+            vec![0.0, 1.0, 2.0],
+            vec![0.0; 3],
             None,
         )?;
+        let read = Var::from_vec(vec![0.0f32], (1, 1, 1), &device)?;
+        let scores = Tensor::from_vec(vec![0.2f32, -0.4, 0.9, 0.1], (1, 1, 4), &device)?;
+        let dots = Tensor::zeros((1, 1, 4), DType::F32, &device)?;
+        let out = read
+            .as_tensor()
+            .apply_op3(&scores, &dots, CreditCapture(state))?;
+        let weight = Tensor::from_vec(vec![0.123_456_79f32], (1, 1, 1), &device)?;
+        let grads = out.mul(&weight)?.sum_all()?.backward()?;
+        let got = grads
+            .get(read.as_tensor())
+            .ok_or_else(|| invalid("missing read gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert_eq!(got[0].to_bits(), 0.123_456_79f32.to_bits());
+        Ok(())
+    }
+
+    /// K3b (corrected by the FIT review): both real utilities 0, equal to the
+    /// null's: no real/real or real/null pair, exactly zero loss and credit.
+    #[test]
+    fn k3b_tie_and_empty_pair_set_give_zero() -> Result<()> {
+        let device = cuda()?;
+        let state = state(&device, vec![0.0, 0.0], vec![0.0, 1.0], vec![0.0; 2], None)?;
         let scores = Tensor::from_vec(vec![0.4f32, 0.2, 0.3], (1, 1, 3), &device)?;
         let dots = Tensor::zeros((1, 1, 3), DType::F32, &device)?;
         let g = Tensor::ones((1, 1, 1), DType::F32, &device)?;
@@ -1031,6 +1072,51 @@ mod cuda_tests {
             &[reports[0].address_margin.to_scalar::<f32>()?],
             &[0.1 + (1.0 - phi_half)],
         );
+        Ok(())
+    }
+
+    /// K3c composed (binding correction): from a raw, non-unit address
+    /// a = 2 rho_home through [`unit_address`], the gradient is
+    /// (I - a^ a^T)(rho_home - rho_adj) / |a| = ((phi/2) rho_home - rho_adj) / 2.
+    #[test]
+    fn k3c_composed_normalisation_gradient() -> Result<()> {
+        let device = cuda()?;
+        let (roots, adjacency) = geometry()?;
+        let home = root(&roots, 0);
+        let adjacent = root(&roots, adjacency[0] as usize);
+        let state = state(&device, vec![-0.5], vec![0.0], vec![1.0], None)?;
+        let raw = Var::from_vec(
+            home.iter().map(|v| 2.0 * v).collect::<Vec<_>>(),
+            (1, 1, 1, 4),
+            &device,
+        )?;
+        let unit = unit_address(raw.as_tensor())?;
+        let rho = Tensor::from_vec(
+            adjacent
+                .iter()
+                .chain(home.iter())
+                .copied()
+                .collect::<Vec<_>>(),
+            (1, 1, 2, 4),
+            &device,
+        )?;
+        let dots = rho.broadcast_mul(&unit)?.sum(3)?;
+        let scores = Tensor::from_vec(vec![0.4f32, 0.3], (1, 1, 2), &device)?;
+        let read = Var::from_vec(vec![0.0f32], (1, 1, 1), &device)?;
+        let out = read
+            .as_tensor()
+            .apply_op3(&scores, &dots.contiguous()?, CreditCapture(state))?;
+        let grads = out.sum_all()?.backward()?;
+        let got = grads
+            .get(raw.as_tensor())
+            .ok_or_else(|| invalid("missing raw address credit"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let phi_half = (1.0 + 5f32.sqrt()) / 4.0;
+        let want: Vec<f32> = (0..4)
+            .map(|i| (phi_half * home[i] - adjacent[i]) / 2.0)
+            .collect();
+        close(&got, &want);
         Ok(())
     }
 
