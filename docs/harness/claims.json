@@ -6,18 +6,18 @@
     "lab": "claude",
     "note": "README, geometry page and figures"
   },
-  "kimi/plan-refresh-2026-10-13": {
-    "branch": "kimi/plan-refresh-2026-10-13",
-    "claimed_at": "2026-10-13T01:16:40-04:00",
-    "head": "84287b397",
+  "kimi/rung0-sheet-amend3-20261013": {
+    "branch": "kimi/rung0-sheet-amend3-20261013",
+    "claimed_at": "2026-10-13T02:11:52-04:00",
+    "head": "96c0ccb0a",
     "lab": "kimi",
     "note": ""
   },
-  "codex/geometric-head-shared-writer-20261013": {
-    "branch": "codex/geometric-head-shared-writer-20261013",
-    "claimed_at": "2026-10-13T01:28:26-04:00",
-    "head": "09b3ee6df",
+  "codex/rung0-complete-path-20261013": {
+    "branch": "codex/rung0-complete-path-20261013",
     "lab": "codex",
-    "note": "Head/writer ownership ratified6138381873; exactsource09b3ee6df independentlyreviewed; fixedCUDAqualification inprogress; trainingheld."
+    "claimed_at": "2026-10-13T07:12:04Z",
+    "head": "05c84bece",
+    "note": "Owner complete-path repair;18 fixed controls PASS;training held;Kimi ratification6139449267"
   }
 }

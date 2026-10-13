@@ -1,3 +1,52 @@
+## 2026-10-13 — The ordinary rung-0 path has concrete source repairs; finite CUDA controls pass (Codex, #2029)
+
+The [complete-path record](../labs/rung0-complete-path-2026-10-13/README.md)
+anchors final source `05c84bece50789163bd0f049a2ae76b8a314ef45`. The audit found actual CLI/dispatch
+failures that the delivered #2301 head-only tests could not qualify: missing
+`rec_gates`, ordinary geometric calls reaching the historical fused recurrence,
+4096-row cap below the declared 6144 rows, likelihood/host-sampling evaluation
+fallthrough, and unsigned lower-edge rate secant credit. Source now routes the
+ordinary recurrence through the composed geometric law, fixes signed table
+credit, initializes direct rate parameters at `((lane %16) +0.5)/16` (0.03125..0.96875; historical initializer unchanged), clips gradients
+on CUDA and records native token/address metrics with no likelihood scorer.
+Native host tensor diagnostics refuse; a healthy run extends a self-set
+`max_seconds` estimate. Step timing synchronizes the actual complete step.
+
+Kimi [ratifies the fixes and dev policy](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6139449267)
+and retains the amended sheet; [finite FIT](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6139464540)
+permits named fixed implementation controls only. Rust metadata inventory finds
+85776 physical dev bytes =64-byte UORT header +42856 u16 tokens,42856 mask bytes,
+14287 eligible masked targets across 400 documents. The 111 global 384-token
+blocks have 232 tail tokens. The earlier 42888 count included 32 header words;
+input corpora/tars remain unchanged. BOS resolves from the pinned tokenizer;
+all eligible masked positions and the tail are scored once with document resets.
+The raw count reference uses the entire decoded stream and reports count units
+separately from learned mean-L1 score units.
+
+**All 18 final finite controls PASS (11 library:10 CUDA+1 metadata; CLI 6 metadata+1 CUDA).
+Final CUDA library compilation 6.02s, CLI compilation 4.79s; protected delivery
+pending. Training and the separate M2 training/rental hold remain.** The actual batch 16×context 384 six-recurrence 256D/384MLP/V=4096 forward/backward
+has finite CUDA gradients and nonzero opening/decay credit in all six layers;
+6144-row head, stored composed/rate/clipping answers, exact masked dev/count
+metrics and native artifact reload/binding refusals pass. Review also closed a
+diagnostic `composed_logits`/helper bypass. Earlier setup/compiler/fixture
+failures remain preserved, not mechanism negatives; no optimizer step, CPU model reference, corpus/quality
+run or generation campaign. Optimizer update is compiled/source-reviewed only;
+the clipping helper has its own device control. Full scientific rung-0 FIT awaits its exact amended
+sheet/source/device identity; no FIT verdict releases a hold. Head/writer #2301
+already delivered at `d41dc422f`; its dated pre-merge record is preserved.
+
+Line: unified geometric route/action/learning integration · count 9/3 → 10/3 on
+completed delivery, no reset · M1 memory20/40, reply37/232 and M2 saved437/512,
+opened0/128, fresh NOT_RUN unchanged.
+
+**Next:** exact-head review and protected delivery, then Kimi's corrected sheet
+amendment and prospective scientific FIT. The
+[header correction6139637354](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6139637354)
+requires payload counts in the next amendment; no hold is released.
+Shared native intent/compiler/full M2, D11 serving and language/energy results
+remain unqualified.
+
 ## 2026-10-13 — An unguarded branch delete lost (and recovered) a PR, and the guard against it (lead, tooling)
 
 Merging with `gh pr merge --auto`, I polled the PR state and then ran the branch cleanup **unconditionally**. Partway through the poll the PR **auto-closed as `DIRTY`** — a concurrent merge made it conflict, so it never merged. The loop exited without noticing and the delete ran anyway, removing the only remote copy of the Rust heartbeat work. **It was recovered** (the commit was still reachable locally; the branch was recreated, rebased and merged as #2302), but nothing in the sequence *prevented* the loss, and recovery depended on the local clone still holding the commit. Two failures compounded: a poll loop that treated an unexpected state (`CLOSED`) as done, and a delete with no precondition. `cli.py git delete-merged --branch <name> [--apply]` now refuses unless the merge is **proven** — a merged PR whose merge commit is an ancestor of `origin/main` — and refuses equally when GitHub is unreachable, when `origin/<branch>` holds commits the merge did not carry, and **when any lab holds a live claim**. That last one was found by using the tool: the first version recommended deleting `kimi/plan-refresh-2026-10-13`, which was under Kimi's live claim, because the merge gate ran *before* the claim guard and an unreachable GitHub returned early — so the protection failed exactly when the evidence was weakest. Recorded as mistake `unguarded-branch-delete` so `mistakes find` surfaces it to every lab.

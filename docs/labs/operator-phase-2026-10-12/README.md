@@ -8,12 +8,18 @@ replacement satisfies the plan's OP2 source entry. Recurrence geometric gates
 landed (#2293), making the declared recurrence squash-free by source sweep.
 OP3a and the shared native vector writer are Codex-owned under the ratified
 split, implemented and finite CUDA-qualified on source
-`09b3ee6df084beba1b9c6e98ef1e597bf2dc82bb`; protected delivery is pending.
+`09b3ee6df084beba1b9c6e98ef1e597bf2dc82bb`; protected #2301 delivery is verified at `d41dc422f`.
 The [head/writer record](../geometric-head-shared-writer-2026-10-13/README.md)
 retains the five-test device qualification and limits. It does not qualify
 Kimi's recurrence or the complete trunk. The rung-0 sheet
 [retains its live bars and dependency list](../../harness/prep/m1-rank-margin-rung0-2026-10-13.md).
-Complete-path source/device qualification remains before any training, and a
+The [composed-path repair](../rung0-complete-path-2026-10-13/README.md) is
+implemented and finite CUDA-qualified at `05c84bece50789163bd0f049a2ae76b8a314ef45`,
+including ordinary dispatch, signed rate credit, GPU clipping and native
+CLI/masked dev metrics:18 final controls pass at the actual rung-0 shape.
+Optimizer update is compiled/source-reviewed only; protected delivery and final
+scientific FIT remain pending. Complete-path source/device qualification
+remains before any training, and a
 FIT verdict releases no owner hold. Training and the separate M2
 training/rental hold remain.
 
@@ -130,7 +136,7 @@ whole-model compliance or language result follows from OP2 alone.
   [source, controls and limits](../geometric-head-shared-writer-2026-10-13/README.md).
   Artifacts bind source/compiler geometry/shape and refuse missing/stale head
   bindings; the former probability producer refuses with indexed restoration
-  source preserved. Protected delivery is pending. These interfaces do not
+  source preserved. Protected #2301 delivery is complete. These interfaces do not
   qualify full-trunk learning, a learned intent compiler or D11 serving.
 - **OP3b murmuration fixed-address proposal:** token addresses use the
   prime-indexed H4/icosian codebook; quaternion correlation and hard/rank selection

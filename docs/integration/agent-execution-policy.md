@@ -47,9 +47,13 @@ clarification adopts no new numeric bar or hold release. See the
 and [source record](../labs/native-vector-transport-2026-10-12/README.md).
 The [OP3a/common vector channel](../labs/geometric-head-shared-writer-2026-10-13/README.md)
 now shares one embedding Tensor/Var across Stack and compiler/store/emitter
-adapters, with finite CUDA qualification and protected delivery pending.
-Complete intent compilation, trunk compliance, quality/capacity and D11 serving
-remain unqualified. This implementation status changes no invariant or hold.
+adapters, with finite CUDA qualification and protected #2301 delivery at `d41dc422f`.
+Complete intent compilation, trained language quality/capacity and D11 serving
+remain unqualified. The [composed rung-0 source repair](../labs/rung0-complete-path-2026-10-13/README.md)
+implements the actual native learning/evaluation wiring at `05c84bece50789163bd0f049a2ae76b8a314ef45`;
+18 finite controls pass at the declared rung-0 shape. Optimizer update is
+compiled/source-reviewed only; protected delivery remains pending. Kimi owns the final amended sheet's
+prospective review. This implementation status changes no invariant or hold.
 
 ## Durable autonomous labs — current owner charter, September 29
 
