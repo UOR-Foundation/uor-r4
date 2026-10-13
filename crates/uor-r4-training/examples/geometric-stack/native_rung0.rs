@@ -1,9 +1,10 @@
 //! Native rung-0 development metrics. All score/count arithmetic stays on CUDA.
 //! Host code prepares token/mask indices and serializes final scalar receipts.
+use super::invalid;
 use candle_core::{DType, Tensor};
 use serde_json::{json, Value};
 use uor_r4_training::geometric_stack::{Objective, StackModel};
-use uor_r4_training::{invalid, Result};
+use uor_r4_training::Result;
 
 pub fn window_starts(tokens: usize, context: usize, windows: usize) -> Result<Vec<usize>> {
     if context == 0 || windows == 0 || tokens <= context || windows > (tokens - 1) / context {
