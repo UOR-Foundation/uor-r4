@@ -1,4 +1,11 @@
 {
+  "codex/archive-s1-s2-float-20261013": {
+    "branch": "codex/archive-s1-s2-float-20261013",
+    "claimed_at": "2026-10-13T16:34:52-04:00",
+    "head": "18627df62",
+    "lab": "codex",
+    "note": "Resolve concurrent append in shared current-state before archive delivery"
+  },
   "codex/count-reference-closeout-20261013": {
     "branch": "codex/count-reference-closeout-20261013",
     "claimed_at": "2026-10-13T09:34:41-04:00",
