@@ -9,17 +9,23 @@
 - line/count: same owner-directed complete geometric learning/output integration; owning milestone records the delivery count; this sheet resets no count or headline
 - verdict: **TEST FITNESS: FIT** — Claude's independent review [6150514242](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6150514242), with amendments A1–A4 incorporated below; exact source/control pins remain required before execution
 
+> **Post-run formatting reconciliation:** this edit adds the harness's required heading/index structure and clarifies the chosen preservation destination. It changes no prospective control, bar, fixture, tolerance, outcome rule or FIT scope. The original frozen source and pre-execution sheet remain intact in the qualification receipts; the later result belongs to the [canonical D29 record](../../labs/d29-vendor-boundary-2026-10-13/README.md). Training and M2 holds remain HELD.
+
 ## Decision and scope
 
 Qualify that the existing admitted rung0 path still gives its stored analytic answers and CUDA gradients after replacing runtime compilation and excluding prohibited vendor/kernel modules. The relevant changes are compiler/loading/dependency boundaries, not a new language mechanism or acceptance panel. A source-only checker PASS does not qualify the executable or lift any hold.
 
-The global training hold and separate M2 training/rental hold remain **HELD**. No optimizer update, parameter-learning step, corpus evaluation, neural grader, transformer comparator or CPU model/reference execution occurs. Host metadata, fixed fixture constants, identities and receipt comparisons remain permitted. D11 serving export and rung0b's later campaign are outside this sheet.
+The global training hold and separate M2 training/rental hold remain **HELD**. **D23/D25 prohibit** softmax and equivalent normalized-exponential forms, softplus, sigmoid, tanh and dense matrix multiplication in every model/objective/gradient/teacher/comparator path. No optimizer update, parameter-learning step, corpus evaluation, neural grader, prohibited transformer comparator (D23/D25) or CPU model/reference execution occurs. Host metadata, fixed fixture constants, identities and receipt comparisons remain permitted. D11 serving export and rung0b's later campaign are outside this sheet.
+
+## Base artifact
 
 Prior evidence stays pinned: complete-path source `05c84bece50789163bd0f049a2ae76b8a314ef45` passed 18 scoped controls; masked TRAIN count-reference source `2fd6358bbc52d2a202a872ad0954ebb12894606f` passed 11 controls. The new build reuses their stored expectations, not their executable identities. Failed setup/compiler attempts remain tooling blockers, never mechanism negatives.
 
-## Frozen conditions and acceptance
+## Data split
 
 The full-shape fixture remains batch16 × context384, width256, heads4, MLP384, V4096, six ordinary recurrence layers, `head=spiralcore_product projection=spiralcore_fbs rec_gates=geometric gate=hamilton objective=hinge`, CUDA/F32. The evaluator's finite V512 fixtures test both one/eight rivals and separate TRAIN/DEV oracle roles. The unchanged corpus pins and scientific bars belong to `m1-rank-margin-rung0-2026-10-13.md`; this qualification reads no corpus and changes none of them.
+
+## Bar
 
 Acceptance requires all 31 named controls below to execute and pass on the frozen build; zero selected tests is **NOT_RUN**. Exact expectations and existing tolerances remain those in the frozen test source; no tolerance widening to obtain PASS. Every model tensor/gradient stays CUDA. The full-shape fixture verifies finite gradients and nonzero rate/opening credit in every recurrence layer; it performs no optimizer step. Artifact controls verify native save/reload/emission and stale/missing identity refusals. The exclusion fixture proves that changing frequent mask-zero TRAIN identities leaves counts/ranks unchanged and that the masked DEV oracle is separately labeled diagnostic. Any D29 quarantine/historical-kernel refusal encountered in a required numerical control is a wiring **BLOCKER**, never a skip or pass (A4).
 
@@ -27,7 +33,7 @@ The compiled boundary also requires the static vendor source/dependency check, a
 
 Static Rust tool: `scripts/check_native_cuda_vendor.rs`. Compile its std-only diagnostic separately into an owned local directory; its `--self-test` plants exponential/squashing and inline tensor-core assembly tokens. Its normal source check and optional `--ptx-dir`, `--features`, `--binary-imports` modes run no model. Supply the **vendor** OUT_DIR for `--ptx-dir`, not the whole target tree. Save the exact tool identity and each input/output receipt. Its result remains a bounded lexical/source check, not proof against arbitrary renamed operations or a runtime PASS.
 
-## Existing controls, exact names
+## Steps — existing controls, exact names
 
 ### Composed Rust boundary amendment, before successor execution
 
@@ -106,14 +112,23 @@ Use `scripts/pod/uor-pod --no-bootstrap` with the Rust Vast provider adapter, `q
 
 Before execution, append the final source commit/tree and SHA256 for manifests/Cargo.lock, vendor build/source/header/backend files, project `build.rs`, CUDA sources and wrappers, writer/core/helper/CLI, and this sheet. Capture resolved selected CUDA features; nvcc/Rust versions, architecture/precision options, OS/image/device/driver identity; all nine vendor PTX plus every project PTX; normal CLI and both test executable hashes/sizes. Source pin, new executable identities and actual pod/rate remain **PENDING**, never guessed. Freeze the finite script and its exclusive `/workspace` report root. Do not invoke the deferred `train` command.
 
-Preserve every build/controller/test attempt, selected-test counts, refusal/static outputs, timings and observed memory peaks. Archive small fixture outputs/configs and reconstruction patches with SHA256 manifests; keep historical sources restorable but inactive. Verify private HF and iCloud round-trips before owned cleanup. Do not download large test executables/targets merely for preservation: retain their hashes, byte sizes, compiler/options and recoverable source. Append actual protected merge identity only after merge verification. Preserve every peer claim/worktree/job.
+Preserve every build/controller/test attempt, selected-test counts, refusal/static outputs, timings and observed memory peaks. Archive small fixture outputs/configs and reconstruction patches with SHA256 manifests; keep historical sources restorable but inactive. The chosen archive destination for this qualification is iCloud with verified round-trip checks; private HF is an optional authorized destination and was not used for this archival choice. This is preservation-plan clarification, not a fabricated HF result. Do not download large test executables/targets merely for preservation: retain their hashes, byte sizes, compiler/options and recoverable source. Append actual protected merge identity only after merge verification. Preserve every peer claim/worktree/job.
+
+## Cost
 
 - preparation: source/static review and metadata only; no GPU/model work
 - finite placement: one owned Vast RTX5090 CUDA12.8+ Ubuntu24 pod via `scripts/pod/uor-pod`; the already-authorized RTX4090 tier is the recovery placement if the RTX5090 driver fails, with its actual nvcc architecture recorded and unchanged controls/tolerances; explicit lab/session admission and per-lab target
 - cost projection: **≤ $4.00 total UNVERIFIED estimate** for setup/build/retries/31 finite controls/preservation; about two hours at the latest status offer of $1.522/h plus margin. Refresh the offer/rate at admission; this is an estimate, not a healthy-run cancellation threshold.
 - owner caps: ≤4 concurrent pods and ≤$8/h across all labs, no new spending class; refresh actual status/rate before admission
 - storage/RAM: projected existing finite shape, prior sampled peak9274MiB is a historical scope estimate, not a measurement of the new build; record new observations and storage admission
+
+## Stop rule
+
 - stop: failure, divergence, resource-owner caps or disk floor; repair justified tooling blockers within scope and preserve attempts; self-estimated wall/cost limits do not cancel a healthy progressing run
+
+## Minimum test power
+
+This fixed implementation qualification requires every one of the 31 exact controls in Steps, with their existing stored/analytic expectations and frozen conditions in Bar/Data split. It makes no language-quality or statistical-power claim and performs no learning campaign. Missing or zero-selected controls remain NOT_RUN/BLOCKER under the unchanged acceptance rule; no new seed, panel or numerical threshold is introduced by this heading reconciliation.
 
 ## Outcomes and approval
 
