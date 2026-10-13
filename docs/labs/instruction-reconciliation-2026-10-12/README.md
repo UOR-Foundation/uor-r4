@@ -15,9 +15,15 @@ named a dense-bootstrap follow-up. The operator registration proposed OP1 fits
 on a prohibited partial trunk, live CPU/cuBLAS references, automatic fallbacks
 and a mixed-unit “BPB within 0.02 nats” quality bar.
 
+The late [owner clarification](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6135511346)
+arrived during reconciliation: OP2 first, G2-only, G1 withdrawn, geometric
+feed-forward permitted, OP3b later research and frozen constraints through the
+first compliant rung0 result. These are included without an additional constraint.
+
 This source/policy repair aligns AGENTS, CONTRIBUTING, readable/machine policy,
 current plan, session/client entry points, compute guidance, README/STATUS/ROADMAP
-and the #2028 tracker. Kimi remains PM and each lab retains its assigned work.
+and the #2028 tracker. The concurrently merged #2258 harness is preserved;
+its new milestone cache and CPU-work admission skill are reconciled too. Kimi remains PM and each lab retains its assigned work.
 The [operator plan](../operator-phase-2026-10-12/README.md) now requires gate,
 Hamilton-projection and geometric-head source before complete-path qualification;
 no partial-trunk training. Raw-score rank/hinge and complete-answer diagnostics

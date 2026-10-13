@@ -1212,6 +1212,7 @@ Historical records keep their text as evidence; they are not rewritten.
 
 **Authority, October 12:** the owner's decisions recorded on
 [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6133330776),
+amended by the [late owner clarification](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6135511346),
 followed by the owner's explicit instruction in Codex chat to reconcile the
 instructions and tracker, fix the operator plan, protected-merge it, keep the
 training hold and preserve everyone's work. The reconciliation claim is
@@ -1236,12 +1237,23 @@ training hold and preserve everyone's work. The reconciliation claim is
   collision resolution; the owner retains strategic authority. Claude owns
   starling/murmuration reads, DeepSeek invariant-addressed router/memory,
   Codex enforcement/M2 grounded reply, and Kimi objectives/operators/CUDA.
-- OP1 gate, OP2 Hamilton projections and OP3 geometric head are implementation
+- OP1 uses G2 Hamilton rotation only. G1 rectified-square is withdrawn by the
+  owner as non-geometric; there is no non-geometric fallback. A geometric
+  feed-forward block (Hamilton gate plus Hamilton projections) is permitted;
+  the MLP ban applies to the dense SwiGLU block.
+- Build order is OP2 Hamilton kernel first, then OP1 G2, OP3a product-key
+  head, compliant rung0, and OP4/rung0b rank-read/gradient. OP3b remains
+  the research arm after OP3a, not an extra prerequisite for rung0. These are implementation
   dependencies before an integrated training experiment. Source landing or an
   isolated kernel check does not establish whole-path compliance. Rung 0 is
   suspended, not withdrawn; its obsolete metric/control clauses must be amended
   before prospective review. Rung 0b follows the compliant operator phase and
   resumed rung 0, then margin-trained starling readout.
+- **Rule freeze:** the 12 October constraint set plus the late G2-only/build-order/
+  geometric-feed-forward clarifications is complete until the first compliant
+  rung0 result reports. New concerns go to a proposal card and take effect only
+  after that result, except cost/safety problems. No new constraint is adopted
+  by this reconciliation. Softmax-dependent results do not count as active progress.
 - **Training remains held.** The independent M2 no-training/no-rental hold
   also remains. Prospective TEST FITNESS, complete source/device qualification
   and explicit owner release of the applicable hold precede a run; a FIT

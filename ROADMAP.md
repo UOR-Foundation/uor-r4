@@ -16,7 +16,7 @@ tracker [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028); each mile
 Kimi is project manager; no softmax/softplus/sigmoid/tanh or equivalent squashing,
 no dense matrix multiplication in training/serving, GPU-only model/reference
 compute and no host fallback. **Training and M2 training/rental remain held.**
-[OP1 gate → OP2 Hamilton projections → OP3 geometric head](docs/labs/operator-phase-2026-10-12/README.md)
+[OP2 Hamilton projections → OP1 G2 gate → OP3a geometric head](docs/labs/operator-phase-2026-10-12/README.md)
 are source dependencies, followed by complete-path/device qualification, amended
 prospective FIT and explicit release of the applicable owner hold before training.
 No partial-trunk fit or fresh prohibited comparator. Rung0 is suspended; rung0b

@@ -3,6 +3,11 @@
 References #2029 (M1) and #2032 (M4). Kimi is project manager and owns the operator
 implementation. This record is repaired under the owner's
 [D25 direction](../../integration/DECISIONS.md#d25---geometric-operator-phase-and-current-lab-direction).
+The [late owner clarification](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6135511346)
+sets **OP2 first, G2-only OP1, OP3a, rung0, then OP4/rung0b**; OP3b stays later
+research. A geometric feed-forward block is permitted. The constraint set is
+frozen through the first compliant rung0 result; new concerns are deferred
+proposal cards except cost/safety. This repair adds no constraint.
 The [original registration](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6134571032)
 and [original plan at aaa210ef4](https://github.com/UOR-Foundation/uor-r4/blob/aaa210ef46301623f10164ae5af586d7f558483a/docs/labs/operator-phase-2026-10-12/README.md)
 remain historical evidence. This amendment supersedes their execution sequence,
@@ -37,16 +42,16 @@ Trace recurrence squashes too; removing SwiGLU alone is insufficient.
 - **G2 Hamilton gate:** quaternion gate `q(g)` rotates each value block by
   `q(g) ⊗ u`. Specify unit-normalization, zero/near-zero behavior, icosian snap,
   exact hard-forward geometry and the actual gradient bridge.
-- **G1 rectified-square candidate:** `relu(g)² ⊙ u` remains an unqualified
-  comparison proposal. An exponential-free scalar gate is not automatically a
-  native geometric replacement. Prospective review must establish its role and
-  permitted geometric path before it is admitted; it is not an automatic fallback.
+**G1 is withdrawn by the owner as non-geometric.** Its source/proposal history
+remains preserved; it is not a comparator arm or fallback. A G2 configuration
+miss leads to geometric iteration under D22, never a non-geometric substitution.
 
 Source deliverable: implemented device forward/backward, declared arithmetic and
 identity/orientation behavior, build checks and static dispatch review. Any
 qualification kernel executes only the lawful operator on GPU, using stored or
 analytically specified expected values; no CPU reference forward or fresh banned
-SwiGLU comparator. **No OP1 language fit before OP2 and OP3 are implemented.**
+SwiGLU comparator. **No OP1 language fit on a partial trunk. OP2 is implemented first; OP3a
+and the rest of the lawful path must exist before integrated training.**
 
 ## OP2 — native Hamilton projection source
 
@@ -69,7 +74,7 @@ absolute/relative error and exact shape/dtype/source; numeric tolerances and spe
 bars are fixed in the amended prospective kernel card before execution. A kernel
 wiring/numerical failure is a blocker to repair, not a mechanism negative.
 
-## OP3 — geometric head source
+## OP3 — geometric head source (OP3a first; OP3b later research)
 
 - **OP3a product-key head proposal:** specify the actual addressed/factorized
   scoring, candidate admission, omitted-target handling, full learning credit and
@@ -84,8 +89,10 @@ wiring/numerical failure is a blocker to repair, not a mechanism negative.
 Both proposals need an objective over the actual admitted candidates and raw
 scores, a declared treatment of targets outside the kept list, and GPU credit
 through the complete learning path. Greedy decoding uses raw-score selection.
-Neither source delivery nor a configuration miss automatically activates OP3a
-or retires the fixed-address mechanism. A compliant, FIT-reviewed alternative
+OP3a is the owner-directed first head implementation; it must itself meet the
+existing compliance/FIT requirements. OP3b is later research, not a required
+pre-rung0 head comparison. Source delivery or a configuration miss retires no
+fixed-address mechanism. A compliant, FIT-reviewed alternative
 may be retained only after the predeclared experiment resolves its own target
 and fresh transfer under D22; mechanism stops remain owner decisions.
 
@@ -128,7 +135,7 @@ reviewed admission bars.
 
 ## Sequence, owners and resources
 
-1. **Preparation:** Kimi implements OP1 → OP2 → OP3; Codex maintains enforcement
+1. **Preparation:** Kimi implements OP2 → OP1 G2 → OP3a; OP3b stays later research; Codex maintains enforcement
    and M2 source dependencies; Claude retains starling/murmuration source and
    DeepSeek retains invariant-addressed router/memory source. Claims identify
    exclusive paths; no takeover, duplicate campaign or peer cleanup.

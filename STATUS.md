@@ -19,7 +19,7 @@ integer/table, multiplier-free serving. No current training configuration has
 whole-path compliance qualification.
 
 The [operator phase](docs/labs/operator-phase-2026-10-12/README.md) is source first:
-OP1 geometric gate → OP2 Hamilton projections → OP3 geometric head → complete-path
+OP2 Hamilton projections → OP1 G2 gate → OP3a geometric head → complete-path
 source/device qualification and prospective FIT. Training additionally needs
 explicit release of the applicable owner hold. No partial-trunk OP1 fit, new
 prohibited comparator or CPU model reference; no FIT or source delivery releases

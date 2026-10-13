@@ -16,10 +16,13 @@ objectives/geometric operators/CUDA. These are current assignments, not authorit
 run a suspended registration or alter another lab's work.
 
 The [repaired operator plan](../labs/operator-phase-2026-10-12/README.md) is the shared
-immediate dependency: **OP1 gate source → OP2 Hamilton-projection source → OP3 geometric
-head source → whole-path source/device qualification and prospective FIT**. No partial
-OP1/OP2 trunk training, fresh prohibited comparator, CPU model reference or automatic
-G1/OP3a promotion is allowed. Quality measures use raw scores/generated answers with
+immediate dependency: **OP2 Hamilton-projection source → OP1 G2 gate source → OP3a geometric
+head source → whole-path source/device qualification and prospective FIT**. G2 is the sole gate arm; G1 is withdrawn, and geometric feed-forward blocks are
+permitted. The late owner clarification puts OP2 first and OP3b later, after
+OP3a. The constraint set is frozen through the first compliant rung0 result;
+new concerns are deferred proposal cards except cost/safety. No partial
+operator-trunk training, fresh prohibited comparator, CPU model reference or automatic
+fallback promotion is allowed. Quality measures use raw scores/generated answers with
 explicit units; numerical quality bars need an amended registration, not the former
 “BPB within 0.02 nats” clause. Tokens/s uses the same CUDA harness.
 

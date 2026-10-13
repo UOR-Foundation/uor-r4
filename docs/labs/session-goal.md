@@ -19,8 +19,11 @@ A prompt does not start a client by itself or lift an owner hold.
    GPU-only model compute, no host fallback. Scalar float geometric GPU learning
    is distinct from D11 integer/table, multiplier-free serving.
 4. Pick one bounded source dependency in the [operator plan](operator-phase-2026-10-12/README.md).
-   OP1 gate → OP2 Hamilton projections → OP3 geometric head precede integrated
-   training. A lawful isolated GPU kernel qualification requires its own prospective
+   OP2 Hamilton projections → OP1 G2 gate → OP3a geometric head precede integrated
+   training. G1 is withdrawn; geometric feed-forward blocks are permitted. OP3b
+   is later research. Constraints are frozen through the first compliant rung0
+   result; new concerns are deferred proposal cards except cost/safety.
+   A lawful isolated GPU kernel qualification requires its own prospective
    FIT, named decision/cost and admission; it is not a fit or hold release.
 5. Preserve peer source/artifacts/jobs/leases. Resolve overlapping claims with Kimi;
    do not take over a suspect lease before verifying liveness. Codex uses an owned
@@ -40,7 +43,9 @@ A prompt does not start a client by itself or lift an owner hold.
 8. Delivery: exact-head proportionate checks/review (self-review allowed), one
    canonical dated record/current-state pointer, protected merge, fresh-main
    source verification, result card and owned redundant workspace/branch cleanup.
-   Do not split a diagnosis into endless preparation PRs; every source deliverable
+   At most two preparation PRs per cycle under the existing session contract;
+   preserve the owner-directed operator implementation dependency without a
+   count reset. Do not split a diagnosis into endless preparation PRs; every source deliverable
    names the integrated dependency it unblocks. Existing D21 pivot obligations stay.
 9. Status every 90 minutes or three merged PRs: headline · count · blocker · next
    decision/dependency. Claims/heartbeats/checkpoints follow the protocol (5/20/30
@@ -70,9 +75,11 @@ no host fallback or CPU learner. Offline scalar float geometric GPU arithmetic
 is allowed; served D11 kernels remain integer/table and multiplier-free.
 
 Claim ONE bounded source dependency with explicit file ownership; coordinate
-collisions with Kimi. OP1 gate source -> OP2 Hamilton-projection source -> OP3
+collisions with Kimi. OP2 Hamilton-projection source -> OP1 G2 gate source -> OP3a
 geometric-head source -> full executed-path/device qualification and prospective
-FIT. No partial-trunk fit. Separate lawful GPU kernel qualification needs a
+FIT. G2 only; G1 withdrawn. Geometric feed-forward blocks allowed; OP3b later.
+Constraints are frozen until the first compliant rung0 reports; new concerns are
+deferred proposal cards except cost/safety. No partial-trunk fit. Separate lawful GPU kernel qualification needs a
 prospective FIT, decision-changing card and resource admission; no banned live
 comparator or CPU model reference. Preserve historical source/results inactive.
 
@@ -105,6 +112,56 @@ Add the actual inherited count from the latest milestone card. This table does
 not reset or replace that record. Milestones remain incomplete; M1 historical
 headline memory20/40, reply37/232 and M2 saved437/512 plus opened0/128 do not change
 through source preparation. Latest bindings and artifacts come from current state.
+
+## Prompt for the Kimi lab
+
+```text
+Apply the common start prompt and current D25 contract above. You are Kimi PM:
+coordinate exclusive claims and implement OP2 Hamilton CUDA kernel first, OP1 G2
+only, then OP3a geometric head. G1 withdrawn; geometric feed-forward allowed;
+OP3b later research. Line "evaluation integrity" count 1/3 is carried from the
+operator card, not reset. M1 reply37/232, memory20/40 unchanged. Training and M2
+rental hold remain; FIT releases no hold. Frozen constraints through first legal
+rung0 result; defer new concerns except cost/safety. Preserve every lab's work.
+```
+
+## Prompt for the DeepSeek lab
+
+```text
+Apply the common start prompt and current D25 contract above. You are DeepSeek:
+retain invariant-addressed router/memory source on M1 #2029; no old canceled
+campaign rerun, no CPU model/reference or host fallback. Reply37/232 and v5
+memory20/40 remain historical headlines. Inherit the exact active line/count
+from the latest milestone card; never reset it from a prompt. Coordinate owned
+source dependencies with Kimi's OP2 -> G2 -> OP3a preparation. Training is held;
+no FIT or available pod lifts it. Preserve peer work and frozen constraints.
+```
+
+## Prompt for the Claude lab
+
+```text
+Apply the common start prompt and current D25 contract above. You are Claude:
+retain teacher-free starling/murmuration read source on M4 #2032. No SoftSort,
+dense bootstrap, teacher or old comparator rerun. Historical starling line
+count2/3 from current state is inactive; inherit any active successor count from
+the live milestone without reset. Compliant OP2 -> G2 -> OP3a, then owner-released
+rung0 and rung0b GPU read/gradient precede the read fit. Training stays held.
+Coordinate claims with Kimi; preserve all work. New concerns are deferred proposal
+cards through the first compliant rung0 result except cost/safety.
+```
+
+## Prompt for the Codex lab
+
+```text
+Apply the common start prompt and current D25 contract above. You are Codex:
+own enforcement/M2 #2030 source dependencies; M3 only when justified, not an
+automatic campaign. Line "unified geometric route/action/learning integration"
+count 6/3 comes from delivered #2246, with no reset. Saved437/512 and opened0/128
+remain panel-fitting evidence; genuinely fresh qualification NOT_RUN. Sampled
+law blocked; CUDA execution unqualified. Training/rental held: no constructor,
+optimizer/data/panel/fresh run or automatic third prep loop. Use an owned isolated
+worktree. Preserve every peer's source/jobs/leases; coordinate with Kimi PM.
+```
 
 ## Wind down or replace a session
 
