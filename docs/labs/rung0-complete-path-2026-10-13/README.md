@@ -75,8 +75,13 @@ The evaluator's document windows are reported separately from these global
 inventory blocks. BOS is resolved from the actual tokenizer special-token map,
 never assumed globally. Kimi's
 [header correction6139637354](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6139637354)
-requires the next sheet amendment to use payload counts; the sheet remains
-Kimi-owned. All eligible masked targets, including the tail, are
+is applied in the [scoped active sheet correction](../../harness/prep/m1-rank-margin-rung0-2026-10-13.md).
+Codex's [coordination6140439165](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6140439165)
+records its limited factual/source scope; Kimi's stale claim is preserved.
+Seeds1/2 are paired across M1/M8, tokenizer restoration is byte/SHA verified at
+private HF commit `435d5f781cd7b8518185cf6e7fda2a7addb0532a`, and exact
+source/CLI/init pins are in the sheet. Scientific verdict stays PENDING;
+acceptance bars and all holds are unchanged. All eligible masked targets, including the tail, are
 scored once. The report shows actual/expected denominators and any mismatch.
 
 Training uses token_margin + address_margin, coefficient 1 each. Dev bars and
