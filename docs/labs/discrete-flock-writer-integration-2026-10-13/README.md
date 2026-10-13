@@ -73,8 +73,18 @@ PTX SHA256:
 `726937ebb907c3c01fe7a6b967a885f3fbe9327aaef6c8a9242007afb7c97f88`;
 generated geometry SHA256:
 `3c7a88bfc82e0fc2f4031ec35cfd69516596dce385b792767675ea937763cc50`.
-Final archive verification and resource/pod-closeout receipts are being collected
-by root; no completed preservation or merge proof is inferred here.
+Preserved before pod deletion at
+`icloud:UOR-R4/results/codex/flock-qualified-20261013-2315.tar`, 83,313,664bytes,
+verified MD5 round-trip `681a266b77d7bf7bb0ba86fb3c2be060`. Its nested restoration
+bundle SHA256 is `df946496e077db984a397da7ea70c9c326f0d557f386726aedc0df03c90a2edd`,
+equal on pod and laptop; it contains source archive, binary, PTX, geometry, both
+setup/build records, controller/job logs and both numerical reports. The raw
+[Route report](receipts/route-controls.json), [flock report](receipts/flock-controls.json)
+and [controller log](receipts/controller.log) are also committed here.
+Owned pod `vast-55826965` was released and deleted, with zero running pods verified.
+The provider ledger records902seconds at$0.842/h, about$0.211 quoted compute;
+including the preceding #2379 qualification the cumulative quoted GPU cost is
+about$1.078. These are rate/time estimates, not invoices or all-in labor costs.
 
 No applied update, corpus learning, learned-language result, throughput or full E8
 coverage follows. The geometric atlas remains the sixteen-root anchor orbit, not
