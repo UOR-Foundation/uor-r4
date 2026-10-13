@@ -521,50 +521,34 @@ pub(crate) fn starling_native_select(
     let narrow = |v: usize| -> CResult<u32> {
         u32::try_from(v).map_err(|_| candle_core::Error::Msg("starling dimension overflow".into()))
     };
-    let (rows32, time32, heads32, depth32, slots32) = (
-        narrow(rows)?,
-        narrow(time)?,
-        narrow(heads)?,
-        narrow(spec.depth)?,
-        narrow(slots)?,
-    );
     // The nvcc-built PTX in its own module: no runtime compiler (NVRTC is
     // banned, owner 13 October 2026) and no other kernel in the module.
-    let function = device.get_or_load_custom_func(
-        "starling_native_select",
+    let args = [
+        Arg::F(q),
+        Arg::F(k),
+        Arg::U(r),
+        Arg::f(&geometry.0),
+        Arg::u(&geometry.1),
+        Arg::u(&ring),
+        Arg::u(&ring_len),
+        Arg::u(&ring_head),
+        Arg::u(&out),
+        Arg::u(&error),
+        Arg::U32(narrow(rows)?),
+        Arg::U32(narrow(time)?),
+        Arg::U32(narrow(heads)?),
+        Arg::U32(narrow(spec.depth)?),
+        Arg::U32(narrow(slots)?),
+    ];
+    crate::cuda_stack_kernels::cuda::launch_prebuilt(
+        device,
         STARLING_NATIVE_MODULE,
         STARLING_NATIVE_PTX,
+        "starling_native_select",
+        rows,
+        &args,
     )?;
-    let block = 128u32;
-    let config = cudarc::driver::LaunchConfig {
-        grid_dim: (rows32.div_ceil(block), 1, 1),
-        block_dim: (block, 1, 1),
-        shared_mem_bytes: 0,
-    };
-    {
-        use cudarc::driver::PushKernelArg;
-        let mut builder = function.builder();
-        builder.arg(&q);
-        builder.arg(&k);
-        builder.arg(&r);
-        builder.arg(&geometry.0);
-        builder.arg(&geometry.1);
-        builder.arg(&ring);
-        builder.arg(&ring_len);
-        builder.arg(&ring_head);
-        builder.arg(&out);
-        builder.arg(&error);
-        builder.arg(&rows32);
-        builder.arg(&time32);
-        builder.arg(&heads32);
-        builder.arg(&depth32);
-        builder.arg(&slots32);
-        // SAFETY: the arguments match `starling_native_select`'s parameters in
-        // order and type; every buffer is sized above for rows x time
-        // (x slots + 2), rows x 120 (x depth); the grid covers `rows` threads
-        // and the kernel bounds-checks its row.
-        unsafe { builder.launch(config) }.map_err(|e| candle_core::Error::Cuda(Box::new(e)))?;
-    }
+    drop(args);
     let flag = device.clone_dtoh(&error)?;
     if flag.first().copied() != Some(0) {
         candle_core::bail!(
