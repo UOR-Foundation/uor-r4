@@ -22778,6 +22778,18 @@ mod tests {
         let mut credited = 0usize;
         for (name, before) in &off {
             let after = &on[name];
+            // A1 trains the query address only: the key-address map only
+            // feeds the hard selection, so it gets no gradient either way.
+            if name.contains("native_starling.key_address") {
+                for gradient in [before, after].into_iter().flatten() {
+                    assert_eq!(
+                        gradient.abs()?.sum_all()?.to_scalar::<f32>()?,
+                        0.0,
+                        "{name} received a gradient"
+                    );
+                }
+                continue;
+            }
             if credit_only(name) {
                 let before_mass = match before {
                     Some(g) => g.abs()?.sum_all()?.to_scalar::<f32>()?,
