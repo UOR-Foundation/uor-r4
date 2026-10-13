@@ -26,6 +26,7 @@ pub mod githelp;
 pub mod harnessrules;
 pub mod mistakes;
 pub mod multilab;
+pub mod multilabrules;
 pub mod notes;
 pub mod onboard;
 pub mod prep;
@@ -39,6 +40,7 @@ pub mod shards;
 pub mod skills;
 pub mod state;
 pub mod status;
+pub mod statusrules;
 pub mod team;
 pub mod version;
 
