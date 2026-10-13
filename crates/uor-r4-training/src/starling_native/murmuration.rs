@@ -44,6 +44,25 @@ pub const MAX_FLOCK: usize = 7;
 /// A raw address with a smaller norm is address-null (M1).
 pub const NULL_ADDRESS_NORM: f64 = 1e-6;
 
+/// The K1 specification the murmuration read runs on: one extra kept slot, so
+/// the reader (always among K1's candidates, which are `j <= t`) can be
+/// dropped **before** the top-K truncation (Codex 6151549249 item 3). Refuses
+/// `K > MAX_FLOCK` or a window that exceeds K1's slot limit.
+pub fn selection_spec(spec: &NativeStarling) -> Result<NativeStarling> {
+    if spec.kept == 0 || spec.kept > MAX_FLOCK {
+        return Err(invalid(format!(
+            "the murmuration flock keeps 1..={MAX_FLOCK} neighbours (K = {})",
+            spec.kept
+        )));
+    }
+    let selector = NativeStarling {
+        kept: spec.kept + 1,
+        ..*spec
+    };
+    selector.validate()?;
+    Ok(selector)
+}
+
 /// An element of `Z[phi]`, `a + b phi` with `phi^2 = phi + 1`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct Golden(i64, i64);
@@ -266,7 +285,7 @@ pub struct MurmurationInputs<'a> {
     pub value: &'a Tensor,
     /// The per-head coupling `K_h`, `[heads]` F32.
     pub coupling: &'a Tensor,
-    /// K1's output `[rows, time, K + E + 2]` U32.
+    /// K1's output on [`selection_spec`]: `[rows, time, (K + 1) + E + 2]` U32.
     pub selection: &'a Tensor,
     pub heads: usize,
 }
@@ -291,12 +310,10 @@ pub fn murmuration_read(
 ) -> Result<MurmurationOutput> {
     spec.validate()?;
     require_cuda(inputs.value, "the murmuration read")?;
-    let (k, s) = (spec.kept, spec.slots());
-    if k > MAX_FLOCK {
-        return Err(invalid(format!(
-            "the murmuration flock keeps at most {MAX_FLOCK} neighbours (K = {k})"
-        )));
-    }
+    // K1 runs with one extra kept slot (see [`selection_spec`]) so the reader
+    // can be filtered out before the top-K truncation.
+    let selector = selection_spec(spec)?;
+    let (k, window, s) = (spec.kept, selector.kept, selector.slots());
     let (rows, time, four) = inputs.value.dims3()?;
     let heads = inputs.heads;
     if four != 4
@@ -370,8 +387,20 @@ pub fn murmuration_read(
         .reshape((rows, time, s, 4))?;
     let carried = hamilton(&transport, &neighbour_value)?; // T_tj(v_j), [rows, time, S, 4]
 
-    // The flock: kept slots only (exploration has zero forward weight).
-    let kept = live.narrow(2, 0, k)?; // [rows, time, K]
+    // The flock: the first K live slots of K1's K + 1 window, in K1's rank
+    // order (largest address dot, ties to the later position). K1 returns only
+    // j <= t, so filtering j < t removes at most the reader itself and this is
+    // exactly the top K of the strict past. Exploration has zero forward
+    // weight. The running count is an explicit sum over the small window.
+    let window_live = live.narrow(2, 0, window)?; // [rows, time, K + 1]
+    let mut running = Tensor::zeros((rows, time, 1), DType::F32, device)?;
+    let mut columns = Vec::with_capacity(window);
+    for i in 0..window {
+        let column = window_live.narrow(2, i, 1)?;
+        running = running.add(&column)?;
+        columns.push(column.mul(&running.le(k as f64)?.to_dtype(DType::F32)?)?);
+    }
+    let kept = Tensor::cat(&columns, 2)?; // [rows, time, K + 1], at most K ones
     let flock = kept.sum(2)?; // [rows, time]
     let reciprocal = Tensor::from_vec(
         (0..=MAX_FLOCK)
@@ -384,7 +413,7 @@ pub fn murmuration_read(
         .index_select(&flock.to_dtype(DType::U32)?.flatten_all()?, 0)?
         .reshape((rows, time, 1))?;
     let mean = carried
-        .narrow(2, 0, k)?
+        .narrow(2, 0, window)?
         .broadcast_mul(&kept.unsqueeze(3)?)?
         .sum(2)?
         .broadcast_mul(&inverse)?; // m_t, [rows, time, 4]
@@ -423,10 +452,16 @@ pub fn murmuration_read(
                 .broadcast_as((rows, time, s))?
                 .contiguous()?)?
             .to_dtype(DType::F32)?;
+        // Credit candidates: the kept flock and the live exploration slots.
+        // A window slot cut by the truncation is neither.
+        let exploration = live.narrow(2, window, s - window)?;
+        let kept_full = Tensor::cat(&[&kept, &exploration.zeros_like()?], 2)?;
+        let candidate = Tensor::cat(&[&kept, &exploration], 2)?;
         let state = CaptureState {
             spec: *spec,
             carried: carried.detach(),
-            live,
+            kept: kept_full,
+            candidate,
             off_home,
             position: safe.to_dtype(DType::F32)?,
             coupling: coupling.detach(),
@@ -451,8 +486,10 @@ struct CaptureState {
     spec: NativeStarling,
     /// `T_tj(v_j)` of every kept and exploration slot, `[rows, time, S, 4]`.
     carried: Tensor,
-    /// 1 for a live candidate (present, `j < t`, not address-null).
-    live: Tensor,
+    /// 1 for a slot in the forward flock, `[rows, time, S]`.
+    kept: Tensor,
+    /// 1 for a credit candidate: the flock plus live exploration slots.
+    candidate: Tensor,
     /// 1 where the candidate's cell differs from the reader's home cell.
     off_home: Tensor,
     /// Candidate positions as F32 (ties: the later position).
@@ -521,7 +558,6 @@ fn address_credit(state: &CaptureState, dots: &Tensor, grad: &Tensor) -> Result<
     }
     let device = grad.device();
     let credit = state.spec.credit;
-    let k = state.spec.kept;
     let queries = (rows * time) as f64;
     // g_t = dL/dm_t = K_h dL/dDelta_t on reading positions.
     let g = grad
@@ -530,15 +566,15 @@ fn address_credit(state: &CaptureState, dots: &Tensor, grad: &Tensor) -> Result<
         .broadcast_mul(&state.reads)?
         .reshape((rows, time, 1, 4))?;
     let utility = state.carried.broadcast_mul(&g)?.sum(3)?.neg()?; // [rows, time, S]
-    let kept = state.live.narrow(2, 0, k)?;
-    let kept_count = kept.sum(2)?;
+    let kept_count = state.kept.sum(2)?;
     let kept_mean = utility
-        .narrow(2, 0, k)?
-        .mul(&kept)?
+        .mul(&state.kept)?
         .sum(2)?
         .div(&kept_count.maximum(&Tensor::ones((rows, time), DType::F32, device)?)?)?;
-    // The best live off-home candidate (kept or exploration), ties: later.
-    let eligible = state.live.mul(&state.off_home)?;
+    // An empty flock has no reference utility: its address credit is exactly 0.
+    let has_flock = kept_count.gt(0.0)?.to_dtype(DType::F32)?;
+    // The best off-home candidate (kept or exploration), ties: later position.
+    let eligible = state.candidate.mul(&state.off_home)?;
     let eligible_mask = eligible.gt(0.0)?;
     let floor = Tensor::full(-3.0e38f32, (rows, time, slots), device)?;
     let masked = eligible_mask.where_cond(&utility, &floor)?;
@@ -558,7 +594,8 @@ fn address_credit(state: &CaptureState, dots: &Tensor, grad: &Tensor) -> Result<
     let on = gap
         .gt(credit.delta as f64)?
         .to_dtype(DType::F32)?
-        .mul(&any)?; // [rows, time]
+        .mul(&any)?
+        .mul(&has_flock)?; // [rows, time]
     let scale = on.affine(
         -(credit.address * credit.address_margin) as f64 / queries,
         0.0,
@@ -717,7 +754,13 @@ mod tests {
         coupling: &Tensor,
         credit: bool,
     ) -> Result<MurmurationOutput> {
-        let selection = select(spec, f.heads, &f.address, &f.address, &f.reset)?;
+        let selection = select(
+            &selection_spec(spec)?,
+            f.heads,
+            &f.address,
+            &f.address,
+            &f.reset,
+        )?;
         murmuration_read(
             spec,
             &MurmurationInputs {
@@ -797,7 +840,8 @@ mod tests {
         for kept in [1usize, 7] {
             let s = spec(kept, 2);
             let out = run(&s, &f, &f.value, &coupling, false)?;
-            let selection = select(&s, 2, &f.address, &f.address, &f.reset)?;
+            let sel = selection_spec(&s)?;
+            let selection = select(&sel, 2, &f.address, &f.address, &f.reset)?;
             let picks: Vec<Vec<Vec<u32>>> = selection.to_vec3()?; // index metadata
             let roots = Tensor::from_vec(geometry()?.0, (CELLS, 4), &device)?;
             let conj = Tensor::new(&[1f32, -1.0, -1.0, -1.0], &device)?;
@@ -807,16 +851,19 @@ mod tests {
                 for t in 0..time {
                     let v_t = f.value.narrow(0, r, 1)?.narrow(1, t, 1)?.reshape(4)?;
                     let c_t = roots
-                        .narrow(0, picks[r][t][s.slots()] as usize, 1)?
+                        .narrow(0, picks[r][t][sel.slots()] as usize, 1)?
                         .reshape(4)?;
                     let mut sum = Tensor::zeros(4, DType::F32, &device)?;
                     let mut count = 0usize;
-                    for &j in &picks[r][t][..kept] {
+                    for &j in &picks[r][t][..kept + 1] {
+                        if count == kept {
+                            break;
+                        }
                         if j == ABSENT || j as usize >= t {
                             continue;
                         }
                         let c_j = roots
-                            .narrow(0, picks[r][j as usize][s.slots() + 1] as usize, 1)?
+                            .narrow(0, picks[r][j as usize][sel.slots() + 1] as usize, 1)?
                             .reshape(4)?;
                         let g = hamilton(&c_t, &c_j.mul(&conj)?)?;
                         let v_j = f
@@ -930,7 +977,7 @@ mod tests {
         assert_eq!(out.delta.abs()?.sum_all()?.to_scalar::<f32>()?, 0.0);
         // Address-null token 0: t = 1's flock loses it; a null reader reads 0.
         let null_norm = Tensor::new(&[[0f32, 1.0, 0.0]], &device)?;
-        let selection = select(&s, 1, &f.address, &f.address, &f.reset)?;
+        let selection = select(&selection_spec(&s)?, 1, &f.address, &f.address, &f.reset)?;
         let out = murmuration_read(
             &s,
             &MurmurationInputs {
@@ -957,8 +1004,11 @@ mod tests {
     }
 
     /// Control 5: analytic value, self-value and coupling gradients against
-    /// device central secants (h = 1e-3, rel <= 2e-3), neighbour set frozen
-    /// (addresses sit exactly on vertices; values do not move cells).
+    /// device central secants, neighbour set frozen (addresses sit exactly on
+    /// vertices; values do not move cells). Error convention, fixed before
+    /// execution: with `h = 1e-3`, a check passes iff
+    /// `|secant - analytic| <= 2e-3 * max(|secant|, |analytic|, 1e-3)`, so a zero
+    /// derivative is held to the absolute floor `2e-6` (no division by zero).
     #[test]
     #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
     fn murm_backward_secants() -> Result<()> {
@@ -1061,7 +1111,7 @@ mod tests {
         let raw = Var::from_tensor(&f.address)?;
         let address = unit_address(raw.as_tensor())?;
         let s = spec(2, 2);
-        let selection = select(&s, 1, &address, &address, &f.reset)?;
+        let selection = select(&selection_spec(&s)?, 1, &address, &address, &f.reset)?;
         let weights = Tensor::stack(
             &[
                 &Tensor::zeros(4, DType::F32, &device)?,
@@ -1106,7 +1156,7 @@ mod tests {
         );
         // Exploration has zero forward weight and is not in |N_t|.
         let plain = spec(2, 0);
-        let plain_selection = select(&plain, 1, &address, &address, &f.reset)?;
+        let plain_selection = select(&selection_spec(&plain)?, 1, &address, &address, &f.reset)?;
         let without = run_with(&plain, &plain_selection, false)?;
         let with = run_with(&s, &selection, false)?;
         let d0: Vec<Vec<Vec<f32>>> = without.delta.to_vec3()?;
@@ -1115,6 +1165,51 @@ mod tests {
         assert_eq!(
             without.flock.to_vec2::<f32>()?,
             with.flock.to_vec2::<f32>()?
+        );
+        Ok(())
+    }
+
+    /// Control 4b (Codex 6151549249 item 2): at K_h = 0 the read is the exact
+    /// identity, so the value gradient through it is exactly zero, while the
+    /// coupling still receives a nonzero wake-up gradient
+    /// `dL/dK_h = sum <dL/dDelta, m - v>`.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_zero_coupling_wakes() -> Result<()> {
+        let device = cuda()?;
+        let (cells, resets) = mixed_cells()?;
+        let f = fixture(&device, &cells, 2, &resets)?;
+        let s = spec(7, 2);
+        let (rows, time) = (cells.len(), cells[0].len());
+        let weights = Tensor::from_vec(
+            (0..rows * time * 4)
+                .map(|i| ((i * 31 % 19) as f32 / 19.0) - 0.5)
+                .collect::<Vec<_>>(),
+            (rows, time, 4),
+            &device,
+        )?;
+        let value = Var::from_tensor(&f.value)?;
+        let coupling = Var::from_tensor(&Tensor::zeros(2, DType::F32, &device)?)?;
+        let out = run(&s, &f, value.as_tensor(), coupling.as_tensor(), false)?;
+        assert_eq!(out.delta.abs()?.sum_all()?.to_scalar::<f32>()?, 0.0);
+        let grads = out.delta.mul(&weights)?.sum_all()?.backward()?;
+        let gv = grads
+            .get(value.as_tensor())
+            .ok_or_else(|| invalid("no value gradient"))?
+            .abs()?
+            .sum_all()?
+            .to_scalar::<f32>()?;
+        assert_eq!(
+            gv, 0.0,
+            "values received credit through a zero-coupled read"
+        );
+        let gk = grads
+            .get(coupling.as_tensor())
+            .ok_or_else(|| invalid("no coupling gradient"))?
+            .to_vec1::<f32>()?;
+        assert!(
+            gk.iter().all(|g| g.is_finite()) && gk.iter().any(|g| *g != 0.0),
+            "the coupling has no wake-up gradient: {gk:?}"
         );
         Ok(())
     }
