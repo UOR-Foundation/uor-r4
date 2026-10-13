@@ -70,3 +70,25 @@ keep drifting from the decisions file — so a reader should check `DECISIONS.md
   A check that refuses a neural grader in a panel's `grader` field is the real fix, and it is not here.
 - **`docs/harness/milestones.json` is a registry other labs also edit.** I changed three fields; a
   concurrent edit would conflict, and I did not coordinate before changing it.
+
+## What CI caught that I had missed: the Rust port had the same defect
+
+**`parity.py` failed on the first push** — `render agreement: sheets differ`. The **Rust** `prep.rs`
+carried its own copy of `APPLICABLE_RULES` as `["D21","D22","D23","D24"]`, frozen from before the port
+began, so a Rust-rendered sheet **omitted the very rule that explains why its own panel is blocked**.
+
+**The defect Antigravity reported was in the Python renderer; the same defect was still in the Rust
+one**, and comparing the two is what surfaced it.
+
+This is exactly what the D30 record predicted: *"`status.rs` still carries its own inline branch
+classification… two implementations of one rule is the defect class this whole line keeps producing."*
+It was right, and it happened again in a different file within the same day.
+
+**Fixed by syncing, and recorded as a duplicate rather than a solution.** The durable fix is to render
+from the registry so there is one list; until then, `parity.render_agreement` is what keeps them equal,
+**which is why the drift was found at all.** A parity check that is scheduled for deletion when Python
+goes is, right now, the only thing holding two implementations together.
+
+Verified after the fix: **`parity.py` all comparisons ok, exit 0**, with the Rust and Python sheets
+rendering identically.
+
