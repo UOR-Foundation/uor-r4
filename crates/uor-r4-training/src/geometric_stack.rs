@@ -21876,6 +21876,220 @@ mod tests {
         Ok(())
     }
 
+    /// The rate table is exact dyadic, strictly decreasing in `lambda` and
+    /// strictly increasing in `keep`, with `keep^2 + lambda^2 = 1` per entry.
+    #[test]
+    fn the_rate_table_is_exact_dyadic_and_monotone() {
+        for (index, (&rate, &keep)) in RATE_TABLE.iter().zip(KEEP_TABLE.iter()).enumerate() {
+            let expected = 2f32.powi(-(index as i32) - 1);
+            assert_eq!(
+                rate, expected,
+                "entry {index} is not the exact power of two"
+            );
+            assert!(
+                (f64::from(keep) * f64::from(keep) + f64::from(rate) * f64::from(rate) - 1.0).abs()
+                    <= 1e-7,
+                "entry {index}: keep^2 + lambda^2 is not 1"
+            );
+        }
+        assert!(
+            RATE_TABLE.windows(2).all(|w| w[0] > w[1]),
+            "rates must fall with the index"
+        );
+        // The keep column never falls; its last four entries are a plateau at
+        // `1.0`, because `1 - 2^-26` is below f32 resolution (the table's own
+        // documentation says so).
+        assert!(
+            KEEP_TABLE.windows(2).all(|w| w[0] <= w[1]),
+            "keeps must never fall with the index"
+        );
+        assert_eq!(KEEP_TABLE[15], 1.0, "the tail is the documented plateau");
+    }
+
+    /// Rate selection on fixed scores, by hand: the index is
+    /// `floor(score * 16)` clamped to the last entry.
+    #[test]
+    fn the_rate_selection_matches_a_hand_computation() -> Result<()> {
+        let scores = Tensor::from_vec(
+            vec![0.0f32, 0.0625, 0.5, 0.999, 1.0, 0.9999],
+            (1, 6),
+            &cpu(),
+        )?;
+        let selected = rate_select(&scores)?.flatten_all()?.to_vec1::<f32>()?;
+        let expected = [
+            (0.5f32, 0.8660253882408142f32),   // 0.0    -> entry 0
+            (0.25, 0.9682458639144897),        // 0.0625 -> entry 1
+            (0.001953125, 0.9999980926513672), // 0.5    -> entry 8
+            (1.52587890625e-05, 1.0),          // 0.999  -> entry 15
+            (1.52587890625e-05, 1.0),          // 1.0    -> entry 15 (clamped)
+            (1.52587890625e-05, 1.0),          // above  -> entry 15
+        ];
+        for (i, (rate, keep)) in expected.iter().enumerate() {
+            assert_eq!(selected[2 * i], *rate, "slot {i} rate");
+            assert_eq!(selected[2 * i + 1], *keep, "slot {i} keep");
+        }
+        assert_eq!(rate_index(0.0624), 0);
+        assert_eq!(rate_index(0.0625), 1);
+        Ok(())
+    }
+
+    /// The secant surrogate allocates credit to the selected entry's two lawful
+    /// neighbours at the fixed edge `1/16`, and to the single neighbour at the
+    /// table's ends, by hand.
+    #[test]
+    fn the_secant_credit_matches_a_hand_computation() -> Result<()> {
+        // Interior: score 0.5 selects entry 8; neighbours 7 and 9, one half each.
+        let scores = Var::from_tensor(&Tensor::from_vec(vec![0.5f32], 1, &cpu())?)?;
+        let selected = rate_select(scores.as_tensor())?;
+        let (d_lambda, d_keep) = (3.0f32, -2.0f32);
+        let grad = Tensor::from_vec(vec![d_lambda, d_keep], (1, 2), &cpu())?;
+        let d_score = selected
+            .mul(&grad)?
+            .sum_all()?
+            .backward()?
+            .get(scores.as_tensor())
+            .ok_or_else(|| invalid("no rate-score gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let mut want = 0.0f64;
+        for neighbour in [7usize, 9] {
+            want += 0.5
+                * (f64::from(d_lambda) * f64::from(RATE_TABLE[neighbour] - RATE_TABLE[8])
+                    + f64::from(d_keep) * f64::from(KEEP_TABLE[neighbour] - KEEP_TABLE[8]));
+        }
+        want *= RATE_ENTRIES as f64;
+        assert!(
+            (f64::from(d_score[0]) - want).abs() <= 1e-6 * want.abs().max(1.0),
+            "interior credit {} vs hand {want}",
+            d_score[0]
+        );
+        // Boundary: score 0 selects entry 0, which has one neighbour at full weight.
+        let scores = Var::from_tensor(&Tensor::from_vec(vec![0.0f32], 1, &cpu())?)?;
+        let selected = rate_select(scores.as_tensor())?;
+        let grad = Tensor::from_vec(vec![1.0f32, 1.0f32], (1, 2), &cpu())?;
+        let d_score = selected
+            .mul(&grad)?
+            .sum_all()?
+            .backward()?
+            .get(scores.as_tensor())
+            .ok_or_else(|| invalid("no rate-score gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let want = (f64::from(RATE_TABLE[1] - RATE_TABLE[0])
+            + f64::from(KEEP_TABLE[1] - KEEP_TABLE[0]))
+            * RATE_ENTRIES as f64;
+        assert!(
+            (f64::from(d_score[0]) - want).abs() <= 1e-6 * want.abs().max(1.0),
+            "boundary credit {} vs hand {want}",
+            d_score[0]
+        );
+        Ok(())
+    }
+
+    /// The clamped-linear opening carries the surrogate credit inside `(0, 1)`
+    /// and nothing outside it (the exact subgradient of the projection onto the
+    /// segment).
+    #[test]
+    fn the_clamped_opening_keeps_its_exact_subgradient() -> Result<()> {
+        let raw = Var::from_tensor(&Tensor::from_vec(vec![-1.0f32, 0.5, 2.0], 3, &cpu())?)?;
+        let opening = raw.as_tensor().clamp(0.0, 1.0)?;
+        let selected = rate_select(&opening)?;
+        let grad = selected.sum_all()?.backward()?;
+        let d_raw = grad
+            .get(raw.as_tensor())
+            .ok_or_else(|| invalid("no opening gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert_eq!(d_raw[0], 0.0, "below the segment the projection is flat");
+        assert_eq!(d_raw[2], 0.0, "above the segment the projection is flat");
+        // Inside, the credit reaches the raw score (the selected entry is 8 at
+        // 0.5, whose neighbours move the table entries).
+        assert!(
+            d_raw[1] != 0.0,
+            "inside the segment the credit must reach the raw score"
+        );
+        Ok(())
+    }
+
+    /// The geometric recurrence is a CUDA training path: a model-level forward
+    /// on any other device refuses loudly (D24), and a configuration that cannot
+    /// carry the 4-lane blocks is refused at validation.
+    #[test]
+    fn the_geometric_recurrence_refuses_what_it_cannot_run() -> Result<()> {
+        let mut config = tiny(StackArch::Geometric, "rr", ReadScore::Lorentz, true);
+        config.rec_gates = RecGates::Geometric;
+        assert!(config.validate().is_ok(), "width 16 is whole 4-blocks");
+        let model = StackModel::new(config.clone(), &cpu())?;
+        let ids = [1u32, 2, 3, 4];
+        let error = model
+            .forward(&ids, 1, ids.len())
+            .err()
+            .ok_or_else(|| invalid("a CPU forward must refuse the geometric recurrence"))?;
+        assert!(
+            error.to_string().contains("CUDA"),
+            "the refusal must name the device: {error}"
+        );
+        let mut transformer = config.clone();
+        transformer.arch = StackArch::Transformer;
+        assert!(
+            transformer.validate().is_err(),
+            "no recurrence on the control"
+        );
+        let mut narrow = config;
+        narrow.width = 18;
+        assert!(narrow.validate().is_err(), "18 is not whole 4-blocks");
+        Ok(())
+    }
+
+    /// The geometric recurrence's decay and output gate, composed as the model
+    /// composes them, on a hand-computed one-step case: the table entry follows
+    /// the clamped score, and the Hamilton output gate preserves the output
+    /// block's norm.
+    #[test]
+    fn the_geometric_recurrence_ops_match_a_hand_computation() -> Result<()> {
+        // Two lanes: scores 0.0 (entry 0) and 0.75 (entry 12).
+        let raw = Tensor::from_vec(vec![0.0f32, 0.75], (1, 2), &cpu())?;
+        let selected = rate_select(&raw.clamp(0.0, 1.0)?)?;
+        assert_eq!(selected.dims(), &[1, 2, 2]);
+        let values = selected.flatten_all()?.to_vec1::<f32>()?;
+        assert_eq!(values.len(), 4, "two scores, two table values each");
+        assert_eq!(values[..2], [0.5, 0.8660253882408142]);
+        // score 0.75 -> entry 12: lambda = 2^-13, keep on the documented plateau.
+        assert_eq!(values[2], 0.0001220703125);
+        assert_eq!(values[3], 1.0);
+        // The output gate: the gate tensor's 4-blocks rotate the state, so every
+        // block keeps its norm (a rotation, not a squash).
+        let gate = Tensor::from_vec(vec![0.0f32, 0.0, 0.0, 1.0], (1, 1, 4), &cpu())?;
+        let state = Tensor::from_vec(vec![1.0f32, 2.0, 3.0, 4.0], (1, 1, 4), &cpu())?;
+        let out = hamilton_gate(&gate, &state)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let norm = |v: &[f32]| v.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!(
+            (norm(&out) - norm(&[1.0, 2.0, 3.0, 4.0])).abs() < 1e-5,
+            "the output gate rotates: |out| {} vs |state| {}",
+            norm(&out),
+            norm(&[1.0, 2.0, 3.0, 4.0])
+        );
+        Ok(())
+    }
+
+    /// The mode round-trips through the config, and the historical form writes
+    /// no field (so older configs stay byte-identical).
+    #[test]
+    fn the_rec_gates_mode_round_trips_and_leaves_legacy_configs_alone() -> Result<()> {
+        let mut config = tiny(StackArch::Geometric, "rr", ReadScore::Lorentz, true);
+        let saved = serde_json::to_string(&config)?;
+        assert!(!saved.contains("rec_gates"), "{saved}");
+        config.rec_gates = RecGates::Geometric;
+        let text = serde_json::to_string(&config)?;
+        assert!(text.contains(r#""rec_gates":"geometric""#), "{text}");
+        let back: StackConfig = serde_json::from_str(&text)?;
+        assert_eq!(back.rec_gates, RecGates::Geometric);
+        assert_eq!(back, config);
+        Ok(())
+    }
+
     /// The Hamilton gate on one 4-block with known values: the gate block is a
     /// quaternion, the up block is rotated by it (so its norm is preserved),
     /// the product is the hand-computed one, and the backward is the hand
