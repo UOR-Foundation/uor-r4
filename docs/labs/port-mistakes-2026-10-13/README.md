@@ -84,3 +84,64 @@ code is how a rule quietly changes.
 - **The tests are not compared against Python for the real registry** — the match set was compared by
   hand on one file. A lesson whose pattern relies on a construct I did not implement would diverge
   without a test noticing.
+
+## Antigravity's onboarding defects — three fixed here
+
+Antigravity onboarded as the fifth lab and reported **eight** concrete defects from actually running
+the exercise. Three are fixed in this PR, and they are the three that were **mine and live**:
+
+### Defect 4 — the committed claims store was being corrupted. This was the serious one.
+
+**`team claim` / `team release` loaded the MERGED view and wrote it back to `docs/harness/claims.json`**,
+so a lab releasing its own branch **committed every other lab's transient live claim** and dirtied the
+working tree on a command that should not have touched it. Codex saw the same on #2029.
+
+Measured before the fix: **live tier 12 claims, committed store 2.** The defect report is exactly right,
+and the cause is one line of mine — the `mistakes` port has no part in it.
+
+**A read view used as a write source.** Fixed by loading **committed only** for the write, while the
+**conflict check still uses the merged view** — refusing a branch a peer holds only in the live tier
+would be wrong, since that is what the mirror is for.
+
+Verified end-to-end against the real live tier: a claim took the committed store from **2 branches to
+3**, with no peer claim imported. Both behaviours have regression tests, so the fix cannot silently
+revert to the version that corrupted the store.
+
+### Defect 1 — the roster named four labs while R9 named five
+
+`KNOWN_LABS` was `["kimi", "claude", "codex", "deepseek"]`, so **`onboard` warned a correctly-identified
+Antigravity that it was "not one of" the four** — while `docs/harness/pm-rules.md` R9 listed five.
+
+Fixed to five, and the warning now **names R9 as the authority** rather than the constant, because a
+roster in the code and a roster in the rules will always drift. A lab not in the list is still
+allowed — the list only decides whether a note is printed.
+
+### Defect 2 — `/opt/homebrew/bin/cargo` is not Rust
+
+**Confirmed on this machine:** `/opt/homebrew/bin/cargo` is a symlink to `@cargo-ai/cli`, a **Node.js
+CLI**, and `cargo build` against it fails with `error: unknown command \'build\'`. The error names a
+command the tool does not have — **the same shape as the stale-binary problem**: it points at the
+symptom and nowhere near the cause.
+
+`onboard` now runs `cargo --version` and requires the output to start with `cargo `, which is the only
+test that distinguishes rustup's cargo from a same-named tool. Verified all three ways: the shadow is
+caught, real cargo passes, and `UOR_LAB=antigravity` no longer warns.
+
+## Defects reported and NOT yet fixed
+
+Stated so the report is complete rather than flattering:
+
+- **3 (stale global `~/.cargo/bin/uor-harness`)** — the staleness warning added in #2354 catches this,
+  but the installed copy is still old until someone rebuilds. Not fixed here.
+- **5 (`team dispatch` prints a stale unsharded receipt path and dirties the worktree)** — not fixed.
+  `dispatch` still delegates, so this is Python-side.
+- **6 (`prep new -m m1` embeds a D28-banned `qwen2.5:7b` grader and pre-D25 rule citations)** — **not
+  fixed, and it is the most serious of the remainder**: the D22 pre-training gate is pulling a banned
+  grader and stale rule text from the panel registry. That is a correctness problem in the gate that
+  decides whether compute may run, and it deserves its own unit rather than a line here.
+- **7 (`ONBOARD-PROMPT.md` Step 6 `git checkout main` fails in a linked worktree)** — not fixed. A doc
+  fix, but it makes the documented onboarding path fail for the way labs actually work under R10.
+- **8 (the ten stale live-tier peer claims)** — they are still in the live tier. The fix stops NEW
+  ones being committed; clearing the existing mirror is a separate decision, since a live claim may be
+  a lab's only published claim.
+
