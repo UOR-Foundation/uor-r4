@@ -57,11 +57,11 @@ pub struct NativeVectorWriter {
 }
 /// IDs and masks accompany bounded raw scores. No omitted target is inserted.
 pub struct VectorCandidates {
-    pub token_ids: Tensor,
-    pub valid: Tensor,
-    pub raw_scores: Tensor,
-    pub cell_ids: Tensor,
-    pub address_scores: Tensor,
+    token_ids: Tensor,
+    valid: Tensor,
+    raw_scores: Tensor,
+    cell_ids: Tensor,
+    address_scores: Tensor,
     query: Tensor,
     table_id: TensorId,
 }
@@ -75,6 +75,21 @@ impl VectorMargin {
     }
 }
 impl VectorCandidates {
+    pub fn token_ids(&self) -> &Tensor {
+        &self.token_ids
+    }
+    pub fn valid(&self) -> &Tensor {
+        &self.valid
+    }
+    pub fn raw_scores(&self) -> &Tensor {
+        &self.raw_scores
+    }
+    pub fn cell_ids(&self) -> &Tensor {
+        &self.cell_ids
+    }
+    pub fn address_scores(&self) -> &Tensor {
+        &self.address_scores
+    }
     /// Ranked kept token list for recall@K: bounded candidates only, smallest
     /// exact token identity on a tie, no target-aware insertion.
     pub fn top_token_ids(&self, k: usize) -> Result<Tensor> {
@@ -371,7 +386,21 @@ impl NativeVectorWriter {
         .unsqueeze(0)?
         .broadcast_as(selected.shape())?;
         for _ in 0..rivals {
-            let at = selected.argmax_keepdim(1)?;
+            let tied = selected
+                .broadcast_eq(&selected.max_keepdim(1)?)?
+                .mul(&available)?;
+            let id = tied
+                .where_cond(
+                    &c.token_ids,
+                    &Tensor::full(u32::MAX, c.token_ids.shape(), self.table.device())?,
+                )?
+                .min_keepdim(1)?;
+            let at = c
+                .token_ids
+                .broadcast_eq(&id)?
+                .mul(&c.valid)?
+                .to_dtype(DType::U32)?
+                .argmax_keepdim(1)?;
             let rival = selected.gather(&at, 1)?;
             let hinge = rival
                 .broadcast_sub(&target_score)?
@@ -734,7 +763,7 @@ mod cuda_tests {
             vec![0, 1]
         );
         let plan = crate::spiralcore_fbs::ProjectionPlan::new(32, 32)?;
-        let queries = Tensor::zeros(plan.query_shape(), DType::F32, &dev)?;
+        let queries = Tensor::zeros(&plan.query_shape(), DType::F32, &dev)?;
         let routed = channel.transport(&carried.tokens[0], &queries)?;
         assert_eq!(
             routed.to_vec2::<f32>()?,
