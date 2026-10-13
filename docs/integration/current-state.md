@@ -1,3 +1,22 @@
+## 2026-10-13 — D29 vendor dependency repair; composed CUDA qualification pending (codex, #2029)
+
+Source repair removes vendor BLAS/NVRTC activation and eager BLAS construction,
+builds an explicit nine-module tensor PTX set, and excludes CPU/NN contraction
+and squashing implementations while retaining host storage and lawful GPU APIs.
+Prohibited operations refuse; original source is preserved inactive. The focused
+Candle core/NN host compile passes after one recorded refusal-stub correction.
+Four prebuilt-loader metadata tests, four host storage/refusal controls and the
+Rust checker's planted-token tests pass. **Composed CUDA compilation and the
+26 finite controls are NOT_RUN; this is not a rung0 readiness claim.**
+[Record](../labs/d29-vendor-boundary-2026-10-13/README.md).
+
+Claude's project-module split is now integrated. Review found freely learned
+contractions in selected-potential and native-context modules that need
+exclusion or actual geometric replacement; the earlier token/PTX checks do
+not detect those mathematical contractions. Exact combined source, FIT and the
+admitted Rust-only pod setup remain dependencies. Training stays **HELD**, with
+no model-quality change or count reset. Prior evidence keeps its source scope.
+
 ## 2026-10-13 — D29 module split and the end of NVRTC: every CUDA module compliant and built ahead of time (claude, #2028)
 
 Every CUDA kernel in `uor-r4-training` is now compiled by nvcc at build time (`build.rs`, `cuda` feature)

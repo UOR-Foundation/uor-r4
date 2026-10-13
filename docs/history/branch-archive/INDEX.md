@@ -1,5 +1,18 @@
 # Branch archive
 
+## October 13 — pre-D29 Candle computational backend (Codex)
+
+[Restoration patch](candle-core-pre-d29-inactive-20261013.patch), SHA256
+`236b71556aaeb34437aec56140dc7c6d6abbe3cf198940553d8036f8fc8630e1`,
+restores the tracked Candle-core vendor source from this repair to its exact
+bytes at `0497528e20a9cc764628c170c0c2895bf24acb8e`. An isolated Git-index
+application restores every tracked vendor path exactly. It preserves the
+former CPU/SIMD/scalar/GGML and CUDA/BLAS implementations as **inactive evidence**,
+not execution permission. New vendor packages retain licenses, upstream archive
+identities and historical originals; see the
+[repair record](../../labs/d29-vendor-boundary-2026-10-13/README.md).
+Composed CUDA qualification remains pending; no prior model result is promoted.
+
 ## October 13 — retired whole-DEV count reference (Codex)
 
 [Restoration patch](rung0-whole-dev-count-oracle-inactive-20261013.patch), SHA256
