@@ -680,18 +680,35 @@ def delete_merged_branch(paths: HarnessPaths, branch: str, apply: bool = False) 
         result["reason"] = "the status module is unavailable, so the merge cannot be proven"
         return result
 
-    # 2. even with a merged PR, the remote ref must actually be gone-or-equal, not different work
+    # 2. even with a merged PR, the branch must not carry commits main lacks.
+    # Does the branch hold any commit main lacks? `git cherry` answers exactly that: '-' means the
+    # commit's changes are already upstream, '+' means they are not.
+    #
+    # Two earlier attempts at this were both wrong, in opposite directions, which is why the test is
+    # worth naming:
+    #
+    #   * `rev-list --count main..branch` (ancestry): a SQUASH merge leaves no ancestor, so it
+    #     reported 2 commits for a branch byte-identical to main and refused every squash-merged
+    #     branch - most of them here.
+    #   * `git diff --stat main..branch` (whole-tree): a branch that is merely BEHIND main shows as
+    #     removing main's newer files, so it refused a branch whose PR had just merged, flagging
+    #     five files belonging to other labs that this branch never touched.
+    #
+    # `git cherry` is the question the guard actually means to ask: does this branch introduce
+    # anything that is not already upstream?
     rc, out = git("rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}")
     if rc == 0:
-        rc2, ahead = git("rev-list", "--count", f"origin/main..origin/{branch}")
-        if rc2 == 0 and ahead.isdigit() and int(ahead) > 0:
-            result["reason"] = (
-                f"origin/{branch} has {ahead} commit(s) not in main - it holds work the "
-                f"merge did not carry"
-            )
-            result["merged"] = False
-            result["safe_to_delete"] = False
-            return result
+        rc2, cherry = git("cherry", "origin/main", f"origin/{branch}")
+        if rc2 == 0:
+            unpushed = [ln for ln in cherry.splitlines() if ln.startswith("+")]
+            if unpushed:
+                result["reason"] = (
+                    f"origin/{branch} holds {len(unpushed)} commit(s) whose changes are not in main "
+                    f"- the merge did not carry them"
+                )
+                result["merged"] = False
+                result["safe_to_delete"] = False
+                return result
 
     if not apply:
         return result
@@ -763,3 +780,59 @@ def remote_branches_without_pr(paths, limit: int = 20) -> list[dict]:
         if len(out) >= limit:
             break
     return out
+
+def checkout_preserving_claims(paths: HarnessPaths, target: str, create: bool = False) -> dict:
+    """Switch branches without losing an uncommitted claim.
+
+    `docs/harness/claims.json` is TRACKED, because a claim has to reach the other labs, and it is
+    APPENDED to by every `team claim` and `team release`. So the ordinary sequence — claim a branch,
+    then check something out — fails with:
+
+        error: Your local changes to the following files would be overwritten by checkout:
+            docs/harness/claims.json
+
+    That happened three times in one session, and each time the workaround was to copy the file
+    aside by hand. It is worth a command because **the wrong workaround is the easy one**:
+    `git checkout -f` or `git checkout -- docs/harness/claims.json` discards the claim, and a claim
+    nobody has committed is still a lab saying "I am working here". Silently dropping it is exactly
+    the collision this plane exists to prevent.
+
+    So: read the modified claims, check out, write them back. The claim survives on the new branch,
+    still uncommitted, exactly as the caller left it.
+    """
+    import subprocess
+
+    import multilab
+
+    # `claims_file` lives in multilab, which resolves it to the MAIN checkout so a claim made from a
+    # linked worktree still lands in the shared store.
+    claims = multilab.claims_file(paths)
+    preserved: str | None = None
+    if claims.is_file():
+        rc, dirty = _git_raw(["git", "-C", str(paths.repo), "status", "--porcelain", "--", str(claims)])
+        if rc == 0 and dirty.strip():
+            preserved = claims.read_text(encoding="utf-8")
+
+    args = ["git", "-C", str(paths.repo), "checkout"]
+    if create:
+        args += ["-b", target]
+    else:
+        args.append(target)
+    rc, out = _git_raw(args)
+    if rc != 0:
+        return {"target": target, "switched": False, "claims_preserved": False, "error": out.strip()}
+
+    restored = False
+    if preserved is not None:
+        claims.write_text(preserved, encoding="utf-8")
+        restored = True
+    return {
+        "target": target,
+        "switched": True,
+        "claims_preserved": restored,
+        "note": (
+            "an uncommitted claim was carried across the checkout"
+            if restored
+            else "no uncommitted claim to carry"
+        ),
+    }

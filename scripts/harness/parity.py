@@ -277,6 +277,312 @@ def controlled_cases(binary: Path) -> list[str]:
     return findings
 
 
+def prep_agreement(binary: Path) -> list[str]:
+    """The Rust and Python readers must agree about every pre-registration sheet.
+
+    The D22 gate turns on a sheet's TEST FITNESS verdict, so a reader that disagrees about one is a
+    gate that opens for one implementation and not the other. This compares the verdict and the
+    missing-block list per sheet, read through each implementation's own parser.
+    """
+    import glob
+
+    findings: list[str] = []
+    sheets = sorted(glob.glob("docs/harness/prep/*.md"))
+    if not sheets:
+        return findings  # a checkout with no sheets is not a disagreement
+
+    code, out, err = run([
+        str(binary), "prep-check", "--repo", str(REPO), "--json",
+    ])
+    if code != 0:
+        findings.append(f"prep agreement: the Rust prep check exited {code}: {err[:200]}")
+        return findings
+    try:
+        rust_rows = {Path(r["sheet"]).name: r for r in json.loads(out)["sheets"]}
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        findings.append(f"prep agreement: could not read the Rust output ({exc}): {out[:200]}")
+        return findings
+
+    probe = (
+        "import json,sys,pathlib;"
+        "sys.path.insert(0,'scripts/harness');"
+        "import core,prep;"
+        "p=core.HarnessPaths.discover(repo='.');"
+        "reqs=prep.sheet_requirements(p);"
+        "out={};"
+        "[out.update({f.name:{'fitness':prep.test_fitness(f.read_text(encoding='utf-8')),"
+        "'missing':[n for k,(n,pred) in reqs.items() if not pred(prep.sections(f.read_text(encoding='utf-8')), f.read_text(encoding='utf-8'))]}})"
+        " for f in sorted(pathlib.Path('docs/harness/prep').glob('*.md'))];"
+        "print(json.dumps(out))"
+    )
+    code, out, err = run([sys.executable, "-c", probe])
+    if code != 0:
+        findings.append(f"prep agreement: the Python reader failed: {err[:200]}")
+        return findings
+    py_rows = json.loads(out)
+
+    if set(rust_rows) != set(py_rows):
+        findings.append(f"prep agreement: sheet sets differ (rust {sorted(rust_rows)}, python {sorted(py_rows)})")
+    for name in sorted(set(rust_rows) & set(py_rows)):
+        r, q = rust_rows[name], py_rows[name]
+        if r["fitness"] != q["fitness"]:
+            findings.append(f"prep {name}: rust says {r['fitness']}, python says {q['fitness']}")
+        if sorted(r.get("missing", [])) != sorted(q.get("missing", [])):
+            findings.append(
+                f"prep {name}: missing blocks differ (rust {r.get('missing')}, python {q.get('missing')})"
+            )
+    return findings
+
+
+def registry_agreement(binary: Path) -> list[str]:
+    """Every milestone's headline and line counts must read identically in both implementations.
+
+    The headline is the number a run is scored against, so a reader that disagrees about it is a
+    pre-registration written against a different bar than the panel grades. The registry is also
+    where three live headline FORMS meet — vacuous ("not qualified"), qualitative ("yes -> target
+    no") and numeric — and rendering the wrong one misstates the bar.
+    """
+    findings: list[str] = []
+    code, out, err = run([str(binary), "registry", "--repo", str(REPO), "--json"])
+    if code != 0:
+        findings.append(f"registry agreement: the Rust reader exited {code}: {err[:200]}")
+        return findings
+    try:
+        rust_rows = {r["key"]: r for r in json.loads(out)["milestones"]}
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        findings.append(f"registry agreement: could not read the Rust output ({exc})")
+        return findings
+
+    probe = (
+        "import json,sys;"
+        "sys.path.insert(0,'scripts/harness');"
+        "import core,registries;"
+        "p=core.HarnessPaths.discover(repo='.');"
+        "ms=registries.load_milestones(p);"
+        "print(json.dumps({k:{'headline':m.headline_line(),'lines':m.line_counts(),'issue':m.issue}"
+        " for k,m in ms.by_key.items()}))"
+    )
+    code, out, err = run([sys.executable, "-c", probe])
+    if code != 0:
+        findings.append(f"registry agreement: the Python reader failed: {err[:200]}")
+        return findings
+    py_rows = json.loads(out)
+
+    if set(rust_rows) != set(py_rows):
+        findings.append(
+            f"registry agreement: milestone sets differ (rust {sorted(rust_rows)}, python {sorted(py_rows)})"
+        )
+    for key in sorted(set(rust_rows) & set(py_rows)):
+        r, q = rust_rows[key], py_rows[key]
+        if r["headline"] != q["headline"]:
+            findings.append(f"registry {key} headline: rust {r['headline']!r} != python {q['headline']!r}")
+        if r["lines"] != q["lines"]:
+            findings.append(f"registry {key} lines: rust {r['lines']!r} != python {q['lines']!r}")
+        if r["issue"] != q["issue"]:
+            findings.append(f"registry {key} issue: rust {r['issue']} != python {q['issue']}")
+    return findings
+
+
+def render_agreement(binary: Path) -> list[str]:
+    """A rendered pre-registration sheet must be byte-identical in both implementations.
+
+    A sheet is a DOCUMENT two implementations must agree about — a lab may read one written by either,
+    and the D22 gate scores against it. A one-character difference in a bar or a target is a different
+    pre-registration, so this compares the whole text rather than selected fields.
+    """
+    import subprocess
+
+    findings: list[str] = []
+    code, rust_text, err = run([str(binary), "prep-render", "--repo", str(REPO), "-m", "m1",
+                                "--mechanism", "parity-probe"])
+    if code != 0:
+        findings.append(f"render agreement: the Rust renderer exited {code}: {err[:200]}")
+        return findings
+
+    probe = (
+        "import sys,types;"
+        "sys.path.insert(0,'scripts/harness');"
+        "import core,registries,prep;"
+        "p=core.HarnessPaths.discover(repo='.');"
+        "reg=registries.Registry.load(p);"
+        "m=reg.milestones.get('m1');"
+        "panel=registries.find_panel(reg.panels,m.panel) if m.panel else None;"
+        "a=types.SimpleNamespace(mechanism='parity-probe',run='',bar='',base='',split='',steps='',"
+        "stop='',cost='',seeds=None,rows=None);"
+        "sys.stdout.write(prep.render_sheet(a,p,reg,m,panel))"
+    )
+    proc = subprocess.run([sys.executable, "-c", probe], cwd=REPO, capture_output=True, text=True, timeout=300)
+    if proc.returncode != 0:
+        findings.append(f"render agreement: the Python renderer failed: {proc.stderr[:200]}")
+        return findings
+    py_text = proc.stdout
+
+    if rust_text != py_text:
+        # Report the first differing line: the whole diff is 4.7KB of prose and unreadable in a log.
+        r_lines, p_lines = rust_text.splitlines(), py_text.splitlines()
+        where = "length differs"
+        for i in range(max(len(r_lines), len(p_lines))):
+            r = r_lines[i] if i < len(r_lines) else "<nothing>"
+            q = p_lines[i] if i < len(p_lines) else "<nothing>"
+            if r != q:
+                where = f"line {i + 1}: rust {r[:90]!r} != python {q[:90]!r}"
+                break
+        findings.append(f"render agreement: sheets differ - {where}")
+    return findings
+
+
+def status_agreement(binary: Path) -> list[str]:
+    """The rendered MILESTONES section must be identical in both implementations.
+
+    Compared against Python's REAL `status` output rather than a Python helper, because the helpers
+    are not what a lab reads. This is the section that carries the headline acceptance number, the
+    line counts and the panel every lab works against, so a difference here is a lab reading a
+    different milestone than the one being graded.
+    """
+    import subprocess
+
+    findings: list[str] = []
+    code, rust_out, err = run([str(binary), "status", "--repo", str(REPO), "--at",
+                               "2026-10-13T02:52:00-04:00", "--lab", "parity"])
+    if code != 0:
+        findings.append(f"status agreement: the Rust status exited {code}: {err[:200]}")
+        return findings
+
+    proc = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "harness" / "cli.py"), "status"],
+        cwd=REPO, capture_output=True, text=True, timeout=600,
+    )
+    if proc.returncode != 0:
+        findings.append(f"status agreement: the Python status failed: {proc.stderr[:200]}")
+        return findings
+
+    def section(text: str, start: str, end: str) -> list[str]:
+        lines = text.splitlines()
+        try:
+            i = next(i for i, l in enumerate(lines) if l.startswith(start))
+        except StopIteration:
+            return []
+        j = next((j for j, l in enumerate(lines) if l.startswith(end) and j > i), len(lines))
+        return [l for l in lines[i:j]]
+
+    rust_lines = section(rust_out, "1. MILESTONES", "2. RECEIPTS")
+    py_lines = section(proc.stdout, "1. MILESTONES", "2. RECEIPTS")
+    if not py_lines:
+        findings.append("status agreement: Python produced no MILESTONES section to compare")
+        return findings
+    if rust_lines != py_lines:
+        where = "length differs"
+        for i in range(max(len(rust_lines), len(py_lines))):
+            r = rust_lines[i] if i < len(rust_lines) else "<nothing>"
+            q = py_lines[i] if i < len(py_lines) else "<nothing>"
+            if r != q:
+                where = f"line {i + 1}: rust {r[:110]!r} != python {q[:110]!r}"
+                break
+        findings.append(f"status agreement: MILESTONES differ - {where}")
+
+    # The source line carries the registry note, which is where a lab learns which owner direction
+    # the cache was reconciled to. Compared without the timestamp, which is the only variable part.
+    def source_line(text: str) -> str:
+        for line in text.splitlines():
+            if line.startswith("source: "):
+                return line
+        return ""
+
+    if source_line(rust_out) != source_line(proc.stdout):
+        findings.append(
+            f"status agreement: source line differs (rust {source_line(rust_out)[:120]!r} != "
+            f"python {source_line(proc.stdout)[:120]!r})"
+        )
+    return findings
+
+
+def status_receipts_agreement(binary: Path) -> list[str]:
+    """The RECEIPTS section must aggregate every lab's shard identically in both implementations.
+
+    This is the section whose whole purpose is cross-lab visibility, so the properties compared are
+    the aggregate counts, the per-kind breakdown, the last-5 lines and the two local 24-hour clauses.
+    Two clauses legitimately differ and are excluded rather than tolerated silently:
+
+      * the live timestamp of the newest receipt, which moves between the two runs; and
+      * the milestone-issue clause, which the Rust side reports as UNAVAILABLE because it does not
+        query GitHub. Claiming the issues are current without looking would be the worse bug.
+    """
+    import subprocess
+
+    findings: list[str] = []
+    code, rust_out, err = run([str(binary), "status", "--repo", str(REPO), "--at",
+                               "2026-10-13T02:52:00-04:00", "--lab", "parity"])
+    if code != 0:
+        findings.append(f"status receipts: the Rust status exited {code}: {err[:200]}")
+        return findings
+    proc = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "harness" / "cli.py"), "status"],
+        cwd=REPO, capture_output=True, text=True, timeout=600,
+    )
+    if proc.returncode != 0:
+        findings.append(f"status receipts: the Python status failed: {proc.stderr[:200]}")
+        return findings
+
+    def section(text: str, start: str, end: str) -> list[str]:
+        lines = text.splitlines()
+        try:
+            i = next(i for i, l in enumerate(lines) if l.startswith(start))
+        except StopIteration:
+            return []
+        j = next((j for j, l in enumerate(lines) if l.startswith(end) and j > i), len(lines))
+        return lines[i:j]
+
+    def stable(lines: list[str]) -> list[str]:
+        out = []
+        for l in lines:
+            if "milestone issue" in l:
+                continue  # the GitHub clause; see the docstring
+            # The newest receipt line carries a live timestamp. Dropped by position: it is the first
+            # `- <ts>` row, and its content is a receipt the other run may not have seen yet.
+            if l.strip().startswith("- 2") and "heartbeat" in l and "no model line" in l:
+                continue
+            out.append(l)
+        return out
+
+    py_lines = stable(section(proc.stdout, "2. RECEIPTS", "3. DELIVERY"))
+    rust_lines = stable(section(rust_out, "2. RECEIPTS", "3. DELIVERY"))
+    if not py_lines:
+        findings.append("status receipts: Python produced no RECEIPTS section")
+        return findings
+
+    # The aggregate counts are the claim. Compared as parsed fields, so a difference is reported as
+    # numbers rather than as a wall of text.
+    def counts(lines: list[str]) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for l in lines:
+            body = l.strip()
+            if " receipts (" in body and "·" in body:
+                for part in body.split("·"):
+                    part = part.strip()
+                    if ":" in part:
+                        k, v = part.split(":", 1)
+                        out[k.strip()] = v.strip()
+            elif body.startswith("skills used:"):
+                out["used"] = body
+        return out
+
+    rc, pc = counts(rust_lines), counts(py_lines)
+    for key in sorted(set(rc) | set(pc)):
+        if rc.get(key) != pc.get(key):
+            findings.append(f"status receipts {key}: rust {rc.get(key)!r} != python {pc.get(key)!r}")
+
+    # The last-5 ordering and the two local 24-hour clauses, compared as text minus the known clause.
+    r_tail = [l for l in rust_lines if l.strip().startswith("milestones with no receipt")]
+    p_tail = [l for l in py_lines if l.strip().startswith("milestones with no receipt")]
+    if r_tail != p_tail:
+        findings.append(f"status receipts stale milestones: rust {r_tail} != python {p_tail}")
+    r_hb = [l for l in rust_lines if "never posted on the issue" in l]
+    p_hb = [l for l in py_lines if "never posted on the issue" in l]
+    if r_hb != p_hb:
+        findings.append(f"status receipts unposted cards: rust {r_hb} != python {p_hb}")
+    return findings
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Check Rust/Python harness parity on shared state.")
     ap.add_argument("--build", action="store_true", help="build the Rust binary first")
@@ -362,6 +668,16 @@ def main(argv: list[str] | None = None) -> int:
     findings.extend(controlled)
     interop = write_interop(binary)
     findings.extend(interop)
+    prep = prep_agreement(binary)
+    findings.extend(prep)
+    registry = registry_agreement(binary)
+    findings.extend(registry)
+    render = render_agreement(binary)
+    findings.extend(render)
+    status_cmp = status_agreement(binary)
+    findings.extend(status_cmp)
+    receipts_cmp = status_receipts_agreement(binary)
+    findings.extend(receipts_cmp)
 
     if args.json:
         print(json.dumps({
@@ -369,6 +685,11 @@ def main(argv: list[str] | None = None) -> int:
             "note": "the format check has one implementation (Rust); controlled cases test it directly",
             "controlled_cases": 6,
             "write_interop": "ok" if not interop else "FAILED",
+            "prep_agreement": "ok" if not prep else "FAILED",
+            "registry_agreement": "ok" if not registry else "FAILED",
+            "render_agreement": "ok" if not render else "FAILED",
+            "status_agreement": "ok" if not status_cmp else "FAILED",
+            "status_receipts_agreement": "ok" if not receipts_cmp else "FAILED",
             "state_valid": not invalid,
             "binary": str(binary),
             "formats": len(r_formats),
@@ -390,6 +711,23 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "  Rust-written receipt read back by Python: "
             + ("ok" if not interop else f"FAILED ({len(interop)})")
+        )
+        print("  prep sheets read identically by both: " + ("ok" if not prep else f"FAILED ({len(prep)})"))
+        print(
+            "  milestone headlines and line counts identical: "
+            + ("ok" if not registry else f"FAILED ({len(registry)})")
+        )
+        print(
+            "  rendered pre-registration sheet identical: "
+            + ("ok" if not render else f"FAILED ({len(render)})")
+        )
+        print(
+            "  status MILESTONES section identical: "
+            + ("ok" if not status_cmp else f"FAILED ({len(status_cmp)})")
+        )
+        print(
+            "  status RECEIPTS aggregation identical: "
+            + ("ok" if not receipts_cmp else f"FAILED ({len(receipts_cmp)})")
         )
     return 1 if findings else 0
 

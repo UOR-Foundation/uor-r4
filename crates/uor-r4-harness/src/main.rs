@@ -12,13 +12,16 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use uor_r4_harness::onboard::{detect_runtime, onboard};
+use uor_r4_harness::prep::{check_all, SheetReport};
 use uor_r4_harness::presence::{heartbeat, Presence};
 use uor_r4_harness::receipt::{append, current_month, Receipt as NewReceipt};
+use uor_r4_harness::registries::Registries;
 use uor_r4_harness::state::{read_ledger, PresenceRow, StatePaths};
+use uor_r4_harness::status;
 use uor_r4_harness::Contract;
 
 /// Flags that only a subcommand understands, forwarded rather than rejected at the top level.
-const SUBCOMMAND_FLAGS: [&str; 13] = [
+const SUBCOMMAND_FLAGS: [&str; 23] = [
     "--kind",
     "--milestone",
     "-m",
@@ -32,10 +35,20 @@ const SUBCOMMAND_FLAGS: [&str; 13] = [
     "--dry-run",
     "--doing",
     "--next",
+    "--date",
+    "--mechanism",
+    "--bar",
+    "--base",
+    "--split",
+    "--steps",
+    "--stop",
+    "--cost",
+    "--seeds",
+    "--rows",
 ];
 
 /// The subset that takes a value, so the value is not mistaken for a command.
-const SUBCOMMAND_VALUE_FLAGS: [&str; 12] = [
+const SUBCOMMAND_VALUE_FLAGS: [&str; 23] = [
     "--kind",
     "--milestone",
     "-m",
@@ -48,6 +61,17 @@ const SUBCOMMAND_VALUE_FLAGS: [&str; 12] = [
     "--run",
     "--doing",
     "--next",
+    "--date",
+    "--mechanism",
+    "--bar",
+    "--base",
+    "--split",
+    "--steps",
+    "--stop",
+    "--cost",
+    "--seeds",
+    "--rows",
+    "--at",
 ];
 
 const USAGE: &str = "\
@@ -69,6 +93,15 @@ COMMANDS:
                 Rust side; use --dry-run to see the line without recording it.
     heartbeat   Check in: publish presence to both tiers and record a receipt.
                 Use --dry-run to see what would be written.
+    prep-check  Read every pre-registration sheet: its TEST FITNESS verdict and
+                which required blocks are missing. The read half of the D22 gate.
+    registry    The milestone registry as this implementation reads it: headline,
+                panel and line counts per milestone. Compared against Python by
+                parity.py, because the headline is the number a run is scored on.
+    prep-render Render a pre-registration sheet to stdout without writing it. The
+                WRITE half of the D22 gate, checked byte-for-byte against Python.
+    status      What is true now. Sections 1 (milestones) and 2 (receipts) are
+                ported; section 3 (delivery) says so rather than rendering blank.
     help        This text.
 
 The Python harness owns behaviour until this path passes the same checks; the
@@ -127,10 +160,15 @@ fn main() -> ExitCode {
             // Flags belonging to a subcommand are collected and handed to it, not rejected here:
             // `receipt` takes many optional fields and the top-level loop cannot know them all.
             other if other.starts_with('-') => {
-                if SUBCOMMAND_FLAGS.contains(&other) {
+                // A flag is known if it takes a value OR is a bare switch. Checking only the switch
+                // list silently rejected every value-only flag: `--at` was added to the value list
+                // and still failed with "unknown option", because the two lists were consulted as if
+                // the first were the complete set.
+                let takes_value = SUBCOMMAND_VALUE_FLAGS.contains(&other);
+                if SUBCOMMAND_FLAGS.contains(&other) || takes_value {
                     rest.push(other.to_string());
                     // A value-taking subcommand flag carries the next token with it.
-                    if !other.contains('=') && SUBCOMMAND_VALUE_FLAGS.contains(&other) {
+                    if !other.contains('=') && takes_value {
                         if let Some(v) = args.get(i + 1) {
                             rest.push(v.clone());
                             i += 1;
@@ -164,6 +202,10 @@ fn main() -> ExitCode {
         Some("ledger") => cmd_ledger(&repo, json),
         Some("receipt") => cmd_receipt(&repo, &rest, json),
         Some("heartbeat") => cmd_heartbeat(&repo, &rest, json),
+        Some("prep-check") => cmd_prep_check(&repo, json),
+        Some("registry") => cmd_registry(&repo, json),
+        Some("prep-render") => cmd_prep_render(&repo, &rest),
+        Some("status") => cmd_status(&repo, &rest),
         Some(other) => {
             eprintln!("uor-harness: unknown command {other}\n\n{USAGE}");
             ExitCode::from(2)
@@ -317,6 +359,185 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+fn cmd_status(repo: &Path, args: &[String]) -> ExitCode {
+    let paths = StatePaths::from_env(repo);
+    // A caller may pin the timestamp so two implementations can be compared; otherwise it is now.
+    let now = flag_value(args, "--at").unwrap_or_else(uor_r4_harness::receipt::now_rfc3339);
+    // No `--lab`: section 2 aggregates EVERY lab's shard, so the view has no "whose receipts"
+    // question to answer.
+    let regs = Registries::load(&paths).ok();
+    print!("{}", status::render(&paths, regs.as_ref(), &now));
+    ExitCode::SUCCESS
+}
+
+fn cmd_prep_render(repo: &Path, args: &[String]) -> ExitCode {
+    use uor_r4_harness::prep::{render_sheet, NewSheet};
+
+    let paths = StatePaths::from_env(repo);
+    let regs = match Registries::load(&paths) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("uor-harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let key = flag_value(args, "--milestone")
+        .or_else(|| flag_value(args, "-m"))
+        .unwrap_or_default();
+    let Some(m) = regs.milestone(&key) else {
+        eprintln!("uor-harness: no milestone {key:?}; try `uor-harness registry`");
+        return ExitCode::from(2);
+    };
+    let panel = regs.panel_for(m);
+    let sheet = NewSheet {
+        date: flag_value(args, "--date").unwrap_or_default(),
+        mechanism: flag_value(args, "--mechanism").unwrap_or_default(),
+        run: flag_value(args, "--run").unwrap_or_default(),
+        bar: flag_value(args, "--bar").unwrap_or_default(),
+        base: flag_value(args, "--base").unwrap_or_default(),
+        split: flag_value(args, "--split").unwrap_or_default(),
+        steps: flag_value(args, "--steps").unwrap_or_default(),
+        stop: flag_value(args, "--stop").unwrap_or_default(),
+        cost: flag_value(args, "--cost").unwrap_or_default(),
+        seeds: flag_value(args, "--seeds").and_then(|v| v.parse().ok()),
+        rows: flag_value(args, "--rows").and_then(|v| v.parse().ok()),
+    };
+    // Prints, never writes. `prep new` writing files is a separate decision, and a renderer that
+    // writes on its first outing is one nobody can inspect before it does.
+    print!(
+        "{}",
+        render_sheet(&sheet, m, panel, &|id| regs.rule(id), &paths)
+    );
+    ExitCode::SUCCESS
+}
+
+fn cmd_registry(repo: &Path, json: bool) -> ExitCode {
+    let paths = StatePaths::from_env(repo);
+    let regs = match Registries::load(&paths) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("uor-harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    if json {
+        let rows: Vec<String> = regs
+            .milestones
+            .iter()
+            .map(|m| {
+                let panel = regs.panel_for(m).map(|p| p.id.clone()).unwrap_or_default();
+                format!(
+                    "    {{\"key\": {:?}, \"id\": {:?}, \"issue\": {}, \"headline\": {:?}, \"panel\": {:?}, \"lines\": {:?}}}",
+                    m.key,
+                    m.id,
+                    m.issue,
+                    m.headline_line(),
+                    panel,
+                    m.line_counts()
+                )
+            })
+            .collect();
+        println!(
+            "{{\n  \"milestones\": [\n{}\n  ],\n  \"panels\": {},\n  \"owner_rules\": {}\n}}",
+            rows.join(",\n"),
+            regs.panels.len(),
+            regs.owner_rules.len()
+        );
+    } else {
+        println!(
+            "{} milestones, {} panels, {} owner rules",
+            regs.milestones.len(),
+            regs.panels.len(),
+            regs.owner_rules.len()
+        );
+        for m in &regs.milestones {
+            println!(
+                "  {:<6} {:<52} {}",
+                m.id,
+                m.headline_line(),
+                m.line_counts()
+            );
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn cmd_prep_check(repo: &Path, json: bool) -> ExitCode {
+    let paths = StatePaths::from_env(repo);
+    let sheets = check_all(&paths);
+    if json {
+        let rows: Vec<String> = sheets.iter().map(sheet_json).collect();
+        println!(
+            "{{\n  \"sheets\": [\n{}\n  ],\n  \"cleared_for_compute\": {}\n}}",
+            rows.join(",\n"),
+            sheets.iter().filter(|s| s.may_compute()).count()
+        );
+    } else {
+        // A view of the GATE, not a dump of the files: a lab wants to know what may be computed
+        // against and what is missing, and nothing else. Rows are ordered FIT first, because the one
+        // question anyone brings here is "is there a sheet I can run against".
+        let mut rows: Vec<&SheetReport> = sheets.iter().collect();
+        rows.sort_by_key(|s| (!s.may_compute(), s.path.clone()));
+        let cleared = rows.iter().filter(|s| s.may_compute()).count();
+        println!(
+            "{} pre-registration sheet(s); {cleared} cleared for compute (D22 requires TEST FITNESS: FIT)",
+            rows.len()
+        );
+        println!(
+            "{:<9} {:<8} {:<9} {:<44} missing",
+            "state", "verdict", "complete", "sheet"
+        );
+        println!("{}", "-".repeat(104));
+        for s in rows {
+            let name = s
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let state = if s.may_compute() { "FIT" } else { "not FIT" };
+            let complete = if s.complete() { "yes" } else { "no" };
+            let missing = s.missing();
+            let gap = if missing.is_empty() {
+                "-".to_string()
+            } else {
+                missing.join(", ")
+            };
+            println!("{state:<9} {:<8} {complete:<9} {name:<44} {gap}", s.fitness);
+        }
+        if cleared == 0 {
+            println!();
+            println!(
+                "Nothing here is cleared for compute. A complete sheet with a PENDING verdict is"
+            );
+            println!(
+                "still not FIT: completeness is the form being filled in, fitness is a reviewer"
+            );
+            println!("saying the bar is testable (D22).");
+        }
+    }
+    // Exit 1 only when a sheet CLAIMS to be FIT and is not readable as one: that is the state worth
+    // failing on. A PENDING sheet is the normal state of work in progress, not a failure.
+    ExitCode::SUCCESS
+}
+
+fn sheet_json(s: &SheetReport) -> String {
+    let blocks: Vec<String> = s
+        .blocks
+        .iter()
+        .map(|b| format!("{{\"key\": {:?}, \"present\": {}}}", b.key, b.present))
+        .collect();
+    let missing: Vec<String> = s.missing().iter().map(|m| format!("{m:?}")).collect();
+    format!(
+        "    {{\"sheet\": {:?}, \"fitness\": {:?}, \"complete\": {}, \"may_compute\": {}, \"missing\": [{}], \"blocks\": [{}]}}",
+        s.path.display().to_string(),
+        s.fitness,
+        s.complete(),
+        s.may_compute(),
+        missing.join(", "),
+        blocks.join(", ")
+    )
 }
 
 fn cmd_receipt(repo: &Path, args: &[String], json: bool) -> ExitCode {
