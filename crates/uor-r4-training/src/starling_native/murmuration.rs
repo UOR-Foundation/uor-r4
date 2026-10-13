@@ -293,11 +293,11 @@ pub enum Chirality {
 impl Chirality {
     /// Whether head `h` transports by the right action.
     pub fn right(self, head: usize) -> bool {
-        self == Chirality::Paired && head % 2 == 1
+        self == Chirality::Paired && !head.is_multiple_of(2)
     }
 
     pub fn validate(self, heads: usize) -> Result<()> {
-        if self == Chirality::Paired && (heads == 0 || heads % 2 != 0) {
+        if self == Chirality::Paired && (heads == 0 || !heads.is_multiple_of(2)) {
             return Err(invalid(format!(
                 "paired (left/right) heads need an even head count, got {heads}"
             )));
