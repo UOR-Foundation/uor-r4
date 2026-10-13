@@ -11,9 +11,16 @@ model that runs on a laptop?*
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
 
 **Status, 13 October 2026: pre-alpha.** No model in this repository holds a useful conversation yet.
-The native-only CUDA training/evaluation source and repaired compiled dependency boundary pass
-all 31 finite controls at `1f1547bfd70f01edc9aa36d34a46e5bc43edc34c`; protected delivery is pending. **Training and the separate M2 holds remain held**.
-[Current D29 record](docs/labs/d29-vendor-boundary-2026-10-13/README.md).
+Under D32 the model and its learning/qualification instruments are discrete: no
+floating-point forward, gradients, optimizer or matrix multiplication. The new
+SpiralCore/FBS shared-vector candidate builds at
+`a2a5b89cdddd1b32bf32f0e3c18d6b21e994e523`; **eleven CUDA controls were observed PASS,
+OUT_OF_REQUIRED_REVIEW_ORDER**. Claude FIT and a new admitted exact repeat are pending;
+these observations do not qualify the milestone. Protected #2379 delivery is pending.
+**Training and the separate M2 holds remain held**; no update or useful-chat result.
+[Discrete record](docs/labs/discrete-geometric-learning-2026-10-13/README.md).
+Earlier 31/18-control float receipts retain their exact historical scope;
+[PR #2370](https://github.com/UOR-Foundation/uor-r4/pull/2370) preserves that evidence.
 
 ## The question
 
@@ -32,6 +39,12 @@ The answer is recorded either way. Architectural priority is not a measured adva
 project keeps the two apart.
 
 ## Architecture
+
+The active standalone discrete path uses actual64-state SpiralCore transport,
+ordered FBS context and one integer codebook for input, carried vectors and output.
+Its sixteen-root orbit is not full E8 coverage or a language result; Claude's
+discrete read/integration remain separate. The diagram and older line descriptions
+below preserve the prior architecture snapshot, not an executable float trunk.
 
 <img src="docs/figures/architecture.svg" alt="Architecture: line A, the geometric stack language base, shows the earlier operator status; the native head now exists, the revised compiled boundary passes finite controls at its declared source scope, and training is held; line B, the native learner, completes 437 of 512 development replies but 0 of 128 on fresh transfer; both join as one model served under D11 at M4" width="100%">
 

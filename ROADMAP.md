@@ -1,5 +1,15 @@
 # UOR-R4 Geometric Language Model - roadmap
 
+**Current learning permission — D32:** discrete/exact GPU model computation and
+instruments only; no floating-point forward, gradient, optimizer or matrix product.
+The standalone shared-writer FBS candidate builds at `a2a5b89c`; eleven CUDA controls
+were observed PASS OUT_OF_REQUIRED_REVIEW_ORDER. Claude FIT and a new admitted exact
+repeat are pending, so milestone qualification and protected #2379 delivery remain pending. Earlier operator/31/18-control float entries
+are preserved historical source scopes, not executable training permissions
+(preservation #2370). Training and separate M2 holds remain HELD. Kimi owns the
+discrete successor sheet; a FIT review releases no hold.
+[Discrete record](docs/labs/discrete-geometric-learning-2026-10-13/README.md).
+
 Updated 13 October 2026. **Pre-alpha.** Useful conversation, broad reasoning, coding, frontier
 capability and lower complete-path energy are not established.
 
@@ -88,9 +98,10 @@ Pictures of the pre-registered mechanisms are in [docs/geometry.md § 11](docs/g
 
 **North star: geometric intelligence.** The goal is a working geometric language model whose
 runtime uses integer, fixed-point and geometric operations only: no transformer, no matrix
-multiplication and no floating point. Offline GPU learning may use scalar floating-point geometric arithmetic, but
-D25 prohibits dense matrix multiplication and exponential-family squashing in
-training as well as serving; D24 prohibits CPU model compute. Non-model
+multiplication and no floating point. D32 extends the discrete requirement to
+learning and numerical model instruments: no float forward, gradients or optimizer.
+D25 prohibits matrix multiplication and exponential-family squashing;
+D24 prohibits CPU model compute. Non-model
 preparation/analysis/tooling may run locally. Training remains held.
 
 The owner reaffirmed this target on 2026-09-27: "Keep the native, multiplier-free serving
