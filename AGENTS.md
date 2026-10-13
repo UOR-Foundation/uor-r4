@@ -131,6 +131,11 @@ This section overrides historical process and scheduling rules below. Technical
 invariants still apply to the runtime where they are declared.
 
 - Use Rust for data preparation, training, artifact construction and inference.
+  Rust is the default for all new code including tooling (D27); the uor-foundation
+  sibling crates (uor-addr, UOR-Framework, uor-matmul's lawful
+  table/tropical/codec parts, prism, LexLean/PrismPM patterns) are the shared
+  ecosystem floor - reuse before rewriting. Python only where Rust genuinely cannot
+  do the job.
   Training may use scalar floating-point geometric arithmetic on GPU, but no dense matrix multiplication or prohibited squashing. The training hold remains. Final inference
   executes learned geometric operators through bounded routing, state updates
   and integer/table lookup. A dense transformer hidden behind lookup is not the
@@ -212,6 +217,35 @@ RDC/DeepSeek/OpenCode sessions, inherit these rules through this file.
 
 ## Research harness — start here, do not reconstruct the rules
 
+**Four labs share this repository** (Kimi as project manager, Claude and Sol on research and
+synthesis, DeepSeek). The harness is the shared plane: it records who holds which branch, what each
+lab is doing, and what actually ran — across labs, in one place.
+
+**Identify yourself first.** One line, once per session:
+
+```sh
+export UOR_LAB=<kimi|claude|codex|deepseek>
+```
+
+Without it your receipts are still recorded but attributed to **nobody**, and no other lab can see
+who did the work. The harness warns loudly rather than letting that pass silently — an unattributed
+record is worse than an absent one, because absence is visible.
+
+**Joining for the first time:** [docs/harness/BOOTSTRAP.md](docs/harness/BOOTSTRAP.md) is a
+ten-minute, no-compute check that proves the tool runs on your runtime and that your claims and
+presence are visible to the other three labs.
+
+Then, across labs rather than within one:
+
+- `python3 scripts/harness/cli.py multilab presence` — what each lab is doing now. Live tier first
+  (`~/.local/share/uor-r4/harness/`, real-time, uncommitted), committed record as the fallback; the
+  board always says which answered. A lab older than 30 minutes reads **STALE**, and stale is not
+  "idle" — it means that lab is working without checking in.
+- `python3 scripts/harness/cli.py multilab claims` — who holds which branch, visible to every lab.
+  Claim yours with `team claim --branch <name> --lab <lab>` before you start.
+- `python3 scripts/harness/cli.py heartbeat -m <milestone>` — the required check-in, which also
+  publishes your presence. There is no separate step to forget.
+
 The plan, the milestone headline, the skills, the expert team, the acceptance panels, the
 pre-registrations and the lessons from past mistakes are queryable rather than prose to be
 re-derived each session. Read [docs/harness/README.md](docs/harness/README.md) once, then use it:
@@ -222,7 +256,8 @@ re-derived each session. Read [docs/harness/README.md](docs/harness/README.md) o
   `TEST FITNESS: FIT` on the milestone before any compute (D22).
 - `python3 scripts/harness/cli.py check` — every machine-checkable rule, with the fix for each.
 - `python3 scripts/harness/cli.py skill use <id>` / `team dispatch <role>` — one receipt line in
-  `docs/harness/ledger/`, so the owner can see what was actually loaded and deployed.
+  `docs/harness/ledger/<lab>-<month>.jsonl` (sharded per lab, so concurrent PRs never conflict),
+  so the owner and the other labs can see what was actually loaded and deployed.
 - `python3 scripts/harness/cli.py mistakes find -f <files>` — what went wrong here before.
 
 The harness is a view over the authorities named in this file, never a replacement for them: the
