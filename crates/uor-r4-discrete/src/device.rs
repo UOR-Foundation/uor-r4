@@ -29,6 +29,17 @@ fn cuda(error: impl std::fmt::Display) -> Error {
     Error::Cuda(error.to_string())
 }
 
+fn launch_config(items: u32) -> LaunchConfig {
+    // The generic cudarc helper always requests 1024 threads, even for one
+    // proposal. Bound blocks to this path's actual inventory and register use.
+    let threads = items.clamp(1, 128);
+    LaunchConfig {
+        grid_dim: (items.div_ceil(threads), 1, 1),
+        block_dim: (threads, 1, 1),
+        shared_mem_bytes: 0,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Binding {
     pub model: u64,
@@ -294,7 +305,7 @@ impl Device {
             .arg(&mut status);
         // SAFETY: exact discrete_init ABI, checked allocation inventories,
         // immutable geometry/spec, writable buffers owned by this launch.
-        unsafe { launch.launch(LaunchConfig::for_num_elems(items)) }.map_err(cuda)?;
+        unsafe { launch.launch(launch_config(items)) }.map_err(cuda)?;
         check_status(&stream, &status, "initialize")?;
         Ok(Self {
             context,
@@ -381,7 +392,7 @@ impl Device {
         // SAFETY: discrete_validate ABI, checked buffer shapes, fixed geometry
         // and spec. All table/root membership and route-state admission runs
         // on CUDA, before the loaded model can encode or forward any tokens.
-        unsafe { launch.launch(LaunchConfig::for_num_elems(items)) }.map_err(cuda)?;
+        unsafe { launch.launch(launch_config(items)) }.map_err(cuda)?;
         check_status(&model.stream, &status, "snapshot validation")?;
         Ok(model)
     }
@@ -544,7 +555,7 @@ impl Device {
             .arg(&mut status);
         // SAFETY: discrete_encode receives valid IDs and count*width buffers;
         // only output/status are writable, and all belong to this context.
-        unsafe { launch.launch(LaunchConfig::for_num_elems(elements)) }.map_err(cuda)?;
+        unsafe { launch.launch(launch_config(elements)) }.map_err(cuda)?;
         check_status(&self.stream, &status, "encode")?;
         Ok(CarriedBatch {
             vectors,
@@ -612,7 +623,7 @@ impl Device {
             .arg(&mut status);
         // SAFETY: discrete_forward ABI and bounded rows/width/context checked
         // before launch; immutable inputs, disjoint owned result buffers.
-        unsafe { launch.launch(LaunchConfig::for_num_elems(batch.rows)) }.map_err(cuda)?;
+        unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;
         check_status(&self.stream, &status, "forward")?;
         let predictions = self.stream.clone_dtoh(&predictions).map_err(cuda)?;
         let losses = self.stream.clone_dtoh(&losses).map_err(cuda)?;
@@ -680,7 +691,7 @@ impl Device {
             .arg(&mut status);
         // SAFETY: exact counterfactual ABI; parameter and input inventories
         // admitted; sixteen output candidates are scored only on CUDA.
-        unsafe { launch.launch(LaunchConfig::for_num_elems(16)) }.map_err(cuda)?;
+        unsafe { launch.launch(launch_config(16)) }.map_err(cuda)?;
         check_status(&self.stream, &status, "counterfactual")?;
         let mut proposal = self.stream.alloc_zeros::<u64>(4).map_err(cuda)?;
         let mut launch = self.stream.launch_builder(&self.kernels.choose);
@@ -696,7 +707,7 @@ impl Device {
             .arg(&mut proposal);
         // SAFETY: fixed sixteen losses, current bound parameter/table/routes,
         // geometry/spec and epoch, with four writable proposal words.
-        unsafe { launch.launch(LaunchConfig::for_num_elems(1)) }.map_err(cuda)?;
+        unsafe { launch.launch(launch_config(1)) }.map_err(cuda)?;
         self.stream.synchronize().map_err(cuda)?;
         Ok(Proposal {
             data: proposal,
@@ -734,7 +745,7 @@ impl Device {
         // SAFETY: opaque same-model/epoch proposal, admitted parameter index,
         // and exclusively borrowed table/routes/epoch buffers. The CUDA
         // kernel decides whether to commit; host code never selects a winner.
-        unsafe { launch.launch(LaunchConfig::for_num_elems(1)) }.map_err(cuda)?;
+        unsafe { launch.launch(launch_config(1)) }.map_err(cuda)?;
         check_status(&self.stream, &status, "apply")?;
         Ok(self.epoch()? != before)
     }
