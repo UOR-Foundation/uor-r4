@@ -127,6 +127,8 @@ inst=$FAKE/vast-instances.json; [ -f "$inst" ] || echo '[]' > "$inst"
 case "$1 $2" in
   "show instances")
     [ "${FAKE_VAST_LIST_FAIL:-0}" != 1 ] || { echo "failed with error 502" >&2; exit 1; }
+    # nothing at all with exit 0 (FAKE_VAST_LIST_EMPTY=1, or =after-create once a rental happened)
+    case ${FAKE_VAST_LIST_EMPTY:-0} in 1) exit 0;; after-create) [ ! -f "$FAKE/vast-created" ] || exit 0;; esac
     # an API error printed as an object with exit 0 (an expired key, a 5xx page)
     [ "${FAKE_VAST_LIST_OBJ:-0}" != 1 ] || { echo '{"error": "invalid_api_key"}'; exit 0; }
     cat "$inst";;
@@ -139,6 +141,7 @@ case "$1 $2" in
     [ "${FAKE_ALLOW_CREATE:-0}" = 1 ] || { echo "REAL MUTATION CALLED IN DRY RUN" >&2; exit 9; }
     if grep -qx "$3" "$FAKE/vast-gone" 2>/dev/null; then echo "{\"success\": false, \"msg\": \"offer $3 is no longer available\"}"; exit 0; fi
     label=''; prev=''; for a in "$@"; do [ "$prev" = --label ] && label=$a; prev=$a; done
+    touch "$FAKE/vast-created"
     c=$((9001 + $(jq length "$inst")))
     jq --argjson c "$c" --arg l "$label" --argjson now "$(date +%s)" '. + [{id: $c, label: $l, num_gpus: 1, dph_total: 0.469,
       gpu_name: "RTX 5090", geolocation: "South Korea, KR", intended_status: "running", actual_status: "running",
@@ -594,7 +597,10 @@ HH=$W/hfhome; mkdir -p "$HH/.cache/huggingface"; printf 'hf_FAKETOKEN123' > "$HH
 rm -rf "$UOR_POD_STATE"; fresh_pods
 HOME=$HH expect "up with an HF token on the laptop" 0 "hf token copied" -- up --lab claude --session hftok --purpose hf --hours 1 --count 2 --no-bootstrap --ref "$SHA40"
 if grep -q 'cat > /root/.cache/huggingface/token' "$FAKE/calls"; then ok "the token is copied to the pod over ssh"; else bad "the token is copied to the pod over ssh"; fi
-if grep -q 'cp /root/.cache/huggingface/token "$HF_HOME/token"' "$FAKE/calls"; then ok "the token is also copied to the image's HF_HOME"; else bad "the token is also copied to the image's HF_HOME"; fi
+if ! grep -q 'HF_HOME' "$FAKE/calls"; then ok "the token is never written to the image's HF_HOME (a shared volume on Runpod)"; else bad "the token is never written to the image's HF_HOME (a shared volume on Runpod)"; fi
+# the bootstrap points hf at that private copy (the image's HF_HOME is elsewhere)
+if (sed -n '/^if \[ "\$NONCANON" = 1 \]/,/^fi$/p' "$HERE/../uor-pod-bootstrap.sh" | grep -q 'export HF_TOKEN_PATH=/root/.cache/huggingface/token'); then
+  ok "the bootstrap's store fetch uses HF_TOKEN_PATH=/root/.cache/huggingface/token"; else bad "the bootstrap's store fetch uses HF_TOKEN_PATH=/root/.cache/huggingface/token"; fi
 if ! grep -q 'hf_FAKETOKEN123' "$W/out" "$FAKE/calls"; then ok "the token value is in neither the output nor any command line"; else bad "the token value is in neither the output nor any command line"; fi
 # ---- any-region placement: no ladder GPU in the volume datacenters, stock in
 # two allowlisted extra datacenters -> the one with more stock, non-canonical;
@@ -892,6 +898,12 @@ vfresh; VO RTX_5090 1 "$OFF5"
 FAKE_VAST_CREATE_GARBLED=1 vexpect "an unparsed rental is found by its label, not repeated" 1 "no contract in the reply, but instance\\(s\\) 9001 labelled uor-claude-[0-9-]+ exist and bill" -- up --lab claude --session vgarb --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"
 if [ "$(grep -c '^vastai create instance' "$FAKE/calls")" = 1 ]; then ok "exactly one create call"; else bad "exactly one create call"; fi
 has "the refusal says how to destroy it" "echo y \\| vastai destroy instance 9001"
+# an empty listing (exit 0) is a failed listing: up stops, and a garbled rental
+# followed by an empty listing cannot be ruled out, so up stops before renting again
+FAKE_VAST_LIST_EMPTY=1 vexpect "up: an empty listing stops up (caps unknowable)" 1 "Vast: the instance listing failed, so the caps cannot be checked" -- "${VUP[@]}"
+vfresh; VO RTX_5090 1 "$OFF5"; rm -f "$FAKE/vast-created"
+FAKE_VAST_CREATE_GARBLED=1 FAKE_VAST_LIST_EMPTY=after-create vexpect "an unparsed rental with an empty listing stops up" 1 "no contract in the reply and the instance listing failed, so a rental cannot be ruled out" -- up --lab claude --session vgarb2 --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"
+if [ "$(grep -c '^vastai create instance' "$FAKE/calls")" = 1 ]; then ok "still exactly one create call"; else bad "still exactly one create call"; fi
 # prune-stopped never destroys a stopped Vast pod's only copy of /workspace
 echo '[{"id": 9001, "label": "uor-claude-x", "num_gpus": 1, "dph_total": 0.1, "intended_status": "stopped", "actual_status": "exited"}]' > "$FAKE/vast-instances.json"
 vexpect "prune-stopped skips a stopped Vast pod" 0 "a Vast pod's disk holds its only copy of /workspace" -- prune-stopped --yes --older-than 0m
