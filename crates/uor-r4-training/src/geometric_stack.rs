@@ -5722,7 +5722,8 @@ impl StackModel {
                 .read_router
                 .as_ref()
                 .is_some_and(|router| router.active())
-            || self.read_weighting != ReadWeighting::Softmax
+            // A historical weighting is refused; the native read has its own.
+            || self.read_weighting != ReadWeighting::default()
             || self.geometric_address.is_some()
             || self.geometric_span.is_some()
             || self.read_lineage.is_some()
@@ -22669,6 +22670,161 @@ mod tests {
                 );
             }
         }
+        Ok(())
+    }
+
+    /// The rung-0b integration control (#2032 A1 section C): the native
+    /// starling read through the ordinary native trunk. Credit off and on give
+    /// bit-identical forwards and bit-identical value, output and rank-table
+    /// gradients; only credit reaches the content, null and address maps.
+    /// Exploration slots do not change the forward. The artifact reloads with
+    /// its read bound, runs past the trained context, and refuses the
+    /// historical read features. One fixed forward/backward, no optimizer.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn native_starling_read_cuda_integration_control() -> Result<()> {
+        use crate::starling_native::{Credit, NativeStarling};
+        let device = Device::new_cuda(0)?;
+        let build = |explore: usize| -> Result<StackModel> {
+            let mut config = StackConfig::transformer_control(43);
+            config.arch = StackArch::Geometric;
+            config.pattern = "rar".into();
+            config.width = 32;
+            config.heads = 4;
+            config.mlp_hidden = 64;
+            config.context = 16;
+            config.vocab_size = 512;
+            config.rotation = true;
+            config.gate = Gate::Hamilton;
+            config.rec_gates = RecGates::Geometric;
+            config.objective = Objective::MarginHinge { rivals: 1 };
+            let mut model = StackModel::new(config, &device)?;
+            model.set_quaternion_weights(QuaternionWeights::SpiralcoreFbs)?;
+            model.set_native_vector_head(8)?;
+            let credit = Credit {
+                delta: 0.0,
+                ..Credit::FIXTURE
+            };
+            model.set_native_starling_read(NativeStarling::parse(
+                &format!("starling_native:4:3:{explore}"),
+                0,
+                credit,
+            )?)?;
+            Ok(model)
+        };
+        let mut model = build(2)?;
+        model.validate_native_learning_path()?;
+        for (name, _) in model.variables() {
+            assert!(
+                !NATIVE_STARLING_UNUSED
+                    .iter()
+                    .any(|unused| name.ends_with(unused)),
+                "unused dense read tensor kept: {name}"
+            );
+        }
+        assert!(model
+            .variables()
+            .keys()
+            .any(|n| n.ends_with("query_address.spiralcore_fbs")));
+        let (batch, time) = (2usize, 16usize);
+        // Two documents per row (BOS = 0 at 0 and 8); fixture IDs, not a corpus.
+        let ids: Vec<u32> = (0..batch * time)
+            .map(|i| {
+                if i % 8 == 0 {
+                    0
+                } else {
+                    2 + ((i * 7) % 29) as u32
+                }
+            })
+            .collect();
+        let targets: Vec<u32> = ids.iter().map(|&id| (id + 1) % 512).collect();
+        let bits = |t: &Tensor| -> Result<Vec<u32>> {
+            Ok(t.flatten_all()?
+                .to_dtype(DType::F32)?
+                .to_vec1::<f32>()?
+                .iter()
+                .map(|v| v.to_bits())
+                .collect())
+        };
+        let gradients = |model: &StackModel| -> Result<(Tensor, BTreeMap<String, Option<Tensor>>)> {
+            let loss = model.loss(&ids, &targets, batch, time)?;
+            let grads = loss.backward()?;
+            let map = model
+                .variables()
+                .iter()
+                .map(|(name, var)| (name.clone(), grads.get(var.as_tensor()).cloned()))
+                .collect();
+            Ok((loss, map))
+        };
+        let (loss_off, off) = gradients(&model)?;
+        model.set_native_starling_credit(true)?;
+        let (loss_on, on) = gradients(&model)?;
+        assert_eq!(
+            bits(&loss_off)?,
+            bits(&loss_on)?,
+            "credit changed the forward"
+        );
+        let credit_only = |name: &str| {
+            name.contains(".read.query.")
+                || name.contains(".read.key.")
+                || name.contains("native_starling.query_address")
+                || name.ends_with(NATIVE_STARLING_NULL)
+        };
+        let mut credited = 0usize;
+        for (name, before) in &off {
+            let after = &on[name];
+            if credit_only(name) {
+                let before_mass = match before {
+                    Some(g) => g.abs()?.sum_all()?.to_scalar::<f32>()?,
+                    None => 0.0,
+                };
+                assert_eq!(before_mass, 0.0, "{name} learned without credit");
+                if let Some(g) = after {
+                    if g.abs()?.sum_all()?.to_scalar::<f32>()? > 0.0 {
+                        credited += 1;
+                    }
+                }
+            } else if name.contains(".read.") || name.ends_with(NATIVE_STARLING_RANK) {
+                let (Some(before), Some(after)) = (before, after) else {
+                    return Err(invalid(format!("exact read gradient missing: {name}")));
+                };
+                assert_eq!(
+                    bits(before)?,
+                    bits(after)?,
+                    "credit changed exact gradient {name}"
+                );
+            }
+        }
+        assert!(
+            credited > 0,
+            "credit reached no content, null or address map"
+        );
+        // Exploration slots carry zero forward weight.
+        let narrow = build(0)?;
+        assert_eq!(
+            bits(&model.hidden(&ids, batch, time)?)?,
+            bits(&narrow.hidden(&ids, batch, time)?)?,
+            "exploration slots changed the forward"
+        );
+        // Past the trained context: no age table bounds the native read.
+        let long: Vec<u32> = (0..24).map(|i| if i % 8 == 0 { 0 } else { 3 }).collect();
+        model.hidden(&long, 1, 24)?;
+        // Historical read features are refused.
+        assert!(model
+            .set_read_route(parse_read_route("starling:4:3")?)
+            .is_err());
+        // The artifact binds the read and reloads it bit-exactly.
+        let directory =
+            std::env::temp_dir().join(format!("uor-native-starling-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        model.save(&directory)?;
+        let loaded = StackModel::load(&directory, &device)?;
+        assert_eq!(loaded.native_starling_read(), model.native_starling_read());
+        assert_eq!(
+            bits(&loaded.hidden(&ids, batch, time)?)?,
+            bits(&model.hidden(&ids, batch, time)?)?
+        );
+        std::fs::remove_dir_all(&directory)?;
         Ok(())
     }
 

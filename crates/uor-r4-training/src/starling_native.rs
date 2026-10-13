@@ -699,7 +699,7 @@ mod spec_tests {
     }
 
     /// The interlock for this read's own sources: K1 carries no exponential,
-    /// logarithm, softmax or squashing function, and nothing here invokes a
+    /// logarithm, normalised exponential or squashing function, and nothing here invokes a
     /// runtime CUDA compiler (owner, 13 October 2026). Tokens are assembled so
     /// this test does not match its own text.
     #[test]
@@ -747,6 +747,306 @@ mod spec_tests {
             .map(|e| e.to_string())
             .unwrap_or_default();
         assert!(error.contains("GPU-only"), "{error}");
+        Ok(())
+    }
+}
+
+/// Finite CUDA controls of the card's section 4 (A1): fixed expected values,
+/// no CPU model reference, no optimizer step, no corpus.
+#[cfg(all(test, feature = "cuda"))]
+mod cuda_tests {
+    use super::*;
+    use candle_core::{Device, Var};
+
+    fn cuda() -> Result<Device> {
+        Ok(Device::new_cuda(0)?)
+    }
+
+    fn root(roots: &[f32], cell: usize) -> [f32; 4] {
+        [
+            roots[4 * cell],
+            roots[4 * cell + 1],
+            roots[4 * cell + 2],
+            roots[4 * cell + 3],
+        ]
+    }
+
+    fn rows_of(selection: &Tensor) -> Result<Vec<Vec<Vec<u32>>>> {
+        Ok(selection.to_vec3::<u32>()?)
+    }
+
+    /// Ring eviction at depth M, ties to the later position, the 12-neighbour
+    /// union (a neighbour key ranks after the home keys at cos 36 degrees),
+    /// a far key excluded, and the home/key cell columns.
+    #[test]
+    fn k1_ring_ties_neighbours_and_far_cells() -> Result<()> {
+        let device = cuda()?;
+        let (roots, adjacency) = geometry()?;
+        let c = 7usize;
+        let n = adjacency[c * 12] as usize;
+        let home = root(&roots, c);
+        let near = root(&roots, n);
+        let far = home.map(|v| -v); // the antipode: not c and not adjacent
+        let keys = [home, home, home, near, far];
+        let query: Vec<f32> = (0..5).flat_map(|_| home).collect();
+        let key: Vec<f32> = keys.iter().flatten().copied().collect();
+        let spec = NativeStarling::parse("starling_native:2:2:1", 0, Credit::FIXTURE)?;
+        let selection = select(
+            &spec,
+            1,
+            &Tensor::from_vec(query, (1, 5, 4), &device)?,
+            &Tensor::from_vec(key, (1, 5, 4), &device)?,
+            &Tensor::zeros((1, 5), DType::U32, &device)?,
+        )?;
+        let got = rows_of(&selection)?;
+        let a = ABSENT;
+        let (c, n) = (c as u32, n as u32);
+        let far_cell = got[0][4][4];
+        assert_ne!(far_cell, c);
+        assert!(!adjacency[7 * 12..7 * 12 + 12].contains(&far_cell));
+        assert_eq!(got[0][0], vec![0, a, a, c, c]);
+        assert_eq!(got[0][1], vec![1, 0, a, c, c]); // tie: later first
+        assert_eq!(got[0][2], vec![2, 1, a, c, c]); // 0 evicted at depth 2
+        assert_eq!(got[0][3], vec![2, 1, 3, c, n]); // neighbour third
+        assert_eq!(got[0][4], vec![2, 1, 3, c, far_cell]); // far key unseen
+        Ok(())
+    }
+
+    /// A BOS clears every ring before its own key enters: no source crosses a
+    /// document start.
+    #[test]
+    fn k1_document_reset_isolates_documents() -> Result<()> {
+        let device = cuda()?;
+        let (roots, _) = geometry()?;
+        let home = root(&roots, 3);
+        let stream: Vec<f32> = (0..4).flat_map(|_| home).collect();
+        let spec = NativeStarling::parse("starling_native:4:3:0", 0, Credit::FIXTURE)?;
+        let reset = Tensor::from_vec(vec![1u32, 0, 1, 0], (1, 4), &device)?;
+        let selection = select(
+            &spec,
+            1,
+            &Tensor::from_vec(stream.clone(), (1, 4, 4), &device)?,
+            &Tensor::from_vec(stream, (1, 4, 4), &device)?,
+            &reset,
+        )?;
+        let got = rows_of(&selection)?;
+        let a = ABSENT;
+        assert_eq!(&got[0][1][..3], &[1, 0, a]);
+        assert_eq!(&got[0][2][..3], &[2, a, a]); // the reset at t = 2
+        assert_eq!(&got[0][3][..3], &[3, 2, a]);
+        Ok(())
+    }
+
+    /// Rows are independent: each (batch, head) row of a joint call equals the
+    /// same row selected alone, and the reset of a batch item reaches all its
+    /// heads and no other item.
+    #[test]
+    fn k1_batch_and_head_isolation() -> Result<()> {
+        let device = cuda()?;
+        let (roots, _) = geometry()?;
+        let (batch, heads, time) = (2usize, 2usize, 6usize);
+        let mut query = Vec::new();
+        let mut key = Vec::new();
+        for row in 0..batch * heads {
+            for t in 0..time {
+                query.extend(root(&roots, (row * 11 + t * 5) % CELLS));
+                key.extend(root(&roots, (row * 7 + t * 3) % CELLS));
+            }
+        }
+        let reset = vec![1u32, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0];
+        let spec = NativeStarling::parse("starling_native:3:3:1", 0, Credit::FIXTURE)?;
+        let joint = rows_of(&select(
+            &spec,
+            heads,
+            &Tensor::from_vec(query.clone(), (batch * heads, time, 4), &device)?,
+            &Tensor::from_vec(key.clone(), (batch * heads, time, 4), &device)?,
+            &Tensor::from_vec(reset.clone(), (batch, time), &device)?,
+        )?)?;
+        for row in 0..batch * heads {
+            let b = row / heads;
+            let span = row * time * 4..(row + 1) * time * 4;
+            let alone = rows_of(&select(
+                &spec,
+                1,
+                &Tensor::from_vec(query[span.clone()].to_vec(), (1, time, 4), &device)?,
+                &Tensor::from_vec(key[span].to_vec(), (1, time, 4), &device)?,
+                &Tensor::from_vec(reset[b * time..(b + 1) * time].to_vec(), (1, time), &device)?,
+            )?)?;
+            assert_eq!(joint[row], alone[0], "row {row}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn k1_refuses_non_finite_addresses() -> Result<()> {
+        let device = cuda()?;
+        let spec = NativeStarling::parse("starling_native:2:2:0", 0, Credit::FIXTURE)?;
+        let mut values = vec![0.5f32; 8];
+        values[5] = f32::NAN;
+        let bad = Tensor::from_vec(values, (1, 2, 4), &device)?;
+        let good = Tensor::from_vec(vec![0.5f32; 8], (1, 2, 4), &device)?;
+        let reset = Tensor::zeros((1, 2), DType::U32, &device)?;
+        assert!(select(&spec, 1, &good, &bad, &reset).is_err());
+        assert!(select(&spec, 1, &bad, &good, &reset).is_err());
+        Ok(())
+    }
+
+    fn state(
+        device: &Device,
+        values: Vec<f32>,
+        position: Vec<f32>,
+        off_home: Vec<f32>,
+        sink: Option<CreditSink>,
+    ) -> Result<CreditState> {
+        let s = values.len();
+        Ok(CreditState {
+            credit: Credit::FIXTURE,
+            values: Tensor::from_vec(values, (1, 1, s, 1), device)?,
+            live: Tensor::ones((1, 1, s), DType::F32, device)?,
+            position: Tensor::from_vec(position, (1, 1, s), device)?,
+            off_home: Tensor::from_vec(off_home, (1, 1, s), device)?,
+            sink,
+        })
+    }
+
+    fn close(got: &[f32], want: &[f32]) {
+        assert_eq!(got.len(), want.len());
+        for (g, w) in got.iter().zip(want) {
+            assert!((g - w).abs() <= 1e-6, "{got:?} != {want:?}");
+        }
+    }
+
+    /// K3a: the active hinge of A1, including the exact delta boundary
+    /// (C over B at u_C - u_B = delta is not a pair), the null pairs, and the
+    /// chain rule into q (-0.06), k and the null score (+0.6).
+    #[test]
+    fn k3a_active_hinge_known_answers() -> Result<()> {
+        let device = cuda()?;
+        let sink: CreditSink = Arc::new(Mutex::new(Vec::new()));
+        // v_A, v_B, v_C = -0.2, -0.5, -0.6 with g = 1: u = 0.2, 0.5, 0.6.
+        let state = state(
+            &device,
+            vec![-0.2, -0.5, -0.6],
+            vec![0.0, 1.0, 2.0],
+            vec![0.0; 3],
+            Some(Arc::clone(&sink)),
+        )?;
+        let q = Var::from_vec(vec![1.0f32], (1, 1, 1), &device)?;
+        let k = Var::from_vec(vec![0.9f32, 0.5, 0.1], (1, 1, 3), &device)?;
+        let b = Var::from_vec(vec![0.3f32], (1, 1, 1), &device)?;
+        let read = Var::from_vec(vec![0.25f32], (1, 1, 1), &device)?;
+        let scores = Tensor::cat(
+            &[&k.as_tensor().broadcast_mul(q.as_tensor())?, b.as_tensor()],
+            2,
+        )?;
+        let dots = Tensor::zeros((1, 1, 4), DType::F32, &device)?;
+        let out = read
+            .as_tensor()
+            .apply_op3(&scores.contiguous()?, &dots, CreditCapture(state))?;
+        assert_eq!(out.flatten_all()?.to_vec1::<f32>()?, vec![0.25]); // identity
+        let grads = out.sum_all()?.backward()?; // g = 1
+        let get = |v: &Var| -> Result<Vec<f32>> {
+            Ok(grads
+                .get(v.as_tensor())
+                .ok_or_else(|| invalid("missing credit gradient"))?
+                .flatten_all()?
+                .to_vec1::<f32>()?)
+        };
+        close(&get(&k)?, &[0.2, -0.4, -0.4]);
+        close(&get(&b)?, &[0.6]);
+        close(&get(&q)?, &[-0.06]);
+        close(&get(&read)?, &[1.0]); // passed through unchanged
+        let reports = sink.lock().map_err(|_| invalid("sink"))?;
+        close(&[reports[0].rank_hinge.to_scalar::<f32>()?], &[1.12]);
+        close(&[reports[0].active_pairs.to_scalar::<f32>()?], &[5.0]);
+        close(&[reports[0].address_margin.to_scalar::<f32>()?], &[0.0]);
+        Ok(())
+    }
+
+    /// K3b: equal utilities and gaps to the null within delta: no pair, zero
+    /// loss and exactly zero credit.
+    #[test]
+    fn k3b_tie_and_empty_pair_set_give_zero() -> Result<()> {
+        let device = cuda()?;
+        let state = state(
+            &device,
+            vec![-0.05, -0.05],
+            vec![0.0, 1.0],
+            vec![0.0; 2],
+            None,
+        )?;
+        let scores = Tensor::from_vec(vec![0.4f32, 0.2, 0.3], (1, 1, 3), &device)?;
+        let dots = Tensor::zeros((1, 1, 3), DType::F32, &device)?;
+        let g = Tensor::ones((1, 1, 1), DType::F32, &device)?;
+        let (sg, dg) = credit_backward(&state, &scores, &dots, &g)?;
+        assert_eq!(sg.flatten_all()?.to_vec1::<f32>()?, vec![0.0; 3]);
+        assert_eq!(dg.flatten_all()?.to_vec1::<f32>()?, vec![0.0; 3]);
+        Ok(())
+    }
+
+    /// K3c: the helpful best candidate off the home vertex. With a = rho_home
+    /// and the candidate in an adjacent cell, the margin is
+    /// 0.1 + (1 - phi/2) = 0.2909830, and d/da = -(rho_adj - rho_home).
+    #[test]
+    fn k3c_address_credit_off_home() -> Result<()> {
+        let device = cuda()?;
+        let (roots, adjacency) = geometry()?;
+        let home = root(&roots, 0);
+        let adjacent = root(&roots, adjacency[0] as usize);
+        let sink: CreditSink = Arc::new(Mutex::new(Vec::new()));
+        let state = state(
+            &device,
+            vec![-0.5],
+            vec![0.0],
+            vec![1.0],
+            Some(Arc::clone(&sink)),
+        )?;
+        let a = Var::from_vec(home.to_vec(), (1, 1, 1, 4), &device)?;
+        let rho = Tensor::from_vec(
+            adjacent
+                .iter()
+                .chain(home.iter())
+                .copied()
+                .collect::<Vec<_>>(),
+            (1, 1, 2, 4),
+            &device,
+        )?;
+        let dots = rho.broadcast_mul(a.as_tensor())?.sum(3)?; // [1, 1, 2]
+        let scores = Tensor::from_vec(vec![0.4f32, 0.3], (1, 1, 2), &device)?;
+        let read = Var::from_vec(vec![0.0f32], (1, 1, 1), &device)?;
+        let out = read
+            .as_tensor()
+            .apply_op3(&scores, &dots.contiguous()?, CreditCapture(state))?;
+        let grads = out.sum_all()?.backward()?;
+        let da = grads
+            .get(a.as_tensor())
+            .ok_or_else(|| invalid("missing address credit"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let want: Vec<f32> = (0..4).map(|i| -(adjacent[i] - home[i])).collect();
+        close(&da, &want);
+        let reports = sink.lock().map_err(|_| invalid("sink"))?;
+        let phi_half = (1.0 + 5f32.sqrt()) / 4.0;
+        close(
+            &[reports[0].address_margin.to_scalar::<f32>()?],
+            &[0.1 + (1.0 - phi_half)],
+        );
+        Ok(())
+    }
+
+    /// K3d: a best candidate in the home cell, or no helpful candidate, gives
+    /// no address credit.
+    #[test]
+    fn k3d_home_or_unhelpful_gives_no_address_credit() -> Result<()> {
+        let device = cuda()?;
+        let dots = Tensor::from_vec(vec![0.2f32, 1.0], (1, 1, 2), &device)?;
+        let scores = Tensor::from_vec(vec![0.4f32, 0.3], (1, 1, 2), &device)?;
+        let g = Tensor::ones((1, 1, 1), DType::F32, &device)?;
+        for (value, off_home) in [(-0.5f32, 0.0f32), (0.5, 1.0)] {
+            let state = state(&device, vec![value], vec![0.0], vec![off_home], None)?;
+            let (_, dg) = credit_backward(&state, &scores, &dots, &g)?;
+            assert_eq!(dg.flatten_all()?.to_vec1::<f32>()?, vec![0.0, 0.0]);
+        }
         Ok(())
     }
 }
