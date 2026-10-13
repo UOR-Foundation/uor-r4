@@ -2796,6 +2796,13 @@ impl StackConfig {
                 }
             }
         }
+        if self.rec_gates == RecGates::Geometric
+            && (self.arch != StackArch::Geometric || self.width % 4 != 0)
+        {
+            return Err(invalid(
+                "the geometric recurrence gates need arch=geometric and a width divisible by 4",
+            ));
+        }
         if self.gate == Gate::Hamilton && self.mlp_hidden % 4 != 0 {
             return Err(invalid(
                 "the Hamilton gate rotates 4-blocks: mlp_hidden must be divisible by 4",
@@ -3198,6 +3205,21 @@ fn spiralcore_fbs_binding(plans: &NativePlans) -> serde_json::Value {
 /// `quaternion_weights=all` with `export`, D11, `qat=true` or `transport_snap`.
 pub fn quaternion_served_refusal() -> crate::TrainingError {
     invalid("quaternion weights have no served form yet")
+}
+
+/// A [`RecGates::Geometric`] recurrence with `export`, D11 or `qat=true`: the
+/// integer engine binds the *historical* decay parameter (its `DecayRate` codec
+/// encodes `8 softplus(-decay)`), so exporting a geometric-recurrence model
+/// would silently reinterpret its `rec.decay` values as rate scores. Refused
+/// until the table read has its own declared served binding; a stale or
+/// undeclared binding is refused, never converted.
+pub fn rec_gates_served_refusal(mode: RecGates) -> crate::TrainingError {
+    invalid(format!(
+        "the {} recurrence gates have no served binding yet: the integer engine binds the \
+         historical decay parameter, so an export would reinterpret it. Train this form in float \
+         until the served table read lands",
+        mode.name()
+    ))
 }
 
 /// A [`Gate`] other than the historical one with `export`, D11 or `qat=true`:
@@ -3821,6 +3843,12 @@ impl StackModel {
         }
         if let Some(config) = &self.geometric_address {
             self.validate_geometric_address(config)?;
+        }
+        if self.config.rec_gates == RecGates::Geometric && !self.device.is_cuda() {
+            return Err(invalid(
+                "the geometric recurrence gates are a CUDA training path; no CPU or Metal model \
+                 execution (D24). The ops keep host references for unit tests only",
+            ));
         }
         match &self.served {
             None if self.quaternion_weights == QuaternionWeights::SpiralcoreFbs => {
@@ -12521,24 +12549,40 @@ impl StackModel {
         let gates = self
             .linear(&u, p.layer(layer, "rec.gate.weight")?)?
             .broadcast_add(p.layer(layer, "rec.gate.bias")?)?;
-        let opening = candle_nn::ops::sigmoid(&gates.narrow(2, 0, lanes)?)?;
-        // log a = -softplus(-decay) keeps a in (0, 1); log lambda = c r log a.
-        let log_a = p
-            .layer(layer, "rec.decay")?
-            .to_dtype(DType::F64)?
-            .neg()?
-            .exp()?
-            .affine(1.0, 1.0)?
-            .log()?
-            .neg()?
-            .to_dtype(DType::F32)?;
-        let log_lambda = opening.broadcast_mul(&log_a)?.affine(DECAY_EXPONENT, 0.0)?;
-        let lambda = log_lambda.exp()?.unsqueeze(3)?;
-        let keep = lambda
-            .sqr()?
-            .affine(-1.0, 1.0)?
-            .clamp(1e-6f32, 1f32)?
-            .sqrt()?;
+        // The decay rate. `RecGates::Geometric`: a clamped-linear opening score
+        // plus the per-lane decay parameter read **raw** as a rate score selects
+        // one entry of the fixed dyadic table ([`rate_select`]); no sigmoid, no
+        // softplus and no `exp` in either direction. `RecGates::Historical`
+        // keeps the exponential chain so existing configs and checkpoints
+        // reproduce exactly (prohibited for new runs).
+        let (lambda, keep) = if self.config.rec_gates == RecGates::Geometric {
+            let score = gates
+                .narrow(2, 0, lanes)?
+                .broadcast_add(&p.layer(layer, "rec.decay")?.reshape((1, 1, lanes))?)?
+                .clamp(0.0, 1.0)?;
+            let selected = rate_select(&score)?;
+            (selected.narrow(3, 0, 1)?, selected.narrow(3, 1, 1)?)
+        } else {
+            let opening = candle_nn::ops::sigmoid(&gates.narrow(2, 0, lanes)?)?;
+            // log a = -softplus(-decay) keeps a in (0, 1); log lambda = c r log a.
+            let log_a = p
+                .layer(layer, "rec.decay")?
+                .to_dtype(DType::F64)?
+                .neg()?
+                .exp()?
+                .affine(1.0, 1.0)?
+                .log()?
+                .neg()?
+                .to_dtype(DType::F32)?;
+            let log_lambda = opening.broadcast_mul(&log_a)?.affine(DECAY_EXPONENT, 0.0)?;
+            let lambda = log_lambda.exp()?.unsqueeze(3)?;
+            let keep = lambda
+                .sqr()?
+                .affine(-1.0, 1.0)?
+                .clamp(1e-6f32, 1f32)?
+                .sqrt()?;
+            (lambda, keep)
+        };
         let transition = if self.config.rotation {
             let raw = gates
                 .narrow(2, lanes, width)?
@@ -12571,10 +12615,15 @@ impl StackModel {
             .broadcast_mul(&keep)?;
         let state = quaternion_scan(&transition.contiguous()?, &drive.contiguous()?)?
             .reshape((batch, time, width))?;
-        self.linear(
-            &state.mul(&gate.gelu()?)?,
-            p.layer(layer, "rec.out.weight")?,
-        )
+        // The output gate. `RecGates::Geometric` rotates the recurrence output
+        // by the gate's 4-lane quaternions ([`hamilton_gate`], OP1); the
+        // historical mode keeps the tanh-GELU gate.
+        let mixed = if self.config.rec_gates == RecGates::Geometric {
+            hamilton_gate(&gate, &state)?
+        } else {
+            state.mul(&gate.gelu()?)?
+        };
+        self.linear(&mixed, p.layer(layer, "rec.out.weight")?)
     }
 }
 
