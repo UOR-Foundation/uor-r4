@@ -685,9 +685,9 @@ mod cuda_tests {
         let mut config = StackConfig::transformer_control(3);
         config.arch = StackArch::Geometric;
         config.pattern = "r".into();
-        config.width = 16;
-        config.heads = 2;
-        config.mlp_hidden = 32;
+        config.width = 32;
+        config.heads = 4;
+        config.mlp_hidden = 64;
         config.vocab_size = 256;
         config.context = 4;
         let mut model = StackModel::new(config, &dev)?; // Parameter preparation only.
@@ -696,7 +696,7 @@ mod cuda_tests {
         let writer = model.native_vector_writer()?;
         let channel = native_vector_channel(&model)?;
         assert_eq!(writer.table_id(), channel.writer().table_id());
-        let vectors = model.embed(&[0, 1], 1, 2)?.reshape((2, 16))?;
+        let vectors = model.embed(&[0, 1], 1, 2)?.reshape((2, 32))?;
         assert_eq!(
             vectors.to_vec2::<f32>()?,
             writer.encode(&[0, 1])?.to_vec2::<f32>()?
