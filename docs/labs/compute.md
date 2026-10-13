@@ -4,8 +4,8 @@
 Every lab session (Claude, Codex/GPT, OpenCode/DeepSeek and any lab that joins
 later; several sessions of one lab may run at once) uses the same tool,
 `scripts/pod/uor-pod`, and the same cadence to see, lease, create, share and
-delete the owner's GPU pods: Vast.ai by default since 13 October 2026
-([D26](../integration/DECISIONS.md#d26---vastai-is-the-default-provider-for-new-pods)), Runpod with `--provider runpod`. The goals: no pod idles, no session is
+delete the owner's GPU pods: Vast.ai since 13 October 2026, with Runpod as an
+emergency backup only ([D26](../integration/DECISIONS.md#d26---vastai-is-the-default-provider-for-new-pods)). The goals: no pod idles, no session is
 surprised by another's pod, and any session can take over a pod whose lease
 expired. The source of truth is the laptop state directory below. The
 [Compute board #2037](https://github.com/UOR-Foundation/uor-r4/issues/2037) is
@@ -231,9 +231,12 @@ Owner-approved 7 October 2026 (#1750).
 Owner direction, 13 October 2026 ([D26](../integration/DECISIONS.md#d26---vastai-is-the-default-provider-for-new-pods)):
 new pods go to Vast.ai, a marketplace that was 40–60 % cheaper per GPU-hour than
 Runpod Secure Cloud for the GPUs this project uses (a verified datacenter RTX 5090
-was $0.469/h against Runpod's $1.19/h on 13 October). Runpod stays available with
-`up --provider runpod` or `UOR_POD_PROVIDER=runpod`; every other command takes
-either kind of pod.
+was $0.469/h against Runpod's $1.19/h on 13 October). The owner then retired Runpod
+to an emergency backup: `up --wait` switches to it only after 30 min with no Vast
+offer (`UOR_POD_RUNPOD_FALLBACK_MIN`) and only when it has stock, ledgered and
+posted to the board; choosing it by hand needs `--owner-approved`. The tool lists
+Vast only (`UOR_POD_PROVIDERS`, default `vast`; the Runpod path stays for its
+remaining volume and for Runpod-only accounts); every command takes either kind of pod.
 
 - **Ids.** A Vast pod is `vast-<contract number>` in every command, lease, ledger
   line and cache entry. `status` lists both providers in one table (`vol=vast-disk`)
@@ -294,8 +297,13 @@ store `caseyallard/uor-r4-store` and the container image, and saves to the store
 | Results | the pod | `/root/uor-store put DIR results/<lab>/<topic-date>/`, or `down --to-store` |
 
 `uor-store` (installed on every pod as `/root/uor-store`; also runs on the laptop):
-`put LOCAL REMOTE`, `get REMOTE [DIR]` (a folder when REMOTE ends in `/`; it reports
-a missing path instead of hf's silent fallback), `ls [PREFIX]`. It uses the owner's
+`put LOCAL REMOTE`, `get REMOTE [DIR]` (a folder when REMOTE ends in `/`; it downloads
+into a fresh directory first, so an old local copy is never reported as a download),
+`ls [PREFIX]` (the Hub's tree API with `curl` and `jq`, every page). A store build is
+used only when it holds plain files, its `BUILD.json` names this commit and GPU with
+parity PASS, and its `SHA256SUMS` lists exactly the expected binaries and verifies; a
+toolchain archive that does not unpack falls back to rustup or crates.io. No step of
+this path adds Python (owner: GPU and Rust over CPU and Python). It uses the owner's
 token (write role, kept so pods can store results; owner 13 October). The bootstrap
 also sets the build's jobs from the cgroup's `cpu.max` when the provider does not
 name the CPU quota (`nproc` reports the host: 128 on a 16-CPU Vast pod).

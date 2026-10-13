@@ -186,8 +186,11 @@ store_fetch_bin() {  # -> 0 when the cache now holds the store's build
   local r=bin/$SHA-sm$CAP.tar tarf=$BINROOT/.$SHA-sm$CAP.store.$POD_TAG.$$.tar stage=$BINROOT/.$SHA-sm$CAP.store.$POD_TAG.$$
   store_get "$r" "$tarf" || return 1
   rm -rf "$stage"; mkdir -p "$stage"
-  if tar -xf "$tarf" -C "$stage" 2>/dev/null && [ -f "$stage/BUILD.json" ] && grep -q '"parity": "PASS"' "$stage/BUILD.json" &&
-     [ -s "$stage/SHA256SUMS" ] && (cd "$stage" && sha256sum -c --quiet SHA256SUMS >/dev/null 2>&1); then
+  # only plain files and directories (no links that could point a job's binary
+  # elsewhere); BUILD.json must name this commit and GPU with parity PASS; and
+  # SHA256SUMS must cover exactly the expected binaries, each one verifying
+  if ! tar -tvf "$tarf" 2>/dev/null | cut -c1 | grep -qv '^[-d]$' &&
+     tar --no-same-owner -xf "$tarf" -C "$stage" 2>/dev/null && store_build_ok "$stage"; then
     rm -f "$tarf"
     publish_stage "$stage"
     if cache_ok; then return 0; fi
@@ -196,12 +199,30 @@ store_fetch_bin() {  # -> 0 when the cache now holds the store's build
   fi
   rm -rf "$stage" "$tarf"; return 1
 }
+store_build_ok() {  # STAGE -> 0 when it is a parity-PASS build of SHA/CAP whose SHA256SUMS name exactly the binaries and verify
+  local st=$1 want have
+  [ -f "$st/BUILD.json" ] && [ -s "$st/SHA256SUMS" ] || return 1
+  grep -q '"parity": "PASS"' "$st/BUILD.json" && grep -q "\"sha\": \"$SHA\"" "$st/BUILD.json" &&
+    grep -Eq "\"compute_cap\": $CAP([,} ]|\$)" "$st/BUILD.json" || return 1
+  # shellcheck disable=SC2086  # word lists
+  want=$(printf '%s\n' $BINS_EXAMPLES $BINS_BINS | sort)
+  have=$(awk '{ f = $2; sub(/^\*/, "", f); print f }' "$st/SHA256SUMS" | sort)
+  [ "$want" = "$have" ] || return 1
+  (cd "$st" && sha256sum -c --quiet SHA256SUMS >/dev/null 2>&1)
+}
 store_push_bin() {  # after a parity-PASS build here: upload it for the next pod
   local r=bin/$SHA-sm$CAP.tar tarf=$BINROOT/.$SHA-sm$CAP.push.$POD_TAG.$$.tar
   cache_ok || return 0
   if tar -C "$BIN" -cf "$tarf" . && store_put "$tarf" "$r"; then log "uploaded $r to the HF store $STORE"
   else log "WARNING: could not upload $r to the HF store (the next pod builds again)"; fi
   rm -f "$tarf"
+}
+
+REG_PUSH=0
+store_push_registry() {  # after the build is published: the crate cache, when the store had none
+  [ "$REG_PUSH" = 1 ] && [ -s "${REG_TAR:-}" ] || return 0
+  if store_put "$REG_TAR" toolchain/cargo-registry.tar; then log "uploaded toolchain/cargo-registry.tar to the HF store"; fi
+  REG_PUSH=0
 }
 
 obtain_bin() {  # -> BIN holds release binaries + BUILD.json for SHA/CAP (built here when needed)
@@ -228,6 +249,7 @@ obtain_bin() {  # -> BIN holds release binaries + BUILD.json for SHA/CAP (built 
     build_into "$stage"
     publish_stage "$stage"
     store_push_bin
+    store_push_registry
   fi
   heartbeat_stop
   exec 8>&-
@@ -382,10 +404,13 @@ export PATH=$CARGO_HOME/bin:$CUDA/bin:$PATH
 T_RUST=0
 if ! cargo "+$RUST_VERSION" --version >/dev/null 2>&1; then
   t=$(date +%s)
+  RUST_OK=0
   if [ -s "$RUST_TAR" ] || store_get "toolchain/${RUST_TAR##*/}" "$RUST_TAR"; then
     log "unpacking cached Rust $RUST_VERSION from $RUST_TAR"
-    tar -C /root -xf "$RUST_TAR"
-  else
+    if tar -C /root -xf "$RUST_TAR" && cargo "+$RUST_VERSION" --version >/dev/null 2>&1; then RUST_OK=1
+    else log "WARNING: $RUST_TAR did not give a working Rust $RUST_VERSION; installing it with rustup"; rm -f "$RUST_TAR"; fi
+  fi
+  if [ "$RUST_OK" = 0 ]; then
     log "installing Rust $RUST_VERSION (not on the volume or in the store) and caching it"
     curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" >/dev/null 2>&1
     tar -C /root -cf "$RUST_TAR.tmp.$$" .rustup .cargo/bin .cargo/env && mv -f "$RUST_TAR.tmp.$$" "$RUST_TAR"
@@ -397,13 +422,16 @@ fi
 # only for crates added since); a pod that had neither uploads its own after the build
 REG_FROM_STORE=0
 if [ ! -s "$REG_TAR" ] && store_get toolchain/cargo-registry.tar "$REG_TAR"; then REG_FROM_STORE=1; log "crate cache from the HF store"; fi
-if [ -s "$REG_TAR" ] && [ ! -d "$CARGO_HOME/registry" ]; then tar -C "$CARGO_HOME" -xf "$REG_TAR"; fi
+if [ -s "$REG_TAR" ] && [ ! -d "$CARGO_HOME/registry" ] && ! tar -C "$CARGO_HOME" -xf "$REG_TAR"; then
+  log "WARNING: $REG_TAR did not unpack; cargo fetches the crates from crates.io"
+  rm -rf "$CARGO_HOME/registry" "$CARGO_HOME/git" "$REG_TAR"; REG_FROM_STORE=0
+fi
 RUSTC_VERSION=$(rustc "+$RUST_VERSION" --version)
 # the pod's CPU quota, not the host's core count (nproc reports the host): Runpod
 # names it; elsewhere (Vast) the cgroup's cpu.max "quota period" holds it (on
 # 13 October a 16-CPU Vast pod saw nproc=128 and built 2x slower with 128 jobs)
 JOBS=$(tr '\0' '\n' < /proc/1/environ | sed -n 's/^RUNPOD_CPU_COUNT=//p' | head -1)
-if [ -z "$JOBS" ] && read -r CPU_Q CPU_P < /sys/fs/cgroup/cpu.max 2>/dev/null && [ "$CPU_Q" != max ] && [ "${CPU_P:-0}" -gt 0 ]; then
+if [ -z "$JOBS" ] && read -r CPU_Q CPU_P 2>/dev/null < /sys/fs/cgroup/cpu.max && [ "$CPU_Q" != max ] && [ "${CPU_P:-0}" -gt 0 ]; then
   JOBS=$(( (CPU_Q + CPU_P - 1) / CPU_P ))
 fi
 export CARGO_BUILD_JOBS=${JOBS:-$(nproc)}
@@ -459,7 +487,7 @@ json.dump({
 PY
   if tar -C "$CARGO_HOME" -cf "$REG_TAR.tmp.$POD_TAG.$$" registry git 2>/dev/null; then
     mv -f "$REG_TAR.tmp.$POD_TAG.$$" "$REG_TAR"
-    if [ "$REG_FROM_STORE" = 0 ] && store_put "$REG_TAR" toolchain/cargo-registry.tar; then log "uploaded toolchain/cargo-registry.tar to the HF store"; fi
+    [ "$REG_FROM_STORE" = 1 ] || REG_PUSH=1   # uploaded once the build is published
   else
     rm -f "$REG_TAR.tmp.$POD_TAG.$$"
   fi

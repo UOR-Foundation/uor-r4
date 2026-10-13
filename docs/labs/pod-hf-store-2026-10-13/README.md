@@ -18,9 +18,18 @@ Infrastructure only: no model training or evaluation (training stays held).
 - [compute.md § The HF store](../compute.md#the-hf-store-what-a-pod-gets-from-it-and-gives-back-13-october-2026)
   has the full table.
 
-Tests: `scripts/pod/tests/uor-pod-dryrun.sh` **330 passed, 0 failed**. With the fix set
-aside, the checksum check fails 2 cases, the upload after a build 2, and `uor-store get`'s
-missing-path check 1.
+Tests: `scripts/pod/tests/uor-pod-dryrun.sh` **348 passed, 0 failed**. Independent review
+(REQUEST CHANGES) found: the crate-cache upload ran before the build was published; `uor-store
+get` could report an old local copy; a store build needed stricter acceptance (commit, GPU,
+exact binary list, plain files only); a bad toolchain archive aborted the bootstrap. All fixed.
+Each safeguard set aside fails its cases: checksums 2, upload after a build 2, exact binary
+list 2, no store call inside the build step 1, missing path 1, old local copy 1.
+
+Owner directions the same night, applied here: **Vast only, Runpod an emergency backup**
+(`up --wait` falls back after 30 min without a Vast offer when Runpod has stock; by hand only
+with `--owner-approved`: tests for the refusal 1, the stretch 2), and **GPU and Rust over CPU
+and Python** (no new Python on this path: `uor-store ls` uses `curl` and `jq`, the store-build
+check uses `grep`).
 
 ## Measured (Vast RTX 5090, 13 October)
 

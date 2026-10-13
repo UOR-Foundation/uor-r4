@@ -40,25 +40,36 @@ case $cmd in
     case $2 in /*|*..*|'') die "REMOTE is a path inside the store, without a leading / or '..' (got '$2')";; esac
     need_hf
     dir=${3:-.}
+    mkdir -p "$dir"
+    # into a fresh directory first: hf falls back to whatever is already in its
+    # --local-dir when the store cannot be read, so an old copy in DIR must never
+    # count as a download
+    tmp=$(mktemp -d "$dir/.uor-store.XXXXXX")
+    trap 'rm -rf "$tmp"' EXIT
     case $2 in
-      */) hf download "$STORE" --repo-type dataset --include "$2*" --local-dir "$dir" >/dev/null;;
-      *) hf download "$STORE" "$2" --repo-type dataset --local-dir "$dir" >/dev/null;;
+      */) hf download "$STORE" --repo-type dataset --include "$2*" --local-dir "$tmp" >/dev/null || true;;
+      *) hf download "$STORE" "$2" --repo-type dataset --local-dir "$tmp" >/dev/null || true;;
     esac
-    # hf falls back to an existing local directory when the store cannot be read,
-    # so a download is only reported when the path is really there now
-    [ -e "$dir/$2" ] || die "nothing downloaded for $2 (not in $STORE, or the token cannot read it)"
+    [ -e "$tmp/$2" ] || die "nothing downloaded for $2 (not in $STORE, or the token cannot read it)"
+    mkdir -p "$(dirname "$dir/${2%/}")"
+    case $2 in
+      */) mkdir -p "$dir/$2" && cp -R "$tmp/$2." "$dir/$2";;
+      *) mv -f "$tmp/$2" "$dir/$2";;
+    esac
     echo "downloaded $STORE:$2 -> $dir/$2";;
   ls)
-    need_hf
-    python3 - "$STORE" "${2:-}" <<'PY'
-import sys
-from huggingface_hub import HfApi
-store, prefix = sys.argv[1], sys.argv[2]
-for f in HfApi().list_repo_tree(store, repo_type="dataset", path_in_repo=prefix or None, recursive=True):
-    size = getattr(f, "size", None)
-    if size is not None:
-        print(f"{size / 1048576:10.1f} MB  {f.path}")
-PY
-    ;;
+    # the Hub's tree API, page by page (it pages large listings: follow Link rel=next)
+    command -v jq >/dev/null 2>&1 || die "ls needs jq"
+    tokf=${HF_TOKEN_PATH:-${HF_HOME:-$HOME/.cache/huggingface}/token}
+    [ -r "$tokf" ] || die "no Hugging Face token at $tokf"
+    case ${2:-} in /*|*..*) die "PREFIX is a path inside the store (got '$2')";; esac
+    url="https://huggingface.co/api/datasets/$STORE/tree/main${2:+/${2%/}}?recursive=true"
+    hdr=$(mktemp); trap 'rm -f "$hdr"' EXIT
+    while [ -n "$url" ]; do
+      printf 'Authorization: Bearer %s\n' "$(cat "$tokf")" | curl -fsS -H @- -D "$hdr" "$url" |
+        jq -r '.[] | select(.type == "file") | "\(.size / 1048576 * 10 | round / 10) MB  \(.path)"' ||
+        die "listing $STORE failed"
+      url=$(tr -d '\r' < "$hdr" | sed -n 's/^[Ll]ink: .*<\([^>]*\)>; *rel="next".*/\1/p' | head -1)
+    done;;
   *) sed -n '2,15p' "$0"; exit 2;;
 esac
