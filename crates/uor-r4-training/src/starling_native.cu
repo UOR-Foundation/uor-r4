@@ -160,11 +160,11 @@ extern "C" __global__ void murm_nearest_cells(
     cell[i] = starling_nearest(a, roots);
 }
 
-// Tree-level selection (S2): K1's ring selection over completed tree nodes.
-// A level-l node *arrives* at the first position after its last leaf, so
-// node_valid[b, t] = 1 marks the arrival of the node whose leaves all lie
-// strictly before t (the host plan clears arrivals that would cross a
-// document start). Scanning positions in order: a reset clears every ring; an
+// Ring selection over a timeline of arriving keys: S1 tokens (address-null
+// keys excluded) and S2 tree nodes (a node arrives at the first position after
+// its last leaf). node_valid[r, t] = 1 marks a real arrival in row r; anything
+// else never enters a ring, so it can neither be ranked nor evict valid history
+// (the host plan also drops node arrivals crossing a document start). Scanning positions in order: a reset clears every ring; an
 // arriving node enters the ring (depth M) of its precomputed cell; then query
 // t gathers the nodes of its home vertex and the 12 neighbours and keeps the
 // `slots` largest address dots, ties to the later arrival. Output per (row,
@@ -172,11 +172,11 @@ extern "C" __global__ void murm_nearest_cells(
 // the home cell and the arriving node's cell (STARLING_ABSENT when none).
 // Exact f32 products and sums in K1's fixed order; no exponential, no
 // normalisation, no host loop.
-extern "C" __global__ void murm_tree_select(
+extern "C" __global__ void murm_ring_select(
     const float* query_address,   // [rows, time, 4], unit
     const float* node_address,    // [rows, time, 4], the arriving node's unit address
     const uint* node_cell,        // [rows, time], the arriving node's cell
-    const uint* node_valid,       // [batch, time], 1 where a node arrives
+    const uint* node_valid,       // [rows, time], 1 where a real key arrives
     const uint* reset,            // [batch, time], 1 at a document start
     const float* roots,           // [120, 4]
     const uint* adjacency,        // [120, 12]
@@ -218,7 +218,7 @@ extern "C" __global__ void murm_tree_select(
             return;
         }
         uint arriving = STARLING_ABSENT;
-        if (node_valid[(u64)b * time + t] != 0) {
+        if (node_valid[(u64)r * time + t] != 0) {
             const float* key = node_address + ((u64)r * time + t) * 4;
             if (!isfinite(key[0]) || !isfinite(key[1]) || !isfinite(key[2])
                 || !isfinite(key[3])) {

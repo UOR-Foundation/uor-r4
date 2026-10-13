@@ -29,14 +29,15 @@
 //! as different scales' summaries; no deduplication against lower levels.
 //! The total read is S1's `Delta` plus this. Model arithmetic is CUDA-only.
 
-use candle_core::{CpuStorage, CustomOp1, CustomOp3, DType, Layout, Shape, Tensor};
+use candle_core::{DType, Tensor};
 
+use super::kernels::{nearest_cells, ring_select};
 #[cfg(test)]
 use super::murmuration::hamilton;
 use super::murmuration::{carry, Chirality, MAX_FLOCK, NULL_ADDRESS_NORM};
 #[cfg(test)]
 use super::{geometry, CELLS};
-use super::{require_cuda, NativeStarling, ABSENT};
+use super::{require_cuda, require_finite, NativeStarling, ABSENT};
 use crate::{invalid, Result};
 
 /// The deepest tree level a plan builds (3^10 = 59,049 positions).
@@ -63,6 +64,8 @@ pub struct TreePlan {
     pub batch: usize,
     pub time: usize,
     pub levels: Vec<LevelPlan>,
+    /// Document start positions per batch row (index metadata).
+    pub starts: Vec<Vec<usize>>,
 }
 
 impl TreePlan {
@@ -145,6 +148,10 @@ impl TreePlan {
             batch,
             time,
             levels: plans,
+            starts: segments
+                .iter()
+                .map(|segs| segs.iter().map(|&(s, _)| s).collect())
+                .collect(),
         })
     }
 
@@ -154,7 +161,15 @@ impl TreePlan {
         let Some(plan) = level.checked_sub(1).and_then(|i| self.levels.get(i)) else {
             return 0;
         };
-        (0..=t.min(self.time.saturating_sub(1)))
+        let t = t.min(self.time.saturating_sub(1));
+        // Fix 4 (Codex 6152388126): count within the current document only.
+        let start = self.starts[b]
+            .iter()
+            .copied()
+            .filter(|&s| s <= t)
+            .max()
+            .unwrap_or(0);
+        (start..=t)
             .filter(|&p| plan.arrival[b * self.time + p] != ABSENT)
             .count()
     }
@@ -195,6 +210,10 @@ pub struct TreeOutput {
     pub delta: Tensor,
     /// Flock size per level, `[levels, rows, time]` F32.
     pub flock: Vec<Tensor>,
+    /// Per level, the ring selection `[rows, time, K + 2]` U32: arrival
+    /// positions in rank order, the home cell and the arriving node's cell
+    /// (diagnostics and controls).
+    pub selection: Vec<Tensor>,
 }
 
 fn row_index(plan: &[u32], heads: usize, per_batch: usize, prev: usize) -> Vec<u32> {
@@ -220,6 +239,9 @@ fn row_index(plan: &[u32], heads: usize, per_batch: usize, prev: usize) -> Vec<u
 pub fn build_levels(plan: &TreePlan, inputs: &TreeInputs<'_>) -> Result<Vec<LevelState>> {
     inputs.chirality.validate(inputs.heads)?;
     require_cuda(inputs.value, "the murmuration tree")?;
+    require_finite(inputs.value, "the tree values")?;
+    require_finite(inputs.address, "the tree addresses")?;
+    require_finite(inputs.address_norm, "the tree address norms")?;
     let (rows, time, _) = inputs.value.dims3()?;
     let heads = inputs.heads;
     if heads == 0 || rows != plan.batch * heads || time != plan.time {
@@ -295,6 +317,18 @@ pub fn build_levels(plan: &TreePlan, inputs: &TreeInputs<'_>) -> Result<Vec<Leve
             .flatten_all()?
             .index_select(&index, 0)?
             .reshape((rows, n, 3))?;
+        // Codex 6153323237: a padded (nonexistent) parent may gather an
+        // address-null token's ABSENT cell; give it a valid cell BEFORE the
+        // table and root gathers. Real null-containing parents were refused above.
+        let real = exists
+            .gt(0.0)?
+            .unsqueeze(2)?
+            .broadcast_as((rows, n, 3))?
+            .contiguous()?;
+        let child_cell = real.where_cond(
+            &child_cell,
+            &Tensor::zeros((rows, n, 3), DType::U32, device)?,
+        )?;
         let child_value = value
             .contiguous()?
             .reshape((rows * prev, 4))?
@@ -337,6 +371,14 @@ pub fn murmuration_tree_read(
 ) -> Result<TreeOutput> {
     spec.validate()?;
     inputs.chirality.validate(inputs.heads)?;
+    // Fix 3: GPU admission at the public entry, before any early return.
+    require_cuda(inputs.value, "the murmuration tree")?;
+    require_cuda(inputs.address, "the murmuration tree")?;
+    // Fix 2: refuse NaN/Inf before any arithmetic.
+    require_finite(inputs.value, "the tree values")?;
+    require_finite(inputs.address, "the tree addresses")?;
+    require_finite(inputs.address_norm, "the tree address norms")?;
+    require_finite(inputs.coupling, "the tree coupling")?;
     let k = spec.kept;
     if k == 0 || k > MAX_FLOCK {
         return Err(invalid(format!(
@@ -357,10 +399,12 @@ pub fn murmuration_tree_read(
     let value = inputs.value.to_dtype(DType::F32)?;
     let mut delta = Tensor::zeros((rows, time, 4), DType::F32, device)?;
     let mut flocks = Vec::with_capacity(levels);
+    let mut selections = Vec::with_capacity(levels);
     if levels == 0 {
         return Ok(TreeOutput {
             delta,
             flock: flocks,
+            selection: selections,
         });
     }
     let built = build_levels(plan, inputs)?;
@@ -384,8 +428,8 @@ pub fn murmuration_tree_read(
         let n = level.nodes;
         // Arrival timeline per row: the node arriving at t (index metadata).
         let arrival_rows = row_index(&level.arrival, heads, time, 0);
-        let valid: Vec<u32> = level
-            .arrival
+        // Per-row arrival mask (index metadata), [rows, time].
+        let valid: Vec<u32> = arrival_rows
             .iter()
             .map(|&a| u32::from(a != ABSENT))
             .collect();
@@ -408,13 +452,16 @@ pub fn murmuration_tree_read(
             .flatten_all()?
             .index_select(&node_at, 0)?
             .reshape((rows, time))?;
-        let selection = tree_select(
-            spec,
+        let selection = ring_select(
+            &NativeStarling {
+                explore: 0,
+                ..*spec
+            },
             heads,
             &inputs.address.to_dtype(DType::F32)?.detach(),
             &node_address,
             &node_cell,
-            &Tensor::from_vec(valid, (plan.batch, time), device)?,
+            &Tensor::from_vec(valid, (rows, time), device)?,
             inputs.reset,
         )?; // [rows, time, K + 2]
         let slots = selection.narrow(2, 0, k)?.contiguous()?; // arrival positions
@@ -473,284 +520,23 @@ pub fn murmuration_tree_read(
                 .broadcast_mul(&reads)?,
         )?;
         flocks.push(flock);
+        selections.push(selection);
     }
     Ok(TreeOutput {
         delta,
         flock: flocks,
+        selection: selections,
     })
 }
 
-/// The shared cell function on the device (kernel `murm_nearest_cells`):
-/// nearest icosian of each unit address `[n, 4]`, `[n]` U32.
-pub fn nearest_cells(address: &Tensor) -> Result<Tensor> {
-    require_cuda(address, "the murmuration cell function")?;
-    let (_, four) = address.dims2()?;
-    if four != 4 || address.dtype() != DType::F32 {
-        return Err(invalid("nearest cells need [n, 4] F32 addresses"));
-    }
-    Ok(address
-        .detach()
-        .contiguous()?
-        .apply_op1_no_bwd(&NearestCells)?)
-}
-
-struct NearestCells;
-
-impl CustomOp1 for NearestCells {
-    fn name(&self) -> &'static str {
-        "murmuration-nearest-cells"
-    }
-    fn cpu_fwd(&self, _: &CpuStorage, _: &Layout) -> candle_core::Result<(CpuStorage, Shape)> {
-        candle_core::bail!("the murmuration cell function is GPU-only; no host fallback (D24)")
-    }
-    #[cfg(feature = "cuda")]
-    fn cuda_fwd(
-        &self,
-        address: &candle_core::CudaStorage,
-        layout: &Layout,
-    ) -> candle_core::Result<(candle_core::CudaStorage, Shape)> {
-        cuda::nearest_cells(address, layout)
-    }
-}
-
-/// Tree-level selection (kernel `murm_tree_select`): `[rows, time, K + 2]`.
-fn tree_select(
-    spec: &NativeStarling,
-    heads: usize,
-    query: &Tensor,
-    node_address: &Tensor,
-    node_cell: &Tensor,
-    valid: &Tensor,
-    reset: &Tensor,
-) -> Result<Tensor> {
-    let (rows, time, _) = query.dims3()?;
-    let batch = rows / heads;
-    if node_address.dims() != [rows, time, 4]
-        || node_cell.dims() != [rows, time]
-        || valid.dims() != [batch, time]
-        || reset.dims() != [batch, time]
-    {
-        return Err(invalid("tree selection tensors disagree"));
-    }
-    // One U32 operand: node cells, then the arrival mask, then the reset mask.
-    let meta = Tensor::cat(
-        &[
-            &node_cell.flatten_all()?,
-            &valid.flatten_all()?,
-            &reset.to_dtype(DType::U32)?.flatten_all()?,
-        ],
-        0,
-    )?;
-    Ok(query.detach().contiguous()?.apply_op3_no_bwd(
-        &node_address.detach().contiguous()?,
-        &meta.contiguous()?,
-        &TreeSelect {
-            spec: *spec,
-            heads,
-            batch,
-        },
-    )?)
-}
-
-struct TreeSelect {
-    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
-    spec: NativeStarling,
-    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
-    heads: usize,
-    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
-    batch: usize,
-}
-
-impl CustomOp3 for TreeSelect {
-    fn name(&self) -> &'static str {
-        "murmuration-tree-select"
-    }
-    fn cpu_fwd(
-        &self,
-        _: &CpuStorage,
-        _: &Layout,
-        _: &CpuStorage,
-        _: &Layout,
-        _: &CpuStorage,
-        _: &Layout,
-    ) -> candle_core::Result<(CpuStorage, Shape)> {
-        candle_core::bail!("tree selection is GPU-only; no host fallback (D24)")
-    }
-    #[cfg(feature = "cuda")]
-    fn cuda_fwd(
-        &self,
-        query: &candle_core::CudaStorage,
-        ql: &Layout,
-        node: &candle_core::CudaStorage,
-        nl: &Layout,
-        meta: &candle_core::CudaStorage,
-        ml: &Layout,
-    ) -> candle_core::Result<(candle_core::CudaStorage, Shape)> {
-        cuda::tree_select(self, query, ql, node, nl, meta, ml)
-    }
-}
-
-#[cfg(feature = "cuda")]
-mod cuda {
-    use candle_core::{CudaStorage, DType, Layout, Result as CResult, Shape};
-    use cudarc::driver::CudaView;
-
-    use super::TreeSelect;
-    use crate::cuda_stack_kernels::cuda::{launch_prebuilt, zeros, Arg};
-
-    const PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/starling_native.ptx"));
-    const MODULE: &str = "uor_r4_starling_native";
-
-    fn view_f32<'a>(s: &'a CudaStorage, l: &Layout) -> CResult<CudaView<'a, f32>> {
-        if !l.is_contiguous() || s.dtype() != DType::F32 {
-            candle_core::bail!("expected a contiguous F32 CUDA tensor");
-        }
-        let start = l.start_offset();
-        match s
-            .as_cuda_slice::<f32>()?
-            .try_slice(start..start + l.shape().elem_count())
-        {
-            Some(v) => Ok(v),
-            None => candle_core::bail!("CUDA input layout exceeds its buffer"),
-        }
-    }
-
-    fn view_u32<'a>(
-        s: &'a CudaStorage,
-        l: &Layout,
-        from: usize,
-        len: usize,
-    ) -> CResult<CudaView<'a, u32>> {
-        if !l.is_contiguous() || s.dtype() != DType::U32 {
-            candle_core::bail!("expected a contiguous U32 CUDA tensor");
-        }
-        let start = l.start_offset() + from;
-        match s.as_cuda_slice::<u32>()?.try_slice(start..start + len) {
-            Some(v) => Ok(v),
-            None => candle_core::bail!("CUDA input layout exceeds its buffer"),
-        }
-    }
-
-    fn narrow(v: usize) -> CResult<u32> {
-        u32::try_from(v)
-            .map_err(|_| candle_core::Error::Msg("murmuration dimension overflow".into()))
-    }
-
-    fn check(
-        device: &candle_core::CudaDevice,
-        error: &cudarc::driver::CudaSlice<u32>,
-        what: &str,
-    ) -> CResult<()> {
-        let flag = device.clone_dtoh(error)?;
-        if flag.first().copied() != Some(0) {
-            candle_core::bail!("{what} rejected its input: {:?}", flag);
-        }
-        Ok(())
-    }
-
-    pub(super) fn nearest_cells(
-        address: &CudaStorage,
-        layout: &Layout,
-    ) -> CResult<(CudaStorage, Shape)> {
-        let device = &address.device;
-        let n = match layout.shape().dims() {
-            [n, 4] => *n,
-            _ => candle_core::bail!("nearest cells need [n, 4] addresses"),
-        };
-        let (roots, _) = crate::starling_native::geometry()
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let roots = device.clone_htod(&roots)?;
-        let out = zeros::<u32>(device, n)?;
-        let error = zeros::<u32>(device, 1)?;
-        let args = [
-            Arg::F(view_f32(address, layout)?),
-            Arg::f(&roots),
-            Arg::u(&out),
-            Arg::u(&error),
-            Arg::U32(narrow(n)?),
-        ];
-        launch_prebuilt(device, MODULE, PTX, "murm_nearest_cells", n, &args)?;
-        drop(args);
-        check(device, &error, "the murmuration cell function")?;
-        Ok((
-            CudaStorage::wrap_cuda_slice(out, device.clone()),
-            Shape::from_dims(&[n]),
-        ))
-    }
-
-    pub(super) fn tree_select(
-        op: &TreeSelect,
-        query: &CudaStorage,
-        ql: &Layout,
-        node: &CudaStorage,
-        nl: &Layout,
-        meta: &CudaStorage,
-        ml: &Layout,
-    ) -> CResult<(CudaStorage, Shape)> {
-        let device = &query.device;
-        let (rows, time) = match ql.shape().dims() {
-            [rows, time, 4] => (*rows, *time),
-            _ => candle_core::bail!("tree selection queries must be [rows, time, 4]"),
-        };
-        let batch = op.batch;
-        if nl.shape().dims() != ql.shape().dims()
-            || ml.shape().elem_count() != rows * time + 2 * batch * time
-        {
-            candle_core::bail!("tree selection operands disagree");
-        }
-        let (roots, adjacency) = crate::starling_native::geometry()
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let roots = device.clone_htod(&roots)?;
-        let adjacency = device.clone_htod(&adjacency)?;
-        let cells = crate::starling_native::CELLS;
-        let slots = op.spec.kept;
-        let ring = zeros::<u32>(device, rows * cells * op.spec.depth)?;
-        let ring_len = zeros::<u32>(device, rows * cells)?;
-        let ring_head = zeros::<u32>(device, rows * cells)?;
-        let out = zeros::<u32>(device, rows * time * (slots + 2))?;
-        let error = zeros::<u32>(device, 1)?;
-        let args = [
-            Arg::F(view_f32(query, ql)?),
-            Arg::F(view_f32(node, nl)?),
-            Arg::U(view_u32(meta, ml, 0, rows * time)?),
-            Arg::U(view_u32(meta, ml, rows * time, batch * time)?),
-            Arg::U(view_u32(
-                meta,
-                ml,
-                rows * time + batch * time,
-                batch * time,
-            )?),
-            Arg::f(&roots),
-            Arg::u(&adjacency),
-            Arg::u(&ring),
-            Arg::u(&ring_len),
-            Arg::u(&ring_head),
-            Arg::u(&out),
-            Arg::u(&error),
-            Arg::U32(narrow(rows)?),
-            Arg::U32(narrow(time)?),
-            Arg::U32(narrow(op.heads)?),
-            Arg::U32(narrow(op.spec.depth)?),
-            Arg::U32(narrow(slots)?),
-        ];
-        launch_prebuilt(device, MODULE, PTX, "murm_tree_select", rows, &args)?;
-        drop(args);
-        check(device, &error, "tree selection")?;
-        Ok((
-            CudaStorage::wrap_cuda_slice(out, device.clone()),
-            Shape::from_dims(&[rows, time, slots + 2]),
-        ))
-    }
-}
-
 #[cfg(test)]
-#[allow(clippy::needless_range_loop)]
+#[allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 mod tests {
     use super::*;
     use crate::starling_native::murmuration::{
-        murmuration_read, selection_spec, MurmurationInputs,
+        murmuration_read, murmuration_select, selection_spec, MurmurationInputs,
     };
-    use crate::starling_native::{select, Credit};
+    use crate::starling_native::Credit;
     use candle_core::{Device, Var};
 
     /// S2-c (host, index metadata): level availability is floor(n_past/3^l)
@@ -814,29 +600,52 @@ mod tests {
         assert_eq!(two.arrival[19], 1);
         // No level-1 node arrives at a document start.
         assert_eq!(one.arrival[10], ABSENT);
+        // Fix 4: availability counts the current document only.
+        assert_eq!(plan.available(0, 9, 1), 3); // [0,3) [3,6) [6,9) arrived by t = 9
+        assert_eq!(plan.available(0, 10, 1), 0); // BOS at 10: a fresh document
+        assert_eq!(plan.available(0, 13, 1), 1); // [10,13) arrives at 13
+        assert_eq!(plan.available(0, 19, 2), 1); // [10,19) arrives at 19
         Ok(())
     }
 
     #[test]
     fn murm_tree_refuses_cpu() -> Result<()> {
+        // Refused at either layer (the vendored backend refuses CPU tensors;
+        // the read refuses non-CUDA input), including a zero-level plan, which
+        // must not bypass admission (fix 3, Codex 6152388126).
         let device = Device::Cpu;
-        let plan = TreePlan::new(&[1, 0, 0, 0], 1, 4, 1)?;
-        let x = Tensor::zeros((1, 4, 4), DType::F32, &device)?;
-        let norm = Tensor::ones((1, 4), DType::F32, &device)?;
-        let cells = Tensor::zeros((1, 4), DType::U32, &device)?;
-        let coupling = Tensor::zeros((1, 1), DType::F32, &device)?;
-        let reset = Tensor::zeros((1, 4), DType::U32, &device)?;
-        let inputs = TreeInputs {
-            address: &x,
-            address_norm: &norm,
-            value: &x,
-            cells: &cells,
-            coupling: &coupling,
-            reset: &reset,
-            heads: 1,
-            chirality: Chirality::Left,
-        };
-        assert!(murmuration_tree_read(&spec(), &plan, &inputs).is_err());
+        for time in [4usize, 2] {
+            let attempt = || -> Result<TreeOutput> {
+                let mut reset = vec![0u32; time];
+                reset[0] = 1;
+                let plan = TreePlan::new(&reset, 1, time, 1)?;
+                let x = Tensor::zeros((1, time, 4), DType::F32, &device)?;
+                let norm = Tensor::ones((1, time), DType::F32, &device)?;
+                let cells = Tensor::zeros((1, time), DType::U32, &device)?;
+                let coupling = Tensor::zeros((plan.levels.len(), 1), DType::F32, &device)?;
+                let reset_t = Tensor::zeros((1, time), DType::U32, &device)?;
+                murmuration_tree_read(
+                    &spec(),
+                    &plan,
+                    &TreeInputs {
+                        address: &x,
+                        address_norm: &norm,
+                        value: &x,
+                        cells: &cells,
+                        coupling: &coupling,
+                        reset: &reset_t,
+                        heads: 1,
+                        chirality: Chirality::Left,
+                    },
+                )
+            };
+            assert!(
+                attempt().is_err(),
+                "time {time}: the CPU tree read was not refused"
+            );
+        }
+        // The zero-level plan really has no levels (the early-return case).
+        assert!(TreePlan::new(&[1, 0], 1, 2, 1)?.levels.is_empty());
         Ok(())
     }
 
@@ -885,7 +694,13 @@ mod tests {
         let value = Tensor::from_vec(value, (1, time, 4), device)?;
         let reset_t = Tensor::from_vec(reset.clone(), (1, time), device)?;
         let s = selection_spec(&spec())?;
-        let selection = select(&s, 1, &address, &address, &reset_t)?;
+        let selection = murmuration_select(
+            &spec(),
+            1,
+            &address,
+            &Tensor::ones((1, address.dim(1)?), DType::F32, address.device())?,
+            &reset_t,
+        )?;
         let key_cell = selection
             .narrow(2, s.slots() + 1, 1)?
             .squeeze(2)?
@@ -939,7 +754,15 @@ mod tests {
             );
         }
         // Expected value: (1/3) sum_k (c_P (x) conj(c_k)) (x) v_k, signed c_k.
-        let c_p = built[0].cell.flatten_all()?.to_vec1::<u32>()?[0] as usize;
+        // Fix 5: the expected parent cell is pinned independently. For 2a + b with
+        // a, b adjacent (dot phi/2), <a^, a> ~ 0.979 beats every other vertex
+        // (at most (phi + 1)/|2a + b| ~ 0.912), so the parent cell is a = 30.
+        let c_p = a;
+        let got_cell = built[0].cell.flatten_all()?.to_vec1::<u32>()?[0] as usize;
+        assert_eq!(
+            got_cell, c_p,
+            "the parent cell is not the pinned nearest vertex"
+        );
         let roots_t = Tensor::from_vec(geometry()?.0, (CELLS, 4), &device)?;
         let conj = Tensor::new(&[1f32, -1.0, -1.0, -1.0], &device)?;
         let cp = roots_t.narrow(0, c_p, 1)?.reshape(4)?;
@@ -962,6 +785,51 @@ mod tests {
         let out = murmuration_tree_read(&spec(), &plan, &inputs)?;
         let flock = out.flock[0].to_vec2::<f32>()?;
         assert_eq!(flock[0], vec![0.0, 0.0, 0.0, 1.0]);
+        Ok(())
+    }
+
+    /// Fix 5b: the registered hemisphere tie. Children at the axis roots
+    /// (1,0,0,0), (0,1,0,0), (1,0,0,0): the second has dot exactly 0 with the
+    /// first, so s = +1 and the parent address is (2,1,0,0)/sqrt5, distinct from
+    /// the s = -1 alternative (2,-1,0,0)/sqrt5.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_tree_hemisphere_tie() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let r = roots()?;
+        let (x, y) = (1usize, 3usize);
+        assert_eq!(r[x], [1.0, 0.0, 0.0, 0.0]);
+        assert_eq!(r[y], [0.0, 1.0, 0.0, 0.0]);
+        let (address, value, key_cell, reset_t, reset) = tokens(&device, &[x, y, x, x], &[0])?;
+        let plan = TreePlan::new(&reset, 1, 4, 1)?;
+        let coupling = Tensor::new(&[[1.0f32]], &device)?;
+        let norm = Tensor::ones((1, 4), DType::F32, &device)?;
+        let built = build_levels(
+            &plan,
+            &TreeInputs {
+                address: &address,
+                address_norm: &norm,
+                value: &value,
+                cells: &key_cell,
+                coupling: &coupling,
+                reset: &reset_t,
+                heads: 1,
+                chirality: Chirality::Left,
+            },
+        )?;
+        let got = built[0]
+            .address
+            .flatten_all()?
+            .narrow(0, 0, 4)?
+            .to_vec1::<f32>()?;
+        let s5 = 5f32.sqrt();
+        let want = [2.0 / s5, 1.0 / s5, 0.0, 0.0];
+        for i in 0..4 {
+            assert!(
+                (got[i] - want[i]).abs() <= 1e-6,
+                "tie parent {got:?} vs {want:?}"
+            );
+        }
         Ok(())
     }
 
@@ -1141,8 +1009,13 @@ mod tests {
             },
         );
         assert!(tree.is_err(), "a null-containing parent was not refused");
-        let s = selection_spec(&spec())?;
-        let selection = select(&s, 1, &address, &address, &reset_t)?;
+        let selection = murmuration_select(
+            &spec(),
+            1,
+            &address,
+            &Tensor::ones((1, address.dim(1)?), DType::F32, address.device())?,
+            &reset_t,
+        )?;
         let k = Tensor::new(&[1.0f32], &device)?;
         assert!(murmuration_read(
             &spec(),
@@ -1159,6 +1032,386 @@ mod tests {
             None,
         )
         .is_ok());
+        Ok(())
+    }
+
+    /// Two rows (one batch, two heads) at the same vertices, distinct values
+    /// per row; the token cells come from the murmuration selector.
+    fn paired_tokens(
+        device: &Device,
+        cells: &[usize],
+        reset_at: &[usize],
+    ) -> Result<(Tensor, Tensor, Tensor, Tensor, Vec<u32>, Tensor)> {
+        let r = roots()?;
+        let time = cells.len();
+        let address: Vec<f32> = (0..2)
+            .flat_map(|_| cells.iter().flat_map(|&c| r[c]))
+            .collect();
+        let value: Vec<f32> = (0..2 * time * 4)
+            .map(|i| (((i * 17) % 31) as f32 / 31.0) * 1.6 - 0.8)
+            .collect();
+        let mut reset = vec![0u32; time];
+        for &t in reset_at {
+            reset[t] = 1;
+        }
+        let address = Tensor::from_vec(address, (2, time, 4), device)?;
+        let value = Tensor::from_vec(value, (2, time, 4), device)?;
+        let reset_t = Tensor::from_vec(reset.clone(), (1, time), device)?;
+        let norm = Tensor::ones((2, time), DType::F32, device)?;
+        let s = selection_spec(&spec())?;
+        let selection = murmuration_select(&spec(), 2, &address, &norm, &reset_t)?;
+        let key_cell = selection
+            .narrow(2, s.slots() + 1, 1)?
+            .squeeze(2)?
+            .contiguous()?;
+        Ok((address, value, key_cell, reset_t, reset, norm))
+    }
+
+    fn near_cells(len: usize) -> Result<Vec<usize>> {
+        let adjacency = geometry()?.1;
+        let a = 30usize;
+        Ok((0..len)
+            .map(|t| {
+                if t % 4 == 0 {
+                    a
+                } else {
+                    adjacency[a * 12 + t % 12] as usize
+                }
+            })
+            .collect())
+    }
+
+    /// Fix 2 control (S2): NaN or infinity in values, norms, addresses or
+    /// couplings is refused before arithmetic.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_tree_nonfinite_refused() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let cells = near_cells(28)?;
+        let (address, value, key_cell, reset_t, reset) = tokens(&device, &cells, &[0])?;
+        let plan = TreePlan::new(&reset, 1, 28, 3)?;
+        let norm = Tensor::ones((1, 28), DType::F32, &device)?;
+        let k = Tensor::new(&[[0.5f32], [0.0], [1.0]], &device)?;
+        let poke = |x: &Tensor, at: usize, bad: f32| -> Result<Tensor> {
+            let mask: Vec<f32> = (0..x.elem_count())
+                .map(|i| if i == at { bad } else { 0.0 })
+                .collect();
+            Ok(x.add(&Tensor::from_vec(mask, x.shape(), &device)?)?)
+        };
+        let read = |a: &Tensor, v: &Tensor, n: &Tensor, k: &Tensor| {
+            murmuration_tree_read(
+                &spec(),
+                &plan,
+                &TreeInputs {
+                    address: a,
+                    address_norm: n,
+                    value: v,
+                    cells: &key_cell,
+                    coupling: k,
+                    reset: &reset_t,
+                    heads: 1,
+                    chirality: Chirality::Left,
+                },
+            )
+        };
+        assert!(read(&address, &value, &norm, &k).is_ok());
+        assert!(read(&address, &poke(&value, 2, f32::NAN)?, &norm, &k).is_err());
+        assert!(read(&address, &value, &poke(&norm, 7, f32::INFINITY)?, &k).is_err());
+        assert!(read(&poke(&address, 11, f32::NAN)?, &value, &norm, &k).is_err());
+        assert!(read(&address, &value, &norm, &poke(&k, 1, f32::NAN)?).is_err());
+        Ok(())
+    }
+
+    fn tree_read(
+        plan: &TreePlan,
+        address: &Tensor,
+        value: &Tensor,
+        key_cell: &Tensor,
+        norm: &Tensor,
+        reset_t: &Tensor,
+        coupling: &Tensor,
+        chirality: Chirality,
+    ) -> Result<TreeOutput> {
+        murmuration_tree_read(
+            &spec(),
+            plan,
+            &TreeInputs {
+                address,
+                address_norm: norm,
+                value,
+                cells: key_cell,
+                coupling,
+                reset: reset_t,
+                heads: 2,
+                chirality,
+            },
+        )
+    }
+
+    /// M2 control 2 on S2 (Codex 6152708506 item 2): under `Paired` the even
+    /// (left) head's tree read is bit-identical to `Left`; the odd head differs.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_tree_left_heads_unchanged() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let cells = near_cells(28)?;
+        let (address, value, key_cell, reset_t, reset, norm) =
+            paired_tokens(&device, &cells, &[0])?;
+        let plan = TreePlan::new(&reset, 1, 28, 3)?;
+        let k = Tensor::new(&[[0.9f32, -0.7], [0.5, 0.6], [-0.4, 1.1]], &device)?;
+        let left: Vec<Vec<Vec<f32>>> = tree_read(
+            &plan,
+            &address,
+            &value,
+            &key_cell,
+            &norm,
+            &reset_t,
+            &k,
+            Chirality::Left,
+        )?
+        .delta
+        .to_vec3()?;
+        let paired: Vec<Vec<Vec<f32>>> = tree_read(
+            &plan,
+            &address,
+            &value,
+            &key_cell,
+            &norm,
+            &reset_t,
+            &k,
+            Chirality::Paired,
+        )?
+        .delta
+        .to_vec3()?;
+        for t in 0..28 {
+            for i in 0..4 {
+                assert_eq!(left[0][t][i].to_bits(), paired[0][t][i].to_bits(), "t {t}");
+            }
+        }
+        assert_ne!(left[1], paired[1], "the right head did not change");
+        Ok(())
+    }
+
+    /// M2 control 3 on S2: the right head's multi-level tree read against an
+    /// independent device reference. Parents are rebuilt from the children's
+    /// signed cells with direct f32 products `v (x) (conj(c_k) (x) c_P)`, and each
+    /// reader's per-level flock (taken from the selection, index metadata) is
+    /// carried by `v_P (x) (conj(c_P) (x) c_t)`. Covers flocks of 0, 1 and 7.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_tree_right_forward_reference() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let cells = near_cells(28)?;
+        let (address, value, key_cell, reset_t, reset, norm) =
+            paired_tokens(&device, &cells, &[0])?;
+        let plan = TreePlan::new(&reset, 1, 28, 3)?;
+        let k = Tensor::new(&[[0.9f32, -0.7], [0.5, 0.6], [-0.4, 1.1]], &device)?;
+        let out = tree_read(
+            &plan,
+            &address,
+            &value,
+            &key_cell,
+            &norm,
+            &reset_t,
+            &k,
+            Chirality::Paired,
+        )?;
+        let inputs = TreeInputs {
+            address: &address,
+            address_norm: &norm,
+            value: &value,
+            cells: &key_cell,
+            coupling: &k,
+            reset: &reset_t,
+            heads: 2,
+            chirality: Chirality::Paired,
+        };
+        let built = build_levels(&plan, &inputs)?;
+        let roots_t = Tensor::from_vec(geometry()?.0, (CELLS, 4), &device)?;
+        let conj = Tensor::new(&[1f32, -1.0, -1.0, -1.0], &device)?;
+        let root = |c: usize| -> Result<Tensor> { Ok(roots_t.narrow(0, c, 1)?.reshape(4)?) };
+        let row = 1usize;
+        // Parents, rebuilt independently for the right row.
+        let mut prev_cells: Vec<usize> = key_cell.to_vec2::<u32>()?[row]
+            .iter()
+            .map(|&c| c as usize)
+            .collect();
+        let mut prev_vals: Vec<Tensor> = (0..28)
+            .map(|t| Ok(value.narrow(0, row, 1)?.narrow(1, t, 1)?.reshape(4)?))
+            .collect::<Result<_>>()?;
+        let mut levels_ref = Vec::new();
+        for (l, level) in plan.levels.iter().enumerate() {
+            let pc: Vec<usize> = built[l].cell.to_vec2::<u32>()?[row]
+                .iter()
+                .map(|&c| c as usize)
+                .collect();
+            let mut vals = Vec::with_capacity(level.nodes);
+            for node in 0..level.nodes {
+                let mut sum = Tensor::zeros(4, DType::F32, &device)?;
+                for kk in 0..3 {
+                    let child = level.children[node * 3 + kk] as usize;
+                    let h = hamilton(&root(prev_cells[child])?.mul(&conj)?, &root(pc[node])?)?;
+                    sum = sum.add(&hamilton(&prev_vals[child], &h)?)?;
+                }
+                vals.push(sum.affine(1.0 / 3.0, 0.0)?);
+            }
+            let got = built[l]
+                .value
+                .narrow(0, row, 1)?
+                .reshape((level.nodes, 4))?;
+            let want = Tensor::stack(&vals, 0)?;
+            let worst = got
+                .sub(&want)?
+                .abs()?
+                .flatten_all()?
+                .max(0)?
+                .to_scalar::<f32>()?;
+            assert!(
+                worst <= 1e-6,
+                "level {} right parents off by {worst}",
+                l + 1
+            );
+            prev_cells = pc;
+            prev_vals = vals.clone();
+            levels_ref.push((prev_cells.clone(), vals));
+        }
+        // Readers.
+        let k_rows = k.to_vec2::<f32>()?;
+        let mut sizes = std::collections::BTreeSet::new();
+        for t in 0..28 {
+            let v_t = value.narrow(0, row, 1)?.narrow(1, t, 1)?.reshape(4)?;
+            let mut want = Tensor::zeros(4, DType::F32, &device)?;
+            for (l, level) in plan.levels.iter().enumerate() {
+                let picks = out.selection[l].to_vec3::<u32>()?;
+                let home = picks[row][t][spec().kept] as usize;
+                let (node_cells, node_vals) = &levels_ref[l];
+                let mut sum = Tensor::zeros(4, DType::F32, &device)?;
+                let mut count = 0usize;
+                for &p in &picks[row][t][..spec().kept] {
+                    if p == ABSENT {
+                        continue;
+                    }
+                    let node = level.arrival[p as usize] as usize;
+                    let h = hamilton(&root(node_cells[node])?.mul(&conj)?, &root(home)?)?;
+                    sum = sum.add(&hamilton(&node_vals[node], &h)?)?;
+                    count += 1;
+                }
+                sizes.insert(count);
+                if count > 0 {
+                    want = want.add(
+                        &sum.affine(1.0 / count as f64, 0.0)?
+                            .sub(&v_t)?
+                            .affine(k_rows[l][row] as f64, 0.0)?,
+                    )?;
+                }
+            }
+            let got = out.delta.narrow(0, row, 1)?.narrow(1, t, 1)?.reshape(4)?;
+            let worst = got.sub(&want)?.abs()?.max(0)?.to_scalar::<f32>()?;
+            assert!(worst <= 1e-6, "t {t}: right tree read off by {worst}");
+        }
+        assert!(
+            sizes.contains(&0) && sizes.contains(&1) && sizes.contains(&7),
+            "flock sizes {sizes:?}"
+        );
+        Ok(())
+    }
+
+    /// M2 control 4 on S2: right-head token-value and per-level coupling
+    /// gradients of the tree read against device central secants (same
+    /// convention: pass iff |s - a| <= 2e-3 * max(|s|, |a|, 1e-3)).
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_tree_right_backward_secants() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let cells = near_cells(28)?;
+        let (address, value, key_cell, reset_t, reset, norm) =
+            paired_tokens(&device, &cells, &[0])?;
+        let plan = TreePlan::new(&reset, 1, 28, 3)?;
+        let weights = Tensor::from_vec(
+            (0..2 * 28 * 4)
+                .map(|i| {
+                    if i >= 28 * 4 {
+                        ((i * 37 % 17) as f32 / 17.0) - 0.5
+                    } else {
+                        0.0
+                    }
+                })
+                .collect::<Vec<_>>(),
+            (2, 28, 4),
+            &device,
+        )?;
+        let v = Var::from_tensor(&value)?;
+        let k = Var::from_tensor(&Tensor::new(
+            &[[0.0f32, 0.9], [0.0, -0.7], [0.0, 0.5]],
+            &device,
+        )?)?;
+        let loss = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
+            Ok(tree_read(
+                &plan,
+                &address,
+                v,
+                &key_cell,
+                &norm,
+                &reset_t,
+                k,
+                Chirality::Paired,
+            )?
+            .delta
+            .mul(&weights)?
+            .sum_all()?)
+        };
+        let grads = loss(v.as_tensor(), k.as_tensor())?.backward()?;
+        let gv = grads
+            .get(v.as_tensor())
+            .ok_or_else(|| invalid("no value grad"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let gk = grads
+            .get(k.as_tensor())
+            .ok_or_else(|| invalid("no coupling grad"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let h = 1e-3f64;
+        let check = |a: f32, p: f32, m: f32, what: &str| {
+            let s = (p - m) as f64 / (2.0 * h);
+            let bound = 2e-3 * s.abs().max(a.abs() as f64).max(1e-3);
+            assert!(
+                (s - a as f64).abs() <= bound,
+                "{what}: analytic {a} secant {s}"
+            );
+        };
+        for idx in [28 * 4 + 1, 28 * 4 + 30, 28 * 4 + 61, 28 * 4 + 99] {
+            let bump = |sign: f64| -> Result<f32> {
+                let e = Tensor::from_vec(
+                    (0..2 * 28 * 4)
+                        .map(|i| if i == idx { (sign * h) as f32 } else { 0.0 })
+                        .collect::<Vec<_>>(),
+                    (2, 28, 4),
+                    &device,
+                )?;
+                Ok(loss(&value.add(&e)?, k.as_tensor())?.to_scalar::<f32>()?)
+            };
+            check(gv[idx], bump(1.0)?, bump(-1.0)?, &format!("value[{idx}]"));
+        }
+        for l in 0..3 {
+            let at = l * 2 + 1; // the right head's coupling at level l
+            let bump = |sign: f64| -> Result<f32> {
+                let e = Tensor::from_vec(
+                    (0..6)
+                        .map(|i| if i == at { (sign * h) as f32 } else { 0.0 })
+                        .collect::<Vec<_>>(),
+                    (3, 2),
+                    &device,
+                )?;
+                Ok(loss(&value, &k.as_tensor().add(&e)?)?.to_scalar::<f32>()?)
+            };
+            check(
+                gk[at],
+                bump(1.0)?,
+                bump(-1.0)?,
+                &format!("coupling[level {l}, right]"),
+            );
+        }
         Ok(())
     }
 }

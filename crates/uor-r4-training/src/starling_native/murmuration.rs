@@ -24,7 +24,8 @@
 //!   and are not in `|N_t|`);
 //! * when the best off-home candidate `j*` (ties: the later position) clears
 //!   `u_tj* - mean_kept u > delta`, the address dot `<a_t, c_j*>` receives
-//!   `-address * address_margin / queries`; through the unit-address
+//!   `-address * address_margin` **per credited reader** (M1: no batch or time
+//!   averaging; Codex 6152780707); through the unit-address
 //!   normalisation that is the tangent push toward `c_j*` of M1.
 //!
 //! No exponential, no normalised exponential, no squashing, no learned matrix
@@ -36,7 +37,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use candle_core::{CpuStorage, CustomOp2, DType, Layout, Shape, Tensor};
 
-use super::{geometry, require_cuda, NativeStarling, ABSENT, CELLS};
+use super::kernels::{nearest_cells, ring_select};
+use super::{geometry, require_cuda, require_finite, NativeStarling, ABSENT, CELLS};
 use crate::{invalid, Result};
 
 /// The largest flock: K1 keeps at most this many neighbours per query for S1.
@@ -199,6 +201,76 @@ pub fn right_relative_table() -> Result<&'static [u32]> {
         .map_err(|e| invalid(e.clone()))
 }
 
+/// Each vertex's 12 nearest neighbours `[120 * 12]`, ascending: the vertices at
+/// the exact `Z[phi]` dot product `phi/2` (doubled roots: `sum = 2 phi`).
+pub(crate) fn exact_adjacency() -> Result<Vec<u32>> {
+    let doubled = doubled_icosians();
+    let two_phi = Golden(0, 2);
+    let mut out = Vec::with_capacity(CELLS * 12);
+    for a in &doubled {
+        let start = out.len();
+        for (k, b) in doubled.iter().enumerate() {
+            let dot = (0..4).fold(Golden(0, 0), |s, i| s.add(a[i].mul(b[i])));
+            if dot == two_phi {
+                out.push(k as u32);
+            }
+        }
+        if out.len() - start != 12 {
+            return Err(invalid(
+                "a 600-cell vertex must have exactly 12 nearest neighbours",
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// Fix 1 (Codex 6152388126): K1's ring law on the token timeline with
+/// address-null keys excluded **before** insertion and ranking, so a null token
+/// is neither stored nor read and cannot evict valid history. Runs on
+/// [`selection_spec`] (K + 1 kept slots). Returns
+/// `[rows, time, (K + 1) + E + 2]` U32: the slot positions in rank order
+/// (ABSENT when fewer), the home cell, and the token's own cell (ABSENT when
+/// null). `address` is `[rows, time, 4]` unit F32, `address_norm` the raw norms
+/// `[rows, time]`, `reset` the `[batch, time]` BOS mask.
+pub fn murmuration_select(
+    spec: &NativeStarling,
+    heads: usize,
+    address: &Tensor,
+    address_norm: &Tensor,
+    reset: &Tensor,
+) -> Result<Tensor> {
+    let selector = selection_spec(spec)?;
+    require_cuda(address, "murmuration selection")?;
+    require_finite(address, "the murmuration addresses")?;
+    require_finite(address_norm, "the murmuration address norms")?;
+    let (rows, time, four) = address.dims3()?;
+    if four != 4 || address_norm.dims() != [rows, time] {
+        return Err(invalid(
+            "murmuration selection needs [rows, time, 4] addresses and [rows, time] norms",
+        ));
+    }
+    let address = address.to_dtype(DType::F32)?.detach().contiguous()?;
+    let cells = nearest_cells(&address.reshape((rows * time, 4))?)?.reshape((rows, time))?;
+    let valid = address_norm
+        .to_dtype(DType::F32)?
+        .ge(NULL_ADDRESS_NORM)?
+        .to_dtype(DType::U32)?;
+    let selection = ring_select(
+        &NativeStarling {
+            kept: selector.slots(),
+            explore: 0,
+            ..selector
+        },
+        heads,
+        &address,
+        &address,
+        &cells,
+        &valid,
+        reset,
+    )?;
+    Ok(selection)
+}
+
 /// The exact table of `product(c_a, c_b)` over all ordered pairs, as icosian
 /// indices; refuses a product outside 2I or a codebook mismatch with K1.
 fn build_table(product: impl Fn(&ExactQ, &ExactQ) -> ExactQ) -> Result<Vec<u32>> {
@@ -308,8 +380,10 @@ impl Chirality {
 
 /// Carry values into their readers' frames, row by row in each row's
 /// handedness: `T^L(v) = roots[rel_L[home, other]] (x) v` on left rows and
-/// `T^R(v) = v (x) roots[rel_R[home, other]]` on right rows. One Hamilton
-/// product per element either way: a right row only swaps the operands.
+/// `T^R(v) = v (x) roots[rel_R[home, other]]` on right rows. Cost: one Hamilton
+/// product per element and no learned parameter in either handedness (a right
+/// row swaps the operands); `Paired` adds a second table gather, a handedness
+/// mask and two selects (Codex M2 clarification 6152708506: not zero cost).
 /// `home`/`other` are U32 cells of one shape whose first axis is the row
 /// (`rows = batch * heads`, head `r % heads`); `value` is that shape plus 4.
 pub(crate) fn carry(
@@ -424,6 +498,11 @@ pub fn murmuration_read(
             "murmuration tensors disagree with the declared route",
         ));
     }
+    // Fix 2 (Codex 6152388126): refuse NaN/Inf before any arithmetic.
+    require_finite(inputs.value, "the murmuration values")?;
+    require_finite(inputs.address, "the murmuration addresses")?;
+    require_finite(inputs.address_norm, "the murmuration address norms")?;
+    require_finite(inputs.coupling, "the murmuration coupling")?;
     let device = inputs.value.device();
     let value = inputs.value.to_dtype(DType::F32)?;
     let selection = inputs.selection;
@@ -462,6 +541,13 @@ pub fn murmuration_read(
         .flatten_all()?
         .index_select(&flat, 0)?
         .reshape((rows, time, s))?;
+    // Codex 6153323237: an unusable slot (absent, future, address-null) may
+    // carry key cell ABSENT; replace it with a valid cell on the device BEFORE
+    // the table and root gathers. Its value is masked out below either way.
+    let neighbour_cell = usable.where_cond(
+        &neighbour_cell,
+        &Tensor::zeros((rows, time, s), DType::U32, device)?,
+    )?;
     let (roots, _) = geometry()?;
     let roots = Tensor::from_vec(roots, (CELLS, 4), device)?;
     let neighbour_value = value
@@ -690,10 +776,7 @@ fn address_credit(state: &CaptureState, dots: &Tensor, grad: &Tensor) -> Result<
         .to_dtype(DType::F32)?
         .mul(&any)?
         .mul(&has_flock)?; // [rows, time]
-    let scale = on.affine(
-        -(credit.address * credit.address_margin) as f64 / queries,
-        0.0,
-    )?;
+    let scale = on.affine(-(credit.address * credit.address_margin) as f64, 0.0)?;
 
     if let Some(sink) = &state.sink {
         sink.lock()
@@ -710,7 +793,7 @@ fn address_credit(state: &CaptureState, dots: &Tensor, grad: &Tensor) -> Result<
 #[allow(clippy::needless_range_loop, clippy::type_complexity)]
 mod tests {
     use super::*;
-    use crate::starling_native::{select, unit_address, Credit};
+    use crate::starling_native::{unit_address, Credit};
     use candle_core::{Device, Var};
 
     /// Control 1 (host part): the relative table is the exact quotient of the
@@ -760,22 +843,27 @@ mod tests {
             bos_id: 0,
             credit: Credit::FIXTURE,
         };
-        let zeros4 = Tensor::zeros((1, 3, 4), DType::F32, &device)?;
-        let norm = Tensor::ones((1, 3), DType::F32, &device)?;
-        let coupling = Tensor::zeros(1, DType::F32, &device)?;
-        let selection = Tensor::zeros((1, 3, 4), DType::U32, &device)?;
-        let inputs = MurmurationInputs {
-            address: &zeros4,
-            address_norm: &norm,
-            value: &zeros4,
-            coupling: &coupling,
-            selection: &selection,
-            heads: 1,
-            chirality: Chirality::Left,
+        // The CPU path is refused at either layer: the vendored backend (#2345)
+        // refuses CPU tensors, and the read refuses non-CUDA input (D24).
+        let attempt = || -> Result<MurmurationOutput> {
+            let zeros4 = Tensor::zeros((1, 3, 4), DType::F32, &device)?;
+            let norm = Tensor::ones((1, 3), DType::F32, &device)?;
+            let coupling = Tensor::zeros(1, DType::F32, &device)?;
+            let selection = Tensor::zeros((1, 3, 4), DType::U32, &device)?;
+            let inputs = MurmurationInputs {
+                address: &zeros4,
+                address_norm: &norm,
+                value: &zeros4,
+                coupling: &coupling,
+                selection: &selection,
+                heads: 1,
+                chirality: Chirality::Left,
+            };
+            murmuration_read(&spec, &inputs, false, None)
         };
-        assert!(murmuration_read(&spec, &inputs, false, None).is_err());
-        let wide = NativeStarling { kept: 8, ..spec };
-        assert!(murmuration_read(&wide, &inputs, false, None).is_err());
+        assert!(attempt().is_err());
+        // An oversized flock is refused before any tensor is touched.
+        assert!(selection_spec(&NativeStarling { kept: 8, ..spec }).is_err());
         Ok(())
     }
 
@@ -849,13 +937,7 @@ mod tests {
         coupling: &Tensor,
         credit: bool,
     ) -> Result<MurmurationOutput> {
-        let selection = select(
-            &selection_spec(spec)?,
-            f.heads,
-            &f.address,
-            &f.address,
-            &f.reset,
-        )?;
+        let selection = murmuration_select(spec, f.heads, &f.address, &f.norm, &f.reset)?;
         murmuration_read(
             spec,
             &MurmurationInputs {
@@ -937,7 +1019,7 @@ mod tests {
             let s = spec(kept, 2);
             let out = run(&s, &f, &f.value, &coupling, false)?;
             let sel = selection_spec(&s)?;
-            let selection = select(&sel, 2, &f.address, &f.address, &f.reset)?;
+            let selection = murmuration_select(&s, 2, &f.address, &f.norm, &f.reset)?;
             let picks: Vec<Vec<Vec<u32>>> = selection.to_vec3()?; // index metadata
             let roots = Tensor::from_vec(geometry()?.0, (CELLS, 4), &device)?;
             let conj = Tensor::new(&[1f32, -1.0, -1.0, -1.0], &device)?;
@@ -1073,7 +1155,7 @@ mod tests {
         assert_eq!(out.delta.abs()?.sum_all()?.to_scalar::<f32>()?, 0.0);
         // Address-null token 0: t = 1's flock loses it; a null reader reads 0.
         let null_norm = Tensor::new(&[[0f32, 1.0, 0.0]], &device)?;
-        let selection = select(&selection_spec(&s)?, 1, &f.address, &f.address, &f.reset)?;
+        let selection = murmuration_select(&s, 1, &f.address, &null_norm, &f.reset)?;
         let out = murmuration_read(
             &s,
             &MurmurationInputs {
@@ -1208,7 +1290,7 @@ mod tests {
         let raw = Var::from_tensor(&f.address)?;
         let address = unit_address(raw.as_tensor())?;
         let s = spec(2, 2);
-        let selection = select(&selection_spec(&s)?, 1, &address, &address, &f.reset)?;
+        let selection = murmuration_select(&s, 1, &address, &f.norm, &f.reset)?;
         let weights = Tensor::stack(
             &[
                 &Tensor::zeros(4, DType::F32, &device)?,
@@ -1252,9 +1334,20 @@ mod tests {
             cos > 0.99,
             "the address push is not toward the helpful vertex: cos {cos}"
         );
+        // Magnitude (Codex 6152780707): M1 injects -address * address_margin
+        // per credited reader, no batch or time averaging. With FIXTURE
+        // constants (1 * 0.1) and a unit raw address, the unit-address Jacobian
+        // makes the raw gradient exactly -0.1 * tangent.
+        let scale = (Credit::FIXTURE.address * Credit::FIXTURE.address_margin) as f64;
+        let off = g_raw
+            .add(&tangent.affine(scale, 0.0)?)?
+            .abs()?
+            .max(0)?
+            .to_scalar::<f32>()?;
+        assert!(off <= 1e-6, "address credit magnitude off by {off}");
         // Exploration has zero forward weight and is not in |N_t|.
         let plain = spec(2, 0);
-        let plain_selection = select(&selection_spec(&plain)?, 1, &address, &address, &f.reset)?;
+        let plain_selection = murmuration_select(&plain, 1, &address, &f.norm, &f.reset)?;
         let without = run_with(&plain, &plain_selection, false)?;
         let with = run_with(&s, &selection, false)?;
         let d0: Vec<Vec<Vec<f32>>> = without.delta.to_vec3()?;
@@ -1363,27 +1456,9 @@ mod tests {
         assert!(Chirality::Paired.validate(0).is_err());
         assert!(Chirality::Paired.validate(4).is_ok());
         assert!(Chirality::Left.validate(3).is_ok());
-        let device = Device::Cpu;
-        let spec = spec(2, 0);
-        let x = Tensor::zeros((3, 3, 4), DType::F32, &device)?;
-        let norm = Tensor::ones((3, 3), DType::F32, &device)?;
-        let coupling = Tensor::zeros(3, DType::F32, &device)?;
-        let selection = Tensor::zeros((3, 3, 5), DType::U32, &device)?;
-        let refused = murmuration_read(
-            &spec,
-            &MurmurationInputs {
-                address: &x,
-                address_norm: &norm,
-                value: &x,
-                coupling: &coupling,
-                selection: &selection,
-                heads: 3,
-                chirality: Chirality::Paired,
-            },
-            false,
-            None,
-        );
-        assert!(refused
+        // The read validates handedness before touching any tensor.
+        assert!(Chirality::Paired
+            .validate(3)
             .err()
             .is_some_and(|e| e.to_string().contains("even head count")));
         Ok(())
@@ -1399,7 +1474,7 @@ mod tests {
         let f = fixture(&device, &cells, 2, &resets)?;
         let s = spec(7, 2);
         let coupling = Tensor::new(&[0.6f32, -0.9], &device)?;
-        let selection = select(&selection_spec(&s)?, 2, &f.address, &f.address, &f.reset)?;
+        let selection = murmuration_select(&s, 2, &f.address, &f.norm, &f.reset)?;
         let read = |c: Chirality| -> Result<Vec<Vec<Vec<f32>>>> {
             Ok(murmuration_read(
                 &s,
@@ -1443,7 +1518,7 @@ mod tests {
         let s = spec(7, 2);
         let sel = selection_spec(&s)?;
         let coupling = Tensor::new(&[0.75f32, -1.25], &device)?;
-        let selection = select(&sel, 2, &f.address, &f.address, &f.reset)?;
+        let selection = murmuration_select(&s, 2, &f.address, &f.norm, &f.reset)?;
         let out = murmuration_read(
             &s,
             &MurmurationInputs {
@@ -1515,7 +1590,7 @@ mod tests {
         let f = fixture(&device, &cells, 2, &resets)?;
         let s = spec(7, 2);
         let (rows, time) = (cells.len(), cells[0].len());
-        let selection = select(&selection_spec(&s)?, 2, &f.address, &f.address, &f.reset)?;
+        let selection = murmuration_select(&s, 2, &f.address, &f.norm, &f.reset)?;
         // Weight only the right (odd) rows.
         let weights = Tensor::from_vec(
             (0..rows * time * 4)
@@ -1595,6 +1670,101 @@ mod tests {
             Ok(loss_of(&f.value, &coupling.as_tensor().add(&e)?)?.to_scalar::<f32>()?)
         };
         check(gk[1], bump(1.0)?, bump(-1.0)?, "coupling[right head]");
+        Ok(())
+    }
+
+    /// Fix 1 control (Codex 6152388126): address-null keys are excluded before
+    /// insertion and ranking. Ring depth 3 in one cell, tokens t0..t4 at the
+    /// same vertex with t2 and t3 address-null: the reader t4 keeps t4 (self),
+    /// t1, t0, because the nulls neither occupied the ring nor evicted t0/t1.
+    /// (Had the nulls been stored, the ring would hold t2, t3, t4.) Positions
+    /// are the original token positions; the BOS reset is preserved.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_null_keys_never_stored() -> Result<()> {
+        let device = cuda()?;
+        let a = 30usize;
+        let f = fixture(&device, &[vec![a, a, a, a, a, a]], 1, &[vec![0, 5]])?;
+        let norm = Tensor::new(&[[1f32, 1.0, 0.0, 0.0, 1.0, 1.0]], &device)?;
+        let s = NativeStarling {
+            depth: 3,
+            ..spec(2, 0)
+        };
+        let sel = selection_spec(&s)?;
+        let selection = murmuration_select(&s, 1, &f.address, &norm, &f.reset)?;
+        let picks: Vec<Vec<Vec<u32>>> = selection.to_vec3()?;
+        assert_eq!(picks[0][4][..sel.kept].to_vec(), vec![4, 1, 0]);
+        for t in 0..6 {
+            for &j in &picks[0][t][..sel.slots()] {
+                assert!(j != 2 && j != 3, "t {t} ranked an address-null key {j}");
+            }
+        }
+        assert_eq!(picks[0][2][sel.slots() + 1], ABSENT);
+        assert_eq!(picks[0][3][sel.slots() + 1], ABSENT);
+        // The BOS at 5 still clears the rings: t5 sees only itself.
+        assert_eq!(picks[0][5][..sel.kept].to_vec(), vec![5, ABSENT, ABSENT]);
+        let out = murmuration_read(
+            &s,
+            &MurmurationInputs {
+                address: &f.address,
+                address_norm: &norm,
+                value: &f.value,
+                coupling: &Tensor::new(&[1f32], &device)?,
+                selection: &selection,
+                heads: 1,
+                chirality: Chirality::Left,
+            },
+            false,
+            None,
+        )?;
+        let flock = out.flock.to_vec2::<f32>()?;
+        assert_eq!(flock[0][4], 2.0);
+        assert_eq!(flock[0][5], 0.0);
+        Ok(())
+    }
+
+    /// Fix 2 control: NaN or infinity in values, norms or couplings is refused
+    /// before arithmetic (masking would not remove it), in selection and read.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_nonfinite_refused() -> Result<()> {
+        let device = cuda()?;
+        let (cells, resets) = mixed_cells()?;
+        let f = fixture(&device, &cells, 2, &resets)?;
+        let s = spec(7, 2);
+        let (rows, time) = (cells.len(), cells[0].len());
+        let selection = murmuration_select(&s, 2, &f.address, &f.norm, &f.reset)?;
+        let poke = |x: &Tensor, at: usize, bad: f32| -> Result<Tensor> {
+            let n = x.elem_count();
+            let mask: Vec<f32> = (0..n).map(|i| if i == at { bad } else { 0.0 }).collect();
+            Ok(x.add(&Tensor::from_vec(mask, x.shape(), &device)?)?)
+        };
+        let read = |v: &Tensor, n: &Tensor, k: &Tensor| {
+            murmuration_read(
+                &s,
+                &MurmurationInputs {
+                    address: &f.address,
+                    address_norm: n,
+                    value: v,
+                    coupling: k,
+                    selection: &selection,
+                    heads: 2,
+                    chirality: Chirality::Paired,
+                },
+                false,
+                None,
+            )
+        };
+        let k = Tensor::new(&[0.5f32, 0.0], &device)?; // includes a K = 0 head
+        assert!(read(&f.value, &f.norm, &k).is_ok());
+        // Position 0 has an empty flock: a NaN there must still be refused.
+        assert!(read(&poke(&f.value, 0, f32::NAN)?, &f.norm, &k).is_err());
+        assert!(read(&poke(&f.value, 4 * time + 9, f32::INFINITY)?, &f.norm, &k).is_err());
+        assert!(read(&f.value, &poke(&f.norm, rows * time - 1, f32::NAN)?, &k).is_err());
+        assert!(read(&f.value, &f.norm, &poke(&k, 1, f32::NAN)?).is_err());
+        assert!(
+            murmuration_select(&s, 2, &f.address, &poke(&f.norm, 3, f32::NAN)?, &f.reset).is_err()
+        );
         Ok(())
     }
 }

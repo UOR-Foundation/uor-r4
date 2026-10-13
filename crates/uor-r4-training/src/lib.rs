@@ -169,6 +169,7 @@ pub mod milestone_world_v2;
 pub mod milestone_world_v2_probe;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod native_grounded_session;
+pub mod native_starling_spec;
 pub mod native_vector_writer;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod ngram;
@@ -197,10 +198,18 @@ pub mod stack_dialogue;
 pub mod stack_export;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod stack_grounded_session;
-pub mod native_starling_spec;
 /// Canonical read-spec metadata; historical numerical source remains inactive.
 pub mod starling_native {
     pub use crate::native_starling_spec::*;
+    // The murmuration read (M4 #2032): S1 flock transport mean, S2 FBS tree,
+    // M2 paired handedness, on the canonical spec types. The historical
+    // rank read in `starling_native.rs` stays inactive and uncompiled.
+    pub mod kernels;
+    pub mod murmuration;
+    pub mod murmuration_tree;
+    mod support;
+    pub(crate) use support::{geometry, require_cuda, require_finite};
+    pub use support::{reset_mask, unit_address};
 }
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod whole_path_learning;

@@ -35,9 +35,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{invalid, Result};
 
-pub mod murmuration;
-pub mod murmuration_tree;
-
 /// The `read_route=` prefix of the native read.
 pub const ROUTE_PREFIX: &str = "starling_native";
 /// An unfilled slot in K1's output.
