@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model — core
 
-> **Selected API, 13 October — D29:** Cargo now selects `src/native_support.rs`: fixed geometry, raw tokenizer/source-ingest metadata, exact scoped storage and report interfaces for the native CUDA stack. Historical core model/learner/session sources below are retained unchanged but excluded from this library build. They are not callable active APIs or a fallback. Host compile admission does not establish model quality, serving or lift training holds. [Boundary record](../../docs/labs/d29-vendor-boundary-2026-10-13/README.md).
+> **Selected API, 13 October — D29:** Cargo now selects `src/native_support.rs`: fixed geometry, raw tokenizer/source-ingest metadata, exact scoped storage and report interfaces for the native CUDA stack. Historical core model/learner/session sources below are retained unchanged but excluded from this library build. They are not callable active APIs or a fallback. The selected composed graph at `1f1547bfd` passes CUDA compilation and all 31 finite controls on RTX4090, pending protected delivery. These controls establish neither model quality nor serving and lift no training hold. [Boundary record](../../docs/labs/d29-vendor-boundary-2026-10-13/README.md).
 
 ## Historical implementation and evidence
 

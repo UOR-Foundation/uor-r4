@@ -11,8 +11,8 @@ model that runs on a laptop?*
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
 
 **Status, 13 October 2026: pre-alpha.** No model in this repository holds a useful conversation yet.
-The native-only CUDA training/evaluation source compiles; the repaired compiled dependency boundary
-still needs its composed finite qualification. **Training and the separate M2 holds remain held**.
+The native-only CUDA training/evaluation source and repaired compiled dependency boundary pass
+all 31 finite controls at `1f1547bfd70f01edc9aa36d34a46e5bc43edc34c`; protected delivery is pending. **Training and the separate M2 holds remain held**.
 [Current D29 record](docs/labs/d29-vendor-boundary-2026-10-13/README.md).
 
 ## The question
@@ -33,7 +33,7 @@ project keeps the two apart.
 
 ## Architecture
 
-<img src="docs/figures/architecture.svg" alt="Architecture: line A, the geometric stack language base, shows the earlier operator status; the native head now exists, the revised compiled boundary awaits qualification, and training is held; line B, the native learner, completes 437 of 512 development replies but 0 of 128 on fresh transfer; both join as one model served under D11 at M4" width="100%">
+<img src="docs/figures/architecture.svg" alt="Architecture: line A, the geometric stack language base, shows the earlier operator status; the native head now exists, the revised compiled boundary passes finite controls at its declared source scope, and training is held; line B, the native learner, completes 437 of 512 development replies but 0 of 128 on fresh transfer; both join as one model served under D11 at M4" width="100%">
 
 - **Line A, the language base (M1).** A geometric stack language model: recurrence layers that carry a
   quaternion state by rotation, geometric feed-forward blocks and a geometric head.
@@ -84,12 +84,12 @@ operators geometrically (the **operator phase**, led by Kimi) before training ag
 | SpiralCore/FBS projection: select one carrier, transport by signed BFS | dense projections | source, tested | [#2279](https://github.com/UOR-Foundation/uor-r4/pull/2279), [brief](docs/mechanisms/spiralcore-fbs-projection.md) |
 | Geometric recurrence gates: clamped opening, exact rate table, Hamilton output gate | sigmoid, `exp`, softplus, GELU | source, tested | [#2293](https://github.com/UOR-Foundation/uor-r4/pull/2293) |
 | Rank-margin objective: a hinge over declared rivals on raw scores | softmax cross-entropy | source, tested | [#2255](https://github.com/UOR-Foundation/uor-r4/pull/2255), [brief](docs/mechanisms/rank-margin-objective.md) |
-| Geometric head (OP3a): addressed raw-distance scoring through the shared token table | the dense tied head | implemented; earlier finite qualification retained at its source scope; new compiled boundary awaits qualification | [head/writer](docs/labs/geometric-head-shared-writer-2026-10-13/README.md), [D29 boundary](docs/labs/d29-vendor-boundary-2026-10-13/README.md) |
-| Device qualification: stored or analytic expected values, no CPU reference | the CPU-referenced parity gate | earlier composed controls retained; repaired D29 source's 31 mandatory controls **NOT_RUN**, setup blocked at the driver check before build | [finite FIT sheet](docs/harness/prep/m1-d29-vendor-finite-2026-10-13.md) |
-| Rung 0: the first lawful training run (2 arms × 2 seeds, ≤ $4) | — | Amendment6 independent FIT; **held**, new source qualification and owner release required | [sheet](docs/harness/prep/m1-rank-margin-rung0-2026-10-13.md) |
+| Geometric head (OP3a): addressed raw-distance scoring through the shared token table | the dense tied head | implemented; earlier source receipts retained; repaired compiled boundary passes 31 finite controls at `1f1547bfd` | [head/writer](docs/labs/geometric-head-shared-writer-2026-10-13/README.md), [D29 boundary](docs/labs/d29-vendor-boundary-2026-10-13/README.md) |
+| Device qualification: stored or analytic expected values, no CPU reference | the CPU-referenced parity gate | repaired D29 source's **31 mandatory controls PASS** at `1f1547bfd` on RTX4090; failed setup attempts retained, protected merge pending | [finite FIT sheet](docs/harness/prep/m1-d29-vendor-finite-2026-10-13.md) |
+| Rung 0: the first lawful training run (2 arms × 2 seeds, ≤ $4) | — | Amendment6 independent FIT; **held**, finite source qualification recorded; protected delivery and owner release required | [sheet](docs/harness/prep/m1-rank-margin-rung0-2026-10-13.md) |
 | Rung 0b: starling / rank-table reads with a rank-consistent gradient | softmax attention | after rung 0 | [brief](docs/mechanisms/starling-read.md) |
 
-The diagrams retain the earlier operator snapshot; the table above is current. The selected native API now excludes historical core/integer model executors, teachers, LUT engines and exporters from compilation. Source/checkpoint lineage binds the masked TRAIN count reference separately from the DEV diagnostic oracle. "Source, tested" labels retain the named earlier source/control scope; they do not qualify the repaired dependency graph. None of these operators has been trained
+The diagrams retain the earlier operator snapshot; the table above is current. The selected native API now excludes historical core/integer model executors, teachers, LUT engines and exporters from compilation. Source/checkpoint lineage binds the masked TRAIN count reference separately from the DEV diagnostic oracle. "Source, tested" labels retain their named source/control scope. The repaired dependency graph separately passes the 31 finite controls at `1f1547bfd`; that result establishes neither trained language quality nor D11 serving. None of these operators has been trained
 yet, and none is a capability claim. Pictures of the three new operators:
 [the geometry page](docs/geometry.md#the-operators-of-the-compliant-trunk).
 

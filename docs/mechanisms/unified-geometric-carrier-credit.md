@@ -1,6 +1,6 @@
 # Unified Geometric Carrier Credit
 
-> **Current compiled boundary, 13 October — D29:** the selected path retains the same shared writer through `native_vector_channel.rs`, reexported under `whole_path_learning::device` for existing callers. The historical bank/learning modules named below are now excluded, rather than runtime fallbacks. Earlier writer controls keep their source scope; the repaired graph's 31 controls are NOT_RUN. This extraction does not implement or qualify a trained intent compiler, full M2 or D11. [Boundary record](../labs/d29-vendor-boundary-2026-10-13/README.md).
+> **Current compiled boundary, 13 October — D29:** the selected path retains the same shared writer through `native_vector_channel.rs`, reexported under `whole_path_learning::device` for existing callers. The historical bank/learning modules named below are now excluded, rather than runtime fallbacks. Earlier writer controls keep their source scope; corrected source `1f1547bfd` passes CUDA compilation and all 31 finite controls on RTX4090, pending protected delivery. This extraction does not implement or qualify a trained intent compiler, full M2 or D11. [Boundary record](../labs/d29-vendor-boundary-2026-10-13/README.md).
 
 **October 12, D23:** the delivered whole-path sampled-choice law uses softmax and
 is BLOCKED pending compliant replacement. Prior source fixtures are historical

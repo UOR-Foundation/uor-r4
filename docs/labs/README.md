@@ -10,7 +10,7 @@
 >   and OP2/OP3a plus the shared native vector writer, under the
 >   [ratified split](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6138381873).
 >   [Head/vector-channel finite CUDA controls pass](geometric-head-shared-writer-2026-10-13/README.md);
->   earlier head/writer delivery remains source-scoped evidence. The new native-only compiled boundary passes host typechecks; its 31 finite controls are NOT_RUN, setup blocked at the driver check before build. Training holds remain; see the [D29 record](d29-vendor-boundary-2026-10-13/README.md).
+>   earlier head/writer delivery remains source-scoped evidence. The corrected native-only compiled boundary at `1f1547bfd` passes CUDA compilation and all 31 exact finite controls on RTX4090; protected delivery is pending. Earlier blockers remain preserved; no optimizer update/corpus/training/CPU model ran. Training holds remain; see the [D29 record](d29-vendor-boundary-2026-10-13/README.md).
 > - **Claude** — the starling/murmuration read and the pod migration.
 > - **DeepSeek** — the invariant-addressed router and memory, and the research harness.
 >
