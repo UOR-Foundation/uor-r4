@@ -28,6 +28,28 @@ their original scope; genuinely fresh qualification NOT_RUN. **Training remains
 held.** OP3a/full-path compliance and the common vector writer remain unfinished;
 finite kernel FIT or source delivery releases no hold.
 
+## 2026-10-13 — Rung 0 pre-registered: the rank-margin objective's TEST FITNESS sheet is PENDING (kimi, #2029)
+
+The [sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md) registers rung 0 on the compliant trunk — the
+recurrence-only geometric stack (`rrrrrr`, no read, no pointer) trained with the margin hinge on mw-balp, arms
+at 1 and 8 declared rivals, two seeds each, one Vast pod, GPU-only — with its bar (monotone dev margin loss
+plus >= 5x the same-seed untrained unviolated-target rate on **both** seeds), its config, its lawful raw-score
+quality measures (top-1, target rank/recall@8, the hinge, the unviolated rate; no BPB or NLL anywhere), its
+outcome decisions (KEEP / ITERATE / BLOCKER, with a mechanism stop reserved to the owner) and its cost
+(<= $4 projected). Its mechanism brief is new:
+[rank-margin-objective.md](../mechanisms/rank-margin-objective.md). The sheet is **`TEST FITNESS: PENDING` and
+the run is BLOCKED** on four named dependencies: Codex's owner-directed SpiralCore/FBS 8D native projection
+(in flight, replacing `HamiltonLinear`'s dense all-pair contraction), the OP3a product-key head (not built),
+the recurrence squash replacements (opening, decay rate, output gate — the served `DecayRate` codec carries
+the *same* softplus today, so it is not a substitute), and the lawful device-qualification gate (stored or
+analytic expected values, no CPU model reference). FIT lifts no hold; the owner releases it.
+
+Line: evaluation integrity · count 1/3 (pre-registration, no compute) · headline: unchanged (M1 v5 memory
+20/40, reply 37/232).
+
+**Next:** the four dependencies land and are checked against this sheet by the FIT review; then the owner's
+hold-release decision, then rung 0 itself.
+
 ## 2026-10-13 — CUDA parity compiles again on main (claude, #2029)
 
 A missing `Gate` import in the CUDA-only parity test (from #2260) made every pod bootstrap
@@ -140,6 +162,31 @@ memory 20/40, reply 37/232).
 **Next:** OP3a (the product-key head) per the amended order; the pod parity receipt for `hamilton_linear`
 needs a prospective kernel card and TEST FITNESS first, and training stays held.
 
+
+## 2026-10-12 — The harness becomes multi-lab: committed presence and claims, sharded ledger, and a CI reconciliation gate (lead, tooling)
+
+The [record](../labs/multilab-harness-2026-10-12/README.md) fixes the three things that break when four labs
+(Kimi as PM, Claude/Sol on research and synthesis) share one coordination layer. **Claims were invisible** — they
+lived in a gitignored per-worktree file, so a claim nobody could read could not prevent the collision it existed
+for; they are now committed in `docs/harness/claims.json`, stale after half a day, releasable only by the holder.
+**Nothing said what a lab was doing** — a receipt exists only after a PR merges; `heartbeat` now also publishes
+`docs/harness/presence/<lab>.json`, so a lab following the 90-minute contract becomes visible for free and one
+that never checks in is visibly absent rather than silently unknown. **One ledger, every lab appending** conflicted
+on every concurrent PR (resolved by hand twice in one session); receipts are now sharded per lab per month, with a
+migration that quarantines an unreadable line rather than dropping it. `.github/workflows/harness.yml` now
+reconciles the milestone registry against the live issues and fails the PR on disagreement, so `main` converges
+whichever lab opened it. Reconnaissance also established that **"the mesh" has no referent in this repository**
+(100 tracked hits, all geometric or unrelated service-mesh catalog entries) and that the retired `lab-runner coord`
+is not to be recreated, so GitHub remains the bus. A measured defect was fixed on the way:
+`mistakes.stale_check` walked 11,171 files with three fnmatch calls per pair and took **46.5s on Python 3.9**,
+dominating `check`; it now uses `git ls-files` and resolves literals first — **46.5s → 0.43s**, and the full suite
+on 3.9 went **205s → 20s**. 262 tests pass on both 3.9.6 and 3.15.0.
+
+Line: no model line — tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** labs should `export UOR_LAB=<lab>` at session start so receipts and presence are attributed; the session
+contract should name `multilab presence` alongside `team claim`; and a non-Claude lab needs a scheduled entry point
+before presence can be continuous rather than per-session.
 
 ## 2026-10-12 — The regression arena, and the harness as the session entry point (lead, tooling)
 

@@ -1395,6 +1395,42 @@ def _how_headline_moves(milestone: Milestone) -> str:
 
 
 def _record_heartbeat(paths: HarnessPaths, milestone: Milestone, line_name: str, count: str, next_text: str, card: str, posted: bool) -> tuple[dict[str, Any] | None, str]:
+    """Record the receipt AND publish presence, so checking in makes a lab visible.
+
+    Presence is published here deliberately rather than behind its own command: a lab that
+    checks in every 90 minutes as the contract requires is then visible to the other labs for
+    free, and one that never checks in is visibly absent rather than silently unknown.
+    """
+    note = ""
+    lab = _lab_identity()
+    if lab:
+        try:
+            import multilab  # noqa: PLC0415 - optional sibling module
+
+            multilab.write_presence(
+                paths,
+                lab,
+                milestone=milestone.key,
+                doing=f"{line_name} {count}",
+                next_step=next_text,
+            )
+        except Exception as exc:  # noqa: BLE001 - the card matters more than presence
+            note = f"presence not published ({type(exc).__name__}: {exc})"
+    else:
+        # Loud on purpose. An unattributed receipt is preserved but cannot answer "which lab did
+        # this", and a lab that silently checks in from nowhere is worse than one that is absent -
+        # absence is visible, misattribution is not.
+        note = ("NO LAB IDENTITY: this check-in is recorded under the unattributed shard, so no "
+                "other lab can see who sent it. Fix it for this session with:  export UOR_LAB=<lab>"
+                "   (kimi | claude | codex | deepseek)")
+        if not globals().get("_IDENTITY_WARNED"):
+            globals()["_IDENTITY_WARNED"] = True
+            print(
+                "uor-harness: WARNING - no lab identity. Receipts and presence will be "
+                "unattributed.\n"
+                "             export UOR_LAB=<lab>   (kimi | claude | codex | deepseek)",
+                file=sys.stderr,
+            )
     try:
         import receipts as R  # noqa: PLC0415 - optional sibling module
 
@@ -1408,11 +1444,17 @@ def _record_heartbeat(paths: HarnessPaths, milestone: Milestone, line_name: str,
             next=next_text,
             posted=bool(posted),
         )
-        return (record if isinstance(record, dict) else None), ""
+        return (record if isinstance(record, dict) else None), note
     except ImportError:
         return None, "receipts module not present; heartbeat not recorded in docs/harness/ledger/"
     except Exception as exc:  # noqa: BLE001 - the card matters more than the ledger
         return None, f"receipt not recorded ({type(exc).__name__}: {exc})"
+
+
+def _lab_identity() -> str:
+    import os
+
+    return os.environ.get("UOR_LAB", "").strip()
 
 
 def _post_card(paths: HarnessPaths, issue: int, card: str) -> tuple[bool, str, str]:
