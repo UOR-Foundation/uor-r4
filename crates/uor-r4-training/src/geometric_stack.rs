@@ -342,6 +342,61 @@ pub const QUATERNION_MAPS: [&str; 10] = [
     "mlp.down.weight",
 ];
 
+/// The native starling read's address maps (rung 0b, #2032): artifact-bound
+/// SpiralCore/FBS projections like [`QUATERNION_MAPS`], present only in the
+/// read layers of a model with [`StackModel::set_native_starling_read`].
+pub const NATIVE_STARLING_MAPS: [&str; 2] = [
+    "read.native_starling.query_address.weight",
+    "read.native_starling.key_address.weight",
+];
+/// Per read layer: the rank table `[heads, K]` and the null score `[heads]`.
+const NATIVE_STARLING_RANK: &str = "read.native_starling.rank";
+const NATIVE_STARLING_NULL: &str = "read.native_starling.null";
+/// Read-layer tensors the native read never uses; it removes them (the dense
+/// NoRead map among them), so none can be trained or executed.
+const NATIVE_STARLING_UNUSED: [&str; 5] = [
+    "read.null.weight",
+    "read.null.bias",
+    "read.age",
+    "read.log_beta",
+    "read.offset",
+];
+/// The `config.json` field binding [`crate::starling_native::NativeStarling`].
+pub const NATIVE_STARLING_FIELD: &str = "native_starling_read";
+
+/// The native read's tensors (dense-shaped metadata for its address maps, as
+/// [`spiralcore_fbs_shapes`] converts them) and the read-layer tensors it
+/// removes. Shared by construction and load so the two cannot drift.
+fn native_starling_shapes(
+    config: &StackConfig,
+    spec: &crate::starling_native::NativeStarling,
+) -> (BTreeMap<String, Vec<usize>>, Vec<String>) {
+    let mut add = BTreeMap::new();
+    let mut remove = Vec::new();
+    for layer in (0..config.layers()).filter(|&l| config.layer_kind(l) == 'a') {
+        for map in NATIVE_STARLING_MAPS {
+            add.insert(layer_name(layer, map), vec![4 * config.heads, config.width]);
+        }
+        add.insert(
+            layer_name(layer, NATIVE_STARLING_RANK),
+            vec![config.heads, spec.kept],
+        );
+        add.insert(layer_name(layer, NATIVE_STARLING_NULL), vec![config.heads]);
+        remove.extend(NATIVE_STARLING_UNUSED.iter().map(|n| layer_name(layer, n)));
+    }
+    (add, remove)
+}
+
+/// The 600-cell codebook of the native starling read: the 120 icosian roots.
+pub(crate) fn starling_native_roots() -> &'static [[f32; 4]] {
+    icosian_roots()
+}
+
+/// The 12 neighbours of every icosian vertex.
+pub(crate) fn starling_native_adjacency() -> Result<&'static [[usize; 12]]> {
+    starling_adjacency()
+}
+
 /// The `config.json` field that records [`QuaternionWeights::All`], written
 /// only when set (absent is [`QuaternionWeights::None`]).
 pub const QUATERNION_WEIGHTS_FIELD: &str = "quaternion_weights";
@@ -700,8 +755,7 @@ const QUATERNION_SEED_MIX: u64 = 0x5155_4154_4552_4E49;
 fn quaternion_name(name: &str) -> Option<String> {
     let (_, rest) = name.split_once("layers.")?;
     let suffix = rest.get(3..)?;
-    QUATERNION_MAPS
-        .contains(&suffix)
+    (QUATERNION_MAPS.contains(&suffix) || NATIVE_STARLING_MAPS.contains(&suffix))
         .then(|| format!("{}.quaternion", &name[..name.len() - ".weight".len()]))
 }
 
@@ -3314,6 +3368,14 @@ pub struct StackModel {
     read_key_shift: bool,
     /// The starling read route of every geometric read ([`Self::set_read_route`]).
     read_route: Option<StarlingRoute>,
+    /// The native starling read of every geometric read (rung 0b,
+    /// [`Self::set_native_starling_read`]); bound into `config.json`.
+    native_starling: Option<crate::starling_native::NativeStarling>,
+    /// Whether the native read's declared credit is injected in backward
+    /// ([`Self::set_native_starling_credit`]); training only, never saved.
+    native_starling_credit: bool,
+    /// Optional collector of the credit backward's diagnostic scalars.
+    native_starling_sink: Option<crate::starling_native::CreditSink>,
     /// Training-only weight of the starling read's dense helper term
     /// ([`Self::set_starling_dense`]); never saved, `None` in evaluation.
     starling_dense: Option<f64>,
@@ -3445,6 +3507,9 @@ impl StackModel {
             read_key_shift: false,
             activation_snap: ActivationSnap::None,
             read_route: None,
+            native_starling: None,
+            native_starling_credit: false,
+            native_starling_sink: None,
             starling_dense: None,
             starling_surrogate: false,
             starling_distill: None,
@@ -4234,6 +4299,74 @@ impl StackModel {
         self.geometric_read_with_source(p, layer, x, capture, binding, gates, ReadSource::default())
     }
 
+    /// One read layer of the native starling read ([`crate::starling_native`]):
+    /// SpiralCore/FBS query, key, value and address maps, K1 selection on the
+    /// device with document resets at BOS, the hard rank read with its null,
+    /// and the read output map. No historical read feature reaches here.
+    #[allow(clippy::too_many_arguments)]
+    fn native_starling_layer(
+        &self,
+        p: &Params<'_>,
+        layer: usize,
+        x: &Tensor,
+        spec: crate::starling_native::NativeStarling,
+        capture: &mut Capture<'_>,
+        binding: &mut Option<BindingCapture<'_>>,
+        source: &ReadSource<'_>,
+    ) -> Result<Tensor> {
+        let (batch, time, _) = x.dims3()?;
+        let heads = self.config.heads;
+        let ids = source.ids.ok_or_else(|| {
+            invalid("the native starling read needs the token ids for its document resets")
+        })?;
+        tap(capture, StackSite::Read(layer), || self.unit_norm(x))?;
+        let u = self.norm(p, x, &layer_name(layer, "read_norm.weight"))?;
+        let project = |name: &str| -> Result<Tensor> {
+            self.heads(&self.linear(&u, p.layer(layer, name)?)?, batch, time)
+        };
+        let value = project("read.value.weight")?;
+        let query = project("read.query.weight")?.to_dtype(DType::F32)?;
+        let key = project("read.key.weight")?.to_dtype(DType::F32)?;
+        // Unit 4-d addresses per head, [batch, heads, time, 4].
+        let unit = |name: &str| -> Result<Tensor> {
+            let raw = project(name)?.to_dtype(DType::F32)?;
+            let norm = raw.sqr()?.sum_keepdim(3)?.affine(1.0, 1e-12)?.sqrt()?;
+            Ok(raw.broadcast_div(&norm)?.contiguous()?)
+        };
+        let query_address = unit(NATIVE_STARLING_MAPS[0])?;
+        let key_address = unit(NATIVE_STARLING_MAPS[1])?;
+        let rows = batch * heads;
+        let reset = Tensor::from_vec(
+            crate::starling_native::reset_mask(ids, batch, time, spec.bos_id)?,
+            (batch, time),
+            &self.device,
+        )?;
+        let selection = crate::starling_native::select(
+            &spec,
+            heads,
+            &query_address.reshape((rows, time, 4))?,
+            &key_address.reshape((rows, time, 4))?,
+            &reset,
+        )?;
+        let inputs = crate::starling_native::ReadInputs {
+            query: &query,
+            key: &key,
+            value: &value,
+            query_address: &query_address,
+            selection: &selection,
+            rank_table: p.layer(layer, NATIVE_STARLING_RANK)?,
+            null_score: p.layer(layer, NATIVE_STARLING_NULL)?,
+        };
+        let read = crate::starling_native::rank_read(
+            &spec,
+            &inputs,
+            self.native_starling_credit,
+            self.native_starling_sink.clone(),
+        )?;
+        let value_width = read.dim(3)?;
+        self.finish_geometric_read(p, layer, &read, value_width, capture, binding, None)
+    }
+
     fn geometric_read_with_source(
         &self,
         p: &Params<'_>,
@@ -4247,6 +4380,9 @@ impl StackModel {
         if let Some(config) = &self.geometric_address {
             return self
                 .geometric_address_read(p, layer, x, capture, binding, gates, config, source);
+        }
+        if let Some(spec) = self.native_starling {
+            return self.native_starling_layer(p, layer, x, spec, capture, binding, &source);
         }
         let (batch, time, _) = x.dims3()?;
         let heads = self.config.heads;
@@ -5487,9 +5623,10 @@ impl StackModel {
                 || self.geometric_address.is_some()
                 || self.read_lineage.is_some()
                 || self.read_identity_latch.is_some()
+                || self.native_starling.is_some()
             {
                 return Err(invalid(
-                    "the starling read excludes a served form, bf16, flock selection, other read weightings, geometric address, lineage and latch",
+                    "the starling read excludes a served form, bf16, flock selection, other read weightings, geometric address, lineage, latch and the native starling read",
                 ));
             }
             if let Some(existing) = self.read_route {
@@ -5551,6 +5688,97 @@ impl StackModel {
         }
         self.read_route = route;
         Ok(())
+    }
+
+    /// The native starling read of every read layer (rung 0b; M4 #2032 card
+    /// 6146209361, amendment A1 6147797508; [`crate::starling_native`]): K1
+    /// neighbour selection on the device, a hard rank read with a learned
+    /// null, and the declared credit. Only on the fresh F32 SpiralCore/FBS
+    /// geometric trunk: every historical read feature is refused. Its address
+    /// maps are artifact-bound FBS projections; the read layers' dense NoRead
+    /// map, age table and Lorentz scalars are removed. The rank table starts
+    /// harmonic (`1/(r+1)`, normalised) and the null score at -1.
+    pub fn set_native_starling_read(
+        &mut self,
+        spec: crate::starling_native::NativeStarling,
+    ) -> Result<()> {
+        spec.validate()?;
+        if let Some(existing) = self.native_starling {
+            return if existing == spec {
+                Ok(())
+            } else {
+                Err(invalid("the native starling read is already fixed"))
+            };
+        }
+        if self.quaternion_weights != QuaternionWeights::SpiralcoreFbs
+            || self.config.arch != StackArch::Geometric
+            || !self.config.pattern.contains('a')
+            || self.precision != Precision::F32
+            || self.served.is_some()
+            || self.read_route.is_some()
+            || self.config.select.is_some()
+            || self
+                .config
+                .read_router
+                .as_ref()
+                .is_some_and(|router| router.active())
+            || self.read_weighting != ReadWeighting::Softmax
+            || self.geometric_address.is_some()
+            || self.geometric_span.is_some()
+            || self.read_lineage.is_some()
+            || self.read_identity_latch.is_some()
+            || self.read_identity_carry
+            || self.read_key_shift
+        {
+            return Err(invalid("the native starling read needs the fresh F32 SpiralCore/FBS geometric trunk with a read layer and no historical read feature (route, selection, router, weighting, address, span, lineage, latch, carry, key shift or served form)"));
+        }
+        let (add, remove) = native_starling_shapes(&self.config, &spec);
+        let (native, plans) = spiralcore_fbs_shapes(add)?;
+        let mut rng = Initializer(self.config.seed ^ 0x6e61_7469_7665_7374);
+        for (name, shape) in &native {
+            let count: usize = shape.iter().product();
+            let values: Vec<f32> = if name.ends_with(".spiralcore_fbs") {
+                (0..count).map(|_| rng.normal() as f32).collect()
+            } else if name.ends_with(NATIVE_STARLING_RANK) {
+                let k = spec.kept;
+                let harmonic: f32 = (0..k).map(|i| 1.0 / (i + 1) as f32).sum();
+                (0..count)
+                    .map(|i| 1.0 / ((i % k) + 1) as f32 / harmonic)
+                    .collect()
+            } else {
+                vec![-1.0; count] // the null score
+            };
+            self.variables.insert(
+                name.clone(),
+                Var::from_vec(values, shape.as_slice(), &self.device)?,
+            );
+        }
+        for name in remove {
+            self.variables.remove(&name);
+        }
+        self.spiralcore_fbs_plans.extend(plans);
+        self.native_starling = Some(spec);
+        Ok(())
+    }
+
+    /// Inject the native read's declared credit in backward (training only;
+    /// never saved). Off, the content scores and the null score get no
+    /// gradient at all, since the hard ranking has none.
+    pub fn set_native_starling_credit(&mut self, on: bool) -> Result<()> {
+        if on && self.native_starling.is_none() {
+            return Err(invalid("starling credit needs the native starling read"));
+        }
+        self.native_starling_credit = on;
+        Ok(())
+    }
+
+    /// Collect each credit backward's diagnostic scalars (reporting only).
+    pub fn set_native_starling_sink(&mut self, sink: Option<crate::starling_native::CreditSink>) {
+        self.native_starling_sink = sink;
+    }
+
+    pub fn native_starling_read(&self) -> Option<crate::starling_native::NativeStarling> {
+        self.native_starling
     }
 
     /// Training-only selector distillation (`Some(weight)`, weight > 0) for a
@@ -10175,7 +10403,9 @@ impl StackModel {
     fn embed_with(&self, p: &Params<'_>, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
         // The context bounds the read's age table; a starling read has none,
         // so its model runs at any length.
-        let bounded = self.read_route.is_none() && time > self.config.context;
+        let bounded = self.read_route.is_none()
+            && self.native_starling.is_none()
+            && time > self.config.context;
         if ids.len() != batch * time || time == 0 || bounded {
             return Err(invalid(
                 "stack forward needs batch * time ids within the context",
@@ -10278,7 +10508,12 @@ impl StackModel {
             || self.config.rec_gates != RecGates::Geometric
             || self.config.gate != Gate::Hamilton
             || self.config.pattern.is_empty()
-            || !self.config.pattern.chars().all(|kind| kind == 'r')
+            || !self
+                .config
+                .pattern
+                .chars()
+                .all(|kind| kind == 'r' || (kind == 'a' && self.native_starling.is_some()))
+            || (self.native_starling.is_some() && self.read_route.is_some())
             || self.config.memory.is_some()
             || self.e8_memory.is_some()
             || self.served.is_some()
@@ -10289,7 +10524,7 @@ impl StackModel {
             || self.activation_snap != ActivationSnap::None
             || self.quaternion_snap != QuaternionSnap::None
         {
-            return Err(invalid("native learning requires the declared F32 CUDA recurrence-only geometric/Hamilton/FBS trunk; historical, read, memory, served and host-snap paths are not admitted"));
+            return Err(invalid("native learning requires the declared F32 CUDA geometric/Hamilton/FBS trunk: recurrence layers, plus read layers only through the native starling read; historical read, memory, served and host-snap paths are not admitted"));
         }
         Ok(())
     }
@@ -11999,6 +12234,12 @@ impl StackModel {
             with_field[READ_ROUTE_FIELD] = serde_json::Value::String(route.name());
             config = serde_json::to_vec_pretty(&with_field)?;
         }
+        if let Some(spec) = &self.native_starling {
+            // Only when set, so every other model keeps its exact bytes.
+            let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
+            with_field[NATIVE_STARLING_FIELD] = serde_json::to_value(spec)?;
+            config = serde_json::to_vec_pretty(&with_field)?;
+        }
         if let Some(name) = self.activation_snap.trained_name() {
             let mut with_field: serde_json::Value = serde_json::from_slice(&config)?;
             with_field[ACTIVATION_SNAP_FIELD] = serde_json::Value::String(name.into());
@@ -12434,7 +12675,21 @@ impl StackModel {
             // Restored, not re-initialised, by set_read_weighting below.
             shapes.extend(learned_rank_shapes(&config)?);
         }
+        let native_starling = Self::saved_native_starling(directory)?;
+        if let Some(spec) = &native_starling {
+            // The address maps join the FBS conversion below, as at construction.
+            let (add, remove) = native_starling_shapes(&config, spec);
+            for name in remove {
+                shapes.remove(&name);
+            }
+            shapes.extend(add);
+        }
         let quaternion_weights = Self::saved_quaternion_weights(directory)?;
+        if native_starling.is_some() && quaternion_weights != QuaternionWeights::SpiralcoreFbs {
+            return Err(invalid(
+                "a native starling artifact must bind SpiralCore/FBS projections",
+            ));
+        }
         let mut native_plans = BTreeMap::new();
         if quaternion_weights == QuaternionWeights::SpiralcoreFbs {
             check_quaternion_arch(&config)?;
@@ -12489,6 +12744,9 @@ impl StackModel {
             read_key_shift: false,
             activation_snap: ActivationSnap::None,
             read_route: None,
+            native_starling: None,
+            native_starling_credit: false,
+            native_starling_sink: None,
             starling_dense: None,
             starling_surrogate: false,
             starling_distill: None,
@@ -12513,6 +12771,7 @@ impl StackModel {
             native_vector_head: None,
             quaternion_snap: QuaternionSnap::None,
         };
+        model.native_starling = native_starling;
         model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
         let saved: serde_json::Value =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
@@ -12596,6 +12855,24 @@ impl StackModel {
 
     /// The saved starling read route of `directory` (`config.json` field
     /// [`READ_ROUTE_FIELD`]). Absent means none.
+    /// The saved native starling read of `directory` (`config.json` field
+    /// [`NATIVE_STARLING_FIELD`]), validated. Absent means none.
+    pub fn saved_native_starling(
+        directory: &Path,
+    ) -> Result<Option<crate::starling_native::NativeStarling>> {
+        let config: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
+        match config.get(NATIVE_STARLING_FIELD) {
+            None => Ok(None),
+            Some(value) => {
+                let spec: crate::starling_native::NativeStarling =
+                    serde_json::from_value(value.clone())?;
+                spec.validate()?;
+                Ok(Some(spec))
+            }
+        }
+    }
+
     pub fn saved_read_route(directory: &Path) -> Result<Option<StarlingRoute>> {
         let config: serde_json::Value =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
