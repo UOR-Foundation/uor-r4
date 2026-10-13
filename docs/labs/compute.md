@@ -242,6 +242,11 @@ either kind of pod.
   The bootstrap runs with `--off-volume --non-canonical`: it builds the toolchain
   (~2 min on 16 cores) and fetches `data/*` from the HF store with the token `up`
   copies from `~/.cache/huggingface/token` (the owner's `hf auth login`). The
+  image sets `HF_HOME=/workspace/.cache/huggingface/`, where the `hf` CLI looks
+  first, so `up` writes the token there as well (before 13 October it did not, and
+  a fetch got HTTP 401 and fell back to nothing; this also affected Runpod
+  non-canonical pods). The fetch is a warning on failure: check the bootstrap
+  log's `HF store fetched:` line. The
   Runpod hot-set relay is skipped for Vast pods.
 - **Results.** `down` copies `/workspace/uor-r4/{jobs,pods,runs,evals}` to
   `~/.local/share/uor-r4/compute/vast-archive/<pod>/` before it destroys the
@@ -254,8 +259,9 @@ either kind of pod.
   listing. By hand: `echo y | vastai destroy instance N`.
 - **Reaper.** The pod-side reaper uses the instance-scoped `CONTAINER_ID` and
   `CONTAINER_API_KEY` Vast injects, and destroys the instance through Vast's REST
-  API after 20 idle minutes without a live lease (`--check` printed `api-ok` on
-  the live smoke pod).
+  API after 20 idle minutes without a live lease. Verified live on 13 October:
+  with the lease released and the idle limit at 0, the reaper destroyed its own
+  instance within seconds.
 - **Account.** The owner's account, prepaid; the CLI is `vastai` (installed with
   `pipx install --python python3.14 vastai`; Python 3.15 has no Pillow wheel yet)
   and its key lives in `~/.config/vastai/vast_api_key`, written by the owner with

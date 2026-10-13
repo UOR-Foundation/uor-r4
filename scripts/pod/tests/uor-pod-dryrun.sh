@@ -594,6 +594,7 @@ HH=$W/hfhome; mkdir -p "$HH/.cache/huggingface"; printf 'hf_FAKETOKEN123' > "$HH
 rm -rf "$UOR_POD_STATE"; fresh_pods
 HOME=$HH expect "up with an HF token on the laptop" 0 "hf token copied" -- up --lab claude --session hftok --purpose hf --hours 1 --count 2 --no-bootstrap --ref "$SHA40"
 if grep -q 'cat > /root/.cache/huggingface/token' "$FAKE/calls"; then ok "the token is copied to the pod over ssh"; else bad "the token is copied to the pod over ssh"; fi
+if grep -q 'cp /root/.cache/huggingface/token "$HF_HOME/token"' "$FAKE/calls"; then ok "the token is also copied to the image's HF_HOME"; else bad "the token is also copied to the image's HF_HOME"; fi
 if ! grep -q 'hf_FAKETOKEN123' "$W/out" "$FAKE/calls"; then ok "the token value is in neither the output nor any command line"; else bad "the token value is in neither the output nor any command line"; fi
 # ---- any-region placement: no ladder GPU in the volume datacenters, stock in
 # two allowlisted extra datacenters -> the one with more stock, non-canonical;

@@ -30,9 +30,18 @@ Safety properties, each pinned by a test that fails when the property is removed
 | A failed provider listing never archives that provider's live leases | 2 |
 | The instance key `vastai create` returns never reaches output, ledger, state or a command line | 1 |
 | A missing result directory is not mistaken for an SSH failure at `down` | 6 |
+| Destroy is confirmed only by a well-formed list without the instance (review 1) | 3 |
+| A listing that is not a JSON array is a failed listing (review 2) | 3 |
+| `status` judges "gone" from the listing it was built from, not a second call (review 3) | 2 |
+| A missing provider CLI stops `up` (its pods would be uncounted) (review 4) | 1 |
+| A rental whose reply does not parse is found by label, never repeated (review 5) | 3 |
+| `prune-stopped` never destroys a stopped Vast pod's only copy (review 6) | 1 |
+| Offers are priced with the 150 GB disk (review 7) | 1 |
 
-`scripts/pod/tests/uor-pod-dryrun.sh`: **292 passed, 0 failed** (246 existing
-cases on the Runpod path, 46 new Vast cases against a fake `vastai`). `bash -n`
+`scripts/pod/tests/uor-pod-dryrun.sh`: **308 passed, 0 failed** (246 existing
+cases on the Runpod path, 62 new cases against a fake `vastai`). An independent
+review asked for changes (8 findings); 1–7 are fixed with the cases above, and 8
+(whether the instance-scoped key may destroy the instance) was verified live. `bash -n`
 and `shellcheck -S warning` are clean apart from one warning already on main.
 
 ## Measured
@@ -43,7 +52,10 @@ and `shellcheck -S warning` are clean apart from one warning already on main.
 | `uor-pod up` live smoke (01:34Z) | 1 × RTX 5090, verified datacenter, South Korea | $0.536/h | 142 s; create → SSH ≈ 2.5 min | parity 38/38 PASS, reaper `api-ok`, `nvidia-smi -L` job ran, `down` archived 3 logs and destroyed |
 | Runpod reference (ledger) | RTX 5090, Secure Cloud | $1.19/h | 164–191 s (build 112–129 s) | — |
 
-Both Vast runs together cost about $0.09 of the $100 prepaid credit. The live smoke
+| Reaper self-destroy (02:11Z) | 1 × RTX 5090, South Korea | $0.536/h | — | lease released, idle limit 0: the reaper destroyed its own instance in seconds (review finding 8) |
+
+The four Vast pods of 13 October (trial, smoke, two diagnostic pods) cost $0.195 of
+the $100 prepaid credit in all. The live smoke
 found one defect the fake had hidden (a missing `uor-r4/evals` made `down` report an
 SSH failure and refuse); it is fixed, and the fake `ssh` now runs the archive
 commands for real so the tests see real exit statuses.
@@ -55,10 +67,20 @@ commands for real so the tests see real exit statuses.
 - Training throughput (tokens/s) on a Vast host has not been compared with Runpod.
   The card is the same, but the host CPU and memory differ; the first real run on
   Vast reports it beside a Runpod number.
-- The HF fetch on the smoke pod returned nothing: the laptop's Hugging Face token
-  was rejected (HTTP 401). The owner has since logged in again (`hf auth login`)
-  and a laptop download of `data/MD5SUMS` from the store succeeded; the next Vast
-  pod is the first to fetch with the new token. The bootstrap still treats a
-  failed fetch as a warning, so a pod can come up without its data.
+- HF fetch: the first smoke pod had a stale laptop token (401). After the owner's
+  new `hf auth login` (the API answers 200 for the store) the pods still got 401,
+  because the image sets `HF_HOME=/workspace/.cache/huggingface/` and the token
+  was only written to `/root/.cache/huggingface/`. With a copy in `HF_HOME` the
+  fetch worked on the pod; `up` now writes both. Runpod non-canonical pods had the
+  same gap. The bootstrap still treats a failed fetch as a warning.
+- The owner's new token has the `write` role on the whole account and is copied
+  to rented hosts; a fine-grained read token for `caseyallard/uor-r4-store` would
+  limit what a compromised host could do.
+- On `main` at `7567cf725` and `19500bf22` the bootstrap's CUDA parity build fails
+  to compile (`tests/cuda_stack_ops_parity.rs:2445`: `Gate` is not imported after
+  the OP1 gate field), so every pod bootstrap at those commits reports parity
+  FAIL on either provider. That test builds only with the CUDA feature, so laptop
+  and CI checks do not see it. It is outside this change and reported to the
+  operator line.
 - The Runpod network volume (`lmd1pfah3y`) is untouched and still bills a few
   dollars a week; retiring it is a later owner decision.
