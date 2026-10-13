@@ -67,7 +67,7 @@ Tracker: [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028). Measured
 - **Useful conversation.** The best chat stack is a 19.9M model with a measured
   bits-per-byte score, not a model that holds a conversation.
 - **Arithmetic and code.** The 214M base still gets code and math arithmetic wrong.
-- **Grounded replies at scale.** The native learner completes 437/512 replies on the exposed frozen panel, passing its 256-reply development target, but fails fresh qualification at 0/128 against 52 required.
+- **Grounded replies at scale.** The native learner retains437/512 on the exposed development panel and0/128 on the opened transfer diagnostic; later genuinely fresh qualification is NOT_RUN, and M2 remains unmet.
 - **One model.** The stack (line A) and the native learner (line B) are not yet joined (M4).
 - **Browser Studio.** The Pages Studio runs the older R4G1 router, not the native or stack model (M7).
 - **Laptop cost.** Full-path energy, RAM and parameter-access cost on an M1 are not measured (M5).
@@ -333,7 +333,7 @@ Every row holds at its exact artifact, data, operator and budget.
 | Open reply panel (232 rows, `fluent_and_relevant`) | 43/232 sealed base, **37/232** at the adopted 10 % dose (p = 0.42, inside noise), 39/232 with read-binding supervision | [Mixture dose](docs/labs/mixture-dose-2026-10-10/README.md), [Read binding](docs/labs/read-binding-2026-10-10/README.md) |
 | Criterion 2, 29M M1 artifacts served under D11 | **1.20138 BPB** (base) / 1.24402 / 1.24233 against a ≤ 0.90 target, engine **bit-exact** (`d11 − d10 nll = 0.0`, `max |Δlogit| = 0` on 64 windows) | [D11 serving](docs/labs/d11-serving-2026-10-10/README.md); byte basis 2.837427 B/token |
 | v4 memory panel (frozen `exact` check pass) | 31/40 at 214M, 26/40 at 96M | 40 memory rows of `conversational-v4*`; Step 7d fine-tunes, one seed; chat-grade `acceptable` is 27/40 at 214M |
-| Native grounded learner | **437/512 complete replies**, up from177; 260 gained, none lost, 177 retained | [Native pooled-token ranking](docs/labs/m2-pooled-rank-2026-10-10/README.md), frozen exposed 512-episode panel; development threshold 256 passed, fresh qualification 0/128 (52 required), failed; panel fitting under D22, not an M2 move |
+| Native grounded learner | **437/512 complete replies**, up from177; 260 gained, none lost, 177 retained | [Native pooled-token ranking](docs/labs/m2-pooled-rank-2026-10-10/README.md), frozen exposed 512-episode panel; development threshold 256 passed, opened transfer diagnostic0/128; later genuinely fresh qualification NOT_RUN; panel fitting under D22, not an M2 move |
 | D11 serving engine | Bit-exact with the float path | NLL equal on 3,072 targets |
 | Softmax-free flock reads (M4 recipe, 2 seeds each) | Δ float BPB against softmax 0.877198: fixed rank `flock:8:8` +0.040; Hamming rank +0.259; learned rank tables `flock:8:8` +0.0185; learned `flock:32:32` +0.0172 | Bar 0.01; all served by D11, at equal speed except `flock:32:32`, which is 15 % slower. Widening the support 17 → 66 sources buys 0.0013, so the remaining cost is the rank weighting or its training, not the support ([record](docs/labs/softmax-free-read-2026-10-10/README.md)) |
 | M1 memory (29M chat line, frozen v5 panel) | 10/40 → 20/40 with a 10 % recall mix; read binding moves bound mass 0.73 → 0.90 and wrong-value failures 17 → 12 | One seed per arm; ±3/40 is panel noise (#2151, #2155) |

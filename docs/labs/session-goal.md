@@ -9,7 +9,7 @@ A prompt does not start a client by itself or lift an owner hold.
 
 ## The contract
 
-1. Read fresh main's AGENTS, current plan/state, D23–D25, your milestone and its
+1. **Your number.** Read fresh main's AGENTS, current plan/state, D23–D25, your milestone and its
    newest owner direction. Register a bounded claim with owned paths/dependencies.
 2. **Training remains held.** M2's separate training/rental hold remains. No
    training, full-model evaluation/generation/benchmark, or CPU model reference
@@ -50,6 +50,10 @@ A prompt does not start a client by itself or lift an owner hold.
 9. Status every 90 minutes or three merged PRs: headline · count · blocker · next
    decision/dependency. Claims/heartbeats/checkpoints follow the protocol (5/20/30
    minutes) without heartbeat spam on milestones; pod leases go to #2037.
+
+10. **Delivery rules stay as they are**: retain protected delivery, source-bound
+    checks/review, no main bypass, verified preservation and owned cleanup.
+    This rule repair changes no milestone acceptance or research count.
 
 The previous seven-hour/48-PR/no-headline episode remains recorded in
 [the pivot review](lab-pivot-2026-10-09/README.md). This correction creates no new
@@ -99,6 +103,11 @@ Status at 90min or 3 PRs; protocol heartbeat/lease/checkpoint 5/20/30min without
 milestone heartbeat spam. No successor until its dependency is verified on main.
 ```
 
+**FINISH LINE:** a saved-model milestone acceptance result or explicit owner stop
+is distinct from a source cycle. When an owner hold or compliance dependency
+blocks compute, report the exact blocker; it does not authorize a replacement
+campaign or make the milestone complete.
+
 ## Lab addenda
 
 | Lab | Current owned responsibility | Immediate boundary |
@@ -123,6 +132,8 @@ OP3b later research. Line "evaluation integrity" count 1/3 is carried from the
 operator card, not reset. M1 reply37/232, memory20/40 unchanged. Training and M2
 rental hold remain; FIT releases no hold. Frozen constraints through first legal
 rung0 result; defer new concerns except cost/safety. Preserve every lab's work.
+FINISH LINE: saved-model acceptance or explicit owner stop; a held source cycle
+reports its exact blocker and does not qualify the milestone.
 ```
 
 ## Prompt for the DeepSeek lab
@@ -135,6 +146,8 @@ memory20/40 remain historical headlines. Inherit the exact active line/count
 from the latest milestone card; never reset it from a prompt. Coordinate owned
 source dependencies with Kimi's OP2 -> G2 -> OP3a preparation. Training is held;
 no FIT or available pod lifts it. Preserve peer work and frozen constraints.
+FINISH LINE: saved-model acceptance or explicit owner stop; a held source cycle
+reports its exact blocker and does not qualify the milestone.
 ```
 
 ## Prompt for the Claude lab
@@ -148,6 +161,8 @@ the live milestone without reset. Compliant OP2 -> G2 -> OP3a, then owner-releas
 rung0 and rung0b GPU read/gradient precede the read fit. Training stays held.
 Coordinate claims with Kimi; preserve all work. New concerns are deferred proposal
 cards through the first compliant rung0 result except cost/safety.
+FINISH LINE: saved-model acceptance or explicit owner stop; a held source cycle
+reports its exact blocker and does not qualify the milestone.
 ```
 
 ## Prompt for the Codex lab
@@ -161,6 +176,8 @@ remain panel-fitting evidence; genuinely fresh qualification NOT_RUN. Sampled
 law blocked; CUDA execution unqualified. Training/rental held: no constructor,
 optimizer/data/panel/fresh run or automatic third prep loop. Use an owned isolated
 worktree. Preserve every peer's source/jobs/leases; coordinate with Kimi PM.
+FINISH LINE: saved-model acceptance or explicit owner stop; a held source cycle
+reports its exact blocker and does not qualify the milestone.
 ```
 
 ## Wind down or replace a session
