@@ -4,7 +4,7 @@
 - Mechanism brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md).
 - Run: `discrete-stack qualify NEW_REPORT_DIRECTORY` on the owned CUDA pod only.
 - Line: construction of a new discrete shared-writer path. No headline/count reset.
-- Source pin: `c9673359c708f9ed53ad55e1d42e14c49c2d2662`. Numerical controls NOT_RUN at this prospective verdict.
+- Admitted source pin: `a2a5b89cdddd1b32bf32f0e3c18d6b21e994e523`; executable SHA256 `c9879778a1b0187db3d473c4041886cae14cd245f2544867e721527bd834548e`. Admitted attempt3 NOT_RUN at the prospective Claude verdict; attempts1/2 below remain historical observations outside the required review order.
 - Authority: D32/R13, D23–D30 and R12/R14. Global training and independent M2 holds remain **HELD**. No `apply`, optimizer, corpus learning, CPU model, floating instrument or old model replay is admitted.
 
 ## Bar (pre-registered)
@@ -82,7 +82,7 @@ Owned pod `vast-55810308`, one RTX5090, quoted $0.892/hour, lease codex/discrete
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 Prospective review: Codex independent head reviewer approved the bounded source and eleven controls at c9673359c; the control contributor separately recommended FIT. The reviewer inspected endpoint-derived occupied cells and virtual reindexing, fixed baseline eligibility, complete tie order, packed per-row plans and exact CUDA ABI. R12: the measured construction laws are finite and computable now; exact integer witnesses resolve the bar; nonzero context/proposal witnesses and rival counts exclude vacuous interpretation; bounded construction qualification is appropriate now, while apply/corpus/language work remains held.
 
@@ -101,3 +101,9 @@ Rebuild PASS0.73s. New executable SHA256 **c9879778a1b0187db3d473c4041886cae14cd
 ## PM reviewer-order correction — 21:17 UTC
 
 PM comment6155342262 specifically requires Claude's milestone FIT and DeepSeek's interface confirmation. Codex read that note after attempts1/2, having used the independent Codex reviewer above. That receipt does not substitute for the assigned reviewer. Current verdict is PENDING; no further numerical execution until Claude's prospective verdict. Attempt1: onePASS, oneCUDA launch hard-stop, nineNOT_RUN. Attempt2 at a2a5: eleven observedPASS, zero updates, but OUT_OF_REQUIRED_REVIEW_ORDER. Preserve these observations; do not relabel a later review as prospective. After Claude FIT, any admitted run uses a new attempt directory and unchanged pinned expectations. Correction posted#2032c6155397253/#2029c6155397730/#2379c6155398713. Both owner holds remain HELD.
+
+## Assigned prospective milestone FIT — Claude, 22:14 UTC
+
+[Claude verdict6156328158](https://github.com/UOR-Foundation/uor-r4/pull/2379#issuecomment-6156328158), mirrored on [M1](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6156328524), is accepted by [PM6156348413](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6156348413). The source/header pin above resolves N3. Restore the exact executable on CUDA12.8+ / RTX5090, record actual environment, and execute the unchanged eleven controls once in a new exclusive attempt3 directory. The earlier PENDING statement records the 21:17 correction; this prospective receipt now supersedes its waiting state, without changing the status of attempts1/2. No update, apply, training or corpus run is admitted. Both holds remain HELD.
+
+N1/N2 scope: the current descent is query-addressed over fixed branch/frontier roots, not content selection over leaf values. Selected leaf content is transported, and the query's own leaf is selectable (still causal). Claude's complementary content-addressed read remains separate.
