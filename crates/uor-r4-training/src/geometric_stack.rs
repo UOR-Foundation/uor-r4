@@ -12677,6 +12677,7 @@ impl StackModel {
         time: usize,
         transport: ComposedTransport<'_>,
     ) -> Result<Tensor> {
+        self.validate_native_learning_path()?;
         let p = self.params()?;
         let mut x = self.embed_with(&p, ids, batch, time)?;
         let tokens = x.clone();
@@ -12736,6 +12737,7 @@ impl StackModel {
         transport: ComposedTransport<'_>,
         capture: &mut Capture<'_>,
     ) -> Result<Tensor> {
+        self.validate_native_learning_path()?;
         if self.config.rec_gates == RecGates::Geometric
             && (!self.device.is_cuda() || !matches!(transport, ComposedTransport::Free))
         {
@@ -22479,12 +22481,15 @@ mod tests {
         // These mutations must refuse before their historical/read paths run.
         model.config.rec_gates = RecGates::Historical;
         assert!(model.hidden(&[0], 1, 1).is_err());
+        assert!(model.logits_with_transport(&[0], 1, 1, None).is_err());
         model.config.rec_gates = RecGates::Geometric;
         model.config.gate = Gate::Swiglu;
         assert!(model.hidden(&[0], 1, 1).is_err());
+        assert!(model.logits_with_transport(&[0], 1, 1, None).is_err());
         model.config.gate = Gate::Hamilton;
         model.config.pattern = "rrrrra".into();
         assert!(model.hidden(&[0], 1, 1).is_err());
+        assert!(model.logits_with_transport(&[0], 1, 1, None).is_err());
         model.config.pattern = "rrrrrr".into();
         model.set_precision(Precision::Bf16);
         assert!(model.hidden(&[0], 1, 1).is_err());
