@@ -507,6 +507,34 @@ def register_rules() -> list[Rule]:
         ),
         register_rule(
             Rule(
+                id="multilab.claim_not_merged",
+                description="no claim is held on a branch whose work has already merged",
+                severity="warn",
+                check=_check_claim_not_merged,
+                rationale=(
+                    "a claim is a statement that work is in progress. One that outlives its merge "
+                    "says another lab is still working on something that is already in main, which "
+                    "is worse than no claim at all - it deters work that is safe to start. "
+                    "Proposed by the PM in docs/harness/pm-rules.md R1"
+                ),
+            )
+        ),
+        register_rule(
+            Rule(
+                id="multilab.claim_stale",
+                description="no claim is held for more than a day without a heartbeat",
+                severity="warn",
+                check=_check_claim_stale,
+                rationale=(
+                    "a claim nobody is working under blocks the branch for everyone else. The PM "
+                    "proposed a day as the point where holding it stops being information and "
+                    "starts being a lock (docs/harness/pm-rules.md R1/R7). Release it, or check in "
+                    "so the claim is visibly live"
+                ),
+            )
+        ),
+        register_rule(
+            Rule(
                 id="multilab.no_shared_ledger",
                 description="receipts are sharded per lab, not written to one shared file",
                 severity="warn",
@@ -561,6 +589,172 @@ def _check_claims_one_owner(paths: HarnessPaths, reg: Any) -> list[RuleResult]: 
                 )
             )
     return out
+
+
+#: How long a claim may be held with no heartbeat before it reads as a lock rather than a signal.
+#: Proposed by the PM (pm-rules.md R1): a day.
+CLAIM_ABANDONED_HOURS = 24
+
+
+def _branch_is_merged(paths: HarnessPaths, branch: str) -> bool | None:
+    """Whether `branch` has a MERGED pull request. `None` when it cannot be established.
+
+    Evidence, not inference. The first version treated "not on origin" as merged, which is wrong:
+    a branch that was never pushed looks identical, so a lab holding a claim on unpushed work would
+    have been told to release it. The check must never say "merged" without a merge to point at.
+
+    Three signals, strongest first:
+
+    1. **A merged PR for this branch.** The direct evidence, and the only one that can prove a
+       squash merge (which leaves no ancestry link for `merge-base --is-ancestor` to find).
+    2. **No commits ahead of origin/main**, when the branch still exists locally or on the remote.
+       Content proof for the case where a branch was merged and kept.
+    3. Otherwise `None` — "not established" — and the rule stays quiet rather than guessing.
+    """
+    import subprocess
+
+    def git(*args: str) -> str:
+        try:
+            return subprocess.run(
+                ["git", "-C", str(paths.repo), *args],
+                capture_output=True, text=True, timeout=20, check=False,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    # 1. A merged PR is the direct evidence, and the only thing that proves a squash merge. Asked
+    #    FIRST, because a stale local ref makes the content comparison below lie in the other
+    #    direction: a lab that has just claimed a branch and pushed it may not have it in the local
+    #    remote-tracking refs yet, so the branch looks "gone", and asking GitHub for a PR on a
+    #    branch pushed seconds ago can come back empty before the push is fully visible.
+    #
+    #    That race produced a false positive on live work: `kimi/plan-refresh-2026-10-13` was
+    #    claimed and flagged as merged within the same couple of minutes, then the warning vanished
+    #    once the ref arrived. A rule that cries wolf on a lab's live branch is worse than no rule.
+    try:
+        from status import gh_json
+    except ImportError:  # pragma: no cover - status ships with the harness
+        pass
+    else:
+        ok, data, _err = gh_json(
+            ["pr", "list", "--head", branch, "--state", "merged", "--limit", "1", "--json", "number,state"],
+            paths.repo,
+        )
+        if ok:
+            if data:
+                return True
+            # No merged PR. If the branch is visible, it is unmerged work; if it is not visible
+            # either, the honest answer is "not established" rather than "merged".
+            for candidate in (f"refs/remotes/origin/{branch}", f"refs/heads/{branch}"):
+                if git("rev-parse", "--verify", "--quiet", candidate):
+                    return False
+            return None
+
+    # 2. GitHub unreachable: fall back to content, which is safe in the direction that matters.
+    #    Nothing ahead of main means the work is in main, whatever route put it there.
+    for candidate in (f"refs/remotes/origin/{branch}", f"refs/heads/{branch}"):
+        if git("rev-parse", "--verify", "--quiet", candidate):
+            ahead = git("rev-list", "--count", f"origin/main..{candidate}")
+            return int(ahead) == 0 if ahead.isdigit() else None
+    return None
+
+
+def _check_claim_not_merged(paths: HarnessPaths, reg: Any) -> list[RuleResult]:  # noqa: ANN401
+    out: list[RuleResult] = []
+    for branch, held in load_claims(paths).items():
+        merged = _branch_is_merged(paths, branch)
+        if merged is not True:
+            continue
+        out.append(
+            RuleResult(
+                rule_id="multilab.claim_not_merged",
+                severity="warn",
+                ok=False,
+                message=(
+                    f"{held.get('lab') or 'nobody'} still holds a claim on {branch!r}, but its work "
+                    f"is already in origin/main"
+                ),
+                path="docs/harness/claims.json",
+                fix=(
+                    f"release it: python3 scripts/harness/cli.py team release --branch {branch} "
+                    f"--lab {held.get('lab') or '<lab>'}"
+                ),
+                meta={"branch": branch, "lab": held.get("lab", "")},
+            )
+        )
+    return out
+
+
+def _check_claim_stale(paths: HarnessPaths, reg: Any) -> list[RuleResult]:  # noqa: ANN401
+    """A claim held past the abandonment window with no heartbeat from its lab.
+
+    The heartbeat is what distinguishes "holding the branch while working" from "holding it and
+    gone". A lab that checks in keeps its claims; one that does not shows up here.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    presence = {p.lab: p for p in all_presence(paths)}
+    out: list[RuleResult] = []
+    for branch, held in load_claims(paths).items():
+        lab = held.get("lab") or ""
+        claimed_at = _parse_claimed_at(held.get("claimed_at", ""))
+        if claimed_at is None:
+            continue  # an unreadable timestamp is reported by claims_one_owner's sibling checks
+        age = now - claimed_at
+        if age < timedelta(hours=CLAIM_ABANDONED_HOURS):
+            continue
+        p = presence.get(lab)
+        fresh = False
+        if p is not None and p.age_minutes is not None:
+            fresh = p.age_minutes <= PRESENCE_TTL_MINUTES
+        if fresh:
+            continue  # the lab is visibly working; the claim is information, not a lock
+        hours = int(age.total_seconds() // 3600)
+        out.append(
+            RuleResult(
+                rule_id="multilab.claim_stale",
+                severity="warn",
+                ok=False,
+                message=(
+                    f"{lab or 'nobody'} has held {branch!r} for {hours}h with no live heartbeat"
+                    + ("" if p is not None else " and has published no presence at all")
+                ),
+                path="docs/harness/claims.json",
+                fix=(
+                    "release it if you are done, or run `cli.py heartbeat -m <milestone>` so the "
+                    "claim is visibly live; the PM resolves a contested claim (pm-rules.md R7)"
+                ),
+                meta={"branch": branch, "lab": lab, "hours": hours},
+            )
+        )
+    return out
+
+
+def _parse_claimed_at(text: str):  # noqa: ANN202 - datetime | None
+    """Parse a claim timestamp in either offset form.
+
+    `datetime.fromisoformat` did not accept the `Z` suffix until Python 3.11, and this harness
+    supports 3.9 (verified on 3.9.6). That matters more than a compatibility nicety: the Rust
+    implementation writes `Z` timestamps, so without this a claim written in Rust is unreadable by
+    the Python harness on 3.9 — the two implementations would disagree about a claim's age, and the
+    staleness rule would silently stop working. Found by running the suite on 3.9 after it passed on
+    3.15.
+    """
+    from datetime import datetime, timezone
+
+    if not text:
+        return None
+    normalised = text.strip()
+    if normalised.endswith(("Z", "z")):
+        normalised = normalised[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalised)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _check_no_shared_ledger(paths: HarnessPaths, reg: Any) -> list[RuleResult]:  # noqa: ANN401

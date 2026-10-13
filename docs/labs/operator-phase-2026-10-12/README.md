@@ -1,5 +1,25 @@
 # The operator phase: geometric replacements for the gate, projections and head
 
+## Status 2026-10-13
+
+OP1 G2 Hamilton gate landed (#2260). OP2's dense HamiltonLinear was superseded
+by the owner-directed SpiralCore BFS + retained FBS projection (#2279); that
+replacement satisfies the plan's OP2 source entry. Recurrence geometric gates
+landed (#2293), making the declared recurrence squash-free by source sweep.
+OP3a and the shared native vector writer are Codex-owned under the ratified
+split, implemented and finite CUDA-qualified on source
+`09b3ee6df084beba1b9c6e98ef1e597bf2dc82bb`; protected delivery is pending.
+The [head/writer record](../geometric-head-shared-writer-2026-10-13/README.md)
+retains the five-test device qualification and limits. It does not qualify
+Kimi's recurrence or the complete trunk. The rung-0 sheet
+[retains its live bars and dependency list](../../harness/prep/m1-rank-margin-rung0-2026-10-13.md).
+Complete-path source/device qualification remains before any training, and a
+FIT verdict releases no owner hold. Training and the separate M2
+training/rental hold remain.
+
+The original 2026-10-12 registration and repair are linked below as historical
+evidence; this living plan includes the newer source and qualification status.
+
 References #2029 (M1) and #2032 (M4). Kimi is project manager and owns
 recurrence/gate source; Codex owns OP2/OP3a and the shared writer under the
 [ratified split](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6138381873). This record is repaired under the owner's

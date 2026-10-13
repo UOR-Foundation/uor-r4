@@ -42,6 +42,39 @@ complete declared learning/output path before any owner hold-release decision.
 The common channel remains vector infrastructure: learned intent compilation,
 full-model quality/capacity and D11 serving remain unqualified.
 
+## 2026-10-13 — The plan documents catch up: projection and recurrence gates landed, OP3a is Codex's (kimi, #2029)
+
+Dependencies **1 and 3 of the rung-0 board are landed**: [the sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md) now records Codex's SpiralCore/FBS projection (#2279, `c6cd409da`) and the recurrence geometric gates ([#2293](https://github.com/UOR-Foundation/uor-r4/pull/2293), merge `d7934bf03`: `rec_gates=geometric` — clamped-linear opening, exact dyadic rate-select table λ=2^-(s+1), Hamilton output gate, geometric secant surrogate credit; the executed recurrence is squash-free by source sweep, and `RecGates::Historical` is preserved as the reproduction path, prohibited for new runs). **Dependencies 2 and 4 are Codex-owned and in flight** per the [ratified ownership split](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6138381873), with the head/writer's finite kernel card FIT (self-review under the exact-head rule, [#2029 comment 6138479221](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6138479221)). The sheet keeps its one `TEST FITNESS: PENDING` verdict line and its amended bars; the [operator plan](../labs/operator-phase-2026-10-12/README.md) gains a dated status header above its registration text, and the roadmap's M1 row names both landings and the in-flight head. Docs only: no model compute, no count reset, no hold change.
+
+Line: no model line — plan hygiene · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** Claude's FIT re-review of the sheet at its current commit; Codex lands the head/writer and the device-qualification gate (dependency 4), then the owner's hold-release decision.
+
+## 2026-10-13 — The README, the geometry page and the figures reflect the current path (claude, #2028)
+
+The [README](../../README.md) was rewritten as a research overview of about 300 lines. Visible sections:
+question, architecture, milestones, the current path (operator-phase checklist), rules D11 and D22–D27,
+mechanisms with status, scoped key results, a bookkeeping table, the R9 roster and the quick start. Longer
+tables are in `<details>`. The [geometry page](../geometry.md) now leads with the compliant next-token path
+and the four trunk operators. Its math sections are kept with corrected status lines. The previous float-form
+page is preserved intact at [history/geometry-float-form-2026-10.md](../history/geometry-float-form-2026-10.md).
+The status figures are now generated in Rust (`cargo run -p xtask -- figures`, D27): five were regenerated and
+two are new. The [mechanism index](../mechanisms/README.md) gains a checked Status column. A
+[bookkeeping](../bookkeeping.md) standard is proposed for the PM's plan.
+[Record](../labs/readme-geometry-2026-10-13/README.md).
+
+Line: no model line — documentation · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** the PM decides whether to adopt the bookkeeping standard; Claude re-reviews the amended rung-0 sheet.
+
+## 2026-10-13 — The PM's two proposed checks are implemented, and they caught three live claims (lead, tooling)
+
+The PM's [operating rules](../harness/pm-rules.md) asked the harness owner to consider two machine checks; both are now in `multilab`, and between them they found a real problem on the first run. **`multilab.claim_not_merged`** flags a claim whose branch already has a merged PR — a claim that outlives its merge tells every other lab the branch is busy when it is finished, and deters work that is safe to start. **`multilab.claim_stale`** flags a claim held more than 24 hours with no live heartbeat, which is the PM's proposed line between "holding while working" and "holding a lock". Both immediately flagged **three live claims by Kimi** (`kimi/d27-rust-first`, `kimi/pm-rules`, `kimi/rung0-sheet-bars`) whose PRs #2278, #2295 and #2290 are all merged and whose branches are deleted — verified against GitHub, not inferred. **The merged-claim check had a false positive when first written** and it is worth recording: "not on origin" was treated as merged, but a branch that was never pushed looks identical, so a lab holding a claim on unpushed work would have been told to release it. The check is now evidence-based — a merged PR, or no commits ahead of main — and returns "not established" rather than guessing, with tests pinning both the real case and the never-pushed case.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** Kimi releases the three stale claims (they are its work to close, not the harness owner's). Then `parity.py` and `doccheck.py` are still new Python needing porting under D27, `doccheck` most of all.
+
 ## 2026-10-13 — The PM operating rules are ported to the shared harness (kimi, #2028)
 
 [pm-rules.md](../harness/pm-rules.md) records the nine project-manager operating rules, owner-ratified on 2026-10-13, each with its rule, its why and the harness surface that carries it: **R1** one owner per branch (`team claim` / `team release`; a claim is visible repo-wide only once its committed change merges), **R2** one live branch per active PR (after merge: verify content on fresh `origin/main`, delete the branch on both sides, remove the worktree, `scripts/storage/uor-hygiene --apply`), **R3** status discipline (`heartbeat` every 90 minutes or 3 merged PRs; presence goes STALE at 30), **R4** no model compute without a prep sheet at `TEST FITNESS: FIT` (FIT lifts no hold), **R5** the ratchets stay green on every PR (D23 interlock 1649, no-matmul 93 sites, claim wording), **R6** preservation (indexed patches in `docs/history/branch-archive/`, dated records keep their text), **R7** collision resolution by the PM against the ownership map (peer source/jobs/leases never touched; an expired lease is suspect, not abandoned), **R8** delivery truthfulness (an open PR is pending, not merged; exact-head checks; a queue acknowledgement is not a test result), **R9** the roster (Kimi PM; Claude; Codex = Sol, same seat; DeepSeek; Antigravity, fifth lab, offline). [claims.json](../harness/claims.json) drops the two stale kimi claims (both branches merged and deleted, so the file now carries only this branch's claim); the roster line lands in [docs/labs/README.md](../labs/README.md) and the registry row in [docs/harness/README.md](../harness/README.md). The frozen state contract [state-formats.json](../harness/state-formats.json) is re-frozen deliberately: the claims entry key moves from the released `kimi/d27-rust-first-2026-10-13` to this branch's claim, marked optional because a branch key is transient — present while its branch lives, absent after release — so a future release is not format drift. Docs only: no model compute, no count reset.
@@ -49,6 +82,13 @@ full-model quality/capacity and D11 serving remain unqualified.
 Line: no model line — governance · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 
 **Next:** DeepSeek (harness owner) considers two proposed machine checks — auto-flag a claim whose branch is already merged, and flag a claim older than 24 hours with no heartbeat; then the next unit runs R1–R9 end to end.
+## 2026-10-13 — The Python format checker is removed: new tooling is Rust (lead, tooling)
+
+D27 says Rust is the default for all new project code *including tooling*, and that "no new Python is added where Rust works". I had added **three new Python files after D27 landed** — `statecheck.py` (248 lines), `parity.py` (410) and `doccheck.py` (374). The clearest case is fixed: **`statecheck.py` is deleted**, because it was a second implementation of a check the Rust crate already performed in `contract.rs`, and two implementations of one rule is how they drift apart. The check is now the Rust `uor-harness check`, surfaced as the `harness.state_formats` rule through a thin adapter (`scripts/harness/stateformats.py`). Because the `harness` CI job has no Rust binary, the rule reports `skipped` there rather than failing a check nobody broke, and the `rust-harness` job — which builds the binary — runs `check --only harness.state_formats` so the rule executes in CI. Parity lost its format half as a result: comparing Rust against a Python checker that no longer exists would be comparing Rust with itself, so that section now asserts what is still meaningful — the state is valid, the checker accepts and rejects six known inputs correctly, the ledger and presence boards agree across implementations, and a **Rust-written receipt is read back intact by Python** (the write half of the port, which every earlier check had left untested). The dated records that describe `statecheck.py` are left as written with a dated correction, because they were true when written.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** `parity.py` and `doccheck.py` are still new Python and still need porting — `doccheck` especially, since checking an argument parser for named commands is a pure-Rust job with no Python need at all. `parity` is inherently two-language, but its comparison logic can move to Rust.
 
 ## 2026-10-13 — The doc checker reads every document, not a list I wrote (lead, tooling)
 
