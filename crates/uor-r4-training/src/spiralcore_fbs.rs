@@ -547,3 +547,191 @@ mod static_plan_tests {
         Ok(())
     }
 }
+
+// These tests execute model arithmetic ONLY on CUDA. Host work constructs fixed
+// geometric fixture metadata and grades device results; it never routes a model
+// input, computes a reference forward/adjoint, or updates learned parameters.
+#[cfg(all(test, feature = "cuda"))]
+mod native_cuda_tests {
+    use super::*;
+    use candle_core::Var;
+
+    fn close(a: &Tensor, b: &Tensor, tolerance: f64) -> Result<()> {
+        let error = a
+            .to_dtype(DType::F32)?
+            .sub(&b.to_dtype(DType::F32)?)?
+            .abs()?
+            .max_all()?
+            .to_scalar::<f32>()?;
+        assert!(
+            error.is_finite() && (error as f64) <= tolerance,
+            "device error {error}"
+        );
+        Ok(())
+    }
+    // Independent device reference: eight explicit gather/sign operations,
+    // with axes from the exact static action, rather than the custom kernel.
+    fn action(x: &Tensor, axes: &[u32]) -> Result<Tensor> {
+        let pieces: Vec<_> = axes
+            .iter()
+            .map(|&code| {
+                x.narrow(0, (code & 7) as usize, 1)?
+                    .affine(if code & 8 == 0 { 1.0 } else { -1.0 }, 0.0)
+            })
+            .collect::<candle_core::Result<_>>()?;
+        Ok(Tensor::cat(&pieces, 0)?)
+    }
+    fn inverse_action(dy: &Tensor, axes: &[u32]) -> Result<Tensor> {
+        let mut inverse = vec![0; 8];
+        for (output, &code) in axes.iter().enumerate() {
+            inverse[(code & 7) as usize] = output as u32 | (code & 8);
+        }
+        action(dy, &inverse)
+    }
+
+    #[test]
+    fn native_cuda_frontier_forward_exact_input_adjoint_and_secant() -> Result<()> {
+        let device = Device::new_cuda(0)?; // Missing CUDA is a failure, never SKIP.
+        let plan = ProjectionPlan::new(16, 8)?;
+        let g = &plan.geometry;
+        let q = Var::from_vec(
+            g.roots[0].map(f32::from).to_vec(),
+            &plan.query_shape()[..],
+            &device,
+        )?;
+        // Fixed fixture data, no CPU tensor operations.
+        let x = Var::from_vec((1..=16).map(|n| n as f32).collect(), (1, 16), &device)?;
+        let dy = Tensor::from_vec(vec![1., 2., 3., 4., 5., 6., 7., 8.], 8, &device)?;
+        for dtype in [DType::F32, DType::BF16] {
+            let input = x.as_tensor().to_dtype(dtype)?;
+            let out = plan.forward(q.as_tensor(), &input)?;
+            let selected = input.flatten_all()?.narrow(0, 0, 8)?;
+            close(&out.flatten_all()?, &selected, 0.)?;
+            let gradient = out
+                .to_dtype(DType::F32)?
+                .flatten_all()?
+                .mul(&dy)?
+                .sum_all()?
+                .backward()?;
+            let dx = gradient
+                .get(&x)
+                .ok_or_else(|| invalid("missing input adjoint"))?;
+            let expected_dx =
+                Tensor::cat(&[dy.clone(), Tensor::zeros(8, DType::F32, &device)?], 0)?
+                    .reshape((1, 16))?;
+            close(dx, &expected_dx, 0.)?;
+            let alt_state =
+                g.compose[g.bfs_actions[1] as usize * 64 + g.identity as usize] as usize;
+            let alternative = action(
+                &input.flatten_all()?.narrow(0, 8, 8)?,
+                &g.axes[alt_state * 8..alt_state * 8 + 8],
+            )?
+            .to_dtype(DType::F32)?;
+            let contrast = alternative
+                .sub(&selected.to_dtype(DType::F32)?)?
+                .mul(&dy)?
+                .sum_all()?;
+            let edge = Tensor::from_vec(g.roots[1].map(f32::from).to_vec(), 8, &device)?.sub(
+                &Tensor::from_vec(g.roots[0].map(f32::from).to_vec(), 8, &device)?,
+            )?;
+            let denominator = edge.sqr()?.sum_all()?;
+            let expected_dq = edge
+                .broadcast_mul(&contrast.div(&denominator)?)?
+                .reshape(&plan.query_shape()[..])?;
+            close(
+                gradient
+                    .get(&q)
+                    .ok_or_else(|| invalid("missing query secant"))?,
+                &expected_dq,
+                1e-5,
+            )?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn native_cuda_complete_ternary_children_and_signed_orientation() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        // Three retained ternary levels; cover all 27 terminals, not just an
+        // averaged parent or a root representative. Queries are fixed roots.
+        let plan = ProjectionPlan::new(27 * 8, 8)?;
+        let g = &plan.geometry;
+        let x = Var::from_vec(
+            (1..=27 * 8).map(|n| n as f32).collect(),
+            (1, 27 * 8),
+            &device,
+        )?;
+        let dy = Tensor::from_vec(vec![1., -2., 3., -4., 5., -6., 7., -8.], 8, &device)?;
+        for atom in 0..27 {
+            let ports = [atom / 9, (atom / 3) % 3, atom % 3];
+            let mut state = g.identity;
+            let mut queries = g.roots[0].map(f32::from).to_vec();
+            for choice in ports {
+                let root = g.root_of_state[state as usize] as usize;
+                let goal = g.branch_targets[root * 3 + choice] as usize;
+                queries.extend(g.roots[goal].map(f32::from));
+                state = g.compose[g.bfs_actions[root * 16 + goal] as usize * 64 + state as usize];
+            }
+            let q = Var::from_vec(queries, &plan.query_shape()[..], &device)?;
+            for dtype in [DType::F32, DType::BF16] {
+                let input = x.as_tensor().to_dtype(dtype)?;
+                let out = plan.forward(q.as_tensor(), &input)?;
+                let axes = &g.axes[state as usize * 8..state as usize * 8 + 8];
+                let expected = action(&input.flatten_all()?.narrow(0, atom * 8, 8)?, axes)?;
+                close(&out.flatten_all()?, &expected, 0.)?;
+                let grads = out
+                    .to_dtype(DType::F32)?
+                    .flatten_all()?
+                    .mul(&dy)?
+                    .sum_all()?
+                    .backward()?;
+                let mut pieces = Vec::new();
+                for i in 0..27 {
+                    pieces.push(if i == atom {
+                        inverse_action(&dy, axes)?
+                    } else {
+                        Tensor::zeros(8, DType::F32, &device)?
+                    });
+                }
+                let expected_dx = Tensor::cat(&pieces, 0)?.reshape((1, 27 * 8))?;
+                close(
+                    grads
+                        .get(&x)
+                        .ok_or_else(|| invalid("missing input gradient"))?,
+                    &expected_dx,
+                    0.,
+                )?;
+                let dq = grads
+                    .get(&q)
+                    .ok_or_else(|| invalid("missing query gradient"))?;
+                assert!(dq.abs()?.max_all()?.to_scalar::<f32>()?.is_finite());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn native_cuda_numerical_and_shape_refusals() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let plan = ProjectionPlan::new(16, 8)?;
+        let valid = Tensor::zeros(&plan.query_shape()[..], DType::F32, &device)?;
+        let x = Tensor::ones((1, 16), DType::F32, &device)?;
+        for bad in [f32::NAN, f32::INFINITY, f32::MAX] {
+            let q = Tensor::from_vec(vec![bad; 8], &plan.query_shape()[..], &device)?;
+            assert!(plan.forward(&q, &x).is_err());
+        }
+        let bad_x = Tensor::from_vec(vec![f32::NAN; 16], (1, 16), &device)?;
+        assert!(plan.forward(&valid, &bad_x).is_err());
+        assert!(plan
+            .forward(&valid, &Tensor::ones((1, 15), DType::F32, &device)?)
+            .is_err());
+        assert!(plan.forward(&valid.to_dtype(DType::BF16)?, &x).is_err());
+        assert!(plan
+            .forward(
+                &Tensor::zeros(&plan.query_shape()[..], DType::F32, &Device::Cpu)?,
+                &x
+            )
+            .is_err());
+        Ok(())
+    }
+}

@@ -3796,6 +3796,14 @@ impl StackModel {
     /// The tensors a forward pass reads: the variables, or in served mode the
     /// served view of their current values.
     fn params(&self) -> Result<Params<'_>> {
+        if self.quaternion_weights == QuaternionWeights::SpiralcoreFbs
+            && (self.activation_snap != ActivationSnap::None
+                || self.quaternion_snap != QuaternionSnap::None)
+        {
+            return Err(invalid(
+                "native SpiralCore/FBS does not accept an activation or quaternion snap",
+            ));
+        }
         if self.quaternion_weights == QuaternionWeights::SpiralcoreFbs && !self.device.is_cuda() {
             return Err(invalid(
                 "native SpiralCore/FBS model execution requires CUDA; no CPU/Metal fallback",
@@ -11859,10 +11867,21 @@ impl StackModel {
     /// The quaternion-weights mode `directory`'s `config.json` records
     /// ([`Self::set_quaternion_weights`]). Absent means
     /// [`QuaternionWeights::None`], as for every model saved before the field
-    /// existed; only `"all"` is ever written, so any other value is refused.
+    /// existed. Native mode writes `"spiralcore_fbs"` with its bound geometry;
+    /// retained `"all"` artifacts remain inactive.
     pub fn saved_quaternion_weights(directory: &Path) -> Result<QuaternionWeights> {
         let config: serde_json::Value =
             serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
+        if config.get("spiralcore_fbs_projection").is_some()
+            && config
+                .get(QUATERNION_WEIGHTS_FIELD)
+                .and_then(|v| v.as_str())
+                != Some("spiralcore_fbs")
+        {
+            return Err(invalid(
+                "native projection binding requires the declared SpiralCore/FBS mode",
+            ));
+        }
         match config.get(QUATERNION_WEIGHTS_FIELD) {
             None => Ok(QuaternionWeights::None),
             Some(value) if value.as_str() == Some("all") => Ok(QuaternionWeights::All),
