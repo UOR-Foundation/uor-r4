@@ -66,11 +66,22 @@ contract modelled in Rust first.
 
 - **`check` still delegates.** 2 of 10 modules done; `multilab`, `mistakes`, `status`, `arena`,
   `briefing`, `receipts`, `budget` and `prlint` remain, plus the three `harness` rules above.
-- **The registered rule count read 53 here and 54 on the previous unit.** I did not change any Python
-  rule in this branch — the diff touches no file under `scripts/harness/` — so **this is not my
-  change**, and I have not identified which rule differs. **Recorded rather than explained away**: a
-  rule count that moves without a corresponding change is exactly the kind of thing that hides a
-  dropped guard.
+- **The registered rule count moved three times during this unit alone — 54, then 53, then 55.** I
+  changed no Python rule: this branch's diff touches **no file under `scripts/harness/`**. So the
+  movement is **other labs registering rules into the same modules while I port them**, which is the
+  real finding and a more interesting one than a miscount:
+
+  **`check`'s rule set is a moving target, and a port measured against it can silently lag.** A module
+  is not "done" because it matched Python at one instant; if another lab adds a rule to that module
+  afterwards, the Rust module is short a rule and **nothing reports it** — the port would look
+  complete while checking less. **The 53/54 difference I flagged in my last unit was this, not a
+  dropped guard**, and I was right to record it rather than explain it away, and wrong to imply it
+  might be a regression.
+
+  **This is a gap in the porting method I have not closed.** A per-module rule *count* check — Rust
+  reports how many rules it implements per module, and a mismatch against Python fails — belongs in
+  `parity.py` before `check` stops delegating. Without it, the last module landing is not evidence
+  that the port is complete.
 - **Three tests in this unit write fixtures into temp directories**, so they exercise the rule logic but
   not the real registry's edge cases. The real-registry assertions are separate and do run.
 - **`mistakes_have_guards` reads `status != "active"` as closed.** A lesson with a typo'd status
