@@ -12,5 +12,12 @@
     "head": "267571feb",
     "lab": "kimi",
     "note": ""
+  },
+  "codex/rung0-standby-20261013-1217": {
+    "branch": "codex/rung0-standby-20261013-1217",
+    "claimed_at": "2026-10-13T12:18:44Z",
+    "head": "9556c1bd3be6a7afab62d4e4f45aec51f0885b17",
+    "lab": "codex",
+    "note": "Sol session codex/rung0-standby-20261013-1217: owner-directed standby for Kimi rung0; training HELD. Manual worktree-local R10 claim because legacy Python team claim redirects writes to the owner checkout; no model or peer-source ownership claimed."
   }
 }
