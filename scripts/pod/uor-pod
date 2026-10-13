@@ -1562,7 +1562,7 @@ cmd_run() {
   b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
   local remote
   remote="set -e; ts=\$(date -u +%Y%m%dT%H%M%SZ); d=/workspace/uor-r4/jobs/$LAB; mkdir -p \$d; log=\$d/\$ts-$SESSION-gpu${GPU//,/-}.log
-cat > /tmp/uor-job-\$ts.sh <<'JOB'
+cat > \$d/\$ts-$SESSION-gpu${GPU//,/-}.sh <<'JOB'
 CMD=\$(echo $b64 | base64 -d)
 echo \"# uor-pod job by=$WHO pod=$pod gpu=$GPU queued \$(date -u +%FT%TZ)\"
 echo \"# cmd: \$CMD\"
@@ -1574,7 +1574,7 @@ CUDA_VISIBLE_DEVICES=$GPU bash -c \"\$CMD\"
 rc=\$?
 echo \"# exit=\$rc end=\$(date -u +%FT%TZ)\"
 JOB
-nohup setsid bash /tmp/uor-job-\$ts.sh > \$log 2>&1 < /dev/null &
+nohup setsid bash \$d/\$ts-$SESSION-gpu${GPU//,/-}.sh > \$log 2>&1 < /dev/null &
 echo \$log"
   if is_dry; then echo "DRY-RUN: on $pod: $remote" >&2; return 0; fi
   local log
