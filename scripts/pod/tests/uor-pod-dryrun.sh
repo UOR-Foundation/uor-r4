@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dry-run test of scripts/pod/uor-pod (leases per lab+session, up placement and
 # caps, down, reap, register/keep, prune-stopped, status) against a fake
-# runpodctl, ssh and gh on PATH (no network, no cost):
+# runpodctl, vastai, ssh and gh on PATH (no network, no cost):
 #
 #   scripts/pod/tests/uor-pod-dryrun.sh
 #
@@ -28,6 +28,12 @@ export UOR_POD_STATE=$W/state UOR_POD_DRY_RUN=1 FAKE=$W/fake PATH="$W/bin:$PATH"
 unset UOR_POD_SESSION UOR_POD_MAX_PODS UOR_POD_MAX_RATE
 export UOR_POD_CONFIG=$W/no-config  # a real user config never loads
 unset UOR_POD_REPO_SLUG UOR_POD_CANONICAL_DC UOR_POD_VOLUME_ID UOR_POD_NEW_VOLUME_GB UOR_POD_IMAGE UOR_POD_BOARD UOR_POD_TEMPLATE UOR_HF_STORE
+unset UOR_POD_VAST_DISK_GB UOR_POD_VAST_MIN_RELIABILITY UOR_POD_VAST_MIN_INET_MBPS UOR_POD_VAST_ARCHIVE_MAX_MB
+# Vast.ai became the default provider for new pods on 2026-10-13. Every test
+# before the Vast section at the end exercises the Runpod path, so it is chosen
+# here; the Vast section sets its own provider. (The fake vastai below lists no
+# instances, so those tests see exactly the Runpod pods they did before.)
+export UOR_POD_PROVIDER=runpod
 # A local stand-in for the GitHub repository `--ref` is checked against (no
 # network): main (2 commits), branch feature (2 commits), and a clone holding
 # one commit that was never pushed.
@@ -106,11 +112,55 @@ case "$1 $2" in
   *) echo "fake runpodctl: unhandled $*" >&2; exit 1;;
 esac
 S
+# fake vastai: $FAKE/vast-instances.json is the account; offers come from
+# $FAKE/vast-offers-<gpu_name>-<num_gpus>.json; an offer id listed in
+# $FAKE/vast-gone was taken after the search. Mutations need FAKE_ALLOW_CREATE=1.
+# Like the real CLI, `destroy instance` asks [y/N] and aborts unless stdin says y,
+# and `create instance` returns an instance-scoped key (a sentinel here).
+cat > "$W/bin/vastai" <<'S'
+#!/usr/bin/env bash
+echo "vastai $*" >> "$FAKE/calls"
+inst=$FAKE/vast-instances.json; [ -f "$inst" ] || echo '[]' > "$inst"
+case "$1 $2" in
+  "show instances")
+    [ "${FAKE_VAST_LIST_FAIL:-0}" != 1 ] || { echo "failed with error 502" >&2; exit 1; }
+    cat "$inst";;
+  "show instance") jq --argjson i "$3" 'map(select(.id == $i)) | if length > 0 then .[0] else {instances: null} end' "$inst";;
+  "search offers")
+    g=$(printf '%s' "$3" | sed -n 's/.*gpu_name=\([^ ]*\).*/\1/p'); n=$(printf '%s' "$3" | sed -n 's/.*num_gpus=\([0-9]*\).*/\1/p')
+    echo "$3" > "$FAKE/vast-query"
+    cat "$FAKE/vast-offers-$g-$n.json" 2>/dev/null || echo '[]';;
+  "create instance")
+    [ "${FAKE_ALLOW_CREATE:-0}" = 1 ] || { echo "REAL MUTATION CALLED IN DRY RUN" >&2; exit 9; }
+    if grep -qx "$3" "$FAKE/vast-gone" 2>/dev/null; then echo "{\"success\": false, \"msg\": \"offer $3 is no longer available\"}"; exit 0; fi
+    label=''; prev=''; for a in "$@"; do [ "$prev" = --label ] && label=$a; prev=$a; done
+    c=$((9001 + $(jq length "$inst")))
+    jq --argjson c "$c" --arg l "$label" --argjson now "$(date +%s)" '. + [{id: $c, label: $l, num_gpus: 1, dph_total: 0.469,
+      gpu_name: "RTX 5090", geolocation: "South Korea, KR", intended_status: "running", actual_status: "running",
+      public_ipaddr: "10.0.0.2", ports: {"22/tcp": [{"HostIp": "0.0.0.0", "HostPort": "2001"}]}, start_date: $now,
+      jupyter_token: "SENTINEL-JUPYTER-TOKEN"}]' "$inst" > "$inst.new" && mv "$inst.new" "$inst"
+    echo "{\"success\": true, \"new_contract\": $c, \"instance_api_key\": \"SENTINEL-INSTANCE-KEY\"}";;
+  "destroy instance")
+    [ "${FAKE_ALLOW_CREATE:-0}" = 1 ] || { echo "REAL MUTATION CALLED IN DRY RUN" >&2; exit 9; }
+    ans=''; read -r ans || true
+    printf 'Are you sure you want to destroy instance %s? [y/N] ' "$3"
+    [ "$ans" = y ] || { echo "Aborted."; exit 0; }
+    echo "destroying instance $3."
+    jq --argjson i "$3" 'map(select(.id != $i))' "$inst" > "$inst.new" && mv "$inst.new" "$inst";;
+  *) echo "fake vastai: unhandled $*" >&2; exit 1;;
+esac
+S
 cat > "$W/bin/ssh" <<'S'
 #!/usr/bin/env bash
 port=''; while [ $# -gt 0 ]; do case $1 in -p) port=$2; shift 2;; -i|-o) shift 2;; root@*) shift; break;; *) shift;; esac; done
 echo "ssh $port $*" >> "$FAKE/calls"
 case "$*" in *probe_ok*) cat "$FAKE/probe-$port" 2>/dev/null;; esac
+# a Vast pod's archive at `down`: which result dirs exist, their size, the tar stream
+case "$*" in
+  *"for d in uor-r4/jobs"*) cat "$FAKE/vast-dirs" 2>/dev/null;;
+  *"du -sk uor-r4/"*) echo "${FAKE_VAST_KB:-12}";;
+  *"tar -cf - uor-r4/"*) [ ! -d "$FAKE/vast-ws" ] || tar -cf - -C "$FAKE/vast-ws" uor-r4;;
+esac
 # the bootstrap run (non-dry tests): 40 lines of output, then either the failure
 # of 2026-10-05 (Ollama's .tgz 404 -> tar, rc 2) or a BOOTSTRAP_RESULT with
 # "ollama": $FAKE_OLLAMA; the exit status line the real pod-side wrapper appends
@@ -710,6 +760,104 @@ chk "bootstrap --check-args accepts --hf-store and --repo-url" 0 "bootstrap argu
 chk "bootstrap --check-args rejects a ; in --hf-store" 2 "--hf-store may contain only" --sha "$MAIN_SHA" --hf-store 'a;b'
 chk "bootstrap --check-args rejects a space in --repo-url" 2 "--repo-url may contain only" --sha "$MAIN_SHA" --repo-url 'https://x y'
 chk "bootstrap --check-args rejects --hf-store without a value" 2 "--hf-store needs a value" --sha "$MAIN_SHA" --hf-store
+
+# ---- Vast.ai, the default provider for new pods (owner 2026-10-13): placement,
+# combined caps, both providers in status, archive-then-destroy at down, and the
+# instance key from `create` never reaching output, ledger or state.
+VO() {  # VO GPU_NAME COUNT 'JSON' -> the fake's offers for that search
+  printf '%s\n' "$3" > "$FAKE/vast-offers-$1-$2.json"
+}
+VSEEN=$W/vast-seen; : > "$VSEEN"
+vexpect() { expect "$@"; cat "$W/out" >> "$VSEEN"; }
+vfresh() {  # empty accounts on both providers, fresh state
+  rm -rf "$UOR_POD_STATE"; echo '[]' > "$FAKE/pods.json"; echo '[]' > "$FAKE/vast-instances.json"
+  rm -f "$FAKE"/vast-offers-*.json "$FAKE/vast-gone"; : > "$FAKE/calls"
+}
+VH=$W/vasthome; mkdir -p "$VH"
+export HOME=$VH UOR_POD_STATE=$W/state-vast UOR_POD_DRY_RUN=1 UOR_POD_MAX_PODS=4 UOR_POD_MAX_RATE=8.00
+unset UOR_POD_PROVIDER FAKE_ALLOW_CREATE
+cat > "$FAKE/gpus.json" <<'J'
+[{"gpuId":"NVIDIA GeForce RTX 5090","securePricePerHr":0.99,"dataCenterAvailability":[{"dataCenterId":"EU-RO-1","stockStatus":"Low"}]}]
+J
+OFF5='[{"id":7002,"dph_total":0.9,"num_gpus":1,"geolocation":"Hungary, HU","reliability2":0.995},{"id":7001,"dph_total":0.469,"num_gpus":1,"geolocation":"South Korea, KR","reliability2":0.998},{"id":7003,"dph_total":0.6,"num_gpus":1,"geolocation":"Maryland, US","reliability2":0.999}]'
+VUP=(up "${X1[@]}" --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA")
+vfresh; VO RTX_5090 1 "$OFF5"
+vexpect "Vast is the default provider and rents the cheapest offer" 0 "DRY-RUN: vastai create instance 7001 --image runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404 --disk 150 --ssh --direct --label uor-codex-" -- "${VUP[@]}"
+has "the offer is announced with its price and place" "Creating 1 x 5090 \\(\\\$0.469/h\\) on Vast South Korea, KR, offer 7001"
+if grep -q 'gpu_name=RTX_5090 num_gpus=1 datacenter=true verified=true rentable=true reliability>0.98 cuda_vers>=12.8 disk_space>=150 inet_down>=200' "$FAKE/vast-query"; then
+  ok "the search asks for verified datacenter hosts, CUDA 12.8+, disk and bandwidth"; else sed 's/^/     /' "$FAKE/vast-query"; bad "the search asks for verified datacenter hosts, CUDA 12.8+, disk and bandwidth"; fi
+if ! grep -q 'runpodctl pod create\|runpodctl gpu list' "$FAKE/calls"; then ok "a Vast up makes no Runpod placement call"; else bad "a Vast up makes no Runpod placement call"; fi
+vexpect "--provider runpod overrides the default" 0 "DRY-RUN: runpodctl pod create" -- "${VUP[@]}" --provider runpod
+UOR_POD_PROVIDER=runpod vexpect "UOR_POD_PROVIDER=runpod still places on Runpod" 0 "Creating 1 x 5090 .* in EU-RO-1" -- "${VUP[@]}"
+vexpect "--provider takes vast or runpod only" 1 "--provider must be vast or runpod" -- "${VUP[@]}" --provider aws
+UOR_POD_PROVIDER=aws vexpect "a bad UOR_POD_PROVIDER is refused" 1 "UOR_POD_PROVIDER must be vast or runpod" -- status
+vexpect "a Vast pod id must be vast-<number>" 1 "vast-<contract number>" -- lease vast-abc "${X1[@]}" --gpus 0 --purpose x --hours 1
+# ladder: no 5090 offer -> 4090; pro6000 is searched by Vast's own name
+vfresh; VO RTX_4090 1 '[{"id":7101,"dph_total":0.4,"num_gpus":1,"geolocation":"Norway, NO","reliability2":0.99}]'
+vexpect "ladder on Vast: no 5090 offer -> 4090" 0 "Creating 1 x 4090 \\(ladder\\) .* offer 7101" -- up "${X1[@]}" --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"
+has "the 5090 miss is reported" "no Vast offer for 1 x 5090"
+vfresh; VO RTX_PRO_6000_S 1 '[{"id":7201,"dph_total":1.2,"num_gpus":1,"geolocation":"Iceland, IS","reliability2":0.99}]'
+vexpect "pro6000 maps to Vast's RTX PRO 6000 S" 0 "offer 7201" -- up "${X1[@]}" --gpu pro6000 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"
+vfresh
+vexpect "no Vast offer at all names --wait and --provider runpod" 1 "no Vast offer for 5090 .*--wait.*--provider runpod" -- "${VUP[@]}"
+# caps are global: Runpod pods and Vast instances count together
+vfresh; VO RTX_5090 1 "$OFF5"
+echo '[{"id":"podr","name":"r","desiredStatus":"RUNNING","gpuCount":2,"costPerHr":7.8,"uptimeSeconds":60}]' > "$FAKE/pods.json"
+vexpect "rate cap counts a Runpod pod against a Vast offer" 1 "cap: running \\\$7.8/h \\+ new \\\$0.469/h exceeds \\\$8.00/h" -- "${VUP[@]}"
+echo '[{"id":"podr","name":"r","desiredStatus":"RUNNING","gpuCount":2,"costPerHr":1,"uptimeSeconds":60},{"id":"pods","name":"s","desiredStatus":"RUNNING","gpuCount":2,"costPerHr":1,"uptimeSeconds":60}]' > "$FAKE/pods.json"
+echo '[{"id":8001,"label":"uor-claude-x","num_gpus":1,"dph_total":0.5,"intended_status":"running","actual_status":"running","public_ipaddr":"10.0.0.3","ports":{"22/tcp":[{"HostPort":"2002"}]}},
+       {"id":8002,"label":"uor-deepseek-y","num_gpus":1,"dph_total":0.5,"intended_status":"running","actual_status":"loading"}]' > "$FAKE/vast-instances.json"
+vexpect "pod cap counts Runpod pods and Vast instances (a loading one too)" 1 "cap reached \\(4 of 4 pods\\)" -- "${VUP[@]}"
+FAKE_VAST_LIST_FAIL=1 vexpect "up refuses when a provider listing fails (caps unknowable)" 1 "Vast instance listing failed: the caps cannot be checked" -- "${VUP[@]}"
+vexpect "status lists both providers" 0 "vast-8001 +uor-claude-x +RUNNING +1x.* vol=vast-disk" -- status
+has "status lists the Runpod pod too" "^podr +r +RUNNING"
+has "status shows a loading Vast instance as running (it bills)" "vast-8002 +uor-deepseek-y +RUNNING"
+has "status totals both providers" "Running: 4 pod\\(s\\) .*\\\$3/h"
+has "status shows Vast offers" "^Vast offers \\(verified datacenter hosts"
+has "status shows the cheapest Vast offer" "^  5090: 3 offers, cheapest \\\$0.469 \\(South Korea, KR\\)"
+hasnt "status never shows the instance's tokens" "SENTINEL"
+# a failed listing is not evidence that a pod is gone (non-dry: status archives
+# the lease files of pods its provider no longer lists)
+mkdir -p "$UOR_POD_STATE/leases/vast-8001"; echo '{"lab":"claude","session":"v","id":"claude-v","gpus":[0],"expires":"2099-01-01T00:00:00Z"}' > "$UOR_POD_STATE/leases/vast-8001/claude-v.json"
+UOR_POD_DRY_RUN=0 FAKE_VAST_LIST_FAIL=1 vexpect "status survives a failed Vast listing" 0 "Vast instance listing failed; its pods are not shown" -- status
+if [ -f "$UOR_POD_STATE/leases/vast-8001/claude-v.json" ]; then ok "a failed listing keeps the pod's live leases"; else bad "a failed listing keeps the pod's live leases"; fi
+echo '[]' > "$FAKE/vast-instances.json"
+UOR_POD_DRY_RUN=0 vexpect "a Vast pod that is really gone has its leases archived" 0 "vast-8001: gone from its provider" -- status
+# ---- non-dry Vast up -> run -> down against the fake CLI (nothing leaves this machine)
+vfresh; VO RTX_5090 1 "$OFF5"; echo 7001 > "$FAKE/vast-gone"
+printf 'gpu=0, NVIDIA GeForce RTX 5090, 0, 1\nreaper=1\nprobe_ok=1\n' > "$FAKE/probe-2001"
+mkdir -p "$VH/.cache/huggingface"; printf 'hf_FAKETOKEN123' > "$VH/.cache/huggingface/token"
+export UOR_POD_DRY_RUN=0 FAKE_ALLOW_CREATE=1 UOR_POD_SSH_WAIT=30
+vexpect "Vast up: a taken offer moves on to the next cheapest" 0 "Ready: ssh -i .* -p 2001 root@10.0.0.2" -- up "${X1[@]}" --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"
+has "the taken offer is named with Vast's reason" "Vast offer 7001 was not rented \\(offer 7001 is no longer available\\); trying the next offer"
+has "the next cheapest offer (7003, not 7002) is rented" "offer 7003, for codex/x1"
+has "Vast pods skip the hot-set relay" "Vast pod: no hot-set seeding"
+has "the HF token is copied" "hf token copied"
+if grep -q -- "--pod vast-9001 --off-volume --non-canonical" "$FAKE/bootcmd"; then ok "the bootstrap fetches from the HF store (--off-volume --non-canonical)"; else sed 's/^/     /' "$FAKE/bootcmd"; bad "the bootstrap fetches from the HF store (--off-volume --non-canonical)"; fi
+if jq -e '."vast-9001" | .provider == "vast" and .off_volume == true and .canonical == false and .gpu == "5090"' "$UOR_POD_STATE/pods.json" >/dev/null &&
+   [ -f "$UOR_POD_STATE/leases/vast-9001/codex-x1.json" ]; then
+  ok "the Vast pod is cached as vast-9001 under the creator's lease"; else bad "the Vast pod is cached as vast-9001 under the creator's lease"; fi
+vexpect "run on the Vast pod" 0 "Started on vast-9001 gpu 0" -- run vast-9001 "${X1[@]}" --gpu 0 -- nvidia-smi -L
+mkdir -p "$FAKE/vast-ws/uor-r4/jobs/codex"; echo result > "$FAKE/vast-ws/uor-r4/jobs/codex/r.log"; echo uor-r4/jobs > "$FAKE/vast-dirs"
+FAKE_VAST_KB=$((6 * 1024 * 1024)) vexpect "down refuses when the results are too big for the laptop" 1 "results not archived .*nothing deleted" -- down vast-9001 "${X1[@]}"
+has "the refusal says how big" "holds 6144 MB of results \\(over 5120 MB"
+if jq -e 'any(.[]; .id == 9001)' "$FAKE/vast-instances.json" >/dev/null; then ok "nothing was destroyed"; else bad "nothing was destroyed"; fi
+vexpect "down archives the results, then destroys" 0 "Deleted vast-9001" -- down vast-9001 "${X1[@]}"
+has "the archive is reported" "Archived 0 MB of vast-9001 results to $UOR_POD_STATE/vast-archive/vast-9001"
+if [ "$(cat "$UOR_POD_STATE/vast-archive/vast-9001/uor-r4/jobs/codex/r.log" 2>/dev/null)" = result ]; then ok "the results are on the laptop"; else bad "the results are on the laptop"; fi
+if grep -q '^vastai destroy instance 9001$' "$FAKE/calls" && [ "$(jq length "$FAKE/vast-instances.json")" = 0 ]; then
+  ok "destroy answered the [y/N] prompt and the instance is gone"; else bad "destroy answered the [y/N] prompt and the instance is gone"; fi
+if grep '"event":"vast-archive"' "$UOR_POD_STATE/ledger.jsonl" | jq -e --arg d "$UOR_POD_STATE/vast-archive/vast-9001" '.dest == $d and .kb == 12' >/dev/null; then
+  ok "the archive is in the ledger"; else bad "the archive is in the ledger"; fi
+# a bootstrap failure destroys the new Vast pod as well
+vfresh; VO RTX_5090 1 "$OFF5"
+FAKE_BOOT_RC=2 vexpect "a failed Vast bootstrap destroys the instance" 1 "bootstrap failed: deleting pod vast-9001" -- up --lab claude --session vboot --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"
+if [ "$(jq length "$FAKE/vast-instances.json")" = 0 ]; then ok "no instance is left billing"; else bad "no instance is left billing"; fi
+# the instance key Vast returns on create never leaks
+if ! grep -rq 'SENTINEL' "$VSEEN" "$UOR_POD_STATE" "$FAKE/calls"; then ok "the instance key and tokens never reach output, ledger, state or a command line"
+else grep -rl 'SENTINEL' "$VSEEN" "$UOR_POD_STATE" "$FAKE/calls" | sed 's/^/     /'; bad "the instance key and tokens never reach output, ledger, state or a command line"; fi
+if ! grep -q 'hf_FAKETOKEN123' "$VSEEN" "$FAKE/calls"; then ok "the HF token value is in neither the output nor a command line"; else bad "the HF token value is in neither the output nor a command line"; fi
+unset FAKE_ALLOW_CREATE
 
 echo "passed $pass, failed $fail"
 [ "$fail" = 0 ]
