@@ -726,11 +726,17 @@ mod cuda_tests {
         config.width = 32;
         config.heads = 4;
         config.mlp_hidden = 64;
-        config.vocab_size = 256;
+        config.vocab_size = 257;
         config.context = 4;
         let mut model = StackModel::new(config, &dev)?; // Parameter preparation only.
         model.set_quaternion_weights(QuaternionWeights::SpiralcoreFbs)?;
         model.set_native_vector_head(8)?;
+        assert!(model
+            .add_pointer(crate::geometric_stack::PointerConfig::new(128), 0)
+            .is_err());
+        model.config.pointer = Some(crate::geometric_stack::PointerConfig::new(128));
+        assert!(model.native_vector_writer().is_err());
+        model.config.pointer = None;
         let writer = model.native_vector_writer()?;
         let channel = native_vector_channel(&model)?;
         assert!(model.target_nll(&[0], &[0], 1, 1).is_err());

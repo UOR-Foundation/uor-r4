@@ -3477,6 +3477,11 @@ impl StackModel {
     /// [`Self::set_pointer_select`]); a head of another width or score is
     /// refused. The optimizer of a model must be built after this.
     pub fn add_pointer(&mut self, pointer: PointerConfig, seed: u64) -> Result<bool> {
+        if self.native_vector_head.is_some() {
+            return Err(invalid(
+                "a shared native vector head cannot adopt a legacy probability pointer",
+            ));
+        }
         if self.geometric_address.is_some() {
             return Err(invalid(
                 "geometric addressing does not support a pointer head",
@@ -10225,6 +10230,14 @@ impl StackModel {
             .native_vector_head
             .as_ref()
             .ok_or_else(|| invalid("native head is not configured; use head=spiralcore_product"))?;
+        if self.quaternion_weights != QuaternionWeights::SpiralcoreFbs
+            || self.config.arch != StackArch::Geometric
+            || self.config.pointer.is_some()
+            || spec.width != self.config.width
+            || spec.vocabulary != self.config.vocab_size
+        {
+            return Err(invalid("native writer configuration changed: geometry/projection, vector shape and no-pointer binding are required"));
+        }
         let table = self
             .variables
             .get("embedding.weight")
