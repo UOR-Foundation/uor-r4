@@ -6,6 +6,13 @@
     "lab": "codex",
     "note": ""
   },
+  "codex/discrete-vector-learning-20261013": {
+    "branch": "codex/discrete-vector-learning-20261013",
+    "claimed_at": "2026-10-13T16:40:01-04:00",
+    "head": "e42e27e8e",
+    "lab": "codex",
+    "note": "D32 discrete SpiralCore/E8/FBS learning and shared vector writer; training HELD"
+  },
   "kimi/d29-nvrtc-amendment": {
     "branch": "kimi/d29-nvrtc-amendment",
     "claimed_at": "2026-10-13T11:31:25-04:00",
