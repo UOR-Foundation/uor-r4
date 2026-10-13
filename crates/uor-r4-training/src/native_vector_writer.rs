@@ -860,7 +860,8 @@ mod cuda_tests {
         assert_eq!(metrics.total_unviolated_count.to_scalar::<u32>()?, 0);
 
         let (_, singleton) = fixture(256, 8, 1)?;
-        let only = singleton.candidates(&query)?;
+        let singleton_query = Tensor::zeros((1, 8), DType::F32, singleton.table.device())?;
+        let only = singleton.candidates(&singleton_query)?;
         assert!(singleton.margin(&only, &[0], 1).is_err());
         assert!(singleton.metrics(&only, &[0], 1, 1).is_err());
         assert!(only.top_token_ids(2).is_err());
