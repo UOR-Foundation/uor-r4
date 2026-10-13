@@ -40,12 +40,32 @@ Line: unified geometric route/action/learning integration · count 9/3 → 10/3 
 completed delivery, no reset · M1 memory20/40, reply37/232 and M2 saved437/512,
 opened0/128, fresh NOT_RUN unchanged.
 
-**Next:** exact-head review and protected delivery, then Kimi's corrected sheet
-amendment and prospective scientific FIT. The
+**Next:** exact-head review and protected delivery, then prospective scientific FIT of the
+[corrected active sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md).
+The scoped Amendment4 corrects UORT accounting, paired seeds1/2, verified
+tokenizer restoration and exact qualified source/CLI/init pins without changing
+bars; [coordination6140439165](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6140439165)
+preserves Kimi's stale claim (stale is not idle). The
 [header correction6139637354](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6139637354)
-requires payload counts in the next amendment; no hold is released.
+is applied to the active sheet; no hold is released.
 Shared native intent/compiler/full M2, D11 serving and language/energy results
 remain unqualified.
+
+## 2026-10-13 — `status` section 3 lands, and the check catches itself about to recommend a destructive command (lead, tooling)
+
+The last substantial gap in clause (a): **DELIVERY now renders in Rust, resolved from local git alone.** It reports the checked-out branch, `origin/main`'s commit and subject, the note that the ref is a **last-fetched** value, the branches holding **only finished work** (with the exact delete command), the branches with **unmerged work** (live, their owners decide), and — stated rather than omitted — that it **cannot name the merging PR**, because it proves a branch is finished by content (`git cherry`) and not by asking GitHub. That is a deliberate trade, not a shortcut: a lab offline, on a pod, or rate-limited still learns whether finished work is sitting on a branch, which is the question the owner's delete-after-merge rule makes load-bearing. **The check immediately found real drift** — four local branches (`bpb-split`, `inference-fix`, `pcopy-accessor`, `repro-fix`) hold **zero** commits main lacks and are still present; `AGENTS.md` separately names `bpb-split` as outstanding. **And it caught itself about to be dangerous:** the first version classified `codex/geometric-path-repair` as finished and offered a delete, because its commits are all upstream — while its **worktree holds twelve uncommitted changes**. Finished-by-commits is not safe-to-delete. Held branches are now reported under a **"do NOT delete"** heading **with no fix command**, since a fix line under that heading is what a lab would paste; the rule is enforced by a test that asserts the renderer never emits a fix for a held branch.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Goal status at round 19 of 20:** (b) sharded ledger, presence and claims — done, all four labs publishing; (c) bootstrap path — done, Claude onboarded through it; (d) the mesh — closed as a recorded, queryable negative (no coordination mesh exists; anything daemon-shaped is forbidden on policy); (e) harness owner — ongoing. **(a) remains partly open:** GitHub reconciliation is still Python-only. Delivery is now proven by content in Rust, and the Python status remains authoritative for PR numbers and the live issue reconciliation. Rust is 6,006 lines against 12,165 Python, with nine parity comparisons holding.
+
+## 2026-10-13 — Negative findings become queryable, and the mesh question is settled as a recorded negative (lead, harness)
+
+The objective's clause (d) had **nothing** against it, so this round closes it — as a **negative result**, which is the honest outcome and was already established but **not queryable**. Re-verified on main rather than trusted from the record: a full-text search for `mesh` returns geometric hits (TensorFlow Mesh's MoE gating, simplicial/nearest-neighbour meshes, `THREE.Mesh`), vendored numpy `meshgrid`, and unrelated service-mesh entries — **no coordination concept**, no Tailscale/WireGuard mesh, and the one daemon-shaped thing this repository ever had (`lab-runner coord`) is **explicitly forbidden to recreate** by `docs/labs/protocol.md`. So "connect to the mesh" resolves to: GitHub is the bus, `main` is the truth, and the harness adds what GitHub alone does not — who holds which branch, and what each lab is doing between merges. Anything daemon-shaped was ruled out **on policy, not effort**. The gap was that a lab asking the question re-ran the search, because the finding lived only in a dated record. **New `class: assumption` in the lesson registry** — a belief that turned out false, kept for the opposite reason to a mistake: so nobody re-derives it — with the same retrieval, the same four sections, and `guard: none` because a negative has nothing to intercept. Two entries seeded: the mesh finding, and **portability is interpreter discovery, not Python version** (measured minutes apart: agent shell `python3` 3.15.0, login shell and `/usr/bin/python3` 3.9.6 — the same machine reporting two versions, which is what made the silent `Z`-suffix parsing bug possible on the declared floor). Both retrieve by file, by topic and by their own question.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** clause (a) — the GitHub reconciliation is still Python-only, and porting `status` section 3 (delivery/PRs) addresses it. Then `briefing`, `mistakes` and `check`'s 51 rules.
 
 ## 2026-10-13 — `status` section 2 aggregates every lab's shard, and the view loses its `--lab` (lead, tooling)
 
