@@ -68,7 +68,7 @@ Live tracker: [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028).
 
 | Milestone | Issue | Status | Headline now → target |
 |---|---|---|---|
-| M1 Language base | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) | in progress; training held | acceptable replies 37 → 116 of 232; v5 memory 20 → 34 of 40 |
+| M1 Language base | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) | in progress; training held | reply headline SUSPENDED/no target under R14 pending a discriminating v2 grader; prior memory20/40 remains historical |
 | M2 Grounded reply from exact memory | [#2030](https://github.com/UOR-Foundation/uor-r4/issues/2030) | held | 437/512 development replies (above 256), but 0/128 on fresh transfer |
 | M3 Durable conversation memory | [#2031](https://github.com/UOR-Foundation/uor-r4/issues/2031) | paused | evaluator and session built; waits on an M1 or M2 model |
 | M4 One served model (D11 and a CLI) | [#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032) | held | softmax at runtime: yes → must be no (D23) |
@@ -129,8 +129,9 @@ Index: [docs/mechanisms/](docs/mechanisms/README.md).
 
 | Mechanism | Milestone | Where it stands |
 |---|---|---|
-| [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs-projection.md) | M1, M2 | source, tested; in the compliant trunk |
-| [Rank-margin objective](docs/mechanisms/rank-margin-objective.md) | M1 | source, tested; rung 0's objective |
+| [Discrete SpiralCore/FBS learning and shared writer](docs/mechanisms/discrete-geometric-learning.md) | M1, M2, M4 | integer source built; eleven observed controls PASS, assigned-review qualification pending |
+| [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs-projection.md) | M1, M2 | prior floating form preserved inactive under D32 |
+| [Rank-margin objective](docs/mechanisms/rank-margin-objective.md) | M1 | prior floating objective preserved; discrete successor is separately registered |
 | [Starling read](docs/mechanisms/starling-read.md) (~7 neighbours on the 600-cell) | M4 | served softmax-free; its gradient is rung 0b |
 | [Flock / rank-table reads](docs/mechanisms/flock-rank-reads.md) | M4 | served; earlier measurements from a softmax-trained stack |
 | [E8 orbit memory](docs/mechanisms/e8-orbit-memory.md) | M4 | source; rung 1 KEEP and iterate (historical) |
