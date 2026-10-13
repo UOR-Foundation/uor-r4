@@ -243,10 +243,11 @@ either kind of pod.
   (~2 min on 16 cores) and fetches `data/*` from the HF store with the token `up`
   copies from `~/.cache/huggingface/token` (the owner's `hf auth login`). The
   image sets `HF_HOME=/workspace/.cache/huggingface/`, where the `hf` CLI looks
-  first, so `up` writes the token there as well (before 13 October it did not, and
-  a fetch got HTTP 401 and fell back to nothing; this also affected Runpod
-  non-canonical pods). The fetch is a warning on failure: check the bootstrap
-  log's `HF store fetched:` line. The
+  by default; the token stays on the pod's own disk (`/root/.cache/huggingface/`,
+  never the shared Runpod volume) and the bootstrap points `hf` at it with
+  `HF_TOKEN_PATH`. Before 13 October it did not, and a fetch got HTTP 401 and fell
+  back to nothing, on Runpod non-canonical pods too. The fetch is a warning on
+  failure: check the bootstrap log's `HF store fetched:` line. The
   Runpod hot-set relay is skipped for Vast pods.
 - **Results.** `down` copies `/workspace/uor-r4/{jobs,pods,runs,evals}` to
   `~/.local/share/uor-r4/compute/vast-archive/<pod>/` before it destroys the

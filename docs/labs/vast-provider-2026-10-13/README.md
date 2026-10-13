@@ -38,10 +38,12 @@ Safety properties, each pinned by a test that fails when the property is removed
 | `prune-stopped` never destroys a stopped Vast pod's only copy (review 6) | 1 |
 | Offers are priced with the 150 GB disk (review 7) | 1 |
 
-`scripts/pod/tests/uor-pod-dryrun.sh`: **308 passed, 0 failed** (246 existing
-cases on the Runpod path, 62 new cases against a fake `vastai`). An independent
-review asked for changes (8 findings); 1–7 are fixed with the cases above, and 8
-(whether the instance-scoped key may destroy the instance) was verified live. `bash -n`
+`scripts/pod/tests/uor-pod-dryrun.sh`: **312 passed, 0 failed** (246 existing
+cases on the Runpod path, 66 new cases against a fake `vastai`). Independent
+review, round 1: 8 findings; 1–7 fixed with the cases above, 8 (may the
+instance-scoped key destroy the instance?) verified live. Round 2: an empty reply
+(exit 0) still passed as a listing in two places, and the HF token copy belonged
+off the shared volume; fixed, with cases that fail when each fix is removed. `bash -n`
 and `shellcheck -S warning` are clean apart from one warning already on main.
 
 ## Measured
@@ -70,9 +72,11 @@ commands for real so the tests see real exit statuses.
 - HF fetch: the first smoke pod had a stale laptop token (401). After the owner's
   new `hf auth login` (the API answers 200 for the store) the pods still got 401,
   because the image sets `HF_HOME=/workspace/.cache/huggingface/` and the token
-  was only written to `/root/.cache/huggingface/`. With a copy in `HF_HOME` the
-  fetch worked on the pod; `up` now writes both. Runpod non-canonical pods had the
-  same gap. The bootstrap still treats a failed fetch as a warning.
+  was only written to `/root/.cache/huggingface/`. With the token visible to `hf`
+  the fetch worked on the pod. The bootstrap now sets `HF_TOKEN_PATH` to the
+  `/root` copy, so the token never lands on `/workspace` (on Runpod, a shared
+  volume that outlives the pod). Runpod non-canonical pods had the same gap. The
+  bootstrap still treats a failed fetch as a warning.
 - The owner's new token has the `write` role on the whole account and is copied
   to rented hosts; a fine-grained read token for `caseyallard/uor-r4-store` would
   limit what a compromised host could do.
