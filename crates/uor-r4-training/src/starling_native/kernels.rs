@@ -133,6 +133,7 @@ impl CustomOp3 for RingSelect {
 
 #[cfg(feature = "cuda")]
 mod cuda {
+    use candle_core::backend::BackendStorage;
     use candle_core::{CudaStorage, DType, Layout, Result as CResult, Shape};
     use cudarc::driver::CudaView;
 
