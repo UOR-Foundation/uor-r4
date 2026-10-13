@@ -22418,7 +22418,7 @@ mod tests {
         assert!(cuda_gradient_clip(&[&host_constant], 2.5).is_err());
         assert!(cuda_gradient_clip(&[&first], f64::NAN).is_err());
         assert!(cuda_gradient_clip(&[&first], 1e-100).is_err());
-        assert!(cuda_gradient_clip(&[&zeros], 1e-40).is_err());
+        assert!(cuda_gradient_clip(&[&zero], 1e-40).is_err());
         assert!(cuda_gradient_clip(&[&first], f64::from(f32::MAX) * 2.0).is_err());
         Ok(())
     }
