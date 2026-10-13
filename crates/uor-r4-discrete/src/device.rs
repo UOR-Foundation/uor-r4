@@ -3,7 +3,10 @@
 //! Initialization, encoding, routing, scoring and proposal choice run on CUDA.
 //! Module loading consumes AOT PTX; there is no runtime compiler or CPU model.
 
-use crate::{metadata::BinderPlan, Error, Identity, Parameter, Result, Spec, SCHEMA};
+use crate::{
+    metadata::{BinderPlan, ABSENT},
+    Error, Identity, Parameter, Result, Spec, SCHEMA,
+};
 use cudarc::driver::{
     CudaContext, CudaFunction, CudaSlice, CudaStream, LaunchConfig, Ptx, PushKernelArg,
 };
@@ -41,6 +44,8 @@ pub struct CarriedBatch {
     vectors: CudaSlice<i32>,
     ids: CudaSlice<u32>,
     identities: Vec<Identity>,
+    valid_lengths: Vec<u32>,
+    plan: Option<CudaSlice<u32>>,
     binding: Binding,
     epoch: u64,
     rows: u32,
@@ -56,6 +61,12 @@ impl CarriedBatch {
     pub fn rows(&self) -> u32 {
         self.rows
     }
+    pub fn valid_lengths(&self) -> &[u32] {
+        &self.valid_lengths
+    }
+    pub fn padded_count(&self) -> usize {
+        self.ids.len()
+    }
     /// Storage/qualification observation only; not a host model input path.
     pub fn values(&self) -> Result<Vec<i32>> {
         self.stream.clone_dtoh(&self.vectors).map_err(cuda)
@@ -66,6 +77,10 @@ impl CarriedBatch {
 pub struct Forward {
     pub predictions: Vec<u32>,
     pub losses: Vec<u64>,
+    pub token_rivals: Vec<u32>,
+    pub address_rivals: Vec<u32>,
+    /// Physical [rows,16] cells; ABSENT marks unused slots.
+    pub admitted_cells: Vec<u32>,
     vectors: CudaSlice<i32>,
     binding: Binding,
     epoch: u64,
@@ -176,7 +191,6 @@ pub struct Device {
     routes: CudaSlice<u32>,
     epoch: CudaSlice<u64>,
     geometry: CudaSlice<u32>,
-    plan: CudaSlice<u32>,
     metadata: BinderPlan,
     kernels: Kernels,
     binding: Binding,
@@ -247,9 +261,6 @@ impl Device {
             validate: module.load_function("discrete_validate").map_err(cuda)?,
         };
         let geometry = stream.clone_htod(&packed).map_err(cuda)?;
-        let mut plan_words = metadata.node_words();
-        plan_words.extend_from_slice(metadata.frontier());
-        let plan = stream.clone_htod(&plan_words).map_err(cuda)?;
         let width = spec.blocks as usize * 8;
         let mut table = stream
             .alloc_zeros::<i32>(spec.vocabulary as usize * width)
@@ -292,7 +303,6 @@ impl Device {
             routes,
             epoch,
             geometry,
-            plan,
             metadata,
             kernels,
             binding,
@@ -398,11 +408,17 @@ impl Device {
                 "carried batch belongs to another model/source/geometry",
             ));
         }
-        if batch.identities.len() % self.spec().context as usize != 0
-            || !(1..=64).contains(&batch.rows)
+        if !(1..=64).contains(&batch.rows)
+            || batch.plan.is_none()
+            || batch.valid_lengths.len() != batch.rows as usize
+            || batch
+                .valid_lengths
+                .iter()
+                .any(|&n| n == 0 || n > self.spec().context)
+            || batch.ids.len() != batch.rows as usize * self.spec().context as usize
         {
             return Err(invalid(
-                "forward/proposal requires 1..64 complete context rows",
+                "forward/proposal requires 1..64 admitted nonempty row plans",
             ));
         }
         if targets.len() != batch.rows as usize
@@ -422,9 +438,77 @@ impl Device {
     }
 
     pub fn carry(&self, identities: &[Identity]) -> Result<CarriedBatch> {
+        let context = self.spec().context as usize;
+        let lengths = if identities.len() % context == 0 && identities.len() / context <= 64 {
+            vec![self.spec().context; identities.len() / context]
+        } else {
+            Vec::new()
+        };
+        self.encode_carried(identities, identities.to_vec(), lengths)
+    }
+
+    /// Each window is one caller-bounded causal prefix. No plan can select
+    /// its padding; the last valid token is the row query. Document/BOS
+    /// segmentation remains explicit in the caller, not inferred from IDs.
+    pub fn carry_windows(&self, windows: &[Vec<Identity>]) -> Result<CarriedBatch> {
         let spec = self.spec();
-        let count = identities.len();
-        if count == 0 || identities.iter().any(|x| x.token >= spec.vocabulary) {
+        if windows.is_empty()
+            || windows.len() > 64
+            || windows.iter().any(|w| {
+                w.is_empty()
+                    || w.len() > spec.context as usize
+                    || w.iter().any(|x| x.token >= spec.vocabulary)
+            })
+        {
+            return Err(invalid("carry_windows requires 1..64 nonempty causal prefixes of length1..context with valid IDs"));
+        }
+        let mut padded = Vec::with_capacity(windows.len() * spec.context as usize);
+        let mut identities = Vec::new();
+        let mut lengths = Vec::with_capacity(windows.len());
+        for window in windows {
+            identities.extend_from_slice(window);
+            lengths.push(window.len() as u32);
+            padded.extend_from_slice(window);
+            padded.extend(std::iter::repeat_n(
+                window[0],
+                spec.context as usize - window.len(),
+            ));
+        }
+        self.encode_carried(&padded, identities, lengths)
+    }
+
+    fn row_plans(&self, lengths: &[u32]) -> Result<CudaSlice<u32>> {
+        let max_nodes = self.metadata.nodes_count();
+        let stride = 3 + max_nodes * 4 + 16;
+        let mut packed = Vec::with_capacity(lengths.len() * stride);
+        for &length in lengths {
+            let plan = BinderPlan::new(length as usize)?;
+            if plan.nodes_count() > max_nodes || plan.frontier().len() > 16 {
+                return Err(invalid("row plan exceeds its model allocation inventory"));
+            }
+            packed.extend([
+                length,
+                plan.nodes_count() as u32,
+                plan.frontier().len() as u32,
+            ]);
+            let nodes = plan.node_words();
+            packed.extend_from_slice(&nodes);
+            packed.extend(std::iter::repeat_n(ABSENT, max_nodes * 4 - nodes.len()));
+            packed.extend_from_slice(plan.frontier());
+            packed.extend(std::iter::repeat_n(ABSENT, 16 - plan.frontier().len()));
+        }
+        self.stream.clone_htod(&packed).map_err(cuda)
+    }
+
+    fn encode_carried(
+        &self,
+        physical: &[Identity],
+        identities: Vec<Identity>,
+        valid_lengths: Vec<u32>,
+    ) -> Result<CarriedBatch> {
+        let spec = self.spec();
+        let count = physical.len();
+        if count == 0 || physical.iter().any(|x| x.token >= spec.vocabulary) {
             return Err(invalid("carry requires nonempty valid token identities"));
         }
         let width = spec.blocks * 8;
@@ -433,15 +517,16 @@ impl Device {
         let elements = count
             .checked_mul(width)
             .ok_or_else(|| invalid("carry vector inventory exceeds CUDA index bound"))?;
-        let rows = if count % spec.context == 0 {
-            count / spec.context
+        let rows = valid_lengths.len() as u32;
+        let plan = if rows > 0 {
+            Some(self.row_plans(&valid_lengths)?)
         } else {
-            0
+            None
         };
         let epoch = self.epoch()?;
         let ids = self
             .stream
-            .clone_htod(&identities.iter().map(|x| x.token).collect::<Vec<_>>())
+            .clone_htod(&physical.iter().map(|x| x.token).collect::<Vec<_>>())
             .map_err(cuda)?;
         let mut vectors = self
             .stream
@@ -464,7 +549,9 @@ impl Device {
         Ok(CarriedBatch {
             vectors,
             ids,
-            identities: identities.to_vec(),
+            identities,
+            valid_lengths,
+            plan,
             binding: self.binding.clone(),
             epoch,
             rows,
@@ -488,6 +575,18 @@ impl Device {
             .stream
             .alloc_zeros::<u64>(batch.rows as usize)
             .map_err(cuda)?;
+        let mut token_rivals = self
+            .stream
+            .alloc_zeros::<u32>(batch.rows as usize)
+            .map_err(cuda)?;
+        let mut address_rivals = self
+            .stream
+            .alloc_zeros::<u32>(batch.rows as usize)
+            .map_err(cuda)?;
+        let mut admitted_cells = self
+            .stream
+            .alloc_zeros::<u32>(batch.rows as usize * 16)
+            .map_err(cuda)?;
         let mut status = self.stream.alloc_zeros::<u32>(1).map_err(cuda)?;
         let mut launch = self.stream.launch_builder(&self.kernels.forward);
         launch
@@ -496,12 +595,20 @@ impl Device {
             .arg(&batch.ids)
             .arg(&batch.vectors)
             .arg(&target)
-            .arg(&self.plan)
+            .arg(
+                batch
+                    .plan
+                    .as_ref()
+                    .ok_or_else(|| invalid("missing admitted row plans"))?,
+            )
             .arg(&self.geometry)
             .arg(&spec)
             .arg(&mut out)
             .arg(&mut predictions)
             .arg(&mut losses)
+            .arg(&mut token_rivals)
+            .arg(&mut address_rivals)
+            .arg(&mut admitted_cells)
             .arg(&mut status);
         // SAFETY: discrete_forward ABI and bounded rows/width/context checked
         // before launch; immutable inputs, disjoint owned result buffers.
@@ -509,9 +616,15 @@ impl Device {
         check_status(&self.stream, &status, "forward")?;
         let predictions = self.stream.clone_dtoh(&predictions).map_err(cuda)?;
         let losses = self.stream.clone_dtoh(&losses).map_err(cuda)?;
+        let token_rivals = self.stream.clone_dtoh(&token_rivals).map_err(cuda)?;
+        let address_rivals = self.stream.clone_dtoh(&address_rivals).map_err(cuda)?;
+        let admitted_cells = self.stream.clone_dtoh(&admitted_cells).map_err(cuda)?;
         Ok(Forward {
             predictions,
             losses,
+            token_rivals,
+            address_rivals,
+            admitted_cells,
             vectors: out,
             binding: self.binding.clone(),
             epoch,
@@ -527,6 +640,7 @@ impl Device {
             {
                 Ok((1, index))
             }
+            Parameter::Gate(index) => Err(Error::UnimplementedParameter { kind: 3, index }),
             _ => Err(invalid(
                 "proposal parameter index exceeds its declared inventory",
             )),
@@ -539,8 +653,8 @@ impl Device {
         targets: &[u32],
         parameter: Parameter,
     ) -> Result<Proposal> {
-        let epoch = self.admit_batch(batch, targets)?;
         let (kind, index) = self.parameter(parameter)?;
+        let epoch = self.admit_batch(batch, targets)?;
         let targets = self.stream.clone_htod(targets).map_err(cuda)?;
         let spec = self.gpu_spec(batch.rows)?;
         let mut losses = self.stream.alloc_zeros::<u64>(16).map_err(cuda)?;
@@ -552,7 +666,12 @@ impl Device {
             .arg(&batch.ids)
             .arg(&batch.vectors)
             .arg(&targets)
-            .arg(&self.plan)
+            .arg(
+                batch
+                    .plan
+                    .as_ref()
+                    .ok_or_else(|| invalid("missing admitted row plans"))?,
+            )
             .arg(&self.geometry)
             .arg(&spec)
             .arg(&kind)
@@ -565,8 +684,18 @@ impl Device {
         check_status(&self.stream, &status, "counterfactual")?;
         let mut proposal = self.stream.alloc_zeros::<u64>(4).map_err(cuda)?;
         let mut launch = self.stream.launch_builder(&self.kernels.choose);
-        launch.arg(&losses).arg(&self.epoch).arg(&mut proposal);
-        // SAFETY: fixed sixteen losses, one epoch, four proposal words.
+        launch
+            .arg(&losses)
+            .arg(&self.epoch)
+            .arg(&self.table)
+            .arg(&self.routes)
+            .arg(&self.geometry)
+            .arg(&spec)
+            .arg(&kind)
+            .arg(&index)
+            .arg(&mut proposal);
+        // SAFETY: fixed sixteen losses, current bound parameter/table/routes,
+        // geometry/spec and epoch, with four writable proposal words.
         unsafe { launch.launch(LaunchConfig::for_num_elems(1)) }.map_err(cuda)?;
         self.stream.synchronize().map_err(cuda)?;
         Ok(Proposal {
@@ -581,6 +710,7 @@ impl Device {
     /// Future authorized commit path. Corpus-training CLI remains held;
     /// finite proposal qualification must not call this method.
     pub fn apply(&mut self, proposal: &Proposal) -> Result<bool> {
+        let (kind, index) = self.parameter(proposal.parameter)?;
         if proposal.binding != self.binding {
             return Err(invalid("proposal belongs to another model/source/geometry"));
         }
@@ -588,7 +718,6 @@ impl Device {
         if proposal.epoch != before || proposal.observation()?.epoch != before {
             return Err(invalid("proposal is stale at the current model epoch"));
         }
-        let (kind, index) = self.parameter(proposal.parameter)?;
         let spec = self.gpu_spec(1)?;
         let mut status = self.stream.alloc_zeros::<u32>(1).map_err(cuda)?;
         let mut launch = self.stream.launch_builder(&self.kernels.apply);

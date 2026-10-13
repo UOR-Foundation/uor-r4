@@ -107,6 +107,71 @@ fn ptx_admission_self_test() -> Result<(), String> {
     Ok(())
 }
 
+// Fixed operator/index metadata only. This is graph reachability over the
+// source-bound action tables, never a host carrier or model reference.
+fn exact_reachability(
+    compose: &[u8],
+    generators: &[u8],
+    neighbors: &[Vec<u8>],
+) -> Result<([u8; 64], [u8; 16]), String> {
+    if compose.len() != 64 * 64
+        || compose.iter().any(|&state| state >= 64)
+        || generators.len() != 15
+        || generators.iter().any(|&state| state >= 64)
+        || neighbors.len() != 16
+        || neighbors
+            .iter()
+            .any(|row| row.len() != 15 || row.iter().any(|&root| root >= 16))
+    {
+        return Err("exact reachability metadata has an invalid action/root inventory".into());
+    }
+    let mut frames = [0u8; 64];
+    for start in 0..64 {
+        let mut seen = [false; 64];
+        seen[start] = true;
+        let mut queue = VecDeque::from([start]);
+        while let Some(from) = queue.pop_front() {
+            for &generator in generators {
+                let to = usize::from(compose[usize::from(generator) * 64 + from]);
+                if !seen[to] {
+                    seen[to] = true;
+                    queue.push_back(to);
+                }
+            }
+        }
+        frames[start] = seen.iter().filter(|&&value| value).count() as u8;
+        if frames[start] != 64 {
+            return Err(format!(
+                "bivector graph reaches {} of 64 frames from state {start}",
+                frames[start]
+            ));
+        }
+    }
+    let mut roots = [0u8; 16];
+    for start in 0..16 {
+        let mut seen = [false; 16];
+        seen[start] = true;
+        let mut queue = VecDeque::from([start]);
+        while let Some(from) = queue.pop_front() {
+            for &to in &neighbors[from] {
+                let to = usize::from(to);
+                if !seen[to] {
+                    seen[to] = true;
+                    queue.push_back(to);
+                }
+            }
+        }
+        roots[start] = seen.iter().filter(|&&value| value).count() as u8;
+        if roots[start] != 16 {
+            return Err(format!(
+                "bivector graph reaches {} of 16 orbit roots from root {start}",
+                roots[start]
+            ));
+        }
+    }
+    Ok((frames, roots))
+}
+
 fn geometry_source() -> Result<String, String> {
     let table = cl06_finite_composition_table().map_err(|e| e.to_string())?;
     let states = table.states();
@@ -181,6 +246,8 @@ fn geometry_source() -> Result<String, String> {
                 .collect()
         })
         .collect::<Result<_, String>>()?;
+    let (frame_reachability, root_reachability) =
+        exact_reachability(&compose, &generators, &neighbors)?;
 
     // Same FIFO BFS and generator ordering as the retained FBS compiler.
     let mut bfs = Vec::with_capacity(16 * 16);
@@ -250,6 +317,8 @@ fn geometry_source() -> Result<String, String> {
          pub const BRANCH: [u8; 48] = {branch:?};\n\
          pub const GENERATORS: [u8; 15] = {generators:?};\n\
          pub const IDENTITY: u8 = {identity};\n\
+         pub const FRAME_REACHABILITY: [u8; 64] = {frame_reachability:?};\n\
+         pub const ROOT_REACHABILITY: [u8; 16] = {root_reachability:?};\n\
          pub const OPERATOR_KAPPA: &str = {:?};\n\
          pub const COMPOSITION_KAPPA: &str = {:?};\n",
         report.operator_kappa,

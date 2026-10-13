@@ -11,6 +11,7 @@ pub enum Error {
     Invalid(String),
     Cuda(String),
     TrainingHeld,
+    UnimplementedParameter { kind: u32, index: u32 },
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -18,6 +19,7 @@ impl std::fmt::Display for Error {
             Self::Invalid(s) => write!(f, "invalid discrete model: {s}"),
             Self::Cuda(s) => write!(f, "CUDA: {s}"),
             Self::TrainingHeld => f.write_str("training remains HELD; source delivery and finite construction controls do not release the owner hold"),
+            Self::UnimplementedParameter { kind, index } => write!(f, "parameter kind {kind} index {index} is reserved but unimplemented"),
         }
     }
 }
@@ -59,6 +61,9 @@ pub struct Identity {
 pub enum Parameter {
     Route(u32),
     VectorBlock(u32),
+    /// Reserved for the independent discrete murmuration read; no gate law
+    /// is implemented by this library yet. CUDA kind 3, never kind 2 (none).
+    Gate(u32),
 }
 
 /// All public corpus-training entry points retain the owner hold.

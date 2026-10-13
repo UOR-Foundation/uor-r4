@@ -1,6 +1,6 @@
 // Integer-only SpiralCore/FBS path. Geometry arrays are compiled from the
 // source-bound signed-axis action graph; no learned coefficient grid exists.
-// Multiplication below is storage indexing only. Model values use gather,
+// Storage indexing uses integer products. Model values use gather,
 // sign, add/subtract, comparison and finite action-table lookup.
 typedef unsigned int U;
 typedef unsigned long long W;
@@ -39,8 +39,11 @@ __device__ void root_cost(const int* x,const U* g,U root,U* distance,U* hamming)
     for(U d=0;d<8;++d) { int y=(int)g[ROOT+root*8+d]; *distance+=(U)magnitude(x[d]-y); *hamming+=(x[d]!=y); }
 }
 __device__ bool route_vector(const int* input,const U* ids,const U* routes,const U* plan,const U* g,const U* s,U row,U kind,U index,U candidate,int* output) {
+    plan+=row*(3+s[6]*4+16);
+    U length=plan[0],nodes=plan[1],frontier=plan[2];plan+=3;
+    if(length==0 || length>s[2] || nodes>s[6] || frontier==0 || frontier>16)return false;
     for(U block=0;block<s[1];++block) {
-        int query[8];input_block(input,ids,g,row,s[2]-1,block,s,kind,index,candidate,query);
+        int query[8];input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,query);
         U node=ABSENT,root=0,total=g[IDENTITY];
         for(U stage=0;stage<s[5];++stage) {
             U parameter=block*s[5]+stage;
@@ -48,7 +51,7 @@ __device__ bool route_vector(const int* input,const U* ids,const U* routes,const
             if(frame>=64) return false;
             if(kind==0 && index==parameter && candidate) frame=compose(g,move_action(g,candidate),frame);
             int q[8];action(g,frame,query,q);
-            U count=stage==0?s[7]:3;
+            U count=stage==0?frontier:3;
             U best=ABSENT,best_distance=ABSENT,best_hamming=ABSENT,goal=0;
             for(U port=0;port<count;++port) {
                 U r=stage==0?port:g[BRANCH+root*3+port];
@@ -60,10 +63,10 @@ __device__ bool route_vector(const int* input,const U* ids,const U* routes,const
             if(best==ABSENT) return false;
             total=compose(g,g[BFS+root*16+goal],total);root=goal;
             node=stage==0?plan[s[6]*4+best]:plan[node*4+best];
-            if(node>=s[6]) return false;
+            if(node>=nodes) return false;
             U atom=plan[node*4+3];
             if(atom!=ABSENT) {
-                if(atom>=s[2]) return false;
+                if(atom>=length) return false;
                 int carrier[8];input_block(input,ids,g,row,atom,block,s,kind,index,candidate,carrier);
                 action(g,total,carrier,output+block*8);break;
             }
@@ -80,33 +83,42 @@ __device__ U token_distance(const int* q,const int* table,const U* g,const U* s,
     for(U block=0;block<s[1];++block) { int v[8];table_block(table,g,token,block,s[1],kind,index,candidate,v);for(U d=0;d<8;++d) sum+=(U)magnitude(q[block*8+d]-v[d]); }
     return sum;
 }
-__device__ W repeated_add(W value,U times) { W total=0;for(U i=0;i<times;++i)total+=value;return total; }
-// Numerator over common denominator 8*width. Target is scored even when
-// geometric admission omits its address. No target participates in admission.
-__device__ W writer(const int* q,const int* table,const U* g,const U* s,U target,U kind,U index,U candidate,U* prediction) {
-    bool used[256];for(U i=0;i<256;++i)used[i]=false;
+__device__ U root_id(const int* v,const U* g) {
+    for(U r=0;r<16;++r){bool equal=true;for(U d=0;d<8;++d)if(v[d]!=(int)g[ROOT+r*8+d])equal=false;if(equal)return r;}
+    return ABSENT;
+}
+__device__ U token_cell(const int* table,const U* g,const U* s,U token,U kind,U index,U candidate) {
+    int first[8],last[8];table_block(table,g,token,0,s[1],kind,index,candidate,first);
+    table_block(table,g,token,s[1]-1,s[1],kind,index,candidate,last);
+    U a=root_id(first,g),b=root_id(last,g);return a==ABSENT || b==ABSENT?ABSENT:a*16+b;
+}
+__device__ W scaled_add(W value,U times) { W total=0;while(times){if(times&1)total+=value;value<<=1;times>>=1;}return total; }
+// Product addresses derive from current codebook geometry, including virtual
+// moves. Full bounded vocabulary scans retain every crowded-cell identity.
+// An absent comparison has zero hinge and an explicit eligibility count.
+__device__ W writer(const int* q,const int* table,const U* g,const U* s,U target,U kind,U index,U candidate,U* prediction,U* token_rivals,U* address_rivals,U* admitted) {
+    bool occupied[256],used[256];for(U i=0;i<256;++i){occupied[i]=false;used[i]=false;}
+    for(U token=0;token<s[0];++token){U c=token_cell(table,g,s,token,kind,index,candidate);if(c==ABSENT)return ~(W)0;occupied[c]=true;}
     U best_token=ABSENT,best_distance=ABSENT,rival_distance=ABSENT,rival_address=ABSENT;
-    U target_cell=target%256;
+    U target_cell=token_cell(table,g,s,target,kind,index,candidate);
+    *token_rivals=0;*address_rivals=0;if(admitted)for(U i=0;i<16;++i)admitted[i]=ABSENT;
     for(U k=0;k<s[3];++k) {
         U cell=ABSENT,cost=ABSENT;
-        for(U c=0;c<256 && c<s[0];++c) if(!used[c]) { U d=address_distance(q,g,s,c);if(d<cost){cell=c;cost=d;} }
+        for(U c=0;c<256;++c)if(occupied[c] && !used[c]){U d=address_distance(q,g,s,c);if(d<cost){cell=c;cost=d;}}
         if(cell==ABSENT)break;
-        used[cell]=true;
-        if(cell!=target_cell && cost<rival_address)rival_address=cost;
-        for(U token=cell;token<s[0];token+=256) {
+        used[cell]=true;if(admitted)admitted[k]=cell;
+        if(cell!=target_cell){++*address_rivals;if(cost<rival_address)rival_address=cost;}
+        for(U token=0;token<s[0];++token)if(token_cell(table,g,s,token,kind,index,candidate)==cell){
             U d=token_distance(q,table,g,s,token,kind,index,candidate);
             if(d<best_distance || (d==best_distance && token<best_token)){best_token=token;best_distance=d;}
-            if(token!=target && d<rival_distance)rival_distance=d;
+            if(token!=target){++*token_rivals;if(d<rival_distance)rival_distance=d;}
         }
     }
-    *prediction=best_token;
-    if(rival_distance==ABSENT)return ~(W)0;
-    U width=s[1]*8;
-    U td=token_distance(q,table,g,s,target,kind,index,candidate);
-    U ad=address_distance(q,g,s,target_cell);
-    W tm=width+td<=rival_distance ? 0 : width+td-rival_distance;
+    *prediction=best_token;if(best_token==ABSENT)return ~(W)0;
+    U width=s[1]*8,td=token_distance(q,table,g,s,target,kind,index,candidate),ad=address_distance(q,g,s,target_cell);
+    W tm=rival_distance==ABSENT || width+td<=rival_distance ? 0 : width+td-rival_distance;
     W am=rival_address==ABSENT || 8+ad<=rival_address ? 0 : 8+ad-rival_address;
-    return (tm<<3)+repeated_add(am,width);
+    return (tm<<3)+scaled_add(am,width);
 }
 extern "C" __global__ void discrete_init(int* table,U* routes,const U* g,const U* s,U seed,U* status) {
     U i=blockIdx.x*blockDim.x+threadIdx.x;
@@ -123,27 +135,42 @@ extern "C" __global__ void discrete_encode(const int* table,const U* ids,U count
     U i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=count*width)return;
     U token=ids[i/width];if(token>=vocabulary){atomicExch(status,1u);return;}out[i]=table[token*width+i%width];
 }
-extern "C" __global__ void discrete_forward(const int* table,const U* routes,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,int* out,U* predictions,W* losses,U* status) {
+extern "C" __global__ void discrete_forward(const int* table,const U* routes,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,int* out,U* predictions,W* losses,U* token_rivals,U* address_rivals,U* admitted,U* status) {
     U row=blockIdx.x*blockDim.x+threadIdx.x;if(row>=s[4])return;
     int q[MAX_WIDTH];if(!route_vector(input,ids,routes,plan,g,s,row,2,0,0,q)){atomicExch(status,2u);return;}
     for(U d=0;d<s[1]*8;++d)out[row*s[1]*8+d]=q[d];
-    losses[row]=writer(q,table,g,s,targets[row],2,0,0,predictions+row);
+    losses[row]=writer(q,table,g,s,targets[row],2,0,0,predictions+row,token_rivals+row,address_rivals+row,admitted+row*16);
     if(losses[row]==~(W)0)atomicExch(status,8u);
 }
 extern "C" __global__ void discrete_counterfactual(const int* table,const U* routes,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,U kind,U index,W* losses,U* status) {
     U candidate=blockIdx.x*blockDim.x+threadIdx.x;if(candidate>=16)return;
-    W sum=0;
-    for(U row=0;row<s[4];++row){int q[MAX_WIDTH];U prediction;
+    W sum=0;U eligible=0;losses[candidate]=~(W)0;
+    for(U row=0;row<s[4];++row){int q[MAX_WIDTH],baseline[MAX_WIDTH];U prediction,tr,ar;
+        if(!route_vector(input,ids,routes,plan,g,s,row,2,0,0,baseline)){atomicExch(status,2u);return;}
+        W base=writer(baseline,table,g,s,targets[row],2,0,0,&prediction,&tr,&ar,0);
+        if(base==~(W)0){atomicExch(status,8u);return;}
+        // The baseline fixes eligible rows. A virtual move cannot improve by
+        // removing its supervised competitor; absent baseline comparisons skip.
+        if(tr==0)continue;++eligible;
         if(!route_vector(input,ids,routes,plan,g,s,row,kind,index,candidate,q)){atomicExch(status,2u);return;}
-        W cost=writer(q,table,g,s,targets[row],kind,index,candidate,&prediction);
-        if(cost==~(W)0){sum=~(W)0;if(candidate==0)atomicExch(status,8u);break;}
+        W cost=writer(q,table,g,s,targets[row],kind,index,candidate,&prediction,&tr,&ar,0);
+        if(cost==~(W)0 || tr==0){sum=~(W)0;break;}
         sum+=cost;
     }
+    if(eligible==0){atomicExch(status,8u);return;}
     losses[candidate]=sum;
 }
-extern "C" __global__ void discrete_choose(const W* losses,const W* epoch,W* proposal) {
+__device__ U resulting_port(const int* table,const U* routes,const U* g,const U* s,U kind,U index,U candidate) {
+    U a=move_action(g,candidate);
+    if(kind==0)return compose(g,a,routes[index]);
+    int out[8];action(g,a,table+index*8,out);return root_id(out,g);
+}
+extern "C" __global__ void discrete_choose(const W* losses,const W* epoch,const int* table,const U* routes,const U* g,const U* s,U kind,U index,W* proposal) {
     if(blockIdx.x || threadIdx.x)return;U best=0;
-    for(U i=1;i<16;++i)if(losses[i]<losses[best])best=i;
+    for(U i=1;i<16;++i) {
+        bool tie=best!=0 && losses[i]==losses[best] && resulting_port(table,routes,g,s,kind,index,i)<resulting_port(table,routes,g,s,kind,index,best);
+        if(losses[i]<losses[best] || tie)best=i;
+    }
     proposal[0]=best;proposal[1]=losses[0];proposal[2]=losses[best];proposal[3]=*epoch;
 }
 extern "C" __global__ void discrete_apply(int* table,U* routes,const U* g,const U* s,const W* proposal,U kind,U index,W* epoch,U* status) {

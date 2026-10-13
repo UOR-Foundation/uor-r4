@@ -20,15 +20,32 @@ fn device_command(args: &[String]) -> Result<()> {
             serde_json::to_writer(output,&model.snapshot()?).map_err(|e|invalid(e.to_string()))
         }
         Some("infer")|Some("propose") if args.len()>=3=>{
+            let parameter = if args[0] == "propose" {
+                if args.len() != 5 { return Err(invalid("propose requires ARTIFACT REQUEST route|vector|gate INDEX")); }
+                let index = args[4].parse().map_err(|_| invalid("parameter index must be unsigned"))?;
+                Some(match args[3].as_str() {
+                    "route" => Parameter::Route(index),
+                    "vector" => Parameter::VectorBlock(index),
+                    "gate" => return Err(Error::UnimplementedParameter { kind: 3, index }),
+                    _ => return Err(invalid("parameter must be route, vector or reserved gate")),
+                })
+            } else {
+                if args.len() != 3 { return Err(invalid("infer requires ARTIFACT REQUEST")); }
+                None
+            };
             #[derive(serde::Deserialize)] #[serde(deny_unknown_fields)]
             struct Request{windows:Vec<Vec<Identity>>,targets:Vec<u32>}
             let snapshot:Snapshot=serde_json::from_slice(&read(&args[1])?).map_err(|e|invalid(e.to_string()))?;
             let request:Request=serde_json::from_slice(&read(&args[2])?).map_err(|e|invalid(e.to_string()))?;
-            if request.windows.is_empty() || request.windows.iter().any(|w|w.len()!=snapshot.spec.context as usize){return Err(invalid("each window must be one complete, caller-bounded causal prefix"));}
+            snapshot.spec.validate()?;
+            if request.windows.is_empty() || request.windows.len()>64 || request.windows.iter().any(|w|w.is_empty() || w.len()>snapshot.spec.context as usize || w.iter().any(|id| id.token>=snapshot.spec.vocabulary)){
+                return Err(invalid("each of1..64 windows must be a nonempty caller-bounded causal prefix of length1..context with valid IDs"));
+            }
+            if request.targets.len()!=request.windows.len() || request.targets.iter().any(|&id| id>=snapshot.spec.vocabulary){return Err(invalid("one valid next-token target is required per window"));}
             let model=Device::from_snapshot(snapshot,0)?;
-            let input=model.carry(&request.windows.into_iter().flatten().collect::<Vec<_>>())?;
-            if args[0]=="infer" && args.len()==3 {let result=model.forward(&input,&request.targets)?;println!("{}",serde_json::json!({"tokens":result.predictions,"loss_numerators":result.losses,"vectors":result.vectors()?,"epoch":result.epoch(),"training":"HELD"}));Ok(())}
-            else if args[0]=="propose" && args.len()==5 {let index=args[4].parse().map_err(|_|invalid("parameter index must be unsigned"))?;let parameter=match args[3].as_str(){"route"=>Parameter::Route(index),"vector"=>Parameter::VectorBlock(index),_=>return Err(invalid("parameter must be route or vector"))};let p=model.propose(&input,&request.targets,parameter)?.observation()?;println!("{}",serde_json::json!({"candidate":p.candidate,"before":p.before,"after":p.after,"epoch":p.epoch,"applied":false}));Ok(())}else{Err(invalid("infer requires ARTIFACT REQUEST; propose adds route|vector INDEX"))}
+            let input=model.carry_windows(&request.windows)?;
+            if let Some(parameter)=parameter {let p=model.propose(&input,&request.targets,parameter)?.observation()?;println!("{}",serde_json::json!({"candidate":p.candidate,"before":p.before,"after":p.after,"epoch":p.epoch,"valid_lengths":input.valid_lengths(),"applied":false}));Ok(())}
+            else {let result=model.forward(&input,&request.targets)?;println!("{}",serde_json::json!({"tokens":result.predictions,"loss_numerators":result.losses,"token_rivals":result.token_rivals,"address_rivals":result.address_rivals,"admitted_cells":result.admitted_cells,"vectors":result.vectors()?,"epoch":result.epoch(),"valid_lengths":input.valid_lengths(),"training":"HELD"}));Ok(())}
         }
         _=>Err(invalid("CUDA commands: init SPEC.json NEW_ARTIFACT.json | infer ARTIFACT REQUEST | propose ARTIFACT REQUEST route|vector INDEX | qualify NEW_REPORT_DIR")),
     }
@@ -46,10 +63,16 @@ fn run() -> Result<()> {
         }
         Some("list-controls") => {
             #[cfg(feature = "cuda")]
-            for name in uor_r4_discrete::qualification::NAMES {
-                println!("{name}");
+            {
+                for name in uor_r4_discrete::qualification::NAMES {
+                    println!("{name}");
+                }
+                Ok(())
             }
-            Ok(())
+            #[cfg(not(feature = "cuda"))]
+            Err(invalid(
+                "CUDA qualification inventory is not compiled in this metadata-only build",
+            ))
         }
         _ => {
             #[cfg(feature = "cuda")]
