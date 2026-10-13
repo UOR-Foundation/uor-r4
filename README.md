@@ -13,10 +13,12 @@ model that runs on a laptop?*
 **Status, 13 October 2026: pre-alpha.** No model in this repository holds a useful conversation yet.
 Under D32 the model and its learning/qualification instruments are discrete: no
 floating-point forward, gradients, optimizer or matrix multiplication. The new
-SpiralCore/FBS shared-vector candidate builds at
-`a2a5b89cdddd1b32bf32f0e3c18d6b21e994e523`; **eleven CUDA controls were observed PASS,
-OUT_OF_REQUIRED_REVIEW_ORDER**. Claude FIT and a new admitted exact repeat are pending;
-these observations do not qualify the milestone. Protected #2379 delivery is pending.
+SpiralCore/FBS shared-vector path passes **all eleven admitted CUDA construction
+controls** after Claude FIT at source `a2a5b89cdddd1b32bf32f0e3c18d6b21e994e523`.
+Earlier attempts remain observations outside required review order. Delivery: #2379.
+Selection is query-addressed against fixed branch/frontier roots; leaf content supplies
+the carried payload, and the query's own prefix leaf is selectable. M1's quality target
+remains SUSPENDED pending a discriminating reply grader under R14.
 **Training and the separate M2 holds remain held**; no update or useful-chat result.
 [Discrete record](docs/labs/discrete-geometric-learning-2026-10-13/README.md).
 Earlier 31/18-control float receipts retain their exact historical scope;
@@ -129,7 +131,7 @@ Index: [docs/mechanisms/](docs/mechanisms/README.md).
 
 | Mechanism | Milestone | Where it stands |
 |---|---|---|
-| [Discrete SpiralCore/FBS learning and shared writer](docs/mechanisms/discrete-geometric-learning.md) | M1, M2, M4 | integer source built; eleven observed controls PASS, assigned-review qualification pending |
+| [Discrete SpiralCore/FBS learning and shared writer](docs/mechanisms/discrete-geometric-learning.md) | M1, M2, M4 | source a2a5b89c; eleven admitted CUDA construction controls PASS after Claude FIT; delivery #2379, training held |
 | [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs-projection.md) | M1, M2 | prior floating form preserved inactive under D32 |
 | [Rank-margin objective](docs/mechanisms/rank-margin-objective.md) | M1 | prior floating objective preserved; discrete successor is separately registered |
 | [Starling read](docs/mechanisms/starling-read.md) (~7 neighbours on the 600-cell) | M4 | served softmax-free; its gradient is rung 0b |

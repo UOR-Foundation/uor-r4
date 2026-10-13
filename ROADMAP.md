@@ -2,9 +2,10 @@
 
 **Current learning permission — D32:** discrete/exact GPU model computation and
 instruments only; no floating-point forward, gradient, optimizer or matrix product.
-The standalone shared-writer FBS candidate builds at `a2a5b89c`; eleven CUDA controls
-were observed PASS OUT_OF_REQUIRED_REVIEW_ORDER. Claude FIT and a new admitted exact
-repeat are pending, so milestone qualification and protected #2379 delivery remain pending. Earlier operator/31/18-control float entries
+The standalone shared-writer FBS path passes eleven admitted CUDA construction
+controls at `a2a5b89c` after Claude FIT. Earlier attempts remain outside required
+review order. Delivery: #2379; M1's quality target remains SUSPENDED pending its
+separate successor sheet. Earlier operator/31/18-control float entries
 are preserved historical source scopes, not executable training permissions
 (preservation #2370). Training and separate M2 holds remain HELD. Kimi owns the
 discrete successor sheet; a FIT review releases no hold.

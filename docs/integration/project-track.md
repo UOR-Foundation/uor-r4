@@ -5,9 +5,11 @@
 D32 supersedes all earlier floating-point model/training/instrument permissions.
 Use discrete exact SpiralCore/E8/FBS moves and one native integer input/carry/output
 writer, without float forward, gradients, optimizer or matrix multiplication.
-The corrected standalone candidate `a2a5b89c` builds; eleven CUDA controls were
-observed PASS OUT_OF_REQUIRED_REVIEW_ORDER. Claude FIT and a new admitted exact repeat
-are pending, so milestone qualification and protected #2379 delivery remain pending. Both holds remain
+The corrected standalone path at `a2a5b89c` passes eleven admitted CUDA construction
+controls after Claude FIT. Earlier attempts remain outside required review order.
+Delivery: #2379; M1's quality target remains SUSPENDED pending its separate successor
+sheet. Selection compares the query with fixed branch/frontier roots; leaf content
+supplies the payload, and the query's own prefix leaf is selectable. Both holds remain
 HELD; no update, language or headline result follows.
 [Discrete record](../labs/discrete-geometric-learning-2026-10-13/README.md).
 Older31/18-control float receipts and unfinished instruments remain inactive,

@@ -4,10 +4,10 @@
 > D32 supersedes floating-point model/learning permissions: no floating-point
 > forward, gradients, optimizer or numerical model instrument, and no matrix
 > multiplication. Use native SpiralCore/E8/FBS geometry and one integer
-> input/carry/output writer. Candidate `a2a5b89c` builds; eleven CUDA controls
-> were observed PASS OUT_OF_REQUIRED_REVIEW_ORDER. Claude FIT and a new admitted
-> exact repeat are pending, so milestone qualification and protected #2379 delivery
-> remain pending. Prior F32/F64/31/18-control evidence is
+> input/carry/output writer. Source `a2a5b89c` passes eleven admitted CUDA
+> construction controls after Claude FIT; apply remains NEVER_RUN. Delivery: #2379.
+> Earlier attempts retain their out-of-required-review-order labels. No trained
+> language or full-model claim follows. Prior F32/F64/31/18-control evidence is
 > preserved inactive through #2370. Both training holds remain HELD; FIT releases
 > neither. See [D32](docs/integration/DECISIONS.md#d32--discrete-geometric-substrate-ternaryhammingquaternion-computation-no-floating-point-in-model-computation-including-learning)
 > and the [discrete record](docs/labs/discrete-geometric-learning-2026-10-13/README.md).

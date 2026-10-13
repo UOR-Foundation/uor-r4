@@ -3,10 +3,10 @@
 > **Current D32 direction, October 13:** model computation and instruments,
 > including learning, are discrete/exact and GPU-only. No floating-point forward,
 > gradient, optimizer, numerical model instrument or matrix multiplication is
-> admitted. Candidate `a2a5b89c` builds; eleven CUDA controls were observed PASS
-> OUT_OF_REQUIRED_REVIEW_ORDER. Claude FIT and a new admitted exact repeat remain
-> pending; milestone qualification and protected #2379 delivery remain pending,
-> with no model update or quality claim.
+> admitted. Source `a2a5b89c` passes eleven admitted CUDA construction controls
+> after Claude FIT; earlier attempts remain outside required review order.
+> Delivery: #2379. M1's quality target remains SUSPENDED, with no model update
+> or quality claim.
 > Earlier31/18-control float evidence is preserved inactive through #2370.
 > Global training and separate M2 holds remain HELD; FIT releases neither.
 > [D32](DECISIONS.md#d32--discrete-geometric-substrate-ternaryhammingquaternion-computation-no-floating-point-in-model-computation-including-learning),

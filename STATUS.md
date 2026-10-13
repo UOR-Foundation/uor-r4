@@ -1,9 +1,9 @@
 # Status
 
 **Current dependency — D32:** the discrete shared-codebook SpiralCore/FBS path
-builds at candidate `a2a5b89c`; eleven CUDA controls were observed PASS
-OUT_OF_REQUIRED_REVIEW_ORDER. Claude FIT and a new admitted exact repeat are pending;
-milestone qualification and protected #2379 delivery remain pending. No floating-point model, gradient/optimizer or numerical
+passes all eleven admitted CUDA construction controls at `a2a5b89c` after
+Claude FIT. Earlier attempts retain their OUT_OF_REQUIRED_REVIEW_ORDER status.
+Delivery: #2379. M1's quality target remains SUSPENDED; the successor sheet is separate. No floating-point model, gradient/optimizer or numerical
 qualification instrument may execute. Earlier 31/18-control float results below
 remain historical source-scoped evidence, preserved inactive through #2370.
 Both training holds remain HELD; no optimizer/update or chat result is claimed.

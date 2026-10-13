@@ -12,10 +12,10 @@ The labs work from these, not only from milestone headline numbers. Every pre-re
 
 Status as of13 October2026. D32 requires discrete model computation and instruments,
 including learning, without float gradients/optimizers or matrix multiplication.
-Both training holds remain HELD. The discrete candidate `a2a5b89c` builds and
-eleven CUDA controls were observed PASS OUT_OF_REQUIRED_REVIEW_ORDER, after an
-initial launch-resource blocker. Claude FIT and a new admitted exact repeat are
-pending; milestone qualification and protected delivery remain pending.
+Both training holds remain HELD. The discrete path at `a2a5b89c` passes eleven
+admitted CUDA construction controls after Claude FIT. Earlier attempts retain
+their launch blocker/review-order history. Delivery: #2379; M1's quality target
+remains SUSPENDED pending its separate successor sheet.
 No learned-language result follows. Older float trunk/results remain preserved
 inactive through [#2370](https://github.com/UOR-Foundation/uor-r4/pull/2370).
 
@@ -23,7 +23,7 @@ inactive through [#2370](https://github.com/UOR-Foundation/uor-r4/pull/2370).
 
 | Mechanism | Milestone | Status | Brief |
 |---|---|---|---|
-| Exact SpiralCore/FBS moves and shared integer vector writer | M1 #2029 / M4 #2032 | candidate a2a5b89c builds;11 observed CUDA PASS outside required review order; Claude FIT/admitted repeat and delivery pending, training held | [discrete-geometric-learning.md](discrete-geometric-learning.md) |
+| Exact SpiralCore/FBS moves and shared integer vector writer | M1 #2029 / M4 #2032 | source a2a5b89c;11 admitted CUDA controls PASS after Claude FIT; delivery #2379, training held; M1 quality target SUSPENDED | [discrete-geometric-learning.md](discrete-geometric-learning.md) |
 
 **Pre-D32 operator phase — preserved inactive float source scopes.**
 
