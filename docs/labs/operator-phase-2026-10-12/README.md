@@ -149,7 +149,7 @@ reviewed admission bars.
 
 ## Sequence, owners and resources
 
-1. **Preparation:** Kimi implements OP2 → OP1 G2 → OP3a; OP3b stays later research; Codex maintains enforcement
+1. **Preparation:** Kimi coordinates OP2 → OP1 G2 → OP3a; Codex delivers the owner-requested SpiralCore/FBS OP2 replacement on its exclusive claim; OP3b stays later research; Codex maintains enforcement
    and M2 source dependencies; Claude retains starling/murmuration source and
    DeepSeek retains invariant-addressed router/memory source. Claims identify
    exclusive paths; no takeover, duplicate campaign or peer cleanup.
