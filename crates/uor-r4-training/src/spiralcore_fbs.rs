@@ -601,7 +601,7 @@ mod native_cuda_tests {
         )?;
         // Fixed fixture data, no CPU tensor operations.
         let x = Var::from_vec((1..=16).map(|n| n as f32).collect(), (1, 16), &device)?;
-        let dy = Tensor::from_vec(vec![1., 2., 3., 4., 5., 6., 7., 8.], 8, &device)?;
+        let dy = Tensor::from_vec(vec![1f32, 2., 3., 4., 5., 6., 7., 8.], 8, &device)?;
         for dtype in [DType::F32, DType::BF16] {
             let input = x.as_tensor().to_dtype(dtype)?;
             let out = plan.forward(q.as_tensor(), &input)?;
@@ -661,7 +661,7 @@ mod native_cuda_tests {
             (1, 27 * 8),
             &device,
         )?;
-        let dy = Tensor::from_vec(vec![1., -2., 3., -4., 5., -6., 7., -8.], 8, &device)?;
+        let dy = Tensor::from_vec(vec![1f32, -2., 3., -4., 5., -6., 7., -8.], 8, &device)?;
         for atom in 0..27 {
             let ports = [atom / 9, (atom / 3) % 3, atom % 3];
             let mut state = g.identity;

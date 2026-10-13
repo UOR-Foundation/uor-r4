@@ -723,44 +723,12 @@ fn quaternion_shape(name: &str, shape: &[usize]) -> Result<Vec<usize>> {
     }
 }
 
-/// The signed basis of the Hamilton left-multiplication matrix: row `c` holds
-/// the 4x4 matrix `P_c` (row-major) with `L(q) = sum_c q_c P_c`, where
-/// `L(a, b, c, d) = [[a,-b,-c,-d],[b,a,-d,c],[c,d,a,-b],[d,-c,b,a]]` so that
-/// `L(q) x = q ⊗ x`.
-const HAMILTON_BASIS: [[f32; 16]; 4] = [
-    [
-        1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
-    ],
-    [
-        0., -1., 0., 0., 1., 0., 0., 0., 0., 0., 0., -1., 0., 0., 1., 0.,
-    ],
-    [
-        0., 0., -1., 0., 0., 0., 0., 1., 1., 0., 0., 0., 0., -1., 0., 0.,
-    ],
-    [
-        0., 0., 0., -1., 0., 0., -1., 0., 0., 1., 0., 0., 1., 0., 0., 0.,
-    ],
-];
-
-/// The dense map `W` `[4 out, 4 in]` of the compact quaternion map `compact`
-/// `[out, in, 4]`: `W[4i + r, 4j + s] = L(compact[i, j])[r, s]`. One matrix
-/// product with the fixed [`HAMILTON_BASIS`] (`[out*in, 4] @ [4, 16]`), then a
-/// block transpose, so gradients reach `compact` by ordinary autodiff.
-pub fn quaternion_dense_weight(compact: &Tensor) -> Result<Tensor> {
-    let (out, input, four) = compact.dims3()?;
-    if four != 4 {
-        return Err(invalid("a compact quaternion map's last dimension is 4"));
-    }
-    let basis = Tensor::from_iter(HAMILTON_BASIS.into_iter().flatten(), compact.device())?
-        .reshape((4, 16))?
-        .to_dtype(compact.dtype())?;
-    Ok(compact
-        .reshape((out * input, 4))?
-        .matmul(&basis)?
-        .reshape((out, input, 4, 4))?
-        .permute((0, 2, 1, 3))?
-        .contiguous()?
-        .reshape((4 * out, 4 * input))?)
+/// Retained API name for old artifact/source callers. Expanding quaternion
+/// parameters into a dense learned map is prohibited and cannot execute.
+pub fn quaternion_dense_weight(_compact: &Tensor) -> Result<Tensor> {
+    Err(invalid(
+        "dense quaternion expansion is forbidden; use native SpiralCore/FBS geometry",
+    ))
 }
 
 /// The per-head logits of [`ReadWeighting::LearnedRank`] in each read layer.
@@ -12340,6 +12308,14 @@ impl StackModel {
         }
         model.set_read_weighting(read_weighting)?;
         model.set_read_route(read_route)?;
+        if model.quaternion_weights == QuaternionWeights::SpiralcoreFbs
+            && (model.activation_snap != ActivationSnap::None
+                || model.quaternion_snap != QuaternionSnap::None)
+        {
+            return Err(invalid(
+                "native projection artifact carries an unsupported snap",
+            ));
+        }
         Ok(model)
     }
 
@@ -13521,9 +13497,9 @@ enum Params<'a> {
     Served(Arc<BTreeMap<String, Tensor>>),
     // Ordinary float semantics with immutable, graph-detached parameters.
     Frozen(BTreeMap<String, Tensor>),
-    /// The variables, with each quaternion map ([`QuaternionWeights::All`]) read
-    /// compact (`[out/4, in/4, 4]`) under its dense name: `linear` executes it as
-    /// a Hamilton product ([`hamilton_linear`]), never as an expanded matrix.
+    /// Native query points under the stable projection call names. `linear`
+    /// dispatches only to the bound SpiralCore/FBS carrier plan; old dense
+    /// quaternion mode is refused before this view is constructed.
     Quaternion(&'a BTreeMap<String, Var>, BTreeMap<String, Tensor>),
 }
 
@@ -33842,6 +33818,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "inactive dense comparator; model execution prohibited"]
     fn quaternion_weights_dense_map_is_the_hamilton_product() -> Result<()> {
         let model = StackModel::new(quaternion_tiny(), &cpu())?;
         let mut rng = Initializer(17);
@@ -33914,10 +33891,73 @@ mod tests {
         Ok(())
     }
 
+    // Parameter preparation and artifact I/O only. No forward/loss/optimizer.
+    #[test]
+    fn native_projection_artifact_round_trip_and_binding_refusals() -> Result<()> {
+        let mut config = quaternion_tiny();
+        config.width = 32;
+        config.mlp_hidden = 64;
+        let mut model = StackModel::new(config, &cpu())?;
+        model.set_quaternion_weights(QuaternionWeights::SpiralcoreFbs)?;
+        let base = std::env::var_os("CARGO_TARGET_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("target"));
+        fs::create_dir_all(&base)?;
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| invalid(e.to_string()))?
+            .as_nanos();
+        let root = base.join(format!(
+            "native-projection-artifact-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&root)?; // Exclusive fixture root before save or load.
+        model.save(&root)?;
+        let loaded = StackModel::load(&root, &cpu())?;
+        assert_eq!(
+            loaded.quaternion_weights(),
+            QuaternionWeights::SpiralcoreFbs
+        );
+        for (name, var) in model.variables() {
+            assert_eq!(var.dims(), loaded.variables()[name].dims());
+            assert!(same_bits(
+                &var.flatten_all()?.to_vec1::<f32>()?,
+                &loaded.variables()[name].flatten_all()?.to_vec1::<f32>()?
+            ));
+        }
+        let path = root.join("config.json");
+        let original: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
+        let mut corrupt = original.clone();
+        corrupt["spiralcore_fbs_projection"]["schema"] = serde_json::json!("wrong");
+        fs::write(&path, serde_json::to_vec(&corrupt)?)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        corrupt = original.clone();
+        corrupt
+            .as_object_mut()
+            .ok_or_else(|| invalid("config object"))?
+            .remove("spiralcore_fbs_projection");
+        fs::write(&path, serde_json::to_vec(&corrupt)?)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        corrupt = original.clone();
+        corrupt
+            .as_object_mut()
+            .ok_or_else(|| invalid("config object"))?
+            .remove(QUATERNION_WEIGHTS_FIELD);
+        fs::write(&path, serde_json::to_vec(&corrupt)?)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        corrupt = original;
+        corrupt[ACTIVATION_SNAP_FIELD] = serde_json::json!("icosian_pair");
+        fs::write(&path, serde_json::to_vec(&corrupt)?)?;
+        assert!(StackModel::load(&root, &cpu()).is_err());
+        fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
     #[test]
     fn retired_dense_quaternion_projection_is_always_refused() -> Result<()> {
         let weight = Tensor::zeros((2, 2, 4), DType::F32, &cpu())?;
         let input = Tensor::zeros((1, 8), DType::F32, &cpu())?;
+        assert!(quaternion_dense_weight(&weight).is_err());
         assert!(hamilton_linear(&weight, &input)
             .unwrap_err()
             .to_string()

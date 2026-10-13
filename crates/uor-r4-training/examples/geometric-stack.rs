@@ -299,17 +299,15 @@
 //! historical gate only; the Hamilton gate's serving form is a later rung).
 //! The saved `config.json` records the gate, every load restores it, and the
 //! report's config carries it.
-//! `quaternion_weights=none|all` (`train`) makes every learned projection map
-//! of a geometric stack quaternion-valued (`StackModel::set_quaternion_weights`):
-//! each 4x4 block of `rec.in/gate/out`, `read.query/key/value/out` and
-//! `mlp.gate/up/down` is the Hamilton left-multiplication matrix of one learned
-//! quaternion, stored compact (`*.quaternion`, `[out/4, in/4, 4]`), so those
-//! maps hold a quarter of the parameters. A training study only: `arch=geometric`
-//! on a fresh model (an `init=` model keeps its own; a dense `init=` model is
-//! refused), and `qat=true`, `transport_snap=` and `export` are refused (no
-//! served form yet). Absent keeps the model's own (`none` for a fresh one); the
-//! saved `config.json` records `all`, every load restores it, a resume refuses a
-//! different explicit value, and the report and lineage record the request.
+//! `projection=spiralcore_fbs` selects retained ordered ternary FBS binders
+//! and actual SpiralCore BFS signed transport over 8D carriers. Query points
+//! are F32 masters, carrier storage is F32/BF16, and model arithmetic is CUDA-only.
+//! Its input adjoint is exact; its routing-point pullback is an explicitly
+//! declared geometric root-edge secant surrogate. Artifacts bind compiler,
+//! kernel, source geometry and retained children. This is operator source,
+//! not permission to train a partial trunk: the native head/complete path and
+//! applicable owner hold release remain dependencies. Historical
+//! `quaternion_weights=all` artifacts can be inspected but cannot execute.
 //! `pointer_route=prime:WINDOW` (`dialogue-train`) replaces the pointer's
 //! learned scores by the exact prime route of ADR-0003
 //! (`uor_r4_training::geometric_stack::PrimeRoute`): a source is admitted when
