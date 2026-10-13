@@ -1,7 +1,9 @@
 # Discrete flock and shared vector writer integration
 
 Date: 2026-10-13. Owning milestone M4 #2032, shared M1 learning interface #2029.
-Status: SOURCE IN PROGRESS. Training and M2 HELD. No flock CUDA qualification has run.
+Status: **17/17 finite CUDA construction controls PASS**, at exact source
+`76198c3b5321cc42ced8a0b4a3728aebfd89c2a4`, after prospective Claude FIT.
+Training and M2 remain **HELD**; applied updates0. Delivery: [PR #2395](https://github.com/UOR-Foundation/uor-r4/pull/2395), not yet verified merged.
 
 Claude's corrected design was approved at `7e3d1995fa5f8775182c17d65c51e517bcbc80a6`
 and merged as #2378 at `5e85f696e3d23f9a6028bcd6ecf411a28111a373`, byte-identical.
@@ -41,11 +43,44 @@ PASS. The new test exposed Serde accepting extra fields on an internally tagged
 unit Route variant; strict deserialization through an empty-struct wire variant
 now rejects them. This is metadata validation, not model execution.
 
-Composed CUDA build, new exact flock controls and artifact round-trip: NOT_RUN.
+[Claude's prospective FIT6157157748](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6157157748)
+was published at `2026-10-13T23:11:42Z`, before numerical execution. It reviewed the
+integrated tree matching exact executable source
+`76198c3b5321cc42ced8a0b4a3728aebfd89c2a4`, the six flock controls and eleven
+unchanged Route controls, the host/kernel ABI, and the literal witnesses on the
+[finite sheet](../../harness/prep/m4-discrete-flock-construction-2026-10-13.md).
+
+The once-only admitted controls ran from `23:14:21Z` to `23:14:36Z` on 13 October,
+**17/17 PASS, exit0, applied updates0**: eleven Route regression controls plus six
+new flock controls (`flock_identity_read`, `flock_gate_counterfactual`,
+`flock_transport_witnesses`, `flock_payload_witness`,
+`flock_selection_and_eligibility`, `flock_refusals_and_noop`). Gate candidate costs
+`[448,256,64]` with thirteen MAX slots, ordinal2 strict improvement, independent
+changed-gate snapshot forwards, zero virtual mutation, signed payload transport,
+rank/recency discrimination and prefix/binder exclusion pass at this exact scope.
+Typed wrong-mode host refusals pass; GPU status9 is shadowed and was not exercised.
+**C3 covers literal snap witnesses only; C9 monotonicity remains diagnostic/open;
+C6 covers valid prefixes, not arbitrary masked children.**
+
+Setup/build attempt1 failed with archive EOF because extraction started before
+upload completion. It is retained as a transfer/setup failure; no model ran.
+Fresh source-complete extraction after checksum verification produced build2
+**PASS in35.29s**, with the exact seven-entry AOT PTX admission. Environment:
+Ubuntu24.04, Rust1.97.1, nvcc12.8.93, `compute_120`, RTX5090 driver595.84.
+Executable SHA256:
+`826bdf1a9ec87d03249c369d0e571d1cecd13c4c9ad49e7726f020f8c98e8d78`;
+PTX SHA256:
+`726937ebb907c3c01fe7a6b967a885f3fbe9327aaef6c8a9242007afb7c97f88`;
+generated geometry SHA256:
+`3c7a88bfc82e0fc2f4031ec35cfd69516596dce385b792767675ea937763cc50`.
+Final archive verification and resource/pod-closeout receipts are being collected
+by root; no completed preservation or merge proof is inferred here.
+
 No applied update, corpus learning, learned-language result, throughput or full E8
-coverage is established by this work in progress. The geometric atlas remains the
-sixteen-root anchor orbit, not all240 E8 roots. Exact fixture expectations will be
-frozen before prospective finite TEST FITNESS and numerical execution.
+coverage follows. The geometric atlas remains the sixteen-root anchor orbit, not
+all240 E8 roots. The fifteen-second control interval is controller/control elapsed,
+not training throughput or total preparation cost. Both owner holds and R14's
+suspended reply-quality target remain unchanged.
 
 ## D2 static cost review supporting Kimi's pending learning sheet
 
@@ -83,12 +118,17 @@ B4 yields16404 proposals and33595392 read/writer calls. One proposal has a ceili
 of19327877120 root-ID coordinate checks. These bounds cannot be converted to dollars
 or tokens/s without an admitted instrument and measured execution.
 
-Flock read and gate costs await the completed kernel. Route parameters are inactive
-in Flock mode; its sweep inventory is vector blocks plus gates. A gate proposal
-with three duplicated baseline/candidate evaluations would have6m writer calls,
-conditional on the final implementation. Prospective finite qualification must
-pin source, shape, measurement method and scope before any timing run. Training
-remains held regardless of a finite qualification result.
+At qualified source `76198c3b5`, Gate3 has **three active candidate lanes**, each
+replaying a baseline and its candidate; lanes3..15 retain MAX and return before
+row evaluation. A fully eligible gate proposal therefore has at most **6m writer
+calls**, now an actual source-loop bound rather than a conditional design estimate.
+VectorBlock retains32m calls. Route parameters are inactive in Flock mode; a full
+vector/gate sweep has `VB + BS` proposals and at most `m(32VB + 6BS)` writer calls
+on the fixed batch, before early exits. Flock neighbour/binder/snap read work is
+additional; it is not priced by the Route descent bound above. These are static
+counts, not measured sweep throughput or dollars. The eventual learning instrument
+must pin source/shape/dose and charge recarry, evaluation, setup and preservation.
+Training remains held regardless of this finite qualification result.
 
 ## Learning-sheet review
 

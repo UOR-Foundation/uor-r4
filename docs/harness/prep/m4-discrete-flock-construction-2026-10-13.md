@@ -5,7 +5,7 @@
 - Brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md); [Claude's discrete read design](../../labs/discrete-murmuration-read-2026-10-13/README.md).
 - Line: discrete read/writer construction. No language headline/count reset.
 - Integrated executable source: `76198c3b5321cc42ced8a0b4a3728aebfd89c2a4`; Claude kernel checkpoint `5fc9d469175ee75cf0ff41fff5c9def80922fe77`, imported as `cbe18c91b`; six-control source SHA256 `eeb0a4df0252c96c11b23631506b05db863ce3ffd7695c402c64abc3eeb8d654`; existing Route controller SHA256 `1c8b2ff2b69cb655721ea81d6190f208b1061d09c844305e32d2941d5fd1da9e`.
-- Host ABI, command inventory and typed refusals are aligned at that source. AOT build PASS, numerical controls NOT_RUN; prospective reviewer verdict PENDING. Build-only preparation is authorized by the owner; numerical execution awaits FIT.
+- Host ABI, command inventory and typed refusals are aligned at that source. AOT build PASS; prospective Claude FIT and the later admitted 17/17 PASS are recorded below. No training or applied update is admitted.
 - Build admission: Ubuntu24.04, Rust1.97.1, nvcc12.8.93, compute_120, RTX5090 driver595.84. SHA256 executable `826bdf1a9ec87d03249c369d0e571d1cecd13c4c9ad49e7726f020f8c98e8d78`, PTX `726937ebb907c3c01fe7a6b967a885f3fbe9327aaef6c8a9242007afb7c97f88`, geometry `3c7a88bfc82e0fc2f4031ec35cfd69516596dce385b792767675ea937763cc50`. Compiled control lists agree with all17 names below; the AOT integer-PTX admission and seven-entry census passed. No numerical result follows from compilation.
 - Authority: D23–D32 and R12–R14. D23/D25 prohibit softmax/normalized-exponential equivalents, scalar squash and dense matmul; D24 requires GPU model computation; D32/R13 require exact integer instruments. No prohibited teacher/comparator is admitted.
 - Global training and the separate M2 hold remain **HELD**. `apply`, corpus learning, optimizer, CPU model/reference and floating-point model/instrument execution are excluded. M1's reply-quality target remains **SUSPENDED** under R14.
@@ -104,6 +104,10 @@ Tiny fixture bounds are vocabulary≤257, width16, context≤4 and two rows; the
 
 ## Verdict
 
-**TEST FITNESS: FIT**
+TEST FITNESS: FIT
 
 Claude's prospective milestone verdict [6157157748](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6157157748), posted 2026-10-13 23:11:42Z, admits these seventeen no-update controls at executable source `76198c3b5321cc42ced8a0b4a3728aebfd89c2a4`. Its condition C1 is the pre-run executable/PTX/toolchain/seven-entry freeze recorded above. No source or expected-value amendment is admitted here. N1 flags local-memory/stack failures as setup hard-stops; N2 disclaims kernel status9 coverage; N3 retains C3 literal, C6 prefix and C9 diagnostic scope. Every control remains NOT_RUN when recording this prospective verdict. Training/M2 remain HELD and apply remains NEVER_RUN.
+
+## Admitted result
+
+Attempt1 ran once on 2026-10-13 at23:14:21–23:14:36Z, after the prospective verdict and artifact freeze. Both suites exited0: eleven Route PASS and six flock PASS, zero skipped/NOT_RUN, zero applied updates. Source, binary, PTX and literal expectations match the pins above. The earlier build-setup extraction failed with EOF before the upload finished; it executed no model and is preserved separately. Checksum verification and a fresh extraction preceded the successful build. [Delivery record](../../labs/discrete-flock-writer-integration-2026-10-13/README.md). This is finite construction evidence only; training and M2 remain HELD.
