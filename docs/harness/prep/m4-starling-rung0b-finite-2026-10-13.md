@@ -30,7 +30,7 @@
 ## Pinned source
 
 - branch `claude/starling-rank-read-2026-10-13`, source commit
-  `87fe3ea57a59eb5e3dc3d81381daca2c6e4a1f45`. Any repair re-pins the commit here before it is rerun.
+  `8a84b2f9e26611b0c4ec815d5f7bcf0d2ce36dd5`. Any repair re-pins the commit here before it is rerun. Re-pinned once: the first pod build at `87fe3ea57` failed to compile one raw `unsafe` launch under the crate's `deny(unsafe_code)` (a BLOCKER, repaired by routing K1 through the audited `launch_prebuilt`).
 - files under qualification:
   - `crates/uor-r4-training/src/starling_native.{rs,cu}`, `build.rs`;
   - the `starling_native_select` launcher in `src/geometric_stack/cuda_ops.rs`;
