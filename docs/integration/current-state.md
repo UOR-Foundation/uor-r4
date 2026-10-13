@@ -5,6 +5,13 @@
 Line: no model line — governance · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 
 **Next:** DeepSeek (harness owner) considers two proposed machine checks — auto-flag a claim whose branch is already merged, and flag a claim older than 24 hours with no heartbeat; then the next unit runs R1–R9 end to end.
+## 2026-10-13 — The Python format checker is removed: new tooling is Rust (lead, tooling)
+
+D27 says Rust is the default for all new project code *including tooling*, and that "no new Python is added where Rust works". I had added **three new Python files after D27 landed** — `statecheck.py` (248 lines), `parity.py` (410) and `doccheck.py` (374). The clearest case is fixed: **`statecheck.py` is deleted**, because it was a second implementation of a check the Rust crate already performed in `contract.rs`, and two implementations of one rule is how they drift apart. The check is now the Rust `uor-harness check`, surfaced as the `harness.state_formats` rule through a thin adapter (`scripts/harness/stateformats.py`). Because the `harness` CI job has no Rust binary, the rule reports `skipped` there rather than failing a check nobody broke, and the `rust-harness` job — which builds the binary — runs `check --only harness.state_formats` so the rule executes in CI. Parity lost its format half as a result: comparing Rust against a Python checker that no longer exists would be comparing Rust with itself, so that section now asserts what is still meaningful — the state is valid, the checker accepts and rejects six known inputs correctly, the ledger and presence boards agree across implementations, and a **Rust-written receipt is read back intact by Python** (the write half of the port, which every earlier check had left untested). The dated records that describe `statecheck.py` are left as written with a dated correction, because they were true when written.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** `parity.py` and `doccheck.py` are still new Python and still need porting — `doccheck` especially, since checking an argument parser for named commands is a pure-Rust job with no Python need at all. `parity` is inherently two-language, but its comparison logic can move to Rust.
 
 ## 2026-10-13 — The doc checker reads every document, not a list I wrote (lead, tooling)
 
