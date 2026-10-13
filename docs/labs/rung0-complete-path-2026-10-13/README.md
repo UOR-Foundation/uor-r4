@@ -2,8 +2,8 @@
 
 References #2029, #2028 and #2030. Final source `05c84bece50789163bd0f049a2ae76b8a314ef45` implements the observed dispatch,
 learning-credit, configuration, row-cap and evaluation repairs and passes the
-named finite CUDA controls at the actual rung-0 shape. Protected delivery and
-final scientific rung-0 FIT remain pending; this is implementation/device
+named finite CUDA controls at the actual rung-0 shape. This unit delivers through
+[protected PR #2318](https://github.com/UOR-Foundation/uor-r4/pull/2318), with prospective scientific rung-0 FIT recorded against the corrected sheet; this is implementation/device
 evidence, not a trained language result. Source checkpoint `6f6eebe68` and the
 intervening failed/corrected attempts are preserved as preparation history.
 The [indexed restoration patch](../../history/branch-archive/rung0-pre-repair-inactive-20261013.patch),
@@ -22,8 +22,9 @@ Kimi's [ratification6139449267](https://github.com/UOR-Foundation/uor-r4/issues/
 approves the repairs and direct interior initialization, and supersedes
 Amendment 2's dev-window truncation: every masked target with a within-document
 predecessor is scored, state resets at BOS, and context may overlap for a tail
-that is scored once. Kimi owns the rung-0 sheet and its next amendment; this
-unit does not edit the active sheet or declare its final scientific FIT.
+that is scored once. Kimi remains the project manager. The scoped Amendment4
+corrects the active sheet under the owner's complete-path instruction, and its
+prospective FIT review preserves every acceptance bar and owner hold.
 The [prospective finite FIT6139464540](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6139464540)
 is for fixed lawful CUDA implementation controls only, not a training release.
 
@@ -80,7 +81,7 @@ Codex's [coordination6140439165](https://github.com/UOR-Foundation/uor-r4/issues
 records its limited factual/source scope; Kimi's stale claim is preserved.
 Seeds1/2 are paired across M1/M8, tokenizer restoration is byte/SHA verified at
 private HF commit `435d5f781cd7b8518185cf6e7fda2a7addb0532a`, and exact
-source/CLI/init pins are in the sheet. Scientific verdict stays PENDING;
+source/CLI/init pins are in the sheet. Scientific verdict is FIT for this configuration;
 acceptance bars and all holds are unchanged. All eligible masked targets, including the tail, are
 scored once. The report shows actual/expected denominators and any mismatch.
 
@@ -157,9 +158,11 @@ source-reviewed; only its clipping helper receives a fixed device control.
 There is no training, corpus evaluation, generation campaign, quality comparison
 or BPB result. The finite controls qualify the declared forward/backward/output
 boundaries, not useful language, fresh transfer, full M2 intent/compiler use,
-energy savings or integer/table D11 serving. Final scientific rung-0 FIT still
-needs the amended sheet's exact source/data/operator/metric identity and
-prospective review. A FIT verdict never releases an owner hold.
+energy savings or integer/table D11 serving. The prospective scientific rung-0
+FIT review binds Amendment4's exact source/data/operator/metric identity; its
+reviewed pre-stamp sheet blob is `bf0a0ededd2027794ff5ddcdab23f53782683df3`.
+Protected source delivery and explicit owner hold release precede execution.
+A FIT verdict never releases an owner hold.
 
 ## Resources and delivery
 
@@ -188,7 +191,8 @@ Missing historical
 model-time ledger is not a zero balance. Only source-bound finite controls are
 admitted; no model fit or unrelated rental campaign is released.
 
-Protected PR/review/merge verification and owned cleanup are pending. Historical
+Protected delivery uses PR #2318; its actual merge/source/tree proof and owned
+cleanup receipts are appended to the preserved delivery archive after verification. Historical
 source and failures retain their exact scope; a tooling defect is a blocker to
 repair, not a mechanism negative. Head/writer #2301 delivery is complete and is
 not reopened by this successor's qualification work.

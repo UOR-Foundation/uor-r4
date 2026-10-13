@@ -79,11 +79,12 @@ context; the UORT payload is 42856 tokens with a 64-byte header, 111 global bloc
 and 232 tail tokens, 14287 eligible targets. These are source/metadata findings. Eighteen finite controls pass, including the
 actual batch 16×context 384 six-recurrence forward/backward, useful rate credit,
 6144-row writer, device clipping and native dev/artifact metrics. Optimizer update
-is compiled/source-reviewed only. Protected delivery and scientific FIT remain
-pending. Kimi ratifies the
-source/data policy and owns the amended sheet. The complete learning/output
-configuration has passed its named finite device controls and still needs final
-prospective scientific FIT before the owner can consider hold release. No test or delivery
+is compiled/source-reviewed only. The corrected Amendment4 sheet has prospective
+scientific FIT with unchanged bars, source/data/CLI/init pins and paired seeds1/2.
+Kimi ratifies the source/data policy; scoped correction coordination is retained.
+Protected delivery through [#2318](https://github.com/UOR-Foundation/uor-r4/pull/2318);
+actual merge proof is appended after verification. The owner can then consider
+explicit hold release; training and separate M2 holds remain HELD. No test or delivery
 automatically releases training. Shared intent/compiler/full M2 and D11 remain
 separate unqualified obligations.
 

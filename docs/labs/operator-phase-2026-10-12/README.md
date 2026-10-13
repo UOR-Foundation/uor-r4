@@ -18,8 +18,10 @@ The [composed-path repair](../rung0-complete-path-2026-10-13/README.md) is
 implemented and finite CUDA-qualified at `05c84bece50789163bd0f049a2ae76b8a314ef45`,
 including ordinary dispatch, signed rate credit, GPU clipping and native
 CLI/masked dev metrics:18 final controls pass at the actual rung-0 shape.
-Optimizer update is compiled/source-reviewed only; protected delivery and final
-scientific FIT remain pending. Complete-path source/device qualification
+Optimizer update is compiled/source-reviewed only. Corrected Amendment4 has
+prospective scientific FIT with unchanged bars. Protected delivery through
+[#2318](https://github.com/UOR-Foundation/uor-r4/pull/2318); actual merge proof is
+appended after verification. Training and the separate M2 hold remain HELD. Complete-path source/device qualification
 remains before any training, and a
 FIT verdict releases no owner hold. Training and the separate M2
 training/rental hold remain.

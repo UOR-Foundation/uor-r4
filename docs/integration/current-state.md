@@ -24,24 +24,28 @@ The raw count reference uses the entire decoded stream and reports count units
 separately from learned mean-L1 score units.
 
 **All 18 final finite controls PASS (11 library:10 CUDA+1 metadata; CLI 6 metadata+1 CUDA).
-Final CUDA library compilation 6.02s, CLI compilation 4.79s; protected delivery
-pending. Training and the separate M2 training/rental hold remain.** The actual batch 16×context 384 six-recurrence 256D/384MLP/V=4096 forward/backward
+Final CUDA library compilation6.02s, CLI compilation4.79s. Protected delivery
+through [#2318](https://github.com/UOR-Foundation/uor-r4/pull/2318); actual merge
+proof is appended after verification. Training and the separate M2 training/rental hold remain.** The actual batch 16×context 384 six-recurrence 256D/384MLP/V=4096 forward/backward
 has finite CUDA gradients and nonzero opening/decay credit in all six layers;
 6144-row head, stored composed/rate/clipping answers, exact masked dev/count
 metrics and native artifact reload/binding refusals pass. Review also closed a
 diagnostic `composed_logits`/helper bypass. Earlier setup/compiler/fixture
 failures remain preserved, not mechanism negatives; no optimizer step, CPU model reference, corpus/quality
 run or generation campaign. Optimizer update is compiled/source-reviewed only;
-the clipping helper has its own device control. Full scientific rung-0 FIT awaits its exact amended
-sheet/source/device identity; no FIT verdict releases a hold. Head/writer #2301
+the clipping helper has its own device control. Corrected Amendment4 has prospective scientific rung-0 FIT against its exact
+sheet/source/device identity, with unchanged acceptance bars; no FIT verdict releases a hold. Head/writer #2301
 already delivered at `d41dc422f`; its dated pre-merge record is preserved.
 
 Line: unified geometric route/action/learning integration · count 9/3 → 10/3 on
 completed delivery, no reset · M1 memory20/40, reply37/232 and M2 saved437/512,
 opened0/128, fresh NOT_RUN unchanged.
 
-**Next:** exact-head review and protected delivery, then prospective scientific FIT of the
-[corrected active sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md).
+**Next:** the [corrected active sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md)
+is prospectively FIT for rung0, with protected delivery through #2318.
+Actual merge/source/tree proof is recorded on the milestone and in the preserved
+delivery appendix after verification. Explicit owner release is still required before
+training; implementation/FIT readiness releases no hold.
 The scoped Amendment4 corrects UORT accounting, paired seeds1/2, verified
 tokenizer restoration and exact qualified source/CLI/init pins without changing
 bars; [coordination6140439165](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6140439165)
