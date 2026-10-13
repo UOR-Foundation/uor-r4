@@ -223,6 +223,7 @@ python3 scripts/check_no_softmax.py && python3 scripts/check_no_matmul.py   # th
 New lab: set `UOR_LAB`, then run the harness onboarding ([docs/harness/ONBOARD-PROMPT.md](docs/harness/ONBOARD-PROMPT.md)).
 GPU work goes through `scripts/pod/uor-pod` ([docs/labs/compute.md](docs/labs/compute.md)); never rent by hand.
 
+<a id="models-and-data"></a>
 <details>
 <summary><b>Models and data</b></summary>
 
