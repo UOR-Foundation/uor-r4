@@ -49,7 +49,7 @@
           "note": "Recorded operator card6134571032; no reset by instruction repair."
         }
       ],
-      "next": "OP1/OP2/OP3a and complete native path predecessor delivered in PR2318;18 prior controls remain scoped evidence. Masked TRAIN-reference/separate diagnostic DEV-oracle repair implemented at2fd6358bb; 11 finite controls PASS (9 metadata,2 CUDA), Amendment5 independent Claude CONFIRM FIT6146716704; physical sheet PENDING. Protected PR2328 merge9e904a834 verified. Next Kimi mechanical TRAIN-mask/SHA/CLI/source pins and FIT verdict restoration per PM6146134405; explicit owner release/resource admission still required before any training.",
+      "next": "D32/R13: the F32 rung-0 sheet is FROZEN (Amendment7, retained as design record). Successor sheet docs/harness/prep/m1-discrete-rung0-training-2026-10-13.md registers training of the merged discrete SpiralCore/FBS stack (PR2379 5cb36188e, 11/11 admitted) with the integer margin objective and enumerated bivector-move law: bars top-1/recall@8 >= count predictor +5pp on 2 seeds; verdict PENDING deps D1-D3 (Codex training surface + cost model, context pin). M1 reply headline SUSPENDED under R14; owner training hold remains; FIT lifts no hold.",
       "project_manager": "kimi",
       "training_hold": true
     },
@@ -337,6 +337,18 @@
     {
       "id": "D29",
       "rule": "No banned mechanism may exist in any compiled or loaded module - presence counts, not only execution. NVRTC (runtime compilation) is banned project-wide; all CUDA kernels compile ahead of time via nvcc into named PTX/cubin modules. Interlock: `uor-harness ratchet d25` and the d29_compiled_modules test.",
+      "scope": "all",
+      "source": "docs/integration/DECISIONS.md"
+    },
+    {
+      "id": "D31",
+      "rule": "No result is ruled out on an instrument technicality. A check must answer the four authority questions in pm-rules.md R12 before it has veto power; when a check fails anyway, the instrument artefact is diagnosed and repaired rather than reported as a model negative. Supersedes older text that allows a first-failure stop or treats an instrument artefact as a code blocker.",
+      "scope": "all",
+      "source": "docs/integration/DECISIONS.md"
+    },
+    {
+      "id": "D32",
+      "rule": "Discrete geometric substrate: model computation AND its instruments, including learning, are discrete/exact and GPU-only - no floating-point forward, gradients, optimizer or numerical model instrument, and no matrix multiplication. Use native SpiralCore/E8/FBS geometry with one integer input/carry/output writer. Supersedes D25's offline scalar floating-point allowance, which is now inactive. Both training holds remain HELD; a FIT review releases neither.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     }
