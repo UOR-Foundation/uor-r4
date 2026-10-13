@@ -1,9 +1,23 @@
 {
-  "kimi/pm-rules-2026-10-13": {
-    "branch": "kimi/pm-rules-2026-10-13",
-    "claimed_at": "2026-10-13T00:58:49-04:00",
-    "head": "d7934bf03",
+  "claude/readme-geometry-2026-10-13": {
+    "branch": "claude/readme-geometry-2026-10-13",
+    "claimed_at": "2026-10-13T01:14:56-04:00",
+    "head": "b441de265",
+    "lab": "claude",
+    "note": "README, geometry page and figures"
+  },
+  "kimi/plan-refresh-2026-10-13": {
+    "branch": "kimi/plan-refresh-2026-10-13",
+    "claimed_at": "2026-10-13T01:16:40-04:00",
+    "head": "84287b397",
     "lab": "kimi",
     "note": ""
+  },
+  "codex/geometric-head-shared-writer-20261013": {
+    "branch": "codex/geometric-head-shared-writer-20261013",
+    "claimed_at": "2026-10-13T01:28:26-04:00",
+    "head": "09b3ee6df",
+    "lab": "codex",
+    "note": "Head/writer ownership ratified6138381873; exactsource09b3ee6df independentlyreviewed; fixedCUDAqualification inprogress; trainingheld."
   }
 }

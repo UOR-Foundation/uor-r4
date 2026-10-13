@@ -1,3 +1,47 @@
+## 2026-10-13 — OP3a and one native vector writer pass finite CUDA boundaries (Codex, #2029/#2030)
+
+The [head/shared-writer record](../labs/geometric-head-shared-writer-2026-10-13/README.md)
+binds final GPU source `09b3ee6df084beba1b9c6e98ef1e597bf2dc82bb`, with peer source through
+`84287b397` integrated. `head=spiralcore_product` plus `projection=spiralcore_fbs`
+uses one embedding Tensor/Var for token input, addressed raw-distance output and
+compiler/exact-store/emitter vector channels. Fixed SpiralCore product ports
+admit bounded identity cells: modulo 256 is address metadata, never a semantic
+metric. Default 8 cells gives 128 token-vector comparisons atV=4096, bounded above
+by 16×32=512; a compatibility full-V score allocation remains. Typed IDs/masks,
+smallest-ID tie breaks and padding refusal preserve exact token identity.
+Negative mean-L1 scores use fixed scale 1; omitted targets receive explicit score
+credit without insertion into inference candidates. Token and address margins
+have weight 1 each; address credit is an auxiliary surrogate, not hard top-K's
+derivative. Exact occurrence/version remains separate from vector transport.
+
+The final five tests PASS in 1.45s (static binding/CPU refusal plus four finite CUDA
+controls), exercising actual Stack/store/channel/artifact interfaces, FBS
+transport, distance adjoints, omitted-target/address credit, ties/padding and
+numerical/device boundaries. Final CUDA CLI compile PASS 3.83s and library-test
+compile `--no-run` PASS 10.76s. The named
+[finite FIT](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6138479221)
+releases no hold. The former probability producer's artifact admission,
+sampling, exponential table pool and probability loss refuse; removed source is
+preserved as an indexed restoration patch. Review found host-score trace-helper, mutable carried identity and reverse-order
+pointer/public-config validation bypasses. Corrected source
+`09b3ee6df084beba1b9c6e98ef1e597bf2dc82bb` retains the model arithmetic; final
+production qualification passes and exact-source review records no blocker.
+The initial `84b1a530f` qualification is preserved as superseded evidence. Kimi's recurrence #2293 is integrated
+but not device-qualified by this unit. Pod `vast-55678610`, RTX 5090 $0.536/h,
+Ubuntu 24.04.3/CUDA12.8.93/Rust 1.97.1; manual build-only setup stopped before old
+CPU parity, target 7.1GiB, peak RSS unmeasured. No optimizer, training, CPU model
+reference, full-trunk/corpus/quality run or new BPB result.
+
+Line: unified geometric route/action/learning integration · count 8/3 → 9/3 on
+completed delivery, no reset · M1 memory20/40, reply37/232; M2 saved437/512,
+opened0/128 and fresh NOT_RUN unchanged. **Protected delivery pending; training
+and the separate M2 training/rental hold remain.**
+
+**Next:** exact-head review and protected delivery; then freeze and qualify the
+complete declared learning/output path before any owner hold-release decision.
+The common channel remains vector infrastructure: learned intent compilation,
+full-model quality/capacity and D11 serving remain unqualified.
+
 ## 2026-10-13 — The PM operating rules are ported to the shared harness (kimi, #2028)
 
 [pm-rules.md](../harness/pm-rules.md) records the nine project-manager operating rules, owner-ratified on 2026-10-13, each with its rule, its why and the harness surface that carries it: **R1** one owner per branch (`team claim` / `team release`; a claim is visible repo-wide only once its committed change merges), **R2** one live branch per active PR (after merge: verify content on fresh `origin/main`, delete the branch on both sides, remove the worktree, `scripts/storage/uor-hygiene --apply`), **R3** status discipline (`heartbeat` every 90 minutes or 3 merged PRs; presence goes STALE at 30), **R4** no model compute without a prep sheet at `TEST FITNESS: FIT` (FIT lifts no hold), **R5** the ratchets stay green on every PR (D23 interlock 1649, no-matmul 93 sites, claim wording), **R6** preservation (indexed patches in `docs/history/branch-archive/`, dated records keep their text), **R7** collision resolution by the PM against the ownership map (peer source/jobs/leases never touched; an expired lease is suspect, not abandoned), **R8** delivery truthfulness (an open PR is pending, not merged; exact-head checks; a queue acknowledgement is not a test result), **R9** the roster (Kimi PM; Claude; Codex = Sol, same seat; DeepSeek; Antigravity, fifth lab, offline). [claims.json](../harness/claims.json) drops the two stale kimi claims (both branches merged and deleted, so the file now carries only this branch's claim); the roster line lands in [docs/labs/README.md](../labs/README.md) and the registry row in [docs/harness/README.md](../harness/README.md). The frozen state contract [state-formats.json](../harness/state-formats.json) is re-frozen deliberately: the claims entry key moves from the released `kimi/d27-rust-first-2026-10-13` to this branch's claim, marked optional because a branch key is transient — present while its branch lives, absent after release — so a future release is not format drift. Docs only: no model compute, no count reset.
