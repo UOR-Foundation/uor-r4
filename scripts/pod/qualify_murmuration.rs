@@ -1,7 +1,7 @@
 //! Fixed murmuration qualification controller; Rust orchestration, never model math.
 //! Build with rustc --edition=2021 on the admitted pod. Requires a FIT sheet
-//! and exact source pin. Preliminary inventory only: repair/composition control
-//! names must be incorporated before prospective FIT. Never runs an optimizer.
+//! and exact source pin. Corrected source/control inventory remains PENDING
+//! admission and prospective FIT. Never runs an optimizer.
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -68,13 +68,21 @@ const GPU: &[&str] = &[
     "starling_native::murmuration::tests::murm_backward_secants",
     "starling_native::murmuration::tests::murm_address_margin_direction",
     "starling_native::murmuration::tests::murm_zero_coupling_wakes",
+    "starling_native::murmuration::tests::murm_null_keys_never_stored",
+    "starling_native::murmuration::tests::murm_nonfinite_refused",
     "starling_native::murmuration::tests::murm_left_heads_unchanged",
     "starling_native::murmuration::tests::murm_right_forward_independent_reference",
     "starling_native::murmuration::tests::murm_right_backward_secants",
     "starling_native::murmuration_tree::tests::murm_tree_closure_known_answer",
+    "starling_native::murmuration_tree::tests::murm_tree_hemisphere_tie",
     "starling_native::murmuration_tree::tests::murm_tree_strict_causality",
     "starling_native::murmuration_tree::tests::murm_tree_backward_secants",
     "starling_native::murmuration_tree::tests::murm_tree_null_parent_refused",
+    "starling_native::murmuration_tree::tests::murm_tree_nonfinite_refused",
+    "starling_native::murmuration_tree::tests::murm_tree_left_heads_unchanged",
+    "starling_native::murmuration_tree::tests::murm_tree_right_forward_reference",
+    "starling_native::murmuration_tree::tests::murm_tree_right_backward_secants",
+    "starling_native::murmuration_composed::murm_composed_credit",
 ];
 const MODULE: &[&str] = &[
     "compiled_sources_carry_no_banned_operation",
