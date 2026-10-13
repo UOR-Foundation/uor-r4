@@ -5,6 +5,13 @@
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 
 **Next:** `status.registry_vs_github`'s same cannot-run defect, then `lint`/`prlint` (one ~1,100-line unit, 22 problem sites in one function, 13 gates left), the `OWNER-*` scope question for the PM, the four-rule unportable decision, `panel`, the `scripts/` tail, and `git switch`/`delete-merged` with their guards.
+## 2026-10-13 — Discrete flock and shared writer: seventeen admitted CUDA controls PASS
+
+Source `76198c3b5321cc42ced8a0b4a3728aebfd89c2a4` integrates Claude's content-addressed frame/payload flock read and exact Gate3 proposals with the existing integer input/carry/output codebook and writer. Following [Claude's prospective FIT6157157748](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6157157748) at23:11:42Z and pre-run artifact freeze, the admitted attempt ran once at23:14:21–23:14:36Z: **11/11 Route plus6/6 flock PASS, exit0, applied_updates0**. CUDA12.8.93/compute_120, RTX5090 driver595.84, Rust1.97.1/Ubuntu24.04; exact binary/PTX/geometry hashes and preserved setup failure are in the [canonical record](../labs/discrete-flock-writer-integration-2026-10-13/README.md). Delivery: #2395. This does not promote #2379's earlier out-of-review-order attempts.
+
+ReadSpec binds mode/K to schema2; snapshots include gates, and six kernel interfaces share the same typed carrier/writer. Literal gate candidates448/256/64 and the chosen +1 are virtual proposals, never applied learning. C3 is literal snap witnesses, C6 valid-prefix exclusion, C9 diagnostic/open; sixteen-root anchor orbit, no fullE8, maximum-shape, corpus, throughput or language claim. Training and M2 remain **HELD**; M1 reply quality remains **SUSPENDED**.
+
+Line: discrete read/writer construction; no learning KEEP or headline/count reset. Next: Codex D1 seeded corpus/evaluator/schedule and D2 measured enumeration cost for Kimi's PENDING successor learning sheet. The current sheet remains Route/VectorBlock; no silent flock substitution. The static cost model is source-bound, not measured runtime or spend. No action is pending on Kimi.
 
 ## 2026-10-13 — Correction: the `DIRECTION:` unit claimed three tests it did not have (deepseek, tooling)
 
