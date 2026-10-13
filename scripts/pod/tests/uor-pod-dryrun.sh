@@ -172,6 +172,7 @@ c=$*
 case "$c" in
   *"du -sk uor-r4/"*) if [ -n "${FAKE_VAST_KB:-}" ]; then echo "$FAKE_VAST_KB"; exit 0; fi; bash -c "${c//\/workspace/$FAKE/vast-ws}"; exit;;
   *"for d in uor-r4/jobs"*|*"tar -cf - uor-r4/"*) bash -c "${c//\/workspace/$FAKE/vast-ws}"; exit;;
+  *"/root/uor-store put "*) exit 0;;
 esac
 # the bootstrap run (non-dry tests): 40 lines of output, then either the failure
 # of 2026-10-05 (Ollama's .tgz 404 -> tar, rc 2) or a BOOTSTRAP_RESULT with
@@ -315,6 +316,7 @@ mv "$FAKE/gpus.json.orig" "$FAKE/gpus.json"
 # helper files are checked before anything is created: a copy of the tool with
 # one helper missing, empty or broken must stop before any create/volume call
 PF=$W/pf; mkdir -p "$PF"; cp "$HERE/../uor-pod" "$HERE/../uor-pod-bootstrap.sh" "$HERE/../hot-set.txt" "$PF/"
+cp "$HERE/../uor-reaper.sh" "$PF/"
 pf_up() {  # NAME PATTERN [extra up args]
   local name=$1 pat=$2 rc=0 n0; shift 2
   n0=$(wc -l < "$FAKE/calls")
@@ -323,6 +325,8 @@ pf_up() {  # NAME PATTERN [extra up args]
      ! tail -n "+$((n0 + 1))" "$FAKE/calls" | grep -qE 'pod create|network-volume|gpu list|pod list'; then ok "$name"
   else echo "     rc=$rc pattern=$pat"; bad "$name"; fi
 }
+pf_up "up refuses before creating when uor-store is missing" "helper file check failed before creating anything:.*uor-store \\(missing\\)"
+cp "$HERE/../uor-store" "$PF/"; rm "$PF/uor-reaper.sh"
 pf_up "up refuses before creating when uor-reaper.sh is missing" "helper file check failed before creating anything:.*uor-reaper.sh \\(missing\\)"
 cp "$HERE/../uor-reaper.sh" "$PF/"; : > "$PF/hot-set.txt"
 pf_up "up refuses before creating when hot-set.txt is empty" "hot-set.txt \\(empty\\)"
@@ -599,8 +603,8 @@ HOME=$HH expect "up with an HF token on the laptop" 0 "hf token copied" -- up --
 if grep -q 'cat > /root/.cache/huggingface/token' "$FAKE/calls"; then ok "the token is copied to the pod over ssh"; else bad "the token is copied to the pod over ssh"; fi
 if ! grep -q 'HF_HOME' "$FAKE/calls"; then ok "the token is never written to the image's HF_HOME (a shared volume on Runpod)"; else bad "the token is never written to the image's HF_HOME (a shared volume on Runpod)"; fi
 # the bootstrap points hf at that private copy (the image's HF_HOME is elsewhere)
-if (sed -n '/^if \[ "\$NONCANON" = 1 \]/,/^fi$/p' "$HERE/../uor-pod-bootstrap.sh" | grep -q 'export HF_TOKEN_PATH=/root/.cache/huggingface/token'); then
-  ok "the bootstrap's store fetch uses HF_TOKEN_PATH=/root/.cache/huggingface/token"; else bad "the bootstrap's store fetch uses HF_TOKEN_PATH=/root/.cache/huggingface/token"; fi
+if grep -q '^if \[ -f /root/.cache/huggingface/token \]; then export HF_TOKEN_PATH=/root/.cache/huggingface/token; fi$' "$HERE/../uor-pod-bootstrap.sh"; then
+  ok "the bootstrap's store calls use HF_TOKEN_PATH=/root/.cache/huggingface/token"; else bad "the bootstrap's store calls use HF_TOKEN_PATH=/root/.cache/huggingface/token"; fi
 if ! grep -q 'hf_FAKETOKEN123' "$W/out" "$FAKE/calls"; then ok "the token value is in neither the output nor any command line"; else bad "the token value is in neither the output nor any command line"; fi
 # ---- any-region placement: no ladder GPU in the volume datacenters, stock in
 # two allowlisted extra datacenters -> the one with more stock, non-canonical;
@@ -661,6 +665,10 @@ boot() {  # NAME PATTERN [ENV=VALUE...] -> runs obtain_bin once in a subshell, o
     # shellcheck disable=SC1090
     . "$boot" "$@"
     CAP=120
+    # the HF store: STUB_STORE_TAR is what bin/<sha>-sm<cap>.tar holds (none: a miss);
+    # an upload is copied to $BINROOT/pushed.tar and logged
+    store_get() { [ -n "${STUB_STORE_TAR:-}" ] && [ "$1" = "bin/$SHA-sm$CAP.tar" ] || return 1; cp "$STUB_STORE_TAR" "$2"; }
+    store_put() { echo "put $2" >> "$BINROOT/puts"; cp "$1" "$BINROOT/pushed.tar"; }
     build_into() {  # stub: a parity-PASS build after STUB_BUILD_S seconds
       echo build >> "$BINROOT/builds"
       [ -z "${STUB_DURING_BUILD:-}" ] || eval "$STUB_DURING_BUILD"
@@ -715,6 +723,50 @@ fresh_binroot; mkdir -p "$CB"; printf '{"parity": "FAIL"}\n' > "$CB/BUILD.json";
 boot "publish lock unavailable and cache occupied: keep the build private" "this pod uses $CB.private-podx-" \
   FAKE_FLOCK_HELD="7 8" UOR_BUILD_WAIT_S=60 UOR_BUILD_HEARTBEAT_STALE_S=30
 if grep -q FAIL "$CB/BUILD.json" && grep -q "RESULT BIN=$CB.private-podx-" "$W/out"; then ok "occupied cache not overwritten without the publish lock"; else bad "occupied cache not overwritten without the publish lock"; fi
+
+# ---- the HF store backs the binary cache for pods without the shared volume
+# (Vast): a parity-PASS store build with matching checksums is a cache hit, any
+# other store copy is ignored, and a build made here is uploaded
+mkstoretar() {  # PARITY [corrupt] -> $W/store.tar
+  local d=$W/storebuild; rm -rf "$d"; mkdir -p "$d"
+  echo binary > "$d/geometric-stack"; (cd "$d" && sha256sum geometric-stack > SHA256SUMS)
+  printf '{"parity": "%s", "built_on_pod": "storepod"}\n' "$1" > "$d/BUILD.json"
+  [ "${2:-}" != corrupt ] || echo tampered > "$d/geometric-stack"
+  tar -C "$d" -cf "$W/store.tar" .
+}
+fresh_binroot; mkstoretar PASS
+boot "the store's parity-PASS build is a cache hit (no build)" "cache hit from the HF store: $CB" STUB_STORE_TAR="$W/store.tar"
+if [ ! -f "$BR/builds" ] && grep -q '"built_on_pod": "storepod"' "$CB/BUILD.json" && [ ! -f "$BR/puts" ] && ! ls -d "$BR"/.*store* >/dev/null 2>&1; then
+  ok "store build published as the cache, nothing re-uploaded, no staging left"; else bad "store build published as the cache, nothing re-uploaded, no staging left"; fi
+fresh_binroot; mkstoretar PASS corrupt
+boot "a store build failing its checksums is ignored: build here" "not a parity-PASS build with matching checksums; building here" STUB_STORE_TAR="$W/store.tar"
+if [ -f "$BR/builds" ] && grep -q '"built_on_pod": "podx"' "$CB/BUILD.json"; then ok "the tampered store build never reaches the cache"; else bad "the tampered store build never reaches the cache"; fi
+fresh_binroot; mkstoretar FAIL
+boot "a store build without parity PASS is ignored: build here" "not a parity-PASS build" STUB_STORE_TAR="$W/store.tar"
+fresh_binroot
+boot "store miss: build here, then upload it for the next pod" "uploaded bin/$SHA40-sm120.tar to the HF store"
+if grep -qx "put bin/$SHA40-sm120.tar" "$BR/puts" && tar -tf "$BR/pushed.tar" | grep -q 'BUILD.json'; then ok "the uploaded tar is this build"; else bad "the uploaded tar is this build"; fi
+# uor-store (the pod's command for the HF store) against a fake hf whose store is a directory
+HFS=$W/hfstore; mkdir -p "$HFS" "$W/hfbin"
+cat > "$W/hfbin/hf" <<'S'
+#!/usr/bin/env bash
+echo "hf $*" >> "$FAKE/hf-calls"
+cmd=$1; shift; repo=$1; shift
+case $cmd in
+  upload) src=$1 dst=$2; mkdir -p "$(dirname "$HFS/$dst")"; if [ -d "$src" ]; then mkdir -p "$HFS/$dst"; cp -R "$src/." "$HFS/$dst/"; else cp "$src" "$HFS/$dst"; fi;;
+  download) path='' inc='' dir=.; while [ $# -gt 0 ]; do case $1 in --repo-type) shift 2;; --include) inc=$2; shift 2;; --local-dir) dir=$2; shift 2;; *) path=$1; shift;; esac; done
+    if [ -n "$path" ]; then [ -e "$HFS/$path" ] || exit 0; mkdir -p "$(dirname "$dir/$path")"; cp -R "$HFS/$path" "$dir/$path"
+    else p=${inc%\*}; [ -e "$HFS/$p" ] || exit 0; mkdir -p "$dir/$p"; cp -R "$HFS/$p." "$dir/$p"; fi;;
+esac
+S
+chmod +x "$W/hfbin/hf"
+us() { env PATH="$W/hfbin:$PATH" HFS="$HFS" HF_TOKEN_PATH="$W/notoken" bash "$HERE/../uor-store" "$@" > "$W/out" 2>&1; }
+mkdir -p "$W/res/run1"; echo 0.42 > "$W/res/run1/metric.txt"
+if us put "$W/res/run1" results/claude/demo-2026-10-13/run1 && [ "$(cat "$HFS/results/claude/demo-2026-10-13/run1/metric.txt")" = 0.42 ]; then ok "uor-store put uploads a directory"; else bad "uor-store put uploads a directory"; fi
+if us get results/claude/demo-2026-10-13/run1/ "$W/back" && [ "$(cat "$W/back/results/claude/demo-2026-10-13/run1/metric.txt")" = 0.42 ]; then ok "uor-store get brings a folder back"; else bad "uor-store get brings a folder back"; fi
+if ! us get results/nothing-here.txt "$W/back" && grep -q "nothing downloaded for results/nothing-here.txt" "$W/out"; then ok "uor-store get reports a missing path instead of a silent nothing"; else bad "uor-store get reports a missing path instead of a silent nothing"; fi
+if ! us put "$W/res/run1" ../escape && grep -q "without a leading / or '..'" "$W/out"; then ok "uor-store refuses a path outside the store"; else bad "uor-store refuses a path outside the store"; fi
+if grep -q -- "upload caseyallard/uor-r4-store $W/res/run1 results/claude/demo-2026-10-13/run1 --repo-type dataset" "$FAKE/hf-calls"; then ok "uor-store uses the project store as a dataset"; else bad "uor-store uses the project store as a dataset"; fi
 
 # ---- Ollama on the pod is optional and never fatal (the bootstrap's Ollama
 # functions, sourced with a fake curl that serves files from $W/serve by name and
@@ -908,6 +960,16 @@ if [ "$(grep -c '^vastai create instance' "$FAKE/calls")" = 1 ]; then ok "still 
 echo '[{"id": 9001, "label": "uor-claude-x", "num_gpus": 1, "dph_total": 0.1, "intended_status": "stopped", "actual_status": "exited"}]' > "$FAKE/vast-instances.json"
 vexpect "prune-stopped skips a stopped Vast pod" 0 "a Vast pod's disk holds its only copy of /workspace" -- prune-stopped --yes --older-than 0m
 if jq -e 'length == 1' "$FAKE/vast-instances.json" >/dev/null; then ok "the stopped Vast pod is kept"; else bad "the stopped Vast pod is kept"; fi
+# down --to-store: the pod uploads its results with /root/uor-store, no laptop copy
+vfresh; VO RTX_5090 1 "$OFF5"
+vexpect "Vast up for the --to-store case" 0 "Ready: ssh" -- up --lab claude --session vstore --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"
+if grep -q 'cat > /root/uor-store && chmod 755 /root/uor-store' "$FAKE/calls"; then ok "up installs uor-store on the pod"; else bad "up installs uor-store on the pod"; fi
+mkdir -p "$FAKE/vast-ws/uor-r4/jobs/claude"; echo r > "$FAKE/vast-ws/uor-r4/jobs/claude/r.log"
+FAKE_VAST_KB=$((9 * 1024 * 1024)) vexpect "down --to-store archives even above the laptop cap" 0 "Archived 9216 MB of vast-9001 results to the HF store under vast-archive/vast-9001/" -- down vast-9001 --lab claude --session vstore --to-store
+if grep -q '/root/uor-store put /workspace/uor-r4/jobs vast-archive/vast-9001/uor-r4/jobs' "$FAKE/calls" && [ ! -d "$UOR_POD_STATE/vast-archive/vast-9001" ]; then
+  ok "the pod uploads; nothing is copied to the laptop"; else bad "the pod uploads; nothing is copied to the laptop"; fi
+if grep '"event":"vast-archive"' "$UOR_POD_STATE/ledger.jsonl" | tail -1 | jq -e '.dest == "hf:vast-archive/vast-9001"' >/dev/null; then ok "the ledger records the store path"; else bad "the ledger records the store path"; fi
+rm -rf "$FAKE/vast-ws"
 # the instance key Vast returns on create never leaks
 if ! grep -rq 'SENTINEL' "$VSEEN" "$UOR_POD_STATE" "$FAKE/calls"; then ok "the instance key and tokens never reach output, ledger, state or a command line"
 else grep -rl 'SENTINEL' "$VSEEN" "$UOR_POD_STATE" "$FAKE/calls" | sed 's/^/     /'; bad "the instance key and tokens never reach output, ledger, state or a command line"; fi
