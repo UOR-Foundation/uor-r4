@@ -1,8 +1,8 @@
 {
-  "kimi/pm-rules-2026-10-13": {
-    "branch": "kimi/pm-rules-2026-10-13",
-    "claimed_at": "2026-10-13T00:58:49-04:00",
-    "head": "d7934bf03",
+  "kimi/plan-refresh-2026-10-13": {
+    "branch": "kimi/plan-refresh-2026-10-13",
+    "claimed_at": "2026-10-13T01:16:40-04:00",
+    "head": "84287b397",
     "lab": "kimi",
     "note": ""
   }
