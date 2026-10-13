@@ -1349,7 +1349,8 @@ cmd_release() {
 # are refused: the laptop disk is small, so those go to the store by hand.
 vast_archive() {  # POD -> 0 when archived (or nothing to archive)
   local pod=$1 have kb dest
-  have=$(pod_ssh "$pod" "cd /workspace 2>/dev/null || exit 0; for d in $VAST_ARCHIVE_DIRS; do [ -e \"\$d\" ] && echo \"\$d\"; done" </dev/null) ||
+  # (the loop ends `true`: a missing last directory is not an SSH failure)
+  have=$(pod_ssh "$pod" "cd /workspace 2>/dev/null || exit 0; for d in $VAST_ARCHIVE_DIRS; do [ -e \"\$d\" ] && echo \"\$d\"; done; true" </dev/null) ||
     { warn "cannot reach $pod over SSH to archive its results"; return 1; }
   if [ -z "$have" ]; then info "$pod: no result directories to archive"; return 0; fi
   # shellcheck disable=SC2086  # one path per word

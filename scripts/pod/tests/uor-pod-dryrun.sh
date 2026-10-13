@@ -155,11 +155,13 @@ cat > "$W/bin/ssh" <<'S'
 port=''; while [ $# -gt 0 ]; do case $1 in -p) port=$2; shift 2;; -i|-o) shift 2;; root@*) shift; break;; *) shift;; esac; done
 echo "ssh $port $*" >> "$FAKE/calls"
 case "$*" in *probe_ok*) cat "$FAKE/probe-$port" 2>/dev/null;; esac
-# a Vast pod's archive at `down`: which result dirs exist, their size, the tar stream
-case "$*" in
-  *"for d in uor-r4/jobs"*) cat "$FAKE/vast-dirs" 2>/dev/null;;
-  *"du -sk uor-r4/"*) echo "${FAKE_VAST_KB:-12}";;
-  *"tar -cf - uor-r4/"*) [ ! -d "$FAKE/vast-ws" ] || tar -cf - -C "$FAKE/vast-ws" uor-r4;;
+# a Vast pod's archive at `down` runs for real against $FAKE/vast-ws (its
+# /workspace), so the exit status is what a pod would return; FAKE_VAST_KB
+# stands in for a large result set
+c=$*
+case "$c" in
+  *"du -sk uor-r4/"*) if [ -n "${FAKE_VAST_KB:-}" ]; then echo "$FAKE_VAST_KB"; exit 0; fi; bash -c "${c//\/workspace/$FAKE/vast-ws}"; exit;;
+  *"for d in uor-r4/jobs"*|*"tar -cf - uor-r4/"*) bash -c "${c//\/workspace/$FAKE/vast-ws}"; exit;;
 esac
 # the bootstrap run (non-dry tests): 40 lines of output, then either the failure
 # of 2026-10-05 (Ollama's .tgz 404 -> tar, rc 2) or a BOOTSTRAP_RESULT with
@@ -838,7 +840,8 @@ if jq -e '."vast-9001" | .provider == "vast" and .off_volume == true and .canoni
    [ -f "$UOR_POD_STATE/leases/vast-9001/codex-x1.json" ]; then
   ok "the Vast pod is cached as vast-9001 under the creator's lease"; else bad "the Vast pod is cached as vast-9001 under the creator's lease"; fi
 vexpect "run on the Vast pod" 0 "Started on vast-9001 gpu 0" -- run vast-9001 "${X1[@]}" --gpu 0 -- nvidia-smi -L
-mkdir -p "$FAKE/vast-ws/uor-r4/jobs/codex"; echo result > "$FAKE/vast-ws/uor-r4/jobs/codex/r.log"; echo uor-r4/jobs > "$FAKE/vast-dirs"
+# only jobs/ exists (as on a fresh pod): the missing pods/runs/evals are skipped
+mkdir -p "$FAKE/vast-ws/uor-r4/jobs/codex"; echo result > "$FAKE/vast-ws/uor-r4/jobs/codex/r.log"
 FAKE_VAST_KB=$((6 * 1024 * 1024)) vexpect "down refuses when the results are too big for the laptop" 1 "results not archived .*nothing deleted" -- down vast-9001 "${X1[@]}"
 has "the refusal says how big" "holds 6144 MB of results \\(over 5120 MB"
 if jq -e 'any(.[]; .id == 9001)' "$FAKE/vast-instances.json" >/dev/null; then ok "nothing was destroyed"; else bad "nothing was destroyed"; fi
@@ -847,7 +850,7 @@ has "the archive is reported" "Archived 0 MB of vast-9001 results to $UOR_POD_ST
 if [ "$(cat "$UOR_POD_STATE/vast-archive/vast-9001/uor-r4/jobs/codex/r.log" 2>/dev/null)" = result ]; then ok "the results are on the laptop"; else bad "the results are on the laptop"; fi
 if grep -q '^vastai destroy instance 9001$' "$FAKE/calls" && [ "$(jq length "$FAKE/vast-instances.json")" = 0 ]; then
   ok "destroy answered the [y/N] prompt and the instance is gone"; else bad "destroy answered the [y/N] prompt and the instance is gone"; fi
-if grep '"event":"vast-archive"' "$UOR_POD_STATE/ledger.jsonl" | jq -e --arg d "$UOR_POD_STATE/vast-archive/vast-9001" '.dest == $d and .kb == 12' >/dev/null; then
+if grep '"event":"vast-archive"' "$UOR_POD_STATE/ledger.jsonl" | jq -e --arg d "$UOR_POD_STATE/vast-archive/vast-9001" '.dest == $d and .kb > 0' >/dev/null; then
   ok "the archive is in the ledger"; else bad "the archive is in the ledger"; fi
 # a bootstrap failure destroys the new Vast pod as well
 vfresh; VO RTX_5090 1 "$OFF5"
