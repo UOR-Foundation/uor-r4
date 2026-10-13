@@ -1721,8 +1721,14 @@ fn softsort_tau_at(schedule: (f64, f64), step: usize, steps: usize) -> f64 {
 
 /// `quaternion_weights=none|all`; absent (`None`) keeps the model's own.
 fn quaternion_weights_arg(args: &Args) -> Result<Option<QuaternionWeights>> {
+    if let Some(projection) = args.optional("projection") {
+        if projection != "spiralcore_fbs" || args.optional("quaternion_weights").is_some() {
+            return Err(invalid("projection=spiralcore_fbs is explicit and cannot be combined with quaternion_weights"));
+        }
+        return Ok(Some(QuaternionWeights::SpiralcoreFbs));
+    }
     args.optional("quaternion_weights")
-        .map(|text| Ok(QuaternionWeights::parse(&text)?))
+        .map(|text| QuaternionWeights::parse(&text))
         .transpose()
 }
 
@@ -1811,7 +1817,10 @@ fn train_settings(args: &Args) -> Result<Settings> {
             .unwrap_or("none"),
     )?;
     let quaternion_weights = quaternion_weights_arg(args)?;
-    if quaternion_weights == Some(QuaternionWeights::All) {
+    if matches!(
+        quaternion_weights,
+        Some(QuaternionWeights::All | QuaternionWeights::SpiralcoreFbs)
+    ) {
         if config.arch != StackArch::Geometric {
             return Err(invalid("quaternion_weights=all needs arch=geometric"));
         }
@@ -2450,7 +2459,7 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
     let active_parameters = match model.quaternion_weights() {
         QuaternionWeights::None => model.config.active_parameter_count()?,
         // The configuration counts dense maps; only memory rows are idle.
-        QuaternionWeights::All => {
+        QuaternionWeights::All | QuaternionWeights::SpiralcoreFbs => {
             parameters
                 - (model.config.parameter_count()? - model.config.active_parameter_count()?)
         }
@@ -6800,6 +6809,7 @@ fn main() -> Result<()> {
                     "objective",
                     "gate",
                     "quaternion_weights",
+                    "projection",
                     "quaternion_snap",
                     "activation_snap",
                     "e8_memory",
