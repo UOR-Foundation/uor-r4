@@ -96,11 +96,14 @@ g_j = BFS[F_j][F_q]           (maps atom j's frame root onto the query's frame r
 c_j = action(g_j, P_j)        (the payload, not the frame, is carried)
 ```
 
-`action(g_j, ·)` is a bijection of the orbit, so distinct payloads with equal
-frames stay distinct. Deranging payloads across positions therefore changes
-the carried set (control C10). The result collapses to `q`'s own payload only
-when a token's payload root equals its own frame root, which is a property of
-that token, not of the law.
+What the transport does and does not guarantee (corrected per Codex
+re-review [6156487835](https://github.com/UOR-Foundation/uor-r4/pull/2378#issuecomment-6156487835)):
+
+- **Fixed action.** For a fixed action `g`, `action(g, ·)` is a bijection of the orbit, so distinct payloads carried by the **same** action stay distinct. Across **different** per-token actions, carried outputs can coincide; nothing here claims they are collision-free.
+- **Equality condition.** A carried payload equals the query's payload exactly when `P_j = action(inverse(g_j), P_q)`. Equality of a token's payload and frame roots is **neither necessary nor sufficient**:
+  - If `F_j = F_q = a` and `P_j = P_q = b ≠ a`, then `g_j` is the identity and `c_j = P_q`, although `P_j ≠ F_j`.
+  - If `P_j = F_j`, then `c_j = F_q`, which need not equal `P_q`.
+- **No universal sensitivity.** An arbitrary derangement need not change the consensus: permuting payloads among same-frame positions preserves the unordered carried set and its sum. Non-vacuity is therefore pinned by **explicit witnesses** (C10, C12), not by a claim that every permutation changes the output.
 
 Orientation stays in the action. This is the S1 relative-transport idea on
 SpiralCore actions instead of icosian products.
@@ -164,35 +167,67 @@ and control C9, not an assertion.
 - **Codebook.** Codex's codebook moves already change every occurrence of a token in the context, and so every flock that token joins. The flock read needs nothing extra for them.
 - **Audit record (optional).** The read can emit the kept positions, `m_l`, `u`, and each contributor's §2 cost to `m_l`. The learner never needs it: the law selects moves by exact replayed loss, not by attributed credit.
 
-## 5. Interface (proposed; new files only, after Codex's crate pins)
+## 5. Interface and ownership (agreed with Codex, handoff [6156724976](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6156724976))
+
+The base is `main` at `5cb36188e`, where #2379 is merged.
+
+**ABI**
 
 ```text
-FlockRead { kept (K), order: RankOrder, levels: from the plan }
-input    same as route_vector: carried [rows, context, blocks, 8] i32, ids, plan, geometry, (valid mask per R2)
-params   gates: [blocks, stages] i8 in {-1, 0, 1}
-output   [rows, blocks, 8] i32 orbit roots
+Spec        unchanged
+ReadSpec    Route (default) | Flock { kept: K }              K in 1..=8
+device spec words: existing words, then append  mode (0 Route, 1 Flock), K
+gates       i32 [blocks * stages], index = block * stages + level   (level 0 = atoms)
+            values in {-1, 0, +1}; placed after routes in init / validate / forward /
+            counterfactual / choose / apply
+Gate        kind 3; 3 candidates: ordinal 0 = CURRENT, then siblings in the order [0, -1, +1]
+            with the current value skipped
+Route, VectorBlock   unchanged, 16 candidates each
 ```
 
-- The read lives inside `crates/uor-r4-discrete` as a sibling kernel to `route_vector`, once Codex's crate lands.
-- It is selected by configuration and bound into the model binding, so a gate snapshot cannot load onto a `route_vector` model.
-- It uses only integer types; nvcc builds the PTX ahead of time (no NVRTC); there is no host model path (D24).
+**Rules on my side of that ABI**
+
+- **Flock is a mode inside the existing seven kernels.** `discrete_forward` and `discrete_counterfactual` call `flock_vector` instead of `route_vector` when `mode = 1`. No new PTX entry is added, so the `build.rs` allow-list of seven entries is unchanged.
+- **Gate counterfactual.**
+  - Candidates are ordinals 0..2. The other 13 loss slots are set to MAX.
+  - The baseline-eligibility rule is the same as #2379.
+  - **Choose:** strict improvement only, and ties keep the lower ordinal, so CURRENT wins ties, then `0`, `−1`, `+1`.
+  - **Apply:** writes the sibling's trit and advances the epoch.
+- **Typed refusals:**
+  - a Gate proposal in Route mode;
+  - a Route proposal in Flock mode, where the route frames are unused, so a proposal there could only tie at identity;
+  - a gate value outside `{−1, 0, +1}` (a new validate status);
+  - `mode` or `K` out of range.
+- **Gate levels.** A gate whose level exceeds a row's plan contributes nothing for that row.
+- **No host path, integers only.** There is no host model path (D24). Integer types only, and nvcc builds the PTX ahead of time (no NVRTC).
+
+**File split**
+
+| Owner | Files |
+|---|---|
+| Claude | this design record; the flock and gate CUDA code in `src/discrete.cu` (`flock_vector`, `snap_n`, the `mode` dispatch, and `kind = 3` in counterfactual, choose, apply and validate); the exact flock controls in a new `src/flock_qualification.rs` |
+| Codex | `src/lib.rs`, `src/device.rs`, `src/main.rs` (ReadSpec, gate trits, snapshot and binding, CLI), plus `build.rs` and module binding, on `codex/discrete-flock-integration-20261013`. Codex also registers `flock_qualification` in the controller. |
+
+`discrete.cu` is shared. I edit only the flock and gate code paths listed
+above, and post the diff before Codex's host side depends on it. A new finite
+FIT is required before any CUDA flock control runs. No training follows.
 
 ## 6. Exact construction controls (R13: no floating point, no tolerances)
 
 | # | Control | Kind |
 |---|---|---|
 | C1 | Orbit closure under the 64 actions | exhaustive |
-| C2 | `BFS[r][s]` maps `r` to `s`; transport loops `r → s → r` return the carrier | exhaustive, 16×16 |
+| C2 | `BFS[r][s]` maps root `r` to root `s`; **payload round trip uses the inverse of the chosen action**: `action(inverse(g), action(g, P)) = P` for every chosen `g = BFS[F_j][F_q]` and every orbit payload `P`. An independently chosen reverse BFS path returns the frame root, which alone does not establish payload round trip. | exhaustive, 16×16 frame pairs × 16 payloads |
 | C3 | `snap_n` equals a brute-force argmin over the 16 roots with the registered tie rule, for every `n ≤ 9` and every sum reachable from signed orbit roots (stored enumeration) | exhaustive and stored |
 | C4 | Causality and isolation: no kept leaf at or after `len − 1`; at valid length 3 the whole-prefix binder is not admitted; padding and other rows are never read; the target is invariant (R2 controls shared with #2379) | stored fixtures |
 | C5 | Rank order equals the lexicographic key of §3.1 (frame L1, Hamming, recency, position) | stored fixtures |
-| C6 | Tree candidates equal the plan's binders; a masked child refuses | stored fixtures |
+| C6 | Tree candidates equal the plan's **eligible binders under §3.4** (all leaves `< len − 1` of the valid length, inside the window); a binder with a masked or excluded leaf is not a candidate | stored fixtures |
 | C7 | Identity read: all gates `0` gives `out = q` bitwise | stored |
 | C8 | Gate counterfactual losses equal full re-runs with that gate changed | stored |
 | C9 | Gate monotonicity under the L1-primary cost: a proof, or a stored-fixture record | proof or stored |
-| C10 | Non-vacuity: deranging carriers across positions changes `out` on a stored fixture; a constant context gives `m` equal to that root | stored |
+| C10 | Non-vacuity by explicit witness: a stored fixture where changing **one kept atom's payload** changes the carried sum and hence `m` and `out`, with the literal before/after roots stated; a constant context gives `m` equal to that root. No claim that an arbitrary derangement changes `m` (same-frame permutations preserve the carried set) | stored |
 | C11 | Operation census: the PTX has no float instruction or conversion | static |
-| C12 | No collapse (Codex P1): on a fixture of two kept atoms with equal frames and distinct payloads, the carried payloads are distinct, and at least one is not `q`'s own payload; a fixture whose payload equals its frame is the only case where a carried value can equal `q`'s | stored fixtures |
+| C12 | No collapse (Codex P1), explicit witnesses: (a) `F_j = F_q`, `P_j ≠ P_q` gives `c_j = P_j ≠ P_q`; (b) on a stored fixture with `F_j ≠ F_q`, chosen so that `P_j ≠ action(inverse(g_j), P_q)`, the literal `c_j = action(BFS[F_j][F_q], P_j)` differs from `P_q`; (c) the equality case `P_j = action(inverse(g_j), P_q)` gives `c_j = P_q`, confirming the exact condition of §3.2 | stored fixtures |
 
 Every control is an equality or an integer comparison.
 
