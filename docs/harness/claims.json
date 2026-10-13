@@ -1,11 +1,4 @@
 {
-  "codex/discrete-flock-integration-20261013": {
-    "branch": "codex/discrete-flock-integration-20261013",
-    "claimed_at": "2026-10-13T18:39:18-04:00",
-    "head": "5cb36188e",
-    "lab": "codex",
-    "note": "Owner authorized Claude2378 flock/shared-writer integration and Kimi learning-sheet support; source split pending, training HELD"
-  },
   "kimi/d29-nvrtc-amendment": {
     "branch": "kimi/d29-nvrtc-amendment",
     "claimed_at": "2026-10-13T11:31:25-04:00",

@@ -147,3 +147,6 @@
 {"kind":"heartbeat","lab":"codex","line":"Composing Claude flock controls with shared writer; Codex owns next D1 driver and D2 cost. Training HELD.","milestone":"M4","schema":1,"ts":"2026-10-13T23:01:41Z"}
 {"kind":"heartbeat","lab":"codex","line":"Claude source and controls composed; finite FIT sheet in preparation, AOT build next. D1/D2 owned. Training HELD.","milestone":"M4","schema":1,"ts":"2026-10-13T23:04:27Z"}
 {"kind":"heartbeat","lab":"codex","line":"AOT CUDA build on owned Vast55826965; 17-control FIT sent directly to Claude. No model compute yet. D1/D2 next, training HELD.","milestone":"M4","schema":1,"ts":"2026-10-13T23:08:46Z"}
+{"kind":"heartbeat","lab":"codex","line":"Composed CUDA build PASSED; 17 controls NOT_RUN awaiting Claude FIT. Draft integration PR opened; D1/D2 next. Training HELD.","milestone":"M4","schema":1,"ts":"2026-10-13T23:11:42Z"}
+{"kind":"heartbeat","lab":"codex","line":"17/17 CUDA controls PASS, zero updates; archiving then protectedPR2395merge. D1/D2 next, training HELD.","milestone":"M4","schema":1,"ts":"2026-10-13T23:18:26Z"}
+{"kind":"heartbeat","lab":"codex","line":"17/17PASS preserved; pod deleted, zero live pods; PR2395 final review/CI. Codex D1/D2 next, training HELD.","milestone":"M4","schema":1,"ts":"2026-10-13T23:22:08Z"}
