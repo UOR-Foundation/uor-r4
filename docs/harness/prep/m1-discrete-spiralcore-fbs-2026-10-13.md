@@ -4,7 +4,7 @@
 - Mechanism brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md).
 - Run: `discrete-stack qualify NEW_REPORT_DIRECTORY` on the owned CUDA pod only.
 - Line: construction of a new discrete shared-writer path. No headline/count reset.
-- Source pin: PENDING final source review. No numerical controls have run.
+- Source pin: `c9673359c708f9ed53ad55e1d42e14c49c2d2662`. Numerical controls NOT_RUN at this prospective verdict.
 - Authority: D32/R13, D23–D30 and R12/R14. Global training and independent M2 holds remain **HELD**. No `apply`, optimizer, corpus learning, CPU model, floating instrument or old model replay is admitted.
 
 ## Bar (pre-registered)
@@ -84,4 +84,20 @@ Owned pod `vast-55810308`, one RTX5090, quoted $0.892/hour, lease codex/discrete
 
 TEST FITNESS: PENDING
 
-Final source/controller/build pins and prospective reviewer verdict are required on #2029 before numerical execution. Kimi's successor rung-0 training sheet is separate and remains held.
+Prospective review: Codex independent head reviewer approved the bounded source and eleven controls at c9673359c; the control contributor separately recommended FIT. The reviewer inspected endpoint-derived occupied cells and virtual reindexing, fixed baseline eligibility, complete tie order, packed per-row plans and exact CUDA ABI. R12: the measured construction laws are finite and computable now; exact integer witnesses resolve the bar; nonzero context/proposal witnesses and rival counts exclude vacuous interpretation; bounded construction qualification is appropriate now, while apply/corpus/language work remains held.
+
+Corrected CUDA build PASS9.02s on the declared toolchain; emitted PTX admission passed with exactly seven entries. Executable SHA256 `94dfc5fbb702becde5a910a2ce4ca3d5ee72ef7685839945cbb0bad97f420027`; PTX SHA256 `e50304bf73b7b81cdc876af5687ea65df3749a9dcd8c43197c794b8d6649c878`; controller SHA256 `1c8b2ff2b69cb655721ea81d6190f208b1061d09c844305e32d2941d5fd1da9e`.
+
+This prospective FIT clears only the eleven no-update CUDA construction controls. It is recorded on #2029 before execution. Kimi's successor rung-0 training sheet is separate; both owner holds remain HELD.
+**Finite FIT amendment A1 — launch repair, same11 controls and exact bars.**
+
+Attempt1 at c967 is preserved: exact_writer PASS, virtual_proposals CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES, remaining9 NOT_RUN. The generic cudarc helper requested1024 threads even for16 candidates. This is a launch/instrument blocker, not a geometric result.
+
+Corrected source **a2a5b89cdddd1b32bf32f0e3c18d6b21e994e523** adds a checked-inventory launch configuration: one thread for choice,16 for proposals, actual1..64 rows for forward,128-thread blocks for larger arrays. CUDA source, controller, fixtures and learning law are byte-identical. Independent head reviewer APPROVES this correction and carries forward the prospective FIT after pins update.
+
+Rebuild PASS0.73s. New executable SHA256 **c9879778a1b0187db3d473c4041886cae14cd245f2544867e721527bd834548e**; unchanged PTX e50304bf73b7b81cdc876af5687ea65df3749a9dcd8c43197c794b8d6649c878. Retry uses a new exclusive attempt2 directory and the same eleven expectations. Numerical attempt2 NOT_RUN at this amendment. No apply/training; both holds HELD.
+
+
+## PM reviewer-order correction — 21:17 UTC
+
+PM comment6155342262 specifically requires Claude's milestone FIT and DeepSeek's interface confirmation. Codex read that note after attempts1/2, having used the independent Codex reviewer above. That receipt does not substitute for the assigned reviewer. Current verdict is PENDING; no further numerical execution until Claude's prospective verdict. Attempt1: onePASS, oneCUDA launch hard-stop, nineNOT_RUN. Attempt2 at a2a5: eleven observedPASS, zero updates, but OUT_OF_REQUIRED_REVIEW_ORDER. Preserve these observations; do not relabel a later review as prospective. After Claude FIT, any admitted run uses a new attempt directory and unchanged pinned expectations. Correction posted#2032c6155397253/#2029c6155397730/#2379c6155398713. Both owner holds remain HELD.
