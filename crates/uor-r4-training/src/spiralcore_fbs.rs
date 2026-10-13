@@ -711,6 +711,73 @@ mod native_cuda_tests {
     }
 
     #[test]
+    fn native_cuda_shared_batch_and_output_credit() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let plan = ProjectionPlan::new(16, 24)?;
+        let g = &plan.geometry;
+        let queries: Vec<f32> = (0..3).flat_map(|_| g.roots[0].map(f32::from)).collect();
+        let q = Var::from_vec(queries, &plan.query_shape()[..], &device)?;
+        let x = Var::from_vec((1..=32).map(|n| n as f32).collect(), (2, 16), &device)?;
+        for dtype in [DType::F32, DType::BF16] {
+            let input = x.as_tensor().to_dtype(dtype)?;
+            let output = plan.forward(q.as_tensor(), &input)?;
+            assert_eq!(output.dims(), &[2, 24]);
+            let expected = Tensor::cat(
+                &[
+                    input.narrow(1, 0, 8)?,
+                    input.narrow(1, 0, 8)?,
+                    input.narrow(1, 0, 8)?,
+                ],
+                1,
+            )?;
+            close(&output, &expected, 0.)?;
+            let gradients = output.to_dtype(DType::F32)?.sum_all()?.backward()?;
+            let expected_dx = Tensor::cat(
+                &[
+                    Tensor::ones((2, 8), DType::F32, &device)?.affine(3., 0.)?,
+                    Tensor::zeros((2, 8), DType::F32, &device)?,
+                ],
+                1,
+            )?;
+            close(
+                gradients
+                    .get(&x)
+                    .ok_or_else(|| invalid("missing shared input credit"))?,
+                &expected_dx,
+                0.,
+            )?;
+            let state = g.compose[g.bfs_actions[1] as usize * 64 + g.identity as usize] as usize;
+            let mut contrasts = Vec::new();
+            for row in 0..2 {
+                let carrier = input.narrow(0, row, 1)?.flatten_all()?;
+                let alternative =
+                    action(&carrier.narrow(0, 8, 8)?, &g.axes[state * 8..state * 8 + 8])?
+                        .to_dtype(DType::F32)?;
+                contrasts.push(
+                    alternative
+                        .sub(&carrier.narrow(0, 0, 8)?.to_dtype(DType::F32)?)?
+                        .sum_all()?,
+                );
+            }
+            let contrast = contrasts[0].add(&contrasts[1])?;
+            let edge = Tensor::from_vec(g.roots[1].map(f32::from).to_vec(), 8, &device)?.sub(
+                &Tensor::from_vec(g.roots[0].map(f32::from).to_vec(), 8, &device)?,
+            )?;
+            let one = edge.broadcast_mul(&contrast.div(&edge.sqr()?.sum_all()?)?)?;
+            let expected_dq = Tensor::cat(&[one.clone(), one.clone(), one], 0)?
+                .reshape(&plan.query_shape()[..])?;
+            close(
+                gradients
+                    .get(&q)
+                    .ok_or_else(|| invalid("missing shared query credit"))?,
+                &expected_dq,
+                1e-5,
+            )?;
+        }
+        Ok(())
+    }
+
+    #[test]
     fn native_cuda_numerical_and_shape_refusals() -> Result<()> {
         let device = Device::new_cuda(0)?;
         let plan = ProjectionPlan::new(16, 8)?;
