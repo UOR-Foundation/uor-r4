@@ -3331,6 +3331,7 @@ pub struct StackModel {
     /// ([`Self::set_quaternion_weights`]).
     quaternion_weights: QuaternionWeights,
     spiralcore_fbs_plans: BTreeMap<(usize, usize), Arc<crate::spiralcore_fbs::ProjectionPlan>>,
+    native_vector_head: Option<crate::native_vector_writer::WriterSpec>,
     /// Trained-in icosian snap of every quaternion map ([`Self::set_quaternion_snap`]).
     quaternion_snap: QuaternionSnap,
     /// Evaluation-only probe ([`Self::set_activation_snap`]): every projection input lane is
@@ -3398,6 +3399,7 @@ impl StackModel {
             copy_span_oracle: None,
             quaternion_weights: QuaternionWeights::None,
             spiralcore_fbs_plans: BTreeMap::new(),
+            native_vector_head: None,
             quaternion_snap: QuaternionSnap::None,
         })
     }
@@ -3950,7 +3952,17 @@ impl StackModel {
             return plan.forward(weight, input);
         }
         if self.quaternion_weights == QuaternionWeights::SpiralcoreFbs {
-            return Err(invalid("native SpiralCore/FBS projections cannot fall through to a dense head/null map; OP3a and whole-path qualification remain required"));
+            if weight.dims() == [self.config.vocab_size, self.config.width]
+                && self.native_vector_head.is_some()
+            {
+                let rows = input.elem_count() / self.config.width;
+                return self.native_vector_writer()?.compatibility_scores(
+                    &input
+                        .to_dtype(DType::F32)?
+                        .reshape((rows, self.config.width))?,
+                );
+            }
+            return Err(invalid("native projections cannot fall through to a dense/null map; configure the shared product head explicitly"));
         }
         let snapped;
         // Only the quaternion maps' inputs: not the tied head ([vocab, width])
@@ -10081,6 +10093,13 @@ impl StackModel {
             return Err(invalid("token id outside the vocabulary"));
         }
         let embedding = p.get("embedding.weight")?;
+        if self.native_vector_head.is_some() {
+            return self.cast_activation(self.native_vector_writer()?.encode(ids)?.reshape((
+                batch,
+                time,
+                self.config.width,
+            ))?);
+        }
         let index = Tensor::from_vec(ids.to_vec(), batch * time, &self.device)?;
         let tokens =
             embedding
@@ -10108,6 +10127,71 @@ impl StackModel {
     pub fn head(&self, hidden: &Tensor) -> Result<Tensor> {
         let p = self.params()?;
         Ok(self.linear(&hidden, p.head()?)?)
+    }
+
+    /// Configure OP3a without changing the learned embedding parameter table.
+    /// Metadata preparation does not release the owner training hold.
+    pub fn set_native_vector_head(&mut self, kept_cells: usize) -> Result<()> {
+        if self.quaternion_weights != QuaternionWeights::SpiralcoreFbs
+            || self.config.pointer.is_some()
+            || self.served.is_some()
+        {
+            return Err(invalid("head=spiralcore_product requires native projection, no legacy pointer or served conversion"));
+        }
+        let spec = crate::native_vector_writer::WriterSpec {
+            vocabulary: self.config.vocab_size,
+            width: self.config.width,
+            kept_cells,
+        };
+        spec.validate()?;
+        self.native_vector_head = Some(spec);
+        Ok(())
+    }
+
+    /// Both input lookup and the compiler/store/emitter channel borrow this
+    /// same parameter tensor. No independent output prototypes are initialized.
+    pub fn native_vector_writer(&self) -> Result<crate::native_vector_writer::NativeVectorWriter> {
+        let spec = self
+            .native_vector_head
+            .as_ref()
+            .ok_or_else(|| invalid("native head is not configured; use head=spiralcore_product"))?;
+        let table = self
+            .variables
+            .get("embedding.weight")
+            .ok_or_else(|| invalid("shared native vector table absent"))?;
+        crate::native_vector_writer::NativeVectorWriter::new(table.as_tensor(), spec.clone())
+    }
+
+    /// Typed bounded candidates, including IDs and admission, rather than a
+    /// fabricated all-vocabulary logits tensor. Full-trunk use remains held.
+    pub fn native_head_candidates(
+        &self,
+        hidden: &Tensor,
+    ) -> Result<crate::native_vector_writer::VectorCandidates> {
+        self.native_vector_writer()?.candidates(hidden)
+    }
+
+    pub fn native_vector_channel(
+        &self,
+    ) -> Result<crate::native_vector_writer::NativeVectorChannel> {
+        Ok(crate::native_vector_writer::NativeVectorChannel::new(
+            self.native_vector_writer()?,
+        ))
+    }
+
+    pub fn native_head_loss(
+        &self,
+        hidden: &Tensor,
+        targets: &[u32],
+        rivals: usize,
+    ) -> Result<Tensor> {
+        let writer = self.native_vector_writer()?;
+        writer.margin(&writer.candidates(hidden)?, targets, rivals)
+    }
+
+    pub fn native_next_token_ids(&self, ids: &[u32], batch: usize, time: usize) -> Result<Tensor> {
+        let writer = self.native_vector_writer()?;
+        writer.write(&self.hidden(ids, batch, time)?)
     }
 
     /// The residual stream [batch, time, width] after running `layers` on
@@ -10983,6 +11067,14 @@ impl StackModel {
         if self.config.pointer.is_some() {
             return self.pointer_loss(ids, targets, None, batch, time);
         }
+        if self.native_vector_head.is_some() {
+            let Objective::MarginHinge { rivals } = self.config.objective else {
+                return Err(invalid(
+                    "native vector head requires its raw-score/address margin objective",
+                ));
+            };
+            return self.native_head_loss(&self.hidden(ids, batch, time)?, targets, rivals);
+        }
         let logits = self.forward(ids, batch, time)?;
         Ok(match self.config.objective {
             Objective::Ce => logits.apply_op1(CrossEntropy {
@@ -11009,6 +11101,9 @@ impl StackModel {
         batch: usize,
         time: usize,
     ) -> Result<Tensor> {
+        if self.native_vector_head.is_some() {
+            return Err(invalid("weighted legacy logits loss cannot credit omitted native targets; use the typed native target/address objective"));
+        }
         if targets.len() != ids.len() || weights.len() != ids.len() {
             return Err(invalid("one target and one weight per input id"));
         }
@@ -11740,6 +11835,9 @@ impl StackModel {
                 with_field["spiralcore_fbs_projection"] =
                     spiralcore_fbs_binding(&self.spiralcore_fbs_plans);
             }
+            if let Some(spec) = &self.native_vector_head {
+                with_field["native_vector_head"] = spec.binding()?;
+            }
             config = serde_json::to_vec_pretty(&with_field)?;
         }
         if let Some(route) = self.read_route {
@@ -12259,9 +12357,25 @@ impl StackModel {
             copy_span_oracle: None,
             quaternion_weights,
             spiralcore_fbs_plans: native_plans,
+            native_vector_head: None,
             quaternion_snap: QuaternionSnap::None,
         };
         model.set_transport_snap(Self::saved_transport_snap(directory)?)?;
+        let saved: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("config.json"))?)?;
+        if let Some(binding) = saved.get("native_vector_head") {
+            let spec: crate::native_vector_writer::WriterSpec =
+                serde_json::from_value(binding["spec"].clone())?;
+            if binding != &spec.binding()?
+                || spec.vocabulary != model.config.vocab_size
+                || spec.width != model.config.width
+            {
+                return Err(invalid(
+                    "shared native vector head artifact identity is missing or stale",
+                ));
+            }
+            model.set_native_vector_head(spec.kept_cells)?;
+        }
         model.set_read_identity_carry(Self::saved_read_identity_carry(directory)?)?;
         model.set_read_key_shift(Self::saved_read_key_shift(directory)?)?;
         {
