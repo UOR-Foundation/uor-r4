@@ -21,7 +21,7 @@
 #   uor-pod run     POD --lab L --session S --gpu K[,K2] -- CMD...
 #   uor-pod register POD --lab L --session S --purpose "..." [--gpu KEY] [--keep REASON]
 #   uor-pod keep|unkeep POD [--purpose REASON]   protect a pod with unique data from down/reap
-#   uor-pod prune-stopped [--older-than 24h] [--yes]   list (and with --yes delete) stopped pods
+#   uor-pod prune-stopped [--older-than 24h] [--yes] [--confirm-archived]   list (and with --yes delete) stopped pods
 #   uor-pod ssh     POD [CMD...]
 #   uor-pod bootstrap POD [--ref SHA|main] [--with-ollama] [--force]
 #   uor-pod seed    POD [--with-ollama] [--via CANONPOD]   copy the hot set (hot-set.txt)
@@ -98,6 +98,10 @@ SSH_WAIT_SECONDS=${UOR_POD_SSH_WAIT:-900}
 # Provider for new pods (owner 2026-10-13: Vast.ai; Runpod stays available).
 PROVIDER=${UOR_POD_PROVIDER:-vast}
 case $PROVIDER in vast|runpod) ;; *) echo "uor-pod: UOR_POD_PROVIDER must be vast or runpod (got '$PROVIDER')" >&2; exit 1;; esac
+# Providers this account uses: each one's pods are listed and counted toward the
+# caps, so a missing CLI or a failed listing is an error for `up`. An account
+# with one provider sets UOR_POD_PROVIDERS to it (scripts/pod/config.example).
+PROVIDERS=${UOR_POD_PROVIDERS:-vast runpod}
 # Vast offers `up` accepts: verified datacenter hosts only (no community hosts:
 # their operator holds the disk and our HF token), CUDA 12.8+, enough disk and
 # bandwidth; the cheapest wins. A Vast pod has no shared network volume: its
@@ -107,6 +111,7 @@ VAST_MIN_REL=${UOR_POD_VAST_MIN_RELIABILITY:-0.98}
 VAST_MIN_INET=${UOR_POD_VAST_MIN_INET_MBPS:-200}
 VAST_ARCHIVE_MAX_MB=${UOR_POD_VAST_ARCHIVE_MAX_MB:-5120}
 VAST_ARCHIVE_DIRS='uor-r4/jobs uor-r4/pods uor-r4/runs uor-r4/evals'
+VAST_POLL_S=${UOR_POD_VAST_POLL_S:-5}   # destroy confirmation: 8 listings this far apart
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # ---------------------------------------------------------------- GPU policy
@@ -277,25 +282,41 @@ VAST_NORM='def vnorm: select(type == "object" and .id != null) | {
        then {ssh: {ip: .public_ipaddr, port: (.ports["22/tcp"][0].HostPort | tonumber)}}
      elif (.ssh_host // "") != "" then {ssh: {ip: .ssh_host, port: .ssh_port}}
      else {} end);'
-rp_pods_all() { runpodctl pod list --all -o json | jq '[.[] | del(.env)]'; }
-vast_pods_all() { vastai show instances --raw | jq "$VAST_NORM"'[.[]? | vnorm]'; }
-# pods_all [strict]: both providers. A provider whose listing fails is left out
-# with a warning; `strict` (used by `up`, whose caps must see every pod) dies.
-pods_all() {
-  local rp='[]' va='[]'
-  if have_runpod; then
-    rp=$(rp_pods_all 2>/dev/null) && [ -n "$rp" ] ||
-      { [ "${1:-}" != strict ] || die "Runpod pod listing failed: the caps cannot be checked"; warn "Runpod pod listing failed; its pods are not shown"; rp='[]'; }
+# A listing that is not a JSON array (an API error printed with exit 0) is a failure.
+rp_pods_all() { runpodctl pod list --all -o json | jq 'if type == "array" then [.[] | del(.env)] else error("not a pod list") end'; }
+vast_pods_all() { vastai show instances --raw | jq "$VAST_NORM"'if type == "array" then [.[] | vnorm] else error("not an instance list") end'; }
+uses() { case " $PROVIDERS " in *" $1 "*) return 0;; *) return 1;; esac; }
+list_miss() {  # STRICT PROVIDER REASON
+  if [ "$1" = strict ]; then
+    die "$2: $3, so the caps cannot be checked (UOR_POD_PROVIDERS lists the providers this account uses: $PROVIDERS)"
   fi
-  if have_vast; then
-    va=$(vast_pods_all 2>/dev/null) && [ -n "$va" ] ||
-      { [ "${1:-}" != strict ] || die "Vast instance listing failed: the caps cannot be checked"; warn "Vast instance listing failed; its pods are not shown"; va='[]'; }
-  fi
-  jq -n --argjson a "$rp" --argjson b "$va" '$a + $b'
+  warn "$2: $3; its pods are not shown"
 }
-listing_ok() {  # POD -> 0 when the provider that owns POD lists its pods right now
-  if is_vast "$1"; then have_vast && vastai show instances --raw >/dev/null 2>&1
-  else have_runpod && runpodctl pod list --all -o json >/dev/null 2>&1; fi
+# list_pods [strict] -> PODS_JSON (pods of every provider in PROVIDERS) and
+# LISTED (the providers whose listing succeeded). It runs in the caller's shell,
+# so a caller can tell "not listed" from "gone": only a provider in LISTED may
+# have its missing pods' leases archived. `strict` (`up`) dies on any miss.
+PODS_JSON='[]' LISTED=''
+list_pods() {
+  local mode=${1:-} out
+  PODS_JSON='[]' LISTED=''
+  if uses runpod; then
+    if ! have_runpod; then list_miss "$mode" Runpod "runpodctl is not installed"
+    elif out=$(rp_pods_all 2>/dev/null); then LISTED="$LISTED runpod"; PODS_JSON=$(jq -n --argjson a "$PODS_JSON" --argjson b "$out" '$a + $b')
+    else list_miss "$mode" Runpod "the pod listing failed"; fi
+  fi
+  if uses vast; then
+    if ! have_vast; then list_miss "$mode" Vast "vastai is not installed"
+    elif out=$(vast_pods_all 2>/dev/null); then LISTED="$LISTED vast"; PODS_JSON=$(jq -n --argjson a "$PODS_JSON" --argjson b "$out" '$a + $b')
+    else list_miss "$mode" Vast "the instance listing failed"; fi
+  fi
+  return 0
+}
+pods_all() { list_pods; echo "$PODS_JSON"; }
+listed() {  # POD -> 0 when the last list_pods listed POD's provider successfully
+  if is_vast "$1"; then case " $LISTED " in *" vast "*) return 0;; esac
+  else case " $LISTED " in *" runpod "*) return 0;; esac; fi
+  return 1
 }
 pod_get() {  # POD -> the pod object, or nothing when the provider does not know it
   if is_vast "$1"; then
@@ -312,7 +333,7 @@ vast_offers() {
   name=$(gpu_field "$1" 5)
   [ -n "$name" ] || { echo '[]'; return 0; }
   out=$(vastai search offers "gpu_name=${name// /_} num_gpus=$2 datacenter=true verified=true rentable=true reliability>$VAST_MIN_REL cuda_vers>=12.8 disk_space>=$VAST_DISK_GB inet_down>=$VAST_MIN_INET" \
-    -o dph_total --raw 2>/dev/null | jq -c '[.[]? | {id, dph: (.dph_total * 1000 | round / 1000), n: .num_gpus, loc: (.geolocation // "?"), rel: .reliability2}] | sort_by(.dph)' 2>/dev/null) || out=''
+    --storage "$VAST_DISK_GB" -o dph_total --raw 2>/dev/null | jq -c '[.[]? | {id, dph: (.dph_total * 1000 | round / 1000), n: .num_gpus, loc: (.geolocation // "?"), rel: .reliability2}] | sort_by(.dph)' 2>/dev/null) || out=''
   echo "${out:-[]}"
 }
 print_vast_stock() {  # [KEYS] -> one line per GPU: offers and the cheapest $/GPU/h
@@ -331,11 +352,11 @@ vast_destroy() {  # POD -> 0 once the instance is no longer listed
   local n=${1#vast-} list
   echo y | vastai destroy instance "$n" >/dev/null 2>&1 || true
   for _ in 1 2 3 4 5 6 7 8; do
-    if list=$(vastai show instances --raw 2>/dev/null) && [ -n "$list" ] &&
-       ! echo "$list" | jq -e --argjson n "$n" 'any(.[]?; .id == $n)' >/dev/null 2>&1; then
+    if list=$(vastai show instances --raw 2>/dev/null) &&
+       echo "$list" | jq -e --argjson n "$n" 'type == "array" and (any(.[]; .id == $n) | not)' >/dev/null 2>&1; then
       return 0
     fi
-    sleep 5
+    sleep "$VAST_POLL_S"
   done
   return 1
 }
@@ -579,7 +600,7 @@ cmd_status() {
   local pods total=0 n_run=0 n_cap=0 id states freelines='' free keep stopped=0 badlines=''
   print_rules
   echo
-  pods=$(pods_all)
+  list_pods; pods=$PODS_JSON
   echo "Pods (caps: <= $MAX_PODS running pods, <= \$$MAX_RATE/h; idle reap after $IDLE_MIN min without a live lease)"
   for id in $(echo "$pods" | jq -r '.[].id'); do
     local p name st n cost up leases cache gtype live flag probe line
@@ -638,8 +659,9 @@ cmd_status() {
     [ -d "$d" ] || continue
     gone=$(basename "$d")
     if ! echo "$pods" | jq -e --arg i "$gone" 'any(.[]; .id == $i)' >/dev/null; then
-      # a failed listing of that pod's provider is not evidence that it is gone
-      if ls "$d"*.json >/dev/null 2>&1 && ! is_dry && listing_ok "$gone"; then
+      # only the listing this status was built from counts: a provider that was
+      # not listed then says nothing about whether its pod is gone
+      if ls "$d"*.json >/dev/null 2>&1 && ! is_dry && listed "$gone"; then
         lock_acquire
         mkdir -p "$STATE/gone"; mv "$d" "$STATE/gone/$gone-$(date -u +%Y%m%dT%H%M%SZ)"
         ledger gone '' "$gone" '{"note": "pod no longer listed by its provider; lease files archived"}'
@@ -701,10 +723,13 @@ cmd_prune_stopped() {
       "${since:-?}" "$( [ "$age" -ge 0 ] && echo $((age / 3600)) || echo '?')" "${keep:+  KEEP: $keep}"
     if [ "$YES" != 1 ]; then continue; fi
     if [ -n "$keep" ]; then echo "  skipped: marked KEEP"; continue; fi
+    if is_vast "$id" && [ "$CONFIRM_ARCHIVED" != 1 ]; then
+      echo "  skipped: a Vast pod's disk holds its only copy of /workspace; archive it ('uor-pod down $id', which copies the results), or re-run with --confirm-archived"; continue
+    fi
     if [ "$age" -lt "$secs" ]; then echo "  skipped: stopped for less than $OLDER"; continue; fi
     pod_delete "$id" >/dev/null || { warn "delete of $id not confirmed: $(delete_hint "$id")"; continue; }
     lock_acquire; ledger prune-stopped "${LAB:-}" "$id" "{\"stopped_s\": $age}"; lock_release
-    board "prune-stopped $id (stopped $((age / 3600)) h; durable data belongs on the volume)${LAB:+ by=$LAB/${SESSION:-}}"
+    board "prune-stopped $id (stopped $((age / 3600)) h; $(is_vast "$id" && echo 'results confirmed archived' || echo 'durable data belongs on the volume'))${LAB:+ by=$LAB/${SESSION:-}}"
     echo "  deleted"
   done
   [ "$YES" = 1 ] || echo "Listed only. Confirm nothing unique is on them (owner approval for pods with data), then re-run with --yes."
@@ -767,7 +792,7 @@ ensure_volume() {  # DC -> volume id; creates uor-shared-<DC> (100 GB, owner-app
 up_attempt() {
   local req=$1 count=$2 pods stock id free gtype probe states n_run rate gid price dc='' off=0 add
   UP_CAPMSG=''
-  pods=$(pods_all strict) || { lock_release; exit 1; }
+  list_pods strict; pods=$PODS_JSON
   if [ "$PROVIDER" = vast ]; then stock='[]'; else stock=$(gpu_stock); fi
 
   # 1. a free leased-compatible GPU already exists? (same GPU type, or type not yet known)
@@ -886,6 +911,15 @@ vast_create() {  # COUNT NAME REQ
     msg=$(printf '%s' "$out" | jq -r '.msg // .error // empty' 2>/dev/null || true)
     [ -n "$msg" ] || msg=$(tail -1 "$STATE/.create-err.$$" 2>/dev/null | cut -c1-200)
     out=''; rm -f "$STATE/.create-err.$$"
+    # a rental that succeeded but did not parse must not lead to a second one:
+    # look for an instance with this pod's label before trying the next offer
+    local mine
+    mine=$(vastai show instances --raw 2>/dev/null | jq -r --arg l "$name" 'if type == "array" then [.[] | select(.label == $l) | .id | tostring] | join(" ") else "?" end' 2>/dev/null) || mine='?'
+    if [ -n "$mine" ]; then
+      lock_release
+      [ "$mine" = '?' ] && die "Vast offer $id: no contract in the reply and the instance listing failed, so a rental cannot be ruled out: check 'vastai show instances' for label $name before retrying"
+      die "Vast offer $id: no contract in the reply, but instance(s) $mine labelled $name exist and bill. Register them (uor-pod register vast-N ...) or destroy them ($(delete_hint "vast-${mine%% *}")) before retrying"
+    fi
     warn "Vast offer $id was not rented (${msg:-no contract returned}); trying the next offer"
     tried="$tried $id"
   done
