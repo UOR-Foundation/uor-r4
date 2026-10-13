@@ -5,7 +5,7 @@
 
 use crate::{
     metadata::{BinderPlan, ABSENT},
-    Error, Identity, Parameter, Result, Spec, SCHEMA,
+    Error, Identity, Parameter, ReadSpec, Result, Spec, SCHEMA,
 };
 use cudarc::driver::{
     CudaContext, CudaFunction, CudaSlice, CudaStream, LaunchConfig, Ptx, PushKernelArg,
@@ -44,6 +44,7 @@ fn launch_config(items: u32) -> LaunchConfig {
 pub struct Binding {
     pub model: u64,
     pub spec: Spec,
+    pub read_spec: ReadSpec,
     pub seed: u32,
     pub geometry_sha256: [u8; 32],
     pub source_sha256: [u8; 32],
@@ -112,6 +113,8 @@ impl Forward {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProposalObservation {
+    /// Candidate ordinal, not a gate trit. Zero is always current/noop; for
+    /// gates, 1/2 select the other trits in [0,-1,+1] order skipping current.
     pub candidate: u64,
     pub before: u64,
     pub after: u64,
@@ -125,10 +128,14 @@ pub struct ProposalObservation {
 pub struct Snapshot {
     pub schema: String,
     pub spec: Spec,
+    pub read_spec: ReadSpec,
     pub seed: u32,
     pub epoch: u64,
     pub table: Vec<i32>,
     pub routes: Vec<u32>,
+    /// Explicit full [blocks,stages] trit inventory in both modes. It is
+    /// inactive in Route mode; there is no schema1/default-mode migration.
+    pub gates: Vec<i32>,
     pub operator_kappa: String,
     pub composition_kappa: String,
     pub kernel_sha256: String,
@@ -162,6 +169,7 @@ fn hex_digest(digest: &[u8; 32]) -> String {
 /// Device-chosen proposal. Private buffers prevent a host-authored update.
 pub struct Proposal {
     data: CudaSlice<u64>,
+    losses: CudaSlice<u64>,
     parameter: Parameter,
     binding: Binding,
     epoch: u64,
@@ -170,6 +178,12 @@ pub struct Proposal {
 impl Proposal {
     pub fn parameter(&self) -> Parameter {
         self.parameter
+    }
+    /// Storage observation of all sixteen completed device counterfactual
+    /// costs. Gate ordinals0..2 are active and ordinals3..15 are MAX padding.
+    /// This performs no host scoring, ranking or candidate selection.
+    pub fn candidate_losses(&self) -> Result<Vec<u64>> {
+        self.stream.clone_dtoh(&self.losses).map_err(cuda)
     }
     pub fn observation(&self) -> Result<ProposalObservation> {
         let words = self.stream.clone_dtoh(&self.data).map_err(cuda)?;
@@ -200,6 +214,7 @@ pub struct Device {
     stream: Arc<CudaStream>,
     table: CudaSlice<i32>,
     routes: CudaSlice<u32>,
+    gates: CudaSlice<i32>,
     epoch: CudaSlice<u64>,
     geometry: CudaSlice<u32>,
     metadata: BinderPlan,
@@ -225,13 +240,14 @@ fn packed_geometry() -> Vec<u32> {
     words
 }
 
-fn make_binding(spec: Spec, seed: u32, geometry: &[u32]) -> Result<Binding> {
+fn make_binding(spec: Spec, read_spec: ReadSpec, seed: u32, geometry: &[u32]) -> Result<Binding> {
     let model = NEXT_MODEL
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| x.checked_add(1))
         .map_err(|_| invalid("process model identity exhausted"))?;
     Ok(Binding {
         model,
         spec,
+        read_spec,
         seed,
         geometry_sha256: geometry_digest(geometry),
         source_sha256: source_sha256(),
@@ -250,13 +266,22 @@ fn geometry_digest(geometry: &[u32]) -> [u8; 32] {
 
 impl Device {
     pub fn new(spec: Spec, seed: u32, ordinal: usize) -> Result<Self> {
-        spec.validate()?;
+        Self::new_with_read(spec, ReadSpec::Route, seed, ordinal)
+    }
+
+    pub fn new_with_read(
+        spec: Spec,
+        read_spec: ReadSpec,
+        seed: u32,
+        ordinal: usize,
+    ) -> Result<Self> {
+        read_spec.validate(spec)?;
         let metadata = BinderPlan::new(spec.context as usize)?;
         let packed = packed_geometry();
         if packed.len() != 5120 {
             return Err(invalid("generated geometry ABI inventory differs"));
         }
-        let binding = make_binding(spec, seed, &packed)?;
+        let binding = make_binding(spec, read_spec, seed, &packed)?;
         let context = CudaContext::new(ordinal).map_err(cuda)?;
         let stream = context.default_stream();
         let module = context.load_module(Ptx::from_src(PTX)).map_err(cuda)?;
@@ -279,6 +304,9 @@ impl Device {
         let mut routes = stream
             .alloc_zeros::<u32>(spec.blocks as usize * metadata.stages())
             .map_err(cuda)?;
+        let mut gates = stream
+            .alloc_zeros::<i32>(spec.blocks as usize * metadata.stages())
+            .map_err(cuda)?;
         let epoch = stream.alloc_zeros::<u64>(1).map_err(cuda)?;
         let spec_gpu = stream
             .clone_htod(&[
@@ -290,15 +318,18 @@ impl Device {
                 metadata.stages() as u32,
                 metadata.nodes_count() as u32,
                 metadata.frontier().len() as u32,
+                read_spec.words()[0],
+                read_spec.words()[1],
             ])
             .map_err(cuda)?;
         let mut status = stream.alloc_zeros::<u32>(1).map_err(cuda)?;
-        let items = u32::try_from(table.len().max(routes.len()))
+        let items = u32::try_from(table.len().max(routes.len()).max(gates.len()))
             .map_err(|_| invalid("initialization inventory exceeds CUDA index bound"))?;
         let mut launch = stream.launch_builder(&kernels.init);
         launch
             .arg(&mut table)
             .arg(&mut routes)
+            .arg(&mut gates)
             .arg(&geometry)
             .arg(&spec_gpu)
             .arg(&seed)
@@ -312,6 +343,7 @@ impl Device {
             stream,
             table,
             routes,
+            gates,
             epoch,
             geometry,
             metadata,
@@ -326,6 +358,9 @@ impl Device {
     pub fn spec(&self) -> Spec {
         self.binding.spec
     }
+    pub fn read_spec(&self) -> ReadSpec {
+        self.binding.read_spec
+    }
     pub fn epoch(&self) -> Result<u64> {
         read_epoch(&self.stream, &self.epoch)
     }
@@ -338,10 +373,12 @@ impl Device {
         Ok(Snapshot {
             schema: SCHEMA.to_owned(),
             spec: self.spec(),
+            read_spec: self.read_spec(),
             seed: self.binding.seed,
             epoch: self.epoch()?,
             table: self.stream.clone_dtoh(&self.table).map_err(cuda)?,
             routes: self.stream.clone_dtoh(&self.routes).map_err(cuda)?,
+            gates: self.stream.clone_dtoh(&self.gates).map_err(cuda)?,
             operator_kappa: geometry::OPERATOR_KAPPA.to_owned(),
             composition_kappa: geometry::COMPOSITION_KAPPA.to_owned(),
             kernel_sha256: kernel_sha256(),
@@ -351,7 +388,7 @@ impl Device {
     }
 
     pub fn from_snapshot(snapshot: Snapshot, ordinal: usize) -> Result<Self> {
-        snapshot.spec.validate()?;
+        snapshot.read_spec.validate(snapshot.spec)?;
         let metadata = BinderPlan::new(snapshot.spec.context as usize)?;
         if snapshot.schema != SCHEMA
             || snapshot.operator_kappa != geometry::OPERATOR_KAPPA
@@ -367,25 +404,33 @@ impl Device {
         if snapshot.table.len()
             != snapshot.spec.vocabulary as usize * snapshot.spec.blocks as usize * 8
             || snapshot.routes.len() != snapshot.spec.blocks as usize * metadata.stages()
+            || snapshot.gates.len() != snapshot.spec.blocks as usize * metadata.stages()
         {
             return Err(invalid(
-                "snapshot codebook/route allocation inventory differs",
+                "snapshot codebook/route/gate allocation inventory differs",
             ));
         }
         // Fresh process identity even for byte-identical reloads. No carried
         // batch/proposal from another model instance becomes valid by loading.
-        let mut model = Self::new(snapshot.spec, snapshot.seed, ordinal)?;
+        let mut model =
+            Self::new_with_read(snapshot.spec, snapshot.read_spec, snapshot.seed, ordinal)?;
         model.table = model.stream.clone_htod(&snapshot.table).map_err(cuda)?;
         model.routes = model.stream.clone_htod(&snapshot.routes).map_err(cuda)?;
+        model.gates = model.stream.clone_htod(&snapshot.gates).map_err(cuda)?;
         model.epoch = model.stream.clone_htod(&[snapshot.epoch]).map_err(cuda)?;
         let spec = model.gpu_spec(1)?;
         let mut status = model.stream.alloc_zeros::<u32>(1).map_err(cuda)?;
-        let items = u32::try_from((model.table.len() / 8).max(model.routes.len()))
-            .map_err(|_| invalid("snapshot validation inventory exceeds CUDA index bound"))?;
+        let items = u32::try_from(
+            (model.table.len() / 8)
+                .max(model.routes.len())
+                .max(model.gates.len()),
+        )
+        .map_err(|_| invalid("snapshot validation inventory exceeds CUDA index bound"))?;
         let mut launch = model.stream.launch_builder(&model.kernels.validate);
         launch
             .arg(&model.table)
             .arg(&model.routes)
+            .arg(&model.gates)
             .arg(&model.geometry)
             .arg(&spec)
             .arg(&mut status);
@@ -409,6 +454,8 @@ impl Device {
                 self.metadata.stages() as u32,
                 self.metadata.nodes_count() as u32,
                 self.metadata.frontier().len() as u32,
+                self.read_spec().words()[0],
+                self.read_spec().words()[1],
             ])
             .map_err(cuda)
     }
@@ -603,6 +650,7 @@ impl Device {
         launch
             .arg(&self.table)
             .arg(&self.routes)
+            .arg(&self.gates)
             .arg(&batch.ids)
             .arg(&batch.vectors)
             .arg(&target)
@@ -645,13 +693,19 @@ impl Device {
 
     fn parameter(&self, parameter: Parameter) -> Result<(u32, u32)> {
         match parameter {
+            Parameter::Route(_) if matches!(self.read_spec(), ReadSpec::Flock { .. }) => {
+                Err(invalid("route parameters are inactive in a flock model"))
+            }
             Parameter::Route(index) if (index as usize) < self.routes.len() => Ok((0, index)),
             Parameter::VectorBlock(index)
                 if index < self.spec().vocabulary * self.spec().blocks =>
             {
                 Ok((1, index))
             }
-            Parameter::Gate(index) => Err(Error::UnimplementedParameter { kind: 3, index }),
+            Parameter::Gate(index) if self.read_spec() == ReadSpec::Route => {
+                Err(Error::UnimplementedParameter { kind: 3, index })
+            }
+            Parameter::Gate(index) if (index as usize) < self.gates.len() => Ok((3, index)),
             _ => Err(invalid(
                 "proposal parameter index exceeds its declared inventory",
             )),
@@ -668,12 +722,16 @@ impl Device {
         let epoch = self.admit_batch(batch, targets)?;
         let targets = self.stream.clone_htod(targets).map_err(cuda)?;
         let spec = self.gpu_spec(batch.rows)?;
+        // Fixed sixteen-word ABI: Gate3 writes active ordinals0..2 and pads
+        // 3..15 with MAX. Its chooser inspects only the three active entries;
+        // geometric parameter kinds use all sixteen. Every slot is written.
         let mut losses = self.stream.alloc_zeros::<u64>(16).map_err(cuda)?;
         let mut status = self.stream.alloc_zeros::<u32>(1).map_err(cuda)?;
         let mut launch = self.stream.launch_builder(&self.kernels.counterfactual);
         launch
             .arg(&self.table)
             .arg(&self.routes)
+            .arg(&self.gates)
             .arg(&batch.ids)
             .arg(&batch.vectors)
             .arg(&targets)
@@ -690,7 +748,7 @@ impl Device {
             .arg(&mut losses)
             .arg(&mut status);
         // SAFETY: exact counterfactual ABI; parameter and input inventories
-        // admitted; sixteen output candidates are scored only on CUDA.
+        // admitted; sixteen loss slots are scored/padded on CUDA as above.
         unsafe { launch.launch(launch_config(16)) }.map_err(cuda)?;
         check_status(&self.stream, &status, "counterfactual")?;
         let mut proposal = self.stream.alloc_zeros::<u64>(4).map_err(cuda)?;
@@ -700,17 +758,20 @@ impl Device {
             .arg(&self.epoch)
             .arg(&self.table)
             .arg(&self.routes)
+            .arg(&self.gates)
             .arg(&self.geometry)
             .arg(&spec)
             .arg(&kind)
             .arg(&index)
             .arg(&mut proposal);
-        // SAFETY: fixed sixteen losses, current bound parameter/table/routes,
+        // SAFETY: fixed sixteen losses with a kind-bound active count, current
+        // parameter/table/routes/gates,
         // geometry/spec and epoch, with four writable proposal words.
         unsafe { launch.launch(launch_config(1)) }.map_err(cuda)?;
         self.stream.synchronize().map_err(cuda)?;
         Ok(Proposal {
             data: proposal,
+            losses,
             parameter,
             binding: self.binding.clone(),
             epoch,
@@ -735,6 +796,7 @@ impl Device {
         launch
             .arg(&mut self.table)
             .arg(&mut self.routes)
+            .arg(&mut self.gates)
             .arg(&self.geometry)
             .arg(&spec)
             .arg(&proposal.data)
