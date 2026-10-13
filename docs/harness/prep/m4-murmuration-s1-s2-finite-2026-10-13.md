@@ -7,11 +7,11 @@
 - integrated numerical source: PR #2355 `1d9c644bf2cccf7a6196d59adef186e2f9e8081a`, including corrected operators from `7640693286f917a1c66cad06ab50fe5d0ae28837` and Codex control 7 from `5c38531b2`; final execution commit adds this sheet/controller and is pinned in the prospective milestone receipt
 - authority: [M1 card6151441631](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6151441631), [M1 binding conditions6151549249](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6151549249), [M2 card6152522132](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6152522132), [M2 prospective FIT6152708101](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6152708101)
 - line/count: starling read; existing3/3, owning milestone controls delivery accounting; no headline/count reset here
-- verdict: PENDING — corrected source and 33 exact control names are registered below; integrated source admission, compiled inventory and independent prospective review remain prerequisites
+- verdict: **TEST FITNESS: FIT** (Claude, independent prospective review on #2032) for the 33 exact finite controls below at the integrated execution pin; compiled inventory, exact-source setup manifest and binary pins remain execution prerequisites
 
 ## Bar
 
-**This preliminary sheet is not executable admission.** Qualification requires every finally registered exact control to execute once, pass and report zero ignored tests on the frozen admitted source. Zero selected tests, missing names, a CPU model/reference fallback, nonfinite model values or a required-path D29 refusal are BLOCKER, never a skipped/pass control or mechanism negative. No tolerance widening after observing output.
+**Execution admission still requires the exact-source setup manifest and binary pins below.** Qualification requires every finally registered exact control to execute once, pass and report zero ignored tests on the frozen admitted source. Zero selected tests, missing names, a CPU model/reference fallback, nonfinite model values or a required-path D29 refusal are BLOCKER, never a skipped/pass control or mechanism negative. No tolerance widening after observing output.
 
 Existing registered numerical expectations remain: forward absolute F32 error `<=1e-6`; central secants with `h=1e-3` and `|secant-analytic| <=2e-3 * max(|secant|,|analytic|,1e-3)`, giving an absolute `2e-6` floor at zero derivative. Exact identity/causality/left-head-preservation checks compare bits where the source/card specifies exactness. Tables and cocycles use exact `Z[phi]` witnesses; M2 checks both cocycles over all120^3 index triples. No language, energy, throughput or campaign bar is introduced.
 
@@ -125,6 +125,6 @@ Fixed implementation/causal qualification, not a model-quality statistical claim
 
 ## Verdict
 
-M1/S2 and M2 design FIT receipts remain at their defined scope. Corrected/paired/composed control names are registered, while final source integration, executable identities and independent prospective execution-sheet review on #2032 remain PENDING. All CUDA controls and compiled inventory verification are NOT_RUN here. Global training and separate M2 holds remain HELD; only the owner releases them.
+M1/S2 and M2 design FIT receipts remain at their defined scope. Source integration is complete at PR #2355 `1d9c644bf` (composed control 7 included); Claude's independent prospective review of this execution sheet is FIT on #2032: all 33 names verified present exactly once in source and identical between this sheet and the runner, 21 GPU-gated. Executable identities remain to be pinned by the exact-source setup manifest before the first control. All CUDA controls and compiled inventory verification are NOT_RUN here. Global training and separate M2 holds remain HELD; only the owner releases them.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
