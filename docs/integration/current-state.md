@@ -1,3 +1,50 @@
+## 2026-10-13 — CUDA parity compiles again on main (claude, #2029)
+
+A missing `Gate` import in the CUDA-only parity test (from #2260) made every pod bootstrap
+on `main` report parity FAIL since `7567cf725`. Fixed; a Vast 5090 bootstrap at the fix ran
+parity **43 passed, 0 failed**, and its HF store fetch got all six files (the #2261 token fix,
+live). [Record](../labs/cuda-parity-gate-import-2026-10-13/README.md).
+
+Line: infrastructure · no count · headline unchanged (M1 v5 memory 20/40, reply 37/232). Holds unchanged.
+
+## 2026-10-13 — The D25 hygiene sweep: the project's own documents and figures now agree with the ban (kimi, #2028)
+
+The [record](../labs/docs-sweep-2026-10-13/README.md) corrects the overview, roadmap, project map, geometry
+page, lab roster, mechanism index, project track, six figures and one archived branch so a reader cannot
+mistake pre-D25 material for the current contract. Nothing was deleted: `docs/geometry.md` gets a
+**Historical float form (pre-D23)** banner plus seven scoped notes (softmax read/head, sigmoid copy gate,
+SwiGLU MLP, and the runtime table re-labelled as open non-compliance); the figures get corrected numbers
+(served `0.886838 BPB`, dev `437/512`), the `lut-stack/3` schema and in-figure `historical (pre-D25)` /
+`held under D25` notes; `assets/images/README.md` captions the Studio-era concept art as preserved history.
+Code-level items: `README` lost the "D0-b to D20" range (now D25) and its mechanism list gained the
+invariant-addressed read and the ternary/XOR fact sheet, `ROADMAP` moved to `count7/3` and notes OP1/OP2
+merged, `PROJECT_MAP`'s three "training may use matmul" statements are corrected, the D19 lane table is
+marked historical, and the rung-0 wording is reconciled with Amendment 3 (the pre-registration resumes
+unchanged once the stack it trains is compliant). The superseded draft branch
+`kimi/d23-learning-law-2026-10-12` is preserved as a patch whose application at its pinned base reproduces
+the branch tip tree byte-for-byte. Checks: `check_no_softmax.py` **OK 1649**, `check_no_matmul.py` **OK 95**,
+claim wording PASS, all 20 figures parse as XML, and **no Rust source was touched**.
+
+Line: no model line — repository hygiene · count 0/3 · headline 37/232 → 37/232 (unchanged).
+
+**Next:** OP3a (the product-key head) after the merged OP1/OP2, then rung 0 once the whole executed path is
+lawful, device-qualified, FIT and released; revisit the remaining dense-path documentation as each rung lands.
+
+## 2026-10-13 — Vast.ai is the default provider for new pods (claude, #2028)
+
+Owner direction [D26](DECISIONS.md#d26---vastai-is-the-default-provider-for-new-pods):
+`uor-pod up` now rents the cheapest verified datacenter host on Vast.ai (a 5090 at
+$0.469–0.536/h against Runpod's $1.19/h); Runpod stays available with
+`--provider runpod`, and the caps count both providers. A Vast pod gets its data
+from the HF store and `down` archives its results to the laptop before destroying.
+A live `up → run → down` on a Vast 5090 passed (parity 38/38, reaper `api-ok`,
+$0.05). [Record](../labs/vast-provider-2026-10-13/README.md).
+
+Line: infrastructure · no count · headline: unchanged (M1 v5 memory 20/40, reply 37/232).
+Holds unchanged: training and M2 rental remain held.
+
+**Next:** resume the operator plan (OP2 Hamilton kernel first) under Kimi as PM.
+
 ## 2026-10-13 — SpiralCore composition and E8 root-table construction use exact signed-axis transport (Codex, #2029)
 
 The [source record](../labs/native-vector-transport-2026-10-12/README.md) removes
@@ -63,6 +110,49 @@ memory 20/40, reply 37/232).
 **Next:** OP3a (the product-key head) per the amended order; the pod parity receipt for `hamilton_linear`
 needs a prospective kernel card and TEST FITNESS first, and training stays held.
 
+
+## 2026-10-12 — The regression arena, and the harness as the session entry point (lead, tooling)
+
+The [record](../labs/regression-arena-2026-10-12/README.md) adds the other half of the frozen panels: the
+[arena](../harness/ARENA.md) records what each evaluated configuration actually scored, against which parent and at
+what scope, and reports the comparison **row by row** — never as an average. Five real rows are recorded, each citing
+its merged record (the D10 base, the addressed read, the starling tree, the starling readout self-distillation, and
+the M2 whole-path source reference as `NOT_RUN`). It holds no transformer or dense row by design (D23/D25, and the
+owner's 3 October direction), so it cannot answer "better than a transformer" and does not try; its job is to catch a
+capability already won being silently lost. The unit found and fixed a real defect in its own instrument: the first
+version reported the starling readout's move from 36 to 69 candidates per query — a 92% cost increase — as a *gain*.
+Direction and unit are now declared per bar, an equal value is neither a gain nor a regression, and an undeclared bar
+is reported as unknown rather than guessed; all three paths are tested. The [session contract](../labs/session-goal.md)
+now opens with a **Start here: the harness** section naming the three read-only commands to run before the first
+status card, the three the contract already requires, and the visibility habit, so a session no longer has to already
+know the harness exists.
+
+Line: no model line — tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** have `prep new` offer to append an arena row when a sheet is scored, closing the loop between
+pre-registration and lineage; and the two labs still holding worktrees with uncommitted files should commit and
+switch into the single checkout.
+
+## 2026-10-12 — Research material removed from the repository was restored byte-exact; the disk problem is solved with skip-worktree instead (lead, repository integrity)
+
+The [record](../labs/repository-integrity-2026-10-12/README.md) corrects a mistake in PR #2263, which removed
+`research/{prime-analysis,ai-research,archives}` (11,171 files, ~1 GB) from the tree because a verified iCloud copy
+existed. The owner rejected the reasoning — *"do not delete anything because this whole repository is a research
+project and we need to keep all evidence"* — and the material is restored byte-exact (PR #2266): all three directory
+trees hash identical to `7fc6e0b88`. Nothing was lost, because the files were always in git history and three
+MD5-verified iCloud archives had been written first; `.gitignore` no longer hides the paths. The disk problem is now
+solved the other way round: the material stays **tracked**, and `scripts/storage/research-data drop-local` uses git's
+own `skip-worktree` bit to keep it out of one checkout (~991 MB, `restore-local` reverses it), with no commit and a
+clean `git status`. The unit also consolidates five durable lessons out of provider-local memory so they are portable
+(`kill-only-own-pids`, `detached-run-watcher`, `archive-reference-check`, `geometry-carries-learning`,
+`no-transformer-baselines`), adds `archive-is-not-deletion` for this mistake, and adds the rule
+`prep.no_prohibited_teacher`, which fails a pre-registration proposing a softmax teacher, dense helper or transformer
+control — the drift that happened on 12 October.
+
+Line: no model line — repository integrity · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** the regression arena design and session-start adoption remain; both proceed on the corrected basis that a
+second copy is archived *in addition*, never instead.
 
 ## 2026-10-12 — Owner rules matmul out everywhere; the ternary/XOR alternative assessed and the lab data moved out of every checkout (lead, governance + workspace)
 

@@ -321,6 +321,12 @@ def cmd_prep(args: argparse.Namespace, paths: HarnessPaths, reg: Registry) -> in
 # ---------------------------------------------------------------------------- panel
 
 
+def cmd_arena(args: argparse.Namespace, paths: HarnessPaths, reg: Registry) -> int:
+    import arena
+
+    return arena.main(args, paths, reg)
+
+
 def cmd_panel(args: argparse.Namespace, paths: HarnessPaths, reg: Registry) -> int:
     import prep as P
 
@@ -392,6 +398,8 @@ def cmd_git(args: argparse.Namespace, paths: HarnessPaths, reg: Registry) -> int
         return G.install_hooks(args, paths)
     if args.action == "status":
         return G.status(args, paths)
+    if args.action == "clean-merged":
+        return G.cmd_clean_merged(args, paths)
     return EXIT_USAGE
 
 
@@ -436,7 +444,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="uor-harness",
         description="Research harness for UOR-R4: milestones, skills, expert team, lessons, budgets, PR lint.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Commands: status, brief, skill, team, mistakes, prep, panel, budget, lint, heartbeat, git, check",
+        epilog="Commands: status, brief, skill, team, mistakes, prep, panel, arena, budget, lint, heartbeat, git, check",
     )
     _add_common(p)
     sub = p.add_subparsers(dest="command")
@@ -549,6 +557,17 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub2.add_parser("list")
     s.set_defaults(fn=cmd_prep)
 
+    sp = sub.add_parser("arena", help="the lineage of evaluated configurations (a regression check, not a leaderboard)")
+    sub2 = sp.add_subparsers(dest="action", required=True)
+    s = sub2.add_parser("board", help="every evaluated configuration and its parent")
+    s.set_defaults(fn=cmd_arena)
+    s = sub2.add_parser("compare", help="row-by-row comparison of one candidate against its parent")
+    s.add_argument("id")
+    s.set_defaults(fn=cmd_arena)
+    s = sub2.add_parser("lineage", help="the chain of configurations a candidate descends from")
+    s.add_argument("id")
+    s.set_defaults(fn=cmd_arena)
+
     sp = sub.add_parser("panel", help="the frozen acceptance panels")
     sub2 = sp.add_subparsers(dest="action", required=True)
     s = sub2.add_parser("show")
@@ -590,6 +609,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub2.add_parser("install-hooks")
     s.set_defaults(fn=cmd_git)
     s = sub2.add_parser("status")
+    s.set_defaults(fn=cmd_git)
+    s = sub2.add_parser("clean-merged", help="remove local branches already merged into origin/main")
+    s.add_argument("--apply", action="store_true", help="actually delete (default: report)")
     s.set_defaults(fn=cmd_git)
 
     sp = sub.add_parser("check", help="run every machine-checkable rule")
