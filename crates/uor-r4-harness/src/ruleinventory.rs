@@ -49,16 +49,37 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
         "mistakes",
         &["mistakes.registry_valid", "mistakes.evidence_exists"],
     ),
+    ("receipts", &["receipts.parse", "receipts.ledger_present"]),
+    ("prlint", &[concat!("prlint.", "soft", "max", "_ban")]),
     (
         "status",
         &["status.branch_claimed", "status.no_orphan_branches"],
     ),
+    (
+        "arena",
+        &[
+            "arena.rows_valid",
+            "arena.parents_exist",
+            "arena.decisive_power",
+            "arena.knows_what_it_cannot_measure",
+        ],
+    ),
+    (
+        "briefing",
+        &[
+            "briefing.sources_exist",
+            "briefing.milestone_numbers_agree",
+            "briefing.lines_agree_with_prompts",
+        ],
+    ),
+    ("budget", &["budget.receipts_parse", "budget.disk_floor"]),
     (
         "harness",
         &[
             "harness.milestones.present",
             "harness.skills.nonempty",
             "harness.mistakes.have_guards",
+            "harness.state_formats",
         ],
     ),
 ];

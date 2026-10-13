@@ -20,10 +20,14 @@
 //! assert!(report.formats_checked > 0);
 //! ```
 
+pub mod arenarules;
 pub mod briefing;
+pub mod briefingrules;
+pub mod budgetrules;
 pub mod contract;
 pub mod githelp;
 pub mod harnessrules;
+pub mod harnessrules_stateformats;
 pub mod mistakes;
 pub mod multilab;
 pub mod multilabrules;
@@ -32,8 +36,10 @@ pub mod onboard;
 pub mod prep;
 pub mod preprules;
 pub mod presence;
+pub mod prlintrules;
 pub mod ratchet;
 pub mod receipt;
+pub mod receiptsrules;
 pub mod registries;
 pub mod ruleinventory;
 pub mod shards;
