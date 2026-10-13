@@ -30,7 +30,7 @@
 ## Pinned source
 
 - branch `claude/starling-rank-read-2026-10-13`, source commit
-  `8a84b2f9e26611b0c4ec815d5f7bcf0d2ce36dd5`. Any repair re-pins the commit here before it is rerun. Re-pinned once: the first pod build at `87fe3ea57` failed to compile one raw `unsafe` launch under the crate's `deny(unsafe_code)` (a BLOCKER, repaired by routing K1 through the audited `launch_prebuilt`).
+  `9e185c88dc312443c0329729f53a90ad48549a0c`. Any repair re-pins the commit here before it is rerun. Re-pinned once: the first pod build at `87fe3ea57` failed to compile one raw `unsafe` launch under the crate's `deny(unsafe_code)` (a BLOCKER, repaired by routing K1 through the audited `launch_prebuilt`). Re-pinned twice: at `8a84b2f9e` 15 of 16 controls passed and the integration control hit a reshape of the heads x 4 address maps by the model width (a BLOCKER, repaired by splitting them with their own width).
 - files under qualification:
   - `crates/uor-r4-training/src/starling_native.{rs,cu}`, `build.rs`;
   - the `starling_native_select` launcher in `src/geometric_stack/cuda_ops.rs`;
