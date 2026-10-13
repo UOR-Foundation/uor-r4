@@ -533,7 +533,7 @@ pub fn murmuration_tree_read(
 #[allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 mod tests {
     use super::*;
-    use crate::starling_native::murmuration::tests::{check_secant, secant};
+    use crate::starling_native::murmuration::check_device_secant;
     use crate::starling_native::murmuration::{
         murmuration_read, murmuration_select, selection_spec, MurmurationInputs,
     };
@@ -916,7 +916,7 @@ mod tests {
         )?;
         let v = Var::from_tensor(&value)?;
         let k = Var::from_tensor(&Tensor::new(&[[0.9f32], [-0.7], [0.5]], &device)?)?;
-        let loss = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
+        let delta_of = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
             Ok(murmuration_tree_read(
                 &spec(),
                 &plan,
@@ -933,7 +933,7 @@ mod tests {
             )?
             .delta)
         };
-        let grads = loss(v.as_tensor(), k.as_tensor())?
+        let grads = delta_of(v.as_tensor(), k.as_tensor())?
             .mul(&weights)?
             .sum_all()?
             .backward()?;
@@ -957,13 +957,16 @@ mod tests {
                     (1, 28, 4),
                     &device,
                 )?;
-                loss(&value.add(&e)?, k.as_tensor())
+                delta_of(&value.add(&e)?, k.as_tensor())
             };
-            check_secant(
+            check_device_secant(
                 gv[idx],
-                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
+                &bump(1.0)?,
+                &bump(-1.0)?,
+                &weights,
+                h,
                 &format!("value[{idx}]"),
-            );
+            )?;
         }
         for l in 0..3 {
             let bump = |sign: f64| -> Result<Tensor> {
@@ -974,13 +977,16 @@ mod tests {
                     (3, 1),
                     &device,
                 )?;
-                loss(&value, &k.as_tensor().add(&e)?)
+                delta_of(&value, &k.as_tensor().add(&e)?)
             };
-            check_secant(
+            check_device_secant(
                 gk[l],
-                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
+                &bump(1.0)?,
+                &bump(-1.0)?,
+                &weights,
+                h,
                 &format!("coupling[{l}]"),
-            );
+            )?;
         }
         Ok(())
     }
@@ -1347,7 +1353,7 @@ mod tests {
             &[[0.0f32, 0.9], [0.0, -0.7], [0.0, 0.5]],
             &device,
         )?)?;
-        let loss = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
+        let delta_of = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
             Ok(tree_read(
                 &plan,
                 &address,
@@ -1360,7 +1366,7 @@ mod tests {
             )?
             .delta)
         };
-        let grads = loss(v.as_tensor(), k.as_tensor())?
+        let grads = delta_of(v.as_tensor(), k.as_tensor())?
             .mul(&weights)?
             .sum_all()?
             .backward()?;
@@ -1384,13 +1390,16 @@ mod tests {
                     (2, 28, 4),
                     &device,
                 )?;
-                loss(&value.add(&e)?, k.as_tensor())
+                delta_of(&value.add(&e)?, k.as_tensor())
             };
-            check_secant(
+            check_device_secant(
                 gv[idx],
-                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
+                &bump(1.0)?,
+                &bump(-1.0)?,
+                &weights,
+                h,
                 &format!("value[{idx}]"),
-            );
+            )?;
         }
         for l in 0..3 {
             let at = l * 2 + 1; // the right head's coupling at level l
@@ -1402,13 +1411,16 @@ mod tests {
                     (3, 2),
                     &device,
                 )?;
-                loss(&value, &k.as_tensor().add(&e)?)
+                delta_of(&value, &k.as_tensor().add(&e)?)
             };
-            check_secant(
+            check_device_secant(
                 gk[at],
-                secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?,
+                &bump(1.0)?,
+                &bump(-1.0)?,
+                &weights,
+                h,
                 &format!("coupling[level {l}, right]"),
-            );
+            )?;
         }
         Ok(())
     }

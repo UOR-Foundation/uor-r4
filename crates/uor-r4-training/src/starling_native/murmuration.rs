@@ -789,9 +789,51 @@ fn address_credit(state: &CaptureState, dots: &Tensor, grad: &Tensor) -> Result<
     Ok(chosen.broadcast_mul(&scale.unsqueeze(2)?)?)
 }
 
+/// Test estimator only: retain F32 production outputs and analytic objective,
+/// but avoid subtracting two rounded global F32 weighted-loss reductions.
+/// Subtraction, weighting, reduction and division all execute on CUDA in F64.
+#[cfg(test)]
+pub(crate) fn check_device_secant(
+    analytic: f32,
+    plus: &Tensor,
+    minus: &Tensor,
+    weights: &Tensor,
+    h: f64,
+    label: &str,
+) -> Result<()> {
+    require_cuda(plus, "secant positive production output")?;
+    require_cuda(minus, "secant negative production output")?;
+    require_cuda(weights, "secant fixed weights")?;
+    if plus.dims() != minus.dims() || plus.dims() != weights.dims() {
+        return Err(invalid("secant outputs and weights must share shape"));
+    }
+    let stable = plus
+        .to_dtype(DType::F64)?
+        .sub(&minus.to_dtype(DType::F64)?)?
+        .mul(&weights.to_dtype(DType::F64)?)?
+        .sum_all()?
+        .affine(1.0 / (2.0 * h), 0.0)?
+        .to_scalar::<f64>()?;
+    // Falsifier diagnostic from the identical production outputs. The old
+    // rounded-loss subtraction is also performed on CUDA, never on the host.
+    let naive = plus
+        .mul(weights)?
+        .sum_all()?
+        .sub(&minus.mul(weights)?.sum_all()?)?
+        .affine(1.0 / (2.0 * h), 0.0)?
+        .to_scalar::<f32>()?;
+    println!("{label}: analytic {analytic}, stable CUDA F64 secant {stable}, naive CUDA F32 secant {naive}");
+    let bound = 2e-3 * stable.abs().max(f64::from(analytic.abs())).max(1e-3);
+    assert!(
+        stable.is_finite() && (stable - f64::from(analytic)).abs() <= bound,
+        "{label}: analytic {analytic} stable secant {stable} naive F32 {naive} bound {bound}"
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 #[allow(clippy::needless_range_loop, clippy::type_complexity)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
     use crate::starling_native::{unit_address, Credit};
     use candle_core::{Device, Var};
@@ -868,32 +910,6 @@ pub(crate) mod tests {
     }
 
     // ---- GPU controls (run on the pod; ignored where CUDA is absent) ----
-
-    /// Central secant of `sum(weights * Delta)` from the two perturbed reads.
-    /// The Deltas are differenced elementwise in F64 first (identical
-    /// elements cancel exactly), then weighted and summed on the device, so
-    /// the small derivative is not lost to F32 rounding of two large global
-    /// sums (Codex 6153771140). Test-only measurement: the read itself stays
-    /// F32, and h, weights, fixtures and the frozen bar are unchanged.
-    pub(crate) fn secant(plus: &Tensor, minus: &Tensor, weights: &Tensor, h: f64) -> Result<f64> {
-        Ok(plus
-            .to_dtype(DType::F64)?
-            .sub(&minus.to_dtype(DType::F64)?)?
-            .mul(&weights.to_dtype(DType::F64)?)?
-            .sum_all()?
-            .to_scalar::<f64>()?
-            / (2.0 * h))
-    }
-
-    /// The frozen secant bar: pass iff
-    /// `|secant - analytic| <= 2e-3 * max(|secant|, |analytic|, 1e-3)`.
-    pub(crate) fn check_secant(analytic: f32, secant: f64, what: &str) {
-        let bound = 2e-3 * secant.abs().max(analytic.abs() as f64).max(1e-3);
-        assert!(
-            (secant - analytic as f64).abs() <= bound,
-            "{what}: analytic {analytic} secant {secant}"
-        );
-    }
 
     fn cuda() -> Result<Device> {
         Ok(Device::new_cuda(0)?)
@@ -1231,10 +1247,12 @@ pub(crate) mod tests {
         )?;
         let value = Var::from_tensor(&f.value)?;
         let coupling = Var::from_tensor(&Tensor::new(&[0.8f32, -0.6], &device)?)?;
-        let loss_of = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
-            Ok(run(&s, &f, v, k, false)?.delta.mul(&weights)?.sum_all()?)
-        };
-        let grads = loss_of(value.as_tensor(), coupling.as_tensor())?.backward()?;
+        let delta_of =
+            |v: &Tensor, k: &Tensor| -> Result<Tensor> { Ok(run(&s, &f, v, k, false)?.delta) };
+        let grads = delta_of(value.as_tensor(), coupling.as_tensor())?
+            .mul(&weights)?
+            .sum_all()?
+            .backward()?;
         let gv = grads
             .get(value.as_tensor())
             .ok_or_else(|| invalid("no value gradient"))?
@@ -1246,8 +1264,6 @@ pub(crate) mod tests {
             .to_vec1::<f32>()?;
         let h = 1e-3f64;
         let n = rows * time * 4;
-        let delta_of =
-            |v: &Tensor, k: &Tensor| -> Result<Tensor> { Ok(run(&s, &f, v, k, false)?.delta) };
         for idx in [0usize, 5, 37, 70, 101, 130, 199, 255] {
             let bump = |sign: f64| -> Result<Tensor> {
                 let e = Tensor::from_vec(
@@ -1259,8 +1275,14 @@ pub(crate) mod tests {
                 )?;
                 delta_of(&f.value.add(&e)?, coupling.as_tensor())
             };
-            let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
-            check_secant(gv[idx], sec, &format!("value[{idx}]"));
+            check_device_secant(
+                gv[idx],
+                &bump(1.0)?,
+                &bump(-1.0)?,
+                &weights,
+                h,
+                &format!("value[{idx}]"),
+            )?;
         }
         for head in 0..2 {
             let bump = |sign: f64| -> Result<Tensor> {
@@ -1273,8 +1295,14 @@ pub(crate) mod tests {
                 )?;
                 delta_of(&f.value, &coupling.as_tensor().add(&e)?)
             };
-            let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
-            check_secant(gk[head], sec, &format!("coupling[{head}]"));
+            check_device_secant(
+                gk[head],
+                &bump(1.0)?,
+                &bump(-1.0)?,
+                &weights,
+                h,
+                &format!("coupling[{head}]"),
+            )?;
         }
         Ok(())
     }
@@ -1672,15 +1700,27 @@ pub(crate) mod tests {
                 )?;
                 delta_of(&f.value.add(&e)?, coupling.as_tensor())
             };
-            let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
-            check_secant(gv[idx], sec, &format!("value[{idx}]"));
+            check_device_secant(
+                gv[idx],
+                &bump(1.0)?,
+                &bump(-1.0)?,
+                &weights,
+                h,
+                &format!("value[{idx}]"),
+            )?;
         }
         let bump = |sign: f64| -> Result<Tensor> {
             let e = Tensor::new(&[0.0f32, (sign * h) as f32], &device)?;
             delta_of(&f.value, &coupling.as_tensor().add(&e)?)
         };
-        let sec = secant(&bump(1.0)?, &bump(-1.0)?, &weights, h)?;
-        check_secant(gk[1], sec, "coupling[right head]");
+        check_device_secant(
+            gk[1],
+            &bump(1.0)?,
+            &bump(-1.0)?,
+            &weights,
+            h,
+            "coupling[right head]",
+        )?;
         Ok(())
     }
 
