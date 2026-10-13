@@ -465,7 +465,11 @@ are superseded, which is what makes removal safe rather than merely convenient.
 | [Original LUT source snapshot](../d29-excluded-lut-2026-10-13/) | Original manifest/source/README from the same dependency repair parent | **INACTIVE.** Retired LUT engine, stack, sampling and CLI source plus the original format/grid files are retained byte-for-byte; active crate is format/grid metadata only. Original checksums are in `SHA256SUMS`; moved from the crate's `historical/` directory into dated docs history to avoid active ratchet sites. | Manifest SHA-256 `4716d47ff5dccd58d3ea3fed2187e091f5fd389521986efd87915a127f0f042c` |
 | [Original uor-addr package](../../../third_party/uor-addr-0.2.0/historical/upstream/) | Git revision `165b51e3e2113ee5d032730cde709335d4fe9b60` | **INACTIVE original package/workspace metadata.** The selected facade preserves canonical JSON/NFC/BLAKE3 label bytes without Prism numerical dependencies; no excluded witness is fabricated. Original Apache-2.0 license and package checksums remain. | `UPSTREAM-SHA256SUMS` SHA-256 `678d9122df6768bea93992375d371f27ad5436282dff92c487b06d93a4bf9d36` |
 
-Reverse-patch SHA-256: `c7c35799e9e0ab43ab48a920a225dc2d5d4a574ad8c1c1005915eb7de0ed2f43`.
+Reverse-patch SHA-256: `b9a2b73b4174d6ad83d4334201766933f4b511a95f5278bca504196360bfc9bf`.
+Resealed against repaired original paths at `9b987c092c504d2900dbb1d4247c30ee51576a35`,
+including the explicit CUDA `d29_compiled_modules` test registration omitted when
+automatic historical test discovery was disabled. The twelve-path scope and
+historical restoration target are unchanged.
 The patch was checked and applied only to an isolated Git index loaded with the
 repair parent and then populated with the twelve repaired original files.
 `git apply --cached --check` **PASS**; after application, `git diff --cached

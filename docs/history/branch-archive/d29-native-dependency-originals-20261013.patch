@@ -713,7 +713,7 @@ index 4ccb78a8f..e60adbfc2 100644
  /// One tensor the model geometry requires from a snapshot: its name and the
  /// shape `config.json` implies. [`SafetensorsSnapshot::open`] verifies
 diff --git b/crates/uor-r4-training/Cargo.toml a/crates/uor-r4-training/Cargo.toml
-index 6922c9d2f..168a0e472 100644
+index d552a5cc7..168a0e472 100644
 --- b/crates/uor-r4-training/Cargo.toml
 +++ a/crates/uor-r4-training/Cargo.toml
 @@ -4,59 +4,43 @@ version = "0.1.0"
@@ -791,7 +791,7 @@ index 6922c9d2f..168a0e472 100644
  [[bin]]
  name = "prepare-chat-parquet"
  required-features = ["parquet-input"]
-@@ -64,8 +48,3 @@ required-features = ["parquet-input"]
+@@ -64,13 +48,3 @@ required-features = ["parquet-input"]
  [[bin]]
  name = "prepare-text-parquet"
  required-features = ["parquet-input"]
@@ -800,6 +800,11 @@ index 6922c9d2f..168a0e472 100644
 -name = "geometric-stack"
 -path = "examples/geometric-stack-native.rs"
 -required-features = ["native-rung0"]
+-
+-[[test]]
+-name = "d29_compiled_modules"
+-path = "tests/d29_compiled_modules.rs"
+-required-features = ["cuda"]
 diff --git b/crates/uor-r4-training/src/kappa_llama.rs a/crates/uor-r4-training/src/kappa_llama.rs
 index f086bc2d3..05cdf8a1e 100644
 --- b/crates/uor-r4-training/src/kappa_llama.rs

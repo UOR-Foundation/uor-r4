@@ -61,10 +61,10 @@ native_vector_writer::cuda_tests::actual_stack_store_channel_and_artifact_identi
 Library, four projection controls:
 
 ```text
-spiralcore_fbs::tests::native_cuda_frontier_forward_exact_input_adjoint_and_secant
-spiralcore_fbs::tests::native_cuda_complete_ternary_children_and_signed_orientation
-spiralcore_fbs::tests::native_cuda_shared_batch_and_output_credit
-spiralcore_fbs::tests::native_cuda_numerical_and_shape_refusals
+spiralcore_fbs::native_cuda_tests::native_cuda_frontier_forward_exact_input_adjoint_and_secant
+spiralcore_fbs::native_cuda_tests::native_cuda_complete_ternary_children_and_signed_orientation
+spiralcore_fbs::native_cuda_tests::native_cuda_shared_batch_and_output_credit
+spiralcore_fbs::native_cuda_tests::native_cuda_numerical_and_shape_refusals
 ```
 
 CLI, nine metadata/argument controls (no CPU model arithmetic):
