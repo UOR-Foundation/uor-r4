@@ -10,7 +10,10 @@ inputs and disabled conv/quantized/MOE/FFI source are retained in historical/;
 they are inactive evidence, never compiled by this build.
 
 UNARY excludes exponential, logarithmic, sigmoid, tanh, erf/CDF, GELU, SiLU,
-ELU and general power entries. REDUCE excludes softmax. Corresponding helpers
+ELU and general power entries. REDUCE excludes softmax and all RoPE exports.
+The pre-RoPE-exclusion reduction module is preserved separately as
+`historical/reduce-pre-rope-exclusion.cu`; the upstream original also remains.
+Corresponding helpers
 are absent from the active shared header. Legal elementwise, reduction,
 indexing and transport kernels retain their existing formulas. CONV and
 QUANTIZED descriptors carry empty PTX, so the patched backend refuses them.

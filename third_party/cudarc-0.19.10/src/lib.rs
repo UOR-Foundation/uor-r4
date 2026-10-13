@@ -134,8 +134,12 @@ extern crate no_std_compat as std;
     feature = "cudnn-08009",
     feature = "cudnn-09010",
     feature = "cudnn-09021",
+    feature = "cutensor",
+    feature = "cusolver",
+    feature = "cusolvermg",
+    feature = "cusparse",
 ))]
-compile_error!("UOR D29: runtime NVRTC and cuBLAS/cuBLASLt/cuDNN are prohibited in this vendored build. Disable cudarc default features and remove the prohibited dependency features; use driver::Ptx to load ahead-of-time modules.");
+compile_error!("UOR D29: runtime NVRTC and cuBLAS/cuBLASLt/cuDNN/cuTENSOR/cuSOLVER/cuSOLVERMg/cuSPARSE are prohibited in this vendored build. Disable cudarc default features and remove the prohibited dependency features; use driver::Ptx to load ahead-of-time modules.");
 
 #[cfg(feature = "cublas")]
 pub mod cublas;

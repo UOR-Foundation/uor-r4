@@ -12,10 +12,15 @@ use std::{
     process,
 };
 
+#[path = "../third_party/candle-kernels-0.9.2/entry_allowlist.rs"]
+mod entry_allowlist;
+
 const MODULES: [&str; 9] = [
     "affine", "binary", "cast", "fill", "indexing", "reduce", "sort", "ternary", "unary",
 ];
-const BANNED_FEATURES: [&str; 4] = ["cublas", "cublaslt", "nvrtc", "cudnn"];
+const BANNED_FEATURES: [&str; 8] = [
+    "cublas", "cublaslt", "nvrtc", "cudnn", "cutensor", "cusolver", "cusolvermg", "cusparse",
+];
 const MAX_FILE: u64 = 64 * 1024 * 1024;
 
 fn read(path: &Path) -> Result<String, String> {
@@ -293,6 +298,9 @@ fn verify(
                 continue;
             }
             let text = read(&path)?;
+            let module = path.file_stem().and_then(|name| name.to_str())
+                .ok_or_else(|| format!("{} invalid PTX module name", path.display()))?;
+            entry_allowlist::check_ptx_exports(module, &text)?;
             let bad = forbidden(&text);
             if !bad.is_empty() || !code(&text).contains(".entry") {
                 return Err(format!("{} invalid/forbidden PTX: {bad:?}", path.display()));
@@ -307,7 +315,7 @@ fn verify(
         if names != expected {
             return Err(format!("vendor OUT_DIR PTX set differs: {names:?}"));
         }
-        checked.push("supplied nine generated vendor PTX modules".into());
+        checked.push("supplied nine generated vendor PTX modules and exact frozen source-derived exports".into());
     }
     if let Some(path) = features {
         let text = read(path)?;
@@ -344,6 +352,7 @@ fn verify(
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     if args == ["--self-test"] {
+        entry_allowlist::self_test();
         for bad in [
             "float x=expf(y);",
             "float x=__expf(y);",
@@ -356,7 +365,7 @@ fn main() {
             assert!(!forbidden(bad).is_empty(), "missed {bad}");
         }
         assert!(forbidden("// expf(x) mma.sync\nfloat x=a+b; /* sigmoid */").is_empty());
-        println!("PASS: planted exponential, squash and tensor-core tokens rejected; comments excluded. Static checker only.");
+        println!("PASS: missing, renamed-extra, duplicate and architecture-conditioned PTX exports rejected by frozen source inventory; planted exponential, squash and tensor-core tokens rejected; comments excluded. Static checker only.");
         return;
     }
     let mut repo = PathBuf::from(".");

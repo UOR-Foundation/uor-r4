@@ -2,12 +2,15 @@
 //! are retained under historical/ and never passed to the CUDA compiler.
 use std::{env, fs, path::PathBuf, process::Command};
 
+mod entry_allowlist;
+
 const MODULES: &[&str] = &[
     "affine", "binary", "cast", "fill", "indexing", "reduce", "sort", "ternary", "unary",
 ];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=entry_allowlist.rs");
     for header in [
         "compatibility.cuh",
         "cuda_utils.cuh",
@@ -51,6 +54,8 @@ fn main() {
             .expect("D29 CUDA build requires nvcc; no runtime compiler fallback");
         assert!(status.success(), "nvcc failed for {source}");
         let text = fs::read_to_string(&ptx).expect("read generated PTX");
+        entry_allowlist::check_ptx_exports(name, &text)
+            .unwrap_or_else(|error| panic!("D29 export admission: {error}"));
         for forbidden in [
             "softmax",
             "sigmoid",

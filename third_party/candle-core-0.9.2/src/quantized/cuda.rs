@@ -1,10 +1,8 @@
 use super::{GgmlDType, QStorage};
-use crate::quantized::k_quants::GgmlType;
-use crate::{backend::BackendDevice, cuda_backend::WrapErr};
-use crate::{builder_arg as barg, CudaDevice, CudaStorage, Result};
-use half::f16;
+use crate::backend::BackendDevice;
+use crate::{CudaDevice, CudaStorage, Result};
 
-use cudarc::driver::{CudaSlice, CudaView, PushKernelArg};
+use cudarc::driver::{CudaSlice, CudaView};
 
 #[derive(Clone, Debug)]
 struct PaddedCudaSlice {
@@ -50,54 +48,8 @@ fn quantize_q8_1(
     ky: usize,
     dev: &CudaDevice,
 ) -> Result<()> {
-    let kx_padded = pad(k, MATRIX_ROW_PADDING);
-    let num_blocks = ceil_div(kx_padded, CUDA_QUANTIZE_BLOCK_SIZE);
-
-    let total_rows = ky;
-    // Get Q8_1 metadata.
-    let q8_1_block_size = GgmlDType::Q8_1.block_size();
-    let q8_1_type_size = GgmlDType::Q8_1.type_size();
-
-    // Calculate the size of the output buffer in bytes.
-    let num_blocks_per_row = kx_padded / q8_1_block_size;
-    let dst_row_size_bytes = num_blocks_per_row * q8_1_type_size;
-
-    const CHUNK_SIZE: usize = 65535; // gridDim.y limit
-    let func = dev.get_or_load_func("quantize_q8_1", &candle_kernels::QUANTIZED)?;
-
-    let mut rows_processed = 0;
-    while rows_processed < total_rows {
-        // --- calculate the number of rows for this chunk ---
-        let remaining_rows = total_rows - rows_processed;
-        // This is our gridDim.y, now <= 65535
-        let rows_in_chunk = std::cmp::min(CHUNK_SIZE, remaining_rows);
-
-        // --- slice the source (f32) tensor by elements ---
-        let src_start_elem = rows_processed * k;
-        let src_num_elems = rows_in_chunk * k;
-        let src_chunk = src.slice(src_start_elem..(src_start_elem + src_num_elems));
-
-        // --- slice the destination (u8) tensor by bytes ---
-        let dst_start_byte = rows_processed * dst_row_size_bytes;
-        let dst_num_bytes = rows_in_chunk * dst_row_size_bytes;
-        let dst_chunk = dst.slice(dst_start_byte..(dst_start_byte + dst_num_bytes));
-
-        let cfg = cudarc::driver::LaunchConfig {
-            grid_dim: (num_blocks as u32, rows_in_chunk as u32, 1),
-            block_dim: (CUDA_QUANTIZE_BLOCK_SIZE as u32, 1, 1),
-            shared_mem_bytes: 0,
-        };
-
-        let mut builder = func.builder();
-        builder.arg(&src_chunk);
-        builder.arg(&dst_chunk);
-        barg!(builder, k as i32, kx_padded as i32);
-        unsafe { builder.launch(cfg) }.w()?;
-
-        rows_processed += rows_in_chunk;
-    }
-
-    Ok(())
+    let _ = (src, dst, k, ky, dev);
+    crate::bail!("D29: historical CUDA quantization is inactive; no PTX or host fallback")
 }
 
 fn dequantize_f32(
@@ -106,58 +58,8 @@ fn dequantize_f32(
     elem_count: usize,
     dev: &CudaDevice,
 ) -> Result<CudaStorage> {
-    let nb = elem_count.div_ceil(256);
-    let (kernel_name, is_k, block_dim, num_blocks) = match dtype {
-        GgmlDType::Q4_0 => ("dequantize_block_q4_0_f32", false, 32, nb),
-        GgmlDType::Q4_1 => ("dequantize_block_q4_1_f32", false, 32, nb),
-        GgmlDType::Q5_0 => (
-            "dequantize_block_q5_0_f32",
-            false,
-            CUDA_DEQUANTIZE_BLOCK_SIZE,
-            ceil_div(elem_count, 2 * CUDA_DEQUANTIZE_BLOCK_SIZE),
-        ),
-        GgmlDType::Q5_1 => (
-            "dequantize_block_q5_1_f32",
-            false,
-            CUDA_DEQUANTIZE_BLOCK_SIZE,
-            ceil_div(elem_count, 2 * CUDA_DEQUANTIZE_BLOCK_SIZE),
-        ),
-        GgmlDType::Q8_0 => ("dequantize_block_q8_0_f32", false, 32, nb),
-        GgmlDType::Q2K => ("dequantize_block_q2_K_f32", true, 64, nb),
-        GgmlDType::Q3K => ("dequantize_block_q3_K_f32", true, 64, nb),
-        GgmlDType::Q4K => ("dequantize_block_q4_K_f32", true, 32, nb),
-        GgmlDType::Q5K => ("dequantize_block_q5_K_f32", true, 64, nb),
-        GgmlDType::Q6K => ("dequantize_block_q6_K_f32", true, 64, nb),
-        GgmlDType::Q8K => ("dequantize_block_q8_K_f32", true, 32, nb),
-        _ => crate::bail!("unsupported dtype for dequantize {dtype:?}"),
-    };
-    let func = dev.get_or_load_func(kernel_name, &candle_kernels::QUANTIZED)?;
-    let dst = unsafe { dev.alloc::<f32>(elem_count)? };
-    // See e.g.
-    // https://github.com/ggerganov/llama.cpp/blob/cbbd1efa06f8c09f9dff58ff9d9af509cc4c152b/ggml-cuda.cu#L7270
-    let cfg = cudarc::driver::LaunchConfig {
-        grid_dim: (num_blocks as u32, 1, 1),
-        block_dim: (block_dim as u32, 1, 1),
-        shared_mem_bytes: 0,
-    };
-
-    if is_k {
-        let mut builder = func.builder();
-        builder.arg(&data.inner);
-        builder.arg(&dst);
-        unsafe { builder.launch(cfg) }.w()?;
-    } else {
-        let nb32 = match dtype {
-            GgmlDType::Q5_0 | GgmlDType::Q5_1 => elem_count,
-            _ => elem_count / 32,
-        };
-        let mut builder = func.builder();
-        builder.arg(&data.inner);
-        builder.arg(&dst);
-        barg!(builder, nb32 as i32);
-        unsafe { builder.launch(cfg) }.w()?;
-    }
-    Ok(CudaStorage::wrap_cuda_slice(dst, dev.clone()))
+    let _ = (data, dtype, elem_count, dev);
+    crate::bail!("D29: historical CUDA F32 quantized decode is inactive; no PTX or host fallback")
 }
 
 fn dequantize_f16(
@@ -166,58 +68,8 @@ fn dequantize_f16(
     elem_count: usize,
     dev: &CudaDevice,
 ) -> Result<CudaStorage> {
-    let nb = elem_count.div_ceil(256);
-    let (kernel_name, is_k, block_dim, num_blocks) = match dtype {
-        GgmlDType::Q4_0 => ("dequantize_block_q4_0_f16", false, 32, nb),
-        GgmlDType::Q4_1 => ("dequantize_block_q4_1_f16", false, 32, nb),
-        GgmlDType::Q5_0 => (
-            "dequantize_block_q5_0_f16",
-            false,
-            CUDA_DEQUANTIZE_BLOCK_SIZE,
-            ceil_div(elem_count, 2 * CUDA_DEQUANTIZE_BLOCK_SIZE),
-        ),
-        GgmlDType::Q5_1 => (
-            "dequantize_block_q5_1_f16",
-            false,
-            CUDA_DEQUANTIZE_BLOCK_SIZE,
-            ceil_div(elem_count, 2 * CUDA_DEQUANTIZE_BLOCK_SIZE),
-        ),
-        GgmlDType::Q8_0 => ("dequantize_block_q8_0_f16", false, 32, nb),
-        GgmlDType::Q2K => ("dequantize_block_q2_K_f16", true, 64, nb),
-        GgmlDType::Q3K => ("dequantize_block_q3_K_f16", true, 64, nb),
-        GgmlDType::Q4K => ("dequantize_block_q4_K_f16", true, 32, nb),
-        GgmlDType::Q5K => ("dequantize_block_q5_K_f16", true, 64, nb),
-        GgmlDType::Q6K => ("dequantize_block_q6_K_f16", true, 64, nb),
-        GgmlDType::Q8K => ("dequantize_block_q8_K_f16", true, 32, nb),
-        _ => crate::bail!("unsupported dtype for dequantize {dtype:?}"),
-    };
-    let func = dev.get_or_load_func(kernel_name, &candle_kernels::QUANTIZED)?;
-    let dst = unsafe { dev.alloc::<f16>(elem_count)? };
-    // See e.g.
-    // https://github.com/ggerganov/llama.cpp/blob/cbbd1efa06f8c09f9dff58ff9d9af509cc4c152b/ggml-cuda.cu#L7270
-    let cfg = cudarc::driver::LaunchConfig {
-        grid_dim: (num_blocks as u32, 1, 1),
-        block_dim: (block_dim as u32, 1, 1),
-        shared_mem_bytes: 0,
-    };
-
-    if is_k {
-        let mut builder = func.builder();
-        builder.arg(&data.inner);
-        builder.arg(&dst);
-        unsafe { builder.launch(cfg) }.w()?;
-    } else {
-        let nb32 = match dtype {
-            GgmlDType::Q5_0 | GgmlDType::Q5_1 => elem_count,
-            _ => elem_count / 32,
-        };
-        let mut builder = func.builder();
-        builder.arg(&data.inner);
-        builder.arg(&dst);
-        barg!(builder, nb32 as i32);
-        unsafe { builder.launch(cfg) }.w()?;
-    }
-    Ok(CudaStorage::wrap_cuda_slice(dst, dev.clone()))
+    let _ = (data, dtype, elem_count, dev);
+    crate::bail!("D29: historical CUDA F16 quantized decode is inactive; no PTX or host fallback")
 }
 
 #[allow(clippy::too_many_arguments)]

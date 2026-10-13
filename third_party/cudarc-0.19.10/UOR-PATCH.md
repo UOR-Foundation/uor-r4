@@ -15,11 +15,17 @@ from compiling CUDA C/C++ source using NVRTC.
 The historical, feature-gated NVRTC implementation remains inactive source.
 Its `cudarc::nvrtc::Ptx` compatibility re-export uses the same carrier type.
 A project-specific compile-time guard rejects `nvrtc`, `cublas`, `cublaslt`,
-`cudnn`, and every direct cuDNN version feature, including activation through
+`cudnn`, every direct cuDNN version feature, `cutensor`, `cusolver`,
+`cusolvermg`, and `cusparse`, including activation through
 Cargo feature unification. Upstream default features therefore fail closed;
 the active graph must disable them. `driver`, `curand`, `f16`, and `f8` remain
 available. The upstream build script's NVRTC link directives remain
 feature-gated, but a prohibited-feature build cannot produce this library.
+
+The vendored float8 0.6.1 belongs to Candle. Cudarc independently retains the
+registry float8 0.7.0 data-type dependency; the vendored packages are not the
+complete transitive dependency closure. The CUDA qualification records the
+resolved graph and selected features rather than inferring them from patches.
 
 Driver context binding, module ownership/unloading, and CUDA error propagation
 are preserved. `Ptx::validate` rejects invalid host metadata before binding a

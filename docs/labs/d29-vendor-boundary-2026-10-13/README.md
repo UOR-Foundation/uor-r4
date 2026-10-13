@@ -3,6 +3,23 @@
 Status: source repair checkpoint; composed CUDA build and finite qualification **NOT_RUN**.
 Training remains **HELD**. This record does not declare rung0 ready or change a model-quality headline.
 
+Review amendments: Claude independently reviewed `e8a90c5ba` on #2345
+([6150540369](https://github.com/UOR-Foundation/uor-r4/pull/2345#issuecomment-6150540369)).
+The follow-up blocks cuTENSOR/cuSOLVER/cuSOLVERMg/cuSPARSE as well as the earlier
+libraries, makes all three quantization helpers refuse directly, and preserves/
+excludes unused vendor RoPE. The float8 0.7.0 registry dependency belongs to
+cudarc; vendored float8 0.6.1 belongs to Candle. These patches are not the full
+dependency closure. Claude's project contraction quarantine is merged as #2347.
+
+The finite sheet is now **FIT**, subject to its incorporated A1–A4 amendments:
+31 exact controls and exactly three project PTX modules. CUDA execution remains
+pending until the composed build and identities are captured. The admitted
+provider uses a new Rust adapter (six protocol/admission fixture tests passed),
+and Rust setup/control helpers bypass the historical Python/HF bootstrap.
+Owned Vast pod `55777904` was admitted at $0.848/h for one RTX5090, with
+`nvidia/cuda:12.8.1-devel-ubuntu24.04`, Ubuntu24.04.1 and nvcc12.8.93 observed.
+Setup only has executed; no training, optimizer or corpus work is permitted.
+
 ## Problem and scope
 
 Claude's project-module/AOT split alone leaves prohibited dependency contents:

@@ -271,7 +271,14 @@ board() {  # board TEXT -> one-line comment on the Compute board issue
 # uptimeSeconds, lastStatusChange, runtimeStatus, networkVolumeId, ssh {ip, port}.
 is_vast() { case $1 in vast-*) return 0;; *) return 1;; esac; }
 have_runpod() { command -v runpodctl >/dev/null 2>&1; }
-have_vast() { command -v vastai >/dev/null 2>&1; }
+# D30: provider protocol is Rust. Never fall back to the Python vastai CLI.
+# An explicit path supports an owned build or a fixture-only test adapter.
+VAST_RUST=${UOR_POD_VAST_BIN:-$HERE/../../local/pod-provider-target/debug/uor-r4-pod-provider}
+have_vast() { [ -x "$VAST_RUST" ]; }
+vastai() {
+  have_vast || die "Rust Vast adapter missing: CARGO_TARGET_DIR=local/pod-provider-target cargo build -p uor-r4-pod-provider (or set UOR_POD_VAST_BIN)"
+  "$VAST_RUST" "$@"
+}
 # A Vast instance as a Runpod-shaped pod. RUNNING unless it was asked to stop;
 # a loading instance already bills, so it counts toward the caps.
 # shellcheck disable=SC2016  # jq source, not shell
@@ -313,7 +320,7 @@ list_pods() {
     else list_miss "$mode" Runpod "the pod listing failed"; fi
   fi
   if uses vast; then
-    if ! have_vast; then list_miss "$mode" Vast "vastai is not installed"
+    if ! have_vast; then list_miss "$mode" Vast "Rust adapter missing; build uor-r4-pod-provider with CARGO_TARGET_DIR=local/pod-provider-target"
     elif out=$(vast_pods_all 2>/dev/null) && [ -n "$out" ]; then LISTED="$LISTED vast"; PODS_JSON=$(jq -n --argjson a "$PODS_JSON" --argjson b "$out" '$a + $b')
     else list_miss "$mode" Vast "the instance listing failed"; fi
   fi
@@ -1197,7 +1204,7 @@ cmd_up() {
   # stdin, never on a command line or in a log. It stays on the pod's own disk
   # (/root): the image's HF_HOME is on /workspace, a shared network volume on
   # Runpod, so the bootstrap points the hf CLI at this file with HF_TOKEN_PATH.
-  if ! is_dry && [ -f "$HOME/.cache/huggingface/token" ]; then
+  if [ "$NO_BOOT" != 1 ] && ! is_dry && [ -f "$HOME/.cache/huggingface/token" ]; then
     if pod_ssh "$pod" 'mkdir -p /root/.cache/huggingface && umask 077 && cat > /root/.cache/huggingface/token' < "$HOME/.cache/huggingface/token"; then
       info "hf token copied"
     else

@@ -228,78 +228,6 @@ __device__ void rmsnorm(const T * x, T * dst, const T * alpha, const int ncols, 
 }
 
 template <typename T>
-__device__ void ropei(const T * src, const T * cos, const T * sin, T * dst, const uint32_t bh, const uint32_t td, const uint32_t stride_b) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (2 * idx >= bh * td) return;
-
-    uint32_t rope_idx = idx % (td / 2);
-    if (stride_b > 0) {
-      uint32_t b_idx = (2 * idx) / stride_b;
-      rope_idx += b_idx * (td / 2);
-    }
-    T c = cos[rope_idx];
-    T s = sin[rope_idx];
-
-    dst[2 * idx] = src[2 * idx] * c - src[2 * idx + 1] * s;
-    dst[2 * idx + 1] = src[2 * idx] * s + src[2 * idx + 1] * c;
-}
-
-template <typename T>
-__device__ void rope(const T * src, const T * cos, const T * sin, T * dst, const uint32_t bh, const uint32_t td, const uint32_t d, const uint32_t stride_b) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (2 * idx >= bh * td) return;
-
-    uint32_t i_bh = idx / (td / 2);
-    uint32_t i_td = idx - (td / 2) * i_bh;
-    uint32_t i_t = i_td / (d / 2);
-    uint32_t i_d = i_td - (d / 2) * i_t;
-    uint32_t i1 = i_bh * td + i_t * d + i_d;
-    uint32_t i2 = i1 + d / 2;
-    uint32_t i_cs = i_t * (d / 2) + i_d;
-    if (stride_b > 0) {
-      uint32_t b_idx = (2 * idx) / stride_b;
-      i_cs += b_idx * (td / 2);
-    }
-    T c = cos[i_cs];
-    T s = sin[i_cs];
-
-    dst[i1] = src[i1] * c - src[i2] * s;
-    dst[i2] = src[i1] * s + src[i2] * c;
-}
-
-template <typename T>
-__device__ void rope_thd(
-    const T * src,
-    const T * cos,
-    const T * sin,
-    T * dst,
-    const uint32_t b,
-    const uint32_t t,
-    const uint32_t h,
-    const uint32_t d,
-    const uint32_t stride_b
-) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (2 * idx >= b * t * h * d) return;
-
-    uint32_t i_bth = idx / (d / 2);
-    uint32_t i_d = idx - (d / 2) * i_bth;
-    uint32_t i_t = (i_bth / h) % t;
-    uint32_t i1 = i_bth * d + i_d;
-    uint32_t i2 = i1 + d / 2;
-    uint32_t i_cs = i_t * (d / 2) + i_d;
-    if (stride_b > 0) {
-      uint32_t b_idx = (2 * idx) / stride_b;
-      i_cs += b_idx * ((t * d) / 2);
-    }
-    T c = cos[i_cs];
-    T s = sin[i_cs];
-
-    dst[i1] = src[i1] * c - src[i2] * s;
-    dst[i2] = src[i1] * s + src[i2] * c;
-}
-
-template <typename T>
 __device__ void
 fast_max(const size_t src_numel, const size_t el_to_sum_per_block,
          const size_t num_dims, const size_t *info, const T *src, T *dst) {
@@ -561,45 +489,9 @@ fast_argmax(const size_t src_numel, const size_t el_to_sum_per_block,
     layernorm<TYPENAME>(src, dst, alpha, beta, n_cols, block_size, eps);       \
   }                                                                            \
 
-#define ROPE_OP(TYPENAME, FN_NAME, FN_NAME_I, FN_NAME_THD) \
-  extern "C" __global__ void FN_NAME_I( \
-      const TYPENAME *src, \
-      const TYPENAME *cos, \
-      const TYPENAME *sin, \
-      TYPENAME *dst, \
-      const uint32_t bh, \
-      const uint32_t td, \
-      const uint32_t stride_b) { \
-    ropei<TYPENAME>(src, cos, sin, dst, bh, td, stride_b); \
-  } \
-  extern "C" __global__ void FN_NAME( \
-      const TYPENAME *src, \
-      const TYPENAME *cos, \
-      const TYPENAME *sin, \
-      TYPENAME *dst, \
-      const uint32_t bh, \
-      const uint32_t td, \
-      const uint32_t d, \
-      const uint32_t stride_b) { \
-    rope<TYPENAME>(src, cos, sin, dst, bh, td, d, stride_b); \
-  } \
-  extern "C" __global__ void FN_NAME_THD( \
-      const TYPENAME *src, \
-      const TYPENAME *cos, \
-      const TYPENAME *sin, \
-      TYPENAME *dst, \
-      const uint32_t b, \
-      const uint32_t t, \
-      const uint32_t h, \
-      const uint32_t d, \
-      const uint32_t stride_b) { \
-    rope_thd<TYPENAME>(src, cos, sin, dst, b, t, h, d, stride_b); \
-  } \
-
 #if __CUDA_ARCH__ >= 800
 RMSNORM_OP(__nv_bfloat16, rmsnorm_bf16)
 LAYERNORM_OP(__nv_bfloat16, layernorm_bf16)
-ROPE_OP(__nv_bfloat16, rope_bf16, rope_i_bf16, rope_thd_bf16)
 SUM_OP(__nv_bfloat16, sum_bf16)
 FAST_OP(__nv_bfloat16, fast_min_bf16, fast_max_bf16, fast_argmin_bf16, fast_argmax_bf16, fast_sum_bf16)
 
@@ -607,14 +499,12 @@ FAST_OP(__nv_bfloat16, fast_min_bf16, fast_max_bf16, fast_argmin_bf16, fast_argm
 // SUM_OP(__nv_fp8_e4m3, sum_fp8_e4m3)
 // RMSNORM_OP(__nv_fp8_e4m3, rmsnorm_fp8_e4m3)
 // LAYERNORM_OP(__nv_fp8_e4m3, layernorm_fp8_e4m3)
-// ROPE_OP(__nv_fp8_e4m3, rope_fp8_e4m3, rope_i_fp8_e4m3, rope_thd_fp8_e4m3)
 // FAST_OP(__nv_fp8_e4m3, fast_min_fp8_e4m3, fast_max_fp8_e4m3, fast_argmin_fp8_e4m3, fast_argmax_fp8_e4m3, fast_sum_fp8_e4m3)
 #endif
 
 #if __CUDA_ARCH__ >= 530
 RMSNORM_OP(__half, rmsnorm_f16)
 LAYERNORM_OP(__half, layernorm_f16)
-ROPE_OP(__half, rope_f16, rope_i_f16, rope_thd_f16)
 SUM_OP(__half, sum_f16)
 FAST_OP(__half, fast_min_f16, fast_max_f16, fast_argmin_f16, fast_argmax_f16, fast_sum_f16)
 #endif
@@ -626,8 +516,6 @@ RMSNORM_OP(float, rmsnorm_f32)
 RMSNORM_OP(double, rmsnorm_f64)
 LAYERNORM_OP(float, layernorm_f32)
 LAYERNORM_OP(double, layernorm_f64)
-ROPE_OP(float, rope_f32, rope_i_f32, rope_thd_f32)
-ROPE_OP(double, rope_f64, rope_i_f64, rope_thd_f64)
 
 FAST_OP(float, fast_min_f32, fast_max_f32, fast_argmin_f32, fast_argmax_f32, fast_sum_f32)
 FAST_OP(double, fast_min_f64, fast_max_f64, fast_argmin_f64, fast_argmax_f64, fast_sum_f64)

@@ -4,10 +4,10 @@
 - milestone: M1 #2029; coordination #2028, operator phase
 - mechanism: existing SpiralCore/FBS projection, geometric recurrence, shared native vector writer and masked TRAIN count reference
 - run: fixed implementation controls after the D29 compiled-module/vendor repair; no learning campaign
-- base: current integration base `0497528e20a9cc764628c170c0c2895bf24acb8e`; final source pin **PENDING**
+- base: integration base `26fb9b92f` (includes #2344, #2346 and #2347); exact complete source/executable pins are captured before controls
 - source: Claude owns the training CUDA module split/AOT loader; Codex owns the vendor dependency/backend boundary; freeze their integrated source before qualification
 - line/count: same owner-directed complete geometric learning/output integration; owning milestone records the delivery count; this sheet resets no count or headline
-- verdict: **TEST FITNESS: PENDING** — independent non-author review and exact source/control pins required before finite GPU execution
+- verdict: **TEST FITNESS: FIT** — Claude's independent review [6150514242](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6150514242), with amendments A1–A4 incorporated below; exact source/control pins remain required before execution
 
 ## Decision and scope
 
@@ -21,7 +21,7 @@ Prior evidence stays pinned: complete-path source `05c84bece50789163bd0f049a2ae7
 
 The full-shape fixture remains batch16 × context384, width256, heads4, MLP384, V4096, six ordinary recurrence layers, `head=spiralcore_product projection=spiralcore_fbs rec_gates=geometric gate=hamilton objective=hinge`, CUDA/F32. The evaluator's finite V512 fixtures test both one/eight rivals and separate TRAIN/DEV oracle roles. The unchanged corpus pins and scientific bars belong to `m1-rank-margin-rung0-2026-10-13.md`; this qualification reads no corpus and changes none of them.
 
-Acceptance requires all 26 named controls below to execute and pass on the frozen build; zero selected tests is **NOT_RUN**. Exact expectations and existing tolerances remain those in the frozen test source; no tolerance widening to obtain PASS. Every model tensor/gradient stays CUDA. The full-shape fixture verifies finite gradients and nonzero rate/opening credit in every recurrence layer; it performs no optimizer step. Artifact controls verify native save/reload/emission and stale/missing identity refusals. The exclusion fixture proves that changing frequent mask-zero TRAIN identities leaves counts/ranks unchanged and that the masked DEV oracle is separately labeled diagnostic.
+Acceptance requires all 31 named controls below to execute and pass on the frozen build; zero selected tests is **NOT_RUN**. Exact expectations and existing tolerances remain those in the frozen test source; no tolerance widening to obtain PASS. Every model tensor/gradient stays CUDA. The full-shape fixture verifies finite gradients and nonzero rate/opening credit in every recurrence layer; it performs no optimizer step. Artifact controls verify native save/reload/emission and stale/missing identity refusals. The exclusion fixture proves that changing frequent mask-zero TRAIN identities leaves counts/ranks unchanged and that the masked DEV oracle is separately labeled diagnostic. Any D29 quarantine/historical-kernel refusal encountered in a required numerical control is a wiring **BLOCKER**, never a skip or pass (A4).
 
 The compiled boundary also requires the static vendor source/dependency check, a census of all generated vendor and project PTX, resolved selected CUDA features, and executable dynamic-import evidence. Vendor CUDA compilation is limited to `affine`, `binary`, `cast`, `fill`, `indexing`, `reduce`, `sort`, `ternary`, `unary`; historical MOE/conv/quantized sources remain preserved and inactive. The compiled Rust dependency boundary also excludes Candle CPU contractions and scalar squashing formulas, and candle-nn's independent softmax/sigmoid/CPU-attention implementations. Host storage, serialization and transfer remain available; prohibited computational APIs return recoverable refusals. Disabling direct cudarc features alone is insufficient if resolved transitive features or backend construction still enable cuBLAS/cuDNN/NVRTC. Inspect the actual saved feature graph and backend/module-loading source; dynamic-import absence does not prove absence of indirect `dlopen`.
 
@@ -82,7 +82,19 @@ native_rung0::cuda_fixed_tests::cuda_masked_train_reference_excludes_unmasked_id
 native_rung0::cuda_fixed_tests::cuda_document_evaluator_known_answers_and_native_artifact_roundtrip
 ```
 
-The stock `uor-pod-bootstrap.sh` currently executes `cuda_stack_ops_parity`, which performs prohibited CPU model/reference and historical squashing/CE work. Use `scripts/pod/uor-pod` with `--no-bootstrap` and an explicit setup/build/finite-control plan, or an independently reviewed corrected bootstrap. No cached historical parity receipt substitutes for this qualification.
+Five project interlocks, built with CUDA and selected exactly from `--test d29_compiled_modules` (A3):
+
+```text
+compiled_sources_carry_no_banned_operation
+no_excluded_historical_kernel_is_compiled
+nothing_in_the_crate_calls_a_runtime_compiler
+quarantined_dense_contraction_modules_stay_out_of_the_build
+built_ptx_modules_carry_no_banned_instruction
+```
+
+The project PTX census is exactly `cuda_stack_f32.ptx`, `cuda_stack_bf16.ptx` and `starling_native.ptx` (A2). Any `native_context.ptx` or `selected_potential.ptx` in its OUT_DIR is a blocker. Source must contain the quarantines and Rust ratchets through #2347 (A1).
+
+Use `scripts/pod/uor-pod --no-bootstrap` with the Rust Vast provider adapter, `qualification_bootstrap.rs` (builds only), and `qualify_geometric.rs` (31 exact controls). The stock bootstrap's historical parity is now skipped by #2341, but its HF/Python setup still cannot be used under D30. No cached historical parity receipt substitutes for this qualification. No Python provider, HF client, dataset or Python model dependency is invoked. The CUDA devel image and actual nvcc architecture are recorded at admission/build time.
 
 ## Identities, recovery and resource ledger
 
@@ -92,7 +104,7 @@ Preserve every build/controller/test attempt, selected-test counts, refusal/stat
 
 - preparation: source/static review and metadata only; no GPU/model work
 - finite placement: one owned Vast RTX5090 CUDA12.8+ Ubuntu24 pod via `scripts/pod/uor-pod`; explicit lab/session admission and per-lab target
-- cost projection: **≤ $2.50 total UNVERIFIED estimate** for setup/build/retries/26 finite controls/preservation; about two hours at the latest status offer of $0.908/h plus margin. Refresh the offer/rate at admission; this is an estimate, not a healthy-run cancellation threshold.
+- cost projection: **≤ $4.00 total UNVERIFIED estimate** for setup/build/retries/31 finite controls/preservation; about two hours at the latest status offer of $1.522/h plus margin. Refresh the offer/rate at admission; this is an estimate, not a healthy-run cancellation threshold.
 - owner caps: ≤4 concurrent pods and ≤$8/h across all labs, no new spending class; refresh actual status/rate before admission
 - storage/RAM: projected existing finite shape, prior sampled peak9274MiB is a historical scope estimate, not a measurement of the new build; record new observations and storage admission
 - stop: failure, divergence, resource-owner caps or disk floor; repair justified tooling blockers within scope and preserve attempts; self-estimated wall/cost limits do not cancel a healthy progressing run
@@ -101,6 +113,6 @@ Preserve every build/controller/test attempt, selected-test counts, refusal/stat
 
 PASS qualifies only the frozen compiled/module and finite learning/output implementation boundaries. It changes no model-quality headline and grants no training permission. A mismatched module/feature, forbidden import, missing control, stale identity, numeric defect or host fallback is a **BLOCKER** to repair, not a model negative. There is no KEEP/negative research decision from these fixed controls.
 
-Independent reviewer: **PENDING**. Exact final source/control pin: **PENDING**. Milestone FIT receipt: **PENDING**. Training/optimizer/corpus/CPU model execution: **NOT_RUN / HELD**.
+Independent reviewer: **Claude**. Milestone FIT receipt: [6150514242](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6150514242). Exact source/executable/control pins must be captured by the Rust build/controller receipts before execution. Amendments A1–A4 are binding above. Training/optimizer/corpus/CPU model execution: **NOT_RUN / HELD**.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT

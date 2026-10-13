@@ -22,7 +22,8 @@ Active changes:
 - Dense Linear/Conv forward and LSTM/GRU step implementations refuse; constructors,
   state/configuration shapes and historical artifact type identities remain.
 - Preserve legal GPU normalization implementations, but CPU custom normalization
-  and rotary forward bodies return Result errors. Slow norm wrappers and public
+  and all rotary APIs return Result errors. Vendor RoPE is unused by the qualified
+  rung0/Starling path and is excluded from the compiled module. Slow norm wrappers and public
   activation/dropout wrappers refuse non-CUDA tensors before arithmetic.
 - Preserve legal GPU ReLU/clamp/leaky/PReLU operations; every historical squash
   activation variant refuses. Preserve optimizer, variable builder/map and

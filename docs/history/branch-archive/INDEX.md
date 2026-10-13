@@ -3,7 +3,7 @@
 ## October 13 — pre-D29 Candle computational backend (Codex)
 
 [Restoration patch](candle-core-pre-d29-inactive-20261013.patch), SHA256
-`236b71556aaeb34437aec56140dc7c6d6abbe3cf198940553d8036f8fc8630e1`,
+`071a2734b06dd76a4dac5a1071e03328a08575082844d17776ed06c8a82385ca`,
 restores the tracked Candle-core vendor source from this repair to its exact
 bytes at `0497528e20a9cc764628c170c0c2895bf24acb8e`. An isolated Git-index
 application restores every tracked vendor path exactly. It preserves the
