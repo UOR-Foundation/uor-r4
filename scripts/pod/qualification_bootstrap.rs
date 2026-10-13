@@ -360,11 +360,13 @@ fn json_string(input: &str) -> String {
     out
 }
 
-// Read only the executable string in Cargo's compiler-artifact event. The
+// Read only the requested target's executable in Cargo's compiler-artifact event.
+// Integration builds also emit ancillary binaries and build-script events.
 // source/root paths admitted above are plain ASCII; unknown escapes fail closed.
-fn executable(line: &str) -> Result<Option<PathBuf>> {
+fn executable(line: &str, target_name: &str) -> Result<Option<PathBuf>> {
     if !line.contains("\"reason\":\"compiler-artifact\"")
         || line.contains("\"kind\":[\"custom-build\"]")
+        || !line.contains(&format!("\"name\":\"{target_name}\""))
     {
         return Ok(None);
     }
@@ -679,8 +681,13 @@ fn setup(c: &Config) -> Result<()> {
         disk(c)?;
         let output = run(c, stage, "rustup", args, &source)?;
         let mut found = Vec::new();
+        let target_name = match stage {
+            "build-module-tests" => "d29_compiled_modules",
+            "build-library-tests" => "uor_r4_training",
+            _ => "geometric-stack",
+        };
         for line in output.lines() {
-            if let Some(path) = executable(line)? {
+            if let Some(path) = executable(line, target_name)? {
                 found.push(path);
             }
         }
@@ -823,16 +830,19 @@ mod tests {
     #[test]
     fn parser_never_treats_null_or_build_script_as_a_test_artifact() {
         assert!(
-            executable("{\"reason\":\"compiler-artifact\",\"executable\":null}")
+            executable("{\"reason\":\"compiler-artifact\",\"target\":{\"name\":\"selected\"},\"executable\":null}", "selected")
                 .expect("null")
                 .is_none()
         );
         let a = executable(
-            "{\"reason\":\"compiler-artifact\",\"executable\":\"/workspace/x/target/debug/t\"}",
+            "{\"reason\":\"compiler-artifact\",\"target\":{\"name\":\"selected\"},\"executable\":\"/workspace/x/target/debug/t\"}",
+            "selected",
         )
         .expect("valid")
         .expect("path");
         assert_eq!(a, PathBuf::from("/workspace/x/target/debug/t"));
+        assert!(executable("{\"reason\":\"compiler-artifact\",\"target\":{\"name\":\"ancillary\"},\"executable\":\"/workspace/x/target/debug/other\"}", "selected").expect("other target").is_none());
+        assert!(executable("{\"reason\":\"compiler-artifact\",\"target\":{\"name\":\"selected\",\"kind\":[\"custom-build\"]},\"executable\":\"/workspace/x/target/debug/build-script\"}", "selected").expect("build script").is_none());
     }
     #[test]
     fn cuda_version_check_is_metadata_only() {
