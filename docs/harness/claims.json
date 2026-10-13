@@ -1,11 +1,4 @@
 {
-  "codex/d29-vendor-boundary-20261013": {
-    "branch": "codex/d29-vendor-boundary-20261013",
-    "claimed_at": "2026-10-13T11:45:14-04:00",
-    "head": "0497528e2",
-    "lab": "codex",
-    "note": "D29 vendor Candle/cudarc lawful kernel+loader repair; third_party and root Cargo wiring; Claude owns training modules"
-  },
   "codex/count-reference-closeout-20261013": {
     "branch": "codex/count-reference-closeout-20261013",
     "claimed_at": "2026-10-13T09:34:41-04:00",
