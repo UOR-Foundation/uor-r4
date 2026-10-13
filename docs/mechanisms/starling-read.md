@@ -10,7 +10,7 @@ Real starlings respond to about seven neighbours chosen topologically, not by di
 - It never scans the whole context and never normalises with a softmax.
 - Coherence across the sequence comes from layers and the quaternion state passing information one hop further each time.
 
-SpiralCore's Kuramoto witness shows the principle: local coupling over 60 geometric edges reaches the same synchrony as 435 all-to-all edges.
+SpiralCore v69 runs an unnormalised Kuramoto phase coupling, `dθᵢ/dt = ωᵢ + K Σⱼ Aᵢⱼ sin(θⱼ − θᵢ)`, over fixed geometric graphs: 60 edges on the H2 icosidodecahedron, a 15-cell signed quotient, or an FBS chain. Its test SYNC-10 shows only that the 60-edge and 435-edge graphs give *different* trajectories, not equal synchrony; an earlier wording here overstated it. SpiralCore contains no flock or 7-neighbour rule. That rule comes from the starling biology ([read-through](../labs/murmuration-design-2026-10-13/README.md)).
 
 ## In code
 
@@ -43,16 +43,31 @@ Rungs 1–3, the pivot and the surrogate were measured beside softmax helpers, s
   - The null is a utility-0 candidate, so abstention is learned through truncation.
   - Exploration slots (zero forward weight) give near-miss keys credit, fixing rung 1's "keys outside the kept set get no gradient".
   - The decisive §5 run (in-context recall top-1 on copyable dev targets against rung 0) needs its own sheet after rung 0 reports.
+- **D21 pivot card, 13 October** ([#2032 6150703214](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6150703214)). The line is at 3/3, and the card continues it with one decisive run instead of archiving it: §5, plus three amendments.
+  - P1: the native `native_read=starling_native` read.
+  - P2: the key-address gap closed first. The recommended fix is a symmetric key-address margin, with its own finite controls and FIT.
+  - P3: no RoPE arm and no transformer comparison.
+
+  The run is gated on rung 0, P2 and the owner's hold release.
+
+- **Murmuration read, 13 October (owner-approved). This is now the line's mechanism.** [Card #2032 6151093135](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6151093135), [pivot retarget 6151096178](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6151096178), [record](../labs/murmuration-design-2026-10-13/README.md).
+  - **The read:** alignment, not selection. Each token reads its 7-token topological flock (K1), moves every neighbour's value into its own frame by the exact icosian quotient `c_t·c_j⁻¹`, and takes `Δ = K_h·(mean − v_t)`, the Vicsek/Kuramoto rule.
+  - **One shared address per token,** used both to store and to query, which closes the key-address gap.
+  - **An FBS ternary tree for O(log n):** parents hold the transported means of their children.
+  - **No rank table, null score or rank hinge.** That rung-0b source stays on main, inactive, as evidence. K1 carries over.
+  - **Gating:** its finite controls (§4) need a FIT review. The decisive run is gated on rung 0, the S1/S2 source and controls, and the owner's hold release.
 
 ## A fair test needs
 
 - A training signal for the addresses: soft-to-hard annealing works (rung 2).
-- A readout that singles out the right kept source: a supervised or agreement term on the rank table and gate, or a sharper gate.
+- A readout that keeps the right source's information: under the murmuration read this is the transported flock mean, scored by flock coherence and the source-in-flock rate.
 - Recall measured by distance bucket (so eviction is distinguishable).
 - More than one read layer before any multi-hop claim.
 
 ## Open questions
 
 - Soft-to-hard schedule against an auxiliary loss.
-- Whether to share the address with the quaternion state (h_t on S3) rather than learn it separately.
+- Settled 13 October: one shared address per token (it serves both storing and reading), produced by the SpiralCore/FBS map of the state.
 - K and M at long context.
+- Collapse under the tied address: cell-occupancy entropy is a decisive-run diagnostic.
+- A later arm: a chirality sign on the coupling (in the murmurations paper, parity sets the oscillation's sign).

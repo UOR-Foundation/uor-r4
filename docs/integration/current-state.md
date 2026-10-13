@@ -1,3 +1,73 @@
+## 2026-10-13 — The staleness check was lying; `version` now reads at runtime (deepseek, tooling)
+
+**The warning I added in #2341 fired at me and was wrong:** it said my binary was 9 commits behind when I had just rebuilt it, which sent me to rebuild something already correct — **worse than no warning, because the next correct warning gets ignored.** Cause: `build.rs` baked the build commit in and watched `../../.git/HEAD`, but **`.git/HEAD` contains `ref: refs/heads/main` — a ref NAME, not a commit** — so a fast-forward never modified it, the script never re-ran, and the binary kept reporting the commit it was first built at; in a linked worktree that path does not exist at all. **The test passed anyway because it asserted the value was *recorded*, not that it was *current*.** **Two fixes were tried and both MEASURED against a real repository with two commits on main, and both failed:** `rerun-if-changed=build.rs` (cargo compiles a build script and **caches its OUTPUT**, re-running only when a declared input changes) and removing every directive (cargo's default re-runs when the *package* changes, which a docs-only commit does not). **The fix reads the CHECKOUT's HEAD and origin/main at runtime, so there is nothing cached to go stale**; `build.rs` now records only the build time. **The loss, stated:** it reports whether the **checkout** is behind, not whether the **binary** predates the checkout — **the original case is no longer detected**, and I traded a false positive for a false negative. The new test is the one the old design never had: a scratch repo asserting a checkout at the first commit is `Behind` by one, at the second is `Current`, and on a branch ahead is `Unknown` — **it fails for the baked-in design.**
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** port `multilab` (presence/claims/touch, and the `presence` unification with a deprecation notice), then `git clean-merged`.
+
+## 2026-10-13 — D30 port 1: `team` is Rust and the front door stops saying "not ported" (deepseek, tooling)
+
+First port of the D30 order. `crates/uor-r4-harness/src/team.rs` — new, **20 tests**; `uor-harness team claim|release|claims` runs in Rust and **`team` is out of the delegated set**, so the *"not ported to Rust yet"* notice no longer prints for it (verified by running it). `roster`/`dispatch` still delegate **by name**, so the progress measure shrinks **action by action** rather than command by command — the rule set in the D30 record, applied here for the first time. **Rules the port had to keep:** one arbiter per branch and it is the committed one (live → committed, weakest first) because **newest-wins cannot choose between two claims that are both current**; re-claiming your **own** branch succeeds and refreshes (how a claim is renewed after a rebase) while only another lab is refused; **release republishes the live mirror**, since a mirror only ever added to **resurrects released claims**; a refused claim writes nothing; empty branch/lab is a **usage** error not a refusal; a missing or corrupt store reads as empty, because a lab must be able to claim on a machine whose **advisory** tier is absent. **Three bugs the port found, all in the new code, and the first two would have shipped as "it compiles and the happy path worked":** `%:z` is a **GNU extension**, so BSD/macOS `date` printed the literal `:z` producing `2026-10-13T13:37:12:z`; **`serde_json` preserves insertion order while the Python store wrote `sort_keys=True`**, so an unsorted writer would have reordered every existing claims file on first touch and turned a one-line claim into a whole-file diff; and `--repo` beat the subcommand word **twice** (first `args[0]`, then "the first word without a dash", because a repo path is a bare word too). **The fixture capture is what caught the first two** — they are only visible when output is compared against what Python actually produced. `tests/fixtures/team/behaviour.json` holds the golden behaviour captured from Python **before** it was replaced: a **regression lock, not parity**, and it cannot catch a bug in the fixture's own interpretation. **Limitations:** `roster`/`dispatch` still run Python; the Python `team` is untouched and still reachable, so it is not retired until those move and their tests port; claims remain deliberately **not a lock**; and **concurrent claims from two processes are untested** — the store is written whole, so a race would lose one claim.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** port `multilab` (presence/claims/touch, and the `presence` unification with a deprecation notice), then `git clean-merged`.
+
+## 2026-10-13 — D30 scope measured: LIVE Python only, and the two traps (deepseek, tooling)
+
+Owner direction: **"everything that is in python becomes rust instead across the whole active project and going forward"**, narrowed by **"you only have to replace the python thats being used, if they are retired you can leave them alone as retired and archived"**. **Measured live Python: ~23,500 lines** — `scripts/harness/` (**12,684**, the CLI and its modules, what every lab runs), CI/Rust-invoked `scripts/` (**~6,300**), and `tests/harness/` (**4,497**). **Retired and left alone:** `tools/r4-softmax-trainer/` (~189 files), `handoff/`, `docs/evidence/`, `archive/`, `research/`, and `check_no_softmax.py`/`check_no_matmul.py` (superseded by `uor-harness ratchet`, #2346, retired once the tests citing them port). **`r4-softmax-trainer` is the clearest case for leaving alone: it is a softmax trainer, D23 prohibits softmax anywhere including tooling, and porting it to Rust would move a prohibited mechanism into the preferred language — the opposite of the goal.** A rule saying "no Python" applied without asking *what the Python is* would have produced exactly that mistake. **Two traps decide the sequencing.** (1) **`parity.py` (27 checks) compares Rust against Python, so it dies with Python** — it is the most valuable verification the harness has and caught four real bugs in the brief port; once Python is gone there is no second opinion, so the mitigation is to **capture the Python behaviour as fixtures while it still exists**, which is a regression lock rather than parity and **must be part of each port, not a cleanup step**. (2) **`tests/harness/` IS the harness regression suite** — deleting Python without porting it deletes the verification with the implementation, so **a module's tests port in the same PR that ports the module**. Order: `team` → `multilab` → `git clean-merged` → `skill`/`mistakes` → `prep`, then `check`'s rules, `lint`/`prlint`, `panel`, `budget`, `arena`, then the `scripts/` tail. **`delegate_to_python` is removed only when the last command lands**, and each port drops its own command from the delegated set — **the notice is the progress measure and must shrink per port.** `presence` unifies per the owner's A decision, with a deprecation notice on the old spelling. **No code is ported by this record**; it is the scope, the traps and the order.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** port `team` (claim/release/claims/roster/dispatch) to Rust with its Python tests and its parity fixtures in the same PR.
+
+## 2026-10-13 — M4: the murmuration read replaces the rung-0b rank read as the starling line's mechanism (claude, #2032)
+
+Owner-approved redesign. [Card](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6151093135) ·
+[record](../labs/murmuration-design-2026-10-13/README.md).
+- **The read is alignment, not selection.** Each token reads a 7-token topological flock (K1), transports every
+  value into its own frame by the exact icosian quotient, and applies the Vicsek/Kuramoto alignment `K_h·(mean − v_t)`.
+- **Address and cost.** One shared address per token closes the key-address gap. An FBS ternary tree gives
+  O(log n) cost.
+- **Retired:** the rank table, null score and rank hinge, kept inactive as evidence.
+- **Read-through of SpiralCore v69's source:**
+  - its transport is exact E8 signed-permutation actions with exact inverses;
+  - it has no learning and no flock rule;
+  - its Kuramoto coupling is real but drives timing;
+  - the starling page's "same synchrony as 435 edges" wording is corrected.
+- **The murmurations paper:** the coherent pattern exists only in a bounded-window family average.
+- Design only: no code, no compute. **Next:** S1/S2 source plus finite controls, with FIT from Codex.
+
+Line: starling read · count 3/3 (this is the decisive run's mechanism) · headline unchanged.
+
+## 2026-10-13 — The pod gate is the D29 interlock; every bootstrap was failing (deepseek, tooling)
+
+Claude's item 5. `scripts/pod/uor-pod-bootstrap.sh` ran `--test cuda_stack_ops_parity` on every `uor-pod up` and refused the pod unless it passed, and **two independent things were wrong at once**: it is a **CPU-reference test** by construction (*"CPU Reference vs Native CUDA Stack Kernels"* in its own header), so **every pod admission depended on a prohibited execution** under D24; and **it no longer compiles**, because `StackConfig` gained `rec_gates` (#2293) and the file's initializers were never updated — **zero** occurrences against a now-required field. **Both are fixed by changing what the gate is rather than repairing the test:** the gate is now **`--test d29_compiled_modules`**, the D29 interlock, which checks the sources `build.rs` compiles and — with `--features cuda` — the built PTX itself, and **needs no CPU reference to be meaningful**; a failure refuses the pod (exit 4) because under D29 **presence counts**. `BUILD.json` records `d29`/`d29_summary`/`d29_seconds` with **both the new key and the old `parity` accepted** so pre-change caches stay valid. **The 3,402-line parity test is preserved and marked `#![cfg(any())]`** — excluded from every build, readable as evidence, with its header stating what a future owner decision would need (a device-side reference and a `rec_gates` value, not a revert). Also fixed: **`uor-harness ratchet` was reported as `unknown subcommand` in AGENTS.md, DECISIONS.md and the execution policy**, reddening `test_doccheck` on main — the Rust-only command set must **grow with the port**. **Not verified: the D29 gate itself**, which needs CUDA and a device this laptop lacks; the first real `uor-pod up` is the test of this change.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** the D30 port in the order posted on #2028 — `team` → `multilab` → `git clean-merged` → `skill`/`mistakes` → `prep`, then `check`, `lint`, `panel`, `budget`, `arena`, removing `delegate_to_python` only when the last lands.
+
+## 2026-10-13 — M4 starling line: D21 pivot card, continue with one decisive run (claude, #2032)
+
+The starling line reached **3/3** with #2338, the rung-0b source PR; the registry still said 2/3, and this entry
+corrects it. The [pivot card](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6150703214)
+continues the line with **one decisive run** rather than archiving it. The lawful native read has never been
+trained, and the earlier negatives are softmax-adjacent evidence that is inactive under D23.
+- **The run:** design card §5, in-context recall top-1 on copyable dev targets, **≥ +5 pp over rung 0 on
+  both seeds**, with a v5 deterministic transfer check and tokens/s reported first.
+- **Amendments:**
+  - **P1:** the native `starling_native` read.
+  - **P2:** the key-address gap closed first. Recommended: a symmetric key-address margin, with finite
+    controls and FIT.
+  - **P3:** no RoPE arm and no transformer comparison. Owner, 13 October: SpiralCore transport and the spin
+    rotations carry position.
+- **Open for Kimi:** the M4 headline can't flip on this run alone, and the panel's BPB bar is BLOCKED, so the
+  card proposes the §5 recall bar as the line's acceptance measure.
+
+Line: starling read · count **3/3** → pivot card filed · headline "softmax at runtime: yes" unchanged.
+
 ## 2026-10-13 — D29 split + quarantines merged; interlocks repointed to the Rust ratchets; rung-0 order ratified (kimi, #2028/#2345)
 
 Claude's D29 line landed: **#2344** (`daa74c9c5`, module split, NVRTC removed — AOT nvcc prebuilt modules), **#2346** (`0909f82b3`, Rust ratchets `uor-harness ratchet d23|d25`, per-file parity; D23 baseline 1648→1647), **#2347** (`26fb9b92f`, the two learned dense contractions Codex found — `native_context.cu`, `selected_potential.cu` — quarantined: out of the build, source preserved, launches refused; Line B is unfinished, not negative). PM rulings on #2345 ([6150598855](https://github.com/UOR-Foundation/uor-r4/issues/2345#issuecomment-6150598855)): **F2 resolved** — the kept vendor RoPE kernels are elementwise rotations (no squash, no contraction, uncalled by any project path), tolerated as vendor dead code, moved to the quarantined set at the next vendor touch, any project call violates the owner's 29-Sep "no RoPE"; **rung-0 order ratified**: Codex fixes #2345 F1 (cutensor/cusolver/cusolvermg/cusparse into the guard + verifier) and rebases → composed CUDA qualification (31 controls, sheet FIT) → owner hold release. Interlock references repointed from the retired Python scripts to `uor-harness ratchet d23|d25` (AGENTS.md, DECISIONS D24/D29, agent-execution-policy .md/.json). **Open follow-up:** hash-binding the prebuilt PTX modules into artifacts (D29 amendment) — Claude's module-build line. Claude's next: the rung-0b pivot card on #2032 (starling line 3/3, D21). Docs only: no model compute, no count reset.
