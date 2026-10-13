@@ -695,6 +695,8 @@ mod cuda_tests {
         model.set_native_vector_head(8)?;
         let writer = model.native_vector_writer()?;
         let channel = native_vector_channel(&model)?;
+        assert!(model.target_nll(&[0], &[0], 1, 1).is_err());
+        assert!(model.next_scores(&[0]).is_err());
         assert_eq!(writer.table_id(), channel.writer().table_id());
         let vectors = model.embed(&[0, 1], 1, 2)?.reshape((2, 32))?;
         assert_eq!(
@@ -730,6 +732,18 @@ mod cuda_tests {
                 .map(|t| t.occurrence)
                 .collect::<Vec<_>>(),
             vec![0, 1]
+        );
+        let plan = crate::spiralcore_fbs::ProjectionPlan::new(32, 32)?;
+        let queries = Tensor::zeros(plan.query_shape(), DType::F32, &dev)?;
+        let routed = channel.transport(&carried.tokens[0], &queries)?;
+        assert_eq!(
+            routed.to_vec2::<f32>()?,
+            plan.forward(&queries, carried.tokens[0].vector())?
+                .to_vec2::<f32>()?
+        );
+        assert_eq!(
+            channel.emit(&routed)?.to_vec1::<u32>()?,
+            writer.write(&routed)?.to_vec1::<u32>()?
         );
         assert!(matches!(
             carry_native_store_read(&channel, &crate::stack_store::StoreRead::Evicted)?,

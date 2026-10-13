@@ -10231,6 +10231,9 @@ impl StackModel {
             .ok_or_else(|| invalid("shared native vector table absent"))?;
         crate::native_vector_writer::NativeVectorWriter::new(table.as_tensor(), spec.clone())
     }
+    pub fn native_vector_head_spec(&self) -> Option<&crate::native_vector_writer::WriterSpec> {
+        self.native_vector_head.as_ref()
+    }
 
     /// Typed bounded candidates, including IDs and admission, rather than a
     /// fabricated all-vocabulary logits tensor. Full-trunk use remains held.
@@ -11078,6 +11081,11 @@ impl StackModel {
         time: usize,
         binding: &ReadBindingTarget,
     ) -> Result<StackBindingLoss> {
+        if self.native_vector_head.is_some() {
+            return Err(invalid(
+                "legacy probability binding objective is unavailable for the native vector head",
+            ));
+        }
         if targets.len() != ids.len()
             || targets
                 .iter()
@@ -11505,6 +11513,9 @@ impl StackModel {
         batch: usize,
         time: usize,
     ) -> Result<TargetScores> {
+        if self.native_vector_head.is_some() {
+            return Err(invalid("native vector scores are not likelihoods; use separate raw token/address margins and admitted ranks"));
+        }
         if targets.len() != ids.len() || weights.is_some_and(|w| w.len() != ids.len()) {
             return Err(invalid("one target and one weight per input id"));
         }
@@ -11589,6 +11600,9 @@ impl StackModel {
     /// the mixture `(1 - g) softmax(z) + g p_copy` there. The greedy token is
     /// the highest score, the lowest id on a tie.
     pub fn next_scores(&self, ids: &[u32]) -> Result<Vec<f32>> {
+        if self.native_vector_head.is_some() {
+            return Err(invalid("native token selection stays on CUDA; use native_next_token_ids instead of legacy host score sampling"));
+        }
         Ok(self.next_scores_pointer_scores(ids)?.0)
     }
 
@@ -11695,6 +11709,11 @@ impl StackModel {
         batch: usize,
         time: usize,
     ) -> Result<Vec<f64>> {
+        if self.native_vector_head.is_some() {
+            return Err(invalid(
+                "native vector head cannot use an external dense/likelihood head",
+            ));
+        }
         if targets.len() != ids.len() {
             return Err(invalid("one target per input id"));
         }

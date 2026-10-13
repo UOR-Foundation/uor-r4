@@ -1283,6 +1283,7 @@ impl Settings {
             "select": self.config.select,
             "read_weighting": self.read_weighting,
             "quaternion_weights": self.quaternion_weights,
+            "head": self.native_vector_head.then_some("spiralcore_product"),
             "quaternion_snap": self.quaternion_snap.name(),
             "activation_snap": self.activation_snap.trained_name().unwrap_or("none"),
             "e8_memory": self.e8_memory.as_ref().map(|e8| e8.name()),
@@ -2507,6 +2508,9 @@ fn train(settings: &Settings, out: &Path) -> Result<()> {
         replica.set_read_key_shift(model.read_key_shift())?;
         replica.set_read_weighting(model.read_weighting())?;
         replica.set_quaternion_weights(model.quaternion_weights())?;
+        if let Some(spec) = model.native_vector_head_spec() {
+            replica.set_native_vector_head(spec.kept_cells)?;
+        }
         replica.copy_variables_from(&model)?;
         eprintln!(
             "data parallel: replica on GPU 1, batch halves of {}",
@@ -6831,6 +6835,7 @@ fn main() -> Result<()> {
                     "gate",
                     "quaternion_weights",
                     "projection",
+                    "head",
                     "quaternion_snap",
                     "activation_snap",
                     "e8_memory",
