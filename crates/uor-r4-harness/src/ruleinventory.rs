@@ -41,7 +41,13 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
             "multilab.claims_one_owner",
             "multilab.claim_stale",
             "multilab.claim_not_merged",
+            "multilab.no_shared_ledger",
+            "multilab.ledger_lab_recorded",
         ],
+    ),
+    (
+        "status",
+        &["status.branch_claimed", "status.no_orphan_branches"],
     ),
     (
         "harness",
