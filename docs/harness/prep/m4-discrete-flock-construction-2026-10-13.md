@@ -5,7 +5,8 @@
 - Brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md); [Claude's discrete read design](../../labs/discrete-murmuration-read-2026-10-13/README.md).
 - Line: discrete read/writer construction. No language headline/count reset.
 - Integrated executable source: `76198c3b5321cc42ced8a0b4a3728aebfd89c2a4`; Claude kernel checkpoint `5fc9d469175ee75cf0ff41fff5c9def80922fe77`, imported as `cbe18c91b`; six-control source SHA256 `eeb0a4df0252c96c11b23631506b05db863ce3ffd7695c402c64abc3eeb8d654`; existing Route controller SHA256 `1c8b2ff2b69cb655721ea81d6190f208b1061d09c844305e32d2941d5fd1da9e`.
-- Host ABI, command inventory and typed refusals are aligned at that source. **Executable/PTX build identities and prospective reviewer verdict: PENDING.** Build-only preparation is authorized by the owner; numerical execution awaits FIT and recorded artifact hashes.
+- Host ABI, command inventory and typed refusals are aligned at that source. AOT build PASS, numerical controls NOT_RUN; prospective reviewer verdict PENDING. Build-only preparation is authorized by the owner; numerical execution awaits FIT.
+- Build admission: Ubuntu24.04, Rust1.97.1, nvcc12.8.93, compute_120, RTX5090 driver595.84. SHA256 executable `826bdf1a9ec87d03249c369d0e571d1cecd13c4c9ad49e7726f020f8c98e8d78`, PTX `726937ebb907c3c01fe7a6b967a885f3fbe9327aaef6c8a9242007afb7c97f88`, geometry `3c7a88bfc82e0fc2f4031ec35cfd69516596dce385b792767675ea937763cc50`. Compiled control lists agree with all17 names below; the AOT integer-PTX admission and seven-entry census passed. No numerical result follows from compilation.
 - Authority: D23–D32 and R12–R14. D23/D25 prohibit softmax/normalized-exponential equivalents, scalar squash and dense matmul; D24 requires GPU model computation; D32/R13 require exact integer instruments. No prohibited teacher/comparator is admitted.
 - Global training and the separate M2 hold remain **HELD**. `apply`, corpus learning, optimizer, CPU model/reference and floating-point model/instrument execution are excluded. M1's reply-quality target remains **SUSPENDED** under R14.
 
@@ -85,7 +86,7 @@ The six names are the registered `flock_qualification::NAMES` inventory, not the
 R12 author answers, for the assigned reviewer to answer independently:
 
 1. **Quantity:** exact construction behavior of the integrated shared writer, content-addressed frame/payload read, prefix/binder exclusion, integer snap witnesses, Gate3 virtual replay/chooser and error/report contracts.
-2. **Computable now:** finite literal integer fixtures and bounded device operations at the integrated host/kernel/CLI pin. CUDA compilation remains to be observed; no numerical readiness is inferred from old Route PASS.
+2. **Computable now:** finite literal integer fixtures and bounded device operations at the integrated host/kernel/CLI pin. CUDA compilation passed with all17 compiled inventory names. No numerical readiness is inferred from old Route PASS.
 3. **Can the instrument resolve the bar:** each expected value is an exact integer/vector/identity/error observation, not a tolerance. Nonzero transport, payload and gate-cost witnesses exclude an all-zero/read-disabled proxy. The independent changed-gate snapshots test virtual replay against actual forward; no CPU model reference is used.
 4. **Should it run now:** yes as a finite no-update construction slice after source readiness and prospective FIT. Corpus learning and headline grading are premature and remain held. A fixture/control pass is not a language result.
 
