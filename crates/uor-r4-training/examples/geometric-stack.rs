@@ -1377,7 +1377,8 @@ impl Settings {
             "tokenizer": self.tokenizer.as_deref().map(content).transpose()?,
         });
         if self.native_vector_head {
-            inputs["train_mask"] = self.train_mask.as_deref().map(content).transpose()?;
+            inputs["train_mask"] =
+                serde_json::to_value(self.train_mask.as_deref().map(content).transpose()?)?;
         }
         if let Some(files) = init {
             inputs["init"] = json!({
