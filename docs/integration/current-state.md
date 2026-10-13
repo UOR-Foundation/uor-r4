@@ -1,3 +1,68 @@
+## 2026-10-13 — Rung-0 sheet amended: vacuity-proof bars, and the SpiralCore/FBS projection landed (kimi, #2029)
+
+Claude lab's `NOT_FIT` review of the rung-0 [pre-registration sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md) found two holes in its pass/fail bar ([#2029 comment 6137914625](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6137914625)): the `5x` unviolated-rate rule could pass on nothing (the same-seed untrained constant is ≈ 0), and "falls monotonically" had no tolerance. Both are closed, and the sheet's bar is now three clauses: **(i)** an absolute loss floor — final dev margin loss < 0.5 raw-score units on both seeds, half the per-position maximum meaningful hinge violation, an absolute floor that cannot pass vacuously; **(ii)** the unviolated-target rate at **>= max(5x the same-seed untrained constant, 1% absolute)** on both seeds, the 1% floor declared explicitly as an anti-vacuity device, not a quality claim; **(iii)** monotonicity with a stated tolerance — dev margin loss evaluated every 128 steps; after warmup (step >= 1024) no point exceeds the running minimum by more than 2% of the step-128 evaluation, and the final-third mean is below the first-third. The [mechanism brief](../mechanisms/rank-margin-objective.md) mirrors the amended bar. **Dependency 1 landed**: Codex's SpiralCore/FBS projection merged as [#2279](https://github.com/UOR-Foundation/uor-r4/pull/2279) (merge `c6cd409da`; `projection=spiralcore_fbs`, the dense contraction retired with refusals, device-qualified on a Vast RTX 5090); dependencies 2–4 (OP3a head; recurrence squash replacements — in flight as the kimi lab source PR; the lawful device-qualification gate) remain open. The sheet keeps exactly one verdict line, `TEST FITNESS: PENDING`; the FIT review is re-requested from Claude lab. Docs only: no model compute, no count reset, no hold change.
+
+Line: evaluation integrity · count 1/3 (sheet amendment, no compute) · headline: unchanged (M1 v5 memory 20/40, reply 37/232).
+
+**Next:** Claude lab's re-review of the amended sheet at its merge commit; then dependencies 2–4, then the owner's hold-release decision, then rung 0 itself.
+
+## 2026-10-13 — Onboarding verifies instead of asserting: a Rust `onboard` command (lead, tooling)
+
+[`uor-harness onboard`](../labs/harness-onboard-2026-10-13/README.md), in the Rust crate because D27
+makes Rust the default for new tooling, answers "can THIS machine use the harness?" by running the
+checks rather than printing a checklist — the previous unit shipped two documented commands that did
+not exist, and prose cannot catch that. It is **read-only** (no receipt, claim, presence write or
+commit; verified by test that the receipt count is unchanged), reports five findings in the order
+things actually fail (python → identity → claims → ledger → harness), exits **0** ready and **3** on
+failure — distinct from `check`'s 1 so automation can tell "not onboarded" from "state drifted". A
+missing `UOR_LAB` is a FAIL because everything downstream is worthless without it; an unfamiliar lab
+name only warns, since joining is a decision. **A test I wrote wrong found a real correctness bug:**
+my first version warned on any `UOR_LAB` outside the four known names, and a test asserting
+`DeepSeek` warned **failed** — correctly, because the harness slugs a lab name into every path it
+touches (`presence/<lab>.json`, `ledger/<lab>-<month>.jsonl`, the receipt's `lab` field), so
+`DeepSeek` and `deepseek` are one lab. Comparison now happens after slugging, with two tests where
+there was one: a case variant must be accepted and slug identically, an unfamiliar name must warn
+without blocking. It deliberately does not write a heartbeat (that would be a state change on a
+command whose value is being safe to repeat) and does not guess your lab identity from the
+environment, because a blank beats a wrong name in an evidence record.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** `team dispatch` and `prep new` still have **zero foreign receipts** — the weakest evidence
+class, and `prep new` is the D22 gate standing between a lab and prohibited compute, so a lab that
+did not write it should exercise it next. Then `scripts/harness/doccheck.py`, which would have caught
+both broken commands automatically: it works but still reports false positives, and a checker that
+cries wolf is worse than none.
+
+## 2026-10-13 — CI learns about the Rust harness, and the parity gate is fixed before it ships (lead, tooling)
+
+`.github/workflows/harness.yml` gains a `rust-harness` job (pinned Rust, cached cargo, `fmt --check`,
+`clippy -D warnings`, `cargo test --locked`, `parity.py`, `statecheck.py`), with the path filter
+extended to `crates/uor-r4-harness/**` and the cargo files, so **the job validates itself on the PR
+that introduces it**. Wiring it up exposed that
+[the parity gate did not work](../labs/harness-ci-2026-10-13/README.md): `parity.py` compared
+violations **by count, not content**, and never failed on invalid state, so a ledger row missing its
+required `ts` key made both implementations report the same two violations while the check printed
+"agree on every format..." and **exited 0**. A gate that only compares two implementations passes
+whenever both are wrong together. It now compares the normalised fault text and fails outright when
+state violates the contract, verified in both directions (valid state exits 0; a row missing `ts`
+exits 1). Quote style is normalised too, since Python renders `'ts'` and Rust `"ts"` for the same
+fault and flagging that would make this a check on formatting rather than on the fault. Every CI step
+was run locally from a **cold** build directory (cold build 5.7 s); `CARGO_TARGET_DIR=local/harness-target`
+is set on every step because `target/` in the owner's checkout is a broken symlink to a removed
+archive. Also removed, with proof, my own stale worktree `deepseek/invariant-router` (1.3 GB): no
+claim on it, clean tree, and both its commits superseded by content - the `read_router` literals are
+in main's three test files via #2245 and the `CellTree::route` change via #2247 - archived as a
+restorable patch with an INDEX row and SHA256. Removing it cleared a warning (7 → 6 failures).
+Disk is **33 GiB free**, near the 30 GB floor.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** port behaviour against the Python suite as the conformance oracle, claims and presence
+first, then cut the labs over once the Rust path passes the same rules. Codex's
+`geometric-path-repair` worktree still holds 12 uncommitted files, so the next safe disk reclaim
+depends on Codex committing.
+
 ## 2026-10-13 — The harness becomes installable: branch rule, per-lab install, and where the PM's decisions live (lead, tooling)
 
 Three gaps that would stop the next lab picking the harness up without being told by hand, closed in
