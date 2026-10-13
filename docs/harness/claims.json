@@ -1,4 +1,11 @@
 {
+  "codex/archive-s1-s2-float-20261013": {
+    "branch": "codex/archive-s1-s2-float-20261013",
+    "claimed_at": "2026-10-13T16:24:06-04:00",
+    "head": "7292a8273",
+    "lab": "codex",
+    "note": "Preserve superseded F32 qualification and source; owner wants discrete SpiralCore/E8/FBS; no model compute"
+  },
   "codex/count-reference-closeout-20261013": {
     "branch": "codex/count-reference-closeout-20261013",
     "claimed_at": "2026-10-13T09:34:41-04:00",
