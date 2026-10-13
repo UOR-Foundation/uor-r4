@@ -4328,8 +4328,15 @@ impl StackModel {
         let query = project("read.query.weight")?.to_dtype(DType::F32)?;
         let key = project("read.key.weight")?.to_dtype(DType::F32)?;
         // Unit 4-d addresses per head, [batch, heads, time, 4].
+        // The address maps output heads x 4 (not the model width), so they
+        // split by head with their own width, in `heads`' axis order.
         let unit = |name: &str| -> Result<Tensor> {
-            crate::starling_native::unit_address(&project(name)?)
+            let raw = self
+                .linear(&u, p.layer(layer, name)?)?
+                .reshape((batch, time, heads, 4))?
+                .transpose(1, 2)?
+                .contiguous()?;
+            crate::starling_native::unit_address(&raw)
         };
         let query_address = unit(NATIVE_STARLING_MAPS[0])?;
         let key_address = unit(NATIVE_STARLING_MAPS[1])?;
