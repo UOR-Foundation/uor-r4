@@ -1,3 +1,11 @@
+## 2026-10-13 — Command docs are machine-checked, and Claude onboarded (lead, tooling)
+
+[`doccheck.py`](../labs/harness-doccheck-2026-10-13/README.md) validates every `cli.py` command in the harness docs against the real argparse tree and is registered as `harness.documented_commands`, so it runs in `check` and in CI. It catches **three of the four** documentation errors that shipped in the previous three units — `heartbeat --dry-run` (no such flag), a top-level `install-hooks` (a `git` subcommand) and `team list` (the subcommand is `roster`) — and it **cannot** catch the fourth, "`prep new` changes no research state", because that is a claim about behaviour and no parser check can see it; saying so is deliberate, since a validator that is silently incomplete is worse than one whose limits are written down. It parses rather than executes, so it is safe against a live repository. **The first version had a hole in the exact case it exists for:** `cli.py install-hooks` was not detected, because `git` was in the tokeniser's skip-list and the walk stopped before reaching `install-hooks` — a check that passes everything looks identical to one that works, and only a known-bad input tells them apart. 13 tests pin errors that actually shipped and shapes the docs really use. Also, **the onboarding prompt ran successfully in Claude**, closing the two paths that had zero foreign receipts: `prep new` (the D22 gate) and `team dispatch` are now exercised by a lab that did not write them, alongside claim/release/heartbeat from claude, codex and kimi. Claude's heartbeat reads `M4: softmax at runtime: yes -> target no (D23)` — real project state. Its prep receipt names a sheet that does not exist on disk, which is **correct**: step 8 tells a lab to delete the sheet if it will not use it.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** every path a lab needs now has a foreign receipt, so the harness is adopted rather than merely built. Remaining: port behaviour to Rust against the Python suite as the conformance oracle, and settle whether a withdrawn `prep` registration should leave a receipt pointing at a deleted sheet.
+
 ## 2026-10-13 — Rung-0 sheet amended: vacuity-proof bars, and the SpiralCore/FBS projection landed (kimi, #2029)
 
 Claude lab's `NOT_FIT` review of the rung-0 [pre-registration sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md) found two holes in its pass/fail bar ([#2029 comment 6137914625](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6137914625)): the `5x` unviolated-rate rule could pass on nothing (the same-seed untrained constant is ≈ 0), and "falls monotonically" had no tolerance. Both are closed, and the sheet's bar is now three clauses: **(i)** an absolute loss floor — final dev margin loss < 0.5 raw-score units on both seeds, half the per-position maximum meaningful hinge violation, an absolute floor that cannot pass vacuously; **(ii)** the unviolated-target rate at **>= max(5x the same-seed untrained constant, 1% absolute)** on both seeds, the 1% floor declared explicitly as an anti-vacuity device, not a quality claim; **(iii)** monotonicity with a stated tolerance — dev margin loss evaluated every 128 steps; after warmup (step >= 1024) no point exceeds the running minimum by more than 2% of the step-128 evaluation, and the final-third mean is below the first-third. The [mechanism brief](../mechanisms/rank-margin-objective.md) mirrors the amended bar. **Dependency 1 landed**: Codex's SpiralCore/FBS projection merged as [#2279](https://github.com/UOR-Foundation/uor-r4/pull/2279) (merge `c6cd409da`; `projection=spiralcore_fbs`, the dense contraction retired with refusals, device-qualified on a Vast RTX 5090); dependencies 2–4 (OP3a head; recurrence squash replacements — in flight as the kimi lab source PR; the lawful device-qualification gate) remain open. The sheet keeps exactly one verdict line, `TEST FITNESS: PENDING`; the FIT review is re-requested from Claude lab. Docs only: no model compute, no count reset, no hold change.
@@ -124,6 +132,30 @@ Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/2
 **Next:** port behaviour against the Python suite as the conformance oracle - claims and presence
 first, since those are what the labs depend on - then cut CI over once the Rust path passes the same
 rules. The grandfather keeps Python working throughout.
+## 2026-10-13 — Dependency 3 delivered: the training recurrence's geometric gates (kimi, #2029)
+
+The [record](../labs/recurrence-geometric-gates-2026-10-13/README.md) lands the third dependency of the
+[rung-0 sheet](../harness/prep/m1-rank-margin-rung0-2026-10-13.md): a new `rec_gates=geometric` mode on
+`StackConfig` makes the model's forward compose a **clamped-linear opening score** (`clamp(gate + raw
+per-lane decay score, 0, 1)`), an **exact table read** over the fixed dyadic rates `lambda = 2^-(s+1)` with
+`keep = sqrt(1-lambda^2)` precomputed beside them, and the **Hamilton rotation gate** (OP1) on the recurrence
+output — so the recurrence rung 0 trains has no sigmoid, `softplus`, `exp` or tanh-GELU left in either
+direction (verified by grep per arm: 0 squash-family tokens in the geometric decay arm, the output-gate arm
+and the new CUDA kernels; the two mentions in the op's documentation name what is absent). The hard
+selection's zero derivative is bridged by the same **declared geometric secant surrogate** pattern `#2279`
+landed for the projection: the selected entry's lawful neighbours contribute their complete counterfactual
+table displacement resolved along the fixed edge `1/16`. The model-level forward refuses any non-CUDA device
+loudly (D24, the ops keep host references for tests), and export/D11 and `qat=true` refuse the mode because
+the integer engine still binds the historical decay parameter — a stale binding is refused, never converted.
+`RecGates::Historical` stays the default so every existing config, checkpoint and test reproduces exactly
+(nothing was deleted, so nothing needed archiving — a deliberate deviation, stated in the record).
+Device qualification is dependency 4 and remains open; the training hold is untouched.
+
+Line: evaluation integrity · count 1/3 (source implementation, no compute) · headline: unchanged (M1 v5
+memory 20/40, reply 37/232).
+
+**Next:** dependency 4 (lawful device qualification with stored/analytic expected values), then OP3a and the
+owner's hold release. `check_no_softmax.py` stays at 1649 and `check_no_matmul.py` at 93.
 
 ## 2026-10-13 — Pods bootstrap from the HF store and save to it (claude, #2028)
 
