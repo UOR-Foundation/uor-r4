@@ -12,6 +12,7 @@ fn device_command(args: &[String]) -> Result<()> {
     let read = |p: &str| std::fs::read(p).map_err(|e| invalid(e.to_string()));
     match args.first().map(String::as_str) {
         Some("qualify") if args.len()==2=>uor_r4_discrete::qualification::run(Path::new(&args[1])),
+        Some("qualify-flock") if args.len()==2=>uor_r4_discrete::flock_qualification::run(Path::new(&args[1])),
         Some("init") if args.len()==3=>{
             let spec:Spec=serde_json::from_slice(&read(&args[1])?).map_err(|e|invalid(e.to_string()))?;
             spec.validate()?;
@@ -85,6 +86,19 @@ fn run() -> Result<()> {
             #[cfg(not(feature = "cuda"))]
             Err(invalid(
                 "CUDA qualification inventory is not compiled in this metadata-only build",
+            ))
+        }
+        Some("list-flock-controls") => {
+            #[cfg(feature = "cuda")]
+            {
+                for name in uor_r4_discrete::flock_qualification::NAMES {
+                    println!("{name}");
+                }
+                Ok(())
+            }
+            #[cfg(not(feature = "cuda"))]
+            Err(invalid(
+                "CUDA flock inventory is not compiled in this metadata-only build",
             ))
         }
         _ => {

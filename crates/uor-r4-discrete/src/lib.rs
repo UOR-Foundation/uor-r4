@@ -188,4 +188,6 @@ mod tests {
 }
 
 #[cfg(feature = "cuda")]
+pub mod flock_qualification;
+#[cfg(feature = "cuda")]
 pub mod qualification;

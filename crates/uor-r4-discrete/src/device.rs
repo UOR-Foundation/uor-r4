@@ -22,6 +22,14 @@ mod geometry {
 const PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/discrete.ptx"));
 static NEXT_MODEL: AtomicU64 = AtomicU64::new(1);
 
+/// Trace ABI from the production flock read, ordered by row then payload block:
+/// header [frame_root, output_root, residual_terms, query_payload_root], followed
+/// by one level record [gate+1, kept_count, consensus_root, eligible_count,
+/// kept_node_ids[8], action_ids[8], carried_root_ids[8]]. Unused slots are ABSENT.
+pub const FLOCK_TRACE_HEADER_WORDS: usize = 4;
+pub const FLOCK_TRACE_LEVEL_WORDS: usize = 28;
+pub const FLOCK_TRACE_KEPT_CAPACITY: usize = 8;
+
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
 }
@@ -94,6 +102,8 @@ pub struct Forward {
     /// Physical [rows,16] cells; ABSENT marks unused slots.
     pub admitted_cells: Vec<u32>,
     vectors: CudaSlice<i32>,
+    trace: Option<CudaSlice<u32>>,
+    trace_stride: Option<usize>,
     binding: Binding,
     epoch: u64,
     stream: Arc<CudaStream>,
@@ -108,6 +118,19 @@ impl Forward {
     /// Storage/qualification observation only; no CPU scoring or transport.
     pub fn vectors(&self) -> Result<Vec<i32>> {
         self.stream.clone_dtoh(&self.vectors).map_err(cuda)
+    }
+    /// Optional completed device trace as storage observation only. This does
+    /// not reconstruct, score, select or transport any model values on the host.
+    /// Normal `forward` results return None and retain no trace allocation.
+    pub fn flock_trace(&self) -> Result<Option<Vec<u32>>> {
+        self.trace
+            .as_ref()
+            .map(|trace| self.stream.clone_dtoh(trace).map_err(cuda))
+            .transpose()
+    }
+    /// Words per (row, block), including its header and all model levels.
+    pub fn trace_stride(&self) -> Option<usize> {
+        self.trace_stride
     }
 }
 
@@ -618,6 +641,24 @@ impl Device {
     }
 
     pub fn forward(&self, batch: &CarriedBatch, targets: &[u32]) -> Result<Forward> {
+        self.forward_internal(batch, targets, false)
+    }
+
+    /// Qualification observation of this same production forward path. The
+    /// read/loss law is unchanged; only a bounded CUDA-written trace is retained.
+    pub fn forward_traced(&self, batch: &CarriedBatch, targets: &[u32]) -> Result<Forward> {
+        if self.read_spec() == ReadSpec::Route {
+            return Err(invalid("forward_traced requires a flock model"));
+        }
+        self.forward_internal(batch, targets, true)
+    }
+
+    fn forward_internal(
+        &self,
+        batch: &CarriedBatch,
+        targets: &[u32],
+        traced: bool,
+    ) -> Result<Forward> {
         let epoch = self.admit_batch(batch, targets)?;
         let target = self.stream.clone_htod(targets).map_err(cuda)?;
         let spec = self.gpu_spec(batch.rows)?;
@@ -645,6 +686,21 @@ impl Device {
             .stream
             .alloc_zeros::<u32>(batch.rows as usize * 16)
             .map_err(cuda)?;
+        let trace_stride = traced
+            .then_some(FLOCK_TRACE_HEADER_WORDS + self.metadata.stages() * FLOCK_TRACE_LEVEL_WORDS);
+        let mut trace = if let Some(stride) = trace_stride {
+            let words = (batch.rows as usize)
+                .checked_mul(self.spec().blocks as usize)
+                .and_then(|blocks| blocks.checked_mul(stride))
+                .ok_or_else(|| invalid("flock trace inventory exceeds storage index bound"))?;
+            Some(self.stream.alloc_zeros::<u32>(words).map_err(cuda)?)
+        } else {
+            None
+        };
+        // CUDA driver pointer parameters are CUdeviceptr-sized words. Passing
+        // the address of this zero WORD marshals a null device pointer, not a
+        // host pointer. The CUDA read tests trace for null before every write.
+        let null_trace: cudarc::driver::sys::CUdeviceptr = 0;
         let mut status = self.stream.alloc_zeros::<u32>(1).map_err(cuda)?;
         let mut launch = self.stream.launch_builder(&self.kernels.forward);
         launch
@@ -667,10 +723,18 @@ impl Device {
             .arg(&mut losses)
             .arg(&mut token_rivals)
             .arg(&mut address_rivals)
-            .arg(&mut admitted_cells)
-            .arg(&mut status);
+            .arg(&mut admitted_cells);
+        if let Some(trace) = trace.as_mut() {
+            launch.arg(trace);
+        } else {
+            launch.arg(&null_trace);
+        }
+        launch.arg(&mut status);
         // SAFETY: discrete_forward ABI and bounded rows/width/context checked
-        // before launch; immutable inputs, disjoint owned result buffers.
+        // before launch; immutable inputs, disjoint owned result buffers. Trace
+        // is either the exact rows*blocks*(4+stages*28) allocation or a null
+        // CUdeviceptr, which the kernel never dereferences. Its U* argument is
+        // immediately before status in the explicit 64-bit driver ABI.
         unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;
         check_status(&self.stream, &status, "forward")?;
         let predictions = self.stream.clone_dtoh(&predictions).map_err(cuda)?;
@@ -685,6 +749,8 @@ impl Device {
             address_rivals,
             admitted_cells,
             vectors: out,
+            trace,
+            trace_stride,
             binding: self.binding.clone(),
             epoch,
             stream: Arc::clone(&self.stream),

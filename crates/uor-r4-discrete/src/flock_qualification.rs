@@ -287,7 +287,7 @@ fn flock_selection_and_eligibility() -> Result<()> {
 }
 
 /// Typed refusals and the all-tie no-op: Gate in Route mode and Route in Flock mode
-/// (status 9), an invalid gate trit (status 10), an out-of-inventory Gate index, and a
+/// (typed host refusals), an invalid gate trit (status 10), an out-of-inventory Gate index, and a
 /// gate whose level has no eligible candidate (all three ordinals tie: CURRENT, no change).
 fn flock_refusals_and_noop() -> Result<()> {
     let route = Device::new(
@@ -301,16 +301,20 @@ fn flock_refusals_and_noop() -> Result<()> {
         0,
     )?;
     let input = route.carry(&[identity(1, 0), identity(0, 1)])?;
-    expect_invalid(
-        route.propose(&input, &[1], Parameter::Gate(0)),
-        "discrete CUDA counterfactual refused with status 9",
-        "gate proposal in Route mode",
-    )?;
+    match route.propose(&input, &[1], Parameter::Gate(0)) {
+        Err(Error::UnimplementedParameter { kind: 3, index: 0 }) => {}
+        Err(error) => return Err(error),
+        Ok(_) => {
+            return Err(Error::Invalid(
+                "gate proposal in Route mode was not refused".into(),
+            ))
+        }
+    }
     let device = Device::from_snapshot(flock(2, 2, 1, &[[A, B], [A, A]], &[0, 0])?, 0)?;
     let input = device.carry(&[identity(1, 0), identity(0, 1)])?;
     expect_invalid(
         device.propose(&input, &[1], Parameter::Route(0)),
-        "discrete CUDA counterfactual refused with status 9",
+        "route parameters are inactive in a flock model",
         "route proposal in Flock mode",
     )?;
     expect_invalid(
