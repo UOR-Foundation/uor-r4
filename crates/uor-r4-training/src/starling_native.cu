@@ -2,7 +2,8 @@
 //
 // Built ahead of time by nvcc (build.rs, `cuda` feature) into its own PTX
 // module: no runtime compiler (owner, 13 October 2026: NVRTC is banned
-// project-wide), and no other kernel shares the module.
+// project-wide). The murmuration read's S2 kernels below share the module and
+// its nearest-vertex and rank laws.
 //
 // One thread per (batch row, head). Scanning positions in order: a document
 // reset (BOS) first clears every ring of the row; key t then enters the ring
@@ -130,5 +131,141 @@ extern "C" __global__ void starling_native_select(
         }
         o[slots] = home;
         o[slots + 1] = cell;
+    }
+}
+
+// ---- Murmuration read, stage S2 (#2032 card 6151093135, M1 S2-a/b/c; Codex
+// FIT 6151549249). Same module, same nearest-vertex and rank laws as K1. ----
+
+// The one cell function of the read: nearest icosian vertex by dot product,
+// ties to the smallest vertex index (exactly K1's starling_nearest), for any
+// list of unit 4-d addresses. Used for tree nodes so the cell that selects a
+// node is bit-identical to the cell that transports it. Non-finite input
+// raises error[0] |= 1.
+extern "C" __global__ void murm_nearest_cells(
+    const float* address,   // [n, 4]
+    const float* roots,     // [120, 4]
+    uint* cell,             // [n]
+    uint* error,
+    uint n
+) {
+    uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const float* a = address + (u64)i * 4;
+    if (!isfinite(a[0]) || !isfinite(a[1]) || !isfinite(a[2]) || !isfinite(a[3])) {
+        atomicOr(error, 1u);
+        cell[i] = STARLING_ABSENT;
+        return;
+    }
+    cell[i] = starling_nearest(a, roots);
+}
+
+// Tree-level selection (S2): K1's ring selection over completed tree nodes.
+// A level-l node *arrives* at the first position after its last leaf, so
+// node_valid[b, t] = 1 marks the arrival of the node whose leaves all lie
+// strictly before t (the host plan clears arrivals that would cross a
+// document start). Scanning positions in order: a reset clears every ring; an
+// arriving node enters the ring (depth M) of its precomputed cell; then query
+// t gathers the nodes of its home vertex and the 12 neighbours and keeps the
+// `slots` largest address dots, ties to the later arrival. Output per (row,
+// t): the arrival positions in rank order (STARLING_ABSENT when fewer), then
+// the home cell and the arriving node's cell (STARLING_ABSENT when none).
+// Exact f32 products and sums in K1's fixed order; no exponential, no
+// normalisation, no host loop.
+extern "C" __global__ void murm_tree_select(
+    const float* query_address,   // [rows, time, 4], unit
+    const float* node_address,    // [rows, time, 4], the arriving node's unit address
+    const uint* node_cell,        // [rows, time], the arriving node's cell
+    const uint* node_valid,       // [batch, time], 1 where a node arrives
+    const uint* reset,            // [batch, time], 1 at a document start
+    const float* roots,           // [120, 4]
+    const uint* adjacency,        // [120, 12]
+    uint* ring,                   // scratch [rows, 120, depth]
+    uint* ring_len,               // scratch [rows, 120]
+    uint* ring_head,              // scratch [rows, 120]
+    uint* out,                    // [rows, time, slots + 2]
+    uint* error,
+    uint rows, uint time, uint heads, uint depth, uint slots
+) {
+    uint r = blockIdx.x * blockDim.x + threadIdx.x;
+    if (r >= rows) return;
+    if (slots == 0 || slots > STARLING_MAX_SLOTS || depth == 0 || heads == 0) {
+        atomicOr(error, 2u);
+        return;
+    }
+    uint b = r / heads;
+    uint* my_ring = ring + (u64)r * STARLING_CELLS * depth;
+    uint* my_len = ring_len + (u64)r * STARLING_CELLS;
+    uint* my_head = ring_head + (u64)r * STARLING_CELLS;
+    for (uint c = 0; c < STARLING_CELLS; ++c) {
+        my_len[c] = 0;
+        my_head[c] = 0;
+    }
+    uint width = slots + 2;
+    float best_s[STARLING_MAX_SLOTS];
+    uint best_j[STARLING_MAX_SLOTS];
+    for (uint t = 0; t < time; ++t) {
+        if (reset[(u64)b * time + t] != 0) {
+            for (uint c = 0; c < STARLING_CELLS; ++c) {
+                my_len[c] = 0;
+                my_head[c] = 0;
+            }
+        }
+        const float* query = query_address + ((u64)r * time + t) * 4;
+        if (!isfinite(query[0]) || !isfinite(query[1]) || !isfinite(query[2])
+            || !isfinite(query[3])) {
+            atomicOr(error, 1u);
+            return;
+        }
+        uint arriving = STARLING_ABSENT;
+        if (node_valid[(u64)b * time + t] != 0) {
+            const float* key = node_address + ((u64)r * time + t) * 4;
+            if (!isfinite(key[0]) || !isfinite(key[1]) || !isfinite(key[2])
+                || !isfinite(key[3])) {
+                atomicOr(error, 1u);
+                return;
+            }
+            uint cell = node_cell[(u64)r * time + t];
+            if (cell >= STARLING_CELLS) {
+                atomicOr(error, 4u);
+                return;
+            }
+            arriving = cell;
+            uint* cell_ring = my_ring + (u64)cell * depth;
+            if (my_len[cell] == depth) {
+                cell_ring[my_head[cell]] = t;
+                my_head[cell] = (my_head[cell] + 1) % depth;
+            } else {
+                cell_ring[(my_head[cell] + my_len[cell]) % depth] = t;
+                my_len[cell] += 1;
+            }
+        }
+        uint home = starling_nearest(query, roots);
+        uint filled = 0;
+        for (uint n = 0; n <= STARLING_NEIGHBOURS; ++n) {
+            uint c = n == 0 ? home : adjacency[home * STARLING_NEIGHBOURS + n - 1];
+            const uint* c_ring = my_ring + (u64)c * depth;
+            for (uint i = 0; i < my_len[c]; ++i) {
+                uint j = c_ring[(my_head[c] + i) % depth];
+                float s = starling_dot4(query, node_address + ((u64)r * time + j) * 4);
+                if (filled < slots || starling_before(s, j, best_s[slots - 1], best_j[slots - 1])) {
+                    uint p = filled < slots ? filled : slots - 1;
+                    if (filled < slots) filled += 1;
+                    while (p > 0 && starling_before(s, j, best_s[p - 1], best_j[p - 1])) {
+                        best_s[p] = best_s[p - 1];
+                        best_j[p] = best_j[p - 1];
+                        p -= 1;
+                    }
+                    best_s[p] = s;
+                    best_j[p] = j;
+                }
+            }
+        }
+        uint* o = out + ((u64)r * time + t) * width;
+        for (uint i = 0; i < slots; ++i) {
+            o[i] = i < filled ? best_j[i] : STARLING_ABSENT;
+        }
+        o[slots] = home;
+        o[slots + 1] = arriving;
     }
 }
