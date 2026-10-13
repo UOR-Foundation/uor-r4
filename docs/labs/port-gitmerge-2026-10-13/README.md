@@ -89,3 +89,24 @@ the fixture holds it.
 - **`stale_worktree_refs` / prunable worktrees are detected but not reported.** `has_prunable` exists
   and is unused, so a prunable worktree holding a branch still shows as "checked out in a worktree"
   with no hint that a prune would free it.
+
+## A fix I reported as delivered that never landed
+
+**Port 2's CI failed, I fixed it, reported it delivered — and it was not on `main`.** `main` still
+carried `date -r` in the `multilab` test helper, so **CI kept failing on the same test**, and this
+port's first CI run failed for the port-2 bug.
+
+What happened: the portability fix was a **second commit** on the port-2 branch
+(`4b25c508d`, "Fix the BSD-only test helper"), pushed after the merge had already been queued. I then
+deleted the branch. **Neither fix commit is an ancestor of `origin/main`** — verified with
+`git merge-base --is-ancestor` — so the squashed merge landed the first commit's tree and not the fix.
+
+**The mistake was mine and it was in the verification step, not the fix:** after merging I verified
+that "the portability fix is on main" by grepping for a pattern that matched nothing either way, and
+read the empty result as success. A grep with no matches looks exactly like a grep that passed.
+
+**The rule this adds:** after a merge, verify the **specific hunk** is present, not that a keyword is
+absent. `grep -cF '"-r"'` returning 0 and `grep -cF 'div_euclid'` returning 0 are not the same
+result, and I treated them as the same.
+
+The fix is now in this PR, in a commit whose file set is checked against `main` rather than assumed.
