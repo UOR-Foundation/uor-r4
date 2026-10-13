@@ -292,6 +292,19 @@
         "Atomic_Ternary_FBS_binder_abstraction"
       ],
       "record": "docs/labs/spiralcore-fbs-projection-2026-10-12/README.md"
+    },
+    "pod_setup_storage": {
+      "repository": "caseyallard/uor-r4-store",
+      "repository_type": "private_dataset",
+      "authorized": [
+        "bootstrap_fixes",
+        "verified_toolchain_and_binary_caches",
+        "training_models",
+        "required_setup_artifacts"
+      ],
+      "identity": "source_image_compiler_architecture_checksums_and_verified_roundtrip",
+      "training_hold": "unchanged",
+      "source_authority": "origin/main"
     }
   },
   "research": {

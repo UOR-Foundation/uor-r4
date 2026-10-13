@@ -137,6 +137,16 @@ receipt records **604672 bytes**, MD5
 `0e60182d9425c7f5b30d23a9d5b559eb`, verified by round-trip and indexed. Protected PR evidence binds
 the delivered source/tree; branch/worktree cleanup follows verified merge.
 
+The owner's later storage permission also preserves a build-only setup recipe,
+qualification receipts, source identities and SHA256 manifest in the private
+HF dataset [caseyallard/uor-r4-store](https://huggingface.co/datasets/caseyallard/uor-r4-store/tree/3314470fc850733d46ffca4e512f3a2f4333c57b/pod-setup/spiralcore-fbs/20261012-0a889bb19).
+All five files passed a download/SHA256 round-trip at commit
+`3314470fc850733d46ffca4e512f3a2f4333c57b`. This bundle contains setup instructions
+and receipts, not a CUDA toolkit tar, binary cache or trained model. Local
+exact-head compile/static/artifact validation extended the build-cache estimate
+from2.8 to4GiB (actual3.3GiB) while maintaining the30GiB free-space floor;
+no CPU model computation occurred.
+
 **Training remains held.** This owner authorization covers this pod development,
 build and finite kernel qualification, not another rental/training campaign.
 OP3a and the complete lawful GPU learning/output path remain dependencies,
