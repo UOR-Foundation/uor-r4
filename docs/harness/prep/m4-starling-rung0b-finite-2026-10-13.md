@@ -30,7 +30,7 @@
 ## Pinned source
 
 - branch `claude/starling-rank-read-2026-10-13`, source commit
-  `9e185c88dc312443c0329729f53a90ad48549a0c`. Any repair re-pins the commit here before it is rerun. Re-pinned once: the first pod build at `87fe3ea57` failed to compile one raw `unsafe` launch under the crate's `deny(unsafe_code)` (a BLOCKER, repaired by routing K1 through the audited `launch_prebuilt`). Re-pinned twice: at `8a84b2f9e` 15 of 16 controls passed and the integration control hit a reshape of the heads x 4 address maps by the model width (a BLOCKER, repaired by splitting them with their own width).
+  `91788550aa0c07e50def382c9a0f048c58cdb57d`. Any repair re-pins the commit here before it is rerun. Re-pinned once: the first pod build at `87fe3ea57` failed to compile one raw `unsafe` launch under the crate's `deny(unsafe_code)` (a BLOCKER, repaired by routing K1 through the audited `launch_prebuilt`). Re-pinned twice: at `8a84b2f9e` 15 of 16 controls passed and the integration control hit a reshape of the heads x 4 address maps by the model width (a BLOCKER, repaired by splitting them with their own width). Re-pinned a third time: at `9e185c88d` the integration control's own classification wrongly expected an exact gradient on the key-address map, which A1 leaves untrained by design; the control now asserts no gradient there.
 - files under qualification:
   - `crates/uor-r4-training/src/starling_native.{rs,cu}`, `build.rs`;
   - the `starling_native_select` launcher in `src/geometric_stack/cuda_ops.rs`;
