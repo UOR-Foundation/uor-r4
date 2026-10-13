@@ -31,8 +31,12 @@
 
 use candle_core::{CpuStorage, CustomOp1, CustomOp3, DType, Layout, Shape, Tensor};
 
-use super::murmuration::{hamilton, relative_table, MAX_FLOCK, NULL_ADDRESS_NORM};
-use super::{geometry, require_cuda, NativeStarling, ABSENT, CELLS};
+#[cfg(test)]
+use super::murmuration::hamilton;
+use super::murmuration::{carry, Chirality, MAX_FLOCK, NULL_ADDRESS_NORM};
+#[cfg(test)]
+use super::{geometry, CELLS};
+use super::{require_cuda, NativeStarling, ABSENT};
 use crate::{invalid, Result};
 
 /// The deepest tree level a plan builds (3^10 = 59,049 positions).
@@ -171,6 +175,8 @@ pub struct TreeInputs<'a> {
     /// The `[batch, time]` document-start mask on the device (U32).
     pub reset: &'a Tensor,
     pub heads: usize,
+    /// Value-transport handedness (M2), the same as the S1 read's.
+    pub chirality: Chirality,
 }
 
 /// One built level on the device.
@@ -212,6 +218,7 @@ fn row_index(plan: &[u32], heads: usize, per_batch: usize, prev: usize) -> Vec<u
 /// Build every level's parents on the device (S2-a), refusing null-containing
 /// parents and non-finite addresses.
 pub fn build_levels(plan: &TreePlan, inputs: &TreeInputs<'_>) -> Result<Vec<LevelState>> {
+    inputs.chirality.validate(inputs.heads)?;
     require_cuda(inputs.value, "the murmuration tree")?;
     let (rows, time, _) = inputs.value.dims3()?;
     let heads = inputs.heads;
@@ -219,8 +226,6 @@ pub fn build_levels(plan: &TreePlan, inputs: &TreeInputs<'_>) -> Result<Vec<Leve
         return Err(invalid("the tree inputs disagree with the plan"));
     }
     let device = inputs.value.device();
-    let table = Tensor::from_slice(relative_table()?, CELLS * CELLS, device)?;
-    let roots = Tensor::from_vec(geometry()?.0, (CELLS, 4), device)?;
     let mut address = inputs.address.to_dtype(DType::F32)?.detach();
     let mut cell = inputs.cells.contiguous()?;
     let mut value = inputs.value.to_dtype(DType::F32)?;
@@ -284,27 +289,28 @@ pub fn build_levels(plan: &TreePlan, inputs: &TreeInputs<'_>) -> Result<Vec<Leve
             .contiguous()?;
         let parent_cell =
             nearest_cells(&parent_address.reshape((rows * n, 4))?)?.reshape((rows, n))?;
-        // v_P = (1/3) sum_k roots[rel[c_P, c_k]] (x) v_k, signed child cells.
+        // v_P = (1/3) sum_k T_{P,k}(v_k) with signed child cells, in each
+        // head's handedness (M2: left c_P conj(c_k) (x) v, right v (x) conj(c_k) c_P).
         let child_cell = cell
             .flatten_all()?
             .index_select(&index, 0)?
             .reshape((rows, n, 3))?;
-        let rel = parent_cell
-            .unsqueeze(2)?
-            .broadcast_as((rows, n, 3))?
-            .contiguous()?
-            .mul(&Tensor::full(CELLS as u32, (rows, n, 3), device)?)?
-            .add(&child_cell)?
-            .flatten_all()?;
-        let transport = roots
-            .index_select(&table.index_select(&rel, 0)?, 0)?
-            .reshape((rows, n, 3, 4))?;
         let child_value = value
             .contiguous()?
             .reshape((rows * prev, 4))?
             .index_select(&index, 0)?
             .reshape((rows, n, 3, 4))?;
-        let parent_value = hamilton(&transport, &child_value)?
+        let carried = carry(
+            inputs.chirality,
+            heads,
+            &parent_cell
+                .unsqueeze(2)?
+                .broadcast_as((rows, n, 3))?
+                .contiguous()?,
+            &child_cell,
+            &child_value,
+        )?;
+        let parent_value = carried
             .sum(2)?
             .affine(1.0 / 3.0, 0.0)?
             .broadcast_mul(&exists.unsqueeze(2)?)?;
@@ -330,6 +336,7 @@ pub fn murmuration_tree_read(
     inputs: &TreeInputs<'_>,
 ) -> Result<TreeOutput> {
     spec.validate()?;
+    inputs.chirality.validate(inputs.heads)?;
     let k = spec.kept;
     if k == 0 || k > MAX_FLOCK {
         return Err(invalid(format!(
@@ -357,8 +364,6 @@ pub fn murmuration_tree_read(
         });
     }
     let built = build_levels(plan, inputs)?;
-    let table = Tensor::from_slice(relative_table()?, CELLS * CELLS, device)?;
-    let roots = Tensor::from_vec(geometry()?.0, (CELLS, 4), device)?;
     let reader_null = inputs
         .address_norm
         .to_dtype(DType::F32)?
@@ -426,16 +431,6 @@ pub fn murmuration_tree_read(
         // Arrival position -> node (row-flat index into the level's nodes).
         let nodes = node_at.index_select(&flat, 0)?; // [rows * time * K]
         let neighbour_cell = state.cell.flatten_all()?.index_select(&nodes, 0)?;
-        let rel = home
-            .unsqueeze(2)?
-            .broadcast_as((rows, time, k))?
-            .contiguous()?
-            .mul(&Tensor::full(CELLS as u32, (rows, time, k), device)?)?
-            .add(&neighbour_cell.reshape((rows, time, k))?)?
-            .flatten_all()?;
-        let transport = roots
-            .index_select(&table.index_select(&rel, 0)?, 0)?
-            .reshape((rows, time, k, 4))?;
         let neighbour_value = state
             .value
             .reshape((rows * n, 4))?
@@ -446,10 +441,19 @@ pub fn murmuration_tree_read(
         let inverse = reciprocal
             .index_select(&flock.to_dtype(DType::U32)?.flatten_all()?, 0)?
             .reshape((rows, time, 1))?;
-        let mean = hamilton(&transport, &neighbour_value)?
-            .broadcast_mul(&live.unsqueeze(3)?)?
-            .sum(2)?
-            .broadcast_mul(&inverse)?;
+        let mean = carry(
+            inputs.chirality,
+            heads,
+            &home
+                .unsqueeze(2)?
+                .broadcast_as((rows, time, k))?
+                .contiguous()?,
+            &neighbour_cell.reshape((rows, time, k))?,
+            &neighbour_value,
+        )?
+        .broadcast_mul(&live.unsqueeze(3)?)?
+        .sum(2)?
+        .broadcast_mul(&inverse)?;
         let reads = flock
             .gt(0.0)?
             .mul(&reader_null.eq(0u8)?)?
@@ -830,6 +834,7 @@ mod tests {
             coupling: &coupling,
             reset: &reset,
             heads: 1,
+            chirality: Chirality::Left,
         };
         assert!(murmuration_tree_read(&spec(), &plan, &inputs).is_err());
         Ok(())
@@ -913,6 +918,7 @@ mod tests {
             coupling: &coupling,
             reset: &reset_t,
             heads: 1,
+            chirality: Chirality::Left,
         };
         let built = build_levels(&plan, &inputs)?;
         // Expected address: a + (-1)(-a) + b, normalised (b . a > 0).
@@ -986,6 +992,7 @@ mod tests {
                     coupling: &coupling,
                     reset: &reset_t,
                     heads: 1,
+                    chirality: Chirality::Left,
                 },
             )?
             .delta
@@ -1052,6 +1059,7 @@ mod tests {
                     coupling: k,
                     reset: &reset_t,
                     heads: 1,
+                    chirality: Chirality::Left,
                 },
             )?
             .delta
@@ -1129,6 +1137,7 @@ mod tests {
                 coupling: &coupling,
                 reset: &reset_t,
                 heads: 1,
+                chirality: Chirality::Left,
             },
         );
         assert!(tree.is_err(), "a null-containing parent was not refused");
@@ -1144,6 +1153,7 @@ mod tests {
                 coupling: &k,
                 selection: &selection,
                 heads: 1,
+                chirality: Chirality::Left,
             },
             false,
             None,

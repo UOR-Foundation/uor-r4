@@ -182,12 +182,26 @@ fn doubled_icosians() -> Vec<ExactQ> {
 pub fn relative_table() -> Result<&'static [u32]> {
     static TABLE: OnceLock<std::result::Result<Vec<u32>, String>> = OnceLock::new();
     TABLE
-        .get_or_init(|| build_relative_table().map_err(|e| e.to_string()))
+        .get_or_init(|| build_table(|a, b| exact_mul(a, &exact_conj(b))).map_err(|e| e.to_string()))
         .as_deref()
         .map_err(|e| invalid(e.clone()))
 }
 
-fn build_relative_table() -> Result<Vec<u32>> {
+/// The exact right-action table `rel_R[a * 120 + b]` = the index of
+/// `conj(c_b) (x) c_a` (M2), built like [`relative_table`]. The right transport
+/// `T^R_tj(v) = v (x) h_tj` with `h_tj = conj(c_j) (x) c_t` is the other SU(2)
+/// factor of the 600-cell's rotation group.
+pub fn right_relative_table() -> Result<&'static [u32]> {
+    static TABLE: OnceLock<std::result::Result<Vec<u32>, String>> = OnceLock::new();
+    TABLE
+        .get_or_init(|| build_table(|a, b| exact_mul(&exact_conj(b), a)).map_err(|e| e.to_string()))
+        .as_deref()
+        .map_err(|e| invalid(e.clone()))
+}
+
+/// The exact table of `product(c_a, c_b)` over all ordered pairs, as icosian
+/// indices; refuses a product outside 2I or a codebook mismatch with K1.
+fn build_table(product: impl Fn(&ExactQ, &ExactQ) -> ExactQ) -> Result<Vec<u32>> {
     let doubled = doubled_icosians();
     let (roots, _) = geometry()?;
     if doubled.len() != CELLS || roots.len() != CELLS * 4 {
@@ -220,7 +234,7 @@ fn build_relative_table() -> Result<Vec<u32>> {
     let mut table = Vec::with_capacity(CELLS * CELLS);
     for a in &doubled {
         for b in &doubled {
-            let product = exact_mul(a, &exact_conj(b));
+            let product = product(a, b);
             let Some(&k) = lookup.get(&product) else {
                 return Err(invalid("an icosian quotient left the group 2I"));
             };
@@ -264,6 +278,84 @@ pub fn hamilton(a: &Tensor, b: &Tensor) -> Result<Tensor> {
     Ok(Tensor::cat(&[&w, &x, &y, &z], last)?)
 }
 
+/// Which value transport each head uses (amendment M2). Handedness is a
+/// value-transport property only: addresses, cells, K1 and the tree are
+/// unchanged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Chirality {
+    /// Every head transports by the left action `g (x) v` (S1/S2 as frozen).
+    Left,
+    /// Even heads left, odd heads right (`v (x) h`): both SU(2) factors of the
+    /// 600-cell's rotation group in every layer. Needs an even head count.
+    Paired,
+}
+
+impl Chirality {
+    /// Whether head `h` transports by the right action.
+    pub fn right(self, head: usize) -> bool {
+        self == Chirality::Paired && head % 2 == 1
+    }
+
+    pub fn validate(self, heads: usize) -> Result<()> {
+        if self == Chirality::Paired && (heads == 0 || heads % 2 != 0) {
+            return Err(invalid(format!(
+                "paired (left/right) heads need an even head count, got {heads}"
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Carry values into their readers' frames, row by row in each row's
+/// handedness: `T^L(v) = roots[rel_L[home, other]] (x) v` on left rows and
+/// `T^R(v) = v (x) roots[rel_R[home, other]]` on right rows. One Hamilton
+/// product per element either way: a right row only swaps the operands.
+/// `home`/`other` are U32 cells of one shape whose first axis is the row
+/// (`rows = batch * heads`, head `r % heads`); `value` is that shape plus 4.
+pub(crate) fn carry(
+    chirality: Chirality,
+    heads: usize,
+    home: &Tensor,
+    other: &Tensor,
+    value: &Tensor,
+) -> Result<Tensor> {
+    let device = value.device();
+    let dims = home.dims().to_vec();
+    let rows = dims.first().copied().unwrap_or(0);
+    if other.dims() != dims.as_slice()
+        || value.dims().split_last().map(|(_, d)| d) != Some(&dims[..])
+    {
+        return Err(invalid("carry operands disagree in shape"));
+    }
+    let count: usize = dims.iter().product();
+    let index = home
+        .contiguous()?
+        .mul(&Tensor::full(CELLS as u32, dims.as_slice(), device)?)?
+        .add(&other.contiguous()?)?
+        .flatten_all()?;
+    let roots = Tensor::from_vec(geometry()?.0, (CELLS, 4), device)?;
+    let left_table = Tensor::from_slice(relative_table()?, CELLS * CELLS, device)?;
+    let left = roots
+        .index_select(&left_table.index_select(&index, 0)?, 0)?
+        .reshape(value.shape())?;
+    if chirality == Chirality::Left {
+        return hamilton(&left, value);
+    }
+    let right_table = Tensor::from_slice(right_relative_table()?, CELLS * CELLS, device)?;
+    let right = roots
+        .index_select(&right_table.index_select(&index, 0)?, 0)?
+        .reshape(value.shape())?;
+    // Per-row handedness (index metadata), broadcast over the row's elements.
+    let per_row = count / rows.max(1);
+    let mask: Vec<u8> = (0..rows)
+        .flat_map(|r| std::iter::repeat_n(u8::from(chirality.right(r % heads)), per_row * 4))
+        .collect();
+    let mask = Tensor::from_vec(mask, value.shape(), device)?;
+    let lhs = mask.where_cond(value, &left)?;
+    let rhs = mask.where_cond(&right, value)?;
+    hamilton(&lhs, &rhs)
+}
+
 /// Device scalars recorded per backward for reporting: the queries whose
 /// address was credited and the mean utility gap that triggered it.
 #[derive(Clone, Debug)]
@@ -288,6 +380,8 @@ pub struct MurmurationInputs<'a> {
     /// K1's output on [`selection_spec`]: `[rows, time, (K + 1) + E + 2]` U32.
     pub selection: &'a Tensor,
     pub heads: usize,
+    /// Value-transport handedness (M2).
+    pub chirality: Chirality,
 }
 
 /// What one S1 read returns: `Delta` and its diagnostics (device tensors).
@@ -309,6 +403,7 @@ pub fn murmuration_read(
     sink: Option<AddressSink>,
 ) -> Result<MurmurationOutput> {
     spec.validate()?;
+    inputs.chirality.validate(inputs.heads)?;
     require_cuda(inputs.value, "the murmuration read")?;
     // K1 runs with one extra kept slot (see [`selection_spec`]) so the reader
     // can be filtered out before the top-K truncation.
@@ -367,25 +462,24 @@ pub fn murmuration_read(
         .flatten_all()?
         .index_select(&flat, 0)?
         .reshape((rows, time, s))?;
-    let rel_index = home
-        .unsqueeze(2)?
-        .broadcast_as((rows, time, s))?
-        .contiguous()?
-        .mul(&Tensor::full(CELLS as u32, (rows, time, s), device)?)?
-        .add(&neighbour_cell)?
-        .flatten_all()?;
-    let table = Tensor::from_slice(relative_table()?, CELLS * CELLS, device)?;
     let (roots, _) = geometry()?;
     let roots = Tensor::from_vec(roots, (CELLS, 4), device)?;
-    let transport = roots
-        .index_select(&table.index_select(&rel_index, 0)?, 0)?
-        .reshape((rows, time, s, 4))?;
     let neighbour_value = value
         .contiguous()?
         .reshape((rows * time, 4))?
         .index_select(&flat, 0)?
         .reshape((rows, time, s, 4))?;
-    let carried = hamilton(&transport, &neighbour_value)?; // T_tj(v_j), [rows, time, S, 4]
+    // T_tj(v_j) in each head's handedness (M2), [rows, time, S, 4].
+    let carried = carry(
+        inputs.chirality,
+        heads,
+        &home
+            .unsqueeze(2)?
+            .broadcast_as((rows, time, s))?
+            .contiguous()?,
+        &neighbour_cell,
+        &neighbour_value,
+    )?;
 
     // The flock: the first K live slots of K1's K + 1 window, in K1's rank
     // order (largest address dot, ties to the later position). K1 returns only
@@ -677,6 +771,7 @@ mod tests {
             coupling: &coupling,
             selection: &selection,
             heads: 1,
+            chirality: Chirality::Left,
         };
         assert!(murmuration_read(&spec, &inputs, false, None).is_err());
         let wide = NativeStarling { kept: 8, ..spec };
@@ -770,6 +865,7 @@ mod tests {
                 coupling,
                 selection: &selection,
                 heads: f.heads,
+                chirality: Chirality::Left,
             },
             credit,
             None,
@@ -987,6 +1083,7 @@ mod tests {
                 coupling: &one,
                 selection: &selection,
                 heads: 1,
+                chirality: Chirality::Left,
             },
             false,
             None,
@@ -1132,6 +1229,7 @@ mod tests {
                     coupling: &one,
                     selection: sel,
                     heads: 1,
+                    chirality: Chirality::Left,
                 },
                 credit,
                 None,
@@ -1211,6 +1309,292 @@ mod tests {
             gk.iter().all(|g| g.is_finite()) && gk.iter().any(|g| *g != 0.0),
             "the coupling has no wake-up gradient: {gk:?}"
         );
+        Ok(())
+    }
+
+    // ---- Amendment M2: paired left/right heads ----
+
+    /// The exact index multiplication table `mult[a * 120 + b]` = index of
+    /// `c_a (x) c_b` (test-only, exact).
+    fn multiplication_table() -> Result<Vec<u32>> {
+        build_table(exact_mul)
+    }
+
+    /// M2 control 1 (host, exact integers): the right table is the exact
+    /// `conj(c_b) (x) c_a`, and both tables are frame cocycles on all 120^3
+    /// triples: `g_tk g_kj = g_tj` and `h_kj h_tk = h_tj`.
+    #[test]
+    fn murm_right_table_exact_and_cocycle() -> Result<()> {
+        let left = relative_table()?;
+        let right = right_relative_table()?;
+        let mult = multiplication_table()?;
+        let doubled = doubled_icosians();
+        for a in 0..CELLS {
+            for b in 0..CELLS {
+                let h = right[a * CELLS + b] as usize;
+                let product = exact_mul(&exact_conj(&doubled[b]), &doubled[a]);
+                let twice = [
+                    doubled[h][0].scale(2),
+                    doubled[h][1].scale(2),
+                    doubled[h][2].scale(2),
+                    doubled[h][3].scale(2),
+                ];
+                assert_eq!(product, twice, "rel_R[{a},{b}] is not conj(c_b) c_a");
+            }
+        }
+        for t in 0..CELLS {
+            for k in 0..CELLS {
+                for j in 0..CELLS {
+                    let g =
+                        mult[left[t * CELLS + k] as usize * CELLS + left[k * CELLS + j] as usize];
+                    assert_eq!(g, left[t * CELLS + j], "left cocycle t {t} k {k} j {j}");
+                    let h =
+                        mult[right[k * CELLS + j] as usize * CELLS + right[t * CELLS + k] as usize];
+                    assert_eq!(h, right[t * CELLS + j], "right cocycle t {t} k {k} j {j}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn murm_odd_heads_refused() -> Result<()> {
+        assert!(Chirality::Paired.validate(3).is_err());
+        assert!(Chirality::Paired.validate(0).is_err());
+        assert!(Chirality::Paired.validate(4).is_ok());
+        assert!(Chirality::Left.validate(3).is_ok());
+        let device = Device::Cpu;
+        let spec = spec(2, 0);
+        let x = Tensor::zeros((3, 3, 4), DType::F32, &device)?;
+        let norm = Tensor::ones((3, 3), DType::F32, &device)?;
+        let coupling = Tensor::zeros(3, DType::F32, &device)?;
+        let selection = Tensor::zeros((3, 3, 5), DType::U32, &device)?;
+        let refused = murmuration_read(
+            &spec,
+            &MurmurationInputs {
+                address: &x,
+                address_norm: &norm,
+                value: &x,
+                coupling: &coupling,
+                selection: &selection,
+                heads: 3,
+                chirality: Chirality::Paired,
+            },
+            false,
+            None,
+        );
+        assert!(refused
+            .err()
+            .is_some_and(|e| e.to_string().contains("even head count")));
+        Ok(())
+    }
+
+    /// M2 control 2: under `Paired`, the even (left) heads are bit-identical
+    /// to `Left` mode.
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_left_heads_unchanged() -> Result<()> {
+        let device = cuda()?;
+        let (cells, resets) = mixed_cells()?;
+        let f = fixture(&device, &cells, 2, &resets)?;
+        let s = spec(7, 2);
+        let coupling = Tensor::new(&[0.6f32, -0.9], &device)?;
+        let selection = select(&selection_spec(&s)?, 2, &f.address, &f.address, &f.reset)?;
+        let read = |c: Chirality| -> Result<Vec<Vec<Vec<f32>>>> {
+            Ok(murmuration_read(
+                &s,
+                &MurmurationInputs {
+                    address: &f.address,
+                    address_norm: &f.norm,
+                    value: &f.value,
+                    coupling: &coupling,
+                    selection: &selection,
+                    heads: 2,
+                    chirality: c,
+                },
+                false,
+                None,
+            )?
+            .delta
+            .to_vec3()?)
+        };
+        let (left, paired) = (read(Chirality::Left)?, read(Chirality::Paired)?);
+        for r in (0..cells.len()).step_by(2) {
+            for t in 0..cells[0].len() {
+                for i in 0..4 {
+                    assert_eq!(left[r][t][i].to_bits(), paired[r][t][i].to_bits());
+                }
+            }
+        }
+        // And the odd (right) heads genuinely differ somewhere.
+        assert!((1..cells.len()).step_by(2).any(|r| left[r] != paired[r]));
+        Ok(())
+    }
+
+    /// M2 control 3: right heads match an independent device reference that
+    /// forms `h = conj(c_j) (x) c_t` by direct f32 products and applies it on
+    /// the right, `v (x) h` (not the table).
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_right_forward_independent_reference() -> Result<()> {
+        let device = cuda()?;
+        let (cells, resets) = mixed_cells()?;
+        let f = fixture(&device, &cells, 2, &resets)?;
+        let s = spec(7, 2);
+        let sel = selection_spec(&s)?;
+        let coupling = Tensor::new(&[0.75f32, -1.25], &device)?;
+        let selection = select(&sel, 2, &f.address, &f.address, &f.reset)?;
+        let out = murmuration_read(
+            &s,
+            &MurmurationInputs {
+                address: &f.address,
+                address_norm: &f.norm,
+                value: &f.value,
+                coupling: &coupling,
+                selection: &selection,
+                heads: 2,
+                chirality: Chirality::Paired,
+            },
+            false,
+            None,
+        )?;
+        let picks: Vec<Vec<Vec<u32>>> = selection.to_vec3()?;
+        let roots = Tensor::from_vec(geometry()?.0, (CELLS, 4), &device)?;
+        let conj = Tensor::new(&[1f32, -1.0, -1.0, -1.0], &device)?;
+        let time = cells[0].len();
+        let k_h = coupling.narrow(0, 1, 1)?;
+        for r in (1..cells.len()).step_by(2) {
+            for t in 0..time {
+                let v_t = f.value.narrow(0, r, 1)?.narrow(1, t, 1)?.reshape(4)?;
+                let c_t = roots
+                    .narrow(0, picks[r][t][sel.slots()] as usize, 1)?
+                    .reshape(4)?;
+                let mut sum = Tensor::zeros(4, DType::F32, &device)?;
+                let mut count = 0usize;
+                for &j in &picks[r][t][..s.kept + 1] {
+                    if count == s.kept {
+                        break;
+                    }
+                    if j == ABSENT || j as usize >= t {
+                        continue;
+                    }
+                    let c_j = roots
+                        .narrow(0, picks[r][j as usize][sel.slots() + 1] as usize, 1)?
+                        .reshape(4)?;
+                    let h = hamilton(&c_j.mul(&conj)?, &c_t)?;
+                    let v_j = f
+                        .value
+                        .narrow(0, r, 1)?
+                        .narrow(1, j as usize, 1)?
+                        .reshape(4)?;
+                    sum = sum.add(&hamilton(&v_j, &h)?)?;
+                    count += 1;
+                }
+                let want = if count == 0 {
+                    Tensor::zeros(4, DType::F32, &device)?
+                } else {
+                    sum.affine(1.0 / count as f64, 0.0)?
+                        .sub(&v_t)?
+                        .broadcast_mul(&k_h)?
+                };
+                let got = out.delta.narrow(0, r, 1)?.narrow(1, t, 1)?.reshape(4)?;
+                let worst = got.sub(&want)?.abs()?.max(0)?.to_scalar::<f32>()?;
+                assert!(worst <= 1e-6, "row {r} t {t}: right head off by {worst}");
+            }
+        }
+        Ok(())
+    }
+
+    /// M2 control 4: right-head value and coupling gradients against device
+    /// central secants (same convention as control 5).
+    #[test]
+    #[cfg_attr(not(feature = "cuda"), ignore = "GPU control: runs on the CUDA pod")]
+    fn murm_right_backward_secants() -> Result<()> {
+        let device = cuda()?;
+        let (cells, resets) = mixed_cells()?;
+        let f = fixture(&device, &cells, 2, &resets)?;
+        let s = spec(7, 2);
+        let (rows, time) = (cells.len(), cells[0].len());
+        let selection = select(&selection_spec(&s)?, 2, &f.address, &f.address, &f.reset)?;
+        // Weight only the right (odd) rows.
+        let weights = Tensor::from_vec(
+            (0..rows * time * 4)
+                .map(|i| {
+                    if (i / (time * 4)) % 2 == 1 {
+                        ((i * 29 % 23) as f32 / 23.0) - 0.5
+                    } else {
+                        0.0
+                    }
+                })
+                .collect::<Vec<_>>(),
+            (rows, time, 4),
+            &device,
+        )?;
+        let loss_of = |v: &Tensor, k: &Tensor| -> Result<Tensor> {
+            Ok(murmuration_read(
+                &s,
+                &MurmurationInputs {
+                    address: &f.address,
+                    address_norm: &f.norm,
+                    value: v,
+                    coupling: k,
+                    selection: &selection,
+                    heads: 2,
+                    chirality: Chirality::Paired,
+                },
+                false,
+                None,
+            )?
+            .delta
+            .mul(&weights)?
+            .sum_all()?)
+        };
+        let value = Var::from_tensor(&f.value)?;
+        let coupling = Var::from_tensor(&Tensor::new(&[0.8f32, -0.6], &device)?)?;
+        let grads = loss_of(value.as_tensor(), coupling.as_tensor())?.backward()?;
+        let gv = grads
+            .get(value.as_tensor())
+            .ok_or_else(|| invalid("no value gradient"))?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let gk = grads
+            .get(coupling.as_tensor())
+            .ok_or_else(|| invalid("no coupling gradient"))?
+            .to_vec1::<f32>()?;
+        let h = 1e-3f64;
+        let n = rows * time * 4;
+        let check = |a: f32, p: f32, m: f32, what: &str| {
+            let s = (p - m) as f64 / (2.0 * h);
+            let bound = 2e-3 * s.abs().max(a.abs() as f64).max(1e-3);
+            assert!(
+                (s - a as f64).abs() <= bound,
+                "{what}: analytic {a} secant {s}"
+            );
+        };
+        // Elements of the right rows (rows 1 and 3).
+        for idx in [
+            time * 4 + 3,
+            time * 4 + 21,
+            3 * time * 4 + 10,
+            3 * time * 4 + 47,
+        ] {
+            let bump = |sign: f64| -> Result<f32> {
+                let e = Tensor::from_vec(
+                    (0..n)
+                        .map(|i| if i == idx { (sign * h) as f32 } else { 0.0 })
+                        .collect::<Vec<_>>(),
+                    (rows, time, 4),
+                    &device,
+                )?;
+                Ok(loss_of(&f.value.add(&e)?, coupling.as_tensor())?.to_scalar::<f32>()?)
+            };
+            check(gv[idx], bump(1.0)?, bump(-1.0)?, &format!("value[{idx}]"));
+        }
+        let bump = |sign: f64| -> Result<f32> {
+            let e = Tensor::new(&[0.0f32, (sign * h) as f32], &device)?;
+            Ok(loss_of(&f.value, &coupling.as_tensor().add(&e)?)?.to_scalar::<f32>()?)
+        };
+        check(gk[1], bump(1.0)?, bump(-1.0)?, "coupling[right head]");
         Ok(())
     }
 }
