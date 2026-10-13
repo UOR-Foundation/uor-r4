@@ -22,7 +22,7 @@
 //!   null-parent policy is registered); a non-finite address is a blocker.
 //!
 //! **Read (S2-b).** At each level the reader's flock is K1's ring selection
-//! over arrived nodes (kernel `murm_tree_select`, same score and tie law, no
+//! over arrived nodes (kernel `murm_ring_select`, same score and tie law, no
 //! exploration), transported into the reader's frame exactly as at level 0,
 //! and `Delta_tree = sum_l K_{h,l} (m_{t,l} - v_t)` over non-empty levels, one
 //! coupling per head and level (initialised at 0 by the caller). Levels add

@@ -206,6 +206,8 @@ pub mod starling_native {
     // rank read in `starling_native.rs` stays inactive and uncompiled.
     pub mod kernels;
     pub mod murmuration;
+    #[cfg(test)]
+    mod murmuration_composed;
     pub mod murmuration_tree;
     mod support;
     pub(crate) use support::{geometry, require_cuda, require_finite};
