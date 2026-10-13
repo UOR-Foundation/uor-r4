@@ -132,13 +132,22 @@ impl VectorCandidates {
 /// Exact occurrence/version identity stays separate from its geometric vector.
 #[derive(Clone)]
 pub struct CarriedVectorToken {
-    pub token_id: u32,
-    pub occurrence: u64,
-    pub version: u64,
+    token_id: u32,
+    occurrence: u64,
+    version: u64,
     vector: Tensor,
     table_id: TensorId,
 }
 impl CarriedVectorToken {
+    pub fn token_id(&self) -> u32 {
+        self.token_id
+    }
+    pub fn occurrence(&self) -> u64 {
+        self.occurrence
+    }
+    pub fn version(&self) -> u64 {
+        self.version
+    }
     pub fn vector(&self) -> &Tensor {
         &self.vector
     }
@@ -726,6 +735,8 @@ mod cuda_tests {
         let channel = native_vector_channel(&model)?;
         assert!(model.target_nll(&[0], &[0], 1, 1).is_err());
         assert!(model.next_scores(&[0]).is_err());
+        assert!(model.next_scores_with_pointer(&[0]).is_err());
+        assert!(model.last_pointer_selection(&[0]).is_err());
         assert_eq!(writer.table_id(), channel.writer().table_id());
         let vectors = model.embed(&[0, 1], 1, 2)?.reshape((2, 32))?;
         assert_eq!(

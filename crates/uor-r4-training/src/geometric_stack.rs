@@ -11615,6 +11615,9 @@ impl StackModel {
         &self,
         ids: &[u32],
     ) -> Result<(Vec<f32>, Option<PointerSelection>)> {
+        if self.native_vector_head.is_some() {
+            return Err(invalid("native token selection stays on CUDA; legacy host pointer trace and sampling are unavailable"));
+        }
         let time = ids.len();
         if time == 0 {
             return Err(invalid("next_scores needs at least one input id"));
