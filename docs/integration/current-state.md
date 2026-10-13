@@ -32,24 +32,15 @@ files and the same refusal to raise a count. [Record](../labs/rust-ratchets-2026
     in both, which the lexical checks cannot see.
 
 Line: no model line — tooling · count unchanged · headlines unchanged.
-## 2026-10-13 — D29 vendor dependency repair; composed CUDA qualification pending (codex, #2029)
+## 2026-10-13 — D29 vendor and native dependency boundary repaired; host compile PASS, successor CUDA qualification NOT_RUN (codex, #2029)
 
-Source repair removes vendor BLAS/NVRTC activation and eager BLAS construction,
-builds an explicit nine-module tensor PTX set, and excludes CPU/NN contraction
-and squashing implementations while retaining host storage and lawful GPU APIs.
-Prohibited operations refuse; original source is preserved inactive. The focused
-Candle core/NN host compile passes after one recorded refusal-stub correction.
-Four prebuilt-loader metadata tests, four host storage/refusal controls and the
-Rust checker's planted-token tests pass. **Composed CUDA compilation and the
-26 finite controls are NOT_RUN; this is not a rung0 readiness claim.**
-[Record](../labs/d29-vendor-boundary-2026-10-13/README.md).
+The repaired native-only library and registered train/evaluate CLI compile on the host (**PASS, 9.11s**); retained host test-module typechecking passes (**1.77s**, no test/model execution). Vendor BLAS/NVRTC activation, eager BLAS, CPU/NN contraction/squash bodies and prohibited backends are excluded or fail closed. The native core/integer/training graph now excludes model-source/GEMM, the retired LUT runtime and Prism address dependencies. Historical source is retained through original files, hashed LUT/address snapshots and an indexed reverse patch. The exact existing shared vector channel is extracted and reexported under its original public namespace.
 
-Claude's project-module split is now integrated. Review found freely learned
-contractions in selected-potential and native-context modules that need
-exclusion or actual geometric replacement; the earlier token/PTX checks do
-not detect those mathematical contractions. Exact combined source, FIT and the
-admitted Rust-only pod setup remain dependencies. Training stays **HELD**, with
-no model-quality change or count reset. Prior evidence keeps its source scope.
+`geometric-stack` selects the new native-only CLI while the historical CLI and model source remain inactive. Native TRAIN-mask/count-reference and separate DEV oracle behavior, schedule/window RNG, CUDA loss/update, checkpoint/resume and synchronized timings remain. New lineage schema/2 refuses incompatible historical bindings. Independent review's swapped-resume configuration risk is closed by comparing loaded model config and optimizer decay/clip to requested settings before evaluation/update; the existing argument control includes metadata-only mismatch fixtures. Final retained host test-module typechecking passes in **2.40s** without execution. The canonical Starling specification and typed setter/getter are metadata seams with runtime/load activation refused pending Claude's operator; this rung0 graph stays recurrence-only.
+
+The earlier `b7a4f01bbbc49da54838edf678a815ff67786a60` pod build reached **SETUP_ONLY**, then prohibited compiled Rust edges blocked qualification. Its binaries and twelve PTX modules do not qualify the repaired successor. The repaired successor CUDA build and **31 mandatory controls are NOT_RUN**: 15 library, 11 CLI, five module, with unchanged identities/expectations and three project plus nine vendor PTX modules. The existing writer fixture now explicitly requests geometric recurrence/Hamilton metadata. The [finite sheet](../harness/prep/m1-d29-vendor-finite-2026-10-13.md) remains FIT with A1–A4; this is prospective finite design fitness, not a model result or training release. Setup mistakes, including an interrupted wrong-target build and duplicate host compilation, remain receipts rather than model negatives. [Canonical record](../labs/d29-vendor-boundary-2026-10-13/README.md).
+
+Claude's quarantines landed in #2347. Exact composed source/lock/PTX/executable freeze, independent confirmation, successor CUDA qualification and protected delivery remain dependencies. Global training and separate M2 holds stay **HELD**; optimizer/model/corpus work is NOT_RUN in this repair. Full M2/shared intent and D11 serving remain unqualified; no model headline or count reset.
 
 ## 2026-10-13 — D29 module split and the end of NVRTC: every CUDA module compliant and built ahead of time (claude, #2028)
 

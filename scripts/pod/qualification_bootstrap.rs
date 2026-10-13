@@ -4,10 +4,14 @@
 //!   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /workspace/rustup-init.sh
 //!   sh /workspace/rustup-init.sh -y --profile minimal --default-toolchain 1.97.1
 //! Then, through scripts/pod/uor-pod only, compile this helper on the pod:
-//!   /root/.cargo/bin/rustc --edition=2021 /workspace/qualification_bootstrap.rs -o /workspace/qualification-bootstrap
+//! Copy this file and ../native_dependency_boundary.rs preserving their relative paths, then:
+//!   /root/.cargo/bin/rustc --edition=2021 /workspace/scripts/pod/qualification_bootstrap.rs -o /workspace/qualification-bootstrap
 //!   /workspace/qualification-bootstrap --sha FULL_SHA --lab codex --session SESSION --root /workspace/EXCLUSIVE_ROOT
 //! Existing roots require --resume and the exact same ownership/source marker.
 //! No HF client/dataset, Python, old bootstrap, parity suite, or test execution.
+#[path = "../native_dependency_boundary.rs"]
+mod native_dependency_boundary;
+
 use std::{
     env,
     fs::{self, OpenOptions},
@@ -604,6 +608,59 @@ fn setup(c: &Config) -> Result<()> {
         &source,
     )?;
     hash_file(c, "cargo-lock-sha256", &source.join("Cargo.lock"))?;
+    let source_paths = run(
+        c,
+        "source-file-inventory",
+        "git",
+        &[
+            "ls-files",
+            "--",
+            "Cargo.toml",
+            "Cargo.lock",
+            "crates/uor-r4-training",
+            "crates/uor-r4-core",
+            "crates/uor-r4-integer",
+            "crates/uor-r4-source-interface",
+            "crates/uor-r4-tokenizer",
+            "third_party",
+            "scripts/native_dependency_boundary.rs",
+            "scripts/check_native_cuda_vendor.rs",
+            "scripts/pod/qualification_bootstrap.rs",
+            "scripts/pod/qualify_geometric.rs",
+            "docs/harness/prep/m1-d29-vendor-finite-2026-10-13.md",
+        ],
+        &source,
+    )?;
+    // This is an identity inventory of retained source, not a claim that every
+    // listed historical file is compiled. The dependency/PTX gates define that.
+    let files: Vec<&str> = source_paths.lines().collect();
+    if files.is_empty() || files.iter().any(|p| p.starts_with('-') || p.contains('\\')) {
+        return Err("invalid source identity inventory".into());
+    }
+    run(c, "source-files-sha256", "sha256sum", &files, &source)?;
+    // Fail before building any native executable if a historical teacher or
+    // known dense backend is reintroduced transitively. Preserve the full
+    // tree receipt, including on refusal, so the dependency edge is visible.
+    let features = run(
+        c,
+        "resolved-cuda-features",
+        "rustup",
+        &[
+            "run",
+            RUST_VERSION,
+            "cargo",
+            "tree",
+            "--locked",
+            "-p",
+            "uor-r4-training",
+            "--features",
+            "cuda",
+            "--edges",
+            "features",
+        ],
+        &source,
+    )?;
+    native_dependency_boundary::verify(&features)?;
     let builds: [(&str, &[&str]); 4] = [
         (
             "build-module-tests",
@@ -729,25 +786,6 @@ fn setup(c: &Config) -> Result<()> {
             json_string(&digest)
         ));
     }
-    run(
-        c,
-        "resolved-cuda-features",
-        "rustup",
-        &[
-            "run",
-            RUST_VERSION,
-            "cargo",
-            "tree",
-            "--locked",
-            "-p",
-            "uor-r4-training",
-            "--features",
-            "cuda",
-            "--edges",
-            "features",
-        ],
-        &source,
-    )?;
     preserve_ptx(c)?;
     let after = run(
         c,

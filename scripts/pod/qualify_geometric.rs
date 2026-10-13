@@ -4,8 +4,37 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    process::{Command, ExitCode},
+    process::{Child, Command, ExitCode, Stdio},
 };
+
+// Only this owned telemetry child is stopped on completion/error. The samples
+// are observed GPU memory use, not a claim of an unsampled absolute peak.
+struct DeviceSamples(Child);
+impl DeviceSamples {
+    fn start(report: &Path) -> Result<Self, String> {
+        let out =
+            fs::File::create(report.join("gpu-memory-samples.csv")).map_err(|e| e.to_string())?;
+        let err = fs::File::create(report.join("gpu-memory-samples.stderr.log"))
+            .map_err(|e| e.to_string())?;
+        Command::new("nvidia-smi")
+            .args([
+                "--query-gpu=timestamp,uuid,memory.used,utilization.gpu",
+                "--format=csv",
+                "--loop-ms=200",
+            ])
+            .stdout(Stdio::from(out))
+            .stderr(Stdio::from(err))
+            .spawn()
+            .map(Self)
+            .map_err(|e| e.to_string())
+    }
+}
+impl Drop for DeviceSamples {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
 
 const LIB: &[&str] = &[
     "geometric_stack::tests::geometric_rate_cuda_uses_signed_edges_and_exact_keep_table",
@@ -186,6 +215,7 @@ fn run() -> Result<(), String> {
             }
         }
     }
+    let _samples = DeviceSamples::start(&report)?;
     let mut passed = 0;
     for (i, names) in [LIB, CLI, MODULE].iter().enumerate() {
         for name in *names {

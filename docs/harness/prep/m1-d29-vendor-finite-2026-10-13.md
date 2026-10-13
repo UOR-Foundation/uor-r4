@@ -29,6 +29,12 @@ Static Rust tool: `scripts/check_native_cuda_vendor.rs`. Compile its std-only di
 
 ## Existing controls, exact names
 
+### Composed Rust boundary amendment, before successor execution
+
+Kimi's [compiled-scope ruling](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6151442134) includes the Rust libraries selected into the executable. The successor build therefore uses the recurrence-only native stack/CLI and metadata/geometry dependency entries, with historical implementations preserved outside that selected graph. The dependency gate must reject model-source, GEMM/matrixmultiply and Prism tensor packages before building. Native checkpoint lineage is `/2`; historical resumes refuse explicitly. No optimizer execution is admitted by this amendment.
+
+The existing `actual_stack_store_channel_and_artifact_identity` fixture now explicitly selects `RecGates::Geometric` and `Gate::Hamilton` before parameter preparation, matching the registered native configuration and excluding historical initialization. Its assertions and tolerances are unchanged. The existing argument control additionally checks that loaded model configuration and optimizer decay/clip agree with requested metadata before evaluation/update. The mandatory list remains exactly 31; no assertion or numerical tolerance is relaxed. The retired Starling rank/null controls are outside this sheet; Claude's replacement murmuration has its separate reviewed card and source qualification.
+
 Build the library and `geometric-stack` example test executables with the CUDA feature on the owned pod and per-lab target. Save `--list` output and confirm each exact name before invoking it with `--exact --nocapture --test-threads=1`. Never run an unfiltered test suite.
 
 Library, four composed-path controls:
