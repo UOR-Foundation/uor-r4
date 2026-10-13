@@ -86,3 +86,9 @@ reports the same error. `Gather`, `IndexSelect` and the upsample rules keep
 `UOR_CANDLE_GRAD_ZERO_THEN_ADD=1`, or `backprop::set_upstream_zero_then_add`,
 restores the upstream path for old-vs-new comparisons. The parity record is
 `crates/uor-r4-training/tests/backprop_first_contribution_parity.rs`.
+
+Scalar binary/comparison adapters transfer the literal's storage to the target
+first, then perform dtype conversion there. Upstream's cast-before-transfer
+order attempted an F64-to-F32 CPU cast for CUDA clipping/comparisons. The finite
+clipping control exposed that refusal; the correction keeps casts on CUDA and
+does not restore CPU arithmetic or change the stored analytic expectations.
