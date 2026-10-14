@@ -1,6 +1,9 @@
 //! Operational admission and recoverable, diagnostic-only A2 pilot controller.
 //! Release records are operator-supplied evidence, not cryptographic owner authentication.
-//! No receipt is manufactured by this module; missing owner evidence leaves training held.
+//! No lab may write, edit, copy or generate an owner-release file. Casey alone runs
+//! `discrete-stack owner-release PILOT_PLAN.json NEW_RELEASE_DIR` from his terminal.
+//! The interactive command below is tooling, never permission for a lab to release a hold.
+//! Missing owner evidence leaves training held.
 #![forbid(unsafe_code)]
 use crate::{
     corpus::{self, FilePin},
@@ -190,6 +193,25 @@ fn validate_release_metadata(
     compiled: &Value,
     executable_sha256: &str,
 ) -> Result<ValidatedRelease> {
+    let owner: OwnerRecord = serde_json::from_slice(&manifest.owner_release.read()?)
+        .map_err(|e| invalid(e.to_string()))?;
+    validate_release_with_owner(
+        config,
+        lineage_sha256,
+        manifest,
+        compiled,
+        executable_sha256,
+        &owner,
+    )
+}
+fn validate_release_with_owner(
+    config: &DriverConfig,
+    lineage_sha256: &str,
+    manifest: ReleaseManifest,
+    compiled: &Value,
+    executable_sha256: &str,
+    owner: &OwnerRecord,
+) -> Result<ValidatedRelease> {
     validate_pilot_config(config)?;
     let e = &manifest.execution;
     for hash in [
@@ -239,8 +261,6 @@ fn validate_release_metadata(
     }
     let review: ReviewRecord = serde_json::from_slice(&manifest.claude_review.read()?)
         .map_err(|e| invalid(e.to_string()))?;
-    let owner: OwnerRecord = serde_json::from_slice(&manifest.owner_release.read()?)
-        .map_err(|e| invalid(e.to_string()))?;
     if review.reviewer != "Claude"
         || review.verdict != "APPROVE_A2_ADMISSION_DIFF"
         || review.scope != PILOT_SCOPE
@@ -251,7 +271,9 @@ fn validate_release_metadata(
         || owner.scope != PILOT_SCOPE
         || owner.execution != *e
         || owner.claude_review_sha256 != manifest.claude_review.sha256
-        || !valid_receipt_url(&owner.receipt_url)
+        || !(valid_receipt_url(&owner.receipt_url)
+            || owner.receipt_url
+                == format!("owner-terminal:{}", manifest.owner_release.path.display()))
     {
         return Err(Error::TrainingHeld);
     }
@@ -328,13 +350,136 @@ fn validate_initial_baseline(release: &ValidatedRelease, resumed: &PilotCheckpoi
         serde_json::from_slice(&pin.read()?).map_err(|e| invalid(e.to_string()))?;
     validate_baseline_pair(&initial, resumed)
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LockRecord {
+    schema: String,
+    pid: u32,
+    host_id: String,
+    boot_id: String,
+    created_unix_ns: String,
+    manifest_sha256: String,
+}
+fn command_text(program: &str, args: &[&str]) -> Result<String> {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|e| invalid(format!("{program}: {e}")))?;
+    let text = String::from_utf8(output.stdout).map_err(|e| invalid(e.to_string()))?;
+    if !output.status.success() || text.trim().is_empty() {
+        return Err(invalid(format!("cannot establish {program} host metadata")));
+    }
+    Ok(text.trim().into())
+}
+fn host_boot() -> Result<(String, String)> {
+    let host = command_text("hostname", &[])?;
+    #[cfg(target_os = "linux")]
+    let boot = fs::read_to_string("/proc/sys/kernel/random/boot_id")
+        .map_err(|e| invalid(e.to_string()))?
+        .trim()
+        .to_owned();
+    #[cfg(target_os = "macos")]
+    let boot = command_text("sysctl", &["-n", "kern.boottime"])?;
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    return Err(invalid(
+        "pilot lock host/boot identification supports Linux and macOS only",
+    ));
+    if boot.is_empty() {
+        return Err(invalid("empty boot identity"));
+    }
+    Ok((host, boot))
+}
+fn unix_ns() -> Result<String> {
+    Ok(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| invalid(e.to_string()))?
+        .as_nanos()
+        .to_string())
+}
+fn lock_record(manifest_sha256: &str) -> Result<LockRecord> {
+    let (host_id, boot_id) = host_boot()?;
+    Ok(LockRecord {
+        schema: "uor-r4.pilot-lock/1".into(),
+        pid: std::process::id(),
+        host_id,
+        boot_id,
+        created_unix_ns: unix_ns()?,
+        manifest_sha256: manifest_sha256.into(),
+    })
+}
+fn require_dead_holder(record: &LockRecord, host: &str, boot: &str) -> Result<()> {
+    if record.schema != "uor-r4.pilot-lock/1"
+        || record.pid == 0
+        || record.host_id != host
+        || record.boot_id != boot
+    {
+        return Err(invalid(
+            "lock holder is foreign or ambiguous; no lock was removed",
+        ));
+    }
+    let output = std::process::Command::new("ps")
+        .args(["-p", &record.pid.to_string(), "-o", "pid="])
+        .output()
+        .map_err(|e| invalid(e.to_string()))?;
+    // Both platforms return 1 with no rows for a nonexistent PID. Any other state refuses.
+    if output.status.code() != Some(1) || !output.stdout.is_empty() || !output.stderr.is_empty() {
+        return Err(invalid(
+            "lock holder is live or liveness is ambiguous; no lock was removed",
+        ));
+    }
+    Ok(())
+}
 struct RunLock {
     path: PathBuf,
+    sha256: String,
 }
 impl Drop for RunLock {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+        if fs::read(&self.path).is_ok_and(|bytes| corpus::sha256(&bytes) == self.sha256) {
+            let _ = fs::remove_file(&self.path);
+        }
     }
+}
+/// Explicit recovery only: never kills a process, never takes over a live/foreign/ambiguous lock.
+pub fn unlock_pilot(
+    state: &Path,
+    expected_lock_sha256: &str,
+    receipt_directory: &Path,
+) -> Result<()> {
+    corpus::validate_sha256(expected_lock_sha256)?;
+    require_disjoint_directories(state, receipt_directory)?;
+    let recovery = state.join("recovery.lock");
+    let recovery_record = lock_record("unlock")?;
+    write_new(&recovery, &recovery_record)?;
+    let _recovery = RunLock {
+        path: recovery,
+        sha256: corpus::sha256(&encode(&recovery_record)?),
+    };
+    let path = state.join("active.lock");
+    let bytes = fs::read(&path).map_err(|e| invalid(e.to_string()))?;
+    if corpus::sha256(&bytes) != expected_lock_sha256 {
+        return Err(invalid("active lock changed or expected SHA is wrong"));
+    }
+    let record: LockRecord = serde_json::from_slice(&bytes)
+        .map_err(|e| invalid(format!("unrecognized lock metadata: {e}")))?;
+    let (host, boot) = host_boot()?;
+    require_dead_holder(&record, &host, &boot)?;
+    fs::create_dir(receipt_directory)
+        .map_err(|e| invalid(format!("exclusive unlock receipt: {e}")))?;
+    write_new(
+        &receipt_directory.join("receipt.json"),
+        &json!({"schema":"uor-r4.pilot-unlock/1","lock_sha256":expected_lock_sha256,"holder":record,"host_id":host,"boot_id":boot,"pid_verified_dead":true,"time_unix_ns":unix_ns()?,"training":"HELD; recovery grants no execution permission"}),
+    )?;
+    sync_directory(receipt_directory)?;
+    require_dead_holder(&record, &host, &boot)?;
+    if fs::read(&path).map_err(|e| invalid(e.to_string()))? != bytes {
+        return Err(invalid("active lock changed during recovery"));
+    }
+    // Rename preserves the exact original lock; never delete it. Recovery lock serializes unlocks.
+    fs::rename(&path, receipt_directory.join("preserved-active.lock"))
+        .map_err(|e| invalid(e.to_string()))?;
+    sync_directory(receipt_directory)?;
+    sync_directory(state)
 }
 fn lock_run(release: &ValidatedRelease, resume: bool) -> Result<RunLock> {
     let state = &release.manifest.run_state_directory;
@@ -346,12 +491,16 @@ fn lock_run(release: &ValidatedRelease, resume: bool) -> Result<RunLock> {
             ))
         })?;
     }
+    if state.join("recovery.lock").exists() {
+        return Err(invalid("explicit lock recovery is in progress"));
+    }
     let lock = state.join("active.lock");
-    write_new(
-        &lock,
-        &json!({"pid":std::process::id(),"manifest_sha256":release.manifest_sha256}),
-    )?;
-    let guard = RunLock { path: lock };
+    let record = lock_record(&release.manifest_sha256)?;
+    write_new(&lock, &record)?;
+    let guard = RunLock {
+        path: lock,
+        sha256: corpus::sha256(&encode(&record)?),
+    };
     let registration = state.join("registration.json");
     if resume {
         let previous: Value = read_json(&registration)?;
@@ -532,7 +681,7 @@ mod tests {
             sha256: corpus::sha256(bytes),
         })
     }
-    fn manifest(config: &DriverConfig, root: &Path) -> Result<ReleaseManifest> {
+    fn manifest(config: &DriverConfig, root: &Path) -> Result<(ReleaseManifest, OwnerRecord)> {
         let sheet = pin(
             root.join("sheet.md"),
             b"TEST FITNESS: FIT; Pilot-reporting pins P1/P2",
@@ -567,24 +716,36 @@ mod tests {
             receipt_url: "https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-2"
                 .into(),
         };
-        let owner_release = pin(root.join("owner.json"), &encode(&owner)?)?;
-        Ok(ReleaseManifest {
-            schema: "uor-r4.pilot-owner-admission/1".into(),
-            scope: PILOT_SCOPE.into(),
-            execution,
-            sheet,
-            claude_review,
-            owner_release,
-            run_state_directory: root.join("run"),
-        })
+        // This fixture never creates an owner-release file, including under another name.
+        let owner_release = FilePin {
+            path: root.join("owner-must-not-exist.json"),
+            sha256: corpus::sha256(&encode(&owner)?),
+        };
+        Ok((
+            ReleaseManifest {
+                schema: "uor-r4.pilot-owner-admission/1".into(),
+                scope: PILOT_SCOPE.into(),
+                execution,
+                sheet,
+                claude_review,
+                owner_release,
+                run_state_directory: root.join("run"),
+            },
+            owner,
+        ))
     }
-    fn admit(config: &DriverConfig, m: ReleaseManifest) -> Result<ValidatedRelease> {
-        validate_release_metadata(
+    fn admit(
+        config: &DriverConfig,
+        m: ReleaseManifest,
+        owner: &OwnerRecord,
+    ) -> Result<ValidatedRelease> {
+        validate_release_with_owner(
             config,
             &"5".repeat(64),
             m,
             &json!({"source_sha256":"1".repeat(64),"kernel_sha256":"2".repeat(64),"geometry_sha256":"3".repeat(64)}),
             &"4".repeat(64),
+            owner,
         )
     }
     #[test]
@@ -616,8 +777,8 @@ mod tests {
     fn release_records_bind_owner_review_scope_and_every_identity() -> Result<()> {
         let root = directory("release")?;
         let c = config()?;
-        let m = manifest(&c, &root)?;
-        assert!(admit(&c, m.clone()).is_ok());
+        let (m, owner) = manifest(&c, &root)?;
+        assert!(admit(&c, m.clone(), &owner).is_ok());
         for field in [
             "scope",
             "base_source",
@@ -639,17 +800,18 @@ mod tests {
             }
             let wrong: ReleaseManifest =
                 serde_json::from_value(wire).map_err(|e| invalid(e.to_string()))?;
-            assert!(admit(&c, wrong).is_err(), "{field}");
+            assert!(admit(&c, wrong, &owner).is_err(), "{field}");
         }
-        let mut owner: OwnerRecord =
-            serde_json::from_slice(&m.owner_release.read()?).map_err(|e| invalid(e.to_string()))?;
-        owner.decision = "HELD".into();
-        let mut held = m.clone();
-        held.owner_release = pin(root.join("held.json"), &encode(&owner)?)?;
-        assert!(matches!(admit(&c, held), Err(Error::TrainingHeld)));
-        let mut missing = m;
-        missing.owner_release.path = root.join("missing.json");
-        assert!(admit(&c, missing).is_err());
+        let mut held = owner.clone();
+        held.decision = "HELD".into();
+        assert!(matches!(
+            admit(&c, m.clone(), &held),
+            Err(Error::TrainingHeld)
+        ));
+        assert!(!m.owner_release.path.exists());
+        assert!(
+            validate_release_metadata(&c, &"5".repeat(64), m, &json!({}), &"4".repeat(64)).is_err()
+        );
         fs::remove_dir_all(root).map_err(|e| invalid(e.to_string()))?;
         Ok(())
     }
@@ -657,7 +819,8 @@ mod tests {
     fn resume_counters_require_exact_pilot_cursor_and_baseline() -> Result<()> {
         let root = directory("resume")?;
         let c = config()?;
-        let release = admit(&c, manifest(&c, &root)?)?;
+        let (manifest, owner) = manifest(&c, &root)?;
+        let release = admit(&c, manifest, &owner)?;
         let binding = |source: crate::corpus::CorpusSource| crate::corpus::CorpusBinding {
             source,
             vocabulary: 4096,
@@ -710,6 +873,48 @@ mod tests {
             };
             assert!(validate_resume_metadata(&release, &wrong).is_err());
         }
+        fs::remove_dir_all(root).map_err(|e| invalid(e.to_string()))?;
+        Ok(())
+    }
+    #[test]
+    fn explicit_unlock_refuses_live_or_foreign_holders_and_preserves_dead_lock() -> Result<()> {
+        let root = directory("unlock")?;
+        let state = root.join("state");
+        fs::create_dir(&state).map_err(|e| invalid(e.to_string()))?;
+        let live = lock_record(&"a".repeat(64))?;
+        assert!(require_dead_holder(&live, &live.host_id, &live.boot_id).is_err());
+        assert!(require_dead_holder(&live, "foreign-host", &live.boot_id).is_err());
+        assert!(require_dead_holder(&live, &live.host_id, "foreign-boot").is_err());
+        // A waited-for host process is a concrete dead PID, not an invented assumption.
+        let mut child = std::process::Command::new("sh")
+            .args(["-c", "exit 0"])
+            .spawn()
+            .map_err(|e| invalid(e.to_string()))?;
+        let dead_pid = child.id();
+        child.wait().map_err(|e| invalid(e.to_string()))?;
+        let dead = LockRecord {
+            pid: dead_pid,
+            ..live
+        };
+        let bytes = encode(&dead)?;
+        write_new(&state.join("active.lock"), &dead)?;
+        assert!(unlock_pilot(&state, &"0".repeat(64), &root.join("wrong-receipt")).is_err());
+        assert_eq!(
+            fs::read(state.join("active.lock")).map_err(|e| invalid(e.to_string()))?,
+            bytes
+        );
+        let receipt = root.join("receipt");
+        unlock_pilot(&state, &corpus::sha256(&bytes), &receipt)?;
+        assert!(!state.join("active.lock").exists());
+        assert!(!state.join("recovery.lock").exists());
+        assert_eq!(
+            fs::read(receipt.join("preserved-active.lock")).map_err(|e| invalid(e.to_string()))?,
+            bytes
+        );
+        assert_eq!(
+            read_json::<Value>(&receipt.join("receipt.json"))?["pid_verified_dead"],
+            json!(true)
+        );
         fs::remove_dir_all(root).map_err(|e| invalid(e.to_string()))?;
         Ok(())
     }
@@ -767,4 +972,123 @@ pub fn evaluate_pilot(config: DriverConfig, manifest: ReleaseManifest, out: &Pat
     let (model, _cursor) = driver.restore(progress.checkpoint, 0)?;
     write_new(&out.join("report.json"), &driver.evaluate(&model)?)?;
     sync_directory(out)
+}
+
+/// Kimi may prepare these pins. This packet contains no owner decision and releases nothing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnerReleasePlan {
+    pub schema: String,
+    pub status: String,
+    pub execution: ExecutionIdentity,
+    pub config: DriverConfig,
+    pub sheet: FilePin,
+    pub claude_review: FilePin,
+    pub run_state_directory: PathBuf,
+}
+/// Casey alone may invoke this from his own terminal. Labs must never invoke or automate it.
+/// The TTY/phrase is an operational safeguard, not authentication against the shared OS account.
+pub fn owner_release(plan_path: &Path, output: &Path) -> Result<()> {
+    use std::io::IsTerminal;
+    if std::env::var_os("UOR_LAB").is_some()
+        || !std::io::stdin().is_terminal()
+        || !std::io::stdout().is_terminal()
+    {
+        return Err(invalid("OWNER ONLY: Casey must run owner-release personally at a terminal with UOR_LAB unset; labs must never create an owner-release record"));
+    }
+    let plan: OwnerReleasePlan = read_json(plan_path)?;
+    validate_pilot_config(&plan.config)?;
+    for hash in [
+        &plan.execution.source_sha256,
+        &plan.execution.kernel_sha256,
+        &plan.execution.geometry_sha256,
+        &plan.execution.executable_sha256,
+        &plan.execution.driver_source_sha256,
+        &plan.execution.config_sha256,
+        &plan.execution.lineage_sha256,
+        &plan.execution.sheet_sha256,
+    ] {
+        corpus::validate_sha256(hash)?;
+    }
+    if plan.schema != "uor-r4.pilot-owner-release-plan/1"
+        || plan.status != "HELD_OWNER_ACTION_REQUIRED"
+        || plan.execution.base_source != BASE_SOURCE
+        || plan.execution.reviewed_source_commit.len() != 40
+        || !plan
+            .execution
+            .reviewed_source_commit
+            .bytes()
+            .all(|c| c.is_ascii_hexdigit())
+        || plan.execution.config_sha256 != corpus::sha256(&encode(&plan.config)?)
+        || plan.execution.sheet_sha256 != plan.sheet.sha256
+        || !plan.run_state_directory.is_absolute()
+    {
+        return Err(invalid(
+            "owner plan has invalid scope/config/source/sheet pins",
+        ));
+    }
+    let sheet = plan.sheet.read()?;
+    let sheet = std::str::from_utf8(&sheet).map_err(|e| invalid(e.to_string()))?;
+    if !sheet.contains("TEST FITNESS: FIT") || !sheet.contains("Pilot-reporting pins P1/P2") {
+        return Err(invalid("pinned sheet lacks A2 FIT/P1/P2"));
+    }
+    let review: ReviewRecord =
+        serde_json::from_slice(&plan.claude_review.read()?).map_err(|e| invalid(e.to_string()))?;
+    if review.reviewer != "Claude"
+        || review.verdict != "APPROVE_A2_ADMISSION_DIFF"
+        || review.scope != PILOT_SCOPE
+        || review.execution != plan.execution
+        || !valid_receipt_url(&review.receipt_url)
+    {
+        return Err(invalid(
+            "owner plan does not match Claude's exact admission review",
+        ));
+    }
+    require_disjoint_directories(output, &plan.run_state_directory)?;
+    if output.exists() {
+        return Err(invalid("owner release output must be a fresh directory"));
+    }
+    println!("Casey only: this releases D4 solely for seed 1, 1640 diagnostic VectorBlock batches. M2 and every other training hold remain HELD.\nPinned plan:\n{}",serde_json::to_string_pretty(&plan).map_err(|e|invalid(e.to_string()))?);
+    println!("Type exactly: I am Casey; release D4 for the 1640-batch diagnostic pilot only");
+    std::io::stdout()
+        .flush()
+        .map_err(|e| invalid(e.to_string()))?;
+    let mut phrase = String::new();
+    std::io::stdin()
+        .read_line(&mut phrase)
+        .map_err(|e| invalid(e.to_string()))?;
+    if phrase.trim_end() != "I am Casey; release D4 for the 1640-batch diagnostic pilot only" {
+        return Err(Error::TrainingHeld);
+    }
+    fs::create_dir(output).map_err(|e| invalid(format!("exclusive owner output: {e}")))?;
+    let output = fs::canonicalize(output).map_err(|e| invalid(e.to_string()))?;
+    let owner_path = output.join("owner.json");
+    let owner = OwnerRecord {
+        owner: "Casey".into(),
+        decision: "RELEASE_D4_FOR_A2_PILOT_ONLY".into(),
+        scope: PILOT_SCOPE.into(),
+        execution: plan.execution.clone(),
+        claude_review_sha256: plan.claude_review.sha256.clone(),
+        receipt_url: format!("owner-terminal:{}", owner_path.display()),
+    };
+    write_new(&owner_path, &owner)?;
+    let manifest = ReleaseManifest {
+        schema: "uor-r4.pilot-owner-admission/1".into(),
+        scope: PILOT_SCOPE.into(),
+        execution: plan.execution,
+        sheet: plan.sheet,
+        claude_review: plan.claude_review,
+        owner_release: FilePin {
+            path: owner_path,
+            sha256: corpus::sha256(&encode(&owner)?),
+        },
+        run_state_directory: plan.run_state_directory,
+    };
+    write_new(&output.join("admission.json"), &manifest)?;
+    sync_directory(&output)?;
+    println!(
+        "Owner-created admission: {}. No model computation was started.",
+        output.join("admission.json").display()
+    );
+    Ok(())
 }

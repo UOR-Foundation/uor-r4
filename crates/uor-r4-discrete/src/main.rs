@@ -141,6 +141,22 @@ fn device_command(args: &[String]) -> Result<()> {
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("--help") | Some("help") => {
+            println!("owner-release PILOT_PLAN.json NEW_RELEASE_DIR — CASEY ONLY, live terminal and typed confirmation; no lab may invoke this or create/copy/edit owner-release files.
+pilot-unlock RUN_STATE EXPECTED_LOCK_SHA256 NEW_RECEIPT_DIR — metadata-only recovery, refuses live/foreign/ambiguous holders and preserves the old lock.
+pilot|pilot-resume|eval-pilot CONFIG ADMISSION NEW_REPORT_DIR — CUDA-only, explicit owner release required; training remains HELD by default.
+build-identity [CONFIG] — compiled/executable/config pins without a CUDA context.");
+            Ok(())
+        }
+        Some("owner-release") if args.len() == 3 => uor_r4_discrete::controller::owner_release(
+            std::path::Path::new(&args[1]),
+            std::path::Path::new(&args[2]),
+        ),
+        Some("pilot-unlock") if args.len() == 4 => uor_r4_discrete::controller::unlock_pilot(
+            std::path::Path::new(&args[1]),
+            &args[2],
+            std::path::Path::new(&args[3]),
+        ),
         Some("train") => uor_r4_discrete::training_admission(),
         Some("prepare-plan") if args.len() == 3 => {
             let config = read_json::<uor_r4_discrete::training::DriverConfig>(&args[1])?;
