@@ -128,4 +128,3 @@ test controller::completion::baseline_authentication::metadata_controls::high_u_
 test controller::completion::baseline_authentication::metadata_controls::zero_baseline_binds_model_rows_reference_and_seed_without_execution ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 9.29s
-
