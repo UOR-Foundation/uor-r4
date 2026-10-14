@@ -10,13 +10,16 @@ four block proposals per visited token, vocabulary target mass, and the full
 parameter pass's 1,049,856 / 2,425,925 actual TRAIN target exposures. Ninety
 accepted proposals belong to zero-TRAIN-target-count vectors, so that cohort
 cannot be declared inactive. No model rerun or mechanism verdict.
+The strict-win guard counts 105 → 149 distance-margin wins, of which only
+0 → 36 have the target admitted; the unchanged guard is not an executed-hit count.
 
 D5 adds separately scoped completion admission, exact checkpoint-1640 import
 with an explicit driver-only lineage migration, preserved pilot baseline,
 registered quarter evaluations with sealed recovery pins, and separate vector /
 Route counters. The old pilot cap/release remains isolated; seed 2 requires its
 own owner-personal release. Numerical kernels and evaluator are unchanged.
-Twenty-four Rust metadata tests pass; new CUDA build/runtime remains UNVERIFIED.
+Twenty-five Rust metadata tests pass, including atomic run-state publication
+after Claude's interruption finding; new CUDA build/runtime remains UNVERIFIED.
 Kimi owns the amended completion sheet; Claude owns FIT/exact-source review;
 source delivery and recorded measurements release no hold. All training and M2
 remain HELD. Collision-free initialization and admission/schedule remedies are

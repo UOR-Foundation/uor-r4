@@ -83,7 +83,7 @@ blocks permit 16^4 combinations, so the sixteen-pattern collapse is imposed by
 the initializer's coupling. This capacity count does not establish language
 capacity, full E8 coverage, or usable contextual geometry.
 
-**Registered remedy for a separate successor:** construct an injective seeded
+**Proposed remedy for a separately registered successor:** construct an injective seeded
 assignment into valid four-block root tuples, with a declared, measured endpoint
 occupancy distribution. Retain actual SpiralCore transport, FBS composition,
 one shared input/carry/output codebook, exact token identity, and geometric cell
@@ -199,6 +199,22 @@ The zero-TRAIN-target coordinate cohort has 944 attempts / 679 sensitive proposa
 90 accepted; the nonzero cohort has 696 / 500 / 146. Zero target count demonstrably
 does not imply objective inactivity.
 
+The existing strict-win guard is a distance-margin measurement, not necessarily
+an admitted writer hit. Its GPU predicate is `token_rivals > 0 && token_hinge < 32`;
+it does not require target-cell admission. The audit separates these quantities:
+
+| Stored strict-win rows | Baseline | Pilot end |
+|---|---:|---:|
+| Total strict wins | 105 | 149 |
+| Target admitted (also top-1 and top-8 correct) | 0 | 36 |
+| Target omitted | 105 | 113 |
+
+All admitted strict-win rows satisfy top-1 correctness in the preserved receipts.
+The guard therefore cannot be described as 105 → 149 executed-writer wins.
+This diagnostic changes neither its predicate nor the registered bar. Kimi and
+Claude have the [written interpretation request](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6164092169)
+for the prospective sheet; no revised FIT is inferred here.
+
 Claude independently checked the admission inference and requested B3 on the
 completion sheet: top-1/top-8 hits are bounded by target-cell admission. The
 pilot-end ceiling 2,180 is below the unchanged top-8 bar 4,775. Completion can
@@ -244,6 +260,11 @@ A persisted valid score is reused; if a crash occurs before an evaluation is
 persisted, that unpersisted evaluation may have to run again and its cost is
 charged. No claim of exactly-once GPU execution across arbitrary crashes is made.
 Report/state/release directories cannot overlap the archived parent directory.
+Fixed-name run-state JSON publishes through a unique pending file, complete write,
+file sync, rename and directory sync while holding the run lock. Stray pending
+files are preserved and do not block a retry. Immutable final files refuse
+replacement; only the latest-checkpoint pointer is replaceable. This repairs
+Claude's R1 interruption finding without changing numerical execution.
 
 The measured pilot checkpoint occupies 3,138,466 bytes uncompressed. Retaining
 roughly 260 checkpoints per complete seed is on the order of **0.8 GB per seed**
@@ -259,9 +280,10 @@ owner-release record; its preservation stays with its owner under R15.
 
 ## Validation scope
 
-- Scoped Rust metadata suite: **24 tests passed**, including five D5 controls
+- Scoped Rust metadata suite: **25 tests passed**, including six D5 controls
   for lineage-only migration, seed/pilot isolation, owner-plan binding, rejection
-  of the pilot owner format, and corrupted evaluation receipts. These are
+  of the pilot owner format, corrupted evaluation receipts, and atomic run-state
+  publication/recovery with preserved pending files. These are
   admission/data-format tests, not model compute or CUDA qualification.
 - Standalone receipt auditor: PASS on the preserved full report and steps; all
   14,287 row pairs and 1,640 steps checked. Existing-output and wrong-input-digest
@@ -269,6 +291,15 @@ owner-release record; its preservation stays with its owner under R15.
 - Source review independently checked the imported parent hash, cap isolation,
   unchanged numerical files and evaluation recovery. It found and prompted the
   sealed-evaluation repair above. It is internal review, not Claude's FIT.
+- [Claude's exact-source review](https://github.com/UOR-Foundation/uor-r4/pull/2454#issuecomment-6164027803)
+  found one required atomic-publication repair; it is fixed at `33564b75e` and
+  [submitted for re-review](https://github.com/UOR-Foundation/uor-r4/pull/2454#issuecomment-6164091917).
+  Its source verdict and the eventual executable-bound admission review are
+  separate. The prior `route_apply_reality` CUDA control is PASS in
+  [driver-controls.json](../discrete-driver-cost-2026-10-13/receipts/driver-controls.json)
+  at source `e7d926fbe`: it applies Route(0), verifies route-only state/epoch and
+  freshly carries/forwards at loss 256 after the initial 640. This is a small
+  finite fixture, not a corpus-scale Route result or a new D5 build qualification.
 - CUDA compilation/runtime of the new controller build: **UNVERIFIED**. This
   machine has no `nvcc`; no GPU was rented or model control run. Unchanged model
   source retains its prior pilot evidence, while new executable/driver identities

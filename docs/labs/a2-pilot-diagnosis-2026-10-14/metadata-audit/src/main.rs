@@ -205,6 +205,33 @@ fn main() -> Result<()> {
     }
     let before = rows(base)?;
     let after = rows(end)?;
+    let mut strict_wins_by_admission: BTreeMap<String, Counts> = BTreeMap::new();
+    for (name, rows) in [("baseline", &before), ("final", &after)] {
+        let c = strict_wins_by_admission.entry(name.into()).or_default();
+        for key in [
+            "strict_wins",
+            "target_admitted",
+            "target_omitted",
+            "top1_correct",
+            "top8_correct",
+        ] {
+            c.entry(key.into()).or_default();
+        }
+        for row in rows {
+            if n(row, "token_rivals")? > 0 && n(row, "token_hinge")? < 32 {
+                let admitted = admission(row)?;
+                require(
+                    admitted == 0 || n(row, "top1_correct")? == 1,
+                    "admitted strict token win without top1 hit",
+                )?;
+                add(c, "strict_wins", 1)?;
+                add(c, "target_admitted", admitted)?;
+                add(c, "target_omitted", 1 - admitted)?;
+                add(c, "top1_correct", n(row, "top1_correct")?)?;
+                add(c, "top8_correct", n(row, "top8_correct")?)?;
+            }
+        }
+    }
     let mut admission_strata: BTreeMap<String, Counts> = BTreeMap::new();
     let mut hit_strata: BTreeMap<String, Counts> = BTreeMap::new();
     let mut total = Counts::new();
@@ -306,6 +333,8 @@ fn main() -> Result<()> {
         "verification":"all row/batch/evaluation sums and weighted numerator identities matched",
         "paired_rows":14287,"admission_transitions":admission_strata,"top8_transitions":hit_strata,
         "overall":total,"coordinate_count_cohorts":cohorts,
+        "strict_wins_by_admission":strict_wins_by_admission,
+        "strict_win_definition":"stored GPU predicate token_rivals > 0 && token_hinge < width (32); target admission is separate, unchanged guard semantics",
         "limitations":["stored rows have no explicit target ID; pairing relies on pinned source and identical lineage/order", "transition associations do not isolate causal effects of individual updates", "zero target count does not mean zero context/rival influence"],
         "training":"HELD"
     });

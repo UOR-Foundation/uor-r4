@@ -90,6 +90,23 @@
   "schema": "uor-r4.pilot-diagnosis-metadata/1",
   "scope": "arithmetic over stored GPU receipts; no model computation",
   "steps_sha256": "76dda96a16aec709f4d1dc4d12d412307e5c79174d9aa8b9be5444aaef443efc",
+  "strict_win_definition": "stored GPU predicate token_rivals > 0 && token_hinge < width (32); target admission is separate, unchanged guard semantics",
+  "strict_wins_by_admission": {
+    "baseline": {
+      "strict_wins": 105,
+      "target_admitted": 0,
+      "target_omitted": 105,
+      "top1_correct": 0,
+      "top8_correct": 0
+    },
+    "final": {
+      "strict_wins": 149,
+      "target_admitted": 36,
+      "target_omitted": 113,
+      "top1_correct": 36,
+      "top8_correct": 36
+    }
+  },
   "top8_transitions": {
     "gained": {
       "baseline_top1_correct": 0,
