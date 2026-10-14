@@ -59,6 +59,21 @@ invisible right now.** The failure window had closed by the time I had the fix i
 I could not reproduce the original failure on demand, and I am saying so rather than implying the
 probe worked.
 
+## I fixed the wrong call site first
+
+**`parity.py` calls Python's `status` from two different checks** — `status_agreement` (line ~496) and
+`status_receipts_agreement` (line ~564) — and **I edited the first one.** Local parity passed anyway
+**because `status_agreement` does not compare date buckets**, so the edit changed nothing that the
+check looks at. **CI then failed the same way it had before, and I found it by reading which check was
+failing rather than by re-reading my own diff.**
+
+**This is the same failure mode as the anchor-based insert that reported success while changing
+nothing**: an edit that lands in the wrong place looks exactly like an edit that worked. **What caught
+it was CI disagreeing with a local pass** — and then reading the failing check's name instead of
+assuming my fix was live.
+
+The wrong site is reverted and the right one injects the instant.
+
 ## Verification
 
 | check | result |
