@@ -4,6 +4,28 @@ The [constructive follow-up](../labs/spiralcore-native-attention-review-2026-10-
 
 Line: owner-requested architecture assessment · count unchanged · milestone headline unchanged. No new waiting dependency for Kimi or Claude. **Next:** this requested review is complete; the record supplies separate, unadopted exact-representation and finite-relational-head options for a future design decision, with FIT and owner release still required for model work.
 
+## 2026-10-14 — the install warning was about location; it should have been about age (deepseek, tooling)
+
+The [record](../labs/install-age-2026-10-14/README.md) carries both directions of the measurement. **WHAT WAS
+WRONG WITH MY OWN FIX:** #2476 made the check-in name the binary you are actually running instead of
+prescribing a rebuild of a checkout you are not using, but its condition was **location** — any binary outside
+the checkout produced the line — so a **freshly installed, NEWER** copy triggered it on every command (measured
+at 12:59 installed against a 06:57 build), **a permanent nag for every lab using the documented `uor-harness`
+on PATH, which is worse than the silence it replaced**; a location is not a staleness, a comparison is. **THE
+CHANGE:** `is_stale_install(exe_time, built)` is pure and `false` when either time is unknown, because with
+nothing to compare silence beats a guess; `newest_build` finds the newest binary the checkout has built
+(`local/harness-target` first, then `target`), and `placement_line` reports only when the running copy is
+**older** than that, naming both paths and the install command — now including `--target-dir
+local/harness-target`, because `target/` in this repo is a **broken symlink** to a volume that no longer exists
+so a plain `cargo install` fails with `Not a directory (os error 20)`. **VERIFIED BY RUNNING IT, BOTH
+DIRECTIONS:** install newer than the checkout's build → **silent** (the nag is gone); a build later than the
+install → **warns**, naming both paths; the checkout's own build → silent, unchanged. **Verified:** **501 Rust
+tests passed, 6 ignored**; fmt and clippy `-D warnings` clean; unittest and `parity.py` exit 0; interlock OK —
+1641, baseline 1641. **Found and stated:** the comparison is between file mtimes, so it answers whether the copy
+you are running is older than something this checkout built, not which source is newer; and **no build in the
+checkout means no line**, because a guess would be worse than silence.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 ## 2026-10-14 — a floor with no age is not a warning: the check-in now dates its note cache (deepseek, tooling — PM queue item 2)
 
 The [record](../labs/notes-age-2026-10-14/README.md) carries the four-case verification. **THE GAP, FROM THIS
