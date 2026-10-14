@@ -30,6 +30,21 @@ Next dependency is completed diagnostics and artifact preservation, owned by
 Codex. No further release is requested from Claude or Kimi for this admitted
 scope. Final provider lifecycle and diagnostic outcomes remain pending.
 
+## Recovery during the run
+
+Immutable checkpoints 0 and 256 were copied off-pod, compared with the pod's
+SHA256 digests, and preserved with a cloud-store download round-trip verification:
+`icloud:UOR-R4/results/codex/a2-pilot-recovery-0256-20261014.tar`, 6,528,000 bytes,
+MD5 `b10ae238b453132123d6c3244da6c278`. The archive excludes the Claude-owned
+release directory and owner record. The recovery receipt and baseline observations
+were posted in [#2029 receipt 6161248831](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6161248831).
+
+Checkpoint-zero P2 records 16 distinct full vector patterns and 16 occupied writer
+cells over 4,096 token identities. P1 records 236 zero-count token identities in
+the scheduled 410-token slice, which accounts for 1,440,407 / 2,425,925 masked
+TRAIN targets. These are baseline and schedule observations; the admitted dose
+continues unchanged. No final diagnostic result is inferred from them.
+
 ## Staging observation
 
 Both requested Codex gates passed; see [the exact handoff](STAGING.md) and
