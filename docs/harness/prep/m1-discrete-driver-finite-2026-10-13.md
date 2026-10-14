@@ -96,7 +96,7 @@ Any later sweep/dose/dollar projection must bind its actual parameter schedule, 
 4. Execute the exact finite controls and separate no-update cost measurement once. Preserve exclusive JSON reports, stdout/stderr/exit codes and partial records. Any CUDA fault stops subsequent launches.
 5. Preserve all setup/build attempts and exact source/artifact identities, charge cumulative provider/build/control/preservation time, and verify archive round-trip before pod deletion. Preserve peer work. No checkpoint may be promoted as a trained result.
 
-At most one owned admitted pod, within the all-lab limit of4 and$8/h. Pod `vast-55833746`, $0.908/h, completed setup and release compilation; numerical execution remains NOT_RUN until the recorded FIT controller launches. Build timing is recorded above; operation cost remains **UNMEASURED**. The twelve timed plus four warm-up production-shape proposals may dominate this finite slice; they resolve D2's training-dose feasibility and do not train. A healthy run is not cancelled because a self-set estimate expires; actual hard stops are owner caps, disk floor, failed/unsafe CUDA and source/contract mismatch.
+At most one owned admitted pod, within the all-lab limit of4 and$8/h. At registration, pod `vast-55833746`, $0.908/h, had completed setup/release compilation while numerical execution was NOT_RUN and operation cost UNMEASURED. The later outcome below does not alter these prospective bars. The twelve timed plus four warm-up production-shape proposals may dominate this finite slice; they resolve D2's training-dose feasibility and do not train. A healthy run is not cancelled because a self-set estimate expires; actual hard stops are owner caps, disk floor, failed/unsafe CUDA and source/contract mismatch.
 
 ## Stop rule
 
@@ -138,3 +138,12 @@ R12 reviewer answers:
 
 At registration all numerical controls and cost observations remain NOT_RUN. Execution receipts will be recorded separately, without altering these prospective bars.
 
+
+## Execution outcome (added after the registered run)
+
+Exact pinned executable: all25 controls PASS, no failure/skip/NOT_RUN; apply calls11,
+disposable fixture updates8, corpus updates0. Separate no-update measurement PASS
+in66.633432500s. Controller ran00:42:39Z–00:43:57Z on14OctoberUTC.
+[Complete canonical result, raw reports, cost and preservation](../../labs/discrete-driver-cost-2026-10-13/README.md).
+The evidence archive was verified before pod deletion at00:48:44Z; no post-apply
+model is retained. Training/M2 HELD; no language or mechanism-negative conclusion.

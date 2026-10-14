@@ -1,11 +1,4 @@
 {
-  "codex/discrete-driver-20261013": {
-    "branch": "codex/discrete-driver-20261013",
-    "claimed_at": "2026-10-13T19:52:50-04:00",
-    "head": "69206d854",
-    "lab": "codex",
-    "note": ""
-  },
   "kimi/d29-nvrtc-amendment": {
     "branch": "kimi/d29-nvrtc-amendment",
     "claimed_at": "2026-10-13T11:31:25-04:00",
