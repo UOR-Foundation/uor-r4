@@ -111,24 +111,67 @@ impl Presence {
     }
 }
 
+/// What a check-in records for one field: the flag when it was given, else what the lab last said.
+///
+/// **The rule is "absent", not "empty".** `heartbeat -m m1` with no `--line` used to rewrite
+/// presence with `doing` and `next` empty, so **a lab that checked in with the documented command
+/// read as live-and-idle on every board - including its own last intent, which its previous file had
+/// held one moment earlier.** Reported by claude/review1 with the repro on #2028 (6163960613).
+///
+/// A flag passed with an EMPTY value is a lab clearing the field on purpose, and that must still
+/// work: this function is only reached when the caller saw no flag at all.
+pub fn remembered(flag: Option<String>, previous: Option<&str>) -> String {
+    match flag {
+        Some(v) => v,
+        None => previous.unwrap_or("").to_string(),
+    }
+}
+
+/// **The two tiers are written in two different shapes, and Python is why.**
+///
+/// The live tier is `json.dumps(record, ensure_ascii=False, sort_keys=True)` — compact with
+/// Python's default separators, `{"a": 1}`. The committed tier is `core._save`'s
+/// `json.dumps(record, indent=2, ensure_ascii=False, sort_keys=True)` — pretty, because **it is
+/// read in a git diff**: `sync_live_to_durable` writing compact JSON over a file Python wrote
+/// pretty would show every line of every lab's row as changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Style {
+    Live,
+    Durable,
+}
+
+impl Style {
+    fn render(self, presence: &Presence) -> String {
+        let json = presence.to_json();
+        match self {
+            Style::Live => crate::receipt::py_dumps_sorted(&json),
+            Style::Durable => serde_json::to_string_pretty(&json).unwrap_or_default(),
+        }
+    }
+}
+
 /// Write one lab's presence to the live tier, atomically.
 pub fn publish_live(paths: &StatePaths, presence: &Presence) -> Result<(), String> {
-    publish(&paths.live_presence(&presence.lab), presence)
+    publish(&paths.live_presence(&presence.lab), presence, Style::Live)
 }
 
 /// Write one lab's presence to the committed record.
 pub fn publish_durable(paths: &StatePaths, presence: &Presence) -> Result<(), String> {
-    publish(&paths.durable_presence(&presence.lab), presence)
+    publish(
+        &paths.durable_presence(&presence.lab),
+        presence,
+        Style::Durable,
+    )
 }
 
 /// Write a presence file via a temporary and a rename, so a reader never sees a partial file.
-fn publish(target: &Path, presence: &Presence) -> Result<(), String> {
+fn publish(target: &Path, presence: &Presence, style: Style) -> Result<(), String> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
     }
     let tmp = target.with_extension("tmp");
-    fs::write(&tmp, format!("{}\n", presence.line()))
+    fs::write(&tmp, format!("{}\n", style.render(presence)))
         .map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
     fs::rename(&tmp, target).map_err(|e| format!("cannot replace {}: {e}", target.display()))?;
     Ok(())
@@ -187,6 +230,23 @@ fn hostname() -> String {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// **The defect, as a test.** A bare `heartbeat -m m1` blanked `doing`/`next`, so a lab read as
+    /// live-and-idle while its previous file still held the intent one moment earlier.
+    #[test]
+    fn a_missing_flag_carries_forward_and_an_empty_one_clears() {
+        assert_eq!(
+            remembered(None, Some("shipping the port")),
+            "shipping the port"
+        );
+        assert_eq!(remembered(None, Some("next step")), "next step");
+        // A lab that clears its next step on purpose still can.
+        assert_eq!(remembered(Some(String::new()), Some("old")), "");
+        // A first check-in has nothing to carry, and that is not an error.
+        assert_eq!(remembered(None, None), "");
+        // A given flag always wins, carried value or not.
+        assert_eq!(remembered(Some("new".into()), Some("old")), "new");
+    }
 
     fn tmp_paths(tag: &str) -> (StatePaths, PathBuf) {
         let dir =

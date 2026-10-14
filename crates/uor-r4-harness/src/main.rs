@@ -11,14 +11,17 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use uor_r4_harness::arena;
 use uor_r4_harness::briefing;
 use uor_r4_harness::githelp;
 use uor_r4_harness::mistakes;
 use uor_r4_harness::multilab;
 use uor_r4_harness::notes;
 use uor_r4_harness::onboard::{detect_runtime, onboard};
+use uor_r4_harness::panels;
 use uor_r4_harness::prep;
 use uor_r4_harness::prep::{check_all, SheetReport};
+use uor_r4_harness::presence;
 use uor_r4_harness::presence::{heartbeat, Presence};
 use uor_r4_harness::receipt::{
     append, append_live, current_month, sync_live_to_committed, Receipt as NewReceipt,
@@ -47,7 +50,7 @@ const PYTHON_PASSTHROUGH_VALUE_FLAGS: [&str; 1] = ["--only"];
 /// failed with "unknown option --only" before it could delegate. Which defeats the point.
 use uor_r4_harness::ruleinventory::PORTED_COMMANDS;
 
-const SUBCOMMAND_FLAGS: [&str; 32] = [
+const SUBCOMMAND_FLAGS: [&str; 33] = [
     "--kind",
     "--milestone",
     "-m",
@@ -80,10 +83,13 @@ const SUBCOMMAND_FLAGS: [&str; 32] = [
     "--list",
     "--quiet",
     "--apply",
+    // `check --staged` selects the staged rule SET. It was missing from this list, so the top-level
+    // parser rejected it as an unknown option before `check` could see it.
+    "--staged",
 ];
 
 /// The subset that takes a value, so the value is not mistaken for a command.
-const SUBCOMMAND_VALUE_FLAGS: [&str; 35] = [
+const SUBCOMMAND_VALUE_FLAGS: [&str; 53] = [
     "--kind",
     "--milestone",
     "-m",
@@ -119,7 +125,75 @@ const SUBCOMMAND_VALUE_FLAGS: [&str; 35] = [
     "--body-file",
     "--body",
     "--action",
+    "--task",
+    "--state",
+    "--scope",
+    // `mistakes capture`. The four `nargs="*"` flags take several values; only the first is
+    // consumed here and `flag_all_values` collects the rest from the argument list.
+    "--id",
+    "--title",
+    "--severity",
+    "--class",
+    "--trigger",
+    "--paths",
+    "--milestones",
+    "--guard",
+    "--evidence",
+    "--symptom",
+    "--lesson",
+    // `heartbeat --session`: which session of a lab is checking in.
+    "--session",
+    // `panel score`: the panel, the measured value, and an optional label for it.
+    "--panel",
+    "--value",
+    "--label",
 ];
+
+/// Per-command help, for the commands whose flags are not guessable from the global usage.
+///
+/// **`heartbeat --help` used to print the global usage**, which lists the command and none of its
+/// flags: a lab had to read `main.rs` to discover `--line`/`--doing`/`--count`/`--next`/`--session`,
+/// on the one command every lab runs every few minutes. Commands not listed here still print the
+/// global usage, which is honest about how much is written down.
+fn command_help(command: &str) -> Option<&'static str> {
+    match command {
+        "heartbeat" => Some(HEARTBEAT_HELP),
+        _ => None,
+    }
+}
+
+const HEARTBEAT_HELP: &str = "\
+uor-harness heartbeat - the required check-in (at least every 5 minutes)
+
+USAGE:
+    uor-harness heartbeat -m <milestone> [flags]
+
+FLAGS:
+    -m, --milestone M   the milestone this work belongs to (m1..m8)
+        --line L        the session contract's line (e.g. \"no model line - tooling\")
+        --doing D       the older spelling of --line; both are accepted
+        --count C       the D21 count, e.g. 0/3
+        --headline H    the D21 headline, e.g. \"37/232 -> 37/232\"
+        --next N        what happens next
+        --session S     which session of this lab is checking in
+        --lab L         the lab identity (default: $UOR_LAB)
+        --dry-run       print the record instead of publishing it
+        --no-notes      do not read the unread-notes cache
+
+WHAT IT WRITES:
+    The live presence tier, immediately visible to every lab on this machine, and one
+    heartbeat receipt in the live ledger shard. Both come from ONE record, so they cannot
+    disagree about what this lab is doing.
+
+    A flag that is ABSENT carries the previous check-in's value forward; a flag passed with
+    an empty value clears the field. `--line` and `--next` are not required, and leaving them
+    out no longer blanks them.
+
+    The committed presence tier is NOT written here: R10 keeps a check-in from dirtying a
+    checkout. `uor-harness multilab sync-live` copies the live tier into it deliberately.
+
+See docs/harness/README.md and docs/labs/session-goal.md.
+";
 
 const USAGE: &str = "\
 uor-harness - the multi-lab research harness (Rust side of the port)
@@ -235,6 +309,16 @@ fn main() -> ExitCode {
                 }
             }
             "-h" | "--help" | "help" => {
+                // **`heartbeat --help` printed the global usage**, so a lab could not learn that
+                // `--line`, `--doing`, `--count`, `--next` or `--session` exist and had to read
+                // this file to find out (claude/review1, #2028 6163960613 item 3). A command word
+                // seen BEFORE the help flag selects its own flag list.
+                if let Some(cmd) = command.as_deref() {
+                    if let Some(block) = command_help(cmd) {
+                        print!("{block}");
+                        return ExitCode::SUCCESS;
+                    }
+                }
                 print!("{USAGE}");
                 return ExitCode::SUCCESS;
             }
@@ -321,7 +405,20 @@ fn main() -> ExitCode {
         // cases caught as `said ok=false, expected True`. **Two commands with two bodies cannot
         // drift that way; a flag can.**
         Some("check-formats") => cmd_check(&repo, json),
-        Some("check") => cmd_check_rules(&repo, &rest, json),
+        Some("panel") => cmd_panel(&repo, &rest, json),
+        Some("arena") => cmd_arena(&repo, &rest, json),
+        // **`check`'s own flags are parsed, not passed through as a filter.** The argument list
+        // used to BE the `--only` prefix set, so `--repo <path>` - which the top-level parser
+        // forwards here on purpose - narrowed the run to nothing and printed `0 rules, 0 failed`.
+        Some("check") => match uor_r4_harness::checkdispatch::parse_args(&rest) {
+            Ok(parsed) => cmd_check_rules(&repo, &parsed, json),
+            // argparse exits 2 on an argument it does not know, and so does this: an unknown
+            // token must never be read as a rule prefix that happens to match nothing.
+            Err(e) => {
+                eprintln!("uor-harness: {e}");
+                ExitCode::from(2)
+            }
+        },
         Some("presence") => cmd_presence(&repo, json),
         Some("ledger") => cmd_ledger(&repo, json),
         Some("receipt") => cmd_receipt(&repo, &rest, json),
@@ -555,9 +652,150 @@ fn cmd_mistakes(repo: &Path, args: &[String], json: bool) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        // `capture` writes a lesson file plus a guard; `show` reads one body. Both are a bigger
-        // surface than the query path and say so individually.
-        "show" | "capture" => delegate_to_python(repo, "mistakes", args),
+        // `show` reads one lesson body; `capture` writes one. **`capture` is the writer, and the
+        // reason this pair stayed delegated: it must never write a file that
+        // `mistakes.registry_valid` would reject**, so the draft is validated before the write and
+        // the written file is read back and removed if it somehow fails.
+        "show" => {
+            let key = action_word_after(args, &["show"]);
+            let lessons = mistakes::load(&paths);
+            let found = if key.is_empty() {
+                None
+            } else {
+                mistakes::find_mistake(&lessons, &key)
+            };
+            // `args.id` is `None` when absent, and the message renders it - so a missing id says
+            // `unknown mistake None` rather than naming an argument, exactly as Python does.
+            let Some(m) = found else {
+                let shown = if key.is_empty() {
+                    "None".to_string()
+                } else {
+                    uor_r4_harness::prgates::py_repr_public(&key)
+                };
+                eprintln!("unknown mistake {shown}");
+                return ExitCode::from(2);
+            };
+            match std::fs::read_to_string(&m.path) {
+                Ok(text) => {
+                    // Python writes through `emit`, which adds the newline only when it is missing.
+                    if text.ends_with('\n') {
+                        print!("{text}");
+                    } else {
+                        println!("{text}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("uor-harness mistakes show: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        "capture" => {
+            let id = flag_value(args, "--id")
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let title = flag_value(args, "--title")
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            // argparse also requires both, so this is reachable only through the Rust parser,
+            // which is lenient; the refusal and the exit code are Python's either way.
+            if id.is_empty() || title.is_empty() {
+                eprintln!("mistakes capture needs --id and --title");
+                return ExitCode::from(2);
+            }
+            if !mistakes::kebab_case_id(&id) {
+                eprintln!(
+                    "--id {} must be kebab-case (a-z, 0-9, '-')",
+                    uor_r4_harness::prgates::py_repr_public(&id)
+                );
+                return ExitCode::from(2);
+            }
+            let severity = flag_value(args, "--severity").unwrap_or_else(|| "warn".to_string());
+            let class = flag_value(args, "--class").unwrap_or_else(|| "process".to_string());
+            if !mistakes::SEVERITIES.contains(&severity.as_str()) {
+                eprintln!(
+                    "--severity must be one of {}",
+                    mistakes::py_tuple(&mistakes::SEVERITIES)
+                );
+                return ExitCode::from(2);
+            }
+            if !mistakes::CLASSES.contains(&class.as_str()) {
+                eprintln!(
+                    "--class must be one of {}",
+                    mistakes::py_tuple(&mistakes::CLASSES)
+                );
+                return ExitCode::from(2);
+            }
+            let target = mistakes::dir(&paths).join(format!("{id}.md"));
+            if target.exists() && !args.iter().any(|a| a == "--force") {
+                eprintln!("{} exists; pass --force to overwrite it", target.display());
+                return ExitCode::from(1);
+            }
+            let draft = mistakes::LessonDraft {
+                id: id.clone(),
+                title,
+                severity: severity.clone(),
+                class: class.clone(),
+                trigger: flag_all_values(args, "--trigger"),
+                paths: flag_all_values(args, "--paths"),
+                milestones: flag_all_values(args, "--milestones"),
+                mechanism: flag_value(args, "--mechanism").unwrap_or_default(),
+                guard: flag_value(args, "--guard").unwrap_or_default(),
+                evidence: flag_all_values(args, "--evidence"),
+                symptom: flag_value(args, "--symptom").unwrap_or_default(),
+                lesson: flag_value(args, "--lesson").unwrap_or_default(),
+                ..Default::default()
+            };
+            let text = uor_r4_harness::prgates::redact_public(&mistakes::build_lesson_text(&draft));
+            let (problems, warnings) = mistakes::draft_problems(&paths, &target, &text);
+            if !problems.is_empty() {
+                eprintln!(
+                    "refusing to write {}: the draft is not a valid lesson",
+                    target.display()
+                );
+                for problem in &problems {
+                    eprintln!("  {problem}");
+                }
+                return ExitCode::from(1);
+            }
+            for warning in &warnings {
+                eprintln!("note: {warning}");
+            }
+            let existed = target.exists();
+            if let Some(parent) = target.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(e) = std::fs::write(&target, &text) {
+                eprintln!("uor-harness mistakes capture: {e}");
+                return ExitCode::from(1);
+            }
+            // Read back what was written: a capture must not leave behind a file the registry
+            // rejects, and if it somehow did, the file is removed rather than left as evidence.
+            let check = mistakes::parse(&id, &text, &target);
+            if let Some(first) = check.errors.first() {
+                let _ = std::fs::remove_file(&target);
+                eprintln!("wrote and removed {}: {first}", target.display());
+                return ExitCode::from(1);
+            }
+            println!(
+                "{} {}",
+                if existed { "overwrote" } else { "wrote" },
+                target.display()
+            );
+            // **Three more lines, and they are the command's own guidance.** They were missed on
+            // the first pass because the function was read only as far as the write; the
+            // comparison of stdout is what showed the difference.
+            println!(
+                "  severity {severity}, class {class}, guard {}",
+                check.guard
+            );
+            println!("  read it back: python3 scripts/harness/cli.py mistakes show {id}");
+            println!("  check: python3 scripts/harness/cli.py check --only mistakes");
+            ExitCode::SUCCESS
+        }
         "" => {
             eprintln!("uor-harness mistakes: which action? list, find, show, capture");
             ExitCode::from(2)
@@ -744,6 +982,32 @@ fn action_word_after(args: &[String], markers: &[&str]) -> String {
         return a.clone();
     }
     String::new()
+}
+
+/// Every value of a flag that takes several (`--scope a b c`), stopping at the next flag.
+///
+/// `flag_values` cannot be used for this: it pairs a flag with exactly one value, and Python's
+/// `--scope` is `nargs="*"`. The top-level parser consumes the first value and the rest arrive as
+/// bare words, so they have to be collected here rather than lost.
+fn flag_all_values(args: &[String], name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == name {
+            let mut j = i + 1;
+            while let Some(v) = args.get(j) {
+                if v.starts_with('-') {
+                    break;
+                }
+                out.push(v.clone());
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    out
 }
 
 /// Every value given to a repeatable flag.
@@ -1421,8 +1685,48 @@ fn cmd_multilab(repo: &Path, args: &[String], json: bool) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        // Not ported yet, and each says so individually.
-        "sync-live" | "migrate-ledger" => delegate_to_python(repo, "multilab", args),
+        // **`sync-live` is the committed presence tier's only refresh path**, and `migrate-ledger`
+        // moves pre-sharding ledgers into per-lab shards. Both are WRITERS, and both preserve what
+        // they read: the sync copies the RECORDED timestamp and intent rather than stamping a new
+        // one, and the migration quarantines an unreadable line instead of dropping it.
+        "sync-live" => match multilab::sync_live_to_durable(&paths) {
+            Ok(r) => {
+                if json {
+                    println!("{}", r.to_pretty());
+                } else if r.synced.is_empty() {
+                    println!("no live presence to sync (looked in {})", r.live_dir);
+                } else {
+                    println!(
+                        "copied live presence for {} into the committed tier",
+                        r.synced.join(", ")
+                    );
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("uor-harness: {e}");
+                ExitCode::from(1)
+            }
+        },
+        "migrate-ledger" => match multilab::migrate_ledger(&paths) {
+            Ok(r) => {
+                if json {
+                    println!("{}", r.to_pretty());
+                } else {
+                    println!("migrated {} receipt(s) into per-lab shards", r.total);
+                    let mut sorted = r.moved.clone();
+                    sorted.sort();
+                    for (shard, n) in sorted {
+                        println!("  {shard}: {n}");
+                    }
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("uor-harness: {e}");
+                ExitCode::from(1)
+            }
+        },
         "" => {
             eprintln!("uor-harness multilab: which action? presence, claims, touch, sync-live, migrate-ledger");
             ExitCode::from(2)
@@ -1579,7 +1883,127 @@ fn cmd_team(repo: &Path, args: &[String], json: bool) -> ExitCode {
                 ExitCode::from(1)
             }
         },
-        "dispatch" => delegate_to_python(repo, "team", args),
+        // dispatch records a real dispatch: it resolves the role, writes ONE receipt through
+        // receipts.record and prints what landed. The write half is the point of the command, so
+        // it is why this stayed delegated until record existed.
+        "dispatch" => {
+            let roles = match uor_r4_harness::registries::load_roles(&paths) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("uor-harness team dispatch: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            // role is positional and optional. Python prints None when it is absent, because the
+            // message renders the parsed value with !r rather than naming a missing argument.
+            let key = action_word_after(args, &["dispatch"]);
+            let role = if key.is_empty() {
+                None
+            } else {
+                uor_r4_harness::registries::find_role(&roles, &key)
+            };
+            let Some(role) = role else {
+                let shown = if key.is_empty() {
+                    "None".to_string()
+                } else {
+                    uor_r4_harness::prgates::py_repr_public(&key)
+                };
+                eprintln!("unknown role {shown}; try: uor-harness team roster");
+                return ExitCode::from(2);
+            };
+            let milestone = flag_value(args, "--milestone")
+                .or_else(|| flag_value(args, "-m"))
+                .unwrap_or_default();
+            let task = flag_value(args, "--task").unwrap_or_default();
+            let scope = flag_all_values(args, "--scope");
+            // Python's args.count or 1: a count of ZERO becomes one, because it tests truthiness.
+            let count = match flag_value(args, "--count") {
+                None => 1i64,
+                Some(v) => match v.trim().parse::<i64>() {
+                    Ok(0) => 1,
+                    Ok(n) => n,
+                    Err(_) => {
+                        eprintln!("uor-harness: argument --count: invalid int value: {v:?}");
+                        return ExitCode::from(2);
+                    }
+                },
+            };
+            let state = flag_value(args, "--state").unwrap_or_else(|| "dispatched".to_string());
+            if !["dispatched", "running", "returned", "failed"].contains(&state.as_str()) {
+                eprintln!(
+                    "uor-harness: argument --state: invalid choice: {state:?} (choose from \
+                     'dispatched', 'running', 'returned', 'failed')"
+                );
+                return ExitCode::from(2);
+            }
+            let route = role.route();
+            let fields: Vec<(&str, serde_json::Value)> = vec![
+                ("role", serde_json::Value::String(role.id.clone())),
+                ("route", serde_json::Value::String(route.clone())),
+                ("milestone", serde_json::Value::String(milestone)),
+                ("task", serde_json::Value::String(task)),
+                (
+                    "scope",
+                    serde_json::Value::Array(
+                        scope.into_iter().map(serde_json::Value::String).collect(),
+                    ),
+                ),
+                ("count", serde_json::Value::from(count)),
+                ("state", serde_json::Value::String(state)),
+            ];
+            let recorded = match uor_r4_harness::receipt::record(
+                &paths,
+                "team",
+                fields,
+                std::env::var("UOR_LAB").ok().as_deref(),
+            ) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("uor-harness: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            if recorded.unattributed {
+                // Python warns and PRESERVES the receipt; refusing would lose the record rather than
+                // surface the gap, which is the whole point of the warning.
+                eprintln!(
+                    "uor-harness: WARNING - no lab identity, so this record is attributed to nobody and no\n\
+                     \x20            other lab can see who did it. Fix it for this session with:\n\
+                     \x20            export UOR_LAB=<kimi|claude|codex|deepseek>"
+                );
+            }
+            let ts = recorded.get_str("ts");
+            if json {
+                println!("{}", recorded.to_pretty());
+            } else {
+                println!(
+                    "dispatched {} -> {route} (count {}) at {ts}",
+                    role.id,
+                    recorded
+                        .get("count")
+                        .and_then(serde_json::Value::as_i64)
+                        .unwrap_or(count)
+                );
+                let task = recorded.get_str("task");
+                if !task.is_empty() {
+                    println!("  task: {task}");
+                }
+                if let Some(items) = recorded.get("scope").and_then(serde_json::Value::as_array) {
+                    let rendered: Vec<&str> =
+                        items.iter().filter_map(serde_json::Value::as_str).collect();
+                    if !rendered.is_empty() {
+                        println!("  write scope: {}", rendered.join(", "));
+                    }
+                }
+                // Python prints the UNSHARDED month file here: the shard a line lands in is named
+                // after the lab, while this is the path a reader opens.
+                println!(
+                    "  receipt: docs/harness/ledger/{}.jsonl",
+                    &ts[..7.min(ts.len())]
+                );
+            }
+            ExitCode::SUCCESS
+        }
         "" => {
             eprintln!("uor-harness team: which action? claim, release, claims, roster, dispatch");
             ExitCode::from(2)
@@ -1853,19 +2277,40 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let milestone = flag_value(args, "--milestone")
-        .or_else(|| flag_value(args, "-m"))
-        .unwrap_or_default();
+    // **A check-in must not ERASE what the lab already said.** `heartbeat -m m1` with no `--line`
+    // and no `--next` used to rewrite presence with both fields empty, so a lab checking in with
+    // the documented command read as live-and-idle on every board - including its own last intent,
+    // which its previous file had held one moment earlier. Reported by claude/review1 on #2028
+    // (6163960613) with the repro, and visible on the board as "live" with an empty `doing`.
+    //
+    // **Absent is not the same as empty.** A flag passed with an empty value is a lab clearing the
+    // field deliberately and still works; only a flag that was never passed falls back.
+    let previous = multilab::read_row(&paths, &lab);
+    let prev_milestone = previous.as_ref().map(|r| r.milestone.clone());
+    let prev_doing = previous.as_ref().map(|r| r.doing.clone());
+    let prev_next = previous.as_ref().map(|r| r.next.clone());
+    let prev_session = previous.as_ref().map(|r| r.session.clone());
+    let milestone = presence::remembered(
+        flag_value(args, "--milestone").or_else(|| flag_value(args, "-m")),
+        prev_milestone.as_deref(),
+    );
     let mut p = Presence::new(&paths, &lab, &milestone);
     // `--line` is the session contract's name (every PR declares its line and count); `--doing` is
     // the older spelling. Both are accepted so a lab following the contract does not hit an unknown
     // option on the command it must run every few minutes.
-    if let Some(v) = flag_value(args, "--line").or_else(|| flag_value(args, "--doing")) {
-        p = p.with_doing(v);
-    }
-    if let Some(v) = flag_value(args, "--next") {
-        p = p.with_next(v);
-    }
+    p = p.with_doing(presence::remembered(
+        flag_value(args, "--line").or_else(|| flag_value(args, "--doing")),
+        prev_doing.as_deref(),
+    ));
+    p = p.with_next(presence::remembered(
+        flag_value(args, "--next"),
+        prev_next.as_deref(),
+    ));
+    // `--session` names WHICH session of this lab is checking in; a lab may run several. It was
+    // never settable, so every presence file carried `"session":""` and two sessions of one lab
+    // were indistinguishable on the board (claude/review1, #2028 6163960613 item 2). Carried
+    // forward like the intent, for the same reason.
+    p.session = presence::remembered(flag_value(args, "--session"), prev_session.as_deref());
     if args.iter().any(|a| a == "--dry-run") {
         println!("{}", p.line());
         return ExitCode::SUCCESS;
@@ -2273,7 +2718,11 @@ fn cmd_receipt(repo: &Path, args: &[String], json: bool) -> ExitCode {
 /// **The rules are computed once and printed into the same object as the formats**, because a second
 /// object after the first is `Extra data` to any JSON reader - which is how the first attempt at this
 /// was caught.
-fn cmd_check_rules(repo: &Path, only: &[String], json: bool) -> ExitCode {
+fn cmd_check_rules(
+    repo: &Path,
+    args: &uor_r4_harness::checkdispatch::CheckArgs,
+    json: bool,
+) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     let regs = match Registries::load(&paths) {
         Ok(r) => r,
@@ -2285,7 +2734,13 @@ fn cmd_check_rules(repo: &Path, only: &[String], json: bool) -> ExitCode {
     let now =
         uor_r4_harness::multilabrules::parse_claimed_at(&uor_r4_harness::receipt::now_rfc3339())
             .unwrap_or(0);
-    let findings = uor_r4_harness::checkdispatch::run(&paths, &regs, only, now);
+    // `--staged` swaps the rule SET, as Python's `scope=` does; it is not a filter over results.
+    let scope = if args.staged {
+        uor_r4_harness::checkdispatch::Scope::Staged
+    } else {
+        uor_r4_harness::checkdispatch::Scope::Repo
+    };
+    let findings = uor_r4_harness::checkdispatch::run_scoped(&paths, &regs, &args.only, scope, now);
     let (checked, failed, errors, warnings) = uor_r4_harness::checkdispatch::summarize(&findings);
 
     // The frozen formats, in the same shape `check-formats` prints.
@@ -2586,6 +3041,220 @@ fn cmd_ledger(repo: &Path, json: bool) -> ExitCode {
 /// `lint check` / `lint format` — the D22/D23/D24 gate over a PR body.
 ///
 /// **This is the command that makes the thirteen ported gates reachable.** Everything it needs is
+/// `arena board|compare|lineage` — the regression arena.
+///
+/// **`lineage` is Rust; `board` and `compare` are not yet and say so.** They share `arena::load`, which
+/// landed with this one, so the next unit is the rendering rather than the reading. This is a
+/// **regression** arena: the report is row by row against the parent, never an aggregate, because a
+/// candidate that gains 0.02 BPB while losing three memory rows is a regression with a headline.
+// The `--json` flag is deliberately unused here: Python's `lineage` action ignores it, because the
+// chain is already a list of ids, and the two actions that DO honour it are still delegated.
+fn cmd_arena(repo: &Path, args: &[String], _json: bool) -> ExitCode {
+    let paths = StatePaths::from_env(repo);
+    let arena = arena::load(&paths.repo);
+    match action_word(args) {
+        "lineage" => {
+            let id = action_word_after(args, &["lineage"]);
+            if id.is_empty() {
+                eprintln!("uor-harness: the following arguments are required: id");
+                return ExitCode::from(2);
+            }
+            // **No `--json` branch here, deliberately**: Python's lineage action ignores the flag,
+            // because the chain is already a list of ids.
+            let chain = arena.lineage(&id);
+            if chain.is_empty() {
+                eprintln!(
+                    "arena: no lineage for {}",
+                    uor_r4_harness::prgates::py_repr_public(&id)
+                );
+                return ExitCode::from(1);
+            }
+            print!("{}", arena::render_lineage(&chain));
+            ExitCode::SUCCESS
+        }
+        "board" | "compare" => delegate_to_python(repo, "arena", args),
+        "" => {
+            eprintln!("uor-harness arena: which action? board, compare, lineage");
+            ExitCode::from(2)
+        }
+        other => {
+            eprintln!("uor-harness arena: unknown action {other:?}; try board, compare, lineage");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `panel show|score` — the frozen acceptance panels.
+///
+/// **`score` is Rust; `show` is not yet and says so.** `show --json` prints each bar as the panel
+/// file's OWN object, in the file's key order (`id, label, current, target, of, unit, direction,
+/// note`) - and **`note` has no field on `registries::Bar` at all**, while `serde_json`'s `Value` is a
+/// `BTreeMap` that would re-order the rest. Matching those bytes needs the order-preserving parse this
+/// crate so far has only for `roles.json`. **A `show` that answered with the keys re-ordered would
+/// look right and diff wrong**, so it delegates and announces itself rather than growing a quieter
+/// second implementation.
+fn cmd_panel(repo: &Path, args: &[String], json: bool) -> ExitCode {
+    let paths = StatePaths::from_env(repo);
+    match action_word(args) {
+        "score" => {
+            let regs = match Registries::load(&paths) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("the panel registry did not load; nothing can be scored: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            // **The required flags are validated FIRST, as argparse does.** They used to be checked
+            // after the bar was chosen, so a command with no `--value` still printed the `--bar`
+            // note and then failed — output Python never produces, because its parser refuses
+            // before any of this runs.
+            let key = flag_value(args, "--panel").unwrap_or_default();
+            if key.is_empty() {
+                // `--panel` is required. An empty key would otherwise match the FIRST panel by
+                // containment, which is a plausible-looking wrong answer.
+                eprintln!("uor-harness: argument --panel is required");
+                return ExitCode::from(2);
+            }
+            let Some(raw) = flag_value(args, "--value") else {
+                eprintln!("uor-harness: argument --value is required");
+                return ExitCode::from(2);
+            };
+            let Ok(value) = raw.trim().parse::<f64>() else {
+                eprintln!("uor-harness: argument --value: invalid float value: {raw:?}");
+                return ExitCode::from(2);
+            };
+            let Some(panel) = panels::find_panel(&regs.panels, &key) else {
+                let known: Vec<String> = regs.panels.iter().map(|p| p.id.clone()).collect();
+                let known = if known.is_empty() {
+                    "none".to_string()
+                } else {
+                    known.join(", ")
+                };
+                eprintln!(
+                    "unknown panel {}; known: {known}",
+                    uor_r4_harness::prgates::py_repr_public(&key)
+                );
+                return ExitCode::from(2);
+            };
+            if panel.bars.is_empty() {
+                eprintln!(
+                    "panel {} has no bars, so there is nothing to score against",
+                    panel.id
+                );
+                return ExitCode::from(1);
+            }
+            let bar_key = flag_value(args, "--bar").unwrap_or_default();
+            let bar = if bar_key.is_empty() {
+                let first = &panel.bars[0];
+                if panel.bars.len() > 1 {
+                    // The first bar is the panel's headline bar, so a score without --bar is not
+                    // ambiguous - but the others are named rather than left to be discovered.
+                    // Python joins the RAW ids here, with no `!r` — unlike the headline id, which
+                    // is quoted. The comparison caught the difference: the alternatives printed as
+                    // `'fresh-transfer'` where Python prints `fresh-transfer`.
+                    let rest: Vec<String> = panel.bars[1..].iter().map(|b| b.id.clone()).collect();
+                    eprintln!(
+                        "no --bar given: scoring the headline bar {} (also available: {})",
+                        uor_r4_harness::prgates::py_repr_public(&first.id),
+                        rest.join(", ")
+                    );
+                }
+                first
+            } else {
+                match panel.bars.iter().find(|b| b.id == bar_key) {
+                    Some(b) => b,
+                    None => {
+                        // Raw ids, not quoted: Python joins `str(b.get("id", "?"))`.
+                        let known: Vec<String> = panel.bars.iter().map(|b| b.id.clone()).collect();
+                        eprintln!(
+                            "panel {} has no bar {}; bars: {}",
+                            panel.id,
+                            uor_r4_harness::prgates::py_repr_public(&bar_key),
+                            known.join(", ")
+                        );
+                        return ExitCode::from(2);
+                    }
+                }
+            };
+            let mut score = panels::classify(panel, bar, value);
+            if let Some(label) = flag_value(args, "--label") {
+                score.label = Some(label);
+            }
+            if json {
+                println!("{}", panels::score_json(&score));
+            } else {
+                print!("{}", panels::render_score(panel, bar, &score, value));
+            }
+            ExitCode::SUCCESS
+        }
+        // **`show` is the reason `ordered.rs` exists.** Its `--json` prints each bar as the panel
+        // file's own object, in the file's key order, `note` included - and `note` is not a field on
+        // `Bar` at all. Delegating it was the alternative; re-serialising the struct would have been
+        // the quiet lie, because the output would look right and diff wrong.
+        "show" => {
+            let regs = match Registries::load(&paths) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!(
+                        "the milestone registry did not load; panels cannot be resolved: {e}"
+                    );
+                    return ExitCode::from(1);
+                }
+            };
+            let key = flag_value(args, "--milestone").unwrap_or_default();
+            let milestone = if key.is_empty() {
+                None
+            } else {
+                regs.milestones.iter().find(|m| m.key == key)
+            };
+            if !key.is_empty() && milestone.is_none() {
+                let mut known: Vec<String> =
+                    regs.milestones.iter().map(|m| m.key.clone()).collect();
+                known.sort();
+                eprintln!(
+                    "unknown milestone {}; known: {}",
+                    uor_r4_harness::prgates::py_repr_public(&key),
+                    known.join(", ")
+                );
+                return ExitCode::from(2);
+            }
+            // A milestone selects the panels that name it as their milestone, or the one panel it
+            // names by id; no milestone selects every panel.
+            let selected: Vec<uor_r4_harness::registries::Panel> = match milestone {
+                Some(m) => regs
+                    .panels
+                    .iter()
+                    .filter(|p| p.milestone.to_lowercase() == m.key || p.id == m.panel)
+                    .cloned()
+                    .collect(),
+                None => regs.panels.clone(),
+            };
+            if selected.is_empty() {
+                let where_ = milestone
+                    .map(|m| format!(" for {}", m.id))
+                    .unwrap_or_default();
+                println!("no panels found{where_} in docs/harness/panels/");
+                return ExitCode::SUCCESS;
+            }
+            if json {
+                let dir = paths.repo.join("docs").join("harness").join("panels");
+                println!("{}", panels::panels_json(&selected, &dir));
+            } else {
+                print!("{}", panels::render_panels(&selected));
+            }
+            ExitCode::SUCCESS
+        }
+        "" => {
+            eprintln!("uor-harness panel: which action? show, score");
+            ExitCode::from(2)
+        }
+        other => {
+            eprintln!("uor-harness panel: unknown action {other:?}; try show, score");
+            ExitCode::from(2)
+        }
+    }
+}
+
 /// now Rust: `check_pr` runs the gates, `format_pr_body` renders a compliant body, and the D23 scan
 /// is the ratchet rather than the retired Python script.
 ///

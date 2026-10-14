@@ -20,6 +20,7 @@
 //! assert!(report.formats_checked > 0);
 //! ```
 
+pub mod arena;
 pub mod arenarules;
 pub mod briefing;
 pub mod briefingrules;
@@ -36,6 +37,8 @@ pub mod multilab;
 pub mod multilabrules;
 pub mod notes;
 pub mod onboard;
+pub mod ordered;
+pub mod panels;
 pub mod prbody;
 pub mod prep;
 pub mod preprules;

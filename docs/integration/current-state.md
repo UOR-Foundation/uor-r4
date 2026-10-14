@@ -6,6 +6,323 @@ Line: evaluation integrity & mechanism specification · count 1/3 unchanged · h
 
 **Next:** Finite construction qualification of prime-zeta codebook non-aliasing and zero-float PTX only after scoped owner authorization; downstream learned tangent/normal null comparison awaits training hold release.
 
+## 2026-10-14 — `arena lineage` is Rust; Python crashes on the path this completes (deepseek, tooling)
+
+The [record](../labs/arena-lineage-port-2026-10-14/README.md) carries the eight comparison cases. **`uor-harness
+arena lineage <id>` RUNS IN RUST**, and it brought **`arena::load`** with it — the reader `board` and
+`compare` will reuse, so the next unit is rendering rather than reading. **DELEGATION: LIVE CALL SITES
+1 → 2; UNPORTED COMMANDS 5 → 4.** The general fallback now carries `budget` x2 and `arena board|compare`
+have their own named line — the same shape as the `panel` unit, where the site count rises while the
+unported count falls, and **both are stated.** **PYTHON CRASHES ON THE PATH THIS PORT COMPLETES:**
+`arena lineage <unknown>` calls `emit(..., file=sys.stderr)` at `arena.py:465`, but `emit(text, out=None)`
+has **no `file` parameter**, so the command exits 1 with a **TypeError traceback**; this port prints **the
+message the Python code intended** and exits **1**, the same code the crash produces — **reproducing a
+traceback is not a fidelity target.** **Verified by running BOTH implementations on eight case groups:**
+`arena lineage <id>` for **all five rows** in `docs/harness/arena.json`, a root and a parented chain, and
+`--json arena lineage` (Python ignores the flag, so this does too) — **all MATCH**; `arena board` still
+delegates (stdout and exit MATCH, stderr carries the delegation notice by design); the no-lineage case
+exits 1/1 with the documented stderr difference; the missing-id case is the recorded argparse usage text.
+**Verified:** fmt and clippy `-D warnings` clean; **472 Rust tests passed, 6 ignored** (was 468);
+`python3 -m unittest discover -s tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK — 1641,
+baseline 1641. Stated rather than hidden: **`load` treats a missing or unreadable arena file as an EMPTY
+arena**, exactly as Python does, and **delegation resolves `scripts/harness/cli.py` relative to `--repo`**,
+which is pre-existing behaviour and why the `board` comparison runs in the real checkout.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** **`arena board`** (rendering; `arena::load` is in place), then **`arena compare`** (91 lines),
+then **`budget show|scan`**. **Four subcommands left before the general fallback can be deleted.**
+## 2026-10-14 — `panel show` is Rust; the last site is back to ONE delegation call site (deepseek, tooling)
+
+The [record](../labs/panel-show-port-2026-10-14/README.md) carries the nine comparison cases. **`uor-harness
+panel show` RUNS IN RUST, AND THE `delegate_to_python` CALL-SITE COUNT WENT 2 → 1**: the general fallback
+is the only one left, carrying `arena` x3 and `budget` x2; **unported commands 6 → 5.** **WHY `show` NEEDED
+A NEW TYPE AND `score` DID NOT:** `panel show --json` does not print a shape this crate invented — for
+each panel its **`bars` value IS the panel file's own list of bar objects**, keys in the order the file
+wrote them (`id, label, current, target, of, unit, direction, note`), **`note` included.** Three things
+made that impossible with `serde_json::Value`: **its object is a `BTreeMap`, so parsing sorts the keys
+away**; **`registries::Bar` has no `note` field at all**, so re-serialising the struct would drop it; and
+re-serialising would reorder the keys it does have — **the output would look right and diff wrong.** So
+**`ordered.rs` adds an `Ordered` JSON value that keeps every object's key order at every depth**, with
+Python's two renderings (compact `", "`/`": "` and `indent=2`); **the scope is deliberate**, because
+turning on `serde_json`'s `preserve_order` feature would change every `Value` in the crate, including the
+paths that rely on the sorting to match Python's `sort_keys=True` writers. **Verified by running BOTH
+implementations on nine case groups: all MATCH**, including **`--json` at 11,943 bytes a side** — a nested
+document with the bars' `note` keys and file order intact — and the milestone text forms at 1352/1128/1119
+bytes. **Verified:** fmt and clippy `-D warnings` clean; **468 Rust tests passed, 6 ignored** (was 461);
+`python3 -m unittest discover -s tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK — 1641,
+baseline 1641; **`delegate_to_python` call sites: 1 — the general fallback only.** Stated rather than
+hidden: the `no panels found ... in docs/harness/panels/` line hard-codes the relative path Python
+computes with `_rel`; `no --milestone` selects every panel in file order; and a bar whose `of` is a
+number prints through Python's `str()`.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** **`arena`** (`board`, `compare` 91 lines, `lineage`) then **`budget`** (`show`, `scan`) — five
+subcommands, and `ordered.rs` is now available for both if their `--json` prints a raw document.
+## 2026-10-14 — `panel score` is Rust; one command ported, six left at the last site (deepseek, tooling)
+
+The [record](../labs/panel-score-port-2026-10-14/README.md) carries the twenty comparison cases and the
+three defects it found. **`uor-harness panel score` RUNS IN RUST** — the D22 acceptance-panel check: one
+measured value against one frozen bar, answering **`PASS` / `FAIL` / `AT NOISE`**, where **AT NOISE means
+the movement is inside the panel's stated noise band and must not be reported as a real difference.**
+**THE UNPORTED-COMMAND COUNT WENT 7 → 6; THE DELEGATION-SITE COUNT WENT 1 → 2**, and only one of those is
+progress, so both are stated: the general fallback used to carry all seven subcommands and now carries
+five (`arena` x3, `budget` x2), while **`panel show` is delegated by its own named line** because its
+`--json` prints each bar as the panel file's own object in the file's key order and **`serde_json` is a
+`BTreeMap` with no `note` field on `registries::Bar` at all** — **a `show` that re-ordered those keys
+would look right and diff wrong.** **THE COMPARISON CAUGHT THREE THINGS I HAD WRONG:** (1) **I had read
+only HALF of `classify`** — Python appends *" - noise is unstated for this bar, so this cannot be called
+a real difference (D22 section 3)"* whenever the band is unstated, which is most panels, and the first
+port printed the shorter sentence; (2) **Python quotes the headline bar id and NOT the alternatives**
+(`'complete-correct-512'` vs `fresh-transfer`); (3) **the `--bar` note was printed BEFORE `--value` was
+validated**, so a command that then failed still printed a note about the headline bar — argparse refuses
+first, and now so does this. **Three formats had to be written out by hand:** `%g`/`%+g` (`150` must not
+print as `150.0`), the `--json` dict order with `improvement`/`needed` present only on the numeric path,
+and `noise_band`, because **an unreadable band is `None` and never `0` — a band of zero turns every
+movement into a real difference.** **Verified by running BOTH implementations on 18 cases against the
+repo's real panels, text and `--json`: stdout, stderr and exit code MATCH on all except two argparse
+usage blocks**, which are this binary's message with the same exit 2. **Verified:** fmt and clippy
+`-D warnings` clean; **461 Rust tests passed, 6 ignored** (was 450); `python3 -m unittest discover -s
+tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK — 1641, baseline 1641.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** **`panel show`** (needs the order-preserving JSON parse), then `arena` (3 subcommands,
+`compare` is 91 lines), then `budget` (2 subcommands, 908 lines). **The D30 condition is met only when
+all six are done and the general fallback can be deleted.**
+## 2026-10-14 — `multilab sync-live|migrate-ledger` are Rust; one delegation site left (deepseek, tooling — PM queue item 4)
+
+The [record](../labs/multilab-sync-port-2026-10-14/README.md) carries the six comparison cases and the
+formats. **`uor-harness multilab sync-live` AND `multilab migrate-ledger` ARE RUST, AND THE `multilab`
+DELEGATION SITE IS GONE: LIVE `delegate_to_python` CALL SITES 2 → 1.** **The only one left is the
+general fallback, which is `arena`/`budget`/`panel`.** **THIS IS ALSO PM QUEUE ITEM 4: `sync-live` IS THE
+COMMITTED PRESENCE TIER'S ONLY REFRESH PATH**, and the durable files are a day stale because **the
+heartbeat writes the live tier only, on purpose** (a check-in every few minutes must never dirty a
+checkout — R10) — so the committed record is refreshed when a lab chooses to publish it, and until this
+unit that command was Python. **THE README WAS WRONG AND IS NOW RIGHT:** `docs/harness/README.md` said
+*"Every heartbeat writes both, from one record"* and *"the durable write happens regardless"* — **neither
+is true and the second is the opposite of the design**; both lines now say what happens, and the section
+records that the old claim was wrong so the next reader does not restore it. **`migrate-ledger` NEVER
+DROPS A LINE:** an unparseable row is quarantined in `unreadable-<month>.jsonl`, a row with no lab goes
+to `unknown`, a lab that slugs to nothing keeps Python's own `-<month>.jsonl`, and every moved row is
+re-serialised with Python's `json.dumps(ensure_ascii=False, sort_keys=True)` so a migration does not
+rewrite the record it moves. **TWO FORMATS, BECAUSE PYTHON HAS TWO:** the live tier is compact
+(`sort_keys=True`), the committed tier is PRETTY (`_save`: `indent=2`) — **and the committed tier is read
+in a git diff, so writing it compact would show every line of every lab's row as changed.** **THE DEFECT
+MY OWN COMPARISON FOUND: the legacy-file matcher required 11 bytes and `2026-10.jsonl` IS 13**, so the
+migration matched nothing, moved nothing and **reported zero rows moved with exit 0** — Python's run had
+five shards and this one had none, which is what made it visible; it is recorded in the code as well as
+here. **Verified by running BOTH implementations on six case groups, comparing stdout, stderr, exit code
+AND every file written** (the whole committed presence directory for the syncs, the whole ledger
+directory for the migrations): **all MATCH.** Stated rather than hidden: **Python requires `--json`
+BEFORE the subcommand** and this binary accepts either position; a live file with `schema` other than 1
+would be rewritten as 1; and the live tier stays compact-without-spaces, which nothing but Rust writes
+now. **Verified:** fmt and clippy `-D warnings` clean; **450 Rust tests passed, 6 ignored** (was 446);
+`python3 -m unittest discover -s tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK — 1641,
+baseline 1641.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** **`arena`/`budget`/`panel` behind the general fallback — the LAST delegation site** — then the
+recorded follow-ups (`check`'s text rendering, `status.no_orphan_branches` reporting `ok` where Python
+warns, the receipt `ts` rendering) and PM queue items 5–7.
+
+## 2026-10-14 — `heartbeat`: a bare check-in blanked the intent, and the session could not be named (deepseek, tooling — PM queue items 1–3)
+
+The [record](../labs/heartbeat-interface-2026-10-14/README.md) carries the before/after repros, all run
+against a **scratch live tier** so no other lab's board was touched. **THREE DEFECTS IN THE ONE COMMAND
+EVERY LAB RUNS EVERY FEW MINUTES, from claude/review1's note on #2028 (6163960613):**
+**(1) A BARE `heartbeat -m m1` ERASED THE INTENT** — it rewrote presence with `doing` and `next` empty,
+so **a lab checking in with the onboarding prompt's own command read as live-and-idle on every board,
+including its own last intent, which its previous file had held one moment earlier** (that is the shape
+Kimi saw as "your board reads idle"); **the rule is "absent", not "empty"** — a flag passed with an
+empty value is a lab clearing the field deliberately and still does, verified in the same run. **A missing
+flag now carries the previous check-in's value forward** (`presence::remembered`, with the rule stated as
+a unit test). **(2) `--session` DID NOT EXIST** (`unknown option --session`, exit 2), so
+`Presence.session` was **never set by anyone** and two sessions of one lab were indistinguishable on the
+board; the flag now exists, is carried forward like the intent, **and the Python transport forwards it
+too — `cli.py heartbeat` is a thin transport to this binary, and a flag present in one entry point and
+missing in the other is the two-implementations problem in miniature.** **(3) `heartbeat --help` PRINTED
+THE GLOBAL USAGE**, listing the command and none of its flags, so a lab had to read `main.rs` to learn
+that `--line`/`--doing`/`--count`/`--next`/`--session` exist; a command word seen before the help flag
+now selects its own flag list, and commands with none written still print the global usage. **ONE
+BEHAVIOUR CHANGE WORTH STATING: a bare check-in's RECEIPT now carries the previous line**, because the
+receipt and the presence are written from one record — verified in the live shard (carried line after a
+bare check-in, absent after `--line ""`, exactly as presence says). **Verified:** fmt and clippy
+`-D warnings` clean; **446 Rust tests passed, 6 ignored** (was 445); `python3 -m unittest discover -s
+tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK — 1641, baseline 1641; **the worktree is
+clean after every check-in** (heartbeats write the live tier only). **NOT FIXED HERE: queue item 4** —
+the durable presence tier is a day stale and the README is wrong about what refreshes it. **That is not a
+heartbeat defect:** the Rust heartbeat writes the live tier only ON PURPOSE (R10: a five-minute check-in
+must not dirty a checkout), and the durable tier's refresh path is `multilab sync-live` — **which is
+still delegated to Python.** So the fix is to port `sync-live` and correct the README, and it is the next
+unit rather than a rider on this one.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**FOUND WHILE VERIFYING, NOT FIXED HERE: the Python suite FAILS when `CARGO_TARGET_DIR` IS EXPORTED — the variable every doc tells a lab to build with.** `stateformats._harness_binary` looks in `$CARGO_TARGET_DIR/debug/uor-harness` first, so with it still set the rule reports a missing contract file as an **error** where the test expects **skipped** (`'error' != 'skipped'`, one command to reproduce). **Deterministic, not the known intermittent flake**, and a test/`stateformats` resolution concern rather than a heartbeat one.
+
+**Next:** **`multilab sync-live|migrate-ledger`** (the durable tier's refresh path, and a delegation
+site), then `arena`/`budget`/`panel`; then queue items 5–7 (pin rustup `cargo` in the bootstrap,
+`claims_file()` pointing at the owner checkout, the stale `~/.cargo/bin` install).
+## 2026-10-14 — A2 paired diagnosis and D5 completion admission source (codex)
+
+The [source-bound diagnosis](../labs/a2-pilot-diagnosis-2026-10-14/README.md)
+accounts for the pilot's +68,000 loss numerator: token contribution −63,968,
+address contribution +131,968. A Rust audit of all 14,287 stored CUDA row pairs
+finds 5,100 lost target-cell admissions and 1,600 gained; gained-admission rows
+provide 983 of 1,169 final top-8 hits. The four-block initializer is symbolically
+limited to sixteen patterns at this shape for any seed. Coverage distinguishes
+four block proposals per visited token, vocabulary target mass, and the full
+parameter pass's 1,049,856 / 2,425,925 actual TRAIN target exposures. Ninety
+accepted proposals belong to zero-TRAIN-target-count vectors, so that cohort
+cannot be declared inactive. No model rerun or mechanism verdict.
+The strict-win guard counts 105 → 149 distance-margin wins, of which only
+0 → 36 have the target admitted; the unchanged guard is not an executed-hit count.
+
+D5 adds separately scoped completion admission, exact checkpoint-1640 import
+with an explicit driver-only lineage migration, preserved pilot baseline,
+registered quarter evaluations with sealed recovery pins, and separate vector /
+Route counters. The old pilot cap/release remains isolated; seed 2 requires its
+own owner-personal release. Numerical kernels and evaluator are unchanged.
+Twenty-five Rust metadata tests pass, including atomic run-state publication
+after Claude's interruption finding; new CUDA build/runtime remains UNVERIFIED.
+Kimi owns the amended completion sheet; Claude owns FIT/exact-source review;
+source delivery and recorded measurements release no hold. All training and M2
+remain HELD. Collision-free initialization and admission/schedule remedies are
+separate prospective configurations, not silent changes to this continuation.
+
+## 2026-10-14 — `mistakes show|capture` are Rust; `capture` was refusing its own output (deepseek, tooling)
+
+The [record](../labs/mistakes-write-port-2026-10-14/README.md) carries the twelve comparison cases.
+**`uor-harness mistakes show` AND `uor-harness mistakes capture` ARE RUST, AND THE `mistakes`
+DELEGATION SITE IS GONE: LIVE `delegate_to_python` CALL SITES 3 → 2** (the general fallback and
+`multilab sync-live|migrate-ledger`). `show` reads one lesson body; **`capture` is the writer** — it
+validates the draft against the same rules `mistakes.registry_valid` applies, refuses to overwrite
+without `--force`, writes, reads the file back and removes it if it somehow fails, **so a capture can
+never leave behind a lesson that turns the lab's own `check` red.** **THREE DEFECTS THE COMPARISON
+FOUND, NONE VISIBLE BY READING: (1) `capture` REFUSED EVERY LESSON WITH AN AUTO-GENERATED GUARD** —
+Rust's front-matter reader did not strip quotes, and `build_lesson_text` writes the default guard
+quoted because it contains a colon, **so the guard began with a `"` instead of `none`, failed the guard
+rule, and the command could not write the lesson it had just generated** (fixed by porting
+`core._coerce`'s one relevant case); **(2) the success message was three lines short** — Python also
+prints the severity/class/guard summary, the `read it back` command and the `check --only mistakes`
+line, and the port printed only the write line **because `capture` had been read as far as the write —
+the stdout comparison is what showed it**; **(3) EVERY front-matter value goes through the YAML
+renderer, not only the awkward ones** — wrapping only the punctuated fields meant a title with a space
+was written bare where Python quotes it, a difference in every captured lesson. **AND TWO DEFECTS IN
+THE RULE THE DRAFT IS VALIDATED AGAINST: `mistakes.registry_valid` was missing three checks Python has**
+(`'trigger' needs at least two phrases`, `'paths' is empty`, `'<key>' must be an inline or block
+list`) **and used Rust's debug formatting where Python uses `!r` and tuple reprs**
+(`severity must be one of ('block', 'warn', 'info'), got 'nope'`). **They were invisible because
+Python's registry loader refuses a lesson with a bad id or severity BEFORE the rule runs**, so the
+only way to compare was a lesson that loads and is still wrong: with one, **both implementations now
+report the same eight findings, in the same order, with the same messages.** **Verified on scratch
+checkouts across twelve case groups, comparing stdout, stderr, exit code AND every file in the mistakes
+directory: all match except one message** — with a required flag absent, Python's argparse prints a
+usage block and this port prints `mistakes capture needs --id and --title`, both refusing with exit 2.
+**FOUND WHILE COMPARING, NOT FIXED HERE: `check`'s TEXT RENDERING IS NOT PYTHON'S** — same verdicts,
+different layout (`harness check: …` + `FAIL <rule> [<path>]: <message>` + a trailing hint line there;
+a bare count + `  error <rule> [<path>]` with the message on its own line here), **surfaced only
+because comparing the rule messages required reading both renderings side by side, and the same class
+as the ledger line: identical verdicts, different bytes, invisible to every JSON comparison.**
+**Verified:** fmt and clippy `-D warnings` clean; **445 Rust tests passed, 6 ignored** (was 438);
+`python3 -m unittest discover -s tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK —
+1641, baseline 1641; **`check`'s rule-id set on the real tree is 41 = 41 with no new findings from the
+added checks.**
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** **`multilab sync-live|migrate-ledger`**, then **`arena`/`budget`/`panel`** (which removes the
+general fallback), plus the recorded follow-ups: `check`'s text rendering, `status.no_orphan_branches`
+reporting `ok` where Python warns, and the receipt `ts` rendering.
+
+## 2026-10-14 — `team dispatch` is Rust, and diffing the written line found the ledger was the wrong shape (deepseek, tooling)
+
+The [record](../labs/team-dispatch-port-2026-10-14/README.md) carries the comparison table and the
+behaviour copied rather than corrected. **`uor-harness team dispatch` IS RUST AND THE `team`
+DELEGATION SITE IS GONE: `delegate_to_python` SITES 5 → 4.** The command resolves the role, writes ONE
+receipt through `receipts.record` and prints what landed — **the write half is why it stayed delegated:
+`team roster` could be ported by reading, a command that WRITES the shared ledger cannot be.** So
+`receipt::record` came with it: the `event` mapping, the `_NEVER` key list, the empty-value rule,
+redaction, lab attribution, the unattributed warning, and the `unknown-<month>` shard for a record with
+no lab. **THE DEFECT THE COMPARISON FOUND: `Receipt::to_line` DOCUMENTED ITSELF AS "matching
+`json.dumps(record, ensure_ascii=False, sort_keys=True)`" AND WROTE COMPACT JSON** — `{"count":2}`
+where Python writes `{"count": 2}`. **Every reader parses, so nothing failed, and this module's own
+header says two implementations writing one file differently "would make every ledger change
+unreadable": it took the first comparison of a WRITTEN line against Python's to see it, because
+reading a line back is not comparing it.** Fixed with `py_dumps_sorted` (Python's default separators,
+sorted keys, `ensure_ascii=False` for the ledger), while `--json` keeps the OTHER Python default
+(`ensure_ascii=True`, insertion order) through `Recorded::to_pretty`, which reuses the `ensure_ascii`
+the roster unit built. **AND THE TEST THAT SHOULD HAVE CAUGHT IT COULD NOT FAIL:**
+`a_receipt_line_is_sorted_json` split the line on `","` — which the compact form happened to produce and
+which Python's separators do not — so after the fix it would have passed on an empty key list; it now
+asserts the EXACT LINE. **Verified by running BOTH implementations against scratch checkouts and
+comparing stdout, stderr, exit code AND the written shard line on six cases** (full flags, minimal,
+`--count 0`, `--json`, no `UOR_LAB`, whitespace task): **all MATCH**, and the error paths agree (unknown
+role is byte-identical on both sides, exit 2; `--count xyz`/`--state bogus` refuse on both, exit 2).
+**ONE DIVERGENCE REMAINS AND IT IS DELIBERATE: a receipt's `ts` is `…Z` in Rust and a local offset in
+Python — the same instant, and `now_rfc3339`'s own comment already records the decision that both are
+valid RFC3339 and the reader parses either.** It is stated here because this unit is the first to
+compare the written bytes; the comparison asserts the two forms as instants rather than assuming it.
+**Behaviour copied rather than corrected:** `--count 0` becomes 1 (Python's `args.count or 1`); a string
+is redacted but a LIST is not redacted element by element (Python tests `isinstance(value, str)`); no lab
+identity WARNS and preserves the receipt rather than refusing it; `--scope` takes several values, so only
+its first is consumed by the flag parser. **Verified:** fmt and clippy `-D warnings` clean; **438 Rust
+tests passed, 6 ignored** (was 432); `python3 -m unittest discover -s tests/harness -t .` exit 0;
+**`parity.py` exit 0** including *Rust-written receipt read back by Python: ok*; interlock OK — 1641,
+baseline 1641.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** the four remaining sites — `mistakes show|capture`, `multilab sync-live|migrate-ledger`, and
+`arena`/`budget`/`panel` behind the general fallback — plus the recorded `check` defects
+(`status.no_orphan_branches` reports `ok` where Python warns).
+
+## 2026-10-14 — `check` read its arguments as a rule filter, so `--repo` ran ZERO rules (deepseek, tooling)
+
+The [record](../labs/check-flags-2026-10-14/README.md) carries the matrix and the two further findings.
+**`uor-harness --repo DIR check` CHECKED NOTHING AND PRINTED `0 rules, 0 failed (0 error, 0 warn)`.**
+`check --json` reports `"checked": 52`; adding `--repo` reported `"checked": 0`, and **the pre-change
+binary reproduces it, so it was live on `main`.** **`--repo` is forwarded into the subcommand argument
+list on purpose** (`main.rs` pushes it into `rest` because `receipt` needs to know where it writes) **and
+`cmd_check_rules` handed that same list to `checkdispatch::run` as the `--only` PREFIX SET** — every token
+was a filter, and no rule id starts with `--repo`, so **a path silently disabled the entire rule set and
+the output was indistinguishable from a clean repository.** Controls: `--only arena` checks 4, `--only zzz`
+checks 0. **This is the third time this port has found the same shape** — a command reporting success
+having checked nothing — after `cmd_check` running only the format contract and three rules that were
+registered and never dispatched; **it is the first time the trigger was an invocation a lab would type by
+habit.** **What changed: `checkdispatch::parse_args` parses `check`'s own flags** (`--only` with Python's
+`append`/`nargs="+"` flattening, `--staged`), consumes the forwarded `--repo`/`--lab`, and makes anything
+else a **usage error at exit 2**, because an unknown token must never be a prefix that happens to match
+nothing; **`Scope`/`run_scoped` make `--staged` what Python makes it — a rule SET, not a filter over
+results — with `STAGED_RULES` empty today because every rule declares the default `repo` scope, and an
+`#[ignore]`d live test comparing that table against `checkrules.rules(scope="staged")` so a staged rule
+added in Python fails the test instead of being skipped silently;** and **`--staged` was missing from
+`SUBCOMMAND_FLAGS` entirely**, so the top-level parser rejected it before `check` saw it. **Verified by
+running BOTH implementations on seven invocations: the rule-id sets match on every one** (`check` 41=41,
+`--repo` 41=41 where it used to be 0, `--staged` 0=0, `--only arena` 4=4, `--only prep budget` 8=8,
+`--only prep --only budget` 8=8, and `--bogus`/bare-token refused at exit 2 by both). **The one
+disagreement, 51 vs 58 records on the unfiltered run, predates this unit: Python counts PR-body gates a
+`check` with no body cannot answer.** **FOUND WHILE FIXING, NOT FIXED HERE: `status.no_orphan_branches`
+FIRES IN PYTHON AND REPORTS `ok` IN RUST** — Python warns `local branch bpb-split still exists but PR #2081
+merged 2026-10-09`; the ported rule covers the local half only, while Python reads `branch_pr_check` (a
+merged-PR lookup: `bpb-split` was squash-merged, leaving no ancestry link) and remote branches with no PR,
+**so the rule is ABSENT where Python's fires — the same sentence this port wrote when it fixed
+`heartbeat_receipts` and `registry_vs_github`.** Also stated: **the Rust form accepts `check --repo DIR`,
+which Python rejects — a divergence in the port's favour.** **Verified:** fmt and clippy `-D warnings`
+clean; **432 Rust tests passed, 6 ignored** (was 425/5); the `#[ignore]`d staged-set test passes;
+`python3 -m unittest discover -s tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK — 1641,
+baseline 1641; **`delegate_to_python` sites 5 — unchanged; this unit ports no command.**
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** **`status.no_orphan_branches` as its own unit** — the `gh` merged-PR chain and the remote-branch
+list, compared against Python on the same tree — then **`team dispatch`** (port `receipts.record`; compare
+the written receipt AND the shard file), `mistakes show|capture`, `multilab sync-live|migrate-ledger`, and
+`arena`/`budget`/`panel` behind the general fallback.
+
 ## 2026-10-14 — `team roster` is Rust; two recorded findings were corrected by measurement (deepseek, tooling)
 
 The [roster port record](../labs/team-roster-port-2026-10-14/README.md) carries the full evidence and the two corrected findings. **`uor-harness team roster` IS RUST, AND ITS OUTPUT IS BYTE-IDENTICAL TO PYTHON'S — 1,936 BYTES BOTH
