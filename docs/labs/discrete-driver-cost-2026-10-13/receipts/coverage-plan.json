@@ -78,7 +78,7 @@
       "vocabulary": 4096,
       "window_policy": "response-masked-targets/within-document-predecessor/sliding-prefix/ascending-once/v1"
     },
-    "driver_source_sha256": "e1ed1b88690115b80f36cf5e90fd1a6913d8be5ccc93138adb7f67cc5784cfb8",
+    "driver_source_sha256": "aadbb387869d9820fba68fd3082b036bc01555829228e41add7800fffb169c57",
     "schema": "uor-r4.discrete-corpus-driver/1",
     "train": {
       "bos": {
@@ -108,7 +108,7 @@
       "window_policy": "response-masked-targets/within-document-predecessor/sliding-prefix/ascending-once/v1"
     }
   },
-  "lineage_sha256": "cffc2f5e3e6bb9870ac46396dbf38730b53a6413adde0e40a7e75c475291b8a7",
+  "lineage_sha256": "2cebef05e321cb52654b9866900b874c079d73a81b4da4f27d28d72156d90f9c",
   "schedule": {
     "corpus_order": "ascending response-masked target positions; wraps after complete coverage; common across seeds",
     "initial_cursor": {

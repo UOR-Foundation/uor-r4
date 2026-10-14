@@ -2,7 +2,7 @@
 
 - Date: 2026-10-13. Milestone: M1 #2029, learning/output interface #2032.
 - Scope: D1 driver/evaluator/update-boundary construction and D2 measured operation cost. This is not the corpus-training sheet.
-- Executable source: `9179a69dcb2c9645416e788611ed3dbb7edea0b2`, crate tree `685927e93bc35ddfd95b690d2fb555f9390be915`, [PR #2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), based on main `1ef7ef415`. Release binary/PTX/geometry hashes are frozen below before execution. No prior executable qualification transfers to the new evaluator or apply controls. Later documentation-only pins do not change this executable source.
+- Executable source: `e7d926fbe38537f4faa90b817705c61a780778d6`, crate tree `218b2e7bc2a5e41332f10dcba666b10275046ef6`, [PR #2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), based on main `1ef7ef415`. Release binary/PTX/geometry hashes are frozen below before execution. No prior executable qualification transfers to the new evaluator or apply controls. Later documentation-only pins do not change this executable source.
 - Brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md).
 - Authority: D23–D32 and R12–R14. Integer-only GPU model and reference arithmetic; no normalized exponential, dense contraction, floating model/instrument, CPU model/reference or NVRTC.
 - Training and M2 remain **HELD**. Owner-directed D1/D2 development includes the disposable finite transition qualification below, subject to prospective exact-head Claude FIT and root's scoped pod admission. FIT alone releases no owner hold. No corpus, optimizer, language evaluation or trained checkpoint is admitted.
@@ -19,11 +19,11 @@ This sheet adopts those four boundaries. Corpus transition requires a private, u
 
 ## Base artifact
 
-Release executable built from source `9179a69dcb2c9645416e788611ed3dbb7edea0b2`:
-SHA256 `c7ba726f70c3525d43629b9ec97867d5ceaf221acf92c8ba050fa85a2ce0eca7`;
+Release executable built from source `e7d926fbe38537f4faa90b817705c61a780778d6`:
+SHA256 `399ab42713589439dd963ec50515133e723abda79cd4b1d90330d9710d80c117`;
 PTX `f864c085e3054df9254646a694e73fc0e582162a11a179324df10236491246b5`;
 geometry `3c7a88bfc82e0fc2f4031ec35cfd69516596dce385b792767675ea937763cc50`.
-Build PASS: Cargo release36.42s, controller38s, Rust1.97.1, nvcc12.8.93 with
+Build PASS: Cargo release16.06s, controller17s, Rust1.97.1, nvcc12.8.93 with
 `-ptx -std=c++17 -arch=compute_120`; RTX5090 driver580.178.04, Ubuntu24.04.1.
 The AOT checker admits exactly11 entries and rejects prohibited floating/tensor
 instructions. Model initialization is seeded; no learned checkpoint is inherited.
