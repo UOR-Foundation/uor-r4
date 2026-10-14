@@ -2,7 +2,7 @@
 
 - Date: 2026-10-13. Milestone: M1 #2029, learning/output interface #2032.
 - Scope: D1 driver/evaluator/update-boundary construction and D2 measured operation cost. This is not the corpus-training sheet.
-- Source/executable/PTX/geometry pin: **PENDING final integrated source and release AOT build**. No prior executable qualification transfers to the new evaluator or apply controls.
+- Executable source: `9179a69dcb2c9645416e788611ed3dbb7edea0b2`, crate tree `685927e93bc35ddfd95b690d2fb555f9390be915`, [PR #2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), based on main `1ef7ef415`. Release binary/PTX/geometry hashes are PENDING build and must be frozen before execution. No prior executable qualification transfers to the new evaluator or apply controls. Later documentation-only pins do not change this executable source.
 - Brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md).
 - Authority: D23–D32 and R12–R14. Integer-only GPU model and reference arithmetic; no normalized exponential, dense contraction, floating model/instrument, CPU model/reference or NVRTC.
 - Training and M2 remain **HELD**. Owner-directed D1/D2 development includes the disposable finite transition qualification below, subject to prospective exact-head Claude FIT and root's scoped pod admission. FIT alone releases no owner hold. No corpus, optimizer, language evaluation or trained checkpoint is admitted.
