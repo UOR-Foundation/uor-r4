@@ -31,6 +31,8 @@ unit rather than a rider on this one.
 
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 
+**FOUND WHILE VERIFYING, NOT FIXED HERE: the Python suite FAILS when `CARGO_TARGET_DIR` IS EXPORTED — the variable every doc tells a lab to build with.** `stateformats._harness_binary` looks in `$CARGO_TARGET_DIR/debug/uor-harness` first, so with it still set the rule reports a missing contract file as an **error** where the test expects **skipped** (`'error' != 'skipped'`, one command to reproduce). **Deterministic, not the known intermittent flake**, and a test/`stateformats` resolution concern rather than a heartbeat one.
+
 **Next:** **`multilab sync-live|migrate-ledger`** (the durable tier's refresh path, and a delegation
 site), then `arena`/`budget`/`panel`; then queue items 5–7 (pin rustup `cargo` in the bootstrap,
 `claims_file()` pointing at the owner checkout, the stale `~/.cargo/bin` install).

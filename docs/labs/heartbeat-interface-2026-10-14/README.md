@@ -66,6 +66,26 @@ absent, which is exactly what presence says.
 | `python3 scripts/check_no_softmax.py` | OK — 1641, baseline 1641 |
 | worktree after all check-ins | clean: heartbeats write the live tier only |
 
+## Found while verifying, NOT fixed here
+
+**The Python suite FAILS when `CARGO_TARGET_DIR` is exported — the variable every doc tells a lab to
+build with.**
+
+```
+$ python3 -m unittest tests.harness.test_stateformats.TestCannotRunIsNotAPass
+OK
+$ CARGO_TARGET_DIR=$PWD/local/harness-target python3 -m unittest tests.harness.test_stateformats.TestCannotRunIsNotAPass
+FAILED (failures=1)
+  'error' != 'skipped'   # cannot read .../state-formats.json: No such file or directory
+```
+
+`stateformats._harness_binary` looks in `$CARGO_TARGET_DIR/debug/uor-harness` **first**, so a lab with
+the documented variable still exported finds a binary and the rule reports the missing contract file as
+an **error**, where the test expects **skipped** (its point being that *cannot run* must not read as a
+*pass*). **Deterministic, not the known intermittent flake**, reproducible in one command. It is a
+test/`stateformats` resolution concern rather than a heartbeat one, so it is recorded and queued rather
+than ridden along here.
+
 ## Not fixed here
 
 **Item 4 of the queue — the durable presence tier is a day stale and the README is wrong about what
