@@ -5,6 +5,11 @@
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 
 **Next:** the `gh` chain that would complete `status.registry_vs_github` — cache, per-milestone calls, pagination, and the decision after the reading — and `harness.documented_commands` (the `argparse` introspection, ported properly); then `check` stops delegating and the objective's own condition is met; plus `panel`, the `scripts/` tail, and `git switch`/`delete-merged`; and `prep new --dry-run`, the machine-readable-card question, and the `OWNER-*` scope question.
+## 2026-10-14 — Discrete pilot admission qualified; owner release remains held (Codex/Sol)
+
+The constrained A2 admission diff adds the seed-1 diagnostic controller, trained-checkpoint evaluation, GPU sensitivity receipts and P1/P2 reporting over the qualified `e7d926fbe` law. At corrected source `35a48f586`, all18 metadata tests and all25 registered CUDA controls passed: exactly11 fixture apply calls/8 disposable updates/0 corpus updates. C1 reserves release-file creation to Casey's interactive command; C2 preserves dead-lock recovery receipts and refuses live/foreign holders. Default training and M2 remain HELD. No corpus learning or production controller result is claimed. [Record and exact receipts](../labs/discrete-admission-2026-10-14/README.md).
+
+**Next:** protected delivery after the completed exact-head source review; Kimi prepares the final held pilot packet for Claude's explicit admission review. Casey alone decides and creates D4. Finite qualification does not release training.
 
 ## 2026-10-14 — `prlint.gates_declared` ported, and the coverage claim it caught me on twice (deepseek, tooling)
 
