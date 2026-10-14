@@ -683,6 +683,26 @@ fn contains_phrase(text: &[String], phrase: &[String]) -> bool {
     !phrase.is_empty() && text.windows(phrase.len()).any(|w| w == phrase)
 }
 
+/// Compact, sign-preserving text normalization for algebraic/numeric checks (`exact_text`):
+/// lowercased, unicode minus/dashes normalized to `-`, superscript `²`/`³` normalized to
+/// `^2`/`^3`, `√` normalized to `sqrt`, and all whitespace removed.
+fn compact_math_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.to_lowercase().chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        match c {
+            '\u{2212}' | '\u{2013}' | '\u{2014}' => out.push('-'),
+            '\u{00b2}' => out.push_str("^2"),
+            '\u{00b3}' => out.push_str("^3"),
+            '\u{221a}' => out.push_str("sqrt"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// The frozen phrases an `abstain` check accepts: the reply says it does not
 /// know, cannot, or was not told.
 const ABSTAIN_PHRASES: &[&str] = &[
@@ -755,6 +775,14 @@ enum CheckKind {
     /// required content and not the wrong one" — presence *and* discrimination
     /// on a row whose request states neither.
     ReplyExact(Vec<Vec<String>>),
+    /// Sign- and punctuation-preserving single-turn exact check (`v2` `F7` for
+    /// algebraic/numeric rows such as `heldout-122` and `heldout-125`): matches
+    /// [`compact_math_text`] substrings so `+`, `-`, `/`, `.` and `(` / `)` are
+    /// preserved rather than stripped by [`words`].
+    ExactText {
+        terms: Vec<String>,
+        forbid: Vec<String>,
+    },
     /// A clarification of an ill-posed request: the reply asks a question (or,
     /// in `v2`, makes a polite imperative request) **about the material the
     /// request refers to but does not contain**, named by a row-specific phrase
@@ -773,14 +801,13 @@ enum CheckKind {
     /// asks what the user needs, without fabricating specifics (`names a
     /// specific`) and without any forbidden continuation word, passes.
     Salutation,
-    /// `v2` (`F6`) exact whole-reply choice (`heldout-120`: "Generate a response
-    /// with ONLY 'yes' or 'no'"): the reply's entire word sequence matches one
-    /// of the listed options and contains no extra words.
+    /// `v2` (`F6`) exact whole-reply choice (`heldout-092`: "Answer with one of
+    /// the following options"): the reply's entire word sequence matches one of
+    /// the listed options and contains no extra words.
     OneOf(Vec<Vec<String>>),
-    /// `v2` (`F6`) exact word-count story check (`heldout-168`: "Create a story
+    /// `v2` (`F6`) exact word-count format check (`heldout-173`: "Create a story
     /// using only six words"): the reply has exactly `n` words, none of the
-    /// row's `forbid` words, and at least one of the row's `keys` (story
-    /// anchors).
+    /// row's `forbid` words, and at least one of the row's `keys` (if any).
     WordCount(usize),
 }
 
@@ -792,6 +819,7 @@ impl CheckKind {
             CheckKind::Question => "question",
             CheckKind::Exact(_) => "exact",
             CheckKind::ReplyExact(_) => "reply_exact",
+            CheckKind::ExactText { .. } => "exact_text",
             CheckKind::Clarify(_) => "clarify",
             CheckKind::AbstainExact => "abstain_exact",
             CheckKind::Salutation => "salutation",
@@ -1132,6 +1160,11 @@ impl RowCheck {
                     && !self.keys.iter().any(|t| contains_phrase(&reply_words, t))
                     && terms.iter().any(|t| contains_phrase(&reply_words, t))
             }
+            CheckKind::ExactText { terms, forbid } => {
+                let compact = compact_math_text(reply);
+                !forbid.iter().any(|f| compact.contains(f.as_str()))
+                    && terms.iter().any(|t| compact.contains(t.as_str()))
+            }
             CheckKind::Clarify(terms) => {
                 let asks_or_invites =
                     reply.contains('?') || (v2 && invites_mode(&reply_words, true));
@@ -1178,6 +1211,14 @@ impl RowCheck {
                     "contains_forbidden_term"
                 } else if has_key {
                     "contains_distractor_key"
+                } else {
+                    "missing_expected_value"
+                }
+            }
+            CheckKind::ExactText { forbid, .. } => {
+                let compact = compact_math_text(reply);
+                if forbid.iter().any(|f| compact.contains(f.as_str())) {
+                    "contains_forbidden_term"
                 } else {
                     "missing_expected_value"
                 }
@@ -1298,14 +1339,15 @@ impl Checks {
 
 /// A checks file: tab-separated `id kind history terms [forbid [keys]]` per line
 /// (`#` comments and blank lines ignored). `kind` is `any`, `abstain`,
-/// `question`, `exact`, `reply_exact`, `clarify`, `abstain_exact`, `salutation`,
-/// `one_of` or `word_count_6`; `history` is `none`, `recall`, `derived` or
-/// `topic`; `terms` is `|`-separated words or phrases for `any`, `exact`,
-/// `reply_exact`, `clarify` and `one_of` and `-` otherwise; `forbid` (default
-/// `-`) is `|`-separated words or phrases that fail an `exact`, `reply_exact`,
-/// `clarify`, `abstain_exact`, `salutation` or `word_count_6` check and must be
-/// `-` for the other kinds; `keys` (default `-`) is `|`-separated words of the
-/// distractor's key (or story anchors for `word_count_6`).
+/// `question`, `exact`, `reply_exact`, `exact_text`, `clarify`, `abstain_exact`,
+/// `salutation`, `one_of` or `word_count_6`; `history` is `none`, `recall`,
+/// `derived` or `topic`; `terms` is `|`-separated words or phrases for `any`,
+/// `exact`, `reply_exact`, `exact_text`, `clarify` and `one_of` and `-`
+/// otherwise; `forbid` (default `-`) is `|`-separated words or phrases that fail
+/// an `exact`, `reply_exact`, `exact_text`, `clarify`, `abstain_exact`,
+/// `salutation` or `word_count_6` check and must be `-` for the other kinds;
+/// `keys` (default `-`) is `|`-separated words of the distractor's key (or story
+/// anchors for `word_count_6`).
 fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
     let mut rows = BTreeMap::new();
     for (number, line) in text.lines().enumerate() {
@@ -1332,6 +1374,13 @@ fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
             }
             Ok(terms)
         };
+        let compact_list = |terms: &str| -> Result<Vec<String>, Error> {
+            let terms: Vec<String> = terms.split('|').map(compact_math_text).collect();
+            if terms.iter().any(String::is_empty) {
+                return Err(format!("checks line {}: an empty exact_text term", number + 1).into());
+            }
+            Ok(terms)
+        };
         let history = match history {
             "none" => History::None,
             "recall" => History::Recall,
@@ -1343,6 +1392,28 @@ fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
             ("any", terms) => CheckKind::Any(term_list(terms)?),
             ("exact", terms) if terms != "-" => CheckKind::Exact(term_list(terms)?),
             ("reply_exact", terms) if terms != "-" => CheckKind::ReplyExact(term_list(terms)?),
+            ("exact_text", terms) if terms != "-" => {
+                if forbid == "-" {
+                    return Err(format!(
+                        "checks line {}: an exact_text check needs a forbidden (distractor) value",
+                        number + 1
+                    )
+                    .into());
+                }
+                let terms_c = compact_list(terms)?;
+                let forbid_c = compact_list(forbid)?;
+                if let Some(t) = terms_c.iter().find(|t| forbid_c.contains(t)) {
+                    return Err(format!(
+                        "checks line {}: '{t}' is both expected and forbidden",
+                        number + 1
+                    )
+                    .into());
+                }
+                CheckKind::ExactText {
+                    terms: terms_c,
+                    forbid: forbid_c,
+                }
+            }
             ("clarify", terms) if terms != "-" => CheckKind::Clarify(term_list(terms)?),
             ("one_of", terms) if terms != "-" => CheckKind::OneOf(term_list(terms)?),
             ("abstain", "-") => CheckKind::Abstain,
@@ -1357,7 +1428,7 @@ fn parse_checks(text: &str) -> Result<BTreeMap<String, RowCheck>, Error> {
             }
         };
         let forbid = match (&kind, forbid) {
-            (_, "-") => Vec::new(),
+            (_, "-") | (CheckKind::ExactText { .. }, _) => Vec::new(),
             (
                 CheckKind::Exact(_)
                 | CheckKind::ReplyExact(_)
@@ -1577,18 +1648,20 @@ const CHECK_RULE: &str = "words are lowercased and split at anything not a lette
      forbidden values (the conversation's distractor values and, for a closed class, its other \
      members) and none of the distractor's key words: a wrong value, both values, the value \
      bound to the distractor's key, or no value fails; reply_exact = exact without the multi-turn \
-     recall precondition; clarify = the reply asks (or in v2 politely requests via an invitation \
-     phrase) about the missing material named by one of the row's clarify phrases, and contains \
-     none of the forbidden/key words; abstain_exact = the reply contains an abstain phrase not \
-     followed by 'wait', no agreement phrase (or 'sure' not after 'not'), no guess marker in a \
-     sentence that is neither a question nor contains an invitation phrase, nothing after 'but' \
-     in a sentence unless that clause abstains, invites or is a question, none of the row's \
-     forbidden words, no digit, and no capitalised word that is not a word of the user turns, I \
-     or OK, or a listed sentence opener at the start of a sentence; salutation (v2) = the reply \
-     greets/offers help or asks a question without fabricated specifics or forbidden words; \
+     recall precondition; exact_text (v2) = sign-preserving substring match on lowercased \
+     whitespace-stripped text (with unicode minus/superscripts normalized) containing at least one \
+     expected term and no forbidden term; clarify = the reply asks (or in v2 politely requests via \
+     an invitation phrase) about the missing material named by one of the row's clarify phrases, \
+     and contains none of the forbidden/key words; abstain_exact = the reply contains an abstain \
+     phrase not followed by 'wait', no agreement phrase (or 'sure' not after 'not'), no guess \
+     marker in a sentence that is neither a question nor contains an invitation phrase, nothing \
+     after 'but' in a sentence unless that clause abstains, invites or is a question, none of the \
+     row's forbidden words, no digit, and no capitalised word that is not a word of the user \
+     turns, I or OK, or a listed sentence opener at the start of a sentence; salutation (v2) = the \
+     reply greets/offers help or asks a question without fabricated specifics or forbidden words; \
      one_of (v2) = the reply's full word sequence matches one listed option; word_count_6 (v2) = \
-     the reply has exactly 6 words, at least one story anchor key, and no forbidden words; rows \
-     with no deterministic check are classified BLOCKED (open_ended_no_exact_anchor)";
+     format-only check that the reply has exactly 6 words and no forbidden words; rows with no \
+     deterministic check are classified BLOCKED (open_ended_no_exact_anchor)";
 
 fn checks_record(checks: &Checks) -> Value {
     let v2 = checks.is_v2();
@@ -1679,6 +1752,32 @@ fn validate_checks(checks: &Checks, requests: &[Request]) -> Result<Vec<String>,
                 }
             }
             CheckKind::OneOf(_) => {}
+            CheckKind::ExactText { terms, forbid } => {
+                let compact_turns: Vec<String> = request
+                    .user_turns
+                    .iter()
+                    .map(|t| compact_math_text(t))
+                    .collect();
+                if let Some(last_compact) = compact_turns.last() {
+                    if let Some(t) = terms.iter().find(|t| last_compact.contains(t.as_str())) {
+                        return Err(format!(
+                            "row {}: exact_text term '{t}' is in the last user turn",
+                            request.id
+                        )
+                        .into());
+                    }
+                }
+                if let Some(f) = forbid
+                    .iter()
+                    .find(|f| compact_turns.iter().any(|u| u.contains(f.as_str())))
+                {
+                    return Err(format!(
+                        "row {}: exact_text forbidden term '{f}' is in a user turn",
+                        request.id
+                    )
+                    .into());
+                }
+            }
             CheckKind::ReplyExact(terms) => {
                 // The whole point of this kind: no recall precondition, so it
                 // validates on a single-turn row. The terms must still be the
@@ -5611,8 +5710,9 @@ mod tests {
                 ("abstain_exact", 32),
                 ("any", 19),
                 ("clarify", 30),
+                ("exact_text", 2),
                 ("one_of", 1),
-                ("reply_exact", 7),
+                ("reply_exact", 5),
                 ("salutation", 6),
                 ("word_count_6", 1),
             ])
@@ -5666,9 +5766,30 @@ mod tests {
             }
         }
 
-        // 3. Negative controls under `v2`: adversarial abstentions still fail every
-        // `abstain_exact` row; non-salutation rows score 0 across all canned/control
-        // constants; only the 6 `salutation` rows accept greeting constants.
+        // 3. Frozen must-fail negative controls (`F7`, 15 rows: id \t user_turn \t reply),
+        // including the 6 wrong answers on `heldout-092`, `heldout-122`, and `heldout-125`.
+        let neg_text = include_str!("../../fixtures/reply-panel-negative-controls-v2.tsv");
+        let mut neg_count = 0usize;
+        for (line_no, line) in neg_text.lines().enumerate() {
+            if line.trim().is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let fields: Vec<&str> = line.split('\t').collect();
+            assert_eq!(fields.len(), 3, "negative control line {}", line_no + 1);
+            let (id, user_turn, reply) = (fields[0], fields[1], fields[2]);
+            let verdict = checks_v2.verdict(id, &[user_turn], reply);
+            assert_eq!(
+                verdict.status, "FAIL",
+                "negative control unexpectedly passed on {id}: {reply}"
+            );
+            neg_count += 1;
+        }
+        assert_eq!(neg_count, 15);
+
+        // Adversarial abstentions still fail every `abstain_exact` row;
+        // non-salutation rows score 0 across all canned/control constants;
+        // 12 of 13 canned replies score 0/96, while the 1 canned greeting
+        // ("Hello! How can I help you today?") scores 6/96 (only the 6 `salutation` rows).
         for adv in ADVERSARIAL_ABSTENTIONS {
             for (id, check) in &reply_checks_v2 {
                 if check.kind == CheckKind::AbstainExact {
@@ -5680,31 +5801,6 @@ mod tests {
                 }
             }
         }
-        // Specific negative checks for the newly added `F6` rows (`heldout-092`, `heldout-173`).
-        assert_eq!(
-            checks_v2.of(
-                "heldout-092",
-                &["Answer with one of the following options: [response_options] My answer is yes. My answer is no. My answer is maybe. Is the sky blue?"],
-                "Yes, the sky is blue."
-            ),
-            Some(false)
-        );
-        assert_eq!(
-            checks_v2.of(
-                "heldout-173",
-                &["Create a story using only six words."],
-                "Once upon a time a girl played."
-            ),
-            Some(false)
-        );
-        assert_eq!(
-            checks_v2.of(
-                "heldout-173",
-                &["Create a story using only six words."],
-                "I will definitely remember that now."
-            ),
-            Some(false)
-        );
 
         let parse_lines = |text: &str| -> Vec<String> {
             text.lines()
@@ -5719,6 +5815,27 @@ mod tests {
         let controls = parse_lines(include_str!(
             "../../../../data/panels/reply-panel-controls.txt"
         ));
+        assert_eq!(canned.len(), 13);
+        let mut canned_zero = 0usize;
+        let mut canned_six = 0usize;
+        for constant in &canned {
+            let mut total_pass = 0usize;
+            for id in reply_checks_v2.keys() {
+                if checks_v2.of(id, &[], constant) == Some(true) {
+                    total_pass += 1;
+                }
+            }
+            if total_pass == 0 {
+                canned_zero += 1;
+            } else if total_pass == 6 && constant == "Hello! How can I help you today?" {
+                canned_six += 1;
+            } else {
+                panic!("unexpected canned score {total_pass}/96 for {constant}");
+            }
+        }
+        assert_eq!(canned_zero, 12);
+        assert_eq!(canned_six, 1);
+
         for constant in canned.iter().chain(&controls) {
             let mut non_salutation_pass = 0usize;
             for (id, check) in &reply_checks_v2 {
