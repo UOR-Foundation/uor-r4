@@ -39,6 +39,12 @@ MD5 `b10ae238b453132123d6c3244da6c278`. The archive excludes the Claude-owned
 release directory and owner record. The recovery receipt and baseline observations
 were posted in [#2029 receipt 6161248831](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6161248831).
 
+Checkpoint 704 was subsequently preserved with the same SHA256 comparison and
+download round-trip verification:
+`icloud:UOR-R4/results/codex/a2-pilot-recovery-0704-20261014.tar`, 3,270,144 bytes,
+MD5 `0a76a6cd54537540db3d7783e0f536bd`. This is another immutable recovery
+snapshot; the final diagnostic report remains pending.
+
 Checkpoint-zero P2 records 16 distinct full vector patterns and 16 occupied writer
 cells over 4,096 token identities. P1 records 236 zero-count token identities in
 the scheduled 410-token slice, which accounts for 1,440,407 / 2,425,925 masked

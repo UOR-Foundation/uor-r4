@@ -200,3 +200,9 @@
 {"kind":"heartbeat","lab":"codex","line":"D33 pilot progressing, 218/1640 batches last observed; no failure; results/preservation pending; other scopes HELD","milestone":"M1","schema":1,"ts":"2026-10-14T04:53:12Z"}
 {"kind":"heartbeat","lab":"codex","line":"D33 pilot RUNNING; checkpoint256 iCloud preserved+verified (b10ae238...); 295/1640 last observed; other holds unchanged","milestone":"M1","schema":1,"ts":"2026-10-14T04:58:13Z"}
 {"kind":"heartbeat","lab":"codex","line":"D33 pilot healthy, 372/1640 last observed; checkpoint256 preserved off-pod; final diagnostics pending; other training HELD","milestone":"M1","schema":1,"ts":"2026-10-14T05:02:53Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pilot progressing: 442/1640 batches, 102 accepted updates observed; checkpoint256 preserved; other holds unchanged","milestone":"M1","schema":1,"ts":"2026-10-14T05:06:18Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pilot healthy: 498/1640 last observed; lease renewed through 09:08Z; checkpoint256 preserved; other holds unchanged","milestone":"M1","schema":1,"ts":"2026-10-14T05:10:40Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pilot progressing: 572/1640 batches, 109 accepted updates observed; first attempt; other training HELD","milestone":"M1","schema":1,"ts":"2026-10-14T05:14:27Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pilot RUNNING, 630/1640 last observed; checkpoint256 iCloud verified; final diagnostics pending; other scopes HELD","milestone":"M1","schema":1,"ts":"2026-10-14T05:18:54Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pilot RUNNING, 696/1640 last observed; valid lease; empty-warning tool defect reported to DeepSeek; other scopes HELD","milestone":"M1","schema":1,"ts":"2026-10-14T05:23:05Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pilot RUNNING: 771/1640, 127 accepted updates observed; checkpoint704 cloud round-trip verified; all other training HELD","milestone":"M1","schema":1,"ts":"2026-10-14T05:26:50Z"}
