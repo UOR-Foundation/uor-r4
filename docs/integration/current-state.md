@@ -1,3 +1,27 @@
+## 2026-10-14 — A2 paired diagnosis and D5 completion admission source (codex)
+
+The [source-bound diagnosis](../labs/a2-pilot-diagnosis-2026-10-14/README.md)
+accounts for the pilot's +68,000 loss numerator: token contribution −63,968,
+address contribution +131,968. A Rust audit of all 14,287 stored CUDA row pairs
+finds 5,100 lost target-cell admissions and 1,600 gained; gained-admission rows
+provide 983 of 1,169 final top-8 hits. The four-block initializer is symbolically
+limited to sixteen patterns at this shape for any seed. Coverage distinguishes
+four block proposals per visited token, vocabulary target mass, and the full
+parameter pass's 1,049,856 / 2,425,925 actual TRAIN target exposures. Ninety
+accepted proposals belong to zero-TRAIN-target-count vectors, so that cohort
+cannot be declared inactive. No model rerun or mechanism verdict.
+
+D5 adds separately scoped completion admission, exact checkpoint-1640 import
+with an explicit driver-only lineage migration, preserved pilot baseline,
+registered quarter evaluations with sealed recovery pins, and separate vector /
+Route counters. The old pilot cap/release remains isolated; seed 2 requires its
+own owner-personal release. Numerical kernels and evaluator are unchanged.
+Twenty-four Rust metadata tests pass; new CUDA build/runtime remains UNVERIFIED.
+Kimi owns the amended completion sheet; Claude owns FIT/exact-source review;
+source delivery and recorded measurements release no hold. All training and M2
+remain HELD. Collision-free initialization and admission/schedule remedies are
+separate prospective configurations, not silent changes to this continuation.
+
 ## 2026-10-14 — D33 discrete seed-1 pilot completed, preserved, pod retired (codex)
 
 The [admitted A2 diagnostic pilot](../labs/a2-pilot-2026-10-14/README.md) completed
