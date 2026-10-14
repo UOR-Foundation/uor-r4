@@ -25,6 +25,93 @@ source delivery and recorded measurements release no hold. All training and M2
 remain HELD. Collision-free initialization and admission/schedule remedies are
 separate prospective configurations, not silent changes to this continuation.
 
+## 2026-10-14 — `mistakes show|capture` are Rust; `capture` was refusing its own output (deepseek, tooling)
+
+The [record](../labs/mistakes-write-port-2026-10-14/README.md) carries the twelve comparison cases.
+**`uor-harness mistakes show` AND `uor-harness mistakes capture` ARE RUST, AND THE `mistakes`
+DELEGATION SITE IS GONE: LIVE `delegate_to_python` CALL SITES 3 → 2** (the general fallback and
+`multilab sync-live|migrate-ledger`). `show` reads one lesson body; **`capture` is the writer** — it
+validates the draft against the same rules `mistakes.registry_valid` applies, refuses to overwrite
+without `--force`, writes, reads the file back and removes it if it somehow fails, **so a capture can
+never leave behind a lesson that turns the lab's own `check` red.** **THREE DEFECTS THE COMPARISON
+FOUND, NONE VISIBLE BY READING: (1) `capture` REFUSED EVERY LESSON WITH AN AUTO-GENERATED GUARD** —
+Rust's front-matter reader did not strip quotes, and `build_lesson_text` writes the default guard
+quoted because it contains a colon, **so the guard began with a `"` instead of `none`, failed the guard
+rule, and the command could not write the lesson it had just generated** (fixed by porting
+`core._coerce`'s one relevant case); **(2) the success message was three lines short** — Python also
+prints the severity/class/guard summary, the `read it back` command and the `check --only mistakes`
+line, and the port printed only the write line **because `capture` had been read as far as the write —
+the stdout comparison is what showed it**; **(3) EVERY front-matter value goes through the YAML
+renderer, not only the awkward ones** — wrapping only the punctuated fields meant a title with a space
+was written bare where Python quotes it, a difference in every captured lesson. **AND TWO DEFECTS IN
+THE RULE THE DRAFT IS VALIDATED AGAINST: `mistakes.registry_valid` was missing three checks Python has**
+(`'trigger' needs at least two phrases`, `'paths' is empty`, `'<key>' must be an inline or block
+list`) **and used Rust's debug formatting where Python uses `!r` and tuple reprs**
+(`severity must be one of ('block', 'warn', 'info'), got 'nope'`). **They were invisible because
+Python's registry loader refuses a lesson with a bad id or severity BEFORE the rule runs**, so the
+only way to compare was a lesson that loads and is still wrong: with one, **both implementations now
+report the same eight findings, in the same order, with the same messages.** **Verified on scratch
+checkouts across twelve case groups, comparing stdout, stderr, exit code AND every file in the mistakes
+directory: all match except one message** — with a required flag absent, Python's argparse prints a
+usage block and this port prints `mistakes capture needs --id and --title`, both refusing with exit 2.
+**FOUND WHILE COMPARING, NOT FIXED HERE: `check`'s TEXT RENDERING IS NOT PYTHON'S** — same verdicts,
+different layout (`harness check: …` + `FAIL <rule> [<path>]: <message>` + a trailing hint line there;
+a bare count + `  error <rule> [<path>]` with the message on its own line here), **surfaced only
+because comparing the rule messages required reading both renderings side by side, and the same class
+as the ledger line: identical verdicts, different bytes, invisible to every JSON comparison.**
+**Verified:** fmt and clippy `-D warnings` clean; **445 Rust tests passed, 6 ignored** (was 438);
+`python3 -m unittest discover -s tests/harness -t .` exit 0; **`parity.py` exit 0**; interlock OK —
+1641, baseline 1641; **`check`'s rule-id set on the real tree is 41 = 41 with no new findings from the
+added checks.**
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** **`multilab sync-live|migrate-ledger`**, then **`arena`/`budget`/`panel`** (which removes the
+general fallback), plus the recorded follow-ups: `check`'s text rendering, `status.no_orphan_branches`
+reporting `ok` where Python warns, and the receipt `ts` rendering.
+
+## 2026-10-14 — `team dispatch` is Rust, and diffing the written line found the ledger was the wrong shape (deepseek, tooling)
+
+The [record](../labs/team-dispatch-port-2026-10-14/README.md) carries the comparison table and the
+behaviour copied rather than corrected. **`uor-harness team dispatch` IS RUST AND THE `team`
+DELEGATION SITE IS GONE: `delegate_to_python` SITES 5 → 4.** The command resolves the role, writes ONE
+receipt through `receipts.record` and prints what landed — **the write half is why it stayed delegated:
+`team roster` could be ported by reading, a command that WRITES the shared ledger cannot be.** So
+`receipt::record` came with it: the `event` mapping, the `_NEVER` key list, the empty-value rule,
+redaction, lab attribution, the unattributed warning, and the `unknown-<month>` shard for a record with
+no lab. **THE DEFECT THE COMPARISON FOUND: `Receipt::to_line` DOCUMENTED ITSELF AS "matching
+`json.dumps(record, ensure_ascii=False, sort_keys=True)`" AND WROTE COMPACT JSON** — `{"count":2}`
+where Python writes `{"count": 2}`. **Every reader parses, so nothing failed, and this module's own
+header says two implementations writing one file differently "would make every ledger change
+unreadable": it took the first comparison of a WRITTEN line against Python's to see it, because
+reading a line back is not comparing it.** Fixed with `py_dumps_sorted` (Python's default separators,
+sorted keys, `ensure_ascii=False` for the ledger), while `--json` keeps the OTHER Python default
+(`ensure_ascii=True`, insertion order) through `Recorded::to_pretty`, which reuses the `ensure_ascii`
+the roster unit built. **AND THE TEST THAT SHOULD HAVE CAUGHT IT COULD NOT FAIL:**
+`a_receipt_line_is_sorted_json` split the line on `","` — which the compact form happened to produce and
+which Python's separators do not — so after the fix it would have passed on an empty key list; it now
+asserts the EXACT LINE. **Verified by running BOTH implementations against scratch checkouts and
+comparing stdout, stderr, exit code AND the written shard line on six cases** (full flags, minimal,
+`--count 0`, `--json`, no `UOR_LAB`, whitespace task): **all MATCH**, and the error paths agree (unknown
+role is byte-identical on both sides, exit 2; `--count xyz`/`--state bogus` refuse on both, exit 2).
+**ONE DIVERGENCE REMAINS AND IT IS DELIBERATE: a receipt's `ts` is `…Z` in Rust and a local offset in
+Python — the same instant, and `now_rfc3339`'s own comment already records the decision that both are
+valid RFC3339 and the reader parses either.** It is stated here because this unit is the first to
+compare the written bytes; the comparison asserts the two forms as instants rather than assuming it.
+**Behaviour copied rather than corrected:** `--count 0` becomes 1 (Python's `args.count or 1`); a string
+is redacted but a LIST is not redacted element by element (Python tests `isinstance(value, str)`); no lab
+identity WARNS and preserves the receipt rather than refusing it; `--scope` takes several values, so only
+its first is consumed by the flag parser. **Verified:** fmt and clippy `-D warnings` clean; **438 Rust
+tests passed, 6 ignored** (was 432); `python3 -m unittest discover -s tests/harness -t .` exit 0;
+**`parity.py` exit 0** including *Rust-written receipt read back by Python: ok*; interlock OK — 1641,
+baseline 1641.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+**Next:** the four remaining sites — `mistakes show|capture`, `multilab sync-live|migrate-ledger`, and
+`arena`/`budget`/`panel` behind the general fallback — plus the recorded `check` defects
+(`status.no_orphan_branches` reports `ok` where Python warns).
+
 ## 2026-10-14 — `check` read its arguments as a rule filter, so `--repo` ran ZERO rules (deepseek, tooling)
 
 The [record](../labs/check-flags-2026-10-14/README.md) carries the matrix and the two further findings.

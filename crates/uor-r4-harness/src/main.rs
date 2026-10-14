@@ -86,7 +86,7 @@ const SUBCOMMAND_FLAGS: [&str; 33] = [
 ];
 
 /// The subset that takes a value, so the value is not mistaken for a command.
-const SUBCOMMAND_VALUE_FLAGS: [&str; 35] = [
+const SUBCOMMAND_VALUE_FLAGS: [&str; 49] = [
     "--kind",
     "--milestone",
     "-m",
@@ -122,6 +122,22 @@ const SUBCOMMAND_VALUE_FLAGS: [&str; 35] = [
     "--body-file",
     "--body",
     "--action",
+    "--task",
+    "--state",
+    "--scope",
+    // `mistakes capture`. The four `nargs="*"` flags take several values; only the first is
+    // consumed here and `flag_all_values` collects the rest from the argument list.
+    "--id",
+    "--title",
+    "--severity",
+    "--class",
+    "--trigger",
+    "--paths",
+    "--milestones",
+    "--guard",
+    "--evidence",
+    "--symptom",
+    "--lesson",
 ];
 
 const USAGE: &str = "\
@@ -569,9 +585,150 @@ fn cmd_mistakes(repo: &Path, args: &[String], json: bool) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        // `capture` writes a lesson file plus a guard; `show` reads one body. Both are a bigger
-        // surface than the query path and say so individually.
-        "show" | "capture" => delegate_to_python(repo, "mistakes", args),
+        // `show` reads one lesson body; `capture` writes one. **`capture` is the writer, and the
+        // reason this pair stayed delegated: it must never write a file that
+        // `mistakes.registry_valid` would reject**, so the draft is validated before the write and
+        // the written file is read back and removed if it somehow fails.
+        "show" => {
+            let key = action_word_after(args, &["show"]);
+            let lessons = mistakes::load(&paths);
+            let found = if key.is_empty() {
+                None
+            } else {
+                mistakes::find_mistake(&lessons, &key)
+            };
+            // `args.id` is `None` when absent, and the message renders it - so a missing id says
+            // `unknown mistake None` rather than naming an argument, exactly as Python does.
+            let Some(m) = found else {
+                let shown = if key.is_empty() {
+                    "None".to_string()
+                } else {
+                    uor_r4_harness::prgates::py_repr_public(&key)
+                };
+                eprintln!("unknown mistake {shown}");
+                return ExitCode::from(2);
+            };
+            match std::fs::read_to_string(&m.path) {
+                Ok(text) => {
+                    // Python writes through `emit`, which adds the newline only when it is missing.
+                    if text.ends_with('\n') {
+                        print!("{text}");
+                    } else {
+                        println!("{text}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("uor-harness mistakes show: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        "capture" => {
+            let id = flag_value(args, "--id")
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let title = flag_value(args, "--title")
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            // argparse also requires both, so this is reachable only through the Rust parser,
+            // which is lenient; the refusal and the exit code are Python's either way.
+            if id.is_empty() || title.is_empty() {
+                eprintln!("mistakes capture needs --id and --title");
+                return ExitCode::from(2);
+            }
+            if !mistakes::kebab_case_id(&id) {
+                eprintln!(
+                    "--id {} must be kebab-case (a-z, 0-9, '-')",
+                    uor_r4_harness::prgates::py_repr_public(&id)
+                );
+                return ExitCode::from(2);
+            }
+            let severity = flag_value(args, "--severity").unwrap_or_else(|| "warn".to_string());
+            let class = flag_value(args, "--class").unwrap_or_else(|| "process".to_string());
+            if !mistakes::SEVERITIES.contains(&severity.as_str()) {
+                eprintln!(
+                    "--severity must be one of {}",
+                    mistakes::py_tuple(&mistakes::SEVERITIES)
+                );
+                return ExitCode::from(2);
+            }
+            if !mistakes::CLASSES.contains(&class.as_str()) {
+                eprintln!(
+                    "--class must be one of {}",
+                    mistakes::py_tuple(&mistakes::CLASSES)
+                );
+                return ExitCode::from(2);
+            }
+            let target = mistakes::dir(&paths).join(format!("{id}.md"));
+            if target.exists() && !args.iter().any(|a| a == "--force") {
+                eprintln!("{} exists; pass --force to overwrite it", target.display());
+                return ExitCode::from(1);
+            }
+            let draft = mistakes::LessonDraft {
+                id: id.clone(),
+                title,
+                severity: severity.clone(),
+                class: class.clone(),
+                trigger: flag_all_values(args, "--trigger"),
+                paths: flag_all_values(args, "--paths"),
+                milestones: flag_all_values(args, "--milestones"),
+                mechanism: flag_value(args, "--mechanism").unwrap_or_default(),
+                guard: flag_value(args, "--guard").unwrap_or_default(),
+                evidence: flag_all_values(args, "--evidence"),
+                symptom: flag_value(args, "--symptom").unwrap_or_default(),
+                lesson: flag_value(args, "--lesson").unwrap_or_default(),
+                ..Default::default()
+            };
+            let text = uor_r4_harness::prgates::redact_public(&mistakes::build_lesson_text(&draft));
+            let (problems, warnings) = mistakes::draft_problems(&paths, &target, &text);
+            if !problems.is_empty() {
+                eprintln!(
+                    "refusing to write {}: the draft is not a valid lesson",
+                    target.display()
+                );
+                for problem in &problems {
+                    eprintln!("  {problem}");
+                }
+                return ExitCode::from(1);
+            }
+            for warning in &warnings {
+                eprintln!("note: {warning}");
+            }
+            let existed = target.exists();
+            if let Some(parent) = target.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(e) = std::fs::write(&target, &text) {
+                eprintln!("uor-harness mistakes capture: {e}");
+                return ExitCode::from(1);
+            }
+            // Read back what was written: a capture must not leave behind a file the registry
+            // rejects, and if it somehow did, the file is removed rather than left as evidence.
+            let check = mistakes::parse(&id, &text, &target);
+            if let Some(first) = check.errors.first() {
+                let _ = std::fs::remove_file(&target);
+                eprintln!("wrote and removed {}: {first}", target.display());
+                return ExitCode::from(1);
+            }
+            println!(
+                "{} {}",
+                if existed { "overwrote" } else { "wrote" },
+                target.display()
+            );
+            // **Three more lines, and they are the command's own guidance.** They were missed on
+            // the first pass because the function was read only as far as the write; the
+            // comparison of stdout is what showed the difference.
+            println!(
+                "  severity {severity}, class {class}, guard {}",
+                check.guard
+            );
+            println!("  read it back: python3 scripts/harness/cli.py mistakes show {id}");
+            println!("  check: python3 scripts/harness/cli.py check --only mistakes");
+            ExitCode::SUCCESS
+        }
         "" => {
             eprintln!("uor-harness mistakes: which action? list, find, show, capture");
             ExitCode::from(2)
@@ -758,6 +915,32 @@ fn action_word_after(args: &[String], markers: &[&str]) -> String {
         return a.clone();
     }
     String::new()
+}
+
+/// Every value of a flag that takes several (`--scope a b c`), stopping at the next flag.
+///
+/// `flag_values` cannot be used for this: it pairs a flag with exactly one value, and Python's
+/// `--scope` is `nargs="*"`. The top-level parser consumes the first value and the rest arrive as
+/// bare words, so they have to be collected here rather than lost.
+fn flag_all_values(args: &[String], name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == name {
+            let mut j = i + 1;
+            while let Some(v) = args.get(j) {
+                if v.starts_with('-') {
+                    break;
+                }
+                out.push(v.clone());
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    out
 }
 
 /// Every value given to a repeatable flag.
@@ -1593,7 +1776,127 @@ fn cmd_team(repo: &Path, args: &[String], json: bool) -> ExitCode {
                 ExitCode::from(1)
             }
         },
-        "dispatch" => delegate_to_python(repo, "team", args),
+        // dispatch records a real dispatch: it resolves the role, writes ONE receipt through
+        // receipts.record and prints what landed. The write half is the point of the command, so
+        // it is why this stayed delegated until record existed.
+        "dispatch" => {
+            let roles = match uor_r4_harness::registries::load_roles(&paths) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("uor-harness team dispatch: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            // role is positional and optional. Python prints None when it is absent, because the
+            // message renders the parsed value with !r rather than naming a missing argument.
+            let key = action_word_after(args, &["dispatch"]);
+            let role = if key.is_empty() {
+                None
+            } else {
+                uor_r4_harness::registries::find_role(&roles, &key)
+            };
+            let Some(role) = role else {
+                let shown = if key.is_empty() {
+                    "None".to_string()
+                } else {
+                    uor_r4_harness::prgates::py_repr_public(&key)
+                };
+                eprintln!("unknown role {shown}; try: uor-harness team roster");
+                return ExitCode::from(2);
+            };
+            let milestone = flag_value(args, "--milestone")
+                .or_else(|| flag_value(args, "-m"))
+                .unwrap_or_default();
+            let task = flag_value(args, "--task").unwrap_or_default();
+            let scope = flag_all_values(args, "--scope");
+            // Python's args.count or 1: a count of ZERO becomes one, because it tests truthiness.
+            let count = match flag_value(args, "--count") {
+                None => 1i64,
+                Some(v) => match v.trim().parse::<i64>() {
+                    Ok(0) => 1,
+                    Ok(n) => n,
+                    Err(_) => {
+                        eprintln!("uor-harness: argument --count: invalid int value: {v:?}");
+                        return ExitCode::from(2);
+                    }
+                },
+            };
+            let state = flag_value(args, "--state").unwrap_or_else(|| "dispatched".to_string());
+            if !["dispatched", "running", "returned", "failed"].contains(&state.as_str()) {
+                eprintln!(
+                    "uor-harness: argument --state: invalid choice: {state:?} (choose from \
+                     'dispatched', 'running', 'returned', 'failed')"
+                );
+                return ExitCode::from(2);
+            }
+            let route = role.route();
+            let fields: Vec<(&str, serde_json::Value)> = vec![
+                ("role", serde_json::Value::String(role.id.clone())),
+                ("route", serde_json::Value::String(route.clone())),
+                ("milestone", serde_json::Value::String(milestone)),
+                ("task", serde_json::Value::String(task)),
+                (
+                    "scope",
+                    serde_json::Value::Array(
+                        scope.into_iter().map(serde_json::Value::String).collect(),
+                    ),
+                ),
+                ("count", serde_json::Value::from(count)),
+                ("state", serde_json::Value::String(state)),
+            ];
+            let recorded = match uor_r4_harness::receipt::record(
+                &paths,
+                "team",
+                fields,
+                std::env::var("UOR_LAB").ok().as_deref(),
+            ) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("uor-harness: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            if recorded.unattributed {
+                // Python warns and PRESERVES the receipt; refusing would lose the record rather than
+                // surface the gap, which is the whole point of the warning.
+                eprintln!(
+                    "uor-harness: WARNING - no lab identity, so this record is attributed to nobody and no\n\
+                     \x20            other lab can see who did it. Fix it for this session with:\n\
+                     \x20            export UOR_LAB=<kimi|claude|codex|deepseek>"
+                );
+            }
+            let ts = recorded.get_str("ts");
+            if json {
+                println!("{}", recorded.to_pretty());
+            } else {
+                println!(
+                    "dispatched {} -> {route} (count {}) at {ts}",
+                    role.id,
+                    recorded
+                        .get("count")
+                        .and_then(serde_json::Value::as_i64)
+                        .unwrap_or(count)
+                );
+                let task = recorded.get_str("task");
+                if !task.is_empty() {
+                    println!("  task: {task}");
+                }
+                if let Some(items) = recorded.get("scope").and_then(serde_json::Value::as_array) {
+                    let rendered: Vec<&str> =
+                        items.iter().filter_map(serde_json::Value::as_str).collect();
+                    if !rendered.is_empty() {
+                        println!("  write scope: {}", rendered.join(", "));
+                    }
+                }
+                // Python prints the UNSHARDED month file here: the shard a line lands in is named
+                // after the lab, while this is the path a reader opens.
+                println!(
+                    "  receipt: docs/harness/ledger/{}.jsonl",
+                    &ts[..7.min(ts.len())]
+                );
+            }
+            ExitCode::SUCCESS
+        }
         "" => {
             eprintln!("uor-harness team: which action? claim, release, claims, roster, dispatch");
             ExitCode::from(2)
