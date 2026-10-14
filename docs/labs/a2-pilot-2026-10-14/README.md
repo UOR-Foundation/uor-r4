@@ -45,6 +45,19 @@ download round-trip verification:
 MD5 `0a76a6cd54537540db3d7783e0f536bd`. This is another immutable recovery
 snapshot; the final diagnostic report remains pending.
 
+Checkpoint 1,152 was also preserved and download-verified:
+`icloud:UOR-R4/results/codex/a2-pilot-recovery-1152-20261014.tar`, 3,270,144 bytes,
+MD5 `11635c5cbe9c88a4b1cf596562522fa6`.
+
+The [receipt auditor](receipt-audit/src/main.rs) checks recorded GPU receipts
+using integer counters and serialized metadata only. It verifies dose, cursor
+continuity, strict improvement for accepted moves, baseline/reference stability,
+and the final evaluated snapshot's binding to the saved checkpoint. Snapshot
+serialization order is explicit: the checkpoint uses a sorted JSON Value, while
+the evaluator hashes the typed Snapshot; both representations are checked.
+The checkpoint-zero serialization check passes; the completed-attempt check is
+pending the final report. No model operation runs in this auditor.
+
 Checkpoint-zero P2 records 16 distinct full vector patterns and 16 occupied writer
 cells over 4,096 token identities. P1 records 236 zero-count token identities in
 the scheduled 410-token slice, which accounts for 1,440,407 / 2,425,925 masked
