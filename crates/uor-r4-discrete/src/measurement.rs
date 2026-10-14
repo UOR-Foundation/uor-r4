@@ -1,7 +1,9 @@
 //! Integer wall-clock observations of the synchronized native GPU API.
 //! No corpus, optimizer, apply, floating timing conversion or CPU model.
 use crate::{
-    device::Device, metadata::BinderPlan, Error, Identity, Parameter, ReadSpec, Result, Spec,
+    device::{Device, Snapshot},
+    metadata::BinderPlan,
+    Error, Identity, Parameter, ReadSpec, Result, Spec,
 };
 use serde_json::{json, Value};
 use std::{path::Path, time::Instant};
@@ -41,6 +43,15 @@ pub fn observe<T>(
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
+}
+
+fn setup_snapshot(records: &mut Vec<Value>, model: &Device, name: &str) -> Result<Snapshot> {
+    let (outcome, setup_elapsed_ns) = timed(|| model.snapshot());
+    records.push(json!({"record_kind":"untimed_setup_event","operation":name,
+        "setup_elapsed_ns":setup_elapsed_ns,"status":if outcome.is_ok(){"PASS"}else{"FAILED"},
+        "error":outcome.as_ref().err().map(ToString::to_string),
+        "timing_scope":"setup/storage outside measured GPU API samples; no snapshot parameters in report"}));
+    outcome
 }
 
 fn windows() -> Vec<Vec<Identity>> {
@@ -103,7 +114,11 @@ fn mode_run(records: &mut Vec<Value>, name: &str, read_spec: ReadSpec) -> Result
             Ok(model)
         }
     })?;
-    let before = model.snapshot()?;
+    if matches!(read_spec, ReadSpec::Flock { .. }) {
+        records.push(json!({"record_kind":"untimed_setup_event","operation":"flock_authored_gate_fixture_snapshot",
+            "status":"PASS","timing_scope":"included in combined flock_load_jit_init setup, not operation samples"}));
+    }
+    let before = setup_snapshot(records, &model, &format!("{name}_snapshot_before"))?;
     let windows = windows();
     let targets: Vec<u32> = (0..ROWS)
         .map(|row| (row as u32 + SHAPE.context) % SHAPE.vocabulary)
@@ -182,7 +197,7 @@ fn mode_run(records: &mut Vec<Value>, name: &str, read_spec: ReadSpec) -> Result
             "resources_after_evaluation":model.resource_metadata()?
         }));
     }
-    let after = model.snapshot()?;
+    let after = setup_snapshot(records, &model, &format!("{name}_snapshot_after"))?;
     if before.table != after.table
         || before.routes != after.routes
         || before.gates != after.gates
@@ -195,6 +210,11 @@ fn mode_run(records: &mut Vec<Value>, name: &str, read_spec: ReadSpec) -> Result
     let stages = BinderPlan::new(SHAPE.context as usize)?.stages() as u64;
     let vector_parameters = u64::from(SHAPE.vocabulary) * u64::from(SHAPE.blocks);
     let read_parameters = u64::from(SHAPE.blocks) * stages;
+    if vector_parameters != 16384 || read_parameters != 20 {
+        return Err(invalid(
+            "cost-shape parameter inventory differs from pinned VB16384/BS20",
+        ));
+    }
     let mut summaries = serde_json::Map::new();
     let physical_tokens = ROWS as u128 * u128::from(SHAPE.context);
     summaries.insert(
@@ -246,8 +266,15 @@ fn mode_run(records: &mut Vec<Value>, name: &str, read_spec: ReadSpec) -> Result
     let read_ns = summaries[read_name]["median_ns"]
         .as_u64()
         .ok_or_else(|| invalid("missing read timing"))?;
-    let projected_ns = u128::from(vector_parameters) * u128::from(vector_ns)
-        + u128::from(read_parameters) * u128::from(read_ns);
+    let vector_pass_ns = u128::from(vector_parameters)
+        .checked_mul(u128::from(vector_ns))
+        .ok_or_else(|| invalid("vector parameter-pass nanoseconds overflow"))?;
+    let read_pass_ns = u128::from(read_parameters)
+        .checked_mul(u128::from(read_ns))
+        .ok_or_else(|| invalid("read parameter-pass nanoseconds overflow"))?;
+    let projected_ns = vector_pass_ns
+        .checked_add(read_pass_ns)
+        .ok_or_else(|| invalid("total parameter-pass nanoseconds overflow"))?;
     Ok(
         json!({"spec":SHAPE,"read_spec":model.read_spec(),"active_flock_gates":matches!(read_spec,ReadSpec::Flock {..}),"binding":{
         "seed":model.binding().seed,"geometry_sha256":model.binding().geometry_sha256,

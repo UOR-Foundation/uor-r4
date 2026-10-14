@@ -1,4 +1,5 @@
 //! Corpus identity and causal-window metadata only. No scores/counts/ranks on host.
+#![forbid(unsafe_code)]
 use crate::{Error, Identity, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

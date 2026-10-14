@@ -85,3 +85,15 @@ Raw timings, integer min/median and floor-divided tokens/s will support projecti
 of a parameter pass and bounded dose. A projection is not an executed corpus sweep
 or measured training throughput. A slow configuration informs implementation/dose;
 it cannot rule out a mechanism. No learning or language-quality result is claimed.
+
+## Delivery instrumentation repair
+
+CI after UTC midnight exposed a hard-coded October13 timestamp in both live Rust
+status comparisons in `scripts/harness/parity.py`, while Python status used the
+current date. The receipts check compared different days, not different readings
+of the same data. The bounded fix supplies a current timezone-aware local timestamp
+in both comparisons and preserves every assertion. DeepSeek/Kimi were notified on
+#2028 before the repair. This existing tooling change adds no model dependency and
+does not change the frozen CUDA source. The initial missing standard prep headings
+were also corrected; the harness now reports this finite sheet complete/PENDING,
+which correctly blocks numerical execution until prospective FIT.

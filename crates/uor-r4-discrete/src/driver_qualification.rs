@@ -84,6 +84,8 @@ fn isolated_apply_boundary(context: &mut Context<'_>) -> Result<()> {
     let snapshot = literal_fixture(2)?;
     let mut model = Device::from_snapshot(snapshot.clone(), 0)?;
     let mut foreign = Device::from_snapshot(snapshot, 0)?;
+    let foreign_before =
+        serde_json::to_value(foreign.snapshot()?).map_err(|e| invalid(e.to_string()))?;
     let input = model.carry(&[id(1, 0)])?;
     let before = model.snapshot()?;
     let proposal = model.propose(&input, &[0], Parameter::VectorBlock(0))?;
@@ -100,18 +102,23 @@ fn isolated_apply_boundary(context: &mut Context<'_>) -> Result<()> {
         "proposal belongs to another model/source/geometry",
         "foreign apply",
     )?;
-    require(foreign.epoch()? == 0, "foreign refusal changed epoch")?;
+    require(
+        foreign.epoch()? == 0
+            && foreign_before
+                == serde_json::to_value(foreign.snapshot()?).map_err(|e| invalid(e.to_string()))?,
+        "foreign refusal changed full snapshot",
+    )?;
     model.synchronize()?;
-    let applied =
-        crate::measurement::observe(&mut context.timings, "tiny_fixture_apply", 1, || {
-            context.apply_calls += 1;
-            let applied = model.apply(&proposal)?;
-            if applied {
-                context.applied_updates += 1;
-            }
-            model.synchronize()?;
-            Ok(applied)
-        })?;
+    // Move only the receipt buffer aside so the timed call uses the same
+    // bounded apply helper as every other fixture call, without aliasing it.
+    let mut timings = std::mem::take(&mut context.timings);
+    let observed = crate::measurement::observe(&mut timings, "tiny_fixture_apply", 1, || {
+        let applied = apply(context, &mut model, &proposal)?;
+        model.synchronize()?;
+        Ok(applied)
+    });
+    context.timings = timings;
+    let applied = observed?;
     require(
         applied && model.epoch()? == 1,
         "improving update did not advance exactly one epoch",
@@ -151,8 +158,9 @@ fn isolated_apply_boundary(context: &mut Context<'_>) -> Result<()> {
         noop_observed.candidate == 0 && noop_observed.before == 544 && noop_observed.after == 544,
         "one-leaf route no-improvement did not select CURRENT",
     )?;
+    let losses = noop.candidate_losses()?;
     require(
-        noop.candidate_losses()?.iter().all(|&loss| loss == 544),
+        losses.len() == 16 && losses.iter().all(|&loss| loss == 544),
         "nonidentity equal-loss candidates were not actually scored",
     )?;
     require(

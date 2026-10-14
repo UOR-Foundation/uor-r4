@@ -1,5 +1,6 @@
 //! Deterministic corpus/coordinate driver. Corpus commits require an unissued capability.
 //! Receipt/cursor arithmetic is metadata; every model evaluation and proposal is CUDA.
+#![forbid(unsafe_code)]
 use crate::{
     corpus::{
         self, BosIdentity, CorpusBatch, CorpusBinding, CorpusSource, FilePin, PreparedCorpus, Split,

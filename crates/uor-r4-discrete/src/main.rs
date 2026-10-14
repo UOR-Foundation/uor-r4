@@ -54,7 +54,11 @@ fn device_command(args: &[String]) -> Result<()> {
             config.validate()?;
             report_command(&args[3],|| {
                 let driver=uor_r4_discrete::training::PreparedDriver::load(config)?;
-                let (model,_cursor)=driver.restore(read_json::<uor_r4_discrete::training::DriverCheckpoint>(&args[2])?,0)?;
+                let checkpoint=read_json::<uor_r4_discrete::training::DriverCheckpoint>(&args[2])?;
+                if checkpoint.cursor.accepted_updates!=0 {
+                    return Err(Error::TrainingHeld);
+                }
+                let (model,_cursor)=driver.restore(checkpoint,0)?;
                 driver.evaluate(&model)
             })
         }

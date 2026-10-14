@@ -1183,7 +1183,7 @@ impl Device {
 
     /// Future authorized commit path. Corpus-training CLI remains held;
     /// finite proposal qualification must not call this method.
-    pub fn apply(&mut self, proposal: &Proposal) -> Result<bool> {
+    pub(crate) fn apply(&mut self, proposal: &Proposal) -> Result<bool> {
         let (kind, index) = self.parameter(proposal.parameter)?;
         if proposal.binding != self.binding {
             return Err(invalid("proposal belongs to another model/source/geometry"));
