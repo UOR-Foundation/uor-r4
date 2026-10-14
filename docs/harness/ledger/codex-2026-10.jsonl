@@ -185,3 +185,10 @@
 {"kind":"heartbeat","lab":"codex","line":"C1/C2 implemented and reviewed; qualifying admission CUDA source; training/M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T03:10:20Z"}
 {"kind":"heartbeat","lab":"codex","line":"Corrected head35a48f586 built; artifacts pinned; starting FIT finite controls only; training/M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T03:13:19Z"}
 {"kind":"heartbeat","lab":"codex","line":"25/25 finite CUDA PASS;18 metadata PASS; archive verified; teardown and protected delivery; D4/M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T03:17:12Z"}
+{"kind":"heartbeat","lab":"codex","line":"Qualification complete25/25; source35a48f586 unchanged at82fb14d12; required checks green; protected merge; D4/M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T03:21:49Z"}
+{"kind":"heartbeat","lab":"codex","line":"MERGED2421 b44b9de33 verified;25CUDA+18metadata PASS; poddeleted; Kimi/Claude handoff posted; D4/M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T03:25:46Z"}
+{"kind":"heartbeat","lab":"codex","line":"MERGED2421 b44b9de33;25CUDA+18metadata PASS; worktree/branch cleared; poddeleted; Kimi/Claude handoff live; D4/M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T03:27:52Z"}
+{"kind":"heartbeat","lab":"codex","line":"MERGED2421 b44b9de33 verified; Claude APPROVE6160178151;25CUDA+18metadata PASS; artifacts preserved and own workspace/pod cleared; Kimi held plan next; D4/M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T03:29:08Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pilot staging: qualified binary identity and delegated tooling build; awaiting Claude release; M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T04:22:44Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 pod vast55864069 created; staging qualified binary/data and metadata release build; no model compute, no release","milestone":"M1","schema":1,"ts":"2026-10-14T04:24:49Z"}
+{"kind":"heartbeat","lab":"codex","line":"D33 READY: exact config/lineage match; pod55864069 staged; Claude delegated release command posted; await receipt before1640pilot; M2 HELD","milestone":"M1","schema":1,"ts":"2026-10-14T04:27:17Z"}
