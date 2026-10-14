@@ -2,7 +2,7 @@
 
 - Date: 2026-10-13. Milestone: M1 #2029, learning/output interface #2032.
 - Scope: D1 driver/evaluator/update-boundary construction and D2 measured operation cost. This is not the corpus-training sheet.
-- Executable source: `9179a69dcb2c9645416e788611ed3dbb7edea0b2`, crate tree `685927e93bc35ddfd95b690d2fb555f9390be915`, [PR #2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), based on main `1ef7ef415`. Release binary/PTX/geometry hashes are PENDING build and must be frozen before execution. No prior executable qualification transfers to the new evaluator or apply controls. Later documentation-only pins do not change this executable source.
+- Executable source: `9179a69dcb2c9645416e788611ed3dbb7edea0b2`, crate tree `685927e93bc35ddfd95b690d2fb555f9390be915`, [PR #2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), based on main `1ef7ef415`. Release binary/PTX/geometry hashes are frozen below before execution. No prior executable qualification transfers to the new evaluator or apply controls. Later documentation-only pins do not change this executable source.
 - Brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md).
 - Authority: D23–D32 and R12–R14. Integer-only GPU model and reference arithmetic; no normalized exponential, dense contraction, floating model/instrument, CPU model/reference or NVRTC.
 - Training and M2 remain **HELD**. Owner-directed D1/D2 development includes the disposable finite transition qualification below, subject to prospective exact-head Claude FIT and root's scoped pod admission. FIT alone releases no owner hold. No corpus, optimizer, language evaluation or trained checkpoint is admitted.
@@ -96,7 +96,7 @@ Any later sweep/dose/dollar projection must bind its actual parameter schedule, 
 4. Execute the exact finite controls and separate no-update cost measurement once. Preserve exclusive JSON reports, stdout/stderr/exit codes and partial records. Any CUDA fault stops subsequent launches.
 5. Preserve all setup/build attempts and exact source/artifact identities, charge cumulative provider/build/control/preservation time, and verify archive round-trip before pod deletion. Preserve peer work. No checkpoint may be promoted as a trained result.
 
-At most one owned admitted pod, within the all-lab limit of4 and$8/h. Build-only pod `vast-55833746`, $0.908/h, is provisioning; root records actual resource/driver/toolchain admission before execution. Setup/build and measurement wall/cost projections are **UNMEASURED**. The twelve timed plus four warm-up production-shape proposals may dominate this finite slice; they resolve D2's training-dose feasibility and do not train. A healthy run is not cancelled because a self-set estimate expires; actual hard stops are owner caps, disk floor, failed/unsafe CUDA and source/contract mismatch.
+At most one owned admitted pod, within the all-lab limit of4 and$8/h. Pod `vast-55833746`, $0.908/h, completed setup and release compilation; numerical execution remains NOT_RUN pending FIT. Build timing is recorded above; operation cost remains **UNMEASURED**. The twelve timed plus four warm-up production-shape proposals may dominate this finite slice; they resolve D2's training-dose feasibility and do not train. A healthy run is not cancelled because a self-set estimate expires; actual hard stops are owner caps, disk floor, failed/unsafe CUDA and source/contract mismatch.
 
 ## Stop rule
 
@@ -118,7 +118,7 @@ two-seed learning comparison, fresh-transfer KEEP or mechanism rejection follows
 ## R12 author answers, for independent review
 
 1. **Quantity:** exact native update/epoch/refusal behavior, top8 and masked TRAIN reference/evaluator correctness, seed/schedule/resume identity, and synchronized API cost at a named nontraining shape.
-2. **Computable:** literal integer fixtures and GPU operations at the final integrated source; metadata coverage is host-only. Source/API/build pins are PENDING; prior qualification is not substituted.
+2. **Computable:** literal integer fixtures and GPU operations at the frozen integrated source, which compiles in release mode with the AOT instruction/entry admission; metadata coverage is host-only. Current source/API/build pins are recorded above; prior qualification is not substituted.
 3. **Discriminating instrument:** 640→544 requires the actual codebook update; target7/8 discriminates top8 membership; TRAIN3/4 versus DEV9 distinguishes reference leakage; explicit eligibility prevents zero-rival penalties being labelled learning. Exact snapshots/cursors expose mutation and resume mistakes. Timing observes the real proposed training API, including synchronizations.
 4. **Stage:** this construction/cost slice is necessary before D1/D2 can support Kimi's eventual learning sheet. It authorizes no corpus dose, language/KEEP result, full E8/D11 claim or training-hold release. Instrument/fixture defects are repaired and preserved rather than treated as mechanism negatives.
 
@@ -126,4 +126,4 @@ two-seed learning comparison, fresh-transfer KEEP or mechanism rejection follows
 
 TEST FITNESS: PENDING
 
-All newly registered controls, isolated apply and cost observations are **NOT_RUN**. Final source/control pins and independent review must replace the stated PENDING items before numerical execution.
+All newly registered controls, isolated apply and cost observations are **NOT_RUN**. Independent review must replace the PENDING verdict before numerical execution.
