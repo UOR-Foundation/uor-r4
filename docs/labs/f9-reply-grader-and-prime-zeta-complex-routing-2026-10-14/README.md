@@ -21,7 +21,7 @@ This integration record documents the completion of the two remaining Antigravit
 2. **Prime-Rank Indexing & Complex-Plane Zeta-Phase Routing Mechanism Specification (`#2029` / `#2032`):**
    - Authored the first-principles mechanism brief in `docs/mechanisms/prime-zeta-complex-routing.md` and indexed it in `docs/mechanisms/README.md`.
    - Generated the formal pre-registration sheet `docs/harness/prep/m1-prime-zeta-complex-routing-2026-10-14.md` under Decision D32 October 14 Addendum ([#2398](https://github.com/UOR-Foundation/uor-r4/pull/2398)) Item 3, formalizing the canonical realification maps $\mathbb{C}^4 \to \mathbb{R}^4$ and $\mathbb{C}^8 \to \mathbb{R}^8$ and defining the exact integer quantization boundary into `PhaseQ29`, `UnitS3Q30`, and $E_8$ anchor roots.
-   - Set initial status to `TEST FITNESS: PENDING` awaiting council review on `#2029` / `#2032` prior to any kernel development or GPU compute.
+   - Incorporates Kimi PM's (`kimi/pm1`) N1–N3 registration amendments (`#2029` comment `6163842973`) at `TEST FITNESS: FIT` (clearing registration only; training and M2 holds remain `HELD`).
 
 3. **Controlled Workspace & Zero-Python Execution:**
    - All work executed strictly inside an isolated worktree at `/Users/casey.allard/uor-r4/.worktrees/antigravity-ag1` on branch `antigravity/ag1-f9-complex-zeta`. The root checkout `/Users/casey.allard/uor-r4` remains completely clean (`git status --short` empty).
@@ -159,8 +159,8 @@ Downstream model computation and learning remain 100% discrete integer / exact C
 ### 4.3 Pre-Registration Sheet Summary
 - File: `docs/harness/prep/m1-prime-zeta-complex-routing-2026-10-14.md`
 - Indexed in: `docs/mechanisms/README.md`
-- Harness verification: `uor-harness prep-check` validated complete with zero missing sections.
-- Pre-registration verdict: `TEST FITNESS: PENDING` awaiting council review on `#2029` / `#2032`.
+- Harness verification: `uor-harness prep-check` validated complete (`FIT`, `complete: yes`, `missing: -`).
+- Pre-registration verdict: `TEST FITNESS: FIT` (conditional FIT by Kimi PM `kimi/pm1` in `#2029` comment `6163842973`, with N1–N3 registration amendments incorporated: N1 matched tangent/normal attribution nulls registered for construction separation and deferred for learned comparison; N2 minimum test power restated for finite construction qualification with D22 training-power rows marked `NOT_APPLICABLE`; N3 base pin refreshed to execution-time `origin/main` `c109b2109d1fdfd80a8cb5bd94d382033f2f8f38` and offline host-only pre-quantization float scope stated explicitly).
 
 ---
 
@@ -173,17 +173,17 @@ All verification commands executed from `/Users/casey.allard/uor-r4/.worktrees/a
 | 1 | `cargo test -p uor-r4-training --bin chat-grade` | `test result: ok. 25 passed; 0 failed; finished in 1.06s` | **PASS** |
 | 2 | `cargo clippy -p uor-r4-training --bin chat-grade -- -D warnings` | 0 warnings, 0 errors | **PASS** |
 | 3 | `(cd data/panels && shasum -a 256 -c MANIFEST.sha256)` | `30/30 OK` (exit code 0) | **PASS** |
-| 4 | `uor-harness prep-check` | `complete: yes`, `missing: -` (exit code 0) | **PASS** |
+| 4 | `uor-harness prep-check` | `FIT`, `complete: yes`, `missing: -` (exit code 0) | **PASS** |
 | 5 | `uor-harness ratchet d23` | `OK: no softmax added. 1641 remaining across 140 files (baseline 1641).` | **PASS** |
 | 6 | `uor-harness ratchet d25` | `OK: no dense matrix product call sites added. 93 remaining across 26 files (baseline 93).` | **PASS** |
 | 7 | `uor-harness lint check` | `OK: PR body compliant.` (exit code 0) | **PASS** |
-| 8 | `UOR_LAB=antigravity uor-harness check` | `All checks passed (55 rules)` (exit code 0) | **PASS** |
+| 8 | `UOR_LAB=antigravity uor-harness check` | `All checks passed` (exit code 0) | **PASS** |
 | 9 | `git status --short` in root checkout `/Users/casey.allard/uor-r4` | Empty output (0 dirty files) | **PASS** |
 
 ---
 
 ## 6. Next Steps
 
-1. Independent auditor verification and review by `teamwork_preview_auditor`.
-2. Council `TEST FITNESS` review on `#2029` / `#2032` for the prime-zeta complex routing pre-registration sheet before any kernel implementation or compute.
-3. Protected pull request submission from branch `antigravity/ag1-f9-complex-zeta`.
+1. One-pass exact-head confirmation by Kimi PM (`kimi/pm1`) on PR #2433.
+2. Protected merge of PR #2433 into `origin/main`, branch/worktree cleanup, and closeout on `#2029`.
+3. Finite construction qualification of prime-zeta codebook non-aliasing and zero-float PTX only after scoped owner authorization; training and M2 holds remain `HELD`.

@@ -20,6 +20,19 @@
   [#2029 6162275408](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6162275408);
   PM acknowledgment
   [6162397952](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6162397952).
+- amendment 1 (2026-10-14): answers Claude's NOT_FIT
+  [#2029 6163425765](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6163425765)
+  — corrects the pilot-slice reading (B1: the visited slice holds the MOST frequent targets,
+  not the rarest), registers the schedule-first attribution step and its named Iterate
+  change (B2), and fixes the batch-range off-by-one. No bar, guard, law, data, evaluator or
+  dose change.
+- amendment 2 (2026-10-14): registers the admission ceiling on the rank bars per Claude's
+  conditional FIT
+  [#2029 6163704400](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6163704400)
+  (item B3) — top-1/top-8 hits bounded by target-cell admitted rows, per-checkpoint reporting
+  of the measure with checkpoint-0 baselines, and writer-admission-first attribution on an
+  admission-limited bar miss. Sheet text only; no bar, guard, law, data, evaluator or dose
+  change.
 
 Training remains HELD by the owner; a FIT verdict on this sheet lifts no hold. The M1
 reply-quality headline remains SUSPENDED under R14. D32 governs: no floating point anywhere
@@ -36,12 +49,20 @@ with the receipt audit PASS. Its readings bound what the completion must and mus
    16→155; occupied writer cells 16→124. A completion dose is not a rescue: there is measured
    first learning to continue.
 2. **The pilot slice is biased by schedule, not by mechanism.** 236 of the 410 visited token
-   identities have zero masked-TRAIN count; the slice holds 1,440,407/2,425,925 masked targets
-   (~59% of mass but the rarest tokens). The remaining 90% of the pass covers every frequent
-   token the count reference scores with. The decisive bars live there; the pilot could not
-   have decided them by construction. No schedule reorder is made here — the parent's
-   frequency-order recommendation stays a named successor, because changing the schedule now
-   would break comparability with the pilot's 236 accepted updates and confound attribution.
+   identities have zero masked-TRAIN count, but the slice also holds the MOST frequent
+   targets: it carries 1,440,407/2,425,925 = 59.4% of masked-TRAIN target mass, and 7 of the
+   count reference's top-8 tokens (1/EOS, 16, 14, 340, 351, 3, 302 — only 435 is outside)
+   lie inside the visited slice. The remaining 14,764 seed-1 batches cover tokens 410..4095
+   (~40.6% of masked-target mass) plus the 20 Route coordinates. Under the registered
+   one-coordinate-per-batch schedule the frequent-token vectors are NOT revisited in this
+   pass: each received its single proposal early, while the rest of the codebook was still
+   at initialization. The bars remain attainable — they are scored on all 14,287 targets,
+   and later moves of other tokens and Routes change the competition around the frozen
+   frequent tokens — but the pilot's rank gains did not come from a rare-token slice, and
+   the expected-gain argument is correspondingly weaker. No schedule reorder is made here —
+   the parent's frequency-order recommendation stays a named successor, because changing
+   the schedule now would break comparability with the pilot's 236 accepted updates and
+   confound attribution.
 3. **The rank-vs-loss divergence is an instrument question, registered, not a verdict.**
    Token hinge sum improved 679,708→671,712 while address hinge sum worsened
    261,824→265,948; the aggregate numerator rose 13,816,032→13,884,032 while every rank
@@ -64,10 +85,12 @@ with the receipt audit PASS. Its readings bound what the completion must and mus
 - **Seed 1: resume from checkpoint 1,640** (SHA256
   `46e8ed5ea0a282bcd8373922d6fa2c8e773b52efce9fe8c1ba2c4b5698ee0440`, preserved in
   `icloud:UOR-R4/results/codex/a2-pilot-complete-20261014.tar`, MD5
-  `fb81eaa335a1d21ca1d05bde9771b3e3`) and complete batches 1,640..16,404 (14,764 batches).
+  `fb81eaa335a1d21ca1d05bde9771b3e3`) and complete batches 1,640..16,403 inclusive (14,764
+  batches; the 16,404-batch pass's last index is 16,403).
   The 236 accepted pilot updates are part of the seed-1 trajectory; restarting seed 1 from
   initialization would waste a measured, admitted, paid-for prefix.
-- **Seed 2: full pass from initialization**, batches 0..16,404, same deterministic schedule
+- **Seed 2: full pass from initialization**, batches 0..16,403 inclusive (16,404 batches),
+  same deterministic schedule
   and corpus order as seed 1 (parent Amendment 1 item 2), `u` measured at its checkpoint 0.
 - **Parameters:** VectorBlock 0..16,383 then Route 0..19 in schedule order. The pilot's Route
   row (attempted 0 / NOT_RUN) becomes a real sensitivity row when the pass reaches it.
@@ -99,14 +122,24 @@ with the receipt audit PASS. Its readings bound what the completion must and mus
 - **Guard (Amendment 2 form):** strict distance-win rate >= max(1%, min(5u, u+5pp)) on both
   seeds, u per seed at checkpoint 0 (seed 1: measured, 105/14,287 ≈ 0.735% → threshold
   ≈ 3.67%). u > 95% → INSTRUMENT-INVALID and bars decide alone; never a negative.
+- **Admission ceiling on the rank bars (B3, registered):** `discrete_evaluate` ranks top-1/top-8
+  only over identities in admitted cells, so top-1 and top-8 hits ≤ target-cell admitted rows,
+  where target-cell admitted rows = admitted_cell_count_sum − address_rival_count_sum (every
+  admitted cell except the target's counts as an address rival). Pilot receipts: baseline
+  114,296 − 108,616 = 5,680; pilot end 114,296 − 112,116 = 2,180 — below bar (ii)'s 4,775 and
+  only just above bar (i)'s 1,941. The bars remain attainable in principle because admission
+  changes as the codebook moves. Target-cell admitted rows are reported at every checkpoint
+  alongside top-1/top-8, with each seed's checkpoint-0 value as its baseline; the receipts
+  already emit both sums, so this needs no code change.
 - **Noise:** Wilson 95% half-width < 0.83 points at n = 14,287; bars wider than noise.
 - **Fresh transfer: UNAVAILABLE / NOT_RUN** (parent Amendment 2 item 2). A KEEP-with-transfer
   claim needs a prospective amendment binding source, sha256, token count and scored count
   >= 200 before it runs.
 - Pilot-observed position for calibration (not a bar): seed-1 at 10% of the pass reads top-1
-  82, top-8 1,169, strict wins 149 vs reference 1,226/4,060 — below bar with 90% of the pass,
-  including every frequent token, unvisited. Nothing about the bar is re-based on this
-  observation.
+  82, top-8 1,169, strict wins 149 vs reference 1,226/4,060 — below bar with 90% of the pass
+  unvisited. The unvisited portion carries ~40.6% of masked-target mass, and the
+  frequent-token vectors already visited are not revisited this pass (§2). Nothing about the
+  bar is re-based on this observation.
 
 ## Data split, dev policy, evaluator — carried over verbatim
 
@@ -135,7 +168,9 @@ as listed in the parent (D21/D22/D23/D24/D26/D28/D29/D31/D32, R12/R13/R14).
    scored decisively.
 7. P1/P2-style reports at every checkpoint: per-kind sensitivity (attempted / any-candidate /
    accepted), distinct full-vector patterns and occupied writer cells, token/address hinge
-   sums and the aggregate numerator, count-reference recomputation check.
+   sums and the aggregate numerator, count-reference recomputation check, and target-cell
+   admitted rows (admitted_cell_count_sum − address_rival_count_sum) with each seed's
+   checkpoint-0 value as its baseline.
 
 ## Minimum test power (D22 §3)
 
@@ -188,7 +223,20 @@ owner decides whether seed 2 proceeds on the seed-1 record.
   transfer clause (prospective amendment first) and open the successor-dose question
   (rung 0b / named successor configurations).
 - **Iterate:** movement above untrained but below bar → same-configuration dose/schedule
-  change only; the pilot's sensitivity and coverage readings guide which.
+  change only; the pilot's sensitivity and coverage readings guide which. **Registered
+  attribution order on any below-bar or below-guard result (B2):** the FIRST attribution
+  step is the schedule, before mechanism — the frequent-token coordinates received one
+  proposal each, early, against an uninitialized codebook, and were never revisited (§2).
+  The matching Iterate change is named now: a **second coordinate pass** or a
+  **frequency-ordered revisit of the top-mass tokens**, as a same-configuration
+  dose/schedule change — so a below-bar result is not read as a configuration verdict when
+  the schedule left 59.4% of the target mass on a single early move. **Registered attribution
+  order on an admission-limited bar miss (B3):** if bar (i) or (ii) is missed while target-cell
+  admitted rows at 100% are below that bar's count, the FIRST attribution — alongside B2's
+  schedule step — is writer admission — the address-objective trade-off — an
+  instrument/configuration step before any mechanism language. The matching named successor is
+  an admission/address-objective configuration for Codex's analysis to specify, NOT adopted
+  here.
 - **Blocker:** instrument or arithmetic fault → repair and re-run (D31); never a negative.
 - **No automatic closure:** R12 attribution order governs; a below-bar result closes this
   configuration only after the attribution chain, and stopping the mechanism needs the owner
@@ -204,11 +252,14 @@ owner decides whether seed 2 proceeds on the seed-1 record.
 2. **Computable now:** yes — every measure is an exact integer comparison; the count
    reference is known; the evaluator is qualified; the pilot demonstrated the full pipeline
    end to end with a receipt-audited PASS.
-3. **Can the instrument beat the bar in principle:** yes — the frequent-token mass the count
-   reference scores with is exactly the mass the remaining 90% of the pass trains on; the
-   pilot's 4–6× rank improvement came from the 10% rarest tokens. If the full dose cannot
-   beat a frequency table by 5pp, that is a real configuration finding (never a mechanism
-   negative, D22).
+3. **Can the instrument beat the bar in principle:** yes — the rank bars are exact integer
+   comparisons scored on all 14,287 targets, and later moves of the remaining tokens and the
+   20 Route coordinates change the competition around the frequent tokens frozen early by
+   the schedule. But the expected-gain argument is weaker than first registered: the
+   remaining pass carries ~40.6% of masked-target mass and never revisits the frequent
+   tokens holding 59.4% of it (§2). If the full dose cannot beat a frequency table by 5pp,
+   that is a real configuration finding (never a mechanism negative, D22) — attributed
+   schedule-first per the registered order in Outcome decisions.
 4. **Should it run at this stage:** yes — the pilot consumed ~5% of the registered cost to
    verify the pipeline, the law's mechanical function, the schedule bias and the guard
    constant; the remaining uncertainty is precisely the one the registered experiment was
@@ -217,4 +268,7 @@ owner decides whether seed 2 proceeds on the seed-1 record.
 
 ## Verdict
 
-TEST FITNESS: PENDING — requested from Claude lab, with Codex source check on D5 when posted.
+TEST FITNESS: FIT (design) — conditional FIT from Claude (#2029 comment 6163704400) with its
+B3 condition registered here as Amendment 2; Claude's one-line confirmation requested. Codex
+source check on D5 when posted. A FIT releases nothing: training remains HELD until D5,
+Claude's exact-source review of it, Kimi's OwnerReleasePlan and the owner's release.
