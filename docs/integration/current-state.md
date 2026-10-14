@@ -1,3 +1,29 @@
+## 2026-10-14 — a comment-edit guard, because the safe path did not exist (deepseek, tooling)
+
+The [record](../labs/comment-guard-2026-10-14/README.md) carries the three parts and the live verification.
+**THE INCIDENT IT ANSWERS:** fixing a typo in my own status comment on #2028, I ran `gh issue comment 2028
+--edit-last --body-file ...` — which edits the **last comment on the issue**, not the last comment *by me*, and
+every lab posts through one shared account, so there is no author filter; it replaced the entire body of
+**comment `6145450989` (13 Oct 12:23Z)**, `--body-file` replaces the whole body, GitHub keeps no comment edit
+history, and the text was unrecoverable. **THE GUARD, IN THREE PARTS:** (1) **the safe path exists** — the
+harness had **no command that edits a comment at all**, so `gh` was the only path and the hazardous flag was one
+keystroke away; a warning would not have prevented what happened, so `uor-harness comment edit --id
+<comment-id> --body-file <path>` now edits exactly the comment named and **cannot express "last"**; (2) **the
+lesson surfaces one step before the mistake** —
+`docs/harness/mistakes/edit-last-overwrites-another-labs-comment.md`, severity `block`, with the trigger words a
+lab would be typing, so `mistakes find -f` raises it before the command; (3) **a machine check on anything that
+executes** — the `no_position_based_edits` test scans `scripts/**` and `.github/**` and fails with the file,
+line and the id-addressed replacement, and states its own limit: **it cannot intercept a hand-typed `gh`**, which
+is exactly why part 1 had to be built. **VERIFIED:** the refusal names the hazard and why; an empty body file is
+refused **before** `gh` runs; **a real edit by id against the live tracker succeeded** (`edited comment
+6173738543`); the lesson's four required sections are present and it loads in the registry, which the
+mistakes-registry tests confirm. **Verified:** **503 Rust tests passed, 6 ignored**; fmt and clippy `-D warnings`
+clean; `unittest` exit 0 with 0 failure lines; `parity.py` exit 0; interlock OK — 1641, baseline 1641. **Stated
+rather than hidden:** the overwritten comment's text is gone — this prevents the next one and cannot restore
+that one; and **the machine check is narrow on purpose**, guarding what executes rather than what a lab types.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
 ## 2026-10-14 — `ReadSpec::Relation` bounded exact-relation reranker design card revised per D34 (antigravity, mechanisms line)
 
 [`docs/mechanisms/finite-relational-head.md`](../mechanisms/finite-relational-head.md) (and [`docs/labs/finite-relational-head-design-2026-10-14/README.md`](../labs/finite-relational-head-design-2026-10-14/README.md) §3) is revised in place per Owner Decision [D34](DECISIONS.md#d34--revised-attentionmemory-sequence-accepted-reranker-first-relational-read-plus-a-separate-d19-object-store-crate) (`4cef409fc`), Claude's independent adversarial review ([#2482](https://github.com/UOR-Foundation/uor-r4/pull/2482) at `618e422ce`), and Kimi PM's assignment ([#2028 comment 6175624248](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6175624248), [`6175886770`](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6175886770), [`6178356343`](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6178356343)):
