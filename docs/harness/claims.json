@@ -6,13 +6,6 @@
     "lab": "antigravity",
     "note": ""
   },
-  "codex/completion-scoring-readiness-20261014": {
-    "branch": "codex/completion-scoring-readiness-20261014",
-    "claimed_at": "2026-10-14T10:08:04-04:00",
-    "head": "3e2534eac",
-    "lab": "codex",
-    "note": ""
-  },
   "kimi/completion-release-plan": {
     "branch": "kimi/completion-release-plan",
     "claimed_at": "2026-10-14T04:46:10-04:00",
