@@ -5,7 +5,7 @@
 - Executable source: `e7d926fbe38537f4faa90b817705c61a780778d6`, crate tree `218b2e7bc2a5e41332f10dcba666b10275046ef6`, [PR #2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), based on main `1ef7ef415`. Release binary/PTX/geometry hashes are frozen below before execution. No prior executable qualification transfers to the new evaluator or apply controls. Later documentation-only pins do not change this executable source.
 - Brief: [discrete geometric learning](../../mechanisms/discrete-geometric-learning.md).
 - Authority: D23–D32 and R12–R14. Integer-only GPU model and reference arithmetic; no normalized exponential, dense contraction, floating model/instrument, CPU model/reference or NVRTC.
-- Training and M2 remain **HELD**. Owner-directed D1/D2 development includes the disposable finite transition qualification below, subject to prospective exact-head Claude FIT and root's scoped pod admission. FIT alone releases no owner hold. No corpus, optimizer, language evaluation or trained checkpoint is admitted.
+- Training and M2 remain **HELD**. Owner-directed D1/D2 development includes the disposable finite transition qualification below, subject to prospective exact-head independent FIT and root's scoped pod admission. FIT alone releases no owner hold. No corpus, optimizer, language evaluation or trained checkpoint is admitted.
 
 [Claude's prospective design review6157700698](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6157700698) states the hold interpretation:
 
@@ -91,12 +91,12 @@ Any later sweep/dose/dollar projection must bind its actual parameter schedule, 
 ## Steps
 
 1. Freeze the integrated source, exact control names, caller/module ABI, evaluator/count metadata contracts and expected values. Build on an owned admitted CUDA12.8+ Ubuntu24 pod through `scripts/pod/uor-pod`; no agent executes a model locally.
-2. Obtain Claude's independent prospective FIT at the exact sheet/source. Record scoped admission for the eleven authored apply calls/eight updates; the separate corpus-training/M2 holds remain.
+2. Obtain independent prospective FIT at the exact sheet/source. Record scoped admission for the eleven authored apply calls/eight updates; the separate corpus-training/M2 holds remain.
 3. Verify release binary/source/PTX/geometry/device pins and compiled control inventory. Root registers the explicit driver qualification and cost commands; no nonexistent command is assumed ready by this draft.
 4. Execute the exact finite controls and separate no-update cost measurement once. Preserve exclusive JSON reports, stdout/stderr/exit codes and partial records. Any CUDA fault stops subsequent launches.
 5. Preserve all setup/build attempts and exact source/artifact identities, charge cumulative provider/build/control/preservation time, and verify archive round-trip before pod deletion. Preserve peer work. No checkpoint may be promoted as a trained result.
 
-At most one owned admitted pod, within the all-lab limit of4 and$8/h. Pod `vast-55833746`, $0.908/h, completed setup and release compilation; numerical execution remains NOT_RUN pending FIT. Build timing is recorded above; operation cost remains **UNMEASURED**. The twelve timed plus four warm-up production-shape proposals may dominate this finite slice; they resolve D2's training-dose feasibility and do not train. A healthy run is not cancelled because a self-set estimate expires; actual hard stops are owner caps, disk floor, failed/unsafe CUDA and source/contract mismatch.
+At most one owned admitted pod, within the all-lab limit of4 and$8/h. Pod `vast-55833746`, $0.908/h, completed setup and release compilation; numerical execution remains NOT_RUN until the recorded FIT controller launches. Build timing is recorded above; operation cost remains **UNMEASURED**. The twelve timed plus four warm-up production-shape proposals may dominate this finite slice; they resolve D2's training-dose feasibility and do not train. A healthy run is not cancelled because a self-set estimate expires; actual hard stops are owner caps, disk floor, failed/unsafe CUDA and source/contract mismatch.
 
 ## Stop rule
 
@@ -124,6 +124,17 @@ two-seed learning comparison, fresh-transfer KEEP or mechanism rejection follows
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
-All newly registered controls, isolated apply and cost observations are **NOT_RUN**. Independent review must replace the PENDING verdict before numerical execution.
+Prospective independent non-author Codex reviewer `/root/independent_a1_fit`, accepted by root before execution: [PR verdict6158277830](https://github.com/UOR-Foundation/uor-r4/pull/2400#issuecomment-6158277830), [M1 verdict6158278165](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6158278165). Exact source and artifacts are pinned above. All A1 and optional instrument changes were independently confirmed; no law, literal, inventory or dose changed.
+
+Claude's [original conditional FIT6158017847](https://github.com/UOR-Foundation/uor-r4/pull/2400#issuecomment-6158017847) remains preserved. Claude's subsequent confirmation was not received: the scheduled inbox summarized into a separate chat without waking the working session, and a safe CLI follow-up failed expired OAuth. This new independent verdict uses the owner's standing exact-head/self-review allowance; it is not attributed to Claude. The previous9179 build remains archived as superseded construction evidence.
+
+R12 reviewer answers:
+1. Quantity: exact update/refusal/epoch, evaluator/count reference, seed/schedule/resume and synchronized GPU API cost; no trained language quality.
+2. Computable: declared GPU controls have concrete integer witnesses, and the release build, compiled inventory, PTX, geometry and environment are bound above. Timing uses integer nanoseconds around synchronized APIs.
+3. Discrimination/possible bar: literal values, nonvacuous counts and full-state comparisons can pass and distinguish wrong behavior. Cost has no speed-rejection bar; three warmed samples are observations, and parameter-pass projections remain UNVERIFIED.
+4. Stage: finite construction/cost before learning dose selection. No corpus update, post-apply artifact retention, language conclusion, mechanism rejection or owner-hold release follows.
+
+At registration all numerical controls and cost observations remain NOT_RUN. Execution receipts will be recorded separately, without altering these prospective bars.
+
