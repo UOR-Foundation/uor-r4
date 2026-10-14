@@ -12,6 +12,41 @@
 - Training and M2 remain **HELD**. This sheet does not release either hold or
   authorize the 1,640-batch corpus pilot. It qualifies finite construction only.
 
+## Base artifact
+
+Integrated source for review: `73f2f7e21a671dc27f42d4c9380673dd23995780`,
+[PR #2421](https://github.com/UOR-Foundation/uor-r4/pull/2421). Later sheet-only
+format/pin updates do not change that executable source. Binary/PTX identities
+remain NOT_BUILT and must be recorded before any numerical execution.
+
+## Data split
+
+Authored disposable literal fixtures only. No production TRAIN/DEV input enters
+an apply call. Metadata tests use literal storage, mask, cursor and release-record
+fixtures; these do not execute a host model. No trained artifact is inherited.
+
+## Bar
+
+All named construction controls must complete with their registered exact
+witnesses/refusals and bounded apply inventory. No tolerance or performance bar
+exists. A failure suspends construction qualification and is diagnosed under R12;
+it cannot close or redirect a geometric mechanism.
+
+## Minimum test power
+
+This is construction qualification, not a statistical language experiment.
+The 25 finite CUDA controls plus 17 metadata tests resolve the named ABI,
+causality, identity, admission and persistence risks. They do not establish
+learnability, corpus controller execution or production throughput. The
+separately registered training sheet owns any later corpus dose and transfer.
+
+## Stop rule
+
+Training and M2 stay HELD. No corpus execution, no owner-release record creation,
+no automatic continuation into the pilot. CUDA/contract faults stop launches
+and preserve actual partial results/NOT_RUN. Owner caps and disk floor remain
+hard boundaries; estimates are not reasons to kill a healthy admitted control.
+
 ## Question and boundaries
 
 Does the admission diff preserve the qualified integer learning law, carry,
@@ -108,7 +143,7 @@ The review must trace CLI admission → private capability → bounded transitio
 → CUDA apply, checkpoint/evaluator bindings and the report assembly. The corpus
 pilot remains NOT_RUN and is outside this finite execution scope.
 
-## Execution, cost and failure handling
+## Steps
 
 1. Finish the allowed diff and freeze its exact source, metadata-test inventory
    and composed CUDA control names. Obtain Claude's prospective exact-source
