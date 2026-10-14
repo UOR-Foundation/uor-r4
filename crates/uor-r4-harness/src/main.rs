@@ -309,7 +309,19 @@ fn main() -> ExitCode {
         // "state formats ok", and believes it has validated its work while 56 rules never ran.
         // That is the worst possible outcome for the command labs trust most, so the full check
         // stays delegated and the Rust one is explicit: `check-formats`.
+        // **`check` and `check-formats` are separate commands**, not one with a flag.
+        //
+        // The earlier note here said exposing the format-contract-only checker as `check` "would
+        // mean a lab runs `uor-harness check`, sees 'state formats ok', and believes it has
+        // validated its work while 56 rules never ran." **That was a correct prediction** - it is
+        // what I found by verifying. `cmd_check_rules` is what answers it.
+        //
+        // **One boolean through one function was tried and reverted**: it made `check-formats` load
+        // the registries on a bare repository and return 2, which `parity`'s controlled one-row
+        // cases caught as `said ok=false, expected True`. **Two commands with two bodies cannot
+        // drift that way; a flag can.**
         Some("check-formats") => cmd_check(&repo, json),
+        Some("check") => cmd_check_rules(&repo, &rest, json),
         Some("presence") => cmd_presence(&repo, json),
         Some("ledger") => cmd_ledger(&repo, json),
         Some("receipt") => cmd_receipt(&repo, &rest, json),
@@ -1030,8 +1042,254 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        "install-hooks" | "status" | "switch" | "delete-merged" => {
-            delegate_to_python(repo, "git", args)
+        // **`switch` is ported WITH ITS GUARD, which is the only reason it is worth having here.**
+        // `git checkout -f` would discard an uncommitted claim, and a claim nobody has committed is
+        // still a lab saying "I am working here" - so the guard is the command, not advice beside it.
+        "switch" => {
+            let target = args
+                .iter()
+                .find(|a| !a.starts_with('-') && *a != "switch")
+                .cloned()
+                .unwrap_or_default();
+            if target.is_empty() {
+                eprintln!("uor-harness git switch: which branch?");
+                return ExitCode::from(2);
+            }
+            let create = args.iter().any(|a| a == "-b" || a == "--create");
+            let paths = StatePaths::from_env(repo);
+            let result = githelp::checkout_preserving_claims(&paths, &target, create);
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&result).unwrap_or_default()
+                );
+            } else if result["switched"] == serde_json::json!(true) {
+                println!(
+                    "on {}: {}",
+                    result["target"].as_str().unwrap_or(""),
+                    result["note"].as_str().unwrap_or("")
+                );
+            } else {
+                println!(
+                    "could not switch to {}: {}",
+                    result["target"].as_str().unwrap_or(""),
+                    result["error"].as_str().unwrap_or("")
+                );
+            }
+            if result["switched"] == serde_json::json!(true) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
+        }
+        // **`delete-merged` is ported WITH ITS WHOLE GUARD CHAIN** — a live claim first and needing
+        // no network, then a merged PR whose merge commit is on `origin/main`, then `git cherry` to
+        // prove the branch introduces nothing upstream lacks. See `githelp::delete_merged_branch`.
+        //
+        // **`safe_to_delete` is the only flag this arm reads**, because the guard's own history
+        // records what happens otherwise: an earlier version keyed on `merged`, a guard returned early
+        // without clearing it, and **a REFUSED branch still printed "would delete".**
+        "delete-merged" => {
+            // **The branch is read from `--branch` FIRST, then positionally.** Python's parser
+            // requires `--branch`; the port accepts either, **because a positional form is what the
+            // sibling commands use (`git switch <target>`, `clean-merged`) and requiring the flag
+            // would make this one command different for no reason a lab could see.** Accepting both
+            // means a documented `--branch` invocation and a natural positional one behave
+            // identically.
+            let branch = args
+                .iter()
+                .position(|a| a == "--branch")
+                .and_then(|i| args.get(i + 1).cloned())
+                .or_else(|| {
+                    args.iter()
+                        .find(|a| !a.starts_with('-') && *a != "delete-merged" && *a != "git")
+                        .cloned()
+                })
+                .unwrap_or_default();
+            if branch.is_empty() {
+                eprintln!("uor-harness git delete-merged: which branch?");
+                return ExitCode::from(2);
+            }
+            let apply = args.iter().any(|a| a == "--apply");
+            let paths = StatePaths::from_env(repo);
+            let r = githelp::delete_merged_branch(&paths, &branch, apply);
+            let safe = r["safe_to_delete"] == serde_json::json!(true);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&r).unwrap_or_default());
+            } else if safe {
+                let deleted = r["deleted"] == serde_json::json!(true);
+                let remote = r["remote_deleted"] == serde_json::json!(true);
+                if deleted || remote {
+                    // **Report each side separately.** A partial delete that reads as a success is how
+                    // a lab ends up believing a branch is gone when it is not.
+                    let local = if deleted {
+                        "deleted".to_string()
+                    } else {
+                        format!("NOT deleted ({})", r["local_error"].as_str().unwrap_or("?"))
+                    };
+                    let mut rem = if remote {
+                        "deleted".to_string()
+                    } else {
+                        "NOT deleted".to_string()
+                    };
+                    if let Some(e) = r["remote_error"].as_str() {
+                        rem.push_str(&format!(" ({e})"));
+                    }
+                    println!("{branch}: local {local}; remote {rem}");
+                } else {
+                    println!(
+                        "would delete {branch}: {}",
+                        r["reason"].as_str().unwrap_or("")
+                    );
+                    println!("  run with --apply to delete it");
+                }
+            } else {
+                println!(
+                    "REFUSED to delete {branch}: {}",
+                    r["reason"].as_str().unwrap_or("")
+                );
+                println!("  an unmerged remote branch is usually the only copy of that work");
+            }
+            if safe {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
+        }
+        // **`install-hooks` is ported because its refusals are the point**: it never clobbers a
+        // foreign hook, and each refusal names what it found and how to proceed.
+        "install-hooks" => {
+            let paths = StatePaths::from_env(repo);
+            let (code, out, err) = githelp::install_hooks(&paths);
+            for l in &out {
+                println!("{l}");
+            }
+            for l in &err {
+                eprintln!("{l}");
+            }
+            if code == 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(code as u8)
+            }
+        }
+        // **`git status` is Rust**, and it is the whole thing: worktree facts, the PR, the delivery
+        // state and the next command. **`merged-unverified` exits 1**, because that state means the PR
+        // is merged and its commit is NOT on the origin/main we can see — **a lab that treats it as
+        // success deletes a branch whose work it never found.**
+        "status" => {
+            let (data, state) = githelp::git_status(repo);
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
+            } else {
+                let f = &data;
+                println!(
+                    "uor-harness git status - branch {} @ {}",
+                    f["branch"].as_str().unwrap_or("?"),
+                    f["head"].as_str().unwrap_or("?")
+                );
+                if f["changes_available"].as_bool() == Some(true) {
+                    let c = &f["changes"];
+                    let cleanliness = if f["clean"].as_bool() == Some(true) {
+                        "clean".to_string()
+                    } else {
+                        format!(
+                            "{} uncommitted change(s) ({} staged, {} unstaged, {} untracked)",
+                            c["total"], c["staged"], c["unstaged"], c["untracked"]
+                        )
+                    };
+                    println!(
+                        "1. worktree {} - {cleanliness}",
+                        f["worktree"].as_str().unwrap_or("")
+                    );
+                } else {
+                    println!(
+                        "1. worktree {} - UNAVAILABLE: {}",
+                        f["worktree"].as_str().unwrap_or(""),
+                        f["changes_reason"].as_str().unwrap_or("")
+                    );
+                }
+                if f["origin_main"]["available"].as_bool() == Some(true) {
+                    let commit = f["origin_main"]["commit"].as_str().unwrap_or("");
+                    let short = &commit[..commit.len().min(8)];
+                    let fetched = if f["fetch"]["ok"].as_bool() == Some(true) {
+                        "just fetched".to_string()
+                    } else {
+                        format!(
+                            "last fetch FAILED: {}",
+                            f["fetch"]["reason"].as_str().unwrap_or("")
+                        )
+                    };
+                    println!(
+                        "2. origin/main {short} ({}) - {fetched}",
+                        f["origin_main"]["subject"].as_str().unwrap_or("")
+                    );
+                } else {
+                    println!(
+                        "2. origin/main - UNAVAILABLE: {}",
+                        f["origin_main"]["reason"]
+                            .as_str()
+                            .unwrap_or("cannot resolve origin/main")
+                    );
+                }
+                let pr = &f["pr"];
+                if pr["available"].as_bool() == Some(true) {
+                    let draft = if pr["is_draft"].as_bool() == Some(true) {
+                        " (draft)"
+                    } else {
+                        ""
+                    };
+                    let contained = match pr["contained_in_origin_main"].as_bool() {
+                        Some(true) => "contained in origin/main",
+                        Some(false) => "NOT contained in origin/main",
+                        None => "containment unknown",
+                    };
+                    println!(
+                        "3. PR #{} {}{draft}: {}",
+                        pr["number"],
+                        pr["state"].as_str().unwrap_or(""),
+                        uor_r4_harness::prbody::truncate(pr["title"].as_str().unwrap_or(""), 80)
+                    );
+                    let sha = pr["checked_sha"].as_str().unwrap_or("");
+                    let refname = if pr["checked_ref"].as_str().unwrap_or("").is_empty() {
+                        "no merge ref".to_string()
+                    } else {
+                        pr["checked_ref"].as_str().unwrap_or("").to_string()
+                    };
+                    println!("   {refname} {} - {contained}", &sha[..sha.len().min(8)]);
+                } else {
+                    println!(
+                        "3. PR - none for this branch ({})",
+                        pr["reason"].as_str().unwrap_or("gh unavailable")
+                    );
+                }
+                if f["upstream"].as_str().unwrap_or("").is_empty() {
+                    println!("4. upstream - none (branch is not pushed)");
+                } else {
+                    println!(
+                        "4. upstream {} - ahead {} / behind {} of origin/main",
+                        f["upstream"].as_str().unwrap_or(""),
+                        f["ahead"],
+                        f["behind"]
+                    );
+                }
+                println!("5. state: {state}");
+                println!("6. next: {}", f["next_command"].as_str().unwrap_or(""));
+                for step in f["next_steps"].as_array().into_iter().flatten() {
+                    println!("   then: {}", step.as_str().unwrap_or(""));
+                }
+                for note in f["notes"].as_array().into_iter().flatten() {
+                    println!("   note: {}", note.as_str().unwrap_or(""));
+                }
+            }
+            if state == "merged-unverified" {
+                ExitCode::from(1)
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         "" => {
             eprintln!("uor-harness git: which action? install-hooks, status, clean-merged, switch, delete-merged");
@@ -1984,6 +2242,102 @@ fn cmd_receipt(repo: &Path, args: &[String], json: bool) -> ExitCode {
             eprintln!("uor-harness: {e}");
             ExitCode::from(1)
         }
+    }
+}
+
+/// `check` - the frozen formats **and** every rule.
+///
+/// **Deliberately a separate function from `cmd_check`.** `cmd_check` is the format contract and
+/// nothing else, proven by `parity`'s six controlled one-row cases; this one adds the rule set and
+/// the single-object JSON that `parity` parses.
+///
+/// **The rules are computed once and printed into the same object as the formats**, because a second
+/// object after the first is `Extra data` to any JSON reader - which is how the first attempt at this
+/// was caught.
+fn cmd_check_rules(repo: &Path, only: &[String], json: bool) -> ExitCode {
+    let paths = StatePaths::from_env(repo);
+    let regs = match Registries::load(&paths) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("uor-harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let now =
+        uor_r4_harness::multilabrules::parse_claimed_at(&uor_r4_harness::receipt::now_rfc3339())
+            .unwrap_or(0);
+    let findings = uor_r4_harness::checkdispatch::run(&paths, &regs, only, now);
+    let (checked, failed, errors, warnings) = uor_r4_harness::checkdispatch::summarize(&findings);
+
+    // The frozen formats, in the same shape `check-formats` prints.
+    let contract_ok = match Contract::load(repo) {
+        Ok(c) => c.check(repo).ok(),
+        Err(e) => {
+            eprintln!("uor-harness: {e}");
+            false
+        }
+    };
+
+    if json {
+        let c = match Contract::load(repo) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("uor-harness: {e}");
+                return ExitCode::from(2);
+            }
+        };
+        let report = c.check(repo);
+        let rows: Vec<String> = report
+            .formats
+            .iter()
+            .map(|f| {
+                let problems: Vec<String> = f.violations.iter().map(|v| v.to_string()).collect();
+                format!(
+                    "    {{\"format\": {:?}, \"files\": {}, \"rows\": {}, \"absent\": {}, \"violations\": {}}}",
+                    f.format,
+                    f.files,
+                    f.rows,
+                    f.absent,
+                    serde_json::to_string(&problems).unwrap_or_else(|_| "[]".into())
+                )
+            })
+            .collect();
+        print!(
+            "{{\n  \"contract\": \"docs/harness/state-formats.json\",\n  \"schema\": {},\n  \"ok\": {},\n  \"formats\": [\n{}\n  ],",
+            c.schema,
+            report.ok(),
+            rows.join(",\n")
+        );
+        print!(
+            "\n  \"rules\": {{\n    \"checked\": {checked}, \"failed\": {failed}, \"errors\": {errors}, \"warnings\": {warnings},\n    \"findings\": ["
+        );
+        for (i, f) in findings.iter().enumerate() {
+            let comma = if i + 1 == findings.len() { "" } else { "," };
+            print!(
+                "\n      {{\"rule\": {:?}, \"severity\": {:?}, \"ok\": {}, \"message\": {:?}, \"path\": {:?}}}{comma}",
+                f.rule_id,
+                f.severity,
+                f.message == "ok",
+                f.message,
+                f.path
+            );
+        }
+        println!("\n    ]\n  }}\n}}");
+    } else {
+        println!("{checked} rules, {failed} failed ({errors} error, {warnings} warn)");
+        for f in findings.iter().filter(|f| f.message != "ok") {
+            println!("  {} {} [{}]", f.severity, f.rule_id, f.path);
+            println!("      {}", f.message);
+            if !f.fix.is_empty() {
+                println!("      fix: {}", f.fix);
+            }
+        }
+    }
+    // **`check` is one verdict: both halves decide it.**
+    if contract_ok && errors == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }
 
