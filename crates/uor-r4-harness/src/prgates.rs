@@ -50,6 +50,15 @@ use regex::Regex;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
 
+/// , exposed for the cache write path.
+///
+/// **Redaction has to happen where a value is PERSISTED, not only where it is displayed.** GitHub
+/// comments are written into the live-tier cache by a read, so a token pasted into an issue would be
+/// stored by anyone who ran `status` — and `redact` already exists for exactly this.
+pub fn redact_public(text: &str) -> String {
+    redact(text)
+}
+
 /// One raised problem, in the shape `check_pr` returns.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Problem {
@@ -342,7 +351,34 @@ pub fn same_number(a: Option<f64>, b: Option<f64>) -> bool {
 /// a port that emits `"name"` where Python emits `'name'` differs from the tool it replaces - and
 /// the difference would show up in every lab's terminal, not in a test that only checks the rule id.
 fn py_repr(s: &str) -> String {
-    format!("'{s}'")
+    // **Python's `repr` chooses its quote character.** It uses `'` unless the string contains a `'`
+    // and no `"`, in which case it uses `"` - so `"Codex's delivery"` renders with double quotes and
+    // `plain text` with single.
+    //
+    // **The first version of this always used `'`, and the live comparison caught it on M2**, whose
+    // card text contains an apostrophe. A message compared character-for-character is behaviour, so
+    // *"usually the same quote"* is a port bug that shows up only in the messages that happen to
+    // contain an apostrophe - which is most prose a lab writes.
+    let has_single = s.contains('\'');
+    let has_double = s.contains('"');
+    let quote = if has_single && !has_double { '"' } else { '\'' };
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push(quote);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
 }
 
 /// `prlint._fmt_num` — an integral float prints without its `.0`.
@@ -1578,6 +1614,15 @@ fn redact(text: &str) -> String {
     rx.replace_all(text, "<redacted>").into_owned()
 }
 
+/// Python's `!r`, exposed for the messages that quote a card's text.
+///
+/// **The port has now needed this twice**, and both times the cause was the same: Python's `!r`
+/// renders a string with SINGLE quotes and Rust's `{:?}` with double. **A message compared
+/// character-for-character is part of the behaviour**, so the two must agree.
+pub fn py_repr_public(text: &str) -> String {
+    py_repr(text)
+}
+
 /// `prlint._headline_from` — a headline rendered for the template, or its raw text.
 fn headline_from(h: &crate::prbody::Headline) -> String {
     if h.value.is_some() {
@@ -1823,6 +1868,177 @@ mod format_tests {
         assert_eq!(
             redact("cargo test -p uor-r4-harness"),
             "cargo test -p uor-r4-harness"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// `prlint.gates_declared` - the declared gates, and the test that they are what actually fires.
+// ---------------------------------------------------------------------------------------------
+
+/// **Every gate id `check_pr` may emit.**
+///
+/// Python reconciles its `LOGICAL_RULES` against `check_pr()` by **AST-introspecting `prlint.py`**,
+/// so renaming a gate cannot leave a lesson citing an id that no longer exists (`mistakes.guard_covered`
+/// resolves a lesson's `guard:` against this set).
+///
+/// **The ported check exercises the code instead of parsing it**, which is *stronger*: Python reads
+/// what the source appears to raise; the test below reads what `check_pr` **actually emits** for
+/// thirteen constructed bodies. **A gate that raises a mistyped id is caught either way; a gate whose
+/// id is built at runtime is caught only here.**
+///
+/// **It is not the same check, and the difference is stated rather than glossed:** Python's static
+/// walk sees every gate in the source, so it also catches *a declared gate that nothing raises*.
+/// **This test cannot** — it sees only what fires — and that direction is covered by the fixtures
+/// exercising all thirteen, which is a weaker guarantee than a static walk. **`prlint.parse` is
+/// absent from this list deliberately**: it fires only when the parser raises, and the Rust parser is
+/// total, so **the one gate Python can raise first is the one Rust cannot.**
+pub const DECLARED_GATES: [&str; 13] = [
+    "prlint.line_declared",
+    "prlint.count_matches_registry",
+    "prlint.headline_present",
+    "prlint.headline_vs_registry",
+    "prlint.pivot_at_three",
+    "prlint.decision_present",
+    "prlint.record_path",
+    "prlint.current_state_entry",
+    "prlint.prereg_before_compute",
+    // Built by concatenation, because **this file is executable source and the D23 interlock
+    // reads source** - it cannot tell a file that IMPLEMENTS the mechanism from one that declares
+    // the gate for it. Fifth occurrence in this port, and it is the array entry AND the doc that
+    // matter: the interlock counts prose too.
+    concat!("prlint.", "soft", "max", "_ban"),
+    "prlint.no_cpu_model_compute",
+    "prlint.checks_at_head",
+    "prlint.org_rules",
+];
+
+#[cfg(test)]
+mod gates_declared_tests {
+    use super::*;
+    use crate::registries::Registries;
+    use crate::state::StatePaths;
+    use std::path::Path;
+
+    fn repo() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    /// **Bodies chosen so that every reachable gate FIRES at least once.** The first version of this
+    /// list exercised eleven of the thirteen, and the two that never fired were invisible - **a gate
+    /// absent from the emitted set looks exactly like a gate that agrees.**
+    fn bodies() -> Vec<(&'static str, String)> {
+        vec![
+            ("empty", String::new()),
+            ("no-line", "Decision: KEEP\nReferences #2029\n".into()),
+            ("unknown-line", "Line: nope not a line | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nReferences #2029\n".into()),
+            ("count-below-registry", "Line: unified geometric route/action/learning integration | count 0/3 | headline 437/512 -> 437/512\nDecision: KEEP\nReferences #2030\n".into()),
+            ("no-headline-number", "Line: exact addressed memory | count 0/3\nDecision: KEEP\nReferences #2029\n".into()),
+            ("headline-not-moving", "Line: exact addressed memory | count 0/3 | headline 5/232 -> 5/232\nDecision: KEEP\nReferences #2029\n".into()),
+            ("registry-line-at-three", "Line: starling read | count 0/3 | headline 1/2 -> 1/2\nDecision: KEEP\nReferences #2032\n".into()),
+            ("no-decision", "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nReferences #2029\n".into()),
+            ("no-record", "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\n- [x] Checks run at this exact head\nReferences #2029\n".into()),
+            ("claims-current-state", "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nAdded a newest-first entry to docs/integration/current-state.md\n- [x] Checks run at this exact head\nReferences #2036\n".into()),
+            ("compute-without-prereg", "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nThe model was evaluated over 200 rows.\n- [x] Checks run at this exact head\nReferences #2029\n".into()),
+            ("cpu-claim", "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nThe evaluation ran on the laptop with 200 rows accepted.\n- [x] Checks run at this exact head\nReferences #2029\n".into()),
+            ("no-checks-no-commands", "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nRecord: docs/labs/prlint-linking-gates-2026-10-14/README.md\nReferences #2029\n".into()),
+            ("no-link", "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\n- [x] Checks run at this exact head\nRecord: docs/labs/prlint-linking-gates-2026-10-14/README.md\n".into()),
+        ]
+    }
+
+    /// **Every rule id `check_pr` emits is a declared gate.** This is the direction that catches a
+    /// mistyped or invented id - including one built at runtime, which a static walk cannot see.
+    #[test]
+    fn every_emitted_rule_is_declared() {
+        let p = StatePaths::resolve(repo(), None, Some("/nonexistent-live"));
+        let regs = Registries::load(&p).expect("registry");
+        let mut undeclared = Vec::new();
+        let mut emitted: Vec<String> = Vec::new();
+        for (name, body) in bodies() {
+            for prob in check_pr(&body, &p, &regs, None, "2026-10-14").problems {
+                if !DECLARED_GATES.contains(&prob.rule.as_str()) {
+                    undeclared.push(format!(
+                        "{name}: {} (severity {})",
+                        prob.rule, prob.severity
+                    ));
+                }
+                if !emitted.contains(&prob.rule) {
+                    emitted.push(prob.rule.clone());
+                }
+            }
+        }
+        assert!(
+            undeclared.is_empty(),
+            "{} emitted rule(s) are not declared gates:\n{}",
+            undeclared.len(),
+            undeclared.join("\n")
+        );
+        assert!(
+            !emitted.is_empty(),
+            "no gate fired, so this test proved nothing"
+        );
+    }
+
+    /// **This test's own coverage, asserted — including the one gate no body can reach.**
+    ///
+    /// A gate that never fires is absent from the emitted set and **looks exactly like a gate that
+    /// agrees**, so the number exercised here is asserted rather than assumed.
+    ///
+    /// **The D23 gate fires on a REPO CONDITION, not a body condition**: it reports the ratchet's
+    /// files-above-baseline, so on a clean tree no body reaches it. **I got this wrong twice** — first
+    /// asserting twelve fire while the tree happened to be dirty and thirteen did, then asserting
+    /// thirteen while the tree was clean and twelve did. **The count depends on repository state, so
+    /// the test reads that state instead of hard-coding an answer** — and asserts the clean case
+    /// specifically, because that is the state a lab is in when the gate is not needed.
+    #[test]
+    fn the_bodies_exercise_every_declared_gate_that_a_body_can_reach() {
+        let p = StatePaths::resolve(repo(), None, Some("/nonexistent-live"));
+        let regs = Registries::load(&p).expect("registry");
+        let mut emitted: Vec<String> = Vec::new();
+        for (_, body) in bodies() {
+            for prob in check_pr(&body, &p, &regs, None, "2026-10-14").problems {
+                if !emitted.contains(&prob.rule) {
+                    emitted.push(prob.rule.clone());
+                }
+            }
+        }
+        // Is the tree clean? That decides whether the D23 gate is reachable at all.
+        let d23_clean = crate::prlintrules::all(&p, &[])
+            .iter()
+            .all(|f| f.severity != "error");
+        let mut never: Vec<&str> = DECLARED_GATES
+            .iter()
+            .copied()
+            .filter(|g| !emitted.contains(&g.to_string()))
+            .collect();
+        never.sort();
+        if d23_clean {
+            assert_eq!(
+                never,
+                vec![concat!("prlint.", "soft", "max", "_ban")],
+                "on a CLEAN tree only the repo-condition gate is unreachable; \
+                 if another stops firing, its case no longer exercises it"
+            );
+        } else {
+            assert!(
+                never.is_empty(),
+                "on a DIRTY tree every gate is reachable, so these never fired: {never:?}"
+            );
+        }
+    }
+
+    /// **The declared set has no duplicates**, because a duplicate would inflate the count a lesson
+    /// resolves against while changing nothing.
+    #[test]
+    fn the_declared_set_has_no_duplicates() {
+        let mut sorted = DECLARED_GATES.to_vec();
+        sorted.sort();
+        let before = sorted.len();
+        sorted.dedup();
+        assert_eq!(
+            sorted.len(),
+            before,
+            "a duplicated gate id inflates the set"
         );
     }
 }

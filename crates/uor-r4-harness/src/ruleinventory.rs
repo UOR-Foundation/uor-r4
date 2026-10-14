@@ -97,6 +97,10 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
             // parser returns no Result, so the state is unrepresentable rather than unimplemented.
             "prlint.checks_at_head",
             "prlint.org_rules",
+            // **The declared-gate reconciliation, exercised rather than introspected.** Python AST-walks
+            // `prlint.py` to see what `check_pr()` raises; this asserts that the ids `check_pr`
+            // ACTUALLY EMITS are within `DECLARED_GATES` - which also catches an id built at runtime.
+            "prlint.gates_declared",
         ],
     ),
     (
@@ -105,6 +109,10 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
             "status.branch_claimed",
             "status.no_orphan_branches",
             "status.heartbeat_receipts",
+            // **The last of the `status` rules.** The `gh` chain, the card reading and the decision
+            // are all Rust, and the decision is verified against Python on live data - all eight
+            // findings agreeing message for message.
+            "status.registry_vs_github",
         ],
     ),
     (
@@ -124,7 +132,17 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
             "briefing.lines_agree_with_prompts",
         ],
     ),
-    ("budget", &["budget.receipts_parse", "budget.disk_floor"]),
+    (
+        "budget",
+        &[
+            "budget.receipts_parse",
+            "budget.disk_floor",
+            // **A rule that fires on every run by design.** It prints the owner's caps rather than
+            // testing anything - `ok=False` with `severity="info"` is the pair that makes them
+            // visible without counting as a failure.
+            "budget.no_new_spending_class",
+        ],
+    ),
     (
         "harness",
         &[
