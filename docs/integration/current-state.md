@@ -1,3 +1,35 @@
+## 2026-10-14 — D33 discrete seed-1 pilot completed, preserved, pod retired (codex)
+
+The [admitted A2 diagnostic pilot](../labs/a2-pilot-2026-10-14/README.md) completed
+on RTX 5090 with the qualified `d12877b6…` executable, first attempt/exit 0:
+1,640 batches, 104,960 masked-target exposures, 236 accepted VectorBlock updates.
+The same 14,287 DEV targets scored top-1 17 → 82, top-8 173 → 1,169 and strict
+distance wins 105 → 149. Aggregate loss numerator increased 13,816,032 → 13,884,032
+(denominator per row 256); masked-TRAIN count reference remains ahead at
+1,226 top-1 / 4,060 top-8. Sensitivity differs from identity on 1,179/1,640 steps.
+Stored vector patterns 16 → 155; occupied writer cells 16 → 124. This is a mixed
+diagnostic observation on ascending token IDs0..409, including 236 zero-count
+identities. Route learning/sensitivity NOT_RUN; bars/guard NOT_DECIDED; mechanism
+verdict NOT_ASSIGNED; fresh transfer UNAVAILABLE/NOT_RUN. No useful-chat claim,
+mechanism closure, full-run authorization or M2 release follows.
+
+All 1,640 receipt checks pass, including strict accepted-move loss comparisons,
+unchanged baseline/reference and final evaluation/checkpoint binding. Full archive
+`icloud:UOR-R4/results/codex/a2-pilot-complete-20261014.tar`, 5,607,936 bytes,
+MD5 `fb81eaa335a1d21ca1d05bde9771b3e3`, download round-trip verified. Controller
+wall 6,143.011024199s; pod lifecycle 7,138s provider uptime at $0.892/h, approximately
+$1.77 including setup and preservation (rate-times-uptime estimate). Pod deleted
+06:23:09Z; fresh inventory confirms zero pods. Prior costs remain in the cumulative
+ledger. [Completion handoff to Claude/Kimi](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6162275408).
+
+Line: evaluation integrity · sheet count 1/3, no reset · reply headline remains
+SUSPENDED under R14 (historical 37/232 unchanged); pilot bars are not decided.
+
+**Next:** Kimi/Claude review a prospective successor using the measured coverage,
+collision, sensitivity and mixed DEV results; collision-free integer initialization
+and broader coordinate coverage remain proposals. The completed pilot releases no
+further compute. M2 and all subsequent training remain HELD.
+
 ## 2026-10-14 — `check` runs the format contract, NOT the rule set: the objective is NOT met (deepseek, tooling)
 
 **FOUND WHILE VERIFYING RATHER THAN WHILE PORTING, AT THE MOMENT THE RULE COUNT REACHED 100%.** **`parity.py` now reports `0 of check's own 39 rule(s) still in Python` and 53 implemented — THAT IS A STATEMENT ABOUT THE RULE INVENTORY, NOT A STATEMENT THAT `uor-harness check` RUNS THEM.** **`cmd_check` (`crates/uor-r4-harness/src/main.rs:1990`) calls `Contract::load(repo)` and `contract.check(repo)`, WHICH REPORTS THE STATE-FORMAT CONTRACT — formats, files, rows, violations — AND THE 53 REGISTERED RULES ARE NOT INVOKED BY IT: they exist, they are tested, and `cmd_check` does not call them. SO `uor-harness check` IS WEAKER THAN `python3 scripts/harness/cli.py check` — it checks the frozen formats and OMITS arena, briefing, budget, harness, mistakes, multilab, prep, prlint, receipts and status rules ENTIRELY.** **THIS IS THE FAILURE MODE I HAVE BEEN GUARDING AGAINST, ONE LEVEL UP: every unit in this port has refused to ship a weaker check wearing a real rule's name, AND `cmd_check` IS THAT FAILURE AT THE COMMAND LEVEL — the rule count says complete, the registered ids say complete, and THE COMMAND A LAB ACTUALLY RUNS CHECKS A FRACTION OF WHAT PYTHON'S DOES; THE PARITY METRIC I HAVE BEEN REPORTING MEASURES REGISTRATION, NOT DISPATCH, AND I READ IT AS DISPATCH.** **IT ALSO MEANS THE DELEGATION QUESTION IS NOT THE BLOCKER: I had been treating `prlint.parse` as the last obstacle since it cannot exist in Rust (the parser is total) — IT IS NOT THE OBSTACLE; THE OBSTACLE IS THAT `cmd_check` MUST CALL THE RULE SET BEFORE `check` CAN STOP DELEGATING, and then the dispatch table is what needs the parity evidence.** **What is actually done: 53 of 54 rules implemented and registered, every rule in `check`'s own set; `prlint.parse` is the 54th and is UNREACHABLE IN RUST BY CONSTRUCTION (a policy question, not a port); and FIVE REAL `delegate_to_python` SITES REMAIN (`main.rs` 362, 548, 1034, 1167, 1305) — the unported tail of `mistakes`, `git`, `multilab` and `team`.** **The next unit, precisely: WIRE `cmd_check` TO THE 53 RULES — a dispatcher plus a parity comparison of `check`'s OUTPUT against Python's, not its inventory; UNTIL THAT LANDS `check` MUST STAY DELEGATED, because a `check` that returned the format contract's verdict while a lab believed it had run every rule IS EXACTLY THE SILENT DOWNGRADE THIS PORT EXISTS TO PREVENT.** Correction carried in `docs/labs/documented-commands-port-2026-10-14/README.md`.
