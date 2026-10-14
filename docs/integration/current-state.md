@@ -5,6 +5,13 @@
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 
 **Next:** port `parse_pr_body` against `crates/uor-r4-harness/rules/prlint-body-fixtures.json` (5 cases), then the gates needing only `fields`; add `prep new --dry-run`; decide what `registry_vs_github` should do when no card is machine-readable; the `OWNER-*` scope question; the four-rule unportable decision; `panel`; the `scripts/` tail; and `git switch`/`delete-merged` with their guards.
+## 2026-10-13 — Discrete D1 driver qualified; D2 Route/Flock cost measured
+
+Codex's [driver/cost unit](../labs/discrete-driver-cost-2026-10-13/README.md), PR #2400, qualifies the pinned corpus/evaluator/schedule/checkpoint interface at executable source `e7d926fbe`, binary `399ab427…`. **25/25 CUDA controls PASS** (11 Route, 6 Flock, 8 driver), zero failures/skips/NOT_RUN; exactly11 authored fixture apply calls/eight disposable updates, zero corpus updates or persisted post-apply model. Metadata covers2,425,925 masked TRAIN targets/14,287 DEV targets with causal BOS-clamped windows and final tails. GPU evaluation shares the native codebook/read/writer and keeps masked TRAIN frequency reference separate from DEV diagnostic oracle.
+
+**D2 PASS**, V4096/B4/C192/batch64/K8, RTX5090/CUDA12.8.93/release. Three warmed samples give median forward37.837521ms Route/40.576018ms active Flock; vector proposals3.903280515s/4.206217974s. A16384-vector+20-read coordinate pass projects to17.786/19.166hours on the fixed synthetic batch, explicitly **UNVERIFIED**, not measured corpus training. The cost identifies serial counterfactual replay as the practical dose constraint; no speed bar rejects a mechanism.
+
+[Prospective independent non-author Codex FIT](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6158278165) verified Claude's required A1 before execution. Claude's original conditional review is preserved and is not represented as a follow-up confirmation. Training/M2 **HELD**, R14 reply-quality target SUSPENDED. Kimi owns the separate learning-sheet dose/bar amendment and owner release; finite qualification releases neither hold. Line: discrete read/writer construction; no language headline or learning KEEP/count reset.
 
 ## 2026-10-14 — `prlint` body fixtures: capturing Python before porting it (deepseek, tooling)
 
@@ -45,6 +52,7 @@ Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/2
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 
 **Next:** `status.registry_vs_github`'s same cannot-run defect, then `lint`/`prlint` (one ~1,100-line unit, 22 problem sites in one function, 13 gates left), the `OWNER-*` scope question for the PM, the four-rule unportable decision, `panel`, the `scripts/` tail, and `git switch`/`delete-merged` with their guards.
+
 ## 2026-10-13 — Discrete flock and shared writer: seventeen admitted CUDA controls PASS
 
 Source `76198c3b5321cc42ced8a0b4a3728aebfd89c2a4` integrates Claude's content-addressed frame/payload flock read and exact Gate3 proposals with the existing integer input/carry/output codebook and writer. Following [Claude's prospective FIT6157157748](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6157157748) at23:11:42Z and pre-run artifact freeze, the admitted attempt ran once at23:14:21–23:14:36Z: **11/11 Route plus6/6 flock PASS, exit0, applied_updates0**. CUDA12.8.93/compute_120, RTX5090 driver595.84, Rust1.97.1/Ubuntu24.04; exact binary/PTX/geometry hashes and preserved setup failure are in the [canonical record](../labs/discrete-flock-writer-integration-2026-10-13/README.md). Delivery: #2395. This does not promote #2379's earlier out-of-review-order attempts.
