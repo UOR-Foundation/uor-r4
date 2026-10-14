@@ -69,16 +69,26 @@ rediscovered.
 | `python3 -m unittest discover -s tests/harness -t .` | **326 passed**, twice |
 | `uor-harness check` | 0 errors |
 | `python3 scripts/check_no_softmax.py` | OK, no softmax added |
+| `parity.py` | **exit 0**, twice (was failing on the date) |
+| `cargo test -p uor-r4-harness` | **323 passed** (2 new) |
+| `cargo fmt --check`, clippy | clean, 0 findings |
 
 ## Limitations, stated
 
-- **`parity.py` fails during this unit, and not because of this change.** `render agreement: line 3:
-  rust '- date: 2026-10-14' != python '- date: 2026-10-13'`. **Root cause: Rust's `prep::today()`
-  slices `now_rfc3339()[..10]` — the UTC date — while Python's `today()` uses local time.** In US
-  evenings they differ by a day, so **parity fails for roughly the last five hours of every US
-  working day.** Not fixed here: it is a real defect, **separate from this change**, and I would
-  rather report it precisely than bundle it. **A verification that fails on a schedule is one people
-  learn to ignore.**
+- **`parity.py` failed during this unit — and that defect is now FIXED in this same PR, because CI
+  made it blocking rather than theoretical.** `render agreement: line 3: rust '- date: 2026-10-14'
+  != python '- date: 2026-10-13'`. **Root cause: Rust's `prep::today()` sliced
+  `now_rfc3339()[..10]` — the UTC date — while Python's `core.today()` is
+  `datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")`, UTC converted to local.** In a US
+  evening they differ by a day, so **parity failed for roughly the last five hours of every US
+  working day — in CI as well as locally.** `today()` now asks `date +%Y-%m-%d`, the same
+  system-fact pattern `team.rs` and `budgetrules.rs` already use, with the UTC slice kept as the
+  fallback so a host without `date` behaves exactly as before. **A verification that fails on a
+  schedule is one people learn to ignore.**
+- **This was caught by the very check it was breaking.** I reported the parity failure as
+  "pre-existing and not mine" and moved to ship; **CI failed the merge on it.** `parity` is the
+  reason the divergence existed for hours instead of weeks, and it is the reason I could not ship
+  around it.
 - **The two unavailability cases still share one severity.** *"Rate-limited right now"* and *"this
   registry has disagreed with its issue for a week"* both produce one warning. **They are no longer
   silent, but they are not yet distinguished** — and distinguishing them needs the comparison to
