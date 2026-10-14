@@ -6,7 +6,16 @@ Authority: [D34](../../integration/DECISIONS.md#d34--revised-attentionmemory-seq
 ## Crate and consumers
 
 `uor-r4-object-store` is a model-independent Rust library for exact byte storage on D19.
-Its first consumer is a source-only durable-memory ingestion/retrieval adapter: an immutable
+Its first external client is **DeepSeek's on-demand reconstruction-DAG reader**, as coordinated
+in [6181045127](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6181045127).
+The store exports a narrow `RecordBackend::fetch(NodeId) -> Result<Option<Record>>` interface;
+`Record` has private fields and a validating decoder, so per-record hash/schema verification
+cannot be asserted by an unchecked backend flag. `Store` is the eager reference backend;
+DeepSeek owns the lazy production reader, cache/fetch strategy and its integration. The store's
+reference `range/rebuild/missing` methods provide byte-comparison controls, not a competing
+production reader. Backend lookup of one verified record never proves whole-object integrity.
+
+The local ingestion/retrieval adapter binds an immutable
 object version, pinned tokenizer identity, and occurrence-to-byte-span bindings. Subsequent
 integration can store the existing durable-session export bytes and retrieve exact quotations;
 `DurableMemoryStore::export_scope/import_scope` remains unchanged in this prototype. No model
@@ -54,7 +63,11 @@ unique record bytes, new record bytes, and visited record bytes separately. Rebu
 retains occurrence multiplicity even when storage deduplicates equal nodes.
 
 A partial result authenticates only its visited path against the **caller-pinned manifest**;
-it does not freshly check the object's whole SHA-256. A full rebuild checks that SHA-256 as
+it does not freshly check the object's whole SHA-256. Every partial response explicitly
+reports `whole_object_digest_verified: false` and the unverified remainder (the complement
+of the returned interval); even a full-length call to `range` does not claim a SHA-256 check.
+Main-track object verification requires a successful `rebuild` result bound to that same
+manifest version; partial success alone cannot promote the object. A full rebuild checks that SHA-256 as
 well. These are separate result types, not a boolean callers can misread. The manifest digest
 is an identity binding, not a signature or authorization. BLAKE2b-96 is a short compatibility
 address with finite collision resistance; conflicting local records are refused, and partial
