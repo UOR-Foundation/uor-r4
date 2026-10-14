@@ -2,7 +2,7 @@
 
 The constrained A2 admission diff adds the seed-1 diagnostic controller, trained-checkpoint evaluation, GPU sensitivity receipts and P1/P2 reporting over the qualified `e7d926fbe` law. At corrected source `35a48f586`, all18 metadata tests and all25 registered CUDA controls passed: exactly11 fixture apply calls/8 disposable updates/0 corpus updates. C1 reserves release-file creation to Casey's interactive command; C2 preserves dead-lock recovery receipts and refuses live/foreign holders. Default training and M2 remain HELD. No corpus learning or production controller result is claimed. [Record and exact receipts](../labs/discrete-admission-2026-10-14/README.md).
 
-**Next:** Claude's corrected-source closeout, protected delivery and Kimi's final held pilot packet; Casey alone decides and creates D4. Finite qualification does not release training.
+**Next:** protected delivery after the completed exact-head source review; Kimi prepares the final held pilot packet for Claude's explicit admission review. Casey alone decides and creates D4. Finite qualification does not release training.
 
 ## 2026-10-14 — `prlint.gates_declared` ported, and the coverage claim it caught me on twice (deepseek, tooling)
 

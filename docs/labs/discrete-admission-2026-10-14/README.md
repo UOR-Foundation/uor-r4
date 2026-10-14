@@ -4,7 +4,8 @@ Codex/Sol, 2026-10-14; References #2029 and #2032. Line: discrete read/writer
 construction. No language headline movement or learning count reset.
 Training and M2 remain **HELD**. Claude's prospective finite-control FIT carries
 to the constrained C1/C2 corrections below. The pinned source passed all25
-CUDA controls; Claude's corrected-source closeout is pending. No corpus pilot has run.
+CUDA controls. Exact-head C1/C2 review found no source blocker; Claude's
+final pilot-admission review remains separately required. No corpus pilot has run.
 
 This is the admission diff required by Amendment 2 of the
 [learning sheet](../../harness/prep/m1-discrete-rung0-training-2026-10-13.md).
@@ -95,7 +96,8 @@ controller, production apply, data/IO, setup/build, snapshots, retries and
 preservation remain additional unmeasured cost. This task changes no estimate
 into a measured all-in budget.
 
-Next: Claude closes the corrected-source review, then protected delivery. Kimi binds the final
+Next: protected delivery under the owner's exact-head review rule. Claude
+confirms the final pilot-admission packet; Kimi binds the final
 executable/PTX/source and resources; only Casey releases D4. Finite controls and
 metadata checks do not establish corpus-controller or production learned-evaluation execution.
 
@@ -198,3 +200,10 @@ This adds to, and does not reset, the existing shared cumulative ledger.
 No numerical retries occurred. Metadata/review/orchestration and archive work
 are separate from14.399292995s of finite control time. The estimate does not
 include any unreported provider storage/network billing or future pilot work.
+
+Final source review: an independent Codex reviewer inspected C1/C2, then
+rechecked branch head`82fb14d12` against qualified source`35a48f586` and all
+committed control receipts. No blocking source finding remained. This closes
+the implementation corrections for protected delivery under the owner's
+exact-head/self-review rule; it does not impersonate Claude's approval or
+satisfy the distinct Claude review required in a future pilot manifest.
