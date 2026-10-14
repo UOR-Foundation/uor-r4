@@ -365,6 +365,65 @@ fn validate_progress(
     }
     Ok(())
 }
+/// Publish only fully written, synced JSON under the run lock. Pending files are
+/// never reclaimed here: they may be evidence from an interrupted attempt. Only
+/// latest.json is replaceable; immutable initial/evaluation names refuse reuse.
+fn publish_state_json<T: Serialize>(path: &Path, value: &T, replace_latest: bool) -> Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let directory = path
+        .parent()
+        .ok_or_else(|| invalid("state publication requires a parent directory"))?;
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| invalid("state publication requires a UTF8 basename"))?;
+    if replace_latest && name != "latest.json" {
+        return Err(invalid("only latest.json may be replaced"));
+    }
+    let require_absent = || -> Result<()> {
+        match fs::symlink_metadata(path) {
+            Ok(_) => Err(invalid(format!(
+                "immutable state already exists: {}",
+                path.display()
+            ))),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(invalid(e.to_string())),
+        }
+    };
+    if !replace_latest {
+        require_absent()?;
+    }
+    let bytes = encode(value)?;
+    let (pending, mut file) = loop {
+        let pending = directory.join(format!(
+            ".{name}.pending-{}-{}-{}",
+            std::process::id(),
+            unix_ns()?,
+            SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&pending)
+        {
+            Ok(file) => break (pending, file),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(invalid(e.to_string())),
+        }
+    };
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| invalid(e.to_string()))?;
+    drop(file);
+    // The run lock serializes publishers; check again immediately before rename.
+    // On any error preserve both the original destination and our pending file.
+    if !replace_latest {
+        require_absent()?;
+    }
+    fs::rename(&pending, path).map_err(|e| invalid(e.to_string()))?;
+    sync_directory(directory)
+}
 #[cfg(feature = "cuda")]
 fn save(
     driver: &PreparedDriver,
@@ -385,13 +444,9 @@ fn save(
     };
     let state = &release.manifest.run_state_directory;
     if !state.join("initial.json").exists() {
-        write_new(&state.join("initial.json"), &pin)?;
-        sync_directory(state)?;
+        publish_state_json(&state.join("initial.json"), &pin, false)?;
     }
-    let pending = state.join(format!("latest-{}.pending", std::process::id()));
-    write_new(&pending, &pin)?;
-    fs::rename(pending, state.join("latest.json")).map_err(|e| invalid(e.to_string()))?;
-    sync_directory(state)
+    publish_state_json(&state.join("latest.json"), &pin, true)
 }
 fn validate_evaluation(
     report: &Value,
@@ -475,22 +530,21 @@ fn score(
         let evaluation = driver.evaluate(model)?;
         let value = json!({"schema":"uor-r4.completion-evaluation/1","admission_sha256":release.manifest_sha256,"completed_batches":n,"cursor":p.checkpoint.cursor,"checkpoint":checkpoint,"driver_checkpoint_sha256":corpus::sha256(&encode(&p.checkpoint)?),"evaluation":evaluation,"sensitivity":{"vector_block":p.vector,"route":p.route},"snapshot_metadata":training::snapshot_metadata(&p.checkpoint.model)?});
         validate_evaluation(&value, release, p)?;
-        write_new(&path, &value)?;
-        sync_directory(state)?;
+        publish_state_json(&path, &value, false)?;
     }
     // Seal the successful durable result separately. A crash before this pin is written
     // can be recovered at the same quarter only after all metadata checks above pass.
     let pin_path = path.with_extension("pin.json");
     if !pin_path.exists() {
         let bytes = fs::read(&path).map_err(|e| invalid(e.to_string()))?;
-        write_new(
+        publish_state_json(
             &pin_path,
             &FilePin {
                 path: fs::canonicalize(&path).map_err(|e| invalid(e.to_string()))?,
                 sha256: corpus::sha256(&bytes),
             },
+            false,
         )?;
-        sync_directory(state)?;
     }
     read_evaluation(&path, driver, release, &p.baseline_evaluation, n)
 }
@@ -902,6 +956,55 @@ mod tests {
             }
             assert!(validate_evaluation(&wrong, &release, &p).is_err(), "{case}");
         }
+        Ok(())
+    }
+    #[test]
+    fn atomic_state_publication_preserves_stray_pending_and_existing_final() -> Result<()> {
+        let root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local/controller-metadata-tests");
+        fs::create_dir_all(&root).map_err(|e| invalid(e.to_string()))?;
+        let root = root.join(format!(
+            "atomic-state-{}-{}",
+            std::process::id(),
+            unix_ns()?
+        ));
+        fs::create_dir(&root).map_err(|e| invalid(e.to_string()))?;
+        for name in [
+            "initial.json",
+            "evaluation-04101.json",
+            "evaluation-04101.pin.json",
+        ] {
+            let stray = root.join(format!(".{name}.pending-{}-0-0", std::process::id()));
+            fs::write(&stray, b"interrupted partial metadata")
+                .map_err(|e| invalid(e.to_string()))?;
+            let final_path = root.join(name);
+            publish_state_json(&final_path, &json!({"generation":1}), false)?;
+            assert_eq!(read_json::<Value>(&final_path)?, json!({"generation":1}));
+            assert_eq!(
+                fs::read(&stray).map_err(|e| invalid(e.to_string()))?,
+                b"interrupted partial metadata"
+            );
+            let original = fs::read(&final_path).map_err(|e| invalid(e.to_string()))?;
+            assert!(publish_state_json(&final_path, &json!({"generation":2}), false).is_err());
+            assert_eq!(
+                fs::read(&final_path).map_err(|e| invalid(e.to_string()))?,
+                original
+            );
+            assert!(publish_state_json(&final_path, &json!({"generation":2}), true).is_err());
+        }
+        // Pointer replacement is the sole intentional mutation; stale PID-only pending
+        // names from the earlier controller cannot prevent a new durable publication.
+        let old_pending = root.join(format!("latest-{}.pending", std::process::id()));
+        fs::write(&old_pending, b"old interrupted pointer").map_err(|e| invalid(e.to_string()))?;
+        let latest = root.join("latest.json");
+        publish_state_json(&latest, &json!({"generation":1}), true)?;
+        publish_state_json(&latest, &json!({"generation":2}), true)?;
+        assert_eq!(read_json::<Value>(&latest)?, json!({"generation":2}));
+        assert_eq!(
+            fs::read(&old_pending).map_err(|e| invalid(e.to_string()))?,
+            b"old interrupted pointer"
+        );
+        fs::remove_dir_all(root).map_err(|e| invalid(e.to_string()))?;
         Ok(())
     }
 }
