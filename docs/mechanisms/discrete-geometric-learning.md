@@ -79,8 +79,10 @@ capability; default requests return `TrainingHeld`. The
 [A2 admission controller](../labs/discrete-admission-2026-10-14/README.md) adds an
 explicitly released seed1/1640-batch diagnostic pilot and trained-checkpoint
 evaluation, gated by pinned source/artifact/data, Claude review and Casey D4
-release records. Its changed receipt ABI and controller qualification remain
-pending; source delivery lifts no hold. `prepare-plan` is metadata only;
+release records. Its changed receipt ABI passed all25 finite CUDA controls
+at `35a48f586`, with11 fixture apply calls/8 disposable updates and0 corpus
+updates;18 host metadata tests cover admission/persistence. Corpus controller
+execution remains NOT_RUN; source delivery lifts no hold. `prepare-plan` is metadata only;
 `init-corpus`/`eval-corpus` are CUDA entry points, with the latter still limited to
 lineage-bound epoch0 checkpoints. The new `eval-pilot` retains the pilot release
 and registered recovery-checkpoint provenance.

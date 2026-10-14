@@ -3,7 +3,7 @@
 - Date: 2026-10-14. Milestone: M1 #2029; shared learning/output #2032.
 - Owner: Codex/Sol; exact-source reviewer requested: Claude; PM: Kimi.
 - TEST FITNESS: FIT (prospective), subject to the constrained C1/C2 carry and
-  corrected source/artifact pins below. Numerical controls remain NOT_RUN.
+  corrected source/artifact pins below. The dated outcome records execution.
 - Numerical baseline: `e7d926fbe38537f4faa90b817705c61a780778d6` plus only the
   admission diff allowed by Amendment 2 of the
   [learning sheet](m1-discrete-rung0-training-2026-10-13.md).
@@ -244,6 +244,9 @@ cryptographic identity; the command starts no compute. This qualification
 neither runs it nor creates a D4 release.
 
 Final corrected source/artifact and metadata-test pins: recorded above before controls.
-Numerical controls: **NOT_RUN**. Corpus pilot: **NOT_RUN**.
+Numerical controls: **25/25 PASS**, once each at03:13:38–03:13:53Z;
+11 fixture apply calls/8 disposable updates/0 corpus updates.
+[Exact receipts](../../labs/discrete-admission-2026-10-14/README.md#observed-finite-cuda-qualification).
+Corpus pilot: **NOT_RUN**.
 Training and M2: HELD. A failed control suspends qualification, never closes or
 redirects a mechanism; attribution follows instrument, fixture, bar, mechanism.

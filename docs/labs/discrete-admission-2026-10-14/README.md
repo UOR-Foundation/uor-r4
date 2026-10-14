@@ -3,8 +3,8 @@
 Codex/Sol, 2026-10-14; References #2029 and #2032. Line: discrete read/writer
 construction. No language headline movement or learning count reset.
 Training and M2 remain **HELD**. Claude's prospective finite-control FIT carries
-to the constrained C1/C2 corrections below; their final source pin and CUDA
-qualification remain pending. No corpus pilot has run.
+to the constrained C1/C2 corrections below. The pinned source passed all25
+CUDA controls; Claude's corrected-source closeout is pending. No corpus pilot has run.
 
 This is the admission diff required by Amendment 2 of the
 [learning sheet](../../harness/prep/m1-discrete-rung0-training-2026-10-13.md).
@@ -83,19 +83,19 @@ registers the composed25 CUDA controls and sensitivity witnesses, with the same
 read-only authored proposal distinguishes nonimproving-but-sensitive from all-tied.
 Claude recorded [TEST FITNESS: FIT (prospective)](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159846324)
 and [confirmed its carry to the constrained C1/C2 correction](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159902239).
-The corrected commit pin is **PENDING**; CUDA build/runtime remain **NOT_RUN**.
+The corrected source is `35a48f5863ed07711f70602ffa30d8d86209bf27`.
+CUDA release build and all25 controls passed; see the observed receipts below.
 Previous #2400 measurements do not qualify this changed proposal ABI or the
 new controller.
 
-Local metadata tests, formatting and ratchets will be reported at the exact
+Local metadata tests, formatting and ratchets passed at the corrected
 source head. They are not CUDA runtime or learned-evaluation results. The pilot's
 known-component estimate remains1.784167939h/$1.620024488 at the prior quoted rate;
 controller, production apply, data/IO, setup/build, snapshots, retries and
 preservation remain additional unmeasured cost. This task changes no estimate
 into a measured all-in budget.
 
-Next: pin the constrained corrected source and its metadata checks, then qualify
-the changed CUDA receipt under the prospective finite FIT. Kimi binds the final
+Next: Claude closes the corrected-source review, then protected delivery. Kimi binds the final
 executable/PTX/source and resources; only Casey releases D4. Finite controls and
 metadata checks do not establish corpus-controller or production learned-evaluation execution.
 
@@ -145,9 +145,56 @@ refuses. Preserve that failed output and verify there was no apply before
 preparing a fresh dedicated state directory and attempt. Each resumed segment's
 wall time belongs to cumulative cost, even if its uncheckpointed work is replayed.
 
-Before C1/C2, local verification observed 17/17 metadata tests PASS; D23
-ratchet1641 and D25 ratchet93 PASS; claim-wording PASS. The corrected inventory
-is 18 metadata tests, adding explicit lock recovery. Corrected-source test and
-format/ratchet receipts are **PENDING** their exact commit pin. Owner-record
+At corrected source `35a48f586`, all18 metadata tests PASS, including explicit
+lock recovery; formatting, D23 ratchet1641, D25 ratchet93, claim-wording and
+diff checks PASS. Owner-record
 test fixtures now remain in memory and never write an owner-release file.
-CUDA build/runtime, production apply/evaluation and corpus pilot remain NOT_RUN.
+Finite CUDA build/runtime passed. Production apply/evaluation and corpus pilot remain NOT_RUN.
+
+## Observed finite CUDA qualification
+
+On2026-10-14 at03:13:38–03:13:53Z, the pre-pinned source at `35a48f586`
+passed all25 controls once: [Route11](receipts/route.json),
+[Flock6](receipts/flock.json), [Driver8](receipts/driver.json). Each suite
+exited0 with no skipped/NOT_RUN controls. Driver dose was exactly11 fixture
+apply calls/8 disposable accepted updates/0 corpus updates. Post-apply model
+snapshots were not saved. The added sensitivity witnesses passed without
+changing the learning law or adding an apply call.
+
+[Build identities](receipts/build-identity.json) match the
+[pre-execution sheet pins](../../harness/prep/m1-discrete-admission-controls-2026-10-14.md).
+The exact11-entry PTX admission passed; all14 uploaded crate-file digests
+matched the reviewed source. Build: Ubuntu24.04.3, Rust1.97.1,
+nvcc12.8.93, `compute_120`, RTX5090 driver595.84. AOT release build40.04s.
+[Suite wall times](receipts/timings.txt): Route7.461352087s,
+Flock3.285109629s, Driver3.652831279s; sum14.399292995s.
+These are finite construction timings, not production throughput.
+
+Scope limits: no corpus controller run, production apply/evaluation,
+learned-checkpoint result, fresh transfer or owner release. The finite controls
+qualify the changed receipt ABI and regression behavior; metadata tests/source
+review cover controller admission and persistence. Sensitivity means an active
+cost changed, including an ineligible MAX cost, not that a move could improve.
+The source review's nonblocking hardening suggestions remain future work:
+explicit parameter-kind refusal in pilot counters, executable inode/mtime
+recheck, output disjointness against prior report roots and a direct dose-cap
+test. Foreign-host/boot lock recovery requires separate verified disposition.
+
+Full archive: `admission-qualified-20261014` (iCloud Codex results; final receipt
+and provider lifecycle cost recorded below). Its nested `qualification.tgz`
+SHA256 is `7253b51e07fbed74301c866d3419176064f9c8f8f760276bba1f8479192c13b1`;
+pod-to-local byte identity verified before archival. Training/M2 remain HELD.
+
+Archive round-trip: `icloud:UOR-R4/results/codex/admission-qualified-20261014.tar`,
+1,400,320bytes, MD5`6bd19fb4b87c388d49ff5f6195f8da4d`, verified by cloud-store
+download before pod teardown. Build/control logs and executable/PTX/geometry
+are retained; the small exact control receipts are also committed above.
+
+[Provider ledger](receipts/provider.jsonl): up03:03:51Z, deleted03:16:50Z;
+779seconds event-to-event at$0.815/h = $0.176356944 conservative incremental
+charge. The provider adapter's uptime field is770seconds ($0.174319444);
+the larger event interval is charged here to include setup/teardown margin.
+This adds to, and does not reset, the existing shared cumulative ledger.
+No numerical retries occurred. Metadata/review/orchestration and archive work
+are separate from14.399292995s of finite control time. The estimate does not
+include any unreported provider storage/network billing or future pilot work.

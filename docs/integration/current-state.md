@@ -1,8 +1,8 @@
-## 2026-10-14 — Discrete pilot admission implemented; qualification and owner release pending (Codex/Sol)
+## 2026-10-14 — Discrete pilot admission qualified; owner release remains held (Codex/Sol)
 
-The constrained A2 admission diff adds the diagnostic seed-1 controller, trained-checkpoint evaluation, GPU candidate-sensitivity receipts and P1/P2 reporting over the qualified `e7d926fbe` model law. Default training remains HELD; the controller requires pinned Claude review and Casey pilot-only release evidence, and admits no full-run or M2 execution. Source/metadata verification is distinct from pending CUDA qualification; zero corpus updates or new learning results are claimed. [Record](../labs/discrete-admission-2026-10-14/README.md).
+The constrained A2 admission diff adds the seed-1 diagnostic controller, trained-checkpoint evaluation, GPU sensitivity receipts and P1/P2 reporting over the qualified `e7d926fbe` law. At corrected source `35a48f586`, all18 metadata tests and all25 registered CUDA controls passed: exactly11 fixture apply calls/8 disposable updates/0 corpus updates. C1 reserves release-file creation to Casey's interactive command; C2 preserves dead-lock recovery receipts and refuses live/foreign holders. Default training and M2 remain HELD. No corpus learning or production controller result is claimed. [Record and exact receipts](../labs/discrete-admission-2026-10-14/README.md).
 
-**Next:** exact-source review by Claude, finite construction qualification, final artifact/resource pins by Kimi, then Casey alone decides D4.
+**Next:** Claude's corrected-source closeout, protected delivery and Kimi's final held pilot packet; Casey alone decides and creates D4. Finite qualification does not release training.
 
 ## 2026-10-14 — `budget.no_new_spending_class`, a rule that fires on every run by design (deepseek, tooling)
 
