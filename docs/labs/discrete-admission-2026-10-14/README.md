@@ -2,8 +2,9 @@
 
 Codex/Sol, 2026-10-14; References #2029 and #2032. Line: discrete read/writer
 construction. No language headline movement or learning count reset.
-Training and M2 remain **HELD**. Implementation is pending qualification and
-Claude's exact-source review; no corpus pilot has run.
+Training and M2 remain **HELD**. Claude's prospective finite-control FIT carries
+to the constrained C1/C2 corrections below; their final source pin and CUDA
+qualification remain pending. No corpus pilot has run.
 
 This is the admission diff required by Amendment 2 of the
 [learning sheet](../../harness/prep/m1-discrete-rung0-training-2026-10-13.md).
@@ -44,9 +45,22 @@ attempted/sensitive/accepted observations. Checkpoints and reports use exclusive
 files; the operational latest-checkpoint pointer is separate from immutable
 report roots. Resume continues the canonical model/corpus/coordinate cursor.
 Interrupted segments are replayed from their last durable snapshot and must be
-charged as retries; their prior logs are retained. A crash may leave `active.lock`:
-verify the recorded worker has stopped before moving that stale lock aside;
-never remove another live session's lock. One controller owns the run state.
+charged as retries; their prior logs are retained. A crash may leave `active.lock`.
+The explicit metadata-only command is:
+
+```sh
+discrete-stack pilot-unlock RUN_STATE EXPECTED_LOCK_SHA256 NEW_RECEIPT_DIR
+```
+
+It requires the original lock's SHA256, matching host and boot identities, and
+a demonstrably dead PID. It checks liveness twice, refuses changed, live,
+foreign or ambiguous locks, serializes recovery attempts, and preserves the
+original lock with a receipt in a fresh disjoint directory. It does not kill a
+process or release a training hold. A reboot or replacement pod changes the
+boot/host identity and therefore refuses automatic recovery; preserve the old
+state and establish worker liveness before an explicit operator disposition.
+One controller owns the run state; recovery is never permission to remove
+another live session's lock.
 
 ## P1 and P2
 
@@ -67,8 +81,11 @@ The [finite construction sheet](../../harness/prep/m1-discrete-admission-control
 registers the composed25 CUDA controls and sensitivity witnesses, with the same
 11 fixture apply calls/8 disposable updates and no corpus training. One extra
 read-only authored proposal distinguishes nonimproving-but-sensitive from all-tied.
-Its prospective FIT and execution are pending. Previous #2400 measurements do
-not qualify this changed proposal ABI or the new controller.
+Claude recorded [TEST FITNESS: FIT (prospective)](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159846324)
+and [confirmed its carry to the constrained C1/C2 correction](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159902239).
+The corrected commit pin is **PENDING**; CUDA build/runtime remain **NOT_RUN**.
+Previous #2400 measurements do not qualify this changed proposal ABI or the
+new controller.
 
 Local metadata tests, formatting and ratchets will be reported at the exact
 source head. They are not CUDA runtime or learned-evaluation results. The pilot's
@@ -77,14 +94,15 @@ controller, production apply, data/IO, setup/build, snapshots, retries and
 preservation remain additional unmeasured cost. This task changes no estimate
 into a measured all-in budget.
 
-Next: Claude reviews the exact admission diff against A2-4/P1/P2 and the finite
-qualification sheet; qualify the changed CUDA receipt and controller interfaces;
-Kimi binds the final executable/PTX/source and resources; only Casey releases D4.
+Next: pin the constrained corrected source and its metadata checks, then qualify
+the changed CUDA receipt under the prospective finite FIT. Kimi binds the final
+executable/PTX/source and resources; only Casey releases D4. Finite controls and
+metadata checks do not establish corpus-controller or production learned-evaluation execution.
 
 ## Operator handoff
 
-No released manifest is supplied. After the real review and owner instruction,
-Kimi obtains exact identity values with `discrete-stack build-identity CONFIG`.
+No released manifest is supplied. Kimi obtains exact identity values with
+`discrete-stack build-identity CONFIG`.
 This reads compiled/file metadata and does not create a CUDA context. The config
 hash is over canonical serialized `DriverConfig`, not the pretty-printed input
 file; this command also prints the admitted corpus lineage hash.
@@ -99,18 +117,37 @@ the actual binary identity checks.
 
 The review record carries `reviewer: Claude`,
 `verdict: APPROVE_A2_ADMISSION_DIFF`, the same `scope` and full `execution`, and
-its real GitHub `receipt_url`. The owner record carries `owner: Casey`,
-`decision: RELEASE_D4_FOR_A2_PILOT_ONLY`, the same `scope` and `execution`, the
-`claude_review_sha256`, and its real `receipt_url`. A structured record is a
-transcription of an actual decision, never permission to invent that decision.
-The separate M2 hold is unaffected.
+its real GitHub `receipt_url`. Kimi may prepare an `OwnerReleasePlan` with schema
+`uor-r4.pilot-owner-release-plan/1`, status `HELD_OWNER_ACTION_REQUIRED`, the
+complete `execution`, `config`, SHA-pinned `sheet` and `claude_review`, and the
+absolute disjoint `run_state_directory`. This plan contains no owner decision.
+
+[Casey's C1 decision](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159895665)
+is binding: **no lab writes, edits, copies or generates `owner.json`, or any
+file that stands in for the owner-release record.** Casey alone runs this
+command from his own terminal, only when he chooses to release the pilot:
+
+```sh
+env -u UOR_LAB discrete-stack owner-release PILOT_PLAN.json NEW_RELEASE_DIR
+```
+
+Labs must never invoke or automate this command. It requires an interactive
+terminal, validates and displays the pinned plan, then asks Casey to type
+`I am Casey; release D4 for the 1640-batch diagnostic pilot only`. It exclusively
+creates the owner record and admission manifest in the new directory; the
+owner record binds the exact execution and Claude review with an owner-terminal
+receipt. It starts no model computation. The TTY and phrase are operational
+safeguards, not authentication against a shared OS account. The separate M2
+hold and all other training holds remain unaffected. No D4 release has occurred.
 
 If initialization fails before a durable checkpoint0 exists, `pilot-resume`
 refuses. Preserve that failed output and verify there was no apply before
 preparing a fresh dedicated state directory and attempt. Each resumed segment's
 wall time belongs to cumulative cost, even if its uncheckpointed work is replayed.
 
-Local verification observed: 17/17 metadata tests PASS; D23 ratchet1641 and D25
-ratchet93 PASS; claim-wording PASS. Formatting initially found only module-order
-style in the new declaration, corrected before delivery. CUDA build/runtime,
-production apply/evaluation and corpus pilot remain NOT_RUN at this review head.
+Before C1/C2, local verification observed 17/17 metadata tests PASS; D23
+ratchet1641 and D25 ratchet93 PASS; claim-wording PASS. The corrected inventory
+is 18 metadata tests, adding explicit lock recovery. Corrected-source test and
+format/ratchet receipts are **PENDING** their exact commit pin. Owner-record
+test fixtures now remain in memory and never write an owner-release file.
+CUDA build/runtime, production apply/evaluation and corpus pilot remain NOT_RUN.

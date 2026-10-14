@@ -2,28 +2,51 @@
 
 - Date: 2026-10-14. Milestone: M1 #2029; shared learning/output #2032.
 - Owner: Codex/Sol; exact-source reviewer requested: Claude; PM: Kimi.
-- TEST FITNESS: PENDING. No numerical execution is authorized by this draft.
+- TEST FITNESS: FIT (prospective), subject to the constrained C1/C2 carry and
+  corrected source/artifact pins below. Numerical controls remain NOT_RUN.
 - Numerical baseline: `e7d926fbe38537f4faa90b817705c61a780778d6` plus only the
   admission diff allowed by Amendment 2 of the
   [learning sheet](m1-discrete-rung0-training-2026-10-13.md).
-- Integrated source, source digest, executable SHA256, PTX SHA256, geometry
-  SHA256, CUDA architecture and compiler: NOT_PINNED. Bind before execution;
+- Integrated source and build pins are recorded below before execution;
   old #2400 artifacts do not qualify this changed proposal receipt ABI.
 - Training and M2 remain **HELD**. This sheet does not release either hold or
   authorize the 1,640-batch corpus pilot. It qualifies finite construction only.
 
 ## Base artifact
 
-Integrated source for review: `73f2f7e21a671dc27f42d4c9380673dd23995780`,
-[PR #2421](https://github.com/UOR-Foundation/uor-r4/pull/2421). Later sheet-only
-format/pin updates do not change that executable source. Binary/PTX identities
-remain NOT_BUILT and must be recorded before any numerical execution.
+Claude reviewed `73f2f7e21a671dc27f42d4c9380673dd23995780` on
+[PR #2421](https://github.com/UOR-Foundation/uor-r4/pull/2421), then confirmed
+the crate was byte-identical at sheet-only head `6f82c06ab`. The corrected C1/C2
+source commit is `35a48f5863ed07711f70602ffa30d8d86209bf27`. The prospective FIT carries only to the explicit
+lock-recovery correction/test and Casey-only owner-release command/documentation
+described below. CUDA release build completed in40.04s on the owned
+Vast `vast-55853826`, RTX5090, CUDA nvcc12.8.93, `compute_120`, Rust1.97.1.
+The build's exact eleven-entry integer PTX admission passed.
+
+Pre-execution pins (SHA256):
+
+| Artifact | SHA256 |
+| --- | --- |
+| Executable | `d12877b6d8adc6a60445a014be682ab82459a781f760ac99a226b07335cbfcac` |
+| CUDA source | `e18361495276e491525674fb3fdce308b0ad787c7fd6860a811adb60dacd9e1a` |
+| Driver source | `236e7fb6e5269e3bd4fed21d391d1ce82f7d9bd31275f1a0d97dd0c4ce9d9806` |
+| PTX | `931a511bece20641ae00c6b0e943f4f2a380c0f35a824d85fcc0447f1e1ccf5b` |
+| Packed geometry | `46ddbb76b7fbe6ac6222ea24779fc10055b1d6cea6a8da786895676fd29fe327` |
+| Generated geometry.rs file | `3c7a88bfc82e0fc2f4031ec35cfd69516596dce385b792767675ea937763cc50` |
+
+The packed geometry digest and generated Rust file digest identify different
+encodings; they are not expected to match. All18 metadata tests, formatting,
+D23=1641, D25=93 and claim-wording checks passed at this source. Executable
+control inventories match the25 names below. No CUDA context was created by
+the build-identity command.
 
 ## Data split
 
 Authored disposable literal fixtures only. No production TRAIN/DEV input enters
 an apply call. Metadata tests use literal storage, mask, cursor and release-record
-fixtures; these do not execute a host model. No trained artifact is inherited.
+fixtures; these do not execute a host model. Owner records exist only in memory
+in tests; no owner-release file is written, copied or generated. No trained
+artifact is inherited.
 
 ## Bar
 
@@ -35,7 +58,7 @@ it cannot close or redirect a geometric mechanism.
 ## Minimum test power
 
 This is construction qualification, not a statistical language experiment.
-The 25 finite CUDA controls plus 17 metadata tests resolve the named ABI,
+The 25 finite CUDA controls plus 18 metadata tests resolve the named ABI,
 causality, identity, admission and persistence risks. They do not establish
 learnability, corpus controller execution or production throughput. The
 separately registered training sheet owns any later corpus dose and transfer.
@@ -105,11 +128,11 @@ as a learning artifact. No new `measure-cost` run is part of this sheet.
 
 ## Controller metadata inventory and source review
 
-Run **17 non-CUDA Rust metadata tests**: the ten baseline tests plus seven
-admission/controller/report tests. Before FIT, confirm these exact names and count
+Run **18 non-CUDA Rust metadata tests**: the ten baseline tests plus eight
+admission/controller/report tests. Confirm these exact names and count
 against integrated `cargo test -p uor-r4-discrete --no-default-features --lib --
---list` output. **This draft remains PENDING until that inventory and the exact
-integrated source are confirmed.** No host test executes model computation.
+--list` output. **All18 passed at `35a48f586`; exact names match this inventory.**
+No host test executes model computation or writes an owner-release record.
 
 | Module | Exact test names |
 | --- | --- |
@@ -117,7 +140,7 @@ integrated source are confirmed.** No host test executes model computation.
 | `metadata::tests` — 2 | `every_admitted_context_preserves_ordered_atom_coverage`, `triple_and_nine_atom_closure_retain_exact_child_indices` |
 | `tests` — 3 | `apply_calls_are_confined_to_bounded_fixture_and_admitted_transition`, `configuration_and_hold_are_metadata_only`, `read_configuration_is_explicit_bounded_metadata` |
 | `training::tests` — 4 | `complete_coordinate_cycle_and_resume_are_metadata`, `checkpoint_metadata_refuses_swapped_config_data_and_cursor`, `pilot_slice_reports_masked_reference_share_without_reordering`, `snapshot_metadata_distinguishes_interior_patterns_from_writer_cells` |
-| `controller::tests` — 5 | `controller_is_pilot_only_and_unknown_release_fields_refuse`, `pilot_configuration_rejects_unregistered_seed_dose_or_data`, `release_records_bind_owner_review_scope_and_every_identity`, `resume_counters_require_exact_pilot_cursor_and_baseline`, `immutable_checkpoint_output_refuses_reuse` |
+| `controller::tests` — 6 | `controller_is_pilot_only_and_unknown_release_fields_refuse`, `pilot_configuration_rejects_unregistered_seed_dose_or_data`, `release_records_bind_owner_review_scope_and_every_identity`, `resume_counters_require_exact_pilot_cursor_and_baseline`, `explicit_unlock_refuses_live_or_foreign_holders_and_preserves_dead_lock`, `immutable_checkpoint_output_refuses_reuse` |
 
 The new checks and source review cover these concrete construction risks:
 
@@ -125,6 +148,11 @@ The new checks and source review cover these concrete construction risks:
   configuration and expanded pilot dose are refused before a CUDA context.
 - Default training and corpus-update admission remain HELD. Merely providing
   a FIT sheet does not mint an update capability or release the hold.
+- Explicit `pilot-unlock RUN_STATE EXPECTED_LOCK_SHA256 NEW_RECEIPT_DIR`
+  preserves the exact dead-holder lock and a recovery receipt. It requires the
+  same host/boot and refuses live, foreign, changed or ambiguous holders; a
+  reboot/replacement pod is not automatically admitted. Recovery grants no
+  model-execution permission.
 - The registered ascending pilot coordinates remain VectorBlock0..1639;
   Route reports attempted0 / sensitivity NOT_RUN / accepted0.
 - Per-kind attempted/sensitive/accepted observations distinguish tied no-op,
@@ -150,7 +178,8 @@ pilot remains NOT_RUN and is outside this finite execution scope.
    FIT, including answers to the four questions below.
 2. Root records scoped qualification admission. Use at most one owned admitted
    CUDA12.8+ Ubuntu24 pod within all-lab limits of four pods and $8/hour; inspect
-   live leases first. No new rental or numerical run follows from this draft.
+   live leases first. No numerical run precedes the corrected source and
+   executable/PTX/geometry pins and scoped resource admission.
 3. Compile release AOT; record architecture, nvcc/Rust/driver/device and binary,
    PTX, source and geometry digests. Admit actual PTX with the existing exact
    eleven-entry integer instruction checker. A build failure is a blocker.
@@ -195,9 +224,26 @@ disk floor, source/contract mismatch and failed/unsafe CUDA.
 
 ## Independent review and outcome
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (prospective)
 
-Claude exact-source verdict and R12 answers: PENDING. Final source/artifact and
-metadata-test pins: PENDING. Numerical controls: NOT_RUN. Corpus pilot: NOT_RUN.
+Claude's [exact-source review and four R12 answers](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159846324)
+admitted the 25 CUDA controls, one extra read-only proposal, unchanged eleven
+fixture apply calls/eight disposable updates and zero corpus dose. Source was
+CHANGES REQUESTED for C1/C2. His [carry confirmation](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159902239)
+retains prospective FIT for the head limited to C2 lock handling/test plus C1
+documentation and command line. The new lock test increases metadata inventory
+from 17 to 18; it adds no model computation or fixture apply.
+
+[Casey's C1 policy](https://github.com/UOR-Foundation/uor-r4/pull/2421#issuecomment-6159895665)
+resolves ownership: no lab writes, edits, copies or generates the owner-release
+record or an equivalent file. Kimi may prepare a pinned, held `OwnerReleasePlan`;
+Casey alone may run `env -u UOR_LAB discrete-stack owner-release PILOT_PLAN.json
+NEW_RELEASE_DIR` at his terminal and enter the explicit pilot-only release
+phrase. Labs never invoke that command. This is operator attestation, not
+cryptographic identity; the command starts no compute. This qualification
+neither runs it nor creates a D4 release.
+
+Final corrected source/artifact and metadata-test pins: recorded above before controls.
+Numerical controls: **NOT_RUN**. Corpus pilot: **NOT_RUN**.
 Training and M2: HELD. A failed control suspends qualification, never closes or
 redirects a mechanism; attribution follows instrument, fixture, bar, mechanism.
