@@ -33,7 +33,7 @@ four separable items, and they get four different answers:
 
 **Parallel testing versus replacement: neither is the right frame.** The discrete path already
 dispatches read laws by a kernel mode word (`discrete.cu:204-207`, `s[8]`), checkpoints and
-drivers already carry the read law in their lineage (`lib.rs:108-114`, `training.rs:296-300`),
+drivers already carry the read law in their lineage (`lib.rs:108-114`, `training.rs:287-299`),
 and rollback is "select `route`". A third `ReadSpec` variant is the parallel path. Replacement of
 SpiralCore transport, the FBS binder or the writer is proposed by no evidence anywhere in the
 reviewed material, and the brief does not actually propose it either. Most of the brief's Stage A
@@ -149,7 +149,8 @@ key never actually decides. The per-frame top-K dominance argument holds.
    `b=0` and `0` otherwise (`discrete.cu:107`), so at B4 payload blocks 1, 2 and 3 share one query
    frame and one candidate frame and compute the identical top-K three times. Codex's "fix the
    block" is right but overcounts: there are two selection problems per level, not four. The
-   same fact is a free exact 3× reduction of selection work today, without any index.
+   same fact removes two of the four selections per level today (a 2× reduction of selection
+   work), without any index.
 2. *No payoff at the registered shape.* At C192 the BinderPlan has 192/64/21/7/2 nodes at levels
    0..4 (286 total, 5 stages). `16K=128` at K8 beats the eligible scan only at level 0 (at most
    192 → 128 comparisons of 16-root tables), and the comparison is a root-table lookup either
@@ -158,12 +159,14 @@ key never actually decides. The per-frame top-K dominance argument holds.
    coordinates (8,192 B packed); a 64-row C192 carried batch is 1,572,864 B (24,576 B packed).
    Both are a few megabytes at most, far below the L2 cache of the qualified RTX 5090. The measured D2 forward
    (37.8 ms Route, 40.6 ms Flock at batch 64) is dominated by the writer's vocabulary pass:
-   `writer` computes `token_cell` for all 4,096 tokens (two `root_id` searches of 16 × 8
+   `writer` computes `token_cell` for all 4,096 tokens (two `root_id` searches of up to 16 × 8
    compares each) per row and again inside each of the 8 admitted cells (`discrete.cu:231`,
-   `241`). Packing changes none of that.
+   `241`): about 5 × 10⁶ compares per row on average, up to 9.4 × 10⁶, before `token_distance`.
+   Packing changes none of that.
 4. *Invalidation.* A VectorBlock proposal on the frame block of a token changes the frame class
    of every occurrence of that token and of every parent whose leftmost leaf is that token
-   (`discrete.cu:148`), inside the same epoch (`24-33`). The index would be rebuilt on most
+   (`discrete.cu:148`), without any epoch increment (the overlay is `24-33`; the epoch moves only
+   at apply, `335` and `344`). The index would be rebuilt on most
    proposals during training. Codex states this; I confirm it and note it removes the training
    case from the index's benefit entirely.
 5. *The nibble-to-root byte code is a relabeling.* Encoding a byte as two of sixteen roots,
@@ -254,13 +257,17 @@ node construction (`discrete.cu:123-155`) and its payload transport, combine and
   first key and Flock's keys as the tie order; relation off (all trits 0) reproduces Flock
   exactly, which is the construction control that matters most (§9).
 - **Learning slots** are the existing Gate parameter kind (`lib.rs:125-131`, kind 3, three
-  ordinals, `discrete.cu:88-94`, `315-317`, `329-335`): no new proposal kind, no new
-  counterfactual lane, no new apply path. The new inventory is `edge_types × stages` trits
+  ordinals, `discrete.cu:88-94`, `315-317`, `329-335`): no new proposal kind and no new
+  counterfactual lane. Three existing checks must admit the new mode, and they are the whole
+  kernel-side learner change: the Gate-only-in-Flock refusals (`discrete.cu:285`, `330`), the
+  `blocks × stages` index bounds (`286`, `331`), and the two-arm `ReadSpec` match in
+  `coordinate()` (`training.rs:236-239`). The new inventory is `edge_types × stages` trits
   (5 edge types × 5 stages = 25 at C192) plus Flock's existing `blocks × stages` combine gates.
 - **Everything downstream is unchanged:** BFS payload transport, integer sum, `snap`, the
   writer, the objective, the epoch rule.
 - **Cost at the registered shape:** per row and frame block, 286 nodes × ≤8 edges × sweeps
-  table operations ≈ 10⁴ integer ops, against the writer's ≈10⁶ compares per row. Trace fields
+  table operations ≈ 10⁴ integer ops, against the writer's ≈ 5 × 10⁶ compares per row (about
+  0.2%). Trace fields
   extend Flock's level trace with the relation score of each kept node.
 
 This is a strict superset of Flock, so the comparison "Relation versus Flock" is one of trits;
@@ -297,7 +304,7 @@ exact.
 `PreparedDriver::coordinate` maps batch index to `VectorBlock` for the first
 `vocabulary × blocks = 16,384` coordinates and to `Route` or `Gate` for the remaining
 `blocks × stages = 20` (`training.rs:224-241`); one coordinate per batch, no wrap inside a pass
-(`plan()`, `training.rs:296-300`; release record lines 140-142). The registered seed-1 completion
+(`plan()`, `training.rs:287-292`, inventory at `177-185`; release record lines 140-142). The registered seed-1 completion
 is exactly one pass (16,404 batches), so Route coordinates are attempted 20 times in total, at
 batches 16,384-16,403, and the Q1 post confirms "Route not yet reached (starts at 16,384)".
 
@@ -310,7 +317,7 @@ Consequences:
   source shows the registered schedule is such an arm.
 - The discriminator needs a declared interleaved schedule (for example every eighth batch takes
   the next read coordinate, wrapping) applied to **both** arms. That is a learner change with its
-  own tiny construction control (`validate_cursor` arithmetic, `training.rs:242-256`) and it
+  own tiny construction control (`validate_cursor` arithmetic, `training.rs:244-259`) and it
   must be registered as a change of the learner, not smuggled in with the head.
 - Sensitivity is already instrumented (`discrete_choose` reports `sensitive`,
   `discrete.cu:313-314`; Q1 reports attempted/any-candidate-differs/accepted per kind). Report
@@ -338,20 +345,24 @@ Consequences:
 | Item | Model-path compute | Storage | Learner | Comment |
 |---|---|---|---|---|
 | Object store (D19 line) | none | new, outside the model path | none | CPU data preparation; warm-case benefit only |
-| Root packing | none expected (cache-resident already) | −516 KiB codebook, −1.5 MiB per carried batch | none | deferred |
+| Root packing | none expected (cache-resident already) | −504 KiB codebook (516,096 B), −1.5 MiB per carried batch | none | deferred |
 | ≤16K index | ≤ level-0 scan only; rebuilt on most proposals | +per-level lists | none | deferred |
-| Relation read | ≈1% of the writer per row per frame block; trace +1 word per kept node | none | +25 trits (Gate kind) | §4.4 |
+| Relation read | ≈0.2% of the writer per row per frame block; trace +1 word per kept node | none | +25 trits (Gate kind) | §4.4 |
 | Interleaved schedule | none | none | redistributes proposals; no new compute | required for any read-law test |
 | Trained-in discriminator | two full passes (Route-interleaved, Relation-interleaved) ≈ 2 × 17.07 h on one RTX 5090 ≈ $30 at the recorded $0.892/h | checkpoints as today | — | within the ≤4-pod/≤$8/h caps; needs FIT and owner release |
 
-Review cost: zero GPU, zero pod, zero paid resource; local byte reproductions ≈ 2.2 s CPU total.
+Review cost: zero GPU, zero pod, zero paid resource; local byte reproductions and the DEV
+statistic ≈ 2.4 s wall total.
 
 ## 9. Minimal reversible design
 
 1. **M0, source only, now:** add `ReadSpec::Relation { kept, sweeps }` (`lib.rs`), kernel
    `relation_vector` sharing Flock's construction, `read_vector` dispatch for mode 2, `discrete_validate`
    status for the new mode/range, trace extension, `init-read` CLI acceptance, Gate-kind inventory
-   `= blocks × stages + edge_types × stages`. Older checkpoints load under their own `read_spec`;
+   `= blocks × stages + edge_types × stages` with the Gate mode checks and index bounds in
+   `discrete_counterfactual`/`discrete_apply` (`discrete.cu:285-286`, `330-331`) and the
+   `ReadSpec` match in `coordinate()` (`training.rs:236-239`) extended to the third variant.
+   Older checkpoints load under their own `read_spec`;
    a Relation checkpoint fails lineage validation on a Route/Flock driver by the existing check
    (`training.rs:293-299`). Rollback is the registered `read_spec: route`; nothing destructive.
 2. **M1, construction controls (prep sheet → FIT):** relation-off equals Flock on identical

@@ -40,7 +40,7 @@ fn main() {
         .collect();
     let (mut recur, mut recent_hit, mut any_hit, mut copy_ceiling) =
         (0usize, 0usize, 0usize, 0usize);
-    let mut recent_hit_by_distance = [0usize; 4]; // distance buckets: <=8, <=32, <=96, <=192
+    let mut recent_hit_by_distance = [0usize; 4]; // disjoint distance buckets: 1-8, 9-32, 33-96, 97-192
     for &p in &eligible {
         let doc = documents.partition_point(|&s| s <= p) - 1;
         let start = p.saturating_sub(context).max(documents[doc]);
@@ -99,7 +99,7 @@ fn main() {
     println!("eligible_targets={}", eligible.len());
     println!("query_token_recurs_in_window={}", recur);
     println!(
-        "most_recent_occurrence_successor_equals_target={} by_distance(<=8,<=32,<=96,<=192)={:?}",
+        "most_recent_occurrence_successor_equals_target={} by_distance(1-8,9-32,33-96,97-192)={:?}",
         recent_hit, recent_hit_by_distance
     );
     println!("any_occurrence_successor_equals_target={}", any_hit);

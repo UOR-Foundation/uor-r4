@@ -65,7 +65,7 @@ before use, copied from a read-only location into this review's own scratch dire
 | eligible targets (matches the registered DEV panel exactly) | 14,287 | 100% |
 | query token recurs earlier in the window | 8,648 | 60.5% |
 | **most recent earlier occurrence's successor equals the target** | **3,847** | **26.9%** |
-| … of which at distance ≤8 / ≤32 / ≤96 / ≤192 from the query | 50 / 2,872 / 900 / 25 | — |
+| … of which at distance 1-8 / 9-32 / 33-96 / 97-192 from the query (disjoint buckets) | 50 / 2,872 / 900 / 25 | — |
 | any earlier occurrence's successor equals the target | 5,182 | 36.3% |
 | target token present anywhere in the window (copy ceiling) | 8,248 | 57.7% |
 
