@@ -1,10 +1,10 @@
 {
-  "antigravity/m1-grader-v2-checks-20261014": {
-    "branch": "antigravity/m1-grader-v2-checks-20261014",
-    "claimed_at": "2026-10-13T21:56:00-04:00",
-    "head": "3e38881a2",
+  "antigravity/ag1-prime-zeta-construction": {
+    "branch": "antigravity/ag1-prime-zeta-construction",
+    "claimed_at": "2026-10-14T10:14:54-04:00",
+    "head": "3e2534eac",
     "lab": "antigravity",
-    "note": ""
+    "note": "Prime-zeta complex routing construction qualification (host codebooks, quantization boundary, CUDA construction, tangent/normal nulls, V4096 fixtures)"
   },
   "kimi/completion-release-plan": {
     "branch": "kimi/completion-release-plan",
