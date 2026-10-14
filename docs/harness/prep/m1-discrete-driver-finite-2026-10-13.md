@@ -17,6 +17,25 @@
 
 This sheet adopts those four boundaries. Corpus transition requires a private, unissued `CorpusUpdateAdmission`; `request_corpus_update_admission` and training admission must return `TrainingHeld`. Only the qualification controller applies the authored literal fixtures. In-memory snapshots used below are dropped in-process and never written to the result archive.
 
+## Base artifact
+
+Release executable built from source `9179a69dcb2c9645416e788611ed3dbb7edea0b2`:
+SHA256 `c7ba726f70c3525d43629b9ec97867d5ceaf221acf92c8ba050fa85a2ce0eca7`;
+PTX `f864c085e3054df9254646a694e73fc0e582162a11a179324df10236491246b5`;
+geometry `3c7a88bfc82e0fc2f4031ec35cfd69516596dce385b792767675ea937763cc50`.
+Build PASS: Cargo release36.42s, controller38s, Rust1.97.1, nvcc12.8.93 with
+`-ptx -std=c++17 -arch=compute_120`; RTX5090 driver580.178.04, Ubuntu24.04.1.
+The AOT checker admits exactly11 entries and rejects prohibited floating/tensor
+instructions. Model initialization is seeded; no learned checkpoint is inherited.
+
+## Data split
+
+Finite authored literal fixtures and fixed synthetic cost windows only. No real
+TRAIN/DEV/UORT input enters an apply. The small UORT bytes in masking/resume controls
+test metadata and count-reference boundaries; they do not train a corpus model.
+The separate full-corpus metadata preparation in the canonical record is not a
+numerical model run and does not enter this finite controller.
+
 ## Exact finite scope and bar
 
 Execute **25 controls** once at the frozen source: eleven unchanged Route regressions, six unchanged Flock regressions and all eight new `driver_qualification::NAMES` controls below. Require exact witnesses, zero skipped/ignored/NOT_RUN and complete independent result records. The names must agree exactly with the compiled source lists before FIT. A generic CUDA failure does not satisfy a domain-refusal witness. A CUDA fault hard-stops further launches and preserves the remaining inventory as NOT_RUN.
@@ -69,7 +88,7 @@ At this shape S=5, VB=16384, BS=20, total16404 coordinates. Each mode projects a
 
 Any later sweep/dose/dollar projection must bind its actual parameter schedule, active candidate inventory, eligible row replays, applied updates, recarry, checkpoint/evaluation cadence, setup/retries and preservation. Source-loop ceilings are not measured GPU instructions. Monetary/rate projections use exact numerators and denominators and stay UNVERIFIED until their measurement exists. This slice neither chooses a corpus dose nor runs training.
 
-## Prospective execution and preservation
+## Steps
 
 1. Freeze the integrated source, exact control names, caller/module ABI, evaluator/count metadata contracts and expected values. Build on an owned admitted CUDA12.8+ Ubuntu24 pod through `scripts/pod/uor-pod`; no agent executes a model locally.
 2. Obtain Claude's independent prospective FIT at the exact sheet/source. Record scoped admission for the eleven authored apply calls/eight updates; the separate corpus-training/M2 holds remain.
@@ -78,6 +97,23 @@ Any later sweep/dose/dollar projection must bind its actual parameter schedule, 
 5. Preserve all setup/build attempts and exact source/artifact identities, charge cumulative provider/build/control/preservation time, and verify archive round-trip before pod deletion. Preserve peer work. No checkpoint may be promoted as a trained result.
 
 At most one owned admitted pod, within the all-lab limit of4 and$8/h. Build-only pod `vast-55833746`, $0.908/h, is provisioning; root records actual resource/driver/toolchain admission before execution. Setup/build and measurement wall/cost projections are **UNMEASURED**. The twelve timed plus four warm-up production-shape proposals may dominate this finite slice; they resolve D2's training-dose feasibility and do not train. A healthy run is not cancelled because a self-set estimate expires; actual hard stops are owner caps, disk floor, failed/unsafe CUDA and source/contract mismatch.
+
+## Stop rule
+
+Any failed exact construction control blocks qualification and prevents cost
+measurement until diagnosed. A CUDA fault hard-stops further launches; partial
+records remain NOT_RUN, never PASS. Source/artifact mismatch, owner caps or disk
+floor block execution. No performance threshold rules out a mechanism; the cost
+report informs the next implementation or dose decision. A repaired controller
+uses a fresh directory and renewed exact-source FIT where source/bars changed.
+
+## Minimum test power
+
+These are deterministic construction witnesses, not statistical learning claims:
+25 declared controls, zero skipped/NOT_RUN, exact integer identities and explicit
+eligibility. The timing instrument retains three warmed repetitions per entry,
+without claiming a confidence interval or performance guarantee. No language bar,
+two-seed learning comparison, fresh-transfer KEEP or mechanism rejection follows.
 
 ## R12 author answers, for independent review
 
