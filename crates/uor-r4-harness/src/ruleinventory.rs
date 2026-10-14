@@ -51,9 +51,22 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
             "mistakes.registry_valid",
             "mistakes.evidence_exists",
             "mistakes.guard_covered",
+            // Reads the repo through `git ls-files`, because a stale glob silently stops recalling
+            // a lesson - indistinguishable from a guard that passes.
+            "mistakes.stale_check",
         ],
     ),
-    ("receipts", &["receipts.parse", "receipts.ledger_present"]),
+    (
+        "receipts",
+        &[
+            "receipts.parse",
+            "receipts.ledger_present",
+            // **Ported as an explicit no-op because that is what it is.** Both of Python's branches
+            // return empty, so no input produces a finding - and writing it as a plausible check
+            // would be inventing a rule the engine does not have.
+            "receipts.skill_usage_recorded",
+        ],
+    ),
     (
         "prlint",
         &[
@@ -111,7 +124,17 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
             "briefing.lines_agree_with_prompts",
         ],
     ),
-    ("budget", &["budget.receipts_parse", "budget.disk_floor"]),
+    (
+        "budget",
+        &[
+            "budget.receipts_parse",
+            "budget.disk_floor",
+            // **A rule that fires on every run by design.** It prints the owner's caps rather than
+            // testing anything - `ok=False` with `severity="info"` is the pair that makes them
+            // visible without counting as a failure.
+            "budget.no_new_spending_class",
+        ],
+    ),
     (
         "harness",
         &[
@@ -119,6 +142,15 @@ pub const INVENTORY: &[(&str, &[&str])] = &[
             "harness.skills.nonempty",
             "harness.mistakes.have_guards",
             "harness.state_formats",
+            // **The rule that guards every future owner rule from being silently omitted**, added
+            // when it was written and never registered here - so coverage UNDER-REPORTED by one
+            // while `parity` reported the rule as still in Python and was believed.
+            "harness.owner_rules_applied",
+            // `harness.entry_point` is ported; **`harness.documented_commands` deliberately is NOT**
+            // and stays in Python, because Python resolves a documented command through the live
+            // `argparse` parser and a Rust version without that introspection could only check the
+            // command word - **a weaker check wearing the name of the real one.** See `doccheck.rs`.
+            "harness.entry_point",
         ],
     ),
 ];
