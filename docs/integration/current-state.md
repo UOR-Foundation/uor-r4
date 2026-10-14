@@ -1,11 +1,4 @@
-## 2026-10-14 — SpiralCore reconstruction descriptions as native attention objects (Codex, owner-requested research review)
-
-The [constructive follow-up](../labs/spiralcore-native-attention-review-2026-10-14/README.md) addresses the owner's architecture question after #2478: compression before tokenization, the full HTML's current golden-route score/instrument/FBS reconstruction loop, and attention over exact descriptions. Six native Codex specialist perspectives and math/ML cross-review found a coherent interface, not an adopted replacement or FIT verdict. Fresh original-code byte checks pass (address/radix and current golden/FBS primitives). A dependency-free Rust reader passes 813 range cases / 2,374 assertions over actual Showcase records: one 23-byte range in a 32,768-byte fixture touches eight nodes/two leaves, 384 serialized record bytes, after full store construction/loading. No physical network or waveform performance claim follows. Source-derived exact options are four-bit root labels and a comparator-specific ≤16K Flock index, with occurrence, BinderPlan, virtual-proposal and trace-count bindings. A new finite relational head has its own candidate pool, input anchors, readout and outer-task learning contract; byte-storage and token-model trees remain distinct. No model/CUDA/training execution, source/configuration adoption, paid resources or owner release occurred. The prior report and all peer work are preserved; training remains HELD.
-
-Line: owner-requested architecture assessment · count unchanged · milestone headline unchanged. No new waiting dependency for Kimi or Claude. **Next:** this requested review is complete; the record supplies separate, unadopted exact-representation and finite-relational-head options for a future design decision, with FIT and owner release still required for model work.
-
 ## 2026-10-14 — the install warning was about location; it should have been about age (deepseek, tooling)
-
 The [record](../labs/install-age-2026-10-14/README.md) carries both directions of the measurement. **WHAT WAS
 WRONG WITH MY OWN FIX:** #2476 made the check-in name the binary you are actually running instead of
 prescribing a rebuild of a checkout you are not using, but its condition was **location** — any binary outside
@@ -24,8 +17,14 @@ tests passed, 6 ignored**; fmt and clippy `-D warnings` clean; unittest and `par
 1641, baseline 1641. **Found and stated:** the comparison is between file mtimes, so it answers whether the copy
 you are running is older than something this checkout built, not which source is newer; and **no build in the
 checkout means no line**, because a guess would be worse than silence.
-
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+## 2026-10-14 — SpiralCore reconstruction descriptions as native attention objects (Codex, owner-requested research review)
+
+The [constructive follow-up](../labs/spiralcore-native-attention-review-2026-10-14/README.md) addresses the owner's architecture question after #2478: compression before tokenization, the full HTML's current golden-route score/instrument/FBS reconstruction loop, and attention over exact descriptions. Six native Codex specialist perspectives and math/ML cross-review found a coherent interface, not an adopted replacement or FIT verdict. Fresh original-code byte checks pass (address/radix and current golden/FBS primitives). A dependency-free Rust reader passes 813 range cases / 2,374 assertions over actual Showcase records: one 23-byte range in a 32,768-byte fixture touches eight nodes/two leaves, 384 serialized record bytes, after full store construction/loading. No physical network or waveform performance claim follows. Source-derived exact options are four-bit root labels and a comparator-specific ≤16K Flock index, with occurrence, BinderPlan, virtual-proposal and trace-count bindings. A new finite relational head has its own candidate pool, input anchors, readout and outer-task learning contract; byte-storage and token-model trees remain distinct. No model/CUDA/training execution, source/configuration adoption, paid resources or owner release occurred. The prior report and all peer work are preserved; training remains HELD.
+
+Line: owner-requested architecture assessment · count unchanged · milestone headline unchanged. No new waiting dependency for Kimi or Claude. **Next:** this requested review is complete; the record supplies separate, unadopted exact-representation and finite-relational-head options for a future design decision, with FIT and owner release still required for model work.
+
 ## 2026-10-14 — a floor with no age is not a warning: the check-in now dates its note cache (deepseek, tooling — PM queue item 2)
 
 The [record](../labs/notes-age-2026-10-14/README.md) carries the four-case verification. **THE GAP, FROM THIS
