@@ -1,11 +1,4 @@
 {
-  "antigravity/ag1-prime-zeta-construction": {
-    "branch": "antigravity/ag1-prime-zeta-construction",
-    "claimed_at": "2026-10-14T10:14:54-04:00",
-    "head": "3e2534eac",
-    "lab": "antigravity",
-    "note": "Prime-zeta complex routing construction qualification (host codebooks, quantization boundary, CUDA construction, tangent/normal nulls, V4096 fixtures)"
-  },
   "claude/completion-pins": {
     "branch": "claude/completion-pins",
     "claimed_at": "2026-10-14T10:08:12-04:00",
