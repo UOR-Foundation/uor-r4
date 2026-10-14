@@ -35,6 +35,29 @@ fn device_command(args: &[String]) -> Result<()> {
     };
     let read = |p: &str| std::fs::read(p).map_err(|e| invalid(e.to_string()));
     match args.first().map(String::as_str) {
+        Some("pilot") | Some("pilot-resume") if args.len()==4=>{
+            let config=read_json::<uor_r4_discrete::training::DriverConfig>(&args[1])?;
+            let admission=read_json::<uor_r4_discrete::controller::ReleaseManifest>(&args[2])?;
+            uor_r4_discrete::controller::run_pilot(config,admission,Path::new(&args[3]),args[0]=="pilot-resume")
+        }
+        Some("eval-pilot") if args.len()==4=>{
+            let config=read_json::<uor_r4_discrete::training::DriverConfig>(&args[1])?;
+            let admission=read_json::<uor_r4_discrete::controller::ReleaseManifest>(&args[2])?;
+            uor_r4_discrete::controller::evaluate_pilot(config,admission,Path::new(&args[3]))
+        }
+        Some("build-identity") if args.len()==1 || args.len()==2=>{
+            let executable=std::env::current_exe().map_err(|e|invalid(e.to_string()))?;
+            let mut identity=serde_json::json!({"compiled":uor_r4_discrete::device::compiled_identity(),"driver_source_sha256":uor_r4_discrete::training::driver_source_sha256(),"executable_sha256":uor_r4_discrete::corpus::sha256(&std::fs::read(executable).map_err(|e|invalid(e.to_string()))?),"cuda_context_created":false,"training":"HELD"});
+            if args.len()==2 {
+                let config=read_json::<uor_r4_discrete::training::DriverConfig>(&args[1])?;
+                uor_r4_discrete::controller::validate_pilot_config(&config)?;
+                let driver=uor_r4_discrete::training::PreparedDriver::load(config)?;
+                identity["config_sha256"]=serde_json::json!(uor_r4_discrete::corpus::sha256(&serde_json::to_vec(driver.config()).map_err(|e|invalid(e.to_string()))?));
+                identity["lineage_sha256"]=serde_json::json!(driver.lineage_sha256()?);
+            }
+            println!("{identity}");
+            Ok(())
+        }
         Some("qualify") if args.len()==2=>uor_r4_discrete::qualification::run(Path::new(&args[1])),
         Some("qualify-flock") if args.len()==2=>uor_r4_discrete::flock_qualification::run(Path::new(&args[1])),
         Some("qualify-driver") if args.len()==2=>uor_r4_discrete::driver_qualification::run(Path::new(&args[1])),
@@ -112,7 +135,7 @@ fn device_command(args: &[String]) -> Result<()> {
             if let Some(parameter)=parameter {let p=model.propose(&input,&request.targets,parameter)?.observation()?;println!("{}",serde_json::json!({"candidate":p.candidate,"candidate_is_ordinal":true,"read_spec":model.read_spec(),"before":p.before,"after":p.after,"epoch":p.epoch,"valid_lengths":input.valid_lengths(),"applied":false}));Ok(())}
             else {let result=model.forward(&input,&request.targets)?;println!("{}",serde_json::json!({"tokens":result.predictions,"read_spec":model.read_spec(),"loss_numerators":result.losses,"token_rivals":result.token_rivals,"address_rivals":result.address_rivals,"admitted_cells":result.admitted_cells,"vectors":result.vectors()?,"epoch":result.epoch(),"valid_lengths":input.valid_lengths(),"training":"HELD"}));Ok(())}
         }
-        _=>Err(invalid("CUDA commands: init SPEC.json NEW_ARTIFACT.json SEED | init-read CONFIG.json NEW_ARTIFACT.json SEED | infer ARTIFACT REQUEST | propose ARTIFACT REQUEST route|vector|gate INDEX | init-corpus CONFIG NEW_REPORT_DIR | eval-corpus CONFIG DRIVER_CHECKPOINT NEW_REPORT_DIR | qualify NEW_REPORT_DIR | qualify-flock NEW_REPORT_DIR | qualify-driver NEW_REPORT_DIR | measure-cost NEW_REPORT_DIR")),
+        _=>Err(invalid("CUDA commands: pilot|pilot-resume|eval-pilot CONFIG ADMISSION NEW_REPORT_DIR | init SPEC.json NEW_ARTIFACT.json SEED | init-read CONFIG.json NEW_ARTIFACT.json SEED | infer ARTIFACT REQUEST | propose ARTIFACT REQUEST route|vector|gate INDEX | init-corpus CONFIG NEW_REPORT_DIR | eval-corpus CONFIG DRIVER_CHECKPOINT NEW_REPORT_DIR | qualify NEW_REPORT_DIR | qualify-flock NEW_REPORT_DIR | qualify-driver NEW_REPORT_DIR | measure-cost NEW_REPORT_DIR")),
     }
 }
 fn run() -> Result<()> {
