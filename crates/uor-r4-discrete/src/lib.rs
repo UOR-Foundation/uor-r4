@@ -1,9 +1,15 @@
 //! Discrete geometric model substrate. Model operations have no host implementation.
 //! Static geometry compilation is a build dependency, excluded from the runtime graph.
 //! The routing atlas is one sixteen-root E8 orbit; this is not full-orbit learnability.
+pub mod corpus;
 #[cfg(feature = "cuda")]
 pub mod device;
+#[cfg(feature = "cuda")]
+pub mod driver_qualification;
+#[cfg(feature = "cuda")]
+pub mod measurement;
 pub mod metadata;
+pub mod training;
 
 pub const SCHEMA: &str = "uor-r4.discrete-spiralcore-fbs/2";
 #[derive(Debug)]
