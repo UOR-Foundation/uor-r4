@@ -164,6 +164,8 @@ pilot remains NOT_RUN and is outside this finite execution scope.
    control JSON. Charge setup, build, controls, retries and preservation to the
    existing cumulative ledger. Verify archive round-trip before pod deletion.
 
+## Cost
+
 The prior composed controls completed within the earlier 78-second control and
 cost-command interval, but that interval also included a separate cost run;
 it is not a standalone timing bound for this new source. The added witness is
