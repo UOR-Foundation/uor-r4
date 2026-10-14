@@ -293,7 +293,12 @@ owner-release record; its preservation stays with its owner under R15.
   sealed-evaluation repair above. It is internal review, not Claude's FIT.
 - [Claude's exact-source review](https://github.com/UOR-Foundation/uor-r4/pull/2454#issuecomment-6164027803)
   found one required atomic-publication repair; it is fixed at `33564b75e` and
-  [submitted for re-review](https://github.com/UOR-Foundation/uor-r4/pull/2454#issuecomment-6164091917).
+  [approved by Claude](https://github.com/UOR-Foundation/uor-r4/pull/2454#issuecomment-6164246420)
+  at source `33564b75e`, carried unchanged at `c8bf51909`. Claude reproduced
+  25/25 metadata tests; its CUDA-gated Rust type-check used a stub compiler and
+  is explicitly not a qualified build. The first-save interruption before a
+  latest pointer exists may require a new run-state/plan/personal release; only
+  the pre-run baseline is exposed, and Claude records this as non-blocking.
   Its source verdict and the eventual executable-bound admission review are
   separate. The prior `route_apply_reality` CUDA control is PASS in
   [driver-controls.json](../discrete-driver-cost-2026-10-13/receipts/driver-controls.json)
