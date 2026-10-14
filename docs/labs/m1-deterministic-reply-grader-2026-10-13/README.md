@@ -141,10 +141,10 @@ Under **D31**, zeros caused by the instrument are never reported as model incapa
 
 ---
 
-## 6. Follow-Up Work: Versioned `v2` Check Table (`F5`, `F6`, `R14`)
+## 6. Follow-Up Work: Versioned `v2` Check Table (`F5`, `F6`, `R14`) — Completed in `m1-grader-v2-checks-2026-10-14`
 
-Per **R14** (`#2029` comment `6154755982`) and PM routing (`#2029` comment `6154614848`), after `#2365` merges, Antigravity will draft (and Claude will review) a separate follow-up PR introducing a versioned `v2` check table while keeping `data/panels/reply-panel-checks.tsv` (`sha256: aba96550fb89cbb063b68bae409421b03d2c248e53874e3168d6d7ef40b7ed0c`) byte-identical:
-1. **Frozen must-pass positive-control set (`F5`):** Legitimate abstentions (e.g., `"Don't know, sorry."`, `"Nope, I don't know."`, `"Honestly, I don't know."`, `"I'm sorry, I don't have that information."`), imperative requests for missing material (`heldout-037`, `-059`, `-069`, `-073`, `-162`, `-190`, `-191`), bare-salutation greetings (`heldout-006`, `-009`, `-019`, `-102`, `-131`, `-196`), and natural clarifications (`"What recipe do you mean?"`, `"Could you share the recipe first?"`), mirroring the must-fail adversarial set.
+Completed in [`docs/labs/m1-grader-v2-checks-2026-10-14/README.md`](../m1-grader-v2-checks-2026-10-14/README.md) (`crates/uor-r4-training/fixtures/reply-panel-checks-v2.tsv`, `crates/uor-r4-training/fixtures/reply-panel-positive-controls-v2.tsv`, and `chat-grade` `checks=v2` + paired copy-control comparisons under `F3`–`F6` and `R14`) while keeping `data/panels/reply-panel-checks.tsv` (`sha256: aba96550fb89cbb063b68bae409421b03d2c248e53874e3168d6d7ef40b7ed0c`) byte-identical:
+1. **Frozen must-pass positive-control set (`F5`):** Legitimate abstentions (e.g., `"Don't know, sorry."`, `"Nope, I don't know."`, `"Honestly, I don't know."`, `"I'm sorry, I don't have that information."`), imperative requests for missing material (`heldout-037`, `-059`, `-069`, `-073`, `-162`, `-190`, `-191`), bare-salutation greetings (`heldout-006`, `-009`, `-019`, `-102`, `-131`, `-196`), and natural clarifications (`"What recipe do you mean?"`, `"Could you share the recipe first?"`), mirroring the must-fail adversarial set (`34/34` positive controls pass).
 2. **Wider accepted behaviour class (`F5`):** Expand `clarify` and `abstain_exact` in the `v2` table to pass the frozen positive-control set while continuing to reject the adversarial and canned controls.
 3. **`F6` row-classification corrections in `v2`:**
    - `heldout-122`: exact algebraic answer ($f - g = 8x^2 + x - 10$).
