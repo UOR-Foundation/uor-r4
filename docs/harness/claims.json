@@ -1,4 +1,11 @@
 {
+  "antigravity/ag1-f9-complex-zeta": {
+    "branch": "antigravity/ag1-f9-complex-zeta",
+    "claimed_at": "2026-10-13T23:12:26-04:00",
+    "head": "6a36f9029",
+    "lab": "antigravity",
+    "note": ""
+  },
   "antigravity/m1-grader-v2-checks-20261014": {
     "branch": "antigravity/m1-grader-v2-checks-20261014",
     "claimed_at": "2026-10-13T21:56:00-04:00",
