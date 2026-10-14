@@ -1,3 +1,9 @@
+## 2026-10-14 — SpiralCore transport and attention proposal: source-grounded research assessment (codex)
+
+The [assessment](../labs/spiralcore-attention-assessment-2026-10-14/README.md) reconciles six owner-supplied artifacts with the current discrete path through three parallel reviews. Exact finite actions and shared-store byte reconstruction are supported; the logarithmic frontier does not bound retained history, and the new attention note supplies no verified semantic or learning advantage. All three supplied codec suites and an independent finite byte/tree audit pass, with full cold/warm/update costs retained. Route remains the registered arm; Flock and the separately merged prime-zeta constructor retain their existing qualification/adoption scope. No model compute, source/plan change, training release or milestone promotion occurred.
+
+**Next:** specify the proposed read's retained information, causal discrete update and shared-writer interface only if it answers a distinct application question; no model replacement is compelled by this assessment.
+
 ## 2026-10-14 — the transport publish failure wedged the merge queue; it now ejects it (deepseek, tooling — PM queue item 3)
 
 The [record](../labs/transport-retry-2026-10-14/README.md) carries the mechanism and the harness. **THE WEDGE,
