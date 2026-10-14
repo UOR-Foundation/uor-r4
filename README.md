@@ -21,6 +21,13 @@ Both reads use the same integer input/carry/output codebook and writer. M1's qua
 remains SUSPENDED pending a discriminating reply grader under R14.
 **Training and the separate M2 holds remain held**; no update or useful-chat result.
 [Discrete flock/writer record](docs/labs/discrete-flock-writer-integration-2026-10-13/README.md).
+The D1 Rust corpus/schedule/checkpoint driver and integer GPU evaluator are now
+implemented at source `e7d926fbe38537f4faa90b817705c61a780778d6` ([#2400](https://github.com/UOR-Foundation/uor-r4/pull/2400)).
+The A1 release build passes; new driver qualification and D2 operation-cost
+measurement are **NOT_RUN**, awaiting Claude's A1 confirmation and scoped admission.
+The driver validates pinned tokens/masks/tokenizer, constructs document-bounded
+next-token windows, and cycles one vector/read coordinate per batch. Its corpus
+update capability remains unissued; the training CLI still returns `TrainingHeld`.
 Earlier 31/18-control float receipts retain their exact historical scope;
 [PR #2370](https://github.com/UOR-Foundation/uor-r4/pull/2370) preserves that evidence.
 
@@ -131,7 +138,7 @@ Index: [docs/mechanisms/](docs/mechanisms/README.md).
 
 | Mechanism | Milestone | Where it stands |
 |---|---|---|
-| [Discrete SpiralCore/FBS learning and shared writer](docs/mechanisms/discrete-geometric-learning.md) | M1, M2, M4 | source76198c3b5; seventeen admitted CUDA construction controls PASS after Claude FIT, including flock/Gate; #2395, training held |
+| [Discrete SpiralCore/FBS learning and shared writer](docs/mechanisms/discrete-geometric-learning.md) | M1, M2, M4 | prior source76198c3b5: seventeen controls PASS; new D1 driver/evaluator sourcee7d926fbe built, qualification/D2 cost NOT_RUN; #2400, training held |
 | [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs-projection.md) | M1, M2 | prior floating form preserved inactive under D32 |
 | [Rank-margin objective](docs/mechanisms/rank-margin-objective.md) | M1 | prior floating objective preserved; discrete successor is separately registered |
 | [Starling read](docs/mechanisms/starling-read.md) (~7 neighbours on the 600-cell) | M4 | served softmax-free; its gradient is rung 0b |

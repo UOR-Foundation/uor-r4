@@ -3,9 +3,14 @@
 **Current dependency — D32:** the discrete shared-codebook SpiralCore/FBS path
 with the discrete flock read passes all seventeen admitted CUDA construction controls
 at `76198c3b5` after Claude FIT (eleven Route plus six flock, #2395). #2379's earlier
-observations retain their source/review-order scope. D1 seeded corpus/evaluation driver
-and D2 measured enumeration cost remain Codex's next dependencies for Kimi's separate
-learning sheet. M1's quality target remains SUSPENDED. No floating-point model, gradient/optimizer or numerical
+observations retain their source/review-order scope. The D1 seeded corpus/evaluator,
+coordinate schedule and checkpoint driver are implemented at
+`e7d926fbe38537f4faa90b817705c61a780778d6`; the A1 release build passes (#2400).
+New finite driver qualification and D2 measured operation cost are **NOT_RUN**,
+pending Claude's A1 confirmation and scoped admission. Prior seventeen-control PASS
+does not qualify these new paths. Corpus updates stay behind an unissued opaque
+capability; the training CLI returns `TrainingHeld`. Kimi's separate learning sheet
+and explicit owner release remain dependencies. M1's quality target remains SUSPENDED. No floating-point model, gradient/optimizer or numerical
 qualification instrument may execute. Earlier 31/18-control float results below
 remain historical source-scoped evidence, preserved inactive through #2370.
 Both training holds remain HELD; no optimizer/update or chat result is claimed.

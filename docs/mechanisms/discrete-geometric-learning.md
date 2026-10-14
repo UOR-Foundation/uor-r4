@@ -1,5 +1,16 @@
 # Discrete geometric learning through exact SpiralCore/FBS moves
 
+**Current D1/D2 status:** the native Rust corpus/schedule/checkpoint driver and
+integer GPU evaluator are implemented at `e7d926fbe38537f4faa90b817705c61a780778d6`
+([PR #2400](https://github.com/UOR-Foundation/uor-r4/pull/2400)). The A1 release build
+passed (Cargo16.06s, controller17s), with executable SHA256
+`399ab42713589439dd963ec50515133e723abda79cd4b1d90330d9710d80c117`;
+PTX/geometry identities are unchanged by the A1 correction. This is a build result.
+New driver qualification, disposable fixture apply controls and D2 cost measurement
+are **NOT_RUN**, awaiting Claude's A1 confirmation and scoped admission under the
+[separate finite sheet](../harness/prep/m1-discrete-driver-finite-2026-10-13.md).
+The earlier seventeen-control result below retains its prior source scope.
+
 **Current integration status, 13 October 2026:** optional `ReadSpec::Flock { kept }` and ternary `Parameter::Gate` proposals are integrated with the same integer codebook and geometric writer under snapshot schema2. At exact source `76198c3b5321cc42ced8a0b4a3728aebfd89c2a4`, eleven Route regressions and six new flock controls passed **17/17**, exit0, from23:14:21Z to23:14:36Z after [prospective Claude FIT](https://github.com/UOR-Foundation/uor-r4/issues/2032#issuecomment-6157157748). Applied updates0; training and M2 remain **HELD**, and M1's reply-quality target remains **SUSPENDED** under R14. Delivery is pending in [PR #2395](https://github.com/UOR-Foundation/uor-r4/pull/2395), not yet verified merged. [Integration and finite qualification record](../labs/discrete-flock-writer-integration-2026-10-13/README.md).
 
 The following #2379 status and finite result retain their prior **Route-only** scope; they do not qualify the new flock read.
@@ -20,7 +31,21 @@ The writer derives every token's product cell from its **current first/last vect
 
 Snapshot schema2 explicitly binds `ReadSpec` and the full `[blocks,stages]` gate inventory; missing fields/schema1 refuse rather than silently migrate. These join the live-model and snapshot geometry/source/PTX/seed bindings. Optional `forward_traced` and `Proposal::candidate_losses` expose completed GPU construction observations without host scoring.
 
-**What is not implemented or established:** full 240-root E8 coverage, the complete marked external FBS object, a migrated old floating-point trunk, a corpus training/evaluation driver, a trained intent compiler, full M2 or D11 qualification, useful chat, language advantage or energy savings. Static geometric construction is build-time metadata; model initialization/reads/scoring/proposals execute only through the integer CUDA module, with no CPU model/reference fallback. [Prior floating-point evidence remains preserved](https://github.com/UOR-Foundation/uor-r4/pull/2370).
+**Driver implementation:** SHA-bound UORT tokens, binary response masks and explicit
+tokenizer/BOS identity determine ascending target positions. Every eligible target
+gets its own causal prefix, reset at its document BOS, with tails included exactly
+once and rows/context bounded64/243. Seed controls initialization; corpus order and
+the canonical vector-then-active-Route/Gate coordinate cycle are common across seeds,
+with one coordinate per batch. Checkpoints bind configuration, source, data, masks,
+tokenizer, roles, cursor and model storage. Evaluation uses CUDA top8/margin/eligibility
+and TRAIN-masked count reference, with DEV oracle diagnostic only; zero-rival zero
+loss is not eligible learning. Reports distinguish evaluation lineage and actual
+snapshot identity. The complete transition loop accepts an opaque owner-admission
+capability whose issuer currently returns `TrainingHeld`. It is not enabled by a
+CLI flag. `prepare-plan` is metadata only; `init-corpus`/`eval-corpus` are CUDA entry
+points, with the CLI limited to lineage-bound epoch0 checkpoints under the hold.
+
+**What is not implemented or established:** full 240-root E8 coverage, the complete marked external FBS object, a migrated old floating-point trunk, a corpus learning result or measured D2 cost, a trained intent compiler, full M2 or D11 qualification, useful chat, language advantage or energy savings. Static geometric construction is build-time metadata; model initialization/reads/scoring/proposals execute only through the integer CUDA module, with no CPU model/reference fallback. [Prior floating-point evidence remains preserved](https://github.com/UOR-Foundation/uor-r4/pull/2370).
 
 **Finite test result:** after required Claude FIT, admitted attempt3 passed the same eleven exact controls, exit0. They check literal writer costs, earlier-child transport, row isolation, collisions/omitted targets, zero-eligibility semantics, artifact/live identity, bounds, virtual proposals, unequal prefix lengths, target-independent admission and geometry-preserving token relabelling. First attempt c967 preserved one PASS, one CUDA launch-resource hard stop and nine NOT_RUN; the host-only launch repair rebuilt in0.73s and produced eleven observed PASS at a2. The law/kernel/controller/bars are unchanged. The earlier observations stay outside required review order. No `apply` belongs to that slice. The launch defect and review-order error are blockers, not mechanism negatives; counts/loss numerators alone are not language results.
 
