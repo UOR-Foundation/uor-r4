@@ -80,6 +80,15 @@ apply either patch to current main or execute the archived model source.
 Both patch applications pass `git apply --cached --check`; the reconstructed
 full trees equal independently staged snapshots of the original dirty
 worktrees. These checks use separate indexes and do not alter the originals.
+The metadata diff passes whitespace checks. The geometric patch retains six
+blank context lines represented by a single space; an unrestricted outer
+`git diff --check` flags those patch-format lines. They are intentionally
+preserved with the exact patch hash. D23/D25 ratchets, claim wording, state
+formats and append-only ledger checks pass. The full harness check reports
+zero errors with existing peer-state, old unattributed-receipt and unready
+prep/panel warnings. No peer state is changed to silence those warnings.
+The completed Codex claims are released in this delivery to avoid leaving
+another merged branch in the durable ownership store.
 Cloud receipt verification, source archive identities and source/document
 checks are preservation evidence only. A protected merge must precede removal
 of either dirty workspace; compare their current diffs to the archived bytes

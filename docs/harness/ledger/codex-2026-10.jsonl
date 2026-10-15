@@ -338,3 +338,4 @@
 {"kind": "heartbeat", "lab": "codex", "line": "#2508 cleanup; preserve stale Codex source", "milestone": "m1", "next": "archive two dirty trees via protected PR; D-A fault standby", "schema": 1, "ts": "2026-10-15T14:41:13Z"}
 {"kind": "heartbeat", "lab": "codex", "line": "#2508 cleaned; archiving stale Codex worktrees", "milestone": "m1", "next": "protected preservation PR; D-A instrument-fault standby", "schema": 1, "ts": "2026-10-15T14:43:16Z"}
 {"kind": "heartbeat", "lab": "codex", "line": "two inactive patches verified; preservation upload running", "milestone": "m1", "next": "protected archive PR and stale-tree removal; D-A standby", "schema": 1, "ts": "2026-10-15T14:46:48Z"}
+{"kind": "heartbeat", "lab": "codex", "line": "preservation verified; protected PR delivery", "milestone": "m1", "next": "merge archive then remove three stale trees; Stage-A fault standby", "schema": 1, "ts": "2026-10-15T14:49:20Z"}
