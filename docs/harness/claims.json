@@ -13,6 +13,13 @@
     "lab": "claude",
     "note": ""
   },
+  "codex/route-learning-slot-20261015": {
+    "branch": "codex/route-learning-slot-20261015",
+    "claimed_at": "2026-10-15T08:46:51-04:00",
+    "head": "3405d2c41",
+    "lab": "codex",
+    "note": ""
+  },
   "kimi/completion-release-plan": {
     "branch": "kimi/completion-release-plan",
     "claimed_at": "2026-10-14T04:46:10-04:00",
