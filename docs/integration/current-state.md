@@ -1,4 +1,10 @@
-## D19 exact byte object-store prototype: original Showcase compatibility and bounded reconstruction — October 15
+## 2026-10-15 — D19 typed I/O follow-up and seed-2 checkpoint-zero guard appendix (codex, durable memory / evaluation integrity)
+
+The [follow-up record](../labs/d19-object-store-review-nits-2026-10-15/README.md) addresses #2495's four nits: dated title style, approved-source claim pin, classifiable I/O errors, and the documented distinction between ingestion and quotation limits. The [guard appendix](../labs/seed2-guard-integration-2026-10-15/README.md) gives Claude the actual checkpoint0 invocation, all25 finite controls plus emitted-PTX admission, exact receipt locations and refusal semantics; it explicitly notes that high-u flags invalid instrumentation without automatically stopping the current CLI. Storage-byte tests only; no model/GPU/pod activity, no new FIT or release, no headline change, seed2/M2 HELD and released seed1 untouched.
+
+Line: D19 infrastructure / evaluation integrity · count0/3 unchanged · retained M2 headline437/512 unchanged. **Next:** parent-first protected delivery, Claude's re-issued sheet after16,404, then guard support only on Casey's GO.
+
+## 2026-10-15 — D19 exact byte object-store prototype: original Showcase compatibility and bounded reconstruction (codex, durable memory)
 
 The [implementation record](../labs/d19-object-store-2026-10-15/README.md) delivers `uor-r4-object-store` under approved #2487: immutable exact records, deterministic exchange, transactional import, bounded persistence/ranges/rebuild, and shared-tokenizer occurrence bindings. Twenty byte-store controls and thirteen existing tokenizer tests pass, including original hash-pinned Showcase answers; exact unique bytes still expand (32,768 → 70,972 record bytes), while repeated content deduplicates (7,776 → 380). The actual #2489 reader adapter compiles and passes exact byte/integrity checks; PM has provisionally ratified the seam while DeepSeek is offline, with its confirmation still owed on return. Source/data-structure work only: no model, GPU, training, head adoption or headline change; seed-2/M2 HELD and released seed-1 untouched.
 
