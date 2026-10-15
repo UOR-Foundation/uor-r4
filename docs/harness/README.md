@@ -248,6 +248,15 @@ long after main had dropped it. The committed store still cannot
 `status.branch_claimed` on every `check`, the pre-commit hook, and the one-checkout policy in
 [docs/labs/working-in-one-checkout.md](../labs/working-in-one-checkout.md).
 
+**A claim dies with its branch, and the post-merge step buries it.** `uor-harness git clean-merged`
+proves which local branches are already in `origin/main` **by content** (a squash merge leaves no
+ancestry link, so ancestry would call merged work unmerged), and `--apply` deletes them — **it now also
+releases the claims on those branches**, in the caller's own committed store and in the live mirror,
+because a mirror that is only ever added to resurrects released claims. An unmerged branch keeps its
+claim, and an `Unknown` state keeps it too: "cannot prove it" is not "dead". Before this, a merged
+branch's claim sat in `claims.json` until its owner noticed, and the next lab to want that branch name
+collided with a claim on finished work — a conflict in the file, not in the work.
+
 **What this cannot do, stated plainly:**
 
 - It is not real-time. Presence is as fresh as the last check-in.
