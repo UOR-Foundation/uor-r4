@@ -70,6 +70,18 @@ fn a_check_in_surfaces_unread_notes_without_marking_them_seen() {
         String::from_utf8_lossy(&first.stderr)
     );
     let out = String::from_utf8_lossy(&first.stdout).to_string();
+    let err = String::from_utf8_lossy(&first.stderr).to_string();
+    // BOTH streams: the defect this pins printed the same line on stderr too, and a stdout-only
+    // assertion is exactly why the wider suite stayed green.
+    let occurrences = format!("{out}{err}").matches("unread note(s)").count();
+    assert_eq!(
+        occurrences, 1,
+        "exactly one render across both streams: {out} | {err}"
+    );
+    assert!(
+        !err.contains("unread note(s)"),
+        "on stdout, not stderr: {err}"
+    );
     assert!(out.contains("unread note(s) on #2029"), "surfaced: {out}");
     assert!(
         out.contains("at least"),
