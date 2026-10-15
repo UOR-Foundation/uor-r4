@@ -1,28 +1,14 @@
 {
-  "antigravity/ag1-post-d30-mechanism-labels": {
-    "branch": "antigravity/ag1-post-d30-mechanism-labels",
-    "claimed_at": "2026-10-14T22:08:52-04:00",
-    "head": "acb76854c",
-    "lab": "antigravity",
-    "note": ""
-  },
-  "antigravity/ag1-readspec-relation-m1": {
-    "branch": "antigravity/ag1-readspec-relation-m1",
-    "claimed_at": "2026-10-15T09:22:17-04:00",
-    "head": "602014f73",
-    "lab": "antigravity",
-    "note": ""
-  },
-  "codex/d19-nits-seed2-appendix": {
-    "branch": "codex/d19-nits-seed2-appendix",
-    "claimed_at": "2026-10-15T09:06:10-04:00",
-    "head": "6af7df75f",
+  "codex/stage-a-eval-kept": {
+    "branch": "codex/stage-a-eval-kept",
+    "claimed_at": "2026-10-15T10:05:15-04:00",
+    "head": "540aeb0f6",
     "lab": "codex",
     "note": ""
   },
-  "kimi/decisions-d35-d36-20261015": {
-    "branch": "kimi/decisions-d35-d36-20261015",
-    "claimed_at": "2026-10-15T04:44:20-04:00",
+  "kimi/rung0-admission-prep-20261015": {
+    "branch": "kimi/rung0-admission-prep-20261015",
+    "claimed_at": "2026-10-15T04:18:30-04:00",
     "head": "977da4ff9",
     "lab": "kimi",
     "note": ""
