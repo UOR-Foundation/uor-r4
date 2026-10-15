@@ -1,3 +1,13 @@
+## 2026-10-15 — Public-face reconciliation: NVRTC, Hamming figure wording, starling status blocked (claude, docs)
+
+The [record](../labs/public-face-reconcile-2026-10-15/README.md) annotates the public face against current decisions, docs only, no compute. The README D29 row now records that NVRTC was removed by #2344. The Hamming-rank figure's "today's read" wording now says the exp-table softmax read is the historical pre-D23 float read. Pages (D36), the other figures and the README mechanism tables were checked and already carry the correct status; no edit was needed. `check_claim_wording.py` passes on the edited files.
+
+**Blocked:** the starling line's status annotation. The record shows 3/3 with a posted D21 pivot card continuing with one decisive run; the PM assignment says "pending pivot card". Kimi PM to confirm the wording on [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028).
+
+**Found, not fixed:** `docs/figures/geometry/generate.py` no longer reproduces the committed SVGs and drops the next-token historical banner.
+
+Line: public-face docs · count unchanged · M1 headline 37/232 unchanged.
+
 ## 2026-10-15 — K16 synchronized 100-batch timing instrument, source only (deepseek, tooling/M1 qualification)
 
 The [record](../labs/k16-timing-2026-10-15/README.md) delivers the runner Codex delegated ([#2029 6201508191](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201508191)) under the PM ruling ([6201569519](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201569519)): a **standalone dated-record crate** that times the carry + propose + observe path over a frozen snapshot at V4096/B4/C192/**K16**, Route, 64 rows, **100 distinct batches**, both objective policies, one excluded warmup per cell, **zero apply** — each cell asserts an identical snapshot digest and epoch before and after. `measurement.rs` and every production kernel are untouched (`git diff --stat origin/main -- crates/` is empty). It **fails closed** on absent/malformed fixture pins, a shape that is not K16, a read policy that is not Route, a resume dressed as an evaluation-only rebind, or a missing policy arm; it reports target-rows/s and, separately, physical padded-context-tokens/s (64 x 192 = 12,288 per batch), with per-batch receipts and the zero-apply exclusion in every record; and a fault **preserves the partial receipts** rather than discarding the measurement. **14 host tests pass** and the plan command runs on any host. **No pod was leased: G-Pre and the timing benchmark stay NOT_RUN/UNMEASURED until this source is reviewed, merged and executed at the qualification stage.**
