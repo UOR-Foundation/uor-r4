@@ -1,22 +1,15 @@
 {
   "claude/public-face-reconcile-2026-10-15": {
     "branch": "claude/public-face-reconcile-2026-10-15",
-    "claimed_at": "2026-10-15T17:33:08-04:00",
-    "head": "f8af41057",
+    "claimed_at": "2026-10-15T17:40:21-04:00",
+    "head": "33ce3b5cc",
     "lab": "claude",
     "note": ""
   },
-  "codex/admission-rank-hinge": {
-    "branch": "codex/admission-rank-hinge",
-    "claimed_at": "2026-10-15T14:17:03-04:00",
-    "head": "18b5ea475",
-    "lab": "codex",
-    "note": ""
-  },
-  "codex/admission-redirect-packet": {
-    "branch": "codex/admission-redirect-packet",
-    "claimed_at": "2026-10-15T16:13:42-04:00",
-    "head": "2fa663b54",
+  "codex/k16-admission-validators": {
+    "branch": "codex/k16-admission-validators",
+    "claimed_at": "2026-10-15T17:18:58-04:00",
+    "head": "27c82c0c8",
     "lab": "codex",
     "note": ""
   },
