@@ -107,6 +107,30 @@ unfrozen m5-m8 panels). CI on the head: the `harness` workflow (harness rules an
 parity - which caught the old two-step assumption as a build failure first, run `38747932047`) and the `ci`
 workflow are **green**.
 
+## Review findings, fixed
+
+The exact-head review (Kimi PM, dispatched reviewer) returned CHANGES REQUESTED on two narrow points; both are
+fixed at the reviewed head:
+
+- **D1 — the README row for `status` was false.** It claimed section 2 reads the committed shards *plus the
+  live shard*; `status.rs` reads committed shards only (47 receipts for the day against 360 in the live
+  tier). The row now says so, and the write-path section states plainly that a receipt reaches the `status`
+  roll-up through `ledger-sync` and the merge, while live-tier readers see it immediately. The alternative
+  the reviewer offered - overlaying the live tier in `read_all_shards` - was not taken: `status` is compared
+  against Python's by the parity job, and Python reads committed shards, so an overlay would have to change
+  both implementations to stay honest.
+- **D2 — `ratchet --update-baseline` wrote a tracked file with no R10 guard**, which falsified "every
+  remaining committed write refuses the shared checkout". It now refuses through a path-based entry point
+  (`state::refuse_shared_checkout_at`), so a writer holding a repository rather than the harness state can be
+  guarded too. Verified live: `ratchet d23 --update-baseline` from `~/uor-r4` exits 2 with the refusal and
+  `scripts/` stays clean, while `ratchet d23 --list` still reads. `git install-hooks` carries the same guard
+  (a lab running it from its own worktree still installs into the shared hooks directory, which is how every
+  worktree is guarded).
+
+Non-blocking notes from the same review, recorded rather than fixed: the unnamed-check-in exit code differs by
+path (2 and 1); the `prep new`/`mistakes capture` guards are verified by hand, not by an automated test; and the
+guard allows a single-checkout clone by design (documented above).
+
 ## What this does not fix
 
 - **`scripts/harness/*.py` keeps the old behaviour** (`receipts.record` writes the committed shard, `multilab.claims_file` reads the working copy). The deployed path is the Rust binary - `check` is the only rule engine still delegated - so the Python side is a stale reference rather than a live writer, but a lab that calls `cli.py receipt` directly can still dirty a checkout.

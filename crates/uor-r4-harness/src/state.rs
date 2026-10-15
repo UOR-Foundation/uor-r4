@@ -171,9 +171,21 @@ pub fn shared_primary_checkout(repo: &Path) -> Option<PathBuf> {
 
 /// Refuse a checkout write that would land in the shared checkout, or pass.
 ///
-/// what names the write for the lab that has to fix it ("claims", "the ledger shard", "presence").
+/// `what` names the write for the lab that has to fix it — "the claims store", "a ledger receipt",
+/// "the pre-registration sheet" — and the message carries the rule and both ways out.
 pub fn refuse_shared_checkout(paths: &StatePaths, what: &str) -> Result<(), String> {
-    let Some(shared) = shared_primary_checkout(&paths.repo) else {
+    refuse_shared_checkout_at(&paths.repo, what)
+}
+
+/// The same refusal for a caller that holds a repository path and not a [`StatePaths`].
+///
+/// The ratchet baselines are tracked files under `scripts/`, so `ratchet --update-baseline` is a
+/// checkout write like any other — and it was the one that falsified "every remaining committed
+/// write refuses the shared checkout" (found in review: it wrote a baseline from a shared primary,
+/// exit 0). A path-based entry point means a writer does not need the whole harness state to be
+/// guarded.
+pub fn refuse_shared_checkout_at(repo: &Path, what: &str) -> Result<(), String> {
+    let Some(shared) = shared_primary_checkout(repo) else {
         return Ok(());
     };
     let msg = format!(
@@ -500,6 +512,24 @@ mod tests {
         assert!(err.contains("claims"), "the write must be named: {err}");
         let own = StatePaths::resolve(&linked, None, Some(live_arg));
         assert_eq!(refuse_shared_checkout(&own, "claims"), Ok(()));
+        // The path-based entry point, used by writers that hold a repository and not the harness
+        // state (`ratchet --update-baseline`): same refusal, same message, and still allowed in a
+        // lab's own worktree.
+        let err = refuse_shared_checkout_at(&primary, "the ratchet baseline")
+            .expect_err("the shared checkout must refuse the baseline too");
+        assert!(
+            err.contains("R10") && err.contains("ratchet baseline"),
+            "{err}"
+        );
+        assert_eq!(
+            refuse_shared_checkout_at(&linked, "the ratchet baseline"),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_shared_checkout_at(&dir.path().join("not-a-repo"), "the ratchet baseline"),
+            Ok(()),
+            "a scratch directory is not the shared checkout"
+        );
     }
 
     /// The real timestamps the harness writes, including the offset form.

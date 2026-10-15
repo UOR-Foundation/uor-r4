@@ -140,7 +140,7 @@ doing between merges.
 |---|---|---|
 | what is each lab doing? | `multilab presence` | the **live** tier first, committed `docs/harness/presence/<lab>.json` as the fallback |
 | who holds this branch? | `multilab claims` | the live mirror, then `origin/main`'s committed `docs/harness/claims.json`, then the caller's own checkout |
-| what actually ran? | `status` (section 2) | `docs/harness/ledger/<lab>-<month>.jsonl`, sharded, plus the live shard |
+| what actually ran? | `status` (section 2) | `docs/harness/ledger/<lab>-<month>.jsonl`, **committed shards only** — a receipt written to the live tier appears here once `ledger-sync` has carried it in |
 
 ### Two tiers: live and durable
 
@@ -196,6 +196,11 @@ entries out before the checkout could be reset.
 So a coordination write never needs a checkout: the check-in, the receipts and the live claims mirror
 land in `~/.local/share/uor-r4/harness/`, and `ledger-sync` carries the receipts into the committed
 shard from the lab's own worktree before the PR.
+
+**`status` reads the committed shards, and only those.** That is the record, and it is why
+`ledger-sync` exists: a receipt is written to the live tier and reaches the `status` roll-up once it has
+been carried into the committed shard and merged. Readers of the live tier (`multilab presence`, the
+unread-note report, `multilab claims`' mirror) see it immediately.
 
 **A committed write refuses the shared checkout.** When the resolved repository is the primary
 worktree of a repository that has linked worktrees — the shared checkout — the write stops with the
