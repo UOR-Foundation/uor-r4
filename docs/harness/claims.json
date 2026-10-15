@@ -1,8 +1,8 @@
 {
-  "codex/stage-a-eval-kept": {
-    "branch": "codex/stage-a-eval-kept",
-    "claimed_at": "2026-10-15T10:05:15-04:00",
-    "head": "540aeb0f6",
+  "codex/post-merge-cleanup": {
+    "branch": "codex/post-merge-cleanup",
+    "claimed_at": "2026-10-15T10:41:13-04:00",
+    "head": "abdf431ed",
     "lab": "codex",
     "note": ""
   },
