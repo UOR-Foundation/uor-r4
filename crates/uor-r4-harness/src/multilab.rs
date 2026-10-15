@@ -521,6 +521,7 @@ pub fn sync_live_to_durable(paths: &StatePaths) -> Result<SyncLive, String> {
 /// `unreadable` and keeps the original text, so a migration cannot silently lose the one row that
 /// would have explained what went wrong.
 pub fn migrate_ledger(paths: &StatePaths) -> Result<LedgerMigration, String> {
+    crate::state::refuse_shared_checkout(paths, "the migrated ledger shards")?;
     let mut moved: Vec<(String, usize)> = Vec::new();
     for file in legacy_ledgers(paths) {
         let month = file

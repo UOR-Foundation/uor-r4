@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
-use crate::state::{slug, StatePaths};
+use crate::state::{slug, slug_stem, StatePaths};
 
 /// Bumped when the receipt shape changes. Must match what the Python implementation writes.
 pub const RECEIPT_SCHEMA: u32 = 1;
@@ -89,19 +89,34 @@ impl Receipt {
 
     /// A malformed receipt is rejected before it can reach the record: the four required keys are
     /// the contract's `required_always`, and a row without them fails `statecheck`.
+    ///
+    /// **An unnamed lab is NOT malformed.** Python warns loudly, keeps `"lab": ""` in the line and
+    /// records it in the `unknown-<month>` shard: a receipt that cannot say who wrote it still says
+    /// what happened, and refusing to write it would lose the record where the warning does not.
+    /// Thirteen receipts accumulated unattributed before that warning existed. [unattributed] tells
+    /// the caller to print it.
     pub fn validate(&self) -> Result<(), String> {
         if self.kind.trim().is_empty() {
             return Err("a receipt needs a kind".into());
-        }
-        if slug(&self.lab).is_empty() {
-            return Err(format!("{:?} does not slug to a usable lab name", self.lab));
         }
         if self.ts.trim().is_empty() {
             return Err("a receipt needs a timestamp".into());
         }
         Ok(())
     }
+
+    /// True when no lab named itself, so this line lands in the `unknown` shard.
+    pub fn unattributed(&self) -> bool {
+        slug_stem(&self.lab).is_empty()
+    }
 }
+
+/// The warning a writer prints when it records an unattributed receipt.
+///
+/// Once per process, on stderr, in Python's words - the wording is the fix instruction, and two
+/// implementations telling a lab different things about the same mistake is a divergence in the
+/// only place it matters.
+pub const UNATTRIBUTED_WARNING: &str = "uor-harness: WARNING - no lab identity, so this record is attributed to nobody and no\n             other lab can see who did it. Fix it for this session with:\n             export UOR_LAB=<kimi|claude|codex|deepseek>";
 
 /// `json.dumps(value, ensure_ascii=False, sort_keys=True)` - Python's DEFAULT separators.
 ///
@@ -149,12 +164,10 @@ pub fn py_dumps_sorted(v: &Value) -> String {
 
 /// Where a lab's shard for a month lives.
 pub fn shard_path(paths: &StatePaths, lab: &str, month: &str) -> PathBuf {
-    let name = if slug(lab).is_empty() {
-        "unknown".to_string()
-    } else {
-        slug(lab)
-    };
-    paths.ledger_dir().join(format!("{name}-{month}.jsonl"))
+    // `slug` already falls back to `unknown`, which is what an unattributed row is filed under.
+    paths
+        .ledger_dir()
+        .join(format!("{}-{month}.jsonl", slug(lab)))
 }
 
 /// Append one receipt to its lab's shard. Returns the shard written.
@@ -174,6 +187,8 @@ pub fn append(paths: &StatePaths, receipt: &Receipt, month: &str) -> Result<Path
 /// refuses an empty lab. Refusing here would be a divergence in the wrong direction - the port
 /// would error where Python records the receipt, warns, and moves on.
 fn write_line(paths: &StatePaths, receipt: &Receipt, month: &str) -> Result<PathBuf, String> {
+    // R10: a committed line goes into the caller's own checkout, never the shared one.
+    crate::state::refuse_shared_checkout(paths, "a ledger receipt")?;
     let shard = shard_path(paths, &receipt.lab, month);
     if let Some(parent) = shard.parent() {
         std::fs::create_dir_all(parent)
@@ -661,10 +676,34 @@ mod tests {
     }
 
     #[test]
-    fn a_receipt_without_a_kind_or_lab_is_rejected_before_it_reaches_the_record() {
+    fn a_receipt_without_a_kind_or_timestamp_is_rejected_before_it_reaches_the_record() {
         assert!(Receipt::new("", "kimi").validate().is_err());
-        assert!(Receipt::new("heartbeat", "  ").validate().is_err());
+        let mut no_ts = Receipt::new("heartbeat", "kimi");
+        no_ts.ts = String::new();
+        assert!(no_ts.validate().is_err());
         assert!(Receipt::new("heartbeat", "kimi").validate().is_ok());
+    }
+
+    /// **An unnamed lab is warned about, not refused.** Python keeps `"lab": ""` in the line and
+    /// files it under `unknown-<month>`: the record survives and the gap is visible, where a refusal
+    /// would have lost it. The shard name is the fallback this task list called for.
+    #[test]
+    fn an_unnamed_lab_is_recorded_under_unknown_rather_than_refused() {
+        let unattributed = Receipt::new("heartbeat", "");
+        assert!(unattributed.validate().is_ok(), "the record must survive");
+        assert!(unattributed.unattributed(), "and the caller must be told");
+        assert!(
+            unattributed.to_line().contains("\"lab\": \"\""),
+            "{}",
+            unattributed.to_line()
+        );
+        // A whitespace name cannot name a lab either; like Python, the line keeps what it was given.
+        assert!(Receipt::new("heartbeat", "  ").unattributed());
+        let named = Receipt::new("heartbeat", "kimi");
+        assert!(!named.unattributed());
+        // The file it lands in, through the same path a write uses.
+        let p = live_shard_path(&paths(), "", "2026-10");
+        assert!(p.ends_with("unknown-2026-10.jsonl"), "{}", p.display());
     }
 
     #[test]
@@ -741,12 +780,7 @@ pub fn live_ledger_dir(paths: &StatePaths) -> PathBuf {
 
 /// The live shard for a lab and month.
 pub fn live_shard_path(paths: &StatePaths, lab: &str, month: &str) -> PathBuf {
-    let name = if slug(lab).is_empty() {
-        "unknown".to_string()
-    } else {
-        slug(lab)
-    };
-    live_ledger_dir(paths).join(format!("{name}-{month}.jsonl"))
+    live_ledger_dir(paths).join(format!("{}-{month}.jsonl", slug(lab)))
 }
 
 /// Append a receipt to the LIVE shard.
@@ -796,6 +830,10 @@ pub fn sync_live_to_committed(
     lab: &str,
     month: &str,
 ) -> Result<SyncReport, String> {
+    // R10: the sync is a deliberate write into a checkout, and it is the caller's own checkout that
+    // carries the lines into review. The shared checkout stays clean; the live tier is where a
+    // receipt goes when there is no checkout to write.
+    crate::state::refuse_shared_checkout(paths, "the committed ledger shard")?;
     let live = live_shard_path(paths, lab, month);
     let committed = shard_path(paths, lab, month);
     let mut report = SyncReport {

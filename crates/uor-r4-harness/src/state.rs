@@ -77,16 +77,42 @@ impl StatePaths {
         self.repo.join("docs").join("harness").join("ledger")
     }
 
-    /// The committed claims store. Always in the repository root, never a worktree-local copy —
-    /// a claim written into a linked worktree is deleted along with the worktree and leaves every
-    /// other lab unable to see that the branch was ever held.
+    /// The committed claims store: the CALLER'S OWN checkout, which is what a write targets.
+    ///
+    /// It was the main worktree once, so every claim landed in the owner checkout (R10 forbids
+    /// that) and the claim still died with the worktree it was filed from. The claim now rides the
+    /// delivery PR, and shared_primary_checkout() refuses the write that used to land there.
     pub fn claims_file(&self) -> PathBuf {
         self.repo.join("docs").join("harness").join("claims.json")
     }
 }
 
 /// Reduce a lab name to the form used in file names, matching the Python `slug()`.
+pub const UNKNOWN_LAB: &str = "unknown";
+
+/// Reduce a lab name to the form used in file names, matching the Python slug().
+///
+/// **The unknown fallback is not cosmetic, and its absence was a real defect.** Python returns
+/// "unknown" when a name reduces to nothing; the Rust version returned the empty string, so an
+/// unset lab wrote ".json" and "-<month>.jsonl" — files no reader looks for, holding a record that
+/// looks attributed. receipt::shard_path had patched around it for the ledger alone; presence, the
+/// note marker and the note cache had not.
 pub fn slug(lab: &str) -> String {
+    let stem = slug_stem(lab);
+    if stem.is_empty() {
+        UNKNOWN_LAB.to_string()
+    } else {
+        stem
+    }
+}
+
+/// The slug with NO fallback: empty when the name carries no usable character.
+///
+/// Separate from slug() because "which file does this land in" and "did a lab identify itself" are
+/// different questions, and one function answering both is how an unattributed record comes to look
+/// attributed. Writers that must refuse an unnamed lab check this; writers that must still record
+/// one use slug() and land in the unknown bucket, exactly as Python does.
+pub fn slug_stem(lab: &str) -> String {
     let mut out = String::with_capacity(lab.len());
     let mut last_dash = false;
     for ch in lab.trim().to_lowercase().chars() {
@@ -102,6 +128,73 @@ pub fn slug(lab: &str) -> String {
         out.pop();
     }
     out
+}
+
+/// **R10: the shared checkout, when this repository has one — and therefore a write to refuse.**
+///
+/// The owner checkout (~/uor-r4) stays on clean origin/main: no lab edits, builds, commits or runs
+/// mutating tools in it (docs/harness/pm-rules.md R10). That rule was repeatedly broken by the
+/// harness itself — team claim, receipt, skill use, ledger-sync and the durable presence sync all
+/// resolved their target from the working directory, so a lab whose shell sat in the owner checkout
+/// dirtied it with a coordination write and another lab had to hand-move the entries out.
+///
+/// The identification is deliberately about the SHAPE of the clone rather than a hard-coded path:
+/// the primary worktree of a repository that has linked worktrees is the shared checkout every lab
+/// shares, and a writable target it is not. A single-checkout clone, a scratch directory and an
+/// unreadable git state all return None — refusing there would break a lab that simply cloned the
+/// repository, which is the opposite of the R10 goal.
+///
+/// **Read-only callers are unaffected.** This is consulted by write paths only: reading claims,
+/// presence and the ledger from the shared checkout is exactly what R10 permits.
+pub fn shared_primary_checkout(repo: &Path) -> Option<PathBuf> {
+    // The working directory may be a SUBDIRECTORY of a worktree; compare roots, not the literal path.
+    let top = git_out(repo, &["rev-parse", "--show-toplevel"])?;
+    let top = PathBuf::from(top);
+    let top = top.canonicalize().unwrap_or(top);
+    let listing = git_out(repo, &["worktree", "list", "--porcelain"])?;
+    let mut worktrees: Vec<PathBuf> = listing
+        .lines()
+        .filter_map(|line| line.strip_prefix("worktree "))
+        .map(|rest| {
+            let p = PathBuf::from(rest.trim());
+            p.canonicalize().unwrap_or(p)
+        })
+        .collect();
+    // A single checkout is the writer's own; only the shared layout has a primary that is not.
+    if worktrees.len() < 2 {
+        return None;
+    }
+    // "git worktree list" names the primary checkout FIRST.
+    let primary = worktrees.remove(0);
+    (primary == top).then_some(primary)
+}
+
+/// Refuse a checkout write that would land in the shared checkout, or pass.
+///
+/// what names the write for the lab that has to fix it ("claims", "the ledger shard", "presence").
+pub fn refuse_shared_checkout(paths: &StatePaths, what: &str) -> Result<(), String> {
+    let Some(shared) = shared_primary_checkout(&paths.repo) else {
+        return Ok(());
+    };
+    let msg = format!(
+        "refusing to write {what} into the shared checkout {} (R10): the owner checkout stays on clean origin/main, and no lab edits or runs mutating tools in it. Run this from your own worktree (.worktrees/<lab>-<task>) or pass --repo <that worktree>; a coordination write that needs no checkout at all goes to the live tier.",
+        shared.display()
+    );
+    Err(msg)
+}
+
+/// Trimmed stdout of a git command, or None when it fails or is not a repository.
+fn git_out(repo: &Path, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 /// A per-lab check-in READ from disk.
@@ -306,7 +399,107 @@ mod tests {
         assert_eq!(slug("Kimi"), "kimi");
         assert_eq!(slug("  deep seek "), "deep-seek");
         assert_eq!(slug("a//b"), "a-b");
-        assert_eq!(slug("---"), "");
+        // Python ends with `return s or "unknown"`. A name that reduces to nothing still names a
+        // FILE, and a reader looks for that file: the empty stem wrote `.json` and `-<month>.jsonl`.
+        assert_eq!(slug("---"), "unknown");
+        assert_eq!(slug(""), "unknown");
+        assert_eq!(slug("  !!!  "), "unknown");
+        // The emptiness is still visible to a writer that must REFUSE an unnamed lab rather than
+        // record it under the fallback: the two questions are answered by two functions.
+        assert_eq!(slug_stem("---"), "");
+        assert_eq!(slug_stem(""), "");
+        assert_eq!(slug_stem("Kimi"), "kimi");
+    }
+
+    /// A primary checkout with a linked worktree - the shape R10 protects.
+    fn shared_clone() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let primary = dir.path().join("owner");
+        std::fs::create_dir_all(&primary).expect("primary");
+        let run = |args: &[&str], cwd: &Path| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .expect("git")
+        };
+        run(&["init", "-q", "-b", "main"], &primary);
+        run(&["config", "user.email", "t@t"], &primary);
+        run(&["config", "user.name", "t"], &primary);
+        std::fs::write(primary.join("f"), "1").expect("write");
+        run(&["add", "f"], &primary);
+        run(&["commit", "-qm", "one"], &primary);
+        let linked = dir.path().join("lab");
+        let linked_arg = linked.to_str().expect("utf8");
+        run(
+            &["worktree", "add", "-q", "-b", "lab/task", linked_arg],
+            &primary,
+        );
+        (dir, primary, linked)
+    }
+
+    /// The shared checkout is identified by SHAPE, from the working directory outward.
+    #[test]
+    fn the_shared_checkout_is_found_and_a_linked_worktree_is_writable() {
+        let (_dir, primary, linked) = shared_clone();
+        // Canonicalised on both sides: on macOS a temp path is reached through /var -> /private/var,
+        // and `shared_primary_checkout` compares canonical roots so a subdirectory still matches.
+        let expect = primary.canonicalize().expect("canonical");
+        assert_eq!(
+            shared_primary_checkout(&primary).as_deref(),
+            Some(expect.as_path()),
+            "the primary worktree of a multi-worktree clone is the shared checkout"
+        );
+        assert_eq!(
+            shared_primary_checkout(&linked),
+            None,
+            "a lab worktree is the writer's own checkout and must stay writable"
+        );
+        // The working directory may be a SUBDIRECTORY: the root is what identifies the checkout.
+        let sub = primary.join("docs");
+        std::fs::create_dir_all(&sub).expect("subdir");
+        assert!(shared_primary_checkout(&sub).is_some());
+    }
+
+    /// A lab that simply cloned the repository must not be refused its own checkout.
+    #[test]
+    fn a_single_checkout_clone_is_never_refused() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let repo = dir.path().join("clone");
+        std::fs::create_dir_all(&repo).expect("clone");
+        let run = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .expect("git")
+        };
+        run(&["init", "-q", "-b", "main"]);
+        assert_eq!(
+            shared_primary_checkout(&repo),
+            None,
+            "one checkout is the writer's own, shared layout or not"
+        );
+        assert_eq!(
+            shared_primary_checkout(&dir.path().join("not-a-repo")),
+            None,
+            "an unreadable git state must not block a write"
+        );
+    }
+
+    /// The refusal names the rule and the fix, because the lab has to act on it.
+    #[test]
+    fn a_write_into_the_shared_checkout_is_refused_with_the_fix() {
+        let (dir, primary, linked) = shared_clone();
+        let live = dir.path().join("live");
+        let live_arg = live.to_str().expect("utf8");
+        let shared = StatePaths::resolve(&primary, None, Some(live_arg));
+        let err = refuse_shared_checkout(&shared, "claims").expect_err("must refuse");
+        assert!(err.contains("R10"), "{err}");
+        assert!(err.contains("worktree"), "{err}");
+        assert!(err.contains("claims"), "the write must be named: {err}");
+        let own = StatePaths::resolve(&linked, None, Some(live_arg));
+        assert_eq!(refuse_shared_checkout(&own, "claims"), Ok(()));
     }
 
     /// The real timestamps the harness writes, including the offset form.

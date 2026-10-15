@@ -101,7 +101,26 @@ come from the owner through the PM.
   machine shares. `cli.py heartbeat` delegates to `uor-harness heartbeat`, the only implementation.
   `uor-harness ledger-sync` appends your live receipts into the committed shard before you open a PR,
   so the record still reaches review. A check-in therefore dirties nothing, which is the property R10
-  exists to protect.
+  exists to protect. **As of 15 October, `receipt`, `skill use` and `prep fit` write the live shard too**:
+  they used to append straight into whatever checkout the working directory named, so a lab whose shell
+  sat in the owner checkout dirtied it with every receipt.
+
+- **The harness refuses to write the shared checkout — R10 is enforced, not just stated.** A committed
+  write (`team claim`/`release`, `ledger-sync`, `multilab sync-live`, `prep new`, `mistakes capture`)
+  targets **the caller's own checkout**, and stops with the rule and the fix when that resolves to the
+  shared one:
+
+  ```
+  uor-harness: refusing to write the claims store into the shared checkout /Users/casey.allard/uor-r4
+  (R10): the owner checkout stays on clean origin/main, and no lab edits or runs mutating tools in it.
+  Run this from your own worktree (.worktrees/<lab>-<task>) or pass --repo <that worktree>; a
+  coordination write that needs no checkout at all goes to the live tier.
+  ```
+
+  Identification is the shape of the clone (the primary worktree of a repository that has linked
+  worktrees), so a single-checkout clone is never refused. Reads — claims, presence, the ledger — are
+  never refused: reading the shared checkout is what R10 permits. **If you hit this, the fix is to `cd`
+  to your worktree, not to reset or clean the owner checkout.**
 
 - **The disk budget is part of the rule, not an afterthought.** Each worktree is a full source
   checkout. Measured 13 October: six worktrees cost **6.4 GB** against a **30 GB** floor, and the
