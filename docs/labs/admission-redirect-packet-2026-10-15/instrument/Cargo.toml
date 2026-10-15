@@ -13,4 +13,3 @@ sha2 = "0.10"
 
 [patch.crates-io]
 cudarc = { path = "../../../../third_party/cudarc-0.19.10" }
-
