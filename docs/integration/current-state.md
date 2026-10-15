@@ -29,7 +29,6 @@ rather than hidden:** the overwritten comment's text is gone — this prevents t
 that one; and **the machine check is narrow on purpose**, guarding what executes rather than what a lab types.
 
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
-
 ## 2026-10-14 — `ReadSpec::Relation` bounded exact-relation reranker design card revised per D34 (antigravity, mechanisms line)
 
 [`docs/mechanisms/finite-relational-head.md`](../mechanisms/finite-relational-head.md) (and [`docs/labs/finite-relational-head-design-2026-10-14/README.md`](../labs/finite-relational-head-design-2026-10-14/README.md) §3) is revised in place per Owner Decision [D34](DECISIONS.md#d34--revised-attentionmemory-sequence-accepted-reranker-first-relational-read-plus-a-separate-d19-object-store-crate) (`4cef409fc`), Claude's independent adversarial review ([#2482](https://github.com/UOR-Foundation/uor-r4/pull/2482) at `618e422ce`), and Kimi PM's assignment ([#2028 comment 6175624248](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6175624248), [`6175886770`](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6175886770), [`6178356343`](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6178356343)):

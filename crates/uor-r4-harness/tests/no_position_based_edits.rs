@@ -1,12 +1,15 @@
-//! The hazard cannot be reintroduced into our own tooling.
+//! The hazard cannot be reintroduced into the tooling that runs on a schedule.
 //!
-//! On 14 October `gh issue comment --edit-last` overwrote the whole body of a comment another lab wrote,
-//! and GitHub keeps no edit history, so the text was unrecoverable.
+//! On 14 October `gh issue comment --edit-last` overwrote the whole body of a comment another lab wrote, and
+//! GitHub keeps no edit history, so the text was unrecoverable. The lesson is at
+//! `docs/harness/mistakes/edit-last-overwrites-another-labs-comment.md` and the safe path is
+//! `uor-harness comment edit --id <id> --body-file <f>`.
 //!
-//! What this test CAN do is stop the hazard being baked into anything that executes: a script or a
-//! workflow that edits by position fails here, before it can overwrite a comment on a schedule. It cannot
-//! intercept a hand-typed `gh` call - which is exactly why the safe path had to be BUILT rather than
-//! merely documented (`uor-harness comment edit --id <id> --body-file <f>`).
+//! **What this test reaches, and what it does not.** It scans the executable workflow roots whose changes this
+//! job actually runs on: `scripts/harness/**` and `.github/workflows/**`. It **cannot intercept a hand-typed
+//! `gh` call** - which is exactly why the safe path had to be BUILT rather than merely documented - and a
+//! change to a script outside these roots will not run this test. Both limits are stated rather than implied,
+//! because a guard that overstates its reach is worse than a narrow one that names it.
 
 use std::path::{Path, PathBuf};
 
@@ -26,13 +29,37 @@ fn files_with_ext(dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>) {
     }
 }
 
+fn harness_root() -> PathBuf {
+    // Resolved from the crate, not the working directory: `cargo test` runs in the package dir today, and
+    // the reviewer caught `Path::new("../..")` depending on that.
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("the workspace root is two levels above the crate")
+        .to_path_buf()
+}
+
+/// Whether a line is a comment. **A lesson must be able to warn about the flag**, so comments are skipped:
+/// the hazard is an executable occurrence, and a comment saying "do not use this" is the opposite of one.
+fn is_comment(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with('#') || t.starts_with("//")
+}
+
 #[test]
 fn no_executable_workflow_edits_a_comment_by_position() {
-    // `cargo test` runs with the package directory as the working directory.
-    let root = Path::new("../..");
+    let root = harness_root();
     let mut files = Vec::new();
-    files_with_ext(&root.join("scripts"), &[".py", ".sh", ".bash"], &mut files);
-    files_with_ext(&root.join(".github"), &[".yml", ".yaml"], &mut files);
+    files_with_ext(
+        &root.join("scripts").join("harness"),
+        &[".py", ".sh", ".bash"],
+        &mut files,
+    );
+    files_with_ext(
+        &root.join(".github").join("workflows"),
+        &[".yml", ".yaml"],
+        &mut files,
+    );
     assert!(
         !files.is_empty(),
         "found no scripts or workflows to scan - the test would pass vacuously"
@@ -45,7 +72,7 @@ fn no_executable_workflow_edits_a_comment_by_position() {
             continue;
         };
         for (i, line) in text.lines().enumerate() {
-            if line.contains(flag) {
+            if line.contains(flag) && !is_comment(line) {
                 offenders.push(format!("{}:{}: {}", f.display(), i + 1, line.trim()));
             }
         }
@@ -56,5 +83,28 @@ fn no_executable_workflow_edits_a_comment_by_position() {
          issue, not the last one this lab wrote, and every lab here posts as one account. Edit by id \
          instead: uor-harness comment edit --id <id> --body-file <f>.\n{}",
         offenders.join("\n")
+    );
+}
+
+/// The scan must not be vacuous in either root: if one is empty the guard silently stops covering it.
+#[test]
+fn the_scan_covers_both_roots() {
+    let root = harness_root();
+    let mut scripts = Vec::new();
+    files_with_ext(
+        &root.join("scripts").join("harness"),
+        &[".py", ".sh", ".bash"],
+        &mut scripts,
+    );
+    let mut workflows = Vec::new();
+    files_with_ext(
+        &root.join(".github").join("workflows"),
+        &[".yml", ".yaml"],
+        &mut workflows,
+    );
+    assert!(!scripts.is_empty(), "scripts/harness has nothing to scan");
+    assert!(
+        !workflows.is_empty(),
+        ".github/workflows has nothing to scan"
     );
 }
