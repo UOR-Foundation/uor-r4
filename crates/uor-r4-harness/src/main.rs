@@ -2077,31 +2077,14 @@ fn cmd_notes(repo: &Path, args: &[String], json: bool) -> ExitCode {
     let regs = Registries::load(&paths).ok();
     let issues = notes::watched_issues(regs.as_ref());
 
-    let mut fetched = 0usize;
     // Whether the read covered everything. A `--cached` call or a failed fetch does not know what it
     // missed, and the report says "at least" rather than presenting a floor as the truth.
-    let mut exact = true;
-    if !args.iter().any(|a| a == "--cached") {
-        for issue in &issues {
-            match fetch_issue_notes(*issue) {
-                Some(found) => match notes::cache_append(&paths, &lab, &found) {
-                    Ok(n) => fetched += n,
-                    Err(e) => {
-                        exact = false;
-                        eprintln!("uor-harness: notes cache: {e}");
-                    }
-                },
-                // A fetch failure is reported but NOT fatal: a lab with no network must still be able
-                // to read what it already knows, and a check-in must never be blocked by GitHub.
-                None => {
-                    exact = false;
-                    eprintln!("uor-harness: could not read #{issue} (no network or no gh)");
-                }
-            }
-        }
+    let (fetched, exact) = if args.iter().any(|a| a == "--cached") {
+        notes::ensure_state(&paths, &lab);
+        (0, false)
     } else {
-        exact = false;
-    }
+        refresh_notes(&paths, &lab, &issues)
+    };
 
     let cached = notes::read_cache(&paths, &lab);
     let mut markers = notes::Markers::load(&paths, &lab);
@@ -2156,33 +2139,104 @@ fn cmd_notes(repo: &Path, args: &[String], json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// How long one `gh` call may take before a check-in gives up on it.
+///
+/// A paginated read of the largest milestone issue completes in a few seconds; twenty leaves room for
+/// a slow network while keeping a check-in that hits a dead one from hanging. The refresh stops at
+/// the first failure, so this is also roughly the worst case a check-in can add.
+const GH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Run a command, returning its stdout only if it exits successfully within `timeout`.
+///
+/// **A check-in must never be blocked by GitHub**, and `Command::output` waits forever on a hung
+/// `gh`. So the child is spawned, its stdout drained on a thread (a full pipe would otherwise stall
+/// the child and look like a timeout), and it is killed at the deadline. No new dependency: std only.
+fn run_bounded(cmd: &mut std::process::Command, timeout: std::time::Duration) -> Option<Vec<u8>> {
+    use std::io::Read;
+    use std::process::Stdio;
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let mut pipe = child.stdout.take()?;
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = pipe.read_to_end(&mut buf);
+        buf
+    });
+    let deadline = std::time::Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+        }
+    };
+    let out = reader.join().ok()?;
+    status.filter(|s| s.success()).map(|_| out)
+}
+
+/// Refresh a lab's note cache from GitHub: `(new notes appended, whether the read was complete)`.
+///
+/// Shared by `notes` and `heartbeat` so the two cannot drift into fetching differently. It **stops at
+/// the first failure**: no network or no `gh` fails every issue the same way, and trying the rest
+/// would multiply the timeout into a check-in that hangs for minutes. Only a complete read marks the
+/// cache refreshed; a partial one stays stale so the next check-in tries again. Either way the cache
+/// and marker files exist afterwards.
+fn refresh_notes(paths: &StatePaths, lab: &str, issues: &[i64]) -> (usize, bool) {
+    notes::ensure_state(paths, lab);
+    let mut fetched = 0usize;
+    for issue in issues {
+        match fetch_issue_notes(*issue) {
+            Some(found) => match notes::cache_append(paths, lab, &found) {
+                Ok(n) => fetched += n,
+                Err(e) => {
+                    eprintln!("uor-harness: notes cache: {e}");
+                    return (fetched, false);
+                }
+            },
+            // Reported but NOT fatal: a lab with no network must still be able to read what it
+            // already knows, and a check-in must never be blocked by GitHub.
+            None => {
+                eprintln!(
+                    "uor-harness: could not read #{issue} (no network, no gh, or timed out) - using the cached notes"
+                );
+                return (fetched, false);
+            }
+        }
+    }
+    notes::mark_refreshed(paths, lab);
+    (fetched, true)
+}
+
 /// Fetch one issue's comments as `id<TAB>author<TAB>created_at<TAB>body-first-line`.
 ///
 /// `gh` does the authentication and the JSON; this reads four tab-separated fields rather than take a
 /// dependency on walking a dynamic tree. `None` means the call failed, which the caller reports and
 /// survives - **a check-in must never be blocked by GitHub.**
 fn fetch_issue_notes(issue: i64) -> Option<Vec<notes::Note>> {
-    let out = std::process::Command::new("gh")
-        .args([
-            "api",
-            // `--paginate`, because ONE PAGE IS NOT THE ISSUE. Without it this read only the first
-            // 100 comments, so on #2029 (231 comments) it reported an old note as "latest" and missed
-            // every recent one - the exact failure the command exists to prevent, in the command
-            // itself. Claude reported it after #2029/#2030/#2032 all showed stale "latest" ids.
-            "--paginate",
-            &format!("repos/UOR-Foundation/uor-r4/issues/{issue}/comments?per_page=100"),
-            "--jq",
-            ".[] | [(.id|tostring), .user.login, .created_at, (.body|split(\"\\n\")|.[0])] | @tsv",
-        ])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    Some(notes::parse_tsv(
-        issue,
-        &String::from_utf8_lossy(&out.stdout),
-    ))
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args([
+        "api",
+        // `--paginate`, because ONE PAGE IS NOT THE ISSUE. Without it this read only the first
+        // 100 comments, so on #2029 (231 comments) it reported an old note as "latest" and missed
+        // every recent one - the exact failure the command exists to prevent, in the command
+        // itself. Claude reported it after #2029/#2030/#2032 all showed stale "latest" ids.
+        "--paginate",
+        &format!("repos/UOR-Foundation/uor-r4/issues/{issue}/comments?per_page=100"),
+        "--jq",
+        ".[] | [(.id|tostring), .user.login, .created_at, (.body|split(\"\\n\")|.[0])] | @tsv",
+    ]);
+    let stdout = run_bounded(&mut cmd, GH_TIMEOUT)?;
+    Some(notes::parse_tsv(issue, &String::from_utf8_lossy(&stdout)))
 }
 
 /// `ledger sync [--lab L] [--month M]` - append live receipts into the committed shard.
@@ -2321,15 +2375,26 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
         eprintln!("uor-harness: {line}");
     }
     // Surface unread notes as part of the check-in: presence without awareness is half the plane.
-    // Read from the CACHE, not the network - a check-in must stay instant, and `notes` refreshes.
+    // Served from the cache while it is fresh (no network, so the check-in stays instant); refreshed
+    // from GitHub, bounded, when it is absent or past the CONTEST window - a lab that only ever runs
+    // `heartbeat` used to never see a new comment. `--cached` keeps the old network-free behaviour.
     if !args.iter().any(|a| a == "--no-notes") {
+        let exact = if !args.iter().any(|a| a == "--cached")
+            && notes::needs_refresh(notes::cache_age(&paths, &lab))
+        {
+            let regs = Registries::load(&paths).ok();
+            refresh_notes(&paths, &lab, &notes::watched_issues(regs.as_ref())).1
+        } else {
+            notes::ensure_state(&paths, &lab);
+            false
+        };
         let cached = notes::read_cache(&paths, &lab);
         if !cached.is_empty() {
             let markers = notes::Markers::load(&paths, &lab);
             let items = notes::summarise(&markers.unread(&cached));
-            // The heartbeat reads the CACHE, so it cannot know what a failed refresh missed: the
-            // count it prints is a floor and says so.
-            for line in notes::render(&items, false) {
+            // A cache read cannot know what it missed, so its count is a floor and says so; a
+            // complete refresh just now states the count as a fact.
+            for line in notes::render(&items, exact) {
                 eprintln!("{line}");
             }
         }

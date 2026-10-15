@@ -603,6 +603,57 @@ pub fn cache_line(age: Option<std::time::Duration>) -> Option<String> {
     }
 }
 
+/// Whether a check-in should refresh the cache from GitHub before reporting.
+///
+/// **A lab that only ever runs `heartbeat` used to never refresh**, so its cache aged forever and it
+/// never saw a new comment - the CONTEST it most needed was exactly the one it could not see. Absent
+/// or older than the CONTEST window refreshes; anything younger is served from the cache with no
+/// network call, so the five-minute cadence costs one fetch per twenty minutes, not one per check-in.
+///
+/// Pure, so the boundary is testable without a clock or a network.
+pub fn needs_refresh(age: Option<std::time::Duration>) -> bool {
+    match age {
+        None => true,
+        Some(d) => d.as_secs() >= CACHE_FRESH_MINUTES * 60,
+    }
+}
+
+/// Make sure the lab's cache and marker files exist, without changing what either says.
+///
+/// A lab that has run `notes` or `heartbeat` must leave state behind even when nothing was fetched,
+/// or the next run cannot tell "never looked" from "looked, nothing there", and the board cannot
+/// count for it. An existing marker is never rewritten, so it cannot move backwards. Best-effort:
+/// an unwritable live tier must not fail a check-in.
+pub fn ensure_state(paths: &StatePaths, lab: &str) {
+    let cache = cache_path(paths, lab);
+    if let Some(parent) = cache.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if !cache.exists() {
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&cache);
+    }
+    if !marker_path(paths, lab).exists() {
+        let _ = Markers::new(lab).save(paths);
+    }
+}
+
+/// Record that the cache was refreshed now, even when the refresh appended nothing.
+///
+/// The cache's mtime IS its refresh time (`cache_age`), and `cache_append` with no new notes leaves
+/// the file untouched - so without this a quiet stream would look stale forever and every check-in
+/// would hit the network. Called only after a COMPLETE refresh: a failed one must stay stale.
+pub fn mark_refreshed(paths: &StatePaths, lab: &str) {
+    if let Ok(f) = std::fs::OpenOptions::new()
+        .append(true)
+        .open(cache_path(paths, lab))
+    {
+        let _ = f.set_modified(std::time::SystemTime::now());
+    }
+}
+
 /// No cache at all used to print NOTHING, so a lab that never ran `notes` could not know there was
 /// anything to run. That silence is the failure this closes.
 pub const NO_CACHE: &str = "no notes cache on this machine yet - run: uor-harness notes";
@@ -638,6 +689,33 @@ mod cache_line_tests {
         assert!(cache_line(None)
             .expect("a line")
             .contains("uor-harness notes"));
+    }
+
+    /// Absent or past the CONTEST window refreshes; younger is served from the cache, offline.
+    #[test]
+    fn a_check_in_refreshes_only_an_absent_or_stale_cache() {
+        assert!(needs_refresh(None), "no cache: first use must fetch");
+        assert!(!needs_refresh(Some(Duration::from_secs(0))));
+        assert!(!needs_refresh(Some(Duration::from_secs(19 * 60 + 59))));
+        assert!(needs_refresh(Some(Duration::from_secs(20 * 60))));
+        assert!(needs_refresh(Some(Duration::from_secs(6 * 3600))));
+    }
+
+    /// First use leaves both files behind; an existing marker is never rewritten backwards.
+    #[test]
+    fn ensure_state_creates_files_and_never_rewinds_a_marker() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let live = dir.path().join("live");
+        let p = StatePaths::resolve(dir.path(), None, Some(live.to_str().expect("utf8")));
+        ensure_state(&p, "antigravity");
+        assert!(cache_path(&p, "antigravity").exists(), "cache created");
+        assert!(marker_path(&p, "antigravity").exists(), "marker created");
+        assert!(read_cache(&p, "antigravity").is_empty());
+        let mut m = Markers::new("claude");
+        m.seen.insert(2029, 500);
+        assert!(m.save(&p));
+        ensure_state(&p, "claude");
+        assert_eq!(Markers::load(&p, "claude").seen.get(&2029), Some(&500));
     }
 
     #[test]
