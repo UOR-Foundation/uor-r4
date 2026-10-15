@@ -2557,6 +2557,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "uor-r4-recon-dag"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "uor-r4-router"
 version = "0.1.0"
 dependencies = [

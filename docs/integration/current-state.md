@@ -1,3 +1,34 @@
+## 2026-10-14 — the reconstruction-DAG production reader: on-demand backend, and RangeVerified vs WholeObject (deepseek, instrument)
+
+The [record](../labs/recon-dag-reader-2026-10-14/README.md) carries the tests and the two claims. **WHAT IT
+REPLACES:** the byte-DAG experiment at
+`docs/labs/spiralcore-native-attention-review-2026-10-14/evidence/cs/range_reader.rs` loads **every** record into a
+`HashMap<Id, Node>` before answering any range query — its own README says *"the experiment is not an end-to-end
+low-memory reader"* — and its final line is the other half of the gap: **`whole_object_sha256_in_rust=NOT_CHECKED`**. **THE
+TWO HALVES:** (1) **an on-demand backend** — the records file is a fixed-stride sequence of `1-byte scale ||
+12-byte id || 32-or-36-byte data`, so `IndexedBackend` builds its `id -> offset` index by walking **headers alone**
+(13 bytes per node, no node data) and reads a record only when a traversal visits it, with the experiment's
+`EagerBackend` kept as the reference; (2) **two digest claims kept apart** — a node id authenticates **the nodes a
+range touched** and says nothing about the nodes outside it or about the object, so `RangeVerified { nodes,
+unverified_nodes }` **reports its unverified remainder** instead of letting the weaker claim pass as the stronger,
+while `WholeObject { digest }` is the only variant carrying object integrity. **THE OWNER'S RULE SHAPES THE API:**
+*on the main track a read must always be verified*, so the strong claim is a **separate entry point**
+(`read_whole_object`) rather than a flag on the range read — a caller cannot reach integrity by forgetting to ask,
+and `Read::whole_object_verified` is the single question a main-track consumer asks. **VERIFIED (6 tests, all
+passing):** 203 ranges produce **byte-identical** output from both backends and equal the source; **corrupting the
+last record leaves a 64-byte range read clean while the whole-object read fails on it** — the record was never
+read, and the corruption is real; and the decisive one, **two DAGs differing in a single bit are both internally
+consistent, so node ids cannot tell them apart and only the declared whole-object digest refuses the wrong one**
+(while it verifies against its own). Fixtures are **built in Rust by the test file** because the experiment's
+fixtures come from a JS generator over pinned sources and are not committed. **Stated rather than hidden:**
+**nothing consumes this crate yet** — it is the reader, delivered with its tests, and wiring it into a
+reconstruction path is a separate step; it is **shaped to consume Codex's D19 object store rather than compete
+with it** (the `Backend` trait is the seam, flagged on #2028 so the digest distinction can be settled once in that
+store's read contract); the whole-object digest is **SHA-256** while node ids are the crate's own 12-byte digest
+over `scale || data`; and `IndexedBackend` currently **reopens the file per node** — correct and simple, with mmap
+or a held handle the obvious next optimisation and not claimed here.
+
+Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
 ## 2026-10-14 — D34: owner accepts the revised attention/memory sequence; dead target symlink removed (kimi PM, owner decision)
 
 Delivered via a persistent decision dialog and recorded at #2028 comment 6176107062: the owner **accepts Claude's revised sequence** from the #2482 independent review — reranker-first (bounded exact-relation reranker as a third `ReadSpec`, relation-off ≡ Flock, copy-successor read at 3,847/14,287 = 26.9% of pinned DEV targets as the capability target) plus a separate D19 object-store crate for exact compressed reads on the durable-memory line. Direction only: no compute, adoption or hold release without pre-registration + FIT + explicit owner release; a trained-in comparison also waits for seed-1's Route rows at cursor 16,404 and an interleaved schedule on both arms. Antigravity's relational-head card addendum proceeds on this basis. The same decision authorized removing the dead `target/` symlink in the owner checkout (done). PM claims cleanup rides this delivery: the stale `kimi/d29-nvrtc-amendment` and `kimi/discrete-rung0-amendment1-20261014` claims are released (both long-delivered work). See [D34](DECISIONS.md#d34--revised-attentionmemory-sequence-accepted-reranker-first-relational-read-plus-a-separate-d19-object-store-crate).
