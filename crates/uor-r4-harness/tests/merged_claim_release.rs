@@ -10,6 +10,7 @@
 //! everything would be a lock nobody could hold.
 
 use std::path::PathBuf;
+
 use std::process::{Command, Output};
 
 /// Two claims: one on a branch that reaches main by squash, one on a branch still open.
@@ -106,7 +107,7 @@ impl Fixture {
     }
 
     /// The committed store in the checkout.
-    fn claims_file(&self, root: &PathBuf) -> String {
+    fn claims_file(&self, root: &std::path::Path) -> String {
         std::fs::read_to_string(root.join("docs/harness/claims.json")).expect("claims")
     }
 
