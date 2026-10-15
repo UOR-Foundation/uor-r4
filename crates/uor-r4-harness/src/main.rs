@@ -1291,6 +1291,18 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
                 .iter()
                 .filter(|s| s.state == githelp::MergeState::Unmerged)
                 .count();
+            // **Claims on merged branches go in the same pass.** The proof this needs is already
+            // here: `branch_states` establishes mergedness by CONTENT, which is exactly what the
+            // release must not guess. Doing it here means the post-merge step every lab already runs
+            // also clears the stale claim, instead of leaving the next lab to collide with a claim
+            // on work that is already in main (the mechanical conflict class reported on #2028).
+            let paths = StatePaths::from_env(repo);
+            let merged_branches: Vec<String> = states
+                .iter()
+                .filter(|s| s.state == githelp::MergeState::Merged)
+                .map(|s| s.branch.clone())
+                .collect();
+            let stale = team::stale_claims(&paths, &merged_branches);
 
             if json {
                 let rows: Vec<String> = states
@@ -1333,10 +1345,17 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
                     println!("  {:<44} {}", s.branch, s.reason);
                 }
             }
+            if !stale.is_empty() {
+                println!();
+                println!("claims on merged branches ({}):", stale.len());
+                for c in &stale {
+                    println!("  {:<44} lab={} since {}", c.branch, c.lab, c.claimed_at);
+                }
+            }
             if !apply {
-                if !removable.is_empty() {
+                if !removable.is_empty() || !stale.is_empty() {
                     println!();
-                    println!("delete them with:  uor-harness git clean-merged --apply");
+                    println!("apply them with:  uor-harness git clean-merged --apply");
                 }
                 return ExitCode::SUCCESS;
             }
@@ -1347,6 +1366,19 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
             println!("deleted {} branch(es)", deleted.len());
             for (b, why) in refused {
                 eprintln!("  refused {b}: {why}");
+            }
+            if !stale.is_empty() {
+                match team::release_merged_claims(&paths, &merged_branches) {
+                    Ok(released) => {
+                        println!("released {} claim(s) on merged branches", released.len());
+                        for c in released {
+                            println!("  {} (was {})", c.branch, c.lab);
+                        }
+                    }
+                    // A refusal here is R10 or an unwritable store: the branch deletion already
+                    // happened and stands, so this is reported rather than fatal.
+                    Err(e) => eprintln!("uor-harness: claims not released: {e}"),
+                }
             }
             ExitCode::SUCCESS
         }
