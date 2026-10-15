@@ -54,11 +54,14 @@ cleanup deletes it**, so the defect re-arms on every merge train. Measured: the 
 
 | file | change |
 |---|---|
-| `crates/uor-r4-harness/src/state.rs` | `slug()` gains Python's `unknown` fallback; new `slug_stem()` keeps "did a lab name itself" a separate question; new `shared_primary_checkout()` and `refuse_shared_checkout()` identify the shared checkout by the shape of the clone |
+| `crates/uor-r4-harness/src/state.rs` | the shared checkout is identified by shape **plus `git config uor.sharedCheckout true`**, which survives the cleanup that removes every linked worktree; `git_out` clears `GIT_DIR`/`GIT_WORK_TREE`; `slug()` gains Python's `unknown` fallback; new `slug_stem()` keeps "did a lab name itself" a separate question; new `shared_primary_checkout()` and `refuse_shared_checkout()` identify the shared checkout by the shape of the clone |
 | `crates/uor-r4-harness/src/receipt.rs` | committed writes are refused in the shared checkout; `Receipt::validate` no longer refuses an unnamed lab; `unattributed()` + `UNATTRIBUTED_WARNING` (Python's wording, once per process); shard names use `slug()` directly |
 | `crates/uor-r4-harness/src/team.rs` | `save_claims` refuses the shared checkout; the shared tier is read from `origin/main` through `git show`, not from a working copy; the shared checkout no longer supplies the caller's own tier |
 | `crates/uor-r4-harness/src/presence.rs` | `publish_durable` refuses the shared checkout; `Presence` keeps the raw lab so an unnamed check-in is still refused while the record and paths carry the slug |
-| `crates/uor-r4-harness/src/multilab.rs` | `migrate_ledger` refuses the shared checkout |
+| `crates/uor-r4-harness/src/multilab.rs` | `migrate_ledger` and `sync_live_to_durable` refuse the shared checkout — the sync refuses **before** it reads the live tier, because the per-row guard only fired when there was a row to publish |
+| `crates/uor-r4-harness/src/ratchet.rs`, `githelp.rs` | `ratchet --update-baseline` and `git install-hooks` refuse the shared checkout; `state::refuse_shared_checkout_at` is the path-based entry point for writers that hold a repository, not the harness state |
+| `crates/uor-r4-harness/src/receipt.rs` (2) | `record` (`team dispatch`) writes the LIVE shard like the other coordination receipts, so the live-first rule the docs state is true of every receipt |
+| `crates/uor-r4-harness/tests/committed_writes_refuse_the_shared_checkout.rs` | **the entry-point pin**: a real shared-layout clone, the real binary, every committed-write command asserted to refuse with R10 and to leave the checkout unchanged, the same commands asserted NOT to be refused in a lab worktree, the dry-run dispatch pinned, the marker case, and the hook-environment case |
 | `crates/uor-r4-harness/src/main.rs` | `receipt`, `skill use` and `prep fit` write the LIVE shard; `cmd_receipt` warns instead of refusing an unnamed lab; one warning text for all writers; `ledger-sync --dry-run` is honoured (the write now sits behind `plan_sync`) |
 | `crates/uor-r4-harness/src/receipt.rs` | `plan_sync` is the read half of the sync: what would be appended, and the lines, writing nothing |
 | `crates/uor-r4-harness/src/main.rs` (2) | `prep new` (the D22 sheet) and `mistakes capture` (the lesson) refuse the shared checkout too - both are record files that ride the delivery PR |
@@ -71,7 +74,7 @@ cleanup deletes it**, so the defect re-arms on every merge train. Measured: the 
 ## Verification
 
 Exact head: this branch. `CARGO_TARGET_DIR=local/harness-target cargo test -p uor-r4-harness --offline`:
-**532 passed, 0 failed, 6 ignored**. New tests cover the guard (shared checkout found, linked worktree
+**533 passed, 0 failed, 6 ignored**, plus **5 entry-point integration tests**. New tests cover the guard (shared checkout found, linked worktree
 writable, subdirectory still the shared checkout, single-checkout clone never refused), the refusal message,
 `slug`/`slug_stem`, the unnamed receipt landing in `unknown-<month>.jsonl`, the tracker in `watched_issues`,
 the shared tier reading `origin/main` rather than a stale working copy, and a claim in a lab's own checkout
@@ -127,9 +130,45 @@ fixed at the reviewed head:
   (a lab running it from its own worktree still installs into the shared hooks directory, which is how every
   worktree is guarded).
 
-Non-blocking notes from the same review, recorded rather than fixed: the unnamed-check-in exit code differs by
-path (2 and 1); the `prep new`/`mistakes capture` guards are verified by hand, not by an automated test; and the
-guard allows a single-checkout clone by design (documented above).
+A second exact-head review (Claude, on `e50865f04`) returned CHANGES with one medium finding and one test-quality
+finding; both are fixed:
+
+- **F1 — the guard switched off when the owner checkout had no linked worktrees.** The shape rule read any
+  single checkout as the writer's own, and `uor-hygiene`/the post-merge cleanup remove worktrees, so `~/uor-r4`
+  could reach that state and accept `team claim` again. Reproduced in review on a single-checkout scratch repo.
+  Fixed with a marker that does not depend on the worktree count — `git config uor.sharedCheckout true`, set once
+  in the shared checkout — checked alongside the shape. A linked worktree of a marked checkout stays writable, and
+  an unmarked single-checkout clone is still a lab's own (both pinned).
+- **F4 — the guards were not pinned.** Deleting the `ledger-sync` guard left all 533 unit tests green. There is now
+  an entry-point integration test (`tests/committed_writes_refuse_the_shared_checkout.rs`) covering every
+  committed-write command. **Every pin was verified by removing its guard and watching the test fail:**
+
+  | entry point | guard removed → test |
+  |---|---|
+  | `team claim` | fails |
+  | `ledger-sync` | fails |
+  | `multilab sync-live` | fails |
+  | `multilab migrate-ledger` | fails |
+  | `prep new` | fails |
+  | `mistakes capture` | fails |
+  | `ratchet --update-baseline` | fails |
+  | `git install-hooks` | fails |
+  | the marker/shape identification itself | fails |
+  | `receipt::append` (no CLI entry point; library API + defense in depth) | not covered — stated, not hidden |
+
+- **F5 — a hook environment could make a lab worktree look shared.** A git hook exports `GIT_DIR`/`GIT_WORK_TREE`,
+  which take precedence over `git -C`, so inside a hook `rev-parse --show-toplevel` reports the MAIN worktree and a
+  lab's own write would have been refused for the wrong reason. `git_out` now clears both. Pinned by running
+  `team claim` from a linked worktree with `GIT_DIR` set.
+
+Non-blocking notes from the reviews, recorded rather than fixed: the unnamed-check-in exit code differs by path
+(2 and 1); the claims view does not yet say which tier answered or how old `origin/main` is (F2); an unattributed
+receipt's shard says `unknown` while its `"lab"` stays `""`, matching the retired Python (F3); `receipt::append`
+and `write_line` remain the committed-write API with no CLI caller (the retired Python path still uses its own).
+Two delivery-time observations worth keeping: `cargo` on `PATH` on this machine is **not** Rust's cargo
+(`/opt/homebrew/bin/cargo` is a different tool), so anything invoking `cargo` by name — including `parity.py`'s
+`build()` fallback — can silently do nothing; and a probe script that used `git checkout -- <file>` to restore a
+guard also reverted two uncommitted edits, which is why the pin probe now runs against committed state only.
 
 ## What this does not fix
 

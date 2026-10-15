@@ -2048,12 +2048,11 @@ fn cmd_team(repo: &Path, args: &[String], json: bool) -> ExitCode {
                         println!("  write scope: {}", rendered.join(", "));
                     }
                 }
-                // Python prints the UNSHARDED month file here: the shard a line lands in is named
-                // after the lab, while this is the path a reader opens.
-                println!(
-                    "  receipt: docs/harness/ledger/{}.jsonl",
-                    &ts[..7.min(ts.len())]
-                );
+                // The path the line ACTUALLY landed in. Python prints the UNSHARDED month file here,
+                // which was never the shard a lab's line goes to, and since the write is live-tier
+                // first (R10) that would now be doubly misleading: a lab looking where it was told
+                // would find nothing, in a checkout it must not write.
+                println!("  receipt: {} (live tier)", recorded.shard.display());
             }
             ExitCode::SUCCESS
         }

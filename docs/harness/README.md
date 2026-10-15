@@ -187,7 +187,7 @@ entries out before the checkout could be reset.
 | command | writes | where |
 |---|---|---|
 | `heartbeat` | presence + one receipt | **live tier only** |
-| `receipt`, `skill use`, `prep fit` | one receipt | **live tier only** |
+| `receipt`, `skill use`, `prep fit`, `team dispatch` | one receipt | **live tier only** |
 | `ledger-sync` | the committed shard | the caller's own checkout |
 | `team claim` / `team release` | `docs/harness/claims.json` | the caller's own checkout |
 | `multilab sync-live` | the committed `presence/<lab>.json` | the caller's own checkout |

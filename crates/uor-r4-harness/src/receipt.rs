@@ -383,7 +383,10 @@ pub fn record(
         shard: shard_path(paths, &lab, &month),
         unattributed,
     };
-    let shard = write_line(paths, &recorded.to_receipt(), &month)?;
+    // LIVE shard, like the check-in and the other coordination receipts: `team dispatch` records that
+    // a role was deployed, which every lab should see immediately and which must not dirty a checkout
+    // (R10). `ledger-sync` carries the line into the committed shard before the PR.
+    let shard = write_live_line(paths, &recorded.to_receipt(), &month)?;
     Ok(Recorded { shard, ..recorded })
 }
 
@@ -555,11 +558,16 @@ mod tests {
         );
     }
 
+    /// A scratch repo AND a writable scratch live tier: `record` writes the live shard (R10), so a
+    /// fixture with the live tier pointed at nothing would now fail on the write rather than on the
+    /// behaviour under test.
     fn scratch() -> (tempfile::TempDir, StatePaths) {
         let dir = tempfile::tempdir().expect("tempdir");
         let ledger = dir.path().join("docs").join("harness").join("ledger");
         std::fs::create_dir_all(&ledger).expect("mkdir");
-        let paths = StatePaths::resolve(dir.path(), None, Some("/nonexistent-live"));
+        let live = dir.path().join("live");
+        std::fs::create_dir_all(&live).expect("mkdir");
+        let paths = StatePaths::resolve(dir.path(), None, Some(live.to_str().expect("utf8")));
         (dir, paths)
     }
 
@@ -639,6 +647,13 @@ mod tests {
             r.shard
                 .ends_with(format!("unknown-{}.jsonl", current_month())),
             "{}",
+            r.shard.display()
+        );
+        // LIVE tier, like the check-in: `team dispatch` records coordination, and coordination does
+        // not dirty a checkout (R10). `ledger-sync` carries the line into the committed shard.
+        assert!(
+            r.shard.starts_with(live_ledger_dir(&paths)),
+            "recorded into {} rather than the live tier",
             r.shard.display()
         );
         assert!(r.line().contains("\"lab\": \"\""));
@@ -788,6 +803,12 @@ pub fn live_shard_path(paths: &StatePaths, lab: &str, month: &str) -> PathBuf {
 /// Appends rather than rewriting, so two labs checking in at once cannot clobber each other's lines.
 pub fn append_live(paths: &StatePaths, receipt: &Receipt, month: &str) -> Result<PathBuf, String> {
     receipt.validate()?;
+    write_live_line(paths, receipt, month)
+}
+
+/// The live write, without the lab check - `record` needs it for the same reason `write_line` exists:
+/// an unattributed receipt is WARNED about and preserved, never refused.
+fn write_live_line(paths: &StatePaths, receipt: &Receipt, month: &str) -> Result<PathBuf, String> {
     let shard = live_shard_path(paths, &receipt.lab, month);
     if let Some(parent) = shard.parent() {
         std::fs::create_dir_all(parent)
