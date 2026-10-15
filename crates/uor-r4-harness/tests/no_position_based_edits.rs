@@ -39,8 +39,9 @@ fn harness_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Whether a line is a comment. **A lesson must be able to warn about the flag**, so comments are skipped:
-/// the hazard is an executable occurrence, and a comment saying "do not use this" is the opposite of one.
+/// Whether a line is a full-line comment (after leading whitespace).
+/// Only full-line `#` or `//` comments are skipped so lessons can warn about the flag.
+/// Inline comments are not parsed: `echo hi  # don't use --edit-last` still trips the guard.
 fn is_comment(line: &str) -> bool {
     let t = line.trim_start();
     t.starts_with('#') || t.starts_with("//")

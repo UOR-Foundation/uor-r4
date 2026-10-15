@@ -65,8 +65,9 @@ uor-harness comment edit --id <comment-id> --body-file <path>   # the safe path,
   position-based form in the harness, deliberately.
 * **Editing anything else shared** — a claim, a presence row, a ledger shard — name the target explicitly and
   never let a tool infer it from what happened most recently.
-* **If you find `--edit-last` in a script or workflow**, it fails `no_position_based_edits` in the harness
-  test suite; replace it with the id-addressed call.
+* **If you find `--edit-last` in `scripts/harness/**` or `.github/workflows/**`**, it fails
+  `no_position_based_edits` in the harness test suite unless the entire line is a comment;
+  replace executable uses with the id-addressed call. Scripts outside these roots are not scanned.
 * **If it is already too late** — a comment was overwritten — post a correction naming the comment id and
   timestamp immediately, and say plainly that the text is unrecoverable. Do not let a silent edit stand as
   if the record were intact.

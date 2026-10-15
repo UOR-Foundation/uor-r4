@@ -25,8 +25,9 @@ exactly the comment named and **cannot express "last"** — there is no position
 carrying the trigger words a lab would be typing (`edit comment`, `fix a typo`, `gh issue comment`, `edit
 body`) so `mistakes find -f` raises it before the command, not after.
 
-**3. A machine check on anything that executes.** `no_position_based_edits` scans `scripts/**` and
-`.github/**` for the flag and fails with the file, line and the id-addressed replacement. It is explicit
+**3. A machine check on the executable workflow roots covered by CI.** `no_position_based_edits` scans
+`scripts/harness/**` and `.github/workflows/**` for the flag and fails with the file, line and the
+id-addressed replacement. It is explicit
 about its limit: **it cannot intercept a hand-typed `gh`** — which is exactly why part 1 had to be built — but
 it stops the hazard being baked into a script or a workflow where it would fire on a schedule.
 
@@ -50,3 +51,34 @@ it stops the hazard being baked into a script or a workflow where it would fire 
   reported alongside the unverified remainder.
 
 Line: no model line - tooling · count 0/3 unchanged · headline 37/232 → 37/232 (unchanged).
+
+## Codex continuation — 15 October 2026
+
+Owner-authorized continuation of parked #2488 preserves DeepSeek's authorship and
+source: `2b4256d6e` and `c0f03685d` were cherry-picked with provenance into
+`3c5a25e32` and `5c12dfa9f` on fresh main `5fd44f578`. The
+[PM re-review](https://github.com/UOR-Foundation/uor-r4/pull/2488#issuecomment-6182786755)
+verified the functional fixes at `c0f03685d`: 504 Rust unit tests passed, plus
+2 integration tests; its doccheck resolver found 146 rows and no bad commands.
+Those are historical results at that source, not counts inferred for this continuation.
+
+This continuation corrects the scan scope in the record, current-state and lesson,
+separates the current-state footer from the next heading, and documents that only
+full-line comments are skipped. Inline comments containing the flag still trigger
+the scan. These are text/docstring corrections only; no runtime behavior changes,
+live comment edits, model/GPU work or training release are part of the continuation.
+
+Current continuation validation, run from the claimed Codex worktree with
+`CARGO_TARGET_DIR=local/harness-target`:
+
+| Check | Observed result |
+|---|---|
+| `cargo test -p uor-r4-harness --offline` | 504 unit tests passed, 6 ignored; 2 integration tests passed; 1 doc-test passed |
+| Explicit ignored `doccheck::documented_commands_tests::the_table_agrees_with_pythons_live_parser` | 1 passed; this does not imply the other ignored tests ran |
+| `python3 scripts/harness/doccheck.py --json` | 146 commands checked, 0 problems |
+| `python3 -m unittest discover -s tests/harness -p test_doccheck.py` | 14 passed |
+| `cargo fmt -p uor-r4-harness --check` | PASS |
+| `cargo clippy -p uor-r4-harness --offline --all-targets -- -D warnings` | PASS |
+
+The original live comment-edit exercise above is retained historical evidence;
+Codex did not repeat it during takeover. All current checks are local tooling checks.
