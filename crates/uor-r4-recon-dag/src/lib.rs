@@ -6,8 +6,10 @@
 //! `whole_object_sha256_in_rust=NOT_CHECKED`. Two things follow, and they are the two halves of this crate:
 //!
 //! 1. **An on-demand backend.** The records file is a fixed-stride sequence of `1-byte scale || 12-byte id
-//!    || 32-or-36-byte data`. An index of `(id -> offset)` costs 13 bytes per node and no node data, so a
-//!    reader can resolve a node only when the traversal actually visits it.
+//!    || 32-or-36-byte data`. The on-disk header is 13 bytes per node, not the resident index cost:
+//!    a `HashMap<Id, offset>` also stores its keys, offsets, buckets and allocator overhead.
+//!    `open()` transiently reads the whole file to index those headers; subsequent traversals fetch and
+//!    authenticate only visited records. No bounded-memory indexing claim is made.
 //! 2. **Two digest claims that are NOT the same claim.** A node id authenticates **the nodes a range
 //!    touched** ([`Verification::RangeVerified`]); it says nothing about the nodes outside the range, and
 //!    nothing about the whole object. Only a whole-object digest ([`Verification::WholeObject`]) can carry
@@ -37,6 +39,7 @@ pub struct Node {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     Format,
+    Allocation,
     Range,
     Missing(Id),
     Scale,
@@ -97,7 +100,12 @@ fn mix(v: &mut [u64; 16], a: usize, b: usize, c: usize, d: usize, x: u64, y: u64
 ///
 /// **This is not the whole-object digest.** It authenticates one node's bytes; the object those nodes
 /// reconstruct is checked separately, by [`whole_object_digest`].
-pub fn id_for(node: &Node) -> Id {
+/// Refuses malformed payloads/scales before accessing the fixed digest buffer.
+pub fn id_for(node: &Node) -> Result<Id, Error> {
+    span(node.scale)?;
+    if node.data.len() != data_size(node.scale) {
+        return Err(Error::Format);
+    }
     let mut bytes = [0u8; 128];
     bytes[0] = node.scale;
     bytes[1..1 + node.data.len()].copy_from_slice(&node.data);
@@ -129,7 +137,7 @@ pub fn id_for(node: &Node) -> Id {
     let mut out = [0u8; 12];
     out[..8].copy_from_slice(&h[0].to_le_bytes());
     out[8..].copy_from_slice(&h[1].to_le_bytes()[..4]);
-    out
+    Ok(out)
 }
 
 /// The whole-object digest of reconstructed bytes, or of the source object they came from.
@@ -152,7 +160,7 @@ pub struct Manifest {
 }
 
 fn parse_id(s: &str) -> Result<Id, Error> {
-    if s.len() != 24 {
+    if s.len() != 24 || !s.is_ascii() {
         return Err(Error::Format);
     }
     let mut id = [0u8; 12];
@@ -255,18 +263,18 @@ impl Backend for EagerBackend {
     }
 }
 
-/// The production backend: a 13-byte-per-node index, with node data read only when a traversal asks.
+/// The production backend retains a header-derived index and fetches node data during traversal.
 ///
-/// The records file is a fixed-stride sequence, so the index is built by walking headers alone - `1 + 12`
-/// bytes per record and no node data. The reader's resident cost is then the index rather than the store,
-/// which is the whole difference from [`EagerBackend`].
+/// The on-disk header is 13 bytes; resident index cost includes HashMap entries and overhead.
+/// Opening the backend transiently reads the whole records file. It does not retain node payloads,
+/// unlike [`EagerBackend`], but no low peak-memory or 13-byte resident-index claim follows.
 pub struct IndexedBackend {
     path: PathBuf,
     index: HashMap<Id, u64>,
 }
 
 impl IndexedBackend {
-    /// Build the index from `records_path`, reading headers only.
+    /// Read the file transiently, then retain only the header-derived index.
     pub fn open(records_path: &Path) -> Result<Self, Error> {
         let bytes = std::fs::read(records_path).map_err(|e| Error::Io(e.to_string()))?;
         let mut index = HashMap::new();
@@ -330,7 +338,7 @@ impl Backend for IndexedBackend {
 /// object. Only a whole-object digest can carry integrity for the reconstruction as a whole.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Verification {
-    /// Every node the traversal TOUCHED matched its own id. Nodes outside the range were never read and are
+    /// Every node the traversal TOUCHED matched its own id. Nodes outside the range were not authenticated and are
     /// NOT covered - `unverified_nodes` counts them. **Not object integrity.**
     RangeVerified {
         nodes: usize,
@@ -357,7 +365,7 @@ impl Verification {
                 nodes,
                 unverified_nodes,
             } => format!(
-                "range-verified only: {nodes} node(s) authenticated, {unverified_nodes} node(s) in the store were NOT read and are not covered"
+                "range-verified only: {nodes} node(s) authenticated, {unverified_nodes} node(s) in the store were NOT authenticated by this traversal and are not covered"
             ),
         }
     }
@@ -410,10 +418,15 @@ fn visit(
     if node.scale != scale {
         return Err(Error::Scale);
     }
+    // Backend is public: malformed nodes must refuse, including on repeated visits.
+    if node.data.len() != data_size(scale) {
+        return Err(Error::Format);
+    }
     t.visits += 1;
-    if t.verified.insert(id) && id_for(&node) != id {
+    if id_for(&node)? != id {
         return Err(Error::Integrity);
     }
+    t.verified.insert(id);
     if scale == 0 {
         t.leaves += 1;
         let lo = a.saturating_sub(start);
@@ -453,7 +466,9 @@ fn walk(
     if a > b || b > manifest.len {
         return Err(Error::Range);
     }
-    let mut out = Vec::with_capacity(b - a);
+    let mut out = Vec::new();
+    out.try_reserve_exact(b - a)
+        .map_err(|_| Error::Allocation)?;
     let mut t = Traversal::default();
     if a == b {
         return Ok((out, t));
