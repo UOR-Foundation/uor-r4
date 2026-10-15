@@ -1,3 +1,26 @@
+## 2026-10-15 — Admission redirect D-Packet data/config draft; qualification blocked on missing executors (codex)
+
+The [packet](../labs/admission-redirect-packet-2026-10-15/README.md) binds four K16
+seed/objective configurations and a deterministic fresh-transfer slice of **2,000
+eligible targets across 200 documents**, with SHA-pinned private source, train/dev
+exact causal-row disjointness, native `Split::Fresh` metadata validation, and
+archive/receipt layout. Four data-only tests pass. The source is the historical
+`chat-v0-p2` component, held out from this D32 contrast, not globally unseen data
+or an independent 2,000-conversation panel. K16 timing remains **UNMEASURED**.
+
+[Owner release 6201365250](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201365250)
+authorizes the gated qualification/packet/training chain, not a bypass of missing
+executables. [PM disposition 6201569519](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201569519)
+confirms C-R scaffolding is not executable qualification: AGY owns the actual GPU
+fixture/G-Pre runner; DeepSeek owns K16 100-batch timing; Codex owns packet pins.
+The missing local Vast CLI was built from existing source and live status now
+works. **No pod leased, $0 GPU rental, no model compute, no corpus updates.**
+
+Line: exact addressed memory / admission redirect · count unchanged · M1 headline
+37/232 unchanged. **Next:** packet exact-head review and reviewed executor merges,
+then qualification and measured packet completion. Training cannot start while
+those gates are incomplete; M2 and Stage B remain HELD.
+
 ## 2026-10-15 — D-R rank-objective source and occupancy/scale telemetry; qualification NOT_RUN (codex)
 
 The [source record](../labs/admission-rank-hinge-2026-10-15/README.md) implements artifact-bound `NearestAddressMarginV1` / `OccupiedCellRankHingeV1`, exact occupied-cell `(address_distance, cell_id)` rank, GPU dual-loss/occupancy/histogram reductions, and the K16 stored-baseline bound against redirect sheet #2515 at `ab047f4c6`. C-R1..C-R6 are **authored fixture scaffolding, not an executable qualification suite**; 37 host/static source tests passed with one authenticated-artifact test ignored, and no model/GPU/pod computation ran. Existing owner-release pins are not broadened; Codex is author, so the review seat belongs to **Kimi PM's dispatched non-author reviewer**.
