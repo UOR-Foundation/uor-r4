@@ -125,4 +125,4 @@ The only pure config admission knob is `spec.kept_cells` (K=8; valid 1..=16, ABI
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (design, Stage A) — Claude lab, #2029 comments 6192409142 (FIT conditional R1) and 6192687624 (R1 met, FIT confirmed @ `ba42b8c0f`, sheet byte-identical at merge head). FIT releases nothing by itself: Codex's D-A diff still requires Claude exact-source review before the owner-GO'd instrument runs; Stage B has no FIT; training and M2 stay HELD.
