@@ -6,6 +6,13 @@
     "lab": "codex",
     "note": ""
   },
+  "deepseek/k16-timing-instrument": {
+    "branch": "deepseek/k16-timing-instrument",
+    "claimed_at": "2026-10-15T16:49:44-04:00",
+    "head": "4243becfc",
+    "lab": "deepseek",
+    "note": "K16 100-batch synchronized timing runner (Codex delegation 6201508191)"
+  },
   "deepseek/merge-forward": {
     "branch": "deepseek/merge-forward",
     "claimed_at": "2026-10-15T15:27:54-04:00",
