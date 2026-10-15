@@ -52,6 +52,7 @@ than a missing flag: it teaches a lab the wrong thing about which commands touch
 | `crates/uor-r4-harness/src/multilab.rs` | `migrate_ledger` refuses the shared checkout |
 | `crates/uor-r4-harness/src/main.rs` | `receipt`, `skill use` and `prep fit` write the LIVE shard; `cmd_receipt` warns instead of refusing an unnamed lab; one warning text for all writers; `ledger-sync --dry-run` is honoured (the write now sits behind `plan_sync`) |
 | `crates/uor-r4-harness/src/receipt.rs` | `plan_sync` is the read half of the sync: what would be appended, and the lines, writing nothing |
+| `crates/uor-r4-harness/src/main.rs` (2) | `prep new` (the D22 sheet) and `mistakes capture` (the lesson) refuse the shared checkout too - both are record files that ride the delivery PR |
 | `crates/uor-r4-harness/src/notes.rs`, `registries.rs` | `watched_issues` puts the tracker first, then the milestones; `Registries::tracker_issue()` reads it from the registry |
 | `docs/harness/README.md`, `pm-rules.md`, `BOOTSTRAP.md` | the write-path table, the enforced-R10 refusal, the tracker in the check-in, the two installed copies; the presence TTL in the README corrected from 30 to 5 minutes (the code has used 5 since 13 October) |
 

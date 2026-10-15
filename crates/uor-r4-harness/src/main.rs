@@ -783,6 +783,12 @@ fn cmd_mistakes(repo: &Path, args: &[String], json: bool) -> ExitCode {
             for warning in &warnings {
                 eprintln!("note: {warning}");
             }
+            // R10: a lesson is a record file that rides the delivery PR, so it lands in the caller's
+            // own checkout. The shared checkout is read-only for every lab.
+            if let Err(e) = uor_r4_harness::state::refuse_shared_checkout(&paths, "the lesson") {
+                eprintln!("uor-harness: {e}");
+                return ExitCode::from(1);
+            }
             let existed = target.exists();
             if let Some(parent) = target.parent() {
                 let _ = std::fs::create_dir_all(parent);
@@ -1208,6 +1214,14 @@ fn cmd_prep(repo: &Path, args: &[String], json: bool) -> ExitCode {
                      Re-run with --force to replace it.",
                     target.display()
                 );
+                return ExitCode::from(1);
+            }
+            // R10: the sheet is the D22 record and rides the delivery PR, so it is written into the
+            // caller's own checkout. The shared checkout stays on clean origin/main for every lab.
+            if let Err(e) =
+                uor_r4_harness::state::refuse_shared_checkout(&paths, "the pre-registration sheet")
+            {
+                eprintln!("uor-harness: {e}");
                 return ExitCode::from(1);
             }
             if let Some(parent) = target.parent() {
