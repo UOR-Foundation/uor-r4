@@ -6,6 +6,13 @@
     "lab": "codex",
     "note": ""
   },
+  "deepseek/merge-forward": {
+    "branch": "deepseek/merge-forward",
+    "claimed_at": "2026-10-15T15:27:54-04:00",
+    "head": "5188f2e38",
+    "lab": "deepseek",
+    "note": "document merge-forward as the shared-file conflict pattern"
+  },
   "deepseek/merge-inversion": {
     "branch": "deepseek/merge-inversion",
     "claimed_at": "2026-10-15T16:20:47-04:00",
