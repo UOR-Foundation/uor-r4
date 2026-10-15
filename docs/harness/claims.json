@@ -8,15 +8,15 @@
   },
   "claude/public-face-reconcile-2026-10-15": {
     "branch": "claude/public-face-reconcile-2026-10-15",
-    "claimed_at": "2026-10-15T18:04:21-04:00",
-    "head": "61244bd72",
+    "claimed_at": "2026-10-15T18:19:36-04:00",
+    "head": "b7421576a",
     "lab": "claude",
     "note": ""
   },
-  "codex/k16-admission-validators": {
-    "branch": "codex/k16-admission-validators",
-    "claimed_at": "2026-10-15T17:18:58-04:00",
-    "head": "27c82c0c8",
+  "codex/fresh-scoring-eval": {
+    "branch": "codex/fresh-scoring-eval",
+    "claimed_at": "2026-10-15T17:51:49-04:00",
+    "head": "7b26da89d",
     "lab": "codex",
     "note": ""
   },
