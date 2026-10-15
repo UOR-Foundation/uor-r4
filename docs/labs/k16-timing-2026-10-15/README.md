@@ -16,8 +16,10 @@ sealed seed-1 Q4 fixture, occupancy 189, crossed with the two policies).
 - Every timed step is bracketed by `Device::synchronize()` — before and after `carry_windows`, and before and after each
   `propose` + `observation`. The numbers are integer host nanoseconds of a synchronized native API.
 - **Zero apply.** Each cell asserts an identical snapshot digest and epoch before and after; a change is a fault, not a footnote.
-- **Two rates, on purpose:** target-rows/s (acceptance-facing) and, separately, physical **padded-context-tokens/s**
-  (64 rows x 192 positions = 12,288 per full batch).
+- **Two rates, on purpose, over the FULL timed unit** (carry + propose + observation for both parameters, named in the plan as
+  `rates_basis`): target-rows/s (acceptance-facing) and, separately, physical **padded-context-tokens/s**
+  (64 rows x 192 positions = 12,288 per full batch). **Carry-only nanoseconds are reported as a separately named secondary**
+  (`carry_only`), never as the headline: a carry-only divisor understates per-batch cost in the expensive direction, and this number fills the D-Packet tokens/s slot that sizes training wall time. Per-family floors (carry, route propose/observation, vector propose/observation) are reported alongside, and the record states its dtype: integer nanoseconds over an integer-only discrete stack, no floating point.
 - **Per-batch receipts** carry the carry nanoseconds, both proposals (candidate, before/after epoch, whether any active candidate
   cost differs from identity, active candidate count) and the epoch, with `applied: false` on every record.
 - **Identities** retained: the pinned fixture pins (snapshot SHA256, seed, epoch, occupancy, original K8 SHA, evaluation-only

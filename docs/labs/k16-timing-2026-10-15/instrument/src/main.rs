@@ -39,6 +39,14 @@ pub const BATCHES: usize = 100;
 pub const WARMUPS: usize = 1;
 pub const PIN_SCHEMA: &str = "k16-timing-pin/v1";
 
+/// The headline rate basis, named in the plan and in every cell record so no
+/// reader has to infer which phases the divisor covers.
+pub const RATE_BASIS: &str = "full timed unit: carry_windows + propose(route) + observation + propose(vector_block) + observation";
+
+/// One word on dtype, because the vocabulary matters here: the stack is
+/// integer-only and the timings are host wall-clock integers, never floats.
+pub const DTYPE: &str = "integer nanoseconds (host wall clock, u128) over an integer-only discrete stack; no floating point";
+
 /// The sentence every record carries. Extrapolating a training dose from these
 /// numbers without quoting it is the mistake this constant exists to prevent.
 pub const EXCLUSION: &str = "no apply/update is timed: every cell asserts an unchanged snapshot digest and epoch, so these are forward-only carry+propose+observe batches and NOT a training dose";
@@ -260,6 +268,11 @@ pub fn targets() -> Vec<u32> {
 /// Integer floors of the measured nanoseconds. Two rates on purpose: rows per
 /// second is the acceptance-facing number, and padded context tokens per second
 /// is the physical work the device actually touched (64 rows * 192 positions).
+///
+/// `total_ns` is the FULL timed unit (see RATE_BASIS), not the carry phase alone:
+/// a carry-only divisor understates per-batch cost, and this rate sizes the
+/// D-Packet training budget. The carry-only rate is computed by calling this with
+/// the carry nanoseconds and is reported as an explicitly named secondary field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Rates {
     pub rows_per_s: u128,
@@ -381,6 +394,9 @@ pub fn plan(pin: &Pin, cells: &[Cell]) -> Value {
         "batches_per_cell": pin.batches,
         "excluded_warmups_per_cell": pin.warmups,
         "timed_operations": ["carry_windows", "propose(route)", "observation", "propose(vector_block)", "observation"],
+        "rates_basis": RATE_BASIS,
+        "rates_secondary": "carry_only rows_per_s and padded_context_tokens_per_s are reported separately and are NOT the headline basis",
+        "dtype": DTYPE,
         "synchronization": "Device::synchronize before and after every timed operation",
         "apply": false,
         "zero_apply_assertion": "snapshot digest and epoch identical before and after each cell",
@@ -465,7 +481,16 @@ mod driver {
             ("vector_block", Parameter::VectorBlock(0)),
         ];
         let mut timed_batches = 0usize;
-        let mut total_ns: u128 = 0;
+        // The timed UNIT is carry + propose + observation, so the headline rate
+        // divides by all of it. Carry-only is kept as a separately named number:
+        // a carry-only headline understates per-batch cost in the expensive
+        // direction, and this rate sizes the D-Packet training budget.
+        let mut unit_ns: u128 = 0;
+        let mut carry_ns_total: u128 = 0;
+        let mut route_propose_ns: u128 = 0;
+        let mut route_observation_ns: u128 = 0;
+        let mut vector_propose_ns: u128 = 0;
+        let mut vector_observation_ns: u128 = 0;
 
         // One excluded warmup per cell: every entry used in a timed sample is
         // exercised once first, so first-use JIT is not charged to the sample.
@@ -523,6 +548,16 @@ mod driver {
                     Ok(observed) => observed,
                     Err(e) => return Err(ledger.fault("observation", &e)),
                 };
+                match operation {
+                    "route" => {
+                        route_propose_ns += propose_ns;
+                        route_observation_ns += observation_ns;
+                    }
+                    _ => {
+                        vector_propose_ns += propose_ns;
+                        vector_observation_ns += observation_ns;
+                    }
+                }
                 proposal_records.push(json!({
                     "operation": operation,
                     "parameter": format!("{parameter:?}"),
@@ -542,7 +577,7 @@ mod driver {
                 Ok(epoch) => epoch,
                 Err(e) => return Err(ledger.fault("epoch_read", &e.to_string())),
             };
-            total_ns += carry_ns;
+            carry_ns_total += carry_ns;
             timed_batches += 1;
             ledger.push(json!({
                 "record_kind": "batch",
@@ -572,14 +607,45 @@ mod driver {
             ));
         }
 
-        let rates = rates(timed_batches, total_ns);
+        unit_ns = carry_ns_total
+            + route_propose_ns
+            + route_observation_ns
+            + vector_propose_ns
+            + vector_observation_ns;
+        let rates = rates(timed_batches, unit_ns);
+        let carry_only = rates(timed_batches, carry_ns_total);
+        let per_batch = |total: u128| -> u128 {
+            if timed_batches == 0 {
+                0
+            } else {
+                total / timed_batches as u128
+            }
+        };
         Ok(json!({
             "record_kind": "cell",
             "cell": {"source": cell.source, "policy": policy_name(cell.policy)},
             "timed_batches": timed_batches,
             "excluded_warmups": pin.warmups,
-            "total_carry_ns": total_ns,
-            "rates": rates,
+            "unit_ns": unit_ns,
+            "rates": {
+                "basis": RATE_BASIS,
+                "rows_per_s": rates.rows_per_s,
+                "padded_context_tokens_per_s": rates.padded_context_tokens_per_s,
+            },
+            "carry_only": {
+                "ns": carry_ns_total,
+                "rows_per_s": carry_only.rows_per_s,
+                "padded_context_tokens_per_s": carry_only.padded_context_tokens_per_s,
+                "note": "carry phase only; not the headline basis",
+            },
+            "per_family_ns_per_batch_floor": {
+                "carry": per_batch(carry_ns_total),
+                "route_propose": per_batch(route_propose_ns),
+                "route_observation": per_batch(route_observation_ns),
+                "vector_propose": per_batch(vector_propose_ns),
+                "vector_observation": per_batch(vector_observation_ns),
+            },
+            "dtype": DTYPE,
             "snapshot_digest_before": before_digest,
             "snapshot_digest_after": after_digest,
             "epoch_before": epoch_before,
@@ -897,7 +963,37 @@ mod tests {
         assert!(operations.iter().any(|op| op == "propose(route)"));
         assert!(operations.iter().any(|op| op == "observation"));
         assert_eq!(planned["apply"], false);
+        assert_eq!(planned["rates_basis"], RATE_BASIS);
+        assert!(
+            planned["rates_basis"]
+                .as_str()
+                .expect("basis")
+                .contains("propose"),
+            "the basis must name the propose phases"
+        );
+        assert!(planned["dtype"]
+            .as_str()
+            .expect("dtype")
+            .contains("integer"));
         assert_eq!(planned["cells"].as_array().expect("cells").len(), 4);
+    }
+
+    /// The reviewer caught a carry-only headline: the timed unit is carry + propose +
+    /// observation, so the headline divides by all of it and carry-only is a named
+    /// secondary. This pins the vocabulary, which is the part a host can check.
+    #[test]
+    fn the_rate_basis_is_the_full_unit_and_carry_only_is_named_secondary() {
+        assert!(RATE_BASIS.contains("carry_windows"));
+        assert!(RATE_BASIS.contains("propose(route)"));
+        assert!(RATE_BASIS.contains("observation"));
+        assert!(RATE_BASIS.contains("propose(vector_block)"));
+        assert!(DTYPE.contains("integer"));
+        assert!(DTYPE.contains("no floating point"));
+        // The same arithmetic, two bases: the full unit is never smaller than carry-only,
+        // so the headline can only be slower or equal, never faster.
+        let carry_only = rates(100, 500_000_000);
+        let full_unit = rates(100, 1_000_000_000);
+        assert!(full_unit.rows_per_s < carry_only.rows_per_s);
     }
 
     #[test]

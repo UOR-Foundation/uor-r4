@@ -19,6 +19,7 @@
       "source": "sealed_seed1_q4"
     }
   ],
+  "dtype": "integer nanoseconds (host wall clock, u128) over an integer-only discrete stack; no floating point",
   "excluded_warmups_per_cell": 1,
   "exclusion": "no apply/update is timed: every cell asserts an unchanged snapshot digest and epoch, so these are forward-only carry+propose+observe batches and NOT a training dose",
   "fixture": {
@@ -32,6 +33,8 @@
     "snapshot_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "training_resume": false
   },
+  "rates_basis": "full timed unit: carry_windows + propose(route) + observation + propose(vector_block) + observation",
+  "rates_secondary": "carry_only rows_per_s and padded_context_tokens_per_s are reported separately and are NOT the headline basis",
   "read_spec": "route",
   "schema": "k16-timing-plan/v1",
   "shape": {
