@@ -2,7 +2,7 @@
 
 The [record](../labs/public-face-reconcile-2026-10-15/README.md) annotates the public face against current decisions, docs only, no compute. The README D29 row now records that NVRTC was removed by #2344. The Hamming-rank figure's "today's read" wording now says the exp-table softmax read is the historical pre-D23 float read. Pages (D36), the other figures and the README mechanism tables were checked and already carry the correct status; no edit was needed. `check_claim_wording.py` passes on the edited files.
 
-**Blocked:** the starling line's status annotation. The record shows 3/3 with a posted D21 pivot card continuing with one decisive run; the PM assignment says "pending pivot card". Kimi PM to confirm the wording on [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028).
+**Resolved by PM ruling** [#2028 comment 6202844646](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6202844646): the starling status needs no annotation, because the D21 pivot already happened and the murmuration read is the active mechanism.
 
 **Found, not fixed:** `docs/figures/geometry/generate.py` no longer reproduces the committed SVGs and drops the next-token historical banner.
 
