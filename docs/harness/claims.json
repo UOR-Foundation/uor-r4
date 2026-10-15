@@ -1,4 +1,11 @@
 {
+  "codex/admission-rank-hinge": {
+    "branch": "codex/admission-rank-hinge",
+    "claimed_at": "2026-10-15T14:17:03-04:00",
+    "head": "18b5ea475",
+    "lab": "codex",
+    "note": ""
+  },
   "deepseek/merge-forward": {
     "branch": "deepseek/merge-forward",
     "claimed_at": "2026-10-15T15:27:54-04:00",
