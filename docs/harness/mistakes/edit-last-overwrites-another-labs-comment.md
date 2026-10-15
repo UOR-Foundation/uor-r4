@@ -37,16 +37,15 @@ A comment's text changes to something you wrote, under a timestamp you did not w
 the command *succeeded* and printed the URL of a comment you did not mean to touch — the edit you wanted is
 still unedited, so it looks like nothing happened.
 
-## Why the obvious guard is not enough
+## Lesson
+
+**Give the safe path a first-class form, and make the unsafe form impossible to express.**
 
 The instinct is a rule that fails when a lab uses `--edit-last`. But **no machine check can intercept a
 direct `gh` call** — the same reason `unguarded-branch-delete` has `guard: none`. A guard that only warns
 leaves the dangerous path as the *only* path: the harness had no command that edits a comment at all, so
-every lab reached for `gh` and the flag was one keystroke away.
-
-## Lesson
-
-**Give the safe path a first-class form, and make the unsafe form impossible to express.**
+every lab reached for `gh` and the flag was one keystroke away. That is why the guard here is a command
+rather than a warning, and why the machine check is explicitly the smaller half.
 
 `uor-harness comment edit --id <comment-id> --body-file <path>` edits exactly the comment named, because it
 has no concept of "last". Two smaller rules in the same family:
