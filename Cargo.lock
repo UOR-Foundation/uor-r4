@@ -2379,7 +2379,6 @@ dependencies = [
  "uor-r4-graph-format",
  "uor-r4-graph-runtime",
  "uor-r4-model-source",
- "uor-r4-router",
 ]
 
 [[package]]
@@ -2426,7 +2425,6 @@ dependencies = [
  "uor-r4-graph-format",
  "uor-r4-graph-runtime",
  "uor-r4-model-source",
- "uor-r4-router",
 ]
 
 [[package]]
@@ -2480,7 +2478,6 @@ dependencies = [
  "uor-r4-core",
  "uor-r4-graph-compiler",
  "uor-r4-graph-format",
- "uor-r4-router",
 ]
 
 [[package]]
@@ -2535,6 +2532,15 @@ name = "uor-r4-naf"
 version = "0.1.0"
 dependencies = [
  "sha2",
+]
+
+[[package]]
+name = "uor-r4-object-store"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sha2",
+ "uor-r4-tokenizer",
 ]
 
 [[package]]

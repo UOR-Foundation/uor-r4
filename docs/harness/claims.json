@@ -1,16 +1,9 @@
 {
-  "claude/completion-pins": {
-    "branch": "claude/completion-pins",
-    "claimed_at": "2026-10-14T10:08:12-04:00",
-    "head": "3e2534eac",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/spiralcore-attention-review-20261014": {
-    "branch": "claude/spiralcore-attention-review-20261014",
-    "claimed_at": "2026-10-14T14:08:30-04:00",
-    "head": "ae3aa4dc3",
-    "lab": "claude",
+  "antigravity/ag1-post-d30-mechanism-labels": {
+    "branch": "antigravity/ag1-post-d30-mechanism-labels",
+    "claimed_at": "2026-10-14T22:08:52-04:00",
+    "head": "acb76854c",
+    "lab": "antigravity",
     "note": ""
   },
   "codex/recon-dag-takeover": {
@@ -20,10 +13,10 @@
     "lab": "codex",
     "note": ""
   },
-  "kimi/completion-release-plan": {
-    "branch": "kimi/completion-release-plan",
-    "claimed_at": "2026-10-14T04:46:10-04:00",
-    "head": "eddc1cce1",
+  "kimi/decisions-d35-d36-20261015": {
+    "branch": "kimi/decisions-d35-d36-20261015",
+    "claimed_at": "2026-10-15T04:44:20-04:00",
+    "head": "977da4ff9",
     "lab": "kimi",
     "note": ""
   }

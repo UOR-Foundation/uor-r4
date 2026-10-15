@@ -107,3 +107,16 @@ passed. No implementation changes were made in that other owned worktree. Output
 fallible (`Error::Allocation`, with capacity-overflow refusal covered); this does not add an explicit
 reader byte/visit budget or bound whole-file index construction. Callers must still bound object/range
 sizes and traversal work. The object-store's admission limits do not automatically become reader limits.
+
+### Integration with current main — 15 October 2026
+
+The continuation is reconciled onto main `5c4a2c867`; the reviewed reader crate
+at `a8f970f4e` is byte-identical. The workspace includes both the reader and the
+now-merged object store, including #2499's typed I/O/limit clarification.
+Fresh integrated checks pass: **13 reader tests**, formatting, clippy with
+warnings denied, and append-only receipt verification. The retained adapter
+source was recompiled using both crates from this same worktree; exact whole
+and range bytes, missing-record mapping, and distinct integrity types pass.
+Only the adapter's local Cargo path was updated from the retired implementation
+worktree to the merged store. This verifies the current source seam, not a
+production integration or performance claim. No model/GPU compute or hold change.
