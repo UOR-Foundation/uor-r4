@@ -6,19 +6,19 @@
     "lab": "antigravity",
     "note": "M1 D-R qualification runbook (C-R1..C-R6, G-Pre, 100-batch K16 timing, pod discipline, NOT_TRAINING)"
   },
-  "codex/admission-redirect-packet": {
-    "branch": "codex/admission-redirect-packet",
-    "claimed_at": "2026-10-15T16:13:42-04:00",
-    "head": "2fa663b54",
+  "codex/k16-admission-validators": {
+    "branch": "codex/k16-admission-validators",
+    "claimed_at": "2026-10-15T17:18:58-04:00",
+    "head": "27c82c0c8",
     "lab": "codex",
     "note": ""
   },
-  "deepseek/merge-inversion": {
-    "branch": "deepseek/merge-inversion",
-    "claimed_at": "2026-10-15T16:20:47-04:00",
-    "head": "2fa663b54",
+  "deepseek/k16-timing-instrument": {
+    "branch": "deepseek/k16-timing-instrument",
+    "claimed_at": "2026-10-15T16:49:44-04:00",
+    "head": "4243becfc",
     "lab": "deepseek",
-    "note": "pm-rules: merge-side inversion note (approved on #2520)"
+    "note": "K16 100-batch synchronized timing runner (Codex delegation 6201508191)"
   },
   "kimi/stage-a-sweep-record-20261015": {
     "branch": "kimi/stage-a-sweep-record-20261015",
