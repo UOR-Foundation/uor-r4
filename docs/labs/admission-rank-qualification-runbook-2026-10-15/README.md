@@ -9,8 +9,8 @@
   - Pre-registration sheet (`TEST FITNESS: FIT (design)` at `8a4388424`, merged in [#2515](https://github.com/UOR-Foundation/uor-r4/pull/2515) as `5188f2e38`): [`docs/harness/prep/m1-discrete-rung0-admission-redirect-2026-10-15.md`](../../harness/prep/m1-discrete-rung0-admission-redirect-2026-10-15.md)
   - `D-R` source slice (merged in [#2518](https://github.com/UOR-Foundation/uor-r4/pull/2518) as `2fa663b54`): [`docs/labs/admission-rank-hinge-2026-10-15/README.md`](../admission-rank-hinge-2026-10-15/README.md), [`crates/uor-r4-discrete/src/objective.rs`](../../../crates/uor-r4-discrete/src/objective.rs), [`crates/uor-r4-discrete/src/discrete.cu`](../../../crates/uor-r4-discrete/src/discrete.cu), [`crates/uor-r4-discrete/src/device.rs`](../../../crates/uor-r4-discrete/src/device.rs), [`crates/uor-r4-discrete/src/training.rs`](../../../crates/uor-r4-discrete/src/training.rs), [`crates/uor-r4-discrete/src/main.rs`](../../../crates/uor-r4-discrete/src/main.rs)
   - `D-Packet` data/config pins (merged in [#2523](https://github.com/UOR-Foundation/uor-r4/pull/2523) as `27c82c0c8`): [`docs/labs/admission-redirect-packet-2026-10-15/README.md`](../admission-redirect-packet-2026-10-15/README.md) and [`docs/labs/admission-redirect-packet-2026-10-15/configs/`](../admission-redirect-packet-2026-10-15/configs/)
-  - `K=16` synchronized 100-batch timing instrument & step-0 gate (merged in [#2524](https://github.com/UOR-Foundation/uor-r4/pull/2524) as `de06ff2ba`; step-0 ruling in [#2522 comment 6202519677](https://github.com/UOR-Foundation/uor-r4/pull/2522#issuecomment-6202519677)): [`docs/labs/k16-timing-2026-10-15/README.md`](../k16-timing-2026-10-15/README.md) and [`docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml`](../k16-timing-2026-10-15/instrument/Cargo.toml)
-  - `K=16` redirect admission validators (merged in [#2525](https://github.com/UOR-Foundation/uor-r4/pull/2525) as `d77500765`): [`docs/labs/k16-admission-validators-2026-10-15/README.md`](../k16-admission-validators-2026-10-15/README.md) and [`crates/uor-r4-discrete/src/redirect_admission.rs`](../../../crates/uor-r4-discrete/src/redirect_admission.rs)
+  - `K=16` synchronized 100-batch timing instrument & step-0 gate (merged in [#2524](https://github.com/UOR-Foundation/uor-r4/pull/2524) as `f8af41057`; step-0 ruling in [#2522 comment 6202519677](https://github.com/UOR-Foundation/uor-r4/pull/2522#issuecomment-6202519677)): [`docs/labs/k16-timing-2026-10-15/README.md`](../k16-timing-2026-10-15/README.md) and [`docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml`](../k16-timing-2026-10-15/instrument/Cargo.toml)
+  - `K=16` redirect admission validators (merged in [#2525](https://github.com/UOR-Foundation/uor-r4/pull/2525) as `7b26da89d`): [`docs/labs/k16-admission-validators-2026-10-15/README.md`](../k16-admission-validators-2026-10-15/README.md) and [`crates/uor-r4-discrete/src/redirect_admission.rs`](../../../crates/uor-r4-discrete/src/redirect_admission.rs)
   - Owner `G-Pre` confirmation: [#2515 comment 6198442894](https://github.com/UOR-Foundation/uor-r4/pull/2515#issuecomment-6198442894)
   - Compute & storage protocol: [`docs/labs/compute.md`](../compute.md), [`scripts/pod/uor-pod`](../../../scripts/pod/uor-pod), `~/.local/share/uor-r4/bin/cloud-store`
 - **Hold status:** Global training hold, M2 training/rental hold, and Rung-0 Stage B remain **HELD**. Completing this qualification runbook on a released qualification lease satisfies the step-0 CUDA build/clippy gate, `G-Code` (`C-R1..C-R6`), `G-Pre`, and the `D-Packet` measured-throughput slot, after which training still requires completed-packet PM acceptance and the owner's separate personal hold release (`R8` / `R15`).
@@ -34,11 +34,11 @@ Before running any GPU command on the qualification pod, the executor must verif
 | `train.mask` (`FilePin`) | `local/driver/data/mw-balp/train/response_mask.u8` (`completion.rs:293-295`) | `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3` |
 | `dev.tokens` (`FilePin`) | `local/driver/data/ft/dev/tokens.u16` (`completion.rs:306-309`) | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` (`expected_payload_tokens = 42,856`, `expected_eligible_targets = 14,287`) |
 | `dev.mask` (`FilePin`) | `local/driver/data/ft/dev/response_mask.u8` (`completion.rs:311-313`) | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
-| `k16-A-seed1.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-A-seed1.json` | `f6a2aa9d5e87be737a041eb274031c9a0542c8b136c9a5e905e3a3e60870fb02` |
-| `k16-A-seed2.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-A-seed2.json` | `dc7c1522b713d02f9d5a06678470d16fb256cc0807474e5dbbb7c6670a4499e2` |
-| `k16-R-seed1.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-R-seed1.json` | `e32bc8c6ba05a7e67bc1b7205344702ab08cf7516244f6bd1a575b0a53bb4d2c` |
-| `k16-R-seed2.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-R-seed2.json` | `20726c29d9ef514efde2bb16362d6da8a180ff1b3207c2e28532cc620042f107` |
-| `checkpoint-16404.json` (Q4 occupancy fixture) | `icloud:UOR-R4/results/codex/20261015T060354Z-rung0-stage-a-pilot-seed1.tar` | `4477eb5c2480b0b85cc94036a2e15b0d22b654e25deee9c8717aa6e30f8ef7bf` (`model_snapshot_sha256 = 29ba5517a6b1b6d3c7ce54d593221560b446c5048a0b0db882ad53b5ec75bbbf`, `189` occupied cells) |
+| `k16-A-seed1.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-A-seed1.json` | Raw file SHA-256: `eff7a77e1c3c8454324c9ddf31a6c08bdbe1b213d3324fe7b7889c0fe7665ae4` (compact `serde_json::to_vec` `config_sha256`: `f6a2aa9d5e87be737a041eb274031c9a0542c8b136c9a5e905e3a3e60870fb02`) |
+| `k16-A-seed2.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-A-seed2.json` | Raw file SHA-256: `bed46548bdb15e883386044442999584696e6cd9acddaf8c2cc5a8be6b578ee4` (compact `serde_json::to_vec` `config_sha256`: `dc7c1522b713d02f9d5a06678470d16fb256cc0807474e5dbbb7c6670a4499e2`) |
+| `k16-R-seed1.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-R-seed1.json` | Raw file SHA-256: `25ef452f78cb612bdedd8135461836ec459d1f7c899e2e5940e830c3dffc61b7` (compact `serde_json::to_vec` `config_sha256`: `e32bc8c6ba05a7e67bc1b7205344702ab08cf7516244f6bd1a575b0a53bb4d2c`) |
+| `k16-R-seed2.json` | `docs/labs/admission-redirect-packet-2026-10-15/configs/k16-R-seed2.json` | Raw file SHA-256: `fe9f172b428ee131fac4a3865402f55ef80c3749ef32f1d98a830718ad361156` (compact `serde_json::to_vec` `config_sha256`: `20726c29d9ef514efde2bb16362d6da8a180ff1b3207c2e28532cc620042f107`) |
+| `checkpoint-16404.json` (Q4 occupancy wrapper) | `icloud:UOR-R4/results/codex/20261015T060354Z-rung0-stage-a-pilot-seed1.tar` (`CompletionCheckpoint` wrapper, `completion.rs:364`) | Wrapper file SHA-256: `4477eb5c2480b0b85cc94036a2e15b0d22b654e25deee9c8717aa6e30f8ef7bf` (`.checkpoint.model_sha256 = 29ba5517a6b1b6d3c7ce54d593221560b446c5048a0b0db882ad53b5ec75bbbf`, historical pilot `.checkpoint.model.source_sha256 = e18361495276e491525674fb3fdce308b0ad787c7fd6860a811adb60dacd9e1a`, `.checkpoint.model.kernel_sha256 = 931a511bece20641ae00c6b0e943f4f2a380c0f35a824d85fcc0447f1e1ccf5b`, `189` occupied cells) |
 
 ---
 
@@ -101,24 +101,24 @@ Per **Fact 4**, **Fact 5**, Amendment 5, and the owner's explicit confirmation (
 1. **Capacity was trained out (`5,680` at `K=8` checkpoint `0` $\to$ `2,180` at cursor `1,640` $\to$ `1,920` at cursor `16,404`), not absent.** Before any `K=16` training lease is executed, `G-Pre` measures the untrained checkpoint-0 `K=16` admission ceiling (`0` updates applied) across **`seed = 1` and `seed = 2` at `K = 8` and `K = 16`** on the 400-document `ft/dev` split (`14,287` eligible target rows).
 2. **`G-Pre` release prerequisite bar (`redirect_admission.rs:447-451`):** Both `seed = 1` and `seed = 2` at `K = 16` checkpoint `0` must satisfy:
    $$\text{target\_admitted\_rows}(K=16, t=0) \ge 4,894 \quad (\text{out of } 14,287 \text{ eligible rows}).$$
-   - **Analytic checkpoint-0 identity in `discrete_init` (`discrete.cu:353-355`):** At initialization, `discrete_init` assigns block roots via `xorshift32(seed ^ ((token * blocks + block) * 0x9e3779b9)) & 15`. Because `blocks = 4`, for every token $v \in 0..4096$, `block 0` uses index $4v$ and `block 3` uses index $4v + 3 = (4v) \oplus 3$, which pairs each first-block root $a \in 0..15$ deterministically with a unique last-block root $b(a) \in 0..15$, populating **at most `16` occupied endpoint cells across all `4,096` tokens at checkpoint `0`** (`occupied_cells == 16`, as already observed in the sealed `seed = 1, K = 8` checkpoint-0 receipt where `occupied_cells = 16` and `5,680 / 14,287` rows fell in the top `8` of `16` occupied cells). Consequently, at `K = 16` checkpoint `0`, all `<= 16` occupied cells are admitted (`admitted_cells == occupied_cells`), yielding `target_cell_rank <= 16`, `cell_rank_hinge_sum == 0`, and **`target_admitted_rows == 14,287 >= 4,894`**.
+   - **Analytic checkpoint-0 identity in `discrete_init` (`discrete.cu:353-355`):** At initialization, `discrete_init` computes `U block = i / 8; U state = seed ^ block ^ 0x9e3779b9u; state ^= state << 13; state ^= state >> 17; state ^= state << 5; table[i] = (int)g[ROOT + (state & 15) * 8 + (i & 7)];` (XOR with `0x9e3779b9u` followed by 32-bit xorshift, no multiplication). Because `blocks = 4`, for every token $v \in 0..4096$, `block 0` uses index `block_0 = 4*v` and `block 3` uses index `block_3 = 4*v + 3 = (4*v) ^ 3`, so `state_3 = state_0 ^ 3`. By $\mathbb{F}_2$-linearity of `xorshift32`, `(xorshift32(state_0 ^ 3) & 15) == (xorshift32(state_0) & 15) ^ (xorshift32(3) & 15)`, which pairs each first-block root $a \in 0..15$ deterministically with a unique last-block root $b(a) \in 0..15$, populating **at most `16` occupied endpoint cells across all `4,096` tokens at checkpoint `0`** (`occupied_cells == 16`, as already observed in the sealed `seed = 1, K = 8` checkpoint-0 receipt where `occupied_cells = 16` and `5,680 / 14,287` rows fell in the top `8` of `16` occupied cells). Consequently, at `K = 16` checkpoint `0`, all `<= 16` occupied cells are admitted (`admitted_cells == occupied_cells`), yielding `target_cell_rank <= 16`, `cell_rank_hinge_sum == 0`, and **`target_admitted_rows == 14,287 >= 4,894`**.
 3. **Re-measuring the `K=16` checkpoint-0 strict-win baseline `u` (`Fact 4`):** Record `token_strict_win_eligible_rows` and `admitted_strict_win_rows` at checkpoint `0` for each `(seed, arm)` (`k16-A-seed1`, `k16-R-seed1`, `k16-A-seed2`, `k16-R-seed2`). This sets each arm's checkpoint-0 baseline rate $u = \text{token\_strict\_win\_eligible\_rows}(t=0) / 14,287$ and the one-sided 99% binomial guard threshold $\lceil 14,287 u + 2.326348 \sqrt{14,287 u (1 - u)} \rceil$ required by `G-Guard`.
 
 ### 2.2 Verbatim `DriverConfig` Contract & `G-Pre` Commands (`init-corpus` + `eval-corpus`, Zero `.apply`)
 
 #### Source Contract Citations (`crates/uor-r4-discrete`)
 - **`DriverConfig` (`crates/uor-r4-discrete/src/training.rs:36-84`):** Annotated with `#[serde(deny_unknown_fields)]`; requires:
-  - `schema`: `"uor-r4.discrete-corpus-driver/1"` (`DRIVER_SCHEMA`, `training.rs:14, 39, 55`)
-  - `spec`: `Spec { vocabulary: 4096, blocks: 4, context: 192, kept_cells: 8 | 16 }` (`crates/uor-r4-discrete/src/lib.rs:38-59`, `training.rs:40, 56`)
+  - `schema`: `"uor-r4.discrete-corpus-driver/1"` (`DRIVER_SCHEMA`, `training.rs:14, 39, 58`)
+  - `spec`: `Spec { vocabulary: 4096, blocks: 4, context: 192, kept_cells: 8 | 16 }` (`crates/uor-r4-discrete/src/lib.rs:38-59`, `training.rs:40, 57`)
   - `read_spec`: `{"kind": "route"}` (`ReadSpec`, `#[serde(tag = "kind", rename_all = "snake_case")]` at `crates/uor-r4-discrete/src/lib.rs:67-95`, `training.rs:41, 57`)
-  - `objective_policy`: `"nearest_address_margin_v1"` or `"occupied_cell_rank_hinge_v1"` (`ObjectivePolicy`, `crates/uor-r4-discrete/src/objective.rs:13-33`, `training.rs:43, 58`)
-  - `seed`: `1` or `2` (`u32`, `seed != 0` at `training.rs:44, 59-61`)
-  - `batch_rows`: `64` (`u16`, `1..=256` at `training.rs:45, 62-64`)
-  - `train`: `CorpusSource` (`crates/uor-r4-discrete/src/corpus.rs:40-47`, `training.rs:46, 65-67`, `split: "train"`)
-  - `dev`: `CorpusSource` (`crates/uor-r4-discrete/src/corpus.rs:40-47`, `training.rs:47, 68-70`, `split: "dev"`)
-  - `tokenizer`: `FilePin` (`crates/uor-r4-discrete/src/corpus.rs:15-19`, `training.rs:48, 76`)
-  - `bos`: `BosIdentity { token: "<|bos|>", id: 0 }` (`crates/uor-r4-discrete/src/corpus.rs:21-25`, `training.rs:49, 77-82`)
-  - `schedule`: `"canonical_vector_then_read_v1"` (`SchedulePolicy::CanonicalVectorThenReadV1`, `training.rs:31-35, 50`)
+  - `objective_policy`: `"nearest_address_margin_v1"` or `"occupied_cell_rank_hinge_v1"` (`ObjectivePolicy`, `crates/uor-r4-discrete/src/objective.rs:13-33`, `training.rs:42-46`)
+  - `seed`: `1` or `2` (`u32`, `training.rs:47`, `seed != 0` enforced in `Device::new_with_objective` at `device.rs:212`)
+  - `batch_rows`: `64` (`u32`, validated range `1..=64` at `training.rs:48, 59`)
+  - `train`: `CorpusSource` (`crates/uor-r4-discrete/src/corpus.rs:40-47`, `training.rs:49, 60, 68-69, 76`, `split: "train"`)
+  - `dev`: `CorpusSource` (`crates/uor-r4-discrete/src/corpus.rs:40-47`, `training.rs:50, 61, 70-71, 76`, `split: "dev"`)
+  - `tokenizer`: `FilePin` (`crates/uor-r4-discrete/src/corpus.rs:15-19`, `training.rs:51, 72`)
+  - `bos`: `BosIdentity { token: "<|bos|>", id: 0 }` (`crates/uor-r4-discrete/src/corpus.rs:21-25`, `training.rs:52, 79-81`)
+  - `schedule`: `"canonical_vector_then_read_v1"` (`SchedulePolicy::CanonicalVectorThenReadV1`, `training.rs:31-35, 53`)
 - **`init-corpus CONFIG NEW_REPORT_DIR` (`crates/uor-r4-discrete/src/main.rs:9-28, 71-80`):** Calls `PreparedDriver::load(config)` (`training.rs:157-162`), `driver.new_model(0)` (`training.rs:786-794`), and `driver.checkpoint(&model, Cursor::initial())` (`training.rs:795-813`), and writes the serialized `DriverCheckpoint` (`CHECKPOINT_SCHEMA = "uor-r4.discrete-driver-checkpoint/1"`, `training.rs:15, 139-146`) to **`NEW_REPORT_DIR/report.json`**.
 - **`eval-corpus CONFIG DRIVER_CHECKPOINT NEW_REPORT_DIR` (`crates/uor-r4-discrete/src/main.rs:9-28, 81-93`):** Reads `DRIVER_CHECKPOINT` (i.e., `INIT_REPORT_DIR/report.json`), enforces `checkpoint.cursor.accepted_updates == 0` (`main.rs:87-89`, returning `Err(Error::TrainingHeld)` if non-zero), calls `driver.restore(checkpoint, 0)` (`training.rs:814-825`) and `driver.evaluate(&model)` (`training.rs:913-964`), and writes the evaluation report (`schema = "uor-r4.discrete-corpus-driver/1"`, `objective_evaluation_schema = "uor-r4.discrete-objective-evaluation/1"`) to **`NEW_REPORT_DIR/report.json`**.
 
@@ -266,13 +266,23 @@ Before **any** timing or qualification execution on the pod, the executor must r
      - For `Parameter::Route(flat_index)` (`kind == 0`), `route_vector` composes `frame = compose(g, move_action(g, candidate), frame)` at `parameter == index` (`discrete.cu:52`), and `discrete_counterfactual` calls `read_vector` (`discrete.cu:384`) and `writer` (`discrete.cu:386`) using the baseline `occupied` cell mask on every baseline-eligible row (`tr > 0`).
      - For `Parameter::VectorBlock(flat_index)` (`kind == 1`), `table_block` / `input_block` applies `action(g, move_action(g, candidate), base, output)` to the selected `(token, block)` (`discrete.cu:27-34`), `occupied_cells_for_candidate` (`discrete.cu:291-300, 390`) recomputes the 256-cell `candidate_occupied` bitmap across the vocabulary, and `discrete_counterfactual` calls `read_vector` (`discrete.cu:391`) and `writer` (`discrete.cu:392`) on every baseline-eligible row (`tr > 0`).
    - When referencing the canonical schedule's `80` `VectorBlock` + `20` `Route` coordinate sample (`step_index ∈ 0..80` for `Parameter::VectorBlock(0..80)` and `step_index ∈ 16384..16404` for `Parameter::Route(0..20)`), it is labeled as a **two-slice family-stratified `80/20` coordinate sample** (never "100 consecutive canonical coordinates", since `step_index` jumps from `79` to `16384`).
+3. **`sealed_seed1_q4` `CompletionCheckpoint` wrapper & cross-version evaluation-only rebind/import dependency (`crates/uor-r4-discrete/src/completion.rs:364`, `crates/uor-r4-discrete/src/device.rs:705-750`, `docs/labs/k16-timing-2026-10-15/instrument/src/main.rs:425-459`):**
+   - **Wrapper layout:** The sealed Q4 file `checkpoint-16404.json` (`4477eb5c2480b0b85cc94036a2e15b0d22b654e25deee9c8717aa6e30f8ef7bf`) is a `CompletionCheckpoint` (`schema = "uor-r4.completion-checkpoint/1"`, top-level keys `["schema", "admission_sha256", "pilot_parent", "checkpoint", "baseline_snapshot_metadata", "baseline_evaluation", "vector", "route"]`). The inner `Snapshot` lives at **`.checkpoint.model`** (with `.checkpoint.model_sha256 == 29ba5517a6b1b6d3c7ce54d593221560b446c5048a0b0db882ad53b5ec75bbbf` and `189` occupied cells), **not** `.model`.
+   - **Cross-version `source_sha256` / `kernel_sha256` loader check:** The inner snapshot `.checkpoint.model` carries the historical Stage-A pilot `source_sha256 = "e18361495276e491525674fb3fdce308b0ad787c7fd6860a811adb60dacd9e1a"` and `kernel_sha256 = "931a511bece20641ae00c6b0e943f4f2a380c0f35a824d85fcc0447f1e1ccf5b"`, whereas `Device::from_snapshot` (`crates/uor-r4-discrete/src/device.rs:722-735`, called by `k16-timing::driver::load_fixture` at `docs/labs/k16-timing-2026-10-15/instrument/src/main.rs:458`) requires `snapshot.source_sha256 == hex_digest(&source_sha256())` and `snapshot.kernel_sha256 == kernel_sha256()` for the current compiled `D-R` binary.
+   - **Reviewed cross-version evaluation-only rebind/import dependency (`NOT_EXECUTABLE` until merged):**
+     - **Hard prohibition:** Never run an unreviewed `jq` rewrite of `source_sha256` or `kernel_sha256`, never silently relabel historical Stage-A weights as a native current-source checkpoint, and never weaken `Device::from_snapshot`'s native checkpoint loader checks.
+     - **Required dependency:** Executing the `sealed_seed1_q4` timing leg (`T-K16A-OCC189`, `T-K16R-OCC189`) requires a **reviewed cross-version evaluation-only rebind/import path** (in `k16-timing` or an explicitly reviewed evaluation-only rebind helper) that:
+       1. Authenticates the outer `CompletionCheckpoint` wrapper SHA-256 `4477eb5c2480b0b85cc94036a2e15b0d22b654e25deee9c8717aa6e30f8ef7bf` and inner `.checkpoint.model_sha256 == 29ba5517a6b1b6d3c7ce54d593221560b446c5048a0b0db882ad53b5ec75bbbf`;
+       2. Authenticates the historical pilot `source_sha256 = "e18361495276e491525674fb3fdce308b0ad787c7fd6860a811adb60dacd9e1a"` and `kernel_sha256 = "931a511bece20641ae00c6b0e943f4f2a380c0f35a824d85fcc0447f1e1ccf5b"`, plus invariant `geometry_sha256 = "46ddbb76b7fbe6ac6222ea24779fc10055b1d6cea6a8da786895676fd29fe327"`, `operator_kappa`, `composition_kappa`, and exact `table` (`131,072` `i8` coordinates, `189` occupied cells), `routes` (`20` `u8`), and `gates` (`20` `u8`);
+       3. Preserves original provenance (`original_sha256`, `original_model_sha256`, `original_source_sha256`, `original_kernel_sha256`, `original_k = 8`, `evaluation_only_rebind = true`, `training_resume = false`) while loading the `189`-cell state into an evaluation-only `K=16, epoch=0` `Device` for zero-apply timing.
+     - **Status on current `main`:** `checkpoint0` (`T-K16A-OCC16`, `T-K16R-OCC16`) and `k16-timing check` / `plan` are executable as written; the `sealed_seed1_q4` GPU timing leg (`T-K16A-OCC189`, `T-K16R-OCC189` via `k16-timing run`) is **gated / `NOT_EXECUTABLE` pending that reviewed cross-version evaluation-only rebind/import dependency**.
 
 | Timing Cell ID | `#2524` `cell.source` | Occupancy Regime | Model State (`epoch = 0`, `accepted_updates = 0`, Zero `.apply`) | `#2524` `cell.policy` (`ObjectivePolicy`) | Timed Batches (`ROWS = 64`, `C = 192`, `1` Excluded Warmup) |
 |---|---|---|---|---|---|
 | **`T-K16A-OCC16`** | `"checkpoint0"` | Regime 0 (`occupied_cells = 16`, checkpoint-0 init) | Fresh `seed = 1` checkpoint-0 `Device::new_with_objective(K16, Route, NearestAddressMarginV1, 1, 0)` | `"nearest_address_margin_v1"` (`8*T + 32*A`) | `1` warmup + `100` timed (`6,400` rows, `1,228,800` padded context tokens) |
 | **`T-K16R-OCC16`** | `"checkpoint0"` | Regime 0 (`occupied_cells = 16`, checkpoint-0 init) | Fresh `seed = 1` checkpoint-0 `Device::new_with_objective(K16, Route, OccupiedCellRankHingeV1, 1, 0)` | `"occupied_cell_rank_hinge_v1"` (`8*T + 32*R`) | `1` warmup + `100` timed (`6,400` rows, `1,228,800` padded context tokens) |
-| **`T-K16A-OCC189`** | `"sealed_seed1_q4"` | Regime Q4 (`occupied_cells = 189`, Q4 sizing anchor per `Fact 6`) | Evaluation-only `K=16, epoch=0` rebind of sealed `checkpoint-16404.json` (`4477eb5c2480b0b85cc94036a2e15b0d22b654e25deee9c8717aa6e30f8ef7bf`) | `"nearest_address_margin_v1"` (`8*T + 32*A`) | `1` warmup + `100` timed (`6,400` rows, `1,228,800` padded context tokens) |
-| **`T-K16R-OCC189`** | `"sealed_seed1_q4"` | Regime Q4 (`occupied_cells = 189`, Q4 sizing anchor per `Fact 6`) | Evaluation-only `K=16, epoch=0` rebind of sealed `checkpoint-16404.json` (`4477eb5c2480b0b85cc94036a2e15b0d22b654e25deee9c8717aa6e30f8ef7bf`) | `"occupied_cell_rank_hinge_v1"` (`8*T + 32*R`) | `1` warmup + `100` timed (`6,400` rows, `1,228,800` padded context tokens) |
+| **`T-K16A-OCC189`** | `"sealed_seed1_q4"` | Regime Q4 (`occupied_cells = 189`, Q4 sizing anchor per `Fact 6`) | Evaluation-only `K=16, epoch=0` rebind of `.checkpoint.model` (`29ba5517...`) inside sealed `checkpoint-16404.json` (`4477eb5c...`; **`NOT_EXECUTABLE` pending reviewed cross-version evaluation-only rebind/import helper**) | `"nearest_address_margin_v1"` (`8*T + 32*A`) | `1` warmup + `100` timed (`6,400` rows, `1,228,800` padded context tokens) |
+| **`T-K16R-OCC189`** | `"sealed_seed1_q4"` | Regime Q4 (`occupied_cells = 189`, Q4 sizing anchor per `Fact 6`) | Evaluation-only `K=16, epoch=0` rebind of `.checkpoint.model` (`29ba5517...`) inside sealed `checkpoint-16404.json` (`4477eb5c...`; **`NOT_EXECUTABLE` pending reviewed cross-version evaluation-only rebind/import helper**) | `"occupied_cell_rank_hinge_v1"` (`8*T + 32*R`) | `1` warmup + `100` timed (`6,400` rows, `1,228,800` padded context tokens) |
 
 ### 3.3 Exact Integer Rate Formulas for `D-Packet` (`Zero Float`, `docs/labs/k16-timing-2026-10-15/instrument/src/main.rs:284-309, 610-647`)
 
@@ -354,37 +364,76 @@ scripts/pod/uor-pod run "${POD_ID}" --lab "${UOR_LAB}" --session "${SESSION}" --
   mkdir -p \"\${OUT_DIR}\"
 
   # Verify frozen DriverConfig data pins under local/driver/data/ (completion.rs:285-330)
+  # and committed #2523 config file SHA-256 digests (§0)
   sha256sum -c <<'PINS'
 d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89  local/driver/data/tokenizer.json
 3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8  local/driver/data/mw-balp/train/tokens.u16
 b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3  local/driver/data/mw-balp/train/response_mask.u8
 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b  local/driver/data/ft/dev/tokens.u16
 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078  local/driver/data/ft/dev/response_mask.u8
+eff7a77e1c3c8454324c9ddf31a6c08bdbe1b213d3324fe7b7889c0fe7665ae4  docs/labs/admission-redirect-packet-2026-10-15/configs/k16-A-seed1.json
+bed46548bdb15e883386044442999584696e6cd9acddaf8c2cc5a8be6b578ee4  docs/labs/admission-redirect-packet-2026-10-15/configs/k16-A-seed2.json
+25ef452f78cb612bdedd8135461836ec459d1f7c899e2e5940e830c3dffc61b7  docs/labs/admission-redirect-packet-2026-10-15/configs/k16-R-seed1.json
+fe9f172b428ee131fac4a3865402f55ef80c3749ef32f1d98a830718ad361156  docs/labs/admission-redirect-packet-2026-10-15/configs/k16-R-seed2.json
 PINS
 
   # STEP-0 GATE: Pod-side cargo build --features cuda + cargo clippy --features cuda --all-targets
-  # (redirect_admission.rs:19-22, 345-356; #2522 comment 6202519677)
+  # (redirect_admission.rs:19-22, 345-356; #2522 comments 6202519677 & 6203506028)
+  # Disable -e around each command so non-zero exit statuses and full transcripts are always
+  # written to cuda-build.log / cuda-clippy.log and cuda_build_exit.txt / cuda_clippy_exit.txt
+  # before halting on failure, and never overwrite the first command's failure with the second's status.
+  set +e
   {
     echo \"# head=\$(git rev-parse HEAD)\"
+    echo \"# UOR_NVCC_ARCH=\${UOR_NVCC_ARCH}\"
+    echo \"+ nvcc --version\"
     nvcc --version
+    echo \"+ rustc --version\"
     rustc --version
-    cargo build --release --locked --features cuda -p uor-r4-discrete
+    echo \"+ cargo build --release --locked --features cuda --manifest-path crates/uor-r4-discrete/Cargo.toml\"
+    cargo build --release --locked --features cuda \
+      --manifest-path crates/uor-r4-discrete/Cargo.toml
+    BUILD_DISCRETE_EXIT=\$?
+    echo \"# exit(crates/uor-r4-discrete/Cargo.toml)=\${BUILD_DISCRETE_EXIT}\"
+    echo \"+ cargo build --release --locked --features cuda --manifest-path docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml\"
     cargo build --release --locked --features cuda \
       --manifest-path docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml
+    BUILD_TIMING_EXIT=\$?
+    echo \"# exit(docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml)=\${BUILD_TIMING_EXIT}\"
   } > \"\${OUT_DIR}/cuda-build.log\" 2>&1
-  CUDA_BUILD_EXIT=\$?
-  echo \"\${CUDA_BUILD_EXIT}\" > \"\${OUT_DIR}/cuda_build_exit.txt\"
-  test \"\${CUDA_BUILD_EXIT}\" -eq 0
+  if [ \"\${BUILD_DISCRETE_EXIT}\" -ne 0 ]; then
+    CUDA_BUILD_EXIT=\"\${BUILD_DISCRETE_EXIT}\"
+  else
+    CUDA_BUILD_EXIT=\"\${BUILD_TIMING_EXIT}\"
+  fi
+  printf '%s\n' \"\${CUDA_BUILD_EXIT}\" > \"\${OUT_DIR}/cuda_build_exit.txt\"
 
   {
     echo \"# head=\$(git rev-parse HEAD)\"
-    cargo clippy --locked --features cuda --all-targets -p uor-r4-discrete
+    echo \"# UOR_NVCC_ARCH=\${UOR_NVCC_ARCH}\"
+    echo \"+ cargo clippy --locked --features cuda --all-targets --manifest-path crates/uor-r4-discrete/Cargo.toml\"
+    cargo clippy --locked --features cuda --all-targets \
+      --manifest-path crates/uor-r4-discrete/Cargo.toml
+    CLIPPY_DISCRETE_EXIT=\$?
+    echo \"# exit(crates/uor-r4-discrete/Cargo.toml)=\${CLIPPY_DISCRETE_EXIT}\"
+    echo \"+ cargo clippy --locked --features cuda --all-targets --manifest-path docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml\"
     cargo clippy --locked --features cuda --all-targets \
       --manifest-path docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml
+    CLIPPY_TIMING_EXIT=\$?
+    echo \"# exit(docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml)=\${CLIPPY_TIMING_EXIT}\"
   } > \"\${OUT_DIR}/cuda-clippy.log\" 2>&1
-  CUDA_CLIPPY_EXIT=\$?
-  echo \"\${CUDA_CLIPPY_EXIT}\" > \"\${OUT_DIR}/cuda_clippy_exit.txt\"
-  test \"\${CUDA_CLIPPY_EXIT}\" -eq 0
+  if [ \"\${CLIPPY_DISCRETE_EXIT}\" -ne 0 ]; then
+    CUDA_CLIPPY_EXIT=\"\${CLIPPY_DISCRETE_EXIT}\"
+  else
+    CUDA_CLIPPY_EXIT=\"\${CLIPPY_TIMING_EXIT}\"
+  fi
+  printf '%s\n' \"\${CUDA_CLIPPY_EXIT}\" > \"\${OUT_DIR}/cuda_clippy_exit.txt\"
+  set -e
+
+  if [ \"\${CUDA_BUILD_EXIT}\" -ne 0 ] || [ \"\${CUDA_CLIPPY_EXIT}\" -ne 0 ]; then
+    echo \"STEP-0 GATE FAILED: cuda_build_exit=\${CUDA_BUILD_EXIT} cuda_clippy_exit=\${CUDA_CLIPPY_EXIT}\" >&2
+    exit 1
+  fi
 "
 ```
 
@@ -398,6 +447,12 @@ scripts/pod/uor-pod run "${POD_ID}" --lab "${UOR_LAB}" --session "${SESSION}" --
   OUT_DIR=\"/workspace/uor-r4/evals/20261015T000000Z-dr-qualification-${REVIEWED_SHA:0:9}\"
   BIN=\"./target/release/discrete-stack\"
   TIMING_BIN=\"./docs/labs/k16-timing-2026-10-15/instrument/target/release/k16-timing\"
+
+  # 0. Verify Step-0 CUDA build & clippy gate succeeded before any GPU execution
+  test -s \"\${OUT_DIR}/cuda-build.log\"
+  test -s \"\${OUT_DIR}/cuda-clippy.log\"
+  test \"\$(cat \"\${OUT_DIR}/cuda_build_exit.txt\")\" = \"0\"
+  test \"\$(cat \"\${OUT_DIR}/cuda_clippy_exit.txt\")\" = \"0\"
 
   # 1. Existing finite GPU suites (each takes NEW_REPORT_DIR and writes NEW_REPORT_DIR/report.json; main.rs:66-69)
   \"\${BIN}\" qualify          \"\${OUT_DIR}/qualify\"
@@ -431,11 +486,24 @@ scripts/pod/uor-pod run "${POD_ID}" --lab "${UOR_LAB}" --session "${SESSION}" --
   done
 
   # 4. 100-batch K=16 synchronized timing benchmark (#2524 k16-timing instrument, 0 apply)
-  # Prepare evaluation-only K=16, epoch=0 rebind of sealed checkpoint-16404.json (189 occupied cells)
+  # Authenticate sealed CompletionCheckpoint wrapper (4477eb5c...) and inner .checkpoint.model (29ba5517...)
   SEALED_Q4=\"/workspace/uor-r4/local/pilot-seed1/checkpoints/checkpoint-16404.json\"
   test \"\$(sha256sum \"\${SEALED_Q4}\" | awk '{print \$1}')\" = \"4477eb5c2480b0b85cc94036a2e15b0d22b654e25deee9c8717aa6e30f8ef7bf\"
+  test \"\$(jq -r '.checkpoint.model_sha256' \"\${SEALED_Q4}\")\" = \"29ba5517a6b1b6d3c7ce54d593221560b446c5048a0b0db882ad53b5ec75bbbf\"
+  test \"\$(jq -r '.checkpoint.model.source_sha256' \"\${SEALED_Q4}\")\" = \"e18361495276e491525674fb3fdce308b0ad787c7fd6860a811adb60dacd9e1a\"
+  test \"\$(jq -r '.checkpoint.model.kernel_sha256' \"\${SEALED_Q4}\")\" = \"931a511bece20641ae00c6b0e943f4f2a380c0f35a824d85fcc0447f1e1ccf5b\"
+
+  # CROSS-VERSION REBIND GATE (§3.2 item 3):
+  # .checkpoint.model carries historical Stage-A pilot source_sha256/kernel_sha256, whereas
+  # Device::from_snapshot (device.rs:722-735, called by k16-timing::driver::load_fixture at
+  # instrument/src/main.rs:458) requires current compiled D-R source_sha256/kernel_sha256.
+  # Do NOT rewrite source_sha256/kernel_sha256 via jq or weaken Device::from_snapshot.
+  # The sealed_seed1_q4 timing leg is NOT_EXECUTABLE until the reviewed cross-version
+  # evaluation-only rebind/import helper (preserving original provenance and exact
+  # table/routes/gates/geometry_sha256/operator_kappa/composition_kappa) has landed and been
+  # invoked to produce \${OUT_DIR}/seed1-q4-k16-rebind-snapshot.json.
   REBIND_SNAP=\"\${OUT_DIR}/seed1-q4-k16-rebind-snapshot.json\"
-  jq '.model | .spec.kept_cells = 16 | .epoch = 0' \"\${SEALED_Q4}\" > \"\${REBIND_SNAP}\"
+  test -s \"\${REBIND_SNAP}\"
   REBIND_SHA=\"\$(sha256sum \"\${REBIND_SNAP}\" | awk '{print \$1}')\"
 
   jq --arg snap \"\${REBIND_SNAP}\" \
