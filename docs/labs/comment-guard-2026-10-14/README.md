@@ -82,3 +82,20 @@ Current continuation validation, run from the claimed Codex worktree with
 
 The original live comment-edit exercise above is retained historical evidence;
 Codex did not repeat it during takeover. All current checks are local tooling checks.
+
+### Integration with current main — 15 October 2026
+
+The protected-delivery reconciliation uses main `57ca5a96d`, preserving its
+bounded inbox refresh and unread-note reporting together with the approved
+explicit-comment-ID edit implementation. `notes.rs` retains main's complete
+file plus the approved 139-line comment-edit section; the command dispatcher
+merges without changing either interface. DeepSeek's original commits remain
+in the continuation's history; its parked branch is not rewritten.
+
+Fresh integrated tooling checks: **520 unit tests passed, 6 ignored; 2 integration
+tests and 1 doc-test passed**. The explicitly selected ignored Rust/Python parser
+parity test also passed; the remaining ignored tests were not run. The command
+resolver checked **151 commands, 0 problems**, and all **14 Python doccheck tests**
+passed. Rust formatting, clippy with warnings denied, and append-only ledger
+verification passed. These are harness/tooling checks, not model execution or
+research results. No live comment-edit exercise was repeated.
