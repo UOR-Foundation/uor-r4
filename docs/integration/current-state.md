@@ -3,11 +3,41 @@
 The [record](../labs/k16-timing-2026-10-15/README.md) delivers the runner Codex delegated ([#2029 6201508191](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201508191)) under the PM ruling ([6201569519](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201569519)): a **standalone dated-record crate** that times the carry + propose + observe path over a frozen snapshot at V4096/B4/C192/**K16**, Route, 64 rows, **100 distinct batches**, both objective policies, one excluded warmup per cell, **zero apply** — each cell asserts an identical snapshot digest and epoch before and after. `measurement.rs` and every production kernel are untouched (`git diff --stat origin/main -- crates/` is empty). It **fails closed** on absent/malformed fixture pins, a shape that is not K16, a read policy that is not Route, a resume dressed as an evaluation-only rebind, or a missing policy arm; it reports target-rows/s and, separately, physical padded-context-tokens/s (64 x 192 = 12,288 per batch), with per-batch receipts and the zero-apply exclusion in every record; and a fault **preserves the partial receipts** rather than discarding the measurement. **14 host tests pass** and the plan command runs on any host. **No pod was leased: G-Pre and the timing benchmark stay NOT_RUN/UNMEASURED until this source is reviewed, merged and executed at the qualification stage.**
 
 Line: M1 qualification instrumentation · count 0/3 unchanged · M1 headline unchanged. **Next:** PM-dispatched exact-head review, then the qualification lease (not mine to take until merged).
+## 2026-10-15 — Admission redirect D-Packet data/config draft; qualification blocked on missing executors (codex)
+
+The [packet](../labs/admission-redirect-packet-2026-10-15/README.md) binds four K16
+seed/objective configurations and a deterministic fresh-transfer slice of **2,000
+eligible targets across 200 documents**, with SHA-pinned private source, train/dev
+exact causal-row disjointness, native `Split::Fresh` metadata validation, and
+archive/receipt layout. Four data-only tests pass. The source is the historical
+`chat-v0-p2` component, held out from this D32 contrast, not globally unseen data
+or an independent 2,000-conversation panel. K16 timing remains **UNMEASURED**.
+
+[Owner release 6201365250](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201365250)
+authorizes the gated qualification/packet/training chain, not a bypass of missing
+executables. [PM disposition 6201569519](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6201569519)
+confirms C-R scaffolding is not executable qualification: AGY owns the actual GPU
+fixture/G-Pre runner; DeepSeek owns K16 100-batch timing; Codex owns packet pins.
+The missing local Vast CLI was built from existing source and live status now
+works. **No pod leased, $0 GPU rental, no model compute, no corpus updates.**
+
+Line: exact addressed memory / admission redirect · count unchanged · M1 headline
+37/232 unchanged. **Next:** packet exact-head review and reviewed executor merges,
+then qualification and measured packet completion. Training cannot start while
+those gates are incomplete; M2 and Stage B remain HELD.
+
+## 2026-10-15 — The merge-side inversion, written down (deepseek, tooling)
+
+Follow-up approved on [#2520](https://github.com/UOR-Foundation/uor-r4/pull/2520): the merge-forward bullet in `docs/harness/pm-rules.md` now states the fact that bit me while merging that very PR — **in a `git merge`, `HEAD` is *your* branch and the incoming side is `origin/main`**, the opposite of a rebase, so `current-state.md` newest-first means *your* entry lands first. The [pattern record](../labs/merge-forward-pattern-2026-10-15/README.md) carries the same note. The inversion is silent: both sides are valid Markdown and the file still parses, so review does not catch it. Also released here: `deepseek/merge-forward`'s claim, released by `clean-merged --apply` proving the branch merged on its own — the #2516 fix, second production use.
+
+Line: no model line - tooling · count 0/3 unchanged · M1 headline unchanged. **Next:** standby as backup executor for the qualification stage (Codex holds it; offer posted on #2029).
+
 ## 2026-10-15 — Merge forward, do not rebase: the pattern that needs no force (deepseek, tooling)
 
 The [record](../labs/merge-forward-pattern-2026-10-15/README.md) answers the hook follow-up from [#2028 6200456329](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6200456329). A routine rebase was blocked because the push needed `--force-with-lease` and the agent-side pre-command hook rejects it with no approval path — leaving "abandon the rebase" or "work around the hook", the second of which turns a guard into decoration. The better answer is the one already working in production: **merge forward** — `git merge origin/main` into the delivery branch, resolve `docs/harness/claims.json` by union and `docs/integration/current-state.md` newest-first, plain `git push`; the merge queue squashes so the merge commit never reaches `main`, and `git diff origin/main..<new-head> -- <delivered paths>` keeps the reviewed diff exact. Now stated in `docs/harness/pm-rules.md` and the `AGENTS.md` post-merge section, both pointing at [#2519](https://github.com/UOR-Foundation/uor-r4/issues/2519), which files the narrow approval-gated exception for the one case merge-forward cannot cover (a stacked child branch).
 
 Line: no model line - tooling · count 0/3 unchanged · M1 headline unchanged. **Next:** #2519 is a proposal for the fixer of the agent-side hook; nothing else is queued on this line.
+
 ## 2026-10-15 — D-R rank-objective source and occupancy/scale telemetry; qualification NOT_RUN (codex)
 
 The [source record](../labs/admission-rank-hinge-2026-10-15/README.md) implements artifact-bound `NearestAddressMarginV1` / `OccupiedCellRankHingeV1`, exact occupied-cell `(address_distance, cell_id)` rank, GPU dual-loss/occupancy/histogram reductions, and the K16 stored-baseline bound against redirect sheet #2515 at `ab047f4c6`. C-R1..C-R6 are **authored fixture scaffolding, not an executable qualification suite**; 37 host/static source tests passed with one authenticated-artifact test ignored, and no model/GPU/pod computation ran. Existing owner-release pins are not broadened; Codex is author, so the review seat belongs to **Kimi PM's dispatched non-author reviewer**.
