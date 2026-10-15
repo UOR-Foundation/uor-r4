@@ -1,3 +1,15 @@
+## 2026-10-15 — K16-scoped admission source and fresh-scoring owner; no execution
+
+Codex/Sol's [separate validator record](../labs/k16-admission-validators-2026-10-15/README.md)
+implements four explicit K16-A/R seed1/2 scopes, fresh checkpoint-zero admission,
+qualified source/config/lineage/receipt bindings, and fail-closed cross-scope resume.
+Historical K8 pilot/completion releases remain unchanged. Qualification, pod-side
+CUDA build/clippy, packet acceptance and R15 owner-release transport resolution
+remain open gates; no training/GPU/model execution occurred. Codex owns the
+fresh-scoring eval-only path before KEEP promotion, a separate deliverable.
+The packet now says exactly 200 documents and the owner's ~30-minute/<$2
+qualification envelope. M1 37/232 and D21/D22 count unchanged; M2/Stage B HELD.
+
 ## 2026-10-15 — Admission redirect D-Packet data/config draft; qualification blocked on missing executors (codex)
 
 The [packet](../labs/admission-redirect-packet-2026-10-15/README.md) binds four K16
