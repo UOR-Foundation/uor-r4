@@ -23,8 +23,9 @@ qualification at K=8 (it must reproduce the sealed quarter metrics exactly). Gat
 G-A: some K reaches ≥ 4,894 target-admitted rows at checkpoint 16,404 (bar (ii) 4,775
 + one Wilson half-width 119). PASS → Stage-B training amendment at the smallest
 passing K (fresh lineage, re-based guard, Claude FIT, owner release — training stays
-HELD until both). FAIL → width-family configuration closure (D22); redirect to the
-admission policy/objective sheet; no training under this sheet.
+HELD until both). FAIL → closes eval-time widening of the K=8-trained codebook
+(D22 configuration closure); K>8-trained lineages stay open as a named successor;
+redirect to the admission policy/objective sheet; no training under this sheet.
 
 ## Artifact pins
 

@@ -25,7 +25,7 @@ The only pure config admission knob is `spec.kept_cells` (K=8; valid 1..=16, ABI
 
 ## Stage A design
 
-- **Instrument:** evaluation-only re-score of the four preserved seed-1 quarter checkpoints at `kept_cells` K ∈ {8, 9, …, 16} over the frozen 14,287-row dev panel (224 batches per (checkpoint, K) pair; 36 evaluations). Optional fifth point at checkpoint 1,640 if its sha matches the pilot pin (`46e8ed5e…`) at instrument-build time.
+- **Instrument:** evaluation-only re-score of the four preserved seed-1 quarter checkpoints at `kept_cells` K ∈ {8, 9, …, 16} over the frozen 14,287-row dev panel (224 batches per (checkpoint, K) pair; 36 evaluations). Optional additional points, not gates: the pilot lineage's checkpoint 0 if accessible in the pilot artifact tree (the untrained ceiling's K-slope next to the trained ones), and checkpoint 1,640 if its sha matches the pilot pin (`46e8ed5e…`) at instrument-build time.
 - **Zero updates:** no training, no checkpoint mutation; artifacts are read-only inputs; outputs are new derived evaluation records written into their own claimed report directory (never beneath a sealed root; `report_output::claim` discipline).
 - **Artifact pins (pod `/workspace/uor-r4/rung0-completion-20261014/seed1-attempt-1/`, archive `rung0-completion-seed1-20261015.tgz` sha256 `300246ab16a1e0adaba547d43590e08264912f59ee29f35d7e024d77591e63a1`):**
   - checkpoint-04101.json sha256 `a5a22dce8a174bbfe368cd8d166170a6c34bf59137b1418943a9d0422cae4cdd`
@@ -41,8 +41,8 @@ The only pure config admission knob is `spec.kept_cells` (K=8; valid 1..=16, ABI
 
 - **Gate G-A:** at checkpoint 16,404, at least one K ∈ {9..16} shows target-admitted rows ≥ **4,894** (bar (ii)'s count 4,775 + one Wilson half-width 119 ≈ 0.83pp at n = 14,287), and the ceiling trajectory across 4,101 → 8,202 → 12,303 → 16,404 at that K does not end below 4,894.
 - **G-A PASS →** the smallest passing K becomes the Stage-B candidate; this sheet is amended with the Stage-B training pre-registration (fresh lineage, re-based guard, revised `1..=8`→`1..=16` guard assertion, cost) and goes to Claude for TEST FITNESS. Training stays HELD until that amendment is FIT and the owner releases.
-- **G-A FAIL (no K reaches 4,894 at 16,404):** the kept-cells-width configuration family is closed for bar (ii) at this codebook — a **configuration closure under D22, never a mechanism negative**. The successor redirects to the admission policy/objective (address metric, selection rule, objective weights), as the completion sheet's B3 clause names; a new sheet is written; **no training runs under this sheet**.
-- **Diagnostic, not a bar:** top-1/top-8/strict-win curves over K per checkpoint, and the guard-direction interaction (best rival distance is a min over admitted cells, so strict wins can only fall as K rises) — reported, not scored.
+- **G-A FAIL (no K reaches 4,894 at 16,404):** closes **eval-time widening of the K=8-trained codebook** — a configuration closure under D22, never a mechanism negative. The sweep re-scores codebooks *trained at K=8*; a K>8-trained lineage sees a different objective (the address hinge ranks rivals among the K admitted cells), so its ceiling is not bounded by this instrument. **K>8-trained lineages remain an untested configuration, recorded as a named successor** alongside the admission policy/objective redirect (address metric, selection rule, objective weights), as the completion sheet's B3 clause names; a new sheet is written; **no training runs under this sheet**.
+- **Diagnostic, not a bar:** top-1/top-8/strict-win curves over K per checkpoint, and the guard-direction interaction (best rival distance is a min over admitted cells, so strict wins can typically only fall as K rises — though a zero-rival row at K can gain its first rival at K+1 and become a strict win; report the count change) — reported, not scored.
 - **Stage-B bars (carried over unchanged, registered for the amendment):** top-1 ≥ 1,941 and top-8 ≥ 4,775 vs the frozen masked-TRAIN count reference (1,226 / 4,060), guard ≥ max(1%, min(5u, u+5pp)) with u re-measured at the new configuration's checkpoint 0 (never reused; `completion_baseline.rs:279`).
 - **Noise:** Wilson 95% half-width < 0.83pp (≈119 rows) at n = 14,287; 2-SE row floors 20 (top-1) / 63 (top-8) / 87 (B3). Bars and the G-A margin are ≥ 4× the noise. No measured seed-to-seed spread exists on this line (seed 2 never ran); none is claimed.
 - panel: the rung-0 completion line's frozen 14,287-row dev copy-successor panel (grader: exact integer kernel evaluator + independent `completion-scoring-audit`, frozen: yes) — NOT the milestone default v5-reply panel; carried over verbatim from the parent sheets.
@@ -112,7 +112,7 @@ The only pure config admission knob is `spec.kept_cells` (K=8; valid 1..=16, ABI
 ## Outcome decisions
 
 - **G-A PASS →** Stage-B amendment at the smallest passing K (Claude FIT, then owner release; training HELD until both).
-- **G-A FAIL →** width-family configuration closure (D22); redirect sheet for the admission policy/objective; no training under this sheet.
+- **G-A FAIL →** closes eval-time widening of the K=8-trained codebook (D22 configuration closure, never a mechanism negative); K>8-trained lineages stay open as a named successor; redirect sheet for the admission policy/objective; no training under this sheet.
 - **Instrument fault →** diagnose and repair (D31); never a finding.
 - **No automatic closure:** R12 attribution order governs; stopping the mechanism needs the owner. Named successors (address metric, selection rule, objective re-weighting, collision-free init, frequency-ordered schedule) stay recorded, not adopted.
 
