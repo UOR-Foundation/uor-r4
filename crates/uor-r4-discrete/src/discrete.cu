@@ -201,10 +201,10 @@ __device__ bool flock_vector(const int* input,const U* ids,const int* gates,cons
                         } else if(e==3) {
                             if(li==0) {
                                 U tid=ids[row*s[2]+last[i]];
-                                for(U j=0;j<i;++j)if(last[j]<length && level[j]==0 && ids[row*s[2]+last[j]]==tid)esum+=prev[j];
+                                for(U j=0;j<i;++j)if(last[j]<length && level[j]==0 && ids[row*s[2]+last[j]]==tid)esum=prev[j];
                             }
                         } else if(e==4) {
-                            for(U j=0;j<i;++j)if(last[j]<length && level[j]==li && frame[j]==frame[i])esum+=prev[j];
+                            for(U j=0;j<i;++j)if(last[j]<length && level[j]==li && frame[j]==frame[i])esum=prev[j];
                         }
                         rel[i]+=gt>0?esum:-esum;
                     }

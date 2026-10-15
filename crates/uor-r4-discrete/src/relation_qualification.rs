@@ -734,6 +734,91 @@ fn relation_bounded_sweeps_and_refusals() -> Result<()> {
         }
     }
 
+    // (8b2) Most-recent prior rule for SameToken (e=3, gates[7]=+1) and SameFrame (e=4, gates[8]=+1)
+    //       when a token, and separately a frame on distinct token IDs, occurs three times before the query.
+    let tokens_mr = [
+        [C_ROOT, A],     // 0: frame 2 (C_ROOT), d_L1=4, d_H=1, m^(0)=4
+        [C_ROOT, B],     // 1: frame 2 (C_ROOT), d_L1=4, d_H=1, m^(0)=4 (distinct token ID)
+        [C_ROOT, NEG_B], // 2: frame 2 (C_ROOT), d_L1=4, d_H=1, m^(0)=4 (distinct token ID)
+        [A, A],          // 3: frame 0 (A),      d_L1=0, d_H=0, m^(0)=8
+        [A, B],          // 4: frame 0 (A),      d_L1=0, d_H=0, m^(0)=8 (distinct token ID)
+        [A, D_ROOT],     // 5: frame 0 (A),      d_L1=0, d_H=0, m^(0)=8 (distinct token ID)
+    ];
+    let prefix_tok_c3 = [
+        identity(0, 0), // node 0: tok 0 (1st)
+        identity(0, 1), // node 1: tok 0 (2nd)
+        identity(0, 2), // node 2: tok 0 (3rd before query)
+        identity(3, 3), // node 4: tok 3 (1st)
+        identity(3, 4), // node 5: tok 3 (2nd)
+        identity(3, 5), // node 6: tok 3 (query)
+    ];
+    let prefix_tok_a3 = [
+        identity(3, 0), // node 0: tok 3 (1st)
+        identity(3, 1), // node 1: tok 3 (2nd)
+        identity(3, 2), // node 2: tok 3 (3rd before query)
+        identity(0, 3), // node 4: tok 0 (1st)
+        identity(0, 4), // node 5: tok 0 (2nd)
+        identity(3, 5), // node 6: tok 3 (query, sees 3 prior tok 3 occurrences)
+    ];
+    let prefix_frm_c3 = [
+        identity(0, 0), // node 0: frame 2 (1st, tok 0)
+        identity(1, 1), // node 1: frame 2 (2nd, tok 1)
+        identity(2, 2), // node 2: frame 2 (3rd before query, tok 2)
+        identity(3, 3), // node 4: frame 0 (1st, tok 3)
+        identity(4, 4), // node 5: frame 0 (2nd, tok 4)
+        identity(5, 5), // node 6: frame 0 (query, tok 5)
+    ];
+    let prefix_frm_a3 = [
+        identity(3, 0), // node 0: frame 0 (1st, tok 3)
+        identity(4, 1), // node 1: frame 0 (2nd, tok 4)
+        identity(5, 2), // node 2: frame 0 (3rd before query, tok 5)
+        identity(0, 3), // node 4: frame 2 (1st, tok 0)
+        identity(1, 4), // node 5: frame 2 (2nd, tok 1)
+        identity(3, 5), // node 6: frame 0 (query, sees 3 prior frame-0 nodes)
+    ];
+    for (gate_idx, p_c3, p_a3, label) in [
+        (7usize, &prefix_tok_c3, &prefix_tok_a3, "C8 SameToken (e=3)"),
+        (8usize, &prefix_frm_c3, &prefix_frm_a3, "C8 SameFrame (e=4)"),
+    ] {
+        let mut gates_mr = [0i32; 14];
+        gates_mr[gate_idx] = 1;
+        for (sweeps, exp_c3, exp_top_c3) in [
+            (1u32, [0, 4, 4, 0, 0, 8, 8, 0], [5u32, 2u32]),
+            (2u32, [0, 4, 8, 0, 0, 8, 16, 0], [5u32, 2u32]),
+        ] {
+            let dev = Device::from_snapshot(
+                relation_snapshot(6, 2, 2, sweeps, &tokens_mr, &gates_mr)?,
+                0,
+            )?;
+            let out = dev.forward_traced(&dev.carry(p_c3)?, &[3])?;
+            let tr = trace(&out)?;
+            let sc = rel_scores(&out)?;
+            let b1 = block_rel_scores(&sc, 2, 8, 0, 1);
+            require(
+                b1 == exp_c3 && summary(&level(&tr, 2, 2, 0, 1, 0), 2).1 == exp_top_c3,
+                label,
+            )?;
+        }
+        for (sweeps, exp_a3) in [
+            (1u32, [0, 8, 8, 0, 0, 4, 8, 0]),
+            (2u32, [0, 8, 16, 0, 0, 4, 16, 0]),
+            (3u32, [0, 8, 24, 0, 0, 4, 32, 0]),
+        ] {
+            let dev = Device::from_snapshot(
+                relation_snapshot(6, 2, 2, sweeps, &tokens_mr, &gates_mr)?,
+                0,
+            )?;
+            let out = dev.forward_traced(&dev.carry(p_a3)?, &[0])?;
+            let tr = trace(&out)?;
+            let sc = rel_scores(&out)?;
+            let b1 = block_rel_scores(&sc, 2, 8, 0, 1);
+            require(
+                b1 == exp_a3 && summary(&level(&tr, 2, 2, 0, 1, 0), 2).1 == [2, 1],
+                label,
+            )?;
+        }
+    }
+
     // (8c) Validation and refusal checks.
     let valid_spec = Spec {
         vocabulary: 5,

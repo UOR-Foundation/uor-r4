@@ -24,7 +24,7 @@ This slice implements the Stage M1 `ReadSpec::Relation { kept, sweeps }` bounded
    - When `s[8] == MODE_RELATION`:
      - Validates `sweeps in 1..=5` and validates all `5 * s[5]` relation gate trits (`gates[s[1]*s[5] + l*5 + e] in -1..=1`).
      - Computes exact anchor-orbit base match scores $m_j^{(0)} = 8 - d_{\text{L1}}(f_q, f_j) \in \{0, 4, 8\}$ on the $D_4$-embedded 16-root orbit.
-     - Executes $S = \text{sweeps} \in \{1..5\}$ synchronous integer sweeps across the 5 retained-structure edge families (`0: ParentChild`, `1: Sibling`, `2: SequentialSuccessor`, `3: SameToken`, `4: SameFrame`, all enforcing `last < length` on both endpoints) using sign-conditioned integer addition/subtraction (`gt > 0 ? esum : -esum`, zero multiply or float instructions).
+     - Executes $S = \text{sweeps} \in \{1..5\}$ synchronous integer sweeps across the 5 retained-structure edge families (`0: ParentChild`, `1: Sibling`, `2: SequentialSuccessor`, `3: SameToken`, `4: SameFrame`, all enforcing `last < length` on both endpoints, with `3: SameToken` and `4: SameFrame` selecting only the most-recent prior matching node `largest j < i` at the same level via `esum = prev[j]` so total degree stays $\le 8$) using sign-conditioned integer addition/subtraction (`gt > 0 ? esum : -esum`, zero multiply or float instructions).
      - Ranks causally eligible level-$l$ nodes (`level[node] == l && last[node] + 1 < length`) by the 5-key total order `(rel[node] desc, distance asc, hamming asc, last[node] desc, node asc)`. When all relation trits are `0` ($r_i^{(S)} = 0$), this reduces bit-for-bit to `ReadSpec::Flock`.
      - Leaves the downstream `BFS[frame[node]*16 + fq]` transport, `snap_K` consensus, level-combine gate residual, `snap_terms` output root, and `writer` (`discrete.cu:229-253`) 100% untouched.
      - Appends per-node relation scores (`rows * blocks * nodes_count` words) after the `Flock` trace region when `trace != 0` in `MODE_RELATION`, keeping `Forward::flock_trace()` bit-for-bit identical between `Flock` and `Relation` while exposing `Forward::relation_scores()`.
@@ -38,7 +38,7 @@ This slice implements the Stage M1 `ReadSpec::Relation { kept, sweeps }` bounded
      - `relation_suffix_and_target_isolation` (`C5`)
      - `relation_endpoint_causal_boundary` (`C6`)
      - `relation_deterministic_tie_order` (`C7`)
-     - `relation_bounded_sweeps_and_refusals` (`C8`)
+     - `relation_bounded_sweeps_and_refusals` (`C8`, including `8a` multi-sweep `SequentialSuccessor`, `8b` all-`+1` `sweeps = 1..=5` worst-case score vectors, `8b2` 3-occurrence `SameToken` `e=3` and `SameFrame` `e=4` most-recent-prior pins on distinct token IDs across `sweeps = 1..=3`, and `8c` typed refusals)
 
 ## 2. Verification & Governance Status
 
