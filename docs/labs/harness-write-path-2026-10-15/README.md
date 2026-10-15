@@ -54,6 +54,8 @@ than a missing flag: it teaches a lab the wrong thing about which commands touch
 | `crates/uor-r4-harness/src/receipt.rs` | `plan_sync` is the read half of the sync: what would be appended, and the lines, writing nothing |
 | `crates/uor-r4-harness/src/main.rs` (2) | `prep new` (the D22 sheet) and `mistakes capture` (the lesson) refuse the shared checkout too - both are record files that ride the delivery PR |
 | `crates/uor-r4-harness/src/notes.rs`, `registries.rs` | `watched_issues` puts the tracker first, then the milestones; `Registries::tracker_issue()` reads it from the registry |
+| `scripts/harness/parity.py` | the Rust-writes/Python-reads probe now follows the two-step path: it points `UOR_HARNESS_LIVE` at a scratch directory, asserts `receipt` wrote nothing into the checkout, runs `ledger-sync`, then reads the committed shard through Python. Without this the probe asserted the old contract and CI failed on it (run `38747932047`), which is the parity job doing its job |
+| `AGENTS.md`, `CONTRIBUTING.md`, `docs/labs/session-goal.md` | the same correction as the README: a receipt is live-tier first and reaches the committed shard through `ledger-sync` |
 | `docs/harness/README.md`, `pm-rules.md`, `BOOTSTRAP.md` | the write-path table, the enforced-R10 refusal, the tracker in the check-in, the two installed copies; the presence TTL in the README corrected from 30 to 5 minutes (the code has used 5 since 13 October) |
 
 ## Verification
@@ -88,6 +90,12 @@ Python's words and records into `unknown-2026-10.jsonl` with `"lab": ""`. Tracke
 (`272 unread note(s) on #2028 (latest: 6193619622, ...)`). Claims tiers, measured: from the owner checkout the
 board reports the live mirror plus `origin/main`'s committed store; the stale `codex/d19-object-store-impl`
 entry from that checkout's working copy no longer appears.
+
+`uor-harness check` at the head: **0 errors**; the 10 warnings are pre-existing or other labs' (a kimi
+claim already in main, kimi presence stale, one historic unattributed row, three PENDING prep sheets,
+unfrozen m5-m8 panels). CI on the head: the `harness` workflow (harness rules and tests, plus Rust/Python
+parity - which caught the old two-step assumption as a build failure first, run `38747932047`) and the `ci`
+workflow are **green**.
 
 ## What this does not fix
 
