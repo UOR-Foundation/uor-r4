@@ -1,4 +1,11 @@
 {
+  "codex/stage-a-eval-kept": {
+    "branch": "codex/stage-a-eval-kept",
+    "claimed_at": "2026-10-15T09:59:46-04:00",
+    "head": "837306f53",
+    "lab": "codex",
+    "note": ""
+  },
   "kimi/rung0-admission-prep-20261015": {
     "branch": "kimi/rung0-admission-prep-20261015",
     "claimed_at": "2026-10-15T04:18:30-04:00",
