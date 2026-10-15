@@ -8,7 +8,7 @@
 - [README.md](../../../README.md) D29 row: records that NVRTC was removed from the module set by #2344.
 - [docs/figures/geometry/hamming-rank-read.svg](../../figures/geometry/hamming-rank-read.svg):
   "today's read" and "vs today" wording now say the exp-table softmax read is the historical
-  pre-D23 float read. The discrete `ReadSpec::Flock` read is the active one.
+  pre-D23 float read. The discrete read (Route registered; Flock/Relation supported) is the active one.
 
 ## Checked, no change needed
 
@@ -22,9 +22,8 @@
 
 ## Open
 
-- Starling line: the README does not state its M4 count. `current-state` (2026-10-13) records 3/3 and
-  a posted D21 pivot card continuing with one decisive run. The PM assignment says "pending pivot
-  card". Not annotated, pending Kimi PM answer on #2028.
+- Starling line: resolved by PM ruling [#2028 comment 6202844646](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6202844646).
+  The pivot already happened (murmuration read active, design and registration phase), so no starling annotation is needed.
 - `docs/figures/geometry/generate.py` does not reproduce the committed SVGs. Running it changes
   `600-cell-icosians.svg` and `next-token.svg` and drops the next-token historical banner. The
   generator was not run for this change; the committed SVG was hand-edited.
