@@ -41,6 +41,15 @@ command ("Use --dry-run to see what would be written") and `cmd_ledger_sync` nev
 appended 101 receipts to the branch's committed shard. A documented read-only flag that writes is worse
 than a missing flag: it teaches a lab the wrong thing about which commands touch a checkout.
 
+**7. The linter read its phrase table from the worktree it was BUILT in.** Reported by Codex on #2508
+([6194024391](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6194024391)): `uor-harness lint
+check` reported a complete PR body as missing its pre-registration, and the same source reinstalled from a
+retained checkout reported `OK - 0 error, 0 warn`. `prbody.rs` read
+`env!("CARGO_MANIFEST_DIR")/rules/prlint-phrases.json` at run time and fell back to `Value::Null`, so every
+phrase became empty and the preregistration markers disappeared. **Labs install from a worktree and routine
+cleanup deletes it**, so the defect re-arms on every merge train. Measured: the copy on PATH is built in
+`.worktrees/codex-harness-main` and carries that path; the directory exists today and will not after cleanup.
+
 ## What changed
 
 | file | change |
@@ -54,6 +63,7 @@ than a missing flag: it teaches a lab the wrong thing about which commands touch
 | `crates/uor-r4-harness/src/receipt.rs` | `plan_sync` is the read half of the sync: what would be appended, and the lines, writing nothing |
 | `crates/uor-r4-harness/src/main.rs` (2) | `prep new` (the D22 sheet) and `mistakes capture` (the lesson) refuse the shared checkout too - both are record files that ride the delivery PR |
 | `crates/uor-r4-harness/src/notes.rs`, `registries.rs` | `watched_issues` puts the tracker first, then the milestones; `Registries::tracker_issue()` reads it from the registry |
+| `crates/uor-r4-harness/src/prbody.rs`, `main.rs` | the phrase table is **compiled into the binary** (`include_str!`); a checkout copy is preferred when it parses, and a missing or malformed one is skipped rather than accepted, so the table can never come back empty. `main` points the parser at the `--repo` registry once per process, so editing the registry still takes effect without a rebuild |
 | `scripts/harness/parity.py` | the Rust-writes/Python-reads probe now follows the two-step path: it points `UOR_HARNESS_LIVE` at a scratch directory, asserts `receipt` wrote nothing into the checkout, runs `ledger-sync`, then reads the committed shard through Python. Without this the probe asserted the old contract and CI failed on it (run `38747932047`), which is the parity job doing its job |
 | `AGENTS.md`, `CONTRIBUTING.md`, `docs/labs/session-goal.md` | the same correction as the README: a receipt is live-tier first and reaches the committed shard through `ledger-sync` |
 | `docs/harness/README.md`, `pm-rules.md`, `BOOTSTRAP.md` | the write-path table, the enforced-R10 refusal, the tracker in the check-in, the two installed copies; the presence TTL in the README corrected from 30 to 5 minutes (the code has used 5 since 13 October) |
@@ -61,7 +71,7 @@ than a missing flag: it teaches a lab the wrong thing about which commands touch
 ## Verification
 
 Exact head: this branch. `CARGO_TARGET_DIR=local/harness-target cargo test -p uor-r4-harness --offline`:
-**529 passed, 0 failed, 6 ignored**. New tests cover the guard (shared checkout found, linked worktree
+**532 passed, 0 failed, 6 ignored**. New tests cover the guard (shared checkout found, linked worktree
 writable, subdirectory still the shared checkout, single-checkout clone never refused), the refusal message,
 `slug`/`slug_stem`, the unnamed receipt landing in `unknown-<month>.jsonl`, the tracker in `watched_issues`,
 the shared tier reading `origin/main` rather than a stale working copy, and a claim in a lab's own checkout

@@ -395,6 +395,10 @@ fn main() -> ExitCode {
             }
         },
     };
+    // The PR-body parser reads its phrase table from this checkout when it can, and from the copy
+    // embedded in the binary otherwise. Point it here, once, before any command runs: a build
+    // worktree that has been cleaned up must not be able to change what the linter means.
+    uor_r4_harness::prbody::use_registry(&repo);
 
     match command.as_deref() {
         Some("onboard") => cmd_onboard(&repo, json),
