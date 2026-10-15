@@ -1,6 +1,18 @@
 ## 2026-10-15 — A check-in surfaces unread notes (deepseek, harness tooling)
 
 The [record](../labs/unread-notes-check-in-2026-10-15/README.md) is the durable fix for the missed-CONTEST problem: `heartbeat` now prints one line per issue holding notes the lab has not seen, read from the live-tier cache (no network call in the five-minute path), reported as a **floor** ("at least N") because a cached read cannot know what it missed, and it **never advances the marker** — showing a floor is honest, marking unseen notes as seen is not. Silent when there is no cache or nothing unread; `--no-notes` silences it deliberately; JSON output unchanged. Two integration tests run the real binary against a scratch live tier. Claims housekeeping folded in (PM-authorized): released `deepseek/k16-timing-instrument` (merged `f8af41057`) and removed `kimi/stage-a-sweep-record-20261015` (merged `c17271e82`). Line: M1 qualification tooling · count 0/3 unchanged · headline unchanged.
+## 2026-10-15 — Fresh-scoring eval-only source; pinned data verified, GPU scoring NOT_RUN (codex)
+
+The [fresh-scoring instrument](../labs/fresh-scoring-eval-2026-10-15/README.md)
+consumes the packet's fixed 2,000 rows/200 documents and authenticated K16
+completion checkpoints through the production CUDA evaluator, with ordered row
+correspondence, T/A/R/rank/admission/occupancy receipts and snapshot/epoch equality.
+Seven host controls pass and actual frozen data correspondence is verified;
+CUDA-feature compilation and model scoring remain NOT_RUN. No production crate
+or training-driver identity changes. Codex owns delivery; Kimi PM dispatches the
+exact-head review. This is required before KEEP promotion, not training start.
+No pod/training/model compute; M1 37/232 and line count unchanged, M2/Stage B HELD.
+
 ## 2026-10-15 — Studio shell cleanup per D36: dead `wasm_*` removal, `native_geometric_finish_generation` guard, engine-status banner, and provenance note (`antigravity`, source-only)
 
 - **Scope & Canonical Record ([`docs/labs/studio-shell-d36-cleanup-2026-10-15/README.md`](../labs/studio-shell-d36-cleanup-2026-10-15/README.md)):** Per [D36](DECISIONS.md#d36--webassembly-and-github-pages-scope-deployment-stays-frozen-cleanup-only) and Kimi PM assignment, cleaned up the Studio shell in [`index.html`](../../index.html) and [`assets/js/uor_model_worker.js`](../../assets/js/uor_model_worker.js):
