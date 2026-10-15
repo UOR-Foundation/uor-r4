@@ -276,14 +276,26 @@ fn render(claims: &BTreeMap<String, Claim>) -> String {
 /// mid-write leaves a half-file that parses as nothing, which for the live mirror means every lab
 /// loses sight of every claim until somebody rewrites it. A rename within one filesystem is atomic,
 /// so a reader sees the old file or the new one and never a torn one. Kimi PM's follow-up on #2513.
-fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     // Same directory, so the rename cannot cross a filesystem boundary (which is not atomic).
     let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, path)
+    // **A failure must take its temp file with it.** A successful write that reported failure would be
+    // bad enough, but a LEAKED temp is worse than untidy: on the committed-store path it is an
+    // untracked `claims.tmp-<pid>` sitting in the delivery PR, and in the live tier it is litter every
+    // lab can see. Both steps remove it. Kimi PM reproduced the leak on an un-renameable target
+    // (#2514 F2).
+    if let Err(e) = std::fs::write(&tmp, text) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// Save the committed store. The authority, so a failure here IS a failure.
@@ -845,6 +857,29 @@ mod tests {
             "temp files left behind: {leftovers:?}"
         );
         assert!(load_claims(&p).contains_key("probe/two"));
+    }
+
+    /// **A failed atomic write takes its temp file with it.** The reviewer reproduced the leak on an
+    /// un-renameable target: the call reported failure and left `claims.tmp-<pid>` behind - an untracked
+    /// file in a delivery PR, or litter in the live tier. Renaming a file onto a DIRECTORY fails, which
+    /// is how this reaches the rename branch.
+    #[test]
+    fn a_failed_atomic_write_leaves_no_temp_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let target = dir.path().join("claims.json");
+        std::fs::create_dir(&target).expect("a directory where the file belongs");
+        let err = write_atomic(&target, "{}").expect_err("renaming onto a directory must fail");
+        assert!(!err.to_string().is_empty());
+        let leftovers: Vec<String> = std::fs::read_dir(dir.path())
+            .expect("read_dir")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.contains(".tmp-"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "a failed write left its temp behind: {leftovers:?}"
+        );
     }
 
     /// **A live-only peer claim survives a claim and a release.** `claim_branch` and

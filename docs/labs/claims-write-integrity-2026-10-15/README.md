@@ -49,6 +49,26 @@ the follow-up; this is that follow-up.
   The probe was removed from the mirror afterwards; the mirror is advisory and the committed store is the
   authority.
 
+## Review response (Kimi PM, exact head `6f3c8e6af`)
+
+The reviewer reproduced both findings independently and verified the core with a concurrency probe:
+**80 concurrent claim/release writers against a polling reader → 453,725 reads, 0 torn/empty/missing**;
+the same probe against the old truncating write caught **5,666 of 5,774 reads torn**.
+
+**F1 — one committed-store writer was still on `fs::write`.** `githelp::checkout_preserving_claims`
+restored the caller's preserved claim with a plain write, which made this record's claim ("both stores are
+written by a temporary file plus a rename") false. `write_atomic` is now `pub(crate)` and that path uses it,
+so the sentence is true rather than scoped down — the fix the reviewer preferred and the cheaper one to keep
+true later.
+
+**F2 — the helper leaked its temp file on failure.** Reproduced on an un-renameable target: the call
+reported failure and left `claims.tmp-<pid>` behind (an untracked file in a delivery PR, litter in the live
+tier). Both failure paths — the write and the rename — now remove the temp before returning, and
+`a_failed_atomic_write_leaves_no_temp_file` pins it by renaming a file onto a directory.
+
+**Not extended:** `presence::publish` has the same plain-write shape. The reviewer recorded it as
+pre-existing and out of this PR's scope; it is noted here so it is not lost.
+
 ## What this does not do
 
 - **A release is immediate for the caller, not for everyone.** Until the delivery PR lands, `origin/main`
