@@ -881,6 +881,20 @@ pub fn run_bounded(
 /// anything to run. That silence is the failure this closes.
 pub const NO_CACHE: &str = "no notes cache on this machine yet - run: uor-harness notes";
 
+/// Notes are cached, but no refresh has ever read EVERY watched source (an issue or the PR list
+/// keeps failing). Saying "no notes cache" here was false - the cache is full - and sent the lab to a
+/// command that is partial for the same reason, so it fixed nothing.
+pub const NEVER_COMPLETE: &str = "notes are cached but no refresh has read every watched issue and PR yet, so the count above is a floor - see the \"could not\" line above";
+
+/// The line a check-in prints about its notes: [`cache_line`], except that a lab holding cached
+/// notes with no complete refresh is told THAT, not that it has no cache. Pure, so testable.
+pub fn check_in_line(age: Option<std::time::Duration>, cached_notes: usize) -> Option<String> {
+    match age {
+        None if cached_notes > 0 => Some(NEVER_COMPLETE.to_string()),
+        _ => cache_line(age),
+    }
+}
+
 #[cfg(test)]
 mod cache_line_tests {
     use super::*;
@@ -905,6 +919,15 @@ mod cache_line_tests {
         assert!(line.contains("6h"), "{line}");
         assert!(line.contains("floor"), "{line}");
         assert!(line.contains("uor-harness notes"), "{line}");
+    }
+
+    #[test]
+    fn cached_notes_without_a_complete_refresh_are_not_called_no_cache() {
+        let line = check_in_line(None, 12).expect("a line");
+        assert!(!line.contains("no notes cache"), "{line}");
+        assert!(line.contains("floor"), "{line}");
+        assert_eq!(check_in_line(None, 0).as_deref(), Some(NO_CACHE));
+        assert_eq!(check_in_line(Some(Duration::from_secs(60)), 12), None);
     }
 
     #[test]
