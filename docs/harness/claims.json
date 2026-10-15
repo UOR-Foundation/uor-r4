@@ -6,6 +6,13 @@
     "lab": "antigravity",
     "note": ""
   },
+  "antigravity/ag1-readspec-relation-m1": {
+    "branch": "antigravity/ag1-readspec-relation-m1",
+    "claimed_at": "2026-10-15T09:22:17-04:00",
+    "head": "602014f73",
+    "lab": "antigravity",
+    "note": ""
+  },
   "codex/d19-nits-seed2-appendix": {
     "branch": "codex/d19-nits-seed2-appendix",
     "claimed_at": "2026-10-15T09:06:10-04:00",
