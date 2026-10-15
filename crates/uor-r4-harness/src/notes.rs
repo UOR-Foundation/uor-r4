@@ -371,6 +371,65 @@ pub fn watched_issues(regs: Option<&crate::registries::Registries>) -> Vec<i64> 
     }
 }
 
+/// One open pull request, as much of it as seat detection reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrRow {
+    pub number: i64,
+    pub head: String,
+    pub title: String,
+    pub body: String,
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// Whether `lab` appears in `text` as a whole word, case-insensitively.
+fn mentions_word(text: &str, lab: &str) -> bool {
+    let (text, lab) = (text.to_ascii_lowercase(), lab.to_ascii_lowercase());
+    if lab.is_empty() {
+        return false;
+    }
+    text.match_indices(&lab).any(|(i, m)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + m.len()..].chars().next();
+        !before.is_some_and(is_word_char) && !after.is_some_and(is_word_char)
+    })
+}
+
+/// Open PRs where `lab` has a seat: its branch prefix `<lab>/`, or its name as a whole word in the
+/// title or body. Ascending and deduplicated. PR comments are issue comments, so these numbers can
+/// join the watched-issue list unchanged.
+pub fn seat_prs(lab: &str, rows: &[PrRow]) -> Vec<i64> {
+    let prefix = format!("{}/", lab.to_ascii_lowercase());
+    let mut out: Vec<i64> = rows
+        .iter()
+        .filter(|r| {
+            r.head.to_ascii_lowercase().starts_with(&prefix)
+                || mentions_word(&r.title, lab)
+                || mentions_word(&r.body, lab)
+        })
+        .map(|r| r.number)
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// Notes still unread per `markers` that are at least `minutes` old at `now_unix`.
+///
+/// A note whose time will not parse is not counted: an age we cannot compute is not evidence of one.
+pub fn unread_older_than(notes: &[Note], markers: &Markers, now_unix: i64, minutes: i64) -> usize {
+    markers
+        .unread(notes)
+        .iter()
+        .filter(|n| {
+            crate::state::parse_iso_unix(&n.created_at)
+                .is_some_and(|t| now_unix - t >= minutes * 60)
+        })
+        .count()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -723,5 +782,91 @@ mod cache_line_tests {
         assert_eq!(human_age(Duration::from_secs(45 * 60)), "45m");
         assert_eq!(human_age(Duration::from_secs(6 * 3600)), "6h");
         assert_eq!(human_age(Duration::from_secs(50 * 3600)), "2d");
+    }
+}
+
+#[cfg(test)]
+mod seat_and_age_tests {
+    use super::*;
+
+    fn pr(number: i64, head: &str, title: &str, body: &str) -> PrRow {
+        PrRow {
+            number,
+            head: head.into(),
+            title: title.into(),
+            body: body.into(),
+        }
+    }
+
+    #[test]
+    fn branch_prefix_matches_case_insensitively() {
+        let rows = [pr(7, "Claude/x", "t", ""), pr(8, "codex/y", "t", "")];
+        assert_eq!(seat_prs("claude", &rows), vec![7]);
+        assert_eq!(seat_prs("CLAUDE", &rows), vec![7]);
+    }
+
+    #[test]
+    fn whole_word_in_title_or_body() {
+        let rows = [
+            pr(1, "o/a", "Review by Claude's lab", ""),
+            pr(2, "o/b", "t", "cc (claude)"),
+            pr(3, "o/c", "t", "see claude/foo"),
+            pr(4, "o/d", "t", "ping @claude please"),
+        ];
+        assert_eq!(seat_prs("claude", &rows), vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn longer_words_do_not_match() {
+        let rows = [
+            pr(1, "o/a", "claudette work", ""),
+            pr(2, "o/b", "t", "claude_x and xclaude and claude2"),
+        ];
+        assert!(seat_prs("claude", &rows).is_empty());
+    }
+
+    #[test]
+    fn ascending_deduped_and_other_labs_excluded() {
+        let rows = [
+            pr(9, "claude/a", "claude", "claude"),
+            pr(3, "claude/b", "", ""),
+            pr(5, "deepseek/z", "t", "b"),
+            pr(3, "claude/b", "", ""),
+        ];
+        assert_eq!(seat_prs("claude", &rows), vec![3, 9]);
+    }
+
+    fn note(id: i64, created_at: &str) -> Note {
+        Note {
+            id,
+            issue: 2029,
+            author: "a".into(),
+            created_at: created_at.into(),
+            first_line: String::new(),
+        }
+    }
+
+    #[test]
+    fn unread_age_threshold() {
+        let now = crate::state::parse_iso_unix("2026-10-14T12:16:00Z").expect("parse");
+        let m = Markers::new("claude");
+        let notes = [
+            note(1, "2026-10-14T12:00:00Z"), // 16 min
+            note(2, "2026-10-14T12:02:00Z"), // 14 min
+            note(3, "garbage"),
+        ];
+        assert_eq!(unread_older_than(&notes, &m, now, 15), 1);
+        assert_eq!(unread_older_than(&notes[1..], &m, now, 15), 0);
+    }
+
+    #[test]
+    fn a_seen_note_is_not_counted() {
+        let now = crate::state::parse_iso_unix("2026-10-14T12:16:00Z").expect("parse");
+        let mut m = Markers::new("claude");
+        m.seen.insert(2029, 1);
+        assert_eq!(
+            unread_older_than(&[note(1, "2026-10-14T12:00:00Z")], &m, now, 15),
+            0
+        );
     }
 }

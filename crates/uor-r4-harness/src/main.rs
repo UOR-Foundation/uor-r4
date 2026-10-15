@@ -1614,13 +1614,27 @@ fn cmd_multilab(repo: &Path, args: &[String], json: bool) -> ExitCode {
         "presence" => {
             let now = now_unix();
             let rows = multilab::board(&paths, now);
+            // Unread-but-live: notes unread for 15+ minutes, for labs with a cache on this machine.
+            let unread_old = |lab: &str| -> Option<usize> {
+                notes::cache_path(&paths, lab).exists().then(|| {
+                    notes::unread_older_than(
+                        &notes::read_cache(&paths, lab),
+                        &notes::Markers::load(&paths, lab),
+                        now,
+                        15,
+                    )
+                })
+            };
             if json {
                 let mut items: Vec<String> = Vec::new();
                 for e in &rows {
+                    let unread =
+                        unread_old(&e.row.lab).map_or("null".to_string(), |n| n.to_string());
                     items.push(format!(
-                        "    {{\"lab\": {:?}, \"updated\": {:?}, \"milestone\": {:?}, \"branch\": {:?}, \"worktree\": {:?}, \"doing\": {:?}, \"next\": {:?}, \"host\": {:?}, \"session\": {:?}, \"source\": {:?}, \"state\": {:?}}}",
+                        "    {{\"lab\": {:?}, \"updated\": {:?}, \"milestone\": {:?}, \"branch\": {:?}, \"worktree\": {:?}, \"doing\": {:?}, \"next\": {:?}, \"host\": {:?}, \"session\": {:?}, \"source\": {:?}, \"state\": {:?}, \"unread_over_15m\": {}}}",
                         e.row.lab, e.row.updated, e.row.milestone, e.row.branch, e.row.worktree,
-                        e.row.doing, e.row.next, e.row.host, e.row.session, e.source, e.state()
+                        e.row.doing, e.row.next, e.row.host, e.row.session, e.source, e.state(),
+                        unread
                     ));
                 }
                 println!("[\n{}\n]", items.join(",\n"));
@@ -1645,14 +1659,13 @@ fn cmd_multilab(repo: &Path, args: &[String], json: bool) -> ExitCode {
                     } else {
                         &e.row.branch
                     };
+                    let mut state = e.state();
+                    if let Some(n) = unread_old(&e.row.lab).filter(|n| *n > 0) {
+                        state.push_str(&format!(" · {n} unread >15m"));
+                    }
                     println!(
                         "  {:<12} {:<20} {:<8} {:<9} {:<20} {}",
-                        e.row.lab,
-                        e.state(),
-                        e.source,
-                        e.row.milestone,
-                        branch,
-                        e.row.doing
+                        e.row.lab, state, e.source, e.row.milestone, branch, e.row.doing
                     );
                 }
             }
@@ -2075,7 +2088,7 @@ fn cmd_notes(repo: &Path, args: &[String], json: bool) -> ExitCode {
         }
     };
     let regs = Registries::load(&paths).ok();
-    let issues = notes::watched_issues(regs.as_ref());
+    let issues = watch_list(&lab, regs.as_ref());
 
     // Whether the read covered everything. A `--cached` call or a failed fetch does not know what it
     // missed, and the report says "at least" rather than presenting a floor as the truth.
@@ -2239,6 +2252,54 @@ fn fetch_issue_notes(issue: i64) -> Option<Vec<notes::Note>> {
     Some(notes::parse_tsv(issue, &String::from_utf8_lossy(&stdout)))
 }
 
+/// Open PRs where `lab` has a seat, from ONE bounded `gh pr list`. Non-fatal: on failure, say so on
+/// one stderr line and return none, so only the milestone issues are watched.
+fn seat_pr_numbers(lab: &str) -> Vec<i64> {
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args([
+        "pr",
+        "list",
+        "--repo",
+        "UOR-Foundation/uor-r4",
+        "--state",
+        "open",
+        "--limit",
+        "100",
+        "--json",
+        "number,headRefName,title,body",
+    ]);
+    let rows = run_bounded(&mut cmd, GH_TIMEOUT)
+        .and_then(|out| serde_json::from_slice::<Vec<serde_json::Value>>(&out).ok());
+    let Some(rows) = rows else {
+        eprintln!("uor-harness: could not list open PRs - watching milestone issues only");
+        return Vec::new();
+    };
+    let rows: Vec<notes::PrRow> = rows
+        .iter()
+        .filter_map(|v| {
+            let text = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+            Some(notes::PrRow {
+                number: v.get("number")?.as_i64()?,
+                head: text("headRefName"),
+                title: text("title"),
+                body: text("body"),
+            })
+        })
+        .collect();
+    notes::seat_prs(lab, &rows)
+}
+
+/// Milestone issues first, then the lab's PRs, deduplicated.
+fn watch_list(lab: &str, regs: Option<&Registries>) -> Vec<i64> {
+    let mut issues = notes::watched_issues(regs);
+    for n in seat_pr_numbers(lab) {
+        if !issues.contains(&n) {
+            issues.push(n);
+        }
+    }
+    issues
+}
+
 /// `ledger sync [--lab L] [--month M]` - append live receipts into the committed shard.
 ///
 /// The delivery step. Run it before opening a PR so the receipts recorded since the last delivery
@@ -2383,7 +2444,7 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
             && notes::needs_refresh(notes::cache_age(&paths, &lab))
         {
             let regs = Registries::load(&paths).ok();
-            refresh_notes(&paths, &lab, &notes::watched_issues(regs.as_ref())).1
+            refresh_notes(&paths, &lab, &watch_list(&lab, regs.as_ref())).1
         } else {
             notes::ensure_state(&paths, &lab);
             false
