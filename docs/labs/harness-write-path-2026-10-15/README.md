@@ -36,6 +36,11 @@ reporting the checkout's staleness as if it were a claim.
 into the owner checkout's release build, built `2026-10-14T16:59:30Z`; `~/.cargo/bin/uor-harness` (what
 `which uor-harness` finds) was built `2026-10-15T13:38:00Z`, after every harness commit on `origin/main`.
 
+**6. `ledger-sync --dry-run` wrote.** Found while delivering this change: the flag is documented on the
+command ("Use --dry-run to see what would be written") and `cmd_ledger_sync` never read it, so the dry run
+appended 101 receipts to the branch's committed shard. A documented read-only flag that writes is worse
+than a missing flag: it teaches a lab the wrong thing about which commands touch a checkout.
+
 ## What changed
 
 | file | change |
@@ -45,14 +50,15 @@ into the owner checkout's release build, built `2026-10-14T16:59:30Z`; `~/.cargo
 | `crates/uor-r4-harness/src/team.rs` | `save_claims` refuses the shared checkout; the shared tier is read from `origin/main` through `git show`, not from a working copy; the shared checkout no longer supplies the caller's own tier |
 | `crates/uor-r4-harness/src/presence.rs` | `publish_durable` refuses the shared checkout; `Presence` keeps the raw lab so an unnamed check-in is still refused while the record and paths carry the slug |
 | `crates/uor-r4-harness/src/multilab.rs` | `migrate_ledger` refuses the shared checkout |
-| `crates/uor-r4-harness/src/main.rs` | `receipt`, `skill use` and `prep fit` write the LIVE shard; `cmd_receipt` warns instead of refusing an unnamed lab; one warning text for all writers |
+| `crates/uor-r4-harness/src/main.rs` | `receipt`, `skill use` and `prep fit` write the LIVE shard; `cmd_receipt` warns instead of refusing an unnamed lab; one warning text for all writers; `ledger-sync --dry-run` is honoured (the write now sits behind `plan_sync`) |
+| `crates/uor-r4-harness/src/receipt.rs` | `plan_sync` is the read half of the sync: what would be appended, and the lines, writing nothing |
 | `crates/uor-r4-harness/src/notes.rs`, `registries.rs` | `watched_issues` puts the tracker first, then the milestones; `Registries::tracker_issue()` reads it from the registry |
 | `docs/harness/README.md`, `pm-rules.md`, `BOOTSTRAP.md` | the write-path table, the enforced-R10 refusal, the tracker in the check-in, the two installed copies; the presence TTL in the README corrected from 30 to 5 minutes (the code has used 5 since 13 October) |
 
 ## Verification
 
 Exact head: this branch. `CARGO_TARGET_DIR=local/harness-target cargo test -p uor-r4-harness --offline`:
-**528 passed, 0 failed, 6 ignored**. New tests cover the guard (shared checkout found, linked worktree
+**529 passed, 0 failed, 6 ignored**. New tests cover the guard (shared checkout found, linked worktree
 writable, subdirectory still the shared checkout, single-checkout clone never refused), the refusal message,
 `slug`/`slug_stem`, the unnamed receipt landing in `unknown-<month>.jsonl`, the tracker in `watched_issues`,
 the shared tier reading `origin/main` rather than a stale working copy, and a claim in a lab's own checkout
@@ -70,6 +76,10 @@ $ uor-harness team claim --branch kimi/probe-r10 --lab kimi           # exit 2, 
 team claim: refusing to write the claims store into the shared checkout /Users/casey.allard/uor-r4 (R10): ...
 $ git -C ~/uor-r4 status --porcelain -- docs/harness                  # empty: the checkout stayed clean
 ```
+
+`ledger-sync --dry-run`, same binary, on a shard holding one unsynced live receipt: "would append 1
+receipt(s) ... nothing written", the committed file's sha256 **unchanged** (`046ca5c3…` before and after),
+and the real sync then appended exactly that one line. Before the fix the same dry run appended 101 lines.
 
 Unset lab, same binary: `env -u UOR_LAB uor-harness receipt --kind harness_test_unattributed` warns in
 Python's words and records into `unknown-2026-10.jsonl` with `"lab": ""`. Tracker watch, same binary:

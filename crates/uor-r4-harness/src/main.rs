@@ -26,7 +26,8 @@ use uor_r4_harness::prep::{check_all, SheetReport};
 use uor_r4_harness::presence;
 use uor_r4_harness::presence::{heartbeat, Presence};
 use uor_r4_harness::receipt::{
-    append_live, current_month, sync_live_to_committed, Receipt as NewReceipt, UNATTRIBUTED_WARNING,
+    append_live, current_month, plan_sync, sync_live_to_committed, Receipt as NewReceipt,
+    UNATTRIBUTED_WARNING,
 };
 use uor_r4_harness::registries::Registries;
 use uor_r4_harness::shards;
@@ -2286,14 +2287,34 @@ fn cmd_ledger_sync(repo: &Path, args: &[String], json: bool) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match sync_live_to_committed(&paths, &lab, &month) {
-        Ok(r) => {
+    // `--dry-run` is READ-ONLY. It was documented and ignored: the command went straight to the
+    // write, so a lab asking what the sync would do got the effect instead of the answer and an
+    // appended-to checkout it never asked for. `plan_sync` is the read half of the same code.
+    let dry_run = args.iter().any(|a| a == "--dry-run");
+    let planned = if dry_run {
+        plan_sync(&paths, &lab, &month).map(|(r, add)| {
+            let n = add.len();
+            (r, n)
+        })
+    } else {
+        sync_live_to_committed(&paths, &lab, &month).map(|r| {
+            let n = r.added;
+            (r, n)
+        })
+    };
+    match planned {
+        Ok((r, added)) => {
             if json {
                 println!(
-                    "{{\"shard\": {:?}, \"added\": {}, \"already_committed\": {}, \"wrote\": {}}}",
-                    r.shard, r.added, r.already_committed, r.wrote
+                    "{{\"shard\": {:?}, \"added\": {}, \"already_committed\": {}, \"wrote\": {}, \"dry_run\": {}}}",
+                    r.shard, added, r.already_committed, r.wrote, dry_run
                 );
-            } else if r.added == 0 {
+            } else if dry_run {
+                println!(
+                    "ledger sync --dry-run: would append {} receipt(s) to {} ({} already committed); nothing written",
+                    added, r.shard, r.already_committed
+                );
+            } else if added == 0 {
                 println!(
                     "ledger sync: nothing to add for {lab} in {month} ({} live receipt(s) already committed)",
                     r.already_committed
@@ -2301,7 +2322,7 @@ fn cmd_ledger_sync(repo: &Path, args: &[String], json: bool) -> ExitCode {
             } else {
                 println!(
                     "ledger sync: appended {} receipt(s) to {} ({} already committed)",
-                    r.added, r.shard, r.already_committed
+                    added, r.shard, r.already_committed
                 );
             }
             ExitCode::SUCCESS

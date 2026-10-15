@@ -833,7 +833,48 @@ pub fn sync_live_to_committed(
     // R10: the sync is a deliberate write into a checkout, and it is the caller's own checkout that
     // carries the lines into review. The shared checkout stays clean; the live tier is where a
     // receipt goes when there is no checkout to write.
+    //
+    // Refused BEFORE any work, so a dry run and a real sync agree about permission: a no-op sync
+    // from the shared checkout is still the wrong checkout to have run it in.
     crate::state::refuse_shared_checkout(paths, "the committed ledger shard")?;
+    let (mut report, add) = plan_sync(paths, lab, month)?;
+    if add.is_empty() {
+        return Ok(report);
+    }
+    let committed = std::path::PathBuf::from(&report.shard);
+    if let Some(parent) = committed.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&committed)
+        .map_err(|e| format!("cannot open {}: {e}", committed.display()))?;
+    use std::io::Write;
+    for line in &add {
+        writeln!(file, "{line}").map_err(|e| format!("cannot append: {e}"))?;
+    }
+    report.added = add.len();
+    report.wrote = true;
+    Ok(report)
+}
+
+/// What a sync WOULD append, and the lines themselves - **writing nothing**.
+///
+/// **This exists because `--dry-run` used to write.** The flag was documented on `ledger-sync` and
+/// never read: the command went straight to `sync_live_to_committed`, so a lab asking what the sync
+/// would do got the effect instead of the answer, and a checkout that should have stayed clean was
+/// appended to. Measured on 15 October, on the delivery run for this very change. A read-only flag
+/// that writes is worse than a missing flag: it teaches a lab the wrong thing about R10.
+///
+/// The refusal is deliberately NOT here: planning reads, and reading the shared checkout is exactly
+/// what R10 permits. The write half asks `refuse_shared_checkout` before it touches anything.
+pub fn plan_sync(
+    paths: &StatePaths,
+    lab: &str,
+    month: &str,
+) -> Result<(SyncReport, Vec<String>), String> {
     let live = live_shard_path(paths, lab, month);
     let committed = shard_path(paths, lab, month);
     let mut report = SyncReport {
@@ -841,7 +882,7 @@ pub fn sync_live_to_committed(
         ..Default::default()
     };
     let Ok(live_text) = std::fs::read_to_string(&live) else {
-        return Ok(report); // nothing live: not an error, just nothing to carry
+        return Ok((report, Vec::new())); // nothing live: not an error, just nothing to carry
     };
     let committed_text = std::fs::read_to_string(&committed).unwrap_or_default();
     let have: std::collections::BTreeSet<String> = committed_text
@@ -867,25 +908,8 @@ pub fn sync_live_to_committed(
             add.push(line.trim().to_string());
         }
     }
-    if add.is_empty() {
-        return Ok(report);
-    }
-    if let Some(parent) = committed.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
-    }
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&committed)
-        .map_err(|e| format!("cannot open {}: {e}", committed.display()))?;
-    use std::io::Write;
-    for line in &add {
-        writeln!(file, "{line}").map_err(|e| format!("cannot append: {e}"))?;
-    }
     report.added = add.len();
-    report.wrote = true;
-    Ok(report)
+    Ok((report, add))
 }
 
 fn key_of(v: &serde_json::Value, field: &str) -> String {
@@ -954,6 +978,35 @@ mod live_tier_tests {
         let text = std::fs::read_to_string(live_shard_path(&f.paths, "deepseek", "2026-10"))
             .expect("read");
         assert_eq!(text.lines().filter(|l| !l.trim().is_empty()).count(), 2);
+    }
+
+    /// **A `--dry-run` must not write.** The flag was documented on `ledger-sync` and never read, so
+    /// asking what the sync would do created and appended to the committed shard - measured on the
+    /// delivery run for this very change, when the dry run added 101 lines.
+    #[test]
+    fn planning_a_sync_writes_nothing() {
+        let f = Fixture::new();
+        append_live(
+            &f.paths,
+            &receipt("deepseek", "heartbeat", "2026-10-13T09:00:00-04:00"),
+            "2026-10",
+        )
+        .expect("append");
+        let committed = shard_path(&f.paths, "deepseek", "2026-10");
+        let (report, add) = plan_sync(&f.paths, "deepseek", "2026-10").expect("plan");
+        assert_eq!(add.len(), 1, "the plan names the line it would carry");
+        assert_eq!(report.added, 1);
+        assert!(!report.wrote, "a plan is not a write");
+        assert!(
+            !committed.exists(),
+            "a dry run must not create the committed shard: {} exists",
+            committed.display()
+        );
+        // And the real sync then writes exactly what the plan promised.
+        let done = sync_live_to_committed(&f.paths, "deepseek", "2026-10").expect("sync");
+        assert!(done.wrote);
+        assert_eq!(done.added, add.len());
+        assert!(committed.is_file());
     }
 
     /// The delivery step: live receipts reach the committed shard that review sees.
