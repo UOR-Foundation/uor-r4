@@ -164,7 +164,7 @@ pub fn shared_primary_checkout(repo: &Path) -> Option<PathBuf> {
     let top = PathBuf::from(top);
     let top = top.canonicalize().unwrap_or(top);
     let listing = git_out(repo, &["worktree", "list", "--porcelain"])?;
-    let mut worktrees: Vec<PathBuf> = listing
+    let worktrees: Vec<PathBuf> = listing
         .lines()
         .filter_map(|line| line.strip_prefix("worktree "))
         .map(|rest| {
@@ -173,10 +173,7 @@ pub fn shared_primary_checkout(repo: &Path) -> Option<PathBuf> {
         })
         .collect();
     // "git worktree list" names the primary checkout FIRST.
-    let primary = match worktrees.first() {
-        Some(p) => p.clone(),
-        None => return None,
-    };
+    let primary = worktrees.first()?.clone();
     // A LINKED worktree is never the shared checkout, whatever the marker says.
     if primary != top {
         return None;
