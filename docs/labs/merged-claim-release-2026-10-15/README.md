@@ -47,12 +47,38 @@ claim, and an `Unknown` state keeps it as well - "cannot prove it" is not "dead"
   `--apply` deletes the merged branch, releases its claim from the checkout **and** the live mirror, and leaves
   the open branch's claim alone.
 
+## Review response (Kimi PM, exact head `a98b2aa0d`)
+
+**R1 — the release deleted other labs' LIVE-only claims.** `publish_claims_live` was handed the caller's
+committed store, and the live mirror IS the only home of a peer's uncommitted claim (the tier's whole
+purpose: visible before its PR lands). Measured by the reviewer: `peer/live-only` vanished from the mirror
+and from `multilab claims`. **Fixed:** the mirror is now republished from the **merged view minus the
+released branches** — foreign live entries survive, and the released branches are removed explicitly
+because `origin/main` still names them until this PR lands. Pinned by seeding the mirror with a
+`peer/live-only` claim and asserting it survives the release *and* is not imported into the committed store.
+
+**R2 — the motivating case was not covered, and the docs implied it was.** `branch_states` enumerates
+`refs/heads`, so a claim whose branch is already deleted (the case this record opens with) is invisible to
+the release. **Fixed by making the residue visible instead of guessing at it:** `clean-merged` now REPORTS
+`claims whose branch is gone` — branches absent both locally and on `origin`, so an open PR is never named —
+each with the exact `uor-harness team release --branch <branch> --lab <lab>` line that clears it. Nothing is
+released on this signal: **"gone" is not "merged"**, and after a squash merge there is neither a tree nor an
+ancestry link to prove it with. The README, `pm-rules` and `AGENTS.md` now state the mechanism's real reach,
+and `remote_branches` returns `None` (report nothing) rather than an empty list when the remote cannot be
+read, so an offline checkout cannot turn every peer claim into a residue. Pinned in the integration test:
+`ghost/gone` is reported with its fix line and is still in the store after `--apply`.
+
 ## What this does not do
 
 - It does not release a claim at `team claim` time. A lab that wants a name held by a *merged* branch still meets
   the refusal until the post-merge step runs - deliberately: releasing another lab's claim inside a claim would
   hide the collision rather than clear it once, in the step whose job is exactly that.
 - It does not touch a claim whose branch state is `Unknown` or `Unmerged`. An open PR keeps its claim.
+- It does not release a claim whose branch is gone: it reports it (R2 above). The residue needs a human
+  because the proof does not exist, not because the command is shy.
+- It does not fix the same read-view-as-write-source pattern in `claim_branch`/`release_branch`
+  (`team.rs` publishes the committed store there too). The reviewer recorded it as a follow-up; the fix is
+  the same one-liner and it is worth its own PR rather than riding this one.
 - It does not change the rule that reports the class (`multilab.claim_not_merged`); the rule stays the detector,
   and this makes the repair mechanical.
 

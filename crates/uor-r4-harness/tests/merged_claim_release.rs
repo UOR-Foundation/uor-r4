@@ -13,9 +13,12 @@ use std::path::PathBuf;
 
 use std::process::{Command, Output};
 
-/// Two claims: one on a branch that reaches main by squash, one on a branch still open.
+/// Three claims: one on a branch that reaches main by squash, one on a branch still open, and one on
+/// a branch that exists nowhere - the residue `--apply` must REPORT but must never release, because
+/// "gone" is not "merged".
 const CLAIMS: &str = concat!(
     "{\n",
+    "  \"ghost/gone\": {\"branch\": \"ghost/gone\", \"claimed_at\": \"2026-10-15T00:00:00-04:00\", \"head\": \"000\", \"lab\": \"ghost\", \"note\": \"\"},\n",
     "  \"lab/done\": {\"branch\": \"lab/done\", \"claimed_at\": \"2026-10-15T00:00:00-04:00\", \"head\": \"abc\", \"lab\": \"lab\", \"note\": \"\"},\n",
     "  \"lab/open\": {\"branch\": \"lab/open\", \"claimed_at\": \"2026-10-15T00:00:00-04:00\", \"head\": \"def\", \"lab\": \"lab\", \"note\": \"\"}\n",
     "}\n"
@@ -132,6 +135,15 @@ fn a_merged_branchs_claim_is_released_and_an_open_branchs_is_kept() {
     let out = String::from_utf8_lossy(&report.stdout).to_string();
     assert!(out.contains("claims on merged branches (1)"), "{out}");
     assert!(out.contains("lab/done"), "{out}");
+    // R2: the claim whose branch is gone is NAMED, with the command that clears it, and the report
+    // says plainly that it is not released.
+    assert!(out.contains("claims whose branch is gone (1)"), "{out}");
+    assert!(out.contains("ghost/gone"), "{out}");
+    assert!(
+        out.contains("team release --branch ghost/gone --lab ghost"),
+        "the residue must come with its fix: {out}"
+    );
+    assert!(out.contains("gone is not merged"), "{out}");
     assert_eq!(f.claims_file(&f.repo), before, "a report must not write");
 
     // Apply: the merged branch is deleted AND its claim released; the open branch keeps both.
@@ -149,6 +161,10 @@ fn a_merged_branchs_claim_is_released_and_an_open_branchs_is_kept() {
     assert!(
         after.contains("lab/open"),
         "the open claim survives: {after}"
+    );
+    assert!(
+        after.contains("ghost/gone"),
+        "a branch that is gone is NOT released on a guess: {after}"
     );
 
     // And it is gone from the LIVE mirror too, or the next reader resurrects it.

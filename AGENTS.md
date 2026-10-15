@@ -253,7 +253,9 @@ tree against the branch tree — because a squash merge leaves no ancestry link 
 `merge-base --is-ancestor` would wrongly call it unmerged. A branch that is not proven merged is kept
 and its owner decides. **`--apply` also releases the claims on the branches it proves merged**, in your
 own checkout and the live mirror: a claim outlives its branch otherwise, and the next lab to want that
-branch name collides with a claim on work already in main.
+branch name collides with a claim on work already in main. A claim whose branch is already deleted cannot
+be proved merged, so it is **reported** by the same command — never released on a guess — with the
+`uor-harness team release --branch <branch> --lab <lab>` line that clears it.
 
 **Why this matters: the repository should hold minimum state.** A merged branch is not a research
 authority — `main` is. `check` reports every orphan as `status.no_orphan_branches` with the exact
