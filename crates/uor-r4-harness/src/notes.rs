@@ -467,13 +467,18 @@ mod tests {
     /// it - and it is where the PM posts the assignment a lab most needs to read.
     #[test]
     fn the_tracker_is_watched_alongside_the_milestones() {
-        let mut regs = crate::registries::Registries::default();
-        regs.tracker = serde_json::json!({"issue": 2028});
-        regs.milestones = vec![milestone(2029), milestone(2030)];
+        let regs = crate::registries::Registries {
+            tracker: serde_json::json!({"issue": 2028}),
+            milestones: vec![milestone(2029), milestone(2030)],
+            ..Default::default()
+        };
         assert_eq!(watched_issues(Some(&regs)), vec![2028, 2029, 2030]);
         // A registry whose tracker entry is missing or malformed still watches its milestones.
-        regs.tracker = serde_json::Value::Null;
-        assert_eq!(watched_issues(Some(&regs)), vec![2029, 2030]);
+        let no_tracker = crate::registries::Registries {
+            tracker: serde_json::Value::Null,
+            ..regs.clone()
+        };
+        assert_eq!(watched_issues(Some(&no_tracker)), vec![2029, 2030]);
         // And with no registry at all, the known ids still surface notes.
         assert_eq!(watched_issues(None), vec![2029, 2030, 2031, 2032]);
     }
