@@ -723,6 +723,13 @@ fn cmd_mistakes(repo: &Path, args: &[String], json: bool) -> ExitCode {
                 .unwrap_or_default()
                 .trim()
                 .to_string();
+            // R10 FIRST: a lesson is a record file that rides the delivery PR, so it is written in the
+            // caller's own checkout. Refusing before the draft is built keeps the refusal the only
+            // answer in the shared checkout, whatever else the draft might be missing.
+            if let Err(e) = uor_r4_harness::state::refuse_shared_checkout(&paths, "the lesson") {
+                eprintln!("uor-harness: {e}");
+                return ExitCode::from(1);
+            }
             // argparse also requires both, so this is reachable only through the Rust parser,
             // which is lenient; the refusal and the exit code are Python's either way.
             if id.is_empty() || title.is_empty() {
@@ -786,12 +793,6 @@ fn cmd_mistakes(repo: &Path, args: &[String], json: bool) -> ExitCode {
             }
             for warning in &warnings {
                 eprintln!("note: {warning}");
-            }
-            // R10: a lesson is a record file that rides the delivery PR, so it lands in the caller's
-            // own checkout. The shared checkout is read-only for every lab.
-            if let Err(e) = uor_r4_harness::state::refuse_shared_checkout(&paths, "the lesson") {
-                eprintln!("uor-harness: {e}");
-                return ExitCode::from(1);
             }
             let existed = target.exists();
             if let Some(parent) = target.parent() {
@@ -1170,6 +1171,15 @@ fn cmd_prep(repo: &Path, args: &[String], json: bool) -> ExitCode {
             ExitCode::SUCCESS
         }
         "new" => {
+            // R10 FIRST, before the registry is read or a sheet is rendered: this is a checkout write,
+            // and the only useful answer in the shared checkout is the refusal. Refusing early also
+            // means a fixture that has no registry cannot mask the refusal with a different error.
+            if let Err(e) =
+                uor_r4_harness::state::refuse_shared_checkout(&paths, "the pre-registration sheet")
+            {
+                eprintln!("uor-harness: {e}");
+                return ExitCode::from(1);
+            }
             let Some(m) = regs.milestone(&key) else {
                 eprintln!("uor-harness prep new: no milestone {key:?}; try `uor-harness registry`");
                 return ExitCode::from(2);
@@ -1218,14 +1228,6 @@ fn cmd_prep(repo: &Path, args: &[String], json: bool) -> ExitCode {
                      Re-run with --force to replace it.",
                     target.display()
                 );
-                return ExitCode::from(1);
-            }
-            // R10: the sheet is the D22 record and rides the delivery PR, so it is written into the
-            // caller's own checkout. The shared checkout stays on clean origin/main for every lab.
-            if let Err(e) =
-                uor_r4_harness::state::refuse_shared_checkout(&paths, "the pre-registration sheet")
-            {
-                eprintln!("uor-harness: {e}");
                 return ExitCode::from(1);
             }
             if let Some(parent) = target.parent() {

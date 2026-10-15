@@ -492,6 +492,11 @@ fn presence_from_row(row: &PresenceRow) -> Presence {
 /// a lab that wants the committed record to show it runs this. That is why the committed presence
 /// files can be a day stale without anything being broken — and why the README must say so.
 pub fn sync_live_to_durable(paths: &StatePaths) -> Result<SyncLive, String> {
+    // R10 FIRST, before the live tier is even read. The per-row guard in `publish_durable` only fires
+    // when there IS a live row to publish, so an empty live tier made this command report success from
+    // the shared checkout without ever consulting the rule (found by the entry-point pin test): a no-op
+    // sync from the shared checkout is still the wrong checkout to have run it in.
+    crate::state::refuse_shared_checkout(paths, "presence")?;
     let dir = live_dir(paths);
     let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
         .map(|e| e.flatten().map(|x| x.path()).collect())

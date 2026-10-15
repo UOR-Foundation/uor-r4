@@ -138,11 +138,23 @@ pub fn slug_stem(lab: &str) -> String {
 /// resolved their target from the working directory, so a lab whose shell sat in the owner checkout
 /// dirtied it with a coordination write and another lab had to hand-move the entries out.
 ///
-/// The identification is deliberately about the SHAPE of the clone rather than a hard-coded path:
-/// the primary worktree of a repository that has linked worktrees is the shared checkout every lab
-/// shares, and a writable target it is not. A single-checkout clone, a scratch directory and an
-/// unreadable git state all return None — refusing there would break a lab that simply cloned the
-/// repository, which is the opposite of the R10 goal.
+/// **Two ways to identify it, because the shape alone has a hole.** The primary worktree of a
+/// repository that has linked worktrees is the shared checkout every lab shares. But `uor-hygiene`
+/// and the post-merge cleanup rule remove those worktrees, and the checkout then looks like an
+/// ordinary single-checkout clone — at which point a shape-only rule silently allows writes into the
+/// owner checkout again. (Found in review: a single-checkout scratch repo accepted `team claim` and
+/// left `docs/harness/claims.json` modified.) So the shape is checked, and so is a MARKER that does
+/// not depend on how many worktrees exist:
+///
+/// ```text
+/// git config uor.sharedCheckout true     # set once, in the shared checkout
+/// ```
+///
+/// The marker is stored in the repository config, so it survives cleanup, a reset and a re-clone of
+/// the working tree, and it is read only for the PRIMARY worktree — a linked worktree of a marked
+/// checkout is still a lab's own and stays writable. A single-checkout clone with no marker, a
+/// scratch directory and an unreadable git state all return None: refusing there would break a lab
+/// that simply cloned the repository, which is the opposite of the R10 goal.
 ///
 /// **Read-only callers are unaffected.** This is consulted by write paths only: reading claims,
 /// presence and the ledger from the shared checkout is exactly what R10 permits.
@@ -160,13 +172,28 @@ pub fn shared_primary_checkout(repo: &Path) -> Option<PathBuf> {
             p.canonicalize().unwrap_or(p)
         })
         .collect();
-    // A single checkout is the writer's own; only the shared layout has a primary that is not.
-    if worktrees.len() < 2 {
+    // "git worktree list" names the primary checkout FIRST.
+    let primary = match worktrees.first() {
+        Some(p) => p.clone(),
+        None => return None,
+    };
+    // A LINKED worktree is never the shared checkout, whatever the marker says.
+    if primary != top {
         return None;
     }
-    // "git worktree list" names the primary checkout FIRST.
-    let primary = worktrees.remove(0);
-    (primary == top).then_some(primary)
+    if worktrees.len() >= 2 || marked_shared(repo) {
+        return Some(primary);
+    }
+    None
+}
+
+/// The `uor.sharedCheckout` marker: `true` when this checkout declares itself the shared one.
+///
+/// Read through `git config --bool --get`, which exits non-zero when the key is unset — so an
+/// unreadable or unrelated key is not a declaration, and the shape rule still decides.
+fn marked_shared(repo: &Path) -> bool {
+    git_out(repo, &["config", "--bool", "--get", "uor.sharedCheckout"])
+        .is_some_and(|v| v.trim() == "true")
 }
 
 /// Refuse a checkout write that would land in the shared checkout, or pass.
@@ -196,11 +223,18 @@ pub fn refuse_shared_checkout_at(repo: &Path, what: &str) -> Result<(), String> 
 }
 
 /// Trimmed stdout of a git command, or None when it fails or is not a repository.
+///
+/// **`GIT_DIR`/`GIT_WORK_TREE` are cleared**, because a git HOOK exports them and they take
+/// precedence over `-C`: inside a pre-commit hook run from a linked worktree, `rev-parse
+/// --show-toplevel` would report the MAIN worktree, so a lab's own checkout would look like the
+/// shared one and its write would be refused for the wrong reason. Review finding F5.
 fn git_out(repo: &Path, args: &[&str]) -> Option<String> {
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(repo)
         .args(args)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
         .output()
         .ok()?;
     if !out.status.success() {
@@ -496,6 +530,61 @@ mod tests {
             shared_primary_checkout(&dir.path().join("not-a-repo")),
             None,
             "an unreadable git state must not block a write"
+        );
+    }
+
+    /// **F1: the shape rule had a hole, and the marker closes it.** `uor-hygiene` and the post-merge
+    /// cleanup remove linked worktrees, after which a shape-only rule read the owner checkout as an
+    /// ordinary single-checkout clone and allowed writes into it again (review finding F1: a
+    /// single-checkout scratch repo accepted `team claim` and left `claims.json` modified).
+    #[test]
+    fn a_marked_single_checkout_is_still_the_shared_checkout() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let repo = dir.path().join("owner");
+        std::fs::create_dir_all(&repo).expect("dir");
+        let run = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .expect("git")
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@t"]);
+        run(&["config", "user.name", "t"]);
+        std::fs::write(repo.join("f"), "1").expect("write");
+        run(&["add", "f"]);
+        run(&["commit", "-qm", "one"]);
+        assert_eq!(
+            shared_primary_checkout(&repo),
+            None,
+            "an unmarked single checkout is a lab's own clone and stays writable"
+        );
+        // A marker that is false, or anything else unreadable, is not a declaration.
+        run(&["config", "uor.sharedCheckout", "false"]);
+        assert_eq!(shared_primary_checkout(&repo), None);
+        // The marker does not depend on how many worktrees exist, so cleanup cannot switch it off.
+        run(&["config", "uor.sharedCheckout", "true"]);
+        let expect = repo.canonicalize().expect("canonical");
+        assert_eq!(
+            shared_primary_checkout(&repo).as_deref(),
+            Some(expect.as_path()),
+            "a marked checkout is the shared checkout even with no linked worktrees"
+        );
+        // A LINKED worktree of a marked checkout is still a lab's own, and stays writable.
+        let linked = dir.path().join("lab");
+        run(&[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "lab/task",
+            linked.to_str().expect("utf8"),
+        ]);
+        assert_eq!(shared_primary_checkout(&linked), None);
+        assert_eq!(
+            refuse_shared_checkout_at(&linked, "the claims store"),
+            Ok(())
         );
     }
 
