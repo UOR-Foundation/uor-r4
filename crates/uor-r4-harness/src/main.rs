@@ -2511,6 +2511,26 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    // **A check-in surfaces what this lab has not read.** This is the durable fix for the
+    // missed-CONTEST problem: a lab checking in every five minutes never thinks to run `notes`, so a
+    // peer note posted mid-task went unseen until somebody happened to mention it. Read from the
+    // CACHE only - a check-in must never hang on GitHub - and never advance the marker here: showing
+    // a floor ("at least N") is honest, marking notes seen that the lab may not have read is not.
+    // `notes` stays the reader that advances. JSON output is unchanged on purpose: it is a machine
+    // contract, and `notes --json` is the machine-readable route.
+    if !json && !args.iter().any(|a| a == "--no-notes") && notes::cache_path(&paths, &lab).exists()
+    {
+        let markers = notes::Markers::load(&paths, &lab);
+        let cached = notes::read_cache(&paths, &lab);
+        let unread = markers.unread(&cached);
+        let items = notes::summarise(&unread);
+        for line in notes::render(&items, false) {
+            println!("{line}");
+        }
+        if !items.is_empty() {
+            println!("  read them in full: uor-harness notes");
+        }
+    }
     // A stale binary is worth one line at check-in: it is the moment a lab is already reading output,
     // and a build that predates a flag fails with "unknown option" rather than anything useful.
     if let Some(line) = uor_r4_harness::version::stale(repo).line() {
