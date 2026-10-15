@@ -659,6 +659,11 @@ mod tests {
             },
         );
         save_claims(&own, &claims).expect("seed");
+        // **The mirror is seeded too**, because that is what a real claim leaves behind:
+        // `publish_claims_live` is called by `claim`/`release`, and a release that forgot to
+        // republish would let the LIVE copy resurrect the claim on the very next read.
+        assert!(publish_claims_live(&own, &claims));
+        assert!(load_claims(&own).contains_key("lab/merged"));
 
         // Nothing proven merged: nothing is stale, and the release is a no-op.
         assert!(stale_claims(&own, &[]).is_empty());
