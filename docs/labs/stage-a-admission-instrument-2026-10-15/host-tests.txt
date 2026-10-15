@@ -265,4 +265,3 @@ test tests::compact_receipts_retain_every_column_and_fit_budget ... ok
 test tests::receipt_accounting_checks_nesting_bounds_and_zero_rivals ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
-
