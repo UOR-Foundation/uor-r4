@@ -201,6 +201,7 @@ fn source_files(repo: &Path) -> Result<Vec<(String, PathBuf)>, RatchetError> {
 }
 
 /// Non-overlapping, ASCII case-insensitive occurrences of `needle` (lowercase) in `hay`.
+#[cfg(test)]
 fn count_ci(hay: &str, needle: &str) -> u64 {
     let lower = hay.to_ascii_lowercase();
     lower.matches(needle).count() as u64
@@ -219,7 +220,20 @@ fn count_ci(hay: &str, needle: &str) -> u64 {
 ///   compounds such as `PreRopeProjectionObservations`, `PreRopeProjectionProbe`, `applyRope`),
 ///   while rejecting English `proper`/`Proper`/`property`/`Properties`/`WriterProperties`.
 fn is_d23_ident_segment(seg: &str) -> bool {
-    let lower = seg.to_ascii_lowercase();
+    if seg.len() < 4 {
+        return false;
+    }
+    let mut stack_buf = [0u8; 128];
+    let owned: String;
+    let lower: &str = if seg.len() <= stack_buf.len() {
+        for (dst, &src) in stack_buf[..seg.len()].iter_mut().zip(seg.as_bytes()) {
+            *dst = src.to_ascii_lowercase();
+        }
+        std::str::from_utf8(&stack_buf[..seg.len()]).unwrap_or("")
+    } else {
+        owned = seg.to_ascii_lowercase();
+        &owned
+    };
     if lower.starts_with(concat!("ro", "pe"))
         || seg.contains(concat!("Ro", "pe"))
         || seg.contains(concat!("Ro", "PE"))
@@ -237,7 +251,15 @@ fn is_d23_ident_segment(seg: &str) -> bool {
 /// every ASCII-alphanumeric identifier segment matching [`D23_IDENT_FAMILIES`] in stripped code
 /// (comments and plain strings removed, raw strings kept).
 fn d23_sites(text: &str) -> u64 {
-    let base = count_ci(text, D23_WORD);
+    let lower = text.to_ascii_lowercase();
+    let base = lower.matches(D23_WORD).count() as u64;
+    let has_ident_family = D23_IDENT_FAMILIES
+        .iter()
+        .filter(|&&fam| fam != concat!("ro", "pei"))
+        .any(|&fam| lower.contains(fam));
+    if !has_ident_family {
+        return base;
+    }
     let code = strip_comments_and_strings(text);
     let extra: u64 = code
         .split(|c: char| !c.is_ascii_alphanumeric())
@@ -250,36 +272,41 @@ fn is_word(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
+fn push_blanked(out: &mut String, slice: &str) {
+    for c in slice.chars() {
+        out.push(if c == '\n' { '\n' } else { ' ' });
+    }
+}
+
 /// `text` with comments and plain string literals replaced by spaces, line breaks kept, so a site's
 /// line number in the result is its own. Raw strings (`r"..."`, `r#"..."#`) are kept: the CUDA
 /// kernel sources lived in one, and that text is executable. Block comments nest, as in Rust.
 pub fn strip_comments_and_strings(text: &str) -> String {
-    let t: Vec<char> = text.chars().collect();
-    let n = t.len();
-    let mut out = t.clone();
-    let starts = |at: usize, s: &str| {
-        s.chars()
-            .enumerate()
-            .all(|(k, c)| t.get(at + k) == Some(&c))
-    };
-    let mut i = 0;
+    let b = text.as_bytes();
+    let n = b.len();
+    let mut out = String::with_capacity(n);
+    let mut copied_until = 0usize;
+    let mut i = 0usize;
     while i < n {
-        let c = t[i];
-        if c == '/' && i + 1 < n && t[i + 1] == '/' {
-            let mut j = i;
-            while j < n && t[j] != '\n' {
-                out[j] = ' ';
+        let c = b[i];
+        if c == b'/' && i + 1 < n && b[i + 1] == b'/' {
+            out.push_str(&text[copied_until..i]);
+            let mut j = i + 2;
+            while j < n && b[j] != b'\n' {
                 j += 1;
             }
+            push_blanked(&mut out, &text[i..j]);
             i = j;
-        } else if c == '/' && i + 1 < n && t[i + 1] == '*' {
+            copied_until = i;
+        } else if c == b'/' && i + 1 < n && b[i + 1] == b'*' {
+            out.push_str(&text[copied_until..i]);
             let mut depth = 0usize;
             let mut j = i;
             while j < n {
-                if starts(j, "/*") {
+                if j + 1 < n && b[j] == b'/' && b[j + 1] == b'*' {
                     depth += 1;
                     j += 2;
-                } else if starts(j, "*/") {
+                } else if j + 1 < n && b[j] == b'*' && b[j + 1] == b'/' {
                     depth = depth.saturating_sub(1);
                     j += 2;
                     if depth == 0 {
@@ -290,65 +317,67 @@ pub fn strip_comments_and_strings(text: &str) -> String {
                 }
             }
             let end = j.min(n);
-            for slot in out.iter_mut().take(end).skip(i) {
-                if *slot != '\n' {
-                    *slot = ' ';
-                }
-            }
+            push_blanked(&mut out, &text[i..end]);
             i = end;
-        } else if c == 'r' && raw_string_end(&t, i).is_some() {
-            i = raw_string_end(&t, i).unwrap_or(n);
-        } else if c == '"' {
+            copied_until = i;
+        } else if c == b'r' {
+            if let Some(end) = raw_string_end_bytes(b, i) {
+                i = end;
+            } else {
+                i += 1;
+            }
+        } else if c == b'"' {
+            out.push_str(&text[copied_until..i]);
             let mut j = i + 1;
             while j < n {
-                if t[j] == '\\' {
-                    j += 2;
+                if b[j] == b'\\' {
+                    j += 1;
+                    if j < n {
+                        // Advance past the escaped UTF-8 character.
+                        j += text[j..].chars().next().map_or(1, char::len_utf8);
+                    }
                     continue;
                 }
-                if t[j] == '"' {
+                if b[j] == b'"' {
+                    j += 1;
                     break;
                 }
                 j += 1;
             }
-            let end = (j + 1).min(n);
-            for slot in out.iter_mut().take(end).skip(i) {
-                if *slot != '\n' {
-                    *slot = ' ';
-                }
-            }
+            let end = j.min(n);
+            push_blanked(&mut out, &text[i..end]);
             i = end;
+            copied_until = i;
         } else {
             i += 1;
         }
     }
-    out.into_iter().collect()
+    out.push_str(&text[copied_until..n]);
+    out
 }
 
-/// The offset just past a raw string starting at `i`, or `None` if none starts there.
-fn raw_string_end(t: &[char], i: usize) -> Option<usize> {
-    if t.get(i) != Some(&'r') {
+/// The byte offset just past a raw string starting at `i`, or `None` if none starts there.
+fn raw_string_end_bytes(b: &[u8], i: usize) -> Option<usize> {
+    if b.get(i) != Some(&b'r') {
         return None;
     }
     let mut j = i + 1;
-    let mut hashes = 0;
-    while j < t.len() && t[j] == '#' {
+    let mut hashes = 0usize;
+    while j < b.len() && b[j] == b'#' {
         hashes += 1;
         j += 1;
     }
-    if j >= t.len() || t[j] != '"' {
+    if j >= b.len() || b[j] != b'"' {
         return None;
     }
-    let closing: Vec<char> = std::iter::once('"')
-        .chain(std::iter::repeat_n('#', hashes))
-        .collect();
     let mut k = j + 1;
-    while k + closing.len() <= t.len() {
-        if t[k..k + closing.len()] == closing[..] {
-            return Some(k + closing.len());
+    while k + 1 + hashes <= b.len() {
+        if b[k] == b'"' && b[k + 1..k + 1 + hashes].iter().all(|&x| x == b'#') {
+            return Some(k + 1 + hashes);
         }
         k += 1;
     }
-    Some(t.len())
+    Some(b.len())
 }
 
 /// The D25 gated sites on one line of stripped code, left to right per pattern (`.matmul(`,
@@ -387,25 +416,27 @@ fn matmul_sites(line: &str, number: usize, into: &mut Vec<Site>) {
             });
         }
     }
-    let b = lower.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i..].starts_with(TC_FRAGMENT.as_bytes()) {
-            into.push(Site {
-                line: number,
-                kind: "tensor-core",
-                text: line[i..i + TC_FRAGMENT.len()].into(),
-            });
-            i += TC_FRAGMENT.len();
-        } else if b[i..].starts_with(TC_SYNC.as_bytes()) {
-            into.push(Site {
-                line: number,
-                kind: "tensor-core",
-                text: line[i..i + TC_SYNC.len()].into(),
-            });
-            i += TC_SYNC.len();
-        } else {
-            i += 1;
+    if lower.contains(TC_FRAGMENT) || lower.contains(TC_SYNC) {
+        let b = lower.as_bytes();
+        let mut i = 0;
+        while i < b.len() {
+            if b[i..].starts_with(TC_FRAGMENT.as_bytes()) {
+                into.push(Site {
+                    line: number,
+                    kind: "tensor-core",
+                    text: line[i..i + TC_FRAGMENT.len()].into(),
+                });
+                i += TC_FRAGMENT.len();
+            } else if b[i..].starts_with(TC_SYNC.as_bytes()) {
+                into.push(Site {
+                    line: number,
+                    kind: "tensor-core",
+                    text: line[i..i + TC_SYNC.len()].into(),
+                });
+                i += TC_SYNC.len();
+            } else {
+                i += 1;
+            }
         }
     }
 }
@@ -437,6 +468,15 @@ pub fn scan(repo: &Path, kind: Kind) -> Result<Scan, RatchetError> {
                 }
             }
             Kind::Matmul => {
+                let lower = text.to_ascii_lowercase();
+                if !lower.contains("matmul")
+                    && !lower.contains("cublas")
+                    && !lower.contains("gemm")
+                    && !lower.contains(TC_FRAGMENT)
+                    && !lower.contains(TC_SYNC)
+                {
+                    continue;
+                }
                 let code = strip_comments_and_strings(&text);
                 let mut sites = Vec::new();
                 for (k, line) in code.split('\n').enumerate() {

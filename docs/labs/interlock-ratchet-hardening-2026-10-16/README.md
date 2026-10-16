@@ -62,8 +62,8 @@ The repository audit (`#2028` comment `6222114728`, Ranks 7–11) identified fiv
 
 1. **FINDING 1 — `docs/labs/k16-timing-2026-10-15/instrument/src/main.rs` (`0 -> 1` in `scripts/no-softmax-baseline.json`):**
    - **Location:** Line `1254`, inside `#[test] fn a_duplicate_cell_and_an_unknown_policy_are_refused()`.
-   - **Site:**Negative test fixture string literal verifying that `validate()` rejects an unknown/prohibited policy name (`0` stripped-code hits; `1` raw `D23_WORD` hit).
-   - **Disposition:** Left untouched so `#2550`'s merged instrument source SHA is preserved for the upcoming diagnostic transcript chain (`#2028` comment `6222315060`); recorded at `1` in `scripts/no-softmax-baseline.json` and flagged for follow-up string-split cleanup after the diagnostic completes.
+   - **Site:** Negative-policy test fixture string literal verifying that `validate()` rejects an unknown/prohibited policy name (`0` stripped-code hits; `1` raw `D23_WORD` hit). This negative-policy fixture is a rejection test, not a model operation.
+   - **Disposition:** Left untouched on that narrow basis so `#2550`'s merged instrument source SHA is preserved for the upcoming diagnostic transcript chain (`#2028` comment `6222315060`); recorded at `1` in `scripts/no-softmax-baseline.json` and flagged for follow-up string-split cleanup after the diagnostic completes.
 2. **FINDING 2 — `crates/uor-r4-training/src/lib.rs` (`4 -> 10` in `scripts/no-softmax-baseline.json`, `3` in `scripts/no-matmul-baseline.json`):**
    - **Location:** D23 lines `328, 329, 346, 347, 351` (`rope_theta`, `rope_interleaved`) and `537, 608` (`apply_rope_f32`, `silu_fwd`); D25 lines `467, 581, 587` (`.matmul(`).
    - **Classification:** Inactive / quarantined `#1017` dense reference scaffolding. Every one of the 6 newly counted D23 sites, the 4 pre-existing `D23_WORD` sites, and all 3 `.matmul(` sites sit inside `#[cfg(any())] pub struct ReferenceConfig` (line `314`) and `#[cfg(any())] impl ReferenceModel` (line `361`), which are never compiled in any build profile.
@@ -150,7 +150,7 @@ The repository audit (`#2028` comment `6222114728`, Ranks 7–11) identified fiv
 | `crates/uor-r4-training/src/stack_aerm.rs` | 0 | 1 | +1 | `sigmoid`:1 — Preserved pre-D32 `uor-r4-training` module/target excluded from compilation (`#[cfg(any())]` in `src/lib.rs` or `autobins/autoexamples/autotests = false` in `Cargo.toml`) |
 | `crates/uor-r4-training/src/stack_export.rs` | 15 | 37 | +22 | `gelu`:10, `rope`:1, `silu`:10, `tanh`:1 — Preserved pre-D32 `uor-r4-training` module/target excluded from compilation (`#[cfg(any())]` in `src/lib.rs` or `autobins/autoexamples/autotests = false` in `Cargo.toml`) |
 | `crates/uor-r4-training/tests/backprop_first_contribution_parity.rs` | 0 | 1 | +1 | `tanh`:1 — Preserved pre-D32 `uor-r4-training` module/target excluded from compilation (`#[cfg(any())]` in `src/lib.rs` or `autobins/autoexamples/autotests = false` in `Cargo.toml`) |
-| `docs/labs/k16-timing-2026-10-15/instrument/src/main.rs` | 0 | 1 | +1 | `D23_WORD`:1 — **FINDING 1:** negative unit-test fixture string literal in `a_duplicate_cell_and_an_unknown_policy_are_refused()` (line 1254); untouched to preserve `#2550` instrument source SHA |
+| `docs/labs/k16-timing-2026-10-15/instrument/src/main.rs` | 0 | 1 | +1 | `D23_WORD`:1 — **FINDING 1:** negative-policy fixture string literal in `a_duplicate_cell_and_an_unknown_policy_are_refused()` (line 1254; a rejection test, not a model operation); untouched to preserve `#2550` instrument source SHA |
 
 ### 3.4 `scripts/no-softmax-baseline.json` Unchanged Non-Zero Entries (`113` files, `1,179` sites)
 
