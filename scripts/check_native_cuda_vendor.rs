@@ -49,6 +49,18 @@ const BANNED_FEATURES: [&str; 8] = [
     "cusolvermg",
     "cusparse",
 ];
+const STANDALONE_INSTRUMENT_MANIFESTS: [&str; 5] = [
+    "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/Cargo.toml",
+    "docs/labs/admission-redirect-packet-2026-10-15/instrument/Cargo.toml",
+    "docs/labs/fresh-scoring-eval-2026-10-15/instrument/Cargo.toml",
+    "docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml",
+    "docs/labs/stage-a-admission-instrument-2026-10-15/instrument/Cargo.toml",
+];
+const APPROVED_BUILD_SCRIPTS: [&str; 3] = [
+    "crates/uor-r4-training/build.rs",
+    "crates/uor-r4-discrete/build.rs",
+    "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/build.rs",
+];
 const MAX_FILE: u64 = 64 * 1024 * 1024;
 
 fn read(path: &Path) -> Result<String, String> {
@@ -387,9 +399,163 @@ fn forbidden_training_cuda(text: &str) -> Vec<String> {
     found.into_iter().collect()
 }
 
+fn cuda_float_literals(cleaned_cuda: &str) -> Vec<String> {
+    let bytes = cleaned_cuda.as_bytes();
+    let mut found = BTreeSet::new();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let prev_boundary = i == 0
+            || (!bytes[i - 1].is_ascii_alphanumeric()
+                && bytes[i - 1] != b'_'
+                && bytes[i - 1] != b'.'
+                && bytes[i - 1] != b'%');
+        if bytes[i] == b'.'
+            && prev_boundary
+            && bytes.get(i + 1).is_some_and(|b| b.is_ascii_digit())
+        {
+            let mut k = i + 2;
+            while k < bytes.len() && (bytes[k].is_ascii_digit() || bytes[k] == b'\'') {
+                k += 1;
+            }
+            if matches!(bytes.get(k), Some(b'e' | b'E')) {
+                k += 1;
+                if matches!(bytes.get(k), Some(b'+' | b'-')) {
+                    k += 1;
+                }
+                while k < bytes.len() && (bytes[k].is_ascii_digit() || bytes[k] == b'\'') {
+                    k += 1;
+                }
+            }
+            while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_') {
+                k += 1;
+            }
+            found.insert(cleaned_cuda[i..k].replace('\'', "").to_ascii_lowercase());
+            i = k;
+            continue;
+        }
+        if bytes[i].is_ascii_digit() && prev_boundary {
+            if bytes[i] == b'0' && matches!(bytes.get(i + 1), Some(b'x' | b'X')) {
+                let mut k = i + 2;
+                while k < bytes.len() && (bytes[k].is_ascii_hexdigit() || bytes[k] == b'\'') {
+                    k += 1;
+                }
+                let has_radix =
+                    bytes.get(k) == Some(&b'.') && bytes.get(k + 1) != Some(&b'.');
+                if has_radix {
+                    k += 1;
+                    while k < bytes.len()
+                        && (bytes[k].is_ascii_hexdigit() || bytes[k] == b'\'')
+                    {
+                        k += 1;
+                    }
+                }
+                let has_bin_exp = matches!(bytes.get(k), Some(b'p' | b'P'));
+                if has_bin_exp {
+                    k += 1;
+                    if matches!(bytes.get(k), Some(b'+' | b'-')) {
+                        k += 1;
+                    }
+                    while k < bytes.len() && (bytes[k].is_ascii_digit() || bytes[k] == b'\'') {
+                        k += 1;
+                    }
+                }
+                while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_')
+                {
+                    k += 1;
+                }
+                if has_radix || has_bin_exp {
+                    found.insert(cleaned_cuda[i..k].replace('\'', "").to_ascii_lowercase());
+                }
+                i = k;
+                continue;
+            }
+            if bytes[i] == b'0' && matches!(bytes.get(i + 1), Some(b'f' | b'F' | b'd' | b'D')) {
+                let mut k = i + 2;
+                while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_')
+                {
+                    k += 1;
+                }
+                found.insert(cleaned_cuda[i..k].to_ascii_lowercase());
+                i = k;
+                continue;
+            }
+            let mut k = i;
+            while k < bytes.len() && (bytes[k].is_ascii_digit() || bytes[k] == b'\'') {
+                k += 1;
+            }
+            if bytes.get(k) == Some(&b'.')
+                && bytes.get(k + 1) != Some(&b'.')
+                && !bytes.get(k + 1).is_some_and(|b| {
+                    (b.is_ascii_alphabetic() || *b == b'_')
+                        && !matches!(b, b'e' | b'E' | b'f' | b'F' | b'l' | b'L')
+                })
+            {
+                k += 1;
+                while k < bytes.len() && (bytes[k].is_ascii_digit() || bytes[k] == b'\'') {
+                    k += 1;
+                }
+                if matches!(bytes.get(k), Some(b'e' | b'E')) {
+                    k += 1;
+                    if matches!(bytes.get(k), Some(b'+' | b'-')) {
+                        k += 1;
+                    }
+                    while k < bytes.len() && (bytes[k].is_ascii_digit() || bytes[k] == b'\'') {
+                        k += 1;
+                    }
+                }
+                while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_')
+                {
+                    k += 1;
+                }
+                found.insert(cleaned_cuda[i..k].replace('\'', "").to_ascii_lowercase());
+                i = k;
+                continue;
+            }
+            if matches!(bytes.get(k), Some(b'e' | b'E')) {
+                let mut m = k + 1;
+                if matches!(bytes.get(m), Some(b'+' | b'-')) {
+                    m += 1;
+                }
+                if bytes.get(m).is_some_and(|b| b.is_ascii_digit()) {
+                    while m < bytes.len() && (bytes[m].is_ascii_digit() || bytes[m] == b'\'') {
+                        m += 1;
+                    }
+                    while m < bytes.len()
+                        && (bytes[m].is_ascii_alphanumeric() || bytes[m] == b'_')
+                    {
+                        m += 1;
+                    }
+                    found.insert(cleaned_cuda[i..m].replace('\'', "").to_ascii_lowercase());
+                    i = m;
+                    continue;
+                }
+            }
+            if matches!(bytes.get(k), Some(b'f' | b'F')) {
+                while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_')
+                {
+                    k += 1;
+                }
+                found.insert(cleaned_cuda[i..k].replace('\'', "").to_ascii_lowercase());
+                i = k;
+                continue;
+            }
+            while k < bytes.len() && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'_') {
+                k += 1;
+            }
+            i = k;
+            continue;
+        }
+        i += 1;
+    }
+    found.into_iter().collect()
+}
+
 fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
     let mut found: BTreeSet<String> = forbidden_ptx(text).into_iter().collect();
     let cleaned = code_cuda(text);
+    for lit in cuda_float_literals(&cleaned) {
+        found.insert(lit);
+    }
     let c = cleaned.to_ascii_lowercase();
     for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
         if [
@@ -438,6 +604,198 @@ fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
         }
     }
     found.into_iter().collect()
+}
+
+fn check_training_build_sources(training_build: &str) -> Result<(), String> {
+    if training_build.contains("native_context")
+        || training_build.contains("selected_potential")
+        || training_build.contains("historical")
+        || training_build.contains("quarantined")
+        || training_build.contains("glob(")
+        || training_build.contains("read_dir(")
+        || training_build.contains("bindgen_cuda")
+    {
+        return Err(
+            "crates/uor-r4-training/build.rs must not reference quarantined/historical modules or discover extra CUDA files"
+                .into(),
+        );
+    }
+    let mod_start = training_build
+        .find("const MODULES:")
+        .ok_or("crates/uor-r4-training/build.rs missing const MODULES")?;
+    let tail = &training_build[mod_start..];
+    let begin = tail
+        .find("= [")
+        .ok_or("crates/uor-r4-training/build.rs MODULES is not an explicit array")?
+        + 3;
+    let end = tail[begin..]
+        .find("];")
+        .ok_or("crates/uor-r4-training/build.rs unclosed MODULES")?
+        + begin;
+    let modules_body = &tail[begin..end];
+    if training_build[..mod_start].contains("sources: &[")
+        || tail[end..].contains("sources:")
+    {
+        return Err(
+            "crates/uor-r4-training/build.rs declares Module.sources outside const MODULES"
+                .into(),
+        );
+    }
+    let expected_training_cu: BTreeSet<String> =
+        TRAINING_COMPILED_CU.iter().map(|s| s.to_string()).collect();
+    let mut declared_sources = BTreeSet::new();
+    let mut module_count = 0usize;
+    let mut scan = modules_body;
+    while let Some(pos) = scan.find("sources:") {
+        let after_key = &scan[pos + "sources:".len()..];
+        let arr_open = after_key
+            .find("&[")
+            .ok_or("crates/uor-r4-training/build.rs Module.sources must be an explicit &[...] slice")?
+            + 2;
+        let arr_close = after_key[arr_open..]
+            .find(']')
+            .ok_or("crates/uor-r4-training/build.rs unclosed Module.sources slice")?
+            + arr_open;
+        let entries = quoted(&after_key[arr_open..arr_close])?;
+        if entries.is_empty() {
+            return Err("crates/uor-r4-training/build.rs empty Module.sources slice".into());
+        }
+        for src_rel in entries {
+            if !src_rel.starts_with("src/") || src_rel.contains("..") {
+                return Err(format!(
+                    "crates/uor-r4-training/build.rs Module.sources path `{src_rel}` outside src/"
+                ));
+            }
+            let repo_rel = format!("crates/uor-r4-training/{src_rel}");
+            if !expected_training_cu.contains(&repo_rel) {
+                return Err(format!(
+                    "crates/uor-r4-training/build.rs Module.sources path `{repo_rel}` not in TRAINING_COMPILED_CU"
+                ));
+            }
+            declared_sources.insert(repo_rel);
+        }
+        module_count += 1;
+        scan = &after_key[arr_close + 1..];
+    }
+    if module_count != 3 {
+        return Err(format!(
+            "crates/uor-r4-training/build.rs expected 3 Module.sources entries, found {module_count}"
+        ));
+    }
+    if declared_sources != expected_training_cu {
+        return Err(format!(
+            "crates/uor-r4-training/build.rs declared Module.sources set differs from TRAINING_COMPILED_CU: {declared_sources:?}"
+        ));
+    }
+    for lit in quoted(training_build)? {
+        if (lit.ends_with(".cu") || lit.ends_with(".cuh")) && lit != ".cu" {
+            let repo_rel = format!("crates/uor-r4-training/{lit}");
+            if !expected_training_cu.contains(&repo_rel) {
+                return Err(format!(
+                    "crates/uor-r4-training/build.rs references unapproved CUDA source literal `{lit}`"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn forbidden_runtime_compiler_rust(cleaned_rust: &str) -> Vec<String> {
+    let mut found = BTreeSet::new();
+    for needle in [
+        "nvrtc::",
+        "compile_ptx",
+        "cuLinkCreate",
+        "cuLinkAddData",
+        "cuLinkAddFile",
+        "cuLinkComplete",
+        "\"nvcc\"",
+        "/nvcc\"",
+        "\"NVCC\"",
+        "\"UOR_NVCC_ARCH\"",
+        "\"ptxas\"",
+        "/ptxas\"",
+        "\"PTXAS\"",
+        "\"nvlink\"",
+        "/nvlink\"",
+        "\"NVLINK\"",
+        "\"cudafe++\"",
+        "\"cicc\"",
+        "\"-ptx\"",
+        "\"--ptx\"",
+        "\"-cubin\"",
+        "\"--cubin\"",
+        "\"-fatbin\"",
+        "\"--fatbin\"",
+    ] {
+        if cleaned_rust.contains(needle) {
+            found.insert(needle.to_string());
+        }
+    }
+    for word in cleaned_rust.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
+        if ["nvcc", "NVCC", "UOR_NVCC_ARCH"].contains(&word) {
+            found.insert(word.to_string());
+        }
+    }
+    found.into_iter().collect()
+}
+
+fn check_standalone_instrument_inventory(repo: &Path) -> Result<(), String> {
+    let labs_dir = repo.join("docs/labs");
+    let mut discovered = BTreeSet::new();
+    let mut discovered_build_scripts = BTreeSet::new();
+    for entry in fs::read_dir(&labs_dir).map_err(|e| format!("{}: {e}", labs_dir.display()))? {
+        let lab_path = entry.map_err(|e| e.to_string())?.path();
+        if !lab_path.is_dir() {
+            continue;
+        }
+        let instr_dir = lab_path.join("instrument");
+        if !instr_dir.exists() {
+            continue;
+        }
+        let manifest_path = instr_dir.join("Cargo.toml");
+        if !manifest_path.is_file() {
+            return Err(format!(
+                "{}: standalone instrument directory missing Cargo.toml",
+                instr_dir.display()
+            ));
+        }
+        let rel = manifest_path
+            .strip_prefix(repo)
+            .unwrap_or(&manifest_path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        discovered.insert(rel);
+        let build_rs = instr_dir.join("build.rs");
+        if build_rs.exists() {
+            let build_rel = build_rs
+                .strip_prefix(repo)
+                .unwrap_or(&build_rs)
+                .to_string_lossy()
+                .replace('\\', "/");
+            discovered_build_scripts.insert(build_rel);
+        }
+    }
+    let expected: BTreeSet<String> = STANDALONE_INSTRUMENT_MANIFESTS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    if discovered != expected {
+        return Err(format!(
+            "standalone instrument manifest inventory differs from frozen 5-root set: {discovered:?}"
+        ));
+    }
+    let expected_build_scripts: BTreeSet<String> = [
+        "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/build.rs".to_string(),
+    ]
+    .into_iter()
+    .collect();
+    if discovered_build_scripts != expected_build_scripts {
+        return Err(format!(
+            "standalone instrument build.rs inventory differs: {discovered_build_scripts:?}"
+        ));
+    }
+    Ok(())
 }
 
 fn global_entries(cleaned_code: &str, require_extern_c: bool) -> Result<Vec<String>, String> {
@@ -648,16 +1006,7 @@ fn verify(
     }
     checked.push("active vendor CUDA source/header token census and no historical FFI".into());
     let training_build = code_rust(&read(&repo.join("crates/uor-r4-training/build.rs"))?);
-    if training_build.contains("native_context")
-        || training_build.contains("selected_potential")
-        || training_build.contains("glob(")
-        || training_build.contains("read_dir(")
-    {
-        return Err(
-            "crates/uor-r4-training/build.rs must not reference quarantined modules or discover extra CUDA files"
-                .into(),
-        );
-    }
+    check_training_build_sources(&training_build)?;
     let mut training_cu_files = BTreeSet::new();
     for entry in
         fs::read_dir(repo.join("crates/uor-r4-training/src")).map_err(|e| e.to_string())?
@@ -836,14 +1185,18 @@ fn verify(
         "discrete CUDA kernel sources (discrete.cu + generated decomposition module) D23/D25/D32 integer-only token and 11+1 entry census"
             .into(),
     );
-    for rel in [
-        "crates/uor-r4-training/build.rs",
-        "crates/uor-r4-discrete/build.rs",
-        "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/build.rs",
-    ] {
+    check_standalone_instrument_inventory(repo)?;
+    for rel in APPROVED_BUILD_SCRIPTS {
         let path = repo.join(rel);
         let cleaned = code_rust(&read(&path)?);
-        for rtc in ["nvrtc::", "compile_ptx", "cuLinkCreate"] {
+        for rtc in [
+            "nvrtc::",
+            "compile_ptx",
+            "cuLinkCreate",
+            "cuLinkAddData",
+            "cuLinkAddFile",
+            "cuLinkComplete",
+        ] {
             if cleaned.contains(rtc) {
                 return Err(format!("{} calls runtime compiler `{rtc}`", path.display()));
             }
@@ -852,12 +1205,11 @@ fn verify(
     let mut rs_stack = vec![
         repo.join("crates/uor-r4-training/src"),
         repo.join("crates/uor-r4-discrete/src"),
-        repo.join("docs/labs/k16-timing-2026-10-15/instrument/src"),
-        repo.join("docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/src"),
-        repo.join("docs/labs/stage-a-admission-instrument-2026-10-15/instrument/src"),
-        repo.join("docs/labs/fresh-scoring-eval-2026-10-15/instrument/src"),
-        repo.join("docs/labs/admission-redirect-packet-2026-10-15/instrument/src"),
     ];
+    for manifest_rel in STANDALONE_INSTRUMENT_MANIFESTS {
+        let src_rel = manifest_rel.trim_end_matches("/Cargo.toml").to_string() + "/src";
+        rs_stack.push(repo.join(src_rel));
+    }
     while let Some(dir) = rs_stack.pop() {
         for entry in fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))? {
             let path = entry.map_err(|e| e.to_string())?.path();
@@ -865,16 +1217,18 @@ fn verify(
                 rs_stack.push(path);
             } else if path.extension().and_then(|v| v.to_str()) == Some("rs") {
                 let cleaned = code_rust(&read(&path)?);
-                for rtc in ["nvrtc::", "compile_ptx", "cuLinkCreate"] {
-                    if cleaned.contains(rtc) {
-                        return Err(format!("{} calls runtime compiler `{rtc}`", path.display()));
-                    }
+                let bad_rtc = forbidden_runtime_compiler_rust(&cleaned);
+                if !bad_rtc.is_empty() {
+                    return Err(format!(
+                        "{} calls runtime compiler or subprocess: {bad_rtc:?}",
+                        path.display()
+                    ));
                 }
             }
         }
     }
     checked.push(
-        "no runtime CUDA compiler calls across training, discrete, and standalone instrument Rust sources and build scripts"
+        "no runtime CUDA compiler calls or compiler subprocesses across training, discrete, and frozen five-root standalone instrument Rust sources and build scripts"
             .into(),
     );
     let root_manifest = read(&repo.join("Cargo.toml"))?;
@@ -938,10 +1292,7 @@ fn verify(
             }
         }
     }
-    for rel in [
-        "docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml",
-        "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/Cargo.toml",
-    ] {
+    for rel in STANDALONE_INSTRUMENT_MANIFESTS {
         let manifest = read(&repo.join(rel))?;
         let instr_patches = section(&manifest, "[patch.crates-io]")?;
         let cudarc_patch = instr_patches
@@ -951,14 +1302,16 @@ fn verify(
         if !cudarc_patch.contains("third_party/cudarc-0.19.10") {
             return Err(format!("{rel}: wrong cudarc patch path: {cudarc_patch}"));
         }
-        let fs = section(&manifest, "[features]")?;
-        for feature in array_field(fs, "cuda")? {
-            if BANNED_FEATURES
-                .iter()
-                .any(|b| feature.ends_with(&format!("/{b}")))
-                || feature == "cudarc/default"
-            {
-                return Err(format!("{rel}: cuda enables {feature}"));
+        if manifest.contains("[features]") {
+            let fs = section(&manifest, "[features]")?;
+            for feature in array_field(fs, "cuda")? {
+                if BANNED_FEATURES
+                    .iter()
+                    .any(|b| feature.ends_with(&format!("/{b}")))
+                    || feature == "cudarc/default"
+                {
+                    return Err(format!("{rel}: cuda enables {feature}"));
+                }
             }
         }
     }
@@ -1132,6 +1485,11 @@ fn main() {
             "extern \"C\" __global__ void discrete_init(float* x) {}",
             "__half h;",
             "__nv_bfloat16 b;",
+            "auto x = 1.0f; auto y = 2.0; x += y;",
+            "decltype(1.0f) x = 0;",
+            "auto z = .5f;",
+            "auto w = 1e-3;",
+            "auto h = 0x1.0p0f;",
             "  @%p1 sin.approx.f32 %f1, %f0;",
             "  $L__BB0_1: @!%p0 cos.approx.f32 %f1, %f0;",
             "  add.u32 %r1, %r2, 1; @%p0 rcp.approx.f32 %f1, %f0;",
@@ -1145,9 +1503,50 @@ fn main() {
         }
         assert!(
             forbidden_discrete_cuda(
-                "extern \"C\" __global__ void discrete_init(unsigned int* x) { x[0] = 1u; }"
+                "extern \"C\" __global__ void discrete_init(unsigned int* x) { unsigned int s = 0x9e3779b9u; x[0] = s ^ 1u; }"
             )
             .is_empty()
+        );
+        let valid_training_build = "const MODULES: [Module; 3] = [\n\
+            Module { sources: &[\"src/cuda_stack.cu\", \"src/spiralcore_fbs.cu\"], ptx: \"cuda_stack_f32.ptx\", options: &PRECISE },\n\
+            Module { sources: &[\"src/cuda_stack.cu\", \"src/spiralcore_fbs.cu\"], ptx: \"cuda_stack_bf16.ptx\", options: &PRECISE },\n\
+            Module { sources: &[\"src/starling_native.cu\"], ptx: \"starling_native.ptx\", options: &[\"--fmad=false\"] },\n\
+        ];";
+        assert!(
+            check_training_build_sources(&code_rust(valid_training_build)).is_ok(),
+            "valid training build.rs Module.sources must pass"
+        );
+        let historical_training_build = valid_training_build.replace(
+            "\"src/cuda_stack.cu\"",
+            "\"docs/history/d29-excluded-kernels-2026-10-13/cuda_stack_historical.cu\"",
+        );
+        assert!(
+            check_training_build_sources(&code_rust(&historical_training_build)).is_err(),
+            "historical Module.sources path must fail training build check"
+        );
+        let unapproved_training_build =
+            valid_training_build.replace("\"src/starling_native.cu\"", "\"src/extra.cu\"");
+        assert!(
+            check_training_build_sources(&code_rust(&unapproved_training_build)).is_err(),
+            "unapproved src/extra.cu Module.sources path must fail training build check"
+        );
+        for bad_rtc_rust in [
+            "std::process::Command::new(\"nvcc\").arg(\"-ptx\");",
+            "let c = std::env::var(\"NVCC\").unwrap_or_else(|_| \"nvcc\".to_string()); std::process::Command::new(&c);",
+            "std::process::Command::new(\"ptxas\").arg(\"-arch=sm_80\");",
+            "cudarc::nvrtc::compile_ptx(\"extern \\\"C\\\" __global__ void k() {}\");",
+        ] {
+            assert!(
+                !forbidden_runtime_compiler_rust(&code_rust(bad_rtc_rust)).is_empty(),
+                "missed runtime compiler subprocess/API in Rust: {bad_rtc_rust}"
+            );
+        }
+        assert!(
+            forbidden_runtime_compiler_rust(&code_rust(
+                "// nvcc ran at build time in build.rs\nlet ptx = Ptx::from_file(&cubin_path); let r = parse_ptxas(log, \"discrete_counterfactual\");"
+            ))
+            .is_empty(),
+            "admitted cubin loader and ptxas log parser must pass"
         );
         let multiline_decl = "extern \"C\" __global__ void\nextra(unsigned int* x) { x[0] = 0u; }";
         assert_eq!(
