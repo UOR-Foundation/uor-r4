@@ -181,6 +181,15 @@ authorized execution; none is added or executed here. These remain diagnostic
 
 ## Evidence and cost
 
+Subsequent [#2539 compile-only review overhead](review-overhead-2539.json) is
+accounted separately from the frozen restart-5 run receipt: check exits 0,
+strict CUDA clippy exits 101, verdict CHANGES. Its 357-second provider uptime
+at $1.137/h adds $0.1127525, extending the 14-lease episode estimate to
+$1.8861519444. Full wall is 360 seconds ($0.1137 alternate estimate).
+The 80,384-byte transcript archive is MD5-round-trip verified before release;
+pod deletion and an empty fleet are verified. No model work or retry occurs.
+The earlier 13-lease closeout below remains unchanged rather than backdated.
+
 Closeout accounting is recorded in [receipt.json](receipt.json) after verified
 pod deletion. The archive is
 `icloud:UOR-R4/results/codex/codex-k16-qualification-20261016-5.tar`,
