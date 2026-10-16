@@ -138,6 +138,47 @@ independently completed G-Pre and C-R receipts, but overall qualification remain
 blocked. Q4 stays NOT_EXECUTABLE; accepted-update cost, fresh transfer, training
 and Stage B/M2 remain unexecuted. No fresh-scoring or training-start gate is waived.
 
+## Where the timing went (sealed-record analysis)
+
+[Exact sums and distributions](cost-attribution.json) are derived from all 198
+unaltered batch records. The five phase sums reproduce each raw cell's
+`unit_ns` exactly; this is metadata analysis, not another model run.
+
+| Phase | Total seconds, 198 batches | Mean per batch | Share of measured units |
+| --- | ---: | ---: | ---: |
+| Carry | 0.166262156 | 0.839708 ms | 0.005781% |
+| Route proposal | 1,442.065670315 | 7.283160 s | 50.145471% |
+| Route observation | 0.005921684 | 0.029907 ms | 0.000206% |
+| Vector-block proposal | 1,433.520765784 | 7.240004 s | 49.848336% |
+| Vector-block observation | 0.005893810 | 0.029767 ms | 0.000205% |
+
+**The synchronized proposal calls account for 99.993808% of measured time.**
+The expensive-carry hypothesis is not supported at this exact C192 scope.
+The proposal medians are 7.283270 s (Route) and 7.239918 s (vector); p95 values
+are 7.285438 s and 7.242359 s. This is sustained per-call cost, not a few stalls.
+
+Measured phases total 2,875.764513749 seconds, versus 2,905 seconds of
+process wall time. The remaining approximately 29.235486251 seconds also
+contain two excluded warmups, loading, snapshots and outside-phase work.
+Warmups have no separate timer and process timestamps have second precision;
+the residual is not a measurement of pure loop overhead. Even attributing it
+all to overhead cannot explain the roughly 48-minute runtime.
+
+The timers bracket host API calls plus synchronization, not isolated GPU
+kernels. At the executed source, `Device::propose` includes admission/epoch
+checks, transfers, allocation/zeroing, the counterfactual and chooser kernels,
+status reads and synchronization. Thus the receipts locate the cost in the
+**proposal path**, but cannot distinguish GPU execution from overhead within
+that API. They do not establish either a slow carry kernel or dominant
+outer-loop accumulation.
+
+The smallest discriminating follow-up instrument would retain the full-unit
+timer and add CUDA-event intervals for counterfactual/choose, separate host
+intervals for allocation/transfers/admission/status/synchronization, and
+explicit warmup/outside-phase timers. That needs source review and separately
+authorized execution; none is added or executed here. These remain diagnostic
+99-batch measurements, not qualified 100-batch rates or training throughput.
+
 ## Evidence and cost
 
 Closeout accounting is recorded in [receipt.json](receipt.json) after verified
