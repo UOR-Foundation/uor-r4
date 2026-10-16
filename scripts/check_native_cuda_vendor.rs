@@ -641,22 +641,44 @@ fn check_training_build_sources(training_build: &str) -> Result<(), String> {
                 .into(),
         );
     }
+    if modules_body.matches("Module").count() != 3 {
+        return Err(
+            "crates/uor-r4-training/build.rs const MODULES must contain exactly 3 Module entries"
+                .into(),
+        );
+    }
     let expected_training_cu: BTreeSet<String> =
         TRAINING_COMPILED_CU.iter().map(|s| s.to_string()).collect();
     let mut declared_sources = BTreeSet::new();
     let mut module_count = 0usize;
     let mut scan = modules_body;
     while let Some(pos) = scan.find("sources:") {
-        let after_key = &scan[pos + "sources:".len()..];
-        let arr_open = after_key
-            .find("&[")
-            .ok_or("crates/uor-r4-training/build.rs Module.sources must be an explicit &[...] slice")?
-            + 2;
-        let arr_close = after_key[arr_open..]
+        let after_key = scan[pos + "sources:".len()..].trim_start();
+        let after_open = after_key.strip_prefix("&[").ok_or(
+            "crates/uor-r4-training/build.rs Module.sources must immediately start with a literal &[...] slice",
+        )?;
+        let arr_close = after_open
             .find(']')
-            .ok_or("crates/uor-r4-training/build.rs unclosed Module.sources slice")?
-            + arr_open;
-        let entries = quoted(&after_key[arr_open..arr_close])?;
+            .ok_or("crates/uor-r4-training/build.rs unclosed Module.sources slice")?;
+        let slice_body = &after_open[..arr_close];
+        let mut entries = Vec::new();
+        for raw_elem in slice_body.split(',') {
+            let elem = raw_elem.trim();
+            if elem.is_empty() {
+                continue;
+            }
+            if !elem.starts_with('"')
+                || !elem.ends_with('"')
+                || elem.len() < 2
+                || elem[1..elem.len() - 1].contains('"')
+                || elem[1..elem.len() - 1].contains('\\')
+            {
+                return Err(format!(
+                    "crates/uor-r4-training/build.rs Module.sources element `{elem}` must be a plain string literal"
+                ));
+            }
+            entries.push(elem[1..elem.len() - 1].to_string());
+        }
         if entries.is_empty() {
             return Err("crates/uor-r4-training/build.rs empty Module.sources slice".into());
         }
@@ -675,7 +697,7 @@ fn check_training_build_sources(training_build: &str) -> Result<(), String> {
             declared_sources.insert(repo_rel);
         }
         module_count += 1;
-        scan = &after_key[arr_close + 1..];
+        scan = &after_open[arr_close + 1..];
     }
     if module_count != 3 {
         return Err(format!(
@@ -1529,6 +1551,24 @@ fn main() {
         assert!(
             check_training_build_sources(&code_rust(&unapproved_training_build)).is_err(),
             "unapproved src/extra.cu Module.sources path must fail training build check"
+        );
+        let nonliteral_training_build = "const INPUTS: &[&str] = &[concat!(\"src/\", \"extra\", \".cu\")];\n\
+            const MODULES: [Module; 3] = [\n\
+                Module { sources: INPUTS, ptx: \"a.ptx\", options: &[\"src/cuda_stack.cu\", \"src/spiralcore_fbs.cu\"] },\n\
+                Module { sources: &[\"src/cuda_stack.cu\", \"src/spiralcore_fbs.cu\"], ptx: \"b.ptx\", options: &[] },\n\
+                Module { sources: &[\"src/starling_native.cu\"], ptx: \"c.ptx\", options: &[] },\n\
+            ];";
+        assert!(
+            check_training_build_sources(&code_rust(nonliteral_training_build)).is_err(),
+            "nonliteral Module.sources variable must not consume later options array"
+        );
+        let concat_training_build = valid_training_build.replace(
+            "\"src/starling_native.cu\"",
+            "concat!(\"src/\", \"starling_native.cu\")",
+        );
+        assert!(
+            check_training_build_sources(&code_rust(&concat_training_build)).is_err(),
+            "nonliteral concat! element inside Module.sources must fail"
         );
         for bad_rtc_rust in [
             "std::process::Command::new(\"nvcc\").arg(\"-ptx\");",
