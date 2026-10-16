@@ -168,4 +168,4 @@ any diagnostic run. Owner instrument+optimize-first defers the 100-batch
 qualification rate to the optimized stack; this three-batch diagnostic cannot
 fill that D-Packet slot.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (design) — Kimi PM, [#2541 review at 5a2b16f0a](https://github.com/UOR-Foundation/uor-r4/pull/2541#issuecomment-6210781684). Execution still requires the separately reviewed identity bridge, merge identity and final pinned execution packet.
