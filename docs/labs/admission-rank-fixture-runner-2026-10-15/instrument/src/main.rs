@@ -131,7 +131,7 @@ pub fn verify_hinge_distribution(
 #[cfg(feature = "cuda")]
 mod gpu_runner {
     use super::*;
-    use crate::cuda_aggregate::run_status12_overflow_checks;
+    use crate::cuda_aggregate::{identity_field, run_status12_overflow_checks};
     use crate::fixtures::{
         c_r1_all_256_cells_table, c_r1_equal_distance_routes, c_r1_equal_distance_tie_table,
         c_r1_mixed_distance_table, c_r2_crowded_rival_cell_table, c_r2_new_preceding_cell_table,
