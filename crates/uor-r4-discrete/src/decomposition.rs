@@ -332,6 +332,16 @@ fn decide_cell(
             valid = false;
         }
         for a in lanes {
+            let denominator = u128::from(a.lane_cycles);
+            if denominator == 0
+                || a.baseline_share.denominator != denominator
+                || a.writer_share.denominator != denominator
+                || a.baseline_share.numerator > denominator
+                || a.writer_share.numerator > denominator
+            {
+                valid = false;
+                continue;
+            }
             if a.fault_code != 0 {
                 valid = false;
             }
