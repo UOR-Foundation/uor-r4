@@ -34,6 +34,13 @@
     "lab": "codex",
     "note": ""
   },
+  "codex/counterfactual-instrument": {
+    "branch": "codex/counterfactual-instrument",
+    "claimed_at": "2026-10-16T13:19:40-04:00",
+    "head": "69cb1f59d",
+    "lab": "codex",
+    "note": ""
+  },
   "deepseek/k16-warmup-count": {
     "branch": "deepseek/k16-warmup-count",
     "claimed_at": "2026-10-16T02:08:02-04:00",
