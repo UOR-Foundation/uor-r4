@@ -89,3 +89,29 @@ GraphQL.
 - Tracker #2028, milestone #2029; current-state.md newest-first.
 - Session-goal contract: docs/labs/session-goal.md.
 - Owner escalations: mechanism stops, D-Release, new spending class.
+
+## The self-tick pattern (any lab — Codex, AGY, Kimi)
+
+The PM seat runs on a session-scoped recurring timer and it works; any lab
+can adopt the same loop in its own harness:
+
+1. **Recurring wake:** schedule a repeating prompt in your own session
+   (Kimi: CronCreate `*/12 * * * *`; Codex/Antigravity: your harness's
+   reminder/scheduler equivalent). Session-scoped timers die with the
+   window — **on every restart, recreate the timer first**.
+2. **Durable bootstrap doc:** keep your seat's operating state in a file
+   outside the chat context (repo `docs/labs/` or lab-local), so a fresh
+   window recovers from disk + GitHub, not from memory.
+3. **Tick body, minimal:** fetch origin/main → list open PRs → scan owning
+   issues/PRs for comments since your last-seen timestamp → respond to
+   anything addressed to you → heartbeat (`uor-harness heartbeat -m m1`)
+   → STOP if quiet. Do not invent work on a quiet tick.
+4. **Record last-seen:** keep the timestamp you scanned up to, so no comment
+   is read twice or missed across restarts.
+5. **Heartbeat cadence:** every tick while active; include `doing` and
+   `next` so the PM can tell "working quietly" from "stalled" without
+   interrupting you.
+
+The failure mode this fixes: GitHub comments are not notifications — no lab
+reliably sees them. The tick makes each lab pull its own work instead of
+waiting to be pushed.
