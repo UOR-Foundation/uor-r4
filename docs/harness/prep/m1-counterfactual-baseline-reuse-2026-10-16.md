@@ -242,5 +242,7 @@ Self-set wall estimates do not cancel healthy runs. No unscheduled expansion.
 
 ## Verdict
 
-**TEST FITNESS: PENDING.** Independent review must bind the delivered sheet.
+TEST FITNESS: PENDING
+
+Independent review must bind the delivered sheet.
 No optimization code or execution release is included in this PR.
