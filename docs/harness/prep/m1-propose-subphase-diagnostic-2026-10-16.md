@@ -37,7 +37,10 @@ policy selection occurs before each cell's before-snapshot.
 The archive is `icloud:UOR-R4/results/codex/codex-k16-qualification-20261016-5.tar`,
 MD5 `21a4633d605289bbede3f19c4581b3dc`. Preserve the original snapshot bytes.
 The [pin template](../../labs/propose-subphase-diagnostic-2026-10-16/diagnostic-pin.json)
-retains these identities; paths may be relocated with hashes unchanged.
+retains the original artifact/PTX/config identities and explicitly declares the
+fixed old/new source mapping in the [separate bridge](../../labs/checkpoint0-identity-bridge-2026-10-16/README.md).
+Paths may be relocated with file hashes unchanged. The bridge does not change
+this sheet's diagnostic dose, timing accounting or outcome decisions.
 
 ## Data split
 
