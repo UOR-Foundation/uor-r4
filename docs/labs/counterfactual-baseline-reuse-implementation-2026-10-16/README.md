@@ -97,8 +97,15 @@ after materializing `xtask` and `tools/lab-runner`; this was a checkout setup
 failure, not model evidence. The independent source review's identical FIT/
 release-reference gap is repaired and covered by a host rejection control.
 
+The merged #2558 scanner now admits generated R through its D32 token check and
+exact one-entry census, alongside the preserved eleven U and one D entries and
+five instrument roots. Its std-only self-test and repository scan pass, including
+injected floating-literal, extra-entry and renamed-entry refusal controls.
+
 Actual CUDA check/Clippy, ordinary image-byte comparison and construction
-resources are **PENDING**. [Construction recipe](construct.sh) runs only builds,
+resources are **PENDING at this source freeze**. Exact-head construction,
+review, cost and delivery receipts are recorded on [source PR #2561](https://github.com/UOR-Foundation/uor-r4/pull/2561)
+before queue admission. [Construction recipe](construct.sh) runs only builds,
 image inspection and host identity/template/plan commands. A separate reviewed
 construction packet/admission is required before rental. No finite or timing
 execution is included. Final protected delivery must bind exact source and
@@ -111,7 +118,7 @@ retained tar originals and only those copies removed (~312MiB); unique evidence
 was preserved. Lightweight host builds retain the30GiB floor.
 
 Line: M1 qualification/cost tooling. Count0/3 and suspended headline37/232 remain
-unchanged. This source preparation has zero new leases/$0 GPU cost; inherited
+unchanged. At source freeze this preparation has zero new leases/$0 GPU cost; inherited
 29-lease Codex estimate$3.174466388 plus separate PM remains, storage/transfer USD
 UNMEASURED. **Next:** exact-head source/construction approval and protected merge;
 then distinct reviewed finite pins/release, accepted outcome, and only afterward

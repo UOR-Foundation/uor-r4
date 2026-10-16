@@ -15,10 +15,10 @@
   },
   "codex/counterfactual-baseline-reuse": {
     "branch": "codex/counterfactual-baseline-reuse",
-    "claimed_at": "2026-10-16T19:03:39-04:00",
-    "head": "55c2c36c3",
+    "claimed_at": "2026-10-16T19:20:37-04:00",
+    "head": "d0e12077b",
     "lab": "codex",
-    "note": "FIT2560 source: crates/uor-r4-discrete/build.rs and src/{lib.rs,device.rs,baseline_reuse.rs,baseline_reuse_source.rs,baseline_reuse_device.rs}; k16 instrument src/{main.rs,checkpoint_bridge.rs,counterfactual_controls.rs,counterfactual_reuse.rs,counterfactual_reuse_controls.rs}; canonical implementation record, STATUS ROADMAP current-state mechanism, Codex claims/ledger. Existing controls only helper visibility/shared metadata reuse. AGY scanner excluded until protected delivery."
+    "note": "FIT2560 implementation/PR2561: existing crate and k16 instrument R source scope, canonical record/status/roadmap/current-state/mechanism and Codex bookkeeping. After verified2558 delivery, also scripts/check_native_cuda_vendor.rs for generated R source/entry census only; peer checkout untouched."
   },
   "deepseek/k16-warmup-count": {
     "branch": "deepseek/k16-warmup-count",
