@@ -56,3 +56,23 @@ no source delivery or compile transcript is execution authorization.
 - Provider193s × $0.977/h = **$0.052378056 estimate**; both source-gate leases
   **$0.085671389**; Codex episode **$2.316106667** plus PM's separate ~$0.086.
   Not invoices; storage/transfer UNMEASURED. No mechanism negative/count reset.
+
+## Attempt 3 — d15e39fc7 (compile passes; reduced register confound)
+
+- Exact head `d15e39fc716db0cbeacc1423dd6bef0507f7951f`, session
+  `codex-cf1-gate2550-r3`, pod `vast-56279268`: **check0 / strict-clippy0 /
+  run0**, no model/fixture/diagnostic execution. Ordinary PTX retains its pin;
+  D PTX is `29615646becefc333c697f685157a4c124847b5022e070ab00d7b9c749bc8506`.
+- ptxas U88/D126 registers, U21,536/D22,096 stack bytes; zero spills both.
+  Volatile local observation storage reduces the194-register confound but
+  still exceeds the unchanged104-register ceiling. Attribution remains
+  UNRESOLVED; do not run a known-inadmissible diagnostic.
+- Next bounded compilation repair caps **D only** at104 registers, derived
+  from measured U88 + the already declared16 allowance. Both PTX generation
+  and the D resource assembly use the cap; any new spill still disqualifies
+  the instrument. Ordinary compilation/model operations/launch are unchanged.
+- Archive `icloud:UOR-R4/results/codex/gate2550-r3-archive.tar`, **3,039,232 bytes**,
+  cloud MD5 **8169faec3981813500a0700694e8ad6b**, SHA manifest checked before
+  release18:00:30Z/down18:00:37Z; real fleet0/$0h. Provider274s × $0.977/h =
+  **$0.074360556 estimate**, all three gates **$0.160031944**, Codex episode
+  **$2.390467222** plus PM's separate ~$0.086. Storage/transfer UNMEASURED.

@@ -101,3 +101,15 @@ Archive SHA256 + verified cloud MD5 round-trip **before** release/delete.
 Record provisioning and provider uptime × actual quote, bytes, cumulative cost;
 storage/transfer USD remain UNMEASURED. The diagnostic's ~20 min / ~$0.303
 planning allowance is separate from this compile lease and grants no release.
+
+## Diagnostic register envelope after compile-only calibration
+
+The ordinary compute_120 kernel repeatedly compiles to88 registers. The
+uncapped diagnostic emitted194 registers; explicit local observation storage
+reduced it to126. Both violate the already declared U+16 envelope, so neither
+is admitted for a diagnostic. D now compiles with `--maxrregcount=104` in both
+its PTX and resource cubin path. This enforces the existing envelope and does
+not amend it: any new/increased spill, changed shared footprint, excess local
+storage, runtime/JIT resource mismatch or >20% event perturbation remains
+UNRESOLVED. The ordinary module receives no new compiler flag. Runtime parity
+and perturbation are NOT_RUN; compile success alone cannot release execution.

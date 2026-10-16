@@ -374,7 +374,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(out.join("decomposition.cu"), diagnostic)?;
     let nvcc = env::var("NVCC").unwrap_or_else(|_| "nvcc".into());
     let status = Command::new(&nvcc)
-        .args(["-ptx", "-std=c++17"])
+        // Fixed to the admitted compute_120 U module's measured88 registers
+        // plus the prospective16-register observation allowance. Zero new
+        // spills remains mandatory; this never changes the ordinary module.
+        .args(["-ptx", "-std=c++17", "--maxrregcount=104"])
         .arg(format!("-arch={arch}"))
         .arg("-o")
         .arg(out.join("decomposition.ptx"))
@@ -392,8 +395,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("ordinary", PathBuf::from("src/discrete.cu")),
         ("decomposition", out.join("decomposition.cu")),
     ] {
-        let report = Command::new(&nvcc)
-            .args(["-cubin", "-std=c++17", "--ptxas-options=-v"])
+        let mut resource_command = Command::new(&nvcc);
+        resource_command.args(["-cubin", "-std=c++17", "--ptxas-options=-v"]);
+        if label == "decomposition" {
+            resource_command.arg("--maxrregcount=104");
+        }
+        let report = resource_command
             .arg(format!("-arch={arch}"))
             // PTX preprocessing retains the virtual architecture, while cubin
             // assembly requires the corresponding real GPU code target.
