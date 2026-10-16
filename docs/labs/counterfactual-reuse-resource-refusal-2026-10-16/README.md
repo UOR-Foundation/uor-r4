@@ -31,7 +31,9 @@ and superseded; re-pin the newly constructed executable after protected delivery
 
 ## Verification and delivery
 
-Scoped Rust formatting, claim wording and diff checks cover this preparation.\nPackage-wide formatting also reports existing differences in unchanged\n`relation_qualification.rs`; that file is preserved. The scoped check uses pinned rustfmt1.97.1 directly.
+Scoped Rust formatting, claim wording and diff checks cover this preparation.
+Package-wide formatting also reports existing differences in unchanged
+`relation_qualification.rs`; that file is preserved. The scoped check uses pinned rustfmt1.97.1 directly.
 An independent source review and actual exact-head CUDA check/strict standalone
 Clippy are required before queue. The unchanged
 [construction recipe](../counterfactual-baseline-reuse-implementation-2026-10-16/construct.sh)
