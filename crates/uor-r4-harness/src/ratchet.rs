@@ -1,4 +1,5 @@
-//! The D23 (normalised exponential) and D25 (dense product) ratchets, in Rust (D30: Rust only).
+//! The D23 (normalised exponential, squashing, activation and rotary) and D25 (dense product and
+//! tensor-core) ratchets, in Rust (D30: Rust only).
 //!
 //! A ratchet cannot prove the tree is clean. It stops a count from growing, so removal can proceed
 //! without new violations landing underneath it. Each one keeps a per-file baseline
@@ -6,32 +7,45 @@
 //! or a file absent from it with any hit, fails. `--update-baseline` may only lower counts, so it
 //! cannot bless a new site.
 //!
-//! This is a port of the two Python checkers, `scripts/check_no_matmul.py` and its D23 twin, with the same
-//! scan, the same baseline files and the same verdicts, so either implementation reads the other's
-//! baseline. Dated records under `docs/` are not scanned: they are evidence, not plans.
+//! Scanned directories cover `crates/` and `docs/labs/*/instrument/` (active instrument crates under
+//! dated lab records). Dated prose/evidence outside `instrument/` is not scanned.
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Directories scanned, relative to the repository root.
-const SCAN_DIRS: [&str; 1] = ["crates"];
+/// Directories scanned, relative to the repository root (`*` matches one directory component).
+const SCAN_DIRS: [&str; 2] = ["crates", "docs/labs/*/instrument"];
 /// File suffixes scanned (the last extension, case-sensitive).
 const SUFFIXES: [&str; 4] = ["rs", "cu", "cuh", "wgsl"];
 
-/// The word D23 counts, assembled so this file does not count against its own ratchet.
+/// The primary word D23 counts across raw source text, assembled so this file does not count against its own ratchet.
 pub const D23_WORD: &str = concat!("soft", "max");
-/// Tensor-core fragment intrinsics, reported by the D25 ratchet and never gated.
+/// Prohibited D23/D25 squashing, activation and rotary identifier families counted on stripped code
+/// (comments and plain string literals removed, raw strings kept), matched on ASCII-alphanumeric
+/// identifier segments so English words like `proper` or `property` do not false-positive.
+pub const D23_IDENT_FAMILIES: [&str; 8] = [
+    concat!("soft", "plus"),
+    concat!("sig", "moid"),
+    concat!("ta", "nh"),
+    concat!("ge", "lu"),
+    concat!("si", "lu"),
+    concat!("ro", "pe"),
+    concat!("ro", "pei"),
+    concat!("rot", "ary"),
+];
+/// Tensor-core fragment and sync intrinsics, gated by the D25 ratchet on stripped code.
 const TC_FRAGMENT: &str = concat!("w", "mma");
 const TC_SYNC: &str = concat!("mma", "_sync");
 
 /// Which ratchet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    /// D23: every case-insensitive occurrence of [`D23_WORD`] in source text, comments included.
+    /// D23: every case-insensitive occurrence of [`D23_WORD`] in source text (comments included), plus
+    /// every stripped-code identifier segment matching [`D23_IDENT_FAMILIES`].
     NormExp,
-    /// D25: dense-product call sites in code (comments and plain strings removed, raw strings kept).
+    /// D25: dense-product and tensor-core call sites in code (comments and plain strings removed, raw strings kept).
     Matmul,
 }
 
@@ -67,7 +81,7 @@ pub struct Scan {
     pub counts: BTreeMap<String, u64>,
     /// Matmul only: every gated site, for `--list`.
     pub detail: BTreeMap<String, Vec<Site>>,
-    /// Matmul only, informational: tensor-core intrinsic sites and the files holding them.
+    /// Matmul only: gated tensor-core intrinsic sites and the files holding them.
     pub tensor_core: u64,
     pub tensor_files: u64,
 }
@@ -99,15 +113,51 @@ impl fmt::Display for RatchetError {
 
 impl std::error::Error for RatchetError {}
 
+/// Expand `SCAN_DIRS` entries (supporting one `/*/` wildcard segment) into concrete base directories.
+fn scan_roots(repo: &Path) -> Result<Vec<PathBuf>, RatchetError> {
+    let mut roots = Vec::new();
+    for pattern in SCAN_DIRS {
+        if let Some((prefix, suffix)) = pattern.split_once("/*/") {
+            let parent = repo.join(prefix);
+            let Ok(meta) = fs::symlink_metadata(&parent) else {
+                continue;
+            };
+            if !meta.is_dir() {
+                continue;
+            }
+            let entries = fs::read_dir(&parent).map_err(|e| RatchetError::Io(parent.clone(), e))?;
+            for entry in entries {
+                let entry = entry.map_err(|e| RatchetError::Io(parent.clone(), e))?;
+                let child = entry.path();
+                let Ok(cmeta) = fs::symlink_metadata(&child) else {
+                    continue;
+                };
+                if !cmeta.is_dir() {
+                    continue;
+                }
+                let candidate = child.join(suffix);
+                let Ok(smeta) = fs::symlink_metadata(&candidate) else {
+                    continue;
+                };
+                if smeta.is_dir() {
+                    roots.push(candidate);
+                }
+            }
+        } else {
+            let base = repo.join(pattern);
+            if base.is_dir() {
+                roots.push(base);
+            }
+        }
+    }
+    Ok(roots)
+}
+
 /// Every scanned source file under the scan directories, as (repo-relative path, absolute path).
 /// Directory symlinks are not followed; any path component named `target` is skipped.
 fn source_files(repo: &Path) -> Result<Vec<(String, PathBuf)>, RatchetError> {
     let mut out = Vec::new();
-    for dir in SCAN_DIRS {
-        let base = repo.join(dir);
-        if !base.is_dir() {
-            continue;
-        }
+    for base in scan_roots(repo)? {
         let mut stack = vec![base];
         while let Some(d) = stack.pop() {
             let entries = fs::read_dir(&d).map_err(|e| RatchetError::Io(d.clone(), e))?;
@@ -154,6 +204,19 @@ fn source_files(repo: &Path) -> Result<Vec<(String, PathBuf)>, RatchetError> {
 fn count_ci(hay: &str, needle: &str) -> u64 {
     let lower = hay.to_ascii_lowercase();
     lower.matches(needle).count() as u64
+}
+
+/// Count D23 sites in `text`: every case-insensitive occurrence of [`D23_WORD`] in raw text, plus
+/// every ASCII-alphanumeric identifier segment matching [`D23_IDENT_FAMILIES`] in stripped code
+/// (comments and plain strings removed, raw strings kept).
+fn d23_sites(text: &str) -> u64 {
+    let base = count_ci(text, D23_WORD);
+    let code = strip_comments_and_strings(text).to_ascii_lowercase();
+    let extra: u64 = code
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|seg| !seg.is_empty() && D23_IDENT_FAMILIES.contains(seg))
+        .count() as u64;
+    base + extra
 }
 
 fn is_word(c: char) -> bool {
@@ -261,8 +324,8 @@ fn raw_string_end(t: &[char], i: usize) -> Option<usize> {
     Some(t.len())
 }
 
-/// The D25 gated sites on one line of stripped code, left to right per pattern (pattern order is
-/// the Python script's: `.matmul(`, `MatMul`, `cublas`, word `gemm`).
+/// The D25 gated sites on one line of stripped code, left to right per pattern (`.matmul(`,
+/// `MatMul`, `cublas`, word `gemm`, and tensor-core intrinsics `wmma` / `mma_sync`).
 fn matmul_sites(line: &str, number: usize, into: &mut Vec<Site>) {
     for _ in line.match_indices(".matmul(") {
         into.push(Site {
@@ -297,25 +360,38 @@ fn matmul_sites(line: &str, number: usize, into: &mut Vec<Site>) {
             });
         }
     }
-}
-
-/// Tensor-core fragment intrinsics ([`TC_FRAGMENT`] or [`TC_SYNC`], any case), non-overlapping, on raw text.
-fn tensor_core_sites(text: &str) -> u64 {
-    let lower = text.to_ascii_lowercase();
     let b = lower.as_bytes();
-    let (mut i, mut n) = (0, 0);
+    let mut i = 0;
     while i < b.len() {
         if b[i..].starts_with(TC_FRAGMENT.as_bytes()) {
-            n += 1;
-            i += 4;
+            into.push(Site {
+                line: number,
+                kind: "tensor-core",
+                text: line[i..i + TC_FRAGMENT.len()].into(),
+            });
+            i += TC_FRAGMENT.len();
         } else if b[i..].starts_with(TC_SYNC.as_bytes()) {
-            n += 1;
-            i += 8;
+            into.push(Site {
+                line: number,
+                kind: "tensor-core",
+                text: line[i..i + TC_SYNC.len()].into(),
+            });
+            i += TC_SYNC.len();
         } else {
             i += 1;
         }
     }
-    n
+}
+
+/// Tensor-core fragment intrinsics ([`TC_FRAGMENT`] or [`TC_SYNC`], any case), non-overlapping, on stripped code.
+#[cfg(test)]
+fn tensor_core_sites(text: &str) -> u64 {
+    let code = strip_comments_and_strings(text);
+    let mut sites = Vec::new();
+    for (k, line) in code.split('\n').enumerate() {
+        matmul_sites(line, k + 1, &mut sites);
+    }
+    sites.iter().filter(|s| s.kind == "tensor-core").count() as u64
 }
 
 /// Scan the repository for one ratchet.
@@ -328,7 +404,7 @@ pub fn scan(repo: &Path, kind: Kind) -> Result<Scan, RatchetError> {
         let text = String::from_utf8_lossy(&bytes);
         match kind {
             Kind::NormExp => {
-                let n = count_ci(&text, D23_WORD);
+                let n = d23_sites(&text);
                 if n > 0 {
                     result.counts.insert(rel, n);
                 }
@@ -339,14 +415,14 @@ pub fn scan(repo: &Path, kind: Kind) -> Result<Scan, RatchetError> {
                 for (k, line) in code.split('\n').enumerate() {
                     matmul_sites(line, k + 1, &mut sites);
                 }
-                if !sites.is_empty() {
-                    result.counts.insert(rel.clone(), sites.len() as u64);
-                    result.detail.insert(rel, sites);
-                }
-                let tc = tensor_core_sites(&text);
+                let tc = sites.iter().filter(|s| s.kind == "tensor-core").count() as u64;
                 if tc > 0 {
                     result.tensor_core += tc;
                     result.tensor_files += 1;
+                }
+                if !sites.is_empty() {
+                    result.counts.insert(rel.clone(), sites.len() as u64);
+                    result.detail.insert(rel, sites);
                 }
             }
         }
@@ -484,14 +560,27 @@ mod tests {
     }
 
     #[test]
-    fn tensor_core_count_is_non_overlapping() {
+    fn tensor_core_count_is_non_overlapping_and_gated() {
         let s = format!(
-            "nvcuda::{}::{}(a) {}_sync",
+            "nvcuda::{}::{}(a) {}_sync // {} \"{}\"",
             TC_FRAGMENT.to_uppercase(),
+            TC_SYNC,
+            TC_FRAGMENT,
             TC_SYNC,
             TC_FRAGMENT
         );
         assert_eq!(tensor_core_sites(&s), 3);
+        let dir = repo_with(&[("crates/x/src/tc.cu", s)], None);
+        let res = scan(dir.path(), Kind::Matmul).expect("scan matmul");
+        assert_eq!(res.counts.get("crates/x/src/tc.cu"), Some(&3));
+        assert_eq!(res.tensor_core, 3);
+        assert_eq!(res.tensor_files, 1);
+        assert_eq!(res.detail["crates/x/src/tc.cu"].len(), 3);
+        assert!(
+            res.detail["crates/x/src/tc.cu"]
+                .iter()
+                .all(|site| site.kind == "tensor-core")
+        );
     }
 
     #[test]
@@ -499,6 +588,44 @@ mod tests {
         let w = D23_WORD;
         let s = format!("{} {w}_rows LOG_{}", w.to_uppercase(), w.to_uppercase());
         assert_eq!(count_ci(&s, w), 3);
+    }
+
+    #[test]
+    fn d23_ident_families_match_stripped_code_segments_not_comments_strings_or_proper() {
+        let code_hits = "fn f() { rank_softplus(); stack_sigmoid_q31(); x.tanh(); gelu_erf(); silu_fwd(); apply_rope_f32(); ropei_table(); rotary_pos(); }\n";
+        assert_eq!(d23_sites(code_hits), 8);
+
+        let clean = "// softplus sigmoid tanh gelu silu rope ropei rotary\nlet s = \"softplus sigmoid tanh gelu silu rope ropei rotary\";\nlet proper = property.properties(is_proper_prefix, WriterProperties);\n";
+        assert_eq!(d23_sites(clean), 0);
+
+        let raw_kernel = "let k = r#\"__device__ void apply_rope_f32() { float y = tanh(x); }\"#;\n";
+        assert_eq!(d23_sites(raw_kernel), 2);
+    }
+
+    #[test]
+    fn scan_includes_docs_labs_instrument_but_skips_other_docs_labs_files() {
+        let hit = "fn f() { apply_rope_f32(); }\n".to_string();
+        let dir = repo_with(
+            &[
+                (
+                    "docs/labs/k16-timing-2026-10-15/instrument/src/lib.rs",
+                    hit.clone(),
+                ),
+                (
+                    "docs/labs/k16-timing-2026-10-15/instrument/target/debug/gen.rs",
+                    hit.clone(),
+                ),
+                ("docs/labs/k16-timing-2026-10-15/other.rs", hit.clone()),
+                ("docs/labs/k16-timing-2026-10-15/README.md", hit),
+            ],
+            None,
+        );
+        let s = scan(dir.path(), Kind::NormExp).expect("scan");
+        assert_eq!(
+            s.counts.keys().cloned().collect::<Vec<_>>(),
+            vec!["docs/labs/k16-timing-2026-10-15/instrument/src/lib.rs".to_string()]
+        );
+        assert_eq!(s.total(), 1);
     }
 
     #[test]
