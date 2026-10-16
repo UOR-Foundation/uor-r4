@@ -30,6 +30,12 @@ all-lane/all-sample stability, the verbatim enclosing-profile limitation, and
 H1 magnitude NOT_APPROVED. Its [pin template](pin-template.json) deliberately
 refuses execution until exact CUDA identities are captured and reviewed.
 
+[Compile-only receipts](compile-gates.md) preserve the first build-script
+failure and its source correction: check101, clippy NOT_RUN, no model call;
+ordinary PTX hash retained, both modules emitted before the resource cubin
+target error. Its132s lease cost$0.033293333 estimate and MD5-before-teardown
+archive are explicit; subsequent source-head transcripts attach to PR #2550.
+
 Local host checks: six decomposition/source tests and 30 instrument tests pass;
 one pre-existing optional archived-byte metadata test is ignored. These test
 receipt parity/accounting, clock/phase boundary routing, resource-log parsing,

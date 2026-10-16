@@ -395,6 +395,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let report = Command::new(&nvcc)
             .args(["-cubin", "-std=c++17", "--ptxas-options=-v"])
             .arg(format!("-arch={arch}"))
+            // PTX preprocessing retains the virtual architecture, while cubin
+            // assembly requires the corresponding real GPU code target.
+            .arg(format!(
+                "--gpu-code={}",
+                arch.replacen("compute_", "sm_", 1)
+            ))
             .arg("-o")
             .arg(out.join(format!("{label}.cubin")))
             .arg(source)
