@@ -208,9 +208,17 @@ mod cuda {
     };
     type Sample = (u128, u128, Vec<meta::LaneRecord>);
     pub fn run(pin: &Pin) -> Result<(), String> {
+        let mut execution_header = plan(pin);
+        // The plan's false/NOT_RUN labels describe a host plan, never an
+        // executed record. Actual model work is evidenced by cell/call records.
+        if let Some(object) = execution_header.as_object_mut() {
+            object.remove("model_compute_executed");
+            object.remove("status");
+        }
+        execution_header["trace_word_names"] = json!(meta::WORD_NAMES.as_slice());
         let mut ledger = Ledger::new(
             pin.out_dir.join("counterfactual-decomposition-record.json"),
-            json!({"decomposition":plan(pin)}),
+            json!({"decomposition":execution_header}),
         );
         match execute(pin, &mut ledger) {
             Ok(()) => ledger.flush("complete"),

@@ -79,6 +79,8 @@ impl Device {
         profiler: &mut ProposeProfiler,
         probe: &mut DecompositionProfiler,
     ) -> Result<Proposal> {
+        probe.submitted = false;
+        profiler.begin();
         if probe.binding != self.binding
             || profiler.model != self.binding.model
             || !Arc::ptr_eq(&profiler.stream, &self.stream)
@@ -88,8 +90,6 @@ impl Device {
                 "decomposition requires same model/stream and Route/VectorBlock parameter",
             ));
         }
-        probe.submitted = false;
-        profiler.begin();
         let result = self.propose_inner(batch, targets, parameter, Some(profiler), Some(probe));
         if result.is_ok() {
             profiler.mark(8);

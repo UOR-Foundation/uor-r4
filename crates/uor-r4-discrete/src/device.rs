@@ -1432,10 +1432,10 @@ impl Device {
         parameter: Parameter,
         profiler: &mut ProposeProfiler,
     ) -> Result<Proposal> {
+        profiler.begin();
         if profiler.model != self.binding.model || !Arc::ptr_eq(&profiler.stream, &self.stream) {
             return Err(invalid("proposal profiler belongs to another model/stream"));
         }
-        profiler.begin();
         let result = self.propose_inner(batch, targets, parameter, Some(profiler), None);
         if result.is_ok() {
             profiler.mark(8);
@@ -1517,8 +1517,9 @@ impl Device {
             launch.arg(&mut probe.records);
             probe.submitted = true;
         }
-        // SAFETY: exact counterfactual ABI; parameter and input inventories
-        // admitted; sixteen loss slots are scored/padded on CUDA as above.
+        // SAFETY: ordinary ABI, or the separately admitted diagnostic ABI with
+        // one additional 16*40-word buffer from decomposition_profiler. Input
+        // inventories are admitted; launch/score inventory stays sixteen.
         if let Some(profile) = profiler.as_deref_mut() {
             profile.event(0)?;
         }
