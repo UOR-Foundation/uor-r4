@@ -49,9 +49,26 @@ pub fn driver_evaluation<'a>(
     const COMPLETION: &str = "uor-r4.completion-evaluation/1";
     let schema = val.get("schema").and_then(|v| v.as_str());
     if schema == Some(COMPLETION) {
-        return val
+        let driver = val
             .get("evaluation")
-            .and_then(|e| e.get("aggregate"))
+            .filter(|e| e.is_object())
+            .ok_or_else(|| format!("{receipt}: completion envelope has no evaluation object"))?;
+        let nested = driver.get("schema").and_then(|v| v.as_str());
+        if nested != Some(DRIVER) {
+            return Err(format!(
+                "{receipt}: nested evaluation schema is {nested:?}, expected {DRIVER}"
+            ));
+        }
+        let nested_objective = driver
+            .get("objective_evaluation_schema")
+            .and_then(|v| v.as_str());
+        if nested_objective != Some(OBJECTIVE) {
+            return Err(format!(
+                "{receipt}: nested objective_evaluation_schema is {nested_objective:?}, expected {OBJECTIVE}"
+            ));
+        }
+        return driver
+            .get("aggregate")
             .filter(|agg| agg.is_object())
             .ok_or_else(|| {
                 format!("{receipt}: completion envelope has no evaluation.aggregate object")
@@ -75,6 +92,25 @@ pub fn driver_evaluation<'a>(
         "{receipt}: unrecognized receipt schema {schema:?}; expected {DRIVER} or {COMPLETION}"
     ))
 }
+/// The object carrying the zero-update flags, in either producer shape.
+///
+/// The flags are SIBLINGS of the aggregate, not inside it: at the receipt root for a raw driver
+/// receipt, and under `evaluation` for a completion envelope. Reading them from the metrics object
+/// rejected genuine zero-update reports, which is what Codex caught in pass 2 (6207702446).
+pub fn driver_zero_update<'a>(
+    val: &'a serde_json::Value,
+    receipt: &str,
+) -> Result<&'a serde_json::Value, String> {
+    const COMPLETION: &str = "uor-r4.completion-evaluation/1";
+    if val.get("schema").and_then(|v| v.as_str()) == Some(COMPLETION) {
+        return val
+            .get("evaluation")
+            .filter(|e| e.is_object())
+            .ok_or_else(|| format!("{receipt}: completion envelope has no evaluation object"));
+    }
+    Ok(val)
+}
+
 pub fn write_new_json<T: Serialize>(path: &Path, value: &T) -> Result<FilePin, String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -181,6 +217,7 @@ mod gpu_runner {
     use super::*;
     use crate::cuda_aggregate::{identity_field, run_status12_overflow_checks};
     use crate::driver_evaluation;
+    use crate::driver_zero_update;
     use crate::fixtures::{
         c_r1_all_256_cells_table, c_r1_equal_distance_routes, c_r1_equal_distance_tie_table,
         c_r1_mixed_distance_table, c_r2_crowded_rival_cell_table, c_r2_new_preceding_cell_table,
@@ -1059,12 +1096,12 @@ mod gpu_runner {
             let sha256 = sha256_hex(&bytes);
             let val: serde_json::Value =
                 serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-            // The zero-update flags live with the metrics, under the aggregate, in both shapes:
-            // reading them at the receipt root is what made a real completion envelope unpassable.
-            let metrics = driver_evaluation(&val, &path.display().to_string())?;
-            if metrics["updates_applied_by_evaluation"] != 0
-                || metrics["accepted_updates_in_model"] != 0
-                || metrics["evaluation_mutates_model"] != false
+            // The zero-update flags are SIBLINGS of the aggregate: at the receipt root for a raw
+            // driver receipt, under `evaluation` for a completion envelope.
+            let flags = driver_zero_update(&val, &path.display().to_string())?;
+            if flags["updates_applied_by_evaluation"] != 0
+                || flags["accepted_updates_in_model"] != 0
+                || flags["evaluation_mutates_model"] != false
             {
                 return Err(format!(
                     "C-R6 G-Pre receipt {} violated zero-update invariant",
@@ -1412,15 +1449,16 @@ mod tests {
             "objective_evaluation_schema": "uor-r4.discrete-objective-evaluation/1",
             "aggregate": {
                 "target_admitted_rows": 4894,
-                "top1_correct": 0,
-                "updates_applied_by_evaluation": 0,
-                "accepted_updates_in_model": 0,
-                "evaluation_mutates_model": false
-            }
+                "top1_correct": 0
+            },
+            "updates_applied_by_evaluation": 0,
+            "accepted_updates_in_model": 0,
+            "evaluation_mutates_model": false
         });
         let ev = driver_evaluation(&raw, "raw.json").expect("raw aggregate accepted");
+        let flags = driver_zero_update(&raw, "raw.json").expect("raw flags beside the aggregate");
         assert_eq!(ev["target_admitted_rows"].as_u64(), Some(4894));
-        assert_eq!(ev["updates_applied_by_evaluation"], serde_json::json!(0));
+        assert_eq!(flags["updates_applied_by_evaluation"], serde_json::json!(0));
     }
 
     #[test]
@@ -1429,17 +1467,18 @@ mod tests {
         let wrapped = serde_json::json!({
             "schema": "uor-r4.completion-evaluation/1",
             "evaluation": {
-                "aggregate": {
-                    "target_admitted_rows": 4894,
-                    "updates_applied_by_evaluation": 0,
-                    "accepted_updates_in_model": 0,
-                    "evaluation_mutates_model": false
-                }
+                "schema": "uor-r4.discrete-corpus-driver/1",
+                "objective_evaluation_schema": "uor-r4.discrete-objective-evaluation/1",
+                "aggregate": {"target_admitted_rows": 4894},
+                "updates_applied_by_evaluation": 0,
+                "accepted_updates_in_model": 0,
+                "evaluation_mutates_model": false
             }
         });
         let ev = driver_evaluation(&wrapped, "wrapped.json").expect("completion envelope accepted");
+        let flags = driver_zero_update(&wrapped, "wrapped.json").expect("nested flags accepted");
         assert_eq!(ev["target_admitted_rows"].as_u64(), Some(4894));
-        assert_eq!(ev["evaluation_mutates_model"], serde_json::json!(false));
+        assert_eq!(flags["evaluation_mutates_model"], serde_json::json!(false));
     }
 
     #[test]
