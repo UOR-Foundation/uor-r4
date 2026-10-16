@@ -8,9 +8,9 @@
 
 ## Summary of Changes
 
-1. **Comment Lexer Hardening (`code`), Expanded `forbidden()`, & Statement/Token Predicated/Labeled PTX Scanner (`forbidden_ptx`) in [`scripts/check_native_cuda_vendor.rs`](../../../scripts/check_native_cuda_vendor.rs):**
-   - Hardened `code(text: &str)` to step over C/C++ and Rust single- and multicharacter literals (`'c'`, `'\"'`, `'\\'`, `'/*'`, `'*/'`, etc., without swallowing Rust lifetimes `'a` or C++14 digit separators) and Rust raw string literals (`r"..."`, `r#"..."#`, `br"..."`, `br#"..."#`) so quotes or comment delimiters inside character, multicharacter, or raw-string literals cannot desynchronize block-comment stripping.
-   - Expanded `forbidden()` with:
+1. **Language-Explicit Comment Lexer (`SourceLang` / `code_cuda` / `code_ptx` / `code_rust` / `code`), Expanded `forbidden()` / `forbidden_cuda()`, & Statement/Token Predicated/Labeled PTX Scanner (`forbidden_ptx`) in [`scripts/check_native_cuda_vendor.rs`](../../../scripts/check_native_cuda_vendor.rs):**
+   - Added explicit `SourceLang` (`Cuda`, `Ptx`, `Rust`, `Auto`) comment strippers (`code_cuda`, `code_ptx`, `code_rust`, `code`) and wired every file-level check in `verify()` to the known language of the file (`code_cuda`/`forbidden_cuda` for `.cu`/`.cuh`, `code_ptx`/`forbidden_ptx` for `.ptx`, and `code_rust` for `.rs`), while preserving both C/C++ multicharacter literal (`'/*'`, `'*/'`, `'a/*'`, `'a+/*'`) and Rust lifetime (`'a /* ... */, 'b`) / C++14 decimal & hex digit-separator (`1'000`, `0xdead'0000`) contracts in `code(text: &str)` and `forbidden(text: &str)`.
+   - Expanded `forbidden()` / `forbidden_cuda()` with:
      - Identifier/symbol substring families: `uelu_`, `wgmma`, `tcgen05`, `ulog_`, `__nv_log`, `__nv_tanh`, `__nv_erf` (alongside existing `softmax`, `softplus`, `sigmoid`, `tanh`, `gelu`, `silu`, `rope`, `ropei`, `rotary`, `cublas`, `cudnn`, `nvrtc`, `matmul`, `gemm`, `wmma`, `mma_sync`, `uexp_`, `__nv_exp`).
      - Exact identifier tokens: `erf`, `erff`, `erfc`, `erfcf`, `erfinv`, `erfinvf`, `tanhf`, `elu`, `sgemm`, `dgemm`, `hgemm`, `gemv` (`elu` is checked as an exact identifier and `uelu_` as a prefix family so `relu` / `urelu_*` in `third_party/candle-kernels-0.9.2/src/unary.cu` do not false-positive).
      - Instruction substrings: `wgmma.`, `tcgen05.`, `lg2.`, `sin.approx`, `cos.approx` (alongside `mma.`, `wmma.`, `ex2.`, `tanh.`).

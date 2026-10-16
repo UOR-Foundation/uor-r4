@@ -62,9 +62,17 @@ fn read(path: &Path) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SourceLang {
+    Cuda,
+    Ptx,
+    Rust,
+    Auto,
+}
+
 // Preserve offsets/newlines while excluding comments. Keep strings: CUDA
 // inline PTX assembly is executable even when spelled inside a string.
-fn code(text: &str) -> String {
+fn code_for(text: &str, lang: SourceLang) -> String {
     let mut out = text.as_bytes().to_vec();
     let mut i = 0;
     while i < out.len() {
@@ -89,7 +97,8 @@ fn code(text: &str) -> String {
                 }
                 i += 1;
             }
-        } else if (out[i] == b'r' || (out[i] == b'b' && i + 1 < out.len() && out[i + 1] == b'r'))
+        } else if lang != SourceLang::Ptx
+            && (out[i] == b'r' || (out[i] == b'b' && i + 1 < out.len() && out[i + 1] == b'r'))
             && (i == 0 || (!out[i - 1].is_ascii_alphanumeric() && out[i - 1] != b'_'))
         {
             let r_pos = if out[i] == b'b' { i + 1 } else { i };
@@ -113,9 +122,21 @@ fn code(text: &str) -> String {
                 i += 1;
             }
         } else if out[i] == b'\'' {
-            let is_digit_sep = i > 0
-                && out[i - 1].is_ascii_digit()
-                && !(i >= 2 && &out[i - 2..i] == b"u8");
+            if lang == SourceLang::Ptx {
+                i += 1;
+                continue;
+            }
+            let mut tok_start = i;
+            while tok_start > 0
+                && (out[tok_start - 1].is_ascii_alphanumeric() || out[tok_start - 1] == b'_')
+            {
+                tok_start -= 1;
+            }
+            let is_digit_sep = lang != SourceLang::Rust
+                && tok_start < i
+                && out[tok_start].is_ascii_digit()
+                && i + 1 < out.len()
+                && out[i + 1].is_ascii_hexdigit();
             if is_digit_sep {
                 i += 1;
                 continue;
@@ -126,33 +147,55 @@ fn code(text: &str) -> String {
                     k += 1;
                 }
             }
-            let mut next_non_ws = k;
-            while next_non_ws < out.len()
-                && (out[next_non_ws] == b' ' || out[next_non_ws] == b'\t')
-            {
-                next_non_ws += 1;
+            let mut j = i + 1;
+            let mut close = None;
+            while j < out.len() && out[j] != b'\n' {
+                if out[j] == b'\\' {
+                    j = (j + 2).min(out.len());
+                } else if out[j] == b'\'' {
+                    close = Some(j + 1);
+                    break;
+                } else {
+                    j += 1;
+                }
             }
-            let is_lifetime = k > i + 1
-                && (k == out.len() || out[k] != b'\'')
-                && (next_non_ws == out.len()
-                    || !matches!(
-                        out[next_non_ws],
-                        b'\'' | b'/' | b'*' | b'"' | b'\\'
-                    ));
-            if is_lifetime {
+            let is_char_literal = match (lang, close) {
+                (_, None) | (SourceLang::Ptx, _) => false,
+                (SourceLang::Cuda, Some(_)) => true,
+                (SourceLang::Rust, Some(end)) => {
+                    let body = &out[i + 1..end - 1];
+                    body.first() == Some(&b'\\')
+                        || std::str::from_utf8(body).is_ok_and(|s| s.chars().count() == 1)
+                }
+                (SourceLang::Auto, Some(end)) => {
+                    let quote_idx = end - 1;
+                    if k == i + 1 || quote_idx == i + 2 {
+                        true
+                    } else {
+                        let tail = &out[k..quote_idx];
+                        let line_end = out[end..]
+                            .iter()
+                            .position(|&b| b == b'\n')
+                            .map_or(out.len(), |off| end + off);
+                        let rest_line = &out[end..line_end];
+                        let unquoted_comment_close = tail.windows(2).any(|w| w == b"/*")
+                            && rest_line
+                                .windows(2)
+                                .position(|w| w == b"*/")
+                                .is_some_and(|pos| !rest_line[..pos].contains(&b'\''));
+                        !out.get(end).is_some_and(|b| b.is_ascii_alphabetic())
+                            && !tail.iter().any(|&b| b == b' ' || b == b'\t')
+                            && !tail.windows(2).any(|w| w == b"*/")
+                            && !unquoted_comment_close
+                    }
+                }
+            };
+            if let Some(end) = close.filter(|_| is_char_literal) {
+                i = end;
+            } else if k > i + 1 {
                 i = k;
             } else {
                 i += 1;
-                while i < out.len() && out[i] != b'\n' {
-                    if out[i] == b'\\' {
-                        i = (i + 2).min(out.len());
-                    } else if out[i] == b'\'' {
-                        i += 1;
-                        break;
-                    } else {
-                        i += 1;
-                    }
-                }
             }
         } else if out[i] == b'"' {
             i += 1;
@@ -176,8 +219,24 @@ fn code(text: &str) -> String {
     String::from_utf8(out).unwrap_or_default()
 }
 
-fn forbidden(text: &str) -> Vec<String> {
-    let c = code(text).to_ascii_lowercase();
+fn code_cuda(text: &str) -> String {
+    code_for(text, SourceLang::Cuda)
+}
+
+fn code_ptx(text: &str) -> String {
+    code_for(text, SourceLang::Ptx)
+}
+
+fn code_rust(text: &str) -> String {
+    code_for(text, SourceLang::Rust)
+}
+
+fn code(text: &str) -> String {
+    code_for(text, SourceLang::Auto)
+}
+
+fn forbidden_with_lang(text: &str, lang: SourceLang) -> Vec<String> {
+    let c = code_for(text, lang).to_ascii_lowercase();
     let mut found = BTreeSet::new();
     for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
         for family in [
@@ -238,6 +297,14 @@ fn forbidden(text: &str) -> Vec<String> {
     found.into_iter().collect()
 }
 
+fn forbidden(text: &str) -> Vec<String> {
+    forbidden_with_lang(text, SourceLang::Auto)
+}
+
+fn forbidden_cuda(text: &str) -> Vec<String> {
+    forbidden_with_lang(text, SourceLang::Cuda)
+}
+
 fn strip_ptx_predicates_and_labels(mut line: &str) -> &str {
     loop {
         line = line.trim_start();
@@ -269,8 +336,8 @@ fn strip_ptx_predicates_and_labels(mut line: &str) -> &str {
 }
 
 fn forbidden_ptx(text: &str) -> Vec<String> {
-    let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
-    let cleaned = code(text);
+    let mut found: BTreeSet<String> = forbidden_cuda(text).into_iter().collect();
+    let cleaned = code_cuda(text);
     for stmt in cleaned.split(['\n', ';', '{', '}']) {
         let stripped = strip_ptx_predicates_and_labels(stmt).to_ascii_lowercase();
         if stripped.is_empty() {
@@ -305,8 +372,8 @@ fn forbidden_ptx(text: &str) -> Vec<String> {
 }
 
 fn forbidden_training_cuda(text: &str) -> Vec<String> {
-    let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
-    let c = code(text).to_ascii_lowercase();
+    let mut found: BTreeSet<String> = forbidden_cuda(text).into_iter().collect();
+    let c = code_cuda(text).to_ascii_lowercase();
     for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
         if [
             "log", "logf", "log2", "log2f", "log10", "log10f", "log1p", "log1pf", "__logf",
@@ -322,7 +389,7 @@ fn forbidden_training_cuda(text: &str) -> Vec<String> {
 
 fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
     let mut found: BTreeSet<String> = forbidden_ptx(text).into_iter().collect();
-    let cleaned = code(text);
+    let cleaned = code_cuda(text);
     let c = cleaned.to_ascii_lowercase();
     for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
         if [
@@ -534,7 +601,7 @@ fn verify(
             continue;
         }
         let text = read(&path)?;
-        let bad = forbidden(&text);
+        let bad = forbidden_cuda(&text);
         if !bad.is_empty() {
             return Err(format!("{} forbidden code tokens: {bad:?}", path.display()));
         }
@@ -567,7 +634,7 @@ fn verify(
     if actual_sources != expected {
         return Err(format!("active .cu set differs: {actual_sources:?}"));
     }
-    let lib = code(&read(&vendor.join("src/lib.rs"))?);
+    let lib = code_rust(&read(&vendor.join("src/lib.rs"))?);
     if !lib.contains("include!(concat!(env!(\"OUT_DIR\"), \"/ptx.rs\"))") {
         return Err("kernel bindings must include only generated OUT_DIR/ptx.rs".into());
     }
@@ -580,7 +647,7 @@ fn verify(
         return Err("historical conv/quantized descriptors must be empty".into());
     }
     checked.push("active vendor CUDA source/header token census and no historical FFI".into());
-    let training_build = code(&read(&repo.join("crates/uor-r4-training/build.rs"))?);
+    let training_build = code_rust(&read(&repo.join("crates/uor-r4-training/build.rs"))?);
     if training_build.contains("native_context")
         || training_build.contains("selected_potential")
         || training_build.contains("glob(")
@@ -616,7 +683,7 @@ fn verify(
     let historical = read(&repo.join(
         "docs/history/d29-excluded-kernels-2026-10-13/cuda_stack_historical.cu",
     ))?;
-    let historical_names = global_entries(&code(&historical), true)?;
+    let historical_names = global_entries(&code_cuda(&historical), true)?;
     if historical_names.len() < 30 {
         return Err("historical D29 evidence file lost its kernels".into());
     }
@@ -649,7 +716,7 @@ fn verify(
                 ));
             }
         }
-        let cleaned = code(&cu_text);
+        let cleaned = code_cuda(&cu_text);
         let defined_entries = global_entries(&cleaned, false)?;
         for name in &historical_names {
             if defined_entries.contains(name)
@@ -675,14 +742,14 @@ fn verify(
         let q_src = read(&repo.join(format!(
             "docs/history/d29-excluded-kernels-2026-10-13/{evidence}"
         )))?;
-        let q_names = global_entries(&code(&q_src), false)?;
+        let q_names = global_entries(&code_cuda(&q_src), false)?;
         if q_names.is_empty() {
             return Err(format!(
                 "quarantined D29 evidence file {evidence} lost its kernels"
             ));
         }
         for rel in TRAINING_COMPILED_CU {
-            let cleaned = code(&read(&repo.join(rel))?);
+            let cleaned = code_cuda(&read(&repo.join(rel))?);
             let defined_entries = global_entries(&cleaned, false)?;
             for name in &q_names {
                 if defined_entries.contains(name)
@@ -743,7 +810,7 @@ fn verify(
             discrete_cu_path.display()
         ));
     }
-    let discrete_code = code(&discrete_cu);
+    let discrete_code = code_cuda(&discrete_cu);
     let discrete_entries = global_entries(&discrete_code, true)?;
     if discrete_entries != DISCRETE_ENTRIES {
         return Err(format!(
@@ -758,7 +825,7 @@ fn verify(
             "generated discrete_counterfactual_decomposition.cu forbidden discrete/D32 CUDA tokens: {bad_decomp:?}"
         ));
     }
-    let decomp_code = code(&decomp_cu);
+    let decomp_code = code_cuda(&decomp_cu);
     let decomp_entries = global_entries(&decomp_code, true)?;
     if decomp_entries != ["discrete_counterfactual_decomposition"] {
         return Err(format!(
@@ -775,7 +842,7 @@ fn verify(
         "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/build.rs",
     ] {
         let path = repo.join(rel);
-        let cleaned = code(&read(&path)?);
+        let cleaned = code_rust(&read(&path)?);
         for rtc in ["nvrtc::", "compile_ptx", "cuLinkCreate"] {
             if cleaned.contains(rtc) {
                 return Err(format!("{} calls runtime compiler `{rtc}`", path.display()));
@@ -797,7 +864,7 @@ fn verify(
             if path.is_dir() {
                 rs_stack.push(path);
             } else if path.extension().and_then(|v| v.to_str()) == Some("rs") {
-                let cleaned = code(&read(&path)?);
+                let cleaned = code_rust(&read(&path)?);
                 for rtc in ["nvrtc::", "compile_ptx", "cuLinkCreate"] {
                     if cleaned.contains(rtc) {
                         return Err(format!("{} calls runtime compiler `{rtc}`", path.display()));
@@ -913,7 +980,7 @@ fn verify(
                 .ok_or_else(|| format!("{} invalid PTX module name", path.display()))?;
             entry_allowlist::check_ptx_exports(module, &text)?;
             let bad = forbidden_ptx(&text);
-            if !bad.is_empty() || !code(&text).contains(".entry") {
+            if !bad.is_empty() || !code_ptx(&text).contains(".entry") {
                 return Err(format!("{} invalid/forbidden PTX: {bad:?}", path.display()));
             }
             names.insert(
@@ -990,6 +1057,10 @@ fn main() {
             "let s = r#\"\\\"/*\"#; let y = expf(x); let t = r#\"*/\"#;",
             "int a = '/*'; float y = expf(x); int b = '*/';",
             "int a = 'a/*'; float y = expf(x); int b = '*/';",
+            "int a = 'a+/*'; float y = expf(x); int b = '*/';",
+            "fn f<'a>(x: &'a /* ' \" */ u32) { let a = \"/*\"; let y = expf(z); let b = \"*/\"; }",
+            "type T<'a> = &'a /* \"\n*/ u32; let a = \"/*\"; let y = expf(x); let b = \"*/\";",
+            "int x = 0xdead'0000; // '/*\nfloat y = expf(x);\n// */",
         ] {
             assert!(!forbidden(bad).is_empty(), "missed {bad}");
         }
@@ -998,6 +1069,23 @@ fn main() {
                 .contains(&"expf".to_string()),
             "multicharacter literal comment-delimiter pair hid expf"
         );
+        assert!(
+            forbidden("int a = 'a+/*'; float y = expf(x); int b = '*/';")
+                .contains(&"expf".to_string()),
+            "punctuation multicharacter literal hid expf"
+        );
+        for clean_lifetime in [
+            "fn f<'a>(x: &'a str) { /* expf(x) */ }",
+            "fn f<'a /* expf(x) */, 'b>(x: &'a str, y: &'b str) {}",
+            "int n = 1'000; /* expf(x) */",
+            "int n = 0xdead'beef; /* expf(x) */",
+        ] {
+            assert!(
+                forbidden(clean_lifetime).is_empty() && !code(clean_lifetime).contains("expf"),
+                "comment leaked across lifetime/digit-separator handling: {}",
+                code(clean_lifetime)
+            );
+        }
         assert!(forbidden("// expf(x) mma.sync\nfloat x=a+b; /* sigmoid */").is_empty());
         assert!(forbidden("void urelu_f32(int x){}").is_empty());
         for bad_ptx in [
