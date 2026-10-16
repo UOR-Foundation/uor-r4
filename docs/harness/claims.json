@@ -55,6 +55,13 @@
     "lab": "deepseek",
     "note": "R-queue rule in pm-rules.md"
   },
+  "deepseek/spiralcore-fbs-replay-20261016": {
+    "branch": "deepseek/spiralcore-fbs-replay-20261016",
+    "claimed_at": "2026-10-16T16:01:25-04:00",
+    "head": "98f29796f",
+    "lab": "deepseek",
+    "note": "SpiralCore Recursive FBS Engine independent review + replayable Rust conformance/measurement test (owner request 16 Oct)"
+  },
   "deepseek/unread-notes": {
     "branch": "deepseek/unread-notes",
     "claimed_at": "2026-10-15T17:33:48-04:00",

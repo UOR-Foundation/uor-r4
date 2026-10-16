@@ -1,0 +1,13 @@
+[package]
+name = "uor-r4-spiralcore-fbs-replay"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Independent reference implementation, conformance suite and measurement harness for the SpiralCore Recursive FBS Engine specification (15 October 2026). Review instrument; not a model."
+publish = false
+
+[dependencies]
+
+[[bin]]
+name = "spiralcore-fbs-replay"
+path = "src/bin/replay.rs"

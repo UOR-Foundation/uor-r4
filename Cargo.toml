@@ -24,6 +24,7 @@ members = [
     "crates/uor-r4-recon-dag",
     "crates/uor-r4-harness",
     "crates/uor-r4-pod-provider",
+    "crates/uor-r4-spiralcore-fbs-replay",
     "xtask",
     "tools/lab-runner",
 ]
