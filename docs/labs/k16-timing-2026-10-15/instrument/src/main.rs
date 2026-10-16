@@ -940,6 +940,9 @@ fn usage() -> String {
         "k16-timing check|plan --pin FILE   (host; no device)",
         "k16-timing run --pin FILE          (needs --features cuda and a pod)",
         "k16-timing diagnose --pin FILE     (three-batch subphase diagnostic only; separate pending FIT)",
+        "k16-timing decompose-check|decompose-plan --pin FILE (host metadata only)",
+        "k16-timing decompose-identity (CUDA compiled identities only; no context)",
+        "k16-timing decompose --pin FILE (separate PM execution release required)",
     ]
     .join(&String::from(char::from(10)))
 }

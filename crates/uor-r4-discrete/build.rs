@@ -374,10 +374,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(out.join("decomposition.cu"), diagnostic)?;
     let nvcc = env::var("NVCC").unwrap_or_else(|_| "nvcc".into());
     let status = Command::new(&nvcc)
-        // Fixed to the admitted compute_120 U module's measured88 registers
-        // plus the prospective16-register observation allowance. Zero new
-        // spills remains mandatory; this never changes the ordinary module.
-        .args(["-ptx", "-std=c++17", "--maxrregcount=104"])
+        // Uncapped D per PM amendment6222308938; zero spills and runtime/AOT
+        // consistency are checked before dose. Ordinary compilation unchanged.
+        .args(["-ptx", "-std=c++17"])
         .arg(format!("-arch={arch}"))
         .arg("-o")
         .arg(out.join("decomposition.ptx"))
@@ -397,9 +396,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ] {
         let mut resource_command = Command::new(&nvcc);
         resource_command.args(["-cubin", "-std=c++17", "--ptxas-options=-v"]);
-        if label == "decomposition" {
-            resource_command.arg("--maxrregcount=104");
-        }
         let report = resource_command
             .arg(format!("-arch={arch}"))
             // PTX preprocessing retains the virtual architecture, while cubin

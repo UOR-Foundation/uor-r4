@@ -40,6 +40,7 @@ fn resources(kernel: &CudaFunction, ptxas: &str, entry: &str) -> Result<KernelRe
         registers: get(Attr::CU_FUNC_ATTRIBUTE_NUM_REGS)?,
         local_bytes: get(Attr::CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES)?,
         shared_bytes: get(Attr::CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES)?,
+        max_threads_per_block: get(Attr::CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK)?,
         ptxas: decomposition::parse_ptxas(ptxas, entry).map_err(invalid)?,
     })
 }

@@ -206,7 +206,7 @@ pub fn generate(source: &str) -> Result<String, String> {
     kernel = kernel
         .replace(
             "void discrete_counterfactual(",
-            "void __maxnreg__(104) discrete_counterfactual_decomposition(",
+            "void discrete_counterfactual_decomposition(",
         )
         .replace("=writer(", "=writer_decomposition(");
     Ok(format!("{helpers}\n{PROBES}\n{writer}\n{kernel}"))
@@ -245,7 +245,8 @@ mod tests {
         let source = include_str!("discrete.cu");
         let generated = generate(source).expect("admitted source anchors");
         assert_eq!(generated.matches("__global__").count(), 1);
-        assert!(generated.contains("__maxnreg__(104) discrete_counterfactual_decomposition("));
+        assert!(generated.contains("void discrete_counterfactual_decomposition("));
+        assert!(!generated.contains("__maxnreg__"));
         assert!(generated.contains("writer_decomposition(q,"));
         assert!(!generated.contains("discrete_apply("));
         assert!(generate(&source.replace("sum+=cost;", "sum = sum + cost;")).is_err());

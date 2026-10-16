@@ -272,20 +272,29 @@ pub struct KernelResources {
     pub registers: u64,
     pub local_bytes: u64,
     pub shared_bytes: u64,
+    pub max_threads_per_block: u64,
     pub ptxas: PtxasResources,
 }
 pub fn resource_parity(u: &KernelResources, d: &KernelResources) -> bool {
-    // Prospective metadata budgets: forty u64 counters need 320 bytes; 1024
-    // allows frame alignment/bookkeeping. Sixteen extra registers is the
-    // declared instrumentation allowance, not measured performance tolerance.
-    d.registers <= u.registers.saturating_add(16)
+    // PM amendment6222308938 supersedes U+16 before any dose. Zero delta
+    // between runtime and AOT registers/local is intentionally fail-closed:
+    // a different JIT resource layout needs a new disposition, not attribution.
+    // Launchability discloses support for the fixed host block of16; it is
+    // not a register guard or an occupancy/performance measurement.
+    let consistent = |r: &KernelResources| {
+        r.registers == r.ptxas.registers && r.local_bytes == r.ptxas.stack_bytes
+    };
+    consistent(u)
+        && consistent(d)
+        && u.max_threads_per_block >= 16
+        && d.max_threads_per_block >= 16
         && d.local_bytes <= u.local_bytes.saturating_add(1024)
+        && d.ptxas.stack_bytes <= u.ptxas.stack_bytes.saturating_add(1024)
         && d.shared_bytes == u.shared_bytes
-        && d.ptxas.registers <= u.ptxas.registers.saturating_add(16)
-        && !(u.ptxas.spill_stores == 0 && d.ptxas.spill_stores != 0)
-        && !(u.ptxas.spill_loads == 0 && d.ptxas.spill_loads != 0)
-        && d.ptxas.spill_stores <= u.ptxas.spill_stores
-        && d.ptxas.spill_loads <= u.ptxas.spill_loads
+        && u.ptxas.spill_stores == 0
+        && d.ptxas.spill_stores == 0
+        && u.ptxas.spill_loads == 0
+        && d.ptxas.spill_loads == 0
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -466,6 +475,59 @@ mod tests {
         d.proposal[4] = 1;
         assert!(parity(&u, &d).is_err());
         assert!(parity(&u, &u).is_ok());
+    }
+    #[test]
+    fn resource_amendment_refuses_jit_drift_spills_and_launch_failure() {
+        let u = KernelResources {
+            registers: 88,
+            local_bytes: 21536,
+            shared_bytes: 0,
+            max_threads_per_block: 1024,
+            ptxas: PtxasResources {
+                registers: 88,
+                stack_bytes: 21536,
+                spill_stores: 0,
+                spill_loads: 0,
+            },
+        };
+        let mut d = u.clone();
+        d.registers = 126;
+        d.ptxas.registers = 126;
+        d.local_bytes = 22096;
+        d.ptxas.stack_bytes = 22096;
+        assert!(resource_parity(&u, &d));
+        let admitted = d.clone();
+        d.registers += 1;
+        assert!(!resource_parity(&u, &d));
+        d = admitted.clone();
+        d.local_bytes += 1;
+        assert!(!resource_parity(&u, &d));
+        d = admitted.clone();
+        d.ptxas.spill_stores = 56;
+        d.ptxas.spill_loads = 56;
+        assert!(!resource_parity(&u, &d));
+        d = admitted.clone();
+        d.max_threads_per_block = 15;
+        assert!(!resource_parity(&u, &d));
+        d = admitted.clone();
+        d.shared_bytes = 1;
+        assert!(!resource_parity(&u, &d));
+        d = admitted;
+        d.local_bytes = u.local_bytes + 1024;
+        d.ptxas.stack_bytes = d.local_bytes;
+        assert!(resource_parity(&u, &d));
+        d.local_bytes += 1;
+        d.ptxas.stack_bytes += 1;
+        assert!(!resource_parity(&u, &d));
+        let mut changed_u = u.clone();
+        changed_u.ptxas.stack_bytes += 1;
+        assert!(!resource_parity(&changed_u, &u));
+        changed_u = u.clone();
+        changed_u.registers += 1;
+        assert!(!resource_parity(&changed_u, &u));
+        changed_u = u.clone();
+        changed_u.ptxas.spill_loads = 1;
+        assert!(!resource_parity(&changed_u, &u));
     }
     #[test]
     fn resource_log_parser_is_entry_scoped_and_refuses_missing_data() {
