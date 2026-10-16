@@ -219,6 +219,12 @@ pub fn validate(pin: &Pin) -> std::result::Result<Vec<Cell>, String> {
         if !is_hex64(&c0.snapshot_sha256) {
             return Err("checkpoint0 snapshot_sha256 is absent or malformed".into());
         }
+        if c0.epoch != 0 {
+            return Err(
+                "checkpoint0 epoch must be 0: the ceiling source is the untrained checkpoint"
+                    .into(),
+            );
+        }
         if c0.snapshot_path.as_os_str().is_empty() {
             return Err("checkpoint0 snapshot_path is absent".into());
         }
@@ -440,6 +446,7 @@ pub fn plan(pin: &Pin, cells: &[Cell]) -> Value {
         "apply": false,
         "zero_apply_assertion": "snapshot digest and epoch identical before and after each cell",
         "fixture": pin.fixture,
+        "checkpoint0": pin.checkpoint0,
         "cells": cells.iter().map(|c| json!({"source": c.source, "policy": policy_name(c.policy)})).collect::<Vec<_>>(),
         "exclusion": EXCLUSION,
     })
@@ -684,7 +691,7 @@ mod driver {
             + route_observation_ns
             + vector_propose_ns
             + vector_observation_ns;
-        let rates = rates(timed_batches, unit_ns);
+        let unit_rates = rates(timed_batches, unit_ns);
         let carry_only = rates(timed_batches, carry_ns_total);
         let per_batch = |total: u128| -> u128 {
             if timed_batches == 0 {
@@ -701,8 +708,8 @@ mod driver {
             "unit_ns": unit_ns,
             "rates": {
                 "basis": RATE_BASIS,
-                "rows_per_s": rates.rows_per_s,
-                "padded_context_tokens_per_s": rates.padded_context_tokens_per_s,
+                "rows_per_s": unit_rates.rows_per_s,
+                "padded_context_tokens_per_s": unit_rates.padded_context_tokens_per_s,
             },
             "carry_only": {
                 "ns": carry_ns_total,
@@ -1142,5 +1149,23 @@ mod tests {
         }
         assert!(arms.contains(&(Source::Checkpoint0, "nearest_address_margin_v1")));
         assert!(arms.contains(&(Source::SealedSeed1Q4, "occupied_cell_rank_hinge_v1")));
+    }
+    #[test]
+    fn a_checkpoint0_pin_must_be_the_untrained_epoch_zero_artifact() {
+        let mut value = pin_value();
+        value["cells"] = json!([
+            {"source": "checkpoint0", "policy": "nearest_address_margin_v1"},
+            {"source": "checkpoint0", "policy": "occupied_cell_rank_hinge_v1"}
+        ]);
+        value["fixture"]["snapshot_sha256"] = json!("");
+        value["fixture"]["original_sha256"] = json!("");
+        value["checkpoint0"]["epoch"] = json!(17);
+        let err =
+            validate(&serde_json::from_value(value.clone()).expect("parses")).expect_err("refused");
+        assert!(err.contains("epoch must be 0"), "{err}");
+        value["checkpoint0"]["epoch"] = json!(0);
+        let cells =
+            validate(&serde_json::from_value(value).expect("parses")).expect("epoch 0 accepted");
+        assert_eq!(cells.len(), 2);
     }
 }
