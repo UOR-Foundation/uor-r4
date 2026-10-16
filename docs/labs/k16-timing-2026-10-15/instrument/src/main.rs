@@ -334,7 +334,7 @@ mod warmup_count_tests {
             100,
             "exactly the pinned batches remain to time"
         );
-        assert_eq!(windows_for_counts(100, 0) - 0, 100);
+        assert_eq!(windows_for_counts(100, 0), 100);
         assert_eq!(windows_for_counts(100, 2) - 2, 100);
     }
 }
@@ -599,7 +599,6 @@ mod driver {
         // divides by all of it. Carry-only is kept as a separately named number:
         // a carry-only headline understates per-batch cost in the expensive
         // direction, and this rate sizes the D-Packet training budget.
-        let mut unit_ns: u128 = 0;
         let mut carry_ns_total: u128 = 0;
         let mut route_propose_ns: u128 = 0;
         let mut route_observation_ns: u128 = 0;
@@ -721,7 +720,7 @@ mod driver {
             ));
         }
 
-        unit_ns = carry_ns_total
+        let unit_ns = carry_ns_total
             + route_propose_ns
             + route_observation_ns
             + vector_propose_ns
@@ -814,10 +813,7 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let refused = || {
-        eprintln!("run needs --features cuda and a pod; this build is host-only");
-        std::process::exit(2);
-    };
+
     match command.as_str() {
         "check" | "plan" => {
             println!(
@@ -830,8 +826,8 @@ fn main() {
             run_all(&pin, &cells);
             #[cfg(not(feature = "cuda"))]
             {
-                let _ = &refused;
-                refused();
+                eprintln!("run needs --features cuda and a pod; this build is host-only");
+                std::process::exit(2);
             }
         }
         other => {
