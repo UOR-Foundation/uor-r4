@@ -19,6 +19,24 @@ mod native_dependency_boundary;
 const MODULES: [&str; 9] = [
     "affine", "binary", "cast", "fill", "indexing", "reduce", "sort", "ternary", "unary",
 ];
+const TRAINING_COMPILED_CU: [&str; 3] = [
+    "crates/uor-r4-training/src/cuda_stack.cu",
+    "crates/uor-r4-training/src/spiralcore_fbs.cu",
+    "crates/uor-r4-training/src/starling_native.cu",
+];
+const DISCRETE_ENTRIES: [&str; 11] = [
+    "discrete_init",
+    "discrete_encode",
+    "discrete_forward",
+    "discrete_counterfactual",
+    "discrete_choose",
+    "discrete_apply",
+    "discrete_validate",
+    "discrete_evaluate",
+    "discrete_evaluation_aggregate",
+    "discrete_count",
+    "discrete_count_score",
+];
 const BANNED_FEATURES: [&str; 8] = [
     "cublas",
     "cublaslt",
@@ -96,18 +114,177 @@ fn forbidden(text: &str) -> Vec<String> {
     let mut found = BTreeSet::new();
     for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
         for family in [
-            "softmax", "softplus", "sigmoid", "tanh", "gelu", "silu", "rope", "ropei", "rotary",
-            "cublas", "cudnn", "nvrtc", "matmul", "gemm", "wmma", "mma_sync", "uexp_", "__nv_exp",
+            "softmax",
+            "softplus",
+            "sigmoid",
+            "tanh",
+            "gelu",
+            "silu",
+            "uelu_",
+            "rope",
+            "ropei",
+            "rotary",
+            "cublas",
+            "cudnn",
+            "nvrtc",
+            "matmul",
+            "gemm",
+            "wmma",
+            "wgmma",
+            "tcgen05",
+            "mma_sync",
+            "uexp_",
+            "ulog_",
+            "__nv_exp",
+            "__nv_log",
+            "__nv_tanh",
+            "__nv_erf",
         ] {
             if word.contains(family) {
                 found.insert(word.to_string());
             }
         }
-        if ["exp", "expf", "exp2", "exp2f", "expm1", "expm1f", "__expf"].contains(&word) {
+        if [
+            "exp", "expf", "exp2", "exp2f", "expm1", "expm1f", "__expf", "erf", "erff", "erfc",
+            "erfcf", "erfinv", "erfinvf", "tanhf", "elu", "sgemm", "dgemm", "hgemm", "gemv",
+        ]
+        .contains(&word)
+        {
             found.insert(word.to_string());
         }
     }
-    for instruction in ["mma.", "wmma.", "ex2.", "tanh."] {
+    for instruction in [
+        "mma.",
+        "wmma.",
+        "wgmma.",
+        "tcgen05.",
+        "ex2.",
+        "lg2.",
+        "tanh.",
+        "sin.approx",
+        "cos.approx",
+    ] {
+        if c.contains(instruction) {
+            found.insert(instruction.to_string());
+        }
+    }
+    found.into_iter().collect()
+}
+
+fn strip_ptx_predicates_and_labels(mut line: &str) -> &str {
+    loop {
+        line = line.trim_start();
+        if let Some(rest) = line.strip_prefix('@') {
+            let rest = rest.strip_prefix('!').unwrap_or(rest);
+            let idx = rest
+                .find(|c: char| c.is_ascii_whitespace())
+                .unwrap_or(rest.len());
+            line = &rest[idx..];
+            continue;
+        }
+        if let Some(colon) = line.find(':') {
+            let head = &line[..colon];
+            let next_is_colon = line[colon + 1..].starts_with(':');
+            if !head.is_empty()
+                && !next_is_colon
+                && head
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+            {
+                line = &line[colon + 1..];
+                continue;
+            }
+        }
+        break;
+    }
+    line.trim_start()
+}
+
+fn forbidden_ptx(text: &str) -> Vec<String> {
+    let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
+    let cleaned = code(text);
+    for raw_line in cleaned.lines() {
+        let stripped = strip_ptx_predicates_and_labels(raw_line).to_ascii_lowercase();
+        if stripped.is_empty() {
+            continue;
+        }
+        for prefix in [
+            "ex2.",
+            "lg2.",
+            "sin.",
+            "cos.",
+            "tanh.",
+            "rcp.approx",
+            "sqrt.approx",
+            "rsqrt.approx",
+            "mma.",
+            "wmma.",
+            "wgmma.",
+            "tcgen05.",
+        ] {
+            if stripped.starts_with(prefix) {
+                found.insert(prefix.to_string());
+            }
+        }
+    }
+    found.into_iter().collect()
+}
+
+fn forbidden_training_cuda(text: &str) -> Vec<String> {
+    let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
+    let c = code(text).to_ascii_lowercase();
+    for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
+        if [
+            "log", "logf", "log2", "log2f", "log10", "log10f", "log1p", "log1pf", "__logf",
+            "nvcuda",
+        ]
+        .contains(&word)
+        {
+            found.insert(word.to_string());
+        }
+    }
+    found.into_iter().collect()
+}
+
+fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
+    let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
+    let c = code(text).to_ascii_lowercase();
+    for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
+        if [
+            "float",
+            "double",
+            "__half",
+            "__nv_bfloat16",
+            "f16",
+            "f16x2",
+            "f32",
+            "f64",
+            "bf16",
+            "bf16x2",
+            "tf32",
+            "e4m3",
+            "e5m2",
+            "mma",
+            "wmma",
+            "wgmma",
+            "tcgen05",
+            "tensor",
+            "tensormap",
+            "log",
+            "logf",
+            "log2",
+            "log2f",
+            "log10",
+            "log10f",
+            "log1p",
+            "log1pf",
+        ]
+        .contains(&word)
+        {
+            found.insert(word.to_string());
+        }
+    }
+    for instruction in ["rcp.approx", "sqrt.approx", "rsqrt.approx"] {
         if c.contains(instruction) {
             found.insert(instruction.to_string());
         }
@@ -238,6 +415,123 @@ fn verify(
         return Err("historical conv/quantized descriptors must be empty".into());
     }
     checked.push("active vendor CUDA source/header token census and no historical FFI".into());
+    let historical = read(&repo.join(
+        "docs/history/d29-excluded-kernels-2026-10-13/cuda_stack_historical.cu",
+    ))?;
+    let historical_names: Vec<&str> = historical
+        .split("extern \"C\" __global__ void ")
+        .skip(1)
+        .filter_map(|rest| rest.split('(').next())
+        .map(str::trim)
+        .collect();
+    if historical_names.len() < 30 {
+        return Err("historical D29 evidence file lost its kernels".into());
+    }
+    for rel in TRAINING_COMPILED_CU {
+        let cu_path = repo.join(rel);
+        let cu_text = read(&cu_path)?;
+        let bad_training = forbidden_training_cuda(&cu_text);
+        if !bad_training.is_empty() {
+            return Err(format!(
+                "{} forbidden training CUDA tokens: {bad_training:?}",
+                cu_path.display()
+            ));
+        }
+        let cleaned = code(&cu_text);
+        for name in &historical_names {
+            if cleaned.contains(&format!("__global__ void {name}(")) {
+                return Err(format!(
+                    "{} defines excluded historical kernel `{name}`",
+                    cu_path.display()
+                ));
+            }
+        }
+    }
+    for (module, evidence) in [
+        ("native_context", "native_context_quarantined.cu"),
+        ("selected_potential", "selected_potential_quarantined.cu"),
+    ] {
+        if repo
+            .join(format!("crates/uor-r4-training/src/{module}.cu"))
+            .exists()
+        {
+            return Err(format!("quarantined {module}.cu returned to training src"));
+        }
+        let q_src = read(&repo.join(format!(
+            "docs/history/d29-excluded-kernels-2026-10-13/{evidence}"
+        )))?;
+        let q_names: Vec<&str> = q_src
+            .split("__global__ void ")
+            .skip(1)
+            .filter_map(|rest| rest.split('(').next())
+            .map(str::trim)
+            .collect();
+        for rel in TRAINING_COMPILED_CU {
+            let cleaned = code(&read(&repo.join(rel))?);
+            for name in &q_names {
+                if cleaned.contains(&format!("__global__ void {name}(")) {
+                    return Err(format!(
+                        "{rel} defines quarantined dense-contraction kernel `{name}`"
+                    ));
+                }
+            }
+        }
+    }
+    checked.push(
+        "training compiled CUDA sources (.cu) D23/D25/D29 token census and historical/quarantined exclusion"
+            .into(),
+    );
+    let discrete_cu_path = repo.join("crates/uor-r4-discrete/src/discrete.cu");
+    let discrete_cu = read(&discrete_cu_path)?;
+    let bad_discrete = forbidden_discrete_cuda(&discrete_cu);
+    if !bad_discrete.is_empty() {
+        return Err(format!(
+            "{} forbidden discrete/D32 CUDA tokens: {bad_discrete:?}",
+            discrete_cu_path.display()
+        ));
+    }
+    let discrete_code = code(&discrete_cu);
+    let discrete_entries: Vec<&str> = discrete_code
+        .split("extern \"C\" __global__ void ")
+        .skip(1)
+        .filter_map(|rest| rest.split('(').next())
+        .map(str::trim)
+        .collect();
+    if discrete_entries != DISCRETE_ENTRIES {
+        return Err(format!(
+            "{} global entry list differs: {discrete_entries:?}",
+            discrete_cu_path.display()
+        ));
+    }
+    checked.push(
+        "discrete CUDA kernel source (discrete.cu) D23/D25/D32 integer-only token and 11-entry census"
+            .into(),
+    );
+    let mut rs_stack = vec![
+        repo.join("crates/uor-r4-training/src"),
+        repo.join("crates/uor-r4-discrete/src"),
+        repo.join("docs/labs/k16-timing-2026-10-15/instrument/src"),
+        repo.join("docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/src"),
+    ];
+    while let Some(dir) = rs_stack.pop() {
+        for entry in fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            if path.is_dir() {
+                rs_stack.push(path);
+            } else if path.extension().and_then(|v| v.to_str()) == Some("rs") {
+                let cleaned = code(&read(&path)?);
+                for rtc in ["nvrtc::", "compile_ptx", "cuLinkCreate"] {
+                    if cleaned.contains(rtc) {
+                        return Err(format!("{} calls runtime compiler `{rtc}`", path.display()));
+                    }
+                }
+            }
+        }
+    }
+    checked.push(
+        "no runtime CUDA compiler calls across training, discrete, and standalone instrument Rust sources"
+            .into(),
+    );
     let root_manifest = read(&repo.join("Cargo.toml"))?;
     let patches = section(&root_manifest, "[patch.crates-io]")?;
     for (name, directory) in [
@@ -259,6 +553,8 @@ fn verify(
         "third_party/candle-core-0.9.2/Cargo.toml",
         "third_party/float8-0.6.1/Cargo.toml",
         "crates/uor-r4-training/Cargo.toml",
+        "crates/uor-r4-discrete/Cargo.toml",
+        "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/Cargo.toml",
     ] {
         let manifest = read(&repo.join(rel))?;
         let dep = if manifest.contains("[dependencies.cudarc]") {
@@ -297,7 +593,34 @@ fn verify(
             }
         }
     }
-    checked.push("vendor patches and direct selected CUDA cudarc feature declarations".into());
+    for rel in [
+        "docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml",
+        "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/Cargo.toml",
+    ] {
+        let manifest = read(&repo.join(rel))?;
+        let instr_patches = section(&manifest, "[patch.crates-io]")?;
+        let cudarc_patch = instr_patches
+            .lines()
+            .find(|l| l.starts_with("cudarc ="))
+            .ok_or_else(|| format!("{rel}: missing vendor patch for cudarc"))?;
+        if !cudarc_patch.contains("third_party/cudarc-0.19.10") {
+            return Err(format!("{rel}: wrong cudarc patch path: {cudarc_patch}"));
+        }
+        let fs = section(&manifest, "[features]")?;
+        for feature in array_field(fs, "cuda")? {
+            if BANNED_FEATURES
+                .iter()
+                .any(|b| feature.ends_with(&format!("/{b}")))
+                || feature == "cudarc/default"
+            {
+                return Err(format!("{rel}: cuda enables {feature}"));
+            }
+        }
+    }
+    checked.push(
+        "vendor patches and direct/standalone-instrument selected CUDA cudarc feature declarations"
+            .into(),
+    );
     if let Some(dir) = ptx {
         let mut names = BTreeSet::new();
         for entry in fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
@@ -311,7 +634,7 @@ fn verify(
                 .and_then(|name| name.to_str())
                 .ok_or_else(|| format!("{} invalid PTX module name", path.display()))?;
             entry_allowlist::check_ptx_exports(module, &text)?;
-            let bad = forbidden(&text);
+            let bad = forbidden_ptx(&text);
             if !bad.is_empty() || !code(&text).contains(".entry") {
                 return Err(format!("{} invalid/forbidden PTX: {bad:?}", path.display()));
             }
@@ -374,13 +697,66 @@ fn main() {
             "call __nv_expf;",
             "mma.sync.aligned.m16n8k16;",
             "asm(\"mma.sync.aligned.m16n8k16;\");",
+            "wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16;",
+            "tcgen05.mma.cta_group::1.kind::f16;",
+            "@%p1 ex2.approx.ftz.f32 %f1, %f0;",
+            "@!%p0 lg2.approx.f32 %f1, %f0;",
             "void uexp_f32(){}",
+            "void ulog_f32(){}",
             "void rope_f32(){}",
+            "void rotary_kernel(){}",
             "float sigmoid(float x){}",
+            "float softplus(float x){}",
+            "float y = elu(x);",
         ] {
             assert!(!forbidden(bad).is_empty(), "missed {bad}");
         }
         assert!(forbidden("// expf(x) mma.sync\nfloat x=a+b; /* sigmoid */").is_empty());
+        assert!(forbidden("void urelu_f32(int x){}").is_empty());
+        for bad_ptx in [
+            "  @%p1 sin.approx.f32 %f1, %f0;",
+            "  $L__BB0_1: @!%p0 cos.approx.f32 %f1, %f0;",
+            "  $L__BB0_2: @%p0 rcp.approx.f32 %f1, %f0;",
+            "  $L__BB0_3: sqrt.approx.f32 %f1, %f0;",
+            "  rsqrt.approx.f32 %f1, %f0;",
+            "  $L__BB0_4: @!%p1 wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16;",
+            "  tcgen05.mma.cta_group::1.kind::f16;",
+        ] {
+            assert!(
+                !forbidden_ptx(bad_ptx).is_empty(),
+                "missed predicated/labeled PTX instruction: {bad_ptx}"
+            );
+        }
+        assert!(forbidden_ptx("  $L__BB0_1: @%p0 mul.lo.u32 %r1, %r2, 8;").is_empty());
+        for bad_training in [
+            "float y = logf(x);",
+            "float y = log1pf(x);",
+            "using namespace nvcuda;",
+        ] {
+            assert!(
+                !forbidden_training_cuda(bad_training).is_empty(),
+                "missed training CUDA violation: {bad_training}"
+            );
+        }
+        for bad_discrete in [
+            "extern \"C\" __global__ void discrete_init(float* x) {}",
+            "__half h;",
+            "__nv_bfloat16 b;",
+            "rcp.approx.f32 %f1, %f0;",
+            "sqrt.approx.f32 %f1, %f0;",
+            "rsqrt.approx.f32 %f1, %f0;",
+        ] {
+            assert!(
+                !forbidden_discrete_cuda(bad_discrete).is_empty(),
+                "missed discrete D32 violation: {bad_discrete}"
+            );
+        }
+        assert!(
+            forbidden_discrete_cuda(
+                "extern \"C\" __global__ void discrete_init(unsigned int* x) { x[0] = 1u; }"
+            )
+            .is_empty()
+        );
         println!("PASS: missing, renamed-extra, duplicate and architecture-conditioned PTX exports rejected by frozen source inventory; planted exponential, squash and tensor-core tokens rejected; comments excluded. Static checker only.");
         return;
     }
