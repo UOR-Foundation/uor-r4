@@ -208,6 +208,8 @@ fn forbidden(text: &str) -> Vec<String> {
         "ex2.",
         "lg2.",
         "tanh.",
+        "sin.approx",
+        "cos.approx",
     ] {
         if c.contains(instruction) {
             found.insert(instruction.to_string());
@@ -254,17 +256,28 @@ fn forbidden_ptx(text: &str) -> Vec<String> {
         if stripped.is_empty() {
             continue;
         }
-        for prefix in [
-            "ex2.",
-            "lg2.",
-            "tanh.",
-            "mma.",
-            "wmma.",
-            "wgmma.",
-            "tcgen05.",
-        ] {
-            if stripped.starts_with(prefix) {
-                found.insert(prefix.to_string());
+        for candidate in std::iter::once(stripped.as_str()).chain(
+            stripped
+                .split_whitespace()
+                .map(strip_ptx_predicates_and_labels),
+        ) {
+            for prefix in [
+                "ex2.",
+                "lg2.",
+                "sin.",
+                "cos.",
+                "tanh.",
+                "rcp.approx",
+                "sqrt.approx",
+                "rsqrt.approx",
+                "mma.",
+                "wmma.",
+                "wgmma.",
+                "tcgen05.",
+            ] {
+                if candidate.starts_with(prefix) {
+                    found.insert(prefix.to_string());
+                }
             }
         }
     }
@@ -288,7 +301,7 @@ fn forbidden_training_cuda(text: &str) -> Vec<String> {
 }
 
 fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
-    let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
+    let mut found: BTreeSet<String> = forbidden_ptx(text).into_iter().collect();
     let cleaned = code(text);
     let c = cleaned.to_ascii_lowercase();
     for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
@@ -337,31 +350,91 @@ fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
             found.insert(instruction.to_string());
         }
     }
-    for stmt in cleaned.split(['\n', ';', '{', '}']) {
-        let stripped = strip_ptx_predicates_and_labels(stmt).to_ascii_lowercase();
-        if stripped.is_empty() {
-            continue;
-        }
-        for prefix in [
-            "ex2.",
-            "lg2.",
-            "sin.",
-            "cos.",
-            "tanh.",
-            "rcp.approx",
-            "sqrt.approx",
-            "rsqrt.approx",
-            "mma.",
-            "wmma.",
-            "wgmma.",
-            "tcgen05.",
-        ] {
-            if stripped.starts_with(prefix) {
-                found.insert(prefix.to_string());
+    found.into_iter().collect()
+}
+
+fn global_entries(cleaned_code: &str, require_extern_c: bool) -> Result<Vec<String>, String> {
+    let bytes = cleaned_code.as_bytes();
+    let needle = b"__global__";
+    let mut entries = Vec::new();
+    let mut i = 0usize;
+    while i + needle.len() <= bytes.len() {
+        if &bytes[i..i + needle.len()] == needle {
+            let prev_ok =
+                i == 0 || (!bytes[i - 1].is_ascii_alphanumeric() && bytes[i - 1] != b'_');
+            let next_pos = i + needle.len();
+            let next_ok = next_pos == bytes.len()
+                || (!bytes[next_pos].is_ascii_alphanumeric() && bytes[next_pos] != b'_');
+            if prev_ok && next_ok {
+                if require_extern_c {
+                    let before = cleaned_code[..i].trim_end();
+                    let Some(before_c) = before.strip_suffix("\"C\"") else {
+                        return Err("CUDA __global__ kernel missing extern \"C\" linkage".into());
+                    };
+                    let before_extern = before_c.trim_end();
+                    let Some(prefix) = before_extern.strip_suffix("extern") else {
+                        return Err("CUDA __global__ kernel missing extern \"C\" linkage".into());
+                    };
+                    if prefix
+                        .as_bytes()
+                        .last()
+                        .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+                    {
+                        return Err("CUDA __global__ kernel missing extern \"C\" linkage".into());
+                    }
+                }
+                let mut rest = cleaned_code[next_pos..].trim_start();
+                while rest.starts_with("__launch_bounds__") || rest.starts_with("__maxnreg__") {
+                    let open = rest
+                        .find('(')
+                        .ok_or("malformed CUDA launch attribute before kernel name")?;
+                    let mut depth = 0usize;
+                    let mut end_attr = None;
+                    for (idx, ch) in rest[open..].char_indices() {
+                        match ch {
+                            '(' => depth += 1,
+                            ')' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    end_attr = Some(open + idx + 1);
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    let end_idx =
+                        end_attr.ok_or("unclosed CUDA launch attribute before kernel name")?;
+                    rest = rest[end_idx..].trim_start();
+                }
+                let after_void = rest
+                    .strip_prefix("void")
+                    .ok_or("expected void return type after __global__")?;
+                if !after_void
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_whitespace())
+                {
+                    return Err("expected whitespace after __global__ void".into());
+                }
+                let after_void = after_void.trim_start();
+                let paren = after_void
+                    .find('(')
+                    .ok_or("missing '(' after __global__ void kernel name")?;
+                let name = after_void[..paren].trim();
+                if name.is_empty()
+                    || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                {
+                    return Err(format!("invalid __global__ kernel identifier: `{name}`"));
+                }
+                entries.push(name.to_string());
+                i = next_pos;
+                continue;
             }
         }
+        i += 1;
     }
-    found.into_iter().collect()
+    Ok(entries)
 }
 
 fn quoted(text: &str) -> Result<Vec<String>, String> {
@@ -523,12 +596,7 @@ fn verify(
     let historical = read(&repo.join(
         "docs/history/d29-excluded-kernels-2026-10-13/cuda_stack_historical.cu",
     ))?;
-    let historical_names: Vec<&str> = historical
-        .split("extern \"C\" __global__ void ")
-        .skip(1)
-        .filter_map(|rest| rest.split('(').next())
-        .map(str::trim)
-        .collect();
+    let historical_names = global_entries(&code(&historical), true)?;
     if historical_names.len() < 30 {
         return Err("historical D29 evidence file lost its kernels".into());
     }
@@ -562,8 +630,11 @@ fn verify(
             }
         }
         let cleaned = code(&cu_text);
+        let defined_entries = global_entries(&cleaned, false)?;
         for name in &historical_names {
-            if cleaned.contains(&format!("__global__ void {name}(")) {
+            if defined_entries.contains(name)
+                || cleaned.contains(&format!("__global__ void {name}("))
+            {
                 return Err(format!(
                     "{} defines excluded historical kernel `{name}`",
                     cu_path.display()
@@ -584,12 +655,7 @@ fn verify(
         let q_src = read(&repo.join(format!(
             "docs/history/d29-excluded-kernels-2026-10-13/{evidence}"
         )))?;
-        let q_names: Vec<&str> = q_src
-            .split("__global__ void ")
-            .skip(1)
-            .filter_map(|rest| rest.split('(').next())
-            .map(str::trim)
-            .collect();
+        let q_names = global_entries(&code(&q_src), false)?;
         if q_names.is_empty() {
             return Err(format!(
                 "quarantined D29 evidence file {evidence} lost its kernels"
@@ -597,8 +663,11 @@ fn verify(
         }
         for rel in TRAINING_COMPILED_CU {
             let cleaned = code(&read(&repo.join(rel))?);
+            let defined_entries = global_entries(&cleaned, false)?;
             for name in &q_names {
-                if cleaned.contains(&format!("__global__ void {name}(")) {
+                if defined_entries.contains(name)
+                    || cleaned.contains(&format!("__global__ void {name}("))
+                {
                     return Err(format!(
                         "{rel} defines quarantined dense-contraction kernel `{name}`"
                     ));
@@ -655,12 +724,7 @@ fn verify(
         ));
     }
     let discrete_code = code(&discrete_cu);
-    let discrete_entries: Vec<&str> = discrete_code
-        .split("extern \"C\" __global__ void ")
-        .skip(1)
-        .filter_map(|rest| rest.split('(').next())
-        .map(str::trim)
-        .collect();
+    let discrete_entries = global_entries(&discrete_code, true)?;
     if discrete_entries != DISCRETE_ENTRIES {
         return Err(format!(
             "{} global entry list differs: {discrete_entries:?}",
@@ -675,12 +739,7 @@ fn verify(
         ));
     }
     let decomp_code = code(&decomp_cu);
-    let decomp_entries: Vec<&str> = decomp_code
-        .split("extern \"C\" __global__ void ")
-        .skip(1)
-        .filter_map(|rest| rest.split('(').next())
-        .map(str::trim)
-        .collect();
+    let decomp_entries = global_entries(&decomp_code, true)?;
     if decomp_entries != ["discrete_counterfactual_decomposition"] {
         return Err(format!(
             "generated discrete_counterfactual_decomposition.cu global entry list differs: {decomp_entries:?}"
@@ -917,23 +976,33 @@ fn main() {
         for bad_ptx in [
             "  @%p1 ex2.approx.ftz.f32 %f1, %f0;",
             "  $L__BB0_1: @!%p0 lg2.approx.f32 %f1, %f0;",
+            "  @%p1 sin.approx.f32 %f1, %f0;",
+            "  $L__BB0_1: @!%p0 cos.approx.f32 %f1, %f0;",
+            "  $L__BB0_2: @%p0 rcp.approx.f32 %f1, %f0;",
+            "  $L__BB0_3: sqrt.approx.f32 %f1, %f0;",
+            "  rsqrt.approx.f32 %f1, %f0;",
+            "  add.u32 %r1, %r2, 1; @%p0 ex2.approx.ftz.f32 %f1, %f0;",
+            "  add.u32 %r1, %r2, 1; $L1: @!%p0 lg2.approx.f32 %f1, %f0;",
+            "  .visible .entry k() { add.u32 %r1, %r2, 1; @%p1 sin.approx.f32 %f1, %f0; }",
+            "  .visible .entry k() { $L__BB0_1: @!%p0 cos.approx.f32 %f1, %f0; ret; }",
             "  .visible .entry k() { @ %p0 tanh.approx.f32 %f1, %f0; ret; }",
+            "  add.u32 %r1, %r2, 1; @%p0 rcp.approx.f32 %f1, %f0;",
+            "  .visible .entry k() { add.u32 %r1, %r2, 1; $L__BB0_3: sqrt.approx.f32 %f1, %f0; }",
+            "  add.u32 %r1, %r2, 1; $L__BB0_4: @!%p0 rsqrt.approx.f32 %f1, %f0;",
             "  $L__BB0_4: @!%p1 wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16;",
-            "  tcgen05.mma.cta_group::1.kind::f16;",
+            "  add.u32 %r1, %r2, 1; tcgen05.mma.cta_group::1.kind::f16;",
         ] {
             assert!(
                 !forbidden_ptx(bad_ptx).is_empty(),
-                "missed predicated/labeled vendor PTX instruction: {bad_ptx}"
+                "missed predicated/labeled/statement PTX instruction: {bad_ptx}"
             );
         }
-        // Vendor candle-kernels unary.ptx / binary.ptx legitimately emit sin/cos/sqrt/rcp PTX for allowlisted usin_*/ucos_*/usqrt_*/urecip_*/bdiv_*
         assert!(
             forbidden_ptx(
-                "  $L__BB0_1: @%p0 sin.approx.ftz.f32 %f1, %f0;\n  cos.approx.ftz.f32 %f2, %f0;\n  rcp.approx.ftz.f32 %f3, %f0;\n  sqrt.approx.ftz.f32 %f4, %f0;"
+                "  .visible .entry k() { $L__BB0_1: @%p0 mul.lo.u32 %r1, %r2, 8; add.u32 %r3, %r1, 1; ret; }"
             )
             .is_empty()
         );
-        assert!(forbidden_ptx("  $L__BB0_1: @%p0 mul.lo.u32 %r1, %r2, 8;").is_empty());
         for bad_training in [
             "float y = logf(x);",
             "float y = log1pf(x);",
@@ -950,9 +1019,9 @@ fn main() {
             "__nv_bfloat16 b;",
             "  @%p1 sin.approx.f32 %f1, %f0;",
             "  $L__BB0_1: @!%p0 cos.approx.f32 %f1, %f0;",
-            "  $L__BB0_2: @%p0 rcp.approx.f32 %f1, %f0;",
-            "  $L__BB0_3: sqrt.approx.f32 %f1, %f0;",
-            "  rsqrt.approx.f32 %f1, %f0;",
+            "  add.u32 %r1, %r2, 1; @%p0 rcp.approx.f32 %f1, %f0;",
+            "  .visible .entry k() { $L__BB0_3: sqrt.approx.f32 %f1, %f0; }",
+            "  add.u32 %r1, %r2, 1; $L__BB0_4: rsqrt.approx.f32 %f1, %f0;",
         ] {
             assert!(
                 !forbidden_discrete_cuda(bad_discrete).is_empty(),
@@ -964,6 +1033,35 @@ fn main() {
                 "extern \"C\" __global__ void discrete_init(unsigned int* x) { x[0] = 1u; }"
             )
             .is_empty()
+        );
+        let multiline_decl = "extern \"C\" __global__ void\nextra(unsigned int* x) { x[0] = 0u; }";
+        assert_eq!(
+            global_entries(&code(multiline_decl), true).expect("valid multiline entry"),
+            vec!["extra".to_string()]
+        );
+        assert!(
+            global_entries(
+                &code("__global__ void\nextra(unsigned int* x) { x[0] = 0u; }"),
+                true
+            )
+            .is_err(),
+            "missing extern \"C\" must be rejected"
+        );
+        let mutated_discrete = format!(
+            "{}\nextern \"C\" __global__ void\nextra(unsigned int* x) {{ x[0] = 0u; }}\n",
+            DISCRETE_ENTRIES
+                .iter()
+                .map(|name| format!(
+                    "extern \"C\" __global__ void {name}(unsigned int* x) {{ x[0] = 0u; }}"
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let mutated_entries =
+            global_entries(&code(&mutated_discrete), true).expect("mutated discrete entries");
+        assert_ne!(
+            mutated_entries, DISCRETE_ENTRIES,
+            "multiline extra kernel must fail exact 11-entry census"
         );
         println!("PASS: missing, renamed-extra, duplicate and architecture-conditioned PTX exports rejected by frozen source inventory; planted exponential, squash and tensor-core tokens rejected; comments excluded. Static checker only.");
         return;
