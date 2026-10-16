@@ -27,6 +27,33 @@ pub struct SuiteExecutionSummary {
     pub controls: Vec<ControlReceipt>,
 }
 
+/// The driver evaluation inside a receipt, in EITHER shape the corpus contains.
+///
+/// Completion reports wrap a driver evaluation under `evaluation` by design. Raw eval-corpus
+/// receipts emit it at the TOP LEVEL (aggregate, objective_evaluation_schema, ...). The runner read
+/// only the wrapped shape, so on a raw receipt the lookup produced null and the K8/K16 guards failed
+/// for a reason unrelated to the measured counts (Codex, #2029 6207186927).
+///
+/// Both shapes are named explicitly rather than probed for anything object-shaped, and a receipt that
+/// is neither is REFUSED: a missing key must not be able to read as a failed bar.
+pub fn driver_evaluation<'a>(
+    val: &'a serde_json::Value,
+    receipt: &str,
+) -> Result<&'a serde_json::Value, String> {
+    if let Some(nested) = val.get("evaluation") {
+        if nested.is_object() {
+            return Ok(nested);
+        }
+    }
+    let raw_driver = val.get("aggregate").is_some_and(|v| v.is_object())
+        && val.get("objective_evaluation_schema").is_some();
+    if raw_driver {
+        return Ok(val);
+    }
+    Err(format!(
+        "{receipt}: neither a completion-style evaluation object nor a raw driver evaluation (aggregate + objective_evaluation_schema) is present"
+    ))
+}
 pub fn write_new_json<T: Serialize>(path: &Path, value: &T) -> Result<FilePin, String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -132,6 +159,7 @@ pub fn verify_hinge_distribution(
 mod gpu_runner {
     use super::*;
     use crate::cuda_aggregate::{identity_field, run_status12_overflow_checks};
+    use crate::driver_evaluation;
     use crate::fixtures::{
         c_r1_all_256_cells_table, c_r1_equal_distance_routes, c_r1_equal_distance_tie_table,
         c_r1_mixed_distance_table, c_r2_crowded_rival_cell_table, c_r2_new_preceding_cell_table,
@@ -1029,7 +1057,7 @@ mod gpu_runner {
         };
 
         let (k8_pin, k8_val) = read_eval("g-pre-k8-A-seed1-eval/report.json")?;
-        let k8_eval = &k8_val["evaluation"];
+        let k8_eval = driver_evaluation(&k8_val, "g-pre-k8-A-seed1-eval/report.json")?;
         if k8_eval["target_admitted_rows"].as_u64() != Some(G_PRE_K8_SEED1_EXPECTED_ADMITTED)
             || k8_eval["top1_correct"].as_u64() != Some(G_PRE_K8_SEED1_EXPECTED_TOP1)
             || k8_eval["top8_correct"].as_u64() != Some(G_PRE_K8_SEED1_EXPECTED_TOP8)
@@ -1052,7 +1080,7 @@ mod gpu_runner {
             "g-pre-k16-R-seed2-eval/report.json",
         ] {
             let (pin, val) = read_eval(run)?;
-            let ev = &val["evaluation"];
+            let ev = driver_evaluation(&val, run)?;
             let target_admitted = ev["target_admitted_rows"]
                 .as_u64()
                 .ok_or("missing target_admitted_rows")?;
@@ -1351,5 +1379,42 @@ mod tests {
         let mut bad_zero = dist;
         bad_zero.zero_rows = 2;
         assert!(verify_hinge_distribution("test_rank", &bad_zero, 17, 22, 4).is_err());
+    }
+    #[test]
+    fn a_raw_driver_receipt_reads_at_the_top_level() {
+        let raw = serde_json::json!({
+            "schema": "uor-r4.driver/v1",
+            "objective_evaluation_schema": "uor-r4.objective-evaluation/v1",
+            "aggregate": {"target_admitted_rows": 4894},
+            "target_admitted_rows": 4894
+        });
+        let ev = driver_evaluation(&raw, "raw.json").expect("raw shape accepted");
+        assert_eq!(ev["target_admitted_rows"].as_u64(), Some(4894));
+    }
+
+    #[test]
+    fn a_completion_style_receipt_still_reads_its_wrapped_evaluation() {
+        let wrapped = serde_json::json!({
+            "schema": "uor-r4.completion-evaluation/v1",
+            "evaluation": {"target_admitted_rows": 4894}
+        });
+        let ev = driver_evaluation(&wrapped, "wrapped.json").expect("wrapped shape accepted");
+        assert_eq!(ev["target_admitted_rows"].as_u64(), Some(4894));
+    }
+
+    #[test]
+    fn a_malformed_receipt_is_refused_rather_than_read_as_a_failed_bar() {
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!({"schema": "uor-r4.driver/v1"}),
+            serde_json::json!({"aggregate": {}}),
+            serde_json::json!({"evaluation": null}),
+        ] {
+            let err = driver_evaluation(&bad, "bad.json").expect_err("refused");
+            assert!(
+                err.contains("bad.json"),
+                "the refusal names the receipt: {err}"
+            );
+        }
     }
 }
