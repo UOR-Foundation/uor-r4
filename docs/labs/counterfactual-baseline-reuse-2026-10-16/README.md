@@ -1,6 +1,6 @@
 # Exact counterfactual baseline reuse — design, 16 October 2026
 
-**Docs-only pre-registration; TEST FITNESS PENDING; implementation and new
+**Docs-only pre-registration; TEST FITNESS FIT for design only; implementation and new
 measurements NOT_RUN.** The [sheet](../../harness/prep/m1-counterfactual-baseline-reuse-2026-10-16.md)
 turns the protected [decomposition result](../counterfactual-decomposition-run-2026-10-16/README.md)
 into one bounded native CUDA change: compute unchanged baseline eligibility
@@ -29,6 +29,8 @@ quality, speedup or fresh-transfer result follows from this design.
 
 This unit costs zero leases / $0 new GPU spend. Inherited29-lease Codex estimate
 $3.174466388 plus separate PM receipts stays unchanged; storage/transfer USD
-UNMEASURED. **Next:** independent exact-head FIT, protected delivery and cleanup,
+UNMEASURED. Independent [design FIT6226136376](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6226136376)
+binds prospective head `925422da5`; source and execution approvals are separate.
+**Next:** protected delivery and cleanup,
 then the narrow source implementation and its independent construction review.
 Finite controls and timing require distinct later execution releases.

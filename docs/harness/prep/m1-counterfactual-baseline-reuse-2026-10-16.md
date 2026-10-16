@@ -243,7 +243,12 @@ Self-set wall estimates do not cancel healthy runs. No unscheduled expansion.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
-Independent review must bind the delivered sheet.
+Independent design review `review_2551` is recorded on
+[#2029, comment6226136376](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6226136376)
+and [PR #2560](https://github.com/UOR-Foundation/uor-r4/pull/2560#issuecomment-6226136069).
+It binds the prospective sheet at `925422da5290af9cab410c8bf4f413f2467dc563`,
+SHA256 `b90aaae2f7068da11823f44e6158b1de930a0e701964ad9d7dc18ee982f7b405`.
+This later verdict annotation changes no hypothesis, dose, bar or permission.
 No optimization code or execution release is included in this PR.
