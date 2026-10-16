@@ -27,7 +27,11 @@ pub struct SuiteExecutionSummary {
     pub controls: Vec<ControlReceipt>,
 }
 
-/// The driver evaluation inside a receipt, in EITHER shape the corpus contains.
+/// The METRICS object (the aggregate) of a receipt, in either producer shape.
+///
+/// The producer puts the aggregate metrics AND the zero-update flags only under `aggregate`: at the
+/// top level for a raw driver receipt, under `evaluation.aggregate` for a completion envelope
+/// (completion.rs:580-581). Reading them one level high is the blocker this repairs.
 ///
 /// Completion reports wrap a driver evaluation under `evaluation` by design. Raw eval-corpus
 /// receipts emit it at the TOP LEVEL (aggregate, objective_evaluation_schema, ...). The runner read
@@ -40,18 +44,35 @@ pub fn driver_evaluation<'a>(
     val: &'a serde_json::Value,
     receipt: &str,
 ) -> Result<&'a serde_json::Value, String> {
-    if let Some(nested) = val.get("evaluation") {
-        if nested.is_object() {
-            return Ok(nested);
-        }
+    const DRIVER: &str = "uor-r4.discrete-corpus-driver/1";
+    const OBJECTIVE: &str = "uor-r4.discrete-objective-evaluation/1";
+    const COMPLETION: &str = "uor-r4.completion-evaluation/1";
+    let schema = val.get("schema").and_then(|v| v.as_str());
+    if schema == Some(COMPLETION) {
+        return val
+            .get("evaluation")
+            .and_then(|e| e.get("aggregate"))
+            .filter(|agg| agg.is_object())
+            .ok_or_else(|| {
+                format!("{receipt}: completion envelope has no evaluation.aggregate object")
+            });
     }
-    let raw_driver = val.get("aggregate").is_some_and(|v| v.is_object())
-        && val.get("objective_evaluation_schema").is_some();
-    if raw_driver {
-        return Ok(val);
+    if schema == Some(DRIVER) {
+        let objective = val
+            .get("objective_evaluation_schema")
+            .and_then(|v| v.as_str());
+        if objective != Some(OBJECTIVE) {
+            return Err(format!(
+                "{receipt}: objective_evaluation_schema is {objective:?}, expected {OBJECTIVE}"
+            ));
+        }
+        return val
+            .get("aggregate")
+            .filter(|agg| agg.is_object())
+            .ok_or_else(|| format!("{receipt}: driver receipt has no aggregate object"));
     }
     Err(format!(
-        "{receipt}: neither a completion-style evaluation object nor a raw driver evaluation (aggregate + objective_evaluation_schema) is present"
+        "{receipt}: unrecognized receipt schema {schema:?}; expected {DRIVER} or {COMPLETION}"
     ))
 }
 pub fn write_new_json<T: Serialize>(path: &Path, value: &T) -> Result<FilePin, String> {
@@ -1038,9 +1059,12 @@ mod gpu_runner {
             let sha256 = sha256_hex(&bytes);
             let val: serde_json::Value =
                 serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-            if val["updates_applied_by_evaluation"] != 0
-                || val["accepted_updates_in_model"] != 0
-                || val["evaluation_mutates_model"] != false
+            // The zero-update flags live with the metrics, under the aggregate, in both shapes:
+            // reading them at the receipt root is what made a real completion envelope unpassable.
+            let metrics = driver_evaluation(&val, &path.display().to_string())?;
+            if metrics["updates_applied_by_evaluation"] != 0
+                || metrics["accepted_updates_in_model"] != 0
+                || metrics["evaluation_mutates_model"] != false
             {
                 return Err(format!(
                     "C-R6 G-Pre receipt {} violated zero-update invariant",
@@ -1381,34 +1405,66 @@ mod tests {
         assert!(verify_hinge_distribution("test_rank", &bad_zero, 17, 22, 4).is_err());
     }
     #[test]
-    fn a_raw_driver_receipt_reads_at_the_top_level() {
+    fn a_raw_driver_receipt_reads_its_aggregate_metrics() {
+        // Producer-faithful: metrics ONLY under aggregate, real schema identifiers, no root alias.
         let raw = serde_json::json!({
-            "schema": "uor-r4.driver/v1",
-            "objective_evaluation_schema": "uor-r4.objective-evaluation/v1",
-            "aggregate": {"target_admitted_rows": 4894},
-            "target_admitted_rows": 4894
+            "schema": "uor-r4.discrete-corpus-driver/1",
+            "objective_evaluation_schema": "uor-r4.discrete-objective-evaluation/1",
+            "aggregate": {
+                "target_admitted_rows": 4894,
+                "top1_correct": 0,
+                "updates_applied_by_evaluation": 0,
+                "accepted_updates_in_model": 0,
+                "evaluation_mutates_model": false
+            }
         });
-        let ev = driver_evaluation(&raw, "raw.json").expect("raw shape accepted");
+        let ev = driver_evaluation(&raw, "raw.json").expect("raw aggregate accepted");
         assert_eq!(ev["target_admitted_rows"].as_u64(), Some(4894));
+        assert_eq!(ev["updates_applied_by_evaluation"], serde_json::json!(0));
     }
 
     #[test]
-    fn a_completion_style_receipt_still_reads_its_wrapped_evaluation() {
+    fn a_completion_envelope_passes_with_its_nested_driver_evaluation() {
+        // A completion envelope carries the driver evaluation nested; its flags live inside it.
         let wrapped = serde_json::json!({
-            "schema": "uor-r4.completion-evaluation/v1",
-            "evaluation": {"target_admitted_rows": 4894}
+            "schema": "uor-r4.completion-evaluation/1",
+            "evaluation": {
+                "aggregate": {
+                    "target_admitted_rows": 4894,
+                    "updates_applied_by_evaluation": 0,
+                    "accepted_updates_in_model": 0,
+                    "evaluation_mutates_model": false
+                }
+            }
         });
-        let ev = driver_evaluation(&wrapped, "wrapped.json").expect("wrapped shape accepted");
+        let ev = driver_evaluation(&wrapped, "wrapped.json").expect("completion envelope accepted");
         assert_eq!(ev["target_admitted_rows"].as_u64(), Some(4894));
+        assert_eq!(ev["evaluation_mutates_model"], serde_json::json!(false));
     }
 
     #[test]
-    fn a_malformed_receipt_is_refused_rather_than_read_as_a_failed_bar() {
+    fn a_missing_aggregate_or_unknown_schema_is_refused_by_name() {
         for bad in [
+            // Driver schema with the metrics at the ROOT only: the descent must FAIL, not fall back.
+            // This is the case the previous regression masked with an invented root alias.
+            serde_json::json!({
+                "schema": "uor-r4.discrete-corpus-driver/1",
+                "objective_evaluation_schema": "uor-r4.discrete-objective-evaluation/1",
+                "target_admitted_rows": 4894
+            }),
+            // Named objective schema is wrong.
+            serde_json::json!({
+                "schema": "uor-r4.discrete-corpus-driver/1",
+                "objective_evaluation_schema": "uor-r4.objective-evaluation/v1",
+                "aggregate": {}
+            }),
+            // Completion envelope without the aggregate descent.
+            serde_json::json!({
+                "schema": "uor-r4.completion-evaluation/1",
+                "evaluation": {"target_admitted_rows": 4894}
+            }),
             serde_json::json!({}),
-            serde_json::json!({"schema": "uor-r4.driver/v1"}),
-            serde_json::json!({"aggregate": {}}),
-            serde_json::json!({"evaluation": null}),
+            serde_json::json!({"schema": "something-else"}),
         ] {
             let err = driver_evaluation(&bad, "bad.json").expect_err("refused");
             assert!(
