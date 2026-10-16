@@ -9,7 +9,7 @@
 ## Summary of Changes
 
 1. **Comment Lexer Hardening (`code`), Expanded `forbidden()`, & Statement/Token Predicated/Labeled PTX Scanner (`forbidden_ptx`) in [`scripts/check_native_cuda_vendor.rs`](../../../scripts/check_native_cuda_vendor.rs):**
-   - Hardened `code(text: &str)` to step over C/Rust character literals (`'c'`, `'\"'`, `'\\'`, etc., without treating Rust lifetimes `'a` as multi-character strings) and Rust raw string literals (`r"..."`, `r#"..."#`, `br"..."`, `br#"..."#`) so quotes inside character or raw-string literals cannot desynchronize block-comment stripping.
+   - Hardened `code(text: &str)` to step over C/C++ and Rust single- and multicharacter literals (`'c'`, `'\"'`, `'\\'`, `'/*'`, `'*/'`, etc., without swallowing Rust lifetimes `'a` or C++14 digit separators) and Rust raw string literals (`r"..."`, `r#"..."#`, `br"..."`, `br#"..."#`) so quotes or comment delimiters inside character, multicharacter, or raw-string literals cannot desynchronize block-comment stripping.
    - Expanded `forbidden()` with:
      - Identifier/symbol substring families: `uelu_`, `wgmma`, `tcgen05`, `ulog_`, `__nv_log`, `__nv_tanh`, `__nv_erf` (alongside existing `softmax`, `softplus`, `sigmoid`, `tanh`, `gelu`, `silu`, `rope`, `ropei`, `rotary`, `cublas`, `cudnn`, `nvrtc`, `matmul`, `gemm`, `wmma`, `mma_sync`, `uexp_`, `__nv_exp`).
      - Exact identifier tokens: `erf`, `erff`, `erfc`, `erfcf`, `erfinv`, `erfinvf`, `tanhf`, `elu`, `sgemm`, `dgemm`, `hgemm`, `gemv` (`elu` is checked as an exact identifier and `uelu_` as a prefix family so `relu` / `urelu_*` in `third_party/candle-kernels-0.9.2/src/unary.cu` do not false-positive).

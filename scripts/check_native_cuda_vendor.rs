@@ -113,26 +113,46 @@ fn code(text: &str) -> String {
                 i += 1;
             }
         } else if out[i] == b'\'' {
-            if i + 2 < out.len()
-                && out[i + 1] != b'\\'
-                && out[i + 1] != b'\''
-                && out[i + 1] != b'\n'
-                && out[i + 2] == b'\''
-            {
-                i += 3;
-            } else if i + 3 < out.len() && out[i + 1] == b'\\' {
-                let mut j = i + 3;
-                let mut closed = None;
-                while j < out.len() && j <= i + 12 && out[j] != b'\n' {
-                    if out[j] == b'\'' {
-                        closed = Some(j + 1);
-                        break;
-                    }
-                    j += 1;
+            let is_digit_sep = i > 0
+                && out[i - 1].is_ascii_digit()
+                && !(i >= 2 && &out[i - 2..i] == b"u8");
+            if is_digit_sep {
+                i += 1;
+                continue;
+            }
+            let mut k = i + 1;
+            if k < out.len() && (out[k].is_ascii_alphabetic() || out[k] == b'_') {
+                while k < out.len() && (out[k].is_ascii_alphanumeric() || out[k] == b'_') {
+                    k += 1;
                 }
-                i = closed.unwrap_or(i + 1);
+            }
+            let mut next_non_ws = k;
+            while next_non_ws < out.len()
+                && (out[next_non_ws] == b' ' || out[next_non_ws] == b'\t')
+            {
+                next_non_ws += 1;
+            }
+            let is_lifetime = k > i + 1
+                && (k == out.len() || out[k] != b'\'')
+                && (next_non_ws == out.len()
+                    || !matches!(
+                        out[next_non_ws],
+                        b'\'' | b'/' | b'*' | b'"' | b'\\'
+                    ));
+            if is_lifetime {
+                i = k;
             } else {
                 i += 1;
+                while i < out.len() && out[i] != b'\n' {
+                    if out[i] == b'\\' {
+                        i = (i + 2).min(out.len());
+                    } else if out[i] == b'\'' {
+                        i += 1;
+                        break;
+                    } else {
+                        i += 1;
+                    }
+                }
             }
         } else if out[i] == b'"' {
             i += 1;
@@ -968,9 +988,16 @@ fn main() {
             "float y = elu(x);",
             "char q = '\"'; const char* a = \"/*\"; float x = expf(y); const char* b = \"*/\"; char q2 = '\"';",
             "let s = r#\"\\\"/*\"#; let y = expf(x); let t = r#\"*/\"#;",
+            "int a = '/*'; float y = expf(x); int b = '*/';",
+            "int a = 'a/*'; float y = expf(x); int b = '*/';",
         ] {
             assert!(!forbidden(bad).is_empty(), "missed {bad}");
         }
+        assert!(
+            forbidden("int a = '/*'; float y = expf(x); int b = '*/';")
+                .contains(&"expf".to_string()),
+            "multicharacter literal comment-delimiter pair hid expf"
+        );
         assert!(forbidden("// expf(x) mma.sync\nfloat x=a+b; /* sigmoid */").is_empty());
         assert!(forbidden("void urelu_f32(int x){}").is_empty());
         for bad_ptx in [
