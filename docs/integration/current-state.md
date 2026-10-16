@@ -7832,3 +7832,7 @@ contracts are in the [history file](../history/current-state-2026-09-25-to-2026-
   **Pre-alpha; no useful general-language, coding, frontier, geometric-advantage or
   full-path energy qualification.**
 
+## 2026-10-16 — Proposal sub-phase instrumentation and pending FIT (codex)
+
+The [source-only diagnostic](../labs/propose-subphase-diagnostic-2026-10-16/README.md) adds precreated same-stream counterfactual/chooser events and nine disjoint host spans while preserving the ordinary proposal path and original caller timer. The [sheet](../harness/prep/m1-propose-subphase-diagnostic-2026-10-16.md) is TEST FITNESS: PENDING: one excluded warmup plus three timed batches per checkpoint0 A/R arm, diagnostic only, not qualification/p95/training rate. Owner instrument+optimize-first defers 100-batch qualification timing. Source hashing necessarily changes; the old checkpoint loader refusal is preserved, with a separately reviewed evaluation-only checkpoint0 identity bridge required before execution. No diagnostic/model/fixture execution is authorized by this delivery. DeepSeek holds source review; Kimi plus independent reviewer holds FIT; Codex supplies compile-only CUDA gates. Qualification/training/M2/Stage B HELD, Q4 NOT_EXECUTABLE, count 0/3 and suspended headline 37/232 unchanged.
+

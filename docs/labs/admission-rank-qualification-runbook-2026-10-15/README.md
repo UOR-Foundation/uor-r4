@@ -641,3 +641,12 @@ Before publishing the qualification receipt PR and `D-Packet`, the executor must
 - `CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/harness-target cargo test --locked --offline -p uor-r4-discrete --no-default-features`: **40 passed (`35` lib + `5` `prime-zeta-qualify`), 0 failed, 1 ignored** (confirms `training::driver_source_sha256() == ed4655a22dbec24316cfe5df16a43407860651ce6aa7a690ee8fcd5bedaf05d8`, `discrete.cu` raw file SHA-256 `f679f8736500925014ff721ab035f3c284446baa6af0763f27b09bc388763008`, `objective.rs` `C-R1..C-R6` host contract scaffolds, `redirect_admission.rs` K16 qualification/G-Pre/step-0 metadata validators, and `lib.rs` `.apply(` call-site census).
 - `CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/harness-target cargo test --locked --offline --manifest-path docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml`: **15 passed, 0 failed**.
 - `uor-harness ratchet d23`, `uor-harness ratchet d25`, `uor-harness check-formats`, `uor-harness shard-check`, `python3 scripts/check_claim_wording.py`: all pass.
+# Current execution dependency — 16 October
+
+The [owner instrument+optimize-first decision](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6210107580)
+defers 100-batch qualification timing to the optimized stack. The
+[pending proposal diagnostic](../propose-subphase-diagnostic-2026-10-16/README.md)
+does not discharge any qualification or training gate; its checkpoint-0
+identity bridge remains a reviewed prerequisite. Historical execution steps
+below do not authorize a restart. Training/M2/Stage B HELD; Q4 NOT_EXECUTABLE.
+
