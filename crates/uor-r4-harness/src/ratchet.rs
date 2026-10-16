@@ -206,15 +206,42 @@ fn count_ci(hay: &str, needle: &str) -> u64 {
     lower.matches(needle).count() as u64
 }
 
+/// Whether an ASCII-alphanumeric code segment (case-preserved) matches one of
+/// [`D23_IDENT_FAMILIES`].
+///
+/// - For `softplus`, `sigmoid`, `tanh`, `gelu`, `silu`, and `rotary`, any case-insensitive
+///   substring match inside the alphanumeric segment counts (catching standalone identifiers,
+///   C float intrinsics like `tanhf`, and CamelCase/PascalCase compounds like `SigmoidGate`,
+///   `RotaryEmbedding`, `SoftplusLoss`, `GeluActivation`, `SiluGate`, `SiLU`, `GeLU`).
+/// - For `rope` and `ropei`, a segment counts when its lowercased form starts with `rope`
+///   (catching `rope`, `ropei`, `RopeMode`, `RopeTheta`, `RoPE`, `RoPEConfig`) or its
+///   case-preserved form contains `Rope`, `RoPE`, or `ROPE` (catching prefixed PascalCase/camelCase
+///   compounds such as `PreRopeProjectionObservations`, `PreRopeProjectionProbe`, `applyRope`),
+///   while rejecting English `proper`/`Proper`/`property`/`Properties`/`WriterProperties`.
+fn is_d23_ident_segment(seg: &str) -> bool {
+    let lower = seg.to_ascii_lowercase();
+    if lower.starts_with(concat!("ro", "pe"))
+        || seg.contains(concat!("Ro", "pe"))
+        || seg.contains(concat!("Ro", "PE"))
+        || seg.contains(concat!("RO", "PE"))
+    {
+        return true;
+    }
+    D23_IDENT_FAMILIES
+        .iter()
+        .filter(|&&fam| fam != concat!("ro", "pe") && fam != concat!("ro", "pei"))
+        .any(|&fam| lower.contains(fam))
+}
+
 /// Count D23 sites in `text`: every case-insensitive occurrence of [`D23_WORD`] in raw text, plus
 /// every ASCII-alphanumeric identifier segment matching [`D23_IDENT_FAMILIES`] in stripped code
 /// (comments and plain strings removed, raw strings kept).
 fn d23_sites(text: &str) -> u64 {
     let base = count_ci(text, D23_WORD);
-    let code = strip_comments_and_strings(text).to_ascii_lowercase();
+    let code = strip_comments_and_strings(text);
     let extra: u64 = code
         .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|seg| !seg.is_empty() && D23_IDENT_FAMILIES.contains(seg))
+        .filter(|seg| !seg.is_empty() && is_d23_ident_segment(seg))
         .count() as u64;
     base + extra
 }
@@ -576,11 +603,9 @@ mod tests {
         assert_eq!(res.tensor_core, 3);
         assert_eq!(res.tensor_files, 1);
         assert_eq!(res.detail["crates/x/src/tc.cu"].len(), 3);
-        assert!(
-            res.detail["crates/x/src/tc.cu"]
-                .iter()
-                .all(|site| site.kind == "tensor-core")
-        );
+        assert!(res.detail["crates/x/src/tc.cu"]
+            .iter()
+            .all(|site| site.kind == "tensor-core"));
     }
 
     #[test]
@@ -595,10 +620,14 @@ mod tests {
         let code_hits = "fn f() { rank_softplus(); stack_sigmoid_q31(); x.tanh(); gelu_erf(); silu_fwd(); apply_rope_f32(); ropei_table(); rotary_pos(); }\n";
         assert_eq!(d23_sites(code_hits), 8);
 
-        let clean = "// softplus sigmoid tanh gelu silu rope ropei rotary\nlet s = \"softplus sigmoid tanh gelu silu rope ropei rotary\";\nlet proper = property.properties(is_proper_prefix, WriterProperties);\n";
+        let camel_and_c_hits = "enum E { RopeMode, RopeTheta, PreRopeProjectionProbe, RotaryEmbedding, SigmoidGate, SoftplusLoss, GeluActivation, SiluGate, RoPE, SiLU, GeLU } fn k() { tanhf(x); }\n";
+        assert_eq!(d23_sites(camel_and_c_hits), 12);
+
+        let clean = "// softplus sigmoid tanh gelu silu rope ropei rotary\nlet s = \"softplus sigmoid tanh gelu silu rope ropei rotary\";\nlet proper = property.properties(is_proper_prefix, Proper, Property, Properties, WriterProperties);\n";
         assert_eq!(d23_sites(clean), 0);
 
-        let raw_kernel = "let k = r#\"__device__ void apply_rope_f32() { float y = tanh(x); }\"#;\n";
+        let raw_kernel =
+            "let k = r#\"__device__ void apply_rope_f32() { float y = tanhf(x); }\"#;\n";
         assert_eq!(d23_sites(raw_kernel), 2);
     }
 

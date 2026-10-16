@@ -45,8 +45,8 @@ come from the owner through the PM.
 
 ## R5 — Ratchets stay green on every PR
 
-- **Rule.** Every PR keeps the ratchets and policy check green: `uor-harness ratchet d23` (2,228 sites /
-  153 files across `crates/` and `docs/labs/*/instrument/`, covering `softmax` plus stripped-code
+- **Rule.** Every PR keeps the ratchets and policy check green: `uor-harness ratchet d23` (2,253 sites /
+  154 files across `crates/` and `docs/labs/*/instrument/`, covering `softmax` plus stripped-code
   `softplus`, `sigmoid`, `tanh`, `gelu`, `silu`, `rope`, `ropei` and `rotary`), `uor-harness ratchet d25`
   (93 sites / 26 files across `crates/` and `docs/labs/*/instrument/`, gating `.matmul(`, `MatMul`,
   `cublas`, `gemm` and tensor-core `wmma`/`mma_sync` intrinsics), `cargo run -p uor-r4-core --bin r4-policy-check`

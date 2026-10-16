@@ -138,8 +138,9 @@ mod tests {
     #[test]
     fn stale_training_matmul_true_is_rejected() {
         let root = repo_root();
-        let src = std::fs::read_to_string(root.join("docs/integration/agent-execution-policy.json"))
-            .expect("read policy");
+        let src =
+            std::fs::read_to_string(root.join("docs/integration/agent-execution-policy.json"))
+                .expect("read policy");
         let mut val: Value = serde_json::from_str(&src).expect("parse policy");
         val["architecture"]["training_matrix_multiplication_allowed"] = Value::from(true);
         let dir = std::env::temp_dir().join(format!(

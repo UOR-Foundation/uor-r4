@@ -172,7 +172,7 @@ pub fn interlock_holds(paths: &StatePaths, claims: &[String]) -> Vec<Finding> {
             Kind::NormExp,
             "D23",
             INTERLOCK,
-            "replace the site with a geometric mechanism, then lower the baseline with              --update-baseline",
+            "replace the site with a geometric mechanism, then lower the baseline with --update-baseline",
         ),
         (
             Kind::Matmul,
@@ -377,8 +377,9 @@ mod tests {
         assert_eq!(f.len(), 1, "{f:?}");
         assert_eq!(f[0].severity, "error");
         assert!(
-            f[0].message
-                .contains("the D25 interlock reports 1 file(s) above baseline: crates/x/src/a.rs (0 -> 1)"),
+            f[0].message.contains(
+                "the D25 interlock reports 1 file(s) above baseline: crates/x/src/a.rs (0 -> 1)"
+            ),
             "{}",
             f[0].message
         );
