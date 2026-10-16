@@ -36,3 +36,23 @@ negative. Diagnostic/parity/qualification/training NOT_RUN. Training/M2/
 Stage B HELD; Q4 NOT_EXECUTABLE. Subsequent exact-head gate transcripts,
 archives and full provider-uptime costs are attached to [source PR #2550](https://github.com/UOR-Foundation/uor-r4/pull/2550);
 no source delivery or compile transcript is execution authorization.
+
+## Attempt 2 — 4dd7e7c38 (compile passes; register confound)
+
+- Exact head `4dd7e7c38f2d34dd1db6278895dfbe1bad67078f`, session
+  `codex-cf1-gate2550-r2`, pod `vast-56278739`, same declared CUDA/Rust profile.
+  **check0 / strict-clippy0 / run0**. Full transcript attaches to PR #2550.
+  No model or fixture calls. Both PTX hashes equal attempt1.
+- Static ptxas report: U88 vs D194 registers, both21,536 bytes stack, both
+  zero spill loads/stores. **D exceeds the prospective U+16 allowance.**
+  Compilation is not a valid causal-instrument result or diagnostic release;
+  runtime/JIT resources, parity and timing remain NOT_RUN.
+- Bounded source repair: make only probe-counter/timer storage volatile local
+  storage, preserving model operations, launch and the unchanged allowance.
+  No source patch/retry on the lease; repair follows archival and deletion.
+- Archive `icloud:UOR-R4/results/codex/gate2550-r2-archive.tar`, **3,104,256 bytes**,
+  cloud MD5 **0010ddee8ae7d7dd0007a49668e374e2**, SHA manifest checked before
+  release17:52:15Z / down17:52:21Z, real fleet0/$0h.
+- Provider193s × $0.977/h = **$0.052378056 estimate**; both source-gate leases
+  **$0.085671389**; Codex episode **$2.316106667** plus PM's separate ~$0.086.
+  Not invoices; storage/transfer UNMEASURED. No mechanism negative/count reset.

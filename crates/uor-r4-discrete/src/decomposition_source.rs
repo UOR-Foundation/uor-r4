@@ -36,7 +36,7 @@ pub fn generate(source: &str) -> Result<String, String> {
         "U* arithmetic_status=0)",
         &format!(
             "U* arithmetic_status=0{}{}",
-            probe(",W* probe_words=0,U probe_base=0"),
+            probe(",volatile W* probe_words=0,U probe_base=0"),
             ")"
         ),
     )?;
@@ -103,7 +103,7 @@ pub fn generate(source: &str) -> Result<String, String> {
         "if(candidate>=16)return;",
         &format!(
             "if(candidate>=16)return;{}",
-            probe("ProbeLane lane(records,candidate);W* t=lane.words;")
+            probe("ProbeLane lane(records,candidate);volatile W* t=lane.words;")
         ),
     )?;
     insert_once(
@@ -216,13 +216,13 @@ const PROBES: &str = r#"
 // Clocks are integer observation metadata, with compiler memory barriers.
 __device__ __forceinline__ W probe_clock() { W now;asm volatile("mov.u64 %0, %%clock64;" : "=l"(now) :: "memory");return now; }
 struct ProbeSpan {
-    W* destination;W begin;bool active;
-    __device__ ProbeSpan(W* out):destination(out),begin(probe_clock()),active(true){}
+    volatile W* volatile destination;volatile W begin;volatile bool active;
+    __device__ ProbeSpan(volatile W* out):destination(out),begin(probe_clock()),active(true){}
     __device__ void finish(){if(active){*destination+=probe_clock()-begin;active=false;}}
     __device__ ~ProbeSpan(){finish();}
 };
 struct ProbeLane {
-    W* output;W words[40];
+    W* output;volatile W words[40];
     __device__ ProbeLane(W* records,U candidate):output(records+candidate*40){
         W begin=probe_clock();for(U i=0;i<40;++i)words[i]=0;
         words[0]=0x434631;words[1]=candidate;words[2]=1;words[5]=begin;
