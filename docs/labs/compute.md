@@ -47,6 +47,14 @@ From an owned worktree use **bash**, with the following variables set to your
 lab, unique session, exact pushed head, branch, PR URL and local archive path.
 `MANIFEST=docs/labs/k16-timing-2026-10-15/instrument/Cargo.toml` for the timing
 instrument; the fixture instrument path is also explicitly admitted by the script.
+`crates/uor-r4-training/Cargo.toml` is admitted for compile-gate coverage of the
+training crate's cuda-gated targets (the D29 source-scan tests are
+`required-features = ["cuda"]`, so only `--all-targets` reaches them on a pod).
+For that manifest the check gate adds `--all-targets`, clippy runs without
+`-D warnings` as an advisory transcript (the crate carries pre-existing lint
+debt; a hard clippy error still stops the run), and the lease should allow
+**30 minutes** (`--hours 0.5`) because the training crate and the vendored
+candle CUDA modules build cold on a fresh pod.
 Do not reuse a session or another lab's pod. Check status/caps before `up`.
 The laptop needs `gh`, `jq`, `tar`, `shasum` and the configured `cloud-store`;
 the latter lives at `$HOME/.local/share/uor-r4/bin/cloud-store` on the owner host.
