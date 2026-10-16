@@ -117,9 +117,27 @@ source preparation,20 duplicated extracted input files were byte-compared agains
 retained tar originals and only those copies removed (~312MiB); unique evidence
 was preserved. Lightweight host builds retain the30GiB floor.
 
+Two construction attempts stopped before CUDA compilation. Attempt r1's provider
+instance exited before setup; SSH refused connections after its initial readiness
+check. Attempt r2 completed setup, then the clean-source preflight rejected its
+own receipt files. Both failures are retained tooling evidence, with no model
+result. The recipe repair preserves exact-head, tracked-tree and index checks,
+allows only this session's output and precisely named runner/reaper receipts,
+and rejects all other untracked files. Host Git fixtures exercise these boundaries.
+
+Both archives passed SHA checks and full cloud MD5 readback before teardown:
+`icloud:UOR-R4/results/codex/gate2561-r1-archive.tar` (56,320 bytes,
+MD5 `7d42af37559759e3cf67a9c67db8ddd7`) and
+`icloud:UOR-R4/results/codex/gate2561-r2-archive.tar` (116,224 bytes,
+MD5 `71ad70f7732b7280d8111c4ae8be9f95`). Their lifecycle estimates are
+$0.026898889 and $0.034249167; provider billing during the first instance's
+stopped interval is not inferred. Both pods are deleted and fleet0 verified.
+Source mathematics, image expectations and fixed experiment dose are unchanged.
+
 Line: M1 qualification/cost tooling. Count0/3 and suspended headline37/232 remain
-unchanged. At source freeze this preparation has zero new leases/$0 GPU cost; inherited
-29-lease Codex estimate$3.174466388 plus separate PM remains, storage/transfer USD
+unchanged. At this revised source freeze, two startup/preflight leases total
+$0.061148056; cumulative31-lease Codex estimate$3.235614444 plus separate PM,
+startup/compile subtotal$0.802360555, storage/transfer USD
 UNMEASURED. **Next:** exact-head source/construction approval and protected merge;
 then distinct reviewed finite pins/release, accepted outcome, and only afterward
 a separate fixed-dose timing release.

@@ -101,10 +101,26 @@ disk_floor() {
     [[ "$available" =~ ^[0-9]+$ ]] && [ "$available" -ge 31457280 ]
 }
 clean_source() {
-    test "$(git rev-parse HEAD)" = "$construction_head"
-    git diff --exit-code
-    git diff --cached --exit-code
-    test -z "$(git status --porcelain --untracked-files=all)"
+    # gate calls this function in an if-condition: propagate each check
+    # explicitly rather than relying on errexit inside that conditional.
+    test "$(git rev-parse HEAD)" = "$construction_head" || return 1
+    git diff --exit-code || return 1
+    git diff --cached --exit-code || return 1
+    local entry path
+    local job_pattern="^jobs/codex/[0-9]{8}T[0-9]{6}Z-${construction_session}-gpu0\\.(log|sh)$"
+    # Operational receipts are created before this check. Only this run's
+    # exact receipt locations are allowed; all other untracked source fails.
+    git status --porcelain=v1 -z --untracked-files=all |
+        while IFS= read -r -d '' entry; do
+            test "${entry:0:3}" = '?? ' || return 1
+            path=${entry:3}
+            case "$path" in
+                "evals/$construction_session/"*|pods/reaper.log) continue ;;
+            esac
+            if [[ "$path" =~ $job_pattern ]]; then continue; fi
+            printf 'Unadmitted untracked path: %q\n' "$path" >&2
+            return 1
+        done
 }
 sha() { sha256sum "$1" | awk '{print $1}'; }
 
