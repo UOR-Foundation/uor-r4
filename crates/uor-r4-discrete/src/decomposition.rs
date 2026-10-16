@@ -1,6 +1,32 @@
 //! Diagnostic receipt parsing and exact accounting only. No host model/oracle.
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstrumentError {
+    Trace(String),
+    Proposal(String),
+    Resource(String),
+    Routing(String),
+}
+impl std::fmt::Display for InstrumentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (kind, message) = match self {
+            Self::Trace(message) => ("trace", message),
+            Self::Proposal(message) => ("proposal", message),
+            Self::Resource(message) => ("resource", message),
+            Self::Routing(message) => ("routing", message),
+        };
+        write!(f, "decomposition {kind}: {message}")
+    }
+}
+impl std::error::Error for InstrumentError {}
+impl From<InstrumentError> for String {
+    fn from(error: InstrumentError) -> Self {
+        error.to_string()
+    }
+}
+pub type InstrumentResult<T> = Result<T, InstrumentError>;
+
 pub const LANES: usize = 16;
 pub const WORDS: usize = 40;
 pub const MAGIC: u64 = 0x434631;
@@ -55,7 +81,7 @@ pub struct Ratio {
     pub denominator: u128,
 }
 impl Ratio {
-    pub fn at_least_percent(&self, percent: u128) -> bool {
+    fn at_least_percent(&self, percent: u128) -> bool {
         self.denominator != 0 && self.numerator * 100 >= self.denominator * percent
     }
 }
@@ -76,7 +102,10 @@ pub struct LaneRecord {
     pub writer_share: Ratio,
 }
 
-pub fn decode(raw: &[u64]) -> Result<Vec<LaneRecord>, String> {
+pub fn decode(raw: &[u64]) -> InstrumentResult<Vec<LaneRecord>> {
+    decode_words(raw).map_err(InstrumentError::Trace)
+}
+fn decode_words(raw: &[u64]) -> Result<Vec<LaneRecord>, String> {
     if raw.len() != LANES * WORDS {
         return Err("diagnostic trace inventory must be 16 x 40 words".into());
     }
@@ -159,7 +188,10 @@ pub struct ProposalReceipt {
     pub proposal: [u64; 5],
 }
 impl ProposalReceipt {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> InstrumentResult<()> {
+        self.validate_fields().map_err(InstrumentError::Proposal)
+    }
+    fn validate_fields(&self) -> Result<(), String> {
         if self.losses.len() != 16
             || self.status != 0
             || self.proposal[0] >= 16
@@ -177,7 +209,10 @@ impl ProposalReceipt {
         Ok(())
     }
 }
-pub fn parity(u: &ProposalReceipt, d: &ProposalReceipt) -> Result<(), String> {
+pub fn parity(u: &ProposalReceipt, d: &ProposalReceipt) -> InstrumentResult<()> {
+    proposal_parity(u, d).map_err(InstrumentError::Proposal)
+}
+fn proposal_parity(u: &ProposalReceipt, d: &ProposalReceipt) -> Result<(), String> {
     u.validate()?;
     d.validate()?;
     if u != d {
@@ -203,7 +238,10 @@ fn number_before(line: &str, suffix: &str) -> Option<u64> {
         .parse()
         .ok()
 }
-pub fn parse_ptxas(log: &str, entry: &str) -> Result<PtxasResources, String> {
+pub fn parse_ptxas(log: &str, entry: &str) -> InstrumentResult<PtxasResources> {
+    parse_resource_log(log, entry).map_err(InstrumentError::Resource)
+}
+fn parse_resource_log(log: &str, entry: &str) -> Result<PtxasResources, String> {
     let mut active = false;
     let mut stack = None;
     let mut stores = None;
@@ -261,6 +299,12 @@ pub struct CellDecision {
     pub reason: &'static str,
 }
 pub fn decide(
+    samples: &[(u128, u128, Vec<LaneRecord>)],
+    resources_match: bool,
+) -> InstrumentResult<CellDecision> {
+    decide_cell(samples, resources_match).map_err(InstrumentError::Routing)
+}
+fn decide_cell(
     samples: &[(u128, u128, Vec<LaneRecord>)],
     resources_match: bool,
 ) -> Result<CellDecision, String> {

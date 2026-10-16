@@ -4,7 +4,8 @@
 pub mod controller;
 pub mod corpus;
 pub mod decomposition;
-pub mod decomposition_source;
+#[cfg(test)]
+mod decomposition_source;
 #[cfg(feature = "cuda")]
 pub mod device;
 #[cfg(feature = "cuda")]
