@@ -12,6 +12,8 @@ use std::{
     process,
 };
 
+#[path = "../crates/uor-r4-discrete/src/decomposition_source.rs"]
+mod decomposition_source;
 #[path = "../third_party/candle-kernels-0.9.2/entry_allowlist.rs"]
 mod entry_allowlist;
 mod native_dependency_boundary;
@@ -85,6 +87,51 @@ fn code(text: &str) -> String {
                 if out[i] != b'\n' {
                     out[i] = b' ';
                 }
+                i += 1;
+            }
+        } else if (out[i] == b'r' || (out[i] == b'b' && i + 1 < out.len() && out[i + 1] == b'r'))
+            && (i == 0 || (!out[i - 1].is_ascii_alphanumeric() && out[i - 1] != b'_'))
+        {
+            let r_pos = if out[i] == b'b' { i + 1 } else { i };
+            let mut hashes = 0usize;
+            while r_pos + 1 + hashes < out.len() && out[r_pos + 1 + hashes] == b'#' {
+                hashes += 1;
+            }
+            if r_pos + 1 + hashes < out.len() && out[r_pos + 1 + hashes] == b'"' {
+                i = r_pos + 2 + hashes;
+                while i < out.len() {
+                    if out[i] == b'"'
+                        && i + 1 + hashes <= out.len()
+                        && out[i + 1..i + 1 + hashes].iter().all(|&b| b == b'#')
+                    {
+                        i += 1 + hashes;
+                        break;
+                    }
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        } else if out[i] == b'\'' {
+            if i + 2 < out.len()
+                && out[i + 1] != b'\\'
+                && out[i + 1] != b'\''
+                && out[i + 1] != b'\n'
+                && out[i + 2] == b'\''
+            {
+                i += 3;
+            } else if i + 3 < out.len() && out[i + 1] == b'\\' {
+                let mut j = i + 3;
+                let mut closed = None;
+                while j < out.len() && j <= i + 12 && out[j] != b'\n' {
+                    if out[j] == b'\'' {
+                        closed = Some(j + 1);
+                        break;
+                    }
+                    j += 1;
+                }
+                i = closed.unwrap_or(i + 1);
+            } else {
                 i += 1;
             }
         } else if out[i] == b'"' {
@@ -161,8 +208,6 @@ fn forbidden(text: &str) -> Vec<String> {
         "ex2.",
         "lg2.",
         "tanh.",
-        "sin.approx",
-        "cos.approx",
     ] {
         if c.contains(instruction) {
             found.insert(instruction.to_string());
@@ -175,7 +220,8 @@ fn strip_ptx_predicates_and_labels(mut line: &str) -> &str {
     loop {
         line = line.trim_start();
         if let Some(rest) = line.strip_prefix('@') {
-            let rest = rest.strip_prefix('!').unwrap_or(rest);
+            let rest = rest.trim_start();
+            let rest = rest.strip_prefix('!').unwrap_or(rest).trim_start();
             let idx = rest
                 .find(|c: char| c.is_ascii_whitespace())
                 .unwrap_or(rest.len());
@@ -203,20 +249,15 @@ fn strip_ptx_predicates_and_labels(mut line: &str) -> &str {
 fn forbidden_ptx(text: &str) -> Vec<String> {
     let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
     let cleaned = code(text);
-    for raw_line in cleaned.lines() {
-        let stripped = strip_ptx_predicates_and_labels(raw_line).to_ascii_lowercase();
+    for stmt in cleaned.split(['\n', ';', '{', '}']) {
+        let stripped = strip_ptx_predicates_and_labels(stmt).to_ascii_lowercase();
         if stripped.is_empty() {
             continue;
         }
         for prefix in [
             "ex2.",
             "lg2.",
-            "sin.",
-            "cos.",
             "tanh.",
-            "rcp.approx",
-            "sqrt.approx",
-            "rsqrt.approx",
             "mma.",
             "wmma.",
             "wgmma.",
@@ -248,7 +289,8 @@ fn forbidden_training_cuda(text: &str) -> Vec<String> {
 
 fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
     let mut found: BTreeSet<String> = forbidden(text).into_iter().collect();
-    let c = code(text).to_ascii_lowercase();
+    let cleaned = code(text);
+    let c = cleaned.to_ascii_lowercase();
     for word in c.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
         if [
             "float",
@@ -284,9 +326,39 @@ fn forbidden_discrete_cuda(text: &str) -> Vec<String> {
             found.insert(word.to_string());
         }
     }
-    for instruction in ["rcp.approx", "sqrt.approx", "rsqrt.approx"] {
+    for instruction in [
+        "sin.approx",
+        "cos.approx",
+        "rcp.approx",
+        "sqrt.approx",
+        "rsqrt.approx",
+    ] {
         if c.contains(instruction) {
             found.insert(instruction.to_string());
+        }
+    }
+    for stmt in cleaned.split(['\n', ';', '{', '}']) {
+        let stripped = strip_ptx_predicates_and_labels(stmt).to_ascii_lowercase();
+        if stripped.is_empty() {
+            continue;
+        }
+        for prefix in [
+            "ex2.",
+            "lg2.",
+            "sin.",
+            "cos.",
+            "tanh.",
+            "rcp.approx",
+            "sqrt.approx",
+            "rsqrt.approx",
+            "mma.",
+            "wmma.",
+            "wgmma.",
+            "tcgen05.",
+        ] {
+            if stripped.starts_with(prefix) {
+                found.insert(prefix.to_string());
+            }
         }
     }
     found.into_iter().collect()
@@ -415,6 +487,39 @@ fn verify(
         return Err("historical conv/quantized descriptors must be empty".into());
     }
     checked.push("active vendor CUDA source/header token census and no historical FFI".into());
+    let training_build = code(&read(&repo.join("crates/uor-r4-training/build.rs"))?);
+    if training_build.contains("native_context")
+        || training_build.contains("selected_potential")
+        || training_build.contains("glob(")
+        || training_build.contains("read_dir(")
+    {
+        return Err(
+            "crates/uor-r4-training/build.rs must not reference quarantined modules or discover extra CUDA files"
+                .into(),
+        );
+    }
+    let mut training_cu_files = BTreeSet::new();
+    for entry in
+        fs::read_dir(repo.join("crates/uor-r4-training/src")).map_err(|e| e.to_string())?
+    {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        let ext = path.extension().and_then(|v| v.to_str()).unwrap_or("");
+        if ext == "cu" || ext == "cuh" {
+            let rel = path
+                .strip_prefix(repo)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            training_cu_files.insert(rel);
+        }
+    }
+    let expected_training_cu: BTreeSet<String> =
+        TRAINING_COMPILED_CU.iter().map(|s| s.to_string()).collect();
+    if training_cu_files != expected_training_cu {
+        return Err(format!(
+            "crates/uor-r4-training/src CUDA file set differs: {training_cu_files:?}"
+        ));
+    }
     let historical = read(&repo.join(
         "docs/history/d29-excluded-kernels-2026-10-13/cuda_stack_historical.cu",
     ))?;
@@ -436,6 +541,25 @@ fn verify(
                 "{} forbidden training CUDA tokens: {bad_training:?}",
                 cu_path.display()
             ));
+        }
+        for line in cu_text
+            .lines()
+            .filter(|l| l.trim_start().starts_with("#include"))
+        {
+            if line.contains("historical")
+                || line.contains("quarantined")
+                || line.contains("native_context")
+                || line.contains("selected_potential")
+                || line.contains("moe")
+                || line.contains("conv")
+                || line.contains("quantized")
+                || line.contains("../")
+            {
+                return Err(format!(
+                    "{} excluded source include: {line}",
+                    cu_path.display()
+                ));
+            }
         }
         let cleaned = code(&cu_text);
         for name in &historical_names {
@@ -466,6 +590,11 @@ fn verify(
             .filter_map(|rest| rest.split('(').next())
             .map(str::trim)
             .collect();
+        if q_names.is_empty() {
+            return Err(format!(
+                "quarantined D29 evidence file {evidence} lost its kernels"
+            ));
+        }
         for rel in TRAINING_COMPILED_CU {
             let cleaned = code(&read(&repo.join(rel))?);
             for name in &q_names {
@@ -481,8 +610,43 @@ fn verify(
         "training compiled CUDA sources (.cu) D23/D25/D29 token census and historical/quarantined exclusion"
             .into(),
     );
+    let mut discrete_cu_files = BTreeSet::new();
+    for entry in
+        fs::read_dir(repo.join("crates/uor-r4-discrete/src")).map_err(|e| e.to_string())?
+    {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        let ext = path.extension().and_then(|v| v.to_str()).unwrap_or("");
+        if ext == "cu" || ext == "cuh" {
+            let rel = path
+                .strip_prefix(repo)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            discrete_cu_files.insert(rel);
+        }
+    }
+    let expected_discrete_cu: BTreeSet<String> =
+        ["crates/uor-r4-discrete/src/discrete.cu".to_string()]
+            .into_iter()
+            .collect();
+    if discrete_cu_files != expected_discrete_cu {
+        return Err(format!(
+            "crates/uor-r4-discrete/src CUDA file set differs: {discrete_cu_files:?}"
+        ));
+    }
     let discrete_cu_path = repo.join("crates/uor-r4-discrete/src/discrete.cu");
     let discrete_cu = read(&discrete_cu_path)?;
+    for line in discrete_cu
+        .lines()
+        .filter(|l| l.trim_start().starts_with("#include"))
+    {
+        if line.contains("historical") || line.contains("quarantined") || line.contains("../") {
+            return Err(format!(
+                "{} excluded source include: {line}",
+                discrete_cu_path.display()
+            ));
+        }
+    }
     let bad_discrete = forbidden_discrete_cuda(&discrete_cu);
     if !bad_discrete.is_empty() {
         return Err(format!(
@@ -503,15 +667,50 @@ fn verify(
             discrete_cu_path.display()
         ));
     }
+    let decomp_cu = decomposition_source::generate(&discrete_cu)?;
+    let bad_decomp = forbidden_discrete_cuda(&decomp_cu);
+    if !bad_decomp.is_empty() {
+        return Err(format!(
+            "generated discrete_counterfactual_decomposition.cu forbidden discrete/D32 CUDA tokens: {bad_decomp:?}"
+        ));
+    }
+    let decomp_code = code(&decomp_cu);
+    let decomp_entries: Vec<&str> = decomp_code
+        .split("extern \"C\" __global__ void ")
+        .skip(1)
+        .filter_map(|rest| rest.split('(').next())
+        .map(str::trim)
+        .collect();
+    if decomp_entries != ["discrete_counterfactual_decomposition"] {
+        return Err(format!(
+            "generated discrete_counterfactual_decomposition.cu global entry list differs: {decomp_entries:?}"
+        ));
+    }
     checked.push(
-        "discrete CUDA kernel source (discrete.cu) D23/D25/D32 integer-only token and 11-entry census"
+        "discrete CUDA kernel sources (discrete.cu + generated decomposition module) D23/D25/D32 integer-only token and 11+1 entry census"
             .into(),
     );
+    for rel in [
+        "crates/uor-r4-training/build.rs",
+        "crates/uor-r4-discrete/build.rs",
+        "docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/build.rs",
+    ] {
+        let path = repo.join(rel);
+        let cleaned = code(&read(&path)?);
+        for rtc in ["nvrtc::", "compile_ptx", "cuLinkCreate"] {
+            if cleaned.contains(rtc) {
+                return Err(format!("{} calls runtime compiler `{rtc}`", path.display()));
+            }
+        }
+    }
     let mut rs_stack = vec![
         repo.join("crates/uor-r4-training/src"),
         repo.join("crates/uor-r4-discrete/src"),
         repo.join("docs/labs/k16-timing-2026-10-15/instrument/src"),
         repo.join("docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/src"),
+        repo.join("docs/labs/stage-a-admission-instrument-2026-10-15/instrument/src"),
+        repo.join("docs/labs/fresh-scoring-eval-2026-10-15/instrument/src"),
+        repo.join("docs/labs/admission-redirect-packet-2026-10-15/instrument/src"),
     ];
     while let Some(dir) = rs_stack.pop() {
         for entry in fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))? {
@@ -529,7 +728,7 @@ fn verify(
         }
     }
     checked.push(
-        "no runtime CUDA compiler calls across training, discrete, and standalone instrument Rust sources"
+        "no runtime CUDA compiler calls across training, discrete, and standalone instrument Rust sources and build scripts"
             .into(),
     );
     let root_manifest = read(&repo.join("Cargo.toml"))?;
@@ -708,25 +907,32 @@ fn main() {
             "float sigmoid(float x){}",
             "float softplus(float x){}",
             "float y = elu(x);",
+            "char q = '\"'; const char* a = \"/*\"; float x = expf(y); const char* b = \"*/\"; char q2 = '\"';",
+            "let s = r#\"\\\"/*\"#; let y = expf(x); let t = r#\"*/\"#;",
         ] {
             assert!(!forbidden(bad).is_empty(), "missed {bad}");
         }
         assert!(forbidden("// expf(x) mma.sync\nfloat x=a+b; /* sigmoid */").is_empty());
         assert!(forbidden("void urelu_f32(int x){}").is_empty());
         for bad_ptx in [
-            "  @%p1 sin.approx.f32 %f1, %f0;",
-            "  $L__BB0_1: @!%p0 cos.approx.f32 %f1, %f0;",
-            "  $L__BB0_2: @%p0 rcp.approx.f32 %f1, %f0;",
-            "  $L__BB0_3: sqrt.approx.f32 %f1, %f0;",
-            "  rsqrt.approx.f32 %f1, %f0;",
+            "  @%p1 ex2.approx.ftz.f32 %f1, %f0;",
+            "  $L__BB0_1: @!%p0 lg2.approx.f32 %f1, %f0;",
+            "  .visible .entry k() { @ %p0 tanh.approx.f32 %f1, %f0; ret; }",
             "  $L__BB0_4: @!%p1 wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16;",
             "  tcgen05.mma.cta_group::1.kind::f16;",
         ] {
             assert!(
                 !forbidden_ptx(bad_ptx).is_empty(),
-                "missed predicated/labeled PTX instruction: {bad_ptx}"
+                "missed predicated/labeled vendor PTX instruction: {bad_ptx}"
             );
         }
+        // Vendor candle-kernels unary.ptx / binary.ptx legitimately emit sin/cos/sqrt/rcp PTX for allowlisted usin_*/ucos_*/usqrt_*/urecip_*/bdiv_*
+        assert!(
+            forbidden_ptx(
+                "  $L__BB0_1: @%p0 sin.approx.ftz.f32 %f1, %f0;\n  cos.approx.ftz.f32 %f2, %f0;\n  rcp.approx.ftz.f32 %f3, %f0;\n  sqrt.approx.ftz.f32 %f4, %f0;"
+            )
+            .is_empty()
+        );
         assert!(forbidden_ptx("  $L__BB0_1: @%p0 mul.lo.u32 %r1, %r2, 8;").is_empty());
         for bad_training in [
             "float y = logf(x);",
@@ -742,9 +948,11 @@ fn main() {
             "extern \"C\" __global__ void discrete_init(float* x) {}",
             "__half h;",
             "__nv_bfloat16 b;",
-            "rcp.approx.f32 %f1, %f0;",
-            "sqrt.approx.f32 %f1, %f0;",
-            "rsqrt.approx.f32 %f1, %f0;",
+            "  @%p1 sin.approx.f32 %f1, %f0;",
+            "  $L__BB0_1: @!%p0 cos.approx.f32 %f1, %f0;",
+            "  $L__BB0_2: @%p0 rcp.approx.f32 %f1, %f0;",
+            "  $L__BB0_3: sqrt.approx.f32 %f1, %f0;",
+            "  rsqrt.approx.f32 %f1, %f0;",
         ] {
             assert!(
                 !forbidden_discrete_cuda(bad_discrete).is_empty(),
