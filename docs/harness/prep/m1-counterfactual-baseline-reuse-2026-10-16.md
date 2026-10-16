@@ -126,8 +126,9 @@ mask3, nonidentity candidates consume mask1, with their original MAX semantics.
 Add exactly three boundary fixtures: repeat the literal `eligible_reference`
 row/target to lengths **16, 17 and 64**. Each uses both policies × both
 parameters × U/R, **24 additional attempts**. All sixteen losses and proposal
-words match U's actual CUDA result; no host loss reduction/reference. Every consumer
-and producer mask covers exactly the admitted rows; no unwritten slot is read.
+words match U's actual CUDA result; no host loss reduction/reference. Each
+consumer visited/eligible mask covers the admitted rows; producer masks are
+disjoint partitions whose union covers those rows. No unwritten slot is read.
 Together with existing one/two-row fixtures this covers lane-stride boundaries.
 Total finite dose: **64 attempts, 56 successes / 8 expected status8**.
 
