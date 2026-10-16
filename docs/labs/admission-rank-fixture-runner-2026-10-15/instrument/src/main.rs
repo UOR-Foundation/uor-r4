@@ -58,6 +58,72 @@ fn default_repo_root() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
+use uor_r4_discrete::objective::{ExactRatio, HingeDistribution};
+
+pub fn verify_hinge_distribution(
+    name: &str,
+    dist: &HingeDistribution,
+    expected_bins: usize,
+    expected_sum: u64,
+    scored_rows: u64,
+) -> Result<(), String> {
+    if dist.histogram.len() != expected_bins {
+        return Err(format!(
+            "C-R5 5A {name} histogram bin inventory {} != {expected_bins}",
+            dist.histogram.len()
+        ));
+    }
+    let bin_sum: u64 = dist.histogram.iter().copied().sum();
+    if bin_sum != scored_rows {
+        return Err(format!(
+            "C-R5 5A {name} sum(bins)={bin_sum} != scored_rows={scored_rows}"
+        ));
+    }
+    if dist.zero_rows != dist.histogram[0] {
+        return Err(format!(
+            "C-R5 5A {name} zero_rows={} != bins[0]={}",
+            dist.zero_rows, dist.histogram[0]
+        ));
+    }
+    if dist.mean
+        != (ExactRatio {
+            numerator: expected_sum,
+            denominator: scored_rows,
+        })
+    {
+        return Err(format!(
+            "C-R5 5A {name} mean {:?} != {expected_sum}/{scored_rows}",
+            dist.mean
+        ));
+    }
+    let actual_quantiles = [
+        dist.min, dist.p25, dist.p50, dist.p75, dist.p90, dist.p99, dist.max,
+    ];
+    for (idx, percent) in [0u64, 25, 50, 75, 90, 99, 100].into_iter().enumerate() {
+        let threshold = if percent == 0 {
+            1
+        } else {
+            (scored_rows * percent).div_ceil(100)
+        };
+        let mut cumulative = 0u64;
+        let mut expected_bin = 0u64;
+        for (value, &count) in dist.histogram.iter().enumerate() {
+            cumulative += count;
+            if cumulative >= threshold {
+                expected_bin = value as u64;
+                break;
+            }
+        }
+        if actual_quantiles[idx] != expected_bin {
+            return Err(format!(
+                "C-R5 5A {name} nearest-rank quantile p{percent}={} != expected {expected_bin}",
+                actual_quantiles[idx]
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(feature = "cuda")]
 mod gpu_runner {
     use super::*;
@@ -303,29 +369,36 @@ mod gpu_runner {
             return Err("C-R2 2A rival cell crowding invariance failed".into());
         }
 
-        // Part 2B: moving one spare token into newly occupied preceding cell 2
-        let spec_k3 = Spec {
-            vocabulary: 16,
-            blocks: 4,
-            context: 3,
-            kept_cells: 3,
-        };
-        let (_, eval_new_cell) = eval_single_window(
-            spec_k3,
-            ObjectivePolicy::OccupiedCellRankHingeV1,
-            c_r2_new_preceding_cell_table(),
-            routes,
-            &win3,
-            2,
-        )?;
-        let row_new = &eval_new_cell.rows[0];
-        if row_new.occupied_cells != 6
-            || row_new.target_cell_rank != 4
-            || row_new.cell_rank_hinge != 1
-        {
+        // Part 2B: moving one spare token into newly occupied preceding cell 2 across K in 1..=4
+        let new_cell_table = c_r2_new_preceding_cell_table();
+        let mut new_cell_hinges = Vec::new();
+        for k in 1..=4u32 {
+            let spec_k = Spec {
+                vocabulary: 16,
+                blocks: 4,
+                context: 3,
+                kept_cells: k,
+            };
+            let (_, eval_new_cell) = eval_single_window(
+                spec_k,
+                ObjectivePolicy::OccupiedCellRankHingeV1,
+                new_cell_table.clone(),
+                routes.clone(),
+                &win3,
+                2,
+            )?;
+            let row_new = &eval_new_cell.rows[0];
+            if row_new.occupied_cells != 6 || row_new.target_cell_rank != 4 {
+                return Err(format!(
+                    "C-R2 2B K={k} new preceding cell mismatch: occ={}, rank={}",
+                    row_new.occupied_cells, row_new.target_cell_rank
+                ));
+            }
+            new_cell_hinges.push(row_new.cell_rank_hinge);
+        }
+        if new_cell_hinges != vec![3, 2, 1, 0] {
             return Err(format!(
-                "C-R2 2B new preceding cell mismatch: occ={}, rank={}, R={}",
-                row_new.occupied_cells, row_new.target_cell_rank, row_new.cell_rank_hinge
+                "C-R2 2B K in 1..=4 hinge mismatch: got {new_cell_hinges:?}, expected [3, 2, 1, 0]"
             ));
         }
 
@@ -347,11 +420,13 @@ mod gpu_runner {
             },
             "part_2b_new_preceding_cell": {
                 "new_preceding_cell": 2,
+                "kept_cells_swept": [1, 2, 3, 4],
                 "occupied_cells_before": 5,
-                "occupied_cells_after": row_new.occupied_cells,
+                "occupied_cells_after": 6,
                 "target_cell_rank_before": 3,
-                "target_cell_rank_after": row_new.target_cell_rank,
-                "cell_rank_hinge_k3_after": row_new.cell_rank_hinge,
+                "target_cell_rank_after": 4,
+                "cell_rank_hinge_before_k1_to_k4": [2, 1, 0, 0],
+                "cell_rank_hinge_after_k1_to_k4": new_cell_hinges,
             }
         });
         let pin = write_new_json(&out_dir.join("c-r2/report.json"), &report)?;
@@ -786,8 +861,26 @@ mod gpu_runner {
                     != agg.weighted_token_hinge_sum + agg.weighted_address_hinge_sum
                 || agg.loss_tr_numerator_sum
                     != agg.weighted_token_hinge_sum + agg.weighted_cell_rank_hinge_sum
+                || agg.address_loss_share_ta
+                    != (ExactRatio {
+                        numerator: agg.weighted_address_hinge_sum,
+                        denominator: agg.loss_ta_numerator_sum,
+                    })
+                || agg.rank_loss_share_tr
+                    != (ExactRatio {
+                        numerator: agg.weighted_cell_rank_hinge_sum,
+                        denominator: agg.loss_tr_numerator_sum,
+                    })
+                || agg.mean_admitted_token_count
+                    != (ExactRatio {
+                        numerator: agg.admitted_token_count_sum,
+                        denominator: agg.scored_rows,
+                    })
             {
-                return Err("C-R5 5A dual-loss integer identity mismatch".into());
+                return Err(
+                    "C-R5 5A dual-loss, ExactRatio share, or mean_admitted_token_count mismatch"
+                        .into(),
+                );
             }
 
             let expected_obj = match policy {
@@ -798,12 +891,27 @@ mod gpu_runner {
                 return Err("C-R5 5A objective_loss_numerator_sum policy routing mismatch".into());
             }
 
-            if agg.token_hinge_distribution.histogram.len() != HISTOGRAM_BINS[0]
-                || agg.address_hinge_distribution.histogram.len() != HISTOGRAM_BINS[1]
-                || agg.cell_rank_hinge_distribution.histogram.len() != HISTOGRAM_BINS[2]
-            {
-                return Err("C-R5 5A histogram bin inventory mismatch".into());
-            }
+            verify_hinge_distribution(
+                "token_hinge",
+                &agg.token_hinge_distribution,
+                HISTOGRAM_BINS[0],
+                agg.token_hinge_sum,
+                agg.scored_rows,
+            )?;
+            verify_hinge_distribution(
+                "address_hinge",
+                &agg.address_hinge_distribution,
+                HISTOGRAM_BINS[1],
+                agg.address_hinge_sum,
+                agg.scored_rows,
+            )?;
+            verify_hinge_distribution(
+                "cell_rank_hinge",
+                &agg.cell_rank_hinge_distribution,
+                HISTOGRAM_BINS[2],
+                agg.cell_rank_hinge_sum,
+                agg.scored_rows,
+            )?;
 
             if dev.aggregate_evaluations(&[]).is_ok() {
                 return Err("C-R5 5A empty aggregate_evaluations must fail".into());
@@ -1212,5 +1320,36 @@ mod tests {
             write_new_json(&target, &payload).is_err(),
             "write_new_json must refuse overwriting an existing file"
         );
+    }
+
+    #[test]
+    fn c_r5_hinge_distribution_verifier_checks_bins_zero_rows_mean_and_nearest_rank_quantiles() {
+        let mut hist = vec![0u64; 17];
+        hist[0] = 1;
+        hist[2] = 1;
+        hist[4] = 1;
+        hist[16] = 1;
+        let dist = HingeDistribution {
+            min: 0,
+            p25: 0,
+            p50: 2,
+            p75: 4,
+            p90: 16,
+            p99: 16,
+            max: 16,
+            mean: ExactRatio {
+                numerator: 22,
+                denominator: 4,
+            },
+            zero_rows: 1,
+            histogram: hist,
+        };
+        assert!(verify_hinge_distribution("test_rank", &dist, 17, 22, 4).is_ok());
+        let mut bad_p50 = dist.clone();
+        bad_p50.p50 = 4;
+        assert!(verify_hinge_distribution("test_rank", &bad_p50, 17, 22, 4).is_err());
+        let mut bad_zero = dist;
+        bad_zero.zero_rows = 2;
+        assert!(verify_hinge_distribution("test_rank", &bad_zero, 17, 22, 4).is_err());
     }
 }

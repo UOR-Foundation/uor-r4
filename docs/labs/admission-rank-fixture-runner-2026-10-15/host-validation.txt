@@ -221,10 +221,12 @@ warning: function `issue_corpus_update_admission` is never used
     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: `uor-r4-discrete` (lib) generated 27 warnings
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+   Compiling admission-rank-fixture-runner v0.1.0 (/Users/casey.allard/uor-r4/.worktrees/antigravity-cr1-cr6-fixture-runner/docs/labs/admission-rank-fixture-runner-2026-10-15/instrument)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.41s
      Running unittests src/main.rs (/Users/casey.allard/uor-r4/local/cr-fixture-runner-target/debug/deps/admission_rank_fixture_runner-adc504378a33debf)
 
-running 7 tests
+running 8 tests
+test tests::c_r5_hinge_distribution_verifier_checks_bins_zero_rows_mean_and_nearest_rank_quantiles ... ok
 test tests::c_r3_candidate_root_images_cover_create_empty_move_interior_and_identity ... ok
 test tests::suite_plan_matches_objective_control_scaffold_and_reports_not_run ... ok
 test tests::c_r4_fixture_tables_cover_single_cell_sixteen_cells_and_absent_rival ... ok
@@ -233,7 +235,7 @@ test tests::host_checks_verify_specs_geometry_and_stage_a_sweep_without_cuda ...
 test tests::cli_rejects_unknown_subcommands_and_refuses_gpu_run_without_cuda_feature ... ok
 test tests::atomic_json_writer_rejects_existing_target_and_computes_exact_sha256 ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
 
 $ cargo clippy --manifest-path docs/labs/admission-rank-fixture-runner-2026-10-15/instrument/Cargo.toml --locked --offline --all-targets -- -D warnings
@@ -459,4 +461,5 @@ warning: function `issue_corpus_update_admission` is never used
     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: `uor-r4-discrete` (lib) generated 27 warnings
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
+    Checking admission-rank-fixture-runner v0.1.0 (/Users/casey.allard/uor-r4/.worktrees/antigravity-cr1-cr6-fixture-runner/docs/labs/admission-rank-fixture-runner-2026-10-15/instrument)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
