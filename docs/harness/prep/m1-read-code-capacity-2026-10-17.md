@@ -38,6 +38,8 @@ Define on the same 14,287 DEV rows:
 
 The upper boundary of each band is strict (`T = M + F` is never H_law); under the normal ordering (`M + F ≥ W + H`) `T = M + F` is H_mixed, `T = W + H` is H_mixed, and `T = W − H` is H_rep, so no outcome is double-assigned. If `M + F < W + H`, the H_mixed interval is empty; every `T` still maps to H_law, H_rep or writer-dominates.
 
+**Pathological-ordering guard.** `M + F < W − H` is unreachable with the measured unigram/bigram rates (both are far above the writer); if it is ever observed, `T < W − H` is H_rep regardless of the `M + F` comparison, because the trained map then exceeds the code table by more than paired noise. Report the ordering as an analysis note.
+
 ## 4.3 Observable signature and per-row outputs
 
 The diagnostic produces one lossless per-row record per DEV row (14,287) and a compact code/target stream for TRAIN (2,425,925 rows; 2 bytes code + 2 bytes target ≈ 9.8 MB). No free-running generation is loaded; the model is scored teacher-forced.
@@ -68,6 +70,8 @@ Per DEV row:
 
 `Forward::admitted_cells` is a `Vec<u32>` of 16 slots per row with sentinel `ABSENT = 0xffffffffu` (`discrete.cu:15`; `device.rs:307-308`, `:1217-1219`). The record re-encodes each slot as `u16` with `0xFFFF` as absent; cells are `0..=255`, so cell id `255` remains a valid cell and is not a sentinel. A presence bitmap is an equivalent encoding.
 
+`unigram_1049856_hit1_admitted`, `unigram_1049856_hit8_admitted`, `bigram_hit1_admitted`, `bigram_hit8_admitted`, `table_sym_hit1_admitted`, and `table_sym_hit8_admitted` are derived aggregates computed from each row's `admitted_cells` and the corresponding prediction; they are not separate raw capture fields.
+
 Aggregates are exact integer sums per predictor and per denominator (14,287; 1,920 admitted; 3,847 `P_succ`; 10,440 complement; 1,335 conflict), plus top-8 sums and the `b+c` discordance counts against each comparator.
 
 ## 4.4 Strongest simple controls and matching
@@ -75,7 +79,7 @@ Aggregates are exact integer sums per predictor and per denominator (14,287; 1,9
 1. **Co-primary ordinary control A — model-matched unigram (1,049,856).** Histogram of the exact 1,049,856 masked TRAIN target tokens the model consumed (16,404 batches × 64, in corpus order); top-1/top-8 on DEV. This is the primary marginal reference. The sealed **1,226/14,287 (8.58%) top-1 and 4,060 top-8** is the full-TRAIN (2,425,925) **secondary** reference; it is not the model-matched value and must not be substituted for `U`.
 2. **Co-primary ordinary control B — query-token bigram (same 1,049,856 rows).** Sparse 4,096 × 4,096 counts of the query token `tokens[p-1]` to the target `tokens[p]` at each consumed TRAIN target position `p`; tie by lowest token id; model-matched unigram fallback for unseen query tokens. It ignores the 192-token window but uses token identity and adjacency. If the 16-bit code table cannot beat it, the code adds nothing beyond token identity.
 3. **Same-representation comparator — the trained writer.** Q4 = 149/14,287 overall and 149/1,920 = 7.76% conditional on its admitted rows; sealed per-row hits (`evaluation-16404.json`, sha256 `4fff1d3c…`). This is the exact artifact the diagnostic tests.
-4. **Admission-matched comparator.** The code table restricted to the writer's admitted cells. This is the decisive conditional comparison, because top-1 ≤ admitted rows (1,920 at K=8); the same restriction is applied to the writer, unigram, bigram and symmetry arms.
+4. **Admission-matched comparator.** The code table restricted to the writer's admitted cells, using the same rule as D34 §6.4 item 7: for each row, `cell(t) = root_id(codebook[t,0])*16 + root_id(codebook[t,B-1])` for every token `t`, and the table prediction is `argmax_{t : cell(t) ∈ admitted} count[code][t]`, tie by lowest token id, with the model-matched unigram fallback restricted to the admitted set; no host recomputation of admission. This is the decisive conditional comparison, because top-1 ≤ admitted rows (1,920 at K=8); the same restriction is applied to the writer, unigram, bigram and symmetry arms.
 5. **Data-scaling arm (secondary).** A table and unigram built on the full 2,425,925 TRAIN targets, reported separately and never substituted for the model-matched arm. It tests whether more data alone would change the readout.
 6. **Symmetry-pooled secondary control.** `table_sym` pools counts over the (at most) 64-element orbit of the code under the 64 signed SpiralCore actions applied uniformly to all four root blocks, canonicalized by the minimum resulting code id; any action output that is not an exact root is an instrument fault. Tie by lowest token id; unigram fallback. This control imposes an invariance the programme does not assume, so it is descriptive and cannot fire H_law/H_rep.
 7. **Cost-matched.** Host counting (seconds to minutes); no new model parameters; no new training.
@@ -116,10 +120,10 @@ If the PM refuses a source change, the fallback is the existing production `forw
   - **Multiplicity:** ≥1,024 distinct codes have ≥2 TRAIN counts in the model-matched table. Report the exact count, the count histogram, and the fraction of DEV rows whose code has ≥2 counts.
   - **Paired discordance:** for each co-primary comparator, `b+c` is reported. If `b+c ≥ 100`, the normal bar `2·sqrt(b+c)` is used; if `b+c < 100`, the exact two-sided McNemar/binomial test is reported and the result is UNDERPOWERED unless it rejects at α = 0.05.
   If any check fails, the result is **UNDERPOWERED**; no hypothesis fires.
-- **Full panel, n = 14,287.** For each comparator X: `b` = X hit & table miss, `c` = X miss & table hit; difference `c − b = T − top1(X)`; null SE `sqrt(b + c)`; per-comparator bar `max(24, 2·sqrt(b+c))`. The **24-row minimum** is 2 SE at 149/14,287 (the lowest reference rate; 2 SE = 24.3 rows) and is used consistently for every full-panel top-1 comparison. The design's unpaired 2-SE figure for the sealed full-TRAIN 1,226/14,287 reference is 68 rows (exact 2 SE ≈ 67; the registered 68 is conservative); it is reported as a descriptive secondary figure, not used as the model-matched floor.
+- **Full panel, n = 14,287.** For each comparator X: `b` = X hit & table miss, `c` = X miss & table hit; difference `c − b = T − top1(X)`; null SE `sqrt(b + c)`; per-comparator bar `max(24, 2·sqrt(b+c))`. The **24-row minimum** is a rounded 2-SE floor at 149/14,287 (2 SE = 24.3 rows); the paired `2·sqrt(b+c)` bar is operative and is used consistently for every full-panel top-1 comparison. The design's unpaired 2-SE figure for the sealed full-TRAIN 1,226/14,287 reference is 68 rows (exact 2 SE ≈ 67; the registered 68 is conservative); it is reported as a descriptive secondary figure, not used as the model-matched floor.
   - H_law requires `T > M + F` with `F = max(F_U, F_G)`; this implies each co-primary paired bar is met.
   - vs writer (149): `max(24, 2·sqrt(b_W+c_W))`.
-- **Admitted conditional, n = 1,920.** Writer 149/1,920 (7.76%), SE ≈ 11.7; floor **24 rows** (2 SE) or the paired `2·sqrt(b+c)`, whichever is larger. This is the decisive writer comparison; the same floor applies to unigram/bigram restricted to the admitted set.
+- **Admitted conditional, n = 1,920.** Writer 149/1,920 (7.76%), SE ≈ 11.7; floor **24 rows** (rounded 2 SE) or the paired `2·sqrt(b+c)`, whichever is larger. This is the decisive writer comparison; the same floor applies to unigram/bigram restricted to the admitted set.
 - **Sub-panel, n = 3,847.** Floor **39 rows**, the M4 sheet's `P_succ` floor (`m4-finite-relational-head-2026-10-15.md:30-31`). It is **top-8-derived** (from the Q1–Q3 `P_succ` top-8 rates and the 39-row seed floor) and is **conservative** for top-1 on 3,847 rows; it is used only for sub-panel top-8 statements, and top-1 sub-panel results are descriptive.
 - **Top-8.** Report code, unigram, bigram and writer top-8 against the model top-8 **747/14,287** and the full-TRAIN unigram **4,060**; the top-8 floor is **63 rows** (the M4 B2 floor), with the paired `2·sqrt(b+c)` term where applicable.
 - **Wilson 95% intervals** for every rate; report the interval, not just the point.
@@ -141,6 +145,8 @@ Apply in order; the first matching row fires. The bands are disjoint and exhaust
 **What changes the decision.** The single number that flips the programme is whether `T` crosses `M + F`. If it does, the next work is a learning-law decomposition; if it does not, the next work is a representation/code-utilization diagnostic. The admitted-conditional comparison against `149/1,920` localizes whether the output map or the admission channel is the immediate bottleneck.
 
 Under the normal ordering (`M+F ≥ W+H`), the old design's `(173, 1,158)` and `(1,226, 1,294)` sub-intervals are now one closed `[W+H, M+F]` H_mixed band (row 3); the `[W−H, W+H)` band is H_rep (row 4). If the measured references invert that ordering, the ordered conditions still assign exactly one row. `T = M+F` is H_mixed, never H_law, and `T = W+H` is H_mixed, never H_rep, so neither boundary is double-assigned.
+
+**Pathological-ordering exception.** If `M+F < W−H` (unreachable at the measured rates), row 4 (H_rep) takes precedence over row 2 for `T < W−H`, per the §4.2 guard.
 
 ## 4.8 Instrument validity
 
