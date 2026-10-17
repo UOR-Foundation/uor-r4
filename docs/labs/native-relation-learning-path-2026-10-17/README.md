@@ -92,13 +92,13 @@ is tautological on the target-defined successor panel and is not learned evidenc
 | Host `check --no-default-features --all-targets` | PASS for repaired candidate; [log](compiler-repair-host/metadata-check.log), existing nonfatal warnings retained |
 | Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
 | Advisory host Clippy | Completed with warnings; no suppression added |
-| CUDA compiler/Clippy | At96ecbd438: CUDA all-target check PASS0 (56.22s), strict package Clippy FAIL101 on ten sites; repaired source needs a new exact-head transcript |
+| CUDA compiler/Clippy | Gate6 at6ca599a53: all-target check PASS0 (47.91s), strict package Clippy FAIL101 at three unchanged-main prime_zeta sites; confined repair pending new exact-head transcript |
 | Finite CUDA qualification / model work | NOT_RUN |
 | Independent integrated source review | APPROVE through `202855294`; AGY source/math APPROVE at `f6c7fa5e1`; subsequent initializer/fixture and canonical-sheet deltas independently approved; no runtime verdict |
 | Scientific initialization/comparator design | FIT (design), PR #2574; no execution release |
 | Training / M2 / Stage B | HELD |
 | Q4 | NOT_EXECUTABLE |
-| Model updates, compiler pod leases, combined lease-cost estimate | 0 / 3 / $0.322072778 provider-uptime estimate; no model execution |
+| Model updates / compiler pod leases | 0 / 6; gate6 native elapsed cost proxy $0.161958333, cumulative mixed Codex estimate $4.320722222 plus PM; not invoices |
 
 The local disk was below the 30 GiB pod-admission floor at source preparation;
 no pod was started. Source preparation used a sparse owned worktree. Subsequent
@@ -302,3 +302,68 @@ separate virtual-only `propose_next` API is not called by that transition.
 A cost projection that adds both APIs as if both execute each batch doubles the
 proposal component. Actual Relation throughput is still unmeasured; neither a
 K16 diagnostic call nor older Route throughput is a current Relation budget.
+
+
+### Gate4–gate6 closure and the confined final lint repair
+
+Gate4 (release6233862027) stopped at SSH publickey authentication before setup;
+all four Cargo gates were NOT_RUN. Its native early-startup failure deletes before
+the up-failed ledger event, so an outer RETAIN message was not live retention.
+An available local snapshot was SHA/cloud-verified before deletion; later archives
+and a separate chronology correction were sealed afterward. Remote logs/inventory
+were UNAVAILABLE. PM6234312088 accepted that explicit preservation boundary.
+Matching local/private-derived/account key fingerprints and correct static endpoint
+pairing did not establish the failed host's actual key injection/root cause.
+
+Gate5 (release6234814065) stopped before SSH/setup after an unusable CREATE reply;
+exact-label reconciliation found own stopped56404709. The available archive
+363520bytes/MD5eebf1b7e5aa7f1bb2b9fd11040997986 was verified before down14:19:40Z;
+fleet0. Raw CREATE response was unavailable, cause UNVERIFIED. Independent8859f9ce
+and PM6235067540 accepted the closure; the latter commissioned only diagnostics
+and bounded stopped-instance handling. This was not a second publickey failure.
+
+Gate6's distinct [release6235906058](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6235906058)
+bound source6ca599a536f6887e0f52afd1ee9efd13a0a27d38, reviewed24-member packet
+c5f70217d3077fa8a1ef40354ffa9f4c2ef7414eadb8e6314c97e19f3a013a1d and readiness
+aa2398288fa436efbc2a6a1b9f2df04ded02cddef179840e8ee27dd8d0aec590. Fresh full
+floor/reserve and fleet/rate passed. Own vast-56414377/RTX5090/Czechia CZ/$1.725h
+reached SSH (native167s) and setup0. The initial exact-source/index/worktree guard
+passed. [CUDA all-target check](compiler-gate6/cuda-check.log) passed0/47.91s;
+[strict package Clippy](compiler-gate6/cuda-clippy.log) failed101 at three distinct
+prime_zeta.rs sites119/349/382. Binary and test messages repeat the same sites.
+The two host metadata gates and final source guard were NOT_RUN after fail-closed
+stop. No CUDA test binary, finite/model/qualification/learning/evaluation ran.
+The [independent actual review](compiler-gate6/independent-outcome-review.md),
+SHA04dda4b1104cc65ae1734c039982f4b044dae2a23fded2bc2b531199623725dd,
+accepts the construction blocker and archived closure.
+
+All38 remote+43 operator+24 packet SHA checks passed, followed by full cloud MD5
+of8152576bytes/4d48c7556e35ecd0aafcca6558a94a52 at
+icloud:UOR-R4/results/codex/attention-compile-gate6-archive.tar before release15:52:45Z
+and down15:52:51Z/fleet0. Receipt and release share a whole second; operator
+sequencing establishes their order. A separate post-down four-member lifecycle
+supplement is23552bytes/MD537190b09abfe500159891a42dccfd969. Raw diagnostic
+responses and reversible encoding remain private, outside these public source
+receipts. Native normalized elapsed338s gives$0.161958333; up/downwall341s gives
+separate$0.163395833. Neither measures actual billed/active-GPU time. Cumulative
+mixed historical Codex estimate$4.320722222 plus PM; storage/transfer UNMEASURED.
+
+[PM6236268062](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6236268062)
+accepted gate6 and approved exactly the three lint-only repairs. Pre-edit
+prime_zeta.rs is byte-identical to fresh origin/main; last-changing commit
+7b26da89def32ff6ea98f0b04d099ddfc2ae2d9b/#2525. The divisor is a known nonzero
+prime; is_multiple_of preserves its predicate. Enumerating the16 scores preserves
+root order; iterating interior alignments preserves the old1..blocks-1 range,
+descending-score ordering and ascending-root tie-break. No waiver or numerical
+CUDA/scientific sheet/initializer/learning/control/default change. These edits
+change source/executable identity, so gate6's old-head pass cannot qualify the
+repaired head. Gate7 requires confined AGY delta review, exact packet rebind and a
+distinct PM dispatch, then one transcript containing all four original commands.
+No automatic retry, model permission or learned-attention result follows.
+
+Local repaired-candidate all-target no-CUDA check and rustfmt PASS. An additional
+strict package-only no-CUDA Clippy attempt is BLOCKED by feature-inactive
+dead-code diagnostics; this is not the accepted CUDA Clippy gate and is not
+expanded into unrelated repair. Retained [logs and candidate identity](compiler-gate6-repair-host/scope.md).
+They execute no generator/model/reference and do not replace the final CUDA
+transcript. Existing metadata tests were not repeated for these three idioms.
