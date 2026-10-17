@@ -462,7 +462,9 @@ fn observe_arm(
     {
         return Err(invalid("fresh restore changed the admitted snapshot"));
     }
-    let evaluation = arm.driver.evaluate_transfer(&model, fresh)?;
+    let evaluation =
+        arm.driver
+            .evaluate_transfer_checkpoint(&model, fresh, &arm.progress.checkpoint)?;
     verify_evaluation(&evaluation, &arm.progress.checkpoint)?;
     let b3 = evidence::summarize(&evaluation, rows)?;
     if serde_json::to_value(model.snapshot()?).map_err(|e| invalid(e.to_string()))?

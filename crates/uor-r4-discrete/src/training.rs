@@ -502,9 +502,73 @@ impl PreparedDriver {
     }
 }
 
+/// Bind two already serialized snapshot observations to the exact stored Value.
+/// The caller obtains both typed hashes with the real Snapshot serializer;
+/// this helper handles storage integrity only, without evaluating a model.
+#[cfg(any(feature = "cuda", test))]
+fn bind_evaluation_storage_domain(
+    stored: &Value,
+    legacy_storage: &str,
+    stored_snapshot: &str,
+    actual_snapshot: &str,
+) -> Result<String> {
+    for hash in [legacy_storage, stored_snapshot, actual_snapshot] {
+        corpus::validate_sha256(hash)?;
+    }
+    let storage = corpus::sha256(&serde_json::to_vec(stored).map_err(|e| invalid(e.to_string()))?);
+    if storage != legacy_storage || stored_snapshot != actual_snapshot {
+        return Err(invalid(
+            "evaluation stored checkpoint or typed snapshot differs from model",
+        ));
+    }
+    Ok(storage)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn evaluation_storage_binding_preserves_explicit_default_without_changing_typed_domain(
+    ) -> Result<()> {
+        // Metadata serializer fixture, not the CUDA-gated Snapshot type or a
+        // model. Both forms decode identically and omit the default in B.
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct Metadata {
+            epoch: u64,
+            #[serde(default, skip_serializing_if = "is_false")]
+            default_flag: bool,
+        }
+        fn is_false(flag: &bool) -> bool {
+            !*flag
+        }
+        let canonical = json!({"epoch":0});
+        let explicit = json!({"epoch":0,"default_flag":false});
+        let typed_hash = |stored: &Value| -> Result<String> {
+            let typed: Metadata =
+                serde_json::from_value(stored.clone()).map_err(|e| invalid(e.to_string()))?;
+            Ok(corpus::sha256(
+                &serde_json::to_vec(&typed).map_err(|e| invalid(e.to_string()))?,
+            ))
+        };
+        let canonical_a =
+            corpus::sha256(&serde_json::to_vec(&canonical).map_err(|e| invalid(e.to_string()))?);
+        let explicit_a =
+            corpus::sha256(&serde_json::to_vec(&explicit).map_err(|e| invalid(e.to_string()))?);
+        let b = typed_hash(&canonical)?;
+        assert_ne!(canonical_a, explicit_a);
+        assert_eq!(typed_hash(&explicit)?, b);
+        assert_eq!(
+            bind_evaluation_storage_domain(&explicit, &explicit_a, &b, &b)?,
+            explicit_a
+        );
+        assert!(bind_evaluation_storage_domain(&explicit, &canonical_a, &b, &b).is_err());
+        assert!(
+            bind_evaluation_storage_domain(&explicit, &explicit_a, &b, &"f".repeat(64)).is_err()
+        );
+        assert!(bind_evaluation_storage_domain(&explicit, &explicit_a, "invalid", &b).is_err());
+        Ok(())
+    }
     #[test]
     fn pilot_slice_reports_masked_reference_share_without_reordering() -> Result<()> {
         let mut counts = vec![0; 4096];
@@ -1484,7 +1548,16 @@ impl PreparedDriver {
         Ok((cursor, receipts))
     }
     pub fn evaluate(&self, model: &crate::device::Device) -> Result<Value> {
-        self.evaluate_prepared(model, &self.dev, false)
+        self.evaluate_prepared(model, &self.dev, false, None)
+    }
+    /// Preserve the admitted checkpoint's exact stored Value domain A, even
+    /// when typed decoding omits explicitly stored default fields on restore.
+    pub fn evaluate_checkpoint(
+        &self,
+        model: &crate::device::Device,
+        checkpoint: &DriverCheckpoint,
+    ) -> Result<Value> {
+        self.evaluate_prepared(model, &self.dev, false, Some(checkpoint))
     }
     /// A separately pinned evaluation-only corpus. Labels never select model
     /// state, initialization or the read; every numerical operation is CUDA.
@@ -1493,6 +1566,19 @@ impl PreparedDriver {
         model: &crate::device::Device,
         transfer: &PreparedCorpus,
     ) -> Result<Value> {
+        self.validate_transfer_content(transfer)?;
+        self.evaluate_prepared(model, transfer, true, None)
+    }
+    pub fn evaluate_transfer_checkpoint(
+        &self,
+        model: &crate::device::Device,
+        transfer: &PreparedCorpus,
+        checkpoint: &DriverCheckpoint,
+    ) -> Result<Value> {
+        self.validate_transfer_content(transfer)?;
+        self.evaluate_prepared(model, transfer, true, Some(checkpoint))
+    }
+    fn validate_transfer_content(&self, transfer: &PreparedCorpus) -> Result<()> {
         let binding = transfer.binding();
         if binding.source.split != Split::Dev
             || binding.vocabulary != self.config.spec.vocabulary
@@ -1503,14 +1589,18 @@ impl PreparedDriver {
         {
             return Err(invalid("transfer needs separately pinned evaluation content, the same vocabulary/BOS and at least200 eligible rows"));
         }
-        self.evaluate_prepared(model, transfer, true)
+        Ok(())
     }
     fn evaluate_prepared(
         &self,
         model: &crate::device::Device,
         scored: &PreparedCorpus,
         transfer: bool,
+        checkpoint: Option<&DriverCheckpoint>,
     ) -> Result<Value> {
+        if let Some(checkpoint) = checkpoint {
+            self.validate_checkpoint(checkpoint)?;
+        }
         if model.spec() != self.config.spec
             || model.read_spec() != self.config.read_spec
             || model.objective_policy() != self.config.objective_policy
@@ -1524,7 +1614,19 @@ impl PreparedDriver {
         let epoch = model.epoch()?;
         let snapshot = model.snapshot()?;
         self.validate_frozen_relation_gates(&snapshot.gates)?;
-        let snapshot_hashes = crate::device::snapshot_hash_domains(&snapshot)?;
+        let mut snapshot_hashes = crate::device::snapshot_hash_domains(&snapshot)?;
+        if let Some(checkpoint) = checkpoint {
+            if epoch != checkpoint.cursor.accepted_updates {
+                return Err(invalid("evaluation checkpoint epoch differs from model"));
+            }
+            let stored_hashes = crate::device::stored_snapshot_hash_domains(&checkpoint.model)?;
+            snapshot_hashes.model_storage_sha256 = bind_evaluation_storage_domain(
+                &checkpoint.model,
+                &checkpoint.model_sha256,
+                &stored_hashes.model_snapshot_sha256,
+                &snapshot_hashes.model_snapshot_sha256,
+            )?;
+        }
         let mut first = 0;
         let mut receipts = Vec::new();
         while first < scored.eligible_len() as u64 {

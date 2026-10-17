@@ -9,7 +9,7 @@ reserves `model_snapshot_sha256` for typed Snapshot bytes and emits stored
 model-Value integrity as `model_storage_sha256`, retaining canonical checkpoint
 and raw FilePin identities. It adds metadata bindings/refusals and persists
 existing qualification observations; no numerical/kernel/learning-law change.
-Host no-CUDA all-target check/fmt and84 metadata tests PASS/0FAIL/1ignored;
+Host no-CUDA all-target check/fmt and85 metadata tests PASS/0FAIL/1ignored;
 the initial missing-local-parent fixture failure is retained and its setup-only
 rerun is documented. CUDA-feature serializer fixtures are authored/NOT_RUN.
 New-source CUDA construction, runtime emission and learning are NOT_RUN. Source/packet review, compiler gate

@@ -902,8 +902,8 @@ fn evaluate_once(
     let hashes = checkpoint_hash_domains(checkpoint)?;
     if !path.exists() {
         let evaluation = match transfer {
-            Some(source) => driver.evaluate_transfer(model, source)?,
-            None => driver.evaluate(model)?,
+            Some(source) => driver.evaluate_transfer_checkpoint(model, source, checkpoint)?,
+            None => driver.evaluate_checkpoint(model, checkpoint)?,
         };
         verify_evaluation(&evaluation, checkpoint)?;
         write_new(
@@ -1072,7 +1072,7 @@ pub fn run(
             let checkpoint = driver.checkpoint(&model, training::Cursor::initial())?;
             validate_initial_storage(driver.config(), &checkpoint.model)?;
             let baseline_snapshot_metadata = training::snapshot_metadata(&checkpoint.model)?;
-            let baseline_evaluation = driver.evaluate(&model)?;
+            let baseline_evaluation = driver.evaluate_checkpoint(&model, &checkpoint)?;
             verify_evaluation(&baseline_evaluation, &checkpoint)?;
             let hashes = checkpoint_hash_domains(&checkpoint)?;
             (
