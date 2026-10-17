@@ -170,9 +170,10 @@ estimate is $3.558663333, plus separate PM costs; storage/transfer remain
 UNMEASURED. This is an operator preflight blocker, not a mechanism negative.
 Independent outcome review accepts the operational blocker receipt and verifies
 all 8 remote, 18 operator and 10 frozen packet SHA entries. A prospective
-session-scoped guard repair passes seven Git-only fixture cases: owned runtime
+session-scoped guard repair passes eight Git-only fixture cases: owned runtime
 paths pass; unrelated files, peer jobs, unstaged/staged source changes, tracked
-changes within allowed paths and wrong HEAD are refused. Those metadata checks
+changes within allowed paths, a staged addition removed from the working tree,
+and wrong HEAD are refused. The index and working tree are checked separately. Those metadata checks
 are not compiler/model execution or permission for another lease.
 
 Finish exact-head source review and meaningful checks in this source unit, obtain
