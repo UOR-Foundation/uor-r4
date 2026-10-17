@@ -38,9 +38,19 @@ initial pattern. Learned gates may subsequently change.
 An active path supplies a learning opportunity, not a guaranteed gain. Snapping,
 ties and writer exclusion may still hide a particular proposal's effect. No
 answer-derived gate, source index, teacher, surrogate optimizer or host forward
-is added. Matched Relation and relation-disabled/Flock arms use the same declared
-leaf initialization and interleaver. Their differing read inventories/budgets are
-reported explicitly; a Route-only comparison cannot attribute relation benefit.
+is added. Treatment and the primary relation-disabled control use the same
+Relation read inventory, leaf initialization and interleaver. The control's
+explicit `relation_learning_policy: frozen_zero_v1` keeps all 25 relation trits
+zero, observes the same scheduled counterfactual proposals, and refuses their
+commits through the existing transition. The policy binds config/lineage and
+checkpoint admission; default omitted `learn_v1` preserves older configuration
+bytes. It is an experimental control, not another reader or optimizer.
+Both arms therefore receive 920 combine and 1,130 relation slots. Refused slots
+retain genuine hypothetical sensitivity observations and have zero accepted
+updates; they are not reported as all-tied model observations. Flock remains a
+secondary identity control with 2,050 combine proposals, a frequency difference
+that prevents using it as the primary causal comparison. A Route-only comparison
+cannot attribute relation benefit.
 
 ## Scoped executor and evidence
 
@@ -52,7 +62,7 @@ The record is an operational safeguard on the shared OS account, not cryptograph
 proof of the owner's identity. No agent invokes the owner-release command.
 
 The new path records actual VectorBlock/GateCombine/GateRelation attempts,
-candidate-cost sensitivity and accepted updates, checkpoints before first apply
+candidate-cost sensitivity, declared relation refusals and accepted updates, checkpoints before first apply
 and every 64 transitions/end, and refuses incompatible resume state. Final output
 retains the trained checkpoint, full DEV rows and same-trained-state relation-off
 ablation. A separately pinned transfer corpus is evaluated on CUDA after the
@@ -113,3 +123,12 @@ collapses, preserve the read observation and isolate that writer interaction.
 Only an attributable learned gain with the declared non-regression and fresh
 transfer criteria earns a bounded learned-attention claim. No result here closes
 a mechanism family, resets a line count or moves the suspended M1 headline.
+
+The scientific sheet is developed in parallel in [PR
+#2574](https://github.com/UOR-Foundation/uor-r4/pull/2574), not a second source
+commission. Source/design reconciliation is recorded in [6230176389](https://github.com/UOR-Foundation/uor-r4/pull/2574#issuecomment-6230176389).
+The real training transition makes one `Device::propose` call per batch; the
+separate virtual-only `propose_next` API is not called by that transition.
+A cost projection that adds both APIs as if both execute each batch doubles the
+proposal component. Actual Relation throughput is still unmeasured; neither a
+K16 diagnostic call nor older Route throughput is a current Relation budget.

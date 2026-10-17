@@ -35,6 +35,20 @@ pub enum SchedulePolicy {
     CanonicalVectorThenReadV1,
     InterleavedReadEvery8V1,
 }
+/// Whether genuine Relation proposals may commit their relation-tail coordinate.
+/// This does not change the read operator, proposal inventory or schedule.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationLearningPolicy {
+    #[default]
+    LearnV1,
+    FrozenZeroV1,
+}
+impl RelationLearningPolicy {
+    pub fn is_learn(&self) -> bool {
+        *self == Self::LearnV1
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DriverConfig {
@@ -48,6 +62,8 @@ pub struct DriverConfig {
     pub objective_policy: ObjectivePolicy,
     #[serde(default, skip_serializing_if = "ReadInitialization::is_zero_gates")]
     pub read_initialization: ReadInitialization,
+    #[serde(default, skip_serializing_if = "RelationLearningPolicy::is_learn")]
+    pub relation_learning_policy: RelationLearningPolicy,
     pub seed: u32,
     pub batch_rows: u32,
     pub train: CorpusSource,
@@ -65,6 +81,15 @@ impl DriverConfig {
         {
             return Err(invalid(
                 "active-leaf initialization requires an explicitly interleaved Flock or Relation driver",
+            ));
+        }
+        if self.relation_learning_policy == RelationLearningPolicy::FrozenZeroV1
+            && (!matches!(self.read_spec, ReadSpec::Relation { .. })
+                || self.schedule != SchedulePolicy::InterleavedReadEvery8V1
+                || self.read_initialization != ReadInitialization::ActiveLeafV1)
+        {
+            return Err(invalid(
+                "frozen-zero relation learning requires interleaved Relation with active-leaf initialization",
             ));
         }
         if self.schema != DRIVER_SCHEMA
@@ -249,6 +274,47 @@ impl PreparedDriver {
     pub fn schedule_cycle(&self) -> u32 {
         self.schedule_cycle
     }
+    fn combine_gate_count(&self) -> Result<usize> {
+        let stages = BinderPlan::new(self.config.spec.context as usize)?.stages();
+        Ok(self.config.spec.blocks as usize * stages)
+    }
+    /// A declared policy refusal, independent of the genuine CUDA candidate costs.
+    /// Combine gates and vector coordinates remain learnable in the frozen control.
+    pub fn apply_refused_by_policy(&self, coordinate: Coordinate) -> Result<bool> {
+        if self.config.relation_learning_policy.is_learn()
+            || coordinate.kind != CoordinateKind::Gate
+        {
+            return Ok(false);
+        }
+        let stages = BinderPlan::new(self.config.spec.context as usize)?.stages() as u32;
+        let reads = self
+            .config
+            .read_spec
+            .gate_count(self.config.spec.blocks, stages)?;
+        if coordinate.index >= reads {
+            return Err(invalid("policy coordinate outside declared read inventory"));
+        }
+        Ok(coordinate.index as usize >= self.combine_gate_count()?)
+    }
+    fn validate_frozen_relation_gates(&self, gates: &[i32]) -> Result<()> {
+        if self.config.relation_learning_policy.is_learn() {
+            return Ok(());
+        }
+        let stages = BinderPlan::new(self.config.spec.context as usize)?.stages() as u32;
+        let expected = self
+            .config
+            .read_spec
+            .gate_count(self.config.spec.blocks, stages)? as usize;
+        if gates.len() != expected
+            || gates.iter().any(|trit| !(-1..=1).contains(trit))
+            || gates[self.combine_gate_count()?..]
+                .iter()
+                .any(|trit| *trit != 0)
+        {
+            return Err(invalid("frozen-zero Relation requires the complete gate inventory and every relation trit zero"));
+        }
+        Ok(())
+    }
     /// Schedule from the absolute batch ordinal. A cursor's wrapped phase alone
     /// is insufficient: a 16,404-batch interleaved cycle is not a multiple of 8.
     pub fn coordinate_at(&self, completed_batches: u64) -> Result<Coordinate> {
@@ -409,6 +475,17 @@ impl PreparedDriver {
                 "checkpoint model spec/read/seed/epoch differs from declared driver state",
             ));
         }
+        if !self.config.relation_learning_policy.is_learn() {
+            let gates: Vec<i32> = serde_json::from_value(
+                checkpoint
+                    .model
+                    .get("gates")
+                    .cloned()
+                    .ok_or_else(|| invalid("frozen-zero checkpoint missing gates"))?,
+            )
+            .map_err(|error| invalid(error.to_string()))?;
+            self.validate_frozen_relation_gates(&gates)?;
+        }
         for name in ["source_sha256", "geometry_sha256", "kernel_sha256"] {
             corpus::validate_sha256(
                 checkpoint
@@ -534,6 +611,7 @@ mod tests {
         let config = DriverConfig {
             objective_policy: ObjectivePolicy::NearestAddressMarginV1,
             read_initialization: ReadInitialization::ZeroGatesV1,
+            relation_learning_policy: RelationLearningPolicy::LearnV1,
             schema: DRIVER_SCHEMA.into(),
             spec,
             read_spec,
@@ -963,6 +1041,165 @@ mod tests {
         );
         Ok(())
     }
+    fn frozen_relation_metadata_fixture() -> Result<PreparedDriver> {
+        let mut driver = metadata_schedule_fixture(
+            1,
+            ReadSpec::Relation { kept: 8, sweeps: 1 },
+            Spec {
+                vocabulary: 4096,
+                blocks: 4,
+                context: 192,
+                kept_cells: 8,
+            },
+            SchedulePolicy::InterleavedReadEvery8V1,
+        )?;
+        driver.config.read_initialization = ReadInitialization::ActiveLeafV1;
+        driver.config.relation_learning_policy = RelationLearningPolicy::FrozenZeroV1;
+        driver.config.validate()?;
+        driver.lineage.config = driver.config.clone();
+        Ok(driver)
+    }
+    #[test]
+    fn relation_learning_policy_defaults_and_explicit_scope() -> Result<()> {
+        let legacy = metadata_fixture(1, ReadSpec::Route)?;
+        let mut encoded =
+            serde_json::to_value(&legacy.config).map_err(|e| invalid(e.to_string()))?;
+        assert!(encoded.get("relation_learning_policy").is_none());
+        let decoded: DriverConfig =
+            serde_json::from_value(encoded.clone()).map_err(|e| invalid(e.to_string()))?;
+        assert_eq!(decoded, legacy.config);
+        encoded["relation_learning_policy"] = json!(RelationLearningPolicy::LearnV1);
+        let explicit: DriverConfig =
+            serde_json::from_value(encoded).map_err(|e| invalid(e.to_string()))?;
+        assert_eq!(explicit, legacy.config);
+        let frozen = frozen_relation_metadata_fixture()?;
+        assert_eq!(
+            serde_json::to_value(&frozen.config).map_err(|e| invalid(e.to_string()))?
+                ["relation_learning_policy"],
+            "frozen_zero_v1"
+        );
+        for mode in [ReadSpec::Route, ReadSpec::Flock { kept: 8 }] {
+            let mut wrong = frozen.config.clone();
+            wrong.read_spec = mode;
+            assert!(wrong.validate().is_err());
+        }
+        let mut wrong = frozen.config.clone();
+        wrong.schedule = SchedulePolicy::CanonicalVectorThenReadV1;
+        assert!(wrong.validate().is_err());
+        wrong = frozen.config.clone();
+        wrong.read_initialization = ReadInitialization::ZeroGatesV1;
+        assert!(wrong.validate().is_err());
+        Ok(())
+    }
+    #[test]
+    fn frozen_relation_preserves_all_scheduled_proposal_slots() -> Result<()> {
+        let frozen = frozen_relation_metadata_fixture()?;
+        let mut learned = frozen_relation_metadata_fixture()?;
+        learned.config.relation_learning_policy = RelationLearningPolicy::LearnV1;
+        learned.lineage.config = learned.config.clone();
+        assert_eq!(frozen.coordinate_count(), 16384 + 45);
+        assert_eq!(frozen.schedule_cycle(), 16404);
+        let mut refused = 0;
+        let mut cursor = Cursor::initial();
+        for step in 0..16404 {
+            let coordinate = frozen.coordinate_at(step)?;
+            assert_eq!(coordinate, learned.coordinate_at(step)?);
+            assert!(!learned.apply_refused_by_policy(coordinate)?);
+            let expected = coordinate.kind == CoordinateKind::Gate && coordinate.index >= 20;
+            assert_eq!(frozen.apply_refused_by_policy(coordinate)?, expected);
+            refused += usize::from(expected);
+            // Metadata only: a withheld commit advances the genuine-attempt
+            // cursor while preserving accepted updates; no model is executed.
+            cursor = frozen.advance(&cursor, false)?;
+        }
+        assert_eq!(refused, 1130);
+        assert_eq!(cursor.completed_batches, 16404);
+        assert_eq!(cursor.accepted_updates, 0);
+        assert!(frozen
+            .apply_refused_by_policy(Coordinate {
+                kind: CoordinateKind::Gate,
+                index: 45
+            })
+            .is_err());
+        Ok(())
+    }
+    #[test]
+    fn frozen_relation_checkpoint_requires_complete_zero_tail_and_policy_lineage() -> Result<()> {
+        let frozen = frozen_relation_metadata_fixture()?;
+        // Storage headers and trits only, never a CPU model/reference evaluator.
+        let mut gates = vec![0i32; 45];
+        gates[0] = -1;
+        gates[19] = 1; // Combine gates remain learnable.
+        let model = json!({"schema":crate::SCHEMA,"spec":frozen.config.spec,"read_spec":frozen.config.read_spec,"read_initialization":ReadInitialization::ActiveLeafV1,"seed":1,"epoch":0,"gates":gates,"source_sha256":"0".repeat(64),"kernel_sha256":"1".repeat(64),"geometry_sha256":"2".repeat(64)});
+        let mut checkpoint = DriverCheckpoint {
+            schema: CHECKPOINT_SCHEMA.into(),
+            lineage: frozen.lineage.clone(),
+            cursor: Cursor::initial(),
+            model_sha256: corpus::sha256(
+                &serde_json::to_vec(&model).map_err(|e| invalid(e.to_string()))?,
+            ),
+            model,
+        };
+        frozen.validate_checkpoint(&checkpoint)?;
+        let rehash = |checkpoint: &mut DriverCheckpoint| -> Result<()> {
+            checkpoint.model_sha256 = corpus::sha256(
+                &serde_json::to_vec(&checkpoint.model).map_err(|e| invalid(e.to_string()))?,
+            );
+            Ok(())
+        };
+        for index in 20..45 {
+            for trit in [-1, 1] {
+                let mut wrong = checkpoint.clone();
+                wrong.model["gates"][index] = json!(trit);
+                rehash(&mut wrong)?;
+                assert!(frozen.validate_checkpoint(&wrong).is_err());
+            }
+        }
+        for bad in [
+            Value::Null,
+            json!(vec![0; 44]),
+            json!(vec![0; 46]),
+            json!(vec!["0"; 45]),
+        ] {
+            let mut wrong = checkpoint.clone();
+            wrong.model["gates"] = bad;
+            rehash(&mut wrong)?;
+            assert!(frozen.validate_checkpoint(&wrong).is_err());
+        }
+        let mut wrong = checkpoint.clone();
+        wrong
+            .model
+            .as_object_mut()
+            .ok_or_else(|| invalid("fixture object"))?
+            .remove("gates");
+        rehash(&mut wrong)?;
+        assert!(frozen.validate_checkpoint(&wrong).is_err());
+        let mut learned = frozen_relation_metadata_fixture()?;
+        learned.config.relation_learning_policy = RelationLearningPolicy::LearnV1;
+        learned.lineage.config = learned.config.clone();
+        assert!(learned.validate_checkpoint(&checkpoint).is_err());
+        checkpoint.lineage.config.relation_learning_policy = RelationLearningPolicy::LearnV1;
+        assert!(frozen.validate_checkpoint(&checkpoint).is_err());
+        learned.validate_checkpoint(&checkpoint)?;
+        Ok(())
+    }
+    #[test]
+    fn receipt_policy_refusal_is_explicit_and_legacy_default_is_omitted() -> Result<()> {
+        let value = json!({"lineage_sha256":"0".repeat(64),"cursor_before":Cursor::initial(),"cursor_after":Cursor::initial(),"coordinate":{"kind":"gate","index":20},"target_positions":[3],"candidate":1,"loss_before":10,"loss_after":9,"model_epoch":0,"applied":false,"any_candidate_cost_differs_from_identity":true});
+        let mut receipt: StepReceipt =
+            serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
+        assert!(!receipt.apply_refused_by_policy);
+        assert!(serde_json::to_value(&receipt)
+            .map_err(|e| invalid(e.to_string()))?
+            .get("apply_refused_by_policy")
+            .is_none());
+        receipt.apply_refused_by_policy = true;
+        let encoded = serde_json::to_value(&receipt).map_err(|e| invalid(e.to_string()))?;
+        assert_eq!(encoded["apply_refused_by_policy"], true);
+        assert_eq!(encoded["loss_after"], 9); // Hypothetical CUDA observation is retained.
+        assert_eq!(encoded["applied"], false);
+        Ok(())
+    }
 }
 
 /// A capability cannot be deserialized or constructed by external callers.
@@ -1075,9 +1312,16 @@ pub struct StepReceipt {
     pub loss_after: u64,
     pub model_epoch: u64,
     pub applied: bool,
+    /// A genuine proposal was observed, but this transition's declared control
+    /// forbade committing a relation-tail coordinate, regardless of its cost.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub apply_refused_by_policy: bool,
     /// Device comparison of every active candidate against CURRENT, including
     /// worse candidates. No accepted update is not the same as no sensitivity.
     pub any_candidate_cost_differs_from_identity: bool,
+}
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[cfg(feature = "cuda")]
@@ -1094,6 +1338,9 @@ impl PreparedDriver {
             return Err(invalid(
                 "model spec/read/seed/epoch differs from driver cursor",
             ));
+        }
+        if !self.config.relation_learning_policy.is_learn() {
+            self.validate_frozen_relation_gates(&model.read_gates()?)?;
         }
         Ok(())
     }
@@ -1166,6 +1413,7 @@ impl PreparedDriver {
             loss_after: observation.after,
             model_epoch: observation.epoch,
             applied: false,
+            apply_refused_by_policy: false,
             any_candidate_cost_differs_from_identity: observation
                 .any_candidate_cost_differs_from_identity,
         })
@@ -1191,8 +1439,14 @@ impl PreparedDriver {
         let coordinate = self.coordinate_at(cursor.completed_batches)?;
         let proposal = model.propose(&carried, &batch.targets, coordinate.parameter())?;
         let observation = proposal.observation()?;
-        // GPU chooses and commits; host consumes only the observed commit/epoch metadata.
-        let applied = model.apply(&proposal)?;
+        // CUDA still computes the complete counterfactual for frozen relation
+        // slots. Policy only withholds the commit; its loss remains hypothetical.
+        let apply_refused_by_policy = self.apply_refused_by_policy(coordinate)?;
+        let applied = if apply_refused_by_policy {
+            false
+        } else {
+            model.apply(&proposal)?
+        };
         let after = self.advance(cursor, applied)?;
         self.admit_model(model, &after)?;
         Ok(StepReceipt {
@@ -1206,6 +1460,7 @@ impl PreparedDriver {
             loss_after: observation.after,
             model_epoch: model.epoch()?,
             applied,
+            apply_refused_by_policy,
             any_candidate_cost_differs_from_identity: observation
                 .any_candidate_cost_differs_from_identity,
         })
@@ -1265,6 +1520,7 @@ impl PreparedDriver {
         }
         let epoch = model.epoch()?;
         let snapshot = model.snapshot()?;
+        self.validate_frozen_relation_gates(&snapshot.gates)?;
         let snapshot_sha256 =
             corpus::sha256(&serde_json::to_vec(&snapshot).map_err(|e| invalid(e.to_string()))?);
         let mut first = 0;

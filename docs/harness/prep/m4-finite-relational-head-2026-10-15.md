@@ -18,16 +18,22 @@ The [integrated source record](../../labs/native-relation-learning-path-2026-10-
 implements the registered interleaver and proposes explicit `active_leaf_v1`
 initialization: +1 only on each block's leaf-combine gate, with all relation and
 other combine gates zero. The same setting and data order apply to Relation and
-its matched relation-disabled/Flock control. Default initialization and frozen
+its matched relation-disabled control. Default initialization and frozen
 artifacts remain unchanged. The scientific amendment still requires prospective
 PM fitness; owner source authorization does not release training/M2/Stage B.
 
-This amendment proposes Relation-vs-matched-Flock as the primary attribution,
+The primary control alignment in the parallel [M1 sheet PR #2574](https://github.com/UOR-Foundation/uor-r4/pull/2574)
+uses the same 45-coordinate Relation inventory with `relation_learning_policy:
+frozen_zero_v1`: relation trits remain zero, scheduled relation proposals retain
+their genuine CUDA cost observations, and those commits are explicitly refused.
+This avoids Flock's different combine proposal frequency. Flock remains a
+secondary identity comparison. This amendment proposes that matched control,
 plus same-trained-checkpoint zero-relation ablation and separately pinned fresh
 transfer. The historical Route comparison below is retained; PM must disposition
 its role, exact primary bars and complete multi-arm/evaluation cost before any
 execution packet is executable. The source executor currently supports the
-explicitly scoped Flock/Relation arms; it does not reinterpret a Route release.
+explicitly scoped treatment, frozen-zero control and secondary Flock arms; it
+does not reinterpret a Route release or select an unreviewed execution design.
 All schedule, sensitivity, target-admission and conditional-rank observables
 remain mandatory. CUDA construction controls are source only until an exact-head
 receipt demonstrates execution. Neither test functions nor an initialization

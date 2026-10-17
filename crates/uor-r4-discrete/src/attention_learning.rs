@@ -29,15 +29,17 @@ pub struct AttentionCostContract {
     pub relation_off_transfer_evaluations: u32,
 }
 impl AttentionCostContract {
-    fn expected(read: ReadSpec) -> Self {
+    fn expected(config: &DriverConfig) -> Self {
+        let ablation = matches!(config.read_spec, ReadSpec::Relation { .. })
+            && config.relation_learning_policy == training::RelationLearningPolicy::LearnV1;
         Self {
             max_batches: ATTENTION_BATCHES,
             checkpoint_every_batches: 64,
             baseline_dev_evaluations: 1,
             final_dev_evaluations: 1,
-            relation_off_dev_evaluations: u32::from(matches!(read, ReadSpec::Relation { .. })),
+            relation_off_dev_evaluations: u32::from(ablation),
             final_transfer_evaluations: 1,
-            relation_off_transfer_evaluations: u32::from(matches!(read, ReadSpec::Relation { .. })),
+            relation_off_transfer_evaluations: u32::from(ablation),
         }
     }
 }
@@ -99,7 +101,13 @@ pub fn review_payload_sha256(plan: &AttentionPlan) -> Result<String> {
 pub fn scope(config: &DriverConfig) -> Result<String> {
     let arm = match config.read_spec {
         ReadSpec::Flock { kept: 8 } => "flock",
-        ReadSpec::Relation { kept: 8, sweeps: 1 } => "relation",
+        ReadSpec::Relation { kept: 8, sweeps: 1 } => {
+            if config.relation_learning_policy == training::RelationLearningPolicy::FrozenZeroV1 {
+                "relation-frozen-zero"
+            } else {
+                "relation"
+            }
+        }
         _ => return Err(invalid("attention admits only Flock8 or Relation8/sweep1")),
     };
     if !matches!(config.seed, 1 | 2) {
@@ -113,6 +121,7 @@ pub fn scope(config: &DriverConfig) -> Result<String> {
     ))
 }
 pub fn validate_config(config: &DriverConfig) -> Result<()> {
+    config.validate()?;
     validate_registered_corpus(config)?;
     scope(config)?;
     if config.spec.kept_cells != 8
@@ -143,7 +152,7 @@ fn validate_plan_header(plan: &AttentionPlan) -> Result<()> {
     if plan.schema != PLAN_SCHEMA
         || plan.status != "HELD_OWNER_ACTION_REQUIRED"
         || plan.scope != scope(&plan.config)?
-        || plan.cost_contract != AttentionCostContract::expected(plan.config.read_spec)
+        || plan.cost_contract != AttentionCostContract::expected(&plan.config)
         || e.base_source != ATTENTION_BASE_SOURCE
         || e.reviewed_source_commit.len() != 40
         || !e
@@ -393,6 +402,7 @@ struct Counters {
     route: KindCounters,
     gate_combine: KindCounters,
     gate_relation: KindCounters,
+    refused_relation_proposals: u64,
 }
 #[cfg(any(feature = "cuda", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -441,6 +451,19 @@ impl Counters {
         let combines = (reads / u64::from(total)) * u64::from(combine)
             + (reads % u64::from(total)).min(u64::from(combine));
         let expected = [completed - reads, 0, combines, reads - combines];
+        let refused =
+            if config.relation_learning_policy == training::RelationLearningPolicy::FrozenZeroV1 {
+                reads - combines
+            } else {
+                0
+            };
+        if self.refused_relation_proposals != refused
+            || (refused != 0 && self.gate_relation.accepted_updates != 0)
+        {
+            return Err(invalid(
+                "attention frozen-zero refusal counts or relation applies differ",
+            ));
+        }
         let mut sum = 0;
         for (counter, attempts) in [
             &self.vector,
@@ -479,6 +502,7 @@ impl Counters {
         counter.any_candidate_cost_differs_from_identity +=
             u64::from(receipt.any_candidate_cost_differs_from_identity);
         counter.accepted_updates += u64::from(receipt.applied);
+        self.refused_relation_proposals += u64::from(receipt.apply_refused_by_policy);
     }
 }
 #[cfg(feature = "cuda")]
@@ -682,6 +706,9 @@ fn relation_off(
     if matches!(driver.config().read_spec, ReadSpec::Flock { .. }) {
         return Ok(json!({"status":"NOT_APPLICABLE_FLOCK_RELATION_ALREADY_OFF"}));
     }
+    if driver.config().relation_learning_policy == training::RelationLearningPolicy::FrozenZeroV1 {
+        return Ok(json!({"status":"NOT_APPLICABLE_MATCHED_CONTROL_RELATION_PINNED_ZERO"}));
+    }
     let mut snapshot: crate::device::Snapshot =
         serde_json::from_value(p.checkpoint.model.clone()).map_err(|e| invalid(e.to_string()))?;
     let (combine, total) = gate_inventory(driver.config())?;
@@ -831,6 +858,11 @@ pub fn run(
                 || receipt.model_epoch != receipt.cursor_after.accepted_updates
                 || receipt.lineage_sha256 != release.lineage_sha256()
                 || (receipt.applied && !receipt.any_candidate_cost_differs_from_identity)
+                || receipt.apply_refused_by_policy
+                    != (driver.config().relation_learning_policy
+                        == training::RelationLearningPolicy::FrozenZeroV1
+                        && expected_family == Family::GateRelation)
+                || (receipt.apply_refused_by_policy && receipt.applied)
             {
                 return Err(invalid(
                     "attention transition receipt violates preflight identity",
@@ -917,6 +949,7 @@ mod tests {
             read_spec,
             objective_policy: crate::ObjectivePolicy::NearestAddressMarginV1,
             read_initialization: ReadInitialization::ActiveLeafV1,
+            relation_learning_policy: training::RelationLearningPolicy::LearnV1,
             seed: 1,
             batch_rows: 64,
             train: corpus::CorpusSource {
@@ -988,7 +1021,7 @@ mod tests {
                 expected_eligible_targets: 2000,
             },
             run_state_directory: PathBuf::from("/metadata/state"),
-            cost_contract: AttentionCostContract::expected(config.read_spec),
+            cost_contract: AttentionCostContract::expected(&config),
             config,
         })
     }
@@ -1107,6 +1140,37 @@ mod tests {
         wrong = p;
         wrong.cost_contract.max_batches = ATTENTION_BATCHES + 1;
         assert!(validate_plan_header(&wrong).is_err());
+        Ok(())
+    }
+    #[test]
+    fn matched_frozen_zero_control_keeps_inventory_and_refuses_relation_slots() -> Result<()> {
+        let treatment = config(ReadSpec::Relation { kept: 8, sweeps: 1 });
+        let mut control = treatment.clone();
+        control.relation_learning_policy = training::RelationLearningPolicy::FrozenZeroV1;
+        validate_config(&control)?;
+        assert_eq!(gate_inventory(&treatment)?, gate_inventory(&control)?);
+        assert_ne!(scope(&treatment)?, scope(&control)?);
+        assert_eq!(
+            AttentionCostContract::expected(&control).relation_off_dev_evaluations,
+            0
+        );
+        assert_eq!(
+            AttentionCostContract::expected(&control).relation_off_transfer_evaluations,
+            0
+        );
+        let mut matched = counts(14354, 920, 1130);
+        assert!(matched.validate(&control, ATTENTION_BATCHES, 0).is_err());
+        matched.refused_relation_proposals = 1130;
+        matched.validate(&control, ATTENTION_BATCHES, 0)?;
+        assert!(matched.validate(&treatment, ATTENTION_BATCHES, 0).is_err());
+        matched
+            .gate_relation
+            .any_candidate_cost_differs_from_identity = 1;
+        matched.gate_relation.accepted_updates = 1;
+        assert!(matched.validate(&control, ATTENTION_BATCHES, 1).is_err());
+        let mut wrong = control;
+        wrong.read_spec = ReadSpec::Flock { kept: 8 };
+        assert!(validate_config(&wrong).is_err());
         Ok(())
     }
     fn counts(vector: u64, combine: u64, relation: u64) -> Counters {

@@ -962,6 +962,11 @@ impl Device {
         self.context.synchronize().map_err(cuda)
     }
 
+    /// Storage-only readback for admission checks; copies no codebook or routes.
+    pub fn read_gates(&self) -> Result<Vec<i32>> {
+        self.stream.clone_dtoh(&self.gates).map_err(cuda)
+    }
+
     pub fn snapshot(&self) -> Result<Snapshot> {
         // This is storage readback, not a CPU reference or a learning update.
         Ok(Snapshot {

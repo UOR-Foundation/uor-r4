@@ -158,6 +158,7 @@ fn validate_registered_data(config: &DriverConfig) -> Result<()> {
     if config.read_spec != ReadSpec::Route
         || config.schedule != training::SchedulePolicy::CanonicalVectorThenReadV1
         || !config.read_initialization.is_zero_gates()
+        || config.relation_learning_policy != training::RelationLearningPolicy::LearnV1
     {
         return Err(invalid(
             "legacy A2 release admits only canonical Route with zero-gate initialization",
