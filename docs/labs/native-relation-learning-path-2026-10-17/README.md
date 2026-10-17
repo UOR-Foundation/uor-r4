@@ -87,9 +87,9 @@ is tautological on the target-defined successor panel and is not learned evidenc
 
 | Check | Status |
 | --- | --- |
-| Host metadata library tests, including schedule/cursor/default/lineage/control | Repaired Rust candidate:65 passed,0 failed,1 ignored; no model execution; [candidate hashes/logs](compiler-repair-host/metadata-tests.log) |
+| Host metadata library tests, including schedule/cursor/default/lineage/control | Prior6ca599a53 compiler-repair candidate:65 passed,0 failed,1 ignored; not rerun for prime-zeta delta; no model execution; [candidate hashes/logs](compiler-repair-host/metadata-tests.log) |
 | Active initialization and matched-off CUDA control | Implemented as additional `qualify-relation` control; NOT_RUN |
-| Host `check --no-default-features --all-targets` | PASS for repaired candidate; [log](compiler-repair-host/metadata-check.log), existing nonfatal warnings retained |
+| Host `check --no-default-features --all-targets` | PASS for prime-zeta repair candidate; [log](compiler-gate6-repair-host/metadata-check.log), existing nonfatal warnings retained |
 | Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
 | Advisory host Clippy | Completed with warnings; no suppression added |
 | CUDA compiler/Clippy | Gate6 at6ca599a53: all-target check PASS0 (47.91s), strict package Clippy FAIL101 at three unchanged-main prime_zeta sites; confined repair pending new exact-head transcript |
