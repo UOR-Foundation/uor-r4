@@ -8,7 +8,8 @@ use crate::proposal_timing::{EventDuration, HostTimings, ProposalTimings, HOST_S
 use crate::{
     metadata::{BinderPlan, ABSENT},
     objective::{self, ExactRatio, HingeDistribution},
-    Error, Identity, ObjectivePolicy, Parameter, ReadSpec, Result, Spec, SCHEMA,
+    Error, Identity, ObjectivePolicy, Parameter, ReadInitialization, ReadSpec, Result, Spec,
+    SCHEMA,
 };
 use cudarc::driver::{
     CudaContext, CudaEvent, CudaFunction, CudaSlice, CudaStream, LaunchConfig, Ptx, PushKernelArg,
@@ -258,6 +259,7 @@ pub struct Binding {
     pub spec: Spec,
     pub read_spec: ReadSpec,
     pub objective_policy: ObjectivePolicy,
+    pub read_initialization: ReadInitialization,
     pub seed: u32,
     pub geometry_sha256: [u8; 32],
     pub source_sha256: [u8; 32],
@@ -387,6 +389,8 @@ pub struct Snapshot {
         skip_serializing_if = "ObjectivePolicy::is_nearest_address_margin"
     )]
     pub objective_policy: ObjectivePolicy,
+    #[serde(default, skip_serializing_if = "ReadInitialization::is_zero_gates")]
+    pub read_initialization: ReadInitialization,
     pub seed: u32,
     pub epoch: u64,
     pub table: Vec<i32>,
@@ -716,6 +720,7 @@ fn make_binding(
     spec: Spec,
     read_spec: ReadSpec,
     objective_policy: ObjectivePolicy,
+    read_initialization: ReadInitialization,
     seed: u32,
     geometry: &[u32],
 ) -> Result<Binding> {
@@ -727,6 +732,7 @@ fn make_binding(
         spec,
         read_spec,
         objective_policy,
+        read_initialization,
         seed,
         geometry_sha256: geometry_digest(geometry),
         source_sha256: source_sha256(),
@@ -770,13 +776,39 @@ impl Device {
         seed: u32,
         ordinal: usize,
     ) -> Result<Self> {
+        Self::new_with_initialization(
+            spec,
+            read_spec,
+            objective_policy,
+            ReadInitialization::ZeroGatesV1,
+            seed,
+            ordinal,
+        )
+    }
+
+    pub fn new_with_initialization(
+        spec: Spec,
+        read_spec: ReadSpec,
+        objective_policy: ObjectivePolicy,
+        read_initialization: ReadInitialization,
+        seed: u32,
+        ordinal: usize,
+    ) -> Result<Self> {
         read_spec.validate(spec)?;
+        read_initialization.validate(read_spec)?;
         let metadata = BinderPlan::new(spec.context as usize)?;
         let packed = packed_geometry();
         if packed.len() != 5120 {
             return Err(invalid("generated geometry ABI inventory differs"));
         }
-        let binding = make_binding(spec, read_spec, objective_policy, seed, &packed)?;
+        let binding = make_binding(
+            spec,
+            read_spec,
+            objective_policy,
+            read_initialization,
+            seed,
+            &packed,
+        )?;
         let context = CudaContext::new(ordinal).map_err(cuda)?;
         admit_cuda_target(&context)?;
         let stream = context.default_stream();
@@ -830,6 +862,7 @@ impl Device {
         let items = u32::try_from(table.len().max(routes.len()).max(gates.len()))
             .map_err(|_| invalid("initialization inventory exceeds CUDA index bound"))?;
         let mut launch = stream.launch_builder(&kernels.init);
+        let initialization_word = read_initialization.word();
         launch
             .arg(&mut table)
             .arg(&mut routes)
@@ -837,11 +870,27 @@ impl Device {
             .arg(&geometry)
             .arg(&spec_gpu)
             .arg(&seed)
+            .arg(&initialization_word)
             .arg(&mut status);
         // SAFETY: exact discrete_init ABI, checked allocation inventories,
         // immutable geometry/spec, writable buffers owned by this launch.
         unsafe { launch.launch(launch_config(items)) }.map_err(cuda)?;
         check_status(&stream, &status, "initialize")?;
+        // Storage validation of a declared literal initialization, never a host
+        // read/score/reference. The kernel must set only atom combine gates.
+        let initialized_gates = stream.clone_dtoh(&gates).map_err(cuda)?;
+        for (index, observed) in initialized_gates.iter().enumerate() {
+            let expected = i32::from(
+                read_initialization == ReadInitialization::ActiveLeafV1
+                    && index < spec.blocks as usize * metadata.stages()
+                    && index % metadata.stages() == 0,
+            );
+            if *observed != expected {
+                return Err(invalid(
+                    "CUDA initial gate storage differs from declared read initialization",
+                ));
+            }
+        }
         Ok(Self {
             context,
             stream,
@@ -867,6 +916,9 @@ impl Device {
     }
     pub fn objective_policy(&self) -> ObjectivePolicy {
         self.binding.objective_policy
+    }
+    pub fn read_initialization(&self) -> ReadInitialization {
+        self.binding.read_initialization
     }
     pub fn ordinal(&self) -> usize {
         self.context.ordinal()
@@ -917,6 +969,7 @@ impl Device {
             spec: self.spec(),
             read_spec: self.read_spec(),
             objective_policy: self.objective_policy(),
+            read_initialization: self.read_initialization(),
             seed: self.binding.seed,
             epoch: self.epoch()?,
             table: self.stream.clone_dtoh(&self.table).map_err(cuda)?,
@@ -959,10 +1012,11 @@ impl Device {
         }
         // Fresh process identity even for byte-identical reloads. No carried
         // batch/proposal from another model instance becomes valid by loading.
-        let mut model = Self::new_with_objective(
+        let mut model = Self::new_with_initialization(
             snapshot.spec,
             snapshot.read_spec,
             snapshot.objective_policy,
+            snapshot.read_initialization,
             snapshot.seed,
             ordinal,
         )?;

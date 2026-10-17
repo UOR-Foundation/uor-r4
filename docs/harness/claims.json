@@ -13,6 +13,13 @@
     "lab": "claude",
     "note": ""
   },
+  "codex/cf1-attention-learning": {
+    "branch": "codex/cf1-attention-learning",
+    "claimed_at": "2026-10-17T01:05:23-04:00",
+    "head": "fa62a670a",
+    "lab": "codex",
+    "note": "Owner chat17Oct explicitly prioritizes learned attention and authorizes Codex implementation/parallel coordination. Existing driver interleaver, matched explicit leaf-read init, gated Relation executor; no model release. K16 PR2571 preserved."
+  },
   "codex/cf1-reuse-timing-uuid-blocker": {
     "branch": "codex/cf1-reuse-timing-uuid-blocker",
     "claimed_at": "2026-10-16T22:35:15-04:00",

@@ -346,7 +346,7 @@ __device__ W writer(const int* q,const int* table,const U* g,const U* s,U target
 // Statuses added with the flock/relation read: 9 = read-mode/proposal-kind mismatch
 // (Gate in Route mode, Route in Flock/Relation mode); 10 = gate trit outside {-1,0,1}
 // or read mode/K/sweeps out of range.
-extern "C" __global__ void discrete_init(int* table,U* routes,int* gates,const U* g,const U* s,U seed,U* status) {
+extern "C" __global__ void discrete_init(int* table,U* routes,int* gates,const U* g,const U* s,U seed,U read_initialization,U* status) {
     U i=blockIdx.x*blockDim.x+threadIdx.x;
     U elements=s[0]*s[1]*8;
     if(i<elements) {
@@ -355,7 +355,9 @@ extern "C" __global__ void discrete_init(int* table,U* routes,int* gates,const U
         table[i]=(int)g[ROOT+(state&15)*8+(i&7)];
     }
     if(i<s[1]*s[5])routes[i]=g[IDENTITY];
-    if(i<gate_count(s))gates[i]=0;
+    // Explicit opt-in: +1 only on atom/leaf combine gates. Relation trits and
+    // all interior combine gates remain zero. Default zero is preserved.
+    if(i<gate_count(s))gates[i]=(read_initialization==1u && i<s[1]*s[5] && i%s[5]==0u)?1:0;
     if(i==0)*status=0;
 }
 extern "C" __global__ void discrete_encode(const int* table,const U* ids,U count,U width,U vocabulary,int* out,U* status) {

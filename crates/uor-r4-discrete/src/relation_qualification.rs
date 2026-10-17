@@ -159,8 +159,10 @@ fn verify_flock_vs_relation_parity(
     windows: &[Vec<Identity>],
     targets: &[u32],
 ) -> Result<()> {
-    let flock_dev =
-        Device::from_snapshot(flock_snapshot(context, kept_cells, kept, tokens, combine_gates)?, 0)?;
+    let flock_dev = Device::from_snapshot(
+        flock_snapshot(context, kept_cells, kept, tokens, combine_gates)?,
+        0,
+    )?;
     let flock_in = flock_dev.carry_windows(windows)?;
     let flock_out = flock_dev.forward_traced(&flock_in, targets)?;
     let flock_tr = trace(&flock_out)?;
@@ -192,9 +194,7 @@ fn verify_flock_vs_relation_parity(
             "relation-off forward output, loss, or trace differs from ReadSpec::Flock",
         )?;
         require(
-            scores
-                .iter()
-                .all(|&s| s == 0 || (s as u32) == ABSENT),
+            scores.iter().all(|&s| s == 0 || (s as u32) == ABSENT),
             "relation-off produced non-zero relation score",
         )?;
     }
@@ -291,11 +291,11 @@ fn relation_off_flock_parity() -> Result<()> {
 /// C2: Copy-successor fixture (`x A B y z A`) at context = 6 (stages = 2, 8 nodes).
 fn relation_copy_successor_fixture() -> Result<()> {
     let tokens = [
-        [B, A],        // 0: tok_x = [root 14, root 0], cell 224
-        [A, D_ROOT],   // 1: tok_A = [root 0, root 15], cell 15
+        [B, A],         // 0: tok_x = [root 14, root 0], cell 224
+        [A, D_ROOT],    // 1: tok_A = [root 0, root 15], cell 15
         [NEG_A, NEG_B], // 2: tok_B = [root 1, root 3], cell 19
-        [C_ROOT, A],   // 3: tok_y = [root 2, root 0], cell 32
-        [D_ROOT, A],   // 4: tok_z = [root 15, root 0], cell 240
+        [C_ROOT, A],    // 3: tok_y = [root 2, root 0], cell 32
+        [D_ROOT, A],    // 4: tok_z = [root 15, root 0], cell 240
     ];
     let prefix = [
         identity(0, 0),
@@ -308,8 +308,7 @@ fn relation_copy_successor_fixture() -> Result<()> {
     // Baseline: gates[2] = +1 (block 1, level 0 combine gate), gates[6] = 0 (Flock baseline).
     let mut base_gates = [0i32; 14];
     base_gates[2] = 1;
-    let base_dev =
-        Device::from_snapshot(relation_snapshot(6, 2, 1, 1, &tokens, &base_gates)?, 0)?;
+    let base_dev = Device::from_snapshot(relation_snapshot(6, 2, 1, 1, &tokens, &base_gates)?, 0)?;
     let base_in = base_dev.carry(&prefix)?;
     let base_out = base_dev.forward_traced(&base_in, &[2])?;
     let base_tr = trace(&base_out)?;
@@ -407,7 +406,7 @@ fn relation_irrelevant_change_invariance() -> Result<()> {
     let mut gates = [0i32; 14];
     gates[2] = 1; // block 1, level 0 combine gate
     gates[6] = 1; // level 0 SequentialSuccessor relation gate
-    // Both level-1 combine gates (gates[1] = 0, gates[3] = 0) are explicitly 0.
+                  // Both level-1 combine gates (gates[1] = 0, gates[3] = 0) are explicitly 0.
     let device = Device::from_snapshot(relation_snapshot(6, 2, 1, 1, &tokens, &gates)?, 0)?;
     for &x in &[0u32, 2, 3, 4] {
         for &y in &[0u32, 2, 3, 4] {
@@ -582,10 +581,7 @@ fn relation_endpoint_causal_boundary() -> Result<()> {
     let lv0 = level(&t, 2, 2, 0, 1, 0);
     let (hdr0, top0, _, _) = summary(&lv0, 2);
     require(
-        b1[4] > 0
-            && hdr0[1] == 2
-            && hdr0[3] == 3
-            && top0.iter().all(|&n| n < 3),
+        b1[4] > 0 && hdr0[1] == 2 && hdr0[3] == 3 && top0.iter().all(|&n| n < 3),
         "C6 level-0 readout must have eligible = 3 (nodes 0, 1, 2) and exclude query node 4",
     )?;
     // 3. Level-1 interior binder node 3 (atoms 0..=2, last = 2 <= length - 2) is eligible
@@ -878,10 +874,7 @@ fn relation_bounded_sweeps_and_refusals() -> Result<()> {
         )?;
     }
     // Lone-token (context = 1, length = 1): both combine gate (1) and relation gate (2) tie and no-op.
-    let lone = Device::from_snapshot(
-        relation_snapshot(1, 2, 1, 1, &[[A, B], [A, A]], &[])?,
-        0,
-    )?;
+    let lone = Device::from_snapshot(relation_snapshot(1, 2, 1, 1, &[[A, B], [A, A]], &[])?, 0)?;
     let single = lone.carry(&[identity(0, 0)])?;
     for gate_idx in [1u32, 2u32] {
         let proposal = lone.propose(&single, &[1], Parameter::Gate(gate_idx))?;
@@ -909,14 +902,146 @@ pub const NAMES: &[&str] = &[
     "relation_endpoint_causal_boundary",
     "relation_deterministic_tie_order",
     "relation_bounded_sweeps_and_refusals",
+    "active_leaf_initialization_and_matched_off_path",
 ];
+
+/// New initialization is qualified on CUDA; this is construction evidence only.
+/// All read selection, carry, consensus and loss computations use Device.
+fn active_leaf_initialization_and_matched_off_path() -> Result<()> {
+    let spec = Spec {
+        vocabulary: 8,
+        blocks: 2,
+        context: 6,
+        kept_cells: 4,
+    };
+    let seed = 7;
+    let flock = Device::new_with_initialization(
+        spec,
+        ReadSpec::Flock { kept: 2 },
+        crate::ObjectivePolicy::NearestAddressMarginV1,
+        crate::ReadInitialization::ActiveLeafV1,
+        seed,
+        0,
+    )?;
+    let relation = Device::new_with_initialization(
+        spec,
+        ReadSpec::Relation { kept: 2, sweeps: 1 },
+        crate::ObjectivePolicy::NearestAddressMarginV1,
+        crate::ReadInitialization::ActiveLeafV1,
+        seed,
+        0,
+    )?;
+    let before_flock = flock.snapshot()?;
+    let before_relation = relation.snapshot()?;
+    let stages = crate::metadata::BinderPlan::new(spec.context as usize)?.stages();
+    let combine_count = spec.blocks as usize * stages;
+    require(
+        before_flock.table == before_relation.table
+            && before_flock.routes == before_relation.routes
+            && before_flock.gates == before_relation.gates[..combine_count]
+            && before_relation.gates[combine_count..]
+                .iter()
+                .all(|g| *g == 0)
+            && before_flock.read_initialization == crate::ReadInitialization::ActiveLeafV1
+            && before_relation.read_initialization == crate::ReadInitialization::ActiveLeafV1,
+        "active matched initialization table/route/gate identity differs",
+    )?;
+    let windows = [
+        vec![
+            identity(0, 0),
+            identity(1, 1),
+            identity(2, 2),
+            identity(3, 3),
+            identity(4, 4),
+            identity(1, 5),
+        ],
+        vec![identity(0, 6), identity(1, 7), identity(2, 8)],
+    ];
+    let targets = [2, 3];
+    let rf = relation.forward_traced(&relation.carry_windows(&windows)?, &targets)?;
+    let ff = flock.forward_traced(&flock.carry_windows(&windows)?, &targets)?;
+    require(
+        rf.vectors()? == ff.vectors()?
+            && rf.losses == ff.losses
+            && rf.predictions == ff.predictions
+            && rf.admitted_cells == ff.admitted_cells
+            && rf.token_rivals == ff.token_rivals
+            && rf.address_rivals == ff.address_rivals
+            && trace(&rf)? == trace(&ff)?,
+        "active matched relation-off output differs from Flock",
+    )?;
+    for (device, before) in [(&flock, &before_flock), (&relation, &before_relation)] {
+        require(
+            crate::corpus::sha256(
+                &serde_json::to_vec(&device.snapshot()?)
+                    .map_err(|e| Error::Invalid(e.to_string()))?,
+            ) == crate::corpus::sha256(
+                &serde_json::to_vec(before).map_err(|e| Error::Invalid(e.to_string()))?,
+            ),
+            "active initialization/forward mutated model state",
+        )?;
+        let reloaded = Device::from_snapshot(before.clone(), 0)?;
+        require(
+            reloaded.read_initialization() == crate::ReadInitialization::ActiveLeafV1,
+            "active initialization identity lost on reload",
+        )?;
+    }
+    // Authored causal witness using the actual declared initializer. This is
+    // a construction check that a relation-only move can reach writer loss;
+    // it is neither corpus learning nor a held-out performance observation.
+    let witness = Device::new_with_initialization(
+        Spec {
+            vocabulary: 5,
+            blocks: 2,
+            context: 6,
+            kept_cells: 2,
+        },
+        ReadSpec::Relation { kept: 1, sweeps: 1 },
+        crate::ObjectivePolicy::NearestAddressMarginV1,
+        crate::ReadInitialization::ActiveLeafV1,
+        seed,
+        0,
+    )?;
+    let mut literal = witness.snapshot()?;
+    for (token, blocks) in [
+        [B, A],
+        [A, D_ROOT],
+        [NEG_A, NEG_B],
+        [C_ROOT, A],
+        [D_ROOT, A],
+    ]
+    .iter()
+    .enumerate()
+    {
+        literal.table[token * 16..token * 16 + 16].copy_from_slice(&concat(blocks));
+    }
+    let witness = Device::from_snapshot(literal, 0)?;
+    let before =
+        serde_json::to_vec(&witness.snapshot()?).map_err(|e| Error::Invalid(e.to_string()))?;
+    let input = witness.carry(&windows[0])?;
+    let proposal = witness.propose(&input, &[2], Parameter::Gate(6))?;
+    let losses = proposal.candidate_losses()?;
+    require(
+        proposal
+            .observation()?
+            .any_candidate_cost_differs_from_identity
+            && losses[..3].iter().any(|value| *value != losses[0]),
+        "active leaf causal witness: relation-only changes do not reach writer loss",
+    )?;
+    require(
+        serde_json::to_vec(&witness.snapshot()?).map_err(|e| Error::Invalid(e.to_string()))?
+            == before,
+        "active leaf causal witness changed snapshot during virtual proposal",
+    )?;
+    Ok(())
+}
 
 /// Same reporting semantics as `qualification::run` and `flock_qualification::run`:
 /// independent findings are collected; a CUDA fault hard-stops and marks remaining
 /// controls NOT_RUN; the report directory is created exclusively before any CUDA work.
 pub fn run(report: &Path) -> Result<()> {
     std::fs::create_dir(report).map_err(|e| Error::Invalid(format!("exclusive report: {e}")))?;
-    let controls: [fn() -> Result<()>; 8] = [
+    let controls: [fn() -> Result<()>; 9] = [
         relation_off_flock_parity,
         relation_copy_successor_fixture,
         relation_irrelevant_change_invariance,
@@ -925,6 +1050,7 @@ pub fn run(report: &Path) -> Result<()> {
         relation_endpoint_causal_boundary,
         relation_deterministic_tie_order,
         relation_bounded_sweeps_and_refusals,
+        active_leaf_initialization_and_matched_off_path,
     ];
     let mut records = Vec::new();
     let (mut failed, mut passed, mut attempted, mut hard_stop) = (false, 0usize, 0usize, None);

@@ -6,7 +6,7 @@ use crate::{
         self, BosIdentity, CorpusBatch, CorpusBinding, CorpusSource, FilePin, PreparedCorpus, Split,
     },
     metadata::BinderPlan,
-    Error, ObjectivePolicy, ReadSpec, Result, Spec,
+    Error, ObjectivePolicy, ReadInitialization, ReadSpec, Result, Spec,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -24,6 +24,7 @@ pub fn driver_source_sha256() -> String {
     bytes.extend_from_slice(include_bytes!("completion.rs"));
     bytes.extend_from_slice(include_bytes!("completion_baseline.rs"));
     bytes.extend_from_slice(include_bytes!("redirect_admission.rs"));
+    bytes.extend_from_slice(include_bytes!("attention_learning.rs"));
     bytes.extend_from_slice(include_bytes!("main.rs"));
     corpus::sha256(&bytes)
 }
@@ -32,6 +33,7 @@ pub fn driver_source_sha256() -> String {
 #[serde(rename_all = "snake_case")]
 pub enum SchedulePolicy {
     CanonicalVectorThenReadV1,
+    InterleavedReadEvery8V1,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -44,6 +46,8 @@ pub struct DriverConfig {
         skip_serializing_if = "ObjectivePolicy::is_nearest_address_margin"
     )]
     pub objective_policy: ObjectivePolicy,
+    #[serde(default, skip_serializing_if = "ReadInitialization::is_zero_gates")]
+    pub read_initialization: ReadInitialization,
     pub seed: u32,
     pub batch_rows: u32,
     pub train: CorpusSource,
@@ -55,6 +59,14 @@ pub struct DriverConfig {
 impl DriverConfig {
     pub fn validate(&self) -> Result<()> {
         self.read_spec.validate(self.spec)?;
+        if !self.read_initialization.is_zero_gates()
+            && (self.read_spec == ReadSpec::Route
+                || self.schedule != SchedulePolicy::InterleavedReadEvery8V1)
+        {
+            return Err(invalid(
+                "active-leaf initialization requires an explicitly interleaved Flock or Relation driver",
+            ));
+        }
         if self.schema != DRIVER_SCHEMA
             || !(1..=64).contains(&self.batch_rows)
             || self.train.split != Split::Train
@@ -151,6 +163,7 @@ pub struct PreparedDriver {
     dev: PreparedCorpus,
     lineage: Lineage,
     coordinates: u32,
+    schedule_cycle: u32,
 }
 
 impl PreparedDriver {
@@ -191,6 +204,12 @@ impl PreparedDriver {
         let coordinates = vectors
             .checked_add(read_parameters)
             .ok_or_else(|| invalid("coordinate inventory overflow"))?;
+        let schedule_cycle = match config.schedule {
+            SchedulePolicy::CanonicalVectorThenReadV1 => coordinates,
+            SchedulePolicy::InterleavedReadEvery8V1 => vectors
+                .checked_add(config.spec.blocks * stages)
+                .ok_or_else(|| invalid("schedule cycle overflow"))?,
+        };
         let lineage = Lineage {
             schema: DRIVER_SCHEMA.into(),
             driver_source_sha256: driver_source_sha256(),
@@ -204,6 +223,7 @@ impl PreparedDriver {
             dev,
             lineage,
             coordinates,
+            schedule_cycle,
         })
     }
     pub fn config(&self) -> &DriverConfig {
@@ -225,6 +245,33 @@ impl PreparedDriver {
     }
     pub fn coordinate_count(&self) -> u32 {
         self.coordinates
+    }
+    pub fn schedule_cycle(&self) -> u32 {
+        self.schedule_cycle
+    }
+    /// Schedule from the absolute batch ordinal. A cursor's wrapped phase alone
+    /// is insufficient: a 16,404-batch interleaved cycle is not a multiple of 8.
+    pub fn coordinate_at(&self, completed_batches: u64) -> Result<Coordinate> {
+        if self.config.schedule == SchedulePolicy::CanonicalVectorThenReadV1 {
+            return self.coordinate((completed_batches % u64::from(self.coordinates)) as u32);
+        }
+        let vectors = self.config.spec.vocabulary * self.config.spec.blocks;
+        if completed_batches % 8 == 7 {
+            let reads = self.coordinates - vectors;
+            Ok(Coordinate {
+                kind: if self.config.read_spec == ReadSpec::Route {
+                    CoordinateKind::Route
+                } else {
+                    CoordinateKind::Gate
+                },
+                index: ((completed_batches / 8) % u64::from(reads)) as u32,
+            })
+        } else {
+            Ok(Coordinate {
+                kind: CoordinateKind::VectorBlock,
+                index: ((completed_batches - completed_batches / 8) % u64::from(vectors)) as u32,
+            })
+        }
     }
     pub fn coordinate(&self, index: u32) -> Result<Coordinate> {
         if index >= self.coordinates {
@@ -254,10 +301,10 @@ impl PreparedDriver {
             || cursor.next_target
                 != (cursor.completed_batches % batches) * u64::from(self.config.batch_rows)
             || cursor.next_coordinate
-                != (cursor.completed_batches % u64::from(self.coordinates)) as u32
+                != (cursor.completed_batches % u64::from(self.schedule_cycle)) as u32
         {
             return Err(invalid(
-                "resume cursor differs from canonical corpus/coordinate cycle",
+                "resume cursor differs from declared corpus/schedule cycle",
             ));
         }
         Ok(())
@@ -286,7 +333,7 @@ impl PreparedDriver {
                 .ok_or_else(|| invalid("update cursor overflow"))?,
             corpus_pass: completed / batches,
             next_target: (completed % batches) * u64::from(self.config.batch_rows),
-            next_coordinate: (completed % u64::from(self.coordinates)) as u32,
+            next_coordinate: (completed % u64::from(self.schedule_cycle)) as u32,
         })
     }
     pub fn plan(&self) -> Result<Value> {
@@ -295,9 +342,12 @@ impl PreparedDriver {
             .config
             .read_spec
             .gate_count(self.config.spec.blocks, plan.stages() as u32)?;
-        Ok(
-            json!({"schema":DRIVER_SCHEMA,"lineage":self.lineage,"lineage_sha256":self.lineage_sha256()?,"seed":self.config.seed,"schedule":{"policy":self.config.schedule,"parameters":self.coordinates,"vector_parameters":self.config.spec.vocabulary*self.config.spec.blocks,"read_parameters":read_parameters,"one_coordinate_per_batch":true,"corpus_order":"ascending response-masked target positions; wraps after complete coverage; common across seeds","initial_cursor":Cursor::initial()},"train_batches_per_pass":(self.train.eligible_len() as u64).div_ceil(u64::from(self.config.batch_rows)),"dev_batches":(self.dev.eligible_len() as u64).div_ceil(u64::from(self.config.batch_rows)),"training":"HELD","applied_updates":0,"throughput":"UNMEASURED"}),
-        )
+        let mut record = json!({"schema":DRIVER_SCHEMA,"lineage":self.lineage,"lineage_sha256":self.lineage_sha256()?,"seed":self.config.seed,"schedule":{"policy":self.config.schedule,"parameters":self.coordinates,"vector_parameters":self.config.spec.vocabulary*self.config.spec.blocks,"read_parameters":read_parameters,"one_coordinate_per_batch":true,"corpus_order":"ascending response-masked target positions; wraps after complete coverage; common across seeds","initial_cursor":Cursor::initial()},"train_batches_per_pass":(self.train.eligible_len() as u64).div_ceil(u64::from(self.config.batch_rows)),"dev_batches":(self.dev.eligible_len() as u64).div_ceil(u64::from(self.config.batch_rows)),"training":"HELD","applied_updates":0,"throughput":"UNMEASURED"});
+        if self.config.schedule == SchedulePolicy::InterleavedReadEvery8V1 {
+            record["schedule"]["cycle"] = json!(self.schedule_cycle);
+            record["schedule"]["coordinate_basis"] = json!("absolute completed_batches");
+        }
+        Ok(record)
     }
     pub fn validate_checkpoint(&self, checkpoint: &DriverCheckpoint) -> Result<()> {
         if checkpoint.schema != CHECKPOINT_SCHEMA || checkpoint.lineage != self.lineage {
@@ -337,8 +387,17 @@ impl PreparedDriver {
                 .unwrap_or_else(|| json!(ObjectivePolicy::default())),
         )
         .map_err(|error| invalid(error.to_string()))?;
+        let initialization: ReadInitialization = serde_json::from_value(
+            checkpoint
+                .model
+                .get("read_initialization")
+                .cloned()
+                .unwrap_or_else(|| json!(ReadInitialization::default())),
+        )
+        .map_err(|error| invalid(error.to_string()))?;
         if spec != self.config.spec
             || objective != self.config.objective_policy
+            || initialization != self.config.read_initialization
             || mode != self.config.read_spec
             || checkpoint.model.get("seed").and_then(Value::as_u64)
                 != Some(u64::from(self.config.seed))
@@ -407,12 +466,36 @@ mod tests {
         Ok(())
     }
     fn metadata_fixture(seed: u32, read_spec: ReadSpec) -> Result<PreparedDriver> {
-        fn corpus(split: Split, ids: &[u16], mask: &[u8], eligible: u64) -> Result<PreparedCorpus> {
+        metadata_schedule_fixture(
+            seed,
+            read_spec,
+            Spec {
+                vocabulary: 10,
+                blocks: 2,
+                context: 3,
+                kept_cells: 2,
+            },
+            SchedulePolicy::CanonicalVectorThenReadV1,
+        )
+    }
+    fn metadata_schedule_fixture(
+        seed: u32,
+        read_spec: ReadSpec,
+        spec: Spec,
+        schedule: SchedulePolicy,
+    ) -> Result<PreparedDriver> {
+        fn corpus(
+            split: Split,
+            ids: &[u16],
+            mask: &[u8],
+            eligible: u64,
+            vocabulary: u32,
+        ) -> Result<PreparedCorpus> {
             let mut bytes = vec![0; 64];
             bytes[..4].copy_from_slice(b"UORT");
             bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
             bytes[8..16].copy_from_slice(&(ids.len() as u64).to_le_bytes());
-            bytes[16..20].copy_from_slice(&10u32.to_le_bytes());
+            bytes[16..20].copy_from_slice(&vocabulary.to_le_bytes());
             for id in ids {
                 bytes.extend_from_slice(&id.to_le_bytes());
             }
@@ -433,7 +516,7 @@ mod tests {
                 source,
                 &bytes,
                 mask,
-                10,
+                vocabulary,
                 BosIdentity {
                     token: "<|bos|>".into(),
                     id: 0,
@@ -445,17 +528,14 @@ mod tests {
             &[0, 9, 9, 3, 3, 4, 0, 9, 4],
             &[0, 0, 0, 1, 1, 1, 0, 0, 1],
             4,
+            spec.vocabulary,
         )?;
-        let dev = corpus(Split::Dev, &[0, 3, 4], &[0, 1, 1], 2)?;
+        let dev = corpus(Split::Dev, &[0, 3, 4], &[0, 1, 1], 2, spec.vocabulary)?;
         let config = DriverConfig {
             objective_policy: ObjectivePolicy::NearestAddressMarginV1,
+            read_initialization: ReadInitialization::ZeroGatesV1,
             schema: DRIVER_SCHEMA.into(),
-            spec: Spec {
-                vocabulary: 10,
-                blocks: 2,
-                context: 3,
-                kept_cells: 2,
-            },
+            spec,
             read_spec,
             seed,
             batch_rows: 3,
@@ -469,11 +549,17 @@ mod tests {
                 token: "<|bos|>".into(),
                 id: 0,
             },
-            schedule: SchedulePolicy::CanonicalVectorThenReadV1,
+            schedule,
         };
         // Inline, already admitted metadata fixture; no file/model initialization.
         config.validate()?;
-        let coordinates = 20 + read_spec.gate_count(2, 2)?;
+        let stages = BinderPlan::new(spec.context as usize)?.stages() as u32;
+        let vectors = spec.vocabulary * spec.blocks;
+        let coordinates = vectors + read_spec.gate_count(spec.blocks, stages)?;
+        let schedule_cycle = match schedule {
+            SchedulePolicy::CanonicalVectorThenReadV1 => coordinates,
+            SchedulePolicy::InterleavedReadEvery8V1 => vectors + spec.blocks * stages,
+        };
         let lineage = Lineage {
             schema: DRIVER_SCHEMA.into(),
             driver_source_sha256: driver_source_sha256(),
@@ -487,6 +573,7 @@ mod tests {
             dev,
             lineage,
             coordinates,
+            schedule_cycle,
         })
     }
     #[test]
@@ -650,6 +737,232 @@ mod tests {
         assert!(driver.advance(&boundary, true).is_err());
         Ok(())
     }
+    #[test]
+    fn interleaved_schedule_24_step_fixture_and_resume() -> Result<()> {
+        let spec = Spec {
+            vocabulary: 10,
+            blocks: 2,
+            context: 3,
+            kept_cells: 2,
+        };
+        for mode in [
+            ReadSpec::Route,
+            ReadSpec::Flock { kept: 2 },
+            ReadSpec::Relation { kept: 2, sweeps: 1 },
+        ] {
+            let driver =
+                metadata_schedule_fixture(1, mode, spec, SchedulePolicy::InterleavedReadEvery8V1)?;
+            assert_eq!(driver.schedule_cycle(), 24);
+            assert_eq!(
+                driver.coordinate_count(),
+                if matches!(mode, ReadSpec::Relation { .. }) {
+                    34
+                } else {
+                    24
+                }
+            );
+            let mut cursor = Cursor::initial();
+            let mut vectors = Vec::new();
+            let mut reads = Vec::new();
+            for step in 0..48 {
+                assert_eq!(cursor.completed_batches, step);
+                let coordinate = driver.coordinate_at(cursor.completed_batches)?;
+                if step < 24 && coordinate.kind == CoordinateKind::VectorBlock {
+                    vectors.push(coordinate.index);
+                }
+                if coordinate.kind != CoordinateKind::VectorBlock {
+                    reads.push(coordinate.index);
+                }
+                let resumed: Cursor = serde_json::from_slice(
+                    &serde_json::to_vec(&cursor).map_err(|e| invalid(e.to_string()))?,
+                )
+                .map_err(|e| invalid(e.to_string()))?;
+                driver.validate_cursor(&resumed)?;
+                assert_eq!(driver.coordinate_at(resumed.completed_batches)?, coordinate);
+                assert_eq!(
+                    driver.advance(&resumed, false)?,
+                    driver.advance(&cursor, false)?
+                );
+                cursor = driver.advance(&cursor, false)?;
+                if step == 23 {
+                    assert_eq!(cursor.next_coordinate, 0);
+                    assert_eq!(cursor.corpus_pass, 12);
+                    assert_eq!(cursor.next_target, 0);
+                }
+            }
+            assert_eq!(
+                vectors,
+                (0..20).chain(std::iter::once(0)).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                reads,
+                if matches!(mode, ReadSpec::Relation { .. }) {
+                    vec![0, 1, 2, 3, 4, 5]
+                } else {
+                    vec![0, 1, 2, 3, 0, 1]
+                }
+            );
+        }
+        Ok(())
+    }
+    #[test]
+    fn interleaved_schedule_c192_counts_frequencies_and_absolute_wrap() -> Result<()> {
+        let spec = Spec {
+            vocabulary: 4096,
+            blocks: 4,
+            context: 192,
+            kept_cells: 8,
+        };
+        for mode in [
+            ReadSpec::Route,
+            ReadSpec::Flock { kept: 8 },
+            ReadSpec::Relation { kept: 8, sweeps: 1 },
+        ] {
+            let driver =
+                metadata_schedule_fixture(1, mode, spec, SchedulePolicy::InterleavedReadEvery8V1)?;
+            assert_eq!(driver.schedule_cycle(), 16404);
+            let read_count = if matches!(mode, ReadSpec::Relation { .. }) {
+                45
+            } else {
+                20
+            };
+            assert_eq!(driver.coordinate_count(), 16384 + read_count);
+            let mut read_frequencies = vec![0; read_count as usize];
+            let mut vector_indices = Vec::new();
+            let mut reads = 0;
+            for step in 0..16404 {
+                let coordinate = driver.coordinate_at(step)?;
+                if coordinate.kind == CoordinateKind::VectorBlock {
+                    vector_indices.push(coordinate.index);
+                } else {
+                    assert_eq!(
+                        coordinate.kind,
+                        if mode == ReadSpec::Route {
+                            CoordinateKind::Route
+                        } else {
+                            CoordinateKind::Gate
+                        }
+                    );
+                    read_frequencies[coordinate.index as usize] += 1;
+                    reads += 1;
+                }
+                let expected = match step + 1 {
+                    4101 => Some((3589, 512)),
+                    8202 => Some((7177, 1025)),
+                    12303 => Some((10766, 1537)),
+                    16404 => Some((14354, 2050)),
+                    _ => None,
+                };
+                if let Some(expected) = expected {
+                    assert_eq!((vector_indices.len(), reads), expected);
+                }
+            }
+            assert_eq!(vector_indices, (0..14354).collect::<Vec<_>>());
+            for (index, count) in read_frequencies.iter().enumerate() {
+                assert_eq!(
+                    *count,
+                    if read_count == 45 {
+                        if index < 25 {
+                            46
+                        } else {
+                            45
+                        }
+                    } else if index < 10 {
+                        103
+                    } else {
+                        102
+                    }
+                );
+            }
+            if read_count == 45 {
+                assert_eq!(read_frequencies[..20].iter().sum::<usize>(), 920);
+                assert_eq!(read_frequencies[20..].iter().sum::<usize>(), 1130);
+            }
+            // The cycle wraps the cursor but MUST NOT reset the absolute interleaver.
+            let cursor = Cursor {
+                completed_batches: 16404,
+                accepted_updates: 0,
+                corpus_pass: 8202,
+                next_target: 0,
+                next_coordinate: 0,
+            };
+            driver.validate_cursor(&cursor)?;
+            assert_eq!(
+                driver.coordinate_at(cursor.completed_batches)?,
+                Coordinate {
+                    kind: CoordinateKind::VectorBlock,
+                    index: 14354
+                }
+            );
+            assert_ne!(
+                driver.coordinate_at(cursor.completed_batches)?,
+                driver.coordinate_at(u64::from(cursor.next_coordinate))?
+            );
+            assert_eq!(driver.coordinate_at(16407)?.index, 2050 % read_count);
+            let mut wrong = cursor;
+            wrong.next_coordinate = 1;
+            assert!(driver.validate_cursor(&wrong).is_err());
+        }
+        Ok(())
+    }
+    #[test]
+    fn initialization_defaults_and_cross_schedule_lineage_refuse() -> Result<()> {
+        let canonical = metadata_fixture(1, ReadSpec::Relation { kept: 2, sweeps: 1 })?;
+        let encoded =
+            serde_json::to_value(&canonical.config).map_err(|e| invalid(e.to_string()))?;
+        assert!(encoded.get("read_initialization").is_none());
+        let decoded: DriverConfig =
+            serde_json::from_value(encoded.clone()).map_err(|e| invalid(e.to_string()))?;
+        assert_eq!(decoded, canonical.config);
+        let model = json!({"schema":crate::SCHEMA,"spec":canonical.config.spec,"read_spec":canonical.config.read_spec,"seed":1,"epoch":0,"source_sha256":"0".repeat(64),"kernel_sha256":"1".repeat(64),"geometry_sha256":"2".repeat(64)});
+        let mut checkpoint = DriverCheckpoint {
+            schema: CHECKPOINT_SCHEMA.into(),
+            lineage: canonical.lineage.clone(),
+            cursor: Cursor::initial(),
+            model_sha256: corpus::sha256(
+                &serde_json::to_vec(&model).map_err(|e| invalid(e.to_string()))?,
+            ),
+            model,
+        };
+        canonical.validate_checkpoint(&checkpoint)?;
+        let mut interleaved = metadata_schedule_fixture(
+            1,
+            canonical.config.read_spec,
+            canonical.config.spec,
+            SchedulePolicy::InterleavedReadEvery8V1,
+        )?;
+        assert!(interleaved.validate_checkpoint(&checkpoint).is_err());
+        checkpoint.lineage = interleaved.lineage.clone();
+        interleaved.validate_checkpoint(&checkpoint)?;
+        assert!(canonical.validate_checkpoint(&checkpoint).is_err());
+        let mut active = canonical.config.clone();
+        active.read_initialization = ReadInitialization::ActiveLeafV1;
+        assert!(active.validate().is_err());
+        active.schedule = SchedulePolicy::InterleavedReadEvery8V1;
+        active.validate()?;
+        active.read_spec = ReadSpec::Route;
+        assert!(active.validate().is_err());
+        active.read_spec = ReadSpec::Flock { kept: 2 };
+        active.validate()?;
+        interleaved.config.read_initialization = ReadInitialization::ActiveLeafV1;
+        interleaved.lineage.config = interleaved.config.clone();
+        checkpoint.lineage = interleaved.lineage.clone();
+        assert!(
+            interleaved.validate_checkpoint(&checkpoint).is_err(),
+            "missing snapshot identity defaults to zero and cannot admit ActiveLeaf"
+        );
+        checkpoint.model["read_initialization"] = json!(ReadInitialization::ActiveLeafV1);
+        checkpoint.model_sha256 = corpus::sha256(
+            &serde_json::to_vec(&checkpoint.model).map_err(|e| invalid(e.to_string()))?,
+        );
+        interleaved.validate_checkpoint(&checkpoint)?;
+        assert_eq!(
+            serde_json::to_value(&interleaved.config).map_err(|e| invalid(e.to_string()))?
+                ["read_initialization"],
+            "active_leaf_v1"
+        );
+        Ok(())
+    }
 }
 
 /// A capability cannot be deserialized or constructed by external callers.
@@ -774,6 +1087,7 @@ impl PreparedDriver {
         if model.spec() != self.config.spec
             || model.read_spec() != self.config.read_spec
             || model.objective_policy() != self.config.objective_policy
+            || model.read_initialization() != self.config.read_initialization
             || model.binding().seed != self.config.seed
             || model.epoch()? != cursor.accepted_updates
         {
@@ -784,10 +1098,11 @@ impl PreparedDriver {
         Ok(())
     }
     pub fn new_model(&self, ordinal: usize) -> Result<crate::device::Device> {
-        crate::device::Device::new_with_objective(
+        crate::device::Device::new_with_initialization(
             self.config.spec,
             self.config.read_spec,
             self.config.objective_policy,
+            self.config.read_initialization,
             self.config.seed,
             ordinal,
         )
@@ -836,7 +1151,7 @@ impl PreparedDriver {
         self.advance(cursor, false)?;
         let batch = self.batch(cursor)?;
         let carried = model.carry_windows(&batch.windows)?;
-        let coordinate = self.coordinate(cursor.next_coordinate)?;
+        let coordinate = self.coordinate_at(cursor.completed_batches)?;
         let observation = model
             .propose(&carried, &batch.targets, coordinate.parameter())?
             .observation()?;
@@ -873,7 +1188,7 @@ impl PreparedDriver {
         self.advance(cursor, false)?;
         let batch = self.batch(cursor)?;
         let carried = model.carry_windows(&batch.windows)?;
-        let coordinate = self.coordinate(cursor.next_coordinate)?;
+        let coordinate = self.coordinate_at(cursor.completed_batches)?;
         let proposal = model.propose(&carried, &batch.targets, coordinate.parameter())?;
         let observation = proposal.observation()?;
         // GPU chooses and commits; host consumes only the observed commit/epoch metadata.
@@ -911,9 +1226,37 @@ impl PreparedDriver {
         Ok((cursor, receipts))
     }
     pub fn evaluate(&self, model: &crate::device::Device) -> Result<Value> {
+        self.evaluate_prepared(model, &self.dev, false)
+    }
+    /// A separately pinned evaluation-only corpus. Labels never select model
+    /// state, initialization or the read; every numerical operation is CUDA.
+    pub fn evaluate_transfer(
+        &self,
+        model: &crate::device::Device,
+        transfer: &PreparedCorpus,
+    ) -> Result<Value> {
+        let binding = transfer.binding();
+        if binding.source.split != Split::Dev
+            || binding.vocabulary != self.config.spec.vocabulary
+            || binding.bos != self.config.bos
+            || binding.source.tokens.sha256 == self.config.train.tokens.sha256
+            || binding.source.tokens.sha256 == self.config.dev.tokens.sha256
+            || binding.eligible_targets < 200
+        {
+            return Err(invalid("transfer needs separately pinned evaluation content, the same vocabulary/BOS and at least200 eligible rows"));
+        }
+        self.evaluate_prepared(model, transfer, true)
+    }
+    fn evaluate_prepared(
+        &self,
+        model: &crate::device::Device,
+        scored: &PreparedCorpus,
+        transfer: bool,
+    ) -> Result<Value> {
         if model.spec() != self.config.spec
             || model.read_spec() != self.config.read_spec
             || model.objective_policy() != self.config.objective_policy
+            || model.read_initialization() != self.config.read_initialization
             || model.binding().seed != self.config.seed
         {
             return Err(invalid(
@@ -926,10 +1269,8 @@ impl PreparedDriver {
             corpus::sha256(&serde_json::to_vec(&snapshot).map_err(|e| invalid(e.to_string()))?);
         let mut first = 0;
         let mut receipts = Vec::new();
-        while first < self.dev.eligible_len() as u64 {
-            let batch = self
-                .dev
-                .batch(first, self.config.spec.context, self.config.batch_rows)?;
+        while first < scored.eligible_len() as u64 {
+            let batch = scored.batch(first, self.config.spec.context, self.config.batch_rows)?;
             let carried = model.carry_windows(&batch.windows)?;
             let mut evaluation = model.evaluate(&carried, &batch.targets)?;
             for ((row, position), target) in evaluation
@@ -948,7 +1289,7 @@ impl PreparedDriver {
         let reference = crate::device::Device::count_reference(
             self.config.spec.vocabulary,
             &self.train.eligible_targets(),
-            &self.dev.eligible_targets(),
+            &scored.eligible_targets(),
             model.ordinal(),
         )?;
         let pilot_slice_bias = pilot_slice_metadata(
@@ -958,8 +1299,11 @@ impl PreparedDriver {
         if model.epoch()? != epoch {
             return Err(invalid("evaluation changed model epoch"));
         }
-        Ok(
-            json!({"schema":DRIVER_SCHEMA,"objective_evaluation_schema":crate::objective::EVALUATION_SCHEMA,"objective_policy":snapshot.objective_policy,"legacy_total_loss_numerator_semantics":"8T_plus_widthA","evaluation_lineage":self.lineage,"evaluation_lineage_sha256":self.lineage_sha256()?,"model_epoch":epoch,"model_snapshot_sha256":snapshot_sha256,"model_bindings":{"schema":snapshot.schema,"spec":snapshot.spec,"read_spec":snapshot.read_spec,"objective_policy":snapshot.objective_policy,"seed":snapshot.seed,"source_sha256":snapshot.source_sha256,"kernel_sha256":snapshot.kernel_sha256,"geometry_sha256":snapshot.geometry_sha256,"operator_kappa":snapshot.operator_kappa,"composition_kappa":snapshot.composition_kappa},"training_provenance":"DriverCheckpoint restore required by eval-corpus CLI; this evaluator's lineage identifies its evaluation inputs","scored_set_policy":corpus::WINDOW_POLICY,"aggregate":aggregate,"batches":receipts,"count_reference":reference,"pilot_slice_bias":pilot_slice_bias,"evaluation_mutates_model":false,"accepted_updates_in_model":epoch,"updates_applied_by_evaluation":0}),
-        )
+        let mut record = json!({"schema":DRIVER_SCHEMA,"objective_evaluation_schema":crate::objective::EVALUATION_SCHEMA,"objective_policy":snapshot.objective_policy,"legacy_total_loss_numerator_semantics":"8T_plus_widthA","evaluation_lineage":self.lineage,"evaluation_lineage_sha256":self.lineage_sha256()?,"model_epoch":epoch,"model_snapshot_sha256":snapshot_sha256,"model_bindings":{"schema":snapshot.schema,"spec":snapshot.spec,"read_spec":snapshot.read_spec,"objective_policy":snapshot.objective_policy,"seed":snapshot.seed,"source_sha256":snapshot.source_sha256,"kernel_sha256":snapshot.kernel_sha256,"geometry_sha256":snapshot.geometry_sha256,"operator_kappa":snapshot.operator_kappa,"composition_kappa":snapshot.composition_kappa},"training_provenance":"DriverCheckpoint restore required by eval-corpus CLI; this evaluator's lineage identifies its evaluation inputs","scored_set_policy":corpus::WINDOW_POLICY,"aggregate":aggregate,"batches":receipts,"count_reference":reference,"pilot_slice_bias":pilot_slice_bias,"evaluation_mutates_model":false,"accepted_updates_in_model":epoch,"updates_applied_by_evaluation":0});
+        if transfer {
+            record["transfer_corpus"] = json!(scored.binding());
+            record["transfer_is_separate_evaluation_content"] = json!(true);
+        }
+        Ok(record)
     }
 }
