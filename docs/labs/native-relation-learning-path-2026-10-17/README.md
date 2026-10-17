@@ -92,12 +92,12 @@ is tautological on the target-defined successor panel and is not learned evidenc
 | Host `check --no-default-features --all-targets` | PASS at `202855294`; final pin-only rerun recorded on PR #2575 |
 | Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
 | Advisory host Clippy | Completed with warnings; no suppression added |
-| Exact-head CUDA check/Clippy and finite controls | NOT_RUN; compiler lease stopped at the clean-tree preflight before Cargo |
+| Exact-head CUDA check/Clippy and finite controls | NOT_RUN; both compiler leases stopped at source-status preflight before Cargo |
 | Independent integrated source review | APPROVE through `202855294`; AGY source/math APPROVE at `f6c7fa5e1`; subsequent initializer/fixture and canonical-sheet deltas independently approved; no runtime verdict |
 | Scientific initialization/comparator design | FIT (design), PR #2574; no execution release |
 | Training / M2 / Stage B | HELD |
 | Q4 | NOT_EXECUTABLE |
-| Model updates, compiler pod leases, lease-cost estimate | 0 / 1 / $0.067731111; no model execution |
+| Model updates, compiler pod leases, combined lease-cost estimate | 0 / 2 / $0.248797778 provider-uptime estimate; no model execution |
 
 The local disk was below the 30 GiB pod-admission floor at source preparation;
 no pod was started. Source preparation used a sparse owned worktree. Subsequent
@@ -175,6 +175,57 @@ paths pass; unrelated files, peer jobs, unstaged/staged source changes, tracked
 changes within allowed paths, a staged addition removed from the working tree,
 and wrong HEAD are refused. The index and working tree are checked separately. Those metadata checks
 are not compiler/model execution or permission for another lease.
+
+### Second compiler lease: captured reaper-path refusal, no compiler result
+
+Distinct PM compiler-only release [6231616281](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6231616281)
+admitted source `c4907cd04c44073dd28813734c5dd2f1223c684b`, packet manifest
+`3fe972314751367b2e5aa166df2e0ba828eaf843315ca44b4a7a83e118c61dc9` and
+readiness `44929a1d4c703a14538d31a1ea311fdff677b038a05da8208696e821842d3455`.
+After fresh full disk-reserve and fleet admission, `vast-56382752` was created
+at 10:40:32Z. SSH became ready after 546 seconds. Setup exited zero; the native
+job ran at 10:51:01–10:51:02Z and exited one **before any Cargo command**.
+All four compiler/metadata gates and finite CUDA controls remain NOT_RUN;
+no model, qualification, learning or evaluation command ran.
+
+Unlike gate1's inferred predicate, this guard directly prints matching expected
+and actual HEAD and captures the sole unexpected path:
+
+```text
+?? pods/reaper.log
+```
+
+The unchanged setup helper starts the reaper, which writes that exact file.
+The session-scoped eval/job repair omitted this transitive setup output. The
+[raw status](compiler-gate2/source-status-unexpected.txt),
+[command transcript](compiler-gate2/command.log) and
+[independent outcome review](compiler-gate2/independent-outcome-review.md)
+record an operator inventory defect, with no compiler or mechanism verdict.
+The raw reaper log and launcher log were not collected in this attempt and
+are UNAVAILABLE; their contents are not reconstructed from the status record.
+
+The 353,280-byte archive
+`icloud:UOR-R4/results/codex/attention-compile-gate2-archive.tar`, MD5
+`b368f635e426cbb6675a327bc05980d5`, passed all 10 remote, 20 operator and
+12 frozen-packet SHA entries plus complete cloud MD5 readback before release
+10:51:48Z/down 10:51:55Z. Fleet returned to zero. Provider uptime of 679 seconds
+at $0.96/hour estimates $0.181066667; the separate 683-second ledger wall
+interval estimates $0.182133333. Neither is an invoice. Cumulative Codex
+provider-based episode estimate is $3.739730000 plus separate PM costs;
+storage/transfer remain UNMEASURED. The closed release cannot authorize a retry.
+
+The prospective correction audits the complete invoked setup/runner/reaper/gate
+path inventory. It adds only the exact untracked `pods/reaper.log` allowance,
+retains global index-vs-HEAD and worktree-vs-index checks, and collects raw
+reaper/launcher logs, installed reaper/setup provenance and failed probe receipts.
+Failed probe paths remain unexpected and blocking. No source ignore, broad
+`pods/**` exception, numerical CUDA, scientific-sheet, compiler-command, model
+or frozen Route/timing3 change is introduced. Eleven local Git-only guard cases
+pass: the setup-generated eval/job/reaper topology is accepted; an unrelated
+pod file and a staged change to the allowed reaper path are refused, alongside
+the eight earlier cases. These are operator metadata checks, not compiler/model
+execution or permission. A final-head prospective packet needs independent
+review and a distinct PM dispatch before another paid lease.
 
 Finish exact-head source review and meaningful checks in this source unit, obtain
 prospective fitness on the amended matched experiment, and obtain the distinct

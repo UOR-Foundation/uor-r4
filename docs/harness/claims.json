@@ -22,10 +22,10 @@
   },
   "codex/cf1-attention-learning": {
     "branch": "codex/cf1-attention-learning",
-    "claimed_at": "2026-10-17T02:33:00-04:00",
-    "head": "d833da01d",
+    "claimed_at": "2026-10-17T07:02:22-04:00",
+    "head": "c4907cd04",
     "lab": "codex",
-    "note": "Owner-priority attention Unit1 source; final initializer-preserving implementation, exact source/sheet binding and narrow stale initializer sentence reconciliation in m1-learned-attention-link-2026-10-17.md per PM6230657270; no scientific effect/bar/dose change. No model/training release."
+    "note": ""
   },
   "codex/cf1-reuse-timing-uuid-blocker": {
     "branch": "codex/cf1-reuse-timing-uuid-blocker",
