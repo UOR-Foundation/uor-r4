@@ -43,7 +43,7 @@ const TC_FIFTH_GEN: &str = concat!("tcgen", "05");
 
 /// Prohibited floating-point type tokens gated by the D32 ratchet across discrete-model and
 /// standalone-instrument sources (`crates/uor-r4-discrete/` and `docs/labs/*/instrument/`).
-pub const D32_FLOAT_TYPES: [&str; 9] = [
+pub const D32_FLOAT_TYPES: [&str; 21] = [
     "f16",
     "bf16",
     "f32",
@@ -53,6 +53,52 @@ pub const D32_FLOAT_TYPES: [&str; 9] = [
     "double",
     "__half",
     "__nv_bfloat16",
+    "float1",
+    "float2",
+    "float3",
+    "float4",
+    "double1",
+    "double2",
+    "double3",
+    "double4",
+    "__half2",
+    "__nv_bfloat162",
+    "f16x2",
+    "bf16x2",
+];
+
+/// Prohibited C/CUDA scalar and device floating-point math intrinsics gated by the D32 ratchet.
+pub const D32_FLOAT_CALLS: [&str; 30] = [
+    "sqrtf",
+    "rsqrtf",
+    "expf",
+    "exp2f",
+    "logf",
+    "log2f",
+    "log10f",
+    "log1pf",
+    "sinf",
+    "cosf",
+    "tanf",
+    "fmaf",
+    "fma",
+    "erff",
+    "erfcf",
+    "fabsf",
+    "fmaxf",
+    "fminf",
+    "__fsqrt_rn",
+    "__frsqrt_rn",
+    "__fdividef",
+    "__expf",
+    "__logf",
+    "__sinf",
+    "__cosf",
+    "__fmaf_rn",
+    "__int_as_float",
+    "__uint_as_float",
+    "__float_as_int",
+    "__float_as_uint",
 ];
 
 /// Which ratchet.
@@ -467,7 +513,7 @@ fn is_discrete_scope(rel: &str) -> bool {
     rel.starts_with("crates/uor-r4-discrete/") || rel.starts_with("docs/labs/")
 }
 
-/// The D32 gated floating-point type and literal sites on one line of stripped code.
+/// The D32 gated floating-point type, intrinsic call, and literal sites on one line of stripped code.
 fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec<Site>) {
     let b = line.as_bytes();
     let n = b.len();
@@ -475,19 +521,23 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
     while i < n {
         let prev_word = i > 0 && (b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_');
         let prev_dot = i > 0 && b[i - 1] == b'.';
+        let prev_single_dot = prev_dot && (i < 2 || b[i - 2] != b'.');
         if (b[i].is_ascii_alphabetic() || b[i] == b'_') && !prev_word {
             let mut k = i + 1;
             while k < n && (b[k].is_ascii_alphanumeric() || b[k] == b'_') {
                 k += 1;
             }
             let word = &line[i..k];
-            if D32_FLOAT_TYPES
-                .iter()
-                .any(|t| word.eq_ignore_ascii_case(t))
-            {
+            if D32_FLOAT_TYPES.iter().any(|t| word.eq_ignore_ascii_case(t)) {
                 into.push(Site {
                     line: number,
                     kind: "float-type",
+                    text: word.to_string(),
+                });
+            } else if D32_FLOAT_CALLS.iter().any(|c| word.eq_ignore_ascii_case(c)) {
+                into.push(Site {
+                    line: number,
+                    kind: "float-call",
                     text: word.to_string(),
                 });
             }
@@ -501,9 +551,7 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
         {
             let prev_tuple_receiver = !is_cuda;
             let mut k = i + 2;
-            while k < n
-                && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\''))
-            {
+            while k < n && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\'')) {
                 k += 1;
             }
             let mut has_exp = false;
@@ -513,8 +561,7 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
                 if matches!(b.get(k), Some(b'+' | b'-')) {
                     k += 1;
                 }
-                while k < n
-                    && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\''))
+                while k < n && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\''))
                 {
                     k += 1;
                 }
@@ -534,7 +581,7 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
             i = k;
             continue;
         }
-        if b[i].is_ascii_digit() && !prev_word && !prev_dot {
+        if b[i].is_ascii_digit() && !prev_word && !prev_single_dot {
             if b[i] == b'0' && matches!(b.get(i + 1), Some(b'x' | b'X' | b'b' | b'B' | b'o' | b'O'))
             {
                 let is_hex = matches!(b.get(i + 1), Some(b'x' | b'X'));
@@ -547,9 +594,8 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
                     }
                     let has_hex_radix = b.get(k) == Some(&b'.')
                         && b.get(k + 1) != Some(&b'.')
-                        && b.get(k + 1).is_some_and(|c| {
-                            c.is_ascii_hexdigit() || matches!(c, b'p' | b'P')
-                        });
+                        && b.get(k + 1)
+                            .is_some_and(|c| c.is_ascii_hexdigit() || matches!(c, b'p' | b'P'));
                     if has_hex_radix {
                         k += 1;
                         while k < n
@@ -566,9 +612,7 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
                             k += 1;
                         }
                         while k < n
-                            && (b[k].is_ascii_digit()
-                                || b[k] == b'_'
-                                || (is_cuda && b[k] == b'\''))
+                            && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\''))
                         {
                             k += 1;
                         }
@@ -591,16 +635,13 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
                 continue;
             }
             let mut k = i + 1;
-            while k < n
-                && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\''))
-            {
+            while k < n && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\'')) {
                 k += 1;
             }
             let mut has_dot = false;
             if b.get(k) == Some(&b'.') {
                 let next = b.get(k + 1).copied();
-                let is_cuda_dot_suff = is_cuda
-                    && matches!(next, Some(b'f' | b'F' | b'd' | b'D'))
+                let is_cuda_dot_suff = matches!(next, Some(b'f' | b'F' | b'd' | b'D'))
                     && !b
                         .get(k + 2)
                         .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_');
@@ -624,8 +665,7 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
                 if matches!(b.get(k), Some(b'+' | b'-')) {
                     k += 1;
                 }
-                while k < n
-                    && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\''))
+                while k < n && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\''))
                 {
                     k += 1;
                 }
@@ -905,7 +945,7 @@ mod tests {
 
     #[test]
     fn discrete_float_ratchet_catches_types_and_literals_without_tuple_or_range_false_positives() {
-        let rust_code = "fn f(a: f32, b: f64, c: bf16, d: f16) { let x = 1.0 + 2. + 1e-5 + 3f32 + 0x1.8p-2; let t = pair.0 + pair.0.1 + (pair).0 + arr[0].1
+        let rust_code = "fn f(a: f32, b: f64, c: bf16, d: f16) { let x = 1.0 + 2. + 1e-5 + 3f32 + 0x1.8p-2; let r = 0..1.0; let t = pair.0 + pair.0.1 + (pair).0 + arr[0].1
             .1; for i in 0..10 { let _ = i.max(1); } // f32 1.0\nlet s = \"f64 2.5\"; }\n";
         let stripped = strip_comments_and_strings(rust_code);
         let mut sites = Vec::new();
@@ -925,11 +965,12 @@ mod tests {
                 ("float-literal", "1e-5"),
                 ("float-literal", "3f32"),
                 ("float-literal", "0x1.8p-2"),
+                ("float-literal", "1.0"),
             ]
         );
 
         let cuda_code =
-            "__device__ void k() { float x = .5f + 1.f + 1'000.25 + 0x1p-4; double y = 2.0; }\n";
+            "__device__ void k(float4 v, __half2 h) { float x = .5f + 1.f + 1'000.25 + 0x1p-4 + sqrtf(v.x) + fmaf(x, x, x); double y = 2.0; }\n";
         let stripped_cu = strip_comments_and_strings(cuda_code);
         let mut cu_sites = Vec::new();
         for (k, line) in stripped_cu.split('\n').enumerate() {
@@ -939,11 +980,15 @@ mod tests {
         assert_eq!(
             cu_found,
             vec![
+                ("float-type", "float4"),
+                ("float-type", "__half2"),
                 ("float-type", "float"),
                 ("float-literal", ".5f"),
                 ("float-literal", "1.f"),
                 ("float-literal", "1'000.25"),
                 ("float-literal", "0x1p-4"),
+                ("float-call", "sqrtf"),
+                ("float-call", "fmaf"),
                 ("float-type", "double"),
                 ("float-literal", "2.0"),
             ]
@@ -967,7 +1012,10 @@ mod tests {
             None,
         );
         let res = scan(dir.path(), Kind::DiscreteFloat).expect("scan d32");
-        assert_eq!(res.counts.get("crates/uor-r4-discrete/src/lib.rs"), Some(&2));
+        assert_eq!(
+            res.counts.get("crates/uor-r4-discrete/src/lib.rs"),
+            Some(&2)
+        );
         assert_eq!(
             res.counts
                 .get("docs/labs/k16-timing-2026-10-15/instrument/src/main.rs"),
