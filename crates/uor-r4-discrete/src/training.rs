@@ -807,7 +807,7 @@ mod tests {
             completed_batches: u64::MAX,
             accepted_updates: 0,
             corpus_pass: u64::MAX / 2,
-            next_target: (u64::MAX % 2) * 3,
+            next_target: 3,
             next_coordinate: (u64::MAX % 24) as u32,
         };
         driver.validate_cursor(&boundary)?;

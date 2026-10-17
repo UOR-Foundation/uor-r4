@@ -1119,11 +1119,12 @@ impl Device {
 
     pub fn carry(&self, identities: &[Identity]) -> Result<CarriedBatch> {
         let context = self.spec().context as usize;
-        let lengths = if identities.len() % context == 0 && identities.len() / context <= 64 {
-            vec![self.spec().context; identities.len() / context]
-        } else {
-            Vec::new()
-        };
+        let lengths =
+            if identities.len().is_multiple_of(context) && identities.len() / context <= 64 {
+                vec![self.spec().context; identities.len() / context]
+            } else {
+                Vec::new()
+            };
         self.encode_carried(identities, identities.to_vec(), lengths)
     }
 
@@ -1668,7 +1669,7 @@ impl Device {
         targets: &[u32],
         parameter: Parameter,
         mut profiler: Option<&mut ProposeProfiler>,
-        mut decomposition: Option<&mut DecompositionProfiler>,
+        decomposition: Option<&mut DecompositionProfiler>,
         mut reuse: Option<&mut BaselineReuseProfiler>,
     ) -> Result<Proposal> {
         let (kind, index) = self.parameter(parameter)?;
@@ -1724,7 +1725,7 @@ impl Device {
             .arg(&index)
             .arg(&mut losses)
             .arg(&mut status);
-        if let Some(probe) = decomposition.as_deref_mut() {
+        if let Some(probe) = decomposition {
             launch.arg(&mut probe.records);
             probe.submitted = true;
         }
@@ -1741,7 +1742,7 @@ impl Device {
             }
         }
         unsafe { launch.launch(launch_config(16)) }.map_err(cuda)?;
-        if let Some(probe) = reuse.as_deref_mut() {
+        if let Some(probe) = reuse {
             probe.submitted = true;
         }
         if let Some(profile) = profiler.as_deref_mut() {

@@ -87,17 +87,18 @@ is tautological on the target-defined successor panel and is not learned evidenc
 
 | Check | Status |
 | --- | --- |
-| Host metadata library tests, including schedule/cursor/default/lineage/control | At `202855294`: 65 passed, 0 failed, 1 ignored; no model execution; final pin-only rerun recorded on PR #2575 |
+| Host metadata library tests, including schedule/cursor/default/lineage/control | Repaired Rust candidate:65 passed,0 failed,1 ignored; no model execution; [candidate hashes/logs](compiler-repair-host/metadata-tests.log) |
 | Active initialization and matched-off CUDA control | Implemented as additional `qualify-relation` control; NOT_RUN |
-| Host `check --no-default-features --all-targets` | PASS at `202855294`; final pin-only rerun recorded on PR #2575 |
+| Host `check --no-default-features --all-targets` | PASS for repaired candidate; [log](compiler-repair-host/metadata-check.log), existing nonfatal warnings retained |
 | Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
 | Advisory host Clippy | Completed with warnings; no suppression added |
-| Exact-head CUDA check/Clippy and finite controls | NOT_RUN; both compiler leases stopped at source-status preflight before Cargo |
+| CUDA compiler/Clippy | At96ecbd438: CUDA all-target check PASS0 (56.22s), strict package Clippy FAIL101 on ten sites; repaired source needs a new exact-head transcript |
+| Finite CUDA qualification / model work | NOT_RUN |
 | Independent integrated source review | APPROVE through `202855294`; AGY source/math APPROVE at `f6c7fa5e1`; subsequent initializer/fixture and canonical-sheet deltas independently approved; no runtime verdict |
 | Scientific initialization/comparator design | FIT (design), PR #2574; no execution release |
 | Training / M2 / Stage B | HELD |
 | Q4 | NOT_EXECUTABLE |
-| Model updates, compiler pod leases, combined lease-cost estimate | 0 / 2 / $0.248797778 provider-uptime estimate; no model execution |
+| Model updates, compiler pod leases, combined lease-cost estimate | 0 / 3 / $0.322072778 provider-uptime estimate; no model execution |
 
 The local disk was below the 30 GiB pod-admission floor at source preparation;
 no pod was started. Source preparation used a sparse owned worktree. Subsequent
@@ -226,6 +227,56 @@ pod file and a staged change to the allowed reaper path are refused, alongside
 the eight earlier cases. These are operator metadata checks, not compiler/model
 execution or permission. A final-head prospective packet needs independent
 review and a distinct PM dispatch before another paid lease.
+
+### Third compiler lease: CUDA check passed; strict package Clippy blocked
+
+Distinct PM dispatch [6233440554](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6233440554)
+released compiler-only source `96ecbd4389cf646274d74ac373c46293150ab81e`,
+manifest `310891985028c706f5bfaf5bfd55942951e75cb8a7606d02047aff62543c42dd`
+and readiness `c6c9c1311fd415ac2b7d56f793f70c39c96a919ac46f8995bfcab2381c44871b`.
+The complete transitive inventory and fifteen path-class fixtures were
+independently reviewed by Codex's non-author reviewer and AGY; the final
+inventory admits only the exact reaper log beyond the previous session paths.
+Fresh full disk reserve and actual fleet/rate admission passed before allocation.
+
+`vast-56389498` reached SSH after34 seconds and setup exited zero. The source
+guard passed. At the released head, **CUDA all-target check passed**, exit0,
+in56.22 seconds. **Strict package-only all-target Clippy failed**, exit101,
+on ten distinct package sites. Dependency warnings remained separate/nonfatal.
+The remaining host check and metadata-test gates and final post-Cargo source
+guard were **NOT_RUN** after fail-closed stop. No model, finite qualification,
+learning or evaluation command ran. The [compiler log](compiler-gate3/cuda-check.log),
+[Clippy log](compiler-gate3/cuda-clippy.log) and
+[independent outcome review](compiler-gate3/independent-outcome-review.md)
+retain the exact evidence; this is a construction blocker, not a model negative.
+
+The unchanged operator retained available PTX/cubins/resources and raw reaper,
+launcher and setup provenance. All38 remote,21 operator and13 frozen packet
+SHA entries passed, followed by complete cloud MD5 readback of the8,028,672-byte
+archive `icloud:UOR-R4/results/codex/attention-compile-gate3-archive.tar`, MD5
+`45e85311190317be14e31bbe2f707af1`, before release11:50:36Z/down11:50:42Z,
+fleet0. Provider uptime270s at$0.977/hour estimates$0.073275000; separate
+ledger wall273s estimates$0.074089167. Cumulative Codex provider-based estimate
+is$3.813005000 plus PM; no invoice claim, storage/transfer UNMEASURED.
+The closed release authorizes no retry.
+
+The smallest source repair addresses those ten sites without lint suppression:
+retain full exact-reachability admission and emit unused Rust reachability
+arrays as audit comments; preserve all packed geometry words and kappas.
+Replace reverse-filter parsing with equivalent `rfind`, use the validated
+nonzero-context `is_multiple_of`, consume two final mutable-option borrows,
+move the byte-identical redirect test module to the file end, fill a test
+slice directly and simplify one constant test expression. No numerical CUDA,
+initializer, scientific sheet, schedule/control/learning law, frozen completion,
+timing3 artifact or binary changes. Source/composite/driver hashes deliberately
+change with these Rust edits: rebuild and repin rather than reusing gate3's
+compiler pass, old checkpoint lineage or execution identity. Host no-CUDA all-target check passed and the65 metadata/storage tests passed
+(0 failures,1 ignored); [candidate source hashes](compiler-repair-host/CANDIDATE-SHA256SUMS)
+and both logs retain their exact code identity. These host checks execute no
+model/reference forward and make no strict CUDA lint claim. CUDA
+construction at that repaired head remains NOT_RUN until a distinct released
+compiler packet runs. No paid retry or on-lease source patch follows from this
+record.
 
 Finish exact-head source review and meaningful checks in this source unit, obtain
 prospective fitness on the amended matched experiment, and obtain the distinct
