@@ -12,7 +12,7 @@ pub const ATTENTION_BASE_SOURCE: &str = "fa62a670a4caefa439eb11c88ecdfe25e60a1e7
 /// Canonical design accepted in PR2574/mainfb4519226. Scope and the selected
 /// arm/seed remain independently pinned by the review payload and owner plan.
 pub const ATTENTION_SHEET_SHA256: &str =
-    "7187f76c373585466ce12efe28c951a4852b5e03e06a994f0a167f72d1c6be0f";
+    "98d037808816b039114a91b5adac1da432c2290c88073d966d520848cfc9d34b";
 const PLAN_SCHEMA: &str = "uor-r4.attention-learning-owner-plan/1";
 #[cfg(feature = "cuda")]
 const ADMISSION_SCHEMA: &str = "uor-r4.attention-learning-owner-admission/1";
