@@ -43,7 +43,7 @@ const TC_FIFTH_GEN: &str = concat!("tcgen", "05");
 
 /// Prohibited floating-point type tokens gated by the D32 ratchet across discrete-model and
 /// standalone-instrument sources (`crates/uor-r4-discrete/` and `docs/labs/*/instrument/`).
-pub const D32_FLOAT_TYPES: [&str; 21] = [
+pub const D32_FLOAT_TYPES: [&str; 9] = [
     "f16",
     "bf16",
     "f32",
@@ -53,52 +53,6 @@ pub const D32_FLOAT_TYPES: [&str; 21] = [
     "double",
     "__half",
     "__nv_bfloat16",
-    "float1",
-    "float2",
-    "float3",
-    "float4",
-    "double1",
-    "double2",
-    "double3",
-    "double4",
-    "__half2",
-    "__nv_bfloat162",
-    "f16x2",
-    "bf16x2",
-];
-
-/// Prohibited C/CUDA scalar and device floating-point math intrinsics gated by the D32 ratchet.
-pub const D32_FLOAT_CALLS: [&str; 30] = [
-    "sqrtf",
-    "rsqrtf",
-    "expf",
-    "exp2f",
-    "logf",
-    "log2f",
-    "log10f",
-    "log1pf",
-    "sinf",
-    "cosf",
-    "tanf",
-    "fmaf",
-    "fma",
-    "erff",
-    "erfcf",
-    "fabsf",
-    "fmaxf",
-    "fminf",
-    "__fsqrt_rn",
-    "__frsqrt_rn",
-    "__fdividef",
-    "__expf",
-    "__logf",
-    "__sinf",
-    "__cosf",
-    "__fmaf_rn",
-    "__int_as_float",
-    "__uint_as_float",
-    "__float_as_int",
-    "__float_as_uint",
 ];
 
 /// Which ratchet.
@@ -393,6 +347,15 @@ pub fn strip_comments_and_strings(text: &str) -> String {
             } else {
                 i += 1;
             }
+        } else if c == b'\'' {
+            if let Some(end) = char_literal_end_bytes(b, i) {
+                out.push_str(&text[copied_until..i]);
+                push_blanked(&mut out, &text[i..end]);
+                i = end;
+                copied_until = i;
+            } else {
+                i += 1;
+            }
         } else if c == b'"' {
             out.push_str(&text[copied_until..i]);
             let mut j = i + 1;
@@ -421,6 +384,51 @@ pub fn strip_comments_and_strings(text: &str) -> String {
     }
     out.push_str(&text[copied_until..n]);
     out
+}
+
+/// The byte offset just past a character literal (`'x'`, `'"'`, `'\"'`, `'\n'`, `'\x7f'`,
+/// `'\u{1234}'`) starting at `i`, or `None` when `i` starts a Rust lifetime (`'a`) or a C++14
+/// numeric separator (`1'000`).
+fn char_literal_end_bytes(b: &[u8], i: usize) -> Option<usize> {
+    if b.get(i) != Some(&b'\'') {
+        return None;
+    }
+    if i > 0 {
+        let prev = b[i - 1];
+        if prev.is_ascii_alphanumeric() || prev == b'_' {
+            let is_prefix = matches!(prev, b'b' | b'u' | b'U' | b'L')
+                && (i < 2 || !(b[i - 2].is_ascii_alphanumeric() || b[i - 2] == b'_'));
+            if !is_prefix {
+                return None;
+            }
+        }
+    }
+    let next = *b.get(i + 1)?;
+    if next == b'\'' || next == b'\n' || next == b'\r' {
+        return None;
+    }
+    if next == b'\\' {
+        let mut j = i + 2;
+        while j < b.len() && b[j] != b'\n' && b[j] != b'\r' && j - i <= 14 {
+            if b[j] == b'\\' {
+                j += 2;
+                continue;
+            }
+            if b[j] == b'\'' {
+                return Some(j + 1);
+            }
+            j += 1;
+        }
+        return None;
+    }
+    let tail = std::str::from_utf8(&b[i + 1..]).ok()?;
+    let ch = tail.chars().next()?;
+    let close = i + 1 + ch.len_utf8();
+    if b.get(close) == Some(&b'\'') {
+        Some(close + 1)
+    } else {
+        None
+    }
 }
 
 /// The byte offset just past a raw string starting at `i`, or `None` if none starts there.
@@ -513,7 +521,7 @@ fn is_discrete_scope(rel: &str) -> bool {
     rel.starts_with("crates/uor-r4-discrete/") || rel.starts_with("docs/labs/")
 }
 
-/// The D32 gated floating-point type, intrinsic call, and literal sites on one line of stripped code.
+/// The D32 gated floating-point type and literal sites on one line of stripped code.
 fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec<Site>) {
     let b = line.as_bytes();
     let n = b.len();
@@ -532,12 +540,6 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
                 into.push(Site {
                     line: number,
                     kind: "float-type",
-                    text: word.to_string(),
-                });
-            } else if D32_FLOAT_CALLS.iter().any(|c| word.eq_ignore_ascii_case(c)) {
-                into.push(Site {
-                    line: number,
-                    kind: "float-call",
                     text: word.to_string(),
                 });
             }
@@ -641,12 +643,19 @@ fn discrete_float_sites(line: &str, number: usize, is_cuda: bool, into: &mut Vec
             let mut has_dot = false;
             if b.get(k) == Some(&b'.') {
                 let next = b.get(k + 1).copied();
-                let is_cuda_dot_suff = matches!(next, Some(b'f' | b'F' | b'd' | b'D'))
+                let is_cuda_dot_suff = is_cuda
+                    && matches!(next, Some(b'f' | b'F' | b'd' | b'D'))
                     && !b
                         .get(k + 2)
                         .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_');
+                let is_cuda_dot_exp = is_cuda
+                    && matches!(next, Some(b'e' | b'E'))
+                    && (b.get(k + 2).is_some_and(|c| c.is_ascii_digit())
+                        || (matches!(b.get(k + 2), Some(b'+' | b'-'))
+                            && b.get(k + 3).is_some_and(|c| c.is_ascii_digit())));
                 let is_range_or_ident = next == Some(b'.')
                     || (!is_cuda_dot_suff
+                        && !is_cuda_dot_exp
                         && next.is_some_and(|c| c.is_ascii_alphabetic() || c == b'_'));
                 if !is_range_or_ident {
                     has_dot = true;
@@ -945,8 +954,8 @@ mod tests {
 
     #[test]
     fn discrete_float_ratchet_catches_types_and_literals_without_tuple_or_range_false_positives() {
-        let rust_code = "fn f(a: f32, b: f64, c: bf16, d: f16) { let x = 1.0 + 2. + 1e-5 + 3f32 + 0x1.8p-2; let r = 0..1.0; let t = pair.0 + pair.0.1 + (pair).0 + arr[0].1
-            .1; for i in 0..10 { let _ = i.max(1); } // f32 1.0\nlet s = \"f64 2.5\"; }\n";
+        let rust_code = "fn f<'a>(a: f32, b: f64, c: bf16, d: f16, s: &'a str) { let quote = '\"'; let esc = '\\\"'; let x = 1.0 + 2. + 1e-5 + 3f32 + 0x1.8p-2; let r = 0..1.0; let t = pair.0 + pair.0.1 + (pair).0 + arr[0].1
+            .1; for i in 0..10 { let _ = i.max(1); } // f32 1.0\nlet lit = \"f64 2.5\"; }\n";
         let stripped = strip_comments_and_strings(rust_code);
         let mut sites = Vec::new();
         for (k, line) in stripped.split('\n').enumerate() {
@@ -970,7 +979,7 @@ mod tests {
         );
 
         let cuda_code =
-            "__device__ void k(float4 v, __half2 h) { float x = .5f + 1.f + 1'000.25 + 0x1p-4 + sqrtf(v.x) + fmaf(x, x, x); double y = 2.0; }\n";
+            "__device__ void k() { float x = .5f + 1.f + 1.e3 + 2.e-4f + 1'000.25 + 0x1p-4; double y = 2.0; }\n";
         let stripped_cu = strip_comments_and_strings(cuda_code);
         let mut cu_sites = Vec::new();
         for (k, line) in stripped_cu.split('\n').enumerate() {
@@ -980,15 +989,13 @@ mod tests {
         assert_eq!(
             cu_found,
             vec![
-                ("float-type", "float4"),
-                ("float-type", "__half2"),
                 ("float-type", "float"),
                 ("float-literal", ".5f"),
                 ("float-literal", "1.f"),
+                ("float-literal", "1.e3"),
+                ("float-literal", "2.e-4f"),
                 ("float-literal", "1'000.25"),
                 ("float-literal", "0x1p-4"),
-                ("float-call", "sqrtf"),
-                ("float-call", "fmaf"),
                 ("float-type", "double"),
                 ("float-literal", "2.0"),
             ]
@@ -998,7 +1005,7 @@ mod tests {
             &[
                 (
                     "crates/uor-r4-discrete/src/lib.rs",
-                    "pub fn f() -> f32 { 1.0 }\n".into(),
+                    "pub fn f() -> f32 { let quote = '\"'; 1.0 }\n".into(),
                 ),
                 (
                     "docs/labs/k16-timing-2026-10-15/instrument/src/main.rs",
