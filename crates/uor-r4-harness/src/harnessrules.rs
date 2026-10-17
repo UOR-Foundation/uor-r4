@@ -154,7 +154,8 @@ pub fn entry_point(paths: &StatePaths) -> Vec<Finding> {
         .collect()
 }
 
-/// `harness.documented_commands` — every `uor-harness <subcommand>` named in normative docs exists.
+/// `harness.documented_commands` — every `uor-harness <subcommand> [flags]` named in normative docs
+/// resolves against [`crate::doccheck`]'s static `ACCEPTED`, `GROUPS`, and `FLAGS` tables.
 ///
 /// [`crate::doccheck::documented_commands_rule`] returns a `warn` finding with `fix: ""` when all
 /// documented commands resolve; `checkdispatch::run_scoped` synthesizes `ok` when no finding is
@@ -426,17 +427,21 @@ mod tests {
     }
 
     /// `documented_commands` emits a `warn` finding when a normative doc names an unknown subcommand
-    /// and is silent when all documented commands exist.
+    /// or flag and is silent when all documented commands exist.
     #[test]
     fn documented_commands_reports_unknown_command_and_stays_silent_when_clean() {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = dir.path();
-        std::fs::write(root.join("README.md"), "Run `uor-harness status`.\n").expect("write clean");
+        std::fs::write(
+            root.join("README.md"),
+            "Run `uor-harness status --refresh`.\n",
+        )
+        .expect("write clean");
         assert!(documented_commands(&paths_of(root)).is_empty());
 
         std::fs::write(
             root.join("README.md"),
-            "Run `uor-harness nonexistent-subcommand`.\n",
+            "Run `uor-harness nonexistent-subcommand` and `uor-harness status --refreshh`.\n",
         )
         .expect("write unknown");
         let f = documented_commands(&paths_of(root));
@@ -448,5 +453,64 @@ mod tests {
             "{}",
             f[0].message
         );
+        assert!(f[0].message.contains("--refreshh"), "{}", f[0].message);
+    }
+
+    /// `harnessrules::all` and `checkdispatch::run_scoped` must actually dispatch
+    /// `owner_rules_applied`, `entry_point`, and `documented_commands` so removing any `out.extend`
+    /// call in `all` fails the suite.
+    #[test]
+    fn all_and_checkdispatch_surface_owner_rules_entry_point_and_documented_commands() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        std::fs::write(
+            root.join("README.md"),
+            "Run `python3 scripts/harness/cli.py status`, `uor-harness nonexistent-subcommand`, and `uor-harness status --refreshh`.\n",
+        )
+        .expect("write violating doc");
+        let p = paths_of(root);
+        let regs = Registries {
+            owner_rules: vec![serde_json::json!({
+                "id": "D99",
+                "scope": "all",
+                "rule": "missing from APPLICABLE_RULES"
+            })],
+            ..Default::default()
+        };
+
+        let direct = all(&p, &regs);
+        for expected in [
+            "harness.owner_rules_applied",
+            "harness.entry_point",
+            "harness.documented_commands",
+        ] {
+            assert!(
+                direct.iter().any(|f| f.rule_id == expected),
+                "harnessrules::all must emit {expected}: {direct:?}"
+            );
+        }
+
+        let dispatched = crate::checkdispatch::run_scoped(
+            &p,
+            &regs,
+            &["harness.".to_string()],
+            crate::checkdispatch::Scope::Repo,
+            0,
+        );
+        for (expected_id, expected_substr) in [
+            ("harness.owner_rules_applied", "D99"),
+            ("harness.entry_point", "README.md:1"),
+            ("harness.documented_commands", "--refreshh"),
+        ] {
+            let hit = dispatched
+                .iter()
+                .find(|f| f.rule_id == expected_id)
+                .unwrap_or_else(|| panic!("missing {expected_id} in {dispatched:?}"));
+            assert!(
+                hit.message.contains(expected_substr),
+                "{expected_id} should contain {expected_substr:?}, got: {}",
+                hit.message
+            );
+        }
     }
 }

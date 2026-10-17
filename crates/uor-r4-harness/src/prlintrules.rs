@@ -255,8 +255,23 @@ pub fn interlock_holds(paths: &StatePaths, claims: &[String]) -> Vec<Finding> {
     )]
 }
 
+#[cfg(test)]
+thread_local! {
+    static GATES_DECLARED_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// `prlint.gates_declared` — reconcile [`crate::prgates::DECLARED_GATES`] against the `"prlint"`
 /// slice of [`crate::ruleinventory::INVENTORY`].
+///
+/// Note on scope vs Python: `scripts/harness/checkrules.py:553-605` (`_check_pr_gates_declared`)
+/// AST-walks `check_pr()` in `scripts/harness/prlint.py` to extract every gate ID emitted in code
+/// and reconciles that live set against `DECLARED_GATES`. In Rust, `gates_declared` reconciles the
+/// two static tables [`crate::prgates::DECLARED_GATES`] and
+/// [`crate::ruleinventory::INVENTORY`]`["prlint"]` at `uor-harness check` time, while the
+/// "declared in `DECLARED_GATES` and actually reachable/emitted by `prgates::check_pr()`" direction
+/// is enforced at `cargo test` time by
+/// `prgates::gates_declared_tests::the_bodies_exercise_every_declared_gate_that_a_body_can_reach`
+/// (`crates/uor-r4-harness/src/prgates.rs:1933-2043`).
 pub fn gates_declared_for(declared: &[&str], inventory_prlint: &[&str]) -> Vec<Finding> {
     let mut seen = std::collections::BTreeSet::new();
     let mut dupes = Vec::new();
@@ -311,6 +326,8 @@ pub fn gates_declared_for(declared: &[&str], inventory_prlint: &[&str]) -> Vec<F
 /// `prlint.gates_declared` evaluated over the live [`crate::prgates::DECLARED_GATES`] and
 /// [`crate::ruleinventory::INVENTORY`] tables.
 pub fn gates_declared() -> Vec<Finding> {
+    #[cfg(test)]
+    GATES_DECLARED_CALLS.with(|c| c.set(c.get() + 1));
     let inv_prlint = crate::ruleinventory::INVENTORY
         .iter()
         .find(|(m, _)| *m == "prlint")
@@ -542,5 +559,53 @@ mod tests {
             "{}",
             f_missing_decl[0].message
         );
+    }
+
+    #[test]
+    fn all_and_checkdispatch_invoke_gates_declared() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("scripts")).expect("mkdir scripts");
+        std::fs::write(
+            crate::ratchet::Kind::NormExp.baseline_path(dir.path()),
+            "{}\n",
+        )
+        .expect("write d23 baseline");
+        std::fs::write(
+            crate::ratchet::Kind::Matmul.baseline_path(dir.path()),
+            "{}\n",
+        )
+        .expect("write d25 baseline");
+        std::fs::write(
+            crate::ratchet::Kind::DiscreteFloat.baseline_path(dir.path()),
+            "{}\n",
+        )
+        .expect("write d32 baseline");
+        let p = StatePaths::resolve(dir.path(), None, Some("/nonexistent-live"));
+        let regs = crate::registries::Registries::default();
+
+        GATES_DECLARED_CALLS.with(|c| c.set(0));
+        let f = all(&p, &[]);
+        assert!(f.is_empty(), "{f:?}");
+        assert_eq!(
+            GATES_DECLARED_CALLS.with(|c| c.get()),
+            1,
+            "prlintrules::all must invoke gates_declared()"
+        );
+
+        let dispatched = crate::checkdispatch::run_scoped(
+            &p,
+            &regs,
+            &["prlint.gates_declared".to_string()],
+            crate::checkdispatch::Scope::Repo,
+            0,
+        );
+        assert_eq!(
+            GATES_DECLARED_CALLS.with(|c| c.get()),
+            2,
+            "checkdispatch::run_scoped must invoke prlintrules::all -> gates_declared()"
+        );
+        assert_eq!(dispatched.len(), 1);
+        assert_eq!(dispatched[0].rule_id, "prlint.gates_declared");
+        assert_eq!(dispatched[0].message, "ok");
     }
 }

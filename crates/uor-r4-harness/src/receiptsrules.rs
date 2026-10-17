@@ -186,6 +186,7 @@ pub fn ledger_present(paths: &StatePaths) -> Vec<Finding> {
 pub fn all(paths: &StatePaths) -> Vec<Finding> {
     let mut out = parse(paths);
     out.extend(ledger_present(paths));
+    out.extend(skill_usage_recorded());
     out
 }
 
@@ -329,6 +330,11 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static SKILL_USAGE_RECORDED_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// `receipts.skill_usage_recorded` — **a rule that cannot fail, ported as one that cannot fail.**
 ///
 /// Python:
@@ -352,6 +358,8 @@ mod tests {
 /// `receipts.skill_usage_recorded` in `check`'s output should know it is a placeholder passing
 /// silently, not a verification that succeeded.
 pub fn skill_usage_recorded() -> Vec<crate::preprules::Finding> {
+    #[cfg(test)]
+    SKILL_USAGE_RECORDED_CALLS.with(|c| c.set(c.get() + 1));
     Vec::new()
 }
 
@@ -363,5 +371,34 @@ mod skill_usage_tests {
     #[test]
     fn the_rule_produces_nothing_for_any_state() {
         assert!(super::skill_usage_recorded().is_empty());
+    }
+
+    #[test]
+    fn all_and_checkdispatch_invoke_skill_usage_recorded() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let p = crate::state::StatePaths::resolve(dir.path(), None, Some("/nonexistent-live"));
+        let regs = crate::registries::Registries::default();
+        super::SKILL_USAGE_RECORDED_CALLS.with(|c| c.set(0));
+        let _ = super::all(&p);
+        assert_eq!(
+            super::SKILL_USAGE_RECORDED_CALLS.with(|c| c.get()),
+            1,
+            "receiptsrules::all must invoke skill_usage_recorded()"
+        );
+        let out = crate::checkdispatch::run_scoped(
+            &p,
+            &regs,
+            &["receipts.skill_usage_recorded".to_string()],
+            crate::checkdispatch::Scope::Repo,
+            0,
+        );
+        assert_eq!(
+            super::SKILL_USAGE_RECORDED_CALLS.with(|c| c.get()),
+            2,
+            "checkdispatch::run_scoped must invoke receiptsrules::all -> skill_usage_recorded()"
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].rule_id, "receipts.skill_usage_recorded");
+        assert_eq!(out[0].message, "ok");
     }
 }
