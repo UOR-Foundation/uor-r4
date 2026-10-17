@@ -60,9 +60,9 @@ pub struct InferenceAuditReport {
 pub struct InferenceAuditVerifier;
 
 impl InferenceAuditVerifier {
-    /// Forbidden instruction mnemonics for x86_64 and AArch64.
+    /// Forbidden instruction mnemonics for x86_64, AArch64, and PTX/SASS.
     pub const FORBIDDEN_MNEMONICS: &'static [&'static str] = &[
-        // Floating point
+        // Floating point (x86_64 / AArch64 / PTX)
         "fadd",
         "fsub",
         "fmul",
@@ -71,21 +71,62 @@ impl InferenceAuditVerifier {
         "vsubss",
         "vmulss",
         "vdivss",
+        "vaddps",
+        "vsubps",
+        "vmulps",
+        "vdivps",
         "fadd.s",
         "fmul.s",
+        // Fused multiply-add & float conversions (x86_64 / AArch64 / PTX)
+        "fma.",
+        "fmadd",
+        "fmsub",
+        "fnmadd",
+        "vfmadd",
+        "vfmsub",
+        "vfnmadd",
+        "cvt.",
+        "cvtsi2ss",
+        "cvtsi2sd",
+        "cvtss2si",
+        "cvtsd2si",
+        "vcvt",
+        "scvtf",
+        "ucvtf",
+        "fcvtzs",
+        "fcvtzu",
+        // PTX transcendentals & reciprocal/rsqrt approximations (D23/D25/D32)
+        "ex2.",
+        "lg2.",
+        "sin.",
+        "cos.",
+        "tanh.",
+        "rcp.",
+        "rsqrt.",
+        "sqrt.approx",
+        " sqrt.rn",
+        // Tensor-core / matrix-multiply-accumulate (PTX / SASS — D25/D32)
+        "mma.",
+        "wmma.",
+        "wgmma",
+        "tcgen05",
+        "hmma",
+        "imma",
+        "qmma",
         // Multiplication & Division
         "mul",
         "imul",
         "div",
         "idiv",
         "mul.d",
-        "div.d", // Heap Allocation
+        "div.d",
+        // Heap Allocation
         "malloc",
         "free",
         "_zn5alloc",
     ];
 
-    /// Forbidden dependency crate names.
+    /// Forbidden dependency crate names (D11/D25/D32).
     pub const FORBIDDEN_DEPENDENCIES: &'static [&'static str] = &[
         "cuda",
         "rocm",
@@ -99,6 +140,23 @@ impl InferenceAuditVerifier {
         "tensorflow",
         "blas",
         "cublas",
+        "cudnn",
+        "cutlass",
+        "cutensor",
+        "cusolver",
+        "cusparse",
+        "nvrtc",
+        "nccl",
+        "candle",
+        "burn",
+        "tch",
+        "ort",
+        "onnx",
+        "nalgebra",
+        "ndarray",
+        "faer",
+        "gemm",
+        "matrixmultiply",
     ];
 
     /// Audit a disassembly snippet for forbidden instruction mnemonics. Total:
@@ -195,14 +253,49 @@ mod tests {
     }
 
     #[test]
+    fn test_disassembly_audit_rejects_fma_conversions_ptx_and_tensor_core() {
+        for bad in [
+            "vfmadd213ps ymm0, ymm1, ymm2",
+            "scvtf s0, w0",
+            "cvt.rn.f32.s32 %f1, %r1;",
+            "ex2.approx.f32 %f2, %f1;",
+            "tanh.approx.f32 %f3, %f1;",
+            "rcp.approx.f32 %f4, %f1;",
+            "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32",
+            "wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16",
+            "tcgen05.mma.cta_group::1.kind::f16",
+        ] {
+            assert!(
+                InferenceAuditVerifier::audit_disassembly(bad).is_none(),
+                "expected {bad:?} to be rejected"
+            );
+        }
+    }
+
+    #[test]
     fn test_disassembly_audit_rejects_multiplication() {
         let bad = "imul eax, ebx";
         assert!(InferenceAuditVerifier::audit_disassembly(bad).is_none());
     }
 
     #[test]
-    fn test_dependency_audit_rejects_gpu_deps() {
-        let bad_deps = &["uor-r4-graph-runtime", "cuda-sys"];
-        assert!(InferenceAuditVerifier::audit_dependencies(bad_deps).is_none());
+    fn test_dependency_audit_rejects_gpu_and_tensor_deps() {
+        for bad in [
+            "cuda-sys",
+            "candle-core",
+            "candle-nn",
+            "faer-core",
+            "ndarray",
+            "nalgebra",
+            "matrixmultiply",
+            "ort",
+            "cudnn-sys",
+        ] {
+            let bad_deps = &["uor-r4-graph-runtime", bad];
+            assert!(
+                InferenceAuditVerifier::audit_dependencies(bad_deps).is_none(),
+                "expected dependency {bad:?} to be rejected"
+            );
+        }
     }
 }
