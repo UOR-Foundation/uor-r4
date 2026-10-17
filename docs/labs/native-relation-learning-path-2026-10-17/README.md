@@ -92,12 +92,12 @@ is tautological on the target-defined successor panel and is not learned evidenc
 | Host `check --no-default-features --all-targets` | PASS at `202855294`; final pin-only rerun recorded on PR #2575 |
 | Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
 | Advisory host Clippy | Completed with warnings; no suppression added |
-| Exact-head CUDA check/Clippy and finite controls | NOT_RUN |
+| Exact-head CUDA check/Clippy and finite controls | NOT_RUN; compiler lease stopped at the clean-tree preflight before Cargo |
 | Independent integrated source review | APPROVE through `202855294`; AGY source/math APPROVE at `f6c7fa5e1`; subsequent initializer/fixture and canonical-sheet deltas independently approved; no runtime verdict |
 | Scientific initialization/comparator design | FIT (design), PR #2574; no execution release |
 | Training / M2 / Stage B | HELD |
 | Q4 | NOT_EXECUTABLE |
-| Model updates, new pod leases, GPU cost | 0 / 0 / $0 |
+| Model updates, compiler pod leases, lease-cost estimate | 0 / 1 / $0.067731111; no model execution |
 
 The local disk was below the 30 GiB pod-admission floor at source preparation;
 no pod was started. Source preparation used a sparse owned worktree. Subsequent
@@ -130,6 +130,42 @@ No historical count is reset by this source delivery; the milestone owns count
 disposition and its suspended 37/232 headline remains unchanged.
 
 ## Next dependency and interpretation
+
+### First compiler lease: preflight blocked, no compiler result
+
+The compiler-only release at milestone comments `6230657270`/`6230824049`,
+reaffirmed by `6231087599`, admitted source `bf8c7e965`. The first local launch
+refused a missing runner companion before allocation; restoring exact-source
+`hot-set.txt`/`uor-store` passed independent packaging review and the existing
+runner's dry-run preflight. No pod or charge followed that first refusal.
+
+The actual lease `vast-56364467` then ran from 07:49:17Z to 07:53:11Z on
+17 October, 232 billed-lifecycle seconds at $1.051/hour, an estimated
+$0.067731111. SSH became ready after 148 seconds. Setup reports exit zero,
+but the gate script reports exit one before printing the source head or
+invoking any Cargo gate. All CUDA/host compiler and metadata results at this
+head remain NOT_RUN; no model or qualification command ran.
+
+The wrapper creates its output directory beneath `evals/` before requiring a
+completely clean checkout, and the pod runner also creates its job files under
+`jobs/codex/`. Neither path is ignored by this source's `.gitignore`. A local
+Git-only reproduction reports both as untracked. This establishes a defect in
+the wrapper's preflight composition. The sealed remote record does not contain
+the rejected status listing, so attribution to that exact predicate is a source
+inference rather than a captured remote diagnostic. The repair must retain
+whole-tree tracked-source checks, admit only this session's generated output
+and job paths, and print the source/status evidence before refusing. It does
+not change model code, the scientific design or its bars.
+
+The 336,896-byte archive
+`icloud:UOR-R4/results/codex/attention-compile-gate1-archive.tar`, MD5
+`afbaee141d854857c30a92cfa6b686e6`, passed local SHA inventories and complete
+cloud MD5 readback before release/down; the fleet returned to zero. The failed
+packet and transcripts are preserved. A corrected packet needs prospective
+review and explicit disposition before another paid attempt; no on-lease patch
+or automatic paid retry is authorized by this receipt. Cumulative Codex lease
+estimate is $3.558663333, plus separate PM costs; storage/transfer remain
+UNMEASURED. This is an operator preflight blocker, not a mechanism negative.
 
 Finish exact-head source review and meaningful checks in this source unit, obtain
 prospective fitness on the amended matched experiment, and obtain the distinct
