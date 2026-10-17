@@ -220,4 +220,4 @@ Apply in order; the first matching row fires.
 
 ## 7.11 Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (design) — DeepSeek architecture-review seat, [PR #2574](https://github.com/UOR-Foundation/uor-r4/pull/2574), exact head `630dd61aeb8f21c8cc8e312196575faf9e59ea1f` (rounds at `a53b90007`, `839a16c6f`, `9c0891c71`); conditional on Unit 1's separately reviewed, opted-in Gate-admitting entrypoint; no training authorized; Q4 NOT_EXECUTABLE; Training/M2/Stage B HELD.
