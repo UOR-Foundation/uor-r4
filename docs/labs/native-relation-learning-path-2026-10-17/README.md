@@ -140,8 +140,10 @@ refused a missing runner companion before allocation; restoring exact-source
 runner's dry-run preflight. No pod or charge followed that first refusal.
 
 The actual lease `vast-56364467` then ran from 07:49:17Z to 07:53:11Z on
-17 October, 232 billed-lifecycle seconds at $1.051/hour, an estimated
-$0.067731111. SSH became ready after 148 seconds. Setup reports exit zero,
+17 October, with provider-reported uptime of 232 seconds at $1.051/hour,
+an estimated $0.067731111. The ledger up-to-down wall interval is 234 seconds,
+a separate $0.068315000 estimate; neither figure is an invoice measurement.
+SSH became ready after 148 seconds. Setup reports exit zero,
 but the gate script reports exit one before printing the source head or
 invoking any Cargo gate. All CUDA/host compiler and metadata results at this
 head remain NOT_RUN; no model or qualification command ran.
@@ -166,6 +168,12 @@ review and explicit disposition before another paid attempt; no on-lease patch
 or automatic paid retry is authorized by this receipt. Cumulative Codex lease
 estimate is $3.558663333, plus separate PM costs; storage/transfer remain
 UNMEASURED. This is an operator preflight blocker, not a mechanism negative.
+Independent outcome review accepts the operational blocker receipt and verifies
+all 8 remote, 18 operator and 10 frozen packet SHA entries. A prospective
+session-scoped guard repair passes seven Git-only fixture cases: owned runtime
+paths pass; unrelated files, peer jobs, unstaged/staged source changes, tracked
+changes within allowed paths and wrong HEAD are refused. Those metadata checks
+are not compiler/model execution or permission for another lease.
 
 Finish exact-head source review and meaningful checks in this source unit, obtain
 prospective fitness on the amended matched experiment, and obtain the distinct
