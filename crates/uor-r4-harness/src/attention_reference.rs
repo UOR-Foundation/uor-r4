@@ -537,6 +537,7 @@ fn build_loaded_from_report_and_u16(
 /// - a JSON `report.json` (`uor-r4.attention-token-cells/1`) referencing its sibling
 ///   `token_cells.u16` binary file (or carrying an inline `token_cells` array with verified
 ///   `token_cells_file.sha256`).
+///
 /// A bare `token_cells.u16` without a valid `uor-r4.attention-token-cells/1` receipt is refused.
 pub fn load_gpu_token_cells_file(
     path: &Path,
