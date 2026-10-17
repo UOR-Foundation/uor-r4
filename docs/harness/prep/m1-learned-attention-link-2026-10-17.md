@@ -18,20 +18,22 @@
 - `B3_R` = the Relation arm's own target-admitted rows on the evaluated slice. `B3_C` = the control's own target-admitted rows. `B3_I` = the intersection of `B3_R` and `B3_C` on `P_succ`. **`B3_I` is the primary paired denominator; `B3_R` and `B3_C` are reported separately and are not substituted for it.**
 - `T2` = the context-free TRAIN successor table from [D34 §6.4 item 3](d34-successor-table-control-2026-10-17.md): pairs `(tokens[p-1], tokens[p])` at the exact masked TRAIN targets the Relation artifact consumed; most frequent successor; tie by lowest token id; model-matched unigram fallback. It is **rebuilt on the actual training budget** of the new artifact (16,404 batches → 1,049,856 targets; 32,808 → 2,099,712), not fixed to the seed-1 1,049,856.
 - `U_succ` = the model-matched unigram top-1/top-8 computed on `P_succ`, not the full-panel 1,226.
-- `F_I = max(24, 2·sqrt(b_I + c_I))` on `B3_I`; `F_T = max(24, 2·sqrt(b_T + c_T))` on `B3_R`; `F_A = max(24, 2·sqrt(b_A + c_A))` on the trained-vs-ablation paired rows; `F_C` = the complement non-regression floor (20 rows top-1, 63 top-8, 87 B3, per the M4 B2 floors).
+- **T2 restrictions (stated, not inferred).** `T2_R` = T2 restricted to the Relation arm's admitted cells on `B3_R` (H_geom's Relation-vs-T2 test). `T2_C` = T2 restricted to the control's admitted cells on `B3_C`. `T2_I` = T2 restricted to the common `B3_I` admitted cells; **H_null uses `T2_I` for both arms.** No arm is compared to a T2 restricted to a different arm's cells.
+- `F_I = max(24, 2·sqrt(b_I + c_I))` on `B3_I`; `F_{T,R} = max(24, 2·sqrt(b_{T,R} + c_{T,R}))` on `B3_R` (Relation vs `T2_R`); `F_{T,I} = max(F_{T,I,R}, F_{T,I,C})`, the larger of the two paired floors for Relation vs `T2_I` and control vs `T2_I` on `B3_I`; `F_A = max(24, 2·sqrt(b_A + c_A))` on the trained-vs-ablation paired rows; `F_C` = the complement non-regression floor: **`max(22, 2·sqrt(b+c))` top-1** (the complement-specific 22 is the rounded 2 SE at 120/10,440 ≈ 21.8 rows), 63 top-8, 87 B3.
 
-**H_geom (learned relation link).** On `B3_I`, the trained Relation arm's conditional top-1 exceeds the matched relation-disabled control by `F_I`; on `B3_R`, it exceeds T2 (admission-restricted to the Relation arm's admitted cells) by `F_T`; on `P_comp`, it does not fall below the control by more than `F_C`; and the within-checkpoint zero-relation ablation loses at least `F_A` on `P_succ` relative to the trained Relation. The fresh transfer reproduces the `P_succ` direction and floor.
+**H_geom (learned relation link).** On `B3_I`, the trained Relation arm's conditional top-1 **exceeds the matched relation-disabled control by `F_I`** (`Relation ≥ control + F_I`); on `B3_R`, it exceeds `T2_R` by `F_{T,R}` (`Relation ≥ T2_R + F_{T,R}`); on `P_comp`, it does not fall below the control by more than `F_C` (`Relation ≥ control − F_C`); and the within-checkpoint zero-relation ablation loses at least `F_A` on `P_succ` relative to the trained Relation. The fresh transfer reproduces the `P_succ` direction and floor.
 
-**H_control (no learned relation effect).** On `B3_I`, the relation-disabled control matches or beats the Relation arm within `F_I`, or the within-checkpoint zero-relation ablation is within `F_A` of the trained Relation. The relation trits add nothing at this configuration.
+**H_control (no learned relation effect).** On `B3_I`, **`control ≥ Relation + F_I`**, or the within-checkpoint zero-relation ablation is within `F_A` of the trained Relation. The relation trits add nothing at this configuration.
 
-**H_null (frequency only).** On `B3_I`/`B3_R`, T2 (admission-restricted) matches or beats both the Relation arm and the control within `F_T`. The sub-panel is explained by token-frequency/successor identity, not contextual learning. `U_succ` is the marginal reference.
+**H_null (frequency only).** On the common `B3_I` cells, **`T2_I ≥ Relation + F_{T,I}` and `T2_I ≥ control + F_{T,I}`** for both arms. The sub-panel is explained by token-frequency/successor identity, not contextual learning. `U_succ` is the marginal reference.
 
-**H_mixed / INCONCLUSIVE.** Any within-floor band; a `P_succ` win with a complement regression beyond `F_C`; or `B3_I < 200`/observed power <80%. No decision fires.
+**H_mixed / INCONCLUSIVE.** **All within-floor results** — `|Relation − control| < F_I`, or `|Relation − T2_R| < F_{T,R}`, or the both-arm H_null within `F_{T,I}` but not a strict H_null — are H_mixed/INCONCLUSIVE, not H_geom or H_control. Also: a `P_succ` win with a complement regression beyond `F_C`; or `B3_I < 200`/observed power <80%. No decision fires.
 
 **Disconfirming observations.**
-- H_geom is **disconfirmed** by any of: `Relation < control + F_I`; `Relation < T2 + F_T`; complement regression beyond `F_C`; ablation drop `< F_A`; fresh-transfer failure.
+- H_geom is **disconfirmed** by any of: `Relation < control + F_I`; `Relation < T2_R + F_{T,R}`; complement regression beyond `F_C`; ablation drop `< F_A`; fresh-transfer failure.
 - H_control is **disconfirmed** by `Relation ≥ control + F_I` **and** ablation drop `≥ F_A`.
-- H_null is **disconfirmed** by `Relation ≥ T2 + F_T` (and the control ≥ T2 + F_T).
+- H_null is **disconfirmed** by **`Relation ≥ T2_I + F_{T,I}` OR `control ≥ T2_I + F_{T,I}`** (one arm beating the table suffices to reject frequency-only).
+- All within-floor results are **H_mixed/INCONCLUSIVE**, never H_geom/H_control/H_null.
 - All hypotheses are subject to the §7.6 evaluability rule and the §7.8 initialization/activation checks. If the initialization check fails, no hypothesis fires.
 
 **Initial-unobservability statement (binding).** At the current zero init, `discrete_init` sets `gates[i]=0` for the whole inventory (`discrete.cu:358`); the combine path skips a zero gate (`discrete.cu:227`, `:258`), and the relation scores skip a zero trit (`discrete.cu:182`). With all gates zero, the Flock/Relation read outputs `snap(query,1)` — the query root per block — so relation-trit changes are **causally inert**. A null result under the zero-init configuration would be uninterpretable and is **not** a mechanism negative. The +1 leaf combine-gate init below is the declared amendment that makes the relation path observable and the test falsifiable.
@@ -78,7 +80,7 @@
 
 **Training arms and budget.**
 - Primary dose: `B = 16,404` batches per arm (one full interleaved cycle at `schedule_cycle = 16,404`), two arms (Relation + Relation-off control).
-- Decisive D22 plan: **two seeds (1 and 2)** per arm. One seed is a reduced-power fallback and cannot measure seed-to-seed noise; the M4 39-row floor is a proxy, not a measured spread. The PM/owner chooses the seed plan and the cost.
+- Seed plan: **two seeds (1 and 2)** per arm as the reproducibility plan (§7.6 seed-floor bullet: reproducibility-only, not a seed-noise-decisive claim). One seed is the reduced-power fallback; the M4 39-row floor is a top-8 proxy, not a measured top-1 spread. The PM/owner chooses the seed plan and the cost.
 - Power-up option: `B = 32,808` (two cycles) if the primary is underpowered; doubles the relation-trit attempts and the training cost. Not automatic.
 - No training is authorized by this sheet. The dose is registered; execution needs FIT + PM release + a resource admission.
 
@@ -86,15 +88,15 @@
 
 | Batch budget | Read proposals | Combine proposals (Gate 0..19) | Relation proposals (Gate 20..44) | Per combine gate | Per level-0 relation trit (Gate 20..24) | Per higher relation trit (Gate 25..44) | +1 leaf gates (0,5,10,15) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4,101 | 512 | 237 | 275 | 11–12 | 11 | 11 | 12 each |
-| 8,202 | 1,025 | 460 | 565 | 23 | 23 | 22–23 | 23 each |
-| 12,303 | 1,537 | 687 | 850 | 34–35 | 34 | 34 | 35 each |
-| 16,404 | 2,050 | 920 | 1,130 | 46 | 46 | 45 | 46 each |
-| 32,808 (power-up) | 4,101 | 1,826 | 2,275 | 91–92 | 91 | 91 | 92 each |
-| 16,404 canonical (current) | 20 | 20 | **0** | 1 | **0** | **0** | 1 each |
-| 18,432 (s%9==8, optional) | 2,048 | 920 | 1,128 | 46 | 46 (3 trits) / 45 (22 trits) | 45 | — |
+| 4,101 | 512 | 237 | 275 | 11–12 | 11 | 11 | 12/12/12/12 |
+| 8,202 | 1,025 | 460 | 565 | 23 | 23 | 22–23 | 23/23/23/23 |
+| 12,303 | 1,537 | 687 | 850 | 34–35 | 34 | 34 | 35/35/34/34 |
+| 16,404 | 2,050 | 920 | 1,130 | 46 | 46 | 45 | 46/46/46/46 |
+| 32,808 (power-up) | 4,101 | 1,826 | 2,275 | 91–92 | 91 | 91 | 92/92/91/91 |
+| 16,404 canonical (current) | 20 | 20 | **0** | 1 | **0** | **0** | 1/1/1/1 |
+| 18,432 (s%9==8, optional) | 2,048 | 920 | 1,128 | 46 | 46 (3 trits) / 45 (22 trits) | 45 | 46/46/46/46 |
 
-The canonical pass reaches the combine gates once and the relation trits **zero** times. The interleaver reaches the relation trits 275 / 565 / 850 / 1,130 times at the four quarter budgets; the level-0 relation trits (the ones activated by the +1 leaf init) get 11 / 23 / 34 / 46 proposals. This is the whole point of the line.
+The canonical pass reaches the combine gates once and the relation trits **zero** times. The interleaver reaches the relation trits 275 / 565 / 850 / 1,130 times at the four quarter budgets; the level-0 relation trits (the ones activated by the +1 leaf init) get 11 / 23 / 34 / 46 proposals. The +1 leaf-gate cells are stated in the exact order Gate(0)/Gate(5)/Gate(10)/Gate(15): 12/12/12/12, 23/23/23/23, 35/35/34/34, 46/46/46/46, 92/92/91/91. This is the whole point of the line.
 
 **Training and evaluation sequence.**
 1. Unit 1 source reviewed; exact source/PTX/config pins; the +1 leaf gate indices/values recorded; the relation-off control's pinned trits recorded.
@@ -118,13 +120,15 @@ The canonical pass reaches the combine gates once and the relation trits **zero*
   - T2 conservation passes; the fresh draw is sealed.
   - If any check fails, no hypothesis fires.
 - **`P_succ` primary matched set, `B3_I`.** Paired discordance `c − b`; null SE `sqrt(b+c)`; `F_I = max(24, 2·sqrt(b+c))`. The 24-row minimum is the rounded 2-SE floor at 149/14,287; the paired term is operative.
-- **Relation vs T2, `B3_R`.** Same paired rule, `F_T = max(24, 2·sqrt(b+c))`, with T2 restricted to the Relation arm's admitted cells per D34 §6.4 item 7.
+- **Relation vs T2, `B3_R`.** Same paired rule, `F_{T,R} = max(24, 2·sqrt(b+c))`, with `T2_R` restricted to the Relation arm's admitted cells per D34 §6.4 item 7.
 - **Full sub-panel, 3,847 rows.** The 39-row floor is the M4 `P_succ` floor; it is top-8-derived and conservative. Report end-to-end counts (Relation, control, T2, `U_succ`) and the admission-restricted upper bounds.
-- **Complement, 10,440 rows (co-primary non-regression).** `F_C`: 20 rows top-1, 63 top-8, 87 B3, per the M4 B2 floors. Report `B3_C` and conditional top-1/top-8 separately; a `P_succ` win with a complement regression beyond `F_C` is H_mixed, not H_geom.
+- **Complement, 10,440 rows (co-primary non-regression).** `F_C`: **`max(22, 2·sqrt(b+c))` top-1** (the complement-specific 22 is the rounded 2 SE at 120/10,440 ≈ 21.8 rows), 63 top-8, 87 B3. Report `B3_C` and conditional top-1/top-8 separately; a `P_succ` win with a complement regression beyond `F_C` is H_mixed, not H_geom.
+- **T2 matching (stated).** H_geom uses `T2_R` (Relation-admitted restriction). H_null uses `T2_I` (common `B3_I` restriction) for both arms, with `F_{T,I} = max(F_{T,I,R}, F_{T,I,C})`. `T2_C` is reported for the control side. No arm is compared to a T2 restricted to a different arm's cells.
 - **Zero-relation ablation.** Paired on `P_succ` and the complement; `F_A = max(24, 2·sqrt(b+c))`. Report the trained-vs-ablation 2×2 and the ablation's own `B3`.
+- **Seed floor and second-seed role.** The M4 39-row floor is top-8-derived; the H_geom primary is top-1. This design **does not claim seed-noise-decisive power**. The second seed is a **reproducibility-only** check: it must reproduce the direction and the pre-registered paired floors, but no seed-to-seed top-1 spread is estimated from two seeds, and the 39-row proxy is not relabeled as a measured top-1 seed floor. The DEV decision uses the paired `F_I`/`F_{T,R}`/`F_A` floors and the fresh transfer; the second seed cannot rescue a DEV result that misses those floors.
 - **Fresh transfer.** Pre-registered at seal time: ≥2,000 response-masked targets, ≥500 copy-successor targets at the ~26.9% base rate, same tokenizer and C192 windowing, disjoint from TRAIN/DEV. Floors: `max(20, 2·sqrt(b+c))` on the fresh matched set (top-1), with the exact counts bound before training. A DEV win without a fresh-transfer confirmation is DEV-only and is not a KEEP.
 - **Wilson 95% intervals** for every rate. **Top-8** reported alongside top-1; the 63-row top-8 floor applies to full-panel and complement top-8 statements.
-- **D22 power.** Two seeds is the decisive plan; one seed is a reduced-power fallback with the 39-row proxy floor. The fresh draw is the separate acceptance draw; it is not used for model selection.
+- **D22 power.** Two seeds is the reproducibility plan, not a seed-noise-decisive claim (see the seed-floor bullet). One seed is the reduced-power fallback. The fresh draw is the separate acceptance draw; it is not used for model selection.
 
 ## 7.7 Decision rule
 
@@ -134,10 +138,10 @@ Apply in order; the first matching row fires.
 | --- | --- | --- | --- |
 | 0 | Init check fails; relation-off control has any nonzero relation trit or accepted relation update; frozen Route executor changed; same-writer/config/corpus/objective/budget mismatch; hash/epoch/apply fault; D23/D25/D32 site | INSTRUMENT FAULT | Diagnose/repair (D31); never a mechanism negative |
 | 1 | `B3_I < 200` and observed power <80%; fresh draw not sealed; T2 conservation fails | UNDERPOWERED / INVALID | Report exact counts; no hypothesis fires; lead resolves |
-| 2 | T2 ≥ both arms + `F_T` on `P_succ` | H_null: frequency/token identity explains the sub-panel | Diagnose the panel/table; no relation claim; do not close the mechanism |
-| 3 | Control ≥ Relation + `F_I`, or ablation within `F_A` of the trained Relation | H_control: no learned relation effect at this configuration | Close the configuration (D22); the mechanism family stays open |
-| 4 | Relation ≥ control + `F_I` but Relation < T2 + `F_T`; or a `P_succ` win with a complement regression beyond `F_C`; or ablation does not drop by `F_A`; or within-floor bands | H_mixed / INCONCLUSIVE | Report the exact 2×2s and the failing condition; do not claim a learned relation link; lead decides whether to power up |
-| 5 | Relation ≥ control + `F_I`, Relation ≥ T2 + `F_T`, complement non-regression within `F_C`, ablation drop ≥ `F_A`, and the fresh transfer reproduces the direction/floor | H_geom: the learned relation link is established at this configuration | Proceed to the M4/M2 B1–B3 and the owner's next decision; no general capability claim |
+| 2 | `T2_I ≥ Relation + F_{T,I}` **and** `T2_I ≥ control + F_{T,I}` on the common `B3_I` cells | H_null: frequency/token identity explains the sub-panel | Diagnose the panel/table; no relation claim; do not close the mechanism |
+| 3 | `control ≥ Relation + F_I`, or ablation within `F_A` of the trained Relation | H_control: no learned relation effect at this configuration | Close the configuration (D22); the mechanism family stays open |
+| 4 | `Relation ≥ control + F_I` but `Relation < T2_R + F_{T,R}`; or a `P_succ` win with a complement regression beyond `F_C`; or any within-floor band (`|Relation − control| < F_I` or `|Relation − T2_R| < F_{T,R}`) | H_mixed / INCONCLUSIVE | Report the exact 2×2s and the failing condition; do not claim a learned relation link; lead decides whether to power up |
+| 5 | `Relation ≥ control + F_I`, `Relation ≥ T2_R + F_{T,R}`, complement non-regression within `F_C`, ablation drop ≥ `F_A`, and the fresh transfer reproduces the direction/floor | H_geom: the learned relation link is established at this configuration | Proceed to the M4/M2 B1–B3 and the owner's next decision; no general capability claim |
 | 6 | DEV meets H_geom but the fresh transfer fails | DEV-only diagnostic | No KEEP; report the failure; do not close the mechanism (D22) |
 
 **What changes the decision.** The first decisive number is the paired difference on `B3_I` against the matched relation-disabled control. The second is the paired difference against T2. A win over the control but not over T2 is **frequency/context not yet separated**; a win over T2 but not over the control is **parameter/budget, not relation**. Only the joint win, with the ablation drop and the complement non-regression, supports H_geom.
@@ -145,8 +149,11 @@ Apply in order; the first matching row fires.
 ## 7.8 Instrument validity
 
 1. **Declared init check.** The loaded treatment and control snapshots have exactly `gates[0]=gates[5]=gates[10]=gates[15]=+1`; all other combine gates are 0; the control's 25 relation trits are exactly 0. Any mismatch is a fault.
-2. **Control lock check.** The relation-off control's per-coordinate ledger shows `accepted_updates(GateRelation)=0` and `attempted(GateRelation)=0` (or refused no-ops); the treatment's relation-trit ledger is reported. A nonzero control relation trit is a fault.
-3. **Causal-activation fixture (before training).** On a finite fixture, a level-0 relation-trit move must change the read output/cost under the +1 leaf init. If it does not, the relation path is still inert — instrument fault, not a mechanism negative. This directly addresses the initial-unobservability issue.
+2. **Control lock check (45-coordinate proof).** The control's recorded per-coordinate ledger must prove the **45-coordinate cycle**, not merely a zero relation count. At 16,404 batches it must show: `proposed(GateRelation)=1,130` and `refused(GateRelation)=1,130` (or an equivalent typed refusal/no-op count), `accepted_updates(GateRelation)=0`, and every relation-trit value still 0; `proposed(GateCombine)=920` with **46 proposals on each of Gate(0..19)** and `accepted_updates(GateCombine)` reported. `attempted(GateRelation)=0` alone is **not** proof: it cannot distinguish the 45-coordinate Relation-off control from a 20-coordinate Flock-like arm. The treatment's ledger reports the same inventory with relation proposals admitted. Any control relation-trit change, or a ledger that does not show the 1,130 relation-coordinate reaches, is a fault.
+3. **Causal-activation fixture (three parts, before training).** Adapt `relation_qualification.rs` C2/C4 to the training shape `B=4, stages=5`: `Spec { vocabulary: 5, blocks: 4, context: 192, kept_cells: 8 }`, `ReadSpec::Relation { kept: 1, sweeps: 1 }`, seed 7. Generalize `relation_snapshot` mechanically to four `[[i32;8];4]` token blocks (no model change). Use the C2 hand-derived roots `A=[2,2,0,0,0,0,0,0]`, `NEG_A=[-2,-2,0,…]`, `C_ROOT=[-2,2,0,…]`, `NEG_B=[0,0,-2,0,-2,0,0,0]`, `B=[0,0,2,0,2,0,0,0]`, `D_ROOT=[2,-2,0,…]`. Tokens (the C2 pattern is carried in the **last** block so the address pair changes): `tok_x=[A,A,A,B]`, `tok_A=[A,A,A,D_ROOT]`, `tok_B=[A,A,A,NEG_B]`, `tok_y=[A,A,A,A]`, `tok_z=[A,A,A,A]`. Prefix: 186 copies of `tok_x`, then `[tok_x, tok_A, tok_B, tok_y, tok_z, tok_A]` at positions 186..191 (`identity(token_at_p, p)` for each p; query `tok_A` at 191; target `tok_B`). Gates: `gates[0]=gates[5]=gates[10]=gates[15]=+1`; all other combine gates 0; all relation trits 0 except the tested `Gate(22)` = level 0, `e=2` (SequentialSuccessor), which applies to all blocks.
+   - **(i) ACTIVE.** Two statically constructed snapshots, `G22=0` and `G22=+1`, both with the +1 leaf gates. On the same prefix/target, assert exactly: (a) the level-0 relation score of the `tok_B` node (position 188) at the last block is **0 vs +8** (the C2 `[0,0,8,0,4]` vector on the eligible level-0 nodes); (b) the last-block output root is **15 (D_ROOT) vs 14 (B)**; blocks 0/1/2 outputs are unchanged `A`; (c) the total writer loss changes by exactly **−192** (`L_active = L_baseline − 192`), the C2 640→448 address-driven delta for this replicated last-block pattern, with the token/address hinge components reported separately. The two loss values and the −192 delta must be literals in the test source, derived from the C2 hand arithmetic; a runtime comparison to the same snapshot, a tolerance, or a printed-but-unasserted value is rejected. If the B=4 rival set changes the delta, the implementer derives and commits the exact literal from source before execution; the fixture asserts exact literals and exact roots, never a runtime comparison.
+   - **(ii) INERT (initial-unobservability control).** Same tokens/prefix/target, `G22=0` vs `G22=+1`, but **all combine gates zero** (no +1 leaf gates). Assert the two forwards are **bit-identical** in `vectors()`, `losses`, `predictions`, `token_rivals`, `address_rivals` and `admitted_cells`; the internal trace/relation-score buffers may differ and are reported separately. If the output changes, the zero-gate path is not inert — fault, not a mechanism negative.
+   - **(iii) INIT LOCK.** The loaded treatment and control snapshots have exactly `gates[0]=gates[5]=gates[10]=gates[15]=+1`; every other combine gate is 0; the control's 25 relation trits are exactly 0. The four indices and values are recorded in the run config. Any mismatch is a fault.
 4. **Frozen executor check.** `completion.rs:744-747` is byte-unchanged and still refuses Gate receipts; the new entrypoint is the only path that admits them. Report both source/PTX identities.
 5. **Same-writer/config check.** The writer bytes are unchanged; the treatment and control config hashes differ only in relation-trit enablement; corpus, objective, budget, seed, spec, schedule, geometry and the +1 leaf gates are identical.
 6. **Zero-apply evaluation.** Snapshot/epoch unchanged before/after DEV, ablation and fresh scoring; `updates_applied: 0`.
@@ -175,10 +182,10 @@ Apply in order; the first matching row fires.
 | Sealed attribution | 7.32–7.37s per `Device::propose` call; 99.995770–99.998097% counterfactual-dominated |
 | T2 | [D34 §6.4 item 3](d34-successor-table-control-2026-10-17.md), rebuilt on the actual training budget |
 
-**Resource projection (no stale 3.74s/batch figure).**
-- The sealed attribution measures **7.32–7.37s per `Device::propose` call** at the K16/checkpoint-0 shape, with 99.995770–99.998097% of the enclosing propose wall in the counterfactual event. A training batch issues **two** propose calls (one coordinate each; `training.rs:859-897`; `device.rs:1587-1698`), so the propose component is **14.64–14.74s/batch** at that shape, before carry/observation.
-- The reviewed configuration is `Relation { kept: 8, sweeps: 1 }` at K=8, not K16; the writer scan is smaller. The actual per-batch cost **must be measured at the reviewed configuration** in the release packet. The sealed K8 seed-1 completion's 15.46 h for 16,404 batches (~3.39s/batch, Route/canonical) is a lower anchor from a different configuration and is not the planning basis.
-- Planning envelope at 14.7s/batch: one arm × 16,404 = ~67.0 h; two arms × one seed = ~134 h ≈ **$122** at $0.908/h; two arms × two seeds = ~268 h ≈ **$243**. At the K8 observed 3.39s/batch: two arms × one seed = ~31 h ≈ **$28**; two seeds = ~62 h ≈ **$56**. The release packet must bind the measured throughput; the PM must choose the seed/budget plan. Do not treat the estimate as a hard stop.
+**Resource projection (no stale 3.74s/batch figure; one propose call per batch).**
+- The sealed attribution measures **7.32–7.37s per `Device::propose` call** at the K16/checkpoint-0 shape, with 99.995770–99.998097% of the enclosing propose wall in the counterfactual event. `PreparedDriver::transition` issues exactly **one** `model.propose` call per batch (`training.rs:877`), one transition per batch (`completion.rs:738`), and `Device::apply` launches the apply kernel without proposing (`device.rs:1746-1775`). The propose component is therefore **7.32–7.37s/batch**, not two calls.
+- Planning envelope at 7.35s/batch: one arm × 16,404 = **~33.4 h** (7.32s → 33.36 h; 7.37s → 33.58 h); two arms × one seed = **~66.9 h ≈ $61** at $0.908/h; two arms × two seeds = **~134 h ≈ $122**. The 32,808 power-up doubles the corresponding envelope. The sealed K8 seed-1 completion's 15.46 h for 16,404 batches (~3.39s/batch, Route/canonical) is a lower anchor from a different configuration, not the planning basis.
+- The reviewed configuration is `Relation { kept: 8, sweeps: 1 }` at K=8, not K16; the actual per-batch cost **must be measured at the reviewed configuration** in the release packet. The envelope is a planning range, not a cap or a hard stop; a healthy admitted run is renewed, not cancelled because the estimate elapsed.
 - DEV + ablation + fresh scoring: ~1–4 h total at the observed range, <$4.
 - Host T2/`U_succ` work: **$0 GPU**.
 - One RTX 5090 through `uor-pod` only; `df ≥ 30 GiB`; caps ≤4 pods and ≤$8/h across labs. This docs delivery is **$0 GPU**.
@@ -203,7 +210,7 @@ Apply in order; the first matching row fires.
 - **(d)** Confirm **T2** (context-free, actual-training-targets) as the ordinary comparator, per D34 §6.4 item 3, not T1.
 - **(e)** Confirm whether **Route** stays as an additional arm. A Route-only win cannot attribute a relation effect.
 - **(f)** Confirm the **primary relation-disabled control is the Relation-off 45-coordinate arm**, not a Flock 20-coordinate arm; the latter has a ~2.25× combine-gate proposal-frequency advantage and is a confound.
-- **(g)** Confirm the **seed/budget plan**: two seeds × 16,404 as the decisive dose (~$243 planning envelope at 14.7s/batch), or one seed as the reduced-power fallback (~$122), or the 32,808 power-up (double). The actual cost must bind the measured throughput at release.
+- **(g)** Confirm the **seed/budget plan**: two arms × one seed × 16,404 at the 7.35s/batch planning envelope ≈ **66.9 h ≈ $61**; two seeds ≈ **134 h ≈ $122** at $0.908/h; the 32,808 power-up doubles the corresponding envelope. The second seed is **reproducibility-only** (see §7.6); the design does not claim seed-noise-decisive power. The actual cost must bind the measured throughput at release.
 - **(h)** Confirm the **objective policy** (A or R) fixed on both arms.
 - **(i)** Confirm the **fresh-transfer source and size** (≥2,000 rows / ≥500 successor rows) and seal it before training.
 - **(j)** Confirm the **`B3_I ≥ 200` / observed-power guard** as the primary paired denominator; `B3_R`/`B3_C` are reported separately, not substituted.
