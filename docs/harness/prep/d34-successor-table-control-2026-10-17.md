@@ -23,7 +23,7 @@
 **Disconfirming observations.**
 - H_geom is disconfirmed if `Relation < T2 + floor` (the symmetric within-floor band is INCONCLUSIVE, not a geom win) **or if H_null fires**.
 - H_table is disconfirmed if `T2 < Relation + floor` **or if H_null fires**; the symmetric within-floor band is INCONCLUSIVE, not an H_table win.
-- H_null is disconfirmed if either arm beats `U_succ` by its paired floor.
+- H_null is disconfirmed if either arm equals or exceeds `U_succ` + its paired floor.
 - The minimum-N observed-power guard takes precedence: no hypothesis fires from an underpowered `B3_R`.
 
 ## 6.3 The saturation exposure (the most important design correction)
@@ -76,7 +76,7 @@ Therefore:
 
 ## 6.6 Bars and uncertainty
 
-- **Relation matched set, `B3_R` rows.** Paired discordance `c − b`; null SE `sqrt(b+c)`; bar = `max(24, 2·sqrt(b+c))`. **24 rows** is a rounded 2-SE floor at 149/14,287 (2 SE = 24.3); the paired `2·sqrt(b+c)` bar is operative and is the minimum absolute floor for top-1 matched-set comparisons. Require `B3_R ≥ 200` or the observed-power guard. Report the exact 2×2 table.
+- **Relation matched set, `B3_R` rows.** Paired discordance `c − b`; null SE `sqrt(b+c)`; bar = `max(24, 2·sqrt(b+c))`. **24 rows** is a rounded 2-SE floor at 149/14,287 (2 SE = 24.3); the paired `2·sqrt(b+c)` bar is operative; the 24-row floor is the minimum absolute floor for top-1 matched-set comparisons. Require `B3_R ≥ 200` or the observed-power guard. Report the exact 2×2 table.
 - **Symmetric one-sided bands.** `Relation ≥ T2 + floor` is H_geom; `T2 ≥ Relation + floor` is H_table; the open band `|T2 − Relation| < floor` is INCONCLUSIVE/UNDERPOWERED. The same floor is used on both sides; there is no zero-row tie bar.
 - **Route interim matched set, 435 rows.** Same floor and same symmetric bands; the 435 is the Route B3. Report the exact 2×2 table.
 - **3,847-row full sub-panel.** **39-row floor**, the M4 `P_succ` floor (`m4-finite-relational-head-2026-10-15.md:30-31`). It is **top-8-derived and conservative**; report end-to-end counts (29/3,847 for Route; the Relation's number when available) and the table's admission-restricted upper bound.
