@@ -1456,6 +1456,8 @@ fn parse_eval_rows(
         || lineage.dev.bos != cfg.bos
         || lineage.train.source != cfg.train
         || lineage.dev.source != cfg.dev
+        || lineage.train.eligible_targets != cfg.train.expected_eligible_targets
+        || lineage.dev.eligible_targets != cfg.dev.expected_eligible_targets
         || lineage.dev.eligible_targets != expected_len as u64
     {
         return Err(
@@ -1469,7 +1471,8 @@ fn parse_eval_rows(
             || cfg.train.mask.sha256 != CANONICAL_TRAIN_MASK_SHA256
             || cfg.dev.tokens.sha256 != CANONICAL_DEV_TOKENS_SHA256
             || cfg.dev.mask.sha256 != CANONICAL_DEV_MASK_SHA256
-            || lineage.train.eligible_targets != CANONICAL_TRAIN_MATCHED_TARGETS as u64)
+            || cfg.train.expected_eligible_targets != CANONICAL_TRAIN_ELIGIBLE_ROWS as u64
+            || lineage.train.eligible_targets != CANONICAL_TRAIN_ELIGIBLE_ROWS as u64)
     {
         return Err(
             "eval.evaluation_lineage: canonical TRAIN/DEV corpus pin or eligible_targets mismatch"
@@ -2047,15 +2050,17 @@ pub fn validate_arm_inputs_with_mode(
             parsed_eval.model_epoch
         ));
     }
-    let cap_snap_sha = capture
-        .get("model_snapshot_sha256")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "capture: missing model_snapshot_sha256".to_string())?;
-    if cap_snap_sha != parsed_eval.model_snapshot_sha256 {
-        return Err(format!(
-            "capture: model_snapshot_sha256 ({cap_snap_sha}) != eval.model_snapshot_sha256 ({})",
-            parsed_eval.model_snapshot_sha256
-        ));
+    if let Some(cap_snap_val) = capture.get("model_snapshot_sha256") {
+        let cap_snap_sha = cap_snap_val
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| "capture: model_snapshot_sha256 must be non-empty string".to_string())?;
+        if cap_snap_sha != parsed_eval.model_snapshot_sha256 {
+            return Err(format!(
+                "capture: model_snapshot_sha256 ({cap_snap_sha}) != eval.model_snapshot_sha256 ({})",
+                parsed_eval.model_snapshot_sha256
+            ));
+        }
     }
     if let Some(ref env_ckpt) = parsed_eval.enveloped_driver_checkpoint_sha256 {
         if env_ckpt != &driver_ckpt_sha {
@@ -3863,7 +3868,7 @@ mod tests {
                 sha256: CANONICAL_TRAIN_MASK_SHA256.to_string(),
             },
             expected_payload_tokens: CANONICAL_TRAIN_PAYLOAD_TOKENS,
-            expected_eligible_targets: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+            expected_eligible_targets: CANONICAL_TRAIN_ELIGIBLE_ROWS as u64,
         };
         let dev_source = CorpusSourceRecord {
             split: SplitRecord::Dev,
@@ -3907,8 +3912,8 @@ mod tests {
                 bos: bos.clone(),
                 payload_tokens: CANONICAL_TRAIN_PAYLOAD_TOKENS,
                 mask_bytes: CANONICAL_TRAIN_PAYLOAD_TOKENS,
-                mask_selected_positions: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
-                eligible_targets: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+                mask_selected_positions: CANONICAL_TRAIN_ELIGIBLE_ROWS as u64,
+                eligible_targets: CANONICAL_TRAIN_ELIGIBLE_ROWS as u64,
                 documents: 100,
                 window_policy: "causal_document_bounded_v1".to_string(),
                 identity_policy: "exact_uor_v1".to_string(),
@@ -4034,12 +4039,12 @@ mod tests {
         let rel_eval_sha = sha256_hex(&serde_json::to_vec(&rel_eval).unwrap());
         let ctrl_eval_sha = sha256_hex(&serde_json::to_vec(&ctrl_eval).unwrap());
 
+        // Matches protected attention-capture-dev (attention_preflight.rs:421-435): omits model_snapshot_sha256.
         let make_cap = |cfg_file_sha: &str,
                         cfg_sha: &str,
                         lin_sha: &str,
                         ckpt_file_sha: &str,
                         ckpt_sha: &str,
-                        snap_sha: &str,
                         eval_sha: &str| {
             json!({
                 "schema": PREFLIGHT_CAPTURE_SCHEMA,
@@ -4049,7 +4054,6 @@ mod tests {
                 "lineage_sha256": lin_sha,
                 "checkpoint_file": {"path": "/tmp/ckpt.json", "sha256": ckpt_file_sha},
                 "driver_checkpoint_sha256": ckpt_sha,
-                "model_snapshot_sha256": snap_sha,
                 "evaluation_file": {"path": "/tmp/eval.json", "sha256": eval_sha},
                 "dev_binding": dev_binding_val,
                 "model_epoch": 0,
@@ -4164,7 +4168,6 @@ mod tests {
             &rel_lin_sha,
             &raw_ckpt_rel_file_sha,
             &ckpt_rel_sha,
-            &snap_rel_sha,
             &rel_eval_sha,
         );
         let ctrl_cap = make_cap(
@@ -4173,7 +4176,6 @@ mod tests {
             &ctrl_lin_sha,
             &raw_ckpt_ctrl_file_sha,
             &ckpt_ctrl_sha,
-            &snap_ctrl_sha,
             &ctrl_eval_sha,
         );
         (panel, rel_cap, rel_eval, ctrl_cap, ctrl_eval, d34)
@@ -4183,6 +4185,15 @@ mod tests {
     fn preflight_and_paired_scoring_validate_distinct_file_and_canonical_hashes_and_complement_floor_22(
     ) {
         let (panel, rel_cap, rel_eval, ctrl_cap, ctrl_eval, d34) = fixture_receipts(1, 0);
+        assert!(rel_cap.get("model_snapshot_sha256").is_none());
+        assert_eq!(
+            rel_eval["evaluation_lineage"]["train"]["eligible_targets"],
+            CANONICAL_TRAIN_ELIGIBLE_ROWS as u64
+        );
+        assert_eq!(
+            d34["tables"]["T2"]["pairs"],
+            CANONICAL_TRAIN_MATCHED_TARGETS
+        );
         let rel_eval_sha = rel_cap["evaluation_file"]["sha256"]
             .as_str()
             .unwrap()
@@ -4191,6 +4202,26 @@ mod tests {
             .as_str()
             .unwrap()
             .to_string();
+        // Verify canonical pin enforcement accepts full TRAIN inventory (2,425,925) and rejects consumed budget (1,049,856) in lineage.train.eligible_targets.
+        parse_eval_rows(&rel_eval, &rel_eval_sha, 2, true).unwrap();
+        let mut wrong_train_inv_eval = rel_eval.clone();
+        wrong_train_inv_eval["evaluation_lineage"]["config"]["train"]
+            ["expected_eligible_targets"] = json!(CANONICAL_TRAIN_MATCHED_TARGETS as u64);
+        wrong_train_inv_eval["evaluation_lineage"]["train"]["source"]
+            ["expected_eligible_targets"] = json!(CANONICAL_TRAIN_MATCHED_TARGETS as u64);
+        wrong_train_inv_eval["evaluation_lineage"]["train"]["eligible_targets"] =
+            json!(CANONICAL_TRAIN_MATCHED_TARGETS as u64);
+        let wrong_lin: DriverLineageRecord =
+            serde_json::from_value(wrong_train_inv_eval["evaluation_lineage"].clone()).unwrap();
+        wrong_train_inv_eval["evaluation_lineage_sha256"] =
+            json!(sha256_hex(&serde_json::to_vec(&wrong_lin).unwrap()));
+        let wrong_eval_sha = sha256_hex(&serde_json::to_vec(&wrong_train_inv_eval).unwrap());
+        let inv_err = parse_eval_rows(&wrong_train_inv_eval, &wrong_eval_sha, 2, true).unwrap_err();
+        assert!(
+            inv_err.contains("canonical TRAIN/DEV corpus pin or eligible_targets mismatch"),
+            "{inv_err}"
+        );
+
         let pre = score_preflight_dev_values(
             &panel,
             sha256_hex(b"p_sha"),
@@ -4221,9 +4252,32 @@ mod tests {
             rel_cap["checkpoint_file"]["sha256"]
         );
         assert_eq!(
+            pre["pins"]["model_snapshot_sha256"],
+            rel_eval["model_snapshot_sha256"]
+        );
+        assert_eq!(
             pre["same_cell_candidate_reranking"]["status"],
             "UNAVAILABLE_MISSING_GPU_TOKEN_CELL_TABLE_AND_RANKED_CANDIDATE_RECEIPT"
         );
+
+        // Optional capture.model_snapshot_sha256 is consistency-checked when present.
+        let mut bad_snap_cap = rel_cap.clone();
+        bad_snap_cap["model_snapshot_sha256"] = json!(sha256_hex(b"wrong_snap"));
+        let snap_err = score_preflight_dev_values(
+            &panel,
+            sha256_hex(b"p_sha"),
+            &bad_snap_cap,
+            sha256_hex(b"rc_sha"),
+            &rel_eval,
+            rel_eval_sha.clone(),
+            &d34,
+            sha256_hex(b"d34_sha"),
+            None,
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(snap_err.contains("model_snapshot_sha256"), "{snap_err}");
 
         let paired = score_paired_dev_values(
             &panel,
