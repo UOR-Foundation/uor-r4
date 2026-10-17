@@ -1,6 +1,39 @@
 ## 2026-10-17 — Standalone Rust same-cell reference scorer (`antigravity/attention-cell-reference-scorer`)
 
-The [scorer record](../labs/attention-cell-reference-scorer-2026-10-17/README.md) delivers `attention-cell-reference-scorer` (`preflight-dev`, `paired-dev`, and `bundle-candidate-cells`) in `crates/uor-r4-harness` (`src/attention_reference.rs` + `src/bin/attention_cell_reference_scorer.rs`) plus `DISCRETE_ENTRIES_WITH_EXPORT` in `scripts/check_native_cuda_vendor.rs` per [#2029 comments `6239938443`, `6240046545`, `6240085282`, `6240113871`, `6240513498`, `6240654230`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6240513498) and [#2604 comment `6241027772`](https://github.com/UOR-Foundation/uor-r4/pull/2604#issuecomment-6241027772), with `0` bytes changed in `crates/uor-r4-discrete/**`, workspace `Cargo.toml`, or `Cargo.lock` (preserving `driver_source_sha256` `f14075f28b229535a740a76e78bda5418fd02274fc089b442c63a60c1705376d`, `discrete_source_sha256` `cb8fb6d055b78dd6cc28ac0c806c9001e34181dfca616c1b299907d85e16a8d3`, and gate8 binary `fdc1b80b612fdca165545900a1e1cfe0929230027fc69cad48bbdb636760dc4e`). Validates GPU-captured 16-slot `admitted_cells[16]` inventories (`uor-r4.attention-preflight-dev-capture/1`), raw (`uor-r4.discrete-corpus-driver/1`) or enveloped (`uor-r4.attention-learning-evaluation/1`) DEV evaluation receipts, separate raw `FilePin` vs canonical `config_sha256`/`driver_checkpoint_sha256` pins, distinct `LearnV1` vs `FrozenZeroV1` paired arm configs/lineages on the shared `14,287` DEV rows (`P_succ` floors `24`/`39`, complement floors `22`/`63`), and the sealed D34 reference (`2717d34bcfcdd1486991925ecab066266a6b56ba34b89727c37f78c821fe3bec`); scores full same-cell `T1/T1b/T2/U_succ/U_train` across all eight DEV slices from a hash/range/D34-verified `--candidate-cells` (`uor-r4.attention-candidate-cell-table/1`) or a GPU-exported `token_cells.u16` (`8,192`-byte `u16[4096]` bound to a required `uor-r4.attention-token-cells/1` `report.json` receipt) + SHA256-verified `TRAIN`/`DEV` `UORT` files (`U_succ` using the model-matched `1,049,856`-target `TRAIN` unigram ranking per D34 §6.4.6, never fitted on `DEV` labels, cross-checked 14,287/14,287 against GPU `eval_target_admitted` and sealed D34 predictions, with zero host `root_id`/`token_cell` codebook arithmetic), and fails closed (`UNAVAILABLE_MISSING_GPU_TOKEN_CELL_TABLE_AND_RANKED_CANDIDATE_RECEIPT`) when neither is provided. `cargo fmt --check`, `cargo clippy -p uor-r4-harness --all-targets -- -D warnings`, `cargo test -p uor-r4-harness`, `uor-harness ratchet d23|d25`, and `check_claim_wording.py` pass; `$0` GPU spend, no model compute; Training, M2, and Stage B HELD; Q4 NOT_EXECUTABLE. **Next:** independent exact-head review, protected merge, and `Codex/cf1` operator integration.
+The [scorer record](../labs/attention-cell-reference-scorer-2026-10-17/README.md) delivers `attention-cell-reference-scorer` (`preflight-dev`, `paired-dev`, and `bundle-candidate-cells`) in `crates/uor-r4-harness` (`src/attention_reference.rs` + `src/bin/attention_cell_reference_scorer.rs`) plus `DISCRETE_ENTRIES_WITH_EXPORT` in `scripts/check_native_cuda_vendor.rs` per [#2029 comments `6239938443`, `6240046545`, `6240085282`, `6240113871`, `6240513498`, `6240654230`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6240513498) and [#2604 comment `6241027772`](https://github.com/UOR-Foundation/uor-r4/pull/2604#issuecomment-6241027772), with `0` bytes changed in `crates/uor-r4-discrete/**`, workspace `Cargo.toml`, or `Cargo.lock` relative to `origin/main` (preserving the merged #2601 `crates/uor-r4-discrete` source identity and binary `5abe54c3e8bf72be360040f6cccf236486016ed902821c6db1a11c3318b982ba`). Validates GPU-captured 16-slot `admitted_cells[16]` inventories (`uor-r4.attention-preflight-dev-capture/1`), raw (`uor-r4.discrete-corpus-driver/1`) or enveloped (`uor-r4.attention-learning-evaluation/1`) DEV evaluation receipts, separate raw `FilePin` vs canonical `config_sha256`/`driver_checkpoint_sha256` pins, distinct `LearnV1` vs `FrozenZeroV1` paired arm configs/lineages on the shared `14,287` DEV rows (`P_succ` floors `24`/`39`, complement floors `22`/`63`), and the sealed D34 reference (`2717d34bcfcdd1486991925ecab066266a6b56ba34b89727c37f78c821fe3bec`); scores full same-cell `T1/T1b/T2/U_succ/U_train` across all eight DEV slices from a hash/range/D34-verified `--candidate-cells` (`uor-r4.attention-candidate-cell-table/1`) or a GPU-exported `token_cells.u16` (`8,192`-byte `u16[4096]` bound to a required `uor-r4.attention-token-cells/1` `report.json` receipt) + SHA256-verified `TRAIN`/`DEV` `UORT` files (`U_succ` using the model-matched `1,049,856`-target `TRAIN` unigram ranking per D34 §6.4.6, never fitted on `DEV` labels, cross-checked 14,287/14,287 against GPU `eval_target_admitted` and sealed D34 predictions, with zero host `root_id`/`token_cell` codebook arithmetic), and fails closed (`UNAVAILABLE_MISSING_GPU_TOKEN_CELL_TABLE_AND_RANKED_CANDIDATE_RECEIPT`) when neither is provided. `cargo fmt --check`, `cargo clippy -p uor-r4-harness --all-targets -- -D warnings`, `cargo test -p uor-r4-harness`, `uor-harness ratchet d23|d25`, and `check_claim_wording.py` pass; `$0` GPU spend, no model compute; Training, M2, and Stage B HELD; Q4 NOT_EXECUTABLE. **Next:** independent exact-head review, protected merge, and `Codex/cf1` operator integration.
+
+## 2026-10-17 — Read-only token-cell input producer for learned attention (Codex/cf1)
+
+The [source record](../labs/attention-token-cell-export-2026-10-17/README.md)
+implements the minimal CUDA export required by PM6240513498: the existing
+`token_cell` maps4096 tokens from an exact DriverCheckpoint to an8192-byte
+little-endian file, with output SHA and source/checkpoint/lineage bindings.
+No host geometry, forward, proposal or apply path is introduced. Full snapshot
+equality is checked before/after the read-only export. Host all-target check
+and two focused storage/no-host-fallback controls PASS. AGY source/packet review
+APPROVE6241052759 and PM compiler dispatch6241202400 led to Gate9 **all five
+commands PASS** at96ad8a475: CUDA check/strict package Clippy, host check,
+82 metadata tests PASS/0FAIL/1ignored, and debug link without invocation.
+Both provenance guards PASS; full58+43+24 SHA/cloud-MD5 archive verified before
+own56451966 down21:19:44Z. The new binary5abe54c3 and full archive retain exact
+source identity; actual export/runtime identity remain NOT_RUN. Cost uptime
+proxy$0.075513333, separate wall proxy$0.076316667, not invoices; storage UNMEASURED.
+The old Gate8 binary and frozen Battery1 draft are preserved. Next: reviewed
+merge-forward/protected delivery → rebound finite preflight → separately
+released paired learning dose. Actual per-row admitted
+slots remain GPU observations; the map alone supplies no same-cell result.
+Headline unchanged, no progress reset or mechanism verdict. Training/M2/StageB
+HELD; Q4 NOT_EXECUTABLE.
+
+## 2026-10-17 — objpeer repair: audit, select, pull missing targets (deepseek/object-store-repair)
+
+The [repair record](../labs/object-store-repair-2026-10-17/README.md) adds objpeer repair: probe each
+replica, classify each target current/repaired/unavailable, group repairs by the replica that holds them
+and pull only the missing targets, with per-target status, JSON totals and exit 3 on unavailable/failed
+targets. Tests cover split targets across replicas (follow-up pull moves 0 records, proving the local
+store is current) and an unavailable target. CLI 16/16, peer 15/15, controls 10/10, vectors 1/1, showcase
+5/5; Clippy -D warnings and fmt clean. No model compute; training/M2/Stage B HELD. **Next:** protected
+delivery, then a packaged repair demo on real artifacts and INDEX update.
 
 ## 2026-10-17 — Replica-aware sync with failover (deepseek/object-store-replica-sync)
 

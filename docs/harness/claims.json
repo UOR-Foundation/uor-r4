@@ -27,17 +27,10 @@
     "lab": "claude",
     "note": ""
   },
-  "codex/cf1-attention-learning": {
-    "branch": "codex/cf1-attention-learning",
-    "claimed_at": "2026-10-17T12:06:41-04:00",
-    "head": "6ca599a53",
-    "lab": "codex",
-    "note": ""
-  },
-  "codex/cf1-attention-unit2b": {
-    "branch": "codex/cf1-attention-unit2b",
-    "claimed_at": "2026-10-17T14:35:08-04:00",
-    "head": "9e6217046",
+  "codex/cf1-attention-cell-export": {
+    "branch": "codex/cf1-attention-cell-export",
+    "claimed_at": "2026-10-17T17:20:56-04:00",
+    "head": "96ad8a475",
     "lab": "codex",
     "note": ""
   },
@@ -122,6 +115,13 @@
     "branch": "deepseek/object-store-pull-series",
     "claimed_at": "2026-10-17T16:07:56-04:00",
     "head": "24fd2c534",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/object-store-repair": {
+    "branch": "deepseek/object-store-repair",
+    "claimed_at": "2026-10-17T17:00:59-04:00",
+    "head": "07bb99b40",
     "lab": "deepseek",
     "note": ""
   },
