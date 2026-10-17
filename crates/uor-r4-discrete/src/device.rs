@@ -862,7 +862,6 @@ impl Device {
         let items = u32::try_from(table.len().max(routes.len()).max(gates.len()))
             .map_err(|_| invalid("initialization inventory exceeds CUDA index bound"))?;
         let mut launch = stream.launch_builder(&kernels.init);
-        let initialization_word = read_initialization.word();
         launch
             .arg(&mut table)
             .arg(&mut routes)
@@ -870,20 +869,29 @@ impl Device {
             .arg(&geometry)
             .arg(&spec_gpu)
             .arg(&seed)
-            .arg(&initialization_word)
             .arg(&mut status);
         // SAFETY: exact discrete_init ABI, checked allocation inventories,
         // immutable geometry/spec, writable buffers owned by this launch.
         unsafe { launch.launch(launch_config(items)) }.map_err(cuda)?;
         check_status(&stream, &status, "initialize")?;
+        // A prospectively declared literal storage amendment after the unchanged
+        // production initializer. This is data upload, not a host read/forward,
+        // target-derived choice or learning apply; the model remains epoch zero.
+        if read_initialization == ReadInitialization::ActiveLeafV1 {
+            let mut declared = vec![0i32; gate_count];
+            for block in 0..spec.blocks as usize {
+                declared[block * metadata.stages()] = 1;
+            }
+            stream.memcpy_htod(&declared, &mut gates).map_err(cuda)?;
+        }
         // Storage validation of a declared literal initialization, never a host
-        // read/score/reference. The kernel must set only atom combine gates.
+        // read/score/reference. Only declared atom combine gates may be nonzero.
         let initialized_gates = stream.clone_dtoh(&gates).map_err(cuda)?;
         for (index, observed) in initialized_gates.iter().enumerate() {
             let expected = i32::from(
                 read_initialization == ReadInitialization::ActiveLeafV1
                     && index < spec.blocks as usize * metadata.stages()
-                    && index % metadata.stages() == 0,
+                    && index.is_multiple_of(metadata.stages()),
             );
             if *observed != expected {
                 return Err(invalid(

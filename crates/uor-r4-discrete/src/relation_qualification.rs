@@ -1,6 +1,8 @@
 //! Finite, exact CUDA construction controls for `ReadSpec::Relation` and Gate (kind 3).
 //! Design: docs/mechanisms/finite-relational-head.md (#2486) and
 //! pre-registration: docs/harness/prep/m1-finite-relational-head-2026-10-14.md (#2494).
+//! Learned-attention activation/init amendment: §7.8 item 3 of
+//! docs/harness/prep/m1-learned-attention-link-2026-10-17.md.
 //! Zero parameter updates or corpus runs execute here. Every expectation is a
 //! hand-derived integer literal over the generated anchor orbit:
 //!   root 0  = A      = [ 2,  2,  0,  0,  0,  0,  0,  0]
@@ -26,6 +28,13 @@ const B: [i32; 8] = [0, 0, 2, 0, 2, 0, 0, 0];
 const D_ROOT: [i32; 8] = [2, -2, 0, 0, 0, 0, 0, 0];
 const TRACE_ROW: usize = 4;
 const TRACE_LEVEL: usize = 28;
+const C2_TOKENS: [[[i32; 8]; 2]; 5] = [
+    [B, A],         // 0: tok_x = [root 14, root 0], cell 224
+    [A, D_ROOT],    // 1: tok_A = [root 0, root 15], cell 15
+    [NEG_A, NEG_B], // 2: tok_B = [root 1, root 3], cell 19
+    [C_ROOT, A],    // 3: tok_y = [root 2, root 0], cell 32
+    [D_ROOT, A],    // 4: tok_z = [root 15, root 0], cell 240
+];
 
 fn require(ok: bool, why: &str) -> Result<()> {
     if ok {
@@ -53,6 +62,16 @@ fn identity(token: u32, occurrence: u64) -> Identity {
         record: 17,
         version: 9,
     }
+}
+fn c2_prefix() -> [Identity; 6] {
+    [
+        identity(0, 0),
+        identity(1, 1),
+        identity(2, 2),
+        identity(3, 3),
+        identity(4, 4),
+        identity(1, 5),
+    ]
 }
 fn concat(blocks: &[[i32; 8]]) -> Vec<i32> {
     blocks.iter().flatten().copied().collect()
@@ -290,21 +309,8 @@ fn relation_off_flock_parity() -> Result<()> {
 
 /// C2: Copy-successor fixture (`x A B y z A`) at context = 6 (stages = 2, 8 nodes).
 fn relation_copy_successor_fixture() -> Result<()> {
-    let tokens = [
-        [B, A],         // 0: tok_x = [root 14, root 0], cell 224
-        [A, D_ROOT],    // 1: tok_A = [root 0, root 15], cell 15
-        [NEG_A, NEG_B], // 2: tok_B = [root 1, root 3], cell 19
-        [C_ROOT, A],    // 3: tok_y = [root 2, root 0], cell 32
-        [D_ROOT, A],    // 4: tok_z = [root 15, root 0], cell 240
-    ];
-    let prefix = [
-        identity(0, 0),
-        identity(1, 1),
-        identity(2, 2),
-        identity(3, 3),
-        identity(4, 4),
-        identity(1, 5),
-    ];
+    let tokens = C2_TOKENS;
+    let prefix = c2_prefix();
     // Baseline: gates[2] = +1 (block 1, level 0 combine gate), gates[6] = 0 (Flock baseline).
     let mut base_gates = [0i32; 14];
     base_gates[2] = 1;
@@ -905,134 +911,116 @@ pub const NAMES: &[&str] = &[
     "active_leaf_initialization_and_matched_off_path",
 ];
 
-/// New initialization is qualified on CUDA; this is construction evidence only.
+/// §7.8 item 3(ii/iii): INERT at the same sealed C2 shape and INIT LOCK at
+/// the registered training shape. Part (i), ACTIVE, is the existing registered
+/// relation_copy_successor_fixture; its exact literals are not rerun or replaced.
 /// All read selection, carry, consensus and loss computations use Device.
 fn active_leaf_initialization_and_matched_off_path() -> Result<()> {
+    // INERT uses exactly the ACTIVE tokens, prefix, target, read shape and seed.
+    // Only the declared interventions differ: all combines zero, Gate(6)=0/+1.
+    let zero = relation_snapshot(6, 2, 1, 1, &C2_TOKENS, &[0; 14])?;
+    let mut positive = zero.clone();
+    positive.gates[6] = 1;
+    let baseline = Device::from_snapshot(zero.clone(), 0)?;
+    let changed = Device::from_snapshot(positive.clone(), 0)?;
+    let prefix = c2_prefix();
+    let baseline_out = baseline.forward_traced(&baseline.carry(&prefix)?, &[2])?;
+    let changed_out = changed.forward_traced(&changed.carry(&prefix)?, &[2])?;
+    require(
+        baseline_out.vectors()? == changed_out.vectors()?
+            && baseline_out.losses == changed_out.losses
+            && baseline_out.predictions == changed_out.predictions
+            && baseline_out.token_rivals == changed_out.token_rivals
+            && baseline_out.address_rivals == changed_out.address_rivals
+            && baseline_out.admitted_cells == changed_out.admitted_cells,
+        "C2 INERT: Gate(6)=0/+1 changed a real forward field with all combine gates zero",
+    )?;
+    // Internal traces are reported separately and are deliberately excluded from
+    // the bit-identity assertion over actual forward outputs.
+    println!(
+        "{}",
+        serde_json::json!({"control":"active_leaf_initialization_and_matched_off_path",
+            "part":"INERT","shape":"sealed C2 B2/C6/K2/read-kept1/seed7",
+            "all_combine_gates":0,"relation_gate_index":6,"relation_gate_values":[0,1],
+            "real_forward_fields_bit_identical":true,
+            "baseline_trace":trace(&baseline_out)?,"changed_trace":trace(&changed_out)?,
+            "baseline_relation_scores":rel_scores(&baseline_out)?,
+            "changed_relation_scores":rel_scores(&changed_out)?,"applied_updates":0})
+    );
+    for (device, before) in [(&baseline, &zero), (&changed, &positive)] {
+        require(
+            serde_json::to_vec(&device.snapshot()?).map_err(|e| Error::Invalid(e.to_string()))?
+                == serde_json::to_vec(before).map_err(|e| Error::Invalid(e.to_string()))?,
+            "C2 INERT forward mutated snapshot storage or epoch",
+        )?;
+    }
+
+    // INIT LOCK uses the registered training shape, not the C2 shape. Treatment
+    // and primary relation-disabled control both instantiate Relation's full
+    // 45-gate inventory; the driver, not this initializer, refuses control apply.
     let spec = Spec {
-        vocabulary: 8,
-        blocks: 2,
-        context: 6,
-        kept_cells: 4,
+        vocabulary: 4096,
+        blocks: 4,
+        context: 192,
+        kept_cells: 8,
     };
-    let seed = 7;
-    let flock = Device::new_with_initialization(
-        spec,
-        ReadSpec::Flock { kept: 2 },
-        crate::ObjectivePolicy::NearestAddressMarginV1,
-        crate::ReadInitialization::ActiveLeafV1,
-        seed,
-        0,
-    )?;
-    let relation = Device::new_with_initialization(
-        spec,
-        ReadSpec::Relation { kept: 2, sweeps: 1 },
-        crate::ObjectivePolicy::NearestAddressMarginV1,
-        crate::ReadInitialization::ActiveLeafV1,
-        seed,
-        0,
-    )?;
-    let before_flock = flock.snapshot()?;
-    let before_relation = relation.snapshot()?;
-    let stages = crate::metadata::BinderPlan::new(spec.context as usize)?.stages();
-    let combine_count = spec.blocks as usize * stages;
-    require(
-        before_flock.table == before_relation.table
-            && before_flock.routes == before_relation.routes
-            && before_flock.gates == before_relation.gates[..combine_count]
-            && before_relation.gates[combine_count..]
-                .iter()
-                .all(|g| *g == 0)
-            && before_flock.read_initialization == crate::ReadInitialization::ActiveLeafV1
-            && before_relation.read_initialization == crate::ReadInitialization::ActiveLeafV1,
-        "active matched initialization table/route/gate identity differs",
-    )?;
-    let windows = [
-        vec![
-            identity(0, 0),
-            identity(1, 1),
-            identity(2, 2),
-            identity(3, 3),
-            identity(4, 4),
-            identity(1, 5),
-        ],
-        vec![identity(0, 6), identity(1, 7), identity(2, 8)],
-    ];
-    let targets = [2, 3];
-    let rf = relation.forward_traced(&relation.carry_windows(&windows)?, &targets)?;
-    let ff = flock.forward_traced(&flock.carry_windows(&windows)?, &targets)?;
-    require(
-        rf.vectors()? == ff.vectors()?
-            && rf.losses == ff.losses
-            && rf.predictions == ff.predictions
-            && rf.admitted_cells == ff.admitted_cells
-            && rf.token_rivals == ff.token_rivals
-            && rf.address_rivals == ff.address_rivals
-            && trace(&rf)? == trace(&ff)?,
-        "active matched relation-off output differs from Flock",
-    )?;
-    for (device, before) in [(&flock, &before_flock), (&relation, &before_relation)] {
+    let read_spec = ReadSpec::Relation { kept: 8, sweeps: 1 };
+    let mut expected = [0i32; 45];
+    for index in [0usize, 5, 10, 15] {
+        expected[index] = 1;
+    }
+    for seed in [1u32, 2] {
+        let treatment = Device::new_with_initialization(
+            spec,
+            read_spec,
+            crate::ObjectivePolicy::NearestAddressMarginV1,
+            crate::ReadInitialization::ActiveLeafV1,
+            seed,
+            0,
+        )?;
+        let control = Device::new_with_initialization(
+            spec,
+            read_spec,
+            crate::ObjectivePolicy::NearestAddressMarginV1,
+            crate::ReadInitialization::ActiveLeafV1,
+            seed,
+            0,
+        )?;
+        let treatment_snapshot = treatment.snapshot()?;
+        let control_snapshot = control.snapshot()?;
+        for snapshot in [&treatment_snapshot, &control_snapshot] {
+            require(snapshot.spec == spec && snapshot.read_spec == read_spec
+                && snapshot.seed == seed && snapshot.epoch == 0
+                && snapshot.read_initialization == crate::ReadInitialization::ActiveLeafV1
+                && snapshot.gates == expected,
+                "INIT LOCK requires exact V4096/B4/C192/K8 gates0/5/10/15=+1 and every other gate zero")?;
+        }
+        let treatment_bytes =
+            serde_json::to_vec(&treatment_snapshot).map_err(|e| Error::Invalid(e.to_string()))?;
         require(
-            crate::corpus::sha256(
-                &serde_json::to_vec(&device.snapshot()?)
+            treatment_bytes
+                == serde_json::to_vec(&control_snapshot)
                     .map_err(|e| Error::Invalid(e.to_string()))?,
-            ) == crate::corpus::sha256(
-                &serde_json::to_vec(before).map_err(|e| Error::Invalid(e.to_string()))?,
-            ),
-            "active initialization/forward mutated model state",
+            "INIT LOCK treatment and primary Relation-off control initialization differ",
         )?;
-        let reloaded = Device::from_snapshot(before.clone(), 0)?;
+        let reloaded = Device::from_snapshot(control_snapshot.clone(), 0)?;
         require(
-            reloaded.read_initialization() == crate::ReadInitialization::ActiveLeafV1,
-            "active initialization identity lost on reload",
+            treatment_bytes
+                == serde_json::to_vec(&reloaded.snapshot()?)
+                    .map_err(|e| Error::Invalid(e.to_string()))?,
+            "INIT LOCK exact initial storage or identity changed on reload",
         )?;
+        println!(
+            "{}",
+            serde_json::json!({
+            "control":"active_leaf_initialization_and_matched_off_path","part":"INIT LOCK",
+            "spec":spec,"read_spec":read_spec,"seed":seed,
+            "initialization":crate::ReadInitialization::ActiveLeafV1,
+            "plus_one_combine_indices":[0,5,10,15],"gates":control_snapshot.gates,
+            "treatment_control_snapshot_bit_identical":true,"reload_bit_identical":true,
+            "snapshot_sha256":crate::corpus::sha256(&treatment_bytes),"applied_updates":0})
+        );
     }
-    // Authored causal witness using the actual declared initializer. This is
-    // a construction check that a relation-only move can reach writer loss;
-    // it is neither corpus learning nor a held-out performance observation.
-    let witness = Device::new_with_initialization(
-        Spec {
-            vocabulary: 5,
-            blocks: 2,
-            context: 6,
-            kept_cells: 2,
-        },
-        ReadSpec::Relation { kept: 1, sweeps: 1 },
-        crate::ObjectivePolicy::NearestAddressMarginV1,
-        crate::ReadInitialization::ActiveLeafV1,
-        seed,
-        0,
-    )?;
-    let mut literal = witness.snapshot()?;
-    for (token, blocks) in [
-        [B, A],
-        [A, D_ROOT],
-        [NEG_A, NEG_B],
-        [C_ROOT, A],
-        [D_ROOT, A],
-    ]
-    .iter()
-    .enumerate()
-    {
-        literal.table[token * 16..token * 16 + 16].copy_from_slice(&concat(blocks));
-    }
-    let witness = Device::from_snapshot(literal, 0)?;
-    let before =
-        serde_json::to_vec(&witness.snapshot()?).map_err(|e| Error::Invalid(e.to_string()))?;
-    let input = witness.carry(&windows[0])?;
-    let proposal = witness.propose(&input, &[2], Parameter::Gate(6))?;
-    let losses = proposal.candidate_losses()?;
-    require(
-        proposal
-            .observation()?
-            .any_candidate_cost_differs_from_identity
-            && losses[..3].iter().any(|value| *value != losses[0]),
-        "active leaf causal witness: relation-only changes do not reach writer loss",
-    )?;
-    require(
-        serde_json::to_vec(&witness.snapshot()?).map_err(|e| Error::Invalid(e.to_string()))?
-            == before,
-        "active leaf causal witness changed snapshot during virtual proposal",
-    )?;
     Ok(())
 }
 

@@ -68,7 +68,7 @@ pub const RELATION_EDGE_TYPES: u32 = 5;
 
 /// Initial read connectivity is a declared experiment setting. The historical
 /// zero-gate default remains unchanged; active leaves carry no target-derived
-/// information and must be matched between Relation and its Flock control.
+/// information and must be matched between Relation and its frozen-zero control.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadInitialization {
@@ -87,13 +87,6 @@ impl ReadInitialization {
             ));
         }
         Ok(())
-    }
-    #[cfg(feature = "cuda")]
-    pub(crate) fn word(self) -> u32 {
-        match self {
-            Self::ZeroGatesV1 => 0,
-            Self::ActiveLeafV1 => 1,
-        }
     }
 }
 

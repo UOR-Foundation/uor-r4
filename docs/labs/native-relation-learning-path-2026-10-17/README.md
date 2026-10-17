@@ -28,8 +28,11 @@ Relation's read family comprises 920 combine and 1,130 relation attempts.
 Corpus order, identities, geometric carrier, shared writer and objective are retained.
 
 `read_initialization: active_leaf_v1` is an explicit prospective configuration:
-CUDA sets +1 at each payload block's leaf-combine gate and zero at every other
-combine/relation gate. The existing omitted/default `zero_gates_v1` keeps its
+after the byte-unchanged production CUDA initializer, the opted-in constructor
+uploads literal +1 at each payload block's leaf-combine gate and zero at every
+other combine/relation gate. This is declared storage preparation, with no
+target-dependent computation or learning apply; epoch remains zero. The
+initializer ABI and default body remain unchanged. The existing omitted/default `zero_gates_v1` keeps its
 old meaning and serialization. Initialization identity binds configuration,
 lineage, model binding and snapshot; a canonical/zero checkpoint cannot silently
 resume into the new experiment. GPU storage readback verifies the declared
@@ -91,7 +94,7 @@ is tautological on the target-defined successor panel and is not learned evidenc
 | Advisory host Clippy | Completed with warnings; no suppression added |
 | Exact-head CUDA check/Clippy and finite controls | NOT_RUN |
 | Independent integrated source review | Pending |
-| Scientific initialization/comparator amendment | PENDING FIT |
+| Scientific initialization/comparator design | FIT (design), PR #2574; no execution release |
 | Training / M2 / Stage B | HELD |
 | Q4 | NOT_EXECUTABLE |
 | Model updates, new pod leases, GPU cost | 0 / 0 / $0 |
@@ -141,9 +144,12 @@ Only an attributable learned gain with the declared non-regression and fresh
 transfer criteria earns a bounded learned-attention claim. No result here closes
 a mechanism family, resets a line count or moves the suspended M1 headline.
 
-The scientific sheet is developed in parallel in [PR
-#2574](https://github.com/UOR-Foundation/uor-r4/pull/2574), not a second source
-commission. Source/design reconciliation is recorded in [6230176389](https://github.com/UOR-Foundation/uor-r4/pull/2574#issuecomment-6230176389).
+The scientific sheet was delivered in parallel in [PR
+#2574](https://github.com/UOR-Foundation/uor-r4/pull/2574), merged at `fb4519226`
+with FIT (design), not an execution release. Source is aligned to its unchanged
+production initializer and three-part ACTIVE/INERT/INIT LOCK construction
+contract. Source/design reconciliation is recorded in [6230176389](https://github.com/UOR-Foundation/uor-r4/pull/2574#issuecomment-6230176389)
+and [6230362901](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6230362901).
 The real training transition makes one `Device::propose` call per batch; the
 separate virtual-only `propose_next` API is not called by that transition.
 A cost projection that adds both APIs as if both execute each batch doubles the
