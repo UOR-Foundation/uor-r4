@@ -1,3 +1,14 @@
+## 2026-10-17 — Exact object store gains native peer replication (deepseek/object-store-peer)
+
+The [peer record](../labs/object-store-peer-2026-10-17/README.md) adds Store read accessors
+(record_bytes/has_record) and a transport-agnostic peer module that replicates an object using the
+native manifest and record wire formats, requesting only nodes the receiver's Store reports missing
+and rebuilding with native digest verification. Package tests 25 pass (3 new peer tests: a
+1,048,576-byte object delta transfers 22 records / 1,014 bytes in 3 rounds and verifies; an identical
+store transfers 0 records), Clippy -D warnings clean, fmt clean. No model compute; training/M2/Stage B
+HELD; Q4 NOT_EXECUTABLE; model milestone counts unchanged. **Next:** protected delivery, driver
+transport adapter, then multi-peer and persisted-store restart gates.
+
 ## 2026-10-17 — Timing attempt refuses a changed GPU before instrument execution (codex/cf1)
 
 The [timing2 setup record](../labs/counterfactual-baseline-reuse-timing-uuid-blocker-2026-10-17/README.md) preserves separate release6228540541 after protected finite qualification #2568. Placement changed between quote and allocation: actual driver595.71.05 matched, but GPU UUID35bf2e2c differed from the qualified1daf8397, so the wrapper stopped before any binary at02:33:21Z. Instrument/model/proposal/timing/apply dose is zero; no timing or checkpoint0 parity result follows. The initial archive copy omitted a required CSV; its manifest check retained and renewed the pod. Preservation-only recovery copied the exact original file and verified all manifests and the complete cloud archive (9,870,336 bytes, MD5 `2e882d487871ff5edc249c15f37c14cf`) before release02:35:01Z/down02:35:07Z. No owned pod remains; the separate DeepSeek lease was untouched. Lifecycle176s at raw$0.9083333333333332/h estimates$0.044407407; cumulative38 closed Codex leases$3.490932222 plus separate PM, storage/transfer UNMEASURED. A subsequent owned-worktree materialization briefly crossed the local disk floor; index refresh/sparse reapply restored it before any new lease or model work. **Next:** protect this blocker/recovery record, then prospectively resolve the physical-device admission constraint and repair the packet's archive copy before a new timing release. No automatic retry or model-negative conclusion. Training/M2/Stage B HELD; Q4 NOT_EXECUTABLE; count0/3 and suspended headline37/232 unchanged.
