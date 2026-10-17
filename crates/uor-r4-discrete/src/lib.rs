@@ -279,7 +279,9 @@ mod tests {
             (
                 (
                     "training.rs".into(),
-                    ["let applied = model", ".", "apply", "(&proposal)?;"].concat(),
+                    // The existing sole transition now returns the guarded
+                    // apply expression; frozen relation slots bypass it.
+                    ["model", ".", "apply", "(&proposal)?"].concat(),
                 ),
                 1,
             ),

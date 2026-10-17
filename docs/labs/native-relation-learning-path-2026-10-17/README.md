@@ -84,9 +84,11 @@ is tautological on the target-defined successor panel and is not learned evidenc
 
 | Check | Status |
 | --- | --- |
-| Schedule/cursor/default/lineage regression source | Implemented; execution NOT_RUN |
+| Host metadata library tests, including schedule/cursor/default/lineage/control | 65 passed, 0 failed, 1 ignored; no model execution |
 | Active initialization and matched-off CUDA control | Implemented as additional `qualify-relation` control; NOT_RUN |
-| Exact-head metadata build/tests and Clippy | NOT_RUN |
+| Host `check --no-default-features --all-targets` | PASS |
+| Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
+| Advisory host Clippy | Completed with warnings; no suppression added |
 | Exact-head CUDA check/Clippy and finite controls | NOT_RUN |
 | Independent integrated source review | Pending |
 | Scientific initialization/comparator amendment | PENDING FIT |
@@ -95,14 +97,29 @@ is tautological on the target-defined successor panel and is not learned evidenc
 | Model updates, new pod leases, GPU cost | 0 / 0 / $0 |
 
 The local disk was below the 30 GiB pod-admission floor at source preparation;
-no pod or material build was started. Source preparation used a small sparse
-owned worktree and formatter only. The shared model-time JSON was not available
+no pod was started. Source preparation used a sparse owned worktree. Subsequent
+host metadata verification materialized about 90 MiB of tracked sources and
+used a small isolated, regenerable Codex target directory, with debug information
+and incremental output disabled. This is compiler/storage/schedule verification,
+not CPU model/reference execution or pod admission. The shared model-time JSON was not available
 at its historical path; this preparation adds no model-time charge. Live harness
 receipts record the coordination; model/compile timing remains NOT_RUN.
 The old 3.74-second batch projection is historical, not a current budget.
 A future reviewed packet must price its actual source, full arm/seed dose,
 construction, baseline/final/ablation/transfer evaluations, retries/resumes,
 checkpoint/archive storage and resource margin from current measurements.
+
+The first host invocation exposed missing tracked include files in the sparse
+checkout; materializing those exact files fixed setup. The first test run then
+found a stale source-inventory spelling after the guarded apply expression and
+an absent ignored `local/` parent for an existing storage test. The inventory
+still permits exactly the same two apply call sites; its expected expression
+was updated, and the test's parent directory was created without changing its
+source. The complete rerun passed. Strict host Clippy stopped on pre-existing
+`native_geometry.rs` dead code and `geometric_span.rs` style in the integer
+dependency; the source unit does not silently cap that result or expand into
+unrelated lint repair. CUDA check/strict Clippy and finite behavior remain
+separate, unexecuted requirements.
 
 Line: M1 learned-attention link (Relation interleaved read), accepted by PM
 [6229949186](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6229949186).

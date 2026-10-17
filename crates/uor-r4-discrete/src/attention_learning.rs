@@ -518,7 +518,7 @@ struct AttentionCheckpoint {
 }
 #[cfg(any(feature = "cuda", test))]
 fn checkpoint_boundary(n: u64) -> Result<()> {
-    if n > ATTENTION_BATCHES || (n % 64 != 0 && n != ATTENTION_BATCHES) {
+    if n > ATTENTION_BATCHES || (!n.is_multiple_of(64) && n != ATTENTION_BATCHES) {
         return Err(invalid(
             "attention resume cursor is not a bounded durable checkpoint",
         ));
@@ -536,7 +536,10 @@ fn validate_initial_storage(config: &DriverConfig, model: &Value) -> Result<()> 
         || model["read_initialization"] != json!(ReadInitialization::ActiveLeafV1)
         || gates.len() != total as usize
         || gates.iter().enumerate().any(|(index, word)| {
-            word.as_i64() != Some(i64::from(index < combine as usize && index % stages == 0))
+            word.as_i64()
+                != Some(i64::from(
+                    index < combine as usize && index.is_multiple_of(stages),
+                ))
         })
     {
         return Err(invalid(
@@ -876,7 +879,7 @@ pub fn run(
             progress.counters.record(expected_family, &receipt);
             progress.checkpoint.cursor = receipt.cursor_after;
             let completed = receipt.cursor_after.completed_batches;
-            if completed % 64 == 0 || completed == ATTENTION_BATCHES {
+            if completed.is_multiple_of(64) || completed == ATTENTION_BATCHES {
                 progress.checkpoint = driver.checkpoint(&model, receipt.cursor_after)?;
                 final_pin = save(&driver, &release, out, &progress)?;
             }
