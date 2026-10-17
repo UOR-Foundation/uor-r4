@@ -111,6 +111,34 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/object-store-repair": {
+    "branch": "deepseek/object-store-repair",
+    "claimed_at": "2026-10-17T17:00:59-04:00",
+    "head": "07bb99b40",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/object-store-replica-audit": {
+    "branch": "deepseek/object-store-replica-audit",
+    "claimed_at": "2026-10-17T16:51:58-04:00",
+    "head": "d0b208a22",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/object-store-replica-sync": {
+    "branch": "deepseek/object-store-replica-sync",
+    "claimed_at": "2026-10-17T16:55:06-04:00",
+    "head": "857bc69e2",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/object-store-retry": {
+    "branch": "deepseek/object-store-retry",
+    "claimed_at": "2026-10-17T16:42:38-04:00",
+    "head": "13a627dc4",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/object-store-spec-note": {
     "branch": "deepseek/object-store-spec-note",
     "claimed_at": "2026-10-17T16:15:23-04:00",
@@ -129,6 +157,13 @@
     "branch": "deepseek/object-store-verify-pipeline",
     "claimed_at": "2026-10-17T16:00:55-04:00",
     "head": "c0a4821cf",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/object-store-verify-retry": {
+    "branch": "deepseek/object-store-verify-retry",
+    "claimed_at": "2026-10-17T16:45:35-04:00",
+    "head": "01703e3bd",
     "lab": "deepseek",
     "note": ""
   },

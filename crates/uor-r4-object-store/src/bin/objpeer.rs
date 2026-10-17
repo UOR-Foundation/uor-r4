@@ -11,7 +11,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::thread;
 
-use uor_r4_object_store::{peer, ExpectedObject, Limits, Manifest, Store};
+use uor_r4_object_store::{peer, Error, ExpectedObject, Limits, Manifest, Store};
 
 fn limits() -> Limits {
     Limits {
@@ -44,6 +44,8 @@ fn hex32(value: &str) -> [u8; 32] {
     }
     out
 }
+
+type SyncServed = (Vec<(Manifest, peer::PullStats)>, u64, String);
 
 struct Counted<S> {
     inner: S,
@@ -98,6 +100,20 @@ fn fold_file(store: &mut Store, path: &str) -> Manifest {
         .manifest
 }
 
+fn retryable(error: &Error) -> bool {
+    !matches!(
+        error,
+        Error::BindingMismatch | Error::UnknownObject | Error::LimitExceeded(_)
+    )
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RepairStatus {
+    Current,
+    Repaired,
+    Failed,
+    Unavailable,
+}
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -107,7 +123,7 @@ fn main() {
     let mut objects: Vec<String> = Vec::new();
     let mut have = String::new();
     let mut bind = String::from("127.0.0.1:0");
-    let mut addr = String::new();
+    let mut addrs: Vec<String> = Vec::new();
     let mut out = String::new();
     let mut sessions: usize = 1;
     let mut concurrent = false;
@@ -118,6 +134,7 @@ fn main() {
     let mut out_dir = String::new();
     let mut json = false;
     let mut select_shas: Vec<[u8; 32]> = Vec::new();
+    let mut retries: usize = 0;
     let mut i = 2usize;
     while i < args.len() {
         let key = args[i].clone();
@@ -142,8 +159,9 @@ fn main() {
             "--have" => have = value,
             "--targets" => targets = value,
             "--out-dir" => out_dir = value,
+            "--retries" => retries = value.parse().unwrap_or_else(|_| die("bad --retries")),
             "--bind" => bind = value,
-            "--addr" => addr = value,
+            "--addr" => addrs.push(value),
             "--out" => out = value,
             "--expect-sha256" => expect_sha = Some(hex32(&value)),
             "--expect-version" => expect_version = Some(hex32(&value)),
@@ -155,6 +173,7 @@ fn main() {
             other => die(&format!("unknown argument {}", other)),
         }
     }
+    let addr = addrs.first().cloned().unwrap_or_default();
     match args[1].as_str() {
         "info" => {
             let object = objects
@@ -237,7 +256,7 @@ fn main() {
             }
         }
         "sync" => {
-            if addr.is_empty() || targets.is_empty() || out_dir.is_empty() {
+            if addrs.is_empty() || targets.is_empty() || out_dir.is_empty() {
                 die("sync requires --addr, --targets and --out-dir");
             }
             let mut store = load_store(&store_path);
@@ -264,19 +283,6 @@ fn main() {
             if selectors.is_empty() {
                 die("sync targets file contained no selectors");
             }
-            let stream = TcpStream::connect(&addr)
-                .unwrap_or_else(|e| die(&format!("connect {}: {}", addr, e)));
-            let reader_stream = stream
-                .try_clone()
-                .unwrap_or_else(|e| die(&format!("clone: {}", e)));
-            let mut reader = Counted {
-                inner: reader_stream,
-                bytes: 0,
-            };
-            let mut writer = Counted {
-                inner: stream,
-                bytes: 0,
-            };
             let requests: Vec<peer::PullRequest> = selectors
                 .iter()
                 .map(|selector| peer::PullRequest {
@@ -284,9 +290,52 @@ fn main() {
                     selector: Some(*selector),
                 })
                 .collect();
-            let results = peer::pull_series(&mut store, &requests, &mut reader, &mut writer)
-                .unwrap_or_else(|e| die(&format!("sync: {:?}", e)));
-            let wire_bytes = reader.bytes + writer.bytes;
+            let mut served: Option<SyncServed> = None;
+            for address in &addrs {
+                let mut attempt = 0usize;
+                loop {
+                    let outcome = (|| -> uor_r4_object_store::Result<(
+                        Vec<(Manifest, peer::PullStats)>,
+                        u64,
+                    )> {
+                        let stream = TcpStream::connect(address)?;
+                        let reader_stream = stream.try_clone()?;
+                        let mut reader = Counted {
+                            inner: reader_stream,
+                            bytes: 0,
+                        };
+                        let mut writer = Counted {
+                            inner: stream,
+                            bytes: 0,
+                        };
+                        let results =
+                            peer::pull_series(&mut store, &requests, &mut reader, &mut writer)?;
+                        Ok((results, reader.bytes + writer.bytes))
+                    })();
+                    match outcome {
+                        Ok((results, wire)) => {
+                            served = Some((results, wire, address.clone()));
+                            break;
+                        }
+                        Err(error) if attempt < retries && retryable(&error) => {
+                            attempt += 1;
+                            eprintln!("retry {}/{} after {:?}", attempt, retries, error);
+                        }
+                        Err(error) => {
+                            eprintln!(
+                                "replica {} unavailable for sync: {:?}; trying next",
+                                address, error
+                            );
+                            break;
+                        }
+                    }
+                }
+                if served.is_some() {
+                    break;
+                }
+            }
+            let (results, wire_bytes, replica_used) =
+                served.unwrap_or_else(|| die("no replica served the sync target set"));
             fs::create_dir_all(&out_dir)
                 .unwrap_or_else(|e| die(&format!("create {}: {}", out_dir, e)));
             let mut nodes = 0u64;
@@ -315,44 +364,33 @@ fn main() {
             save_store(&store, &store_path);
             if json {
                 println!(
-                    "{{\"artifacts\":{},\"nodes\":{},\"record_bytes\":{},\"wire_bytes\":{},\"output_dir\":\"{}\"}}",
+                    "{{\"artifacts\":{},\"nodes\":{},\"record_bytes\":{},\"wire_bytes\":{},\"replica\":\"{}\",\"output_dir\":\"{}\"}}",
                     results.len(),
                     nodes,
                     record_bytes,
                     wire_bytes,
+                    replica_used,
                     out_dir
                 );
             } else {
                 println!(
-                    "SYNC_SERIES artifacts={} nodes={} record_bytes={} wire_bytes={}",
+                    "SYNC_SERIES artifacts={} nodes={} record_bytes={} wire_bytes={} replica={}",
                     results.len(),
                     nodes,
                     record_bytes,
-                    wire_bytes
+                    wire_bytes,
+                    replica_used
                 );
             }
         }
         "verify" => {
-            if addr.is_empty() {
+            if addrs.is_empty() {
                 die("verify requires --addr");
             }
             let mut store = load_store(&store_path);
             if !have.is_empty() {
                 fold_file(&mut store, &have);
             }
-            let stream = TcpStream::connect(&addr)
-                .unwrap_or_else(|e| die(&format!("connect {}: {}", addr, e)));
-            let reader_stream = stream
-                .try_clone()
-                .unwrap_or_else(|e| die(&format!("clone: {}", e)));
-            let mut reader = Counted {
-                inner: reader_stream,
-                bytes: 0,
-            };
-            let mut writer = Counted {
-                inner: stream,
-                bytes: 0,
-            };
             let expected =
                 if expect_sha.is_none() && expect_version.is_none() && expect_bytes.is_none() {
                     None
@@ -396,61 +434,164 @@ fn main() {
                     });
                 }
             }
-            let outcomes = peer::verify_series(&store, &requests, &mut reader, &mut writer)
-                .unwrap_or_else(|e| die(&format!("verify: {:?}", e)));
-            let wire_bytes = reader.bytes + writer.bytes;
-            let mut verified = 0usize;
-            let mut stale = 0usize;
-            let mut unknown = 0usize;
-            let mut mismatch = 0usize;
-            for outcome in &outcomes {
-                match outcome {
-                    peer::VerifyOutcome::Verified { .. } => verified += 1,
-                    peer::VerifyOutcome::Stale { .. } => stale += 1,
-                    peer::VerifyOutcome::Unknown => unknown += 1,
-                    peer::VerifyOutcome::Mismatch => mismatch += 1,
+            let mut replicas: Vec<(String, Vec<peer::VerifyOutcome>, u64)> = Vec::new();
+            for address in &addrs {
+                let mut attempt = 0usize;
+                let (outcomes, wire_bytes) = loop {
+                    let outcome =
+                        (|| -> uor_r4_object_store::Result<(Vec<peer::VerifyOutcome>, u64)> {
+                            let stream = TcpStream::connect(address)?;
+                            let reader_stream = stream.try_clone()?;
+                            let mut reader = Counted {
+                                inner: reader_stream,
+                                bytes: 0,
+                            };
+                            let mut writer = Counted {
+                                inner: stream,
+                                bytes: 0,
+                            };
+                            let outcomes =
+                                peer::verify_series(&store, &requests, &mut reader, &mut writer)?;
+                            Ok((outcomes, reader.bytes + writer.bytes))
+                        })();
+                    match outcome {
+                        Ok(value) => break value,
+                        Err(error) if attempt < retries && retryable(&error) => {
+                            attempt += 1;
+                            eprintln!("retry {}/{} after {:?}", attempt, retries, error);
+                        }
+                        Err(error) => die(&format!("verify {}: {:?}", address, error)),
+                    }
+                };
+                replicas.push((address.clone(), outcomes, wire_bytes));
+            }
+            let checks = replicas
+                .first()
+                .map(|(_, outcomes, _)| outcomes.len())
+                .unwrap_or(0);
+            let mut all_ok = vec![true; checks];
+            let mut stale_targets = vec![false; checks];
+            let mut unknown_targets = vec![false; checks];
+            let mut mismatch_targets = vec![false; checks];
+            let mut total_wire = 0u64;
+            for (_, outcomes, wire) in &replicas {
+                total_wire += wire;
+                for (index, outcome) in outcomes.iter().enumerate() {
+                    if index >= checks {
+                        continue;
+                    }
+                    match outcome {
+                        peer::VerifyOutcome::Verified { .. } => {}
+                        peer::VerifyOutcome::Stale { .. } => {
+                            all_ok[index] = false;
+                            stale_targets[index] = true;
+                        }
+                        peer::VerifyOutcome::Unknown => {
+                            all_ok[index] = false;
+                            unknown_targets[index] = true;
+                        }
+                        peer::VerifyOutcome::Mismatch => {
+                            all_ok[index] = false;
+                            mismatch_targets[index] = true;
+                        }
+                    }
                 }
             }
+            let verified_all = all_ok.iter().filter(|value| **value).count();
+            let stale = stale_targets.iter().filter(|value| **value).count();
+            let unknown = unknown_targets.iter().filter(|value| **value).count();
+            let mismatch = mismatch_targets.iter().filter(|value| **value).count();
+            let single = replicas.len() == 1;
             if json {
-                let results: Vec<String> = outcomes
-                    .iter()
-                    .enumerate()
-                    .map(|(index, outcome)| {
-                        let selector = selectors
-                            .get(index)
-                            .map(|value| hex(value))
-                            .unwrap_or_default();
-                        match outcome {
-                            peer::VerifyOutcome::Verified { missing } => format!(
-                                "{{\"i\":{},\"status\":\"verified\",\"missing\":{},\"selector\":\"{}\"}}",
-                                index, missing, selector
-                            ),
-                            peer::VerifyOutcome::Stale { missing } => format!(
-                                "{{\"i\":{},\"status\":\"stale\",\"missing\":{},\"selector\":\"{}\"}}",
-                                index, missing, selector
-                            ),
-                            peer::VerifyOutcome::Unknown => format!(
-                                "{{\"i\":{},\"status\":\"unknown\",\"selector\":\"{}\"}}",
-                                index, selector
-                            ),
-                            peer::VerifyOutcome::Mismatch => format!(
-                                "{{\"i\":{},\"status\":\"mismatch\",\"selector\":\"{}\"}}",
-                                index, selector
-                            ),
-                        }
-                    })
-                    .collect();
-                println!(
-                    "{{\"checks\":{},\"verified\":{},\"stale\":{},\"unknown\":{},\"mismatch\":{},\"wire_bytes\":{},\"results\":[{}]}}",
-                    outcomes.len(),
-                    verified,
-                    stale,
-                    unknown,
-                    mismatch,
-                    wire_bytes,
-                    results.join(",")
-                );
-            } else {
+                if single {
+                    let (_, outcomes, _) = &replicas[0];
+                    let results: Vec<String> = outcomes
+                        .iter()
+                        .enumerate()
+                        .map(|(index, outcome)| {
+                            let selector = selectors
+                                .get(index)
+                                .map(|value| hex(value))
+                                .unwrap_or_default();
+                            match outcome {
+                                peer::VerifyOutcome::Verified { missing } => format!(
+                                    "{{\"i\":{},\"status\":\"verified\",\"missing\":{},\"selector\":\"{}\"}}",
+                                    index, missing, selector
+                                ),
+                                peer::VerifyOutcome::Stale { missing } => format!(
+                                    "{{\"i\":{},\"status\":\"stale\",\"missing\":{},\"selector\":\"{}\"}}",
+                                    index, missing, selector
+                                ),
+                                peer::VerifyOutcome::Unknown => format!(
+                                    "{{\"i\":{},\"status\":\"unknown\",\"selector\":\"{}\"}}",
+                                    index, selector
+                                ),
+                                peer::VerifyOutcome::Mismatch => format!(
+                                    "{{\"i\":{},\"status\":\"mismatch\",\"selector\":\"{}\"}}",
+                                    index, selector
+                                ),
+                            }
+                        })
+                        .collect();
+                    println!(
+                        "{{\"checks\":{},\"verified\":{},\"stale\":{},\"unknown\":{},\"mismatch\":{},\"wire_bytes\":{},\"results\":[{}]}}",
+                        outcomes.len(),
+                        verified_all,
+                        stale,
+                        unknown,
+                        mismatch,
+                        total_wire,
+                        results.join(",")
+                    );
+                } else {
+                    let targets: Vec<String> = (0..checks)
+                        .map(|index| {
+                            let selector = selectors
+                                .get(index)
+                                .map(|value| hex(value))
+                                .unwrap_or_default();
+                            let per_replica: Vec<String> = replicas
+                                .iter()
+                                .map(|(address, outcomes, _)| match &outcomes[index] {
+                                    peer::VerifyOutcome::Verified { missing } => format!(
+                                        "{{\"addr\":\"{}\",\"status\":\"verified\",\"missing\":{}}}",
+                                        address, missing
+                                    ),
+                                    peer::VerifyOutcome::Stale { missing } => format!(
+                                        "{{\"addr\":\"{}\",\"status\":\"stale\",\"missing\":{}}}",
+                                        address, missing
+                                    ),
+                                    peer::VerifyOutcome::Unknown => format!(
+                                        "{{\"addr\":\"{}\",\"status\":\"unknown\"}}",
+                                        address
+                                    ),
+                                    peer::VerifyOutcome::Mismatch => format!(
+                                        "{{\"addr\":\"{}\",\"status\":\"mismatch\"}}",
+                                        address
+                                    ),
+                                })
+                                .collect();
+                            format!(
+                                "{{\"selector\":\"{}\",\"replicas\":[{}]}}",
+                                selector,
+                                per_replica.join(",")
+                            )
+                        })
+                        .collect();
+                    println!(
+                        "{{\"replicas\":{},\"checks\":{},\"verified_all\":{},\"stale\":{},\"unknown\":{},\"mismatch\":{},\"wire_bytes\":{},\"results\":[{}]}}",
+                        replicas.len(),
+                        checks,
+                        verified_all,
+                        stale,
+                        unknown,
+                        mismatch,
+                        total_wire,
+                        targets.join(",")
+                    );
+                }
+            } else if single {
+                let (_, outcomes, _) = &replicas[0];
                 for (index, outcome) in outcomes.iter().enumerate() {
                     match outcome {
                         peer::VerifyOutcome::Verified { missing } => {
@@ -470,17 +611,279 @@ fn main() {
                 println!(
                     "VERIFY_SERIES checks={} verified={} stale={} unknown={} mismatch={} wire_bytes={}",
                     outcomes.len(),
-                    verified,
+                    verified_all,
                     stale,
                     unknown,
                     mismatch,
-                    wire_bytes
+                    total_wire
+                );
+            } else {
+                for (address, outcomes, wire) in &replicas {
+                    let mut rep_verified = 0usize;
+                    let mut rep_stale = 0usize;
+                    let mut rep_unknown = 0usize;
+                    let mut rep_mismatch = 0usize;
+                    for outcome in outcomes {
+                        match outcome {
+                            peer::VerifyOutcome::Verified { .. } => rep_verified += 1,
+                            peer::VerifyOutcome::Stale { .. } => rep_stale += 1,
+                            peer::VerifyOutcome::Unknown => rep_unknown += 1,
+                            peer::VerifyOutcome::Mismatch => rep_mismatch += 1,
+                        }
+                    }
+                    println!(
+                        "REPLICA addr={} verified={} stale={} unknown={} mismatch={} wire_bytes={}",
+                        address, rep_verified, rep_stale, rep_unknown, rep_mismatch, wire
+                    );
+                }
+                println!(
+                    "VERIFY_REPLICAS replicas={} checks={} verified_all={} stale={} unknown={} mismatch={} wire_bytes={}",
+                    replicas.len(),
+                    checks,
+                    verified_all,
+                    stale,
+                    unknown,
+                    mismatch,
+                    total_wire
                 );
             }
             if unknown > 0 {
                 std::process::exit(2);
             }
             if stale > 0 || mismatch > 0 {
+                std::process::exit(3);
+            }
+        }
+        "repair" => {
+            if addrs.is_empty() || targets.is_empty() {
+                die("repair requires at least one --addr and --targets");
+            }
+            let mut store = load_store(&store_path);
+            if !have.is_empty() {
+                fold_file(&mut store, &have);
+            }
+            let text = fs::read_to_string(&targets)
+                .unwrap_or_else(|e| die(&format!("read {}: {}", targets, e)));
+            let mut selectors: Vec<[u8; 32]> = select_shas.clone();
+            for (number, line) in text.lines().enumerate() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if line.len() != 64 {
+                    die(&format!(
+                        "{}:{}: expected 64 hex characters",
+                        targets,
+                        number + 1
+                    ));
+                }
+                selectors.push(hex32(line));
+            }
+            if selectors.is_empty() {
+                die("repair targets file contained no selectors");
+            }
+            let probe_requests: Vec<peer::VerifyRequest> = selectors
+                .iter()
+                .map(|selector| peer::VerifyRequest {
+                    expected: None,
+                    selector: Some(*selector),
+                })
+                .collect();
+            let mut states: Vec<Option<Vec<peer::VerifyOutcome>>> = Vec::with_capacity(addrs.len());
+            for address in &addrs {
+                let mut attempt = 0usize;
+                let outcome = loop {
+                    let result = (|| -> uor_r4_object_store::Result<Vec<peer::VerifyOutcome>> {
+                        let stream = TcpStream::connect(address)?;
+                        let reader_stream = stream.try_clone()?;
+                        let mut reader = Counted {
+                            inner: reader_stream,
+                            bytes: 0,
+                        };
+                        let mut writer = Counted {
+                            inner: stream,
+                            bytes: 0,
+                        };
+                        peer::verify_series(&store, &probe_requests, &mut reader, &mut writer)
+                    })();
+                    match result {
+                        Ok(outcomes) => break Some(outcomes),
+                        Err(error) if attempt < retries && retryable(&error) => {
+                            attempt += 1;
+                            eprintln!("retry {}/{} after {:?}", attempt, retries, error);
+                        }
+                        Err(error) => {
+                            eprintln!("replica {} probe failed: {:?}; skipping", address, error);
+                            break None;
+                        }
+                    }
+                };
+                states.push(outcome);
+            }
+            let mut results: Vec<(RepairStatus, Option<usize>)> =
+                vec![(RepairStatus::Unavailable, None); selectors.len()];
+            let mut groups: Vec<(usize, Vec<usize>)> = Vec::new();
+            let mut current = 0usize;
+            let mut unavailable = 0usize;
+            for (index, _) in selectors.iter().enumerate() {
+                let mut chosen: Option<usize> = None;
+                let mut is_current = false;
+                for (replica, state) in states.iter().enumerate() {
+                    let Some(outcomes) = state else {
+                        continue;
+                    };
+                    let Some(outcome) = outcomes.get(index) else {
+                        continue;
+                    };
+                    match outcome {
+                        peer::VerifyOutcome::Verified { .. } => {
+                            is_current = true;
+                            chosen = Some(replica);
+                            break;
+                        }
+                        peer::VerifyOutcome::Stale { .. } => {
+                            if chosen.is_none() {
+                                chosen = Some(replica);
+                            }
+                        }
+                        peer::VerifyOutcome::Unknown | peer::VerifyOutcome::Mismatch => {}
+                    }
+                }
+                if is_current {
+                    current += 1;
+                    results[index] = (RepairStatus::Current, chosen);
+                } else if let Some(replica) = chosen {
+                    if let Some(group) = groups.iter_mut().find(|(item, _)| *item == replica) {
+                        group.1.push(index);
+                    } else {
+                        groups.push((replica, vec![index]));
+                    }
+                    results[index] = (RepairStatus::Repaired, Some(replica));
+                } else {
+                    unavailable += 1;
+                }
+            }
+            let mut failed = 0usize;
+            let mut repaired_wire = 0u64;
+            for (replica, indexes) in &groups {
+                let address = &addrs[*replica];
+                let pull_requests: Vec<peer::PullRequest> = indexes
+                    .iter()
+                    .map(|index| peer::PullRequest {
+                        expected: None,
+                        selector: Some(selectors[*index]),
+                    })
+                    .collect();
+                let mut attempt = 0usize;
+                let outcome = loop {
+                    let result =
+                        (|| -> uor_r4_object_store::Result<Vec<(Manifest, peer::PullStats)>> {
+                            let stream = TcpStream::connect(address)?;
+                            let reader_stream = stream.try_clone()?;
+                            let mut reader = Counted {
+                                inner: reader_stream,
+                                bytes: 0,
+                            };
+                            let mut writer = Counted {
+                                inner: stream,
+                                bytes: 0,
+                            };
+                            let results = peer::pull_series(
+                                &mut store,
+                                &pull_requests,
+                                &mut reader,
+                                &mut writer,
+                            )?;
+                            repaired_wire += reader.bytes + writer.bytes;
+                            Ok(results)
+                        })();
+                    match result {
+                        Ok(results) => break results,
+                        Err(error) if attempt < retries && retryable(&error) => {
+                            attempt += 1;
+                            eprintln!("retry {}/{} after {:?}", attempt, retries, error);
+                        }
+                        Err(error) => {
+                            eprintln!("repair from {} failed: {:?}", address, error);
+                            for index in indexes {
+                                results[*index] = (RepairStatus::Failed, Some(*replica));
+                            }
+                            failed += indexes.len();
+                            break Vec::new();
+                        }
+                    }
+                };
+                if outcome.len() != pull_requests.len() && !outcome.is_empty() {
+                    failed += indexes.len();
+                }
+            }
+            save_store(&store, &store_path);
+            let repaired = results
+                .iter()
+                .filter(|(status, _)| *status == RepairStatus::Repaired)
+                .count();
+            let status_name = |status: RepairStatus| match status {
+                RepairStatus::Current => "current",
+                RepairStatus::Repaired => "repaired",
+                RepairStatus::Failed => "failed",
+                RepairStatus::Unavailable => "unavailable",
+            };
+            if json {
+                let entries: Vec<String> = results
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (status, replica))| {
+                        let selector = hex(&selectors[index]);
+                        match replica {
+                            Some(replica) => format!(
+                                "{{\"selector\":\"{}\",\"status\":\"{}\",\"replica\":\"{}\"}}",
+                                selector,
+                                status_name(*status),
+                                addrs[*replica]
+                            ),
+                            None => format!(
+                                "{{\"selector\":\"{}\",\"status\":\"{}\"}}",
+                                selector,
+                                status_name(*status)
+                            ),
+                        }
+                    })
+                    .collect();
+                println!(
+                    "{{\"replicas\":{},\"checks\":{},\"current\":{},\"repaired\":{},\"unavailable\":{},\"failed\":{},\"wire_bytes\":{},\"results\":[{}]}}",
+                    addrs.len(),
+                    selectors.len(),
+                    current,
+                    repaired,
+                    unavailable,
+                    failed,
+                    repaired_wire,
+                    entries.join(",")
+                );
+            } else {
+                for (index, (status, replica)) in results.iter().enumerate() {
+                    match replica {
+                        Some(replica) => println!(
+                            "REPAIR i={} status={} replica={}",
+                            index,
+                            status_name(*status),
+                            addrs[*replica]
+                        ),
+                        None => println!("REPAIR i={} status={}", index, status_name(*status)),
+                    }
+                }
+                println!(
+                    "REPAIR_SUMMARY replicas={} checks={} current={} repaired={} unavailable={} failed={} wire_bytes={}",
+                    addrs.len(),
+                    selectors.len(),
+                    current,
+                    repaired,
+                    unavailable,
+                    failed,
+                    repaired_wire
+                );
+            }
+            if unavailable > 0 || failed > 0 {
                 std::process::exit(3);
             }
         }
@@ -493,19 +896,6 @@ fn main() {
                 fold_file(&mut store, &have);
             }
             save_store(&store, &store_path);
-            let stream = TcpStream::connect(&addr)
-                .unwrap_or_else(|e| die(&format!("connect {}: {}", addr, e)));
-            let reader_stream = stream
-                .try_clone()
-                .unwrap_or_else(|e| die(&format!("clone: {}", e)));
-            let mut reader = Counted {
-                inner: reader_stream,
-                bytes: 0,
-            };
-            let mut writer = Counted {
-                inner: stream,
-                bytes: 0,
-            };
             let expected =
                 if expect_sha.is_none() && expect_version.is_none() && expect_bytes.is_none() {
                     None
@@ -516,15 +906,38 @@ fn main() {
                         whole_sha256: expect_sha,
                     })
                 };
-            let (manifest, stats) = peer::pull_selected(
-                &mut store,
-                expected,
-                select_shas.first().copied(),
-                &mut reader,
-                &mut writer,
-            )
-            .unwrap_or_else(|e| die(&format!("pull: {:?}", e)));
-            let wire_bytes = reader.bytes + writer.bytes;
+            let mut attempt = 0usize;
+            let (manifest, stats, wire_bytes) = loop {
+                let outcome =
+                    (|| -> uor_r4_object_store::Result<(Manifest, peer::PullStats, u64)> {
+                        let stream = TcpStream::connect(&addr)?;
+                        let reader_stream = stream.try_clone()?;
+                        let mut reader = Counted {
+                            inner: reader_stream,
+                            bytes: 0,
+                        };
+                        let mut writer = Counted {
+                            inner: stream,
+                            bytes: 0,
+                        };
+                        let (manifest, stats) = peer::pull_selected(
+                            &mut store,
+                            expected,
+                            select_shas.first().copied(),
+                            &mut reader,
+                            &mut writer,
+                        )?;
+                        Ok((manifest, stats, reader.bytes + writer.bytes))
+                    })();
+                match outcome {
+                    Ok(value) => break value,
+                    Err(error) if attempt < retries && retryable(&error) => {
+                        attempt += 1;
+                        eprintln!("retry {}/{} after {:?}", attempt, retries, error);
+                    }
+                    Err(error) => die(&format!("pull: {:?}", error)),
+                }
+            };
             save_store(&store, &store_path);
             let verified = store
                 .rebuild(&manifest)

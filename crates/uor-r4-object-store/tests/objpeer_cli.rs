@@ -1,8 +1,12 @@
 //! The packaged objpeer CLI replicates a delta between two real processes over loopback.
 
 use std::io::{BufRead, BufReader, Read};
+use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::thread;
+
+use uor_r4_object_store::{peer, Limits, Store};
 
 fn atoms(n: usize, salt: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(n * 32);
@@ -497,4 +501,484 @@ fn packaged_cli_sync_targets_into_directory() {
     let _ = server.wait();
     let mut rest = String::new();
     reader.read_to_string(&mut rest).ok();
+}
+
+fn test_limits() -> Limits {
+    Limits {
+        max_object_bytes: 1 << 30,
+        max_records: 1_000_000,
+        max_record_bytes: 1 << 30,
+        max_returned_bytes: 1 << 30,
+        max_visits: 100_000_000,
+        max_occurrences: 10_000_000,
+    }
+}
+
+#[test]
+fn packaged_cli_retries_after_a_cut_connection() {
+    let dir = tmp_dir("retry");
+    let old = dir.join("old.bin");
+    let new = dir.join("new.bin");
+    let old_bytes = atoms(2048, 71);
+    let new_bytes = atoms(2064, 71);
+    std::fs::write(&old, &old_bytes).unwrap();
+    std::fs::write(&new, &new_bytes).unwrap();
+
+    let mut sender = Store::new(test_limits());
+    let manifest = sender.fold(&new_bytes).expect("fold").manifest;
+    let server_listener = TcpListener::bind("127.0.0.1:0").expect("bind server");
+    let server_addr = server_listener.local_addr().expect("server addr");
+    let server = thread::spawn(move || {
+        let (stream, _) = server_listener.accept().expect("accept");
+        let mut reader = stream.try_clone().expect("clone");
+        let mut writer = stream;
+        peer::serve(&sender, &manifest, &mut reader, &mut writer).expect("serve");
+    });
+
+    let proxy_listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy");
+    let proxy_addr = proxy_listener.local_addr().expect("proxy addr");
+    let proxy = thread::spawn(move || {
+        // First connection: cut after receiving part of the first frame.
+        let (mut cut, _) = proxy_listener.accept().expect("accept cut");
+        let mut buffer = [0u8; 16];
+        let _ = cut.read(&mut buffer);
+        drop(cut);
+        // Second connection: bridge to the server.
+        let (client, _) = proxy_listener.accept().expect("accept bridge");
+        let upstream = TcpStream::connect(server_addr).expect("upstream");
+        let mut client_read = client.try_clone().expect("clone client");
+        let mut upstream_write = upstream.try_clone().expect("clone upstream");
+        let pump = thread::spawn(move || {
+            let _ = std::io::copy(&mut client_read, &mut upstream_write);
+        });
+        let mut upstream_read = upstream;
+        let mut client_write = client;
+        let _ = std::io::copy(&mut upstream_read, &mut client_write);
+        pump.join().ok();
+    });
+
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("pull")
+        .arg("--store")
+        .arg(dir.join("client.store"))
+        .arg("--have")
+        .arg(&old)
+        .arg("--addr")
+        .arg(proxy_addr.to_string())
+        .arg("--out")
+        .arg(dir.join("out.bin"))
+        .args(["--retries", "2"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(out.status.success(), "retry pull failed: {}", stderr);
+    assert!(
+        stderr.contains("retry 1/2"),
+        "expected a retry line in stderr: {}",
+        stderr
+    );
+    assert_eq!(std::fs::read(dir.join("out.bin")).unwrap(), new_bytes);
+    server.join().expect("server");
+    proxy.join().expect("proxy");
+}
+
+#[test]
+fn packaged_cli_verify_retries_after_a_cut_connection() {
+    use sha2::{Digest, Sha256};
+
+    let dir = tmp_dir("verify-retry");
+    let object = dir.join("object.bin");
+    let payload = atoms(64, 81);
+    std::fs::write(&object, &payload).unwrap();
+
+    let mut sender = Store::new(test_limits());
+    let manifest = sender.fold(&payload).expect("fold").manifest;
+    let server_listener = TcpListener::bind("127.0.0.1:0").expect("bind server");
+    let server_addr = server_listener.local_addr().expect("server addr");
+    let server = thread::spawn(move || {
+        let (stream, _) = server_listener.accept().expect("accept");
+        let mut reader = stream.try_clone().expect("clone");
+        let mut writer = stream;
+        peer::serve(&sender, &manifest, &mut reader, &mut writer).expect("serve");
+    });
+
+    let proxy_listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy");
+    let proxy_addr = proxy_listener.local_addr().expect("proxy addr");
+    let proxy = thread::spawn(move || {
+        let (mut cut, _) = proxy_listener.accept().expect("accept cut");
+        let mut buffer = [0u8; 16];
+        let _ = cut.read(&mut buffer);
+        drop(cut);
+        let (client, _) = proxy_listener.accept().expect("accept bridge");
+        let upstream = TcpStream::connect(server_addr).expect("upstream");
+        let mut client_read = client.try_clone().expect("clone client");
+        let mut upstream_write = upstream.try_clone().expect("clone upstream");
+        let pump = thread::spawn(move || {
+            let _ = std::io::copy(&mut client_read, &mut upstream_write);
+        });
+        let mut upstream_read = upstream;
+        let mut client_write = client;
+        let _ = std::io::copy(&mut upstream_read, &mut client_write);
+        pump.join().ok();
+    });
+
+    let digest = Sha256::digest(&payload);
+    let sha: String = digest.iter().map(|byte| format!("{:02x}", byte)).collect();
+    let targets = dir.join("targets.txt");
+    std::fs::write(&targets, format!("{}\n", sha)).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("verify")
+        .arg("--store")
+        .arg(dir.join("client.store"))
+        .arg("--have")
+        .arg(&object)
+        .arg("--addr")
+        .arg(proxy_addr.to_string())
+        .arg("--targets")
+        .arg(&targets)
+        .args(["--retries", "2"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(out.status.success(), "verify retry failed: {}", stderr);
+    assert!(
+        stderr.contains("retry 1/2"),
+        "expected retry line: {}",
+        stderr
+    );
+    assert!(
+        stdout.contains("verified=1"),
+        "expected verified audit: {}",
+        stdout
+    );
+    server.join().expect("server");
+    proxy.join().expect("proxy");
+}
+
+fn sha_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect()
+}
+
+#[test]
+fn packaged_cli_multi_replica_audit() {
+    let dir = tmp_dir("replicas");
+    let object = dir.join("object.bin");
+    let payload = atoms(64, 91);
+    std::fs::write(&object, &payload).unwrap();
+    let (mut server1, mut reader1, addr1, _) =
+        spawn_serve_many(&dir.join("server1.store"), &[&object], 1);
+    let (mut server2, mut reader2, addr2, _) =
+        spawn_serve_many(&dir.join("server2.store"), &[&object], 1);
+    let client = dir.join("client.store");
+    assert!(Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .args(["info", "--store"])
+        .arg(&client)
+        .arg("--object")
+        .arg(&object)
+        .output()
+        .unwrap()
+        .status
+        .success());
+    let targets = dir.join("targets.txt");
+    std::fs::write(&targets, format!("{}\n", sha_hex(&payload))).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("verify")
+        .arg("--store")
+        .arg(&client)
+        .arg("--targets")
+        .arg(&targets)
+        .arg("--addr")
+        .arg(&addr1)
+        .arg("--addr")
+        .arg(&addr2)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        out.status.success(),
+        "multi replica audit failed: {}",
+        stdout
+    );
+    assert!(stdout.contains("\"replicas\":2"), "{}", stdout);
+    assert_eq!(
+        stdout.matches("\"status\":\"verified\"").count(),
+        2,
+        "{}",
+        stdout
+    );
+    let _ = server1.wait();
+    let _ = server2.wait();
+    let mut sink = String::new();
+    reader1.read_to_string(&mut sink).ok();
+    reader2.read_to_string(&mut sink).ok();
+}
+
+#[test]
+fn packaged_cli_multi_replica_reports_unknown_on_one_replica() {
+    let dir = tmp_dir("replicas-miss");
+    let object1 = dir.join("one.bin");
+    let object2 = dir.join("two.bin");
+    let first = atoms(64, 92);
+    let second = atoms(64, 93);
+    std::fs::write(&object1, &first).unwrap();
+    std::fs::write(&object2, &second).unwrap();
+    let (mut server1, mut reader1, addr1, _) =
+        spawn_serve_many(&dir.join("server1.store"), &[&object1], 1);
+    let (mut server2, mut reader2, addr2, _) =
+        spawn_serve_many(&dir.join("server2.store"), &[&object2], 1);
+    let client = dir.join("client.store");
+    assert!(Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .args(["info", "--store"])
+        .arg(&client)
+        .arg("--object")
+        .arg(&object1)
+        .output()
+        .unwrap()
+        .status
+        .success());
+    let targets = dir.join("targets.txt");
+    std::fs::write(&targets, format!("{}\n", sha_hex(&first))).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("verify")
+        .arg("--store")
+        .arg(&client)
+        .arg("--targets")
+        .arg(&targets)
+        .arg("--addr")
+        .arg(&addr1)
+        .arg("--addr")
+        .arg(&addr2)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "expected unknown exit: {}",
+        stdout
+    );
+    assert!(stdout.contains("\"replicas\":2"), "{}", stdout);
+    assert_eq!(
+        stdout.matches("\"status\":\"verified\"").count(),
+        1,
+        "{}",
+        stdout
+    );
+    assert_eq!(
+        stdout.matches("\"status\":\"unknown\"").count(),
+        1,
+        "{}",
+        stdout
+    );
+    let _ = server1.wait();
+    let _ = server2.wait();
+    let mut sink = String::new();
+    reader1.read_to_string(&mut sink).ok();
+    reader2.read_to_string(&mut sink).ok();
+}
+
+#[test]
+fn packaged_cli_sync_fails_over_from_a_dead_replica() {
+    let dir = tmp_dir("sync-failover-dead");
+    let object = dir.join("object.bin");
+    let payload = atoms(64, 101);
+    std::fs::write(&object, &payload).unwrap();
+    let (mut server, mut reader, addr, _) =
+        spawn_serve_many(&dir.join("server.store"), &[&object], 1);
+    let targets = dir.join("targets.txt");
+    std::fs::write(&targets, format!("{}\n", sha_hex(&payload))).unwrap();
+    let out_dir = dir.join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("sync")
+        .arg("--store")
+        .arg(dir.join("client.store"))
+        .arg("--addr")
+        .arg("127.0.0.1:1")
+        .arg("--addr")
+        .arg(&addr)
+        .arg("--targets")
+        .arg(&targets)
+        .arg("--out-dir")
+        .arg(&out_dir)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(
+        out.status.success(),
+        "failover sync failed: {} {}",
+        stdout,
+        stderr
+    );
+    assert!(stderr.contains("unavailable for sync"), "{}", stderr);
+    assert!(stdout.contains("\"artifacts\":1"), "{}", stdout);
+    assert!(
+        stdout.contains(&format!("\"replica\":\"{}\"", addr)),
+        "expected second replica in JSON: {}",
+        stdout
+    );
+    assert_eq!(
+        std::fs::read(out_dir.join(format!("{}.bin", sha_hex(&payload)))).unwrap(),
+        payload
+    );
+    let _ = server.wait();
+    let mut sink = String::new();
+    reader.read_to_string(&mut sink).ok();
+}
+
+#[test]
+fn packaged_cli_sync_fails_over_when_first_replica_lacks_the_target() {
+    let dir = tmp_dir("sync-failover-missing");
+    let target = dir.join("target.bin");
+    let other = dir.join("other.bin");
+    let target_payload = atoms(64, 102);
+    std::fs::write(&target, &target_payload).unwrap();
+    std::fs::write(&other, atoms(64, 103)).unwrap();
+    let (mut server1, mut reader1, addr1, _) =
+        spawn_serve_many(&dir.join("server1.store"), &[&other], 1);
+    let (mut server2, mut reader2, addr2, _) =
+        spawn_serve_many(&dir.join("server2.store"), &[&target], 1);
+    let targets = dir.join("targets.txt");
+    std::fs::write(&targets, format!("{}\n", sha_hex(&target_payload))).unwrap();
+    let out_dir = dir.join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("sync")
+        .arg("--store")
+        .arg(dir.join("client.store"))
+        .arg("--addr")
+        .arg(&addr1)
+        .arg("--addr")
+        .arg(&addr2)
+        .arg("--targets")
+        .arg(&targets)
+        .arg("--out-dir")
+        .arg(&out_dir)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(
+        out.status.success(),
+        "missing-target failover failed: {} {}",
+        stdout,
+        stderr
+    );
+    assert!(stderr.contains("unavailable for sync"), "{}", stderr);
+    assert!(
+        stdout.contains(&format!("\"replica\":\"{}\"", addr2)),
+        "expected second replica in JSON: {}",
+        stdout
+    );
+    let _ = server1.wait();
+    let _ = server2.wait();
+    let mut sink = String::new();
+    reader1.read_to_string(&mut sink).ok();
+    reader2.read_to_string(&mut sink).ok();
+}
+
+#[test]
+fn packaged_cli_repair_restores_split_targets() {
+    let dir = tmp_dir("repair");
+    let one = dir.join("one.bin");
+    let two = dir.join("two.bin");
+    let first = atoms(64, 111);
+    let second = atoms(64, 112);
+    std::fs::write(&one, &first).unwrap();
+    std::fs::write(&two, &second).unwrap();
+    let (mut server1, mut reader1, addr1, _) =
+        spawn_serve_many(&dir.join("server1.store"), &[&one], 3);
+    let (mut server2, mut reader2, addr2, _) =
+        spawn_serve_many(&dir.join("server2.store"), &[&two], 3);
+    let targets = dir.join("targets.txt");
+    std::fs::write(
+        &targets,
+        format!("{}\n{}\n", sha_hex(&first), sha_hex(&second)),
+    )
+    .unwrap();
+    let client = dir.join("client.store");
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("repair")
+        .arg("--store")
+        .arg(&client)
+        .arg("--targets")
+        .arg(&targets)
+        .arg("--addr")
+        .arg(&addr1)
+        .arg("--addr")
+        .arg(&addr2)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(out.status.success(), "repair failed: {} {}", stdout, stderr);
+    assert!(stdout.contains("\"repaired\":2"), "{}", stdout);
+    assert!(stdout.contains("\"unavailable\":0"), "{}", stdout);
+    // Prove the local store is now current: pulling from the same replica moves 0 records.
+    for (object, address) in [(&one, &addr1), (&two, &addr2)] {
+        let sha = sha_hex(&std::fs::read(object).unwrap());
+        let pulled = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+            .arg("pull")
+            .arg("--store")
+            .arg(&client)
+            .arg("--addr")
+            .arg(address)
+            .arg("--select-sha256")
+            .arg(&sha)
+            .arg("--out")
+            .arg(dir.join(format!("out-{}.bin", sha)))
+            .output()
+            .unwrap();
+        let pull_stdout = String::from_utf8_lossy(&pulled.stdout).to_string();
+        assert!(pulled.status.success(), "{}", pull_stdout);
+        assert!(pull_stdout.contains("nodes=0"), "{}", pull_stdout);
+    }
+    let _ = server1.wait();
+    let _ = server2.wait();
+    let mut sink = String::new();
+    reader1.read_to_string(&mut sink).ok();
+    reader2.read_to_string(&mut sink).ok();
+}
+
+#[test]
+fn packaged_cli_repair_reports_unavailable_targets() {
+    let dir = tmp_dir("repair-missing");
+    let present = dir.join("present.bin");
+    let ghost = atoms(64, 113);
+    std::fs::write(&present, atoms(64, 114)).unwrap();
+    let (mut server, mut reader, addr, _) =
+        spawn_serve_many(&dir.join("server.store"), &[&present], 2);
+    let targets = dir.join("targets.txt");
+    std::fs::write(
+        &targets,
+        format!("{}\n{}\n", sha_hex(&atoms(64, 114)), sha_hex(&ghost)),
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("repair")
+        .arg("--store")
+        .arg(dir.join("client.store"))
+        .arg("--targets")
+        .arg(&targets)
+        .arg("--addr")
+        .arg(&addr)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert_eq!(out.status.code(), Some(3), "expected exit 3: {}", stdout);
+    assert!(stdout.contains("\"repaired\":1"), "{}", stdout);
+    assert!(stdout.contains("\"unavailable\":1"), "{}", stdout);
+    let _ = server.wait();
+    let mut sink = String::new();
+    reader.read_to_string(&mut sink).ok();
 }

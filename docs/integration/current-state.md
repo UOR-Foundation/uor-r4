@@ -21,6 +21,56 @@ slots remain GPU observations; the map alone supplies no same-cell result.
 Headline unchanged, no progress reset or mechanism verdict. Training/M2/StageB
 HELD; Q4 NOT_EXECUTABLE.
 
+## 2026-10-17 — objpeer repair: audit, select, pull missing targets (deepseek/object-store-repair)
+
+The [repair record](../labs/object-store-repair-2026-10-17/README.md) adds objpeer repair: probe each
+replica, classify each target current/repaired/unavailable, group repairs by the replica that holds them
+and pull only the missing targets, with per-target status, JSON totals and exit 3 on unavailable/failed
+targets. Tests cover split targets across replicas (follow-up pull moves 0 records, proving the local
+store is current) and an unavailable target. CLI 16/16, peer 15/15, controls 10/10, vectors 1/1, showcase
+5/5; Clippy -D warnings and fmt clean. No model compute; training/M2/Stage B HELD. **Next:** protected
+delivery, then a packaged repair demo on real artifacts and INDEX update.
+
+## 2026-10-17 — Replica-aware sync with failover (deepseek/object-store-replica-sync)
+
+The [replica-sync record](../labs/object-store-replica-sync-2026-10-17/README.md) makes objpeer sync
+replica-aware: repeated --addr is tried in order with per-replica retries, a failed or incomplete
+replica falls through to the next, and the artifact set is written once with the serving replica
+reported in JSON/SYNC_SERIES. Tests cover a dead first replica and a first replica missing the target.
+CLI 14/14, peer 15/15, controls 10/10, vectors 1/1, showcase 5/5; Clippy -D warnings and fmt clean. No
+model compute; training/M2/Stage B HELD. **Next:** protected delivery, then a local end-to-end
+audit-then-failover-sync repair demo and INDEX update.
+
+## 2026-10-17 — Replica-aware fleet audit (deepseek/object-store-replica-audit)
+
+The [replica-audit record](../labs/object-store-replica-audit-2026-10-17/README.md) lets objpeer verify
+take repeated --addr and report per-target per-replica status: JSON gains replicas/verified_all and
+per-target replica entries, human output gains REPLICA lines plus VERIFY_REPLICAS, and exit codes flag
+any unknown (2) or stale/mismatch (3) on any replica. Single-address output is unchanged. Two new CLI
+tests cover all-replicas-verified and one-replica-unknown. CLI 12/12, peer 15/15, controls 10/10,
+vectors 1/1, showcase 5/5; Clippy -D warnings and fmt clean. No model compute; training/M2/Stage B
+HELD. **Next:** protected delivery, then a two-replica local audit benchmark and INDEX update.
+
+## 2026-10-17 — Read-only retries for verify and fleet audit (deepseek/object-store-verify-retry)
+
+The [verify-retry record](../labs/object-store-verify-retry-2026-10-17/README.md) extends reconnect/retry
+to objpeer verify and therefore fleet audit: --retries N re-runs the pipelined series after retryable
+I/O/schema/integrity failures, while binding/unknown/limit errors stop early; verification is read-only
+so retries cannot corrupt state. A cutting-proxy CLI test cuts the first connection and bridges the
+second, yielding a successful verified audit with a retry line. CLI 10/10, peer 15/15, controls 10/10,
+vectors 1/1, showcase 5/5; Clippy -D warnings and fmt clean. No model compute; training/M2/Stage B
+HELD. **Next:** protected delivery, then product consolidation with the measured-surface index.
+
+## 2026-10-17 — Reconnect and retry for real networks (deepseek/object-store-retry)
+
+The [retry record](../labs/object-store-retry-2026-10-17/README.md) adds opt-in --retries N to objpeer
+pull and sync: each attempt reconnects, retryable I/O/schema/integrity failures print retry n/N and retry,
+while binding/unknown/limit errors stop early. Atomic digest-verified imports make retries safe, and a
+cutting-proxy CLI test (first connection cut, second bridged) proves a real reconnect and byte-identical
+output. CLI 9/9, peer 15/15, controls 10/10, vectors 1/1, showcase 5/5; Clippy -D warnings and fmt
+clean. No model compute; training/M2/Stage B HELD. **Next:** protected delivery, then a WAN flap test
+against the pod proxy if useful.
+
 ## 2026-10-17 — Protocol spec note: node id is standard BLAKE2b-96 (deepseek/object-store-spec-note)
 
 The [spec note](../labs/object-store-spec-note-2026-10-17/README.md) records that node_id(scale,payload)
