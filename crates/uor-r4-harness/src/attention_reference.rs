@@ -47,6 +47,12 @@ pub const CANONICAL_BOS: u16 = 0;
 pub const UNUSED_CELL_SLOT: u32 = u32::MAX;
 
 pub const TOKEN_CELLS_RECEIPT_SCHEMA: &str = "uor-r4.attention-token-cells/1";
+pub const TOKEN_CELLS_RECEIPT_STATUS: &str = "DEVICE_TOKEN_CELL_MAP_EXPORTED_ZERO_APPLY";
+
+pub const CANONICAL_PSUCC_TOP1_FLOOR: u64 = 24;
+pub const CANONICAL_PSUCC_TOP8_FLOOR: u64 = 39;
+pub const CANONICAL_COMPLEMENT_TOP1_FLOOR: u64 = 22;
+pub const CANONICAL_COMPLEMENT_TOP8_FLOOR: u64 = 63;
 
 /// Pure-integer SHA-256 implementation (FIPS 180-4) for receipt pinning.
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -143,15 +149,23 @@ pub struct TokenCellsReceipt {
     pub token_cells: Vec<u32>,
 }
 
-/// Validated GPU-exported `token_cells[4096]` loaded from `token_cells.u16` or JSON receipt.
+/// Validated GPU-exported `token_cells[4096]` loaded from an `attention-export-token-cells`
+/// receipt (`uor-r4.attention-token-cells/1`) and its bound `token_cells.u16`.
 #[derive(Debug, Clone)]
 pub struct LoadedTokenCells {
     pub token_cells: Vec<u32>,
     pub occupied_cells: usize,
     pub token_cells_sha256: String,
-    pub report_sha256: Option<String>,
-    pub driver_checkpoint_sha256: Option<String>,
-    pub model_snapshot_sha256: Option<String>,
+    pub report_sha256: String,
+    pub config_sha256: Option<String>,
+    pub config_file_sha256: Option<String>,
+    pub lineage_sha256: Option<String>,
+    pub driver_checkpoint_sha256: String,
+    pub checkpoint_file_sha256: Option<String>,
+    pub model_snapshot_sha256: String,
+    pub model_epoch: Option<u64>,
+    pub completed_batches: Option<u64>,
+    pub model_bindings: Option<Value>,
 }
 
 /// External receipt supplying GPU-exported token cells and registered non-model ranked candidate lists.
@@ -234,35 +248,39 @@ pub struct DevCorpusRow {
     pub window_query_successors_most_recent_first: Vec<u32>,
 }
 
-/// Parse a raw `8,192`-byte (`4,096 * u16` little-endian) or `8,256`-byte `UORT` v1
-/// `token_cells.u16` byte slice into `4,096` cell IDs in `0..256`.
-pub fn parse_token_cells_u16_bytes(bytes: &[u8], label: &str) -> Result<(Vec<u32>, usize), String> {
-    let payload: &[u8] = if bytes.len() == CANONICAL_VOCAB * 2 {
-        bytes
-    } else if bytes.len() == 64 + CANONICAL_VOCAB * 2 && &bytes[..4] == b"UORT" {
-        let version = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-        if version != 1 {
-            return Err(format!("{label}: unsupported UORT version {version}"));
-        }
-        let count = u64::from_le_bytes([
-            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
-        ]) as usize;
-        if count != CANONICAL_VOCAB {
-            return Err(format!("{label}: UORT count {count} != {CANONICAL_VOCAB}"));
-        }
-        &bytes[64..]
-    } else {
+/// Encode `4,096` cell IDs (`0..256`) into the canonical `8,192`-byte raw little-endian
+/// `token_cells.u16` byte representation (no header).
+pub fn encode_token_cells_u16_le(token_cells: &[u32]) -> Result<Vec<u8>, String> {
+    if token_cells.len() != CANONICAL_VOCAB {
         return Err(format!(
-            "{label}: expected {} bytes (raw u16x4096) or {} bytes (UORT v1), got {} bytes",
+            "token_cells length {} != {CANONICAL_VOCAB}",
+            token_cells.len()
+        ));
+    }
+    let mut out = Vec::with_capacity(CANONICAL_VOCAB * 2);
+    for (idx, &c) in token_cells.iter().enumerate() {
+        if c >= 256 {
+            return Err(format!("token_cells[{idx}] = {c} >= 256"));
+        }
+        out.extend_from_slice(&(c as u16).to_le_bytes());
+    }
+    Ok(out)
+}
+
+/// Parse a raw `8,192`-byte (`4,096 * u16` little-endian, no header) `token_cells.u16`
+/// byte slice into `4,096` cell IDs in `0..256`.
+pub fn parse_token_cells_u16_bytes(bytes: &[u8], label: &str) -> Result<(Vec<u32>, usize), String> {
+    if bytes.len() != CANONICAL_VOCAB * 2 {
+        return Err(format!(
+            "{label}: expected {} bytes (raw u16x4096 little-endian, no header), got {} bytes",
             CANONICAL_VOCAB * 2,
-            64 + CANONICAL_VOCAB * 2,
             bytes.len()
         ));
-    };
+    }
 
     let mut token_cells = Vec::with_capacity(CANONICAL_VOCAB);
     let mut occupied = BTreeSet::new();
-    for (idx, pair) in payload.chunks_exact(2).enumerate() {
+    for (idx, pair) in bytes.chunks_exact(2).enumerate() {
         let cell = u32::from(u16::from_le_bytes([pair[0], pair[1]]));
         if cell >= 256 {
             return Err(format!("{label}: token_cells[{idx}] = {cell} >= 256"));
@@ -273,22 +291,120 @@ pub fn parse_token_cells_u16_bytes(bytes: &[u8], label: &str) -> Result<(Vec<u32
     Ok((token_cells, occupied.len()))
 }
 
-/// Validate a GPU-exported `token_cells` JSON receipt against optional expected
-/// checkpoint and snapshot SHA-256 digests without any host codebook or `root_id` arithmetic.
-pub fn parse_token_cells_receipt(
+fn validate_token_cells_report_envelope(
     receipt_value: &Value,
     expected_driver_checkpoint_sha256: &str,
     expected_model_snapshot_sha256: &str,
-) -> Result<(Vec<u32>, usize), String> {
+) -> Result<(String, Option<String>, String), String> {
+    if receipt_value.get("schema").and_then(Value::as_str) != Some(TOKEN_CELLS_RECEIPT_SCHEMA) {
+        return Err(format!(
+            "token_cells receipt: expected schema '{TOKEN_CELLS_RECEIPT_SCHEMA}', got {:?}",
+            receipt_value.get("schema")
+        ));
+    }
+    if receipt_value.get("status").and_then(Value::as_str) != Some(TOKEN_CELLS_RECEIPT_STATUS) {
+        return Err(format!(
+            "token_cells receipt: expected status '{TOKEN_CELLS_RECEIPT_STATUS}', got {:?}",
+            receipt_value.get("status")
+        ));
+    }
+    if receipt_value.get("updates_applied").and_then(Value::as_u64) != Some(0)
+        || receipt_value
+            .get("snapshot_unchanged")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        return Err(
+            "token_cells receipt: updates_applied == 0 and snapshot_unchanged == true are required"
+                .to_string(),
+        );
+    }
+    if let Some(proposals) = receipt_value.get("proposals").and_then(Value::as_u64) {
+        if proposals != 0 {
+            return Err(format!("token_cells receipt: proposals ({proposals}) != 0"));
+        }
+    }
+    if let Some(fwd) = receipt_value
+        .get("gpu_forward_calls")
+        .and_then(Value::as_u64)
+    {
+        if fwd != 0 {
+            return Err(format!(
+                "token_cells receipt: gpu_forward_calls ({fwd}) != 0"
+            ));
+        }
+    }
+    if let Some(cap) = receipt_value
+        .get("training_capability_issued")
+        .and_then(Value::as_bool)
+    {
+        if cap {
+            return Err(
+                "token_cells receipt: training_capability_issued must be false".to_string(),
+            );
+        }
+    }
+    if let Some(host_rec) = receipt_value
+        .get("host_cell_reconstruction")
+        .and_then(Value::as_bool)
+    {
+        if host_rec {
+            return Err("token_cells receipt: host_cell_reconstruction must be false".to_string());
+        }
+    }
+    if let Some(absent_ok) = receipt_value
+        .get("absent_cells_allowed")
+        .and_then(Value::as_bool)
+    {
+        if absent_ok {
+            return Err("token_cells receipt: absent_cells_allowed must be false".to_string());
+        }
+    }
+    if let Some(cnt) = receipt_value.get("token_count").and_then(Value::as_u64) {
+        if cnt != CANONICAL_VOCAB as u64 {
+            return Err(format!(
+                "token_cells receipt: token_count ({cnt}) != {CANONICAL_VOCAB}"
+            ));
+        }
+    }
+    if let Some(bc) = receipt_value.get("byte_count").and_then(Value::as_u64) {
+        if bc != (CANONICAL_VOCAB * 2) as u64 {
+            return Err(format!(
+                "token_cells receipt: byte_count ({bc}) != {}",
+                CANONICAL_VOCAB * 2
+            ));
+        }
+    }
+    if let Some(enc) = receipt_value.get("encoding").and_then(Value::as_str) {
+        if enc != "raw_u16_le_no_header" {
+            return Err(format!("token_cells receipt: unexpected encoding '{enc}'"));
+        }
+    }
+    if let Some(ord) = receipt_value.get("ordering").and_then(Value::as_str) {
+        if ord != "ascending_token_id_0_through4095" {
+            return Err(format!("token_cells receipt: unexpected ordering '{ord}'"));
+        }
+    }
+
     let ckpt_sha = receipt_value
         .get("driver_checkpoint_sha256")
-        .or_else(|| {
-            receipt_value
-                .get("checkpoint_file")
-                .and_then(|v| v.get("sha256"))
-        })
         .and_then(Value::as_str)
-        .ok_or_else(|| "token_cells receipt: missing driver_checkpoint_sha256".to_string())?;
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "token_cells receipt: missing driver_checkpoint_sha256".to_string())?
+        .to_string();
+    let ckpt_file_sha = receipt_value
+        .get("checkpoint_file")
+        .and_then(|v| v.get("sha256"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let snap_sha = receipt_value
+        .get("model_snapshot_sha256")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "token_cells receipt: missing model_snapshot_sha256".to_string())?
+        .to_string();
+
     if !expected_driver_checkpoint_sha256.is_empty()
         && ckpt_sha != expected_driver_checkpoint_sha256
     {
@@ -296,32 +412,26 @@ pub fn parse_token_cells_receipt(
             "token_cells receipt driver_checkpoint_sha256 ({ckpt_sha}) != expected ({expected_driver_checkpoint_sha256})"
         ));
     }
-    if let Some(snap_sha) = receipt_value
-        .get("model_snapshot_sha256")
-        .and_then(Value::as_str)
-    {
-        if !expected_model_snapshot_sha256.is_empty() && snap_sha != expected_model_snapshot_sha256
-        {
-            return Err(format!(
-                "token_cells receipt model_snapshot_sha256 ({snap_sha}) != expected ({expected_model_snapshot_sha256})"
-            ));
-        }
+    if !expected_model_snapshot_sha256.is_empty() && snap_sha != expected_model_snapshot_sha256 {
+        return Err(format!(
+            "token_cells receipt model_snapshot_sha256 ({snap_sha}) != expected ({expected_model_snapshot_sha256})"
+        ));
     }
-    if let Some(updates) = receipt_value.get("updates_applied").and_then(Value::as_u64) {
-        if updates != 0 {
-            return Err(format!(
-                "token_cells receipt: updates_applied ({updates}) != 0"
-            ));
-        }
-    }
-    if let Some(unchanged) = receipt_value
-        .get("snapshot_unchanged")
-        .and_then(Value::as_bool)
-    {
-        if !unchanged {
-            return Err("token_cells receipt: snapshot_unchanged must be true".to_string());
-        }
-    }
+    Ok((ckpt_sha, ckpt_file_sha, snap_sha))
+}
+
+/// Validate a GPU-exported `token_cells` JSON receipt against optional expected
+/// checkpoint and snapshot SHA-256 digests without any host codebook or `root_id` arithmetic.
+pub fn parse_token_cells_receipt(
+    receipt_value: &Value,
+    expected_driver_checkpoint_sha256: &str,
+    expected_model_snapshot_sha256: &str,
+) -> Result<(Vec<u32>, usize), String> {
+    let _ = validate_token_cells_report_envelope(
+        receipt_value,
+        expected_driver_checkpoint_sha256,
+        expected_model_snapshot_sha256,
+    )?;
     let cells_arr = receipt_value
         .get("token_cells")
         .and_then(Value::as_array)
@@ -345,14 +455,89 @@ pub fn parse_token_cells_receipt(
         token_cells.push(c);
         occupied.insert(c);
     }
+    let le_bytes = encode_token_cells_u16_le(&token_cells)?;
+    let actual_sha = sha256_hex(&le_bytes);
+    if let Some(claimed_sha) = receipt_value
+        .get("token_cells_file")
+        .and_then(|f| f.get("sha256"))
+        .or_else(|| receipt_value.get("token_cells_sha256"))
+        .or_else(|| receipt_value.get("token_cells_u16_sha256"))
+        .and_then(Value::as_str)
+    {
+        if claimed_sha != actual_sha {
+            return Err(format!(
+                "token_cells receipt: claimed token_cells sha256 ({claimed_sha}) != encoded u16LE sha256 ({actual_sha})"
+            ));
+        }
+    }
     Ok((token_cells, occupied.len()))
 }
 
+fn build_loaded_from_report_and_u16(
+    rep_val: &Value,
+    rep_sha: String,
+    u16_bytes: &[u8],
+    u16_label: &str,
+    expected_driver_checkpoint_sha256: &str,
+    expected_model_snapshot_sha256: &str,
+) -> Result<LoadedTokenCells, String> {
+    let (ckpt_sha, ckpt_file_sha, snap_sha) = validate_token_cells_report_envelope(
+        rep_val,
+        expected_driver_checkpoint_sha256,
+        expected_model_snapshot_sha256,
+    )?;
+    let u16_sha = sha256_hex(u16_bytes);
+    let pinned_u16_sha = rep_val
+        .get("token_cells_file")
+        .and_then(|f| f.get("sha256"))
+        .or_else(|| rep_val.get("token_cells_sha256"))
+        .or_else(|| rep_val.get("token_cells_u16_sha256"))
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            "token_cells report: missing token_cells_file.sha256 (or token_cells_sha256)"
+                .to_string()
+        })?;
+    if pinned_u16_sha != u16_sha {
+        return Err(format!(
+            "token_cells.u16 sha256 ({u16_sha}) != report pin ({pinned_u16_sha})"
+        ));
+    }
+    let (token_cells, occupied_cells) = parse_token_cells_u16_bytes(u16_bytes, u16_label)?;
+    Ok(LoadedTokenCells {
+        token_cells,
+        occupied_cells,
+        token_cells_sha256: u16_sha,
+        report_sha256: rep_sha,
+        config_sha256: rep_val
+            .get("config_sha256")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        config_file_sha256: rep_val
+            .get("config_file")
+            .and_then(|v| v.get("sha256"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        lineage_sha256: rep_val
+            .get("lineage_sha256")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        driver_checkpoint_sha256: ckpt_sha,
+        checkpoint_file_sha256: ckpt_file_sha,
+        model_snapshot_sha256: snap_sha,
+        model_epoch: rep_val.get("model_epoch").and_then(Value::as_u64),
+        completed_batches: rep_val.get("completed_batches").and_then(Value::as_u64),
+        model_bindings: rep_val.get("model_bindings").cloned(),
+    })
+}
+
 /// Load GPU-exported `token_cells[4096]` from either:
-/// - a binary `token_cells.u16` file (`8,192` raw little-endian bytes or `8,256`-byte `UORT` v1),
-///   automatically cross-checking any sibling `report.json` in the same directory if present, or
-/// - a JSON receipt/report file containing `"token_cells": [...]` or referencing a sibling
-///   `token_cells.u16` binary file.
+/// - a binary `token_cells.u16` file (`8,192` raw little-endian bytes) accompanied by a
+///   required sibling `report.json` (`uor-r4.attention-token-cells/1`), or
+/// - a JSON `report.json` (`uor-r4.attention-token-cells/1`) referencing its sibling
+///   `token_cells.u16` binary file (or carrying an inline `token_cells` array with verified
+///   `token_cells_file.sha256`).
+/// A bare `token_cells.u16` without a valid `uor-r4.attention-token-cells/1` receipt is refused.
 pub fn load_gpu_token_cells_file(
     path: &Path,
     expected_driver_checkpoint_sha256: &str,
@@ -365,70 +550,44 @@ pub fn load_gpu_token_cells_file(
     if trimmed == Some(b'{') {
         let val: Value = serde_json::from_slice(&bytes)
             .map_err(|e| format!("token_cells JSON ({}): {e}", path.display()))?;
-        let ckpt_sha = val
-            .get("driver_checkpoint_sha256")
-            .or_else(|| val.get("checkpoint_file").and_then(|v| v.get("sha256")))
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        let snap_sha = val
-            .get("model_snapshot_sha256")
-            .and_then(Value::as_str)
-            .map(str::to_string);
         if val.get("token_cells").is_some() {
+            let (ckpt_sha, ckpt_file_sha, snap_sha) = validate_token_cells_report_envelope(
+                &val,
+                expected_driver_checkpoint_sha256,
+                expected_model_snapshot_sha256,
+            )?;
             let (token_cells, occupied_cells) = parse_token_cells_receipt(
                 &val,
                 expected_driver_checkpoint_sha256,
                 expected_model_snapshot_sha256,
             )?;
-            let mut le_bytes = Vec::with_capacity(CANONICAL_VOCAB * 2);
-            for &c in &token_cells {
-                le_bytes.extend_from_slice(&(c as u16).to_le_bytes());
-            }
-            let tc_sha = val
-                .get("token_cells_sha256")
-                .or_else(|| val.get("token_cells_u16_sha256"))
-                .or_else(|| val.get("token_cells_file").and_then(|f| f.get("sha256")))
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .unwrap_or_else(|| sha256_hex(&le_bytes));
+            let le_bytes = encode_token_cells_u16_le(&token_cells)?;
+            let tc_sha = sha256_hex(&le_bytes);
             return Ok(LoadedTokenCells {
                 token_cells,
                 occupied_cells,
                 token_cells_sha256: tc_sha,
-                report_sha256: Some(file_sha),
+                report_sha256: file_sha,
+                config_sha256: val
+                    .get("config_sha256")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                config_file_sha256: val
+                    .get("config_file")
+                    .and_then(|v| v.get("sha256"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                lineage_sha256: val
+                    .get("lineage_sha256")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 driver_checkpoint_sha256: ckpt_sha,
+                checkpoint_file_sha256: ckpt_file_sha,
                 model_snapshot_sha256: snap_sha,
+                model_epoch: val.get("model_epoch").and_then(Value::as_u64),
+                completed_batches: val.get("completed_batches").and_then(Value::as_u64),
+                model_bindings: val.get("model_bindings").cloned(),
             });
-        }
-        // JSON report referencing a binary token_cells.u16 file
-        if let Some(ref c_sha) = ckpt_sha {
-            if !expected_driver_checkpoint_sha256.is_empty()
-                && c_sha != expected_driver_checkpoint_sha256
-            {
-                return Err(format!(
-                    "token_cells report driver_checkpoint_sha256 ({c_sha}) != expected ({expected_driver_checkpoint_sha256})"
-                ));
-            }
-        }
-        if let Some(ref s_sha) = snap_sha {
-            if !expected_model_snapshot_sha256.is_empty() && s_sha != expected_model_snapshot_sha256
-            {
-                return Err(format!(
-                    "token_cells report model_snapshot_sha256 ({s_sha}) != expected ({expected_model_snapshot_sha256})"
-                ));
-            }
-        }
-        if let Some(updates) = val.get("updates_applied").and_then(Value::as_u64) {
-            if updates != 0 {
-                return Err(format!(
-                    "token_cells report: updates_applied ({updates}) != 0"
-                ));
-            }
-        }
-        if let Some(unchanged) = val.get("snapshot_unchanged").and_then(Value::as_bool) {
-            if !unchanged {
-                return Err("token_cells report: snapshot_unchanged must be true".to_string());
-            }
         }
         let u16_path = path
             .parent()
@@ -441,114 +600,44 @@ pub fn load_gpu_token_cells_file(
                 u16_path.display()
             )
         })?;
-        let u16_sha = sha256_hex(&u16_bytes);
-        if let Some(exp_u16_sha) = val
-            .get("token_cells_sha256")
-            .or_else(|| val.get("token_cells_u16_sha256"))
-            .or_else(|| val.get("token_cells_file").and_then(|f| f.get("sha256")))
-            .and_then(Value::as_str)
-        {
-            if exp_u16_sha != u16_sha {
-                return Err(format!(
-                    "token_cells.u16 sha256 ({u16_sha}) != report pin ({exp_u16_sha})"
-                ));
-            }
-        }
-        let (token_cells, occupied_cells) =
-            parse_token_cells_u16_bytes(&u16_bytes, &u16_path.display().to_string())?;
-        return Ok(LoadedTokenCells {
-            token_cells,
-            occupied_cells,
-            token_cells_sha256: u16_sha,
-            report_sha256: Some(file_sha),
-            driver_checkpoint_sha256: ckpt_sha,
-            model_snapshot_sha256: snap_sha,
-        });
+        return build_loaded_from_report_and_u16(
+            &val,
+            file_sha,
+            &u16_bytes,
+            &u16_path.display().to_string(),
+            expected_driver_checkpoint_sha256,
+            expected_model_snapshot_sha256,
+        );
     }
 
-    // Binary token_cells.u16 file
-    let (token_cells, occupied_cells) =
-        parse_token_cells_u16_bytes(&bytes, &path.display().to_string())?;
-    let mut report_sha256 = None;
-    let mut ckpt_sha = None;
-    let mut snap_sha = None;
+    // Binary token_cells.u16 file: require sibling report.json with uor-r4.attention-token-cells/1
     let sibling_report = path
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("report.json");
-    if sibling_report.is_file() {
-        let rep_bytes = fs::read(&sibling_report)
-            .map_err(|e| format!("sibling report ({}): {e}", sibling_report.display()))?;
-        let rep_sha = sha256_hex(&rep_bytes);
-        let rep_val: Value = serde_json::from_slice(&rep_bytes).map_err(|e| {
-            format!(
-                "sibling report ({}): invalid JSON: {e}",
-                sibling_report.display()
-            )
-        })?;
-        ckpt_sha = rep_val
-            .get("driver_checkpoint_sha256")
-            .or_else(|| rep_val.get("checkpoint_file").and_then(|v| v.get("sha256")))
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        snap_sha = rep_val
-            .get("model_snapshot_sha256")
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        if let Some(ref c_sha) = ckpt_sha {
-            if !expected_driver_checkpoint_sha256.is_empty()
-                && c_sha != expected_driver_checkpoint_sha256
-            {
-                return Err(format!(
-                    "sibling report driver_checkpoint_sha256 ({c_sha}) != expected ({expected_driver_checkpoint_sha256})"
-                ));
-            }
-        }
-        if let Some(ref s_sha) = snap_sha {
-            if !expected_model_snapshot_sha256.is_empty() && s_sha != expected_model_snapshot_sha256
-            {
-                return Err(format!(
-                    "sibling report model_snapshot_sha256 ({s_sha}) != expected ({expected_model_snapshot_sha256})"
-                ));
-            }
-        }
-        if let Some(exp_u16_sha) = rep_val
-            .get("token_cells_sha256")
-            .or_else(|| rep_val.get("token_cells_u16_sha256"))
-            .or_else(|| {
-                rep_val
-                    .get("token_cells_file")
-                    .and_then(|f| f.get("sha256"))
-            })
-            .and_then(Value::as_str)
-        {
-            if exp_u16_sha != file_sha {
-                return Err(format!(
-                    "token_cells.u16 sha256 ({file_sha}) != sibling report pin ({exp_u16_sha})"
-                ));
-            }
-        }
-        if let Some(updates) = rep_val.get("updates_applied").and_then(Value::as_u64) {
-            if updates != 0 {
-                return Err(format!("sibling report: updates_applied ({updates}) != 0"));
-            }
-        }
-        if let Some(unchanged) = rep_val.get("snapshot_unchanged").and_then(Value::as_bool) {
-            if !unchanged {
-                return Err("sibling report: snapshot_unchanged must be true".to_string());
-            }
-        }
-        report_sha256 = Some(rep_sha);
+    if !sibling_report.is_file() {
+        return Err(format!(
+            "bare token_cells.u16 ({}) without sibling report.json ({TOKEN_CELLS_RECEIPT_SCHEMA}) is refused; device-export receipt is required",
+            path.display()
+        ));
     }
-
-    Ok(LoadedTokenCells {
-        token_cells,
-        occupied_cells,
-        token_cells_sha256: file_sha,
-        report_sha256,
-        driver_checkpoint_sha256: ckpt_sha,
-        model_snapshot_sha256: snap_sha,
-    })
+    let rep_bytes = fs::read(&sibling_report)
+        .map_err(|e| format!("sibling report ({}): {e}", sibling_report.display()))?;
+    let rep_sha = sha256_hex(&rep_bytes);
+    let rep_val: Value = serde_json::from_slice(&rep_bytes).map_err(|e| {
+        format!(
+            "sibling report ({}): invalid JSON: {e}",
+            sibling_report.display()
+        )
+    })?;
+    build_loaded_from_report_and_u16(
+        &rep_val,
+        rep_sha,
+        &bytes,
+        &path.display().to_string(),
+        expected_driver_checkpoint_sha256,
+        expected_model_snapshot_sha256,
+    )
 }
 
 fn parse_uort_v1(bytes: &[u8], label: &str) -> Result<Vec<u16>, String> {
@@ -686,7 +775,7 @@ pub fn build_corpus_reference_tables(
     let u_train_ranked: Vec<u32> = u_train_pairs.into_iter().map(|(_, y)| y).collect();
     let u_train_top1 = u_train_ranked.first().copied().unwrap_or(0);
 
-    // Partition DEV and build per-row window query-occurrence successor lists + U_succ counts.
+    // Partition DEV and build per-row window query-occurrence successor lists.
     let documents: Vec<usize> = dev_tokens
         .iter()
         .enumerate()
@@ -703,7 +792,6 @@ pub fn build_corpus_reference_tables(
         ));
     }
 
-    let mut u_succ_counts = vec![0u32; CANONICAL_VOCAB];
     let mut dev_rows = Vec::with_capacity(dev_eligible.len());
     let mut binding_lines = String::new();
 
@@ -748,9 +836,6 @@ pub fn build_corpus_reference_tables(
                     3
                 });
             }
-        }
-        if copy_successor {
-            u_succ_counts[target as usize] += 1;
         }
         let conflict = any_succ && !copy_successor;
         let t1_candidate = most_recent.map(|mr| u32::from(dev_tokens[mr + 1]));
@@ -832,13 +917,10 @@ pub fn build_corpus_reference_tables(
         ));
     }
 
-    let mut u_succ_pairs: Vec<(u32, u32)> = u_succ_counts
-        .iter()
-        .enumerate()
-        .filter_map(|(y, &cnt)| (cnt > 0).then_some((cnt, y as u32)))
-        .collect();
-    u_succ_pairs.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
-    let u_succ_ranked: Vec<u32> = u_succ_pairs.into_iter().map(|(_, y)| y).collect();
+    // Per D34 §6.4.6 and Kimi PM 6240513498, U_succ is the same model-matched
+    // TRAIN unigram ranking (u_train_ranked, total count 1,049,856) scored on P_succ;
+    // it must never be fitted on DEV labels.
+    let u_succ_ranked: Vec<u32> = u_train_ranked.clone();
 
     let train_matched_targets = matched.len() as u64;
     let train_bigram_total_pairs: u64 = bigram_counts
@@ -848,7 +930,7 @@ pub fn build_corpus_reference_tables(
         .sum();
     let u_train_total_counts: u64 = u_train_counts.iter().map(|&c| u64::from(c)).sum();
     let dev_psucc_rows = dev_rows.iter().filter(|r| r.is_psucc).count() as u64;
-    let u_succ_total_counts: u64 = u_succ_counts.iter().map(|&c| u64::from(c)).sum();
+    let u_succ_total_counts: u64 = u_train_total_counts;
     let t1_all_match_target = dev_rows
         .iter()
         .filter(|r| r.is_psucc)
@@ -856,11 +938,11 @@ pub fn build_corpus_reference_tables(
 
     if train_bigram_total_pairs != train_matched_targets
         || u_train_total_counts != train_matched_targets
-        || u_succ_total_counts != dev_psucc_rows
+        || u_succ_total_counts != train_matched_targets
         || !t1_all_match_target
     {
         return Err(format!(
-            "corpus table conservation check failed: bigram_total={train_bigram_total_pairs} (expected {train_matched_targets}), u_train_total={u_train_total_counts}, u_succ_total={u_succ_total_counts} (expected {dev_psucc_rows}), t1_all_match={t1_all_match_target}"
+            "corpus table conservation check failed: bigram_total={train_bigram_total_pairs} (expected {train_matched_targets}), u_train_total={u_train_total_counts}, u_succ_total={u_succ_total_counts} (expected {train_matched_targets}), t1_all_match={t1_all_match_target}"
         ));
     }
     if enforce_canonical_pins
@@ -878,9 +960,7 @@ pub fn build_corpus_reference_tables(
     let u_train_ranked_table_sha256 = sha256_hex(
         &serde_json::to_vec(&u_train_ranked).map_err(|e| format!("u_train json sha: {e}"))?,
     );
-    let u_succ_ranked_table_sha256 = sha256_hex(
-        &serde_json::to_vec(&u_succ_ranked).map_err(|e| format!("u_succ json sha: {e}"))?,
-    );
+    let u_succ_ranked_table_sha256 = u_train_ranked_table_sha256.clone();
     let window_succs: Vec<&Vec<u32>> = dev_rows
         .iter()
         .map(|r| &r.window_query_successors_most_recent_first)
@@ -946,8 +1026,13 @@ pub struct ValidatedArmInputs {
     pub eval_sha256: String,
     pub d34_sha256: String,
     pub config_sha256: String,
+    pub config_file_sha256: Option<String>,
+    pub panel_config_sha256: String,
+    pub panel_config_file_sha256: Option<String>,
     pub lineage_sha256: String,
+    pub panel_lineage_sha256: String,
     pub driver_checkpoint_sha256: String,
+    pub checkpoint_file_sha256: Option<String>,
     pub model_snapshot_sha256: String,
     pub ordered_row_binding_sha256: String,
     pub model_epoch: u64,
@@ -968,7 +1053,7 @@ type PanelRowTuple = (usize, u64, u32, bool);
 fn parse_panel_rows(
     panel: &Value,
     enforce_canonical_pins: bool,
-) -> Result<(String, String, Vec<PanelRowTuple>), String> {
+) -> Result<(String, Option<String>, String, Vec<PanelRowTuple>), String> {
     if panel.get("schema").and_then(Value::as_str) != Some(PREFLIGHT_PANEL_SCHEMA) {
         return Err(format!(
             "panel: expected schema '{PREFLIGHT_PANEL_SCHEMA}', got {:?}",
@@ -988,22 +1073,16 @@ fn parse_panel_rows(
         .and_then(Value::as_str)
         .ok_or_else(|| "panel: missing config_sha256".to_string())?
         .to_string();
+    let config_file_sha = panel
+        .get("config_file")
+        .and_then(|v| v.get("sha256"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let lineage_sha = panel
         .get("lineage_sha256")
         .and_then(Value::as_str)
         .ok_or_else(|| "panel: missing lineage_sha256".to_string())?
         .to_string();
-    if let Some(cfg_file_sha) = panel
-        .get("config_file")
-        .and_then(|v| v.get("sha256"))
-        .and_then(Value::as_str)
-    {
-        if cfg_file_sha != config_sha {
-            return Err(format!(
-                "panel: config_file.sha256 ({cfg_file_sha}) != config_sha256 ({config_sha})"
-            ));
-        }
-    }
     let dev_source = panel
         .get("dev_binding")
         .and_then(|b| b.get("source"))
@@ -1022,6 +1101,9 @@ fn parse_panel_rows(
         .ok_or_else(|| "panel: missing dev_binding.source.mask.sha256".to_string())?;
     if enforce_canonical_pins {
         validate_sha256_str(&config_sha, "panel.config_sha256")?;
+        if let Some(ref cfs) = config_file_sha {
+            validate_sha256_str(cfs, "panel.config_file.sha256")?;
+        }
         validate_sha256_str(&lineage_sha, "panel.lineage_sha256")?;
         if tok_sha != CANONICAL_DEV_TOKENS_SHA256 {
             return Err(format!(
@@ -1097,7 +1179,7 @@ fn parse_panel_rows(
             "panel: expected {CANONICAL_DEV_PSUCC_ROWS} P_succ rows, got {psucc_count}"
         ));
     }
-    Ok((config_sha, lineage_sha, rows))
+    Ok((config_sha, config_file_sha, lineage_sha, rows))
 }
 
 #[derive(Debug, Clone)]
@@ -1525,7 +1607,35 @@ pub fn validate_arm_inputs(
     d34_sha: String,
     enforce_canonical_pins: bool,
 ) -> Result<ValidatedArmInputs, String> {
-    let (config_sha, lineage_sha, panel_rows) = parse_panel_rows(panel, enforce_canonical_pins)?;
+    validate_arm_inputs_with_mode(
+        panel,
+        panel_sha,
+        capture,
+        capture_sha,
+        eval,
+        eval_sha,
+        d34,
+        d34_sha,
+        enforce_canonical_pins,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_arm_inputs_with_mode(
+    panel: &Value,
+    panel_sha: String,
+    capture: &Value,
+    capture_sha: String,
+    eval: &Value,
+    eval_sha: String,
+    d34: &Value,
+    d34_sha: String,
+    enforce_canonical_pins: bool,
+    enforce_panel_config_lineage: bool,
+) -> Result<ValidatedArmInputs, String> {
+    let (panel_config_sha, panel_config_file_sha, panel_lineage_sha, panel_rows) =
+        parse_panel_rows(panel, enforce_canonical_pins)?;
     let expected_len = panel_rows.len();
 
     if capture.get("schema").and_then(Value::as_str) != Some(PREFLIGHT_CAPTURE_SCHEMA) {
@@ -1542,23 +1652,43 @@ pub fn validate_arm_inputs(
             capture.get("status")
         ));
     }
-    if capture.get("config_sha256").and_then(Value::as_str) != Some(config_sha.as_str())
-        || capture.get("lineage_sha256").and_then(Value::as_str) != Some(lineage_sha.as_str())
-        || capture.get("dev_binding") != panel.get("dev_binding")
-    {
-        return Err(
-            "capture: config_sha256, lineage_sha256, or dev_binding differs from panel".to_string(),
-        );
-    }
-    if let Some(cap_cfg_sha) = capture
+    let config_sha = capture
+        .get("config_sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "capture: missing config_sha256".to_string())?
+        .to_string();
+    let config_file_sha = capture
         .get("config_file")
         .and_then(|v| v.get("sha256"))
         .and_then(Value::as_str)
-    {
-        if cap_cfg_sha != config_sha {
+        .map(str::to_string);
+    let lineage_sha = capture
+        .get("lineage_sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "capture: missing lineage_sha256".to_string())?
+        .to_string();
+    if enforce_canonical_pins {
+        validate_sha256_str(&config_sha, "capture.config_sha256")?;
+        if let Some(ref cfs) = config_file_sha {
+            validate_sha256_str(cfs, "capture.config_file.sha256")?;
+        }
+        validate_sha256_str(&lineage_sha, "capture.lineage_sha256")?;
+    }
+    if capture.get("dev_binding") != panel.get("dev_binding") {
+        return Err("capture: dev_binding differs from panel".to_string());
+    }
+    if enforce_panel_config_lineage {
+        if config_sha != panel_config_sha || lineage_sha != panel_lineage_sha {
             return Err(format!(
-                "capture: config_file.sha256 ({cap_cfg_sha}) != config_sha256 ({config_sha})"
+                "capture: config_sha256 ({config_sha}) or lineage_sha256 ({lineage_sha}) differs from panel ({panel_config_sha}, {panel_lineage_sha})"
             ));
+        }
+        if let (Some(ref p_cf), Some(ref c_cf)) = (&panel_config_file_sha, &config_file_sha) {
+            if p_cf != c_cf {
+                return Err(format!(
+                    "capture: config_file.sha256 ({c_cf}) != panel.config_file.sha256 ({p_cf})"
+                ));
+            }
         }
     }
     if capture
@@ -1585,18 +1715,15 @@ pub fn validate_arm_inputs(
         .and_then(Value::as_str)
         .ok_or_else(|| "capture: missing driver_checkpoint_sha256".to_string())?
         .to_string();
-    if enforce_canonical_pins {
-        validate_sha256_str(&driver_ckpt_sha, "capture.driver_checkpoint_sha256")?;
-    }
-    if let Some(ckpt_file_sha) = capture
+    let ckpt_file_sha = capture
         .get("checkpoint_file")
         .and_then(|v| v.get("sha256"))
         .and_then(Value::as_str)
-    {
-        if ckpt_file_sha != driver_ckpt_sha {
-            return Err(format!(
-                "capture: checkpoint_file.sha256 ({ckpt_file_sha}) != driver_checkpoint_sha256 ({driver_ckpt_sha})"
-            ));
+        .map(str::to_string);
+    if enforce_canonical_pins {
+        validate_sha256_str(&driver_ckpt_sha, "capture.driver_checkpoint_sha256")?;
+        if let Some(ref ckfs) = ckpt_file_sha {
+            validate_sha256_str(ckfs, "capture.checkpoint_file.sha256")?;
         }
     }
     let model_epoch = capture
@@ -1620,6 +1747,14 @@ pub fn validate_arm_inputs(
             "eval: model_epoch ({}) != capture.model_epoch ({model_epoch})",
             parsed_eval.model_epoch
         ));
+    }
+    if let Some(cap_snap_sha) = capture.get("model_snapshot_sha256").and_then(Value::as_str) {
+        if cap_snap_sha != parsed_eval.model_snapshot_sha256 {
+            return Err(format!(
+                "capture: model_snapshot_sha256 ({cap_snap_sha}) != eval.model_snapshot_sha256 ({})",
+                parsed_eval.model_snapshot_sha256
+            ));
+        }
     }
     if let Some(ref env_ckpt) = parsed_eval.enveloped_driver_checkpoint_sha256 {
         if env_ckpt != &driver_ckpt_sha {
@@ -1848,8 +1983,13 @@ pub fn validate_arm_inputs(
         eval_sha256: eval_sha,
         d34_sha256: d34_sha,
         config_sha256: config_sha,
+        config_file_sha256: config_file_sha,
+        panel_config_sha256: panel_config_sha,
+        panel_config_file_sha256: panel_config_file_sha,
         lineage_sha256: lineage_sha,
+        panel_lineage_sha256: panel_lineage_sha,
         driver_checkpoint_sha256: driver_ckpt_sha,
+        checkpoint_file_sha256: ckpt_file_sha,
         model_snapshot_sha256: parsed_eval.model_snapshot_sha256,
         ordered_row_binding_sha256,
         model_epoch,
@@ -2105,6 +2245,98 @@ fn summarize_same_cell_slice(rows: &[&ValidatedRow], scores: &[SameCellRowScore]
     })
 }
 
+fn validate_unique_vocab_tokens(tokens: &[u32], label: &str) -> Result<(), String> {
+    let mut seen = BTreeSet::new();
+    for (idx, &t) in tokens.iter().enumerate() {
+        if t >= CANONICAL_VOCAB as u32 {
+            return Err(format!(
+                "{label}[{idx}]: token {t} >= vocab {CANONICAL_VOCAB}"
+            ));
+        }
+        if !seen.insert(t) {
+            return Err(format!("{label}: duplicate candidate token {t}"));
+        }
+    }
+    Ok(())
+}
+
+pub fn verify_loaded_token_cells_against_arm(
+    arm: &ValidatedArmInputs,
+    loaded: &LoadedTokenCells,
+    label: &str,
+) -> Result<(), String> {
+    if loaded.report_sha256.is_empty() {
+        return Err(format!(
+            "{label}: missing bound '{TOKEN_CELLS_RECEIPT_SCHEMA}' report receipt"
+        ));
+    }
+    let tc_ckpt = loaded.driver_checkpoint_sha256.as_str();
+    if tc_ckpt != arm.driver_checkpoint_sha256 {
+        return Err(format!(
+            "{label}: driver_checkpoint_sha256 ({tc_ckpt}) != capture ({})",
+            arm.driver_checkpoint_sha256
+        ));
+    }
+    if let (Some(ref tc_cf), Some(ref arm_cf)) =
+        (&loaded.checkpoint_file_sha256, &arm.checkpoint_file_sha256)
+    {
+        if tc_cf != arm_cf {
+            return Err(format!(
+                "{label}: checkpoint_file.sha256 ({tc_cf}) != capture.checkpoint_file.sha256 ({arm_cf})"
+            ));
+        }
+    }
+    let tc_snap = loaded.model_snapshot_sha256.as_str();
+    if tc_snap != arm.model_snapshot_sha256 {
+        return Err(format!(
+            "{label}: model_snapshot_sha256 ({tc_snap}) != eval ({})",
+            arm.model_snapshot_sha256
+        ));
+    }
+    if let Some(ref tc_cfg) = loaded.config_sha256 {
+        if tc_cfg != &arm.config_sha256 {
+            return Err(format!(
+                "{label}: config_sha256 ({tc_cfg}) != capture ({})",
+                arm.config_sha256
+            ));
+        }
+    }
+    if let (Some(ref tc_cfg_f), Some(ref arm_cfg_f)) =
+        (&loaded.config_file_sha256, &arm.config_file_sha256)
+    {
+        if tc_cfg_f != arm_cfg_f {
+            return Err(format!(
+                "{label}: config_file.sha256 ({tc_cfg_f}) != capture.config_file.sha256 ({arm_cfg_f})"
+            ));
+        }
+    }
+    if let Some(ref tc_lin) = loaded.lineage_sha256 {
+        if tc_lin != &arm.lineage_sha256 {
+            return Err(format!(
+                "{label}: lineage_sha256 ({tc_lin}) != capture ({})",
+                arm.lineage_sha256
+            ));
+        }
+    }
+    if let Some(tc_ep) = loaded.model_epoch {
+        if tc_ep != arm.model_epoch {
+            return Err(format!(
+                "{label}: model_epoch ({tc_ep}) != capture ({})",
+                arm.model_epoch
+            ));
+        }
+    }
+    if let Some(tc_cb) = loaded.completed_batches {
+        if tc_cb != arm.completed_batches {
+            return Err(format!(
+                "{label}: completed_batches ({tc_cb}) != capture ({})",
+                arm.completed_batches
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn score_same_cell_rows_from_table(
     arm: &ValidatedArmInputs,
     table: &CandidateCellTable,
@@ -2121,23 +2353,43 @@ pub fn score_same_cell_rows_from_table(
             table.driver_checkpoint_sha256, arm.driver_checkpoint_sha256
         ));
     }
-    if let Some(ref snap_sha) = table.model_snapshot_sha256 {
-        if snap_sha != &arm.model_snapshot_sha256 {
-            return Err(format!(
-                "candidate_cells: model_snapshot_sha256 ({snap_sha}) != eval ({})",
-                arm.model_snapshot_sha256
-            ));
-        }
+    let snap_sha = table
+        .model_snapshot_sha256
+        .as_deref()
+        .ok_or_else(|| "candidate_cells: missing model_snapshot_sha256".to_string())?;
+    if snap_sha != arm.model_snapshot_sha256 {
+        return Err(format!(
+            "candidate_cells: model_snapshot_sha256 ({snap_sha}) != eval ({})",
+            arm.model_snapshot_sha256
+        ));
     }
-    if let Some(ref bind_sha) = table.ordered_row_binding_sha256 {
-        if bind_sha != &arm.ordered_row_binding_sha256 {
-            return Err(format!(
-                "candidate_cells: ordered_row_binding_sha256 ({bind_sha}) != d34 ({})",
-                arm.ordered_row_binding_sha256
-            ));
-        }
+    let bind_sha = table
+        .ordered_row_binding_sha256
+        .as_deref()
+        .ok_or_else(|| "candidate_cells: missing ordered_row_binding_sha256".to_string())?;
+    if bind_sha != arm.ordered_row_binding_sha256 {
+        return Err(format!(
+            "candidate_cells: ordered_row_binding_sha256 ({bind_sha}) != d34 ({})",
+            arm.ordered_row_binding_sha256
+        ));
     }
     verify_token_cells_against_gpu_capture(arm, &table.token_cells)?;
+
+    let expected_tc_sha = table
+        .token_cells_sha256
+        .as_deref()
+        .ok_or_else(|| "candidate_cells: missing token_cells_sha256".to_string())?;
+    let mut u16_bytes = Vec::with_capacity(CANONICAL_VOCAB * 2);
+    for &c in &table.token_cells {
+        u16_bytes.extend_from_slice(&(c as u16).to_le_bytes());
+    }
+    let actual_tc_sha = sha256_hex(&u16_bytes);
+    if actual_tc_sha != expected_tc_sha {
+        return Err(format!(
+            "candidate_cells: token_cells_sha256 ({expected_tc_sha}) != recomputed u16LE sha256 ({actual_tc_sha})"
+        ));
+    }
+
     let occupied_cells = table
         .token_cells
         .iter()
@@ -2150,31 +2402,147 @@ pub fn score_same_cell_rows_from_table(
             table.t2_ranked_candidates_by_query.len()
         ));
     }
-    if table.u_succ_ranked_candidates.is_empty()
-        || table
-            .u_succ_ranked_candidates
-            .iter()
-            .any(|&t| t >= CANONICAL_VOCAB as u32)
-    {
-        return Err("candidate_cells: invalid u_succ_ranked_candidates".to_string());
+    for (q, q_cands) in table.t2_ranked_candidates_by_query.iter().enumerate() {
+        validate_unique_vocab_tokens(
+            q_cands,
+            &format!("candidate_cells.t2_ranked_candidates_by_query[{q}]"),
+        )?;
     }
-    if let Some(ref occs) = table.dev_window_query_successors_most_recent_first {
-        if occs.len() != arm.rows.len() {
-            return Err(format!(
-                "candidate_cells: dev_window_query_successors_most_recent_first len {} != {}",
-                occs.len(),
-                arm.rows.len()
-            ));
+    if table.u_succ_ranked_candidates.is_empty() {
+        return Err("candidate_cells: empty u_succ_ranked_candidates".to_string());
+    }
+    validate_unique_vocab_tokens(
+        &table.u_succ_ranked_candidates,
+        "candidate_cells.u_succ_ranked_candidates",
+    )?;
+    let u_train_ranked = table
+        .u_train_ranked_candidates
+        .as_ref()
+        .ok_or_else(|| "candidate_cells: missing u_train_ranked_candidates".to_string())?;
+    if u_train_ranked.is_empty() {
+        return Err("candidate_cells: empty u_train_ranked_candidates".to_string());
+    }
+    validate_unique_vocab_tokens(u_train_ranked, "candidate_cells.u_train_ranked_candidates")?;
+    if u_train_ranked != &table.u_succ_ranked_candidates {
+        return Err(
+            "candidate_cells: u_succ_ranked_candidates must equal u_train_ranked_candidates (model-matched TRAIN unigram ranking per D34 §6.4.6)"
+                .to_string(),
+        );
+    }
+
+    let occs = table
+        .dev_window_query_successors_most_recent_first
+        .as_ref()
+        .ok_or_else(|| {
+            "candidate_cells: missing dev_window_query_successors_most_recent_first".to_string()
+        })?;
+    if occs.len() != arm.rows.len() {
+        return Err(format!(
+            "candidate_cells: dev_window_query_successors_most_recent_first len {} != {}",
+            occs.len(),
+            arm.rows.len()
+        ));
+    }
+    for (r_idx, r_occs) in occs.iter().enumerate() {
+        for (c_idx, &tok) in r_occs.iter().enumerate() {
+            if tok >= CANONICAL_VOCAB as u32 {
+                return Err(format!(
+                    "candidate_cells.dev_window_query_successors_most_recent_first[{r_idx}][{c_idx}]: token {tok} >= vocab {CANONICAL_VOCAB}"
+                ));
+            }
         }
     }
 
-    let u_train_ranked: &[u32] = table
-        .u_train_ranked_candidates
+    let expected_t2_sha = table
+        .t2_ranked_table_sha256
         .as_deref()
-        .unwrap_or(&table.u_succ_ranked_candidates);
+        .ok_or_else(|| "candidate_cells: missing t2_ranked_table_sha256".to_string())?;
+    let actual_t2_sha = sha256_hex(
+        &serde_json::to_vec(&table.t2_ranked_candidates_by_query)
+            .map_err(|e| format!("t2 table json sha: {e}"))?,
+    );
+    if actual_t2_sha != expected_t2_sha {
+        return Err(format!(
+            "candidate_cells: t2_ranked_table_sha256 ({expected_t2_sha}) != recomputed ({actual_t2_sha})"
+        ));
+    }
+
+    let expected_usucc_sha = table
+        .u_succ_ranked_table_sha256
+        .as_deref()
+        .ok_or_else(|| "candidate_cells: missing u_succ_ranked_table_sha256".to_string())?;
+    let actual_usucc_sha = sha256_hex(
+        &serde_json::to_vec(&table.u_succ_ranked_candidates)
+            .map_err(|e| format!("u_succ table json sha: {e}"))?,
+    );
+    if actual_usucc_sha != expected_usucc_sha {
+        return Err(format!(
+            "candidate_cells: u_succ_ranked_table_sha256 ({expected_usucc_sha}) != recomputed ({actual_usucc_sha})"
+        ));
+    }
+
+    let expected_utrain_sha = table
+        .u_train_ranked_table_sha256
+        .as_deref()
+        .ok_or_else(|| "candidate_cells: missing u_train_ranked_table_sha256".to_string())?;
+    let actual_utrain_sha = sha256_hex(
+        &serde_json::to_vec(u_train_ranked).map_err(|e| format!("u_train table json sha: {e}"))?,
+    );
+    if actual_utrain_sha != expected_utrain_sha || expected_usucc_sha != expected_utrain_sha {
+        return Err(format!(
+            "candidate_cells: u_train_ranked_table_sha256 ({expected_utrain_sha}) mismatch against recomputed ({actual_utrain_sha}) or u_succ ({expected_usucc_sha})"
+        ));
+    }
+
+    let expected_win_sha = table
+        .dev_window_successors_sha256
+        .as_deref()
+        .ok_or_else(|| "candidate_cells: missing dev_window_successors_sha256".to_string())?;
+    let actual_win_sha = sha256_hex(
+        &serde_json::to_vec(occs).map_err(|e| format!("dev_window_successors json sha: {e}"))?,
+    );
+    if actual_win_sha != expected_win_sha {
+        return Err(format!(
+            "candidate_cells: dev_window_successors_sha256 ({expected_win_sha}) != recomputed ({actual_win_sha})"
+        ));
+    }
+
+    let u_train_top1 = u_train_ranked[0];
 
     let mut out = Vec::with_capacity(arm.rows.len());
     for (idx, row) in arm.rows.iter().enumerate() {
+        let row_occs = &occs[idx];
+        let t2_q = &table.t2_ranked_candidates_by_query[row.query_token as usize];
+
+        // Cross-check unconditional predictions/hits against sealed d34 per-row record.
+        if row.is_psucc && row_occs.first().copied() != Some(row.target_token) {
+            return Err(format!(
+                "candidate_cells row {idx}: P_succ row most-recent successor {:?} != target_token {}",
+                row_occs.first(),
+                row.target_token
+            ));
+        }
+        let expected_t1b_pred = row_occs.get(1).copied().unwrap_or(u_train_top1);
+        let expected_t2_pred = t2_q.first().copied().unwrap_or(u_train_top1);
+        let expected_t2_top8: &[u32] = if t2_q.is_empty() {
+            &u_train_ranked[..u_train_ranked.len().min(8)]
+        } else {
+            &t2_q[..t2_q.len().min(8)]
+        };
+        if row.d34_t1b_prediction != expected_t1b_pred
+            || row.d34_t1b_hit1 != (expected_t1b_pred == row.target_token)
+            || row.d34_t2_prediction != expected_t2_pred
+            || row.d34_t2_hit1 != (expected_t2_pred == row.target_token)
+            || row.d34_t2_hit8 != expected_t2_top8.contains(&row.target_token)
+            || row.d34_u_hit1 != (u_train_top1 == row.target_token)
+            || row.d34_u_hit8
+                != u_train_ranked[..u_train_ranked.len().min(8)].contains(&row.target_token)
+        {
+            return Err(format!(
+                "candidate_cells row {idx}: unconditional T1b/T2/U prediction or hit disagrees with sealed D34 record"
+            ));
+        }
+
         let is_admitted =
             |tok: u32| -> bool { row.active_cells.contains(&table.token_cells[tok as usize]) };
 
@@ -2186,36 +2554,22 @@ pub fn score_same_cell_rows_from_table(
             .find(|&y| is_admitted(y))
             .or(u_train_adm_top1);
 
-        let (t1_admitted_hit1, t1b_unconditional_in_admitted_hit1, t1b_nearest_admitted_occ_hit1) =
-            if let Some(ref occs) = table.dev_window_query_successors_most_recent_first {
-                let row_occs = &occs[idx];
-                let t1_hit = row_occs
-                    .first()
-                    .copied()
-                    .is_some_and(|y1| is_admitted(y1) && y1 == row.target_token);
-                let t1b_uncond = match row_occs.get(1).copied() {
-                    Some(y1b) if is_admitted(y1b) => y1b == row.target_token,
-                    _ => u_train_adm_top1 == Some(row.target_token),
-                };
-                let t1b_nearest = row_occs
-                    .iter()
-                    .copied()
-                    .filter(|&y| is_admitted(y))
-                    .nth(1)
-                    .or(u_train_adm_top1)
-                    == Some(row.target_token);
-                (t1_hit, t1b_uncond, t1b_nearest)
-            } else {
-                let t1_hit = row.is_psucc && row.eval_target_admitted;
-                let t1b_uncond = if is_admitted(row.d34_t1b_prediction) {
-                    row.d34_t1b_prediction == row.target_token
-                } else {
-                    u_train_adm_top1 == Some(row.target_token)
-                };
-                (t1_hit, t1b_uncond, t1b_uncond)
-            };
+        let t1_admitted_hit1 = row_occs
+            .first()
+            .copied()
+            .is_some_and(|y1| is_admitted(y1) && y1 == row.target_token);
+        let t1b_unconditional_in_admitted_hit1 = match row_occs.get(1).copied() {
+            Some(y1b) if is_admitted(y1b) => y1b == row.target_token,
+            _ => u_train_adm_top1 == Some(row.target_token),
+        };
+        let t1b_nearest_admitted_occ_hit1 = row_occs
+            .iter()
+            .copied()
+            .filter(|&y| is_admitted(y))
+            .nth(1)
+            .or(u_train_adm_top1)
+            == Some(row.target_token);
 
-        let t2_q = &table.t2_ranked_candidates_by_query[row.query_token as usize];
         let mut t2_adm: Vec<u32> = t2_q.iter().copied().filter(|&y| is_admitted(y)).collect();
         let t2_strict_top1 = t2_adm.first().copied();
         let t2_top1_with_fallback = t2_strict_top1.or(u_train_adm_top1);
@@ -2271,8 +2625,8 @@ pub fn score_same_cell_rows_from_table(
     Ok((out, occupied_cells))
 }
 
-/// Bundle a GPU-exported `LoadedTokenCells` (`token_cells.u16` or JSON receipt) with the
-/// non-model `T1/T1b/T2/U_succ/U_train` count tables rebuilt from the pinned corpus files
+/// Bundle a GPU-exported `LoadedTokenCells` (`token_cells.u16` + sibling `report.json` or JSON receipt)
+/// with the non-model `T1/T1b/T2/U_succ/U_train` count tables rebuilt from the pinned corpus files
 /// and cross-checked against `d34.json`.
 pub fn build_candidate_cell_table_from_loaded(
     loaded: &LoadedTokenCells,
@@ -2282,17 +2636,23 @@ pub fn build_candidate_cell_table_from_loaded(
     corpus_paths: &CorpusPaths<'_>,
     enforce_canonical_pins: bool,
 ) -> Result<CandidateCellTable, String> {
-    let ckpt_sha = explicit_driver_checkpoint_sha256
-        .or(loaded.driver_checkpoint_sha256.as_deref())
-        .ok_or_else(|| {
-            "token_cells: missing driver_checkpoint_sha256 (provide sibling report.json or JSON receipt)"
-                .to_string()
-        })?
-        .to_string();
-    validate_sha256_str(&ckpt_sha, "token_cells.driver_checkpoint_sha256")?;
-    if let Some(ref s) = loaded.model_snapshot_sha256 {
-        validate_sha256_str(s, "token_cells.model_snapshot_sha256")?;
+    if loaded.report_sha256.is_empty() {
+        return Err(format!(
+            "token_cells: missing bound '{TOKEN_CELLS_RECEIPT_SCHEMA}' report receipt"
+        ));
     }
+    let receipt_ckpt_sha = loaded.driver_checkpoint_sha256.as_str();
+    if let Some(exp) = explicit_driver_checkpoint_sha256 {
+        if !exp.is_empty() && exp != receipt_ckpt_sha {
+            return Err(format!(
+                "token_cells: explicit driver_checkpoint_sha256 ({exp}) != receipt ({receipt_ckpt_sha})"
+            ));
+        }
+    }
+    let ckpt_sha = receipt_ckpt_sha.to_string();
+    validate_sha256_str(&ckpt_sha, "token_cells.driver_checkpoint_sha256")?;
+    let snap_sha = loaded.model_snapshot_sha256.as_str();
+    validate_sha256_str(snap_sha, "token_cells.model_snapshot_sha256")?;
 
     let expected_rows = if enforce_canonical_pins {
         CANONICAL_DEV_ELIGIBLE_ROWS
@@ -2316,7 +2676,7 @@ pub fn build_candidate_cell_table_from_loaded(
     Ok(CandidateCellTable {
         schema: CANDIDATE_CELL_TABLE_SCHEMA.to_string(),
         driver_checkpoint_sha256: ckpt_sha,
-        model_snapshot_sha256: loaded.model_snapshot_sha256.clone(),
+        model_snapshot_sha256: Some(loaded.model_snapshot_sha256.clone()),
         token_cells_sha256: Some(loaded.token_cells_sha256.clone()),
         ordered_row_binding_sha256: Some(ordered_row_binding_sha256),
         t2_ranked_table_sha256: Some(corpus_tables.t2_ranked_table_sha256),
@@ -2388,22 +2748,7 @@ pub fn score_preflight_dev_values(
         parse_d34_record(d34, &arm.d34_sha256, arm.rows.len(), enforce_canonical_pins)?;
 
     let same_cell_block = if let Some((loaded_tc, corpus_paths)) = token_cells_and_corpus {
-        if let Some(ref c_sha) = loaded_tc.driver_checkpoint_sha256 {
-            if c_sha != &arm.driver_checkpoint_sha256 {
-                return Err(format!(
-                    "token_cells driver_checkpoint_sha256 ({c_sha}) != capture ({})",
-                    arm.driver_checkpoint_sha256
-                ));
-            }
-        }
-        if let Some(ref s_sha) = loaded_tc.model_snapshot_sha256 {
-            if s_sha != &arm.model_snapshot_sha256 {
-                return Err(format!(
-                    "token_cells model_snapshot_sha256 ({s_sha}) != eval ({})",
-                    arm.model_snapshot_sha256
-                ));
-            }
-        }
+        verify_loaded_token_cells_against_arm(&arm, loaded_tc, "token_cells")?;
         let corpus_tables =
             build_corpus_reference_tables(corpus_paths, &d34_rows, enforce_canonical_pins)?;
         let row_scores =
@@ -2493,8 +2838,10 @@ pub fn score_preflight_dev_values(
             "eval_sha256": arm.eval_sha256,
             "d34_sha256": arm.d34_sha256,
             "config_sha256": arm.config_sha256,
+            "config_file_sha256": arm.config_file_sha256,
             "lineage_sha256": arm.lineage_sha256,
             "driver_checkpoint_sha256": arm.driver_checkpoint_sha256,
+            "checkpoint_file_sha256": arm.checkpoint_file_sha256,
             "model_snapshot_sha256": arm.model_snapshot_sha256,
             "ordered_row_binding_sha256": arm.ordered_row_binding_sha256,
             "model_epoch": arm.model_epoch,
@@ -2601,7 +2948,9 @@ pub fn score_paired_dev_values(
     token_cells_and_corpus: Option<(&LoadedTokenCells, &LoadedTokenCells, &CorpusPaths<'_>)>,
     enforce_canonical_pins: bool,
 ) -> Result<Value, String> {
-    let rel = validate_arm_inputs(
+    // Validate each arm against its own config_sha256 / lineage_sha256 while requiring
+    // both arms to share the exact panel dev_binding and 14,287 DEV rows.
+    let rel = validate_arm_inputs_with_mode(
         panel,
         panel_sha.clone(),
         rel_capture,
@@ -2611,8 +2960,9 @@ pub fn score_paired_dev_values(
         d34,
         d34_sha.clone(),
         enforce_canonical_pins,
+        false,
     )?;
-    let ctrl = validate_arm_inputs(
+    let ctrl = validate_arm_inputs_with_mode(
         panel,
         panel_sha,
         ctrl_capture,
@@ -2622,7 +2972,62 @@ pub fn score_paired_dev_values(
         d34,
         d34_sha,
         enforce_canonical_pins,
+        false,
     )?;
+
+    // The provided panel must bind to either the Relation or Control arm's config/lineage.
+    let panel_matches_rel = rel.panel_config_sha256 == rel.config_sha256
+        && rel.panel_lineage_sha256 == rel.lineage_sha256;
+    let panel_matches_ctrl = ctrl.panel_config_sha256 == ctrl.config_sha256
+        && ctrl.panel_lineage_sha256 == ctrl.lineage_sha256;
+    if !panel_matches_rel && !panel_matches_ctrl {
+        return Err(format!(
+            "paired-dev: panel (config_sha256={}, lineage_sha256={}) matches neither relation ({}, {}) nor control ({}, {})",
+            rel.panel_config_sha256,
+            rel.panel_lineage_sha256,
+            rel.config_sha256,
+            rel.lineage_sha256,
+            ctrl.config_sha256,
+            ctrl.lineage_sha256
+        ));
+    }
+    if panel_matches_rel {
+        if let (Some(ref p_cf), Some(ref r_cf)) =
+            (&rel.panel_config_file_sha256, &rel.config_file_sha256)
+        {
+            if p_cf != r_cf {
+                return Err(format!(
+                    "paired-dev: panel.config_file.sha256 ({p_cf}) != relation capture.config_file.sha256 ({r_cf})"
+                ));
+            }
+        }
+    }
+    if panel_matches_ctrl {
+        if let (Some(ref p_cf), Some(ref c_cf)) =
+            (&ctrl.panel_config_file_sha256, &ctrl.config_file_sha256)
+        {
+            if p_cf != c_cf {
+                return Err(format!(
+                    "paired-dev: panel.config_file.sha256 ({p_cf}) != control capture.config_file.sha256 ({c_cf})"
+                ));
+            }
+        }
+    }
+
+    // Treatment (LearnV1) and Control (FrozenZeroV1) have distinct configs and lineages.
+    if rel.config_sha256 == ctrl.config_sha256 || rel.lineage_sha256 == ctrl.lineage_sha256 {
+        return Err(format!(
+            "paired-dev: relation and control must have distinct config_sha256 and lineage_sha256 (got rel=({}, {}), ctrl=({}, {}))",
+            rel.config_sha256, rel.lineage_sha256, ctrl.config_sha256, ctrl.lineage_sha256
+        ));
+    }
+    if let (Some(ref r_cf), Some(ref c_cf)) = (&rel.config_file_sha256, &ctrl.config_file_sha256) {
+        if r_cf == c_cf {
+            return Err(format!(
+                "paired-dev: relation and control must have distinct config_file.sha256 (got {r_cf})"
+            ));
+        }
+    }
 
     if rel.completed_batches != ctrl.completed_batches {
         return Err(format!(
@@ -2728,8 +3133,8 @@ pub fn score_paired_dev_values(
             "status": "SCORED",
             "ablation_eval_sha256": abl_sha,
             "ablation_model_snapshot_sha256": parsed_abl.model_snapshot_sha256,
-            "relation_vs_ablation_on_b3_r_top1": compute_paired_2x2(&rel_b3_r_top1, &abl_b3_r_top1, 24, "rel_vs_abl_b3_r")?,
-            "relation_vs_ablation_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &abl_b3_i_top1, 24, "rel_vs_abl_b3_i")?,
+            "relation_vs_ablation_on_b3_r_top1": compute_paired_2x2(&rel_b3_r_top1, &abl_b3_r_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_abl_b3_r")?,
+            "relation_vs_ablation_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &abl_b3_i_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_abl_b3_i")?,
         })
     } else {
         json!({
@@ -2778,12 +3183,12 @@ pub fn score_paired_dev_values(
             "status": status,
             "relation_occupied_writer_cells": rel_occupied,
             "control_occupied_writer_cells": ctrl_occupied,
-            "relation_vs_t2_r_same_cell_on_b3_r_top1": compute_paired_2x2(&rel_b3_r_top1, &t2_r_on_b3_r, 24, "rel_vs_t2_r_b3_r")?,
-            "relation_vs_u_succ_r_same_cell_on_b3_r_top1": compute_paired_2x2(&rel_b3_r_top1, &u_succ_r_on_b3_r, 24, "rel_vs_u_succ_r_b3_r")?,
-            "relation_vs_t2_r_same_cell_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &t2_r_on_b3_i, 24, "rel_vs_t2_r_b3_i")?,
-            "control_vs_t2_c_same_cell_on_b3_i_top1": compute_paired_2x2(&ctrl_b3_i_top1, &t2_c_on_b3_i, 24, "ctrl_vs_t2_c_b3_i")?,
-            "control_vs_t2_c_same_cell_on_b3_c_top1": compute_paired_2x2(&ctrl_b3_c_top1, &t2_c_on_b3_c, 24, "ctrl_vs_t2_c_b3_c")?,
-            "relation_vs_u_succ_r_same_cell_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &u_succ_r_on_b3_i, 24, "rel_vs_u_succ_r_b3_i")?,
+            "relation_vs_t2_r_same_cell_on_b3_r_top1": compute_paired_2x2(&rel_b3_r_top1, &t2_r_on_b3_r, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_t2_r_b3_r")?,
+            "relation_vs_u_succ_r_same_cell_on_b3_r_top1": compute_paired_2x2(&rel_b3_r_top1, &u_succ_r_on_b3_r, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_u_succ_r_b3_r")?,
+            "relation_vs_t2_r_same_cell_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &t2_r_on_b3_i, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_t2_r_b3_i")?,
+            "control_vs_t2_c_same_cell_on_b3_i_top1": compute_paired_2x2(&ctrl_b3_i_top1, &t2_c_on_b3_i, CANONICAL_PSUCC_TOP1_FLOOR, "ctrl_vs_t2_c_b3_i")?,
+            "control_vs_t2_c_same_cell_on_b3_c_top1": compute_paired_2x2(&ctrl_b3_c_top1, &t2_c_on_b3_c, CANONICAL_PSUCC_TOP1_FLOOR, "ctrl_vs_t2_c_b3_c")?,
+            "relation_vs_u_succ_r_same_cell_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &u_succ_r_on_b3_i, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_u_succ_r_b3_i")?,
         });
         out[rel_pin_key] = Value::String(rel_pin_sha);
         out[ctrl_pin_key] = Value::String(ctrl_pin_sha);
@@ -2793,38 +3198,8 @@ pub fn score_paired_dev_values(
     let same_cell_paired_block = if let Some((rel_tc, ctrl_tc, corpus_paths)) =
         token_cells_and_corpus
     {
-        if let Some(ref c_sha) = rel_tc.driver_checkpoint_sha256 {
-            if c_sha != &rel.driver_checkpoint_sha256 {
-                return Err(format!(
-                    "relation token_cells driver_checkpoint_sha256 ({c_sha}) != relation capture ({})",
-                    rel.driver_checkpoint_sha256
-                ));
-            }
-        }
-        if let Some(ref s_sha) = rel_tc.model_snapshot_sha256 {
-            if s_sha != &rel.model_snapshot_sha256 {
-                return Err(format!(
-                    "relation token_cells model_snapshot_sha256 ({s_sha}) != relation eval ({})",
-                    rel.model_snapshot_sha256
-                ));
-            }
-        }
-        if let Some(ref c_sha) = ctrl_tc.driver_checkpoint_sha256 {
-            if c_sha != &ctrl.driver_checkpoint_sha256 {
-                return Err(format!(
-                    "control token_cells driver_checkpoint_sha256 ({c_sha}) != control capture ({})",
-                    ctrl.driver_checkpoint_sha256
-                ));
-            }
-        }
-        if let Some(ref s_sha) = ctrl_tc.model_snapshot_sha256 {
-            if s_sha != &ctrl.model_snapshot_sha256 {
-                return Err(format!(
-                    "control token_cells model_snapshot_sha256 ({s_sha}) != control eval ({})",
-                    ctrl.model_snapshot_sha256
-                ));
-            }
-        }
+        verify_loaded_token_cells_against_arm(&rel, rel_tc, "relation_token_cells")?;
+        verify_loaded_token_cells_against_arm(&ctrl, ctrl_tc, "control_token_cells")?;
         let (_, d34_rows) =
             parse_d34_record(d34, &rel.d34_sha256, rel.rows.len(), enforce_canonical_pins)?;
         let corpus_tables =
@@ -2843,6 +3218,8 @@ pub fn score_paired_dev_values(
             &rel_sc,
             &ctrl_sc,
         )?;
+        block["relation_token_cells_report_sha256"] = json!(rel_tc.report_sha256);
+        block["control_token_cells_report_sha256"] = json!(ctrl_tc.report_sha256);
         block["corpus_pins"] = json!({
             "train_tokens_sha256": corpus_tables.train_tokens_sha256,
             "train_mask_sha256": corpus_tables.train_mask_sha256,
@@ -2896,8 +3273,10 @@ pub fn score_paired_dev_values(
                 "capture_sha256": rel.capture_sha256,
                 "eval_sha256": rel.eval_sha256,
                 "config_sha256": rel.config_sha256,
+                "config_file_sha256": rel.config_file_sha256,
                 "lineage_sha256": rel.lineage_sha256,
                 "driver_checkpoint_sha256": rel.driver_checkpoint_sha256,
+                "checkpoint_file_sha256": rel.checkpoint_file_sha256,
                 "model_snapshot_sha256": rel.model_snapshot_sha256,
                 "model_epoch": rel.model_epoch,
             },
@@ -2905,8 +3284,10 @@ pub fn score_paired_dev_values(
                 "capture_sha256": ctrl.capture_sha256,
                 "eval_sha256": ctrl.eval_sha256,
                 "config_sha256": ctrl.config_sha256,
+                "config_file_sha256": ctrl.config_file_sha256,
                 "lineage_sha256": ctrl.lineage_sha256,
                 "driver_checkpoint_sha256": ctrl.driver_checkpoint_sha256,
+                "checkpoint_file_sha256": ctrl.checkpoint_file_sha256,
                 "model_snapshot_sha256": ctrl.model_snapshot_sha256,
                 "model_epoch": ctrl.model_epoch,
             },
@@ -2923,21 +3304,21 @@ pub fn score_paired_dev_values(
             "agreement_denominator": psucc_total,
             "b3_i_meets_minimum_200": b3_i >= 200,
             "mde_rel_24_over_b3_i": {
-                "numerator": 24,
+                "numerator": CANONICAL_PSUCC_TOP1_FLOOR,
                 "denominator": b3_i,
             },
         },
         "paired_comparisons": {
-            "relation_vs_control_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &ctrl_b3_i_top1, 24, "rel_vs_ctrl_b3_i")?,
-            "relation_vs_unconditional_t2_on_b3_i_top1_lower_bound": compute_paired_2x2(&rel_b3_i_top1, &t2_uncond_b3_i_top1, 24, "rel_vs_t2_uncond_b3_i")?,
-            "control_vs_unconditional_t2_on_b3_i_top1_lower_bound": compute_paired_2x2(&ctrl_b3_i_top1, &t2_uncond_b3_i_top1, 24, "ctrl_vs_t2_uncond_b3_i")?,
-            "relation_vs_unconditional_u_on_b3_i_top1_lower_bound": compute_paired_2x2(&rel_b3_i_top1, &u_uncond_b3_i_top1, 24, "rel_vs_u_uncond_b3_i")?,
-            "relation_vs_unconditional_t2_on_b3_r_top1_lower_bound": compute_paired_2x2(&rel_b3_r_top1, &t2_uncond_b3_r_top1, 24, "rel_vs_t2_uncond_b3_r")?,
-            "relation_vs_unconditional_u_on_b3_r_top1_lower_bound": compute_paired_2x2(&rel_b3_r_top1, &u_uncond_b3_r_top1, 24, "rel_vs_u_uncond_b3_r")?,
-            "relation_vs_control_psucc_itt_top1": compute_paired_2x2(&rel_itt_top1, &ctrl_itt_top1, 24, "rel_vs_ctrl_itt_top1")?,
-            "relation_vs_control_psucc_itt_top8": compute_paired_2x2(&rel_itt_top8, &ctrl_itt_top8, 39, "rel_vs_ctrl_itt_top8")?,
-            "relation_vs_control_complement_top1": compute_paired_2x2(&rel_comp_top1, &ctrl_comp_top1, 20, "rel_vs_ctrl_comp_top1")?,
-            "relation_vs_control_complement_top8": compute_paired_2x2(&rel_comp_top8, &ctrl_comp_top8, 63, "rel_vs_ctrl_comp_top8")?,
+            "relation_vs_control_on_b3_i_top1": compute_paired_2x2(&rel_b3_i_top1, &ctrl_b3_i_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_ctrl_b3_i")?,
+            "relation_vs_unconditional_t2_on_b3_i_top1_lower_bound": compute_paired_2x2(&rel_b3_i_top1, &t2_uncond_b3_i_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_t2_uncond_b3_i")?,
+            "control_vs_unconditional_t2_on_b3_i_top1_lower_bound": compute_paired_2x2(&ctrl_b3_i_top1, &t2_uncond_b3_i_top1, CANONICAL_PSUCC_TOP1_FLOOR, "ctrl_vs_t2_uncond_b3_i")?,
+            "relation_vs_unconditional_u_on_b3_i_top1_lower_bound": compute_paired_2x2(&rel_b3_i_top1, &u_uncond_b3_i_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_u_uncond_b3_i")?,
+            "relation_vs_unconditional_t2_on_b3_r_top1_lower_bound": compute_paired_2x2(&rel_b3_r_top1, &t2_uncond_b3_r_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_t2_uncond_b3_r")?,
+            "relation_vs_unconditional_u_on_b3_r_top1_lower_bound": compute_paired_2x2(&rel_b3_r_top1, &u_uncond_b3_r_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_u_uncond_b3_r")?,
+            "relation_vs_control_psucc_itt_top1": compute_paired_2x2(&rel_itt_top1, &ctrl_itt_top1, CANONICAL_PSUCC_TOP1_FLOOR, "rel_vs_ctrl_itt_top1")?,
+            "relation_vs_control_psucc_itt_top8": compute_paired_2x2(&rel_itt_top8, &ctrl_itt_top8, CANONICAL_PSUCC_TOP8_FLOOR, "rel_vs_ctrl_itt_top8")?,
+            "relation_vs_control_complement_top1": compute_paired_2x2(&rel_comp_top1, &ctrl_comp_top1, CANONICAL_COMPLEMENT_TOP1_FLOOR, "rel_vs_ctrl_comp_top1")?,
+            "relation_vs_control_complement_top8": compute_paired_2x2(&rel_comp_top8, &ctrl_comp_top8, CANONICAL_COMPLEMENT_TOP8_FLOOR, "rel_vs_ctrl_comp_top8")?,
             "ablation": ablation_block,
             "same_cell_reranked": same_cell_paired_block,
         },
@@ -3112,20 +3493,22 @@ mod tests {
         assert_eq!(paired_integer_floor(24, 0), 24);
         assert_eq!(paired_integer_floor(24, 144), 24);
         assert_eq!(paired_integer_floor(24, 145), 25);
-        assert_eq!(paired_integer_floor(20, 100), 20);
-        assert_eq!(paired_integer_floor(20, 101), 21);
+        assert_eq!(paired_integer_floor(22, 121), 22);
+        assert_eq!(paired_integer_floor(22, 122), 23);
     }
 
     fn fixture_receipts(
         rel_top1_row0: u64,
         ctrl_top1_row0: u64,
     ) -> (Value, Value, Value, Value, Value, Value) {
+        // Distinct raw FilePin hashes (e.g. pretty-printed JSON files) vs canonical encode(&config)
+        // and encode(&checkpoint) hashes, and distinct LearnV1 vs FrozenZeroV1 configs/lineages.
         let panel = json!({
             "schema": PREFLIGHT_PANEL_SCHEMA,
             "status": "PINNED_PANEL_AND_PROBE_METADATA_ONLY",
-            "config_file": {"path": "/tmp/cfg.json", "sha256": "cfg_sha"},
-            "config_sha256": "cfg_sha",
-            "lineage_sha256": "lin_sha",
+            "config_file": {"path": "/tmp/rel_cfg.json", "sha256": "raw_rel_cfg_file_sha"},
+            "config_sha256": "canonical_rel_cfg_sha",
+            "lineage_sha256": "rel_lineage_sha",
             "dev_binding": {
                 "source": {
                     "tokens": {"path": "/tmp/dev.u16", "sha256": CANONICAL_DEV_TOKENS_SHA256},
@@ -3144,14 +3527,19 @@ mod tests {
             "updates_applied": 0
         });
 
-        let make_cap = |ckpt_sha: &str, eval_sha: &str| {
+        let make_cap = |cfg_file_sha: &str,
+                        cfg_sha: &str,
+                        lin_sha: &str,
+                        ckpt_file_sha: &str,
+                        ckpt_sha: &str,
+                        eval_sha: &str| {
             json!({
                 "schema": PREFLIGHT_CAPTURE_SCHEMA,
                 "status": "ACTUAL_GPU_FORWARD_CELL_IDS_CAPTURED_ZERO_APPLY",
-                "config_file": {"path": "/tmp/cfg.json", "sha256": "cfg_sha"},
-                "config_sha256": "cfg_sha",
-                "lineage_sha256": "lin_sha",
-                "checkpoint_file": {"path": "/tmp/ckpt.json", "sha256": ckpt_sha},
+                "config_file": {"path": "/tmp/cfg.json", "sha256": cfg_file_sha},
+                "config_sha256": cfg_sha,
+                "lineage_sha256": lin_sha,
+                "checkpoint_file": {"path": "/tmp/ckpt.json", "sha256": ckpt_file_sha},
                 "driver_checkpoint_sha256": ckpt_sha,
                 "evaluation_file": {"path": "/tmp/eval.json", "sha256": eval_sha},
                 "dev_binding": panel["dev_binding"],
@@ -3191,10 +3579,10 @@ mod tests {
             })
         };
 
-        let make_eval = |snap_sha: &str, top1_row0: u64| {
+        let make_eval = |lin_sha: &str, snap_sha: &str, top1_row0: u64| {
             json!({
                 "schema": DRIVER_EVAL_SCHEMA,
-                "evaluation_lineage_sha256": "lin_sha",
+                "evaluation_lineage_sha256": lin_sha,
                 "model_snapshot_sha256": snap_sha,
                 "model_epoch": 0,
                 "accepted_updates_in_model": 0,
@@ -3286,20 +3674,35 @@ mod tests {
             ]
         });
 
-        let rel_cap = make_cap("ckpt_rel", "re_sha");
-        let ctrl_cap = make_cap("ckpt_ctrl", "ce_sha");
+        let rel_cap = make_cap(
+            "raw_rel_cfg_file_sha",
+            "canonical_rel_cfg_sha",
+            "rel_lineage_sha",
+            "raw_ckpt_rel_file_sha",
+            "ckpt_rel",
+            "re_sha",
+        );
+        let ctrl_cap = make_cap(
+            "raw_ctrl_cfg_file_sha",
+            "canonical_ctrl_cfg_sha",
+            "ctrl_lineage_sha",
+            "raw_ckpt_ctrl_file_sha",
+            "ckpt_ctrl",
+            "ce_sha",
+        );
         (
             panel,
             rel_cap,
-            make_eval("snap_rel", rel_top1_row0),
+            make_eval("rel_lineage_sha", "snap_rel", rel_top1_row0),
             ctrl_cap,
-            make_eval("snap_ctrl", ctrl_top1_row0),
+            make_eval("ctrl_lineage_sha", "snap_ctrl", ctrl_top1_row0),
             d34,
         )
     }
 
     #[test]
-    fn preflight_and_paired_scoring_validate_slots_and_report_missing_gpu_cell_table() {
+    fn preflight_and_paired_scoring_validate_distinct_file_and_canonical_hashes_and_complement_floor_22(
+    ) {
         let (panel, rel_cap, rel_eval, ctrl_cap, ctrl_eval, d34) = fixture_receipts(1, 0);
         let pre = score_preflight_dev_values(
             &panel,
@@ -3314,26 +3717,19 @@ mod tests {
             None,
             false,
         )
-        .expect("preflight score succeeds");
+        .expect("preflight score succeeds with distinct raw FilePin vs canonical hashes");
 
         assert_eq!(pre["schema"], PREFLIGHT_SCORE_SCHEMA);
+        assert_eq!(pre["pins"]["config_sha256"], "canonical_rel_cfg_sha");
+        assert_eq!(pre["pins"]["config_file_sha256"], "raw_rel_cfg_file_sha");
+        assert_eq!(pre["pins"]["driver_checkpoint_sha256"], "ckpt_rel");
+        assert_eq!(
+            pre["pins"]["checkpoint_file_sha256"],
+            "raw_ckpt_rel_file_sha"
+        );
         assert_eq!(
             pre["same_cell_candidate_reranking"]["status"],
             "UNAVAILABLE_MISSING_GPU_TOKEN_CELL_TABLE_AND_RANKED_CANDIDATE_RECEIPT"
-        );
-        assert_eq!(
-            pre["b3_and_sealed_d34_slices"]["copy_successor_subpanel"]["b3_target_admitted"],
-            1
-        );
-        assert_eq!(
-            pre["b3_and_sealed_d34_slices"]["copy_successor_subpanel"]
-                ["on_gpu_target_admitted_b3_rows"]["t1_hit1"]["hits"],
-            1
-        );
-        assert_eq!(
-            pre["b3_and_sealed_d34_slices"]["copy_successor_subpanel"]
-                ["on_gpu_target_admitted_b3_rows"]["t2_hit1"]["hits"],
-            1
         );
 
         let paired = score_paired_dev_values(
@@ -3354,7 +3750,7 @@ mod tests {
             None,
             false,
         )
-        .expect("paired score succeeds");
+        .expect("paired score succeeds with distinct LearnV1 vs FrozenZeroV1 configs/lineages");
 
         assert_eq!(paired["schema"], PAIRED_DEV_SCORE_SCHEMA);
         assert_eq!(paired["admission_summary_psucc"]["b3_i_intersection"], 1);
@@ -3363,7 +3759,35 @@ mod tests {
                 ["difference_a_minus_b"],
             1
         );
+        assert_eq!(
+            paired["paired_comparisons"]["relation_vs_control_complement_top1"]["mde_floor"],
+            22
+        );
         assert_eq!(paired["scientific_verdict"], "DEFERRED_TO_PM_DISPOSITION");
+
+        // Rejects paired arms if Relation and Control accidentally have identical config_sha256.
+        let mut bad_ctrl_cap = ctrl_cap.clone();
+        bad_ctrl_cap["config_sha256"] = json!("canonical_rel_cfg_sha");
+        let err = score_paired_dev_values(
+            &panel,
+            "p_sha".to_string(),
+            &rel_cap,
+            "rc_sha".to_string(),
+            &rel_eval,
+            "re_sha".to_string(),
+            &bad_ctrl_cap,
+            "cc_sha".to_string(),
+            &ctrl_eval,
+            "ce_sha".to_string(),
+            None,
+            &d34,
+            "d34_sha".to_string(),
+            None,
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("distinct config_sha256 and lineage_sha256"));
     }
 
     #[test]
@@ -3388,7 +3812,7 @@ mod tests {
     }
 
     #[test]
-    fn token_cells_receipt_and_candidate_table_validate_target_admission_and_slices() {
+    fn token_cells_receipt_and_candidate_table_validate_hashes_ranges_and_d34_consistency() {
         let (panel, rel_cap, rel_eval, _, _, d34) = fixture_receipts(1, 0);
         let arm = validate_arm_inputs(
             &panel,
@@ -3404,10 +3828,19 @@ mod tests {
         .unwrap();
 
         let token_cells = vec![0u32; CANONICAL_VOCAB];
+        let mut u16_bytes = Vec::with_capacity(CANONICAL_VOCAB * 2);
+        for &c in &token_cells {
+            u16_bytes.extend_from_slice(&(c as u16).to_le_bytes());
+        }
+        let tc_sha = sha256_hex(&u16_bytes);
+
         let tc_receipt = json!({
             "schema": TOKEN_CELLS_RECEIPT_SCHEMA,
+            "status": TOKEN_CELLS_RECEIPT_STATUS,
             "driver_checkpoint_sha256": "ckpt_rel",
             "model_snapshot_sha256": "snap_rel",
+            "updates_applied": 0,
+            "snapshot_unchanged": true,
             "token_cells": token_cells,
         });
         let (cells, occupied) =
@@ -3418,21 +3851,28 @@ mod tests {
 
         let mut t2_by_q = vec![vec![7u32]; CANONICAL_VOCAB];
         t2_by_q[3] = vec![7, 4];
-        let cand_table = CandidateCellTable {
+        t2_by_q[5] = vec![8, 9];
+        let u_ranked = vec![2u32, 7, 4, 8];
+        let occs = vec![vec![7u32, 4], vec![8u32, 9]];
+        let t2_sha = sha256_hex(&serde_json::to_vec(&t2_by_q).unwrap());
+        let u_sha = sha256_hex(&serde_json::to_vec(&u_ranked).unwrap());
+        let win_sha = sha256_hex(&serde_json::to_vec(&occs).unwrap());
+
+        let mut cand_table = CandidateCellTable {
             schema: CANDIDATE_CELL_TABLE_SCHEMA.to_string(),
             driver_checkpoint_sha256: "ckpt_rel".to_string(),
             model_snapshot_sha256: Some("snap_rel".to_string()),
             ordered_row_binding_sha256: Some(CANONICAL_ORDERED_ROW_BINDING_SHA256.to_string()),
-            token_cells_sha256: Some("tc_sha".to_string()),
-            t2_ranked_table_sha256: Some("t2_sha".to_string()),
-            u_succ_ranked_table_sha256: Some("usucc_sha".to_string()),
-            u_train_ranked_table_sha256: Some("utrain_sha".to_string()),
-            dev_window_successors_sha256: Some("devwin_sha".to_string()),
+            token_cells_sha256: Some(tc_sha),
+            t2_ranked_table_sha256: Some(t2_sha),
+            u_succ_ranked_table_sha256: Some(u_sha.clone()),
+            u_train_ranked_table_sha256: Some(u_sha),
+            dev_window_successors_sha256: Some(win_sha),
             token_cells: cells,
             t2_ranked_candidates_by_query: t2_by_q,
-            u_succ_ranked_candidates: vec![7, 4],
-            u_train_ranked_candidates: Some(vec![7, 4]),
-            dev_window_query_successors_most_recent_first: Some(vec![vec![7, 4], vec![8]]),
+            u_succ_ranked_candidates: u_ranked.clone(),
+            u_train_ranked_candidates: Some(u_ranked),
+            dev_window_query_successors_most_recent_first: Some(occs),
         };
         let pre = score_preflight_dev_values(
             &panel,
@@ -3462,10 +3902,19 @@ mod tests {
                 ["t2_same_cell_hit1"]["hits"],
             1
         );
+
+        // Out-of-range token ID in t2_ranked_candidates_by_query must fail cleanly without panic.
+        let mut bad_table = cand_table.clone();
+        bad_table.t2_ranked_candidates_by_query[3].push(4096);
+        assert!(score_same_cell_rows_from_table(&arm, &bad_table).is_err());
+
+        // Mismatched u_succ_ranked_candidates vs u_train_ranked_candidates must fail cleanly.
+        cand_table.u_succ_ranked_candidates = vec![7, 2, 4, 8];
+        assert!(score_same_cell_rows_from_table(&arm, &cand_table).is_err());
     }
 
     #[test]
-    fn raw_token_cells_u16_parses_8192_bytes_and_rejects_out_of_range_cells() {
+    fn raw_token_cells_u16_requires_sibling_report_receipt_and_rejects_bare_file() {
         let mut raw = Vec::with_capacity(CANONICAL_VOCAB * 2);
         for tok in 0..CANONICAL_VOCAB {
             let cell = ((tok * 17) % 256) as u16;
@@ -3476,8 +3925,121 @@ mod tests {
         assert_eq!(occupied, 256);
         assert_eq!(cells[7], 119);
 
-        raw[0] = 0;
-        raw[1] = 1; // 256 in little-endian u16 -> out of range
-        assert!(parse_token_cells_u16_bytes(&raw, "token_cells.u16").is_err());
+        let tmp_dir = std::env::temp_dir().join(format!("uor_r4_tc_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp_dir);
+        fs::create_dir_all(&tmp_dir).unwrap();
+        let u16_path = tmp_dir.join("token_cells.u16");
+        fs::write(&u16_path, &raw).unwrap();
+
+        // Bare token_cells.u16 without sibling report.json must be refused.
+        let bare_err = load_gpu_token_cells_file(&u16_path, "ckpt_rel", "snap_rel").unwrap_err();
+        assert!(
+            bare_err.contains("without sibling report.json"),
+            "{bare_err}"
+        );
+
+        // Writing a valid sibling report.json succeeds and binds all receipt pins.
+        let u16_sha = sha256_hex(&raw);
+        let report_val = json!({
+            "schema": TOKEN_CELLS_RECEIPT_SCHEMA,
+            "status": TOKEN_CELLS_RECEIPT_STATUS,
+            "config_file": {"path": "/tmp/cfg.json", "sha256": "raw_rel_cfg_file_sha"},
+            "config_sha256": "canonical_rel_cfg_sha",
+            "lineage_sha256": "rel_lineage_sha",
+            "checkpoint_file": {"path": "/tmp/ckpt.json", "sha256": "raw_ckpt_rel_file_sha"},
+            "driver_checkpoint_sha256": "ckpt_rel",
+            "model_snapshot_sha256": "snap_rel",
+            "model_epoch": 0,
+            "completed_batches": 0,
+            "token_cells_file": {"path": u16_path.to_string_lossy(), "sha256": u16_sha},
+            "updates_applied": 0,
+            "snapshot_unchanged": true
+        });
+        fs::write(
+            tmp_dir.join("report.json"),
+            serde_json::to_vec(&report_val).unwrap(),
+        )
+        .unwrap();
+        let loaded = load_gpu_token_cells_file(&u16_path, "ckpt_rel", "snap_rel").unwrap();
+        assert_eq!(loaded.occupied_cells, 256);
+        assert_eq!(
+            loaded.checkpoint_file_sha256.as_deref(),
+            Some("raw_ckpt_rel_file_sha")
+        );
+        let _ = fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn u_succ_ranked_uses_train_unigram_ranking_not_dev_labels() {
+        let tmp_dir =
+            std::env::temp_dir().join(format!("uor_r4_usucc_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp_dir);
+        fs::create_dir_all(&tmp_dir).unwrap();
+
+        // Synthetic TRAIN: BOS(0), 3, 2, 3, 2, 3, 7 -> matched targets at p=2,4,6 are 2, 2, 7.
+        // Modal TRAIN target is token 2 (count 2), followed by token 7 (count 1).
+        let train_toks: [u16; 7] = [0, 3, 2, 3, 2, 3, 7];
+        let train_mask: [u8; 7] = [0, 0, 1, 0, 1, 0, 1];
+
+        // Synthetic DEV: BOS(0), 3, 7, 3, 7 -> eligible row at p=4 has query=3, target=7 (P_succ).
+        // If U_succ were fitted on DEV P_succ labels, its top-1 would be 7 instead of TRAIN modal 2.
+        let dev_toks: [u16; 5] = [0, 3, 7, 3, 7];
+        let dev_mask: [u8; 5] = [0, 0, 0, 0, 1];
+
+        let write_u16 = |path: &Path, slice: &[u16]| {
+            let mut b = vec![0u8; 64];
+            b[..4].copy_from_slice(b"UORT");
+            b[4..8].copy_from_slice(&1u32.to_le_bytes());
+            b[8..16].copy_from_slice(&(slice.len() as u64).to_le_bytes());
+            b[16..20].copy_from_slice(&(CANONICAL_VOCAB as u32).to_le_bytes());
+            for &x in slice {
+                b.extend_from_slice(&x.to_le_bytes());
+            }
+            fs::write(path, b).unwrap();
+        };
+        let train_tok_p = tmp_dir.join("train.tokens.u16");
+        let train_mask_p = tmp_dir.join("train.mask.u8");
+        let dev_tok_p = tmp_dir.join("dev.tokens.u16");
+        let dev_mask_p = tmp_dir.join("dev.mask.u8");
+        write_u16(&train_tok_p, &train_toks);
+        fs::write(&train_mask_p, train_mask).unwrap();
+        write_u16(&dev_tok_p, &dev_toks);
+        fs::write(&dev_mask_p, dev_mask).unwrap();
+
+        let d34_rows = vec![ValidatedD34Row {
+            ordinal: 0,
+            position: 4,
+            query_token: 3,
+            target_token: 7,
+            is_psucc: true,
+            distance_bucket: Some(0),
+            conflict: false,
+            t1b_prediction: 2,
+            t1b_hit1: false,
+            t2_prediction: 2,
+            t2_hit1: false,
+            t2_hit8: true,
+            t3_prediction: 2,
+            t3_hit1: false,
+            u_hit1: false,
+            u_hit8: true,
+        }];
+        let paths = CorpusPaths {
+            train_tokens: &train_tok_p,
+            train_mask: &train_mask_p,
+            dev_tokens: &dev_tok_p,
+            dev_mask: &dev_mask_p,
+        };
+        let tables = build_corpus_reference_tables(&paths, &d34_rows, false).unwrap();
+        assert_eq!(tables.train_matched_targets, 3);
+        assert_eq!(tables.u_train_total_counts, 3);
+        assert_eq!(tables.u_succ_total_counts, 3);
+        assert_eq!(tables.u_train_ranked, vec![2, 7]);
+        assert_eq!(tables.u_succ_ranked, vec![2, 7]);
+        assert_eq!(
+            tables.u_succ_ranked_table_sha256,
+            tables.u_train_ranked_table_sha256
+        );
+        let _ = fs::remove_dir_all(&tmp_dir);
     }
 }
