@@ -1,24 +1,17 @@
 //! The `prlint` rules, as Rust (D30 check-port step 10 of 10 — **the module set is complete**).
 //!
-//! # The two `prlint` rules, and which can be ported
+//! # The two `prlint` rules
 //!
 //! | rule | severity | in this unit |
 //! |---|---|---|
 //! | `prlint.d23_interlock` | error | **yes** |
-//! | `prlint.gates_declared` | error | **no — see below** |
+//! | `prlint.gates_declared` | error | **yes** |
 //!
-//! ## Why `gates_declared` cannot be ported
+//! ## `gates_declared` reconciles `DECLARED_GATES` with `ruleinventory::INVENTORY`
 //!
-//! It **parses its own source file with Python's `ast`** to extract the gate ids that `check_pr`
-//! raises, then compares them to a declared list — so that renaming a gate cannot leave a lesson
-//! citing an id that no longer exists.
-//!
-//! **In Rust that check would parse Rust source and compare a different list, which is a different
-//! check that does not do the job.** It is the same class as `harness.entry_point` and
-//! `harness.documented_commands`: **a rule whose subject is the file it lives in.** Those rules are
-//! properties of *this implementation at this moment*, not of the repository, and they should
-//! **become unnecessary rather than translated** — when `prlint` itself is Rust, the gate list and
-//! the gates will be in one file and one compiler will check they line up.
+//! Every gate id declared in [`crate::prgates::DECLARED_GATES`] must be unique and registered under
+//! `"prlint"` in [`crate::ruleinventory::INVENTORY`], and every `"prlint.*"` rule in the inventory
+//! other than `"prlint.gates_declared"` itself must appear in `DECLARED_GATES`.
 //!
 //! ## `interlock_holds` is a real port, and the reason is that its subject moved
 //!
@@ -262,9 +255,75 @@ pub fn interlock_holds(paths: &StatePaths, claims: &[String]) -> Vec<Finding> {
     )]
 }
 
+/// `prlint.gates_declared` — reconcile [`crate::prgates::DECLARED_GATES`] against the `"prlint"`
+/// slice of [`crate::ruleinventory::INVENTORY`].
+pub fn gates_declared_for(declared: &[&str], inventory_prlint: &[&str]) -> Vec<Finding> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut dupes = Vec::new();
+    for &g in declared {
+        if !seen.insert(g) && !dupes.contains(&g) {
+            dupes.push(g);
+        }
+    }
+    let inv_set: std::collections::BTreeSet<&str> = inventory_prlint.iter().copied().collect();
+    let missing_from_inventory: Vec<&str> = declared
+        .iter()
+        .copied()
+        .filter(|g| !inv_set.contains(g))
+        .collect();
+    let missing_from_declared: Vec<&str> = inventory_prlint
+        .iter()
+        .copied()
+        .filter(|&g| g != "prlint.gates_declared" && !seen.contains(g))
+        .collect();
+
+    let mut problems = Vec::new();
+    if !dupes.is_empty() {
+        problems.push(format!(
+            "duplicate gate(s) in DECLARED_GATES: {}",
+            dupes.join(", ")
+        ));
+    }
+    if !missing_from_inventory.is_empty() {
+        problems.push(format!(
+            "gate(s) in DECLARED_GATES absent from ruleinventory::INVENTORY[prlint]: {}",
+            missing_from_inventory.join(", ")
+        ));
+    }
+    if !missing_from_declared.is_empty() {
+        problems.push(format!(
+            "gate(s) in ruleinventory::INVENTORY[prlint] absent from DECLARED_GATES: {}",
+            missing_from_declared.join(", ")
+        ));
+    }
+    if problems.is_empty() {
+        return Vec::new();
+    }
+    vec![Finding {
+        rule_id: "prlint.gates_declared",
+        severity: "error",
+        message: problems.join("; "),
+        path: "crates/uor-r4-harness/src/prgates.rs".into(),
+        fix: "keep prgates::DECLARED_GATES and ruleinventory::INVENTORY[\"prlint\"] in exact 1-to-1 agreement".into(),
+    }]
+}
+
+/// `prlint.gates_declared` evaluated over the live [`crate::prgates::DECLARED_GATES`] and
+/// [`crate::ruleinventory::INVENTORY`] tables.
+pub fn gates_declared() -> Vec<Finding> {
+    let inv_prlint = crate::ruleinventory::INVENTORY
+        .iter()
+        .find(|(m, _)| *m == "prlint")
+        .map(|(_, ids)| *ids)
+        .unwrap_or(&[]);
+    gates_declared_for(&crate::prgates::DECLARED_GATES, inv_prlint)
+}
+
 /// Every `prlint` rule ported in this unit.
 pub fn all(paths: &StatePaths, claims: &[String]) -> Vec<Finding> {
-    interlock_holds(paths, claims)
+    let mut out = gates_declared();
+    out.extend(interlock_holds(paths, claims));
+    out
 }
 
 #[cfg(test)]
@@ -434,6 +493,54 @@ mod tests {
             ),
             "{}",
             f[0].message
+        );
+    }
+
+    /// `gates_declared` passes on the real `DECLARED_GATES` and `ruleinventory::INVENTORY` tables,
+    /// and `gates_declared_for` reports duplicates and mismatches in either direction.
+    #[test]
+    fn gates_declared_reconciles_declared_gates_with_inventory() {
+        assert!(
+            gates_declared().is_empty(),
+            "live DECLARED_GATES and INVENTORY[prlint] must agree"
+        );
+
+        let f_dup = gates_declared_for(
+            &["prlint.a", "prlint.a"],
+            &["prlint.a", "prlint.gates_declared"],
+        );
+        assert_eq!(f_dup.len(), 1, "{f_dup:?}");
+        assert_eq!(f_dup[0].rule_id, "prlint.gates_declared");
+        assert!(
+            f_dup[0].message.contains("duplicate gate(s)"),
+            "{}",
+            f_dup[0].message
+        );
+
+        let f_missing_inv = gates_declared_for(
+            &["prlint.a", "prlint.b"],
+            &["prlint.a", "prlint.gates_declared"],
+        );
+        assert_eq!(f_missing_inv.len(), 1, "{f_missing_inv:?}");
+        assert!(
+            f_missing_inv[0]
+                .message
+                .contains("absent from ruleinventory::INVENTORY[prlint]: prlint.b"),
+            "{}",
+            f_missing_inv[0].message
+        );
+
+        let f_missing_decl = gates_declared_for(
+            &["prlint.a"],
+            &["prlint.a", "prlint.c", "prlint.gates_declared"],
+        );
+        assert_eq!(f_missing_decl.len(), 1, "{f_missing_decl:?}");
+        assert!(
+            f_missing_decl[0]
+                .message
+                .contains("absent from DECLARED_GATES: prlint.c"),
+            "{}",
+            f_missing_decl[0].message
         );
     }
 }
