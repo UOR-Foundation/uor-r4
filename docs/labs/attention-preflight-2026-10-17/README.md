@@ -5,7 +5,11 @@ executable.** Battery2 exited1 with zero attempted command steps. This is an
 instrument/setup defect, not evidence against Relation or native attention.
 The released attempt is closed; its permission cannot be replayed.
 
-The owner-prioritized learned-attention headline remains **NOT_RUN**. No
+The protected line remains **count0/3**, with headline **reply37/232 SUSPENDED**
+and attributable learned Relation **NOT_RUN**, per
+[PM count ruling6242715607](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242715607).
+Preparation units and this D31 staging failure do not consume the executed-test
+line count. No
 learning, mechanism negative, KEEP, progress reset or milestone transition is
 claimed. Under D31, this instrument failure does not add a mechanism negative
 or reset the existing D21/D22 history. Training/M2/Stage B remain HELD and
@@ -16,6 +20,8 @@ Q4 NOT_EXECUTABLE.
 - [PM battery FIT/cost/sensitivity disposition6241890920](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6241890920).
 - [AGY actual packet APPROVE6242095986](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242095986).
 - [Actual finite-preflight dispatch6242232012](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242232012).
+- [Actual closure report6242397583](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242397583).
+- [PM operational closure/repair disposition6242429565](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242429565).
 - Protected source `d46e050f4dfe4177f599410f34e1647cc9b2fc4f`, reviewed delivery
   `ca70766067adbf58409ac5d590f84636339377ff`, constructed source
   `96ad8a4750398a8ecbf89e711f351de1580d7991` and binary SHA256
@@ -134,8 +140,12 @@ raw-rate proxy or$0.051145556 rounded-rate proxy. These are alternatives, not
 summed charges or invoices. The carried mixed Codex estimate, adding the
 rounded-rate uptime proxy, is$4.644607777 plus PM; storage/transfer UNMEASURED.
 
-Next is the same necessary staging repair and confined transport review,
-followed by actual AGY packet review/PM disposition and a distinct release.
+Battery3 is **conditionally ready for distinct PM dispatch; NOT_RELEASED /
+NOT_RUN**, per [independent prospective verdict6242500425](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242500425)
+and [final frozen-packet handoff6242520855](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242520855).
+[AGY confined packet APPROVE6242609372](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6242609372)
+completes the required packet reviews. Next is a new distinct actual PM dispatch
+and fresh admission, then execution of the same reviewed battery phases.
 No new compiler run, timing series, mechanism bar or host model reconstruction
 is implied. A successful battery must still precede any separately released
 paired learning dose; a token map alone cannot establish same-cell attribution.
