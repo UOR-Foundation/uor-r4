@@ -1,0 +1,213 @@
+# Pre-registration — M1 learned-attention link
+
+## 7.1 Header
+
+- **Date / owner:** 2026-10-17 / Kimi PM (kimi/pm1), drafted by DeepSeek design seat.
+- **Authority:** owner priority on issue #2029, posted 2026-10-17 04:42Z, "close the missing learned-attention link"; PM disposition [#2029 comment 6229949186](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6229949186) accepting it as the active M1 line; [D22](../../integration/DECISIONS.md) (a negative closes a configuration, never a mechanism); [D24](../../integration/DECISIONS.md) (no CPU model compute; no GPU on non-decisive work); [D32](../../integration/DECISIONS.md) (integer-only substrate, no softmax/matmul/float); [D34](../../integration/DECISIONS.md:1642-1660); [finite-relational-head](../../mechanisms/finite-relational-head.md); [M4 sheet](m4-finite-relational-head-2026-10-15.md); [D34 successor-table control](d34-successor-table-control-2026-10-17.md).
+- **Line:** M1 qualification; count **0/3**, suspended headline **37/232**, unchanged. No mechanism negative, KEEP, acceptance or count reset.
+- **Delivery:** **docs only**. This sheet authorizes **NO training**. All new observations are `NOT_RUN`. The interleaver, the +1 leaf combine-gate initialization and the Gate-admitting learning entrypoint are **Unit 1**, separately assigned to Codex. This sheet binds their reviewed contract; it does not implement them.
+- **Scope:** trained-in discriminator design, not a capability claim. **Q4 NOT_EXECUTABLE**; Training/M2/Stage B **HELD**. FIT releases none of these holds. Execution needs FIT + PM release; any D-Release-class decision needs owner release. This configuration is not D-Release-class.
+- **Hard dependency:** the frozen Route completion executor rejects Gate receipts (`completion.rs:744-747`). A Relation artifact cannot be produced by the existing completion path. Unit 1's separately reviewed, opted-in Gate-admitting entrypoint is a precondition, not a design choice.
+
+## 7.2 Question and smallest falsifiable hypothesis
+
+**Question.** Does a **trained-in** `ReadSpec::Relation { kept: 8, sweeps: 1 }` artifact — the first learned Relation checkpoint — outperform a **matched relation-disabled control** under the identical declared initialization, and the **T2 context-free successor table**, on the 3,847-row copy-successor panel (`P_succ`) **and** its 10,440-row complement (`P_comp`), with actual Relation target admission reported separately from conditional token rank, and with a declared fresh-transfer confirmation?
+
+**Fixed definitions.**
+- `P_succ` = 3,847 rows (26.9266% of 14,287); `P_comp` = 10,440 rows; conflict rows = 1,335 (`P_any_succ \ P_succ`); buckets `[50, 2872, 900, 25]`; zero at `d=1`; `ordered_row_binding_sha256 = e4ef44fb…`.
+- `B3_R` = the Relation arm's own target-admitted rows on the evaluated slice. `B3_C` = the control's own target-admitted rows. `B3_I` = the intersection of `B3_R` and `B3_C` on `P_succ`. **`B3_I` is the primary paired denominator; `B3_R` and `B3_C` are reported separately and are not substituted for it.**
+- `T2` = the context-free TRAIN successor table from [D34 §6.4 item 3](d34-successor-table-control-2026-10-17.md): pairs `(tokens[p-1], tokens[p])` at the exact masked TRAIN targets the Relation artifact consumed; most frequent successor; tie by lowest token id; model-matched unigram fallback. It is **rebuilt on the actual training budget** of the new artifact (16,404 batches → 1,049,856 targets; 32,808 → 2,099,712), not fixed to the seed-1 1,049,856.
+- `U_succ` = the model-matched unigram top-1/top-8 computed on `P_succ`, not the full-panel 1,226.
+- `F_I = max(24, 2·sqrt(b_I + c_I))` on `B3_I`; `F_T = max(24, 2·sqrt(b_T + c_T))` on `B3_R`; `F_A = max(24, 2·sqrt(b_A + c_A))` on the trained-vs-ablation paired rows; `F_C` = the complement non-regression floor (20 rows top-1, 63 top-8, 87 B3, per the M4 B2 floors).
+
+**H_geom (learned relation link).** On `B3_I`, the trained Relation arm's conditional top-1 exceeds the matched relation-disabled control by `F_I`; on `B3_R`, it exceeds T2 (admission-restricted to the Relation arm's admitted cells) by `F_T`; on `P_comp`, it does not fall below the control by more than `F_C`; and the within-checkpoint zero-relation ablation loses at least `F_A` on `P_succ` relative to the trained Relation. The fresh transfer reproduces the `P_succ` direction and floor.
+
+**H_control (no learned relation effect).** On `B3_I`, the relation-disabled control matches or beats the Relation arm within `F_I`, or the within-checkpoint zero-relation ablation is within `F_A` of the trained Relation. The relation trits add nothing at this configuration.
+
+**H_null (frequency only).** On `B3_I`/`B3_R`, T2 (admission-restricted) matches or beats both the Relation arm and the control within `F_T`. The sub-panel is explained by token-frequency/successor identity, not contextual learning. `U_succ` is the marginal reference.
+
+**H_mixed / INCONCLUSIVE.** Any within-floor band; a `P_succ` win with a complement regression beyond `F_C`; or `B3_I < 200`/observed power <80%. No decision fires.
+
+**Disconfirming observations.**
+- H_geom is **disconfirmed** by any of: `Relation < control + F_I`; `Relation < T2 + F_T`; complement regression beyond `F_C`; ablation drop `< F_A`; fresh-transfer failure.
+- H_control is **disconfirmed** by `Relation ≥ control + F_I` **and** ablation drop `≥ F_A`.
+- H_null is **disconfirmed** by `Relation ≥ T2 + F_T` (and the control ≥ T2 + F_T).
+- All hypotheses are subject to the §7.6 evaluability rule and the §7.8 initialization/activation checks. If the initialization check fails, no hypothesis fires.
+
+**Initial-unobservability statement (binding).** At the current zero init, `discrete_init` sets `gates[i]=0` for the whole inventory (`discrete.cu:358`); the combine path skips a zero gate (`discrete.cu:227`, `:258`), and the relation scores skip a zero trit (`discrete.cu:182`). With all gates zero, the Flock/Relation read outputs `snap(query,1)` — the query root per block — so relation-trit changes are **causally inert**. A null result under the zero-init configuration would be uninterpretable and is **not** a mechanism negative. The +1 leaf combine-gate init below is the declared amendment that makes the relation path observable and the test falsifiable.
+
+## 7.3 The missing learned-attention link and the declared initialization amendment
+
+**Source facts on current main (`fa62a670a`).**
+- `SchedulePolicy` has only `CanonicalVectorThenReadV1` (`training.rs:31-35`). `InterleavedReadEvery8V1` exists only as a plan in the M4 sheet; it is not implemented.
+- At `V4096/B4/C192`, `read_parameters = gate_count = 20 + 25 = 45`; `coordinates = 16,384 + 45 = 16,429` (`lib.rs:140-153`; `training.rs:184-193`).
+- A 16,404-batch canonical pass executes coordinate indices `0..16,403`. The read coordinates are the last 20 (`16,384..16,403`), i.e. **Gate(0..19) = the 20 level-combine gates**. It reaches **zero relation-trit coordinates** (`Gate(20..44)`). The dispatch's shorthand "ZERO Gate coordinates" is imprecise: it is zero **relation** Gate coordinates; 20 combine-gate coordinates are reached, once each.
+- `completion.rs:744-747` admits only `VectorBlock` and `Route` receipts and returns `Err("completion never admits flock gates")` on any Gate receipt. `PreparedDriver::transition` is coordinate-kind agnostic (`training.rs:859-897`), so the missing link is the **entrypoint's admission of Gate receipts**, not the transition math.
+- The read is integer and writer-shared (`discrete.cu:125-267`, `:307-345`); no dense/float path is introduced.
+
+**Declared amendment: +1 leaf combine gate per payload block.**
+- Set `gates[b*stages + 0] = +1` for `b = 0..3` (at `stages = 5`: Gate(0), Gate(5), Gate(10), Gate(15)), identically on the Relation arm and the matched relation-disabled control.
+- Effect: the level-0 consensus is added to the query residual (`terms = 2`), so the read is context-sensitive at initialization and the **5 level-0 relation trits** (`Gate(20..24)`, edge types `e=0..4` at level 0) become causally active. The 20 higher-level relation trits remain inert until their combine gates learn a nonzero value; they are learnable under the interleaved schedule.
+- It is **architecture-selected before data/results**, recorded in the run configuration with the exact four indices and values, and never derived from the target token, the DEV evaluation, or any answer index.
+- The production `discrete_init` is unchanged; the opted-in entrypoint applies the four `+1` values deterministically after initialization and records them. Any deviation is an instrument fault.
+
+**Matched relation-disabled control (primary design).**
+- Use `ReadSpec::Relation { kept: 8, sweeps: 1 }` with the 25 relation trits **pinned to 0** and their proposals refused/no-op, so the control keeps the **same 45-coordinate cycle**, the same interleaved schedule, the same +1 leaf combine init, and the same combine-gate proposal frequency as the treatment.
+- Do **not** use `ReadSpec::Flock` as the primary control. A Flock model has a 20-coordinate read cycle; at 16,404 batches its combine gates receive ~102–103 proposals each, versus ~46 in the 45-coordinate Relation arm. That is a proposal-frequency confound, not a matched control. The Flock arm may be retained as a secondary relation-off ≡ Flock identity check, labeled with the confound.
+- The only permitted difference between the treatment and the primary control is whether the 25 relation trits are learnable/active.
+
+## 7.4 Controls and matching
+
+| Control | Role | Matching |
+| --- | --- | --- |
+| **Relation arm** | Treatment: `ReadSpec::Relation { kept: 8, sweeps: 1 }`, interleaved, +1 leaf combine init | — |
+| **Relation-off control (primary)** | Same `ReadSpec`, same 45-coordinate cycle, same +1 leaf init; 25 relation trits pinned 0, relation proposals refused | Exact spec/schedule/init/seed/budget/objective/corpus match; only relation enablement differs |
+| **Within-checkpoint zero-relation ablation** | Trained Relation checkpoint, in-memory `gates[20..45]=0`, combine gates and codebook unchanged; zero-apply | Same checkpoint, same rows; attribution, not retraining |
+| **T2 context-free successor table** | Ordinary comparator: does contextual learning beat frequency/token identity? | Same actual training targets; admission-restricted to the Relation arm's admitted cells per D34 §6.4 item 7 |
+| **U_succ** | Marginal reference on `P_succ` | Model-matched 1,049,856 or 2,099,712 targets, depending on budget |
+| **Flock arm (secondary only)** | relation-off ≡ Flock identity check | Same +1 leaf init; **not** proposal-frequency matched (20- vs 45-coordinate cycle) |
+| **Route arm (optional only)** | Additional comparison if the PM requires it | Not a causal control; a Route-only win cannot attribute a relation effect |
+
+**Matched fields (must be identical on the treatment and primary control):** `Spec { vocabulary: 4096, blocks: 4, context: 192, kept_cells: 8 }`; `batch_rows = 64`; seed(s); ascending response-masked corpus order; objective policy (fixed at release); batch budget; interleaved schedule `s % 8 == 7`, `r = (s/8) % 45`; +1 leaf combine gates (0,5,10,15); shared writer (`discrete.cu:307-345`); geometry sha256 `46ddbb76…`; tokenizer `d36d3e87…`; the same opted-in Gate-admitting entrypoint; the same DEV and fresh evaluation path. The only permitted config difference is relation-trit enablement. Record both config hashes and the diff.
+
+**Explicitly excluded:** no oracle source index; no answer-derived gate; no teacher or external logits; no hidden dense/float path; no DEV-selected setting. The +1 leaf gates are fixed before data/results; K, sweeps, schedule, seeds, budget and objective are fixed before training; the fresh draw is sealed before training.
+
+## 7.5 Design and dose
+
+**Unit 1 dependency (Codex, separately reviewed).** The interleaver, the +1 leaf combine-gate initialization and the Gate-admitting learning entrypoint are Unit 1. This sheet binds their contract: the entrypoint must admit Gate receipts, record per-coordinate `attempted / any_candidate_cost_differs_from_identity / accepted_updates` for `VectorBlock`, `GateCombine (0..19)` and `GateRelation (20..44)`, and leave the frozen Route completion executor unchanged. No on-lease patch; no modification of `completion.rs:744-747`.
+
+**Training arms and budget.**
+- Primary dose: `B = 16,404` batches per arm (one full interleaved cycle at `schedule_cycle = 16,404`), two arms (Relation + Relation-off control).
+- Decisive D22 plan: **two seeds (1 and 2)** per arm. One seed is a reduced-power fallback and cannot measure seed-to-seed noise; the M4 39-row floor is a proxy, not a measured spread. The PM/owner chooses the seed plan and the cost.
+- Power-up option: `B = 32,808` (two cycles) if the primary is underpowered; doubles the relation-trit attempts and the training cost. Not automatic.
+- No training is authorized by this sheet. The dose is registered; execution needs FIT + PM release + a resource admission.
+
+**Dose arithmetic — the relation coordinates must actually be reached.** Under `s % 8 == 7`, the read proposal index is `r = (s/8) % 45`; `Gate(0..19)` are combine gates, `Gate(20..44)` are relation trits. The table below is exact integer arithmetic for the candidate budgets.
+
+| Batch budget | Read proposals | Combine proposals (Gate 0..19) | Relation proposals (Gate 20..44) | Per combine gate | Per level-0 relation trit (Gate 20..24) | Per higher relation trit (Gate 25..44) | +1 leaf gates (0,5,10,15) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4,101 | 512 | 237 | 275 | 11–12 | 11 | 11 | 12 each |
+| 8,202 | 1,025 | 460 | 565 | 23 | 23 | 22–23 | 23 each |
+| 12,303 | 1,537 | 687 | 850 | 34–35 | 34 | 34 | 35 each |
+| 16,404 | 2,050 | 920 | 1,130 | 46 | 46 | 45 | 46 each |
+| 32,808 (power-up) | 4,101 | 1,826 | 2,275 | 91–92 | 91 | 91 | 92 each |
+| 16,404 canonical (current) | 20 | 20 | **0** | 1 | **0** | **0** | 1 each |
+| 18,432 (s%9==8, optional) | 2,048 | 920 | 1,128 | 46 | 46 (3 trits) / 45 (22 trits) | 45 | — |
+
+The canonical pass reaches the combine gates once and the relation trits **zero** times. The interleaver reaches the relation trits 275 / 565 / 850 / 1,130 times at the four quarter budgets; the level-0 relation trits (the ones activated by the +1 leaf init) get 11 / 23 / 34 / 46 proposals. This is the whole point of the line.
+
+**Training and evaluation sequence.**
+1. Unit 1 source reviewed; exact source/PTX/config pins; the +1 leaf gate indices/values recorded; the relation-off control's pinned trits recorded.
+2. Initialize both arms from the same deterministic `Device::new_with_read` seed/ordinal and apply the +1 leaf gates identically. Run the §7.8 causal-activation fixture before training.
+3. Train each arm for `B` batches in ascending corpus order, one coordinate per batch, same objective. Record per-coordinate attempted/sensitive/accepted counts, the relation-trit ledger, and the combine-gate ledger.
+4. At `B`, write both checkpoints; verify the treatment's relation-trit accepted updates and the control's zero relation-trit updates.
+5. DEV scoring (zero-apply): one `Device::forward` over the 224 DEV batches per arm, capturing `predictions`, `admitted_cells`, `top1_correct`, `top8_correct`, losses and the hinge components. Report `B3_R`, `B3_C`, `B3_I`, and conditional top-1/top-8 on `P_succ`, `P_comp`, the conflict rows and the full panel.
+6. Within-checkpoint zero-relation ablation: copy the trained Relation snapshot in memory, set `gates[20..45] = 0`, leave `gates[0..20]` and the codebook unchanged, evaluate the same 224 DEV batches zero-apply. Report the paired deltas on `P_succ`, `P_comp`, the full panel and `B3`.
+7. Fresh transfer: the fresh draw is sealed before training; score it once after the DEV result and the arm/checkpoint selection. The same zero-apply path; no retuning.
+8. Host: build T2 and `U_succ` on the actual training targets; score them on the same rows with the D34 admission restriction; emit the paired 2×2 tables.
+
+**Zero-apply statement.** No `apply`, proposal, optimizer or epoch advance during DEV, ablation or fresh scoring; `snapshot_unchanged: true`, `updates_applied: 0`. The training arms are the only place `.apply` occurs, and they are the registered dose, not an evaluation.
+
+**No softmax / no matmul / no float / no teacher.** The design introduces no softmax, softplus, sigmoid, tanh, GELU or normalized exponential, and no matrix multiplication/GEMM. The read, writer, gates and tables are integer. No teacher, external logits, oracle index or answer-derived gate. Any prohibited site is a blocker under D23/D25/D32, not a design choice.
+
+## 7.6 Bars and uncertainty
+
+- **Evaluability (precedence over every hypothesis).**
+  - `B3_I ≥ 200`, or the exact paired observed-power guard at the observed difference: if observed power <80%, the result is **UNDERPOWERED** and no decision fires. Report `B3_R`, `B3_C`, `B3_I` and the exact 2×2 counts.
+  - The initialization check (§7.8 items 1–3) passes.
+  - T2 conservation passes; the fresh draw is sealed.
+  - If any check fails, no hypothesis fires.
+- **`P_succ` primary matched set, `B3_I`.** Paired discordance `c − b`; null SE `sqrt(b+c)`; `F_I = max(24, 2·sqrt(b+c))`. The 24-row minimum is the rounded 2-SE floor at 149/14,287; the paired term is operative.
+- **Relation vs T2, `B3_R`.** Same paired rule, `F_T = max(24, 2·sqrt(b+c))`, with T2 restricted to the Relation arm's admitted cells per D34 §6.4 item 7.
+- **Full sub-panel, 3,847 rows.** The 39-row floor is the M4 `P_succ` floor; it is top-8-derived and conservative. Report end-to-end counts (Relation, control, T2, `U_succ`) and the admission-restricted upper bounds.
+- **Complement, 10,440 rows (co-primary non-regression).** `F_C`: 20 rows top-1, 63 top-8, 87 B3, per the M4 B2 floors. Report `B3_C` and conditional top-1/top-8 separately; a `P_succ` win with a complement regression beyond `F_C` is H_mixed, not H_geom.
+- **Zero-relation ablation.** Paired on `P_succ` and the complement; `F_A = max(24, 2·sqrt(b+c))`. Report the trained-vs-ablation 2×2 and the ablation's own `B3`.
+- **Fresh transfer.** Pre-registered at seal time: ≥2,000 response-masked targets, ≥500 copy-successor targets at the ~26.9% base rate, same tokenizer and C192 windowing, disjoint from TRAIN/DEV. Floors: `max(20, 2·sqrt(b+c))` on the fresh matched set (top-1), with the exact counts bound before training. A DEV win without a fresh-transfer confirmation is DEV-only and is not a KEEP.
+- **Wilson 95% intervals** for every rate. **Top-8** reported alongside top-1; the 63-row top-8 floor applies to full-panel and complement top-8 statements.
+- **D22 power.** Two seeds is the decisive plan; one seed is a reduced-power fallback with the 39-row proxy floor. The fresh draw is the separate acceptance draw; it is not used for model selection.
+
+## 7.7 Decision rule
+
+Apply in order; the first matching row fires.
+
+| Precedence | Observation | Interpretation at this configuration | Next decision |
+| --- | --- | --- | --- |
+| 0 | Init check fails; relation-off control has any nonzero relation trit or accepted relation update; frozen Route executor changed; same-writer/config/corpus/objective/budget mismatch; hash/epoch/apply fault; D23/D25/D32 site | INSTRUMENT FAULT | Diagnose/repair (D31); never a mechanism negative |
+| 1 | `B3_I < 200` and observed power <80%; fresh draw not sealed; T2 conservation fails | UNDERPOWERED / INVALID | Report exact counts; no hypothesis fires; lead resolves |
+| 2 | T2 ≥ both arms + `F_T` on `P_succ` | H_null: frequency/token identity explains the sub-panel | Diagnose the panel/table; no relation claim; do not close the mechanism |
+| 3 | Control ≥ Relation + `F_I`, or ablation within `F_A` of the trained Relation | H_control: no learned relation effect at this configuration | Close the configuration (D22); the mechanism family stays open |
+| 4 | Relation ≥ control + `F_I` but Relation < T2 + `F_T`; or a `P_succ` win with a complement regression beyond `F_C`; or ablation does not drop by `F_A`; or within-floor bands | H_mixed / INCONCLUSIVE | Report the exact 2×2s and the failing condition; do not claim a learned relation link; lead decides whether to power up |
+| 5 | Relation ≥ control + `F_I`, Relation ≥ T2 + `F_T`, complement non-regression within `F_C`, ablation drop ≥ `F_A`, and the fresh transfer reproduces the direction/floor | H_geom: the learned relation link is established at this configuration | Proceed to the M4/M2 B1–B3 and the owner's next decision; no general capability claim |
+| 6 | DEV meets H_geom but the fresh transfer fails | DEV-only diagnostic | No KEEP; report the failure; do not close the mechanism (D22) |
+
+**What changes the decision.** The first decisive number is the paired difference on `B3_I` against the matched relation-disabled control. The second is the paired difference against T2. A win over the control but not over T2 is **frequency/context not yet separated**; a win over T2 but not over the control is **parameter/budget, not relation**. Only the joint win, with the ablation drop and the complement non-regression, supports H_geom.
+
+## 7.8 Instrument validity
+
+1. **Declared init check.** The loaded treatment and control snapshots have exactly `gates[0]=gates[5]=gates[10]=gates[15]=+1`; all other combine gates are 0; the control's 25 relation trits are exactly 0. Any mismatch is a fault.
+2. **Control lock check.** The relation-off control's per-coordinate ledger shows `accepted_updates(GateRelation)=0` and `attempted(GateRelation)=0` (or refused no-ops); the treatment's relation-trit ledger is reported. A nonzero control relation trit is a fault.
+3. **Causal-activation fixture (before training).** On a finite fixture, a level-0 relation-trit move must change the read output/cost under the +1 leaf init. If it does not, the relation path is still inert — instrument fault, not a mechanism negative. This directly addresses the initial-unobservability issue.
+4. **Frozen executor check.** `completion.rs:744-747` is byte-unchanged and still refuses Gate receipts; the new entrypoint is the only path that admits them. Report both source/PTX identities.
+5. **Same-writer/config check.** The writer bytes are unchanged; the treatment and control config hashes differ only in relation-trit enablement; corpus, objective, budget, seed, spec, schedule, geometry and the +1 leaf gates are identical.
+6. **Zero-apply evaluation.** Snapshot/epoch unchanged before/after DEV, ablation and fresh scoring; `updates_applied: 0`.
+7. **T2 conservation.** T2's counts sum to the actual training targets (1,049,856 at 16,404; 2,099,712 at 32,808); tie/fallback deterministic; no token ≥4,096.
+8. **Fresh seal.** The fresh tokens/mask and ordered row binding are SHA256-bound before training; the file is not read during training or DEV selection.
+9. **`B3_R`/`B3_C`/`B3_I` measurement.** Admission is read from `Forward::admitted_cells` (`device.rs:307-308`), not assumed; the intersection is computed from the two arms' slots; no host recomputation of admission.
+10. **D23/D25/D32 ratchets** on the new source; any prohibited site is a blocker.
+
+**Which negatives only trigger diagnosis.** An init-check failure, a control-lock failure, a causal-activation failure, a frozen-executor change, a config mismatch, a hash/epoch fault, a T2 conservation failure or a fresh-seal failure is an **instrument fault** and triggers repair, not a mechanism negative. A `B3_I < 200` underpowered result triggers a power-up decision, not a closure. A null result under the **zero-init** configuration would be uninterpretable and is not admissible as a negative.
+
+## 7.9 Loaded artifacts, lineage and resource projection
+
+| Item | Value |
+| --- | --- |
+| Base | `origin/main = fa62a670a4caefa439eb11c88ecdfe25e60a1e7c` |
+| TRAIN tokens / mask | `3dee858f…` / `b5e7352d…` (2,425,925 masked targets) |
+| DEV tokens / mask | `0919e90f…` / `a838bb1a…` (14,287 eligible; 3,847 `P_succ`) |
+| Tokenizer | `d36d3e87…` |
+| Training targets consumed | 1,049,856 at 16,404 batches; 2,099,712 at 32,808 |
+| +1 leaf gates | Gate(0), Gate(5), Gate(10), Gate(15) = +1; recorded in config |
+| Relation inventory | 20 combine + 25 relation = 45; `coordinates = 16,429` |
+| Relation implementation | `discrete.cu:78-267`, `:166-218`, `:182`, `:227`, `:258`, `:270-273`; `device.rs:341-356`, `1231-1246`, `1512-1514`; `lib.rs:76-79`, `116-127`, `140-153`; `relation_qualification.rs:1-120` |
+| Frozen executor | `completion.rs:744-747` — Gate receipts refused |
+| Learned Relation checkpoint | **does not exist**; hash TBD at release |
+| Q4 Route reference | `4477eb5c…`; evaluation `4fff1d3c…`; 149/14,287; 29/435 `P_succ` |
+| Sealed attribution | 7.32–7.37s per `Device::propose` call; 99.995770–99.998097% counterfactual-dominated |
+| T2 | [D34 §6.4 item 3](d34-successor-table-control-2026-10-17.md), rebuilt on the actual training budget |
+
+**Resource projection (no stale 3.74s/batch figure).**
+- The sealed attribution measures **7.32–7.37s per `Device::propose` call** at the K16/checkpoint-0 shape, with 99.995770–99.998097% of the enclosing propose wall in the counterfactual event. A training batch issues **two** propose calls (one coordinate each; `training.rs:859-897`; `device.rs:1587-1698`), so the propose component is **14.64–14.74s/batch** at that shape, before carry/observation.
+- The reviewed configuration is `Relation { kept: 8, sweeps: 1 }` at K=8, not K16; the writer scan is smaller. The actual per-batch cost **must be measured at the reviewed configuration** in the release packet. The sealed K8 seed-1 completion's 15.46 h for 16,404 batches (~3.39s/batch, Route/canonical) is a lower anchor from a different configuration and is not the planning basis.
+- Planning envelope at 14.7s/batch: one arm × 16,404 = ~67.0 h; two arms × one seed = ~134 h ≈ **$122** at $0.908/h; two arms × two seeds = ~268 h ≈ **$243**. At the K8 observed 3.39s/batch: two arms × one seed = ~31 h ≈ **$28**; two seeds = ~62 h ≈ **$56**. The release packet must bind the measured throughput; the PM must choose the seed/budget plan. Do not treat the estimate as a hard stop.
+- DEV + ablation + fresh scoring: ~1–4 h total at the observed range, <$4.
+- Host T2/`U_succ` work: **$0 GPU**.
+- One RTX 5090 through `uor-pod` only; `df ≥ 30 GiB`; caps ≤4 pods and ≤$8/h across labs. This docs delivery is **$0 GPU**.
+- No training is authorized. The cost is a projection, not a release.
+
+**Stop conditions.** Unit 1 source/FIT not complete → no training. Init/control-lock/causal-activation/frozen-executor/config/hash/epoch/T2/fresh-seal fault → stop and seal. Any D23/D25/D32 site → blocker. `B3_I < 200` and power <80% → underpowered, no decision. Disk floor/resource cap → stop. A healthy admitted run is renewed, not cancelled because a planning estimate elapsed.
+
+**Record schema.** `uor-r4.learned-attention-link/1`: run config (with the +1 gate indices/values and relation enablement), per-coordinate ledgers, per-row DEV/fresh records (`row_ordinal`, `doc_id`, `target_position`, `query_token`, `target_token`, `subpanel`, `distance_bucket`, `admitted_cells[16]`, `target_admitted`, `top1_correct`, `top8_correct`, `prediction`, hinges, `arm`, `seed`), `B3_R`/`B3_C`/`B3_I`, T2/`U_succ` counts, ablation deltas, paired 2×2 tables, source/checkpoint/evaluation hashes, `updates_applied: 0` for evaluations, `zero_apply: true`, fresh seal. Seal with `report_output::claim`/`seal`.
+
+## 7.10 D22, claim discipline and assumptions
+
+**D22.** A negative closes the **`(Relation, InterleavedReadEvery8V1, +1-leaf-combine init, this V4096/B4/C192 configuration)`** — never the geometric attention/Relation mechanism family. Stopping a mechanism needs the owner. A null result under zero init is uninterpretable and closes nothing.
+
+**Claim discipline.** No capability claim. This is the first trained-in Relation artifact and a diagnostic/trained-in discriminator at one configuration. A `P_succ` win is not general language or reasoning evidence. The fresh transfer is a confirmation draw, not a capability benchmark. The complement is a co-primary non-regression panel, not a second capability claim.
+
+**Authorization.** This sheet authorizes **NO training**. Execution needs FIT + PM release; any D-Release-class decision needs owner release. Q4 remains **NOT_EXECUTABLE**; Training/M2/Stage B remain **HELD**; counts unchanged.
+
+**Assumptions the lead must resolve.**
+- **(a)** Confirm the **+1 leaf combine gate per payload block** as the declared amendment, versus alternatives (e.g., +1 at more levels, a learned gate init, or zero init with a longer budget). The leaf-only init activates the 5 level-0 relation trits; the 20 higher-level trits remain inert until their combine gates learn. If the owner expects all 25 relation trits active from step 0, the amendment must be widened.
+- **(b)** Confirm the **10,440-row complement as co-primary** for non-regression (20/63/87 floors), not merely descriptive.
+- **(c)** Confirm the **within-checkpoint zero-relation ablation** is in-memory, zero-apply, no retraining, and separate from the matched relation-disabled arm.
+- **(d)** Confirm **T2** (context-free, actual-training-targets) as the ordinary comparator, per D34 §6.4 item 3, not T1.
+- **(e)** Confirm whether **Route** stays as an additional arm. A Route-only win cannot attribute a relation effect.
+- **(f)** Confirm the **primary relation-disabled control is the Relation-off 45-coordinate arm**, not a Flock 20-coordinate arm; the latter has a ~2.25× combine-gate proposal-frequency advantage and is a confound.
+- **(g)** Confirm the **seed/budget plan**: two seeds × 16,404 as the decisive dose (~$243 planning envelope at 14.7s/batch), or one seed as the reduced-power fallback (~$122), or the 32,808 power-up (double). The actual cost must bind the measured throughput at release.
+- **(h)** Confirm the **objective policy** (A or R) fixed on both arms.
+- **(i)** Confirm the **fresh-transfer source and size** (≥2,000 rows / ≥500 successor rows) and seal it before training.
+- **(j)** Confirm the **`B3_I ≥ 200` / observed-power guard** as the primary paired denominator; `B3_R`/`B3_C` are reported separately, not substituted.
+
+## 7.11 Verdict
+
+TEST FITNESS: PENDING
