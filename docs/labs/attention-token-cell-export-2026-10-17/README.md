@@ -7,10 +7,12 @@ captures contain per-row admitted slots; neither is a declared4096-token map.
 approves host analysis of the sealed TRAIN counts and requires this map to be
 exported on CUDA through the existing `token_cell`, with no host reimplementation.
 
-**Scope:** source implementation and host metadata checks only. CUDA construction,
-the export, the battery and learned attention remain **NOT_RUN**. There is no
-compiler or finite execution release for this source yet. Gate8 and its binary
-retain their earlier identities and evidence scopes.
+**Scope:** source implementation plus Gate9 CUDA construction at
+`96ad8a4750398a8ecbf89e711f351de1580d7991`. All five declared compiler/host/link
+commands PASS under [PM dispatch6241202400](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6241202400).
+The export, battery and learned attention remain **NOT_RUN**. The constructed
+binary was archived without invocation; no finite or learning release follows.
+Gate8 and its binary retain their earlier identities and evidence scopes.
 
 ## Exact interface and format
 
@@ -70,10 +72,46 @@ and execution. No waiver, lint cap or generic runtime is added.
 - Two focused host metadata controls: PASS — exact raw encoding/order/length/
   range, and refusal without CUDA instead of input reads or host geometry.
 - Formatting and diff checks: PASS.
-- Independent exact-source review: pending; AGY review requested at the PR head.
-- CUDA all-target check, strict package `--no-deps` Clippy and linked binary:
-  **NOT_RUN**, awaiting the separately reviewed/released compiler-only packet.
+- Independent exact-source and actual packet review: AGY **APPROVE** at96ad,
+  [6241052759](https://github.com/UOR-Foundation/uor-r4/pull/2601#issuecomment-6241052759).
+- Gate9 CUDA all-target check: PASS (35.76s); strict CUDA package all-target
+  `--no-deps` Clippy `-D warnings`: PASS (27.30s).
+- Gate9 host no-CUDA all-target check: PASS (2.03s); metadata library suite:
+  **82 PASS /0 FAIL /1 ignored**, test execution7.47s (build8.28s separate).
+- Debug CUDA `discrete-stack` build/link: PASS (27.61s), binary SHA256
+  `5abe54c3ce64dd66006b5ff50697d0c416071ba50c473014a0053e6bd63099ed`.
+  Executable invocation and runtime compiled identity: **NOT_RUN**.
 - Device map correctness, export and immutable runtime receipt: **NOT_RUN**.
+
+## Actual Gate9 transcript and closure
+
+The frozen24-member packet manifest is
+`9ea1b5b162ae96d513a9c421add737fb296a62f44afe209cd19ac752e9ef9e1b`;
+installed independent readiness is
+`6937fb24f681bbb067b17b751ff47e4a8504500acf4a71c17d9851233e705f8a`.
+The exclusive dispatch binds the actual PM receipt and AGY review, accepts the
+strict package scope and build/archive without invocation, and uses a fresh
+128-bit attempt label. The original operator completed with exit0, setup0 and
+remote command0; no continuation, restart, on-lease patch or retry occurred.
+Initial and final exact-source/tracked/index/unexpected-path guards PASS.
+
+Own`vast-56451966` used RTX5090, driver595.99.02, CUDA12.8.93,
+compute_120 and Rust1.97.1. The full58-remote/43-operator/24-packet SHA inventory
+passed. `icloud:UOR-R4/results/codex/attention-compile-gate9-archive.tar`
+is40,995,328bytes, MD5`22c08eb316a9f669cb723b601112cc0c`; full cloud readback
+verified before normal release21:19:38Z/down21:19:44Z. Fresh fleet after down
+showed0pods; this is a dated observation, never ownership of a peer's pod.
+Late final operator/fleet/ledger closure files are preserved separately after
+down and are not represented as pre-down remote evidence. Raw provider
+diagnostics remain private; published receipts disclose no CREATE/up/lease data.
+
+Provider-recorded uptime282s at$0.964/h estimates$0.075513333; the separate
+up-to-down285s wall proxy estimates$0.076316667. These are estimates, not an
+invoice; storage/transfer remain UNMEASURED. Carried Codex mixed episode
+estimate is$4.594265555 plus PM spending, with its earlier scopes retained.
+Construction permits protected source delivery after actual outcome and
+merge-forward review; it establishes neither a correct runtime map nor a
+learned-attention result. Gates1–9 releases are consumed, not reusable.
 
 ## Next dependency and scientific scope
 

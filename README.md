@@ -23,9 +23,10 @@ remains SUSPENDED pending a discriminating reply grader under R14.
 The current M1 priority is the [learned native-attention link](docs/harness/prep/m1-learned-attention-link-2026-10-17.md).
 Its interleaved learning and checkpoint runner are delivered; the
 [minimal GPU token-cell export](docs/labs/attention-token-cell-export-2026-10-17/README.md)
-is the next input dependency before separately released preflight and paired
-learning. No learned-attention result is established, and this new export's
-CUDA construction and execution remain NOT_RUN.
+passes its exact-source CUDA check, strict package Clippy, host metadata suite
+and debug link in Gate9; the binary is archived without invocation. Protected
+delivery and separately released preflight/paired learning follow. The actual
+export and learned-attention result remain NOT_RUN.
 The completed D33 pilot recorded 1,640 corpus batches and 236 accepted vector updates. Earlier construction
 controls recorded eleven isolated fixture apply calls and eight disposable updates;
 those retain their pre-pilot scope. [Pilot measurements and preserved artifacts](docs/labs/a2-pilot-2026-10-14/README.md).
