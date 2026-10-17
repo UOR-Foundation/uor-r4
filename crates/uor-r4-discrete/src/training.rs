@@ -1524,8 +1524,7 @@ impl PreparedDriver {
         let epoch = model.epoch()?;
         let snapshot = model.snapshot()?;
         self.validate_frozen_relation_gates(&snapshot.gates)?;
-        let snapshot_sha256 =
-            corpus::sha256(&serde_json::to_vec(&snapshot).map_err(|e| invalid(e.to_string()))?);
+        let snapshot_hashes = crate::device::snapshot_hash_domains(&snapshot)?;
         let mut first = 0;
         let mut receipts = Vec::new();
         while first < scored.eligible_len() as u64 {
@@ -1558,7 +1557,7 @@ impl PreparedDriver {
         if model.epoch()? != epoch {
             return Err(invalid("evaluation changed model epoch"));
         }
-        let mut record = json!({"schema":DRIVER_SCHEMA,"objective_evaluation_schema":crate::objective::EVALUATION_SCHEMA,"objective_policy":snapshot.objective_policy,"legacy_total_loss_numerator_semantics":"8T_plus_widthA","evaluation_lineage":self.lineage,"evaluation_lineage_sha256":self.lineage_sha256()?,"model_epoch":epoch,"model_snapshot_sha256":snapshot_sha256,"model_bindings":{"schema":snapshot.schema,"spec":snapshot.spec,"read_spec":snapshot.read_spec,"objective_policy":snapshot.objective_policy,"seed":snapshot.seed,"source_sha256":snapshot.source_sha256,"kernel_sha256":snapshot.kernel_sha256,"geometry_sha256":snapshot.geometry_sha256,"operator_kappa":snapshot.operator_kappa,"composition_kappa":snapshot.composition_kappa},"training_provenance":"DriverCheckpoint restore required by eval-corpus CLI; this evaluator's lineage identifies its evaluation inputs","scored_set_policy":corpus::WINDOW_POLICY,"aggregate":aggregate,"batches":receipts,"count_reference":reference,"pilot_slice_bias":pilot_slice_bias,"evaluation_mutates_model":false,"accepted_updates_in_model":epoch,"updates_applied_by_evaluation":0});
+        let mut record = json!({"schema":DRIVER_SCHEMA,"objective_evaluation_schema":crate::objective::EVALUATION_SCHEMA,"objective_policy":snapshot.objective_policy,"legacy_total_loss_numerator_semantics":"8T_plus_widthA","evaluation_lineage":self.lineage,"evaluation_lineage_sha256":self.lineage_sha256()?,"model_epoch":epoch,"model_storage_sha256":snapshot_hashes.model_storage_sha256,"model_snapshot_sha256":snapshot_hashes.model_snapshot_sha256,"model_bindings":{"schema":snapshot.schema,"spec":snapshot.spec,"read_spec":snapshot.read_spec,"objective_policy":snapshot.objective_policy,"seed":snapshot.seed,"source_sha256":snapshot.source_sha256,"kernel_sha256":snapshot.kernel_sha256,"geometry_sha256":snapshot.geometry_sha256,"operator_kappa":snapshot.operator_kappa,"composition_kappa":snapshot.composition_kappa},"training_provenance":"DriverCheckpoint restore required by eval-corpus CLI; this evaluator's lineage identifies its evaluation inputs","scored_set_policy":corpus::WINDOW_POLICY,"aggregate":aggregate,"batches":receipts,"count_reference":reference,"pilot_slice_bias":pilot_slice_bias,"evaluation_mutates_model":false,"accepted_updates_in_model":epoch,"updates_applied_by_evaluation":0});
         if transfer {
             record["transfer_corpus"] = json!(scored.binding());
             record["transfer_is_separate_evaluation_content"] = json!(true);

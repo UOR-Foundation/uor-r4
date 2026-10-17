@@ -14,8 +14,10 @@ B3 admission2034/3847 P_succ targets abovefloor500, both sensitivity predicates
 and9/9 Relation qualification controls, zero applies. Its original operator
 exited0; fullSHA/cloud archive preceded own-pod teardown. Battery2's earlier
 staging failure remains preserved, with no mechanism negative inferred.
-Next is independent actual-outcome disposition and the separately reviewed,
-pinned/released paired learning dose. No learned result or fresh transfer has
+PM6243260600 formally accepts this result as-is. Next is the
+[bounded artifact hash-domain repair](docs/labs/attention-hash-domains-2026-10-17/README.md)
+and its source review/construction/delivery, then the separately reviewed,
+pinned/released one-seed-first paired learning dose. No learned result or fresh transfer has
 run. Training/M2/StageB remain HELD;
 Q4 NOT_EXECUTABLE. The earlier pilot below retains its measured scope.
 

@@ -1,3 +1,22 @@
+## 2026-10-17 — Explicit attention storage and typed-snapshot integrity domains (Codex/cf1)
+
+[PM6243260600](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6243260600)
+formally ACCEPTS Battery3 as-is: its stored model and typed Snapshot hashes
+are different valid serialization domains, already cross-checked by the existing
+B3 metadata validation. No rerun or rescore is required. The
+[bounded runner repair](../labs/attention-hash-domains-2026-10-17/README.md)
+reserves `model_snapshot_sha256` for typed Snapshot bytes and emits stored
+model-Value integrity as `model_storage_sha256`, retaining canonical checkpoint
+and raw FilePin identities. It adds metadata bindings/refusals and persists
+existing qualification observations; no numerical/kernel/learning-law change.
+Host no-CUDA all-target check/fmt and84 metadata tests PASS/0FAIL/1ignored;
+the initial missing-local-parent fixture failure is retained and its setup-only
+rerun is documented. CUDA-feature serializer fixtures are authored/NOT_RUN.
+New-source CUDA construction, runtime emission and learning are NOT_RUN. Source/packet review, compiler gate
+and protected delivery precede the rebound one-seed-first paired dose. No old
+binary/checkpoint/release is promoted. Count0/3/reply37/232SUSPENDED/learned
+Relation NOT_RUN unchanged; Training/M2/StageB HELD, Q4 NOT_EXECUTABLE.
+
 ## 2026-10-17 — Attention Battery3 scoped preflight complete, zero apply (Codex/cf1)
 
 The [actual preflight record](../labs/attention-preflight-2026-10-17/README.md)

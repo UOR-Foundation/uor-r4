@@ -43,6 +43,11 @@ tracker [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028); each mile
 [canonical plan](docs/integration/project-track.md). The 29 September roadmap is preserved in
 [docs/history/roadmap-2026-09-29-snapshot.md](docs/history/roadmap-2026-09-29-snapshot.md).
 
+The next source dependency is the [explicit artifact hash-domain repair](docs/labs/attention-hash-domains-2026-10-17/README.md),
+commissioned by PM6243260600 before the dose. Battery3 is accepted as-is, with no
+rerun/rescore; new-source construction/delivery and rebound dose release remain.
+No learned result or progress-count reset follows from this metadata change.
+
 ## Earlier operator qualification (pre-D32, inactive)
 
 **D29 compiled-source dependency:** corrected native-only source `1f1547bfd70f01edc9aa36d34a46e5bc43edc34c` passes the CUDA build and all 31 exact finite controls on RTX4090, nvcc12.8.93, compute_89, Rust1.97.1. The registered `geometric-stack` example uses the new native train/evaluate path. Historical core/integer model executors, model-source/GEMM, retired LUT engines and exporter/teacher modules are excluded. Static vendor PTX/dependency/import checks and all five project interlocks pass; exactly three project PTX modules remain. Failed driver, registration/controller and clipping attempts are preserved as corrected blockers. Earlier qualification receipts below remain source-scoped history. Independent Amendment6 FIT is recorded; protected delivery and explicit owner hold release remain. No optimizer update, corpus/training/CPU model execution or S1 read activation occurred. [Record](docs/labs/d29-vendor-boundary-2026-10-13/README.md).
