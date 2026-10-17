@@ -20,7 +20,13 @@ shared writer, read, evaluator/reference, seeded schedule/resume and update boun
 Both reads use the same integer input/carry/output codebook and writer. M1's quality target
 remains SUSPENDED pending a discriminating reply grader under R14.
 **The scoped D33 seed-1 diagnostic pilot is complete; further training and M2 remain held.**
-It recorded 1,640 corpus batches and 236 accepted vector updates. Earlier construction
+The current M1 priority is the [learned native-attention link](docs/harness/prep/m1-learned-attention-link-2026-10-17.md).
+Its interleaved learning and checkpoint runner are delivered; the
+[minimal GPU token-cell export](docs/labs/attention-token-cell-export-2026-10-17/README.md)
+is the next input dependency before separately released preflight and paired
+learning. No learned-attention result is established, and this new export's
+CUDA construction and execution remain NOT_RUN.
+The completed D33 pilot recorded 1,640 corpus batches and 236 accepted vector updates. Earlier construction
 controls recorded eleven isolated fixture apply calls and eight disposable updates;
 those retain their pre-pilot scope. [Pilot measurements and preserved artifacts](docs/labs/a2-pilot-2026-10-14/README.md).
 The [paired pilot diagnosis and D5 completion controller](docs/labs/a2-pilot-diagnosis-2026-10-14/README.md)

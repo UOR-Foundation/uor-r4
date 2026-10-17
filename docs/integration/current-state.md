@@ -1,3 +1,20 @@
+## 2026-10-17 — Read-only token-cell input producer for learned attention (Codex/cf1)
+
+The [source record](../labs/attention-token-cell-export-2026-10-17/README.md)
+implements the minimal CUDA export required by PM6240513498: the existing
+`token_cell` maps4096 tokens from an exact DriverCheckpoint to an8192-byte
+little-endian file, with output SHA and source/checkpoint/lineage bindings.
+No host geometry, forward, proposal or apply path is introduced. Full snapshot
+equality is checked before/after the read-only export. Host all-target check
+and two focused storage/no-host-fallback controls PASS; exact-head independent
+review and CUDA construction remain pending, and the export is NOT_RUN.
+The old Gate8 binary and frozen Battery1 draft are preserved. Next: source
+review → separately released compiler-only construction → rebound finite
+preflight → separately released paired learning dose. Actual per-row admitted
+slots remain GPU observations; the map alone supplies no same-cell result.
+Headline unchanged, no progress reset or mechanism verdict. Training/M2/StageB
+HELD; Q4 NOT_EXECUTABLE.
+
 ## 2026-10-17 — Protocol spec note: node id is standard BLAKE2b-96 (deepseek/object-store-spec-note)
 
 The [spec note](../labs/object-store-spec-note-2026-10-17/README.md) records that node_id(scale,payload)
