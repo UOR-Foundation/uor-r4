@@ -87,13 +87,13 @@ is tautological on the target-defined successor panel and is not learned evidenc
 
 | Check | Status |
 | --- | --- |
-| Host metadata library tests, including schedule/cursor/default/lineage/control | At `f6c7fa5e1`: 65 passed, 0 failed, 1 ignored; no model execution; final source-head rerun pending |
+| Host metadata library tests, including schedule/cursor/default/lineage/control | At `202855294`: 65 passed, 0 failed, 1 ignored; no model execution; final pin-only rerun recorded on PR #2575 |
 | Active initialization and matched-off CUDA control | Implemented as additional `qualify-relation` control; NOT_RUN |
-| Host `check --no-default-features --all-targets` | PASS at `f6c7fa5e1`; final source-head rerun pending |
+| Host `check --no-default-features --all-targets` | PASS at `202855294`; final pin-only rerun recorded on PR #2575 |
 | Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
 | Advisory host Clippy | Completed with warnings; no suppression added |
 | Exact-head CUDA check/Clippy and finite controls | NOT_RUN |
-| Independent integrated source review | Pending |
+| Independent integrated source review | APPROVE through `202855294`; AGY source/math APPROVE at `f6c7fa5e1`; subsequent initializer/fixture and canonical-sheet deltas independently approved; no runtime verdict |
 | Scientific initialization/comparator design | FIT (design), PR #2574; no execution release |
 | Training / M2 / Stage B | HELD |
 | Q4 | NOT_EXECUTABLE |
