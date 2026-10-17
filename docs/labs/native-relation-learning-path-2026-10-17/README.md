@@ -367,3 +367,12 @@ dead-code diagnostics; this is not the accepted CUDA Clippy gate and is not
 expanded into unrelated repair. Retained [logs and candidate identity](compiler-gate6-repair-host/scope.md).
 They execute no generator/model/reference and do not replace the final CUDA
 transcript. Existing metadata tests were not repeated for these three idioms.
+
+PM6236462377 requires merge-forward of #2579/d3a4013ad owner resolutions(a)/(g).
+The merge retains the already-approved post-init literal-storage declaration
+from this source branch and adds only the owner leaf-only/one-seed resolutions.
+Main #2579 still carries the superseded internal-initializer sentence; it is not
+reintroduced into this source. The actual merged corrected sheet SHA is
+9e74331701aba3e124f85a34dcd677b25a4290f9d233cd465579e55ad9141f46; ATTENTION_SHEET_SHA256 binds those exact bytes.
+This differs from main57d74842 because the accepted declaration correction is
+preserved. No source initialization, dose law, control or numerical CUDA change.
