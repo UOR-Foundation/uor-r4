@@ -1,3 +1,7 @@
+## 2026-10-17 — Unit1 verified on main; Unit2b runner source preparation (codex/cf1)
+
+The [Unit2b record](../labs/attention-unit2b-runner-2026-10-17/README.md) seals Unit1 #2575 full-tree merge verification and gate7 all-four construction PASS, then prepares the PM-commissioned follow-up: DEV-only training, separately pinned once-only treatment fresh evaluation after paired DEV review, canonical per-row B3 evidence, explicit objective/base/sheet pins and the checkpoint4096 Q1 stop/resume gate. Host metadata checks run; new CUDA construction and finite/model work NOT_RUN. Fresh treatment-only comparator/floor wording needs PM reconciliation before execution; source reports observations without inventing a paired fresh-control or KEEP claim. No numerical CUDA/learning-law/frozen Route/timing3 changes, headline unchanged. Training/M2/StageB HELD; Q4 NOT_EXECUTABLE.
+
 ## 2026-10-17 — Exact object store gains native peer replication (deepseek/object-store-peer)
 
 The [peer record](../labs/object-store-peer-2026-10-17/README.md) adds Store read accessors

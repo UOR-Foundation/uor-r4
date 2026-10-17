@@ -167,6 +167,7 @@ completion|completion-resume CONFIG ADMISSION NEW_REPORT_DIR — separately rele
             println!("attention-build-identity [CONFIG] — compiled/config/lineage identity without a CUDA context.
 attention-check-plan PLAN — metadata validation only; no release.
 attention-owner-release PLAN NEW_RELEASE_DIR — Casey personally at a terminal, UOR_LAB unset; separate attention arm/seed scope, no D33 delegation.
+attention-transfer PAIRED_DEV_DECISION NEW_REPORT_DIR — CUDA-only once-only treatment fresh evaluation after sealed paired DEV review.
 attention|attention-resume CONFIG ADMISSION NEW_REPORT_DIR — CUDA-only matched active-leaf Flock/Relation learning, cap16404, separately released; training remains HELD by default.");
             Ok(())
         }
@@ -187,6 +188,12 @@ attention|attention-resume CONFIG ADMISSION NEW_REPORT_DIR — CUDA-only matched
                 ))?
             );
             Ok(())
+        }
+        Some("attention-transfer") if args.len() == 3 => {
+            uor_r4_discrete::controller::attention_learning::transfer::run(
+                std::path::Path::new(&args[1]),
+                std::path::Path::new(&args[2]),
+            )
         }
         Some("attention-owner-release") if args.len() == 3 => {
             uor_r4_discrete::controller::attention_learning::owner_release(
