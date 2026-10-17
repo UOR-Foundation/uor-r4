@@ -20,6 +20,13 @@
     "lab": "codex",
     "note": "Finite release6227215454 outcome record only: docs/labs/counterfactual-baseline-reuse-controls-2026-10-17, current-state, STATUS, ROADMAP, discrete mechanism, prior source records, claims and Codex ledger. No kernel or new compute changes."
   },
+  "codex/cf1-reuse-finite-pass": {
+    "branch": "codex/cf1-reuse-finite-pass",
+    "claimed_at": "2026-10-16T21:02:41-04:00",
+    "head": "4146771ca",
+    "lab": "codex",
+    "note": ""
+  },
   "deepseek/k16-warmup-count": {
     "branch": "deepseek/k16-warmup-count",
     "claimed_at": "2026-10-16T02:08:02-04:00",
