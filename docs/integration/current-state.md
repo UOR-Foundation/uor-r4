@@ -1,3 +1,14 @@
+## 2026-10-17 — Batch verification on one session (deepseek/object-store-verify-series)
+
+The [batch record](../labs/object-store-verify-series-2026-10-17/README.md) adds verify_series plus
+VerifyRequest/VerifyOutcome: many manifest selectors are checked on one connection with one DONE, an
+unknown selector no longer aborts the serve session, and the CLI verify accepts repeated
+--select-sha256, printing per-check VERIFY lines and a VERIFY_SERIES summary with exit 0/3/2 for
+all-verified/stale-or-mismatch/unknown. This amortizes the connection setup that dominated the
+cross-machine fleet pass (226 B and about 564 ms per check). Unit 7/7, peer 12/12, objpeer_cli 6/6,
+controls 10/10, showcase 5/5; Clippy -D warnings and fmt clean. No model compute; training/M2/Stage B
+HELD. **Next:** protected delivery, then local and cross-machine batch benchmarks.
+
 ## 2026-10-17 — Fleet protocol docs and stale-verification coverage (deepseek/object-store-fleet-docs)
 
 The [docs record](../labs/object-store-fleet-docs-2026-10-17/README.md) completes the fleet surface:
