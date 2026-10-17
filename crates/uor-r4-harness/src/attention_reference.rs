@@ -131,6 +131,13 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     out
 }
 
+pub const CANONICAL_TOKENIZER_SHA256: &str =
+    "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89";
+pub const CANONICAL_TRAIN_PAYLOAD_TOKENS: u64 = 7_512_797;
+pub const CANONICAL_DEV_PAYLOAD_TOKENS: u64 = 42_856;
+pub const DISCRETE_SNAPSHOT_SCHEMA: &str = "uor-r4.discrete-spiralcore-fbs/2";
+pub const OBJECTIVE_EVALUATION_SCHEMA: &str = "uor-r4.discrete-objective-evaluation/1";
+
 fn validate_sha256_str(s: &str, label: &str) -> Result<(), String> {
     if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(format!("{label}: invalid 64-hex sha256 '{s}'"));
@@ -138,37 +145,229 @@ fn validate_sha256_str(s: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Receipt supplying GPU-exported `token_cells: [u32; 4096]` bound to a pinned checkpoint.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct TokenCellsReceipt {
+pub struct FilePinRecord {
+    pub path: std::path::PathBuf,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SplitRecord {
+    Train,
+    Dev,
+    Fresh,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BosIdentityRecord {
+    pub token: String,
+    pub id: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CorpusSourceRecord {
+    pub split: SplitRecord,
+    pub tokens: FilePinRecord,
+    pub mask: FilePinRecord,
+    pub expected_payload_tokens: u64,
+    pub expected_eligible_targets: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CorpusBindingRecord {
+    pub source: CorpusSourceRecord,
+    pub vocabulary: u32,
+    pub bos: BosIdentityRecord,
+    pub payload_tokens: u64,
+    pub mask_bytes: u64,
+    pub mask_selected_positions: u64,
+    pub eligible_targets: u64,
+    pub documents: u64,
+    pub window_policy: String,
+    pub identity_policy: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpecRecord {
+    pub vocabulary: u32,
+    pub blocks: u32,
+    pub context: u32,
+    pub kept_cells: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReadSpecRecord {
+    Route,
+    Flock { kept: u32 },
+    Relation { kept: u32, sweeps: u32 },
+}
+
+impl<'de> Deserialize<'de> for ReadSpecRecord {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+        enum Wire {
+            Route {},
+            Flock { kept: u32 },
+            Relation { kept: u32, sweeps: u32 },
+        }
+        Ok(match <Wire as Deserialize>::deserialize(deserializer)? {
+            Wire::Route {} => Self::Route,
+            Wire::Flock { kept } => Self::Flock { kept },
+            Wire::Relation { kept, sweeps } => Self::Relation { kept, sweeps },
+        })
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectivePolicyRecord {
+    #[default]
+    NearestAddressMarginV1,
+    OccupiedCellRankHingeV1,
+}
+
+impl ObjectivePolicyRecord {
+    pub fn is_nearest_address_margin(&self) -> bool {
+        *self == Self::NearestAddressMarginV1
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadInitializationRecord {
+    #[default]
+    ZeroGatesV1,
+    ActiveLeafV1,
+}
+
+impl ReadInitializationRecord {
+    pub fn is_zero_gates(&self) -> bool {
+        *self == Self::ZeroGatesV1
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationLearningPolicyRecord {
+    #[default]
+    LearnV1,
+    FrozenZeroV1,
+}
+
+impl RelationLearningPolicyRecord {
+    pub fn is_learn(&self) -> bool {
+        *self == Self::LearnV1
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulePolicyRecord {
+    CanonicalVectorThenReadV1,
+    InterleavedReadEvery8V1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DriverConfigRecord {
     pub schema: String,
-    pub driver_checkpoint_sha256: String,
-    #[serde(default)]
-    pub model_snapshot_sha256: Option<String>,
-    pub token_cells: Vec<u32>,
+    pub spec: SpecRecord,
+    pub read_spec: ReadSpecRecord,
+    #[serde(
+        default,
+        skip_serializing_if = "ObjectivePolicyRecord::is_nearest_address_margin"
+    )]
+    pub objective_policy: ObjectivePolicyRecord,
+    #[serde(
+        default,
+        skip_serializing_if = "ReadInitializationRecord::is_zero_gates"
+    )]
+    pub read_initialization: ReadInitializationRecord,
+    #[serde(
+        default,
+        skip_serializing_if = "RelationLearningPolicyRecord::is_learn"
+    )]
+    pub relation_learning_policy: RelationLearningPolicyRecord,
+    pub seed: u32,
+    pub batch_rows: u32,
+    pub train: CorpusSourceRecord,
+    pub dev: CorpusSourceRecord,
+    pub tokenizer: FilePinRecord,
+    pub bos: BosIdentityRecord,
+    pub schedule: SchedulePolicyRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DriverLineageRecord {
+    pub schema: String,
+    pub driver_source_sha256: String,
+    pub config: DriverConfigRecord,
+    pub train: CorpusBindingRecord,
+    pub dev: CorpusBindingRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EvalModelBindingsRecord {
+    pub schema: String,
+    pub spec: SpecRecord,
+    pub read_spec: ReadSpecRecord,
+    pub objective_policy: ObjectivePolicyRecord,
+    pub seed: u32,
+    pub source_sha256: String,
+    pub kernel_sha256: String,
+    pub geometry_sha256: String,
+    pub operator_kappa: String,
+    pub composition_kappa: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenCellsModelBindingsRecord {
+    pub source_sha256: String,
+    pub kernel_sha256: String,
+    pub geometry_sha256: String,
+    pub spec: SpecRecord,
+    pub read_spec: ReadSpecRecord,
+    pub objective_policy: ObjectivePolicyRecord,
+    pub read_initialization: ReadInitializationRecord,
+    pub seed: u32,
 }
 
 /// Validated GPU-exported `token_cells[4096]` loaded from an `attention-export-token-cells`
 /// receipt (`uor-r4.attention-token-cells/1`) and its bound `token_cells.u16`.
+/// All producer fields emitted by `#2601` are mandatory.
 #[derive(Debug, Clone)]
 pub struct LoadedTokenCells {
     pub token_cells: Vec<u32>,
     pub occupied_cells: usize,
     pub token_cells_sha256: String,
     pub report_sha256: String,
-    pub config_sha256: Option<String>,
-    pub config_file_sha256: Option<String>,
-    pub lineage_sha256: Option<String>,
+    pub config_sha256: String,
+    pub config_file_sha256: String,
+    pub lineage_sha256: String,
     pub driver_checkpoint_sha256: String,
-    pub checkpoint_file_sha256: Option<String>,
+    pub checkpoint_file_sha256: String,
     pub model_snapshot_sha256: String,
-    pub model_epoch: Option<u64>,
-    pub completed_batches: Option<u64>,
-    pub model_bindings: Option<Value>,
+    pub model_epoch: u64,
+    pub completed_batches: u64,
+    pub model_bindings: TokenCellsModelBindingsRecord,
 }
 
 /// External receipt supplying GPU-exported token cells and registered non-model ranked candidate lists.
+/// Scoring requires cross-checking every ranked table against `CorpusReferenceTables` rebuilt from
+/// the SHA-verified `TRAIN` and `DEV` corpus files.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CandidateCellTable {
@@ -291,186 +490,16 @@ pub fn parse_token_cells_u16_bytes(bytes: &[u8], label: &str) -> Result<(Vec<u32
     Ok((token_cells, occupied.len()))
 }
 
-fn validate_token_cells_report_envelope(
-    receipt_value: &Value,
-    expected_driver_checkpoint_sha256: &str,
-    expected_model_snapshot_sha256: &str,
-) -> Result<(String, Option<String>, String), String> {
-    if receipt_value.get("schema").and_then(Value::as_str) != Some(TOKEN_CELLS_RECEIPT_SCHEMA) {
+fn parse_file_pin(val: Option<&Value>, label: &str) -> Result<FilePinRecord, String> {
+    let raw = val.ok_or_else(|| format!("{label}: missing FilePin object"))?;
+    let pin: FilePinRecord = serde_json::from_value(raw.clone())
+        .map_err(|e| format!("{label}: invalid FilePin: {e}"))?;
+    if pin.path.as_os_str().is_empty() || pin.sha256.is_empty() {
         return Err(format!(
-            "token_cells receipt: expected schema '{TOKEN_CELLS_RECEIPT_SCHEMA}', got {:?}",
-            receipt_value.get("schema")
+            "{label}: FilePin path and sha256 must be non-empty"
         ));
     }
-    if receipt_value.get("status").and_then(Value::as_str) != Some(TOKEN_CELLS_RECEIPT_STATUS) {
-        return Err(format!(
-            "token_cells receipt: expected status '{TOKEN_CELLS_RECEIPT_STATUS}', got {:?}",
-            receipt_value.get("status")
-        ));
-    }
-    if receipt_value.get("updates_applied").and_then(Value::as_u64) != Some(0)
-        || receipt_value
-            .get("snapshot_unchanged")
-            .and_then(Value::as_bool)
-            != Some(true)
-    {
-        return Err(
-            "token_cells receipt: updates_applied == 0 and snapshot_unchanged == true are required"
-                .to_string(),
-        );
-    }
-    if let Some(proposals) = receipt_value.get("proposals").and_then(Value::as_u64) {
-        if proposals != 0 {
-            return Err(format!("token_cells receipt: proposals ({proposals}) != 0"));
-        }
-    }
-    if let Some(fwd) = receipt_value
-        .get("gpu_forward_calls")
-        .and_then(Value::as_u64)
-    {
-        if fwd != 0 {
-            return Err(format!(
-                "token_cells receipt: gpu_forward_calls ({fwd}) != 0"
-            ));
-        }
-    }
-    if let Some(cap) = receipt_value
-        .get("training_capability_issued")
-        .and_then(Value::as_bool)
-    {
-        if cap {
-            return Err(
-                "token_cells receipt: training_capability_issued must be false".to_string(),
-            );
-        }
-    }
-    if let Some(host_rec) = receipt_value
-        .get("host_cell_reconstruction")
-        .and_then(Value::as_bool)
-    {
-        if host_rec {
-            return Err("token_cells receipt: host_cell_reconstruction must be false".to_string());
-        }
-    }
-    if let Some(absent_ok) = receipt_value
-        .get("absent_cells_allowed")
-        .and_then(Value::as_bool)
-    {
-        if absent_ok {
-            return Err("token_cells receipt: absent_cells_allowed must be false".to_string());
-        }
-    }
-    if let Some(cnt) = receipt_value.get("token_count").and_then(Value::as_u64) {
-        if cnt != CANONICAL_VOCAB as u64 {
-            return Err(format!(
-                "token_cells receipt: token_count ({cnt}) != {CANONICAL_VOCAB}"
-            ));
-        }
-    }
-    if let Some(bc) = receipt_value.get("byte_count").and_then(Value::as_u64) {
-        if bc != (CANONICAL_VOCAB * 2) as u64 {
-            return Err(format!(
-                "token_cells receipt: byte_count ({bc}) != {}",
-                CANONICAL_VOCAB * 2
-            ));
-        }
-    }
-    if let Some(enc) = receipt_value.get("encoding").and_then(Value::as_str) {
-        if enc != "raw_u16_le_no_header" {
-            return Err(format!("token_cells receipt: unexpected encoding '{enc}'"));
-        }
-    }
-    if let Some(ord) = receipt_value.get("ordering").and_then(Value::as_str) {
-        if ord != "ascending_token_id_0_through4095" {
-            return Err(format!("token_cells receipt: unexpected ordering '{ord}'"));
-        }
-    }
-
-    let ckpt_sha = receipt_value
-        .get("driver_checkpoint_sha256")
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| "token_cells receipt: missing driver_checkpoint_sha256".to_string())?
-        .to_string();
-    let ckpt_file_sha = receipt_value
-        .get("checkpoint_file")
-        .and_then(|v| v.get("sha256"))
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-    let snap_sha = receipt_value
-        .get("model_snapshot_sha256")
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| "token_cells receipt: missing model_snapshot_sha256".to_string())?
-        .to_string();
-
-    if !expected_driver_checkpoint_sha256.is_empty()
-        && ckpt_sha != expected_driver_checkpoint_sha256
-    {
-        return Err(format!(
-            "token_cells receipt driver_checkpoint_sha256 ({ckpt_sha}) != expected ({expected_driver_checkpoint_sha256})"
-        ));
-    }
-    if !expected_model_snapshot_sha256.is_empty() && snap_sha != expected_model_snapshot_sha256 {
-        return Err(format!(
-            "token_cells receipt model_snapshot_sha256 ({snap_sha}) != expected ({expected_model_snapshot_sha256})"
-        ));
-    }
-    Ok((ckpt_sha, ckpt_file_sha, snap_sha))
-}
-
-/// Validate a GPU-exported `token_cells` JSON receipt against optional expected
-/// checkpoint and snapshot SHA-256 digests without any host codebook or `root_id` arithmetic.
-pub fn parse_token_cells_receipt(
-    receipt_value: &Value,
-    expected_driver_checkpoint_sha256: &str,
-    expected_model_snapshot_sha256: &str,
-) -> Result<(Vec<u32>, usize), String> {
-    let _ = validate_token_cells_report_envelope(
-        receipt_value,
-        expected_driver_checkpoint_sha256,
-        expected_model_snapshot_sha256,
-    )?;
-    let cells_arr = receipt_value
-        .get("token_cells")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "token_cells receipt: missing token_cells array".to_string())?;
-    if cells_arr.len() != CANONICAL_VOCAB {
-        return Err(format!(
-            "token_cells receipt: token_cells length {} != {CANONICAL_VOCAB}",
-            cells_arr.len()
-        ));
-    }
-    let mut token_cells = Vec::with_capacity(CANONICAL_VOCAB);
-    let mut occupied = BTreeSet::new();
-    for (idx, val) in cells_arr.iter().enumerate() {
-        let c = val
-            .as_u64()
-            .and_then(|v| u32::try_from(v).ok())
-            .ok_or_else(|| format!("token_cells[{idx}] not u32"))?;
-        if c >= 256 {
-            return Err(format!("token_cells[{idx}] = {c} >= 256"));
-        }
-        token_cells.push(c);
-        occupied.insert(c);
-    }
-    let le_bytes = encode_token_cells_u16_le(&token_cells)?;
-    let actual_sha = sha256_hex(&le_bytes);
-    if let Some(claimed_sha) = receipt_value
-        .get("token_cells_file")
-        .and_then(|f| f.get("sha256"))
-        .or_else(|| receipt_value.get("token_cells_sha256"))
-        .or_else(|| receipt_value.get("token_cells_u16_sha256"))
-        .and_then(Value::as_str)
-    {
-        if claimed_sha != actual_sha {
-            return Err(format!(
-                "token_cells receipt: claimed token_cells sha256 ({claimed_sha}) != encoded u16LE sha256 ({actual_sha})"
-            ));
-        }
-    }
-    Ok((token_cells, occupied.len()))
+    Ok(pin)
 }
 
 fn build_loaded_from_report_and_u16(
@@ -481,26 +510,125 @@ fn build_loaded_from_report_and_u16(
     expected_driver_checkpoint_sha256: &str,
     expected_model_snapshot_sha256: &str,
 ) -> Result<LoadedTokenCells, String> {
-    let (ckpt_sha, ckpt_file_sha, snap_sha) = validate_token_cells_report_envelope(
-        rep_val,
-        expected_driver_checkpoint_sha256,
-        expected_model_snapshot_sha256,
-    )?;
-    let u16_sha = sha256_hex(u16_bytes);
-    let pinned_u16_sha = rep_val
-        .get("token_cells_file")
-        .and_then(|f| f.get("sha256"))
-        .or_else(|| rep_val.get("token_cells_sha256"))
-        .or_else(|| rep_val.get("token_cells_u16_sha256"))
+    if rep_val.get("schema").and_then(Value::as_str) != Some(TOKEN_CELLS_RECEIPT_SCHEMA) {
+        return Err(format!(
+            "token_cells report: expected schema '{TOKEN_CELLS_RECEIPT_SCHEMA}', got {:?}",
+            rep_val.get("schema")
+        ));
+    }
+    if rep_val.get("status").and_then(Value::as_str) != Some(TOKEN_CELLS_RECEIPT_STATUS) {
+        return Err(format!(
+            "token_cells report: expected status '{TOKEN_CELLS_RECEIPT_STATUS}', got {:?}",
+            rep_val.get("status")
+        ));
+    }
+    if rep_val.get("token_cells").is_some() {
+        return Err(
+            "token_cells report: inline token_cells JSON array is refused; require raw_u16_le_no_header token_cells.u16 paired with report.json"
+                .to_string(),
+        );
+    }
+    if rep_val.get("token_count").and_then(Value::as_u64) != Some(CANONICAL_VOCAB as u64)
+        || rep_val.get("byte_count").and_then(Value::as_u64) != Some((CANONICAL_VOCAB * 2) as u64)
+        || rep_val.get("encoding").and_then(Value::as_str) != Some("raw_u16_le_no_header")
+        || rep_val.get("ordering").and_then(Value::as_str)
+            != Some("ascending_token_id_0_through4095")
+        || rep_val.get("cell_range") != Some(&json!({"min": 0, "max": 255}))
+        || rep_val.get("absent_cells_allowed").and_then(Value::as_bool) != Some(false)
+        || rep_val.get("model_restores").and_then(Value::as_u64) != Some(1)
+        || rep_val.get("export_kernel_calls").and_then(Value::as_u64) != Some(1)
+        || rep_val
+            .get("token_cell_evaluations")
+            .and_then(Value::as_u64)
+            != Some(CANONICAL_VOCAB as u64)
+        || rep_val.get("gpu_forward_calls").and_then(Value::as_u64) != Some(0)
+        || rep_val.get("proposals").and_then(Value::as_u64) != Some(0)
+        || rep_val.get("updates_applied").and_then(Value::as_u64) != Some(0)
+        || rep_val.get("snapshot_unchanged").and_then(Value::as_bool) != Some(true)
+        || rep_val
+            .get("training_capability_issued")
+            .and_then(Value::as_bool)
+            != Some(false)
+        || rep_val
+            .get("host_cell_reconstruction")
+            .and_then(Value::as_bool)
+            != Some(false)
+        || rep_val.get("training").and_then(Value::as_str) != Some("HELD")
+        || rep_val.get("m2").and_then(Value::as_str) != Some("HELD")
+        || rep_val.get("stage_b").and_then(Value::as_str) != Some("HELD")
+        || rep_val.get("q4").and_then(Value::as_str) != Some("NOT_EXECUTABLE")
+    {
+        return Err(
+            "token_cells report: mandatory #2601 zero-apply / raw_u16_le_no_header / hold invariants missing or violated"
+                .to_string(),
+        );
+    }
+
+    let config_file = parse_file_pin(rep_val.get("config_file"), "token_cells.config_file")?;
+    let config_sha256 = rep_val
+        .get("config_sha256")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            "token_cells report: missing token_cells_file.sha256 (or token_cells_sha256)"
-                .to_string()
-        })?;
-    if pinned_u16_sha != u16_sha {
+        .ok_or_else(|| "token_cells report: missing config_sha256".to_string())?
+        .to_string();
+    let lineage_sha256 = rep_val
+        .get("lineage_sha256")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "token_cells report: missing lineage_sha256".to_string())?
+        .to_string();
+    let checkpoint_file = parse_file_pin(
+        rep_val.get("checkpoint_file"),
+        "token_cells.checkpoint_file",
+    )?;
+    let ckpt_sha = rep_val
+        .get("driver_checkpoint_sha256")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "token_cells report: missing driver_checkpoint_sha256".to_string())?
+        .to_string();
+    let snap_sha = rep_val
+        .get("model_snapshot_sha256")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "token_cells report: missing model_snapshot_sha256".to_string())?
+        .to_string();
+    let model_epoch = rep_val
+        .get("model_epoch")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "token_cells report: missing model_epoch".to_string())?;
+    let completed_batches = rep_val
+        .get("completed_batches")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "token_cells report: missing completed_batches".to_string())?;
+    let mb_raw = rep_val
+        .get("model_bindings")
+        .ok_or_else(|| "token_cells report: missing model_bindings".to_string())?;
+    let model_bindings: TokenCellsModelBindingsRecord = serde_json::from_value(mb_raw.clone())
+        .map_err(|e| format!("token_cells report: invalid model_bindings: {e}"))?;
+    let token_cells_file = parse_file_pin(
+        rep_val.get("token_cells_file"),
+        "token_cells.token_cells_file",
+    )?;
+
+    if !expected_driver_checkpoint_sha256.is_empty()
+        && ckpt_sha != expected_driver_checkpoint_sha256
+    {
         return Err(format!(
-            "token_cells.u16 sha256 ({u16_sha}) != report pin ({pinned_u16_sha})"
+            "token_cells report driver_checkpoint_sha256 ({ckpt_sha}) != expected ({expected_driver_checkpoint_sha256})"
+        ));
+    }
+    if !expected_model_snapshot_sha256.is_empty() && snap_sha != expected_model_snapshot_sha256 {
+        return Err(format!(
+            "token_cells report model_snapshot_sha256 ({snap_sha}) != expected ({expected_model_snapshot_sha256})"
+        ));
+    }
+
+    let u16_sha = sha256_hex(u16_bytes);
+    if token_cells_file.sha256 != u16_sha {
+        return Err(format!(
+            "token_cells.u16 sha256 ({u16_sha}) != report token_cells_file.sha256 ({})",
+            token_cells_file.sha256
         ));
     }
     let (token_cells, occupied_cells) = parse_token_cells_u16_bytes(u16_bytes, u16_label)?;
@@ -509,25 +637,15 @@ fn build_loaded_from_report_and_u16(
         occupied_cells,
         token_cells_sha256: u16_sha,
         report_sha256: rep_sha,
-        config_sha256: rep_val
-            .get("config_sha256")
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        config_file_sha256: rep_val
-            .get("config_file")
-            .and_then(|v| v.get("sha256"))
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        lineage_sha256: rep_val
-            .get("lineage_sha256")
-            .and_then(Value::as_str)
-            .map(str::to_string),
+        config_sha256,
+        config_file_sha256: config_file.sha256,
+        lineage_sha256,
         driver_checkpoint_sha256: ckpt_sha,
-        checkpoint_file_sha256: ckpt_file_sha,
+        checkpoint_file_sha256: checkpoint_file.sha256,
         model_snapshot_sha256: snap_sha,
-        model_epoch: rep_val.get("model_epoch").and_then(Value::as_u64),
-        completed_batches: rep_val.get("completed_batches").and_then(Value::as_u64),
-        model_bindings: rep_val.get("model_bindings").cloned(),
+        model_epoch,
+        completed_batches,
+        model_bindings,
     })
 }
 
@@ -535,10 +653,10 @@ fn build_loaded_from_report_and_u16(
 /// - a binary `token_cells.u16` file (`8,192` raw little-endian bytes) accompanied by a
 ///   required sibling `report.json` (`uor-r4.attention-token-cells/1`), or
 /// - a JSON `report.json` (`uor-r4.attention-token-cells/1`) referencing its sibling
-///   `token_cells.u16` binary file (or carrying an inline `token_cells` array with verified
-///   `token_cells_file.sha256`).
+///   `token_cells.u16` binary file.
 ///
-/// A bare `token_cells.u16` without a valid `uor-r4.attention-token-cells/1` receipt is refused.
+/// Inline `token_cells` JSON arrays and bare `token_cells.u16` files without a sibling
+/// `report.json` are refused.
 pub fn load_gpu_token_cells_file(
     path: &Path,
     expected_driver_checkpoint_sha256: &str,
@@ -552,43 +670,10 @@ pub fn load_gpu_token_cells_file(
         let val: Value = serde_json::from_slice(&bytes)
             .map_err(|e| format!("token_cells JSON ({}): {e}", path.display()))?;
         if val.get("token_cells").is_some() {
-            let (ckpt_sha, ckpt_file_sha, snap_sha) = validate_token_cells_report_envelope(
-                &val,
-                expected_driver_checkpoint_sha256,
-                expected_model_snapshot_sha256,
-            )?;
-            let (token_cells, occupied_cells) = parse_token_cells_receipt(
-                &val,
-                expected_driver_checkpoint_sha256,
-                expected_model_snapshot_sha256,
-            )?;
-            let le_bytes = encode_token_cells_u16_le(&token_cells)?;
-            let tc_sha = sha256_hex(&le_bytes);
-            return Ok(LoadedTokenCells {
-                token_cells,
-                occupied_cells,
-                token_cells_sha256: tc_sha,
-                report_sha256: file_sha,
-                config_sha256: val
-                    .get("config_sha256")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                config_file_sha256: val
-                    .get("config_file")
-                    .and_then(|v| v.get("sha256"))
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                lineage_sha256: val
-                    .get("lineage_sha256")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                driver_checkpoint_sha256: ckpt_sha,
-                checkpoint_file_sha256: ckpt_file_sha,
-                model_snapshot_sha256: snap_sha,
-                model_epoch: val.get("model_epoch").and_then(Value::as_u64),
-                completed_batches: val.get("completed_batches").and_then(Value::as_u64),
-                model_bindings: val.get("model_bindings").cloned(),
-            });
+            return Err(format!(
+                "token_cells report ({}) contains inline token_cells JSON array; inline token_cells are refused — provide report.json paired with raw_u16_le_no_header token_cells.u16",
+                path.display()
+            ));
         }
         let u16_path = path
             .parent()
@@ -596,7 +681,7 @@ pub fn load_gpu_token_cells_file(
             .join("token_cells.u16");
         let u16_bytes = fs::read(&u16_path).map_err(|e| {
             format!(
-                "token_cells report ({}) has no inline token_cells array and sibling {} could not be read: {e}",
+                "token_cells report ({}) sibling {} could not be read: {e}",
                 path.display(),
                 u16_path.display()
             )
@@ -1027,17 +1112,20 @@ pub struct ValidatedArmInputs {
     pub eval_sha256: String,
     pub d34_sha256: String,
     pub config_sha256: String,
-    pub config_file_sha256: Option<String>,
+    pub config_file_sha256: String,
     pub panel_config_sha256: String,
-    pub panel_config_file_sha256: Option<String>,
+    pub panel_config_file_sha256: String,
     pub lineage_sha256: String,
     pub panel_lineage_sha256: String,
     pub driver_checkpoint_sha256: String,
-    pub checkpoint_file_sha256: Option<String>,
+    pub checkpoint_file_sha256: String,
+    pub evaluation_file_sha256: String,
     pub model_snapshot_sha256: String,
     pub ordered_row_binding_sha256: String,
     pub model_epoch: u64,
     pub completed_batches: u64,
+    pub lineage: DriverLineageRecord,
+    pub model_bindings: EvalModelBindingsRecord,
     pub rows: Vec<ValidatedRow>,
 }
 
@@ -1054,7 +1142,16 @@ type PanelRowTuple = (usize, u64, u32, bool);
 fn parse_panel_rows(
     panel: &Value,
     enforce_canonical_pins: bool,
-) -> Result<(String, Option<String>, String, Vec<PanelRowTuple>), String> {
+) -> Result<
+    (
+        String,
+        String,
+        String,
+        CorpusBindingRecord,
+        Vec<PanelRowTuple>,
+    ),
+    String,
+> {
     if panel.get("schema").and_then(Value::as_str) != Some(PREFLIGHT_PANEL_SCHEMA) {
         return Err(format!(
             "panel: expected schema '{PREFLIGHT_PANEL_SCHEMA}', got {:?}",
@@ -1066,45 +1163,53 @@ fn parse_panel_rows(
         || panel.get("cuda_context_created").and_then(Value::as_bool) != Some(false)
         || panel.get("model_constructed").and_then(Value::as_bool) != Some(false)
         || panel.get("updates_applied").and_then(Value::as_u64) != Some(0)
+        || panel.get("release").and_then(Value::as_str) != Some("STILL_REQUIRED")
+        || panel.get("training").and_then(Value::as_str) != Some("HELD")
+        || panel.get("q4").and_then(Value::as_str) != Some("NOT_EXECUTABLE")
     {
-        return Err("panel: zero-compute / zero-update invariants violated".to_string());
+        return Err("panel: zero-compute / zero-update / hold invariants violated".to_string());
     }
     let config_sha = panel
         .get("config_sha256")
         .and_then(Value::as_str)
         .ok_or_else(|| "panel: missing config_sha256".to_string())?
         .to_string();
-    let config_file_sha = panel
-        .get("config_file")
-        .and_then(|v| v.get("sha256"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let config_file: FilePinRecord = serde_json::from_value(
+        panel
+            .get("config_file")
+            .cloned()
+            .ok_or_else(|| "panel: missing config_file".to_string())?,
+    )
+    .map_err(|e| format!("panel.config_file: {e}"))?;
+    if config_file.path.as_os_str().is_empty() || config_file.sha256.is_empty() {
+        return Err("panel.config_file: path and sha256 must be non-empty".to_string());
+    }
     let lineage_sha = panel
         .get("lineage_sha256")
         .and_then(Value::as_str)
         .ok_or_else(|| "panel: missing lineage_sha256".to_string())?
         .to_string();
-    let dev_source = panel
-        .get("dev_binding")
-        .and_then(|b| b.get("source"))
-        .ok_or_else(|| "panel: missing dev_binding.source".to_string())?;
-    let tok_sha = dev_source
-        .get("tokens")
-        .and_then(|t| t.get("sha256"))
-        .or_else(|| dev_source.get("tokens_sha256"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| "panel: missing dev_binding.source.tokens.sha256".to_string())?;
-    let mask_sha = dev_source
-        .get("mask")
-        .and_then(|m| m.get("sha256"))
-        .or_else(|| dev_source.get("mask_sha256"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| "panel: missing dev_binding.source.mask.sha256".to_string())?;
+    let dev_binding: CorpusBindingRecord = serde_json::from_value(
+        panel
+            .get("dev_binding")
+            .cloned()
+            .ok_or_else(|| "panel: missing dev_binding".to_string())?,
+    )
+    .map_err(|e| format!("panel.dev_binding: {e}"))?;
+    if dev_binding.source.split != SplitRecord::Dev
+        || dev_binding.bos.token != "<|bos|>"
+        || dev_binding.bos.id != u32::from(CANONICAL_BOS)
+        || dev_binding.vocabulary != CANONICAL_VOCAB as u32
+        || dev_binding.source.tokens.path.as_os_str().is_empty()
+        || dev_binding.source.mask.path.as_os_str().is_empty()
+    {
+        return Err("panel.dev_binding: invalid DEV source or BOS metadata".to_string());
+    }
+    let tok_sha = dev_binding.source.tokens.sha256.as_str();
+    let mask_sha = dev_binding.source.mask.sha256.as_str();
     if enforce_canonical_pins {
         validate_sha256_str(&config_sha, "panel.config_sha256")?;
-        if let Some(ref cfs) = config_file_sha {
-            validate_sha256_str(cfs, "panel.config_file.sha256")?;
-        }
+        validate_sha256_str(&config_file.sha256, "panel.config_file.sha256")?;
         validate_sha256_str(&lineage_sha, "panel.lineage_sha256")?;
         if tok_sha != CANONICAL_DEV_TOKENS_SHA256 {
             return Err(format!(
@@ -1116,6 +1221,12 @@ fn parse_panel_rows(
                 "panel: dev mask sha256 '{mask_sha}' != canonical '{CANONICAL_DEV_MASK_SHA256}'"
             ));
         }
+        if dev_binding.eligible_targets != CANONICAL_DEV_ELIGIBLE_ROWS as u64 {
+            return Err(format!(
+                "panel.dev_binding: eligible_targets {} != {CANONICAL_DEV_ELIGIBLE_ROWS}",
+                dev_binding.eligible_targets
+            ));
+        }
     }
     let rows_arr = panel
         .get("rows")
@@ -1124,6 +1235,13 @@ fn parse_panel_rows(
     if enforce_canonical_pins && rows_arr.len() != CANONICAL_DEV_ELIGIBLE_ROWS {
         return Err(format!(
             "panel: expected {CANONICAL_DEV_ELIGIBLE_ROWS} rows, got {}",
+            rows_arr.len()
+        ));
+    }
+    if dev_binding.eligible_targets != rows_arr.len() as u64 {
+        return Err(format!(
+            "panel.dev_binding.eligible_targets ({}) != panel rows ({})",
+            dev_binding.eligible_targets,
             rows_arr.len()
         ));
     }
@@ -1180,7 +1298,13 @@ fn parse_panel_rows(
             "panel: expected {CANONICAL_DEV_PSUCC_ROWS} P_succ rows, got {psucc_count}"
         ));
     }
-    Ok((config_sha, config_file_sha, lineage_sha, rows))
+    Ok((
+        config_sha,
+        config_file.sha256,
+        lineage_sha,
+        dev_binding,
+        rows,
+    ))
 }
 
 #[derive(Debug, Clone)]
@@ -1199,6 +1323,8 @@ struct ParsedEval {
     enveloped_eval_sha256: Option<String>,
     enveloped_driver_checkpoint_sha256: Option<String>,
     lineage_sha256: String,
+    lineage: DriverLineageRecord,
+    model_bindings: EvalModelBindingsRecord,
     model_snapshot_sha256: String,
     model_epoch: u64,
     rows: Vec<EvalRowObs>,
@@ -1263,6 +1389,124 @@ fn parse_eval_rows(
         .and_then(Value::as_str)
         .ok_or_else(|| "eval: missing evaluation_lineage_sha256".to_string())?
         .to_string();
+    let lineage: DriverLineageRecord = serde_json::from_value(
+        eval.get("evaluation_lineage")
+            .cloned()
+            .ok_or_else(|| "eval: missing evaluation_lineage".to_string())?,
+    )
+    .map_err(|e| format!("eval.evaluation_lineage: {e}"))?;
+    let recomputed_lineage_sha = sha256_hex(
+        &serde_json::to_vec(&lineage)
+            .map_err(|e| format!("eval.evaluation_lineage encode: {e}"))?,
+    );
+    if recomputed_lineage_sha != lineage_sha256 {
+        return Err(format!(
+            "eval: recomputed evaluation_lineage sha256 ({recomputed_lineage_sha}) != evaluation_lineage_sha256 ({lineage_sha256})"
+        ));
+    }
+    if lineage.schema != DRIVER_EVAL_SCHEMA {
+        return Err(format!(
+            "eval.evaluation_lineage: expected schema '{DRIVER_EVAL_SCHEMA}', got '{}'",
+            lineage.schema
+        ));
+    }
+    let cfg = &lineage.config;
+    if cfg.schema != DRIVER_EVAL_SCHEMA {
+        return Err(format!(
+            "eval.evaluation_lineage.config: expected schema '{DRIVER_EVAL_SCHEMA}', got '{}'",
+            cfg.schema
+        ));
+    }
+    let expected_spec = SpecRecord {
+        vocabulary: CANONICAL_VOCAB as u32,
+        blocks: 4,
+        context: CANONICAL_CONTEXT as u32,
+        kept_cells: 8,
+    };
+    if cfg.spec != expected_spec {
+        return Err(format!(
+            "eval.evaluation_lineage.config.spec {:?} != canonical {:?}",
+            cfg.spec, expected_spec
+        ));
+    }
+    if cfg.objective_policy != ObjectivePolicyRecord::NearestAddressMarginV1
+        || cfg.read_initialization != ReadInitializationRecord::ActiveLeafV1
+        || cfg.schedule != SchedulePolicyRecord::InterleavedReadEvery8V1
+        || cfg.batch_rows != 64
+        || !matches!(cfg.seed, 1 | 2)
+    {
+        return Err(
+            "eval.evaluation_lineage.config: objective_policy, read_initialization, schedule, batch_rows, or seed outside admitted contract"
+                .to_string(),
+        );
+    }
+    match cfg.read_spec {
+        ReadSpecRecord::Flock { kept: 8 } | ReadSpecRecord::Relation { kept: 8, sweeps: 1 } => {}
+        ref other => {
+            return Err(format!(
+                "eval.evaluation_lineage.config.read_spec {other:?} outside admitted K=8 contract"
+            ))
+        }
+    }
+    if cfg.train.split != SplitRecord::Train
+        || cfg.dev.split != SplitRecord::Dev
+        || cfg.bos.token != "<|bos|>"
+        || cfg.bos.id != u32::from(CANONICAL_BOS)
+        || lineage.train.bos != cfg.bos
+        || lineage.dev.bos != cfg.bos
+        || lineage.train.source != cfg.train
+        || lineage.dev.source != cfg.dev
+        || lineage.dev.eligible_targets != expected_len as u64
+    {
+        return Err(
+            "eval.evaluation_lineage: train/dev source or eligible_targets binding mismatch"
+                .to_string(),
+        );
+    }
+    if enforce_canonical_pins
+        && (cfg.tokenizer.sha256 != CANONICAL_TOKENIZER_SHA256
+            || cfg.train.tokens.sha256 != CANONICAL_TRAIN_TOKENS_SHA256
+            || cfg.train.mask.sha256 != CANONICAL_TRAIN_MASK_SHA256
+            || cfg.dev.tokens.sha256 != CANONICAL_DEV_TOKENS_SHA256
+            || cfg.dev.mask.sha256 != CANONICAL_DEV_MASK_SHA256
+            || lineage.train.eligible_targets != CANONICAL_TRAIN_MATCHED_TARGETS as u64)
+    {
+        return Err(
+            "eval.evaluation_lineage: canonical TRAIN/DEV corpus pin or eligible_targets mismatch"
+                .to_string(),
+        );
+    }
+
+    let model_bindings: EvalModelBindingsRecord = serde_json::from_value(
+        eval.get("model_bindings")
+            .cloned()
+            .ok_or_else(|| "eval: missing model_bindings".to_string())?,
+    )
+    .map_err(|e| format!("eval.model_bindings: {e}"))?;
+    if model_bindings.schema != DISCRETE_SNAPSHOT_SCHEMA
+        || model_bindings.spec != cfg.spec
+        || model_bindings.read_spec != cfg.read_spec
+        || model_bindings.objective_policy != cfg.objective_policy
+        || model_bindings.seed != cfg.seed
+    {
+        return Err(
+            "eval.model_bindings disagrees with evaluation_lineage.config (schema, spec, read_spec, objective_policy, or seed)"
+                .to_string(),
+        );
+    }
+    validate_sha256_str(
+        &model_bindings.source_sha256,
+        "eval.model_bindings.source_sha256",
+    )?;
+    validate_sha256_str(
+        &model_bindings.kernel_sha256,
+        "eval.model_bindings.kernel_sha256",
+    )?;
+    validate_sha256_str(
+        &model_bindings.geometry_sha256,
+        "eval.model_bindings.geometry_sha256",
+    )?;
+
     let model_snapshot_sha256 = eval
         .get("model_snapshot_sha256")
         .and_then(Value::as_str)
@@ -1378,6 +1622,8 @@ fn parse_eval_rows(
         enveloped_eval_sha256: env_sha,
         enveloped_driver_checkpoint_sha256: env_ckpt_sha,
         lineage_sha256,
+        lineage,
+        model_bindings,
         model_snapshot_sha256,
         model_epoch,
         rows,
@@ -1635,7 +1881,7 @@ pub fn validate_arm_inputs_with_mode(
     enforce_canonical_pins: bool,
     enforce_panel_config_lineage: bool,
 ) -> Result<ValidatedArmInputs, String> {
-    let (panel_config_sha, panel_config_file_sha, panel_lineage_sha, panel_rows) =
+    let (panel_config_sha, panel_config_file_sha, panel_lineage_sha, panel_dev_binding, panel_rows) =
         parse_panel_rows(panel, enforce_canonical_pins)?;
     let expected_len = panel_rows.len();
 
@@ -1658,11 +1904,16 @@ pub fn validate_arm_inputs_with_mode(
         .and_then(Value::as_str)
         .ok_or_else(|| "capture: missing config_sha256".to_string())?
         .to_string();
-    let config_file_sha = capture
-        .get("config_file")
-        .and_then(|v| v.get("sha256"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let config_file: FilePinRecord = serde_json::from_value(
+        capture
+            .get("config_file")
+            .cloned()
+            .ok_or_else(|| "capture: missing config_file".to_string())?,
+    )
+    .map_err(|e| format!("capture.config_file: {e}"))?;
+    if config_file.path.as_os_str().is_empty() || config_file.sha256.is_empty() {
+        return Err("capture.config_file: path and sha256 must be non-empty".to_string());
+    }
     let lineage_sha = capture
         .get("lineage_sha256")
         .and_then(Value::as_str)
@@ -1670,12 +1921,17 @@ pub fn validate_arm_inputs_with_mode(
         .to_string();
     if enforce_canonical_pins {
         validate_sha256_str(&config_sha, "capture.config_sha256")?;
-        if let Some(ref cfs) = config_file_sha {
-            validate_sha256_str(cfs, "capture.config_file.sha256")?;
-        }
+        validate_sha256_str(&config_file.sha256, "capture.config_file.sha256")?;
         validate_sha256_str(&lineage_sha, "capture.lineage_sha256")?;
     }
-    if capture.get("dev_binding") != panel.get("dev_binding") {
+    let capture_dev_binding: CorpusBindingRecord = serde_json::from_value(
+        capture
+            .get("dev_binding")
+            .cloned()
+            .ok_or_else(|| "capture: missing dev_binding".to_string())?,
+    )
+    .map_err(|e| format!("capture.dev_binding: {e}"))?;
+    if capture_dev_binding != panel_dev_binding {
         return Err("capture: dev_binding differs from panel".to_string());
     }
     if enforce_panel_config_lineage {
@@ -1684,20 +1940,28 @@ pub fn validate_arm_inputs_with_mode(
                 "capture: config_sha256 ({config_sha}) or lineage_sha256 ({lineage_sha}) differs from panel ({panel_config_sha}, {panel_lineage_sha})"
             ));
         }
-        if let (Some(ref p_cf), Some(ref c_cf)) = (&panel_config_file_sha, &config_file_sha) {
-            if p_cf != c_cf {
-                return Err(format!(
-                    "capture: config_file.sha256 ({c_cf}) != panel.config_file.sha256 ({p_cf})"
-                ));
-            }
+        if panel_config_file_sha != config_file.sha256 {
+            return Err(format!(
+                "capture: config_file.sha256 ({}) != panel.config_file.sha256 ({panel_config_file_sha})",
+                config_file.sha256
+            ));
         }
     }
+    let expected_gpu_forward_calls = (expected_len as u64).div_ceil(64);
     if capture
         .get("physical_cell_words_per_row")
         .and_then(Value::as_u64)
         != Some(16)
         || capture.get("unused_slot_marker").and_then(Value::as_u64)
             != Some(u64::from(UNUSED_CELL_SLOT))
+        || capture.get("row_count").and_then(Value::as_u64) != Some(expected_len as u64)
+        || capture
+            .get("additional_zero_apply_gpu_forward_passes")
+            .and_then(Value::as_u64)
+            != Some(1)
+        || capture.get("gpu_forward_calls").and_then(Value::as_u64)
+            != Some(expected_gpu_forward_calls)
+        || capture.get("model_restores").and_then(Value::as_u64) != Some(1)
         || capture.get("updates_applied").and_then(Value::as_u64) != Some(0)
         || capture.get("proposals").and_then(Value::as_u64) != Some(0)
         || capture.get("snapshot_unchanged").and_then(Value::as_bool) != Some(true)
@@ -1705,9 +1969,13 @@ pub fn validate_arm_inputs_with_mode(
             .get("training_capability_issued")
             .and_then(Value::as_bool)
             != Some(false)
+        || capture.get("training").and_then(Value::as_str) != Some("HELD")
+        || capture.get("m2").and_then(Value::as_str) != Some("HELD")
+        || capture.get("stage_b").and_then(Value::as_str) != Some("HELD")
+        || capture.get("q4").and_then(Value::as_str) != Some("NOT_EXECUTABLE")
     {
         return Err(
-            "capture: physical16-cell / zero-apply / unchanged-snapshot invariants violated"
+            "capture: physical16-cell / zero-apply / unchanged-snapshot / forward-call / hold invariants violated"
                 .to_string(),
         );
     }
@@ -1716,16 +1984,30 @@ pub fn validate_arm_inputs_with_mode(
         .and_then(Value::as_str)
         .ok_or_else(|| "capture: missing driver_checkpoint_sha256".to_string())?
         .to_string();
-    let ckpt_file_sha = capture
-        .get("checkpoint_file")
-        .and_then(|v| v.get("sha256"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let checkpoint_file: FilePinRecord = serde_json::from_value(
+        capture
+            .get("checkpoint_file")
+            .cloned()
+            .ok_or_else(|| "capture: missing checkpoint_file".to_string())?,
+    )
+    .map_err(|e| format!("capture.checkpoint_file: {e}"))?;
+    if checkpoint_file.path.as_os_str().is_empty() || checkpoint_file.sha256.is_empty() {
+        return Err("capture.checkpoint_file: path and sha256 must be non-empty".to_string());
+    }
+    let evaluation_file: FilePinRecord = serde_json::from_value(
+        capture
+            .get("evaluation_file")
+            .cloned()
+            .ok_or_else(|| "capture: missing evaluation_file".to_string())?,
+    )
+    .map_err(|e| format!("capture.evaluation_file: {e}"))?;
+    if evaluation_file.path.as_os_str().is_empty() || evaluation_file.sha256.is_empty() {
+        return Err("capture.evaluation_file: path and sha256 must be non-empty".to_string());
+    }
     if enforce_canonical_pins {
         validate_sha256_str(&driver_ckpt_sha, "capture.driver_checkpoint_sha256")?;
-        if let Some(ref ckfs) = ckpt_file_sha {
-            validate_sha256_str(ckfs, "capture.checkpoint_file.sha256")?;
-        }
+        validate_sha256_str(&checkpoint_file.sha256, "capture.checkpoint_file.sha256")?;
+        validate_sha256_str(&evaluation_file.sha256, "capture.evaluation_file.sha256")?;
     }
     let model_epoch = capture
         .get("model_epoch")
@@ -1743,19 +2025,37 @@ pub fn validate_arm_inputs_with_mode(
             parsed_eval.lineage_sha256
         ));
     }
+    let recomputed_config_sha = sha256_hex(
+        &serde_json::to_vec(&parsed_eval.lineage.config)
+            .map_err(|e| format!("eval.evaluation_lineage.config encode: {e}"))?,
+    );
+    if recomputed_config_sha != config_sha {
+        return Err(format!(
+            "eval: recomputed evaluation_lineage.config sha256 ({recomputed_config_sha}) != capture.config_sha256 ({config_sha})"
+        ));
+    }
+    if capture_dev_binding != parsed_eval.lineage.dev
+        || panel_dev_binding != parsed_eval.lineage.dev
+    {
+        return Err(
+            "capture/panel dev_binding disagrees with eval.evaluation_lineage.dev".to_string(),
+        );
+    }
     if parsed_eval.model_epoch != model_epoch {
         return Err(format!(
             "eval: model_epoch ({}) != capture.model_epoch ({model_epoch})",
             parsed_eval.model_epoch
         ));
     }
-    if let Some(cap_snap_sha) = capture.get("model_snapshot_sha256").and_then(Value::as_str) {
-        if cap_snap_sha != parsed_eval.model_snapshot_sha256 {
-            return Err(format!(
-                "capture: model_snapshot_sha256 ({cap_snap_sha}) != eval.model_snapshot_sha256 ({})",
-                parsed_eval.model_snapshot_sha256
-            ));
-        }
+    let cap_snap_sha = capture
+        .get("model_snapshot_sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "capture: missing model_snapshot_sha256".to_string())?;
+    if cap_snap_sha != parsed_eval.model_snapshot_sha256 {
+        return Err(format!(
+            "capture: model_snapshot_sha256 ({cap_snap_sha}) != eval.model_snapshot_sha256 ({})",
+            parsed_eval.model_snapshot_sha256
+        ));
     }
     if let Some(ref env_ckpt) = parsed_eval.enveloped_driver_checkpoint_sha256 {
         if env_ckpt != &driver_ckpt_sha {
@@ -1764,17 +2064,11 @@ pub fn validate_arm_inputs_with_mode(
             ));
         }
     }
-    if let Some(cap_eval_sha) = capture
-        .get("evaluation_file")
-        .and_then(|v| v.get("sha256"))
-        .and_then(Value::as_str)
-    {
-        if cap_eval_sha != parsed_eval.raw_eval_sha256 && cap_eval_sha != eval_sha {
-            return Err(format!(
-                "capture: evaluation_file.sha256 ({cap_eval_sha}) matches neither raw eval sha256 ({}) nor file sha256 ({eval_sha})",
-                parsed_eval.raw_eval_sha256
-            ));
-        }
+    if evaluation_file.sha256 != parsed_eval.raw_eval_sha256 && evaluation_file.sha256 != eval_sha {
+        return Err(format!(
+            "capture: evaluation_file.sha256 ({}) matches neither raw eval sha256 ({}) nor file sha256 ({eval_sha})",
+            evaluation_file.sha256, parsed_eval.raw_eval_sha256
+        ));
     }
 
     let (ordered_row_binding_sha256, d34_rows) =
@@ -1957,25 +2251,26 @@ pub fn validate_arm_inputs_with_mode(
         });
     }
 
-    // If capture carries its own b3 summary object, cross-check its counts.
-    if let Some(cap_b3) = capture.get("b3") {
-        let check_b3 = |key: &str, exp_rows: u64, exp_adm: u64| -> Result<(), String> {
-            let s = cap_b3
-                .get(key)
-                .ok_or_else(|| format!("capture.b3: missing {key}"))?;
-            if s.get("rows").and_then(Value::as_u64) != Some(exp_rows)
-                || s.get("target_admitted").and_then(Value::as_u64) != Some(exp_adm)
-            {
-                return Err(format!("capture.b3.{key} disagrees with row tally"));
-            }
-            Ok(())
-        };
-        let psucc_rows = validated.iter().filter(|r| r.is_psucc).count() as u64;
-        let comp_rows = (validated.len() as u64) - psucc_rows;
-        check_b3("full", validated.len() as u64, b3_full)?;
-        check_b3("psucc", psucc_rows, b3_psucc)?;
-        check_b3("complement", comp_rows, b3_comp)?;
-    }
+    // Require capture.b3 summary object and cross-check its counts.
+    let cap_b3 = capture
+        .get("b3")
+        .ok_or_else(|| "capture: missing b3 summary object".to_string())?;
+    let check_b3 = |key: &str, exp_rows: u64, exp_adm: u64| -> Result<(), String> {
+        let s = cap_b3
+            .get(key)
+            .ok_or_else(|| format!("capture.b3: missing {key}"))?;
+        if s.get("rows").and_then(Value::as_u64) != Some(exp_rows)
+            || s.get("target_admitted").and_then(Value::as_u64) != Some(exp_adm)
+        {
+            return Err(format!("capture.b3.{key} disagrees with row tally"));
+        }
+        Ok(())
+    };
+    let psucc_rows = validated.iter().filter(|r| r.is_psucc).count() as u64;
+    let comp_rows = (validated.len() as u64) - psucc_rows;
+    check_b3("full", validated.len() as u64, b3_full)?;
+    check_b3("psucc", psucc_rows, b3_psucc)?;
+    check_b3("complement", comp_rows, b3_comp)?;
 
     let _ = parsed_eval.enveloped_eval_sha256;
     Ok(ValidatedArmInputs {
@@ -1984,17 +2279,20 @@ pub fn validate_arm_inputs_with_mode(
         eval_sha256: eval_sha,
         d34_sha256: d34_sha,
         config_sha256: config_sha,
-        config_file_sha256: config_file_sha,
+        config_file_sha256: config_file.sha256,
         panel_config_sha256: panel_config_sha,
         panel_config_file_sha256: panel_config_file_sha,
         lineage_sha256: lineage_sha,
         panel_lineage_sha256: panel_lineage_sha,
         driver_checkpoint_sha256: driver_ckpt_sha,
-        checkpoint_file_sha256: ckpt_file_sha,
+        checkpoint_file_sha256: checkpoint_file.sha256,
+        evaluation_file_sha256: evaluation_file.sha256,
         model_snapshot_sha256: parsed_eval.model_snapshot_sha256,
         ordered_row_binding_sha256,
         model_epoch,
         completed_batches,
+        lineage: parsed_eval.lineage,
+        model_bindings: parsed_eval.model_bindings,
         rows: validated,
     })
 }
@@ -2271,69 +2569,67 @@ pub fn verify_loaded_token_cells_against_arm(
             "{label}: missing bound '{TOKEN_CELLS_RECEIPT_SCHEMA}' report receipt"
         ));
     }
-    let tc_ckpt = loaded.driver_checkpoint_sha256.as_str();
-    if tc_ckpt != arm.driver_checkpoint_sha256 {
+    if loaded.driver_checkpoint_sha256 != arm.driver_checkpoint_sha256 {
         return Err(format!(
-            "{label}: driver_checkpoint_sha256 ({tc_ckpt}) != capture ({})",
-            arm.driver_checkpoint_sha256
+            "{label}: driver_checkpoint_sha256 ({}) != capture ({})",
+            loaded.driver_checkpoint_sha256, arm.driver_checkpoint_sha256
         ));
     }
-    if let (Some(ref tc_cf), Some(ref arm_cf)) =
-        (&loaded.checkpoint_file_sha256, &arm.checkpoint_file_sha256)
-    {
-        if tc_cf != arm_cf {
-            return Err(format!(
-                "{label}: checkpoint_file.sha256 ({tc_cf}) != capture.checkpoint_file.sha256 ({arm_cf})"
-            ));
-        }
-    }
-    let tc_snap = loaded.model_snapshot_sha256.as_str();
-    if tc_snap != arm.model_snapshot_sha256 {
+    if loaded.checkpoint_file_sha256 != arm.checkpoint_file_sha256 {
         return Err(format!(
-            "{label}: model_snapshot_sha256 ({tc_snap}) != eval ({})",
-            arm.model_snapshot_sha256
+            "{label}: checkpoint_file.sha256 ({}) != capture.checkpoint_file.sha256 ({})",
+            loaded.checkpoint_file_sha256, arm.checkpoint_file_sha256
         ));
     }
-    if let Some(ref tc_cfg) = loaded.config_sha256 {
-        if tc_cfg != &arm.config_sha256 {
-            return Err(format!(
-                "{label}: config_sha256 ({tc_cfg}) != capture ({})",
-                arm.config_sha256
-            ));
-        }
+    if loaded.model_snapshot_sha256 != arm.model_snapshot_sha256 {
+        return Err(format!(
+            "{label}: model_snapshot_sha256 ({}) != eval ({})",
+            loaded.model_snapshot_sha256, arm.model_snapshot_sha256
+        ));
     }
-    if let (Some(ref tc_cfg_f), Some(ref arm_cfg_f)) =
-        (&loaded.config_file_sha256, &arm.config_file_sha256)
+    if loaded.config_sha256 != arm.config_sha256 {
+        return Err(format!(
+            "{label}: config_sha256 ({}) != capture ({})",
+            loaded.config_sha256, arm.config_sha256
+        ));
+    }
+    if loaded.config_file_sha256 != arm.config_file_sha256 {
+        return Err(format!(
+            "{label}: config_file.sha256 ({}) != capture.config_file.sha256 ({})",
+            loaded.config_file_sha256, arm.config_file_sha256
+        ));
+    }
+    if loaded.lineage_sha256 != arm.lineage_sha256 {
+        return Err(format!(
+            "{label}: lineage_sha256 ({}) != capture ({})",
+            loaded.lineage_sha256, arm.lineage_sha256
+        ));
+    }
+    if loaded.model_epoch != arm.model_epoch {
+        return Err(format!(
+            "{label}: model_epoch ({}) != capture ({})",
+            loaded.model_epoch, arm.model_epoch
+        ));
+    }
+    if loaded.completed_batches != arm.completed_batches {
+        return Err(format!(
+            "{label}: completed_batches ({}) != capture ({})",
+            loaded.completed_batches, arm.completed_batches
+        ));
+    }
+    let mb = &loaded.model_bindings;
+    if mb.source_sha256 != arm.model_bindings.source_sha256
+        || mb.kernel_sha256 != arm.model_bindings.kernel_sha256
+        || mb.geometry_sha256 != arm.model_bindings.geometry_sha256
+        || mb.spec != arm.model_bindings.spec
+        || mb.read_spec != arm.model_bindings.read_spec
+        || mb.objective_policy != arm.model_bindings.objective_policy
+        || mb.read_initialization != arm.lineage.config.read_initialization
+        || mb.seed != arm.model_bindings.seed
     {
-        if tc_cfg_f != arm_cfg_f {
-            return Err(format!(
-                "{label}: config_file.sha256 ({tc_cfg_f}) != capture.config_file.sha256 ({arm_cfg_f})"
-            ));
-        }
-    }
-    if let Some(ref tc_lin) = loaded.lineage_sha256 {
-        if tc_lin != &arm.lineage_sha256 {
-            return Err(format!(
-                "{label}: lineage_sha256 ({tc_lin}) != capture ({})",
-                arm.lineage_sha256
-            ));
-        }
-    }
-    if let Some(tc_ep) = loaded.model_epoch {
-        if tc_ep != arm.model_epoch {
-            return Err(format!(
-                "{label}: model_epoch ({tc_ep}) != capture ({})",
-                arm.model_epoch
-            ));
-        }
-    }
-    if let Some(tc_cb) = loaded.completed_batches {
-        if tc_cb != arm.completed_batches {
-            return Err(format!(
-                "{label}: completed_batches ({tc_cb}) != capture ({})",
-                arm.completed_batches
-            ));
-        }
+        return Err(format!(
+            "{label}: model_bindings disagrees with arm eval/lineage model_bindings"
+        ));
     }
     Ok(())
 }
@@ -2341,6 +2637,7 @@ pub fn verify_loaded_token_cells_against_arm(
 pub fn score_same_cell_rows_from_table(
     arm: &ValidatedArmInputs,
     table: &CandidateCellTable,
+    corpus_tables: &CorpusReferenceTables,
 ) -> Result<(Vec<SameCellRowScore>, usize), String> {
     if table.schema != CANDIDATE_CELL_TABLE_SCHEMA {
         return Err(format!(
@@ -2368,7 +2665,9 @@ pub fn score_same_cell_rows_from_table(
         .ordered_row_binding_sha256
         .as_deref()
         .ok_or_else(|| "candidate_cells: missing ordered_row_binding_sha256".to_string())?;
-    if bind_sha != arm.ordered_row_binding_sha256 {
+    if bind_sha != arm.ordered_row_binding_sha256
+        || bind_sha != corpus_tables.ordered_row_binding_sha256
+    {
         return Err(format!(
             "candidate_cells: ordered_row_binding_sha256 ({bind_sha}) != d34 ({})",
             arm.ordered_row_binding_sha256
@@ -2409,6 +2708,12 @@ pub fn score_same_cell_rows_from_table(
             &format!("candidate_cells.t2_ranked_candidates_by_query[{q}]"),
         )?;
     }
+    if table.t2_ranked_candidates_by_query != corpus_tables.t2_ranked_by_query {
+        return Err(
+            "candidate_cells: t2_ranked_candidates_by_query disagrees with corpus-recomputed T2 table"
+                .to_string(),
+        );
+    }
     if table.u_succ_ranked_candidates.is_empty() {
         return Err("candidate_cells: empty u_succ_ranked_candidates".to_string());
     }
@@ -2416,6 +2721,12 @@ pub fn score_same_cell_rows_from_table(
         &table.u_succ_ranked_candidates,
         "candidate_cells.u_succ_ranked_candidates",
     )?;
+    if table.u_succ_ranked_candidates != corpus_tables.u_succ_ranked {
+        return Err(
+            "candidate_cells: u_succ_ranked_candidates disagrees with corpus-recomputed U_succ table"
+                .to_string(),
+        );
+    }
     let u_train_ranked = table
         .u_train_ranked_candidates
         .as_ref()
@@ -2424,9 +2735,11 @@ pub fn score_same_cell_rows_from_table(
         return Err("candidate_cells: empty u_train_ranked_candidates".to_string());
     }
     validate_unique_vocab_tokens(u_train_ranked, "candidate_cells.u_train_ranked_candidates")?;
-    if u_train_ranked != &table.u_succ_ranked_candidates {
+    if u_train_ranked != &table.u_succ_ranked_candidates
+        || u_train_ranked != &corpus_tables.u_train_ranked
+    {
         return Err(
-            "candidate_cells: u_succ_ranked_candidates must equal u_train_ranked_candidates (model-matched TRAIN unigram ranking per D34 §6.4.6)"
+            "candidate_cells: u_train_ranked_candidates disagrees with corpus-recomputed U_train table (or u_succ_ranked_candidates)"
                 .to_string(),
         );
     }
@@ -2437,20 +2750,25 @@ pub fn score_same_cell_rows_from_table(
         .ok_or_else(|| {
             "candidate_cells: missing dev_window_query_successors_most_recent_first".to_string()
         })?;
-    if occs.len() != arm.rows.len() {
+    if occs.len() != arm.rows.len() || occs.len() != corpus_tables.dev_rows.len() {
         return Err(format!(
             "candidate_cells: dev_window_query_successors_most_recent_first len {} != {}",
             occs.len(),
             arm.rows.len()
         ));
     }
-    for (r_idx, r_occs) in occs.iter().enumerate() {
+    for (r_idx, (r_occs, c_row)) in occs.iter().zip(corpus_tables.dev_rows.iter()).enumerate() {
         for (c_idx, &tok) in r_occs.iter().enumerate() {
             if tok >= CANONICAL_VOCAB as u32 {
                 return Err(format!(
                     "candidate_cells.dev_window_query_successors_most_recent_first[{r_idx}][{c_idx}]: token {tok} >= vocab {CANONICAL_VOCAB}"
                 ));
             }
+        }
+        if r_occs != &c_row.window_query_successors_most_recent_first {
+            return Err(format!(
+                "candidate_cells.dev_window_query_successors_most_recent_first[{r_idx}] disagrees with corpus-recomputed window successors"
+            ));
         }
     }
 
@@ -2462,7 +2780,7 @@ pub fn score_same_cell_rows_from_table(
         &serde_json::to_vec(&table.t2_ranked_candidates_by_query)
             .map_err(|e| format!("t2 table json sha: {e}"))?,
     );
-    if actual_t2_sha != expected_t2_sha {
+    if actual_t2_sha != expected_t2_sha || actual_t2_sha != corpus_tables.t2_ranked_table_sha256 {
         return Err(format!(
             "candidate_cells: t2_ranked_table_sha256 ({expected_t2_sha}) != recomputed ({actual_t2_sha})"
         ));
@@ -2476,7 +2794,9 @@ pub fn score_same_cell_rows_from_table(
         &serde_json::to_vec(&table.u_succ_ranked_candidates)
             .map_err(|e| format!("u_succ table json sha: {e}"))?,
     );
-    if actual_usucc_sha != expected_usucc_sha {
+    if actual_usucc_sha != expected_usucc_sha
+        || actual_usucc_sha != corpus_tables.u_succ_ranked_table_sha256
+    {
         return Err(format!(
             "candidate_cells: u_succ_ranked_table_sha256 ({expected_usucc_sha}) != recomputed ({actual_usucc_sha})"
         ));
@@ -2489,7 +2809,10 @@ pub fn score_same_cell_rows_from_table(
     let actual_utrain_sha = sha256_hex(
         &serde_json::to_vec(u_train_ranked).map_err(|e| format!("u_train table json sha: {e}"))?,
     );
-    if actual_utrain_sha != expected_utrain_sha || expected_usucc_sha != expected_utrain_sha {
+    if actual_utrain_sha != expected_utrain_sha
+        || expected_usucc_sha != expected_utrain_sha
+        || actual_utrain_sha != corpus_tables.u_train_ranked_table_sha256
+    {
         return Err(format!(
             "candidate_cells: u_train_ranked_table_sha256 ({expected_utrain_sha}) mismatch against recomputed ({actual_utrain_sha}) or u_succ ({expected_usucc_sha})"
         ));
@@ -2502,7 +2825,9 @@ pub fn score_same_cell_rows_from_table(
     let actual_win_sha = sha256_hex(
         &serde_json::to_vec(occs).map_err(|e| format!("dev_window_successors json sha: {e}"))?,
     );
-    if actual_win_sha != expected_win_sha {
+    if actual_win_sha != expected_win_sha
+        || actual_win_sha != corpus_tables.dev_window_successors_sha256
+    {
         return Err(format!(
             "candidate_cells: dev_window_successors_sha256 ({expected_win_sha}) != recomputed ({actual_win_sha})"
         ));
@@ -2796,30 +3121,11 @@ pub fn score_preflight_dev_values(
                 "d_97_192": summarize_same_cell_slice(&b3_refs, &row_scores),
             }
         })
-    } else if let Some((table, table_sha)) = candidate_cells {
-        let (row_scores, occupied_cells) = score_same_cell_rows_from_table(&arm, table)?;
-        let psucc_b3_slice = summarize_same_cell_slice(&psucc_refs, &row_scores);
-        json!({
-            "status": "SCORED_FROM_ADMITTED_CANDIDATE_CELL_TABLE",
-            "candidate_cell_table_sha256": table_sha,
-            "occupied_writer_cells": occupied_cells,
-            "target_cell_cross_check_rows": arm.rows.len(),
-            "psucc_b3_rows": psucc_b3_slice["b3_target_admitted"],
-            "t2_same_cell_top1_on_psucc_b3": psucc_b3_slice["on_b3_rows"]["t2_same_cell_hit1"],
-            "t2_same_cell_top8_on_psucc_b3": psucc_b3_slice["on_b3_rows"]["t2_same_cell_hit8"],
-            "u_succ_same_cell_top1_on_psucc_b3": psucc_b3_slice["on_b3_rows"]["u_succ_same_cell_hit1"],
-            "u_succ_same_cell_top8_on_psucc_b3": psucc_b3_slice["on_b3_rows"]["u_succ_same_cell_hit8"],
-            "slices": {
-                "full_panel": summarize_same_cell_slice(&all_refs, &row_scores),
-                "copy_successor_subpanel": psucc_b3_slice,
-                "complement_subpanel": summarize_same_cell_slice(&comp_refs, &row_scores),
-                "conflict_rows": summarize_same_cell_slice(&conflict_refs, &row_scores),
-                "d_1_8": summarize_same_cell_slice(&b0_refs, &row_scores),
-                "d_9_32": summarize_same_cell_slice(&b1_refs, &row_scores),
-                "d_33_96": summarize_same_cell_slice(&b2_refs, &row_scores),
-                "d_97_192": summarize_same_cell_slice(&b3_refs, &row_scores),
-            }
-        })
+    } else if let Some((_table, _table_sha)) = candidate_cells {
+        return Err(
+            "preflight-dev: external --candidate-cells without --token-cells and pinned corpus files (--train-tokens/--train-mask/--dev-tokens/--dev-mask) is refused; provide --token-cells alongside the 4 corpus files so T2/U_succ/U_train/window tables are authenticated against the corpus and token_cells report receipt"
+                .to_string(),
+        );
     } else {
         json!({
             "status": "UNAVAILABLE_MISSING_GPU_TOKEN_CELL_TABLE_AND_RANKED_CANDIDATE_RECEIPT",
@@ -2992,42 +3298,70 @@ pub fn score_paired_dev_values(
             ctrl.lineage_sha256
         ));
     }
-    if panel_matches_rel {
-        if let (Some(ref p_cf), Some(ref r_cf)) =
-            (&rel.panel_config_file_sha256, &rel.config_file_sha256)
-        {
-            if p_cf != r_cf {
-                return Err(format!(
-                    "paired-dev: panel.config_file.sha256 ({p_cf}) != relation capture.config_file.sha256 ({r_cf})"
-                ));
-            }
-        }
+    if panel_matches_rel && rel.panel_config_file_sha256 != rel.config_file_sha256 {
+        return Err(format!(
+            "paired-dev: panel.config_file.sha256 ({}) != relation capture.config_file.sha256 ({})",
+            rel.panel_config_file_sha256, rel.config_file_sha256
+        ));
     }
-    if panel_matches_ctrl {
-        if let (Some(ref p_cf), Some(ref c_cf)) =
-            (&ctrl.panel_config_file_sha256, &ctrl.config_file_sha256)
-        {
-            if p_cf != c_cf {
-                return Err(format!(
-                    "paired-dev: panel.config_file.sha256 ({p_cf}) != control capture.config_file.sha256 ({c_cf})"
-                ));
-            }
-        }
+    if panel_matches_ctrl && ctrl.panel_config_file_sha256 != ctrl.config_file_sha256 {
+        return Err(format!(
+            "paired-dev: panel.config_file.sha256 ({}) != control capture.config_file.sha256 ({})",
+            ctrl.panel_config_file_sha256, ctrl.config_file_sha256
+        ));
     }
 
-    // Treatment (LearnV1) and Control (FrozenZeroV1) have distinct configs and lineages.
-    if rel.config_sha256 == ctrl.config_sha256 || rel.lineage_sha256 == ctrl.lineage_sha256 {
+    // Treatment (LearnV1) and Control (FrozenZeroV1) have distinct configs and lineages,
+    // and must be identical in every DriverConfig/DriverLineage field EXCEPT relation_learning_policy.
+    if rel.config_sha256 == ctrl.config_sha256
+        || rel.lineage_sha256 == ctrl.lineage_sha256
+        || rel.config_file_sha256 == ctrl.config_file_sha256
+    {
         return Err(format!(
-            "paired-dev: relation and control must have distinct config_sha256 and lineage_sha256 (got rel=({}, {}), ctrl=({}, {}))",
+            "paired-dev: relation and control must have distinct config_sha256, config_file.sha256, and lineage_sha256 (got rel=({}, {}), ctrl=({}, {}))",
             rel.config_sha256, rel.lineage_sha256, ctrl.config_sha256, ctrl.lineage_sha256
         ));
     }
-    if let (Some(ref r_cf), Some(ref c_cf)) = (&rel.config_file_sha256, &ctrl.config_file_sha256) {
-        if r_cf == c_cf {
-            return Err(format!(
-                "paired-dev: relation and control must have distinct config_file.sha256 (got {r_cf})"
-            ));
-        }
+    let expected_read_spec = ReadSpecRecord::Relation { kept: 8, sweeps: 1 };
+    if rel.lineage.config.read_spec != expected_read_spec {
+        return Err(format!(
+            "paired-dev: relation arm read_spec must be Relation {{ kept: 8, sweeps: 1 }}, got {:?}",
+            rel.lineage.config.read_spec
+        ));
+    }
+    if rel.lineage.config.relation_learning_policy != RelationLearningPolicyRecord::LearnV1 {
+        return Err(format!(
+            "paired-dev: relation arm relation_learning_policy must be LearnV1, got {:?}",
+            rel.lineage.config.relation_learning_policy
+        ));
+    }
+    if ctrl.lineage.config.relation_learning_policy != RelationLearningPolicyRecord::FrozenZeroV1 {
+        return Err(format!(
+            "paired-dev: control arm relation_learning_policy must be FrozenZeroV1, got {:?}",
+            ctrl.lineage.config.relation_learning_policy
+        ));
+    }
+    let mut expected_ctrl_config = rel.lineage.config.clone();
+    expected_ctrl_config.relation_learning_policy = RelationLearningPolicyRecord::FrozenZeroV1;
+    if ctrl.lineage.config != expected_ctrl_config {
+        return Err(
+            "paired-dev: control arm DriverConfig differs from relation arm in fields other than relation_learning_policy (LearnV1 vs FrozenZeroV1)"
+                .to_string(),
+        );
+    }
+    let mut expected_ctrl_lineage = rel.lineage.clone();
+    expected_ctrl_lineage.config = expected_ctrl_config;
+    if ctrl.lineage != expected_ctrl_lineage {
+        return Err(
+            "paired-dev: control arm DriverLineage differs from relation arm in corpus_binding or spec"
+                .to_string(),
+        );
+    }
+    if ctrl.model_bindings != rel.model_bindings {
+        return Err(
+            "paired-dev: control arm model_bindings differs from relation arm model_bindings"
+                .to_string(),
+        );
     }
 
     if rel.completed_batches != ctrl.completed_batches {
@@ -3042,6 +3376,24 @@ pub fn score_paired_dev_values(
 
     let abl_parsed = if let Some((abl_val, abl_sha)) = ablation_eval {
         let parsed = parse_eval_rows(abl_val, &abl_sha, rel.rows.len(), enforce_canonical_pins)?;
+        if parsed.lineage_sha256 != rel.lineage_sha256 || parsed.lineage != rel.lineage {
+            return Err(format!(
+                "ablation_eval: evaluation_lineage / lineage_sha256 ({}) != relation ({})",
+                parsed.lineage_sha256, rel.lineage_sha256
+            ));
+        }
+        if parsed.model_epoch != rel.model_epoch {
+            return Err(format!(
+                "ablation_eval: model_epoch ({}) != relation ({})",
+                parsed.model_epoch, rel.model_epoch
+            ));
+        }
+        if parsed.model_bindings != rel.model_bindings {
+            return Err(
+                "ablation_eval: model_bindings disagrees with relation arm model_bindings"
+                    .to_string(),
+            );
+        }
         for (idx, (a_r, r_r)) in parsed.rows.iter().zip(rel.rows.iter()).enumerate() {
             if a_r.target_position != r_r.target_position || a_r.target_token != r_r.target_token {
                 return Err(format!(
@@ -3239,20 +3591,11 @@ pub fn score_paired_dev_values(
             "dev_window_successors_sha256": corpus_tables.dev_window_successors_sha256,
         });
         block
-    } else if let Some((rel_tbl, rel_tbl_sha, ctrl_tbl, ctrl_tbl_sha)) = candidate_tables {
-        let (rel_sc, rel_occupied) = score_same_cell_rows_from_table(&rel, rel_tbl)?;
-        let (ctrl_sc, ctrl_occupied) = score_same_cell_rows_from_table(&ctrl, ctrl_tbl)?;
-        build_paired_same_cell_json(
-            "SCORED_FROM_ADMITTED_CANDIDATE_CELL_TABLES",
-            "relation_candidate_cells_sha256",
-            rel_tbl_sha,
-            "control_candidate_cells_sha256",
-            ctrl_tbl_sha,
-            rel_occupied,
-            ctrl_occupied,
-            &rel_sc,
-            &ctrl_sc,
-        )?
+    } else if let Some((_rel_tbl, _rel_tbl_sha, _ctrl_tbl, _ctrl_tbl_sha)) = candidate_tables {
+        return Err(
+            "paired-dev: external --relation-candidate-cells / --control-candidate-cells without --relation-token-cells / --control-token-cells and pinned corpus files (--train-tokens/--train-mask/--dev-tokens/--dev-mask) is refused; provide --relation-token-cells and --control-token-cells alongside the 4 corpus files so T2/U_succ/U_train/window tables are authenticated against the corpus and token_cells report receipts"
+                .to_string(),
+        );
     } else {
         json!({
             "status": "UNAVAILABLE_MISSING_GPU_TOKEN_CELL_TABLES_AND_CORPUS_OR_CANDIDATE_TABLES",
@@ -3498,24 +3841,125 @@ mod tests {
         assert_eq!(paired_integer_floor(22, 122), 23);
     }
 
+    fn make_fixture_lineage(policy: RelationLearningPolicyRecord) -> (Value, String, String) {
+        let spec = SpecRecord {
+            vocabulary: CANONICAL_VOCAB as u32,
+            blocks: 4,
+            context: CANONICAL_CONTEXT as u32,
+            kept_cells: 8,
+        };
+        let bos = BosIdentityRecord {
+            token: "<|bos|>".to_string(),
+            id: u32::from(CANONICAL_BOS),
+        };
+        let train_source = CorpusSourceRecord {
+            split: SplitRecord::Train,
+            tokens: FilePinRecord {
+                path: "/tmp/train.u16".into(),
+                sha256: CANONICAL_TRAIN_TOKENS_SHA256.to_string(),
+            },
+            mask: FilePinRecord {
+                path: "/tmp/train.u8".into(),
+                sha256: CANONICAL_TRAIN_MASK_SHA256.to_string(),
+            },
+            expected_payload_tokens: CANONICAL_TRAIN_PAYLOAD_TOKENS,
+            expected_eligible_targets: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+        };
+        let dev_source = CorpusSourceRecord {
+            split: SplitRecord::Dev,
+            tokens: FilePinRecord {
+                path: "/tmp/dev.u16".into(),
+                sha256: CANONICAL_DEV_TOKENS_SHA256.to_string(),
+            },
+            mask: FilePinRecord {
+                path: "/tmp/dev.u8".into(),
+                sha256: CANONICAL_DEV_MASK_SHA256.to_string(),
+            },
+            expected_payload_tokens: CANONICAL_DEV_PAYLOAD_TOKENS,
+            expected_eligible_targets: 2,
+        };
+        let cfg = DriverConfigRecord {
+            schema: DRIVER_EVAL_SCHEMA.to_string(),
+            spec,
+            read_spec: ReadSpecRecord::Relation { kept: 8, sweeps: 1 },
+            objective_policy: ObjectivePolicyRecord::NearestAddressMarginV1,
+            read_initialization: ReadInitializationRecord::ActiveLeafV1,
+            relation_learning_policy: policy,
+            seed: 1,
+            batch_rows: 64,
+            train: train_source.clone(),
+            dev: dev_source.clone(),
+            tokenizer: FilePinRecord {
+                path: "/tmp/tok.json".into(),
+                sha256: CANONICAL_TOKENIZER_SHA256.to_string(),
+            },
+            bos: bos.clone(),
+            schedule: SchedulePolicyRecord::InterleavedReadEvery8V1,
+        };
+        let cfg_sha = sha256_hex(&serde_json::to_vec(&cfg).unwrap());
+        let lineage = DriverLineageRecord {
+            schema: DRIVER_EVAL_SCHEMA.to_string(),
+            driver_source_sha256: sha256_hex(b"driver_source"),
+            config: cfg,
+            train: CorpusBindingRecord {
+                source: train_source,
+                vocabulary: CANONICAL_VOCAB as u32,
+                bos: bos.clone(),
+                payload_tokens: CANONICAL_TRAIN_PAYLOAD_TOKENS,
+                mask_bytes: CANONICAL_TRAIN_PAYLOAD_TOKENS,
+                mask_selected_positions: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+                eligible_targets: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+                documents: 100,
+                window_policy: "causal_document_bounded_v1".to_string(),
+                identity_policy: "exact_uor_v1".to_string(),
+            },
+            dev: CorpusBindingRecord {
+                source: dev_source,
+                vocabulary: CANONICAL_VOCAB as u32,
+                bos,
+                payload_tokens: CANONICAL_DEV_PAYLOAD_TOKENS,
+                mask_bytes: CANONICAL_DEV_PAYLOAD_TOKENS,
+                mask_selected_positions: 2,
+                eligible_targets: 2,
+                documents: 1,
+                window_policy: "causal_document_bounded_v1".to_string(),
+                identity_policy: "exact_uor_v1".to_string(),
+            },
+        };
+        let lin_val = serde_json::to_value(&lineage).unwrap();
+        let lin_sha = sha256_hex(&serde_json::to_vec(&lineage).unwrap());
+        (lin_val, cfg_sha, lin_sha)
+    }
+
     fn fixture_receipts(
         rel_top1_row0: u64,
         ctrl_top1_row0: u64,
     ) -> (Value, Value, Value, Value, Value, Value) {
-        // Distinct raw FilePin hashes (e.g. pretty-printed JSON files) vs canonical encode(&config)
-        // and encode(&checkpoint) hashes, and distinct LearnV1 vs FrozenZeroV1 configs/lineages.
+        let (rel_lineage_val, rel_cfg_sha, rel_lin_sha) =
+            make_fixture_lineage(RelationLearningPolicyRecord::LearnV1);
+        let (ctrl_lineage_val, ctrl_cfg_sha, ctrl_lin_sha) =
+            make_fixture_lineage(RelationLearningPolicyRecord::FrozenZeroV1);
+
+        let raw_rel_cfg_file_sha = sha256_hex(b"raw_rel_cfg_file");
+        let raw_ctrl_cfg_file_sha = sha256_hex(b"raw_ctrl_cfg_file");
+        let raw_ckpt_rel_file_sha = sha256_hex(b"raw_ckpt_rel_file");
+        let raw_ckpt_ctrl_file_sha = sha256_hex(b"raw_ckpt_ctrl_file");
+        let ckpt_rel_sha = sha256_hex(b"ckpt_rel_canonical");
+        let ckpt_ctrl_sha = sha256_hex(b"ckpt_ctrl_canonical");
+        let snap_rel_sha = sha256_hex(b"snap_rel_canonical");
+        let snap_ctrl_sha = sha256_hex(b"snap_ctrl_canonical");
+        let source_sha = sha256_hex(b"constructed_source");
+        let kernel_sha = sha256_hex(b"kernel_source");
+        let geom_sha = sha256_hex(b"geometry_source");
+        let dev_binding_val = rel_lineage_val["dev"].clone();
+
         let panel = json!({
             "schema": PREFLIGHT_PANEL_SCHEMA,
             "status": "PINNED_PANEL_AND_PROBE_METADATA_ONLY",
-            "config_file": {"path": "/tmp/rel_cfg.json", "sha256": "raw_rel_cfg_file_sha"},
-            "config_sha256": "canonical_rel_cfg_sha",
-            "lineage_sha256": "rel_lineage_sha",
-            "dev_binding": {
-                "source": {
-                    "tokens": {"path": "/tmp/dev.u16", "sha256": CANONICAL_DEV_TOKENS_SHA256},
-                    "mask": {"path": "/tmp/dev.u8", "sha256": CANONICAL_DEV_MASK_SHA256},
-                }
-            },
+            "config_file": {"path": "/tmp/rel_cfg.json", "sha256": raw_rel_cfg_file_sha},
+            "config_sha256": rel_cfg_sha,
+            "lineage_sha256": rel_lin_sha,
+            "dev_binding": dev_binding_val,
             "row_count": 2,
             "psucc_count": 1,
             "rows": [
@@ -3525,14 +3969,77 @@ mod tests {
             "scoring_performed": false,
             "cuda_context_created": false,
             "model_constructed": false,
-            "updates_applied": 0
+            "updates_applied": 0,
+            "release": "STILL_REQUIRED",
+            "training": "HELD",
+            "m2": "HELD",
+            "stage_b": "HELD",
+            "q4": "NOT_EXECUTABLE"
         });
+
+        let make_eval = |lin_val: &Value, lin_sha: &str, snap_sha: &str, top1_row0: u64| {
+            json!({
+                "schema": DRIVER_EVAL_SCHEMA,
+                "evaluation_lineage": lin_val,
+                "evaluation_lineage_sha256": lin_sha,
+                "model_snapshot_sha256": snap_sha,
+                "model_epoch": 0,
+                "accepted_updates_in_model": 0,
+                "evaluation_mutates_model": false,
+                "updates_applied_by_evaluation": 0,
+                "model_bindings": {
+                    "schema": DISCRETE_SNAPSHOT_SCHEMA,
+                    "spec": lin_val["config"]["spec"],
+                    "read_spec": lin_val["config"]["read_spec"],
+                    "objective_policy": "nearest_address_margin_v1",
+                    "seed": lin_val["config"]["seed"],
+                    "source_sha256": source_sha,
+                    "kernel_sha256": kernel_sha,
+                    "geometry_sha256": geom_sha,
+                    "operator_kappa": "spiralcore_fbs_v1",
+                    "composition_kappa": "g2_tree_v1"
+                },
+                "batches": [
+                    {
+                        "rows": [
+                            {
+                                "target_position": 10,
+                                "target_token": 7,
+                                "admitted_cells": 2,
+                                "address_rivals": 1,
+                                "top1_correct": top1_row0,
+                                "top8_correct": 1
+                            },
+                            {
+                                "target_position": 20,
+                                "target_token": 9,
+                                "admitted_cells": 1,
+                                "address_rivals": 1,
+                                "top1_correct": 0,
+                                "top8_correct": 0
+                            }
+                        ]
+                    }
+                ]
+            })
+        };
+
+        let rel_eval = make_eval(&rel_lineage_val, &rel_lin_sha, &snap_rel_sha, rel_top1_row0);
+        let ctrl_eval = make_eval(
+            &ctrl_lineage_val,
+            &ctrl_lin_sha,
+            &snap_ctrl_sha,
+            ctrl_top1_row0,
+        );
+        let rel_eval_sha = sha256_hex(&serde_json::to_vec(&rel_eval).unwrap());
+        let ctrl_eval_sha = sha256_hex(&serde_json::to_vec(&ctrl_eval).unwrap());
 
         let make_cap = |cfg_file_sha: &str,
                         cfg_sha: &str,
                         lin_sha: &str,
                         ckpt_file_sha: &str,
                         ckpt_sha: &str,
+                        snap_sha: &str,
                         eval_sha: &str| {
             json!({
                 "schema": PREFLIGHT_CAPTURE_SCHEMA,
@@ -3542,16 +4049,14 @@ mod tests {
                 "lineage_sha256": lin_sha,
                 "checkpoint_file": {"path": "/tmp/ckpt.json", "sha256": ckpt_file_sha},
                 "driver_checkpoint_sha256": ckpt_sha,
+                "model_snapshot_sha256": snap_sha,
                 "evaluation_file": {"path": "/tmp/eval.json", "sha256": eval_sha},
-                "dev_binding": panel["dev_binding"],
+                "dev_binding": dev_binding_val,
                 "model_epoch": 0,
                 "completed_batches": 0,
                 "physical_cell_words_per_row": 16,
                 "unused_slot_marker": UNUSED_CELL_SLOT,
-                "updates_applied": 0,
-                "proposals": 0,
-                "snapshot_unchanged": true,
-                "training_capability_issued": false,
+                "row_count": 2,
                 "b3": {
                     "full": {"rows": 2, "target_admitted": 1},
                     "psucc": {"rows": 1, "target_admitted": 1},
@@ -3576,41 +4081,19 @@ mod tests {
                         "model_epoch": 0,
                         "admitted_cells": [5, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT, UNUSED_CELL_SLOT]
                     }
-                ]
-            })
-        };
-
-        let make_eval = |lin_sha: &str, snap_sha: &str, top1_row0: u64| {
-            json!({
-                "schema": DRIVER_EVAL_SCHEMA,
-                "evaluation_lineage_sha256": lin_sha,
-                "model_snapshot_sha256": snap_sha,
-                "model_epoch": 0,
-                "accepted_updates_in_model": 0,
-                "evaluation_mutates_model": false,
-                "updates_applied_by_evaluation": 0,
-                "batches": [
-                    {
-                        "rows": [
-                            {
-                                "target_position": 10,
-                                "target_token": 7,
-                                "admitted_cells": 2,
-                                "address_rivals": 1,
-                                "top1_correct": top1_row0,
-                                "top8_correct": 1
-                            },
-                            {
-                                "target_position": 20,
-                                "target_token": 9,
-                                "admitted_cells": 1,
-                                "address_rivals": 1,
-                                "top1_correct": 0,
-                                "top8_correct": 0
-                            }
-                        ]
-                    }
-                ]
+                ],
+                "additional_zero_apply_gpu_forward_passes": 1,
+                "gpu_forward_calls": 1,
+                "model_restores": 1,
+                "updates_applied": 0,
+                "proposals": 0,
+                "snapshot_unchanged": true,
+                "training_capability_issued": false,
+                "release": "STILL_REQUIRED",
+                "training": "HELD",
+                "m2": "HELD",
+                "stage_b": "HELD",
+                "q4": "NOT_EXECUTABLE"
             })
         };
 
@@ -3676,44 +4159,47 @@ mod tests {
         });
 
         let rel_cap = make_cap(
-            "raw_rel_cfg_file_sha",
-            "canonical_rel_cfg_sha",
-            "rel_lineage_sha",
-            "raw_ckpt_rel_file_sha",
-            "ckpt_rel",
-            "re_sha",
+            &raw_rel_cfg_file_sha,
+            &rel_cfg_sha,
+            &rel_lin_sha,
+            &raw_ckpt_rel_file_sha,
+            &ckpt_rel_sha,
+            &snap_rel_sha,
+            &rel_eval_sha,
         );
         let ctrl_cap = make_cap(
-            "raw_ctrl_cfg_file_sha",
-            "canonical_ctrl_cfg_sha",
-            "ctrl_lineage_sha",
-            "raw_ckpt_ctrl_file_sha",
-            "ckpt_ctrl",
-            "ce_sha",
+            &raw_ctrl_cfg_file_sha,
+            &ctrl_cfg_sha,
+            &ctrl_lin_sha,
+            &raw_ckpt_ctrl_file_sha,
+            &ckpt_ctrl_sha,
+            &snap_ctrl_sha,
+            &ctrl_eval_sha,
         );
-        (
-            panel,
-            rel_cap,
-            make_eval("rel_lineage_sha", "snap_rel", rel_top1_row0),
-            ctrl_cap,
-            make_eval("ctrl_lineage_sha", "snap_ctrl", ctrl_top1_row0),
-            d34,
-        )
+        (panel, rel_cap, rel_eval, ctrl_cap, ctrl_eval, d34)
     }
 
     #[test]
     fn preflight_and_paired_scoring_validate_distinct_file_and_canonical_hashes_and_complement_floor_22(
     ) {
         let (panel, rel_cap, rel_eval, ctrl_cap, ctrl_eval, d34) = fixture_receipts(1, 0);
+        let rel_eval_sha = rel_cap["evaluation_file"]["sha256"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let ctrl_eval_sha = ctrl_cap["evaluation_file"]["sha256"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let pre = score_preflight_dev_values(
             &panel,
-            "p_sha".to_string(),
+            sha256_hex(b"p_sha"),
             &rel_cap,
-            "rc_sha".to_string(),
+            sha256_hex(b"rc_sha"),
             &rel_eval,
-            "re_sha".to_string(),
+            rel_eval_sha.clone(),
             &d34,
-            "d34_sha".to_string(),
+            sha256_hex(b"d34_sha"),
             None,
             None,
             false,
@@ -3721,12 +4207,18 @@ mod tests {
         .expect("preflight score succeeds with distinct raw FilePin vs canonical hashes");
 
         assert_eq!(pre["schema"], PREFLIGHT_SCORE_SCHEMA);
-        assert_eq!(pre["pins"]["config_sha256"], "canonical_rel_cfg_sha");
-        assert_eq!(pre["pins"]["config_file_sha256"], "raw_rel_cfg_file_sha");
-        assert_eq!(pre["pins"]["driver_checkpoint_sha256"], "ckpt_rel");
+        assert_eq!(pre["pins"]["config_sha256"], rel_cap["config_sha256"]);
+        assert_eq!(
+            pre["pins"]["config_file_sha256"],
+            rel_cap["config_file"]["sha256"]
+        );
+        assert_eq!(
+            pre["pins"]["driver_checkpoint_sha256"],
+            rel_cap["driver_checkpoint_sha256"]
+        );
         assert_eq!(
             pre["pins"]["checkpoint_file_sha256"],
-            "raw_ckpt_rel_file_sha"
+            rel_cap["checkpoint_file"]["sha256"]
         );
         assert_eq!(
             pre["same_cell_candidate_reranking"]["status"],
@@ -3735,18 +4227,18 @@ mod tests {
 
         let paired = score_paired_dev_values(
             &panel,
-            "p_sha".to_string(),
+            sha256_hex(b"p_sha"),
             &rel_cap,
-            "rc_sha".to_string(),
+            sha256_hex(b"rc_sha"),
             &rel_eval,
-            "re_sha".to_string(),
+            rel_eval_sha.clone(),
             &ctrl_cap,
-            "cc_sha".to_string(),
+            sha256_hex(b"cc_sha"),
             &ctrl_eval,
-            "ce_sha".to_string(),
+            ctrl_eval_sha.clone(),
             None,
             &d34,
-            "d34_sha".to_string(),
+            sha256_hex(b"d34_sha"),
             None,
             None,
             false,
@@ -3766,44 +4258,90 @@ mod tests {
         );
         assert_eq!(paired["scientific_verdict"], "DEFERRED_TO_PM_DISPOSITION");
 
-        // Rejects paired arms if Relation and Control accidentally have identical config_sha256.
-        let mut bad_ctrl_cap = ctrl_cap.clone();
-        bad_ctrl_cap["config_sha256"] = json!("canonical_rel_cfg_sha");
-        let err = score_paired_dev_values(
+        // Rejects paired arms if Relation and Control are swapped (Relation has FrozenZeroV1, Control has LearnV1).
+        let swapped_err = score_paired_dev_values(
             &panel,
-            "p_sha".to_string(),
-            &rel_cap,
-            "rc_sha".to_string(),
-            &rel_eval,
-            "re_sha".to_string(),
-            &bad_ctrl_cap,
-            "cc_sha".to_string(),
+            sha256_hex(b"p_sha"),
+            &ctrl_cap,
+            sha256_hex(b"cc_sha"),
             &ctrl_eval,
-            "ce_sha".to_string(),
+            ctrl_eval_sha.clone(),
+            &rel_cap,
+            sha256_hex(b"rc_sha"),
+            &rel_eval,
+            rel_eval_sha.clone(),
             None,
             &d34,
-            "d34_sha".to_string(),
+            sha256_hex(b"d34_sha"),
             None,
             None,
             false,
         )
         .unwrap_err();
-        assert!(err.contains("distinct config_sha256 and lineage_sha256"));
+        assert!(
+            swapped_err.contains("relation arm relation_learning_policy must be LearnV1"),
+            "{swapped_err}"
+        );
+
+        // Rejects paired arms if Control differs in a non-policy DriverConfig field (e.g. seed 2 vs 1).
+        let mut forged_ctrl_eval = ctrl_eval.clone();
+        forged_ctrl_eval["evaluation_lineage"]["config"]["seed"] = json!(2);
+        forged_ctrl_eval["model_bindings"]["seed"] = json!(2);
+        let forged_ctrl_cfg: DriverConfigRecord =
+            serde_json::from_value(forged_ctrl_eval["evaluation_lineage"]["config"].clone())
+                .unwrap();
+        let forged_ctrl_cfg_sha = sha256_hex(&serde_json::to_vec(&forged_ctrl_cfg).unwrap());
+        let forged_ctrl_lin: DriverLineageRecord =
+            serde_json::from_value(forged_ctrl_eval["evaluation_lineage"].clone()).unwrap();
+        let forged_ctrl_lin_sha = sha256_hex(&serde_json::to_vec(&forged_ctrl_lin).unwrap());
+        forged_ctrl_eval["evaluation_lineage_sha256"] = json!(forged_ctrl_lin_sha);
+        let forged_ctrl_eval_sha = sha256_hex(&serde_json::to_vec(&forged_ctrl_eval).unwrap());
+        let mut forged_ctrl_cap = ctrl_cap.clone();
+        forged_ctrl_cap["config_sha256"] = json!(forged_ctrl_cfg_sha);
+        forged_ctrl_cap["lineage_sha256"] = json!(forged_ctrl_lin_sha);
+        forged_ctrl_cap["evaluation_file"]["sha256"] = json!(forged_ctrl_eval_sha);
+        let seed_err = score_paired_dev_values(
+            &panel,
+            sha256_hex(b"p_sha"),
+            &rel_cap,
+            sha256_hex(b"rc_sha"),
+            &rel_eval,
+            rel_eval_sha,
+            &forged_ctrl_cap,
+            sha256_hex(b"cc_sha"),
+            &forged_ctrl_eval,
+            forged_ctrl_eval_sha,
+            None,
+            &d34,
+            sha256_hex(b"d34_sha"),
+            None,
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            seed_err.contains("other than relation_learning_policy"),
+            "{seed_err}"
+        );
     }
 
     #[test]
     fn rejects_scalar_or_mismatched_slot_captures() {
         let (panel, mut rel_cap, rel_eval, _, _, d34) = fixture_receipts(1, 0);
+        let rel_eval_sha = rel_cap["evaluation_file"]["sha256"]
+            .as_str()
+            .unwrap()
+            .to_string();
         rel_cap["rows"][0]["admitted_cells"] = json!(2);
         let err = score_preflight_dev_values(
             &panel,
-            "p_sha".to_string(),
+            sha256_hex(b"p_sha"),
             &rel_cap,
-            "rc_sha".to_string(),
+            sha256_hex(b"rc_sha"),
             &rel_eval,
-            "re_sha".to_string(),
+            rel_eval_sha,
             &d34,
-            "d34_sha".to_string(),
+            sha256_hex(b"d34_sha"),
             None,
             None,
             false,
@@ -3814,16 +4352,24 @@ mod tests {
 
     #[test]
     fn token_cells_receipt_and_candidate_table_validate_hashes_ranges_and_d34_consistency() {
-        let (panel, rel_cap, rel_eval, _, _, d34) = fixture_receipts(1, 0);
+        let (panel, rel_cap, rel_eval, ctrl_cap, ctrl_eval, d34) = fixture_receipts(1, 0);
+        let rel_eval_sha = rel_cap["evaluation_file"]["sha256"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let ctrl_eval_sha = ctrl_cap["evaluation_file"]["sha256"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let arm = validate_arm_inputs(
             &panel,
-            "p_sha".to_string(),
+            sha256_hex(b"p_sha"),
             &rel_cap,
-            "rc_sha".to_string(),
+            sha256_hex(b"rc_sha"),
             &rel_eval,
-            "re_sha".to_string(),
+            rel_eval_sha.clone(),
             &d34,
-            "d34_sha".to_string(),
+            sha256_hex(b"d34_sha"),
             false,
         )
         .unwrap();
@@ -3834,21 +4380,7 @@ mod tests {
             u16_bytes.extend_from_slice(&(c as u16).to_le_bytes());
         }
         let tc_sha = sha256_hex(&u16_bytes);
-
-        let tc_receipt = json!({
-            "schema": TOKEN_CELLS_RECEIPT_SCHEMA,
-            "status": TOKEN_CELLS_RECEIPT_STATUS,
-            "driver_checkpoint_sha256": "ckpt_rel",
-            "model_snapshot_sha256": "snap_rel",
-            "updates_applied": 0,
-            "snapshot_unchanged": true,
-            "token_cells": token_cells,
-        });
-        let (cells, occupied) =
-            parse_token_cells_receipt(&tc_receipt, "ckpt_rel", "snap_rel").unwrap();
-        assert_eq!(occupied, 1);
-        assert_eq!(cells[7], 0);
-        verify_token_cells_against_gpu_capture(&arm, &cells).unwrap();
+        verify_token_cells_against_gpu_capture(&arm, &token_cells).unwrap();
 
         let mut t2_by_q = vec![vec![7u32]; CANONICAL_VOCAB];
         t2_by_q[3] = vec![7, 4];
@@ -3859,63 +4391,153 @@ mod tests {
         let u_sha = sha256_hex(&serde_json::to_vec(&u_ranked).unwrap());
         let win_sha = sha256_hex(&serde_json::to_vec(&occs).unwrap());
 
+        let corpus_tables = CorpusReferenceTables {
+            train_tokens_sha256: CANONICAL_TRAIN_TOKENS_SHA256.to_string(),
+            train_mask_sha256: CANONICAL_TRAIN_MASK_SHA256.to_string(),
+            dev_tokens_sha256: CANONICAL_DEV_TOKENS_SHA256.to_string(),
+            dev_mask_sha256: CANONICAL_DEV_MASK_SHA256.to_string(),
+            ordered_row_binding_sha256: CANONICAL_ORDERED_ROW_BINDING_SHA256.to_string(),
+            train_matched_targets: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+            train_bigram_total_pairs: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+            u_train_total_counts: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+            dev_psucc_rows: 1,
+            u_succ_total_counts: CANONICAL_TRAIN_MATCHED_TARGETS as u64,
+            conservation_ok: true,
+            t2_ranked_by_query: t2_by_q.clone(),
+            t2_ranked_table_sha256: t2_sha.clone(),
+            u_train_ranked: u_ranked.clone(),
+            u_train_ranked_table_sha256: u_sha.clone(),
+            u_succ_ranked: u_ranked.clone(),
+            u_succ_ranked_table_sha256: u_sha.clone(),
+            dev_rows: vec![
+                DevCorpusRow {
+                    ordinal: 0,
+                    position: 10,
+                    query_token: 3,
+                    target_token: 7,
+                    is_psucc: true,
+                    distance_bucket: Some(0),
+                    conflict: false,
+                    t1_candidate: Some(7),
+                    t1b_candidate: Some(4),
+                    window_query_successors_most_recent_first: vec![7, 4],
+                },
+                DevCorpusRow {
+                    ordinal: 1,
+                    position: 20,
+                    query_token: 5,
+                    target_token: 9,
+                    is_psucc: false,
+                    distance_bucket: None,
+                    conflict: true,
+                    t1_candidate: Some(8),
+                    t1b_candidate: Some(9),
+                    window_query_successors_most_recent_first: vec![8, 9],
+                },
+            ],
+            dev_window_successors_sha256: win_sha.clone(),
+        };
+
         let mut cand_table = CandidateCellTable {
             schema: CANDIDATE_CELL_TABLE_SCHEMA.to_string(),
-            driver_checkpoint_sha256: "ckpt_rel".to_string(),
-            model_snapshot_sha256: Some("snap_rel".to_string()),
+            driver_checkpoint_sha256: arm.driver_checkpoint_sha256.clone(),
+            model_snapshot_sha256: Some(arm.model_snapshot_sha256.clone()),
             ordered_row_binding_sha256: Some(CANONICAL_ORDERED_ROW_BINDING_SHA256.to_string()),
             token_cells_sha256: Some(tc_sha),
             t2_ranked_table_sha256: Some(t2_sha),
             u_succ_ranked_table_sha256: Some(u_sha.clone()),
             u_train_ranked_table_sha256: Some(u_sha),
             dev_window_successors_sha256: Some(win_sha),
-            token_cells: cells,
+            token_cells: token_cells.clone(),
             t2_ranked_candidates_by_query: t2_by_q,
             u_succ_ranked_candidates: u_ranked.clone(),
             u_train_ranked_candidates: Some(u_ranked),
             dev_window_query_successors_most_recent_first: Some(occs),
         };
-        let pre = score_preflight_dev_values(
+
+        let (row_scores, occupied_cells) =
+            score_same_cell_rows_from_table(&arm, &cand_table, &corpus_tables).unwrap();
+        assert_eq!(occupied_cells, 1);
+        assert_eq!(row_scores.len(), 2);
+        assert!(row_scores[0].t1_admitted_hit1);
+        assert!(row_scores[0].t2_same_cell_hit1);
+
+        // Standalone external CandidateCellTable without token_cells + corpus files must be refused by both scorers.
+        let ext_pre_err = score_preflight_dev_values(
             &panel,
-            "p_sha".to_string(),
+            sha256_hex(b"p_sha"),
             &rel_cap,
-            "rc_sha".to_string(),
+            sha256_hex(b"rc_sha"),
             &rel_eval,
-            "re_sha".to_string(),
+            rel_eval_sha.clone(),
             &d34,
-            "d34_sha".to_string(),
+            sha256_hex(b"d34_sha"),
             Some((&cand_table, "cand_sha".to_string())),
             None,
             false,
         )
-        .unwrap();
-        assert_eq!(
-            pre["same_cell_candidate_reranking"]["status"],
-            "SCORED_FROM_ADMITTED_CANDIDATE_CELL_TABLE"
+        .unwrap_err();
+        assert!(
+            ext_pre_err.contains("external --candidate-cells without --token-cells"),
+            "{ext_pre_err}"
         );
-        assert_eq!(
-            pre["same_cell_candidate_reranking"]["slices"]["copy_successor_subpanel"]["on_b3_rows"]
-                ["t1_same_cell_hit1"]["hits"],
-            1
+        let ext_paired_err = score_paired_dev_values(
+            &panel,
+            sha256_hex(b"p_sha"),
+            &rel_cap,
+            sha256_hex(b"rc_sha"),
+            &rel_eval,
+            rel_eval_sha,
+            &ctrl_cap,
+            sha256_hex(b"cc_sha"),
+            &ctrl_eval,
+            ctrl_eval_sha,
+            None,
+            &d34,
+            sha256_hex(b"d34_sha"),
+            Some((
+                &cand_table,
+                "cand_rel".to_string(),
+                &cand_table,
+                "cand_ctrl".to_string(),
+            )),
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            ext_paired_err.contains(
+                "external --relation-candidate-cells / --control-candidate-cells without"
+            ),
+            "{ext_paired_err}"
         );
-        assert_eq!(
-            pre["same_cell_candidate_reranking"]["slices"]["copy_successor_subpanel"]["on_b3_rows"]
-                ["t2_same_cell_hit1"]["hits"],
-            1
+
+        // Tampering with non-top-1 tail of t2_ranked_candidates_by_query (even with recomputed JSON sha) must fail corpus cross-check.
+        let mut tampered_tail_table = cand_table.clone();
+        tampered_tail_table.t2_ranked_candidates_by_query[3] = vec![7, 4, 15];
+        tampered_tail_table.t2_ranked_table_sha256 = Some(sha256_hex(
+            &serde_json::to_vec(&tampered_tail_table.t2_ranked_candidates_by_query).unwrap(),
+        ));
+        let tail_err = score_same_cell_rows_from_table(&arm, &tampered_tail_table, &corpus_tables)
+            .unwrap_err();
+        assert!(
+            tail_err.contains("disagrees with corpus-recomputed T2 table"),
+            "{tail_err}"
         );
 
         // Out-of-range token ID in t2_ranked_candidates_by_query must fail cleanly without panic.
         let mut bad_table = cand_table.clone();
         bad_table.t2_ranked_candidates_by_query[3].push(4096);
-        assert!(score_same_cell_rows_from_table(&arm, &bad_table).is_err());
+        assert!(score_same_cell_rows_from_table(&arm, &bad_table, &corpus_tables).is_err());
 
         // Mismatched u_succ_ranked_candidates vs u_train_ranked_candidates must fail cleanly.
         cand_table.u_succ_ranked_candidates = vec![7, 2, 4, 8];
-        assert!(score_same_cell_rows_from_table(&arm, &cand_table).is_err());
+        assert!(score_same_cell_rows_from_table(&arm, &cand_table, &corpus_tables).is_err());
     }
 
     #[test]
     fn raw_token_cells_u16_requires_sibling_report_receipt_and_rejects_bare_file() {
+        let (_panel, rel_cap, rel_eval, _, _, _) = fixture_receipts(1, 0);
         let mut raw = Vec::with_capacity(CANONICAL_VOCAB * 2);
         for tok in 0..CANONICAL_VOCAB {
             let cell = ((tok * 17) % 256) as u16;
@@ -3932,41 +4554,107 @@ mod tests {
         let u16_path = tmp_dir.join("token_cells.u16");
         fs::write(&u16_path, &raw).unwrap();
 
+        let ckpt_sha = rel_cap["driver_checkpoint_sha256"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let snap_sha = rel_eval["model_snapshot_sha256"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
         // Bare token_cells.u16 without sibling report.json must be refused.
-        let bare_err = load_gpu_token_cells_file(&u16_path, "ckpt_rel", "snap_rel").unwrap_err();
+        let bare_err = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &snap_sha).unwrap_err();
         assert!(
             bare_err.contains("without sibling report.json"),
             "{bare_err}"
         );
 
-        // Writing a valid sibling report.json succeeds and binds all receipt pins.
+        // Inline token_cells JSON array without raw_u16_le_no_header binary file must be refused.
+        let inline_json_path = tmp_dir.join("inline_receipt.json");
+        let inline_val = json!({
+            "schema": TOKEN_CELLS_RECEIPT_SCHEMA,
+            "status": TOKEN_CELLS_RECEIPT_STATUS,
+            "driver_checkpoint_sha256": ckpt_sha,
+            "model_snapshot_sha256": snap_sha,
+            "updates_applied": 0,
+            "snapshot_unchanged": true,
+            "token_cells": cells
+        });
+        fs::write(&inline_json_path, serde_json::to_vec(&inline_val).unwrap()).unwrap();
+        let inline_err =
+            load_gpu_token_cells_file(&inline_json_path, &ckpt_sha, &snap_sha).unwrap_err();
+        assert!(
+            inline_err.contains("inline token_cells are refused"),
+            "{inline_err}"
+        );
+
+        // Writing a valid #2601 sibling report.json succeeds and binds all receipt pins.
         let u16_sha = sha256_hex(&raw);
         let report_val = json!({
             "schema": TOKEN_CELLS_RECEIPT_SCHEMA,
             "status": TOKEN_CELLS_RECEIPT_STATUS,
-            "config_file": {"path": "/tmp/cfg.json", "sha256": "raw_rel_cfg_file_sha"},
-            "config_sha256": "canonical_rel_cfg_sha",
-            "lineage_sha256": "rel_lineage_sha",
-            "checkpoint_file": {"path": "/tmp/ckpt.json", "sha256": "raw_ckpt_rel_file_sha"},
-            "driver_checkpoint_sha256": "ckpt_rel",
-            "model_snapshot_sha256": "snap_rel",
+            "config_file": rel_cap["config_file"],
+            "config_sha256": rel_cap["config_sha256"],
+            "lineage_sha256": rel_cap["lineage_sha256"],
+            "checkpoint_file": rel_cap["checkpoint_file"],
+            "driver_checkpoint_sha256": ckpt_sha,
+            "model_snapshot_sha256": snap_sha,
             "model_epoch": 0,
             "completed_batches": 0,
             "token_cells_file": {"path": u16_path.to_string_lossy(), "sha256": u16_sha},
+            "token_count": 4096,
+            "byte_count": 8192,
+            "encoding": "raw_u16_le_no_header",
+            "ordering": "ascending_token_id_0_through4095",
+            "cell_range": {"min": 0, "max": 255},
+            "absent_cells_allowed": false,
+            "model_bindings": {
+                "source_sha256": rel_eval["model_bindings"]["source_sha256"],
+                "kernel_sha256": rel_eval["model_bindings"]["kernel_sha256"],
+                "geometry_sha256": rel_eval["model_bindings"]["geometry_sha256"],
+                "spec": rel_eval["model_bindings"]["spec"],
+                "read_spec": rel_eval["model_bindings"]["read_spec"],
+                "objective_policy": rel_eval["model_bindings"]["objective_policy"],
+                "read_initialization": "active_leaf_v1",
+                "seed": rel_eval["model_bindings"]["seed"]
+            },
+            "model_restores": 1,
+            "export_kernel_calls": 1,
+            "token_cell_evaluations": 4096,
+            "gpu_forward_calls": 0,
+            "proposals": 0,
             "updates_applied": 0,
-            "snapshot_unchanged": true
+            "snapshot_unchanged": true,
+            "training_capability_issued": false,
+            "host_cell_reconstruction": false,
+            "training": "HELD",
+            "m2": "HELD",
+            "stage_b": "HELD",
+            "q4": "NOT_EXECUTABLE"
         });
-        fs::write(
-            tmp_dir.join("report.json"),
-            serde_json::to_vec(&report_val).unwrap(),
-        )
-        .unwrap();
-        let loaded = load_gpu_token_cells_file(&u16_path, "ckpt_rel", "snap_rel").unwrap();
+        let report_path = tmp_dir.join("report.json");
+        fs::write(&report_path, serde_json::to_vec(&report_val).unwrap()).unwrap();
+        let loaded = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &snap_sha).unwrap();
         assert_eq!(loaded.occupied_cells, 256);
         assert_eq!(
-            loaded.checkpoint_file_sha256.as_deref(),
-            Some("raw_ckpt_rel_file_sha")
+            loaded.checkpoint_file_sha256,
+            rel_cap["checkpoint_file"]["sha256"].as_str().unwrap()
         );
+
+        // Missing checkpoint_file in report.json must be refused.
+        let mut missing_ckpt_report = report_val.clone();
+        missing_ckpt_report
+            .as_object_mut()
+            .unwrap()
+            .remove("checkpoint_file");
+        fs::write(
+            &report_path,
+            serde_json::to_vec(&missing_ckpt_report).unwrap(),
+        )
+        .unwrap();
+        let missing_err = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &snap_sha).unwrap_err();
+        assert!(missing_err.contains("checkpoint_file"), "{missing_err}");
         let _ = fs::remove_dir_all(&tmp_dir);
     }
 
