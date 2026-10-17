@@ -6,6 +6,8 @@ use super::*;
 use crate::ReadInitialization;
 #[path = "attention_evidence.rs"]
 pub mod evidence;
+#[path = "attention_preflight.rs"]
+pub mod preflight;
 #[path = "attention_transfer.rs"]
 pub mod transfer;
 #[cfg(any(feature = "cuda", test))]
@@ -535,7 +537,6 @@ struct Q1Record {
     q1_b3: evidence::B3Summary,
     decision: evidence::Q1Decision,
 }
-#[cfg(feature = "cuda")]
 fn dev_row_identities(config: &DriverConfig) -> Result<Vec<(u64, u32, bool)>> {
     // Corpus/window partition metadata only. No scoring or forward computation.
     let source = corpus::PreparedCorpus::load(&config.dev, config.spec.vocabulary, &config.bos)?;
