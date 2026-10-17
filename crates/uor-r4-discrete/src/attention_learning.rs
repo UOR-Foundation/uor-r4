@@ -15,10 +15,11 @@ use crate::{metadata::BinderPlan, training::CoordinateKind};
 
 pub const ATTENTION_BATCHES: u64 = 16_404;
 pub const ATTENTION_BASE_SOURCE: &str = "ef9d30999700be11e103f96590e9e3b83b6807c7";
-/// Canonical Unit2b amendment accepted in PR2581/main9e6217046. Scope and the selected
+/// Canonical Unit2b and paired-fresh clarification through PR2583/mainc7b2b1cb.
+/// Scope and the selected
 /// arm/seed remain independently pinned by the review payload and owner plan.
 pub const ATTENTION_SHEET_SHA256: &str =
-    "89db2d3b4cc5344a68cfd21af377b309badcd45c8f5a666bc4097e6047bd0ff6";
+    "844814009ecc7368c0a3ecabf62434bae7d72850363e19f67c0126810fee7ffc";
 const PLAN_SCHEMA: &str = "uor-r4.attention-learning-owner-plan/2";
 #[cfg(feature = "cuda")]
 const ADMISSION_SCHEMA: &str = "uor-r4.attention-learning-owner-admission/2";
@@ -50,7 +51,10 @@ impl AttentionCostContract {
             q1_dev_evaluations: 1,
             final_dev_evaluations: 1,
             relation_off_dev_evaluations: u32::from(ablation),
-            final_transfer_evaluations: u32::from(ablation),
+            final_transfer_evaluations: u32::from(matches!(
+                config.read_spec,
+                ReadSpec::Relation { .. }
+            )),
             relation_off_transfer_evaluations: 0,
         }
     }
@@ -282,7 +286,7 @@ pub fn check_plan(plan_path: &Path) -> Result<Value> {
         "compiled_identity_checked":cfg!(feature="cuda"),"cuda_context_created":false,
         "transfer_source_seal":plan.transfer,"fresh_content_read":false,
         "owner_release":"STILL_REQUIRED","training":"HELD",
-        "evaluation_scope":"baseline/Q1/final DEV; Relation ablation DEV; separate treatment-only fresh command after sealed paired DEV decision",
+        "evaluation_scope":"baseline/Q1/final DEV; Relation ablation DEV; separate paired fresh command only after sealed DEV H_geom decision",
         "learned_attention_result":"NOT_YET_SCORED"}))
 }
 #[cfg(any(feature = "cuda", test))]
@@ -1338,7 +1342,7 @@ mod tests {
         control.relation_learning_policy = training::RelationLearningPolicy::FrozenZeroV1;
         assert_eq!(
             AttentionCostContract::expected(&control).final_transfer_evaluations,
-            0
+            1
         );
         let mut wrong = p.clone();
         wrong.cost_contract.q1_dev_evaluations = 0;

@@ -170,7 +170,7 @@ attention-owner-release PLAN NEW_RELEASE_DIR — Casey personally at a terminal,
 attention-panel CONFIG NEW_REPORT_DIR — canonical DEV row metadata and first64 successor probe request, no model.
 attention-capture-dev CONFIG DRIVER_CHECKPOINT DEV_EVALUATION NEW_REPORT_DIR — separately released zero-apply GPU Forward slot capture.
 attention-dev-b3 CONFIG DRIVER_CHECKPOINT DEV_EVALUATION NEW_REPORT_DIR — exact immutable DEV B3 metadata, no model.
-attention-transfer PAIRED_DEV_DECISION NEW_REPORT_DIR — CUDA-only once-only treatment fresh evaluation after sealed paired DEV review.
+attention-transfer PAIRED_DEV_DECISION NEW_REPORT_DIR — CUDA-only once-only paired fresh evaluation after sealed DEV H_geom.
 attention|attention-resume CONFIG ADMISSION NEW_REPORT_DIR — CUDA-only matched active-leaf Flock/Relation learning, cap16404, separately released; training remains HELD by default.");
             Ok(())
         }
