@@ -15,10 +15,10 @@
   },
   "codex/cf1-attention-learning": {
     "branch": "codex/cf1-attention-learning",
-    "claimed_at": "2026-10-17T01:05:23-04:00",
-    "head": "fa62a670a",
+    "claimed_at": "2026-10-17T02:33:00-04:00",
+    "head": "d833da01d",
     "lab": "codex",
-    "note": "Owner chat17Oct explicitly prioritizes learned attention and authorizes Codex implementation/parallel coordination. Existing driver interleaver, matched explicit leaf-read init, gated Relation executor; no model release. K16 PR2571 preserved."
+    "note": "Owner-priority attention Unit1 source; final initializer-preserving implementation, exact source/sheet binding and narrow stale initializer sentence reconciliation in m1-learned-attention-link-2026-10-17.md per PM6230657270; no scientific effect/bar/dose change. No model/training release."
   },
   "codex/cf1-reuse-timing-uuid-blocker": {
     "branch": "codex/cf1-reuse-timing-uuid-blocker",
