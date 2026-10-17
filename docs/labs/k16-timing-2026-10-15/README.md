@@ -1,5 +1,7 @@
 # K16 synchronized 100-batch timing instrument (2026-10-15)
 
+**17 October source hardening:** the [closure repair](../k16-warmup-closure-2026-10-17/README.md) retains #2539's already-correct101-window/one-warmup schedule and adds an internal refusal when the completed timed count differs from the pin, before emitting rates or cell success. The shared iterator has source regression tests for100/1, diagnostic3/1 and short/excess partial receipts. Host execution and exact-head CUDA gates are NOT_RUN pending disk admission; the normal100-batch checkpoint0 source bridge is a separate unresolved PM disposition. Frozen timing3 and its32-proposal dose remain unchanged. No new timing or qualification result follows.
+
 **Current direction, 16 October:** the [sealed sub-phase diagnostic](../propose-subphase-diagnostic-run-2026-10-16/README.md) completed after its reviewed bridge: the counterfactual kernel occupies 99.995770–99.998097% of propose wall. The [decomposition instrument](../counterfactual-instrument-2026-10-16/README.md) adds separate `decompose-check`, `decompose-plan`, CUDA metadata-only `decompose-identity`, and gated `decompose` commands under #2545's design FIT; model execution is NOT_RUN, and all six execution requirements remain explicit. No qualified rate or p95 follows. #2539 fixes the warmup window count. The
 [owner instrument+optimize-first decision](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6210107580)
 defers 100-batch qualification timing to the optimized stack. The separate

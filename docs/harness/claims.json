@@ -13,12 +13,12 @@
     "lab": "claude",
     "note": ""
   },
-  "codex/cf1-reuse-timing-uuid-blocker": {
-    "branch": "codex/cf1-reuse-timing-uuid-blocker",
-    "claimed_at": "2026-10-16T22:35:15-04:00",
-    "head": "66154156d",
+  "codex/cf1-k16-warmup-closure": {
+    "branch": "codex/cf1-k16-warmup-closure",
+    "claimed_at": "2026-10-16T23:50:40-04:00",
+    "head": "d325c3037",
     "lab": "codex",
-    "note": ""
+    "note": "PM6229239369 timing-line closure: K16 warmup/count source audit and bounded repair, exact-head compile-only transcript; frozen timing3 untouched. Scope docs/labs/k16-timing-2026-10-15/instrument, dated closure record, state/claims/ledger. No model execution release."
   },
   "deepseek/k16-warmup-count": {
     "branch": "deepseek/k16-warmup-count",

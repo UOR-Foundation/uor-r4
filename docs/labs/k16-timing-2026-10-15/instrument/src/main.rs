@@ -407,29 +407,91 @@ pub fn windows_for(pin: &Pin) -> usize {
     windows_for_counts(pin.batches, pin.warmups)
 }
 
-/// The same arithmetic, without a Pin, so the count can be asserted in a two-line test.
+/// The same allocation count without a Pin. The CUDA loop consumes `timed_windows` below.
 pub fn windows_for_counts(batches: usize, warmups: usize) -> usize {
     batches + warmups
 }
 
+#[cfg(any(feature = "cuda", test))]
+fn timed_windows<T>(windows: &[T], warmups: usize) -> impl Iterator<Item = (usize, &T)> {
+    windows.iter().enumerate().skip(warmups)
+}
+
+/// A completed cell may report rates only for exactly its declared timed dose.
+#[cfg(any(feature = "cuda", test))]
+fn validate_completed_batches(
+    expected: usize,
+    completed: usize,
+    ledger: &mut Ledger,
+) -> std::result::Result<(), String> {
+    if completed != expected {
+        return Err(ledger.fault(
+            "completed_batch_count",
+            &format!(
+                "completed {completed} timed batches, expected {expected}; cell rates refused"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod warmup_count_tests {
-    use super::windows_for_counts;
+    use super::{timed_windows, validate_completed_batches, windows_for_counts, Ledger};
+    use serde_json::{json, Value};
 
     #[test]
-    fn the_timed_batches_survive_the_excluded_warmup() {
-        // A pinned cell declares `batches` TIMED batches plus excluded warmups. Building only
-        // `batches` windows and then skipping the warmup leaves 99 to time for a pin declaring 100,
-        // which is what the `timing-status` gate caught at restart-5 (Codex, #2029).
-        let windows = windows_for_counts(100, 1);
-        assert_eq!(windows, 101);
-        assert_eq!(
-            windows - 1,
-            100,
-            "exactly the pinned batches remain to time"
-        );
-        assert_eq!(windows_for_counts(100, 0), 100);
-        assert_eq!(windows_for_counts(100, 2) - 2, 100);
+    fn the_cuda_schedule_excludes_only_the_warmup() {
+        for expected in [100, 3] {
+            // Integer window labels exercise the exact iterator used by run_cell;
+            // no model/window evaluation is needed for schedule metadata.
+            let windows: Vec<_> = (0..windows_for_counts(expected, 1)).collect();
+            let scheduled: Vec<_> = timed_windows(&windows, 1)
+                .map(|(index, window)| (index, *window))
+                .collect();
+            assert_eq!(
+                scheduled,
+                (1..=expected).map(|n| (n, n)).collect::<Vec<_>>()
+            );
+            let dir = tempfile::tempdir().expect("tempdir");
+            let mut ledger = Ledger::new(dir.path().join("record.json"), json!({}));
+            validate_completed_batches(expected, scheduled.len(), &mut ledger)
+                .expect("exact completed dose");
+            assert!(ledger.faults.is_empty());
+            assert!(!ledger.path.exists(), "valid count does not flush a fault");
+        }
+    }
+
+    #[test]
+    fn short_or_excess_cuda_schedules_preserve_partial_receipts() {
+        for (expected, available) in [(100, 100), (100, 102), (3, 3), (3, 5)] {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let mut ledger = Ledger::new(dir.path().join("record.json"), json!({}));
+            let windows: Vec<_> = (0..available).collect();
+            let mut completed = 0;
+            for (index, _) in timed_windows(&windows, 1) {
+                ledger.push(json!({"record_kind":"batch", "batch":index}));
+                completed += 1;
+            }
+            let error = validate_completed_batches(expected, completed, &mut ledger)
+                .expect_err("short and excess doses must refuse rates/success");
+            assert!(error.contains(&format!("completed {completed}")));
+            let written: Value = serde_json::from_str(
+                &std::fs::read_to_string(&ledger.path).expect("partial record preserved"),
+            )
+            .expect("record json");
+            assert_eq!(written["status"], "partial");
+            assert_eq!(
+                written["records"].as_array().expect("records").len(),
+                completed
+            );
+            assert_eq!(written["faults"][0]["stage"], "completed_batch_count");
+            assert!(written["records"]
+                .as_array()
+                .expect("records")
+                .iter()
+                .all(|record| record["record_kind"] == "batch" && record.get("rates").is_none()));
+        }
     }
 }
 
@@ -756,7 +818,7 @@ mod driver {
             ledger.push(json!({"record_kind":"excluded_warmup","cell":{"source":cell.source,"policy":policy_name(cell.policy)},"elapsed_ns":started.elapsed().as_nanos(),"profiles":warmup_profiles,"applied":false}));
         }
 
-        for (index, window) in windows.iter().enumerate().skip(pin.warmups) {
+        for (index, window) in timed_windows(&windows, pin.warmups) {
             let batch_started = pin.diagnostic.as_ref().map(|_| Instant::now());
             if let Err(e) = device.synchronize() {
                 return Err(ledger.fault("sync_before_carry", &e.to_string()));
@@ -877,6 +939,8 @@ mod driver {
                 "snapshot or epoch changed during a forward-only cell",
             ));
         }
+
+        validate_completed_batches(pin.batches, timed_batches, ledger)?;
 
         let unit_ns = carry_ns_total
             + route_propose_ns
