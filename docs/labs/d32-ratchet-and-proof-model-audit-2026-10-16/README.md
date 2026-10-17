@@ -8,7 +8,7 @@ Follow-on to `#2547` (`6725e0ea9`), `#2551` (`ec65ce5c5`), `#2558` (`e2fb90379`)
 
 1. **D32 Discrete-Float Ratchet (`uor-harness ratchet d32` / `Kind::DiscreteFloat`):**
    - Adds `Kind::DiscreteFloat` (`d32` / `discrete-float`) in `crates/uor-r4-harness/src/ratchet.rs` (`discrete_float_sites()`), wired into `crates/uor-r4-harness/src/main.rs` (`cmd_ratchet` with `--list` and `--update-baseline`) and `crates/uor-r4-harness/src/prlintrules.rs` (`interlock_holds`).
-   - Blanks single- and escaped character literals (`'"'`, `'\"'`, `'x'`) in `strip_comments_and_strings()` while preserving Rust lifetimes (`'a`) and C++14 numeric separators (`1'000.25`).
+   - Blanks single- and escaped character literals (`'"'`, `'\"'`, `'x'`) via `strip_comments_strings_and_char_literals()` on the D32 path while preserving Rust lifetimes (`'a`), C++14 numeric separators (`1'000.25`), and exact `d23`/`d25` parity in `strip_comments_and_strings()`.
    - Scans comment/string/char-literal-stripped code across `crates/uor-r4-discrete/` and `docs/labs/*/instrument/` for:
      - `D32_FLOAT_TYPES`: `f16`, `bf16`, `f32`, `f64`, `tf32`, `float`, `double`, `__half`, `__nv_bfloat16` (identifiers).
      - Floating-point literals: decimal (`1.0`, `2.`, `.5f`, `1.f`, including range bounds `0..1.0`), exponent (`1e-5`, `2E+3`, and CUDA decimal-point exponents `1.e3`, `2.e-4f`), hex-float (`0x1.8p-2`), and Rust typed float literals (`3f32`, `4_f64`), while excluding Rust tuple indexing (`pair.0`, `pair.0.1`, `(pair).0`, `arr[0].1`, multiline `\n .1;`), integer ranges (`0..10`), and integer method calls (`i.max(1)`).

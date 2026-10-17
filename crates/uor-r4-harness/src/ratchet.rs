@@ -303,6 +303,17 @@ fn push_blanked(out: &mut String, slice: &str) {
 /// line number in the result is its own. Raw strings (`r"..."`, `r#"..."#`) are kept: the CUDA
 /// kernel sources lived in one, and that text is executable. Block comments nest, as in Rust.
 pub fn strip_comments_and_strings(text: &str) -> String {
+    strip_comments_and_strings_mode(text, false)
+}
+
+/// Like [`strip_comments_and_strings`], and also blanks single-quoted character literals (`'x'`,
+/// `'"'`, `'\"'`, `'\n'`) while preserving Rust lifetimes (`'a`) and C++14 numeric separators
+/// (`1'000`) so an unescaped `'"'` character literal cannot open a string literal on the D32 path.
+pub fn strip_comments_strings_and_char_literals(text: &str) -> String {
+    strip_comments_and_strings_mode(text, true)
+}
+
+fn strip_comments_and_strings_mode(text: &str, strip_char_literals: bool) -> String {
     let b = text.as_bytes();
     let n = b.len();
     let mut out = String::with_capacity(n);
@@ -347,7 +358,7 @@ pub fn strip_comments_and_strings(text: &str) -> String {
             } else {
                 i += 1;
             }
-        } else if c == b'\'' {
+        } else if strip_char_literals && c == b'\'' {
             if let Some(end) = char_literal_end_bytes(b, i) {
                 out.push_str(&text[copied_until..i]);
                 push_blanked(&mut out, &text[i..end]);
@@ -761,7 +772,7 @@ pub fn scan(repo: &Path, kind: Kind) -> Result<Scan, RatchetError> {
             }
             Kind::DiscreteFloat => {
                 let is_cuda = rel.ends_with(".cu") || rel.ends_with(".cuh");
-                let code = strip_comments_and_strings(&text);
+                let code = strip_comments_strings_and_char_literals(&text);
                 let mut sites = Vec::new();
                 for (k, line) in code.split('\n').enumerate() {
                     discrete_float_sites(line, k + 1, is_cuda, &mut sites);
@@ -956,7 +967,7 @@ mod tests {
     fn discrete_float_ratchet_catches_types_and_literals_without_tuple_or_range_false_positives() {
         let rust_code = "fn f<'a>(a: f32, b: f64, c: bf16, d: f16, s: &'a str) { let quote = '\"'; let esc = '\\\"'; let x = 1.0 + 2. + 1e-5 + 3f32 + 0x1.8p-2; let r = 0..1.0; let t = pair.0 + pair.0.1 + (pair).0 + arr[0].1
             .1; for i in 0..10 { let _ = i.max(1); } // f32 1.0\nlet lit = \"f64 2.5\"; }\n";
-        let stripped = strip_comments_and_strings(rust_code);
+        let stripped = strip_comments_strings_and_char_literals(rust_code);
         let mut sites = Vec::new();
         for (k, line) in stripped.split('\n').enumerate() {
             discrete_float_sites(line, k + 1, false, &mut sites);
@@ -980,7 +991,7 @@ mod tests {
 
         let cuda_code =
             "__device__ void k() { float x = .5f + 1.f + 1.e3 + 2.e-4f + 1'000.25 + 0x1p-4; double y = 2.0; }\n";
-        let stripped_cu = strip_comments_and_strings(cuda_code);
+        let stripped_cu = strip_comments_strings_and_char_literals(cuda_code);
         let mut cu_sites = Vec::new();
         for (k, line) in stripped_cu.split('\n').enumerate() {
             discrete_float_sites(line, k + 1, true, &mut cu_sites);
