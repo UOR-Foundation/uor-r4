@@ -6,18 +6,15 @@
 //! |---|---|---|
 //! | `receipts.parse` | error | **yes** |
 //! | `receipts.ledger_present` | warn | **yes** |
-//! | `receipts.skill_usage_recorded` | info | no — it has no check |
+//! | `receipts.skill_usage_recorded` | info | **yes** (explicit no-op matching Python) |
 //!
-//! ## Why `skill_usage_recorded` is not ported
+//! ## Why `skill_usage_recorded` is an explicit no-op
 //!
-//! **Its body always returns an empty list.** It reads the skill receipts and then returns `[]` on
-//! both branches — the comment says so: *"informational only: the engine prints `ok` for an empty
-//! list."* **It is a rule that cannot fail**, and porting it would add a function whose only
-//! observable effect is to be counted.
-//!
-//! That is the same call I made for `budget.no_new_spending_class`, and the reason is the same: **a
-//! rule that cannot fail reads as coverage.** If the intent is to report that skills have or have not
-//! been used, that belongs in the `receipts` command's output, where a reader sees it.
+//! **Its Python body always returns an empty list.** It reads the skill receipts and then returns
+//! `[]` on both branches — the comment says so: *"informational only: the engine prints `ok` for an
+//! empty list."* Ported in [`skill_usage_recorded`] and wired into [`all`] so [`crate::checkdispatch`]
+//! invokes every rule registered in `checkdispatch::RULES`, while preserving Python's exact no-op
+//! behaviour rather than inventing a failure condition Python does not have.
 //!
 //! ## `receipts.parse` and `budget.receipts_parse` are two rules over one file
 //!
