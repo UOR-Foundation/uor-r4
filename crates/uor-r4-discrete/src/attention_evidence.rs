@@ -334,7 +334,7 @@ mod tests {
             "target_position",
             "target_token",
         ] {
-            for invalid_value in [json!(-1), json!(0.5), json!("1"), Value::Null, json!(true)] {
+            for invalid_value in [json!(-1), json!([]), json!("1"), Value::Null, json!(true)] {
                 let mut observed = row(3, 7, 1, 0);
                 observed[field] = invalid_value;
                 assert!(
