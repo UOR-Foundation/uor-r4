@@ -87,9 +87,9 @@ is tautological on the target-defined successor panel and is not learned evidenc
 
 | Check | Status |
 | --- | --- |
-| Host metadata library tests, including schedule/cursor/default/lineage/control | 65 passed, 0 failed, 1 ignored; no model execution |
+| Host metadata library tests, including schedule/cursor/default/lineage/control | At `f6c7fa5e1`: 65 passed, 0 failed, 1 ignored; no model execution; final source-head rerun pending |
 | Active initialization and matched-off CUDA control | Implemented as additional `qualify-relation` control; NOT_RUN |
-| Host `check --no-default-features --all-targets` | PASS |
+| Host `check --no-default-features --all-targets` | PASS at `f6c7fa5e1`; final source-head rerun pending |
 | Strict host Clippy | BLOCKED by existing dependency lints in unchanged integer crate; not a pass |
 | Advisory host Clippy | Completed with warnings; no suppression added |
 | Exact-head CUDA check/Clippy and finite controls | NOT_RUN |
