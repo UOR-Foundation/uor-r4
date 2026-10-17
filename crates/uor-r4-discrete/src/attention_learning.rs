@@ -9,6 +9,10 @@ use crate::{metadata::BinderPlan, training::CoordinateKind};
 
 pub const ATTENTION_BATCHES: u64 = 16_404;
 pub const ATTENTION_BASE_SOURCE: &str = "fa62a670a4caefa439eb11c88ecdfe25e60a1e7c";
+/// Canonical design accepted in PR2574/mainfb4519226. Scope and the selected
+/// arm/seed remain independently pinned by the review payload and owner plan.
+pub const ATTENTION_SHEET_SHA256: &str =
+    "0ddfc8cc9b16fc2b3f48abffcc40403e69768355ff0a8843987cf3a9ee49871e";
 const PLAN_SCHEMA: &str = "uor-r4.attention-learning-owner-plan/1";
 #[cfg(feature = "cuda")]
 const ADMISSION_SCHEMA: &str = "uor-r4.attention-learning-owner-admission/1";
@@ -162,6 +166,7 @@ fn validate_plan_header(plan: &AttentionPlan) -> Result<()> {
         || e.driver_source_sha256 != training::driver_source_sha256()
         || e.config_sha256 != corpus::sha256(&encode(&plan.config)?)
         || e.sheet_sha256 != plan.sheet.sha256
+        || plan.sheet.sha256 != ATTENTION_SHEET_SHA256
         || !plan.run_state_directory.is_absolute()
     {
         return Err(invalid(
@@ -211,11 +216,10 @@ fn validate_plan(plan: &AttentionPlan) -> Result<()> {
     if !sheet
         .lines()
         .any(|line| line.starts_with("TEST FITNESS: FIT"))
-        || !sheet.contains("attention-learning")
-        || !sheet.contains(&plan.scope)
+        || !sheet.starts_with("# Pre-registration — M1 learned-attention link")
     {
         return Err(invalid(
-            "attention sheet lacks prospective FIT and exact attention scope",
+            "attention requires the canonical M1 learned-attention FIT sheet",
         ));
     }
     let review: AttentionReview = serde_json::from_slice(&plan.independent_review.read()?)
@@ -1012,9 +1016,12 @@ mod tests {
                 driver_source_sha256: training::driver_source_sha256(),
                 config_sha256: corpus::sha256(&encode(&config)?),
                 lineage_sha256: "4".repeat(64),
-                sheet_sha256: "5".repeat(64),
+                sheet_sha256: ATTENTION_SHEET_SHA256.into(),
             },
-            sheet: pin("sheet", '5'),
+            sheet: FilePin {
+                path: PathBuf::from("/metadata/m1-learned-attention-link-2026-10-17.md"),
+                sha256: ATTENTION_SHEET_SHA256.into(),
+            },
             independent_review: pin("review", '6'),
             transfer: corpus::CorpusSource {
                 split: corpus::Split::Dev,
@@ -1032,6 +1039,10 @@ mod tests {
     fn attention_requires_its_own_scope_initialization_and_pins() -> Result<()> {
         let p = plan()?;
         validate_plan_header(&p)?;
+        let mut unrelated_sheet = p.clone();
+        unrelated_sheet.sheet.sha256 = "5".repeat(64);
+        unrelated_sheet.execution.sheet_sha256 = unrelated_sheet.sheet.sha256.clone();
+        assert!(validate_plan_header(&unrelated_sheet).is_err());
         assert!(validate_pilot_config(&p.config).is_err());
         for old_scope in [PILOT_SCOPE, "m1-a2-completion-seed1-checkpoint1640..16404"] {
             let mut wrong = p.clone();
