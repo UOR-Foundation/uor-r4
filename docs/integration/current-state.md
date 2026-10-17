@@ -2,6 +2,27 @@
 
 The [Unit2b record](../labs/attention-unit2b-runner-2026-10-17/README.md) seals Unit1 #2575 full-tree merge verification and gate7 all-four construction PASS, then prepares the PM-commissioned follow-up: DEV-only training, separately pinned once-only treatment fresh evaluation after paired DEV review, canonical per-row B3 evidence, explicit objective/base/sheet pins and the checkpoint4096 Q1 stop/resume gate. Prospective preflight interfaces expose existing GPU proposal sensitivity/costs, canonical DEV metadata/B3 and separately released actual Forward slot capture; no host slot reconstruction. A compiler-only linked binary build/archive is prepared for distinct PM acceptance so the next battery has an executable. Host metadata checks run; new CUDA construction and finite/model work NOT_RUN. Fresh treatment-only comparator/floor wording needs PM reconciliation before execution; source reports observations without inventing a paired fresh-control or KEEP claim. No numerical CUDA/learning-law/frozen Route/timing3 changes, headline unchanged. Training/M2/StageB HELD; Q4 NOT_EXECUTABLE.
 
+## 2026-10-17 — Peer pull requests deduplicated DAG nodes once (deepseek/object-store-peer-dedupe)
+
+The [dedupe record](../labs/object-store-peer-dedupe-2026-10-17/README.md) fixes a real failure found by
+the product CLI against hardened main: deduplicated repeated content makes the FBS tree a DAG, so one
+missing node could appear on several paths and the strict correlated-response check rejected a valid
+duplicate request. missing_nodes now deduplicates ids before batching; response correlation stays strict.
+Regression covers a periodic 2 MiB object with a 128-atom edited region; peer suite 7/7, package 30
+passed, Clippy -D warnings and fmt clean. No model compute; training/M2/Stage B HELD; model milestone
+counts unchanged. **Next:** protected delivery, then driver-side DoS/limits and multi-peer fan-out.
+
+## 2026-10-17 — Exact object store peer replication hardened (deepseek/object-store-peer-hardening)
+
+The [hardening record](../labs/object-store-peer-hardening-2026-10-17/README.md) adds a caller-pinned
+object identity (ExpectedObject + pull_expected, rejected before import), limit-derived dynamic batching
+that completes a cold 1 MiB pull, correlated responses (count, requested ids, duplicates), an atomic
+staged commit after native SHA-256 verification, DONE/flush/clean-EOF protocol hygiene, and
+manifest-closure-scoped serving with budgets. Peer suite 6/6 and all package tests pass; Clippy -D
+warnings and fmt clean; a scattered 16-edit delta adds 131 records and verifies exactly. No model
+compute; training/M2/Stage B HELD; model milestone counts unchanged. **Next:** protected delivery, then
+driver-side sync DoS/limits and multi-peer fan-out.
+
 ## 2026-10-17 — Exact object store gains native peer replication (deepseek/object-store-peer)
 
 The [peer record](../labs/object-store-peer-2026-10-17/README.md) adds Store read accessors
