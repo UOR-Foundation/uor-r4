@@ -1,6 +1,57 @@
 ## 2026-10-17 — Unit1 verified on main; Unit2b runner source preparation (codex/cf1)
 
 The [Unit2b record](../labs/attention-unit2b-runner-2026-10-17/README.md) seals Unit1 #2575 full-tree merge verification and gate7 all-four construction PASS, then prepares the PM-commissioned follow-up: DEV-only training, separately pinned once-only paired fresh evaluation after a DEV H_geom decision, canonical per-row B3 evidence, explicit objective/base/sheet pins and the checkpoint4096 Q1 stop/resume gate. Prospective preflight interfaces expose existing GPU proposal sensitivity/costs, canonical DEV metadata/B3 and separately released actual Forward slot capture; no host slot reconstruction. A compiler-only linked binary build/archive is prepared for distinct PM acceptance so the next battery has an executable. Host metadata checks run; new CUDA construction and finite/model work NOT_RUN. Protected #2583/PM6238946297 resolves fresh confirmation as one paired evaluation of the two fixed final arms, ablation DEV-only, with integer paired discordances/floor; no automatic KEEP claim. The scientific sheet stays byte-identical to main. No numerical CUDA/learning-law/frozen Route/timing3 changes, headline unchanged. Training/M2/StageB HELD; Q4 NOT_EXECUTABLE.
+## 2026-10-17 — Fleet protocol docs and stale-verification coverage (deepseek/object-store-fleet-docs)
+
+The [docs record](../labs/object-store-fleet-docs-2026-10-17/README.md) completes the fleet surface:
+objpeer usage documents verify, repeated --object and --select-sha256; the peer module documents the
+32-byte selector and serve_many; and stale verification is now gated in both the library (missing > 0,
+verified=false on an empty store) and the CLI (exit 3, verified=false). Peer 11/11, CLI 5/5, controls
+10/10, showcase 5/5; Clippy -D warnings and fmt clean. No model compute; training/M2/Stage B HELD.
+**Next:** protected delivery, then cross-machine fleet verification.
+
+## 2026-10-17 — Fleet verify and multi-object manifest selection (deepseek/object-store-fleet)
+
+The [fleet record](../labs/object-store-fleet-2026-10-17/README.md) adds a backward-compatible 32-byte
+manifest selector to MANIFEST_REQUEST: a store can serve many objects (repeated --object), clients can
+pull or verify a selected object by whole SHA-256 or manifest version, an unknown selector returns
+Error::UnknownObject, and fetch scoping stays per object. peer::verify reports missing/verified without
+fetching or rebuilding, giving a roughly 200-byte fleet current-check; the CLI exposes repeated --object,
+--select-sha256 and a verify command. Peer 10/10, CLI 4/4, controls 10/10, showcase 5/5; Clippy -D
+warnings and fmt clean. No model compute; training/M2/Stage B HELD. **Next:** protected delivery, then a
+measured fleet-verification benchmark versus full pulls.
+
+## 2026-10-17 — Trusted object pins in the peer API and CLI (deepseek/object-store-object-pin)
+
+The [pin record](../labs/object-store-object-pin-2026-10-17/README.md) turns the audited trusted anchor
+into a usable surface: ExpectedObject accepts any combination of native length, manifest version and
+whole-object SHA-256 pins, rejects an empty anchor, and fails with BindingMismatch before fetch/import.
+The packaged objpeer CLI exposes --expect-sha256/--expect-version/--expect-bytes and prints the object
+sha256 and manifest_version so peers can be pinned out of band. Tests cover accept and reject paths in
+the library and the CLI; package suites pass, Clippy -D warnings and fmt clean. A pin proves object
+identity, not peer authenticity (no TLS/credential). No model compute; training/M2/Stage B HELD.
+**Next:** protected delivery, then record the trust model with the product packaging and check whether a
+session-level authentication layer is worth adding.
+
+## 2026-10-17 — Packaged objpeer replication CLI in the object store (deepseek/object-store-objpeer-cli)
+
+The [packaging record](../labs/object-store-objpeer-cli-2026-10-17/README.md) adds the content-addressed
+artifact replication CLI (info/serve/pull) to uor-r4-object-store itself, built on the merged Store and
+peer APIs with no new dependencies, plus a two-process loopback delta test and an info test. Package 33
+passed, Clippy -D warnings and fmt clean. The same CLI source produced the review-repo measurements
+(2,504 B local / 2,509 B cross-machine for a 52.5 MB weight revision; 220 B verification; 38,508 B for
+12 warm receivers). No model compute; training/M2/Stage B HELD. **Next:** protected delivery, then an
+ExpectedObject pin flag and replacing the review-repo copy with this binary.
+
+## 2026-10-17 — Concurrent peer sessions on one read-only store (deepseek/object-store-concurrency)
+
+The [concurrency record](../labs/object-store-peer-concurrency-2026-10-17/README.md) documents and gates
+that peer::serve takes &Store, so multiple peers can replicate from one loaded store concurrently; each
+session keeps its own expected anchor, correlation checks and digest verification while the store stays
+immutable. A new test runs two simultaneous sessions and verifies identical counts and exact bytes.
+Peer suite 8/8, package 31 passed, Clippy -D warnings and fmt clean. No model compute; training/M2/Stage
+B HELD; model milestone counts unchanged. **Next:** protected delivery, then multi-object dedup accounting
+and product packaging.
 
 ## 2026-10-17 — Peer pull requests deduplicated DAG nodes once (deepseek/object-store-peer-dedupe)
 
