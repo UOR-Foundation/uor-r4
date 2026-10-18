@@ -9,7 +9,7 @@ distinct wire counts on one route and asserts the bucket equals both sums and th
 forward-merged with fresh `origin/main` (`58757e219`) without rebase; `WIRE_SOCKET_ROUTING_PASS`, the
 new `WIRE_SOCKET_STATS_PASS`, py_compile, claim wording and `git diff --check` pass at the merged
 head; host-only, no model compute, pods, training or evaluation. Claim:
-`kimi/wire-counter-aggregation-2026-10-18`; protected PR for exact-head review, not queued or merged.
+`kimi/wire-counter-aggregation-2026-10-18`; protected PR [#2651](https://github.com/UOR-Foundation/uor-r4/pull/2651) for exact-head review, not queued or merged.
 Record: [labs/wire-counter-aggregation-2026-10-18](../labs/wire-counter-aggregation-2026-10-18/README.md).
 
 ## 2026-10-18  Seventh DeepSeek claims cleanup (deepseek)

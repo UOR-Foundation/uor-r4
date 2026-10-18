@@ -77,5 +77,6 @@ the last-connection-only ratio (0.0030).
   the merge preserves the source and test identities (`wire_socket.py` SHA-256
   `0debe0c8c8398b087fe14cec3007aa9df72414f93a66578d776499c638c0ccae`; test SHA-256
   `7a98279fd30ce2c1142b32a32106a7c7b5f0479cd0cb192708b706be9230dcff`).
-- A protected PR is opened after the merged-head checks for exact-head review; it is not queued,
-  merged or deleted from this worktree. The PR link is added here before handoff.
+- A protected PR is open for exact-head review: https://github.com/UOR-Foundation/uor-r4/pull/2651
+  (not queued, merged or deleted from this worktree). The PR carries `References #2613` and
+  `References #2029`, the actual checks above, and the `$0`/no-compute scope.
