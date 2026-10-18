@@ -417,11 +417,14 @@ pub const COST_BUCKETS: [&str; 6] = [
 
 /// Owner rules that apply to every pre-registration.
 ///
-/// **D31 and D32 were added the day they were issued, and that is the point.** D32 **supersedes
-/// D25's floating-point allowance** and D31 governs what happens when an instrument check fails —
-/// **both change what a pre-registration may propose.** A sheet that omitted them would send a lab
-/// to work under a rule the owner had already replaced, **which is exactly the defect that put a
-/// banned grader on a sheet**: the rule text a lab reads is the rule text it follows.
+/// **D31, D32 and D37 were added the day they were issued, and that is the point.** D31 governs
+/// what happens when an instrument check fails. D37 revises D32's offline-training float ban:
+/// float forward passes, gradients and optimizers, and offline numerical instruments, are legal in
+/// a separately scanned float module; the active discrete path, D11 serving and the
+/// no-squashing/no-matmul bans are unchanged. **Each changes what a pre-registration may
+/// propose.** A sheet that omitted them would send a lab to work under a rule the owner had
+/// already replaced, **which is exactly the defect that put a banned grader on a sheet**: the rule
+/// text a lab reads is the rule text it follows.
 ///
 /// **Kept equal to Python's tuple, and `parity.render_agreement` is what keeps them equal.**
 ///
@@ -434,8 +437,8 @@ pub const COST_BUCKETS: [&str; 6] = [
 /// **Two lists of one rule is the defect class this whole line keeps producing.** The durable fix is
 /// to render from the registry rather than a constant, so there is one list; until then, this one is
 /// kept equal to Python's by `parity.render_agreement`, which is why the drift was found at all.
-pub const APPLICABLE_RULES: [&str; 9] = [
-    "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32",
+pub const APPLICABLE_RULES: [&str; 10] = [
+    "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32", "D37",
 ];
 
 /// D22 section 3: the minimum test power a decisive run must state.
@@ -843,14 +846,15 @@ pub fn today() -> String {
 mod applicable_rules_tests {
     use super::*;
 
-    /// **The sheet must cite every rule the owner has in force**, and the two newest were added the
-    /// day they were issued. A missing rule is not a cosmetic gap: D32 **supersedes** D25's
-    /// floating-point allowance, so a sheet citing only D25 would send a lab to work under a
-    /// replaced rule — the same failure that put a banned grader on a sheet.
+    /// **The sheet must cite every rule the owner has in force**, and the newest were added the
+    /// day they were issued. A missing rule is not a cosmetic gap: D37 revises D32's
+    /// offline-training float ban, so a sheet citing only D32 would deny the float lane the owner
+    /// has now permitted, while a sheet citing only D37 would lose the discrete path's exact
+    /// instruments — the same failure that put a banned grader on a sheet.
     #[test]
     fn the_applicable_rules_include_the_current_owner_rules() {
         for rid in [
-            "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32",
+            "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32", "D37",
         ] {
             assert!(
                 APPLICABLE_RULES.contains(&rid),
@@ -859,8 +863,8 @@ mod applicable_rules_tests {
         }
         assert_eq!(
             APPLICABLE_RULES.len(),
-            9,
-            "the set is nine ids, asserted so a drift fails loudly"
+            10,
+            "the set is ten ids, asserted so a drift fails loudly"
         );
     }
 

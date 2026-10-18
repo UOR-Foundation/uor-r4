@@ -6,9 +6,11 @@ the current path; all three active labs align to it. PM path directive:
 
 ## What was decided
 
-- D11 multiplier-free serving **stands**; no float/transcendental in served
-  computation. Scalar float and sin/cos remain legal in offline training
-  (owner 2026-10-12), unchanged.
+- D11 multiplier-free serving **stands**; no float, transcendental or multiplier
+  instruction in served computation. Under D37 (owner 2026-10-18), float forward
+  passes, gradients, optimizers and numerical instruments are legal in offline
+  training only, in a separately scanned module with a reported export gap. The
+  October 14 complex-plane zeta-zero exception remains separate and unchanged.
 - The compute-cost thesis is architectural: KB-scale cache-resident addressed
   state and exact addressed reads instead of per-token weight streaming. It is
   proven in order, not asserted.
