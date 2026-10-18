@@ -83,9 +83,6 @@ jobs:
         if: steps.scope.outputs.code != 'true'
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Claim-wording gate
-        run: cargo run -q --locked -p uor-r4-claim-wording -- .
-
       - name: Cache cargo
         if: steps.scope.outputs.code == 'true'
         uses: actions/cache@v4
@@ -96,6 +93,9 @@ jobs:
             target
           key: cargo-fast-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-fast-${{ runner.os }}-
+
+      - name: Claim-wording gate
+        run: cargo run -q --locked -p uor-r4-claim-wording -- .
 
       - name: cargo fmt --check
         if: steps.scope.outputs.code == 'true'

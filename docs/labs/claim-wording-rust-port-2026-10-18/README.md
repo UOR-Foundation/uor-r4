@@ -41,4 +41,12 @@ Dated records under `docs/labs/`, `docs/history/`, `docs/evidence/`, `archive/` 
 
 **Python retired, not deleted.** `scripts/check_claim_wording.py` keeps its logic. A `RETIRED 2026-10-18` line under its docstring points to the crate, and the file stays as dated evidence.
 
+**Known parity edges.** A fresh-context review found these. None is hit by any file in the repo today.
+- **Unicode `\w`:** Rust's `\w` includes combining marks (category M), and Python's does not. A disavowal word containing a combining mark (for example `nó`) is matched differently. Parity is claimed for the repo's ASCII disavowal words.
+- **IO errors:** Rust prints a clean error and exits 2; Python crashed with a traceback and exit 1. A directory named `*.md`, which crashed Python, is recursed into by Rust.
+- **Symlink loops:** the walker does not follow-guard them. No symlinks exist under `docs/` or `crates/`.
+- **`real_repo_passes`:** this test ties the crate's own test suite to the live docs, so a future unlinked phrase anywhere in `docs/` also fails `cargo test -p uor-r4-claim-wording`. That is intended for a gate.
+
+In `fast-gate`, the claim step runs after the cargo cache step, so code changes reuse the cached `regex` build.
+
 No model compute, GPU or paid resource was used.
