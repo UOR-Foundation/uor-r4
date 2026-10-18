@@ -77,7 +77,11 @@ Table: `prime-zeta-codebook` V4096 B4. `table_sha256` is `e9e03bcd95b78632a7f18d
 3. **G-Cap, raw and net of admission (D39 item 2).**
    - Raw: `dev_alias_ceiling_rows` from `coverage-census` on the artifact.
    - Net: P_succ rows whose target is an alias representative **and** whose target cell is admitted at checkpoint 0. The admission term comes from the zero-update checkpoint-0 DEV evaluation's per-row admitted cells, the same evaluation that yields B3_init.
-   - Both values are reported. D39 item 2 requires net G-Cap to exceed the sheet's **Bar (i)**. The parent sheet has no bar labelled "Bar (i)". Its row bar on admitted `P_succ` rows is the §7.12.1 admission floor, `B3(P_succ) ≥ 500`, which the §7.12.2 Q1 gate enforces. That floor is this sheet's Bar (i): **net G-Cap must exceed 500 `P_succ` rows**, or the run is `INSTRUMENT_UNREACHABLE`.
+   - Both values are reported. D39 item 2 requires net G-Cap to exceed the sheet's **Bar (i)**. The alias ceiling caps how many rows top-1 can ever win, so Bar (i) has to be a **ranking** bar, not an admission count.
+   - The parent's primary ranking bar (§7.6) is paired, not absolute. H_geom needs the Relation arm to beat the FrozenZero control on the matched `P_succ` set by `c − b ≥ F_I = max(24, 2·sqrt(b+c))` top-1 rows. So the Relation arm must be able to win at least `top1_control + F_I` rows.
+   - This sheet's **Bar (i)** is therefore `top1_control(P_succ, checkpoint 0) + 24`. It uses the control's checkpoint-0 top-1 count from the same zero-update DEV evaluation, and the 24-row floor of `F_I`.
+   - **The gate is: net G-Cap > max(500, Bar (i)).** The 500 is the §7.12.1 evaluability floor `B3(P_succ) ≥ 500`. If the gate fails, the run is `INSTRUMENT_UNREACHABLE` and is not dispatched.
+   - This is a **necessary, not sufficient** condition. The control can still learn after checkpoint 0, so passing the gate does not prove H_geom is reachable. Failing it proves H_geom is not.
    - The 1,941 figure in D39 item 2 is the Bar (i) of the rung-0 admission sheets (`m1-discrete-rung0-admission*`), not of this attention sheet. It does not apply here.
    - **Reported, not gating (D39 item 6):** the interim M1 headline, "injective codebook plus Q4 target admission ≥ 4,894", is reported for this lineage so that D21 can count the line. Its Q4 admission count is recorded when it exists. It neither releases nor blocks dispatch.
 4. **B3_init(P_succ)** is measured on the GPU and recorded before dispatch. If it is below 500, the run is not dispatched, and a successor decision is needed: with 256 occupied cells, admission at K = 8 may be low from the start. This is the parent's hard gate, run on this lineage.
@@ -149,4 +153,6 @@ The release packet must measure per-batch throughput and all-in cost for the new
 - Seed 2 is reproducibility only.
 - **Out of scope, as a named follow-up sheet:** the PrimeZeta-vs-null attribution (tangent and normal nulls, both exportable with `prime-zeta-codebook`), and injective vs seeded initialization at a matched arm.
 
-TEST FITNESS: PENDING
+Re-pin rule: changing this sheet (including the TEST FITNESS line below) changes `INJECTIVE_SHEET_SHA256` in `attention_learning.rs` and therefore `driver_source_sha256`. Both are re-pinned in the same PR, and the release packet binds the driver hash through `execution.driver_source_sha256`.
+
+TEST FITNESS: FIT (owner direction 2026-10-18 in the Claude chat: Claude's fresh-context adversarial reviewer subagents replace cross-lab FIT for Claude lanes. Two read-only reviews — the sheet and source, then the fix diff — returned FIT-WITH-FIXES; every finding (F1–F6, the ranking Bar (i), the re-pin rule and the title-prefix test) is applied. Registration does not release training: dispatch waits for the D39 W1 conclusion per §Sequencing, then the owner's release, typed by Casey per D40.)

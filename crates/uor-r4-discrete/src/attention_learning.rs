@@ -22,20 +22,16 @@ pub const ATTENTION_SHEET_SHA256: &str =
     "844814009ecc7368c0a3ecabf62434bae7d72850363e19f67c0126810fee7ffc";
 /// The injective-codebook (PinnedTableV1) attention pre-registration sheet.
 pub const INJECTIVE_SHEET_SHA256: &str =
-    "0679dc64ffaefe967e0889fa7ab70a63d21916298b05486cea91a97964d90408";
+    "79c6f9434f2751e6e3d3380d93fc6c3fd313e86abb6f1538a15953a185b030a6";
 /// The registered sheet (SHA-256 and title line) a plan must bind, keyed by
 /// the codebook initialization: the seeded lineage keeps the parent sheet.
+const ATTENTION_SHEET_TITLE: &str = "# Pre-registration — M1 learned-attention link";
+const INJECTIVE_SHEET_TITLE: &str = "# Learned attention link from an injective codebook";
 fn registered_sheet(config: &DriverConfig) -> (&'static str, &'static str) {
     if config.codebook_initialization.is_seeded_device() {
-        (
-            ATTENTION_SHEET_SHA256,
-            "# Pre-registration — M1 learned-attention link",
-        )
+        (ATTENTION_SHEET_SHA256, ATTENTION_SHEET_TITLE)
     } else {
-        (
-            INJECTIVE_SHEET_SHA256,
-            "# Learned attention link from an injective codebook",
-        )
+        (INJECTIVE_SHEET_SHA256, INJECTIVE_SHEET_TITLE)
     }
 }
 const PLAN_SCHEMA: &str = "uor-r4.attention-learning-owner-plan/2";
@@ -1574,6 +1570,9 @@ mod tests {
         );
         assert_eq!(corpus::sha256(parent), ATTENTION_SHEET_SHA256);
         assert_eq!(corpus::sha256(injective), INJECTIVE_SHEET_SHA256);
+        // validate_plan refuses a sheet whose first line lacks its title prefix.
+        assert!(parent.starts_with(ATTENTION_SHEET_TITLE.as_bytes()));
+        assert!(injective.starts_with(INJECTIVE_SHEET_TITLE.as_bytes()));
     }
     fn with_sheet(mut p: AttentionPlan, sha256: &str) -> AttentionPlan {
         p.sheet.sha256 = sha256.into();
