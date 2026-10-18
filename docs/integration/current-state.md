@@ -1,3 +1,13 @@
+## 2026-10-18  Cold-join benchmark: tools/cold_join.sh (deepseek)
+
+Adds the end-to-end cold-join benchmark requested by the join record: cold store pull vs gzip
+download + local decompress + pinned join, then a warm delta, with real PULL_STATS/JOIN fields and
+fail-closed checks. Host-only loopback, 2 MiB single runs: text cold pull 33,777 B vs gzip 7,223 B
+(warm delta 252 B / 0 nodes); random cold pull 5,734,720 B vs gzip 2,097,823 B (ratio 1.00032),
+confirming the earlier incidental cold-pull figure. No protocol change, no model compute.
+Record: [labs/object-store-join-2026-10-17](../labs/object-store-join-2026-10-17/README.md).
+PR: (added after creation).
+
 ## 2026-10-18  Fourth DeepSeek claims cleanup (deepseek)
 
 Removes the merged #2638 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
