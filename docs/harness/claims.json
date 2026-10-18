@@ -69,39 +69,18 @@
     "lab": "claude",
     "note": ""
   },
-  "codex/cf1-attention-dose-packet": {
-    "branch": "codex/cf1-attention-dose-packet",
-    "claimed_at": "2026-10-17T22:43:56-04:00",
-    "head": "94d4d34ad",
+  "codex/cf1-attention-rows-q1-result": {
+    "branch": "codex/cf1-attention-rows-q1-result",
+    "claimed_at": "2026-10-18T04:24:12-04:00",
+    "head": "e002430a0",
     "lab": "codex",
     "note": ""
   },
-  "codex/cf1-attention-hash-domains": {
-    "branch": "codex/cf1-attention-hash-domains",
-    "claimed_at": "2026-10-17T19:56:11-04:00",
-    "head": "a2af13cc2",
-    "lab": "codex",
-    "note": ""
-  },
-  "codex/cf1-attention-strategic-stop": {
-    "branch": "codex/cf1-attention-strategic-stop",
-    "claimed_at": "2026-10-18T01:29:12-04:00",
-    "head": "fe4c327b5",
-    "lab": "codex",
-    "note": ""
-  },
-  "codex/cf1-k16-inactive-archive": {
-    "branch": "codex/cf1-k16-inactive-archive",
-    "claimed_at": "2026-10-18T01:57:31-04:00",
-    "head": "c7cfc2e15",
-    "lab": "codex",
-    "note": ""
-  },
-  "codex/cf1-reuse-timing-uuid-blocker": {
-    "branch": "codex/cf1-reuse-timing-uuid-blocker",
-    "claimed_at": "2026-10-16T22:35:15-04:00",
-    "head": "66154156d",
-    "lab": "codex",
+  "kimi/dose1-dispatch-record-2026-10-18": {
+    "branch": "kimi/dose1-dispatch-record-2026-10-18",
+    "claimed_at": "2026-10-17T23:10:49-04:00",
+    "head": "35c4c4038",
+    "lab": "kimi",
     "note": ""
   },
   "codex/docs-research-front-door": {
@@ -117,5 +96,12 @@
     "head": "b8158ad98",
     "lab": "kimi",
     "note": "Docs-only: post-dose optimization path in project-track.md + current-state entry + canonical record. No source/science changes."
+  },
+  "kimi/wire-counter-aggregation-2026-10-18": {
+    "branch": "kimi/wire-counter-aggregation-2026-10-18",
+    "claimed_at": "2026-10-18T03:14:52-04:00",
+    "head": "42ab73dd9",
+    "lab": "kimi",
+    "note": "P2 #2613 follow-up: accumulate WireGateway route wire bytes across completed connections (#2029/#2613)"
   }
 }

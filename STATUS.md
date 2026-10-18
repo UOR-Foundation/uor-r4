@@ -2,18 +2,23 @@
 
 **Pre-alpha, evidence checked 18 October 2026.** No model holds a useful conversation;
 0/8 milestones are complete. M1's reply headline remains **37/232 SUSPENDED**;
-no completed learned-attention attribution or fresh-transfer result follows from the partial dose.
+the Dose2 Q1 diagnostic stop establishes no efficacy or fresh-transfer result.
 
 | Evidence | What it establishes |
 |---|---|
 | [D33 diagnostic pilot](docs/labs/a2-pilot-2026-10-14/README.md) | 1,640 batches, 236 accepted vector updates. On 14,287 DEV targets top-1 moved 17 → 82 and top-8 173 → 1,169, while aggregate loss increased; the count reference remains ahead. |
 | [Original paired Dose1](docs/labs/attention-dose1-strategic-stop-2026-10-18/README.md) | Owner-stopped strategically at 904 treatment / 1,065 frozen-zero batches, before Q1. Partials and raw exits143 preserved; custody independently accepted; own pod down 05:16:47 UTC. This was not a mechanism failure. |
 | [Rows parity attempt 3](docs/labs/counterfactual-rows-parity-2026-10-18/evidence/attempt3/rows-parity.json) | 684 Route + 108 Flock + 288 Relation proposal cases, three refusals and two forced terminals: **1,085 cases**, zero updates. ~56× synchronized proposal microbenchmark at V4096/B4/C192/K8/64 rows; `timing.qualified=false`, no whole-training or quality speedup. |
-| [Dose2 review](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246433669) and [owner dispatch](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246440910) | Exact 1,376-member `01833fa7…` packet/source `20d158ae…` reviewed and one initial paired `rows_v1` dose released around 06:15 UTC. A [06:24 UTC receipt](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246536845) reports the owned pod up and setup/RELEASE-build staging, with no new model run yet. No successor scientific outcome is established. |
+| [Rows Dose2 Q1 result](docs/labs/attention-rows-q1-diagnosis-2026-10-18/README.md) and [scientific review](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6248429872) | Both arms stopped at the registered admission-collapse gate after 4,096 batches (`Q1_STOP_FOR_DIAGNOSIS`, exit0). P_succ target admission: 2,034 → 225 treatment /205 control of 3,847. These are admission counts, not accuracy or a treatment win. Configured admission collapse in both arms; no implementation or identity fault found, no registered efficacy hypothesis fires, no KEEP or mechanism-negative verdict. Fresh remains sealed. |
+| Custody and publication | Pod `56510253` was released and down at 07:53:30 UTC after preserved custody. [Scorer compatibility #2652](https://github.com/UOR-Foundation/uor-r4/pull/2652) and [diagnostic publication #2653](https://github.com/UOR-Foundation/uor-r4/pull/2653) are merged. Compatibility does not supply unavailable full-dose inputs or license scoring. |
 
-**Next:** the responsible execution lab follows that scoped release and reports the actual
-receipt/outcome on [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029).
-No general training release, second seed, retry, M2 or Stage B release follows.
+The shared vector/combine pathway is a plausible explanation for the admission
+collapse, including in the relation-disabled control, but causality is not established.
+No registered paired efficacy comparison is licensed at Q1.
+
+**Next:** prospective next-configuration registration and owner decision under the
+existing sheet; the consumed dose is not permission to resume or retry.
+No general training, second seed, M2 or Stage B release follows.
 The [architecture](docs/architecture.md) traces current computation to source;
 [current-state](docs/integration/current-state.md) retains the chronological evidence.
 

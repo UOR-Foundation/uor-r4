@@ -10,8 +10,12 @@ spells out the same distinctions on small screens.
 **18 October 2026:** the active discrete crate has a shared vector writer and
 Route/Flock/Relation reads. The [D33 pilot](labs/a2-pilot-2026-10-14/README.md)
 completed 236 accepted vector updates; the [original paired dose](labs/attention-dose1-strategic-stop-2026-10-18/README.md)
-was owner-stopped before Q1. The [rows successor](../STATUS.md) has a scoped release;
-no useful-conversation or completed learned-attention attribution is established here.
+was owner-stopped before Q1. Both arms of the [rows Dose2](../STATUS.md) stopped at the registered Q1
+admission-collapse gate after 4,096 batches. Admission 2,034 → 225 treatment /205
+control is not accuracy or a treatment win. [Scientific review](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6248429872)
+finds configured admission collapse without an implementation or identity fault;
+no registered efficacy hypothesis fires, fresh remains sealed, and no KEEP or
+mechanism-negative verdict follows.
 [D37](integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)
 allows offline floats while retaining matmul/GEMM and softmax/squashing bans,
 GPU-only model compute and a separately qualified D11 integer export.
