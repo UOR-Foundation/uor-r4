@@ -100,3 +100,27 @@ Losses are equal in both cases.
 - **Archive:** `icloud:UOR-R4/results/claude/vast-56499123.tar` (5,452,288 bytes, MD5 `369c45c4e1150b2fa68d7397f4b54dbc`).
 - **Cost:** about $0.25. The pod was released and deleted.
 - **What this means:** attempt 3 is the qualifying parity evidence for the fast-path Dose 1 re-issue.
+
+## Attempt 4 at `907a9926b` — rank-hinge objective at K16 PASS; K16 A/R timing
+
+This run is the prerequisite for the owner's fast-path admission redirect (K16-A vs K16-R, #2029 6250410397). It used a fresh RTX 5090, `vast-56557973`, cloned at the exact SHA with the source hashes checked.
+
+**Parity:**
+- **New control `rows_rank_objective_parity`:** Route at `kept_cells = 16`, complete inventories, under both `OccupiedCellRankHingeV1` (the rank hinge, writer `s[11] == 1`) and `NearestAddressMarginV1`. Result: **1,368/1,368 PASS**.
+- **Every earlier control PASSes again:** Route 684, Flock 108, Relation 288, refusals 3, forced terminals.
+- **Other checks:** D29 checks 0/0/0; the negative gate FAILs as required; restored source hashes are clean.
+
+**Timing** (64 rows, median of 5; losses equal in every case):
+
+| Shape / objective | Ordinary | Row-parallel | Ratio |
+|---|---|---|---|
+| K8, Route VectorBlock(0), A | 3.882 s | 0.0700 s | 55.5× |
+| K8, Relation Gate(0), A | 4.200 s | 0.0742 s | 56.6× |
+| **K16, Route VectorBlock(0), A (K16-A)** | 7.400 s | 0.1297 s | **57.0×** |
+| **K16, Route VectorBlock(0), R (K16-R)** | 7.402 s | 0.1292 s | **57.3×** |
+
+**Derived redirect budget:** 16,404 batches × about 0.13 s comes to about 36 min per arm-seed, so the four registered runs take about 1.2 h on a 2×5090 pod, about $2.3. The ordinary kernel would need about 34 h per arm-seed.
+
+- **Evidence:** `evidence/attempt4/`. The release `rows-qualify` SHA-256 starts `75682c52…`.
+- **Archive:** `icloud:UOR-R4/results/claude/vast-56557973.tar` (5,453,824 bytes, MD5 `2991ca26475dd9b8f04def32564c73ed`).
+- **Cost:** about $0.25.
