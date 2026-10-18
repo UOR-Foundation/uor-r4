@@ -1,3 +1,7 @@
+## 2026-10-18 — Post-dose drafts: batched verified coordinates (BVG-K) and decode tokens/s baseline (claude)
+
+These two DRAFT prep sheets are not registered: no FIT is requested and no compute runs ($0). Each is to be registered after the fast-path Dose 1 decision. [BVG-K](../harness/prep/m1-batched-verified-coordinates-DRAFT-2026-10-18.md) is path step 3, the batched-coordinate learning-law change. Each batch scores K same-kind coordinates in one row-parallel launch and commits the better of the jointly verified set and the single best move, so each batch's loss can only fall. K = 1 is a bitwise rollback identity. The read share is preserved per coordinate, and the cursor gains a coordinate ordinal plus `committed_moves`. Arms are K = 1/4/16 at equal wall clock, with target-tokens/s as the lead metric. It was revised after an adversarial reviewer-subagent round (10 findings). [Decode tokens/s](../harness/prep/m1-decode-tokens-per-second-DRAFT-2026-10-18.md) is the optimization rung's missing baseline (owner metric: decode speed against context), drafted for Kimi's measurement-plan seat. **Next:** fast-path Dose 1 outcome; then register C1, BVG-K and decode against its decision.
+
 ## 2026-10-18  Fourth DeepSeek claims cleanup (deepseek)
 
 Removes the merged #2638 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
