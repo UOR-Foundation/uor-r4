@@ -82,6 +82,26 @@ rustc --edition 2021 docs/labs/documentation-reconciliation-2026-10-18/wording-r
 local/doc-wording
 ```
 
+## Integration with current main
+
+The follow-up merges main `e780b0b6` (full source identity in `validation.json`)
+into the previously reviewed docs head `22e8d3c2`. The two conflicts were resolved
+without dropping peer state: `docs/harness/claims.json` uses main's complete
+registry plus only this documentation branch's claim, and
+`docs/integration/current-state.md` retains both sets of entries with the docs
+entry first. Upstream's cold-join benchmark, post-dose draft sheets and lab records
+are preserved. No CI workflow or permission change was made.
+
+Fresh [integration check outputs](checks/integration-e780b0b6/) include actual
+[host tests](checks/integration-e780b0b6/discrete-tests.log) and
+[selected Cargo targets](checks/integration-e780b0b6/selected-targets.json).
+The 22 regenerated SVGs retain their recorded hashes; all 44 browser bounds
+records are empty, and fresh captures match the nine committed preview PNGs
+byte-for-byte. The committed previews therefore remain the actual inspected
+output for this integrated source. CI transport acknowledgements, workflow runs
+and model/host tests remain separate evidence; exact-head GitHub state is reported
+on the draft after pushing this merge, not inferred from the local checks.
+
 ## Limitations and resources
 
 External links were verified selectively through primary source/issue reads;

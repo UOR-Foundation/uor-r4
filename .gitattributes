@@ -43,3 +43,6 @@ docs/history/branch-archive/native-vector-transport-2026-10-12/generic-contracti
 
 # Keep the captured test output byte-for-byte, including Cargo's trailing blank line.
 docs/labs/documentation-reconciliation-2026-10-18/checks/discrete-tests.log whitespace=-blank-at-eof
+
+# Same preservation rule for the post-merge test capture.
+docs/labs/documentation-reconciliation-2026-10-18/checks/integration-e780b0b6/discrete-tests.log whitespace=-blank-at-eof

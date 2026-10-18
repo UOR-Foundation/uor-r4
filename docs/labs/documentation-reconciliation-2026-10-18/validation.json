@@ -12,7 +12,7 @@
     "note": "finite enumerations and sampled numerical consistency checks; not 29 general proofs"
   },
   "link_audit": {
-    "checked": 819,
+    "checked": 822,
     "unresolved": 0,
     "note": "Repository-relative Markdown/HTML paths and Markdown heading/explicit anchors in current front doors and this record; external HTTP targets excluded."
   },
@@ -69,5 +69,19 @@
     "files": 10,
     "result": "PASS",
     "scope": "Specific rejected wording; not scientific validation"
+  },
+  "integration": {
+    "main_sha": "e780b0b64aeeeb290967934d2c490bac6dc3a256",
+    "previous_reviewed_head": "22e8d3c29e44a8f6fd2a7c3489287c0304eecad1",
+    "conflicts_resolved": [
+      "docs/harness/claims.json",
+      "docs/integration/current-state.md"
+    ],
+    "main_claims_preserved": true,
+    "only_docs_claim_added": true,
+    "unchanged_regenerated_svgs": 22,
+    "unchanged_preview_pngs": 9,
+    "checks_directory": "checks/integration-e780b0b6",
+    "ci_workflows_or_permissions_changed": false
   }
 }

@@ -2,6 +2,24 @@
 
 The README, documentation hub, contributor navigation and active discrete-crate guide now distinguish selected M1 computation from retained research and separately qualified D11 serving. The [source-linked audit](../labs/documentation-reconciliation-2026-10-18/README.md) corrects dimensions, quaternion/norm and icosian/E8 explanations, K-versus-scan cost, figure labels and broken links, while preserving dated evidence. Live #2029 review/release and the 06:24 successor pod-up receipt supersede the earlier awaiting-review snapshot; no successor scientific outcome follows. Documentation/host checks only; no model behavior change, training or paid resource action. **Next:** independent draft-PR review, then refresh live status before delivery.
 
+## 2026-10-18  Fifth DeepSeek claims cleanup (deepseek)
+
+Removes the merged #2641 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
+
+## 2026-10-18  Cold-join benchmark: tools/cold_join.sh (deepseek)
+
+Adds the end-to-end cold-join benchmark requested by the join record: cold store pull vs gzip
+download + local decompress + pinned join, then a warm delta, with real PULL_STATS/JOIN fields and
+fail-closed checks. Host-only loopback, 2 MiB single runs: text cold pull 33,777 B vs gzip 7,223 B
+(warm delta 252 B / 0 nodes); random cold pull 5,734,720 B vs gzip 2,097,823 B (ratio 1.00032),
+confirming the earlier incidental cold-pull figure. No protocol change, no model compute.
+Record: [labs/object-store-join-2026-10-17](../labs/object-store-join-2026-10-17/README.md).
+PR: (added after creation).
+
+## 2026-10-18 — Post-dose drafts: batched verified coordinates (BVG-K) and decode tokens/s baseline (claude)
+
+These two DRAFT prep sheets are not registered: no FIT is requested and no compute runs ($0). Each is to be registered after the fast-path Dose 1 decision. [BVG-K](../harness/prep/m1-batched-verified-coordinates-DRAFT-2026-10-18.md) is path step 3, the batched-coordinate learning-law change. Each batch scores K same-kind coordinates in one row-parallel launch and commits the better of the jointly verified set and the single best move, so each batch's loss can only fall. K = 1 is a bitwise rollback identity. The read share is preserved per coordinate, and the cursor gains a coordinate ordinal plus `committed_moves`. Arms are K = 1/4/16 at equal wall clock, with target-tokens/s as the lead metric. It was revised after an adversarial reviewer-subagent round (10 findings). [Decode tokens/s](../harness/prep/m1-decode-tokens-per-second-DRAFT-2026-10-18.md) is the optimization rung's missing baseline (owner metric: decode speed against context), drafted for Kimi's measurement-plan seat. **Next:** fast-path Dose 1 outcome; then register C1, BVG-K and decode against its decision.
+
 ## 2026-10-18 — K16 draft source preserved inactive; no timing prerequisite (Codex)
 
 The unique draft2571 count-hardening source at `a3d8ca2d38f5fb2925e02ef7e7c09c8ead98323a` is retained as an exact six-file inactive patch plus metadata/INDEX row; isolated-index application to based325 restores the entire original tree `9e7208093cbd950a64ea2d31e37a07a760cc0f31`. Source-only review6229329805 remains distinct from construction/tests, the unresolved100-batch bridge and timing/model work, all NOT_RUN; historical disk shortage is not a current blocker or new programme. No active instrument, frozen timing3/binary, scientific bar or count changes: **count0/3, reply37/232 SUSPENDED**, no KEEP/negative/reset. [Canonical inactive record](../labs/k16-inactive-archive-2026-10-18/README.md). **Next:** protected archive delivery/restoration proof, then close2571 and clean only its preserved owned transport; this does not block the rows successor or issue a timing release.
