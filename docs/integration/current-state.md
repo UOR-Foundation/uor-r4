@@ -1,3 +1,7 @@
+## 2026-10-18 — C1 DRAFT sheet shape repaired; still not registered (kimi/pm1)
+
+[The C1 DRAFT sheet](../harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md) now carries the D22 blocks the harness requires: Bar, Base artifact, Data split, Steps, Stop rule, Cost and Minimum test power, each truthfully marked `NOT_REGISTERED`/`NOT_RUN` at $0, plus `TEST FITNESS: PENDING` (DRAFT; no FIT requested). This is a documentation-shape repair after CI job 117572368828 (PM comments 6245063482, 6245085269): no bar, split, control, mechanism, source, artifact or hold changed. Training/M2/Stage B stay HELD. **Next:** the sheet remains a post-Dose-1 registration draft; registration and FIT wait on the Dose 1 decision.
+
 ## 2026-10-18 — C1 flock-coupling draft: finite controls and export-gap contract (claude)
 
 The [C1 draft](../harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md) specifies the D37 float-trained coupling magnitude for the discrete Flock read, exported to integer Gate weights (`ReadSpec::FlockCoupled`, with `k_max = 1 ≡ Flock`). It contains:
