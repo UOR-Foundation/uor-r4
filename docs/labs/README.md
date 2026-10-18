@@ -5,8 +5,8 @@
 > **Current K16 preparation:** the existing FIT A/R redirect on `rows_v1`, seeds1/2,
 > retains its conditional release and all registered qualification predicates.
 > The [timing adapter and packet sequence](k16-rows-timing-source-2026-10-18/README.md)
-> are source-only; actual new-head qualification, four-cell100-sample timing,
-> the evaluation-only Q4 importer/provenance and accepted measured D-Packet remain pending.
+> are source-only; actual new-head qualification, checkpoint-0 A/R100-sample timing
+> and accepted measured D-Packet remain pending. The [owner Q4 timing waiver6251027125](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6251027125) removes Q4/importer from the critical path.
 >
 > [D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised) permits offline floating point, retaining matmul/GEMM and softmax/squashing bans, GPU-only model compute and separately qualified D11 export. Other training, M2 and Stage B holds remain.
 >

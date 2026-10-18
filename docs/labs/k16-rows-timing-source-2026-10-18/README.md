@@ -25,15 +25,15 @@ actual predicates. The ordered chain is:
 
 1. Reviewed and protected-delivered timing source and Claude's R/K16 rows qualifier;
    four newly pinned rows configs, runtime paths and operational packet. The
-   existing runbook's evaluation-only Q4 importer is still an explicit source
-   dependency; the checkpoint0-only bridge cannot substitute or silently relabel
-   old Q4 identity. No Q4 runtime readiness follows from this selector adapter.
+   [owner Q4 timing waiver6251027125](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6251027125) removes the two Q4 cells and evaluation-only
+   importer from the critical path. The unchanged source already supports selecting
+   only checkpoint-0 A/R; no Q4 runtime readiness or importer implementation is claimed.
 2. Actual new-source build/executable/PTX/geometry/compiler/GPU identities and
    one qualification session:25/25 finite controls plus `admit_ptx`, C-R1..6,
    G-Pre≥4,894, nonvacuous R/K16 rows parity, refusals/negative/zero-update controls,
    and the registered timing.
-3. **Four timing cells**, checkpoint0/Q4 occupancy × A/R, **100 completed samples
-   each plus1excluded warmup**. Q4 is retained; no waiver is requested. Preserve
+3. **Two timing cells**, checkpoint0 × A/R, **100 completed samples
+   each plus1excluded warmup**. The owner explicitly waived Q4. Preserve
    raw samples, counts, snapshot/epoch equality, path and image identities.
 4. Accepted completed D-Packet with genuine receipts, exact four arm/seed identities,
    original fresh-source binding and measured all-in budget; then the existing
@@ -43,7 +43,7 @@ actual predicates. The ordered chain is:
 The conditional release does not need another strategic owner acknowledgment.
 Actual packet review and PM dispatch remain operational work. Five-sample
 qualifier timing, earlier99-sample records or old checkpoint0 rates cannot fill
-this100-sample/four-cell slot. The measured unit includes carry, Route and vector
+this100-sample/two-cell slot. The measured unit includes carry, Route and vector
 proposal/observation on a frozen state; it is **forward-only, not training-dose
 throughput**, and the budget must retain evaluation, accepted-update, I/O and
 custody costs. A healthy run is not cancelled because an estimate expires.
@@ -92,7 +92,9 @@ uses no paid resource. The earlier cumulative resource ledger remains separate.
 Codex owns this timing adapter and the external operator/config/D-Packet integration.
 Claude owns the R/K16 rows qualifier and exact source review; AGY reuses the
 existing redirect runbook/consumer with the actual four identities. Kimi owns
-operational packet acceptance/dispatch and protected delivery. No duplicate
+operational packet acceptance/dispatch. While Kimi is offline, DeepSeek offers
+source-queue cover under the owner's autonomous direction; model acceptance and
+honest machine owner/admission attribution remain separate. No duplicate
 scorer or proposed K8 R-only/B3 trajectory is introduced.
 
 The original transfer archive has been restored once and all16 original manifest
