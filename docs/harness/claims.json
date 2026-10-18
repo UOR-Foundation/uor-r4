@@ -258,6 +258,13 @@
     "lab": "codex",
     "note": ""
   },
+  "codex/docs-d38-cost-20261018": {
+    "branch": "codex/docs-d38-cost-20261018",
+    "claimed_at": "2026-10-18T21:03:28+00:00",
+    "head": "948744c9",
+    "lab": "codex",
+    "note": "Parent-delegated docs only: ROADMAP R3/R5 D38 evidence and injective draft section8 estimate provenance; no running-status, model, tests, policy or resource changes"
+  },
   "codex/docs-research-front-door": {
     "branch": "codex/docs-research-front-door",
     "claimed_at": "2026-10-18T06:28:47+00:00",

@@ -1,3 +1,15 @@
+## 2026-10-18 — D38 evidence and injective-draft planning-cost provenance (codex)
+
+ROADMAP R3/R5 now name D5-a post-warmup hardware-counter cache/DRAM bytes per token
+separately from D5-b measured selected parameter access when the model exceeds
+cache, retaining J/token, RSS, tokens/s and D25. Section8 of the unregistered
+injective attention draft labels its historical resource-lifetime extrapolations
+as assumption-based planning estimates, not measured batch-rate/cost bounds,
+under [timing clarification6253995798](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6253995798).
+Changed-lineage throughput and all-in cost remain unmeasured. No scientific bar,
+registered budget, permission or running-status change; no compute, $0 new work.
+Record: [labs/d38-cost-provenance-docs-2026-10-18](../labs/d38-cost-provenance-docs-2026-10-18/README.md).
+
 ## 2026-10-18 — BVG-K (W3) bound to the measured K16 profile and split into construction and training stages (claude)
 
 The batched-verified-coordinates draft's utilization hypothesis is now bound to measured data and the source:
