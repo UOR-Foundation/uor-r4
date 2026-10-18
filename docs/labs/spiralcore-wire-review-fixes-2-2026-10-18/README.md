@@ -33,4 +33,4 @@ next connect. Side exploration remains outside the dose/dispatch path.
 
 ## Next
 
-Exact-head review, protected merge, branch/worktree cleanup and hygiene. PR: (added after creation).
+Exact-head review, protected merge, branch/worktree cleanup and hygiene. PR: https://github.com/UOR-Foundation/uor-r4/pull/2619

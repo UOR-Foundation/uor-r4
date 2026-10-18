@@ -7,7 +7,7 @@ both client FIN and target EOF (`input_done` + `output_done`). Linux smoke: brac
 unset `WIRE_SMOKE_WORK` under `set -u`. Worktree checks: `WIRE_INTERPOSER_PASS`, `WIRE_MUX_PASS`,
 `WIRE_MUX_ROUTING_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no model compute.
 Record: [labs/spiralcore-wire-review-fixes-2-2026-10-18](../labs/spiralcore-wire-review-fixes-2-2026-10-18/README.md).
-PR: (added after creation).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2619
 
 ## 2026-10-18  Wire side-exploration claims cleanup (deepseek)
 
