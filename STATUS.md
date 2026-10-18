@@ -18,10 +18,12 @@ PM6243260600 formally accepts this result as-is. The
 [artifact hash-domain repair](docs/labs/attention-hash-domains-2026-10-17/README.md)
 is protected-delivered at23d5 after Gate10 five-command PASS; its debug binary
 remains construction-only. The [Dose 1 packet](docs/labs/attention-dose1-packet-2026-10-18/README.md)
-is now source/metadata frozen with actual disjoint FreshV2 metadata and posted
-internal independent reviews. Next: AGY confined actual packet verdict and Kimi
-FIT/dispatch; the same resource then builds the required RELEASE executable,
-binds real plans/reviews/check-plan and Casey personal admission before learning.
+is source/metadata frozen with actual disjoint FreshV2 metadata and posted
+internal independent reviews; AGY's confined verdict and Kimi's actual dispatch
+are recorded in the [dispatch record](docs/labs/attention-dose1-dispatch-2026-10-18/README.md).
+The same resource then builds the required RELEASE executable,
+binds real plans/reviews/check-plan and Casey personal admission before learning;
+the dispatch confirms neither an allocation nor a build.
 No learned dose or fresh transfer has run. Training/M2/StageB remain HELD;
 Q4 NOT_EXECUTABLE. The earlier pilot below retains its measured scope.
 

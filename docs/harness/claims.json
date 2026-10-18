@@ -223,6 +223,13 @@
     "lab": "deepseek",
     "note": "unread-note surfacing in heartbeat + claims housekeeping"
   },
+  "kimi/dose1-dispatch-record-2026-10-18": {
+    "branch": "kimi/dose1-dispatch-record-2026-10-18",
+    "claimed_at": "2026-10-17T23:10:49-04:00",
+    "head": "35c4c4038",
+    "lab": "kimi",
+    "note": ""
+  },
   "kimi/optimization-path-2026-10-18": {
     "branch": "kimi/optimization-path-2026-10-18",
     "claimed_at": "2026-10-17T21:10:00-04:00",

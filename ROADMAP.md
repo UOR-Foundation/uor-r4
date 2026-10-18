@@ -47,10 +47,12 @@ The [artifact hash-domain repair](docs/labs/attention-hash-domains-2026-10-17/RE
 is protected-delivered at23d5 after Gate10 five-command construction/host PASS;
 Battery3 remains accepted as-is, no rerun/rescore. The
 [Dose 1 selected packet](docs/labs/attention-dose1-packet-2026-10-18/README.md)
-now binds actual FreshV2 metadata and reviewed operator components. AGY actual
-confined packet verdict and Kimi FIT/dispatch precede fresh admission; actual
-RELEASE construction, plan reviews/check-plan and Casey personal TTY happen on
-the same resource before model work. No learned result, full attribution or
+now binds actual FreshV2 metadata and reviewed operator components. AGY's
+confined verdict and Kimi's actual dispatch are recorded
+([dispatch record](docs/labs/attention-dose1-dispatch-2026-10-18/README.md))
+without confirming an allocation or build; fresh admission still precedes actual
+RELEASE construction, plan reviews/check-plan and Casey personal TTY, which happen
+on the same resource before model work. No learned result, full attribution or
 progress-count reset follows from packet preparation. Optimization remains
 gated on the dose outcome under project-track's post-dose path.
 
