@@ -13,7 +13,7 @@
 > **Current D32 direction, October 13:** model computation and instruments,
 > including learning, are discrete/exact and GPU-only. No floating-point forward,
 > gradient, optimizer, numerical model instrument or matrix multiplication is
-> admitted. Source `a2a5b89c` passes eleven admitted CUDA construction controls
+> admitted on the discrete path (offline training is revised by D37 above). Source `a2a5b89c` passes eleven admitted CUDA construction controls
 > after Claude FIT; earlier attempts remain outside required review order.
 > Delivery: #2379. M1's quality target remains SUSPENDED, with no model update
 > or quality claim.

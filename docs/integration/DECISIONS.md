@@ -1509,7 +1509,7 @@ should have run at all; D31 governs what a failure may mean once it has run.
 
 ## D32 — Discrete geometric substrate: ternary/Hamming/quaternion computation, no floating point in model computation including learning
 
-> **Partly superseded, October 18, by [D37](#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised):** floating point is legal in offline training. Items 1 and 5 no longer bind offline training. Serving (D11), the discrete active path and the October 14 zeta exception are unchanged.
+> **Partly superseded, October 18, by [D37](#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised):** floating point is legal in offline training. Item 1 no longer binds offline training, and item 5 is replaced by D37 item 5 (re-registration only). Serving (D11), the discrete active path and the October 14 zeta exception are unchanged.
 
 **Authority, October 13:** Casey, relayed by Codex from the owner's session to
 #2028 (comment 6154399083) and #2032 (comment 6154399570), with the owner's

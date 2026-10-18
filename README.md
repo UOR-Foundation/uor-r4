@@ -130,7 +130,9 @@ The active D32 model uses integer E8 carriers, SpiralCore signed transport,
 ordered ternary FBS and one shared input/carry/output vector writer. Learning
 enumerates exact geometric moves and accepts a move only when its fixed-batch
 integer objective improves. No floating-point model computation, gradient,
-softmax or hidden matrix product is admitted.
+softmax or hidden matrix product is admitted on this active discrete path
+(D37 permits offline float training through new pre-registrations; softmax and
+matmul stay banned everywhere).
 
 The first scoped D33 pilot completed 1,640 batches with 236 accepted vector
 updates on one RTX 5090. On the pinned 14,287-target development set, top-1
