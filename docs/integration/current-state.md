@@ -9,13 +9,33 @@ everything earlier is linked under [Older entries and authority](#older-entries-
 
 M1's definition of done is **D39 item 1**: G-Pre ≥ 4,894; G-Adm on both seeds; G-Occ with > 16 occupied cells and an actual R > 0 row; ≤ 0.90 BPB on the chat held-out stream through the D11 export with the export gap reported; a fresh pre-registered transfer panel. The 116/232 reply bar is BLOCKED under R14 and is not a closing condition. M2–M8 quote the acceptance criteria already frozen on `#2030`–`#2036`; no bar is new, and amending one is an owner decision.
 
-`current-state.md` is now a rolling window: 229 entries dated 2026-10-14 and newer stay, and the 355 entries for 13 October back to 3 October moved verbatim to [current-state-2026-10-03-to-2026-10-13-archive](../history/current-state-2026-10-03-to-2026-10-13-archive.md). Page lines 8,646 → 2,324. Nothing was deleted, and every moved entry keeps its anchor.
+`current-state.md` is now a rolling window: the 355 entries for 13 October back to 3 October moved verbatim to [current-state-2026-10-03-to-2026-10-13-archive](../history/current-state-2026-10-03-to-2026-10-13-archive.md), and the page keeps only entries dated 2026-10-14 and newer (233 at this commit, including this entry and three merged the same day). Page lines 8,667 → 2,358. Nothing was deleted, and every moved entry keeps its anchor.
 
 **Checks.** `python3 scripts/check_claim_wording.py` and `cargo run -q --locked -p uor-r4-claim-wording -- .` pass; the project-track archive reproduces its source text exactly once the five inserted banners are stripped and the link prefixes reversed; the current-state archive matches all 355 source entries the same way; `uor-harness check` reports no finding on any of the four files.
 
 **Next:** `#2028`'s milestone table now matches `NOW.md` and D39 — M1 is "rows_v1 successor (Dose 2)" with the interim headline **injective codebook + Q4 admission ≥ 4,894** and the reply bars recorded as BLOCKED under R14. The remaining stale cells (the four status words for M3 and M4, audit C11/C12) belong to the owning milestone issues, not to this page.
 
 Documentation only — no model compute, $0.
+## 2026-10-18  README decision range and statistics refreshed (deepseek)
+
+Updates the README owner-decision link range to D0–D39 and replaces the 13 October statistics snapshot
+with current verifiable counts (merged PRs, Rust lines, test functions, open issues), noting the 18 October
+history consolidation. Docs-only; no code, model or evidence change, no compute.
+Record: [labs/readme-stats-2026-10-18](../labs/readme-stats-2026-10-18/README.md).
+
+## 2026-10-18  ROADMAP stale rows corrected for D37, M7, and closed citations (deepseek)
+
+Fixes four Phase 1 tracker-hygiene items in `ROADMAP.md`: the D32 learning paragraph now reflects D37's
+offline-float allowance (serving still D11), the M7 row records the #2654 WASM runtime and that the model
+bundle is not integrated, and closed `#820` / `#1542/#1476/#1718/#1738` citations are no longer presented
+as open. Docs-only; no code, model or evidence change, no compute.
+Record: [labs/roadmap-stale-rows-2026-10-18](../labs/roadmap-stale-rows-2026-10-18/README.md).
+
+## 2026-10-18  One-page plan linked from README/STATUS/ROADMAP (deepseek)
+
+Links `docs/integration/NOW.md` from the repository front door, status page and roadmap title block,
+closing the D39 Phase 1 tracker-hygiene item. Docs-only; no code, model or evidence change, no compute.
+Record: [labs/now-link-2026-10-18](../labs/now-link-2026-10-18/README.md).
 
 ## 2026-10-18 — D39: course-correction package approved; NOW.md is the current plan page (kimi PM; owner decision)
 
