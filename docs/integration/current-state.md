@@ -4,7 +4,7 @@
 file count plus a SHA-256 manifest sidecar must match, otherwise down aborts with the pod retained.
 Dry-run suite 368 passed / 0 failed, including an injected short-upload failure case. Host-only,
 no pods or model compute. Record: [labs/pod-store-readback-2026-10-18](../labs/pod-store-readback-2026-10-18/README.md).
-PR: (added after creation).
+PR: #2629.
 
 ## 2026-10-18 — Row-parallel exact counterfactual: GPU parity PASS, ~56× faster proposals (claude)
 

@@ -1537,7 +1537,7 @@ vast_archive() {  # POD -> 0 when archived (or nothing to archive)
 # same file count and return the same SHA-256 manifest sidecar. A silent partial
 # upload therefore aborts `down` with the pod retained.
 vast_archive_store() {  # POD DIRS KB -> 0 when every directory was uploaded AND read back
-  local pod=$1 have=$2 kb=$3 d tag files checksum hashline got cmpout manifest readback verified_files=0
+  local pod=$1 have=$2 kb=$3 d tag files checksum hashline got cmpout manifest readback verified_files=0 verified_manifest=unverified
   if ! is_dry && ! pod_ssh "$pod" 'test -x /root/uor-store' </dev/null; then
     warn "$pod has no /root/uor-store (bootstrapped before it existed): run 'uor-pod bootstrap $pod' to install it, or archive without --to-store"; return 1
   fi
@@ -1552,7 +1552,7 @@ vast_archive_store() {  # POD DIRS KB -> 0 when every directory was uploaded AND
     tag=$(printf "%s" "$d" | tr / _)
     manifest=/tmp/uor-store-manifest-$tag.sha256
     readback=/tmp/uor-store-readback-$tag
-    pod_ssh "$pod" "cd /workspace/$d && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > $manifest" </dev/null ||
+    pod_ssh "$pod" "cd /workspace/$d && find . -type f -print0 | LC_ALL=C sort -z | xargs -0r sha256sum > $manifest" </dev/null ||
       { warn "building the read-back manifest for /workspace/$d of $pod failed; pod retained"; return 1; }
     files=$(pod_ssh "$pod" "wc -l < $manifest" </dev/null | tr -d " ") || files=
     hashline=$(pod_ssh "$pod" "sha256sum $manifest" </dev/null) || hashline=
