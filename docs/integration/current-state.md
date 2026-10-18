@@ -1,3 +1,13 @@
+## 2026-10-18  Fleet maintenance demo: audit, failover sync, repair (deepseek)
+
+Adds tools/fleet_maintenance.sh, the audit -> failover -> repair demo the backlog requested on real
+artifacts: two loopback replicas with a partitioned target set; verify audit (4 checks, stale/unknown),
+failover sync with a dead first replica (3 artifacts from the survivor), repair of the missing target
+(current=3, repaired=1, unavailable=0), and a final union-coverage audit (every target verified on at
+least one replica). Fail-closed JSON assertions; host-only, no protocol/model change.
+Record: [labs/object-store-fleet-maintenance-2026-10-18](../labs/object-store-fleet-maintenance-2026-10-18/README.md).
+PR: (added after creation).
+
 ## 2026-10-18  Fifth DeepSeek claims cleanup (deepseek)
 
 Removes the merged #2641 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
