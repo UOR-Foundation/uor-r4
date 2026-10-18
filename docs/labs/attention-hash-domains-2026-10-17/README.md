@@ -82,10 +82,39 @@ and passes85/0/1 at its final source. Its author verification report SHA is
 `7f49ce69c336ade601d0b13e2086209ff9c0514520f322f3eeab7df373fbff0c`. The two real typed-Snapshot serialization
 fixtures are CUDA-feature scoped: source authored, execution NOT_RUN. They
 construct no Device and test only encoding/default omission/refusals. CUDA
-construction, new binary linking, new runtime artifact emission and learning
-execution are NOT_RUN. The prospective
-Gate10 packet retains the five declared compiler-only commands and accepted
-lifecycle, with separate actual release required. No old gate release is reused.
+construction and debug linking now PASS at exact source
+`dfa3f483090a714b9e56891e74f6ef197087ca53` under distinct
+[PM dispatch6243606649](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6243606649),
+after AGY exact source/packet APPROVE6243576819/6243576996. Gate10's frozen
+24-member manifest is
+`59cef84aba46f8ee7f549f005cc2ba6de8f97d31c56fe6c67e167aea7c99b6e9`;
+its independently installed readiness is
+`7047c59d9c1b608b457fea0b9d1e3bd8e798db541f1c656c966cd8a1ca4a2df2`.
+No old gate release is reused.
+
+All five command exits and the original command marker are0: CUDA all-target
+check35.62s, strict CUDA package `--no-deps` all-target Clippy `-D warnings`
+27.40s, host no-CUDA all-target check2.09s, host metadata build8.35s with
+85PASS/0FAIL/1ignored (test execution7.41s), and debug CUDA link27.59s. These
+are Cargo-reported durations, not end-to-end lease or model throughput.
+Initial/final exact-source guards pass. The linked ELF SHA is
+`d87c9f14dacca8a67024352cee1c1c2d6b6644b9a064ca3bdcf8d51c71830f2b`;
+it is archived without invocation, so runtime identity remains
+UNAVAILABLE_NOT_EXECUTED. New artifact emission, CUDA-feature serializer-test
+execution, initialization, export, evaluation, qualification and learning are
+NOT_RUN at this source. Original operator85354/setup/command all return0, with
+no continuation, restart or paid retry. All58 remote,43 operator and24 frozen
+packet SHA entries verify. The full archive is41159168bytes/MD5
+`81cc3a7285c6517d1035649c393acf51`, stored and cloud-readback verified before
+own pod56471322 release00:22:05Z/down00:22:12Z on18October. Fresh fleet status
+then reports0pods; this is a dated observation. Late lifecycle files are sealed
+separately after down, never claimed to exist in the earlier archive.
+
+Native provider uptime251s at$.964/h gives$.067212222 as an elapsed-cost proxy;
+the separate254s up/down wall proxy is$.068015556. These alternatives are not
+summed or called invoices. The carried mixed Codex estimate becomes$4.804471110
+plus PM work; storage/transfer remain UNMEASURED. This is compiler construction,
+not runtime qualification, learned-attention evidence or a dose release.
 
 After source review, construction and protected delivery, bind the actual new
 source/executable and final artifact contract into the one-seed-first paired

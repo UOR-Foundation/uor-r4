@@ -36,7 +36,8 @@ Battery3's same-named export field carries A while its eval field carries B;
 the existing checkpoint-to-eval validation already checked the consistent pair.
 Those accepted historical bytes remain unchanged, without rerun or rescore.
 Canonical DriverCheckpoint and raw file identities remain separate. The new
-source requires its own construction/delivery before dose use; the Gate9 and
+source passes Gate10's five compiler/host commands at dfa3, with its debug
+binary archived without invocation; protected delivery precedes dose use. Gate9 and
 Battery3 evidence below retains its exact earlier source scope.
 
 ## Exact interface and format

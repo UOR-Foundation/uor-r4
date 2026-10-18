@@ -45,7 +45,10 @@ tracker [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028); each mile
 
 The next source dependency is the [explicit artifact hash-domain repair](docs/labs/attention-hash-domains-2026-10-17/README.md),
 commissioned by PM6243260600 before the dose. Battery3 is accepted as-is, with no
-rerun/rescore; new-source construction/delivery and rebound dose release remain.
+rerun/rescore. Gate10's five construction/host commands now PASS at dfa3,
+with85metadataPASS/0FAIL/1ignored and a linked binary archived without invocation;
+full archive verified before own-pod teardown. Independent outcome review,
+protected delivery and rebound dose release remain.
 No learned result or progress-count reset follows from this metadata change.
 
 ## Earlier operator qualification (pre-D32, inactive)

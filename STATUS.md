@@ -16,7 +16,9 @@ exited0; fullSHA/cloud archive preceded own-pod teardown. Battery2's earlier
 staging failure remains preserved, with no mechanism negative inferred.
 PM6243260600 formally accepts this result as-is. Next is the
 [bounded artifact hash-domain repair](docs/labs/attention-hash-domains-2026-10-17/README.md)
-and its source review/construction/delivery, then the separately reviewed,
+now passes Gate10's five compiler/host commands at dfa3, including85 metadata
+tests/0fail/1ignored and a debug binary archived without invocation. Protected
+delivery follows the actual archive/outcome review, then the separately reviewed,
 pinned/released one-seed-first paired learning dose. No learned result or fresh transfer has
 run. Training/M2/StageB remain HELD;
 Q4 NOT_EXECUTABLE. The earlier pilot below retains its measured scope.

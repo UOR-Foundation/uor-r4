@@ -12,8 +12,16 @@ existing qualification observations; no numerical/kernel/learning-law change.
 Host no-CUDA all-target check/fmt and85 metadata tests PASS/0FAIL/1ignored;
 the initial missing-local-parent fixture failure is retained and its setup-only
 rerun is documented. CUDA-feature serializer fixtures are authored/NOT_RUN.
-New-source CUDA construction, runtime emission and learning are NOT_RUN. Source/packet review, compiler gate
-and protected delivery precede the rebound one-seed-first paired dose. No old
+Gate10 under actual PM6243606649 now passes all five compiler/host commands at
+exact dfa3: CUDA check/strict package Clippy, host check/85metadata0FAIL1ignored,
+and debug link. Initial/final source guards pass. Linked ELF d87c9f14 is archived
+without invocation; runtime emission and learning remain NOT_RUN. Original
+operator/setup/command0, full58+43+24SHA and cloud41159168bytes/MD5
+81cc3a7285c6517d1035649c393acf51 verified before own56471322 down00:22:12Z;
+dated fleet0, late lifecycle closure separate. Native251s at$.964/h gives
+$.067212222 elapsed proxy versus254s wall$.068015556, alternatives/not invoices;
+carried mixed Codex$4.804471110 plusPM/storageUNMEASURED. Protected delivery and the
+rebound one-seed-first paired dose remain next. No old
 binary/checkpoint/release is promoted. Count0/3/reply37/232SUSPENDED/learned
 Relation NOT_RUN unchanged; Training/M2/StageB HELD, Q4 NOT_EXECUTABLE.
 
