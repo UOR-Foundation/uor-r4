@@ -98,6 +98,10 @@ const BVGK: &str = r#"
 //   14 a member's recorded kind differs from the launch kind; 15 two members
 //   share one index (storage would not be disjoint); 16 the commit set is
 //   empty; 17 |S_t| >= 2 with the joint loss absent.
+// decide zeroes commit[0..k] and commit_count before either refusal return,
+// so a refused batch never leaves a previous batch's commit set for apply.
+// Status 16 is a misuse code: the host never launches apply when
+// commit_count == 0 (an empty S_t is a legal no-op batch, not a refusal).
 // Apply validates every member before any write; on refusal nothing changes.
 #define BVGK_RECORD 8u
 __device__ bool bvgk_in_range(const U* s,U kind,U index) {
@@ -144,6 +148,8 @@ extern "C" __global__ void discrete_bvgk_choose(const W* all_losses,const U* all
 extern "C" __global__ void discrete_bvgk_decide(const U* member,const W* summary,U k,const W* joint,U* commit,W* commit_count,U* status) {
     if(blockIdx.x || threadIdx.x)return;
     W count=summary[0],best=summary[1];
+    for(U c=0;c<k;++c)commit[c]=0u;
+    *commit_count=0;
     if(count>k || (count && (best>=k || !member[best]))){*status=4u;return;}
     if(count>=2 && joint[0]==0){*status=17u;return;}
     bool whole=count>=2 && joint[1]<summary[2];
@@ -273,6 +279,50 @@ mod tests {
             "__device__ U bvgk_resulting_port(const int* table,const U* routes,const U* g,const U* s,U kind,U index,U candidate) {{\n{ORDINARY_RESULTING_PORT_BODY}"
         );
         assert_eq!(BVGK.matches(port.as_str()).count(), 1);
+        // Chooser sensitivity line, proposal words, gate write and the port
+        // signature appear in both texts (the proposal record is `p[w]` here
+        // and `proposal[w]` in the ordinary kernel).
+        for anchor in [
+            "for(U i=1;i<active;++i)if(losses[i]!=losses[0])sensitive=1;",
+            "gates[index]=gate_value(gates,index,GATE_KIND,index,",
+        ] {
+            assert_eq!(ordinary.matches(anchor).count(), 1, "{anchor}");
+            assert_eq!(BVGK.matches(anchor).count(), 1, "{anchor}");
+        }
+        for (text, name) in [(ordinary, "proposal"), (BVGK, "p")] {
+            let words = format!(
+                "{name}[0]=best;{name}[1]=losses[0];{name}[2]=losses[best];{name}[3]=*epoch;{name}[4]=sensitive;"
+            );
+            assert_eq!(text.matches(words.as_str()).count(), 1, "{words}");
+        }
+        let signature =
+            "(const int* table,const U* routes,const U* g,const U* s,U kind,U index,U candidate) {";
+        assert_eq!(
+            ordinary
+                .matches(format!("__device__ U resulting_port{signature}").as_str())
+                .count(),
+            1
+        );
+        assert_eq!(
+            BVGK.matches(format!("__device__ U bvgk_resulting_port{signature}").as_str())
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn bvgk_decide_zeroes_the_commit_set_before_every_refusal() {
+        let at = BVGK.find("void discrete_bvgk_decide(").expect("decide");
+        let end = BVGK.find("void discrete_bvgk_apply(").expect("apply");
+        let decide = &BVGK[at..end];
+        let zero = decide
+            .find("for(U c=0;c<k;++c)commit[c]=0u;")
+            .expect("zeroing loop");
+        let count = decide.find("*commit_count=0;").expect("count reset");
+        for refusal in ["*status=4u;return;", "*status=17u;return;"] {
+            let r = decide.find(refusal).expect(refusal);
+            assert!(zero < r && count < r, "zeroing must precede {refusal}");
+        }
     }
 
     #[test]
