@@ -90,6 +90,13 @@
     "lab": "codex",
     "note": ""
   },
+  "codex/cf1-k16-rows-timing": {
+    "branch": "codex/cf1-k16-rows-timing",
+    "claimed_at": "2026-10-18T09:27:38-04:00",
+    "head": "fb9e004fb",
+    "lab": "codex",
+    "note": ""
+  },
   "codex/docs-research-front-door": {
     "branch": "codex/docs-research-front-door",
     "claimed_at": "2026-10-18T06:28:47+00:00",
