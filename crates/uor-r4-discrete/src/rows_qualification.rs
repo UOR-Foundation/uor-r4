@@ -17,6 +17,7 @@ pub const NAMES: &[&str] = &[
     "rows_relation_gate_parity",
     "rows_refusal_parity",
     "rows_forced_terminal_parity",
+    "rows_rank_objective_parity",
 ];
 
 fn require(ok: bool, why: &str) -> Result<()> {
@@ -292,15 +293,33 @@ fn compare_calls(
 }
 
 fn sweep(read: ReadSpec, blocks: u32, seed: u64, tally: &mut Tally) -> Result<()> {
+    sweep_with(
+        read,
+        blocks,
+        4,
+        crate::ObjectivePolicy::NearestAddressMarginV1,
+        seed,
+        tally,
+    )
+}
+
+fn sweep_with(
+    read: ReadSpec,
+    blocks: u32,
+    kept_cells: u32,
+    objective: crate::ObjectivePolicy,
+    seed: u64,
+    tally: &mut Tally,
+) -> Result<()> {
     let (vocabulary, context) = (16, 12);
     let spec = Spec {
         vocabulary,
         blocks,
         context,
-        kept_cells: 4,
+        kept_cells,
     };
     for model_seed in [7u32, 11] {
-        let device = Device::new_with_read(spec, read, model_seed, 0)?;
+        let device = Device::new_with_objective(spec, read, objective, model_seed, 0)?;
         let rows = device.rows_counterfactual()?;
         let snapshot = device.snapshot()?;
         let gates = snapshot.gates.len() as u32;
@@ -330,6 +349,18 @@ fn sweep(read: ReadSpec, blocks: u32, seed: u64, tally: &mut Tally) -> Result<()
 fn rows_route_parity(tally: &mut Tally) -> Result<()> {
     sweep(ReadSpec::Route, 2, 0x5157, tally)?;
     sweep(ReadSpec::Route, 4, 0x5158, tally)
+}
+/// The admission redirect (K16-A vs K16-R, Route) trains at kept_cells 16 under
+/// both objectives; the rank hinge is a different writer term (s[11] == 1).
+fn rows_rank_objective_parity(tally: &mut Tally) -> Result<()> {
+    for objective in [
+        crate::ObjectivePolicy::OccupiedCellRankHingeV1,
+        crate::ObjectivePolicy::NearestAddressMarginV1,
+    ] {
+        sweep_with(ReadSpec::Route, 2, 16, objective, 0x0a16, tally)?;
+        sweep_with(ReadSpec::Route, 4, 16, objective, 0x0a17, tally)?;
+    }
+    Ok(())
 }
 fn rows_flock_gate_parity(tally: &mut Tally) -> Result<()> {
     sweep(ReadSpec::Flock { kept: 3 }, 2, 0xf10c, tally)?;
@@ -384,14 +415,36 @@ fn timing() -> Result<serde_json::Value> {
     };
     let mut rng = Lcg(0x7193);
     let mut cases = Vec::new();
-    for (read, parameter) in [
-        (ReadSpec::Route, Parameter::VectorBlock(0)),
+    // Dose 1 shape (K8, objective A) and the admission-redirect shape (K16,
+    // Route, both objectives: K16-A and K16-R).
+    for (kept_cells, objective, read, parameter) in [
         (
+            8,
+            crate::ObjectivePolicy::NearestAddressMarginV1,
+            ReadSpec::Route,
+            Parameter::VectorBlock(0),
+        ),
+        (
+            8,
+            crate::ObjectivePolicy::NearestAddressMarginV1,
             ReadSpec::Relation { kept: 8, sweeps: 1 },
             Parameter::Gate(0),
         ),
+        (
+            16,
+            crate::ObjectivePolicy::NearestAddressMarginV1,
+            ReadSpec::Route,
+            Parameter::VectorBlock(0),
+        ),
+        (
+            16,
+            crate::ObjectivePolicy::OccupiedCellRankHingeV1,
+            ReadSpec::Route,
+            Parameter::VectorBlock(0),
+        ),
     ] {
-        let device = Device::new_with_read(spec, read, 1, 0)?;
+        let spec = Spec { kept_cells, ..spec };
+        let device = Device::new_with_objective(spec, read, objective, 1, 0)?;
         let rows = device.rows_counterfactual()?;
         let batch: Vec<Vec<Identity>> = (0..64u64)
             .map(|r| {
@@ -437,12 +490,13 @@ fn timing() -> Result<serde_json::Value> {
         )?;
         cases.push(serde_json::json!({
             "read": format!("{read:?}"), "parameter": format!("{parameter:?}"),
+            "kept_cells": kept_cells, "objective": format!("{objective:?}"),
             "ordinary_median_ns": ordinary_ns as u64, "rows_median_ns": rows_ns as u64,
             "losses_equal": true,
         }));
     }
     Ok(serde_json::json!({
-        "shape": "V4096/B4/C192/K8, 64 rows, synchronized propose, 1 warmup + 5 timed, median",
+        "shape": "V4096/B4/C192, K8 (objective A) and K16 (A and R), 64 rows, synchronized propose, 1 warmup + 5 timed, median",
         "qualified": false,
         "cases": cases,
     }))
@@ -450,12 +504,13 @@ fn timing() -> Result<serde_json::Value> {
 
 pub fn run(report: &Path) -> Result<()> {
     std::fs::create_dir(report).map_err(|e| Error::Invalid(format!("exclusive report: {e}")))?;
-    let controls: [fn(&mut Tally) -> Result<()>; 5] = [
+    let controls: [fn(&mut Tally) -> Result<()>; 6] = [
         rows_route_parity,
         rows_flock_gate_parity,
         rows_relation_gate_parity,
         rows_refusal_parity,
         rows_forced_terminal_parity,
+        rows_rank_objective_parity,
     ];
     let mut records = Vec::new();
     let mut failed = false;
