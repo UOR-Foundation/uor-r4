@@ -111,13 +111,6 @@
     "lab": "codex",
     "note": "Owner-requested native SVG visual repair; docs/figures, generators, embedded previews and documentation record only; no model or gate changes"
   },
-  "deepseek/claims-cleanup-2660": {
-    "branch": "deepseek/claims-cleanup-2660",
-    "claimed_at": "2026-10-18T10:55:08-04:00",
-    "head": "5fd2eb974",
-    "lab": "deepseek",
-    "note": "Remove the merged #2660 claim from docs/harness/claims.json."
-  },
   "kimi/dose1-dispatch-record-2026-10-18": {
     "branch": "kimi/dose1-dispatch-record-2026-10-18",
     "claimed_at": "2026-10-17T23:10:49-04:00",
