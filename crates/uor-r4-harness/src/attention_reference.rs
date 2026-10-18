@@ -396,11 +396,11 @@ pub struct DeviceSnapshotRecord {
 /// Validated GPU-exported `token_cells[4096]` loaded from an `attention-export-token-cells`
 /// receipt (`uor-r4.attention-token-cells/1`), its bound `token_cells.u16`, and its pinned
 /// `DriverCheckpoint` (`uor-r4.discrete-driver-checkpoint/1`).
-/// All producer fields emitted by `#2601` and all four checkpoint/model hash domains are mandatory:
-/// - `checkpoint_file_sha256`: raw `DriverCheckpoint` JSON file SHA256
-/// - `driver_checkpoint_sha256`: canonical typed `DriverCheckpointRecord` SHA256
-/// - `model_snapshot_sha256`: canonical `serde_json::Value` model SHA256 (`checkpoint.model_sha256` == `export.model_snapshot_sha256`)
-/// - `typed_model_snapshot_sha256`: typed `DeviceSnapshotRecord` SHA256 (`eval.model_snapshot_sha256`)
+/// All producer fields emitted by `#2601` / `#2611` and all four checkpoint/model hash domains are mandatory:
+/// - `checkpoint_file_sha256`: raw `DriverCheckpoint` JSON file SHA256 (Domain D)
+/// - `driver_checkpoint_sha256`: canonical typed `DriverCheckpointRecord` SHA256 (Domain C)
+/// - `model_storage_sha256` (`model_snapshot_sha256` alias): canonical `serde_json::Value` model SHA256 (`checkpoint.model_sha256`, Domain A)
+/// - `typed_model_snapshot_sha256`: typed `DeviceSnapshotRecord` SHA256 (`eval.model_snapshot_sha256`, Domain B)
 #[derive(Debug, Clone)]
 pub struct LoadedTokenCells {
     pub token_cells: Vec<u32>,
@@ -412,6 +412,7 @@ pub struct LoadedTokenCells {
     pub lineage_sha256: String,
     pub driver_checkpoint_sha256: String,
     pub checkpoint_file_sha256: String,
+    pub model_storage_sha256: String,
     pub model_snapshot_sha256: String,
     pub typed_model_snapshot_sha256: String,
     pub model_epoch: u64,
@@ -429,6 +430,8 @@ pub struct CandidateCellTable {
     pub driver_checkpoint_sha256: String,
     #[serde(default)]
     pub model_snapshot_sha256: Option<String>,
+    #[serde(default)]
+    pub model_storage_sha256: Option<String>,
     #[serde(default)]
     pub model_value_sha256: Option<String>,
     #[serde(default)]
@@ -559,12 +562,12 @@ fn parse_file_pin(val: Option<&Value>, label: &str) -> Result<FilePinRecord, Str
 }
 
 /// Authenticate a raw `DriverCheckpoint` JSON byte slice across all four producer hash domains:
-/// 1. Raw `DriverCheckpoint` JSON file (`checkpoint_file.sha256`)
-/// 2. Canonical typed `DriverCheckpointRecord` (`driver_checkpoint_sha256`)
-/// 3. Canonical `serde_json::Value` model (`checkpoint.model_sha256 == export.model_snapshot_sha256`)
-/// 4. Typed `DeviceSnapshotRecord` re-encoding (`eval.model_snapshot_sha256`)
+/// 1. Raw `DriverCheckpoint` JSON file (`checkpoint_file.sha256`, Domain D)
+/// 2. Canonical typed `DriverCheckpointRecord` (`driver_checkpoint_sha256`, Domain C)
+/// 3. Canonical `serde_json::Value` model (`checkpoint.model_sha256 == expected_model_value_sha256`, Domain A)
+/// 4. Typed `DeviceSnapshotRecord` re-encoding (`eval.model_snapshot_sha256`, Domain B)
 ///
-/// Returns the typed `DeviceSnapshotRecord` SHA256 (`eval.model_snapshot_sha256` domain).
+/// Returns the typed `DeviceSnapshotRecord` SHA256 (`eval.model_snapshot_sha256` Domain B).
 #[allow(clippy::too_many_arguments)]
 pub fn verify_driver_checkpoint_domains(
     ckpt_bytes: &[u8],
@@ -651,7 +654,7 @@ pub fn verify_driver_checkpoint_domains(
     }
     if actual_model_val_sha != expected_model_value_sha256 {
         return Err(format!(
-            "checkpoint: model Value sha256 ({actual_model_val_sha}) != token_cells.model_snapshot_sha256 ({expected_model_value_sha256})"
+            "checkpoint: model Value sha256 ({actual_model_val_sha}) != token_cells model storage/value sha256 ({expected_model_value_sha256})"
         ));
     }
 
@@ -876,6 +879,24 @@ fn build_loaded_from_report_and_u16(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| "token_cells report: missing model_snapshot_sha256".to_string())?
         .to_string();
+    validate_sha256_str(&snap_sha, "token_cells.model_snapshot_sha256")?;
+    let dual_record_storage_sha = match rep_val.get("model_storage_sha256") {
+        Some(v) => {
+            let s = v
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| {
+                    "token_cells report: model_storage_sha256 must be non-empty string".to_string()
+                })?
+                .to_string();
+            validate_sha256_str(&s, "token_cells.model_storage_sha256")?;
+            Some(s)
+        }
+        None => None,
+    };
+    let expected_storage_sha = dual_record_storage_sha
+        .as_deref()
+        .unwrap_or(snap_sha.as_str());
     let model_epoch = rep_val
         .get("model_epoch")
         .and_then(Value::as_u64)
@@ -913,17 +934,23 @@ fn build_loaded_from_report_and_u16(
         &ckpt_sha,
         &config_sha256,
         &lineage_sha256,
-        &snap_sha,
+        expected_storage_sha,
         model_epoch,
         completed_batches,
         &model_bindings,
     )?;
 
+    if dual_record_storage_sha.is_some() && snap_sha != typed_model_snapshot_sha256 {
+        return Err(format!(
+            "token_cells report: dual-record model_snapshot_sha256 ({snap_sha}) != checkpoint typed model snapshot sha256 ({typed_model_snapshot_sha256})"
+        ));
+    }
+
     if !expected_model_snapshot_sha256.is_empty()
         && typed_model_snapshot_sha256 != expected_model_snapshot_sha256
     {
         return Err(format!(
-            "token_cells report typed model snapshot sha256 ({typed_model_snapshot_sha256}, value={snap_sha}) != expected ({expected_model_snapshot_sha256})"
+            "token_cells report typed model snapshot sha256 ({typed_model_snapshot_sha256}, storage={expected_storage_sha}) != expected ({expected_model_snapshot_sha256})"
         ));
     }
 
@@ -935,6 +962,7 @@ fn build_loaded_from_report_and_u16(
         ));
     }
     let (token_cells, occupied_cells) = parse_token_cells_u16_bytes(u16_bytes, u16_label)?;
+    let storage_sha = expected_storage_sha.to_string();
     Ok(LoadedTokenCells {
         token_cells,
         occupied_cells,
@@ -945,7 +973,8 @@ fn build_loaded_from_report_and_u16(
         lineage_sha256,
         driver_checkpoint_sha256: ckpt_sha,
         checkpoint_file_sha256: checkpoint_file.sha256,
-        model_snapshot_sha256: snap_sha,
+        model_storage_sha256: storage_sha.clone(),
+        model_snapshot_sha256: storage_sha,
         typed_model_snapshot_sha256,
         model_epoch,
         completed_batches,
@@ -1438,6 +1467,7 @@ pub struct ValidatedArmInputs {
     pub driver_checkpoint_sha256: String,
     pub checkpoint_file_sha256: String,
     pub evaluation_file_sha256: String,
+    pub model_storage_sha256: Option<String>,
     pub model_snapshot_sha256: String,
     pub ordered_row_binding_sha256: String,
     pub model_epoch: u64,
@@ -1643,6 +1673,7 @@ struct ParsedEval {
     lineage_sha256: String,
     lineage: DriverLineageRecord,
     model_bindings: EvalModelBindingsRecord,
+    model_storage_sha256: Option<String>,
     model_snapshot_sha256: String,
     model_epoch: u64,
     rows: Vec<EvalRowObs>,
@@ -1661,14 +1692,23 @@ fn parse_eval_rows(
         .get("schema")
         .and_then(Value::as_str)
         .ok_or_else(|| "eval: missing schema".to_string())?;
-    let (eval, raw_sha, env_sha, env_ckpt_sha) = if top_schema == DRIVER_EVAL_SCHEMA {
+    let (eval, raw_sha, env_sha, env_ckpt_sha, env_storage_sha, env_snap_sha) = if top_schema
+        == DRIVER_EVAL_SCHEMA
+    {
         if eval_input.get("transfer_corpus").is_some() || eval_input.get("evaluation").is_some() {
             return Err(
                 "eval: requires raw DEV eval-corpus report, not transfer or enveloped evidence"
                     .to_string(),
             );
         }
-        (eval_input, eval_file_sha256.to_string(), None, None)
+        (
+            eval_input,
+            eval_file_sha256.to_string(),
+            None,
+            None,
+            None,
+            None,
+        )
     } else if top_schema == ENVELOPED_EVAL_SCHEMA {
         if eval_input.get("transfer") != Some(&Value::Null) {
             return Err("eval envelope: transfer must be null for DEV evaluation".to_string());
@@ -1678,6 +1718,34 @@ fn parse_eval_rows(
             .and_then(Value::as_str)
             .ok_or_else(|| "eval envelope: missing driver_checkpoint_sha256".to_string())?
             .to_string();
+        let env_storage = match eval_input.get("model_storage_sha256") {
+            Some(v) => {
+                let s = v
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| {
+                        "eval envelope: model_storage_sha256 must be non-empty string".to_string()
+                    })?
+                    .to_string();
+                validate_sha256_str(&s, "eval_envelope.model_storage_sha256")?;
+                Some(s)
+            }
+            None => None,
+        };
+        let env_snap = match eval_input.get("model_snapshot_sha256") {
+            Some(v) => {
+                let s = v
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| {
+                        "eval envelope: model_snapshot_sha256 must be non-empty string".to_string()
+                    })?
+                    .to_string();
+                validate_sha256_str(&s, "eval_envelope.model_snapshot_sha256")?;
+                Some(s)
+            }
+            None => None,
+        };
         let inner = eval_input
             .get("evaluation")
             .ok_or_else(|| "eval envelope: missing inner evaluation".to_string())?;
@@ -1695,6 +1763,8 @@ fn parse_eval_rows(
             sha256_hex(&inner_bytes),
             Some(eval_file_sha256.to_string()),
             Some(ckpt_sha),
+            env_storage,
+            env_snap,
         )
     } else {
         return Err(format!(
@@ -1833,6 +1903,38 @@ fn parse_eval_rows(
         .and_then(Value::as_str)
         .ok_or_else(|| "eval: missing model_snapshot_sha256".to_string())?
         .to_string();
+    let inner_storage_sha = match eval.get("model_storage_sha256") {
+        Some(v) => {
+            let s = v
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| "eval: model_storage_sha256 must be non-empty string".to_string())?
+                .to_string();
+            validate_sha256_str(&s, "eval.model_storage_sha256")?;
+            Some(s)
+        }
+        None => None,
+    };
+    if let Some(ref es) = env_snap_sha {
+        if es != &model_snapshot_sha256 {
+            return Err(format!(
+                "eval envelope: model_snapshot_sha256 ({es}) != inner evaluation.model_snapshot_sha256 ({model_snapshot_sha256})"
+            ));
+        }
+    }
+    let model_storage_sha256 = match (env_storage_sha, inner_storage_sha) {
+        (Some(es), Some(is)) => {
+            if es != is {
+                return Err(format!(
+                    "eval envelope: model_storage_sha256 ({es}) != inner evaluation.model_storage_sha256 ({is})"
+                ));
+            }
+            Some(is)
+        }
+        (Some(es), None) => Some(es),
+        (None, Some(is)) => Some(is),
+        (None, None) => None,
+    };
     if enforce_canonical_pins {
         validate_sha256_str(&lineage_sha256, "eval.evaluation_lineage_sha256")?;
         validate_sha256_str(&model_snapshot_sha256, "eval.model_snapshot_sha256")?;
@@ -1945,6 +2047,7 @@ fn parse_eval_rows(
         lineage_sha256,
         lineage,
         model_bindings,
+        model_storage_sha256,
         model_snapshot_sha256,
         model_epoch,
         rows,
@@ -2373,6 +2476,7 @@ pub fn validate_arm_inputs_with_mode(
             .as_str()
             .filter(|s| !s.is_empty())
             .ok_or_else(|| "capture: model_snapshot_sha256 must be non-empty string".to_string())?;
+        validate_sha256_str(cap_snap_sha, "capture.model_snapshot_sha256")?;
         if cap_snap_sha != parsed_eval.model_snapshot_sha256 {
             return Err(format!(
                 "capture: model_snapshot_sha256 ({cap_snap_sha}) != eval.model_snapshot_sha256 ({})",
@@ -2380,6 +2484,28 @@ pub fn validate_arm_inputs_with_mode(
             ));
         }
     }
+    let cap_storage_sha = match capture.get("model_storage_sha256") {
+        Some(v) => {
+            let s = v
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| {
+                    "capture: model_storage_sha256 must be non-empty string".to_string()
+                })?
+                .to_string();
+            validate_sha256_str(&s, "capture.model_storage_sha256")?;
+            if let Some(ref eval_storage) = parsed_eval.model_storage_sha256 {
+                if &s != eval_storage {
+                    return Err(format!(
+                        "capture: model_storage_sha256 ({s}) != eval.model_storage_sha256 ({eval_storage})"
+                    ));
+                }
+            }
+            Some(s)
+        }
+        None => None,
+    };
+    let model_storage_sha256 = parsed_eval.model_storage_sha256.or(cap_storage_sha);
     if let Some(ref env_ckpt) = parsed_eval.enveloped_driver_checkpoint_sha256 {
         if env_ckpt != &driver_ckpt_sha {
             return Err(format!(
@@ -2610,6 +2736,7 @@ pub fn validate_arm_inputs_with_mode(
         driver_checkpoint_sha256: driver_ckpt_sha,
         checkpoint_file_sha256: checkpoint_file.sha256,
         evaluation_file_sha256: evaluation_file.sha256,
+        model_storage_sha256,
         model_snapshot_sha256: parsed_eval.model_snapshot_sha256,
         ordered_row_binding_sha256,
         model_epoch,
@@ -2905,9 +3032,19 @@ pub fn verify_loaded_token_cells_against_arm(
         ));
     }
     validate_sha256_str(
+        &loaded.model_storage_sha256,
+        "token_cells.model_storage_sha256",
+    )?;
+    validate_sha256_str(
         &loaded.model_snapshot_sha256,
         "token_cells.model_snapshot_sha256",
     )?;
+    if loaded.model_storage_sha256 != loaded.model_snapshot_sha256 {
+        return Err(format!(
+            "{label}: model_storage_sha256 ({}) != model_snapshot_sha256 ({})",
+            loaded.model_storage_sha256, loaded.model_snapshot_sha256
+        ));
+    }
     validate_sha256_str(
         &loaded.typed_model_snapshot_sha256,
         "token_cells.typed_model_snapshot_sha256",
@@ -2917,6 +3054,14 @@ pub fn verify_loaded_token_cells_against_arm(
             "{label}: typed_model_snapshot_sha256 ({}) != eval.model_snapshot_sha256 ({})",
             loaded.typed_model_snapshot_sha256, arm.model_snapshot_sha256
         ));
+    }
+    if let Some(ref arm_storage_sha) = arm.model_storage_sha256 {
+        if loaded.model_storage_sha256 != *arm_storage_sha {
+            return Err(format!(
+                "{label}: model_storage_sha256 ({}) != arm.model_storage_sha256 ({arm_storage_sha})",
+                loaded.model_storage_sha256
+            ));
+        }
     }
     if loaded.config_sha256 != arm.config_sha256 {
         return Err(format!(
@@ -2991,6 +3136,16 @@ pub fn score_same_cell_rows_from_table(
             "candidate_cells: model_snapshot_sha256 ({snap_sha}) != eval ({})",
             arm.model_snapshot_sha256
         ));
+    }
+    if let (Some(tbl_storage), Some(arm_storage)) = (
+        table.model_storage_sha256.as_deref(),
+        arm.model_storage_sha256.as_deref(),
+    ) {
+        if tbl_storage != arm_storage {
+            return Err(format!(
+                "candidate_cells: model_storage_sha256 ({tbl_storage}) != arm ({arm_storage})"
+            ));
+        }
     }
     let bind_sha = table
         .ordered_row_binding_sha256
@@ -3340,6 +3495,7 @@ pub fn build_candidate_cell_table_from_loaded(
         schema: CANDIDATE_CELL_TABLE_SCHEMA.to_string(),
         driver_checkpoint_sha256: ckpt_sha,
         model_snapshot_sha256: Some(loaded.typed_model_snapshot_sha256.clone()),
+        model_storage_sha256: Some(loaded.model_storage_sha256.clone()),
         model_value_sha256: Some(loaded.model_snapshot_sha256.clone()),
         token_cells_sha256: Some(loaded.token_cells_sha256.clone()),
         ordered_row_binding_sha256: Some(ordered_row_binding_sha256),
@@ -3422,6 +3578,7 @@ pub fn score_preflight_dev_values(
             "status": "SCORED_FROM_GPU_TOKEN_CELLS_AND_REGISTERED_CORPUS_TABLES",
             "token_cells_sha256": loaded_tc.token_cells_sha256,
             "token_cells_report_sha256": loaded_tc.report_sha256,
+            "model_storage_sha256": loaded_tc.model_storage_sha256,
             "export_model_value_sha256": loaded_tc.model_snapshot_sha256,
             "eval_typed_model_snapshot_sha256": loaded_tc.typed_model_snapshot_sha256,
             "model_snapshot_sha256": arm.model_snapshot_sha256,
@@ -3489,6 +3646,7 @@ pub fn score_preflight_dev_values(
             "lineage_sha256": arm.lineage_sha256,
             "driver_checkpoint_sha256": arm.driver_checkpoint_sha256,
             "checkpoint_file_sha256": arm.checkpoint_file_sha256,
+            "model_storage_sha256": arm.model_storage_sha256,
             "model_snapshot_sha256": arm.model_snapshot_sha256,
             "ordered_row_binding_sha256": arm.ordered_row_binding_sha256,
             "model_epoch": arm.model_epoch,
@@ -3913,9 +4071,11 @@ pub fn score_paired_dev_values(
         )?;
         block["relation_token_cells_report_sha256"] = json!(rel_tc.report_sha256);
         block["control_token_cells_report_sha256"] = json!(ctrl_tc.report_sha256);
+        block["relation_model_storage_sha256"] = json!(rel_tc.model_storage_sha256);
         block["relation_export_model_value_sha256"] = json!(rel_tc.model_snapshot_sha256);
         block["relation_eval_typed_model_snapshot_sha256"] =
             json!(rel_tc.typed_model_snapshot_sha256);
+        block["control_model_storage_sha256"] = json!(ctrl_tc.model_storage_sha256);
         block["control_export_model_value_sha256"] = json!(ctrl_tc.model_snapshot_sha256);
         block["control_eval_typed_model_snapshot_sha256"] =
             json!(ctrl_tc.typed_model_snapshot_sha256);
@@ -3967,6 +4127,7 @@ pub fn score_paired_dev_values(
                 "lineage_sha256": rel.lineage_sha256,
                 "driver_checkpoint_sha256": rel.driver_checkpoint_sha256,
                 "checkpoint_file_sha256": rel.checkpoint_file_sha256,
+                "model_storage_sha256": rel.model_storage_sha256,
                 "model_snapshot_sha256": rel.model_snapshot_sha256,
                 "model_epoch": rel.model_epoch,
             },
@@ -3978,6 +4139,7 @@ pub fn score_paired_dev_values(
                 "lineage_sha256": ctrl.lineage_sha256,
                 "driver_checkpoint_sha256": ctrl.driver_checkpoint_sha256,
                 "checkpoint_file_sha256": ctrl.checkpoint_file_sha256,
+                "model_storage_sha256": ctrl.model_storage_sha256,
                 "model_snapshot_sha256": ctrl.model_snapshot_sha256,
                 "model_epoch": ctrl.model_epoch,
             },
@@ -4908,6 +5070,7 @@ mod tests {
             schema: CANDIDATE_CELL_TABLE_SCHEMA.to_string(),
             driver_checkpoint_sha256: arm.driver_checkpoint_sha256.clone(),
             model_snapshot_sha256: Some(arm.model_snapshot_sha256.clone()),
+            model_storage_sha256: None,
             model_value_sha256: None,
             ordered_row_binding_sha256: Some(CANONICAL_ORDERED_ROW_BINDING_SHA256.to_string()),
             token_cells_sha256: Some(tc_sha),
@@ -5165,6 +5328,7 @@ mod tests {
         assert_eq!(loaded.occupied_cells, 256);
         assert_eq!(loaded.checkpoint_file_sha256, ckpt_file_sha);
         assert_eq!(loaded.driver_checkpoint_sha256, ckpt_sha);
+        assert_eq!(loaded.model_storage_sha256, value_model_sha);
         assert_eq!(loaded.model_snapshot_sha256, value_model_sha);
         assert_eq!(loaded.typed_model_snapshot_sha256, typed_snap_sha);
 
@@ -5174,7 +5338,7 @@ mod tests {
             &rel_cap,
             sha256_hex(b"rc_sha"),
             &rel_eval,
-            rel_eval_sha,
+            rel_eval_sha.clone(),
             &d34,
             sha256_hex(b"d34_sha"),
             false,
@@ -5183,6 +5347,101 @@ mod tests {
         let mut matches_gpu_arm = loaded.clone();
         matches_gpu_arm.token_cells[7] = 0;
         verify_loaded_token_cells_against_arm(&arm, &matches_gpu_arm, "test").unwrap();
+
+        // Post-#2611 (dfa3f4830) dual-record format:
+        // report.json, eval, and capture emit model_storage_sha256 = Domain A (value_model_sha)
+        // and model_snapshot_sha256 = Domain B (typed_snap_sha), with A != B.
+        let mut dual_report = report_val.clone();
+        dual_report["model_storage_sha256"] = json!(value_model_sha);
+        dual_report["model_snapshot_sha256"] = json!(typed_snap_sha);
+        fs::write(&report_path, serde_json::to_vec(&dual_report).unwrap()).unwrap();
+        let dual_loaded = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &typed_snap_sha).unwrap();
+        assert_eq!(dual_loaded.model_storage_sha256, value_model_sha);
+        assert_eq!(dual_loaded.model_snapshot_sha256, value_model_sha);
+        assert_eq!(dual_loaded.typed_model_snapshot_sha256, typed_snap_sha);
+
+        let mut dual_eval = rel_eval.clone();
+        dual_eval["model_storage_sha256"] = json!(value_model_sha);
+        dual_eval["model_snapshot_sha256"] = json!(typed_snap_sha);
+        let dual_eval_sha = sha256_hex(&serde_json::to_vec(&dual_eval).unwrap());
+        let mut dual_cap = rel_cap.clone();
+        dual_cap["model_storage_sha256"] = json!(value_model_sha);
+        dual_cap["model_snapshot_sha256"] = json!(typed_snap_sha);
+        dual_cap["evaluation_file"]["sha256"] = json!(dual_eval_sha);
+        let dual_arm = validate_arm_inputs(
+            &panel,
+            sha256_hex(b"p_sha"),
+            &dual_cap,
+            sha256_hex(b"rc_sha"),
+            &dual_eval,
+            dual_eval_sha.clone(),
+            &d34,
+            sha256_hex(b"d34_sha"),
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            dual_arm.model_storage_sha256.as_deref(),
+            Some(value_model_sha.as_str())
+        );
+        assert_eq!(dual_arm.model_snapshot_sha256, typed_snap_sha);
+        let mut dual_matches_gpu_arm = dual_loaded.clone();
+        dual_matches_gpu_arm.token_cells[7] = 0;
+        verify_loaded_token_cells_against_arm(&dual_arm, &dual_matches_gpu_arm, "test_dual")
+            .unwrap();
+
+        // Dual-record report.json that leaves Domain A in model_snapshot_sha256 when model_storage_sha256 is present must be refused.
+        let mut bad_dual_report_a = dual_report.clone();
+        bad_dual_report_a["model_snapshot_sha256"] = json!(value_model_sha);
+        fs::write(
+            &report_path,
+            serde_json::to_vec(&bad_dual_report_a).unwrap(),
+        )
+        .unwrap();
+        let bad_dual_a_err =
+            load_gpu_token_cells_file(&u16_path, &ckpt_sha, &typed_snap_sha).unwrap_err();
+        assert!(
+            bad_dual_a_err.contains("typed model snapshot sha256"),
+            "{bad_dual_a_err}"
+        );
+
+        // Dual-record report.json that puts Domain B in model_storage_sha256 must be refused.
+        let mut bad_dual_report_b = dual_report.clone();
+        bad_dual_report_b["model_storage_sha256"] = json!(typed_snap_sha);
+        fs::write(
+            &report_path,
+            serde_json::to_vec(&bad_dual_report_b).unwrap(),
+        )
+        .unwrap();
+        let bad_dual_b_err =
+            load_gpu_token_cells_file(&u16_path, &ckpt_sha, &typed_snap_sha).unwrap_err();
+        assert!(
+            bad_dual_b_err.contains("model storage/value sha256"),
+            "{bad_dual_b_err}"
+        );
+
+        // Mismatched capture.model_storage_sha256 vs eval.model_storage_sha256 must be refused.
+        let mut bad_dual_cap = dual_cap.clone();
+        bad_dual_cap["model_storage_sha256"] = json!(typed_snap_sha);
+        let bad_cap_storage_err = validate_arm_inputs(
+            &panel,
+            sha256_hex(b"p_sha"),
+            &bad_dual_cap,
+            sha256_hex(b"rc_sha"),
+            &dual_eval,
+            dual_eval_sha,
+            &d34,
+            sha256_hex(b"d34_sha"),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            bad_cap_storage_err.contains("eval.model_storage_sha256"),
+            "{bad_cap_storage_err}"
+        );
+
+        // Restore valid report_val for remaining checks.
+        fs::write(&report_path, serde_json::to_vec(&report_val).unwrap()).unwrap();
 
         // Tampering with eval.model_snapshot_sha256 (wrong typed snapshot hash) must be refused by load_gpu_token_cells_file.
         let wrong_typed_err =
