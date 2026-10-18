@@ -1,3 +1,11 @@
+## 2026-10-18  Pod store read-back before down (deepseek)
+
+`uor-pod down --to-store` now reads every Vast result upload back before it may destroy the pod:
+file count plus a SHA-256 manifest sidecar must match, otherwise down aborts with the pod retained.
+Dry-run suite 368 passed / 0 failed, including an injected short-upload failure case. Host-only,
+no pods or model compute. Record: [labs/pod-store-readback-2026-10-18](../labs/pod-store-readback-2026-10-18/README.md).
+PR: (added after creation).
+
 ## 2026-10-18  PM coordination hygiene: stale DeepSeek claims removed (deepseek)
 
 While Kimi is rate-limited, DeepSeek is covering PM coordination. This removes 25 stale committed

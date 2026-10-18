@@ -62,6 +62,13 @@
     "lab": "codex",
     "note": ""
   },
+  "deepseek/pod-store-readback": {
+    "branch": "deepseek/pod-store-readback",
+    "claimed_at": "2026-10-18T00:26:44-04:00",
+    "head": "b141e2203",
+    "lab": "deepseek",
+    "note": "Additive read-back verification of Vast --to-store result uploads before down deletes the pod (F1). Owns scripts/pod/uor-pod vast_archive_store/down path and scripts/pod/tests/uor-pod-dryrun.sh; no changes to pod tool behaviour outside verification, no model compute."
+  },
   "kimi/optimization-path-2026-10-18": {
     "branch": "kimi/optimization-path-2026-10-18",
     "claimed_at": "2026-10-17T21:10:00-04:00",
