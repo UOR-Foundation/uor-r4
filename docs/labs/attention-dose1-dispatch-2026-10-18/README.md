@@ -4,16 +4,19 @@
 
 Record the actual Project Manager dispatch of the seed-1 paired
 `LearnV1`/`FrozenZeroV1` attention dose: its receipts, the packet and source it
-binds, the later runtime allocation, release build, AGY review, finalization
-and check-plan sequence, and what it explicitly does not release. Decision:
-**DISPATCHED; ALLOCATION CONFIRMED; RELEASE METADATA BUILT; BOTH-ARM REVIEW
-AND CHECK-PLAN PASS; OWNER RELEASE AND MODEL NOT_RUN**.
+binds, the runtime allocation, release build, AGY review, finalization,
+check-plan and launch sequence, the owner-stopped partial run, the verified
+custody, and the separate `rows_v1` successor. Decision:
+**DISPATCHED; EXECUTION STARTED AND OWNER-STOPPED AFTER A PARTIAL RUN; CUSTODY
+VERIFIED; DOSE NOT_COMPLETED; SUCCESSOR RELEASED SEPARATELY**.
 
-This is not a model result: no training, evaluation, scoring or runtime CUDA
-qualification is claimed, and the dose remains **NOT_RUN**. No pod, SSH,
-build or model compute was started for this record; `$0` and no GPU work. The
-allocation and build facts below are read from the operator's receipts at
-their exact hashes, not re-executed here.
+This is not a model result: no completed dose, scientific verdict, capability
+claim or progress-count reset follows. The original attempt ran 904 treatment /
+1,065 frozen-zero batches, never reached Q1, and was stopped by owner decision;
+final device maps, the 224 capture and fresh transfer are **NOT_RUN**. No pod,
+SSH, build or model compute was started for this record; `$0` and no GPU work.
+The facts below are read from the operator's and public receipts at their exact
+hashes, not re-executed here.
 
 ## Exact authorities
 
@@ -36,6 +39,12 @@ their exact hashes, not re-executed here.
 | Release build receipt | `runtime-build.json` SHA256 `eae570b4c6c10504e72fbb89fdd7ed0f13c8906a1b5cc15688257251abe053b7`, `RELEASE_BUILT_METADATA_VERIFIED`, `build_exit` 0 |
 | Runtime binary binding | `controller/runtime-binary-binding.json` SHA256 `2921dce26c686e7b48cda535b22b25929d7318bb1dfc5664f38fb0538fbafe60` |
 | Per-arm plan candidates | treatment `64869df7d5fde9eaf23162e3046e1fc5cbd9aaaff4d7533cd4274c2d7510113f`; frozen-zero `b52933ecf2f0291877d85b568bb1d6961e6d6d405c0c413eadbe9bc53a64ec7a` (`uor-r4.attention-learning-owner-plan/2`) |
+| Launch delegation | [#2029 `6245307092`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245307092), 2026-10-18T03:43:30Z |
+| Start receipt | [#2029 `6245367341`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245367341), 03:51:32Z; GPU0 03:48:36Z, GPU1 03:48:38Z |
+| Owner stop decision | [#2029 `6245711750`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245711750), 04:36:29Z — “Stop it; rerun on the fast path” |
+| Independent stop/custody audit | [#2029 `6246074493`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246074493), 05:24:39Z; top manifest `6b5c4f29587789adb38e63c9517a0246c70f74642d88d0dc21da0a74f9e3a9e5` |
+| Local closure record | `authority-ac60c495/STRATEGIC-STOP-CLOSURE.json` SHA256 `c5ca0f6aff2467333e3e40682f054f2de55f82fb0a5850055aed5a05ba98274e` |
+| Separate `rows_v1` successor | [#2029 `6246440910`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246440910), 06:13:00Z; packet `01833fa7…`, source `20d158ae…` |
 
 `dispatch.json` is the operator's private local packet file
 (`codex-attention-dose1-operator/dispatch.json`); it is not committed here.
@@ -90,6 +99,19 @@ Read-only checks run on 18 October for this record:
   `compiled_identity_checked` `true`, `cuda_context_created` `false`,
   `fresh_content_read` `false`, `owner_release` `STILL_REQUIRED`, `training`
   `HELD`; their `plan_sha256` values equal the final typed plans.
+- Launch/stop receipts verified with `gh`: delegation `6245307092`, start
+  `6245367341` (GPU0 03:48:36Z, GPU1 03:48:38Z), owner stop `6245711750`;
+  independent outcome/custody audit `6246074493`.
+- `STRATEGIC-STOP-CLOSURE.json` → SHA256 `c5ca0f6a…8274e`, recording 904
+  treatment / 1,065 frozen-zero batches, raw exit 143 on both, native ends
+  `04:58:38Z`/`04:58:40Z`, `Q1 NOT_REACHED_BOTH`, `scientific_verdict
+  NOT_ISSUED`, final maps/capture/fresh `NOT_RUN`, the custody MD5s and down
+  `05:16:47Z`. `strategic-custody-source-terminals.json` independently records
+  the same counts, classification and `NOT_RUN` final phases.
+- Successor identity only: owner release `6246440910`, packet
+  `codex-attention-dose2-rows-operator` `01833fa7…`, source `20d158ae…`, pod
+  `vast-56510253` UP `06:24:07Z` (`6246536845`); its outcome is not read or
+  claimed here.
 
 The PM activation reply records that `lifecycle/dose-common.sh::dose_authority`
 and the dependency pins also pass. That function writes
@@ -110,13 +132,13 @@ did not mutate the packet.
   standing caps (`≤4` pods, `≤$8/h`) and the reviewed reserves plus the 30 GiB
   host floor. The receipt states that the local pod status seen at dispatch
   time was not fleet proof.
-- These gates still precede model work, in order: the same-dispatch release
+- These gates still preceded model work, in order: the same-dispatch release
   build; two no-context build identities; actual per-arm `/2` plans with
-  genuine non-Codex admission-diff reviews; `attention-check-plan`; then
-  Casey's two personal live-TTY owner releases. The build, identities, both-arm
-  AGY approval and both check-plan entries are recorded below; the personal TTY
-  and owner-release gates remain pending. PM does not create those records or
-  invoke owner-release.
+  genuine non-Codex admission-diff reviews; `attention-check-plan`; then the
+  owner release. The build, identities, both-arm AGY approval and both
+  check-plan entries are recorded below. The owner then delegated the launch
+  (`6245307092`), superseding the personal-typing requirement for this initial
+  dose only; execution started and was later owner-stopped (below).
 
 ## What is not released
 
@@ -124,9 +146,9 @@ did not mutate the packet.
   separate actual PM grant after external full-context review; there is no
   automatic `CREATE` and no replay.
 - No second seed, no optimization rung and no fresh-panel scoring. The
-  pre-registered tokens/s rung stays gated on the dose outcome.
-- No model work of any kind before the gates above. Every failure is a blocker
-  for review, not a mechanism negative.
+  pre-registered tokens/s rung stays gated on a completed dose outcome.
+- No replay of this attempt. The partial run is not a source failure, mechanism
+  negative, Q1 diagnosis or KEEP, and it does not reset any count.
 
 ## Fresh V2 sealed input metadata
 
@@ -196,17 +218,19 @@ metadata; no model/runtime CUDA qualification".
 
 `controller/runtime-binary-binding.json` (SHA256
 `2921dce26c686e7b48cda535b22b25929d7318bb1dfc5664f38fb0538fbafe60`) repeats
-the ELF/source/kernel/geometry/config/lineage identities and records
-`cuda_runtime_resource_admission: NOT_RUN`,
+the ELF/source/kernel/geometry/config/lineage identities. At bind time
+(03:12Z, before launch) it records `cuda_runtime_resource_admission: NOT_RUN`,
 `live_resource_admission: NOT_PERFORMED_BY_HOST_BINDER`,
 `model_computation: false` and
 `typed_config_owner_admission: EXISTING_PROTECTED_SOURCE_REQUIRED`, with
-`authority_issued: false`.
+`authority_issued: false`; the owner delegation and actual launch that followed
+are recorded below.
 
 **Distinction:** the RELEASE construction and its metadata identities are
 built and verified. That is not runtime CUDA resource admission, not an owner
-release, and not training. No CUDA context was created and no model command
-ran.
+release, and not training. During the build and check-plan, no CUDA context was
+created and no model command ran; execution began only after the owner's launch
+delegation.
 
 ### Per-arm plans — AGY approved, finalized and checked
 
@@ -235,10 +259,76 @@ and frozen-zero
 `attention-check-plan` entries returned `PLAN_METADATA_VALID` for both, with
 `compiled_identity_checked` true, `cuda_context_created` false,
 `fresh_content_read` false, `owner_release` `STILL_REQUIRED` and `training`
-`HELD`. The personal TTY card is ready at
-`final/PERSONAL-TERMINAL-CARD.txt`; model, init and owner-release remain
-**NOT_RUN** ([handoff `6245235242`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245235242),
-2026-10-18T03:34:07Z).
+`HELD`. The personal TTY card was ready at `final/PERSONAL-TERMINAL-CARD.txt`; at that
+03:34Z gate, model, init and owner-release had not run
+([handoff `6245235242`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245235242),
+2026-10-18T03:34:07Z). The owner then delegated the launch and execution began.
+
+### Execution, owner stop and verified custody
+
+The owner delegated the launch for these exact two plans in
+[#2029 `6245307092`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245307092)
+(2026-10-18T03:43:30Z): Codex was allowed to run the pod without another
+personal kickoff approval, the personal-typing requirement was superseded for
+this initial dose only, and operator attribution was recorded. The start receipt
+[`6245367341`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245367341)
+(03:51:32Z) records treatment on GPU0 at 03:48:36Z and frozen-zero on GPU1 at
+03:48:38Z, both attempt-0001 and `LIVE_RETAIN`.
+
+The owner then chose **“Stop it; rerun on the fast path”**
+([`6245711750`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245711750),
+04:36:29Z). After the reviewed driver delivery
+([`6245768780`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245768780),
+04:44:10Z) the run was stopped; the stop helper is separately reviewed at
+[`6245906700`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245906700)
+(05:02:40Z). Actual partial execution: contiguous **904 treatment / 1,065
+frozen-zero batches**, both below the Q1 gate of 4,096. The native log tails end
+at `04:58:38Z` / `04:58:40Z` with raw outcome `COMMAND_FAILED_TERMINAL` / exit
+`143` on both arms, independently attributed as **OWNER_STOPPED_STRATEGIC** —
+not a source failure, mechanism negative, Q1 diagnosis or KEEP.
+
+Consequences, exactly: **Q1 NOT_REACHED_BOTH; dose NOT_COMPLETED; final device
+maps, the 224 capture and fresh transfer NOT_RUN; scientific verdict
+NOT_ISSUED**. No capability result, completed-dose claim, negative-count reset
+or optimization release follows. The original dispatch is **consumed**.
+
+Custody was independently accepted in
+[`6246074493`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246074493)
+(05:24:39Z): immutable top manifest
+`6b5c4f29587789adb38e63c9517a0246c70f74642d88d0dc21da0a74f9e3a9e5`;
+selected same-compressed-reader verification of **198 regular members /
+237,872,396 uncompressed bytes**, gzip `24,808,873` / SHA
+`05126b3b555ff72d247e895e6d651eb9a69ce41c4db004e1e060e71d20c22014`; cloud data
+`25,345,536` / MD5 `ec029a201130ab41b3cd89b3cc6355de` (05:05:53Z) and late
+operator `143,634,944` / MD5 `a75a23a70ab438e46f399a96df39ad8e` (05:11:25Z),
+both verified before teardown; fresh quiescence at 05:16:41Z with zero
+owned/unknown live processes and GPU applications; native **down at 05:16:47Z**,
+fresh configured fleet `[]` and own lease absent; separate after-down closure
+`4,026,880` / MD5 `fb4a4a264408c44ae61fbad5559a7e05` with manifest
+`ff2ddfce4e91f6e1d106a9467b6f17d1be8b19545fbb515612a7d2d20fc9930a`, read back
+at 05:23:37Z. The local closure record `STRATEGIC-STOP-CLOSURE.json` (SHA256
+`c5ca0f6aff2467333e3e40682f054f2de55f82fb0a5850055aed5a05ba98274e`) matches the
+counts, exits, times, custody MD5s and down.
+
+Cost remains a proxy, never an invoice: `8,009 s × $1.894/h = $4.213623889`;
+the prior mixed `$4.804471110` gives mixed `$9.018094999` plus separate PM;
+storage/transfer **UNMEASURED**.
+
+### Current successor — `rows_v1` (separate identity)
+
+The owner released a **separate** fast-path successor in
+[`6246440910`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246440910)
+(06:13:00Z): packet `codex-attention-dose2-rows-operator` with 1,376-member
+`REVIEW-SHA256SUMS`
+`01833fa7bc540c5e15e02e0156521a1455502a6261cd5747c153519b7dbb7415`, protected
+source `20d158ae31052ef4e62896fadcab23ae341deced`, both arms
+`counterfactual_path: rows_v1` with configs `52b32dc8…` / `6a035717…`, and a new
+pod `vast-56510253` (native UP 06:24:07Z, attempt
+`uor-cf1-dose2-rows-322faf70e6b3479087c890897274da24`,
+[`6246536845`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246536845)).
+The same sheet, seed, arms and gates carry forward; the source, packet, binary
+and pod do not. This record does not conflate that identity, inherit this
+attempt's state, or claim its outcome.
 
 ### Preserved launch state
 
@@ -257,21 +347,17 @@ file's provider instance key stays private and is not copied into this record.
 
 ## Decision and next action
 
-`DISPATCH_VALID` stands. As of 2026-10-18T03:34:07Z the correct PM state is
+`DISPATCH_VALID` stands and is now **consumed**. Final state:
 **dispatched; allocation confirmed at `vast-56488188`; RELEASE build metadata
-verified; AGY approved both arms; finalize and both check-plan entries PASS;
-personal TTY card ready; owner release STILL_REQUIRED; model work NOT_RUN**.
+verified; both-arm AGY approval and both check-plan entries PASS; execution
+started 03:48:36Z/03:48:38Z; owner-stopped at 904/1,065 batches; custody
+verified and pod down 05:16:47Z; Q1 NOT_REACHED_BOTH; dose NOT_COMPLETED; final
+maps/capture/fresh NOT_RUN; scientific verdict NOT_ISSUED**.
 
-The next decision inputs are Casey's two genuine personal live-TTY
-command/phrase records, then the unchanged `admission.sh collect` and wait. No
-agent may create those records. Until they exist, no model command, training
-step or dose result may be claimed, and the metadata-verified build is not
-runtime qualification. Any failure returns to PM review as a blocker, not a
-mechanism negative.
-
-Fresh V2 content remains sealed pending typed `DEV H_geom` plus a PM decision.
-No headline, milestone, progress count, training hold or mechanism status
-changes in this record.
+No scientific result, completed dose, mechanism negative or progress-count
+reset follows. The current successor is the separate `rows_v1` dispatch released
+in `6246440910`; its outcome is not claimed here. Fresh V2 remains sealed pending
+typed `DEV H_geom` plus a PM decision.
 
 ## Provenance
 
@@ -280,7 +366,9 @@ Base `35c4c40380ad25b2ba4cde0239b93110b26768db`; branch
 `.worktrees/kimi-dose1-dispatch-record`; lab `kimi`; branch claim recorded in
 `docs/harness/claims.json`. Record authored and revised 18 October 2026,
 host-only. The first revision added the runtime allocation, release-build and
-binary-binding receipts and the driver composite provenance; this revision
-corrects the build interval to start 03:11:34Z / exit 0 at 03:12:39Z, adds
-AGY's two-arm approval, finalization and both check-plan results, and records
-the current quote.
+binary-binding receipts and the driver composite provenance; the second
+corrected the build interval to start 03:11:34Z / exit 0 at 03:12:39Z, added
+AGY's two-arm approval, finalization and both check-plan results, and recorded
+the quote; this revision adds the owner launch delegation, start receipt,
+strategic stop, partial-run counts, verified custody/closure and the separate
+`rows_v1` successor.

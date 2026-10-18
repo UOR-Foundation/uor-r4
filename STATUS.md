@@ -21,12 +21,12 @@ remains construction-only. The [Dose 1 packet](docs/labs/attention-dose1-packet-
 is source/metadata frozen with actual disjoint FreshV2 metadata and posted
 internal independent reviews; AGY's confined verdict and Kimi's actual dispatch
 are recorded in the [dispatch record](docs/labs/attention-dose1-dispatch-2026-10-18/README.md).
-That dispatch now has a confirmed allocation at `vast-56488188`, a
-metadata-verified RELEASE build (shared `8,099,440`-byte ELF `1f7dd526…`), AGY's
-two-arm admission approval and both `attention-check-plan` entries PASS; the
-personal TTY card is ready, while owner release, runtime CUDA admission and model
-work remain NOT_RUN.
-No learned dose or fresh transfer has run. Training/M2/StageB remain HELD;
+That dispatch then ran: under the owner's launch delegation both arms started at
+03:48:36Z/03:48:38Z and were owner-stopped after 904/1,065 contiguous batches,
+below Q1; attribution is OWNER_STOPPED_STRATEGIC, not a source or mechanism
+negative. Custody is verified and the pod is down; the original attempt is
+consumed and the separate `rows_v1` successor is released. No completed dose,
+learned result or fresh transfer exists. Training/M2/StageB remain HELD;
 Q4 NOT_EXECUTABLE. The earlier pilot below retains its measured scope.
 
 **Current result — D32/D33, 14 October:** the admitted seed-1 discrete pilot

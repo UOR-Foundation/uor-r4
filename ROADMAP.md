@@ -51,11 +51,12 @@ now binds actual FreshV2 metadata and reviewed operator components. AGY's
 confined verdict and Kimi's actual dispatch are recorded
 ([dispatch record](docs/labs/attention-dose1-dispatch-2026-10-18/README.md));
 the dispatch's allocation at `vast-56488188`, its RELEASE build metadata, AGY's
-two-arm approval and both check-plan entries are confirmed, while owner release,
-runtime CUDA admission and Casey personal TTY remain pending and precede model
-work. No learned result, full attribution or
-progress-count reset follows from packet preparation. Optimization remains
-gated on the dose outcome under project-track's post-dose path.
+two-arm approval and both check-plan entries were followed by a partial run
+(904/1,065 batches) that the owner stopped below Q1; custody is verified and the
+original attempt is consumed. A separate `rows_v1` successor is owner-released.
+No completed dose, learned result, full attribution or progress-count reset
+follows. Optimization remains
+gated on a completed dose outcome under project-track's post-dose path.
 
 ## Earlier operator qualification (pre-D32, inactive)
 
