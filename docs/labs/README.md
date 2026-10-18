@@ -1,30 +1,10 @@
 # Joining the UOR-R4 research labs
 
-> **Current learned-attention handoff (18 October):** the original paired Dose1
-> was [strategically stopped and preserved](attention-dose1-strategic-stop-2026-10-18/README.md)
-> at904/1065 batches before Q1 under the owner's instruction; actual custody,
-> down and separate closure are independently accepted. No scientific verdict
-> or count reset follows. Source20d's rows successor is a source/metadata packet
-> awaiting whole review and new applicable owner release, NOT_READY/NOT_RELEASED/NOT_RUN.
-
-> **Current start (12 October):** Kimi is project manager under [D25](../integration/DECISIONS.md#d25---geometric-operator-phase-and-current-lab-direction). Read the current [session prompts](session-goal.md) and [operator plan](operator-phase-2026-10-12/README.md). No softmax/softplus/sigmoid/tanh, dense matrix multiplication or CPU model execution. **Training remains held; M2 training/rental remains held separately.** Source work only until the complete path, prospective FIT and applicable owner release are in place. The older client packets below are historical context wherever they conflict; they cannot start an old campaign.
-> **Current roster (13 October 2026).** Who is on which line right now:
+> **Current M1 handoff (18 October):** the original paired Dose1 was [strategically stopped and preserved](attention-dose1-strategic-stop-2026-10-18/README.md) at 904 treatment / 1,065 control batches before Q1. The exact rows successor now has [Claude's whole-packet approval](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246433669) and a [scoped owner dispatch release](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246440910). Those comments establish authorization, not a completed successor outcome. See [STATUS](../../STATUS.md) and the live issue for results.
 >
-> - **Kimi** — project manager (session `kimi/pm1`, owner-appointed 12 October 2026, D25 and
->   [#2029 comment 6133330776](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6133330776)):
->   the objective layer, recurrence gates/rate-select CUDA and the rung-0 sheet.
-> - **Codex** — native dependency/vendor isolation and CI/Rust ratchets (`uor-harness ratchet d23|d25`), M2 grounded reply,
->   and OP2/OP3a plus the shared native vector writer, under the
->   [ratified split](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6138381873).
->   [Head/vector-channel finite CUDA controls pass](geometric-head-shared-writer-2026-10-13/README.md);
->   earlier head/writer delivery remains source-scoped evidence. The corrected native-only compiled boundary at `1f1547bfd` passes CUDA compilation and all 31 exact finite controls on RTX4090; protected delivery is pending. Earlier blockers remain preserved; no optimizer update/corpus/training/CPU model ran. Training holds remain; see the [D29 record](d29-vendor-boundary-2026-10-13/README.md).
-> - **Claude** — the starling/murmuration read and the pod migration.
-> - **DeepSeek** — the invariant-addressed router and memory, and the research harness.
+> [D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised) permits offline floating point, retaining matmul/GEMM and softmax/squashing bans, GPU-only model compute and separately qualified D11 export. Other training, M2 and Stage B holds remain.
 >
-> **Codex is also Sol** (alias, same seat); **Antigravity** is the fifth lab, currently offline.
->
-> The assignments are work claims, not ownership of a mechanism; any lab may join, leave and return under
-> the shared protocol, and the owner retains strategic authority.
+> Work claims and reviewer availability are renewable and belong in the live harness/issue. Start with the [session contract](session-goal.md), [protocol](protocol.md), [current architecture](../architecture.md) and [discrete crate](../../crates/uor-r4-discrete/README.md); the dated packets below preserve historical scope.
 
 > **Current owner direction, October 1 — D19:** grounded conversation and durable
 > memory lead the active canonical plan. Codex rejoins Claude and OpenCode–DeepSeek

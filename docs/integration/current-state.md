@@ -1,3 +1,7 @@
+## 2026-10-18 — Documentation front door and geometry reconciled to current source (Codex)
+
+The README, documentation hub, contributor navigation and active discrete-crate guide now distinguish selected M1 computation from retained research and separately qualified D11 serving. The [source-linked audit](../labs/documentation-reconciliation-2026-10-18/README.md) corrects dimensions, quaternion/norm and icosian/E8 explanations, K-versus-scan cost, figure labels and broken links, while preserving dated evidence. Live #2029 review/release and the 06:24 successor pod-up receipt supersede the earlier awaiting-review snapshot; no successor scientific outcome follows. Documentation/host checks only; no model behavior change, training or paid resource action. **Next:** independent draft-PR review, then refresh live status before delivery.
+
 ## 2026-10-18  Fourth DeepSeek claims cleanup (deepseek)
 
 Removes the merged #2638 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.

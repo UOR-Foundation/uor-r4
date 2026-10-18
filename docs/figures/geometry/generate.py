@@ -14,7 +14,7 @@ PHIB = (1 - sqrt(5)) / 2
 INK, MUTED, FAINT, GRID = "#1f2933", "#5f6b7a", "#d3dae2", "#8a97a6"
 BLUE, SKY, GREEN, ORANGE, VERM, PINK, PURPLE = "#0072B2", "#56B4E9", "#009E73", "#E69F00", "#D55E00", "#CC79A7", "#7A4FA3"
 TEN = [ORANGE, SKY, GREEN, BLUE, VERM, PINK, PURPLE, "#8C8C1A", "#1B9AAA", "#8B5A2B"]
-FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'DejaVu Sans', sans-serif"
 
 
 def f(x):
@@ -161,11 +161,11 @@ def axis_quat(n, theta): return (cos(theta / 2),) + scl(n, sin(theta / 2))
 
 # ================================================================ FIG 1
 def fig_quaternion():
-    fg = Fig("quaternion-rotation.svg", "A unit quaternion is a 3-D rotation",
+    fg = Fig("quaternion-rotation.svg", "Quaternion conjugation rotates 3-D vectors",
              "A sphere wireframe with a rotation axis, a vector v, its image q v q* and the arc it sweeps. A side panel shows that a unit quaternion is a point on the 4-D unit sphere S3 because its four squared components sum to one.",
              ["q = cos(θ/2) + sin(θ/2)(xi + yj + zk) turns every 3-D vector by θ about the axis (x, y, z): v ↦ q v q*.",
-              "All unit quaternions together form the 4-D unit sphere S³; q and −q describe the same rotation.",
-              "Stack recurrence: h_t = λ_t (u_t · h_{t−1}) + √(1−λ_t²) a_t, with u_t a learned unit quaternion each step."])
+              "All unit quaternions together form the 4-D unit sphere S³; q and −q describe the same 3D conjugation.",
+              "Pure transport stays on S³. Additive stack recurrence generally leaves it unless explicitly normalized."])
     n = unit((0.35, 0.2, 0.91)); theta = math.radians(110)
     q = axis_quat(n, theta)
     v = unit((1.0, 0.12, -0.05)); v2 = qrot(q, v)
@@ -217,7 +217,7 @@ def fig_quaternion():
         wd = tot * val * val; fg.rect(x0, 328, wd, 30, col, "#fff", 1.5); x0 += wd
     sq = sum(c_[1] ** 2 for c_ in comps); assert abs(sq - 1) < 1e-12
     fg.text(px + 20, 388, f"w² + x² + y² + z² = {sq:.3f}", 15, INK, weight="bold")
-    for i, l in enumerate(["The axis is the vector part (x, y, z);", "the angle comes from w = cos(θ/2).", "", "Every point of S³ is one rotation of", "3-D space, and −q gives the same one,", "so S³ covers the rotations twice."]):
+    for i, l in enumerate(["The axis is the vector part (x, y, z);", "the angle comes from w = cos(θ/2).", "", "Conjugation q v q⁻¹ acts on R³;", "q and −q give the same rotation.", "Left action q h acts on R⁴ instead."]):
         fg.text(px + 20, 430 + 24 * i, l, 14.5, INK)
     fg.save()
 
@@ -246,7 +246,7 @@ def fig_s3():
              "Great circles of the 4-D unit sphere S3 drawn by stereographic projection to 3-D, where they appear as circles and straight lines, and a path of states h0, h1, h2 and so on produced by multiplying repeatedly by one fixed quaternion, which traces a geodesic.",
              ["Stereographic projection flattens S³ into 3-D (identity at the centre, −1 at infinity): great circles become circles or lines.",
               "Multiplying by one fixed quaternion q again and again moves h₀ → h₁ → h₂ → … by equal arcs along one great circle.",
-              "Stack recurrence: h_t = λ_t (u_t · h_{t−1}) + √(1−λ_t²) a_t, with u_t a learned unit quaternion each step."])
+              "Pure transport stays on S³. Additive stack recurrence generally leaves it unless explicitly normalized."])
     CL = 1.9
     alpha = math.radians(30)
     h0 = unit((0.15, 0.6, -0.5, 0.6))
@@ -322,7 +322,7 @@ def fig_hopf():
     fg = Fig("hopf-fibration.svg", "The Hopf map: a circle behind every point",
              "Left: the 2-sphere with ten colour-coded marked points. Right: the ten corresponding Hopf fibres, which are linked circles in the 3-sphere, drawn by stereographic projection to 3-D in the same colours. Faint circles show the nested tori the fibres sit on.",
              ["Each point on S² is a whole circle in S³; observing only S² loses the position along the circle (the fiber).",
-              "The model keeps the fiber separately. Any two fibres are linked circles; one latitude of S² gives a torus of fibres."])
+              "Fixed geometry can keep the fibre separately; current M1 does not. A latitude of S² gives a torus of fibres."])
     rings = [(100, [-80 + 40 * i for i in range(5)]), (140, [-80 + 40 * i for i in range(5)])]
     pts = [(b, a) for b, al in rings for a in al]
     def fibre(beta, alp, N=160):
@@ -489,7 +489,7 @@ def fig_600cell():
 def fig_golden():
     fg = Fig("golden-integers.svg", "Exact golden integers Z[φ]",
              "Top: the numbers a plus b phi for small integers a and b placed on the real line, one row per value of b, with their union below. Bottom: the Galois-conjugate embedding that sends the pair a, b to the point a plus b phi and a plus b phi-bar in the plane, a lattice, with the points in a horizontal band projecting to an aperiodic exact chain on the line.",
-             ["Icosian coordinates are exact numbers a + bφ (integers a, b); chirality and polarity are exact signs of these coordinates.",
+             ["Unit icosian coordinates are (a + bφ)/2 (integers a, b); scaled pairs retain the one-half factor.",
               "Rows b = −3…3 are integers shifted by bφ; below, each a + bφ is paired with its conjugate a + bφ̄ (φ̄ = 1 − φ)."])
     x0, x1, lo, hi = 90, 950, -6.0, 9.0
     X = lambda t: x0 + (t - lo) / (hi - lo) * (x1 - x0)
@@ -690,7 +690,7 @@ def fig_next_token():
     fg = Fig("next-token.svg", "How the next token is predicted",
              "Left-to-right pipeline of the geometric stack: a token id selects an embedding row; sixteen layers in the pattern rrarrarrarrarrar alternate quaternion-rotation recurrence (r) with reads over earlier positions (a); a final norm gives logits over the 4,096 tokens, a softmax in the float form, and an optional copy head routed by prime products mixes in a copy distribution to give the next-token probabilities. A band notes that the served form uses integer table reads and a greedy argmax over integer scores.",
              ["Geometry: state carried by quaternion rotation, the past read by a Lorentz score, copying routed by primes. Float form shown.",
-              "Example numbers are illustrative. Served form: D11 integer table reads for steps 2-6, greedy argmax, no vocabulary softmax."])
+              "Historical pre-D23 float form: prohibited softmax/copy/MLP paths. Example numbers are illustrative."])
     SOFT = "#f6f9fc"
 
     def badge(x, y, n, col=INK):
@@ -929,7 +929,7 @@ def fig_connections():
     fg = Fig("connections.svg", "How the geometric pieces connect",
              "A map of how the project's geometric structures are derived from one another: six primes give 15 semiprimes and the complete graph K6, which matches the 15 two-fold axes of the icosahedron. Cl(0,6) bivectors, octonions and quaternions lead to the 120 icosians of 2I, which carry Z[phi] coordinates, the E8 roots, the Hopf map and the VSA bit codes. Edge colours mark verified mathematics, parts used in a model, pre-registered tests and a labelling choice.",
              ["Each arrow reads as derived from or realised in. The map shows structure, not a measured advantage for the model.",
-              "Blue: verified mathematics. Green: used in a model. Dashed: pre-registered, not yet run. Dotted: a labelling choice."])
+              "Blue: mathematical connections (finite/sampled checks). Other colours: historical use, proposed tests and labels."])
     VER, USED, PRE, LAB = BLUE, GREEN, ORANGE, PURPLE
     N = {}
 
@@ -975,7 +975,7 @@ def fig_connections():
     node("zp", 150, R5, 150, ["Exact Z[φ]"])
     node("hp", 360, R5, 200, ["Hopf S²", "2I → 30 points, fibres of 4"])
     node("vs", 600, R5, 180, ["VSA bit codes", "via token → icosian"])
-    node("e8", 840, R5, 200, ["E8", "240 roots = 2I ∪ φ·2I"])
+    node("e8", 840, R5, 200, ["E8 (reduced metric)", "240 roots: 2I ∪ φ·2I"])
 
     # prime chain
     edge([P("pr", "b"), P("sp", "t")], VER); lab(176, 152, ["pairs"], "start", False)
@@ -1012,10 +1012,12 @@ def fig_connections():
     # legend
     fg.rect(40, 566, 920, 40, "#f6f9fc", FAINT, 1.2, 12)
     lx = 58
-    for col, dash, txt, wd in ((VER, None, "verified mathematics", 190), (USED, None, "used in a model", 170), (PRE, "7 5", "pre-registered, not yet run", 230), (LAB, "1 5", "labelling choice", 160)):
+    for col, dash, txt, wd in ((VER, None, "math connection", 150), (USED, None, "historical model use", 170), (PRE, "7 5", "proposed test", 150), (LAB, "1 5", "labelling choice", 160)):
         fg.line(lx, 586, lx + 38, 586, col, 2.6, 1, dash)
         fg.text(lx + 48, 591, txt, 12.5, INK)
         lx += wd + 40
+    fg.save()
+
 def _badge(fg):
     fg.rect(720, 34, 240, 28, "#fff4cf", ORANGE, 1.4, 14)
     fg.text(840, 53, "pre-registered, not yet measured", 12.5, "#7a4f00", "middle", weight="bold")
@@ -1226,7 +1228,7 @@ def fig_hamming_read():
     fg.text(820, 405, "output = Σ_i w_i · v_(i)", 13.5, INK, "middle", weight="bold")
     # notes
     fg.rect(40, 466, 454, 34, "#fdf3ea", VERM, 1.2, 10)
-    fg.text(267, 488, "vs today: exp-table-emulated softmax over Lorentz/Dot scores", 12.5, "#8a3a00", "middle", weight="bold")
+    fg.text(267, 488, "historical pre-D23: softmax over Lorentz/Dot scores", 12.5, "#8a3a00", "middle", weight="bold")
     fg.rect(506, 466, 454, 34, "#f6f9fc", FAINT, 1.2, 10)
     fg.text(733, 488, "uses the shared BitCode primitive (planned)", 12.5, INK, "middle", weight="bold")
     fg.rect(40, 512, 920, 30, "#f6f9fc", FAINT, 1.2, 10)

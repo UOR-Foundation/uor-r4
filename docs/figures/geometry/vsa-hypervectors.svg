@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="900" height="630" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="900" height="630" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'DejaVu Sans', sans-serif">
 <title id="t">VSA hypervectors: Hamming similarity</title>
 <desc id="d">Each token has a 4096-bit bipolar hypervector stored as 64 u64 words. Two codes are compared by XOR and popcount to get a Hamming distance, then a bipolar cosine. Codes come from a fixed token-id hash (historical, disconnected from the learned 120 roots) or from the learned icosian root assignment (trained since PR 2077).</desc>
 <rect x="2" y="2" width="996" height="696" rx="22" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>

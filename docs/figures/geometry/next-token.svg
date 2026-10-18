@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="900" height="630" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="900" height="630" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'DejaVu Sans', sans-serif">
 <title id="t">How the next token is predicted</title>
 <desc id="d">Left-to-right pipeline of the geometric stack: a token id selects an embedding row; sixteen layers in the pattern rrarrarrarrarrar alternate quaternion-rotation recurrence (r) with reads over earlier positions (a); a final norm gives logits over the 4,096 tokens, a softmax in the float form, and an optional copy head routed by prime products mixes in a copy distribution to give the next-token probabilities. A band notes that the served form uses integer table reads and a greedy argmax over integer scores.</desc>
 <rect x="2" y="2" width="996" height="696" rx="22" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
@@ -165,6 +165,5 @@
 <text x="58" y="612.5" font-size="12" fill="#ffffff" fill-opacity="1" text-anchor="middle" font-weight="bold">7</text>
 <text x="504" y="612" font-size="11.5" fill="#00704f" fill-opacity="1" text-anchor="middle" font-weight="bold">served: steps 2–6 as D11 integer table reads (no multiplier, no float); token = greedy argmax over i32 scores, no vocabulary softmax</text>
 <text x="40" y="648" font-size="14" fill="#5f6b7a">Geometry: state carried by quaternion rotation, the past read by a Lorentz score, copying routed by primes. Float form shown.</text>
-<text x="40" y="669" font-size="14" fill="#5f6b7a">Example numbers are illustrative. Served form: D11 integer table reads for steps 2-6, greedy argmax, no vocabulary softmax.</text>
-<text x="40" y="690" font-size="14" fill="#7a4f00">historical (pre-D25): the softmax read and head, the sigmoid copy gate and the SwiGLU MLP drawn here are banned in executed paths (see the banner in docs/geometry.md).</text>
+<text x="40" y="669" font-size="14" fill="#5f6b7a">Historical pre-D23 float form: prohibited softmax/copy/MLP paths. Example numbers are illustrative.</text>
 </svg>

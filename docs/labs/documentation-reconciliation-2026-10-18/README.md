@@ -1,0 +1,58 @@
+# Documentation and figure reconciliation — 18 October 2026
+
+## Question and scope
+
+Can a contributor find the current implementation and distinguish implemented
+mechanisms, measured results, mathematical foundations and future integration?
+**Decision: documentation reconciliation; no model promotion or scientific verdict.**
+Work began from fetched main `9a343425949939c4d02668c8583c56dedaf1254f`,
+which includes the original Dose1 custody record at `c7cfc2e1`.
+The [plan](../../superpowers/plans/2026-10-18-documentation-reconciliation.md)
+tracks this bounded deliverable. The parent arranges independent review; delivery is draft-only.
+
+## Primary sources and corrections
+
+- [D37](../../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised): offline floats allowed; matmul/GEMM, softmax/squashing and GPU-only constraints retained; D11 integer export separately qualified. Corrected docs hub, contributor guidance and the stale local skill allowance.
+- [`build.rs`](../../../crates/uor-r4-discrete/build.rs): 8D blocks, 16 carrier roots and 64 signed actions; four blocks give width32. [Architecture](../../architecture.md) traces each current data-flow arrow to the implementation.
+- [`discrete.cu`](../../../crates/uor-r4-discrete/src/discrete.cu): Flock node scans and Relation sweeps precede bounded selection; the writer scans vocabulary occupancy and admitted-cell tokens. Bounded retained K does not imply bounded selection work independent of context.
+- [`prime_zeta.rs`](../../../crates/uor-r4-discrete/src/prime_zeta.rs): C⁴ per block → R⁴ + R⁴ → normalized Q30 lanes → permutation → 16-root carrier alignment with allocation controls.
+- [`anchors.rs`](../../../crates/uor-r4-core/src/native_geometric/anchors.rs): coordinates `(a+bφ)/2`, with coefficient pairs distinct from an orthogonal Euclidean E8 embedding. The [geometry guide](../../geometry.md) specifies the reduced inner product, 3D conjugation versus 4D left action, additive-state norm caveat and Hopf's absent M1 integration.
+- [Rows parity attempt3 JSON](../counterfactual-rows-parity-2026-10-18/evidence/attempt3/rows-parity.json): 1,080 proposal cases plus 3 refusals and 2 forced terminals = **1,085 finite cases**, zero updates; the ~56× proposal timing has `qualified=false`. Older 1,080 totals in dated records retain proposal-only scope.
+- [Original Dose1 record](../attention-dose1-strategic-stop-2026-10-18/README.md): owner-stopped at 904 treatment /1,065 frozen-zero batches, before Q1; evidence preserved and pod down. No mechanism negative.
+- Live issue read through [Claude's whole-packet review](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246433669), [scoped owner dispatch](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246440910), and [06:24 pod-up/build-staging receipt](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246536845). The 06:05 “awaiting review/release” audit snapshot is superseded by those comments. No successor model run or outcome was established by the latest retrieved receipt.
+
+## Validation
+
+All commands below ran with the pinned Rust1.97.1 toolchain. Model computation
+was not invoked; the default-feature discrete tests are host/metadata/construction checks.
+
+| Check | Outcome |
+|---|---|
+| `cargo metadata --locked --no-deps --format-version 1` | Core selects `native_support.rs`; integer selects `native_geometry.rs`; discrete selects its own `lib.rs`. |
+| `cargo check --locked -p uor-r4-discrete --lib` | PASS; existing dead-code warnings retained. |
+| `cargo test --locked -p uor-r4-discrete --lib` | 90 passed, 0 failed, 1 ignored. |
+| `cargo run -q --locked -p xtask -- figures --write` then `… figures` | Seven generated Rust figures current; generator fit checks pass. |
+| `rustfmt --check --edition 2021 xtask/src/figures.rs` | PASS. |
+| `python3 docs/figures/geometry/generate.py` | Regenerates mathematical SVGs; repaired missing `connections` save so source edits reach that figure. |
+| `python3 docs/figures/geometry/verify_connections.py` | 29/29 checks pass; finite enumeration and sampled consistency scopes remain distinct. |
+| `cargo run -q --locked -p uor-r4-claim-wording -- .` | PASS; wording gate is not a scientific audit. |
+| Local Markdown/HTML target and heading-anchor scan | Audited root/STATUS/CONTRIBUTING/AGENTS, docs hub/map/geometry/architecture/labs hub, discrete README, research index, local skill and audit/plan; zero unresolved targets. See [validation.json](validation.json) for final count. |
+| Chromium SVG renders, all 22 figures at 1200px and 390px | Current architecture readable on mobile; mathematical vector originals linked for zoom. Corrected figures visually inspected; browser text bounds checked. |
+| `git diff --check` | PASS. |
+
+Source-controlled SVGs remain generated vectors. Historical pipeline/operator
+figures retain dated scope. Mathematical figure prose now states assumptions;
+29 passing checks are not described as 29 general proofs. The desktop architecture
+is capped at 600px and retains its vertical reading order on mobile.
+
+## Limitations and resources
+
+External links were verified selectively through primary source/issue reads;
+the local link audit is not an exhaustive external HTTP check. No CUDA controls,
+model inference, evaluation, parity, training, provider action or paid resource
+ran in this task. The Rust toolchain/build cache and browser renders live under
+ignored `local/`/`target/` in the owned worktree. Historical data archives and peer
+work are untouched. No model-quality, serving-speed or whole-training speed claim changes.
+
+**Next:** independent review of the draft, particularly source-arrow semantics and
+mathematical notation; refresh volatile status from #2029 before any later delivery.
