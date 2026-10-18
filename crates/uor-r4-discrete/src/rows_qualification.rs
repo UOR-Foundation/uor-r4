@@ -423,6 +423,10 @@ fn rows_rank_hinge_active_parity(tally: &mut Tally) -> Result<()> {
     snapshot_a.objective_policy = crate::ObjectivePolicy::NearestAddressMarginV1;
     let device = Device::from_snapshot(snapshot, 0)?;
     let device_a = Device::from_snapshot(snapshot_a, 0)?;
+    // Every call below (evaluate, parity pairs, sensitivity proposals) is
+    // bracketed by an unchanged-state check on both devices.
+    let before_r = device.snapshot()?;
+    let before_a = device_a.snapshot()?;
     let rows = device.rows_counterfactual()?;
     let route_count = device.snapshot()?.routes.len() as u32;
     let mut rng = Lcg(0x8a16);
@@ -458,15 +462,25 @@ fn rows_rank_hinge_active_parity(tally: &mut Tally) -> Result<()> {
         .collect();
     for parameter in parameters {
         compare(&device, &rows, &batch, &targets, parameter, tally)?;
-        if let (Ok(r), Ok(a)) = (
-            device.propose(&input, &targets, parameter),
-            device_a.propose(&input_a, &targets, parameter),
-        ) {
-            if r.candidate_losses()? != a.candidate_losses()? {
-                sensitive += 1;
-            }
+        // Admission and eligibility are objective-independent, so both
+        // objectives must accept the proposal; any failure is a FAIL, never a skip.
+        let r = device.propose(&input, &targets, parameter)?;
+        let a = device_a.propose(&input_a, &targets, parameter)?;
+        if r.candidate_losses()? != a.candidate_losses()? {
+            sensitive += 1;
         }
     }
+    let unchanged = |d: &Device, before: &crate::device::Snapshot| -> Result<bool> {
+        let after = d.snapshot()?;
+        Ok(before.table == after.table
+            && before.routes == after.routes
+            && before.gates == after.gates
+            && before.epoch == after.epoch)
+    };
+    require(
+        unchanged(&device, &before_r)? && unchanged(&device_a, &before_a)?,
+        "active rank parity mutated model state or epoch",
+    )?;
     require(
         sensitive > 0,
         "objective A and R gave identical ordinary losses on every parameter: R not exercised",

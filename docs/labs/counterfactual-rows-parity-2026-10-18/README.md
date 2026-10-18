@@ -145,3 +145,15 @@ New control `rows_rank_hinge_active_parity`:
 - **Evidence:** `evidence/attempt5/`. The release `rows-qualify` SHA-256 starts `06142611…`.
 - **Archive:** `icloud:UOR-R4/results/claude/vast-56559825.tar` (5,456,896 bytes, MD5 `7db5dbfa3ace2202c41cda903448fd93`).
 - **Cost:** about $0.20.
+
+## Scope of attempts 4–5 and the registered timing slot (AGY review #2658 6250630831, P3)
+
+| Attempt | Source | Controls run | What it establishes |
+|---|---|---|---|
+| 4 | `907a9926b` | 6, including `rows_rank_objective_parity` (1,368/1,368) | Lanes/rows parity under the R code path at K16, **with R = 0 on every row** (V = 16, at most 16 occupied cells). Vacuous for the R term. |
+| 5 | `3af49e029` | 7, adding `rows_rank_hinge_active_parity` (134/134) | Parity with a **live R term**: V = 64, B = 2, K16, 64 occupied cells, 46 rows with R > 0, objective sensitivity 134/134 |
+| Final head (P1/P2 repairs) | this PR's head | the same 7 controls | P1 turns a sensitivity-loop proposal failure into a FAIL instead of a skip. P2 brackets every call in the active control with unchanged-state checks on both devices. Neither changes a measured value. **This head runs on GPU in the single new-head qualification session** (PM audit item 4) and is bound there. |
+
+**Timing.** The 5-sample `timing()` above is `qualified: false`: `VectorBlock(0)` only, checkpoint-0 only. It is a diagnostic speedup check and budget estimate.
+
+**The registered K16 timing slot** is filled in the qualification session by the dedicated `k16-timing` `rows_v1` adapter (#2659, Codex): checkpoint-0 and Q4 × A and R, `Route(0)` plus `VectorBlock(0)`, with 100 timed samples plus 1 excluded warmup. These rows-qualify numbers do not compete with that slot.

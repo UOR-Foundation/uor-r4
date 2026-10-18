@@ -1,6 +1,6 @@
 ## 2026-10-18 — Active rank-hinge (R>0) row-parallel parity PASS (claude; PM audit fix)
 
-Kimi's audit found my K16 R parity vacuous: at ≤16 occupied cells, R = 0 everywhere. Attempt 5 adds a 64-cell fixture where **46/64 rows have R > 0**. Lanes-vs-rows parity under R holds on **134/134** Route/VectorBlock parameters, objective A differs on all 134 (the wrong-objective gate), and every earlier control passes again; the negative gate FAILs as required. This closes the R/K16 qualifier requirement for the fast-path admission redirect. [Record](../labs/counterfactual-rows-parity-2026-10-18/README.md). About $0.20.
+Kimi's audit found my K16 R parity vacuous: at ≤16 occupied cells, R = 0 everywhere. Attempt 5 adds a 64-cell fixture where **46/64 rows have R > 0**. Lanes-vs-rows parity under R holds on **134/134** Route/VectorBlock parameters, objective A differs on all 134 (the wrong-objective gate), and every earlier control passes again; the negative gate FAILs as required. At `3af49e029` this meets the R/K16 qualifier criteria. The final head adds only AGY P1/P2 error and state hardening, and it runs on GPU in the single new-head qualification session (PM item 4). The 5-sample timing is diagnostic; the registered 100-batch K16 slot is #2659. [Record](../labs/counterfactual-rows-parity-2026-10-18/README.md). About $0.20.
 
 ## 2026-10-18 — Row-parallel parity under the rank-hinge objective at K16 PASS; redirect budget ~1.2 h (claude)
 
