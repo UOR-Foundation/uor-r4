@@ -21,10 +21,11 @@ remains construction-only. The [Dose 1 packet](docs/labs/attention-dose1-packet-
 is source/metadata frozen with actual disjoint FreshV2 metadata and posted
 internal independent reviews; AGY's confined verdict and Kimi's actual dispatch
 are recorded in the [dispatch record](docs/labs/attention-dose1-dispatch-2026-10-18/README.md).
-That dispatch now has a confirmed allocation at `vast-56488188` and a
-metadata-verified RELEASE build (shared ELF `1f7dd526…`), with both per-arm `/2`
-plans prepared and under AGY review; runtime CUDA admission, check-plan and
-Casey personal admission remain NOT_RUN and precede learning.
+That dispatch now has a confirmed allocation at `vast-56488188`, a
+metadata-verified RELEASE build (shared `8,099,440`-byte ELF `1f7dd526…`), AGY's
+two-arm admission approval and both `attention-check-plan` entries PASS; the
+personal TTY card is ready, while owner release, runtime CUDA admission and model
+work remain NOT_RUN.
 No learned dose or fresh transfer has run. Training/M2/StageB remain HELD;
 Q4 NOT_EXECUTABLE. The earlier pilot below retains its measured scope.
 

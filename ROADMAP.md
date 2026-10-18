@@ -50,9 +50,10 @@ Battery3 remains accepted as-is, no rerun/rescore. The
 now binds actual FreshV2 metadata and reviewed operator components. AGY's
 confined verdict and Kimi's actual dispatch are recorded
 ([dispatch record](docs/labs/attention-dose1-dispatch-2026-10-18/README.md));
-the dispatch's allocation at `vast-56488188` and its RELEASE build metadata are
-confirmed, while runtime CUDA admission, plan finalization/check-plan and Casey
-personal TTY remain pending and precede model work. No learned result, full attribution or
+the dispatch's allocation at `vast-56488188`, its RELEASE build metadata, AGY's
+two-arm approval and both check-plan entries are confirmed, while owner release,
+runtime CUDA admission and Casey personal TTY remain pending and precede model
+work. No learned result, full attribution or
 progress-count reset follows from packet preparation. Optimization remains
 gated on the dose outcome under project-track's post-dose path.
 

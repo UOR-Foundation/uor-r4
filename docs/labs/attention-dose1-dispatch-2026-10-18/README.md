@@ -4,9 +4,10 @@
 
 Record the actual Project Manager dispatch of the seed-1 paired
 `LearnV1`/`FrozenZeroV1` attention dose: its receipts, the packet and source it
-binds, the later runtime allocation and release build it produced, and what it
-explicitly does not release. Decision: **DISPATCHED; ALLOCATION CONFIRMED;
-RELEASE METADATA BUILT; RUNTIME CUDA ADMISSION AND MODEL NOT_RUN**.
+binds, the later runtime allocation, release build, AGY review, finalization
+and check-plan sequence, and what it explicitly does not release. Decision:
+**DISPATCHED; ALLOCATION CONFIRMED; RELEASE METADATA BUILT; BOTH-ARM REVIEW
+AND CHECK-PLAN PASS; OWNER RELEASE AND MODEL NOT_RUN**.
 
 This is not a model result: no training, evaluation, scoring or runtime CUDA
 qualification is claimed, and the dose remains **NOT_RUN**. No pod, SSH,
@@ -36,10 +37,10 @@ their exact hashes, not re-executed here.
 | Runtime binary binding | `controller/runtime-binary-binding.json` SHA256 `2921dce26c686e7b48cda535b22b25929d7318bb1dfc5664f38fb0538fbafe60` |
 | Per-arm plan candidates | treatment `64869df7d5fde9eaf23162e3046e1fc5cbd9aaaff4d7533cd4274c2d7510113f`; frozen-zero `b52933ecf2f0291877d85b568bb1d6961e6d6d405c0c413eadbe9bc53a64ec7a` (`uor-r4.attention-learning-owner-plan/2`) |
 
-`dispatch.json` is the operator's private local file at
-`/Users/casey.allard/uor-r4-local/codex-attention-dose1-operator/dispatch.json`;
-it is not committed here. Its `pm_receipt_url` points at the receipt above and
-its `test_fitness_reference` at the FIT comment.
+`dispatch.json` is the operator's private local packet file
+(`codex-attention-dose1-operator/dispatch.json`); it is not committed here.
+Its `pm_receipt_url` points at the receipt above and its
+`test_fitness_reference` at the FIT comment.
 
 Read-only checks run on 18 October for this record:
 
@@ -75,12 +76,26 @@ Read-only checks run on 18 October for this record:
   `OK`; cross-receipt equality of `dispatch_sha256` among the allocation,
   build and binding → `true`, and `build.allocation_sha256` equals the raw
   allocation file hash.
+- Build interval: `release-build-status/started.utc` `2026-10-18T03:11:34Z`,
+  `ended.utc` `2026-10-18T03:12:39Z`, and `build.log` ends `Finished release
+  profile ... in 1m 02s`; `stat` on the ELF is 8,099,440 bytes.
+- AGY review files: treatment `dfd100aa…0534`, frozen-zero `03c36420…ea13`;
+  both carry exactly the six keys and `APPROVE_ATTENTION_LEARNING_ADMISSION_DIFF`
+  for scopes `m1-attention-learning-relation-k8-seed1-batches0..16404` and
+  `m1-attention-learning-relation-frozen-zero-k8-seed1-batches0..16404`, with
+  payloads `7f8f47ec…bc9e` and `6d0749f4…6ae8` and receipt URL `6245205468`.
+- `finalize.exit` → `0`; final typed plans treatment `e8d25b21…0297` and
+  frozen-zero `a8b76562…8de40`; `FINAL-SHA256SUMS` → all members `OK`.
+- Both `*-source-check-plan.json` → `PLAN_METADATA_VALID`,
+  `compiled_identity_checked` `true`, `cuda_context_created` `false`,
+  `fresh_content_read` `false`, `owner_release` `STILL_REQUIRED`, `training`
+  `HELD`; their `plan_sha256` values equal the final typed plans.
 
 The PM activation reply records that `lifecycle/dose-common.sh::dose_authority`
 and the dependency pins also pass. That function writes
 `lifecycle/latest-packet-check.private.log` inside the operator packet, so this
-record did not re-invoke it; it re-ran the function's read-only predicates
-above instead and did not mutate the packet.
+record did not re-invoke it; it re-ran the read-only checks above instead and
+did not mutate the packet.
 
 ## What the dispatch releases
 
@@ -98,10 +113,10 @@ above instead and did not mutate the packet.
 - These gates still precede model work, in order: the same-dispatch release
   build; two no-context build identities; actual per-arm `/2` plans with
   genuine non-Codex admission-diff reviews; `attention-check-plan`; then
-  Casey's two personal live-TTY owner releases. The build and identities are
-  recorded below and the plans are prepared and under AGY review; the later
-  gates remain pending. PM does not create those records or invoke
-  owner-release.
+  Casey's two personal live-TTY owner releases. The build, identities, both-arm
+  AGY approval and both check-plan entries are recorded below; the personal TTY
+  and owner-release gates remain pending. PM does not create those records or
+  invoke owner-release.
 
 ## What is not released
 
@@ -143,6 +158,12 @@ attempt label above, `dispatch_sha256` `4f768169…543bb`, count 2 and GPUs
 `[0,1]`. Its `authority_issued` is `false`: the allocation is confirmed, but it
 is not an owner release.
 
+### Cost
+
+The current provider quote is USD `1.893688888888889`/h total for the two GPUs
+— a **quote, not an invoice**. Storage and transfer remain **UNMEASURED**; no
+source outcome or first-64 throughput exists.
+
 ### Release build — metadata verified
 
 `runtime-build.json` (SHA256
@@ -155,7 +176,7 @@ cuda` at `UOR_NVCC_ARCH=compute_120`.
 
 | Build identity | Value |
 |---|---|
-| Shared ELF (both arms) | `1f7dd5268b6e7b69c3a22a2c7a4905d5484cdedb720ee89ceb541b18d8b2dbb3`, ELF64_X86_64; the on-host `bin/discrete-stack` matches |
+| Shared ELF (both arms) | `1f7dd5268b6e7b69c3a22a2c7a4905d5484cdedb720ee89ceb541b18d8b2dbb3`, 8,099,440 bytes, ELF64_X86_64; the on-host `bin/discrete-stack` matches |
 | Protected source commit | `23d5b146b46cf6479d27695a555e03e3cc98e972` |
 | Compiled source | `64e484637425f009969c6ec270ccbae6ab7ca50e89fc244240058231d00d9dad` |
 | Kernel | `5cd0e73241fd895f2dd0004c83af3d1eb9f89e00ec2e933c1acc44fc7127bfd6` |
@@ -163,6 +184,10 @@ cuda` at `UOR_NVCC_ARCH=compute_120`.
 | Driver | `9538f5c3…bd04c` (composite above) |
 | Treatment config / lineage | `c446aa7f…9f216` / `ffad0e1d…ba2e1` |
 | Frozen-zero config / lineage | `1435f016…071c3` / `f859bf22…7a9ae` |
+
+The sealed ELF is **8,099,440 bytes** (host `stat` and the runtime build pin).
+AGY's earlier explanatory `14,768,528` byte count is corrected; the raw ELF
+SHA and every review/payload/plan hash are unchanged.
 
 `cuda_context_created` is `false` for both arms, `metadata_identity_calls` is
 2, `model_commands` and `init_commands` are 0, and `training` is `HELD`. The
@@ -183,7 +208,7 @@ built and verified. That is not runtime CUDA resource admission, not an owner
 release, and not training. No CUDA context was created and no model command
 ran.
 
-### Per-arm plans — prepared, review pending
+### Per-arm plans — AGY approved, finalized and checked
 
 Both `/2` plan candidates exist as metadata: treatment raw
 `64869df7d5fde9eaf23162e3046e1fc5cbd9aaaff4d7533cd4274c2d7510113f` and
@@ -191,16 +216,29 @@ frozen-zero raw
 `b52933ecf2f0291877d85b568bb1d6961e6d6d405c0c413eadbe9bc53a64ec7a`, scoped
 `batches0..16404` with the exact ten-key `ExecutionIdentity` (base
 `ef9d3099…`, reviewed source `23d5b146`, sheet `84481400…`, source/kernel/
-geometry/executable/driver/config/lineage as above). Their
-`.review.candidate.json` records remain `NOT_REVIEWED` / `UNASSIGNED`, and the
-candidates are `HELD_OWNER_ACTION_REQUIRED` pending that review.
+geometry/executable/driver/config/lineage as above).
 
-Codex handed both to AGY for the genuine non-Codex per-arm admission-diff
-review in
-[#2029 `6245084232`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245084232)
-(2026-10-18T03:14:32Z, "no new dispatch requested"). Plan finalization, the
-actual `attention-check-plan` with no CUDA context, and Casey's two personal
-TTY releases remain pending.
+AGY reviewed the genuine payloads and posted
+`APPROVE_ATTENTION_LEARNING_ADMISSION_DIFF` for **both arms** in
+[#2029 `6245205468`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245205468)
+(2026-10-18T03:30:18Z). The six-key review files are treatment
+`dfd100aa5061d139fdd226aba24338499b4178e1d59f70e16bae490129ab0534` with
+payload `7f8f47ec620608adc0460e9f1e0c3d0ce5a6a4b900f37a226645b3127e87bc9e`,
+and frozen-zero `03c364202de6edeae03d00cafaa249c89acdd75baa609e7f47fa2d427964ea13`
+with payload `6d0749f4ce6b9ef1c0097c7a5c24c5cdb3cc7b2ea238147c1813ea4ae16f6ae8`.
+
+Codex's frozen-admission `finalize` then exited 0. The final typed plans are
+treatment `e8d25b21b111b0b310eb79233b3864e6679057783771894e23c9ea99b9bb0297`
+and frozen-zero
+`a8b76562d829beea201d006c2ac506d313d105841eabc5bf8189efab29e8de40`, and
+`FINAL-SHA256SUMS` verified. Running the actual RELEASE ELF on both
+`attention-check-plan` entries returned `PLAN_METADATA_VALID` for both, with
+`compiled_identity_checked` true, `cuda_context_created` false,
+`fresh_content_read` false, `owner_release` `STILL_REQUIRED` and `training`
+`HELD`. The personal TTY card is ready at
+`final/PERSONAL-TERMINAL-CARD.txt`; model, init and owner-release remain
+**NOT_RUN** ([handoff `6245235242`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245235242),
+2026-10-18T03:34:07Z).
 
 ### Preserved launch state
 
@@ -211,23 +249,25 @@ review (03:07:37Z) remains the record of the launch hazard:
 operator `37502` absent, 0-byte outer log with no recorded exit, no setup or
 build at that point, and the historical cause **UNVERIFIED**. The later
 receipts show the reviewed post-UP continuation completed setup0, five data
-transfers with SHA verification, and the native release-build job terminal at
-03:11:34Z with exit 0 — with no `CREATE`, rebuild, retry or source patch. The
+transfers with SHA verification, and the native release-build job started at
+03:11:34Z and exited 0 at 03:12:39Z (log `1m 02s`) — with no `CREATE`,
+rebuild, retry or source patch. The
 unverified launch cause is not a mechanism negative, and the create-response
 file's provider instance key stays private and is not copied into this record.
 
 ## Decision and next action
 
-`DISPATCH_VALID` stands. As of 2026-10-18T03:14:32Z the correct PM state is
+`DISPATCH_VALID` stands. As of 2026-10-18T03:34:07Z the correct PM state is
 **dispatched; allocation confirmed at `vast-56488188`; RELEASE build metadata
-verified; runtime CUDA admission NOT_RUN; model work NOT_RUN**.
+verified; AGY approved both arms; finalize and both check-plan entries PASS;
+personal TTY card ready; owner release STILL_REQUIRED; model work NOT_RUN**.
 
-The next decision inputs are AGY's genuine per-arm admission-diff verdicts and
-six-key `AttentionReview` records, then plan finalization, the actual
-`attention-check-plan` with no CUDA context, and Casey's two personal TTY
-releases. Until those exist, no model command, training step or dose result may
-be claimed, and the metadata-verified build is not runtime qualification. Any
-failure returns to PM review as a blocker, not a mechanism negative.
+The next decision inputs are Casey's two genuine personal live-TTY
+command/phrase records, then the unchanged `admission.sh collect` and wait. No
+agent may create those records. Until they exist, no model command, training
+step or dose result may be claimed, and the metadata-verified build is not
+runtime qualification. Any failure returns to PM review as a blocker, not a
+mechanism negative.
 
 Fresh V2 content remains sealed pending typed `DEV H_geom` plus a PM decision.
 No headline, milestone, progress count, training hold or mechanism status
@@ -239,5 +279,8 @@ Base `35c4c40380ad25b2ba4cde0239b93110b26768db`; branch
 `kimi/dose1-dispatch-record-2026-10-18`; worktree
 `.worktrees/kimi-dose1-dispatch-record`; lab `kimi`; branch claim recorded in
 `docs/harness/claims.json`. Record authored and revised 18 October 2026,
-host-only; the revision adds the runtime allocation, release-build and
-binary-binding receipts and the driver composite provenance.
+host-only. The first revision added the runtime allocation, release-build and
+binary-binding receipts and the driver composite provenance; this revision
+corrects the build interval to start 03:11:34Z / exit 0 at 03:12:39Z, adds
+AGY's two-arm approval, finalization and both check-plan results, and records
+the current quote.
