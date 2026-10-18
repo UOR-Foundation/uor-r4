@@ -29,8 +29,8 @@
   },
   "claude/claim-wording-rust-20261018": {
     "branch": "claude/claim-wording-rust-20261018",
-    "claimed_at": "2026-10-17T23:42:16-04:00",
-    "head": "9d29258b9",
+    "claimed_at": "2026-10-17T23:48:09-04:00",
+    "head": "53b90576e",
     "lab": "claude",
     "note": ""
   },
