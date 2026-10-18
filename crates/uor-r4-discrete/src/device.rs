@@ -35,6 +35,7 @@ pub use decomposition_device::DecompositionProfiler;
 #[path = "baseline_reuse_device.rs"]
 mod baseline_reuse_device;
 pub use baseline_reuse_device::BaselineReuseProfiler;
+#[path = "rows_device.rs"]
 mod rows_device;
 pub use rows_device::{compiled_rows_image_sha256, RowsCounterfactual};
 static NEXT_MODEL: AtomicU64 = AtomicU64::new(1);
