@@ -1,7 +1,7 @@
 ## 2026-10-18 — C1 flock-coupling draft: finite controls and export-gap contract (claude)
 
 The [C1 draft](../harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md) specifies the D37 float-trained coupling magnitude for the discrete Flock read, exported to integer Gate weights (`ReadSpec::FlockCoupled`, with `k_max = 1 ≡ Flock`). It contains:
-- 18 finite controls with literals hand-derived from the generated 16-root orbit: cache fidelity, the integer export kernel, and the float primitive (including an export-gap witness);
+- 22 finite controls (C0, X1–X12 and nine F rows), with literals hand-derived from the generated 16-root orbit: cache fidelity, the integer export kernel, and the float primitive (including an export-gap witness);
 - a writer-structured mean-L1 proxy objective with a proxy-agreement instrument;
 - a box-projected update, needed because the writer's address margin exceeds the inter-root distance;
 - the export-gap contract on the Dose 1 evaluator;
