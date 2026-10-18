@@ -23,7 +23,7 @@ K16-A versus K16-R admission redirect on `rows_v1`, under the
 qualification, measured timing/budget and acceptance of the regenerated D-Packet.
 Keep Route/K16, seeds 1 and 2, `CanonicalVectorThenReadV1`, the registered
 16,404-batch schedule and scientific bars unchanged. Qualification requires
-same-state, same-R-objective lanes/rows parity with **>16 occupied cells and an
+same-device, same-state, same-R-objective lanes/rows parity with **>16 occupied cells and an
 actual R>0 row**, 25/25 controls plus `admit_ptx`, G-Pre, C-R1..C-R6,
 required refusal/terminal coverage, wrong-objective/broken-negative checks and zero apply.
 Retain all four checkpoint-0/Q4 × A/R timing cells, **100 samples each** plus
