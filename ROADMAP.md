@@ -50,7 +50,7 @@ and separate M2 holds remain HELD. Kimi owns the
 discrete successor sheet; a FIT review releases no hold.
 [Discrete flock/writer record](docs/labs/discrete-flock-writer-integration-2026-10-13/README.md).
 
-Updated 14 October 2026. **Pre-alpha.** Useful conversation, broad reasoning, coding, frontier
+Updated 18 October 2026. **Pre-alpha.** Useful conversation, broad reasoning, coding, frontier
 capability and lower complete-path energy are not established.
 
 Milestones M1-M8 below, with the standing serving rules in section 0. Live status and claims:
