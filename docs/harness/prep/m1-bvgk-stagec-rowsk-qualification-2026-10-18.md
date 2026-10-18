@@ -13,6 +13,7 @@
 
 ## Bar
 
+- **V0 (identity preflight, AGY 6255181282 item 2).** `rowsk-qualify` refuses to run unless the embedded `rowsk.cu` begins byte-for-byte with the embedded `rows.cu`. The receipt records `driver_source_sha256()` (expected unchanged from main, since no include-list file is touched) and the `rows` and `rowsk` image identities.
 - **V2 (scoring parity). PASS requires every case to agree.** For every coordinate of every block, the K-coordinate launch's sixteen losses and status must equal an independent `propose_rows` for that coordinate on the same device, carried batch and targets. The sweep:
   - complete Route + VectorBlock inventories (Route, B2 and B4, objectives A and R), and Gate + VectorBlock (Relation `{2,1}`, B2);
   - V16, C12, K = 4 cells, model seeds 7 and 11;
@@ -25,11 +26,12 @@
   - The D29 checker (`scripts/check_native_cuda_vendor.rs`, `--self-test` and `--repo .`) must PASS at the run head. That covers the D23/D25/D30 token scan (no float, squash or matmul tokens) and the exact 5-entry `rowsk.cu` census.
   - The build's `admit_ptx_inventory` must admit the 5-entry PTX.
   - The receipt records `applied_updates: 0`, zero corpus updates and no checkpoint promotion.
+  - The D29 checker's full stdout and its SHA-256 are saved beside `rowsk-qualification.json` in the report directory, so the run's compliance pass is part of the receipt.
 - **Latency-curve protocol (pre-registered; diagnostic for Stage T, never a gate).**
   - **Shape:** V4096 / B4 / C192 / K16, Route, objective A, model seed 1, freshly initialized at checkpoint 0. The same model state and the same pod are used for every K. 64 deterministic rows.
   - **Blocks:** K ∈ {1, 4, 16}, with block = `VectorBlock(0..K)`.
   - **Samples:** per K, **1 excluded warmup + 20 timed** synchronized launches. The reference is the same for single `propose_rows(VectorBlock(0))`.
-  - **Timing:** wall-clock around synchronized device calls. That is a device-side measurement with no host model computation.
+  - **Timing scope:** wall-clock around the host-callable `Device::score_rows_k` and `Device::propose_rows`, including per-call buffer allocation, host-to-device and device-to-host copies and stream synchronization. There is no host model computation. The receipt states this scope.
   - **Reported per K:**
     - median and p95 (nearest-rank) block latency;
     - per-coordinate latency;

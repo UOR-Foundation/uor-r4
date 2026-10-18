@@ -439,6 +439,11 @@ fn latency_curve() -> Result<serde_json::Value> {
 
 pub fn run(report: &Path) -> Result<()> {
     std::fs::create_dir(report).map_err(|e| Error::Invalid(format!("exclusive report: {e}")))?;
+    // V0 identity preflight: rows-K only appends to the unchanged rows source.
+    require(
+        crate::device::rowsk_extends_rows_source(),
+        "embedded rowsk.cu does not begin with the embedded rows.cu",
+    )?;
     let mut records = Vec::new();
     let mut failed = false;
     let controls: [(&str, Control); 2] = [
@@ -482,6 +487,9 @@ pub fn run(report: &Path) -> Result<()> {
         "latency_curve": latency,
         "rowsk_image_sha256": crate::device::compiled_rowsk_image_sha256(),
         "rows_image_sha256": crate::device::compiled_rows_image_sha256(),
+        "rowsk_extends_rows_source": true,
+        "driver_source_sha256": crate::training::driver_source_sha256(),
+        "latency_scope": "host-callable Device::score_rows_k vs Device::propose_rows, including per-call buffer allocation, host-to-device and device-to-host copies and stream synchronization",
         "training": "HELD",
         "applied_updates": 0,
     });
