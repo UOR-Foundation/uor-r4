@@ -322,7 +322,7 @@ def fig_hopf():
     fg = Fig("hopf-fibration.svg", "The Hopf map: a circle behind every point",
              "Left: the 2-sphere with ten colour-coded marked points. Right: the ten corresponding Hopf fibres, which are linked circles in the 3-sphere, drawn by stereographic projection to 3-D in the same colours. Faint circles show the nested tori the fibres sit on.",
              ["Each point on S² is a whole circle in S³; observing only S² loses the position along the circle (the fiber).",
-              "Fixed geometry can keep the fibre separately; current M1 does not. A latitude of S² gives a torus of fibres."])
+              "Core helpers are float-backed with Q30 storage, outside M1. A latitude of S² gives a fibre torus."])
     rings = [(100, [-80 + 40 * i for i in range(5)]), (140, [-80 + 40 * i for i in range(5)])]
     pts = [(b, a) for b, al in rings for a in al]
     def fibre(beta, alp, N=160):
@@ -561,10 +561,10 @@ PHASE_STOPS = [BLUE, SKY, "#F0E442", ORANGE, VERM, PINK, PURPLE]
 
 def fig_zeta():
     fg = Fig("zeta-phases.svg", "Fixed zeta-zero phases as position signatures",
-             "Ten small unit circles, one per nontrivial zeta zero gamma-k, each showing the phase e to the i gamma-k log n of positions n equals 1 to 12 as dots; below, a colour table of the same phases where every position n gives a different column of ten phases.",
+             "Illustrative phases for ten fixed zeta-zero frequencies at positions n equals 1 to 12. These examples do not guarantee injectivity after quantization; current codebook uniqueness is enforced separately by allocation controls.",
              ["Fixed phases from the zeta zeros γ: each pair of primes gets the phase γ·(log p − log q).",
-              "The model uses them as a fixed lookup table of distinct, non-repeating offsets; they are not learned.",
-              "Dot n sits at angle γ·ln n (mod 2π); in the table, colour = phase, so each column is one position’s signature."])
+              "Illustrative phases: quantization does not guarantee uniqueness; current codebook allocation controls enforce it.",
+              "Dot n sits at angle γ·ln n (mod 2π); table colour encodes phase. See docs/geometry.md for the constructor."])
     NS = list(range(1, 13)); ncol = lambda n: ramp([ORANGE, VERM, PURPLE, BLUE], (n - 1) / 11)
     ang = lambda g, n: (g * log(n)) % (2 * pi)
     for k, g in enumerate(ZEROS):
@@ -687,8 +687,8 @@ def fig_primes():
 
 
 def fig_next_token():
-    fg = Fig("next-token.svg", "How the next token is predicted",
-             "Left-to-right pipeline of the geometric stack: a token id selects an embedding row; sixteen layers in the pattern rrarrarrarrarrar alternate quaternion-rotation recurrence (r) with reads over earlier positions (a); a final norm gives logits over the 4,096 tokens, a softmax in the float form, and an optional copy head routed by prime products mixes in a copy distribution to give the next-token probabilities. A band notes that the served form uses integer table reads and a greedy argmax over integer scores.",
+    fg = Fig("next-token.svg", "Historical float next-token path",
+             "Historical pre-D23 pipeline of the geometric stack: a token id selects an embedding row; sixteen layers in the pattern rrarrarrarrarrar alternate quaternion-rotation recurrence (r) with reads over earlier positions (a); a final norm gives logits over the 4,096 tokens, a softmax in the float form, and an optional copy head routed by prime products mixes in a copy distribution to give the next-token probabilities. A band marks the historical export target; those executors are excluded from the selected build.",
              ["Geometry: state carried by quaternion rotation, the past read by a Lorentz score, copying routed by primes. Float form shown.",
               "Historical pre-D23 float form: prohibited softmax/copy/MLP paths. Example numbers are illustrative."])
     SOFT = "#f6f9fc"
@@ -831,7 +831,7 @@ def fig_next_token():
     # ---- serving band
     fg.rect(40, 596, 920, 24, "#e6f6ef", GREEN, 1.2, 12)
     badge(58, 608, 7, GREEN)
-    fg.text(504, 612, "served: steps 2–6 as D11 integer table reads (no multiplier, no float); token = greedy argmax over i32 scores, no vocabulary softmax", 11.5, "#00704f", "middle", weight="bold")
+    fg.text(504, 612, "Historical export target: D11 tables and greedy argmax; these executors are excluded from the selected build.", 11.5, "#00704f", "middle", weight="bold")
     fg.save()
 
 
@@ -848,7 +848,7 @@ def fig_vsa():
     fg = Fig("vsa-hypervectors.svg", "VSA hypervectors: Hamming similarity",
              "Each token has a 4096-bit bipolar hypervector stored as 64 u64 words. Two codes are compared by XOR and popcount to get a Hamming distance, then a bipolar cosine. Codes come from a fixed token-id hash (historical, disconnected from the learned 120 roots) or from the learned icosian root assignment (trained since PR 2077).",
              ["Bipolar cosine = 1 - 2d/4096, with d = popcount(A XOR B); the VSA term adds vsa_scale x cosine to the root and leaf scores.",
-              "Built and tested; a pre-registered retraining test (#2029) is running. Bit patterns and example values here are illustrative."])
+              "Historical M2 learner experiment; bit patterns and example values are illustrative. See STATUS.md for current work."])
     pc = lambda v: BLUE if v > 0 else ORANGE
     for x, t in ((40, "1  a token has a code"), (350, "2  compare two codes"), (690, "3  where codes come from")):
         fg.text(x, 100, t, 16, INK, weight="bold")
@@ -927,9 +927,10 @@ def fig_vsa():
 
 def fig_connections():
     fg = Fig("connections.svg", "How the geometric pieces connect",
-             "A map of how the project's geometric structures are derived from one another: six primes give 15 semiprimes and the complete graph K6, which matches the 15 two-fold axes of the icosahedron. Cl(0,6) bivectors, octonions and quaternions lead to the 120 icosians of 2I, which carry Z[phi] coordinates, the E8 roots, the Hopf map and the VSA bit codes. Edge colours mark verified mathematics, parts used in a model, pre-registered tests and a labelling choice.",
+             "A map of how the project's geometric structures are derived from one another: six primes give 15 semiprimes and the complete graph K6, which matches the 15 two-fold axes of the icosahedron. Cl(0,6) bivectors, octonions and quaternions lead to the 120 icosians of 2I, which carry half-scaled golden coordinates, reduced-metric E8 roots, Hopf observations and historical VSA codes. E1 separately checks the standard-coordinate E8 signed action; no cross-representation intertwiner is asserted. Edge colours mark verified mathematics, parts used in a model, pre-registered tests and a labelling choice.",
              ["Each arrow reads as derived from or realised in. The map shows structure, not a measured advantage for the model.",
-              "Blue: mathematical connections (finite/sampled checks). Other colours: historical use, proposed tests and labels."])
+              "Blue: mathematical connections (finite/sampled checks). Other colours: historical use, proposed tests and labels.",
+              "E1 and E2 check separate E8 representations; no intertwiner between them is established."])
     VER, USED, PRE, LAB = BLUE, GREEN, ORANGE, PURPLE
     N = {}
 
@@ -976,6 +977,7 @@ def fig_connections():
     node("hp", 360, R5, 200, ["Hopf S²", "2I → 30 points, fibres of 4"])
     node("vs", 600, R5, 180, ["VSA bit codes", "via token → icosian"])
     node("e8", 840, R5, 200, ["E8 (reduced metric)", "240 roots: 2I ∪ φ·2I"])
+    node("e8std", c3, R2, 200, ["Standard-coordinate E8", "240 roots (E1)"])
 
     # prime chain
     edge([P("pr", "b"), P("sp", "t")], VER); lab(176, 152, ["pairs"], "start", False)
@@ -1007,8 +1009,8 @@ def fig_connections():
     edge([P("ic", "b", -30), P("vs", "t", -10)], USED); lab(556, 462, ["learned assignment"], color="#00704f")
     edge([P("ic", "b", 70), P("e8", "t", -50)], VER); lab(700, 459, ["with φ·2I"])
     edge([P("ic", "b", -95), P("zp", "t")], VER); lab(262, 454, ["coordinates", "in Z[φ]/2"])
-    # bivectors -> E8 along the top and right edge
-    edge([P("bv", "r"), (965, R2), (965, R5), P("e8", "r")], VER); lab(765, 192, ["preserve the 240 roots"], bg=False)
+    # E1 preserves standard-coordinate roots; E2 is a separate realization.
+    edge([P("bv", "r"), P("e8std", "l")], VER); lab(645, 192, ["preserves roots (E1)"], bg=False)
     # legend
     fg.rect(40, 566, 920, 40, "#f6f9fc", FAINT, 1.2, 12)
     lx = 58
@@ -1020,7 +1022,7 @@ def fig_connections():
 
 def _badge(fg):
     fg.rect(720, 34, 240, 28, "#fff4cf", ORANGE, 1.4, 14)
-    fg.text(840, 53, "pre-registered, not yet measured", 12.5, "#7a4f00", "middle", weight="bold")
+    fg.text(840, 53, "historical research proposal", 12.5, "#7a4f00", "middle", weight="bold")
 
 
 def _legend(fg, items, y=566):
@@ -1034,7 +1036,7 @@ def _legend(fg, items, y=566):
 
 def fig_exact_lanes():
     fg = Fig("exact-2i-lanes.svg", "Exact icosian holonomy lanes (E1)",
-             "Each token maps to one of the 120 binary icosians. A lane state is updated by one read of a 120 by 120 multiplication table, h_t = u_t h_{t-1}. To read an earlier position j, the relative element h_j inverse times h_t gets a shell index 0 to 8 and is weighted by a rank table. Pre-registered, not yet measured.",
+             "Each token maps to one of the 120 binary icosians. A lane state is updated by one read of a 120 by 120 multiplication table, h_t = u_t h_{t-1}. To read an earlier position j, the relative element h_j inverse times h_t gets a shell index 0 to 8 and is weighted by a rank table. Historical proposal; consult its record for status.",
              ["Exact, order-preserving lane: one table read per step, then a shell-index lookup; the rank table replaces softmax.",
               "A pure product never decays, so it is designed to run beside the learned r-layer, not replace it."])
     _badge(fg)
@@ -1115,7 +1117,7 @@ def fig_exact_lanes():
 
 def fig_signed_binding():
     fg = Fig("octonion-signed-binding.svg", "Octonion-signed binding vs XOR",
-             "The Fano plane has 7 points labelled 1 to 7 and 7 lines, each line being a, b, a xor b. Binding two basis units gives plus or minus the third unit on their line, the sign set by orientation. XOR binding is commutative and associative so it loses order and grouping; signed binding changes sign on swapping distinct imaginary units and is non-associative for 168 of 210 ordered distinct imaginary triples. Incidence alone does not define coherent octonion signs. Pre-registered, not yet measured.",
+             "The Fano plane has 7 points labelled 1 to 7 and 7 lines, each line being a, b, a xor b. Binding two basis units gives plus or minus the third unit on their line, the sign set by orientation. XOR binding is commutative and associative so it loses order and grouping; signed binding changes sign on swapping distinct imaginary units and is non-associative for 168 of 210 ordered distinct imaginary triples. Incidence alone does not define coherent octonion signs. Historical proposal; consult its record for status.",
              ["Signed binding = XOR after relabelling plus a coherent sign-table read; incidence alone is insufficient.",
               "Costs add/subtract and table reads only; no multiplier, no float."])
     _badge(fg)
@@ -1184,9 +1186,9 @@ def fig_hamming_read():
     d = [sum(1 for a, b in zip(q, k) if a != b) + ag for k, ag in zip(ks, ages)]
     order = sorted(range(n), key=lambda j: (d[j], j))
     fg = Fig("hamming-rank-read.svg", "Hamming-rank read (softmax-free)",
-             "Query and keys are binarized to sign bits. Each key gets a distance d_j, the popcount of query xor key plus an age term. Keys are sorted by d_j and weighted by a rank table w_i proportional to 1 over i plus 1, and the values are summed. This replaces the exp-table-emulated softmax over Lorentz or dot scores. Pre-registered, not yet measured.",
+             "Query and keys are binarized to sign bits. Each key gets a distance d_j, the popcount of query xor key plus an age term. Keys are sorted by d_j and weighted by a rank table w_i proportional to 1 over i plus 1, and the values are summed. This historical proposal replaces the pre-D23 exp-table softmax comparator; it is not the current discrete Flock/Relation implementation.",
              ["Rank weights come from a fixed table indexed by rank; the sign-bit codes use the shared BitCode primitive (planned).",
-              "Contrast: today's read uses exp-table-emulated softmax over Lorentz/Dot scores."])
+              "Historical pre-D23 comparator: softmax over Lorentz/Dot scores; excluded from current M1."])
     _badge(fg)
     for x, t in ((40, "1  binarize q and keys"), (390, "2  distance per key"), (680, "3  rank, weight, sum")):
         fg.text(x, 100, t, 16, INK, weight="bold")
@@ -1238,8 +1240,8 @@ def fig_hamming_read():
 
 
 def fig_native_input_access():
-    fg = Fig("native-input-access.svg", "M2: input influence and explicit read access",
-             "All admitted tokens update recurrent geometry; only Source occurrences enter the current bank read and Copy lists.",
+    fg = Fig("native-input-access.svg", "Historical M2: input influence and read access",
+             "In this retained M2 snapshot, admitted tokens update recurrence; only Source occurrences enter its bank read and Copy lists.",
              ["Caller trace plus token-zero diagnostic: early cue reaches scores; novel replies 0/2, original controls 2/2.",
               "M1 all-position read is a separate path. A read-only history role is not yet integrated."])
     def box(x, y, w, title, lines, color):
@@ -1264,7 +1266,7 @@ def fig_native_input_access():
     fg.text(60, 439, "Candidate consolidation: a separate read-only history role", 18, VERM, weight="bold")
     fg.text(60, 465, "Retained input position + causal state can become a key without becoming a stored fact or Copy action.", 14, INK)
     fg.text(60, 488, "Not integrated. Early cue changes 3981/4096 Generate and 11/11 Copy scores; next: learning integration.", 14, INK)
-    fg.text(40, 550, "No claim that Source-only admission causes the current 8/512 result.", 15, MUTED)
+    fg.text(40, 550, "No causal claim for Source-only admission in the historical 8/512 result.", 15, MUTED)
     fg.text(40, 577, "No change to Source provenance, accepted artifact, D11 target or native acceptance checks.", 15, MUTED)
     fg.save()
 

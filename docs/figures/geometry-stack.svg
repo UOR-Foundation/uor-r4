@@ -48,10 +48,10 @@
 <rect x="40" y="410" width="1120" height="46" rx="8" fill="#F6F8FA" stroke="#D0D7DE" stroke-width="1"/>
 <rect x="40" y="410" width="6" height="46" rx="3" fill="#0072B2" stroke="#0072B2" stroke-width="1"/>
 <text x="60" y="438" font-size="14.5" font-weight="700" fill="#1F2328" text-anchor="start">Hopf S³ → S², fibre kept</text>
-<text x="350" y="438" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">observation without losing phase</text>
+<text x="350" y="438" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">float-backed; Q30 storage</text>
 <rect x="700" y="422" width="118" height="22" rx="11" fill="#0072B2" stroke="#0072B2" stroke-width="1.5"/>
 <text x="759" y="437" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.4">BUILT &amp; TESTED</text>
-<text x="860" y="438" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">native learner only</text>
+<text x="860" y="438" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">offline geometry; outside M1</text>
 <rect x="40" y="462" width="1120" height="46" rx="8" fill="#F6F8FA" stroke="#D0D7DE" stroke-width="1"/>
 <rect x="40" y="462" width="6" height="46" rx="3" fill="#0072B2" stroke="#0072B2" stroke-width="1"/>
 <text x="60" y="490" font-size="14.5" font-weight="700" fill="#1F2328" text-anchor="start">Chirality and polarity</text>

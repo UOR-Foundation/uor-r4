@@ -21,8 +21,9 @@ GPU-only model compute and a separately qualified D11 integer export.
 ## The compliant next-token path
 
 1. **Input:** a token ID selects blocks from `Snapshot.table`.
-2. **Context:** ordered ternary FBS combines and transports carriers.
-3. **Read:** Route selects a path; Flock ranks and transports eligible nodes;
+2. **Context:** ordered ternary FBS plans preserve context order for the read.
+3. **Read:** Route selects one carrier per block and transports it without
+   summing or snapping. Flock ranks eligible nodes, transports, sums and snaps;
    Relation adds finite relational reranking before the Flock selection.
 4. **Shared writer:** product-address admission and exact distances select a token
    using the same table. The writer is implemented.
@@ -70,7 +71,8 @@ Even with unit inputs this sum generally has a nonzero cross term in its squared
 norm. It need not lie on S³; λ² + (1−λ²) = 1 alone does not normalize it.
 The rotation preserves the norm of the transported term. Any unit-state claim
 for the combined state needs an explicit normalization or further conditions.
-Current M1 sums discrete transported vectors and snaps back to its finite carrier
+Current M1 Flock/Relation reads sum transported vectors and snap back to the finite carrier;
+Route instead transports one selected carrier per block without summing or snapping
 in [`discrete.cu`](../crates/uor-r4-discrete/src/discrete.cu).
 
 ## 3. The 120 icosians, the 600-cell and E8
@@ -90,6 +92,11 @@ inner-product counts and reflection closure. The executable finite checks are
 in [`verify_connections.py`](figures/geometry/verify_connections.py) (E2); the
 [primary construction paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC4786034/)
 explains the reduced inner product.
+
+Check E1 separately verifies preservation of the standard-coordinate E8 root set
+by the specified signed matrices. E2 verifies the reduced-metric icosian root
+system. These checks do not supply an intertwiner between the two representations;
+the action-preservation claim across that missing map remains unestablished.
 
 The retained [`anchors.rs`](../crates/uor-r4-core/src/native_geometric/anchors.rs)
 stores `[a0,…,a3,b0,…,b3]` and a Galois companion for one H4 root. Its header
@@ -122,13 +129,18 @@ for complete tuples are not semantic distances between class numbers.
 
 The Hopf map S³ → S² identifies circles of points. For a unit quaternion
 (a,b,c,d), `UnitS3Q30::hopf` computes
-`(2(ac+bd), 2(bc−ad), a²+b²−c²−d²)` in fixed point.
+`(2(ac+bd), 2(bc−ad), a²+b²−c²−d²)` after decoding Q30 storage
+to `f64`, then normalizes and requantizes the result to Q30. Q30 names the
+storage representation here, not integer execution of the Hopf map.
 A common complex phase changes the fibre position while leaving the S² image
 unchanged. The image alone is not an invertible representation of the input.
 
 [`prime_route_attention.rs`](../crates/uor-r4-core/src/prime_route_attention.rs)
 provides `rotate_common_fiber` and `SpinTorsionState { s3, fiber, torsion }`.
-These are fixed geometry facilities. Hopf fibre tracking is **not wired into the
+`rotate_common_fiber` also decodes to `f64`, uses `libm::sin`/`cos`, and
+normalizes/requantizes the rotated point. These are float-backed, offline
+fixed-geometry utilities, not an integer model execution path. Hopf fibre
+tracking is **not wired into the
 current discrete M1 read**. The retained M2
 [Hopf metric](../crates/uor-r4-core/src/native_geometric/hopf_metric.rs) is separate research.
 
@@ -208,10 +220,10 @@ tied to SpiralCore (next section).
 | Question | Answer | Where |
 | --- | --- | --- |
 | What carries route order? | Current M1 uses ordered FBS plans and composed 8D signed transport. The retained float stack uses noncommuting quaternion recurrence; these are distinct implementations. | `crates/uor-r4-discrete`, `geometric_stack.rs` |
-| What tracks accumulated phase? | `hopf_metric.rs` tracks a cumulative U(1) holonomy phase and a geodesic distance (Line B only, **`dormant`** in held M2 learner; Q30 integer `SpinTorsionState` in `prime_route_attention.rs` is **`active`** fixed geometry). Under the D32 Oct 14 addendum, `crates/uor-r4-discrete/src/prime_zeta.rs` uses offline complex-plane zeta-zero phases to construct `Snapshot.table` (**`active`**, [#2473](https://github.com/UOR-Foundation/uor-r4/pull/2473)/[#2477](https://github.com/UOR-Foundation/uor-r4/pull/2477), [brief](mechanisms/prime-zeta-complex-routing.md)). | `native_geometric/`, `prime_route_attention.rs`, `uor-r4-discrete/src/prime_zeta.rs` |
+| What tracks accumulated phase? | `hopf_metric.rs` tracks a cumulative U(1) holonomy phase and a geodesic distance (Line B only, **`dormant`** in held M2 learner; `SpinTorsionState` in `prime_route_attention.rs` uses Q30 storage with float-backed Hopf/fibre helpers outside M1). Under the D32 Oct 14 addendum, `crates/uor-r4-discrete/src/prime_zeta.rs` uses offline complex-plane zeta-zero phases to construct `Snapshot.table` (**`active`**, [#2473](https://github.com/UOR-Foundation/uor-r4/pull/2473)/[#2477](https://github.com/UOR-Foundation/uor-r4/pull/2477), [brief](mechanisms/prime-zeta-complex-routing.md)). | `native_geometric/`, `prime_route_attention.rs`, `uor-r4-discrete/src/prime_zeta.rs` |
 | What are chirality and polarity? | Exact signs on Z[φ] (**`active`** fixed integer tables in `native_geometric/anchors.rs`). Line B only. | `native_geometric/` |
 | What is SpiralCore? | `spiralcore_operator.rs` reproduces the SpiralCore v63 octonion/Cl(0,6) convention exactly: the oriented Fano cycles (124)(235)(346)(457)(561)(672)(713), 15 bivectors ↔ 15 semiprimes, and a 64-state composition table. **Since #2279 its signed BFS action is the trunk's projection** (`spiralcore_fbs.rs`, **`dormant`** in pre-D32 F32/BF16 form, [brief](mechanisms/spiralcore-fbs-projection.md); **`active`** in discrete integer/CUDA form in `crates/uor-r4-discrete` [#2379](https://github.com/UOR-Foundation/uor-r4/pull/2379)/[#2395](https://github.com/UOR-Foundation/uor-r4/pull/2395)/[#2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), [discrete brief](mechanisms/discrete-geometric-learning.md), [discrete record](labs/discrete-geometric-learning-2026-10-13/README.md)). One anchor orbit holds 16 roots and 64 signed operator states, and an output block's carrier is moved by the composed edge history. The orientation in Mark (N3mesis)'s later substrate sketch is different and inconsistent, and it must not replace this canonical table (see the review in section 10). | `uor-r4-core/src/spiralcore_operator.rs`, `uor-r4-discrete/src/{lib.rs,discrete.cu}`, `uor-r4-training/src/spiralcore_fbs.rs` |
-| What was tried earlier? | Recursive geometric attention over earlier tokens (A1) was stopped on 1 October (D18) because a reusable state erased order (**`archived-negative (D22 scope)`**; under D22 that closes the configuration, not the mechanism). A route-holonomy read and an octonion-signed binding remain **`dormant`** designs (see [Designs not yet built](#designs-not-yet-built)). | #2029 |
+| What was tried earlier? | Recursive geometric attention over earlier tokens (A1) was stopped on 1 October (D18) because a reusable state erased order (**`archived-negative (D22 scope)`**; under D22 that closes the configuration, not the mechanism). A route-holonomy read and an octonion-signed binding remain **`dormant`** designs (see [Historical research designs](#historical-research-designs)). | #2029 |
 
 ## 10. How the geometric pieces connect
 
@@ -236,13 +248,14 @@ Matthew (SpiralCore v63/v69); the octonion and Fano material to Mark (N3mesis, N
 | Six primes | six five-fold axes | a labelling | **chosen**: 720 labellings, 12 inequivalent under rotation | `verify_connections.py` prints its choice | — |
 | Semiprimes p_i·p_j | Cl(0,6) bivectors B_ij | B_ij·B_jk = −B_ik, mirroring p_i p_j · p_j p_k → p_i p_k; the B_ij generate a group of order 64 that maps onto the 32 square-free even prime products (kernel ±1) | forced | `spiralcore_operator.rs` | SpiralCore control; trunk projection (**`dormant`** float #2279; **`active`** discrete `uor-r4-discrete` #2379/#2400) |
 | Cl(0,6) bivectors | octonions | Cl(0,6) acting on the octonions through the 7 Fano lines (124)(235)(346)(457)(561)(672)(713) | forced | `spiralcore_operator.rs`, `cd_space.rs` | control (**`active`**); pre-registered octonion-signed binding (**`dormant`**) |
-| Fano plane | XOR on 3-bit indices | after relabelling, every line is {a, b, a⊕b}, so the octonion product is a signed XOR (168 relabellings) | forced (up to relabelling) | `verify_connections.py` | pre-registered binding (**`dormant`**), Hamming-rank read (**`active`** discrete `ReadSpec::Flock` #2395/#2400; **`archived-negative (D22 scope)`** parallel-to-softmax float run) |
+| Fano plane | XOR on 3-bit indices | after relabelling, every line is {a, b, a⊕b}, so the octonion product is a signed XOR (168 relabellings) | forced (up to relabelling) | `verify_connections.py` | pre-registered binding (**`dormant`**), historical sign-bit/rank-table proposal (**`dormant`**; **`archived-negative (D22 scope)`** parallel-to-softmax float run), distinct from current Flock/Relation |
 | Octonions | quaternions | each Fano line spans a copy of the quaternions; the octonions are alternative and norm-multiplicative, and 168 of 210 ordered unit triples are non-associative (exactly the non-collinear ones) | forced | `cd_space.rs` | stack transport (**`active`** in `uor-r4-discrete`; **`dormant`** in float `geometric_stack.rs`) |
 | Quaternions (S³) | 2I, the 120 unit icosians | the finite subgroup of S³; closed, order 120; shells 1, 12, 20, 12, 30, 12, 20, 12, 1 from every element; 720 edges (shell 1) | forced | `geometric_stack.rs` (icosian snap) | stack (**`dormant`** float snap), pre-registered E1 (**`dormant`**) |
 | 2I | icosahedral rotations | 2I/±1 = A5 (60 rotations), acting 2-transitively on the six five-fold axes | forced | `verify_connections.py` | — |
 | 2I | exact Z[φ] | icosian coordinates lie in Z[φ]/2 | forced | `ZPhi { a, b }` | **`active`** fixed integer arithmetic (`uor-r4-core`); **`dormant`** held Line B learner |
-| 2I ∪ φ·2I | E8 | 240 roots under the reduced rational-part metric defined in section3, not ordinary quaternion Euclidean distance; the specified bivectors preserve them | forced | E8 notes in `AGENTS.md`, `uor-r4-discrete` | **`active`** current carrier uses a 16-root suborbit, not this full 240-root set (#2379, #2473); **`dormant`** float E8 orbit memory ([brief](mechanisms/e8-orbit-memory.md)) |
-| 2I | Hopf S² | S³ → S² maps the 120 icosians onto one orbit of 30 points, every fibre of size 4 (a two-fold-type orbit, not literally the axes of the chosen frame) | forced | `prime_route_attention.rs`, `hopf_metric.rs` | **`active`** Q30 integer Hopf map; **`dormant`** held Line B learner |
+| Cl(0,6) bivectors | Standard-coordinate E8 | the signed matrices preserve the 240 standard-coordinate roots (check E1), independently of the reduced-metric icosian realization | forced for the specified coordinates | `verify_connections.py` E1, `spiralcore_operator.rs` | current M1 uses a 16-root orbit in this coordinate convention |
+| 2I ∪ φ·2I | E8 | 240 roots under the reduced rational-part metric defined in section3, not ordinary quaternion Euclidean distance (check E2); no intertwiner to the E1 signed-action representation is established | forced | E8 notes in `AGENTS.md`, `uor-r4-discrete` | current M1 separately uses a 16-root standard-coordinate carrier; no basis bridge to this icosian realization is asserted; **`dormant`** float E8 orbit memory ([brief](mechanisms/e8-orbit-memory.md)) |
+| 2I | Hopf S² | S³ → S² maps the 120 icosians onto one orbit of 30 points, every fibre of size 4 (a two-fold-type orbit, not literally the axes of the chosen frame) | forced | `prime_route_attention.rs`, `hopf_metric.rs` | float-backed offline Hopf utility with Q30 storage, outside current M1; **`dormant`** held Line B learner |
 | 2I | VSA bit codes | the learned token → icosian-root assignment builds the codes | learned | `vsa_codes.rs` (since #2077) | **`dormant`** in held Line B learner (trained VSA helps); **`archived-negative (D22 scope)`** Mode 0 & root-only codes ([record](labs/vsa-native-test-2026-10-09/README.md)) |
 
 **Cautions for anyone building on this.**
@@ -270,7 +283,7 @@ continue to concern the repository's specified structures, not certification of 
 A further fact: the icosahedron's five orthogonal frames of two-fold axes form a *synthematic total* of
 K6, five perfect matchings that together cover all 15 edges.
 
-## Designs not yet built
+## Historical research designs
 
 Three integer-only, softmax-free designs follow from the connections above. They have figures and full
 descriptions on the [archived page](history/geometry-float-form-2026-10.md#11-pre-registered-mechanisms-not-yet-measured).
@@ -280,12 +293,18 @@ Under D22 each needs its own pre-registration and a `TEST FITNESS: FIT` review b
   120 × 120 table. Earlier positions are ranked by the shell index of the relative product.
 - **Octonion-signed binding** (**`dormant`** design; the inconsistent N3mesis draft cycle orientation is **`archived-negative (D22 scope)`** as a draft convention defect in [octonion substrate review](labs/octonion-substrate-review-2026-10-09/README.md), while the canonical v63 Fano table in `spiralcore_operator.rs` is **`active`**). On the Fano plane, e_a · e_b = ±e_(a⊕b): a signed XOR whose sign depends
   on operand order, unlike plain XOR.
-- **Hamming-rank read** (**`active`** in discrete `ReadSpec::Flock` in `crates/uor-r4-discrete` [#2395](https://github.com/UOR-Foundation/uor-r4/pull/2395)/[#2400](https://github.com/UOR-Foundation/uor-r4/pull/2400), [discrete flock record](labs/discrete-flock-writer-integration-2026-10-13/README.md); **`dormant`** in pre-D32 float/LUT form; **`archived-negative (D22 scope)`** for the single parallel-to-softmax Hamming-rank configuration at +0.259 BPB in [softmax-free read](labs/softmax-free-read-2026-10-10/README.md)). Binarized query and keys are compared by popcount, then ranked and weighted by
-  a fixed rank table. A version trained beside a softmax stack measured +0.259 BPB against softmax
-  ([flock reads](mechanisms/flock-rank-reads.md)). That closes only that configuration.
+- **Hamming-rank read** is a historical sign-bit/popcount design with fixed rank-table weights. The [historical float configuration](mechanisms/flock-rank-reads.md) trained beside a softmax stack measured +0.259 BPB against softmax; that result closes only that configuration. It is not the current discrete Flock/Relation algorithm.
 
-The starling and flock rank reads, the reads rung 0b adds, have their own briefs:
-[starling read](mechanisms/starling-read.md) (**`dormant`** in pre-D32 float/rung-0b `starling_native` form, [rung0b source](labs/starling-rung0b-source-2026-10-13/README.md); **`active`** discrete murmuration `ReadSpec::Flock` in [#2395](https://github.com/UOR-Foundation/uor-r4/pull/2395)/[#2400](https://github.com/UOR-Foundation/uor-r4/pull/2400); **`archived-negative (D22 scope)`** for pre-D23 Rungs 1–3, pivot and softmax-surrogate configurations #2222–#2249) and [flock / rank-table reads](mechanisms/flock-rank-reads.md) (**`active`** discrete `ReadSpec::Flock` in [#2395](https://github.com/UOR-Foundation/uor-r4/pull/2395)/[#2400](https://github.com/UOR-Foundation/uor-r4/pull/2400) and **`active`** D34 `ReadSpec::Relation` reranker design card in [finite-relational-head.md](mechanisms/finite-relational-head.md); **`dormant`** pre-D32 stack/LUT form; **`archived-negative (D22 scope)`** for M4 runs #2140/#2144/#2153/#2160 measured beside a softmax-trained host stack).
+Current [`flock_vector`](../crates/uor-r4-discrete/src/discrete.cu) orders candidates
+by relation score descending, L1 displacement ascending, coordinate Hamming
+ascending, recency descending and node ascending. In Flock mode the relation
+scores are zero. It **equally sums** the selected transported roots and snaps the
+sum to a carrier root; it does not use the historical fixed rank-table weights.
+Relation adds its graph reranking before this same selection/aggregation path.
+The [architecture map](architecture.md) traces those implemented reads, while the
+[starling](mechanisms/starling-read.md) and [rank-table](mechanisms/flock-rank-reads.md)
+briefs retain their distinct historical designs and measurements.
+
 
 ## Serving without multiplication
 

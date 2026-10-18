@@ -335,16 +335,16 @@ fn architecture() -> Result<String, Fail> {
     );
     let steps = [
         (
-            "1  Token IDs → shared table",
+            "1  Encode IDs from shared table",
             "8D blocks · 16 carrier roots · 64 actions",
         ),
         (
             "2  Ordered ternary context",
-            "FBS combines and transports carriers",
+            "FBS plans preserve context order",
         ),
         (
             "3  Route / Flock / Relation read",
-            "Select, transport, sum and snap",
+            "Route: one carrier, exact transport",
         ),
         (
             "4  Shared vector writer",
@@ -356,7 +356,17 @@ fn architecture() -> Result<String, Fail> {
         let y = 108.0 + i as f64 * 132.0;
         s.rect([30.0, y, 540.0, 98.0], 12.0, ("#E4EFF8", BLUE, 1.5, None));
         s.fit([50.0, y + 35.0], (23.0, 700, INK), 500.0, title);
-        s.fit([50.0, y + 70.0], (20.0, 400, BODY), 500.0, detail);
+        if i == 2 {
+            s.fit([50.0, y + 61.0], (20.0, 400, BODY), 500.0, detail);
+            s.fit(
+                [50.0, y + 85.0],
+                (20.0, 400, BODY),
+                500.0,
+                "Flock/Relation: sum and snap",
+            );
+        } else {
+            s.fit([50.0, y + 70.0], (20.0, 400, BODY), 500.0, detail);
+        }
         if i < steps.len() - 1 {
             s.arrow(300.0, y + 98.0, 300.0, y + 130.0, false);
         }
@@ -425,7 +435,7 @@ fn architecture() -> Result<String, Fail> {
     );
     s.finish(
         "Current discrete M1 architecture",
-        "Token IDs index the shared table. Ordered FBS context feeds Route, Flock or Relation reads. The same vector table supplies the writer and selected token. Learning compares exact virtual moves on a fixed batch. M2, object-store integration, Hopf fibre tracking and unified D11 serving are separate boundaries. Every current arrow is sourced in docs/architecture.md.",
+        "discrete_encode looks up token IDs in the shared table to produce encoded blocks. Ordered FBS plans feed Route single-carrier transport or Flock/Relation transported sums and snaps. The same vector table supplies the writer and selected token. Learning compares exact virtual moves on a fixed batch. M2, object-store integration, Hopf fibre tracking and unified D11 serving are separate boundaries. Every current arrow is sourced in docs/architecture.md.",
     )
 }
 
@@ -922,7 +932,7 @@ fn training_pipeline() -> Result<String, Fail> {
     s.legend(656.0, &[St::Working, St::Built, St::Planned, St::Held]);
     s.finish(
         "The gated training pipeline",
-        "Data from the private HF store, a pre-registration sheet, a TEST FITNESS review and the owner's hold release come before any GPU time. A Vast.ai pod bootstrapped from the store trains the compliant trunk on GPU only, evaluates with raw-score measures and keeps the results in iCloud and the store. Export to D11 waits for the integer engine to bind the new geometric modes.",
+        "Historical operator-phase workflow: data, pre-registration, review, scoped owner release, GPU training/evaluation and artifact preservation. This dated diagram is not the active execution status; see STATUS.md. Unified D11 serving remains unqualified.",
     )
 }
 
@@ -1119,7 +1129,7 @@ fn milestones() -> Result<String, Fail> {
     s.legend(636.0, &[St::Progress, St::Held, St::Paused, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "M1 language base in progress (reply 37 of 232, memory 20 of 40, compliant trunk source landed); M2 grounded reply held (437 of 512 development replies, 0 of 128 on fresh transfer); M3 durable memory paused; M4 one served model held; M5 to M8 not started.",
+        "M1 language base in progress (reply 37 of 232 suspended, pilot 236 updates, original paired dose partial); M2 grounded reply held (437 of 512 development replies, 0 of 128 on fresh transfer); M3 durable memory paused; M4 one served model held; M5 to M8 not started.",
     )
 }
 
@@ -1157,9 +1167,9 @@ fn geometry_stack() -> Result<String, Fail> {
         ),
         (
             "Hopf S³ → S², fibre kept",
-            "observation without losing phase",
+            "float-backed; Q30 storage",
             St::Built,
-            "native learner only",
+            "offline geometry; outside M1",
         ),
         (
             "Chirality and polarity",

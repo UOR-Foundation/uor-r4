@@ -45,6 +45,43 @@ figures retain dated scope. Mathematical figure prose now states assumptions;
 29 passing checks are not described as 29 general proofs. The desktop architecture
 is capped at 600px and retains its vertical reading order on mobile.
 
+## Independent review corrections
+
+Review of initial head `7ab658bb` requested corrections in eight related groups:
+
+1. Historical figure scopes: removed present-tense softmax and running-VSA-test claims from generator and SVG output; marked retained M2/float/proposal figures explicitly.
+2. README mechanism rows: replaced the stale running-D5/source-only-Relation passage with artifact-bound pilot, partial-dose, preflight and successor references.
+3. Encoder arrow: `discrete_encode` performs token-table lookup; `input_block` reads encoded input and applies an optional virtual move.
+4. Read semantics: Route transports one carrier per block without summing/snapping. Flock/Relation select, equally sum transported roots and snap. The diagram and prose now distinguish them.
+5. Hopf boundary: Q30 is storage, while `hopf` and fibre rotation decode to `f64`, compute/normalize and requantize; rotation uses `libm::sin`/`cos`. These offline helpers are outside current M1, not integer execution.
+6. Historical Hamming design: sign-bit/popcount/fixed rank weights are distinct from the implemented relation-score/L1/coordinate-Hamming/recency/node ordering and equal-sum Flock aggregation.
+7. E8 representation boundary: E1 standard-coordinate signed-action preservation and E2 reduced-metric icosian roots remain separate results. No intertwiner is established. The figure has separate E8 nodes, and the README qualifies its shorthand.
+8. Prime-Zeta uniqueness: phase examples and quantization do not guarantee injectivity; separate allocation controls enforce codebook uniqueness under the declared capacity conditions.
+
+These corrections narrow claims; they do not disprove the unestablished cross-representation map or close a mechanism. The [wording regression guard](wording-regression.rs) rejects the specific misleading phrases found in this review; it is not a semantic/scientific audit.
+
+### Reviewable check output and actual rendered previews
+
+[Host check log](checks/discrete-check.log), [actual host-test log](checks/discrete-tests.log),
+[local link scan output](checks/links.json), [figure freshness output](checks/figures-check.log),
+[claim-wording output](checks/claim-wording.log), [geometry-check output](checks/geometry-checks.log)
+and [regression guard output](checks/wording-regression.log) preserve the executed outputs.
+These host tests are separate from GitHub's transport-only acknowledgements;
+no CI transport status is treated as test evidence.
+
+The bounds records are automated checks, not a substitute for visual inspection.
+The following are actual Chromium render captures inspected during this revision:
+
+- Architecture: [390px](previews/architecture-390.png), [1200px](previews/architecture-1200.png).
+- Historical Hamming design: [390px](previews/hamming-rank-read-390.png), [1200px](previews/hamming-rank-read-1200.png).
+- Separate E8 representations: [390px](previews/connections-390.png), [1200px](previews/connections-1200.png).
+- [Hopf helper boundary](previews/hopf-fibration-1200.png), [zeta allocation distinction](previews/zeta-phases-1200.png), [historical VSA status](previews/vsa-hypervectors-1200.png).
+
+```sh
+rustc --edition 2021 docs/labs/documentation-reconciliation-2026-10-18/wording-regression.rs -o local/doc-wording
+local/doc-wording
+```
+
 ## Limitations and resources
 
 External links were verified selectively through primary source/issue reads;

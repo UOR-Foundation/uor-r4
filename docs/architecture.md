@@ -10,9 +10,9 @@ completed unified serving system. [Status and results](../STATUS.md) name the me
 
 | Figure arrow or component | Primary source and meaning |
 |---|---|
-| Token IDs → shared table | [`input_block` in discrete.cu](../crates/uor-r4-discrete/src/discrete.cu): token IDs index `Snapshot.table`; the same table supplies output vectors. |
-| Shared table → ordered context | [`metadata.rs`](../crates/uor-r4-discrete/src/metadata.rs) builds ordered ternary plans; `route_vector` / `flock_vector` in [`discrete.cu`](../crates/uor-r4-discrete/src/discrete.cu) consume the plans. |
-| Ordered context → read vector | `read_vector` dispatches Route, Flock or Relation. Flock ranks eligible prior nodes, transports payloads into the query frame, sums, snaps and applies ternary gates. Relation reranks with finite graph-edge sweeps before that selection. |
+| Token IDs + shared table → encoded blocks | [`discrete_encode` in discrete.cu](../crates/uor-r4-discrete/src/discrete.cu) performs the token-table lookup into encoded input blocks. `input_block` reads that already encoded buffer and optionally applies the virtual candidate move; it is not the encoder. The writer uses the same `Snapshot.table` for output vectors. |
+| Encoded blocks + ordered context plan → read | [`metadata.rs`](../crates/uor-r4-discrete/src/metadata.rs) builds ordered ternary plans; `route_vector` / `flock_vector` in [`discrete.cu`](../crates/uor-r4-discrete/src/discrete.cu) consume the plans. |
+| Ordered context → read vector | `read_vector` dispatches Route, Flock or Relation. `route_vector` follows one selected carrier per block and applies the composed signed transport, without summing or snapping. Flock ranks eligible prior nodes, transports payloads into the query frame, sums, snaps and applies ternary gates. Relation reranks with finite graph-edge sweeps before that selection. |
 | Read vector → shared writer → selected token | `writer` in [`discrete.cu`](../crates/uor-r4-discrete/src/discrete.cu) admits occupied product-address cells and scans tokens in admitted cells by exact integer distance, with deterministic ties. No probability normalization is formed. |
 | Snapshot + fixed batch → virtual moves → accepted snapshot | [`device.rs`](../crates/uor-r4-discrete/src/device.rs), [`training.rs`](../crates/uor-r4-discrete/src/training.rs) and [`controller.rs`](../crates/uor-r4-discrete/src/controller.rs): proposals compare exact fixed-batch objectives; updates require improvement and applicable admission. [`rows_device.rs`](../crates/uor-r4-discrete/src/rows_device.rs) provides opt-in row-parallel proposals. |
 | Prime-Zeta constructor → shared table (optional initialization) | [`prime_zeta.rs`](../crates/uor-r4-discrete/src/prime_zeta.rs): four complex channels per block → two normalized Q30 quaternion lanes → fixed coordinate permutation → exact alignment to the carrier, under writer-cell quotas and full-vector uniqueness controls. This constructor is distinct from the integer kernel. |
@@ -34,7 +34,8 @@ K or finite tables alone do not establish context-independent cost or laptop lat
 
 Quaternion/S³, full icosian/H4, reduced-metric E8, Hopf/fibre and wider prime-addressed
 memory research are explained in the [geometry guide](geometry.md). Hopf fibre tracking
-is available fixed geometry, not a step in the current discrete M1 read.
+uses float-backed offline geometry helpers with Q30 storage; it is not an
+integer execution path or a step in the current discrete M1 read.
 
 Cargo selects core [`native_support.rs`](../crates/uor-r4-core/src/native_support.rs)
 and integer [`native_geometry.rs`](../crates/uor-r4-integer/src/native_geometry.rs)

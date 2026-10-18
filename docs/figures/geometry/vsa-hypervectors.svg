@@ -387,5 +387,5 @@
 <rect x="538" y="580" width="14" height="14" rx="3" fill="#8a97a6" fill-opacity="1" stroke="#fff" stroke-width="1" stroke-opacity="1"/>
 <text x="560" y="592" font-size="12.5" fill="#1f2933" fill-opacity="1" text-anchor="start" font-weight="normal">fixed-hash code (historical)</text>
 <text x="40" y="648" font-size="14" fill="#5f6b7a">Bipolar cosine = 1 - 2d/4096, with d = popcount(A XOR B); the VSA term adds vsa_scale x cosine to the root and leaf scores.</text>
-<text x="40" y="669" font-size="14" fill="#5f6b7a">Built and tested; a pre-registered retraining test (#2029) is running. Bit patterns and example values here are illustrative.</text>
+<text x="40" y="669" font-size="14" fill="#5f6b7a">Historical M2 learner experiment; bit patterns and example values are illustrative. See STATUS.md for current work.</text>
 </svg>

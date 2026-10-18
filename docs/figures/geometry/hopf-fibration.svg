@@ -309,5 +309,5 @@
 <text x="489" y="360" font-size="13" fill="#5f6b7a" fill-opacity="1" text-anchor="middle" font-weight="normal" font-style="italic">fibre</text>
 <text x="40" y="616" font-size="13" fill="#5f6b7a" fill-opacity="1" text-anchor="start" font-weight="normal">numbers match points to fibres; dashed rings on S² are the two latitudes whose fibres fill the tori</text>
 <text x="40" y="648" font-size="14" fill="#5f6b7a">Each point on S² is a whole circle in S³; observing only S² loses the position along the circle (the fiber).</text>
-<text x="40" y="669" font-size="14" fill="#5f6b7a">Fixed geometry can keep the fibre separately; current M1 does not. A latitude of S² gives a torus of fibres.</text>
+<text x="40" y="669" font-size="14" fill="#5f6b7a">Core helpers are float-backed with Q30 storage, outside M1. A latitude of S² gives a fibre torus.</text>
 </svg>
