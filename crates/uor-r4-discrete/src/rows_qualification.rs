@@ -198,6 +198,83 @@ fn rows_refusal_parity(tally: &mut Tally) -> Result<()> {
     Ok(())
 }
 
+/// Non-gating wall-clock comparison at the Dose 1 shape (V4096/B4/C192, 64
+/// full-context rows, kept cells 8). Each sample is one synchronized proposal;
+/// one warmup per path is excluded; the median of five timed samples is kept.
+/// Parity of these exact calls is also required. Not a qualified rate.
+fn timing() -> Result<serde_json::Value> {
+    let spec = Spec {
+        vocabulary: 4096,
+        blocks: 4,
+        context: 192,
+        kept_cells: 8,
+    };
+    let mut rng = Lcg(0x7193);
+    let mut cases = Vec::new();
+    for (read, parameter) in [
+        (ReadSpec::Route, Parameter::VectorBlock(0)),
+        (
+            ReadSpec::Relation { kept: 8, sweeps: 1 },
+            Parameter::Gate(0),
+        ),
+    ] {
+        let device = Device::new_with_read(spec, read, 1, 0)?;
+        let rows = device.rows_counterfactual()?;
+        let batch: Vec<Vec<Identity>> = (0..64u64)
+            .map(|r| {
+                (0..192u64)
+                    .map(|p| Identity {
+                        token: rng.next(4096),
+                        occurrence: r * 192 + p + 1,
+                        record: 17,
+                        version: 9,
+                    })
+                    .collect()
+            })
+            .collect();
+        let targets: Vec<u32> = (0..64).map(|_| rng.next(4096)).collect();
+        let input = device.carry_windows(&batch)?;
+        let sample = |use_rows: bool| -> Result<(u128, Vec<u64>)> {
+            let started = std::time::Instant::now();
+            let proposal = if use_rows {
+                device.propose_rows(&input, &targets, parameter, &rows)?
+            } else {
+                device.propose(&input, &targets, parameter)?
+            };
+            let losses = proposal.candidate_losses()?;
+            Ok((started.elapsed().as_nanos(), losses))
+        };
+        let median = |use_rows: bool| -> Result<(u128, Vec<u64>)> {
+            sample(use_rows)?; // excluded warmup
+            let mut times = Vec::new();
+            let mut losses = Vec::new();
+            for _ in 0..5 {
+                let (ns, l) = sample(use_rows)?;
+                times.push(ns);
+                losses = l;
+            }
+            times.sort_unstable();
+            Ok((times[2], losses))
+        };
+        let (ordinary_ns, ordinary_losses) = median(false)?;
+        let (rows_ns, rows_losses) = median(true)?;
+        require(
+            ordinary_losses == rows_losses,
+            &format!("{read:?}/{parameter:?}: timing-shape losses differ"),
+        )?;
+        cases.push(serde_json::json!({
+            "read": format!("{read:?}"), "parameter": format!("{parameter:?}"),
+            "ordinary_median_ns": ordinary_ns as u64, "rows_median_ns": rows_ns as u64,
+            "losses_equal": true,
+        }));
+    }
+    Ok(serde_json::json!({
+        "shape": "V4096/B4/C192/K8, 64 rows, synchronized propose, 1 warmup + 5 timed, median",
+        "qualified": false,
+        "cases": cases,
+    }))
+}
+
 pub fn run(report: &Path) -> Result<()> {
     std::fs::create_dir(report).map_err(|e| Error::Invalid(format!("exclusive report: {e}")))?;
     let controls: [fn(&mut Tally) -> Result<()>; 4] = [
@@ -227,10 +304,24 @@ pub fn run(report: &Path) -> Result<()> {
         println!("{record}");
         records.push(record);
     }
+    // Timing runs only after every parity control passed; it is reported, not gated.
+    let timing = if failed {
+        serde_json::json!("NOT_RUN: parity failed")
+    } else {
+        match timing() {
+            Ok(value) => value,
+            Err(error) => {
+                failed = true;
+                serde_json::json!({ "status": "FAIL", "error": error.to_string() })
+            }
+        }
+    };
+    println!("{timing}");
     let payload = serde_json::json!({
         "schema": crate::SCHEMA,
         "suite": "rows-counterfactual-parity",
         "status": if failed { "FAILED" } else { "PASS" },
+        "timing": timing,
         "rows_image_sha256": crate::device::compiled_rows_image_sha256(),
         "controls": records,
         "training": "HELD",
