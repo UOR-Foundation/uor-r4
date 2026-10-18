@@ -1,3 +1,15 @@
+## 2026-10-18 — Wire route counters accumulate across connections (kimi)
+
+Fixes the original #2613 P2: `WireGateway._handle` overwrote the persistent route bucket's `wire`
+bytes with the latest completed connection while `plain_in`/`plain_out` accumulated, understating the
+documented per-route ratio on reused routes. One-line change to `+=`; adds
+`tools/wire_socket_stats_smoke.py`, which completes two connections with distinct wire counts on one
+route and asserts the bucket equals both sums and the aggregate ratio (negative control against the
+original source fails with the last-only counter). `WIRE_SOCKET_ROUTING_PASS` and the new
+`WIRE_SOCKET_STATS_PASS` pass; host-only, no model compute, pods, training or evaluation. Claim:
+`kimi/wire-counter-aggregation-2026-10-18`; local head returned for PM review, no PR/merge.
+Record: [labs/wire-counter-aggregation-2026-10-18](../labs/wire-counter-aggregation-2026-10-18/README.md).
+
 ## 2026-10-18  Sixth DeepSeek claims cleanup (deepseek)
 
 Removes the merged #2646 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
