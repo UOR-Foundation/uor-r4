@@ -1,14 +1,14 @@
 ## 2026-10-18  Interposer fork-safe close (wire side exploration; deepseek)
 
-Closes the Codex P1 residual from the merged wire side exploration: `close()` no longer calls
-`shutdown(SHUT_RDWR)` to wake a blocked reader (which disturbed sockets shared after `fork`). Receive now
-waits with a bounded `poll()` loop that checks the fd's active flag; close only marks it inactive and
-closes the descriptor; reused-fd connect waits on the receive lock for at most that timeout. Added a
-stock-binary fork test (child closes inherited routed fd, parent continues) to both platform smokes.
-Worktree checks: `WIRE_INTERPOSER_PASS` and `WIRE_INTERPOSER_LINUX_PASS`, both with `fork_ok=true`. No
-model compute. Adversarial independent review requested.
+Closes the Codex P1 residual on the merged wire side exploration: close no longer calls
+shutdown(SHUT_RDWR) (which disturbed fork-shared sockets). Receive is non-blocking chunked
+(MSG_DONTWAIT) with an atomic active re-check; recv/send/shutdown carry a per-fd generation guard;
+atfork child lock re-init and child skip-free windows; fork test covers close-wake and reused-fd
+connect, with an unsafe-build negative control that must exit 7. Checks: WIRE_INTERPOSER_PASS and
+WIRE_INTERPOSER_LINUX_PASS, both fork_ok=true negative_control=true. Trade-off documented (idle
+20 Hz polls; close can wait for current-frame decompression). No model compute.
 Record: [labs/spiralcore-wire-interposer-fork-safe-2026-10-18](../labs/spiralcore-wire-interposer-fork-safe-2026-10-18/README.md).
-PR: https://github.com/UOR-Foundation/uor-r4/pull/2625
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2625.
 
 ## 2026-10-18  Final wire claims cleanup (deepseek)
 

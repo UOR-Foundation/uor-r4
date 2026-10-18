@@ -6,6 +6,7 @@
  * behaviour) breaks the parent; a fork-safe close must keep it working.
  */
 #include <arpa/inet.h>
+#include <errno.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdatomic.h>
@@ -19,11 +20,18 @@
 
 
 static atomic_int reader_done = 0;
+static atomic_int reader_started = 0;
+static atomic_int reader_result = 0;
+static atomic_int reader_errno = 0;
 
 static void *blocked_reader(void *arg) {
     int fd = *(int *)arg;
     unsigned char byte;
-    (void)recv(fd, &byte, 1, 0);
+    atomic_store(&reader_started, 1);
+    errno = 0;
+    ssize_t result = recv(fd, &byte, 1, 0);
+    atomic_store(&reader_result, (int)result);
+    atomic_store(&reader_errno, errno);
     atomic_store(&reader_done, 1);
     return NULL;
 }
@@ -68,6 +76,8 @@ static void fill(unsigned char *buffer, size_t size) {
 }
 
 int main(int argc, char **argv) {
+    signal(SIGPIPE, SIG_IGN);
+    alarm(15);
     if (argc < 3) {
         fprintf(stderr, "usage: %s HOST:PORT BYTES\n", argv[0]);
         return 2;
@@ -144,7 +154,7 @@ int main(int argc, char **argv) {
     }
     close(fd3);
     close(fd);
-    printf("FORK_TEST_OK bytes=%zu interrupt_ok=true reused_fd_ok=true\n", total);
+    printf("FORK_TEST_OK bytes=%zu interrupt_ok=true reused_fd_ok=true reader_result=%d\n", total, atomic_load(&reader_result));
     free(payload);
     free(echo);
     return 0;

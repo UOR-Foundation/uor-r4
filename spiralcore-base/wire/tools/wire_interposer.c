@@ -229,6 +229,16 @@ static void dump_stats(void) {
 
 static volatile int g_ready = 0;
 
+static volatile int child_after_fork = 0;
+
+static void child_after_fork_handler(void) {
+    child_after_fork = 1;
+}
+
+static void parent_after_fork_handler(void) {
+    child_after_fork = 0;
+}
+
 static void reinit_locks_after_fork(void) {
     int i;
     for (i = 0; i < MAX_FD; i += 1) {
@@ -247,7 +257,7 @@ static void wire_interposer_ctor(void) {
         pthread_mutex_init(&fds[i].lock, NULL);
         pthread_mutex_init(&fds[i].io_lock, NULL);
     }
-    pthread_atfork(NULL, NULL, reinit_locks_after_fork);
+    pthread_atfork(NULL, parent_after_fork_handler, reinit_locks_after_fork);
     g_ready = 1;
     atexit(dump_stats);
 }
@@ -438,7 +448,7 @@ static ssize_t read_frame(FdState *state, int fd, void *buffer, size_t size) {
         if (state->eof) return 0;
         unsigned char header[HEADER];
         ssize_t got = read_exact_active(state, fd, header, HEADER);
-        if (got <= 0) {
+        if (got != (ssize_t)HEADER) {
             state->eof = 1;
             return 0;
         }
@@ -539,6 +549,19 @@ static ssize_t read_frame(FdState *state, int fd, void *buffer, size_t size) {
 }
 
 static void reset_state(FdState *state) {
+    if (child_after_fork) {
+        state->rbuf = NULL;
+        state->rbuf_len = 0;
+        state->rbuf_off = 0;
+        state->def_init = 0;
+        state->inf_init = 0;
+        state->active = 0;
+        state->send_mode = -1;
+        state->recv_mode = -1;
+        state->eof = 0;
+        state->eof_sent = 0;
+        return;
+    }
     if (state->def_init) {
         deflateEnd(&state->def);
         state->def_init = 0;
@@ -609,10 +632,15 @@ int WIRE_API(connect)(int fd, const struct sockaddr *addr, socklen_t len) {
 
 ssize_t WIRE_API(send)(int fd, const void *buffer, size_t size, int flags) {
     if (!g_ready) return sys_send(fd, buffer, size, flags);
-    if (fd < 0 || fd >= MAX_FD || flags != 0 || !fds[fd].active) return sys_send(fd, buffer, size, flags);
+    if (fd < 0 || fd >= MAX_FD || flags != 0) return sys_send(fd, buffer, size, flags);
     FdState *state = &fds[fd];
     pthread_mutex_lock(&state->lock);
-    if (!state->active || state->eof_sent) {
+    int was_active = atomic_load(&state->active);
+    unsigned generation = state->generation;
+    pthread_mutex_unlock(&state->lock);
+    if (!was_active) return sys_send(fd, buffer, size, flags);
+    pthread_mutex_lock(&state->lock);
+    if (!atomic_load(&state->active) || state->generation != generation || state->eof_sent) {
         pthread_mutex_unlock(&state->lock);
         errno = EPIPE;
         return -1;
@@ -630,8 +658,10 @@ ssize_t WIRE_API(recv)(int fd, void *buffer, size_t size, int flags) {
     }
     FdState *state = &fds[fd];
     pthread_mutex_lock(&state->lock);
+    int was_active = atomic_load(&state->active);
     unsigned generation = state->generation;
     pthread_mutex_unlock(&state->lock);
+    if (!was_active) return sys_recv(fd, buffer, size, flags);
     pthread_mutex_lock(&state->io_lock);
     pthread_mutex_lock(&state->lock);
     int valid = atomic_load(&state->active) && state->generation == generation;
@@ -662,9 +692,19 @@ ssize_t WIRE_API(write)(int fd, const void *buffer, size_t size) {
 
 int WIRE_API(shutdown)(int fd, int how) {
     if (!g_ready) return sys_shutdown(fd, how);
-    if (fd < 0 || fd >= MAX_FD || !fds[fd].active) return sys_shutdown(fd, how);
+    if (fd < 0 || fd >= MAX_FD) return sys_shutdown(fd, how);
     FdState *state = &fds[fd];
     pthread_mutex_lock(&state->lock);
+    int was_active = atomic_load(&state->active);
+    unsigned generation = state->generation;
+    pthread_mutex_unlock(&state->lock);
+    if (!was_active) return sys_shutdown(fd, how);
+    pthread_mutex_lock(&state->lock);
+    if (!atomic_load(&state->active) || state->generation != generation) {
+        pthread_mutex_unlock(&state->lock);
+        errno = EPIPE;
+        return -1;
+    }
     int rc = 0;
     if ((how == SHUT_WR || how == SHUT_RDWR) && !state->eof_sent) {
         unsigned char zero[HEADER] = {0, 0, 0, 0};
@@ -686,8 +726,9 @@ int WIRE_API(close)(int fd) {
         atomic_store(&state->eof, 1);
         pthread_mutex_unlock(&state->lock);
         /* No shutdown(): it would disturb a socket shared after fork. A reader in
-           read_exact_active sees active == 0 between non-blocking chunks and exits;
-           a reused-fd connect then only waits for that short chunk loop. */
+           read_exact_active sees active == 0 between non-blocking chunks and exits.
+           A reused-fd connect may additionally wait for the current frame's
+           decompression to finish (bounded CPU), but not for further socket I/O. */
 #if defined(WIRE_UNSAFE_CLOSE_SHUTDOWN)
         (void)sys_shutdown(fd, SHUT_RDWR);
 #endif

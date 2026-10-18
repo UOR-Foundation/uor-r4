@@ -79,12 +79,12 @@ grep -q 'PY_CLIENT_OK' py.log || fail 'linux python payload'
 cc -o wire_fork_test "$SCRIPT_DIR/wire_interposer_fork_test.c" || fail 'linux fork test build'
 LD_PRELOAD="$WORK/libwireinterposer.so" WIRE_ROUTES="$FAKE=$GATEWAY" WIRE_STATS_FILE="$WORK/fork.stats" \
   ./wire_fork_test "$FAKE" 32768 > fork_test.log 2>&1 || fail 'linux fork-safety round trip'
-grep -q 'FORK_TEST_OK' fork_test.log || fail 'linux fork-safety bytes'
+grep -q 'FORK_TEST_OK.*interrupt_ok=true reused_fd_ok=true' fork_test.log || fail 'linux fork-safety bytes/mechanism'
 cc -shared -fPIC -DWIRE_UNSAFE_CLOSE_SHUTDOWN -o libwireinterposer_unsafe.so "$SCRIPT_DIR/wire_interposer.c" -ldl -lz || fail 'linux unsafe build'
 LD_PRELOAD="$WORK/libwireinterposer_unsafe.so" WIRE_ROUTES="$FAKE=$GATEWAY" ./wire_fork_test "$FAKE" 32768 > fork_unsafe.log 2>&1
 UNSAFE_RC=$?
-if [ "$UNSAFE_RC" -eq 0 ] && grep -q 'FORK_TEST_OK' fork_unsafe.log; then
-  fail 'linux negative control did not fail'
+if [ "$UNSAFE_RC" -ne 7 ] || ! grep -q 'post-fork round trip failed' fork_unsafe.log; then
+  fail "linux negative control did not fail for the expected reason (rc=$UNSAFE_RC)"
 fi
 NEGATIVE_CONTROL=true
 FORK_OK=true
