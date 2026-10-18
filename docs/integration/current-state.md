@@ -4,6 +4,18 @@ The owner revised D32. Float forward passes, gradients and optimizers are legal 
 
 [D37](DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised); [record](../labs/d37-offline-float-2026-10-18/README.md). The policy JSON moves to schema `/7`, and `r4-policy-check` now pins the serving float/transcendental/multiplier commitments. The D32 discrete path, the Dose 1 sheet/packet and all holds are unchanged; no compute ran, $0. **Next:** pre-registrations may cite D37 for offline float learning in a separately scanned module; the starling/murmuration coupling (C1) is drafted only after the Dose 1 decision.
 
+## 2026-10-18  Wire side-exploration review fixes (Codex P1 findings; `deepseek/spiralcore-wire-review-fixes`)
+
+Follow-up to merged #2613 (`94d4d34a`): Codex's post-merge exact-head review at `3af1acf` reported four
+P1 findings, all addressed here. Interposer: separate `io_lock` so a blocking `recv` no longer blocks
+`close`/`shutdown`, and `close` defers buffer reset to the next connect. Mux: gateway releases completed
+streams (`finish_stream`). Linux smoke: scratch workspace defaults inside the checkout
+(`WIRE_SMOKE_WORK` override for the mvm guest). Delivery: removed committed transient
+`spiralcore-base/wire/local/` outputs and added `.gitignore`. Worktree checks: `WIRE_INTERPOSER_PASS`,
+`WIRE_MUX_PASS`, `WIRE_MUX_ROUTING_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no model compute.
+Record: [labs/spiralcore-wire-review-fixes-2026-10-18](../labs/spiralcore-wire-review-fixes-2026-10-18/README.md).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2614
+
 ## 2026-10-18  Wire transport side exploration merged (`deepseek/spiralcore-wire-side-exploration`)
 
 Merges the standalone wire-compression/transport work as a self-contained side exploration under
