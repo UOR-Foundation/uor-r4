@@ -476,6 +476,11 @@ fn latency_curve() -> Result<serde_json::Value> {
                 .score_rows_k(&input, &targets, &block, &rowsk)
                 .map(|_| ())
         }))?;
+        let after = device.score_rows_k(&input, &targets, &block, &rowsk)?;
+        require(
+            after.iter().all(|s| s.status == 0) && after[0].losses == first,
+            &format!("latency-shape block K={k} changed outcome across timing"),
+        )?;
         // Spread-aware reading of the pre-registered 2x threshold: the low bound
         // pairs the single median with the block p95, the high bound the single
         // p95 with the block median.

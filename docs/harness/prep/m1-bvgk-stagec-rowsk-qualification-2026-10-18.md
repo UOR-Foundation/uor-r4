@@ -22,7 +22,7 @@
 
   Racy refusals (lanes ending on different statuses, published by `atomicExch` on both paths) pass only if the observed status sets overlap across 4 re-runs. The receipt records each racy case's parameter and both observed sets in full. One mismatched loss or status is FAIL. Learned state and epoch must be unchanged around every call.
 
-  **Aliasing power (subagent review, finding 1).** Parity can only expose a coordinate reading another coordinate's slot if coordinates in the same block hold different results. So V2 records, per configuration cell (read, blocks, objective, row count, kind, K), how many multi-coordinate blocks held two or more distinct (status, losses) results. **At 64 rows, every cell with K ≥ 4 must have at least one such block; otherwise V2 FAILs as blind.**
+  **Aliasing power (subagent review, finding 1).** Parity can only expose a coordinate reading another coordinate's slot if coordinates in the same block hold different results. So V2 records, per configuration cell (read, blocks, objective, row count, kind, K), how many multi-coordinate blocks held two or more distinct (status, losses) results. **At 64 rows, every cell with K ≥ 4 must have at least one such block; otherwise V2 FAILs as blind.** Cells are pooled over model seeds 7 and 11. A kind with fewer than two coordinates forms no multi-coordinate block and is not a cell. A blind FAIL caused by the input, for example a 64-row batch that refuses at baseline so every coordinate shares one status, is an **instrument blocker** under D22, not a kernel result. It is repaired by a one-line amendment to the batch seed, with the reason posted, and V2 is rerun in a fresh report directory.
 
   **Partial blocks.** V2 also scores one deliberately short block (K − 1 coordinates) per K > 1, so the partial-block path always runs. The receipt counts short blocks, and the count must be > 0.
 - **V2-neg (sabotage control, pre-registered).** After the clean run, the same pod applies `docs/labs/bvgk-rowsk-scoring-2026-10-18/sabotage-reducer-offset.patch`. The patch makes the reducer write coordinate c's losses into slot c − 1. The pod rebuilds and runs `rowsk-qualify` into a fresh report directory. **V2 must FAIL**, with a losses or status mismatch or the blindness check. The source is then reverted with `git apply -R`, and the clean image identity is re-checked. If the sabotaged run PASSes, the instrument is powerless: that is an instrument blocker, and the clean result is not accepted.
@@ -42,7 +42,7 @@
     - per-coordinate latency;
     - `speedup_x1000` against K single proposals;
     - **all raw samples retained** in the receipt.
-  - **Checks:** the first coordinate's losses equal `propose_rows`, and every coordinate in each timed block has status 0. A refused coordinate would shrink the block's work and inflate the speedup.
+  - **Checks:** the first coordinate's losses equal `propose_rows`, and every coordinate in each timed block has status 0. This is checked on the same block and input once before timing and once after the last timed sample, which must also reproduce coordinate 0's losses. A refused coordinate would shrink the block's work and inflate the speedup.
   - **Spread-aware reading (per K):** `low = K × single median ÷ block p95` and `high = K × single p95 ÷ block median`, both ×1000.
     - The reading is `above_2x` if low ≥ 2000.
     - It is `below_2x` if high < 2000.
@@ -86,4 +86,4 @@ This is finite exact parity, so there is no statistical bar:
 - V2 compares every coordinate of complete inventories, and a single disagreement fails it;
 - the latency curve is descriptive and reported with its sample count.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (owner direction 2026-10-18 in the Claude chat: Claude's own fresh-context adversarial reviewer subagents replace cross-lab FIT for Claude lanes. Three read-only reviews — kernels/launch/parity, build/D29/V2-power/refusal text/driver hash, and the fix diff — returned FIT-WITH-FIXES; every finding is applied in this revision. Posted on #2029.)
