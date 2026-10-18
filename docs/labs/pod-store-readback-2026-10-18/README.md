@@ -2,8 +2,8 @@
 
 Closes an evidence-loss hole in Vast pod custody: `uor-pod down --to-store` uploaded
 each result directory with `/root/uor-store put` and then destroyed the instance without
-ever reading the upload back. A silent partial upload would therefore destroy the only copy of
-the results, while the ledger reported success.
+ever reading the upload back. A store path that lists fewer files than the pod, or whose manifest sidecar does not read back
+identically, would previously still be reported as archived and the pod destroyed.
 
 ## Change
 
@@ -30,8 +30,12 @@ resulting `down` aborts and the fake instance remains.
 
 ## Limits
 
-- The read-back verifies file count + the manifest sidecar content, not every payload byte; the
-  manifest binds hashes for a later restore check.
+- The read-back verifies the store listing count and the manifest sidecar content, not every payload
+  byte; the manifest binds per-file SHA-256 digests for a later restore check. The remote listing and
+  manifest steps are separate checked commands (no pipe hides an `ls`/`find`/`sort` failure); a listing
+  that emits rows and then fails aborts `down` with the pod retained.
+- The ledger records `files` (total across directories) and `directories`; `manifest_sha256` is recorded
+  only when exactly one directory was archived (multi-directory archives keep per-directory sidecars).
 - It adds one small sidecar upload and several SSH round trips per result directory, and needs
   `/root/uor-store` on the pod (already required by `--to-store`).
 - A stale extra store object under the same prefix makes the count check fail closed; an operator

@@ -186,18 +186,22 @@ case "$c" in
   *"for d in uor-r4/jobs"*|*"tar -cf - uor-r4/"*) bash -c "${c//\/workspace/$FAKE/vast-ws}"; exit;;
   *"uor-store ls "*)
     d=$(printf '%s' "$c" | sed -n 's/.*vast-archive\/[^/ ]*\/\([^ ]*\).*/\1/p')
+    l=$(printf '%s' "$c" | sed -n 's/.*> \([^ ]*uor-store-list[^ ]*\).*/\1/p')
     n=$(find "$FAKE/vast-ws/$d" -type f 2>/dev/null | wc -l | tr -d " ")
     [ "${FAKE_STORE_TRUNC:-0}" = 1 ] && n=$((n > 0 ? n - 1 : 0))
-    echo "$n"; exit 0;;
+    i=0; while [ "$i" -lt "$n" ]; do echo "0.0 MB  vast-archive/$d/f$i"; i=$((i+1)); done > "$l"
+    [ "${FAKE_STORE_LATE_FAIL:-0}" = 1 ] && exit 23
+    exit 0;;
   *"uor-store get "*) echo MATCH; exit 0;;
   *"sha256sum /tmp/uor-store-manifest"*)
     echo "FAKEMANIFESTHASH  $(printf '%s' "$c" | sed -n 's/.*sha256sum \([^ ]*\).*/\1/p')"; exit 0;;
-  *"wc -l < /tmp/uor-store-manifest"*) bash -c "$c"; exit;;
+  *"wc -l < /tmp/uor-store-"*) bash -c "$c"; exit;;
   *"find . -type f -print0"*)
     d=$(printf '%s' "$c" | sed -n 's|.*/workspace/\([^ ]*\) .*|\1|p')
+    f=$(printf '%s' "$c" | sed -n 's|.*-print0 > \([^ ]*\).*|\1|p')
     m=$(printf '%s' "$c" | sed -n 's|.*> \([^ ]*\.sha256\).*|\1|p')
     n=$(find "$FAKE/vast-ws/$d" -type f 2>/dev/null | wc -l | tr -d " ")
-    : > "$m"; i=0; while [ "$i" -lt "$n" ]; do echo "HASH  ./f$i" >> "$m"; i=$((i+1)); done; exit 0;;
+    : > "$f"; : > "$m"; i=0; while [ "$i" -lt "$n" ]; do echo "./f$i" >> "$f"; echo "HASH  ./f$i" >> "$m"; i=$((i+1)); done; exit 0;;
   *"/root/uor-store put "*) exit 0;;
 esac
 # the bootstrap run (non-dry tests): 40 lines of output, then either the failure
@@ -1077,6 +1081,9 @@ vexpect "Vast up for the --to-store case" 0 "Ready: ssh" -- up --lab claude --se
 if grep -q 'cat > /root/uor-store && chmod 755 /root/uor-store' "$FAKE/calls"; then ok "up installs uor-store on the pod"; else bad "up installs uor-store on the pod"; fi
 mkdir -p "$FAKE/vast-ws/uor-r4/jobs/claude"; echo r > "$FAKE/vast-ws/uor-r4/jobs/claude/r.log"
 FAKE_STORE_TRUNC=1 FAKE_VAST_KB=$((9 * 1024 * 1024)) vexpect "down --to-store aborts when the store read-back is short" 1 "READ-BACK FAILED.*pod retained" -- down vast-9001 --lab claude --session vstore --to-store
+if jq -e 'any(.[]; .id == 9001)' "$FAKE/vast-instances.json" >/dev/null; then ok "the pod is retained after a short listing"; else bad "the pod is retained after a short listing"; fi
+FAKE_STORE_LATE_FAIL=1 FAKE_VAST_KB=$((9 * 1024 * 1024)) vexpect "down --to-store aborts when the store listing fails after rows" 1 "read-back listing .*failed.*pod retained" -- down vast-9001 --lab claude --session vstore --to-store
+if jq -e 'any(.[]; .id == 9001)' "$FAKE/vast-instances.json" >/dev/null; then ok "the pod is retained after a late listing failure"; else bad "the pod is retained after a late listing failure"; fi
 if jq -e 'any(.[]; .id == 9001)' "$FAKE/vast-instances.json" >/dev/null; then ok "the pod is retained after a failed read-back"; else bad "the pod is retained after a failed read-back"; fi
 FAKE_VAST_KB=$((9 * 1024 * 1024)) vexpect "down --to-store archives even above the laptop cap" 0 "read-back verified 1 files" -- down vast-9001 --lab claude --session vstore --to-store
 if grep -q '/root/uor-store put /workspace/uor-r4/jobs vast-archive/vast-9001/uor-r4/jobs' "$FAKE/calls" && [ ! -d "$UOR_POD_STATE/vast-archive/vast-9001" ]; then
