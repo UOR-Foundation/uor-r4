@@ -534,6 +534,11 @@ impl PreparedDriver {
     /// Schedule from the absolute batch ordinal. A cursor's wrapped phase alone
     /// is insufficient: a 16,404-batch interleaved cycle is not a multiple of 8.
     pub fn coordinate_at(&self, completed_batches: u64) -> Result<Coordinate> {
+        if !self.config.coordinate_block.is_one() {
+            return Err(invalid(
+                "coordinate_block > 1 schedule is addressed through block_at",
+            ));
+        }
         if self.config.schedule == SchedulePolicy::CanonicalVectorThenReadV1 {
             return self.coordinate((completed_batches % u64::from(self.coordinates)) as u32);
         }
@@ -1672,15 +1677,24 @@ mod tests {
                     }
                     if schedule == SchedulePolicy::InterleavedReadEvery8V1 {
                         // Batch kinds follow today's rule, so 1 read : 7 vector per 8.
-                        assert_eq!(steps % 8, 0);
-                        assert_eq!(vector_batches, 7 * read_batches);
+                        // Exactly every eighth batch is a read batch.
+                        assert_eq!(read_batches, steps / 8);
+                        assert_eq!(vector_batches, steps - steps / 8);
                     } else {
+                        assert_eq!(vector_batches, 2 * vectors.div_ceil(u64::from(k)));
+                        assert_eq!(vector_seq.len() as u64, 2 * vectors);
                         assert_eq!(read_batches, 2 * reads.div_ceil(u64::from(k)));
                         assert_eq!(read_seq.len() as u64, 2 * reads);
                     }
                     // Every coordinate once per family pass, in today's order.
                     for (seq, size) in [(&vector_seq, vectors), (&read_seq, reads)] {
-                        assert!(seq.len() as u64 >= size.min(2 * reads));
+                        // Exact visit counts: full passes plus the ascending partial.
+                        let (passes, rest) = (seq.len() as u64 / size, seq.len() as u64 % size);
+                        assert!(passes >= 1);
+                        for index in 0..size {
+                            let count = seq.iter().filter(|i| u64::from(**i) == index).count();
+                            assert_eq!(count as u64, passes + u64::from(index < rest));
+                        }
                         assert!(seq
                             .iter()
                             .enumerate()
@@ -1823,6 +1837,119 @@ mod tests {
             assert_eq!(first, whole);
             assert_eq!(end, whole_end);
         }
+        Ok(())
+    }
+    /// Block coordinate lists (vector blocks, read blocks) in visit order.
+    fn k3_cycle(schedule: SchedulePolicy, steps: u64) -> Result<(Vec<Vec<u32>>, Vec<Vec<u32>>)> {
+        let driver = block_fixture(3, ReadSpec::Flock { kept: 2 }, SPEC24, schedule)?;
+        assert_eq!(driver.families(), (20, 4));
+        let mut cursor = driver.initial_cursor();
+        let (mut vector, mut read) = (Vec::new(), Vec::new());
+        for _ in 0..steps {
+            let block = driver.block_at(&cursor)?;
+            let list: Vec<u32> = block
+                .coordinates
+                .iter()
+                .copied()
+                .map(parameter_index)
+                .collect();
+            if block.kind == CoordinateKind::VectorBlock {
+                vector.push(list);
+            } else {
+                read.push(list);
+            }
+            cursor = driver.advance_block(&cursor, false, 0)?;
+        }
+        Ok((vector, read))
+    }
+    #[test]
+    fn block_k3_truncates_at_pass_boundaries_under_both_schedules() -> Result<()> {
+        let pass: Vec<Vec<u32>> = vec![
+            vec![0, 1, 2],
+            vec![3, 4, 5],
+            vec![6, 7, 8],
+            vec![9, 10, 11],
+            vec![12, 13, 14],
+            vec![15, 16, 17],
+            vec![18, 19],
+        ];
+        let reads: Vec<Vec<u32>> = vec![vec![0, 1, 2], vec![3]];
+        // Canonical: 7 vector blocks then 2 read blocks per cycle.
+        let (vector, read) = k3_cycle(SchedulePolicy::CanonicalVectorThenReadV1, 9)?;
+        assert_eq!((&vector, &read), (&pass, &reads));
+        // Interleaved: every eighth batch is a read batch; 16 steps = 14 + 2.
+        let (vector, read) = k3_cycle(SchedulePolicy::InterleavedReadEvery8V1, 16)?;
+        assert_eq!(vector, [pass.clone(), pass.clone()].concat());
+        assert_eq!(read, reads);
+        // No block straddles a pass; every coordinate once per family pass.
+        for list in vector.iter().chain(read.iter()) {
+            assert!(list.windows(2).all(|w| w[1] == w[0] + 1));
+        }
+        assert_eq!(pass.concat(), (0..20).collect::<Vec<u32>>());
+        assert_eq!(reads.concat(), (0..4).collect::<Vec<u32>>());
+        Ok(())
+    }
+    #[test]
+    fn block_k3_cursor_resumes_right_after_a_truncated_block() -> Result<()> {
+        for schedule in [
+            SchedulePolicy::InterleavedReadEvery8V1,
+            SchedulePolicy::CanonicalVectorThenReadV1,
+        ] {
+            let driver = block_fixture(3, ReadSpec::Flock { kept: 2 }, SPEC24, schedule)?;
+            let run = |mut cursor: Cursor, from: u64, to: u64| -> Result<(Cursor, Vec<Block>)> {
+                let mut blocks = Vec::new();
+                for step in from..to {
+                    let block = driver.block_at(&cursor)?;
+                    let moves = if step % 3 == 0 { 0 } else { 1 };
+                    blocks.push(block);
+                    cursor = driver.advance_block(&cursor, moves > 0, moves)?;
+                }
+                Ok((cursor, blocks))
+            };
+            // Step 6 is the truncated [18, 19] vector block; resume right after it.
+            let (middle, mut first) = run(driver.initial_cursor(), 0, 7)?;
+            assert_eq!(first[6].coordinates.len(), 2);
+            let encoded = serde_json::to_vec(&middle).map_err(|e| invalid(e.to_string()))?;
+            let resumed: Cursor =
+                serde_json::from_slice(&encoded).map_err(|e| invalid(e.to_string()))?;
+            driver.validate_cursor(&resumed)?;
+            let (end, rest) = run(resumed, 7, 60)?;
+            first.extend(rest);
+            let (whole_end, whole) = run(driver.initial_cursor(), 0, 60)?;
+            assert_eq!(first, whole);
+            assert_eq!(end, whole_end);
+        }
+        Ok(())
+    }
+    #[test]
+    fn block_k4_initial_checkpoint_validates_and_coordinate_at_refuses() -> Result<()> {
+        let driver = block_fixture(
+            4,
+            ReadSpec::Flock { kept: 2 },
+            SPEC24,
+            SchedulePolicy::InterleavedReadEvery8V1,
+        )?;
+        let initial = driver.initial_cursor();
+        assert_ne!(initial, Cursor::initial());
+        driver.validate_cursor(&initial)?;
+        let model = json!({"schema":crate::SCHEMA,"spec":driver.config.spec,"read_spec":driver.config.read_spec,"seed":1,"epoch":0,"source_sha256":"0".repeat(64),"kernel_sha256":"1".repeat(64),"geometry_sha256":"2".repeat(64)});
+        let checkpoint = DriverCheckpoint {
+            schema: CHECKPOINT_SCHEMA.into(),
+            lineage: driver.lineage.clone(),
+            cursor: initial,
+            model_sha256: corpus::sha256(
+                &serde_json::to_vec(&model).map_err(|e| invalid(e.to_string()))?,
+            ),
+            model,
+        };
+        driver.validate_checkpoint(&checkpoint)?;
+        let mut legacy = checkpoint.clone();
+        legacy.cursor = Cursor::initial();
+        assert!(driver.validate_checkpoint(&legacy).is_err());
+        assert_eq!(
+            refusal(driver.coordinate_at(0)),
+            "coordinate_block > 1 schedule is addressed through block_at"
+        );
         Ok(())
     }
     #[test]

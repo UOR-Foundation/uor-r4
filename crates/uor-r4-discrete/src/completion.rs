@@ -685,7 +685,7 @@ pub fn run(config: DriverConfig, a: CompletionAdmission, out: &Path, resume: boo
             )
         } else {
             let model = driver.new_model(0)?;
-            let checkpoint = driver.checkpoint(&model, training::Cursor::initial())?;
+            let checkpoint = driver.checkpoint(&model, driver.initial_cursor())?;
             let baseline_snapshot_metadata = training::snapshot_metadata(&checkpoint.model)?;
             let baseline_evaluation = driver.evaluate(&model)?;
             (
