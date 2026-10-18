@@ -6,6 +6,10 @@ independent visual review; no capability or scientific status change.**
 The PR remains a draft and must not merge before that review. The owner's
 standing authorization covers subsequent protected delivery without another
 confirmation. No model, training, workflow, permission or scientific gate changes.
+Main `7937ce10` was merged forward, preserving #2659's source/status updates,
+#2662's timing waiver and #2663's peer claim removals. The authored diff against
+that main remains limited to figures, their generators, documentation and the
+own coordination receipt. Its SVG identities match the initial visual review set.
 
 ## Original references and visual diagnosis
 
@@ -103,7 +107,7 @@ can vary slightly by operating system.
 Executed checks and exact SVG identities are in [checks/](checks/): Rust 1.97.1
 build and formatting; 8 current Rust figures; 15 mathematical figures unchanged
 on regeneration; 29/29 finite/sampled geometry checks; the wording gate and all
-17 prior rejected-claim regressions; 336 local links/anchors with no failures;
+17 prior rejected-claim regressions; 337 local links/anchors with no failures;
 and 23 native accessible SVGs with no raster/foreign content or clipped text.
 All six inspected mathematical figures have identical non-text primitive
 hashes before/after, and the zeta annotation overlap list is empty. The harness
