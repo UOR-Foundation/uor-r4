@@ -174,13 +174,6 @@
     "lab": "codex",
     "note": ""
   },
-  "codex/cf1-k16-qualification-results": {
-    "branch": "codex/cf1-k16-qualification-results",
-    "claimed_at": "2026-10-18T13:40:51-04:00",
-    "head": "6dd23c09e",
-    "lab": "codex",
-    "note": "Canonical exact21224 K16 rows qualification result and D-Packet budget; no new model or training release; all raw custody/Claudeacceptance explicit"
-  },
   "codex/cf1-k16-rows-timing": {
     "branch": "codex/cf1-k16-rows-timing",
     "claimed_at": "2026-10-18T09:27:38-04:00",
