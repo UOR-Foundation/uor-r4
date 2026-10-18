@@ -83,6 +83,13 @@
     "lab": "codex",
     "note": ""
   },
+  "deepseek/pod-laptop-archive-verify": {
+    "branch": "deepseek/pod-laptop-archive-verify",
+    "claimed_at": "2026-10-18T10:12:45-04:00",
+    "head": "43bca5e15",
+    "lab": "deepseek",
+    "note": "Add pre-delete verification to the laptop tar archive path and make reap retain a pod when archive verification fails; dry-run tests. Host-only, no model compute."
+  },
   "kimi/dose1-dispatch-record-2026-10-18": {
     "branch": "kimi/dose1-dispatch-record-2026-10-18",
     "claimed_at": "2026-10-17T23:10:49-04:00",
