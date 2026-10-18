@@ -314,6 +314,13 @@
     "lab": "codex",
     "note": "Owner-requested native SVG visual repair; docs/figures, generators, embedded previews and documentation record only; no model or gate changes"
   },
+  "deepseek/docs-now-link-20261018": {
+    "branch": "deepseek/docs-now-link-20261018",
+    "claimed_at": "2026-10-18T13:48:16-04:00",
+    "head": "0122737e9",
+    "lab": "deepseek",
+    "note": "Link NOW.md from README/STATUS/ROADMAP per D39 Phase 1 tracker-hygiene queue; docs-only protected PR."
+  },
   "kimi-pm-main": {
     "branch": "kimi-pm-main",
     "claimed_at": "2026-10-18T03:19:18-04:00",
