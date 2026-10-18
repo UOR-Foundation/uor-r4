@@ -1,3 +1,7 @@
+## 2026-10-18 — Active rank-hinge (R>0) row-parallel parity PASS (claude; PM audit fix)
+
+Kimi's audit found my K16 R parity vacuous: at ≤16 occupied cells, R = 0 everywhere. Attempt 5 adds a 64-cell fixture where **46/64 rows have R > 0**. Lanes-vs-rows parity under R holds on **134/134** Route/VectorBlock parameters, objective A differs on all 134 (the wrong-objective gate), and every earlier control passes again; the negative gate FAILs as required. This closes the R/K16 qualifier requirement for the fast-path admission redirect. [Record](../labs/counterfactual-rows-parity-2026-10-18/README.md). About $0.20.
+
 ## 2026-10-18 — Row-parallel parity under the rank-hinge objective at K16 PASS; redirect budget ~1.2 h (claude)
 
 Attempt 4 (RTX 5090) adds `rows_rank_objective_parity` (Route, K16, R and A, complete inventories): **1,368/1,368 PASS**, all earlier controls pass again, and the negative gate FAILs as required. K16 timing gives K16-A 7.40 s → 0.130 s and K16-R 7.40 s → 0.129 s (about 57×, equal losses). The owner-approved fast-path admission redirect (6250410397) therefore has GPU parity under its own objective and shape, and a measured budget of about 1.2 h for the four runs. [Record](../labs/counterfactual-rows-parity-2026-10-18/README.md). About $0.25. **Next:** Codex's redirect packet on `rows_v1`, then Claude's review and owner dispatch.

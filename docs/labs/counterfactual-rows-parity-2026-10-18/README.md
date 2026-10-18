@@ -124,3 +124,24 @@ This run is the prerequisite for the owner's fast-path admission redirect (K16-A
 - **Evidence:** `evidence/attempt4/`. The release `rows-qualify` SHA-256 starts `75682c52…`.
 - **Archive:** `icloud:UOR-R4/results/claude/vast-56557973.tar` (5,453,824 bytes, MD5 `2991ca26475dd9b8f04def32564c73ed`).
 - **Cost:** about $0.25.
+
+**Correction (PM audit #2029 6250526855, item 2).** Attempt 4's rank-objective parity was **vacuous for the R term**. At vocabulary 16 a model has at most 16 occupied cells, so `rank ≤ kept_cells = 16` and R = 0 on every row. It proves lanes/rows parity under the R code path, not with a live R term, and it stays recorded at that scope.
+
+## Attempt 5 at `3af49e029` — active rank-hinge parity PASS
+
+New control `rows_rank_hinge_active_parity`:
+- **Fixture:** a 64-token, two-block table over **64 distinct cells**. Token `t` has block0 root `t mod 16` and block1 root `(t + t/16) mod 16`.
+- **Required on the exact batch and state**, so the R term is live: more than 16 occupied cells, at least one evaluated row with `cell_rank_hinge > 0`, lanes-vs-rows parity under R for every Route and VectorBlock index, and objective A on the same state giving different ordinary losses for at least one parameter (the wrong-objective gate).
+
+| Check | Result |
+|---|---|
+| Occupied cells | **64** (> K16) |
+| Rows with `cell_rank_hinge > 0` | **46 / 64** |
+| Lanes-vs-rows parity under R (Route + VectorBlock, all indices) | **134 / 134 PASS** |
+| Parameters whose ordinary losses differ between R and A | **134 / 134** |
+| All earlier controls (Route 684, Flock 108, Relation 288, refusals, forced terminals, vacuous-R 1,368) | PASS |
+| D29 self-test / repo, negative gate (reducer `tr` clause deleted), restored hashes | 0 / 0, FAIL as required, clean |
+
+- **Evidence:** `evidence/attempt5/`. The release `rows-qualify` SHA-256 starts `06142611…`.
+- **Archive:** `icloud:UOR-R4/results/claude/vast-56559825.tar` (5,456,896 bytes, MD5 `7db5dbfa3ace2202c41cda903448fd93`).
+- **Cost:** about $0.20.
