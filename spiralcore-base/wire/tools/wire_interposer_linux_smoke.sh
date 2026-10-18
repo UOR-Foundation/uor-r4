@@ -76,6 +76,11 @@ print("PY_CLIENT_OK bytes=%d" % len(payload))
 PYCLIENT
 LD_PRELOAD="$WORK/libwireinterposer.so" WIRE_ROUTES="$FAKE=$GATEWAY" WIRE_STATS_FILE="$WORK/python.stats" python3 py_client.py > py.log 2>&1 || fail 'linux python client'
 grep -q 'PY_CLIENT_OK' py.log || fail 'linux python payload'
+cc -o wire_fork_test "$SCRIPT_DIR/wire_interposer_fork_test.c" || fail 'linux fork test build'
+LD_PRELOAD="$WORK/libwireinterposer.so" WIRE_ROUTES="$FAKE=$GATEWAY" WIRE_STATS_FILE="$WORK/fork.stats" \
+  ./wire_fork_test "$FAKE" 32768 > fork_test.log 2>&1 || fail 'linux fork-safety round trip'
+grep -q 'FORK_TEST_OK' fork_test.log || fail 'linux fork-safety bytes'
+FORK_OK=true
 PYTHON_RATIO=$(ratio_of "$WORK/python.stats")
-echo "WIRE_INTERPOSER_LINUX_PASS text_ratio=$TEXT_RATIO random_ratio=$RANDOM_RATIO python_ratio=$PYTHON_RATIO passthrough_connections=$PASSTHROUGH_CONNS"
+echo "WIRE_INTERPOSER_LINUX_PASS text_ratio=$TEXT_RATIO random_ratio=$RANDOM_RATIO python_ratio=$PYTHON_RATIO passthrough_connections=$PASSTHROUGH_CONNS fork_ok=$FORK_OK"
 kill $ECHO_PID $GW_PID 2>/dev/null || true

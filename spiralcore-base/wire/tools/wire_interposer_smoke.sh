@@ -91,7 +91,12 @@ PYTHON_BIN=$(command -v python3)
 DYLD_INSERT_LIBRARIES="$WORK/libwireinterposer.dylib" WIRE_ROUTES="$FAKE=$GATEWAY" \
   WIRE_STATS_FILE="$WORK/python.stats" "$PYTHON_BIN" py_client.py > py.log 2>&1 || fail 'python client'
 grep -q 'PY_CLIENT_OK' py.log || fail 'python client payload'
+cc -o wire_fork_test "$PROJ/tools/wire_interposer_fork_test.c" || fail 'fork test build'
+DYLD_INSERT_LIBRARIES="$WORK/libwireinterposer.dylib" WIRE_ROUTES="$FAKE=$GATEWAY" \
+  WIRE_STATS_FILE="$WORK/fork.stats" ./wire_fork_test "$FAKE" 32768 > fork_test.log 2>&1 || fail 'fork-safety round trip'
+grep -q 'FORK_TEST_OK' fork_test.log || fail 'fork-safety bytes'
+FORK_OK=true
 PYTHON_RATIO=$(ratio_of "$WORK/python.stats")
 DIRECT_WALL=$(awk '/PROBE_OK/ {print $4}' direct.log)
 TEXT_WALL=$(awk '/PROBE_OK/ {print $4}' text.log)
-echo "WIRE_INTERPOSER_PASS text_ratio=$TEXT_RATIO random_ratio=$RANDOM_RATIO python_ratio=$PYTHON_RATIO passthrough_connections=$PASSTHROUGH_CONNS direct_wall=$DIRECT_WALL interposed_wall=$TEXT_WALL"
+echo "WIRE_INTERPOSER_PASS text_ratio=$TEXT_RATIO random_ratio=$RANDOM_RATIO python_ratio=$PYTHON_RATIO passthrough_connections=$PASSTHROUGH_CONNS direct_wall=$DIRECT_WALL interposed_wall=$TEXT_WALL fork_ok=$FORK_OK"

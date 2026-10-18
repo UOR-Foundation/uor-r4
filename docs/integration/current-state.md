@@ -1,3 +1,15 @@
+## 2026-10-18  Interposer fork-safe close (wire side exploration; deepseek)
+
+Closes the Codex P1 residual from the merged wire side exploration: `close()` no longer calls
+`shutdown(SHUT_RDWR)` to wake a blocked reader (which disturbed sockets shared after `fork`). Receive now
+waits with a bounded `poll()` loop that checks the fd's active flag; close only marks it inactive and
+closes the descriptor; reused-fd connect waits on the receive lock for at most that timeout. Added a
+stock-binary fork test (child closes inherited routed fd, parent continues) to both platform smokes.
+Worktree checks: `WIRE_INTERPOSER_PASS` and `WIRE_INTERPOSER_LINUX_PASS`, both with `fork_ok=true`. No
+model compute. Adversarial independent review requested.
+Record: [labs/spiralcore-wire-interposer-fork-safe-2026-10-18](../labs/spiralcore-wire-interposer-fork-safe-2026-10-18/README.md).
+PR: (added after creation).
+
 ## 2026-10-18  Final wire claims cleanup (deepseek)
 
 Removes the stale committed claims left by the merged wire side-exploration PRs (#2613, #2614, #2619, #2621) and this cleanup branch from docs/harness/claims.json. No code, model, evidence or dispatch change; coordination record only.

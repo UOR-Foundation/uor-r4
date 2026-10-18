@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <poll.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -250,12 +251,23 @@ static Route *match_route(const struct sockaddr *addr, socklen_t len) {
     return NULL;
 }
 
-static int wait_fd_ready(int fd) {
-    /* ensure per-fd state is initialized exactly once */
-    static pthread_mutex_t table_lock = PTHREAD_MUTEX_INITIALIZER;
-    (void)table_lock;
-    if (fd < 0 || fd >= MAX_FD) return -1;
-    return fd;
+static int wait_readable(FdState *state, int fd) {
+    /* Bounded wait instead of a blocking recv so close() can stop a reader without
+       shutdown() (which would disturb a socket shared after fork). */
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLIN;
+    for (;;) {
+        if (!state->active) return -1;
+        pfd.revents = 0;
+        int rc = poll(&pfd, 1, 50);
+        if (rc > 0) {
+            if (pfd.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) return 0;
+            continue;
+        }
+        if (rc == 0 || errno == EINTR) continue;
+        return -1;
+    }
 }
 
 static ssize_t send_all(int fd, const void *buffer, size_t size) {
@@ -382,6 +394,10 @@ static int write_frame(FdState *state, int fd, const void *data, size_t size) {
 static ssize_t read_frame(FdState *state, int fd, void *buffer, size_t size) {
     while (state->rbuf_off >= state->rbuf_len) {
         if (state->eof) return 0;
+        if (wait_readable(state, fd) < 0) {
+            state->eof = 1;
+            return 0;
+        }
         unsigned char header[HEADER];
         ssize_t got = recv_into(fd, header, HEADER);
         if (got <= 0) {
@@ -401,6 +417,11 @@ static ssize_t read_frame(FdState *state, int fd, void *buffer, size_t size) {
         }
         unsigned char *blob = malloc(frame_size);
         if (!blob) return -1;
+        if (wait_readable(state, fd) < 0) {
+            free(blob);
+            state->eof = 1;
+            return 0;
+        }
         got = recv_into(fd, blob, frame_size);
         if (got != (ssize_t)frame_size) {
             free(blob);
@@ -624,10 +645,10 @@ int WIRE_API(close)(int fd) {
         state->active = 0;
         state->eof = 1;
         pthread_mutex_unlock(&state->lock);
-        /* Wake a recv blocked on another thread before closing: otherwise Linux can leave
-           that receive asleep on the old file, and a later connect on the reused descriptor
-           would wait forever for io_lock. The next connect resets the buffers. */
-        (void)sys_shutdown(fd, SHUT_RDWR);
+        /* Do not shutdown() here: it would disturb the shared socket after fork.
+           A reader wakes on the wait_readable poll timeout, sees active == 0 and exits;
+           the next connect waits on io_lock for at most that timeout. Buffers reset
+           on the next connect. */
     }
     return sys_close(fd);
 }
