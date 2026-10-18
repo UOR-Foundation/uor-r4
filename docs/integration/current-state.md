@@ -4,6 +4,27 @@ Protected source `21224b446db14efc8f9123cf8c43917a5337ea95` passed all 21 constr
 
 The full four-root/all-job DATA custody and late operator payload/metadata have verified cloud readbacks. The sealed packet request[6254373730](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6254373730), manifest`e367301901499c125521b15cc05acfc0bc0fa7eaaa4888e072cbe8ac1b1a047a`, includes four DOCUMENT_ONLY A/R×seed1/2 configs and measured timing/budget. Claude's sole delegated [ACCEPT6254417234](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6254417234) followed sealing. The owner's [relayed gated release6254435225](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6254435225) covers exactly the four unchanged trajectories; [Kimi PM dispatch6254457591](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6254457591) is ISSUED_GATED_START; [Claude census PASS6254480425](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6254480425) posts raw/net1,986 on all four actual roles >1,941, clearing the scientific training-start gate. Each role reports16 distinct vectors,16 alias groups×256, tie mass4,096 tokens/12,301 DEV rows; cell metrics are UNAVAILABLE. Published reportSHA`19c053e9779d6ab1dd7b02a5403b6c10910131c5829b51dd7ca361d512f050cf` is verified against the retrieved3,119-byte report. Durable object`claude-k16-cp0-coverage-census-20261018.tar` is16,384bytes/MD5`6687ae6ad16d9a1b56836ec414a57467`; root native fetch83459 exited0, closing locator request6254490769 after Claude correction6254516409. No further census wait remains; root prepares native admission transport, with no training execution claimed. AGY's consumer source findings are closed at helper5c3bc562/README410fa4de under6254038861. The same lease is retained; normal close/final cost remain separate, with a dated rental-proxy cutoff in the canonical record. Training and fresh scoring are NOT_RUN. The 2.3691 GPU-hour checkpoint-0 proposal-work projection is not training-dose throughput; the remaining 5–8 GPU-hour range includes unmeasured allowances and is proposal-only, not measured all-in cost or release. Later owner delegation6251237195 assigns acceptance to Claude alone; PM dispatch and actual owner training release remain separate. D39/NOW is the current plan: interim M1 headline injective codebook + Q4 target admission ≥ 4,894; old reply37/232 and attention count0/3 retain their historical SUSPENDED/unchanged scope. No learned advantage, mechanism negative, KEEP, milestone closure or count reset follows. K16 Amendment7 is prospective for A/R and successors; the in-flight qualification is unchanged.
 
+## 2026-10-18 — Core README and geometry front-door corrections (deepseek)
+
+Fixes the core README's "Active native model" contradiction (now Historical, Cargo does not select it) and
+replaces docs/geometry.md's repeated 13-line status paragraph with a concise pre-alpha + D37 sentence,
+closing #2682 and #2683. No claims/numbers/mechanism labels changed; docs-only; core check and
+claim-wording PASS; no compute.
+Record: [labs/core-geometry-docs-2026-10-18](../labs/core-geometry-docs-2026-10-18/README.md).
+
+## 2026-10-18 — ROADMAP D37 permission and M2/M3/M4 statuses corrected (deepseek)
+
+Section 0 now states the D37 learning permission instead of the superseded total D32 float ban, and the
+milestone table uses the README statuses (M2 held, M3 paused, M4 held). Closes #2680 and #2681; no other
+cells or the SVG touched. Claim-wording PASS; docs-only; no compute.
+Record: [labs/roadmap-d37-status-2026-10-18](../labs/roadmap-d37-status-2026-10-18/README.md).
+
+## 2026-10-18 — PROJECT_MAP ops row and heading spacing fixed (deepseek)
+
+Adds `ops/` to "Where work and evidence are stored" with its RAPL/D5-b/Braket caveats and fixes the two
+missing spaces in the September headings, closing #2679. Docs-only; claim-wording PASS; no compute.
+Record: [labs/project-map-ops-headings-2026-10-18](../labs/project-map-ops-headings-2026-10-18/README.md).
+
 ## 2026-10-18 — Mechanism briefs corrected for the aliased-key finding (claude; mechanism-brief lane)
 
 - **`finite-relational-head.md`:** records that every trained Relation run so far started from the 16-vector xorshift codebook, so no run yet isolates the read. It adds a fair-test prerequisite: a distinguishable-key codebook, shown by artifact-level coverage gates (D39 item 2).
