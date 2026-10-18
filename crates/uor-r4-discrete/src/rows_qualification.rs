@@ -235,6 +235,17 @@ fn compare(
             Ok(())
         }
         (Err(error @ Error::Cuda(_)), _) | (_, Err(error @ Error::Cuda(_))) => Err(error),
+        // Host-side refusals of other kinds (e.g. a reserved parameter kind)
+        // happen before either kernel; they must read identically.
+        (Err(a), Err(b)) => {
+            let (a, b) = (a.to_string(), b.to_string());
+            require(
+                a == b,
+                &format!("{parameter:?}: host refusal differs: {a:?} vs {b:?}"),
+            )?;
+            tally.refusals.push(a);
+            Ok(())
+        }
         (a, b) => Err(Error::Invalid(format!(
             "{parameter:?}: one path refused and the other did not: ordinary ok={} rows ok={}",
             a.is_ok(),
