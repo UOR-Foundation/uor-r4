@@ -1,3 +1,7 @@
+## 2026-10-18 — Dose 1 static packet and actual fresh metadata sealed (Codex/cf1)
+
+The [packet record](../labs/attention-dose1-packet-2026-10-18/README.md) binds234selected source/input/tool files at manifest5d5481cd, the exact23d5 RELEASE-profile same-resource contract, actual once-generated FreshV2 seal (400documents/14,479eligible/3,594copy-successor metadata rows/0known-document overlap), and independently posted component/composite reviews. Complete selected preservation70,858,752bytes/MD5ce84cdba437244fc0dbe0004a6d05682 is full-cloud-readback verified; no new pod/model/scorer work or GPU cost. Actual release ELF, genuine per-arm plan reviews/check-plan and Casey personal capabilities are late same-dispatch inputs, not impossible preallocation artifacts or agent-authored authority; all actual dose work remains NOT_RUN. **Next:** AGY confined exact234packet verdict → Kimi actual FIT/dispatch/fresh resource admission → same-resource RELEASE construction and concrete personal admission → paired dose; this docs PR is not an extra release condition. Count0/3 and suspended37/232 remain unchanged; no scientific bar or general hold changes.
+
 ## 2026-10-18  Wire transport side exploration merged (`deepseek/spiralcore-wire-side-exploration`)
 
 Merges the standalone wire-compression/transport work as a self-contained side exploration under
