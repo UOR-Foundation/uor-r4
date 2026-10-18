@@ -41,6 +41,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/bvgk-c2-h2a-20261018": {
+    "branch": "claude/bvgk-c2-h2a-20261018",
+    "claimed_at": "2026-10-18T19:04:11-04:00",
+    "head": "0c55e57b7",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/bvgk-fit-fixes-20261018": {
     "branch": "claude/bvgk-fit-fixes-20261018",
     "claimed_at": "2026-10-18T17:10:46-04:00",
@@ -129,6 +136,13 @@
     "branch": "claude/stagec-fit-20261018",
     "claimed_at": "2026-10-18T18:21:38-04:00",
     "head": "acf3029da",
+    "lab": "claude",
+    "note": ""
+  },
+  "claude/stagec-receipt-20261018": {
+    "branch": "claude/stagec-receipt-20261018",
+    "claimed_at": "2026-10-18T18:40:27-04:00",
+    "head": "c172d7c7a",
     "lab": "claude",
     "note": ""
   },
