@@ -26,10 +26,12 @@ default path, so this closes the remaining custody hole.
 
     bash scripts/pod/tests/uor-pod-dryrun.sh      # 373 passed, 0 failed
     # includes: "down refuses when the laptop archive verification fails" (pod retained)
-    #           "the verified archive is in the ledger" (.verified == true, .files == 1)
+    #           "the verified archive is in the ledger" (.verified == true, .files == 2)
+    #           "an empty results dir verifies 0 files" (zero-file case)
 
 The mismatch case is injected, not a real corrupted tar; the success case exercises the real manifest
-comparison on the fake workspace.
+comparison on the fake workspace, and a separate empty-results case pins the zero-file path (0 == 0,
+xargs -0r on both sides). The `reap` failure path is covered by code review, not a dedicated test.
 
 ## Limits
 

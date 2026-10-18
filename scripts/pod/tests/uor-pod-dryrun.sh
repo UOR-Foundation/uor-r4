@@ -1032,6 +1032,13 @@ if grep -q '^vastai destroy instance 9001$' "$FAKE/calls" && [ "$(jq length "$FA
   ok "destroy answered the [y/N] prompt and the instance is gone"; else bad "destroy answered the [y/N] prompt and the instance is gone"; fi
 if grep '"event":"vast-archive"' "$UOR_POD_STATE/ledger.jsonl" | jq -e --arg d "$UOR_POD_STATE/vast-archive/vast-9001" '.dest == $d and .kb > 0 and .verified == true and .files == 2' >/dev/null; then
   ok "the verified archive is in the ledger"; else bad "the verified archive is in the ledger"; fi
+# a fresh pod whose only results directory is empty must still verify (0 files == 0)
+vfresh; VO RTX_5090 1 "$OFF5"; echo 7001 > "$FAKE/vast-gone"
+vexpect "Vast up for the empty-results archive case" 0 "SSH ready after" -- up "${X1[@]}" --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA" --no-bootstrap
+rm -rf "$FAKE/vast-ws"; mkdir -p "$FAKE/vast-ws/uor-r4/jobs/codex"
+vexpect "down archives an empty results dir and verifies 0 files" 0 "Archived 0 MB" -- down vast-9001 "${X1[@]}"
+if grep '"event":"vast-archive"' "$UOR_POD_STATE/ledger.jsonl" | jq -e '.verified == true and .files == 0' >/dev/null; then
+  ok "an empty results dir verifies 0 files"; else bad "an empty results dir verifies 0 files"; fi
 # a bootstrap failure destroys the new Vast pod as well
 vfresh; VO RTX_5090 1 "$OFF5"
 FAKE_BOOT_RC=2 vexpect "a failed Vast bootstrap destroys the instance" 1 "bootstrap failed: deleting pod vast-9001" -- up --lab claude --session vboot --gpu 5090 --count 1 --purpose vast --hours 1 --ref "$MAIN_SHA"

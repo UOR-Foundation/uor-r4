@@ -1516,7 +1516,7 @@ verify_laptop_archive() {  # POD DEST DIRS -> 0 when count and digest match
     echo "DRY-RUN: verify $pod archive count + SHA-256 manifest before any delete" >&2
     return 0
   fi
-  pod_line=$(pod_ssh "$pod" "cd /workspace && f=\$(mktemp) && find $have -type f -print0 > \$f && LC_ALL=C sort -z \$f -o \$f && echo ARCHIVE_FILES=\$(tr -cd '\000' < \$f | wc -c | tr -d ' ') && echo ARCHIVE_SUM=\$(xargs -0 sha256sum < \$f | sha256sum | cut -d' ' -f1) && rm -f \$f" </dev/null) ||
+  pod_line=$(pod_ssh "$pod" "cd /workspace && f=\$(mktemp) && find $have -type f -print0 > \$f && LC_ALL=C sort -z \$f -o \$f && echo ARCHIVE_FILES=\$(tr -cd '\000' < \$f | wc -c | tr -d ' ') && echo ARCHIVE_SUM=\$(xargs -0r sha256sum < \$f | sha256sum | cut -d' ' -f1) && rm -f \$f" </dev/null) ||
     { warn "cannot reach $pod over SSH to verify the laptop archive"; return 1; }
   pod_files=$(printf "%s\n" "$pod_line" | sed -n "s/^ARCHIVE_FILES=//p")
   pod_sum=$(printf "%s\n" "$pod_line" | sed -n "s/^ARCHIVE_SUM=//p")
@@ -1524,9 +1524,9 @@ verify_laptop_archive() {  # POD DEST DIRS -> 0 when count and digest match
   [ -n "$pod_sum" ] || { warn "cannot hash the results on $pod for archive verification"; return 1; }
   local_files=$(cd "$dest" && find $have -type f -print0 | tr -cd '\000' | wc -c | tr -d " ")
   if command -v sha256sum >/dev/null 2>&1; then
-    local_sum=$(cd "$dest" && find $have -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1)
+    local_sum=$(cd "$dest" && find $have -type f -print0 | LC_ALL=C sort -z | xargs -0r sha256sum | sha256sum | cut -d" " -f1)
   else
-    local_sum=$(cd "$dest" && find $have -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d" " -f1)
+    local_sum=$(cd "$dest" && find $have -type f -print0 | LC_ALL=C sort -z | xargs -0r shasum -a 256 | shasum -a 256 | cut -d" " -f1)
   fi
   if [ "$pod_files" != "$local_files" ] || [ "$pod_sum" != "$local_sum" ]; then
     warn "ARCHIVE VERIFICATION FAILED for $pod: pod ${pod_files} files/${pod_sum}, laptop ${local_files} files/${local_sum}; pod retained"
