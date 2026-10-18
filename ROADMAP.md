@@ -12,8 +12,9 @@ separately pinned paired Relation/frozen-zero learning test under the
 Actual device admissions and the matched reference reports support attribution;
 full same-cell dose results cannot be inferred from scalar admission counts.
 The export source passes all five Gate9 construction/host commands and its
-read-only device export has now run in Battery3. The paired learning dose,
-full same-cell attribution and learned result remain NOT_RUN.
+read-only device export has now run in Battery3. The paired learning dose began
+but was owner-stopped after 904 treatment / 1,065 frozen-zero batches before Q1;
+full same-cell attribution and a learned result remain NOT_RUN.
 This progression changes no scientific bar or standing training/compute hold.
 
 **Current learning permission — D32:** discrete/exact GPU model computation and

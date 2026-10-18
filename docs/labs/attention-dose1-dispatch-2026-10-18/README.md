@@ -184,7 +184,9 @@ is not an owner release.
 
 The current provider quote is USD `1.893688888888889`/h total for the two GPUs
 — a **quote, not an invoice**. Storage and transfer remain **UNMEASURED**; no
-source outcome or first-64 throughput exists.
+completed-dose scientific outcome or validated pure first-64 throughput claim
+exists. The first-64 observations (treatment 64 receipts/281 s, frozen-zero 64
+receipts/276 s) are poll-inclusive and are not a pure GPU/batch duration.
 
 ### Release build — metadata verified
 
