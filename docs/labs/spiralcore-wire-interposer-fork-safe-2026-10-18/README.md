@@ -21,15 +21,26 @@ closing an inherited routed descriptor kills the parent's connection).
     WIRE_INTERPOSER_PASS        macOS, rc=0, fork_ok=true
     WIRE_INTERPOSER_LINUX_PASS  Linux mvm guest, rc=0, fork_ok=true
 
-## Trade-off
+## Trade-off and measured cost
 
-The poll wait adds a bounded wake latency (<=50 ms) and one poll syscall before each frame read; the
-alternative (socket shutdown) is not fork-safe. Throughput numbers are in the smoke output.
+- A reader blocked with no data wakes every 50 ms while idle (20 wakeups/s per blocked routed fd).
+- Each read is chunked with MSG_DONTWAIT; when data is already buffered no poll is needed; on EAGAIN
+  the reader polls once (50 ms slice).
+- macOS interposer smoke, 2 MiB text probe: interposed wall about 28 ms vs 19 ms before this hardening
+  (about +9 ms per 2 MiB probe, including the fork/interrupt tests in the same binary). This is the
+  cost of an interruptible, fork-safe read path; the earlier shutdown-based wake was cheaper but not
+  fork-safe.
+- A reader is woken by close between non-blocking chunks, not instantly inside a blocking recv.
 
 ## Limits
 
 - Concurrent recv on one fd remains unsupported.
 - Per-fd receive buffers are reset on the next connect rather than in close (bounded by MAX_FD).
+- Fork safety means a child closing an inherited routed fd does not disturb the parent. If parent and
+  child both keep using the same inherited routed fd, the per-process compression state makes the wire
+  stream unsound; only the closer's process may treat the descriptor as closed.
+- The fork test now includes a negative control: an unsafe build (WIRE_UNSAFE_CLOSE_SHUTDOWN) must fail
+  the same test, proving the test is sensitive to the old shutdown-in-close behaviour.
 
 ## Next
 

@@ -11,6 +11,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <poll.h>
+#include <stdatomic.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -108,7 +109,7 @@ static ssize_t sys_write(int fd, const void *buf, size_t len) {
 #endif
 
 typedef struct {
-    volatile int active;
+    _Atomic int active;
     pthread_mutex_t lock;
     pthread_mutex_t io_lock;   /* serializes recv only; never held by close/shutdown */
     int send_mode;   /* -1 undecided, 0 compressed, 1 raw */
@@ -120,7 +121,8 @@ typedef struct {
     unsigned char *rbuf;
     size_t rbuf_len;
     size_t rbuf_off;
-    int eof;
+    _Atomic int eof;
+    unsigned generation;
     int eof_sent;
 } FdState;
 
@@ -227,6 +229,15 @@ static void dump_stats(void) {
 
 static volatile int g_ready = 0;
 
+static void reinit_locks_after_fork(void) {
+    int i;
+    for (i = 0; i < MAX_FD; i += 1) {
+        pthread_mutex_init(&fds[i].lock, NULL);
+        pthread_mutex_init(&fds[i].io_lock, NULL);
+    }
+    pthread_mutex_init(&stats_lock, NULL);
+}
+
 static void wire_interposer_ctor(void) __attribute__((constructor));
 static void wire_interposer_ctor(void) {
     init_symbols();
@@ -236,6 +247,7 @@ static void wire_interposer_ctor(void) {
         pthread_mutex_init(&fds[i].lock, NULL);
         pthread_mutex_init(&fds[i].io_lock, NULL);
     }
+    pthread_atfork(NULL, NULL, reinit_locks_after_fork);
     g_ready = 1;
     atexit(dump_stats);
 }
@@ -251,24 +263,7 @@ static Route *match_route(const struct sockaddr *addr, socklen_t len) {
     return NULL;
 }
 
-static int wait_readable(FdState *state, int fd) {
-    /* Bounded wait instead of a blocking recv so close() can stop a reader without
-       shutdown() (which would disturb a socket shared after fork). */
-    struct pollfd pfd;
-    pfd.fd = fd;
-    pfd.events = POLLIN;
-    for (;;) {
-        if (!state->active) return -1;
-        pfd.revents = 0;
-        int rc = poll(&pfd, 1, 50);
-        if (rc > 0) {
-            if (pfd.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) return 0;
-            continue;
-        }
-        if (rc == 0 || errno == EINTR) continue;
-        return -1;
-    }
-}
+
 
 static ssize_t send_all(int fd, const void *buffer, size_t size) {
     const unsigned char *cursor = buffer;
@@ -297,6 +292,53 @@ static ssize_t recv_into(int fd, void *buffer, size_t size) {
         if (got == 0) return (ssize_t)(size - left);
         cursor += got;
         left -= (size_t)got;
+    }
+    return (ssize_t)size;
+}
+
+static ssize_t sys_recv_nowait(int fd, void *buf, size_t len) {
+    return (ssize_t)syscall(SYS_recvfrom, fd, buf, len, MSG_DONTWAIT, NULL, NULL);
+}
+
+static int wait_readable(FdState *state, int fd) {
+    /* Readiness wait only; reads are non-blocking chunks in read_exact_active so
+       close() can stop a reader without shutdown() (fork-shared sockets). */
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLIN;
+    for (;;) {
+        if (!atomic_load(&state->active)) return -1;
+        pfd.revents = 0;
+        int rc = poll(&pfd, 1, 50);
+        if (rc > 0) {
+            if (!atomic_load(&state->active)) return -1;
+            if (pfd.revents & POLLNVAL) return -1;
+            if (pfd.revents & (POLLIN | POLLHUP | POLLERR)) return 0;
+            continue;
+        }
+        if (rc == 0 || errno == EINTR) continue;
+        return -1;
+    }
+}
+
+static ssize_t read_exact_active(FdState *state, int fd, void *buffer, size_t size) {
+    unsigned char *cursor = buffer;
+    size_t left = size;
+    while (left > 0) {
+        if (!atomic_load(&state->active)) return -1;
+        ssize_t got = sys_recv_nowait(fd, cursor, left);
+        if (got > 0) {
+            cursor += got;
+            left -= (size_t)got;
+            continue;
+        }
+        if (got == 0) return (ssize_t)(size - left);
+        if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (wait_readable(state, fd) < 0) return -1;
+            continue;
+        }
+        return -1;
     }
     return (ssize_t)size;
 }
@@ -394,12 +436,8 @@ static int write_frame(FdState *state, int fd, const void *data, size_t size) {
 static ssize_t read_frame(FdState *state, int fd, void *buffer, size_t size) {
     while (state->rbuf_off >= state->rbuf_len) {
         if (state->eof) return 0;
-        if (wait_readable(state, fd) < 0) {
-            state->eof = 1;
-            return 0;
-        }
         unsigned char header[HEADER];
-        ssize_t got = recv_into(fd, header, HEADER);
+        ssize_t got = read_exact_active(state, fd, header, HEADER);
         if (got <= 0) {
             state->eof = 1;
             return 0;
@@ -417,12 +455,7 @@ static ssize_t read_frame(FdState *state, int fd, void *buffer, size_t size) {
         }
         unsigned char *blob = malloc(frame_size);
         if (!blob) return -1;
-        if (wait_readable(state, fd) < 0) {
-            free(blob);
-            state->eof = 1;
-            return 0;
-        }
-        got = recv_into(fd, blob, frame_size);
+        got = read_exact_active(state, fd, blob, frame_size);
         if (got != (ssize_t)frame_size) {
             free(blob);
             state->eof = 1;
@@ -559,6 +592,7 @@ int WIRE_API(connect)(int fd, const struct sockaddr *addr, socklen_t len) {
         return -1;
     }
     state->active = 1;
+    state->generation += 1;
     state->send_mode = -1;
     state->recv_mode = -1;
     state->eof = 0;
@@ -591,18 +625,24 @@ ssize_t WIRE_API(send)(int fd, const void *buffer, size_t size, int flags) {
 
 ssize_t WIRE_API(recv)(int fd, void *buffer, size_t size, int flags) {
     if (!g_ready) return sys_recv(fd, buffer, size, flags);
-    if (fd < 0 || fd >= MAX_FD || flags != 0 || !fds[fd].active) return sys_recv(fd, buffer, size, flags);
-    FdState *state = &fds[fd];
-    pthread_mutex_lock(&state->io_lock);
-    pthread_mutex_lock(&state->lock);
-    int active = state->active;
-    pthread_mutex_unlock(&state->lock);
-    if (!active) {
-        pthread_mutex_unlock(&state->io_lock);
+    if (fd < 0 || fd >= MAX_FD || flags != 0 || !atomic_load(&fds[fd].active)) {
         return sys_recv(fd, buffer, size, flags);
     }
-    /* read_frame blocks on the socket; holding io_lock (not lock) keeps shutdown/close
-       responsive and avoids the close-behind-blocking-recv deadlock. */
+    FdState *state = &fds[fd];
+    pthread_mutex_lock(&state->lock);
+    unsigned generation = state->generation;
+    pthread_mutex_unlock(&state->lock);
+    pthread_mutex_lock(&state->io_lock);
+    pthread_mutex_lock(&state->lock);
+    int valid = atomic_load(&state->active) && state->generation == generation;
+    pthread_mutex_unlock(&state->lock);
+    if (!valid) {
+        pthread_mutex_unlock(&state->io_lock);
+        errno = ECONNRESET;
+        return -1;
+    }
+    /* read_frame reads in non-blocking chunks and re-checks active between them, so
+       close() wakes it without shutdown() and reused-fd connect waits are bounded. */
     ssize_t result = read_frame(state, fd, buffer, size);
     pthread_mutex_unlock(&state->io_lock);
     return result;
@@ -639,16 +679,18 @@ int WIRE_API(shutdown)(int fd, int how) {
 
 int WIRE_API(close)(int fd) {
     if (!g_ready) return sys_close(fd);
-    if (fd >= 0 && fd < MAX_FD && fds[fd].active) {
+    if (fd >= 0 && fd < MAX_FD && atomic_load(&fds[fd].active)) {
         FdState *state = &fds[fd];
         pthread_mutex_lock(&state->lock);
-        state->active = 0;
-        state->eof = 1;
+        atomic_store(&state->active, 0);
+        atomic_store(&state->eof, 1);
         pthread_mutex_unlock(&state->lock);
-        /* Do not shutdown() here: it would disturb the shared socket after fork.
-           A reader wakes on the wait_readable poll timeout, sees active == 0 and exits;
-           the next connect waits on io_lock for at most that timeout. Buffers reset
-           on the next connect. */
+        /* No shutdown(): it would disturb a socket shared after fork. A reader in
+           read_exact_active sees active == 0 between non-blocking chunks and exits;
+           a reused-fd connect then only waits for that short chunk loop. */
+#if defined(WIRE_UNSAFE_CLOSE_SHUTDOWN)
+        (void)sys_shutdown(fd, SHUT_RDWR);
+#endif
     }
     return sys_close(fd);
 }

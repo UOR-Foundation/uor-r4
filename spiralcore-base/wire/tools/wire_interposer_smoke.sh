@@ -95,8 +95,17 @@ cc -o wire_fork_test "$PROJ/tools/wire_interposer_fork_test.c" || fail 'fork tes
 DYLD_INSERT_LIBRARIES="$WORK/libwireinterposer.dylib" WIRE_ROUTES="$FAKE=$GATEWAY" \
   WIRE_STATS_FILE="$WORK/fork.stats" ./wire_fork_test "$FAKE" 32768 > fork_test.log 2>&1 || fail 'fork-safety round trip'
 grep -q 'FORK_TEST_OK' fork_test.log || fail 'fork-safety bytes'
+cc -dynamiclib -DWIRE_UNSAFE_CLOSE_SHUTDOWN -o libwireinterposer_unsafe.dylib "$PROJ/tools/wire_interposer.c" -lz || fail 'unsafe interposer build'
+codesign -f -s - libwireinterposer_unsafe.dylib >/dev/null 2>&1 || fail 'unsafe codesign'
+DYLD_INSERT_LIBRARIES="$WORK/libwireinterposer_unsafe.dylib" WIRE_ROUTES="$FAKE=$GATEWAY" \
+  ./wire_fork_test "$FAKE" 32768 > fork_unsafe.log 2>&1
+UNSAFE_RC=$?
+if [ "$UNSAFE_RC" -eq 0 ] && grep -q 'FORK_TEST_OK' fork_unsafe.log; then
+  fail 'negative control did not fail'
+fi
+NEGATIVE_CONTROL=true
 FORK_OK=true
 PYTHON_RATIO=$(ratio_of "$WORK/python.stats")
 DIRECT_WALL=$(awk '/PROBE_OK/ {print $4}' direct.log)
 TEXT_WALL=$(awk '/PROBE_OK/ {print $4}' text.log)
-echo "WIRE_INTERPOSER_PASS text_ratio=$TEXT_RATIO random_ratio=$RANDOM_RATIO python_ratio=$PYTHON_RATIO passthrough_connections=$PASSTHROUGH_CONNS direct_wall=$DIRECT_WALL interposed_wall=$TEXT_WALL fork_ok=$FORK_OK"
+echo "WIRE_INTERPOSER_PASS text_ratio=$TEXT_RATIO random_ratio=$RANDOM_RATIO python_ratio=$PYTHON_RATIO passthrough_connections=$PASSTHROUGH_CONNS direct_wall=$DIRECT_WALL interposed_wall=$TEXT_WALL fork_ok=$FORK_OK negative_control=$NEGATIVE_CONTROL"

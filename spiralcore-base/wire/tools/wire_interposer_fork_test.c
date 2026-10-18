@@ -6,12 +6,27 @@
  * behaviour) breaks the parent; a fork-safe close must keep it working.
  */
 #include <arpa/inet.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdatomic.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+
+static atomic_int reader_done = 0;
+
+static void *blocked_reader(void *arg) {
+    int fd = *(int *)arg;
+    unsigned char byte;
+    (void)recv(fd, &byte, 1, 0);
+    atomic_store(&reader_done, 1);
+    return NULL;
+}
 
 static int parse_addr(const char *text, struct sockaddr_in *out) {
     char host[64];
@@ -93,8 +108,43 @@ int main(int argc, char **argv) {
         fprintf(stderr, "post-fork round trip failed\n");
         return 7;
     }
+    signal(SIGPIPE, SIG_IGN);
+    alarm(15);
+    /* Phase 2: close must wake a reader blocked on a routed fd, and the reused fd must
+       accept a new routed connection immediately. */
+    int fd2 = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd2 < 0) return 8;
+    if (connect(fd2, (struct sockaddr *)&address, sizeof(address)) != 0) return 8;
+    int thread_fd = fd2;
+    pthread_t thread;
+    atomic_store(&reader_done, 0);
+    if (pthread_create(&thread, NULL, blocked_reader, &thread_fd) != 0) return 8;
+    usleep(100000);
+    close(fd2);
+    int waited = 0;
+    while (!atomic_load(&reader_done) && waited < 3000) {
+        usleep(10000);
+        waited += 10;
+    }
+    if (!atomic_load(&reader_done)) {
+        fprintf(stderr, "close did not wake a blocked reader\n");
+        return 9;
+    }
+    pthread_join(thread, NULL);
+    int fd3 = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd3 < 0) return 10;
+    if (connect(fd3, (struct sockaddr *)&address, sizeof(address)) != 0) {
+        fprintf(stderr, "reused-fd connect failed\n");
+        return 10;
+    }
+    if (send_all_fd(fd3, payload, size) != 0 || recv_all_fd(fd3, echo, size) != 0 ||
+        memcmp(payload, echo, size) != 0) {
+        fprintf(stderr, "reused-fd round trip failed\n");
+        return 11;
+    }
+    close(fd3);
     close(fd);
-    printf("FORK_TEST_OK bytes=%zu\n", total);
+    printf("FORK_TEST_OK bytes=%zu interrupt_ok=true reused_fd_ok=true\n", total);
     free(payload);
     free(echo);
     return 0;
