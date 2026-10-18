@@ -16,9 +16,23 @@ The shared vector/combine pathway is a plausible explanation for the admission
 collapse, including in the relation-disabled control, but causality is not established.
 No registered paired efficacy comparison is licensed at Q1.
 
-**Next:** prospective next-configuration registration and owner decision under the
-existing sheet; the consumed dose is not permission to resume or retry.
-No general training, second seed, M2 or Stage B release follows.
+**Immediate priority — 18 October 2026:** prepare and qualify the existing FIT'd
+K16-A versus K16-R admission redirect on `rows_v1`, under the
+[owner direction](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6250410397) and [PM gate audit](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6250526855).
+**Source/packet preparation GO; packet acceptance and training NO-GO** pending exact-head
+qualification, measured timing/budget and acceptance of the regenerated D-Packet.
+Keep Route/K16, seeds 1 and 2, `CanonicalVectorThenReadV1`, the registered
+16,404-batch schedule and scientific bars unchanged. Qualification requires
+same-state, same-R-objective lanes/rows parity with **>16 occupied cells and an
+actual R>0 row**, 25/25 controls plus `admit_ptx`, G-Pre, C-R1..C-R6,
+required refusal/terminal coverage, wrong-objective/broken-negative checks and zero apply.
+Retain all four checkpoint-0/Q4 × A/R timing cells, **100 samples each** plus
+one excluded warmup, unless explicitly waived. Author results in
+[PR #2658](https://github.com/UOR-Foundation/uor-r4/pull/2658) are not accepted readiness.
+The separate K8 Relation/R successor is deferred planning, not an added K16 gate.
+The existing conditional release preserves qualification → accepted packet →
+training → fresh before KEEP; fresh execution is not a training-start gate.
+Other training/M2/Stage B holds remain.
 The [architecture](docs/architecture.md) traces current computation to source;
 [current-state](docs/integration/current-state.md) retains the chronological evidence.
 
