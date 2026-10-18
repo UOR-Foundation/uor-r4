@@ -1,3 +1,7 @@
+## 2026-10-18  Wire side-exploration claims cleanup (deepseek)
+
+Removes the stale committed claims for the merged wire branches (`deepseek/spiralcore-wire-side-exploration`, `deepseek/spiralcore-wire-review-fixes`) plus this cleanup branch entry from docs/harness/claims.json. No code, model, evidence or dispatch change; coordination record only. References #2613, #2614.
+
 ## 2026-10-18  Wire side-exploration review fixes (Codex P1 findings; `deepseek/spiralcore-wire-review-fixes`)
 
 Follow-up to merged #2613 (`94d4d34a`): Codex's post-merge exact-head review at `3af1acf` reported four
