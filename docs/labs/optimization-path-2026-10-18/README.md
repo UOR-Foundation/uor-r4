@@ -9,8 +9,11 @@ the current path; all three active labs align to it. PM path directive:
 - D11 multiplier-free serving **stands**; no float, transcendental or multiplier
   instruction in served computation. Under D37 (owner 2026-10-18), float forward
   passes, gradients, optimizers and numerical instruments are legal in offline
-  training only, in a separately scanned module with a reported export gap. The
-  October 14 complex-plane zeta-zero exception remains separate and unchanged.
+  training only, in a separately scanned module that stays geometric
+  (SpiralCore/E8/FBS, icosian/quaternion, prime/zeta), has its own scanned
+  allowlist entry added/reviewed with the pre-registration (never widening the
+  discrete crate scan), and reports its export gap. The October 14 complex-plane
+  zeta-zero exception remains separate and unchanged.
 - The compute-cost thesis is architectural: KB-scale cache-resident addressed
   state and exact addressed reads instead of per-token weight streaming. It is
   proven in order, not asserted.

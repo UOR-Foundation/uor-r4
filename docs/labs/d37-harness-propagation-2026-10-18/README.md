@@ -13,10 +13,13 @@ does not reinterpret it.
 ## Scope
 
 D37 permits float forward passes, gradients and optimizers, and offline numerical training
-instruments, in a separately scanned float module with a reported export gap. It leaves D23/D25
-squashing bans, D25/D30 dense matrix products, D24 GPU-only placement, D11 integer/table serving
-with no float/transcendental/multiplier instruction, the October 14 complex-plane zeta-zero
-exception, the active discrete path (`crates/uor-r4-discrete`, Dose 1) and every hold unchanged.
+instruments, in a separately scanned float module with a reported export gap. The float lane must
+remain geometric (SpiralCore/E8/FBS, icosian/quaternion, prime/zeta), as D32 item 2 requires, and
+the module gets its own scanned allowlist entry, added and reviewed with its pre-registration,
+never by widening the discrete crate's scan. D37 leaves D23/D25 squashing bans, D25/D30 dense
+matrix products, D24 GPU-only placement, D11 integer/table serving with no
+float/transcendental/multiplier instruction, the October 14 complex-plane zeta-zero exception, the
+active discrete path (`crates/uor-r4-discrete`, Dose 1) and every hold unchanged.
 
 The work was limited to making the harness and current-authority documents state exactly that.
 
@@ -46,17 +49,22 @@ No other path changed.
 
 | Check | Result |
 |---|---|
-| `cargo test --locked -p uor-r4-harness prep::` | PASS — 14 selected tests, including both `applicable_rules_tests`; 0 failed |
+| `CARGO_TARGET_DIR=local/harness-target cargo test --locked --offline -p uor-r4-harness prep::` | PASS — 14 selected tests, including both `applicable_rules_tests`; 0 failed |
 | `python3.12 scripts/harness/parity.py --build` | PASS — prep sheets, milestone registry and rendered sheet identical; all agreement checks ok |
-| `uor-harness check` | PASS — exit 0, no errors; no `harness.owner_rules_applied` finding |
-| `uor-harness prep-render -m m1` (stdout) | contains `- D37:` once; stale “Supersedes D25's offline scalar floating-point allowance, which is now inactive” count 0 |
-| `cargo run --locked -p uor-r4-core --bin r4-policy-check -- .` | PASS — `uor-r4.agent-execution-policy/7`; serving float/transcendental/multiplier false, training matmul false |
-| `uor-harness ratchet d23` | PASS — 2,253 sites / 154 files, baseline 2,253 |
-| `uor-harness ratchet d25` | PASS — 93 sites / 26 files, baseline 93; 0 tensor-core sites |
-| `uor-harness ratchet d32` | PASS — 31 sites / 1 file, baseline 31 |
+| `local/harness-target/debug/uor-harness check` | PASS — exit 0. Reviewed run: 122 rules, 0 errors, 87 warnings, 1 info finding (88 non-ok). Final re-run: 120 rules, 0 errors, 86 warnings, 1 info (87 non-ok), because live peer claim/branch state moved; no `harness.owner_rules_applied` finding |
+| `local/harness-target/debug/uor-harness prep-render -m m1` (stdout) | contains `- D37:` once; stale “Supersedes D25's offline scalar floating-point allowance, which is now inactive” count 0 |
+| `CARGO_TARGET_DIR=local/harness-target cargo run --locked --offline -p uor-r4-core --bin r4-policy-check -- .` | PASS — `uor-r4.agent-execution-policy/7`; serving float/transcendental/multiplier false, training matmul false |
+| `local/harness-target/debug/uor-harness ratchet d23` | PASS — 2,253 sites / 154 files, baseline 2,253 |
+| `local/harness-target/debug/uor-harness ratchet d25` | PASS — 93 sites / 26 files, baseline 93; 0 tensor-core sites |
+| `local/harness-target/debug/uor-harness ratchet d32` | PASS — 31 sites / 1 file, baseline 31 |
 | `python3 scripts/check_claim_wording.py` | PASS |
 | `cargo fmt --check -p uor-r4-harness` | PASS |
 | `git diff --check` | PASS |
+
+The `uor-harness check` warnings are pre-existing peer-claim, presence-staleness, PENDING-sheet,
+claim-hygiene and orphan-branch findings plus the owner spending-cap info reminder. The live count
+drifts as peers merge and release claims; both runs exit 0, and none concerns D37, this diff, or
+`harness.owner_rules_applied`.
 
 **Python-version note.** The system `python3` is 3.9.6, whose `datetime.fromisoformat` cannot parse
 the ledger's `Z` receipt timestamps; it therefore omits the brief's 24-hour receipts section and

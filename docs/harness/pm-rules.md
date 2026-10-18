@@ -53,8 +53,10 @@ come from the owner through the PM.
   (verifying `/schema == "uor-r4.agent-execution-policy/7"`, `training_matrix_multiplication_allowed == false`,
   `serving_floating_point_allowed == false`, `serving_transcendentals_allowed == false` and
   `serving_kernel_multiplier_instructions_allowed == false`, plus the D25/D32/D37 invariants: offline float
-  training is allowed only in a separately scanned module, while the active discrete path, D11 serving and
-  the no-squashing/no-matmul bans are unchanged), and `scripts/check_claim_wording.py`.
+  training is allowed only in a separately scanned geometric module (SpiralCore/E8/FBS,
+  icosian/quaternion, prime/zeta) whose own scanned allowlist entry is added and reviewed with the
+  pre-registration (never by widening the discrete crate scan), while the active discrete path, D11 serving
+  and the no-squashing/no-matmul bans are unchanged), and `scripts/check_claim_wording.py`.
 - **Why.** The bans erode one "temporary" site at a time; a baseline is a floor, not a budget.
 - **Harness surface.** `lint check` and `uor-harness check` invoke both the D23 (`Kind::NormExp`) and D25
   (`Kind::Matmul`) interlocks in process via `prlint.d23_interlock`; a PR that raises either baseline fails.
@@ -280,9 +282,11 @@ D32 and all standing decisions.
 **Scope (D37, October 18):** the rulings below govern the **active discrete path only** —
 `crates/uor-r4-discrete`, Dose 1 and its instruments. A separate D37 offline float lane may use
 float forward passes, gradients, optimizers and declared numerical instruments in a **separately
-scanned module**, under R12/D31 and a pre-registration that reports its export gap. That lane does
-not widen, share or weaken the discrete crate's exact instruments, and it releases no hold. The
-discrete path's exact/no-float optimizer and instrument rulings stand unchanged.
+scanned module** that stays geometric (SpiralCore/E8/FBS, icosian/quaternion, prime/zeta), under
+R12/D31 and a pre-registration that adds and reviews its own scanned allowlist entry (never by
+widening the discrete crate scan) and reports its export gap. That lane does not widen, share or
+weaken the discrete crate's exact instruments, and it releases no hold. The discrete path's
+exact/no-float optimizer and instrument rulings stand unchanged.
 
 - **Ruling 1 — rung 0 re-registers as a new sheet on a compliant discrete learning law.**
   The frozen F32 sheet (`docs/harness/prep/m1-rank-margin-rung0-2026-10-13.md`, FIT at

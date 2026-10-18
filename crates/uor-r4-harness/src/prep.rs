@@ -420,11 +420,13 @@ pub const COST_BUCKETS: [&str; 6] = [
 /// **D31, D32 and D37 were added the day they were issued, and that is the point.** D31 governs
 /// what happens when an instrument check fails. D37 revises D32's offline-training float ban:
 /// float forward passes, gradients and optimizers, and offline numerical instruments, are legal in
-/// a separately scanned float module; the active discrete path, D11 serving and the
-/// no-squashing/no-matmul bans are unchanged. **Each changes what a pre-registration may
-/// propose.** A sheet that omitted them would send a lab to work under a rule the owner had
-/// already replaced, **which is exactly the defect that put a banned grader on a sheet**: the rule
-/// text a lab reads is the rule text it follows.
+/// a separately scanned float module that stays geometric (SpiralCore/E8/FBS, icosian/quaternion,
+/// prime/zeta) and has its own scanned allowlist entry added and reviewed with its
+/// pre-registration, never by widening the discrete crate scan; the active discrete path, D11
+/// serving and the no-squashing/no-matmul bans are unchanged. **Each changes what a
+/// pre-registration may propose.** A sheet that omitted them would send a lab to work under a rule
+/// the owner had already replaced, **which is exactly the defect that put a banned grader on a
+/// sheet**: the rule text a lab reads is the rule text it follows.
 ///
 /// **Kept equal to Python's tuple, and `parity.render_agreement` is what keeps them equal.**
 ///
@@ -848,8 +850,9 @@ mod applicable_rules_tests {
 
     /// **The sheet must cite every rule the owner has in force**, and the newest were added the
     /// day they were issued. A missing rule is not a cosmetic gap: D37 revises D32's
-    /// offline-training float ban, so a sheet citing only D32 would deny the float lane the owner
-    /// has now permitted, while a sheet citing only D37 would lose the discrete path's exact
+    /// offline-training float ban and requires the float lane to stay geometric with its own
+    /// scanned allowlist entry, so a sheet citing only D32 would deny the float lane the owner has
+    /// now permitted, while a sheet citing only D37 would lose the discrete path's exact
     /// instruments — the same failure that put a banned grader on a sheet.
     #[test]
     fn the_applicable_rules_include_the_current_owner_rules() {
@@ -870,6 +873,9 @@ mod applicable_rules_tests {
 
     /// Every cited rule must have text in the registry, or the sheet prints a hole where a rule
     /// should be — which reads as "no rule applies" rather than "the registry is missing one".
+    /// D37's text must also state both conditions a float lane needs: a geometric path and its own
+    /// scanned allowlist entry. A pre-registration/export-gap sentence alone would authorize a
+    /// broader lane than the owner approved.
     #[test]
     fn every_applicable_rule_has_registry_text() {
         use crate::registries::Registries;
@@ -886,6 +892,13 @@ mod applicable_rules_tests {
             assert!(
                 ids.iter().any(|i| i == rid),
                 "{rid} is cited but has no text in the registry"
+            );
+        }
+        let d37 = regs.rule("D37").to_lowercase();
+        for condition in ["geometric", "allowlist"] {
+            assert!(
+                d37.contains(condition),
+                "D37 must state the float lane's `{condition}` condition, not just its export gap"
             );
         }
     }
