@@ -4,14 +4,15 @@
 
 Record the actual Project Manager dispatch of the seed-1 paired
 `LearnV1`/`FrozenZeroV1` attention dose: its receipts, the packet and source it
-binds, what it releases, and what it explicitly does not. Decision:
-**DISPATCH_VALID, NOT_RUN**.
+binds, the later runtime allocation and release build it produced, and what it
+explicitly does not release. Decision: **DISPATCHED; ALLOCATION CONFIRMED;
+RELEASE METADATA BUILT; RUNTIME CUDA ADMISSION AND MODEL NOT_RUN**.
 
-This is a record of one coordination act, not a result. No model,
-allocation, release-build, plan-review, check-plan or learning outcome is
-claimed here. No pod, SSH, build, model compute, training, evaluation or
-scoring was started for this record; `$0` and no GPU work. The dose itself
-remains **NOT_RUN**.
+This is not a model result: no training, evaluation, scoring or runtime CUDA
+qualification is claimed, and the dose remains **NOT_RUN**. No pod, SSH,
+build or model compute was started for this record; `$0` and no GPU work. The
+allocation and build facts below are read from the operator's receipts at
+their exact hashes, not re-executed here.
 
 ## Exact authorities
 
@@ -26,10 +27,14 @@ remains **NOT_RUN**.
 | Scientific sheet | `docs/harness/prep/m1-learned-attention-link-2026-10-17.md`, SHA256 `844814009ecc7368c0a3ecabf62434bae7d72850363e19f67c0126810fee7ffc` |
 | Release-build contract | `596a978d9f81e7404a858931596accb5cbbdf7695e196ab79ba27520a418a73f` |
 | Admission glue (`admission.sh`) | `f0f5c06421c625651c3d483afab7312192cca659e2d6299a4625bcec6b4ab736` (prepare/finalize/collect) |
-| Driver identity | `9538f5c3908dc7f3dacea13fb97ac081b5ab7a72fcc4deabc519bfc1ff8bd04c`, as bound by the PM receipt |
+| Driver identity | `9538f5c3908dc7f3dacea13fb97ac081b5ab7a72fcc4deabc519bfc1ff8bd04c` — SHA256 over the concatenated `git show 23d5b146:crates/uor-r4-discrete/src/` bytes of `corpus.rs`, `training.rs`, `controller.rs`, `completion.rs`, `completion_baseline.rs`, `redirect_admission.rs`, `attention_learning.rs`, `attention_evidence.rs`, `attention_transfer.rs`, `attention_preflight.rs`, `main.rs`, recomputed read-only |
 | Applicable FIT | [#2029 `6230317153`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6230317153) |
 | Owner resolutions | [#2029 `6236444507`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6236444507) |
 | Attempt label | `uor-cf1-dose1-ac60c495ec8d601b267319b8cf548910` |
+| Runtime allocation | `runtime-allocation.json` SHA256 `1f1ed8dbf12004c5cf5adde82a84a9fefcaae7a73d34d66143232a2e80058515`: pod `vast-56488188`, two GPUs `[0,1]` |
+| Release build receipt | `runtime-build.json` SHA256 `eae570b4c6c10504e72fbb89fdd7ed0f13c8906a1b5cc15688257251abe053b7`, `RELEASE_BUILT_METADATA_VERIFIED`, `build_exit` 0 |
+| Runtime binary binding | `controller/runtime-binary-binding.json` SHA256 `2921dce26c686e7b48cda535b22b25929d7318bb1dfc5664f38fb0538fbafe60` |
+| Per-arm plan candidates | treatment `64869df7d5fde9eaf23162e3046e1fc5cbd9aaaff4d7533cd4274c2d7510113f`; frozen-zero `b52933ecf2f0291877d85b568bb1d6961e6d6d405c0c413eadbe9bc53a64ec7a` (`uor-r4.attention-learning-owner-plan/2`) |
 
 `dispatch.json` is the operator's private local file at
 `/Users/casey.allard/uor-r4-local/codex-attention-dose1-operator/dispatch.json`;
@@ -52,6 +57,24 @@ Read-only checks run on 18 October for this record:
 - `git cat-file -t 23d5b146` → commit; `git diff --stat
   23d5b146..35c4c4038 -- crates/uor-r4-discrete` → empty, so the discrete
   crate is unchanged from the protected pin to the base.
+- Driver provenance: the exact `for f in corpus.rs training.rs controller.rs
+  completion.rs completion_baseline.rs redirect_admission.rs
+  attention_learning.rs attention_evidence.rs attention_transfer.rs
+  attention_preflight.rs main.rs; do git show 23d5b146:crates/uor-r4-discrete/src/$f;
+  done | shasum -a 256` → `9538f5c3…bd04c`, matching the build receipt's
+  `driver_source_sha256`.
+- `runtime-allocation.json` → `1f1ed8db…58515`; its `dispatch_sha256` equals
+  the dispatch above, pod `vast-56488188`, count 2, GPUs `[0,1]`.
+- `runtime-build.json` → `eae570b4…053b7`, matching the binding's
+  `runtime_build.sha256`; the on-host `bin/discrete-stack` → `1f7dd526…dbb3`,
+  matching the receipt's ELF.
+- `controller/runtime-binary-binding.json` → `2921dce2…afe60`; its
+  `construction_manifest.sha256` equals the build directory's `SHA256SUMS`
+  (`e2527d24…c5777`).
+- `shasum -a 256 -c SHA256SUMS` inside the build directory → every member
+  `OK`; cross-receipt equality of `dispatch_sha256` among the allocation,
+  build and binding → `true`, and `build.allocation_sha256` equals the raw
+  allocation file hash.
 
 The PM activation reply records that `lifecycle/dose-common.sh::dose_authority`
 and the dependency pins also pass. That function writes
@@ -75,8 +98,10 @@ above instead and did not mutate the packet.
 - These gates still precede model work, in order: the same-dispatch release
   build; two no-context build identities; actual per-arm `/2` plans with
   genuine non-Codex admission-diff reviews; `attention-check-plan`; then
-  Casey's two personal live-TTY owner releases. PM does not create those
-  records or invoke owner-release.
+  Casey's two personal live-TTY owner releases. The build and identities are
+  recorded below and the plans are prepared and under AGY review; the later
+  gates remain pending. PM does not create those records or invoke
+  owner-release.
 
 ## What is not released
 
@@ -103,59 +128,106 @@ decision and a separate PM decision. No fresh capture, ablation, selection,
 redraw or automatic KEEP is released. The conditional paired fresh remains 227
 batches per arm (454 paired) and is **NOT_RUN**.
 
-## Allocation and build state
+## Allocation, release build and admission state
 
 At the base commit the packet carried allocation intent and private provider
 logs only: `precreate-inventory.json` was `[]` and the operator log was 0
-bytes. No confirmed allocation or release-build receipt existed.
+bytes. The sequence after the dispatch is now preserved in three receipts.
 
-A newer public Codex/cf1 operational review,
-[#2029 `6245029696`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245029696),
-was posted at 2026-10-18T03:07:37Z and verified with `gh` for this record. It
-reports **`CONDITIONAL_APPROVE_EXISTING_POD_REVIEWED_POST_UP_TAIL_ONLY`**:
+### Allocation — confirmed
 
-- an own pod `vast-56488188` evidenced by a created-pod marker, own native UP
-  count 2 and a renewal, with canonical lease 0/1;
-- original operator `37502` absent, outer log 0 bytes with no recorded exit or
-  trap, host allocation absent, and only allocation-intent/fleet/UP work
-  present;
-- **no** local anchor, setup, build or model submission, and the historical
-  launch cause **UNVERIFIED**;
-- permission for root to complete only the exact unexecuted reviewed post-UP
-  steps on the same pod, after fresh attempt/session/provider/lease/ledger
-  checks, positive worker absence, remote absence checks and renewed resource
-  admission. Never re-run the full script or `CREATE`, never overwrite
-  partials, restart jobs or patch source.
+`runtime-allocation.json` (schema `uor-r4.attention-dose1-allocation/1`, SHA256
+`1f1ed8dbf12004c5cf5adde82a84a9fefcaae7a73d34d66143232a2e80058515`)
+binds lab `codex`, session `codex-attention-dose1`, pod `vast-56488188`, the
+attempt label above, `dispatch_sha256` `4f768169…543bb`, count 2 and GPUs
+`[0,1]`. Its `authority_issued` is `false`: the allocation is confirmed, but it
+is not an owner release.
 
-Read-only host inspection for this record is consistent with that review: the
-create diagnostics hold HTTP 200 and
-`{"new_contract":56488188,"success":true}`; a retained renewal runs to
-2026-10-18T03:34:58Z; a retained observation lists two RTX 5090 devices and
-reports `OWNED_ROOT_PRESENT=0` and `PROJECT_SOURCE_PRESENT=0`. The create
-response file also contains a provider instance key; it stays private and is
-not copied into this record.
+### Release build — metadata verified
 
-Therefore, precisely:
+`runtime-build.json` (SHA256
+`eae570b4c6c10504e72fbb89fdd7ed0f13c8906a1b5cc15688257251abe053b7`, under
+`metadata-uor-cf1-dose1-ac60c495ec8d601b267319b8cf548910/construction/release-build/`,
+directory manifest `e2527d24…c5777`) records
+`RELEASE_BUILT_METADATA_VERIFIED` with `build_exit` 0 and the exact required
+argv `cargo +1.97.1 build --release --locked -p uor-r4-discrete --features
+cuda` at `UOR_NVCC_ARCH=compute_120`.
 
-- **Provider-side pod creation:** evidenced (`new_contract` 56488188).
-- **Operator allocation receipt:** **NOT_CONFIRMED** — the host allocation
-  record is absent and the launch is under conditional continuation review.
-- **Release build:** **NOT_CONFIRMED** — no ELF, source/kernel/geometry/config
-  binding or build receipt exists in the reviewed evidence.
-- **Model work:** **NOT_RUN**.
+| Build identity | Value |
+|---|---|
+| Shared ELF (both arms) | `1f7dd5268b6e7b69c3a22a2c7a4905d5484cdedb720ee89ceb541b18d8b2dbb3`, ELF64_X86_64; the on-host `bin/discrete-stack` matches |
+| Protected source commit | `23d5b146b46cf6479d27695a555e03e3cc98e972` |
+| Compiled source | `64e484637425f009969c6ec270ccbae6ab7ca50e89fc244240058231d00d9dad` |
+| Kernel | `5cd0e73241fd895f2dd0004c83af3d1eb9f89e00ec2e933c1acc44fc7127bfd6` |
+| Geometry | `46ddbb76b7fbe6ac6222ea24779fc10055b1d6cea6a8da786895676fd29fe327` |
+| Driver | `9538f5c3…bd04c` (composite above) |
+| Treatment config / lineage | `c446aa7f…9f216` / `ffad0e1d…ba2e1` |
+| Frozen-zero config / lineage | `1435f016…071c3` / `f859bf22…7a9ae` |
 
-This record does not call the pod a confirmed admitted allocation, does not
-infer a mechanism negative from the launch hazard, and claims no build or
-learning result.
+`cuda_context_created` is `false` for both arms, `metadata_identity_calls` is
+2, `model_commands` and `init_commands` are 0, and `training` is `HELD`. The
+receipt's own `validation_scope` is "actual release build and no-context
+metadata; no model/runtime CUDA qualification".
+
+`controller/runtime-binary-binding.json` (SHA256
+`2921dce26c686e7b48cda535b22b25929d7318bb1dfc5664f38fb0538fbafe60`) repeats
+the ELF/source/kernel/geometry/config/lineage identities and records
+`cuda_runtime_resource_admission: NOT_RUN`,
+`live_resource_admission: NOT_PERFORMED_BY_HOST_BINDER`,
+`model_computation: false` and
+`typed_config_owner_admission: EXISTING_PROTECTED_SOURCE_REQUIRED`, with
+`authority_issued: false`.
+
+**Distinction:** the RELEASE construction and its metadata identities are
+built and verified. That is not runtime CUDA resource admission, not an owner
+release, and not training. No CUDA context was created and no model command
+ran.
+
+### Per-arm plans — prepared, review pending
+
+Both `/2` plan candidates exist as metadata: treatment raw
+`64869df7d5fde9eaf23162e3046e1fc5cbd9aaaff4d7533cd4274c2d7510113f` and
+frozen-zero raw
+`b52933ecf2f0291877d85b568bb1d6961e6d6d405c0c413eadbe9bc53a64ec7a`, scoped
+`batches0..16404` with the exact ten-key `ExecutionIdentity` (base
+`ef9d3099…`, reviewed source `23d5b146`, sheet `84481400…`, source/kernel/
+geometry/executable/driver/config/lineage as above). Their
+`.review.candidate.json` records remain `NOT_REVIEWED` / `UNASSIGNED`, and the
+candidates are `HELD_OWNER_ACTION_REQUIRED` pending that review.
+
+Codex handed both to AGY for the genuine non-Codex per-arm admission-diff
+review in
+[#2029 `6245084232`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245084232)
+(2026-10-18T03:14:32Z, "no new dispatch requested"). Plan finalization, the
+actual `attention-check-plan` with no CUDA context, and Casey's two personal
+TTY releases remain pending.
+
+### Preserved launch state
+
+The earlier
+[#2029 `6245029696`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245029696)
+review (03:07:37Z) remains the record of the launch hazard:
+`CONDITIONAL_APPROVE_EXISTING_POD_REVIEWED_POST_UP_TAIL_ONLY`, original
+operator `37502` absent, 0-byte outer log with no recorded exit, no setup or
+build at that point, and the historical cause **UNVERIFIED**. The later
+receipts show the reviewed post-UP continuation completed setup0, five data
+transfers with SHA verification, and the native release-build job terminal at
+03:11:34Z with exit 0 — with no `CREATE`, rebuild, retry or source patch. The
+unverified launch cause is not a mechanism negative, and the create-response
+file's provider instance key stays private and is not copied into this record.
 
 ## Decision and next action
 
-`DISPATCH_VALID` stands: the operator may continue the reviewed initial-dose
-lease chain, subject to fresh admission and every release-build, per-arm
-review, check-plan and Casey-TTY gate. The next decision inputs are the actual
-post-allocation bindings above; until they exist, the correct PM state is
-**dispatched, allocation receipt NOT_CONFIRMED, build NOT_CONFIRMED, dose
-NOT_RUN**.
+`DISPATCH_VALID` stands. As of 2026-10-18T03:14:32Z the correct PM state is
+**dispatched; allocation confirmed at `vast-56488188`; RELEASE build metadata
+verified; runtime CUDA admission NOT_RUN; model work NOT_RUN**.
+
+The next decision inputs are AGY's genuine per-arm admission-diff verdicts and
+six-key `AttentionReview` records, then plan finalization, the actual
+`attention-check-plan` with no CUDA context, and Casey's two personal TTY
+releases. Until those exist, no model command, training step or dose result may
+be claimed, and the metadata-verified build is not runtime qualification. Any
+failure returns to PM review as a blocker, not a mechanism negative.
 
 Fresh V2 content remains sealed pending typed `DEV H_geom` plus a PM decision.
 No headline, milestone, progress count, training hold or mechanism status
@@ -166,4 +238,6 @@ changes in this record.
 Base `35c4c40380ad25b2ba4cde0239b93110b26768db`; branch
 `kimi/dose1-dispatch-record-2026-10-18`; worktree
 `.worktrees/kimi-dose1-dispatch-record`; lab `kimi`; branch claim recorded in
-`docs/harness/claims.json`. Record authored 18 October 2026, host-only.
+`docs/harness/claims.json`. Record authored and revised 18 October 2026,
+host-only; the revision adds the runtime allocation, release-build and
+binary-binding receipts and the driver composite provenance.
