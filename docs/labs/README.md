@@ -8,8 +8,11 @@
 > [registered Q1 diagnostic stops in both arms](attention-rows-q1-diagnosis-2026-10-18/README.md)
 > at4,096 batches/exit0, P_succ target admission225/205 versus initial2034.
 > Data/operator custody and separate closure are verified; own pod is down.
-> Scientific outcome review and a prospective next-configuration decision remain;
-> no full-dose attribution, fresh result or new compute release follows.
+> Claude’s scientific outcome is configured admission collapse, with no implementation/identity fault.
+> The owner selected the existing FIT K16-A/R redirect on rows_v1, seeds1/2,
+> with its conditional release: [source/qualification/packet sequence](k16-rows-timing-source-2026-10-18/README.md).
+> New-head qualification, four-cell100sampletiming and accepted measured D-Packet
+> precede training; no full-dose attention attribution or fresh result follows.
 
 > **Current start (12 October):** Kimi is project manager under [D25](../integration/DECISIONS.md#d25---geometric-operator-phase-and-current-lab-direction). Read the current [session prompts](session-goal.md) and [operator plan](operator-phase-2026-10-12/README.md). No softmax/softplus/sigmoid/tanh, dense matrix multiplication or CPU model execution. **Training remains held; M2 training/rental remains held separately.** Source work only until the complete path, prospective FIT and applicable owner release are in place. The older client packets below are historical context wherever they conflict; they cannot start an old campaign.
 > **Current roster (13 October 2026).** Who is on which line right now:

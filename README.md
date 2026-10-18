@@ -21,7 +21,7 @@ shared writer, read, evaluator/reference, seeded schedule/resume and update boun
 Both reads use the same integer input/carry/output codebook and writer. M1's quality target
 remains SUSPENDED pending a discriminating reply grader under R14.
 **The scoped D33 seed-1 diagnostic pilot is complete; further training and M2 remain held.**
-The current M1 priority is the [learned native-attention link](docs/harness/prep/m1-learned-attention-link-2026-10-17.md).
+The current M1 priority is the [existing K16-A/R admission redirect on rows_v1](docs/labs/k16-rows-timing-source-2026-10-18/README.md), with its registered qualification and accepted packet before training. The preceding [learned native-attention link](docs/harness/prep/m1-learned-attention-link-2026-10-17.md) retains the following evidence.
 Its interleaved learning and checkpoint runner are delivered; the
 [minimal GPU token-cell export](docs/labs/attention-token-cell-export-2026-10-17/README.md)
 passes its exact-source CUDA check, strict package Clippy, host metadata suite
@@ -33,8 +33,13 @@ nine Relation qualification controls with zero applies. The separately released
 [Q1 diagnostic stop in both arms](docs/labs/attention-rows-q1-diagnosis-2026-10-18/README.md)
 at4,096 batches: P_succ target admission2034→225 treatment/205 frozen-zero,
 below the registered500-target floor with nonzero sensitivities. Both returned0;
-all evidence is preserved and the pod is down. Scientific outcome review and the
-prospective next configuration remain; full attribution and fresh transfer are
+all evidence is preserved and the pod is down. Claude’s scientific outcome finds
+configured admission collapse with no implementation or identity fault. The owner
+selected the existing FIT K16-A/R admission redirect on the rows fast path,
+seeds1/2: [source and qualification sequence](docs/labs/k16-rows-timing-source-2026-10-18/README.md).
+The timing adapter is source-only; actual new-head qualification, registered
+four-cell timing and accepted measured packet precede training under its existing
+conditional release. Full attention attribution and fresh transfer remain
 unestablished. Admission counts are not learned accuracy.
 The completed D33 pilot recorded 1,640 corpus batches and 236 accepted vector updates. Earlier construction
 controls recorded eleven isolated fixture apply calls and eight disposable updates;

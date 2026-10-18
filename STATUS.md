@@ -35,10 +35,14 @@ at4,096 batches/exit0: P_succ target admission2034→225 treatment and2034→205
 frozen-zero, both belowfloor500 and halfinitial, with nonzero gate sensitivities.
 Original DATA and late-operator SHA/cloud readbacks preceded own down07:53:30Z;
 the separate after-down closure is also verified. The release is consumed.
-Scientific outcome review and a prospective next-configuration decision remain;
-full-dose attribution, final maps/224 captures and fresh scoring remain NOT_RUN.
-Training/M2/StageB remain HELD;
-Q4 NOT_EXECUTABLE. The earlier pilot below retains its measured scope.
+Claude’s [scientific outcome6248429872](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6248429872)
+records configured admission collapse with no implementation/identity fault found.
+The owner selected the existing FIT K16-A/R redirect on rows_v1, seeds1/2:
+[concrete source/qualification/release sequence](docs/labs/k16-rows-timing-source-2026-10-18/README.md).
+Timing source now binds the explicit rows path; new-head qualification/timing
+and accepted measured D-Packet still precede the four trajectories under the
+existing conditional release. Other training/M2/StageB holds remain. Full-dose
+attention attribution, final maps/224 captures and fresh scoring remain NOT_RUN. The earlier pilot below retains its measured scope.
 
 **Current result — D32/D33, 14 October:** the admitted seed-1 discrete pilot
 completed all 1,640 batches on CUDA, with 236 accepted shared-vector updates.
