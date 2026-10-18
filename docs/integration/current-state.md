@@ -6,6 +6,14 @@ Dry-run suite 368 passed / 0 failed, including an injected short-upload failure 
 no pods or model compute. Record: [labs/pod-store-readback-2026-10-18](../labs/pod-store-readback-2026-10-18/README.md).
 PR: (added after creation).
 
+## 2026-10-18 — Row-parallel exact counterfactual: GPU parity PASS, ~56× faster proposals (claude)
+
+The opt-in row-parallel `discrete_counterfactual` (owner: "Build now, Dose 1 runs on") passes finite GPU parity on an RTX 5090: 468/468 sweep cases (Route, Flock and Relation Gate), refusals, a forced status-8 batch and a forced lane break all match the ordinary kernel exactly, and the negative gate FAILs as required. At the Dose 1 shape (V4096/B4/C192/K8, 64 rows) a proposal takes 69–73 ms against 3.8–4.1 s, about **56–57×**, with identical losses. That derives to ~20 min per Dose 1 arm instead of ~19 h. The default path is unchanged and nothing is wired into training yet. About $0.30; [record](../labs/counterfactual-rows-parity-2026-10-18/README.md). Dose 1 is untouched. Training/M2/Stage B stay HELD. **Next:** opt-in `counterfactual_path` in the training driver (separate PR), then the owner decides whether to re-run Dose 1 on it.
+
+## 2026-10-18  Delivered M1/M4/harness branch claims cleanup (antigravity)
+
+Removes the stale committed branch claims for merged PRs #2565, #2573, #2604, #2605, #2611, #2617, #2618, #2620, and #2623 (`antigravity/*`, `kimi/optimization-path-2026-10-18`, `codex/cf1-attention-hash-domains`, `codex/cf1-attention-dose-packet`, and `claude/*`) from `docs/harness/claims.json` per `#2029` comments `6245248627` and `6245449740`. No code, model, or evidence change; coordination record only. Record: [labs/attention-cell-reference-scorer-2026-10-17](../labs/attention-cell-reference-scorer-2026-10-17/README.md).
+
 ## 2026-10-18  PM coordination hygiene: stale DeepSeek claims removed (deepseek)
 
 While Kimi is rate-limited, DeepSeek is covering PM coordination. This removes 25 stale committed
