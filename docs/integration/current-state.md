@@ -2,6 +2,30 @@
 
 The [scorer record](../labs/attention-cell-reference-scorer-2026-10-17/README.md) delivers `attention-cell-reference-scorer` (`preflight-dev`, `paired-dev`, and `bundle-candidate-cells`) in `crates/uor-r4-harness` (`src/attention_reference.rs` + `src/bin/attention_cell_reference_scorer.rs`) plus `DISCRETE_ENTRIES_WITH_EXPORT` in `scripts/check_native_cuda_vendor.rs` per [#2029 comments `6239938443`, `6240046545`, `6240085282`, `6240113871`, `6240513498`, `6240654230`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6240513498) and [#2604 comments `6241027772`, `6241711867`, `6242583159`, `6242961864`, `6243108155`](https://github.com/UOR-Foundation/uor-r4/pull/2604#issuecomment-6243108155), with `0` bytes changed in `crates/uor-r4-discrete/**`, workspace `Cargo.toml`, or `Cargo.lock` relative to `origin/main` (preserving the merged #2601 `crates/uor-r4-discrete` source identity `96ad8a4750398a8ecbf89e711f351de1580d7991` and binary `5abe54c3ce64dd66006b5ff50697d0c416071ba50c473014a0053e6bd63099ed`). Validates GPU-captured 16-slot `admitted_cells[16]` inventories (`uor-r4.attention-preflight-dev-capture/1`, matching the actual `attention-capture-dev` producer shape without requiring an invented `capture.model_snapshot_sha256` field while binding all four distinct producer checkpoint/model hash domains across `checkpoint_file.sha256`, `driver_checkpoint_sha256`, `checkpoint.model_sha256 == export.model_snapshot_sha256` canonical `serde_json::Value` model, and `typed_model_snapshot_sha256 == eval.model_snapshot_sha256` typed `DeviceSnapshotRecord` serialization), raw (`uor-r4.discrete-corpus-driver/1`) or enveloped (`uor-r4.attention-learning-evaluation/1`) DEV evaluation receipts, mandatory `config_file`/`checkpoint_file`/`evaluation_file` `FilePin` records vs canonical `sha256(encode(&config)) == config_sha256` and `sha256(encode(&evaluation_lineage)) == evaluation_lineage_sha256` pins (binding the full `2,425,925`-row `TRAIN` `PreparedCorpus` lineage inventory separately from the `1,049,856`-target Dose 1 reference budget), exact `LearnV1` vs `FrozenZeroV1` paired arm `DriverConfig`/`DriverLineage`/`EvalModelBindings` equality on the shared `14,287` DEV rows (`P_succ` floors `24`/`39`, complement floors `22`/`63`), and the sealed D34 reference (`2717d34bcfcdd1486991925ecab066266a6b56ba34b89727c37f78c821fe3bec`); scores full same-cell `T1/T1b/T2/U_succ/U_train` across all eight DEV slices from a GPU-exported `token_cells.u16` (`8,192`-byte `raw_u16_le_no_header` `u16[4096]` bound to a mandatory #2601 `uor-r4.attention-token-cells/1` `report.json` receipt, refusing bare `.u16` files, inline JSON `token_cells` arrays, and unauthenticated standalone `--candidate-cells` inputs) + SHA256-verified `TRAIN`/`DEV` `UORT` files (`U_succ` using the model-matched `1,049,856`-target `TRAIN` unigram ranking per D34 §6.4.6, never fitted on `DEV` labels, cross-checked 14,287/14,287 against GPU `eval_target_admitted` and sealed D34 predictions, with zero host `root_id`/`token_cell` codebook arithmetic), and fails closed (`UNAVAILABLE_MISSING_GPU_TOKEN_CELL_TABLE_AND_RANKED_CANDIDATE_RECEIPT`) when not provided. `cargo fmt --check`, `cargo clippy -p uor-r4-harness --locked --all-targets -- -D warnings`, `cargo test -p uor-r4-harness --lib attention_reference`, `uor-harness ratchet d23|d25`, and `check_claim_wording.py` pass; `$0` GPU spend, no model compute; Training, M2, and Stage B HELD; Q4 NOT_EXECUTABLE. **Next:** independent exact-head review, protected merge, and `Codex/cf1` operator integration.
 
+## 2026-10-17 — Attention Battery3 scoped preflight complete, zero apply (Codex/cf1)
+
+The [actual preflight record](../labs/attention-preflight-2026-10-17/README.md)
+and [outcome6243041786](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6243041786)
+record Battery3 under distinct PM6242930665/AGY6242609372 at protected runtime
+d46e/constructed96ad/executable5abe. All five staged data hashes, all26 actual
+command/contract steps and original operator41735 returned0. Initial checkpoint
+lock and read-only device export PASS; export4096cells/8192bytes preserves the
+snapshot. DEV evaluation applies0; initial B3 admits2034/3847 P_succ targets
+abovefloor500 (full7500/14287, complement5466/10440). Both fixed sensitivity
+predicates pass; Relation qualification9/9PASS/0FAIL/0NOT_RUN/0apply and final
+source/residual contracts pass. No learning dose, full same-cell scoring,
+224-forward admitted-slot capture or fresh draw ran.
+
+Main34380288bytes/MD5`d0d0d74506123c834b186ff626ec8cdb` fullSHA/cloud verified
+before own56464787 down23:22:46Z; separate late closure23552/
+`6e7392328db3eb09e93e894b78733ade` verified afterward. Native346s at$.964/h
+gives$.092651111 proxy; separate wall349s$.093454444, alternatives/not invoices.
+Carried mixed Codex$4.737258888 plusPM; storage/transfer UNMEASURED.
+[Independent actual review6243075217](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6243075217)
+APPROVES the scoped preflight (report80cae1fc). PM disposition and the separately
+pinned paired-dose packet are next. Recorded count0/3/reply37/232SUSPENDED/learned Relation NOT_RUN are
+not reset or promoted here. Training/M2/StageB HELD; Q4 NOT_EXECUTABLE.
+
 ## 2026-10-17 — Attention Battery2 staging stop before binary invocation (Codex/cf1)
 
 The [actual preflight record](../labs/attention-preflight-2026-10-17/README.md),
