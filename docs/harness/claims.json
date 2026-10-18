@@ -316,8 +316,8 @@
   },
   "kimi-pm-main": {
     "branch": "kimi-pm-main",
-    "claimed_at": "2026-10-18T03:19:18-04:00",
-    "head": "2572f323f",
+    "claimed_at": "2026-10-18T13:44:36-04:00",
+    "head": "0122737e9",
     "lab": "kimi",
     "note": ""
   },
@@ -332,13 +332,6 @@
     "branch": "kimi/d38-d5-split",
     "claimed_at": "2026-10-18T13:18:06-04:00",
     "head": "f8ddce2f3",
-    "lab": "kimi",
-    "note": ""
-  },
-  "kimi/d39-course-correction": {
-    "branch": "kimi/d39-course-correction",
-    "claimed_at": "2026-10-18T13:41:10-04:00",
-    "head": "1feef402d",
     "lab": "kimi",
     "note": ""
   },
