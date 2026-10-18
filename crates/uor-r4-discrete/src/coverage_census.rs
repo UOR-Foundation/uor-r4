@@ -34,6 +34,9 @@ struct CellReceipt {
 pub fn alias_representatives(table: &[i32], spec: Spec) -> Result<Vec<u32>> {
     let width = spec.blocks as usize * 8;
     let vocabulary = spec.vocabulary as usize;
+    if width == 0 || vocabulary == 0 {
+        return Err(invalid("codebook spec has no blocks or no vocabulary"));
+    }
     if table.len() != vocabulary * width {
         return Err(invalid(format!(
             "codebook holds {} words, expected vocabulary {vocabulary} x {width}",
@@ -96,7 +99,13 @@ pub fn census(
         "blocks": spec.blocks,
         "distinct_vectors": group_size.len(),
         "alias_group_size_histogram": size_histogram,
-        "tokens_in_alias_groups": representative.iter().filter(|r| group_size[r] > 1).count(),
+        // Exact evaluation ties: identical vectors always share a cell and a
+        // distance (table_block returns the row at evaluation), so only the
+        // lowest-ID member can win. This is the within-cell tie mass of D39.
+        "within_cell_tie_mass": {
+            "tokens_in_alias_groups": representative.iter().filter(|r| group_size[r] > 1).count(),
+            "dev_rows_targeting_non_representative": dev_targets.len() as u64 - ceiling_rows,
+        },
         "dev_rows": dev_targets.len(),
         "dev_distinct_targets": distinct_targets.len(),
         "dev_targets_alias_representative": reachable_targets,
@@ -125,6 +134,13 @@ fn cell_census(cells: &[u16], representative: &[u32], dev_targets: &[u32]) -> Re
         }
         occupancy[cell] += 1;
         let r = representative[token];
+        // An alias group must share one cell: the exporter and the evaluator
+        // read the same row. A split group is an instrument fault (D31).
+        if cells[r as usize] as usize != cell {
+            return Err(invalid(format!(
+                "token {token} and its alias representative {r} have different exported cells"
+            )));
+        }
         if !vectors[cell].contains(&r) {
             vectors[cell].push(r);
         }
@@ -133,16 +149,16 @@ fn cell_census(cells: &[u16], representative: &[u32], dev_targets: &[u32]) -> Re
     for &n in occupancy.iter().filter(|&&n| n > 0) {
         *occupancy_histogram.entry(n).or_default() += 1;
     }
-    // A within-cell tie: the cell holds more than one distinct vector, so tokens
-    // in it are separated only by token distance, then by token ID.
-    let tied = |cell: usize| vectors[cell].len() > 1;
-    let tokens_in_multi_vector_cells: u64 = (0..CELL_COUNT)
-        .filter(|&c| tied(c))
+    // Crowding, not ties: distinct vectors sharing a cell compete on token
+    // distance; they tie only when that distance is also equal.
+    let crowded = |cell: usize| vectors[cell].len() > 1;
+    let tokens_in_crowded_cells: u64 = (0..CELL_COUNT)
+        .filter(|&c| crowded(c))
         .map(|c| occupancy[c])
         .sum();
-    let dev_rows_in_multi_vector_cells = dev_targets
+    let dev_rows_in_crowded_cells = dev_targets
         .iter()
-        .filter(|&&t| tied(cells[t as usize] as usize))
+        .filter(|&&t| crowded(cells[t as usize] as usize))
         .count();
     Ok(json!({
         "status": "FROM_GPU_TOKEN_CELL_RECEIPT",
@@ -150,9 +166,9 @@ fn cell_census(cells: &[u16], representative: &[u32], dev_targets: &[u32]) -> Re
         "cell_occupancy_histogram": occupancy_histogram,
         "max_cell_occupancy": occupancy.iter().max().copied().unwrap_or(0),
         "cell_collision_pairs": occupancy.iter().map(|&n| n * n.saturating_sub(1) / 2).sum::<u64>(),
-        "cells_with_multiple_vectors": (0..CELL_COUNT).filter(|&c| tied(c)).count(),
-        "tokens_in_multi_vector_cells": tokens_in_multi_vector_cells,
-        "dev_rows_in_multi_vector_cells": dev_rows_in_multi_vector_cells,
+        "crowded_cells_multiple_vectors": (0..CELL_COUNT).filter(|&c| crowded(c)).count(),
+        "tokens_in_crowded_cells": tokens_in_crowded_cells,
+        "dev_rows_in_crowded_cells": dev_rows_in_crowded_cells,
     }))
 }
 
@@ -193,6 +209,11 @@ pub fn run(
         corpus::sha256(&serde_json::to_vec(&checkpoint).map_err(|e| invalid(e.to_string()))?);
     let spec: Spec = serde_json::from_value(checkpoint.model["spec"].clone())
         .map_err(|e| invalid(e.to_string()))?;
+    if spec != driver.config().spec {
+        return Err(invalid(
+            "checkpoint model spec differs from the driver config",
+        ));
+    }
     let table: Vec<i32> = serde_json::from_value(checkpoint.model["table"].clone())
         .map_err(|e| invalid(e.to_string()))?;
     let cells = cell_receipt
@@ -269,18 +290,37 @@ mod tests {
         let report = census(&table(), spec(4), &[0, 1, 3, 3], Some(&cells), None).unwrap();
         let c = &report["cells"];
         assert_eq!(c["occupied_cells"], 2);
-        assert_eq!(c["cells_with_multiple_vectors"], 1);
-        assert_eq!(c["tokens_in_multi_vector_cells"], 2);
-        assert_eq!(c["dev_rows_in_multi_vector_cells"], 3);
+        assert_eq!(c["crowded_cells_multiple_vectors"], 1);
+        assert_eq!(c["tokens_in_crowded_cells"], 2);
+        assert_eq!(c["dev_rows_in_crowded_cells"], 3);
         assert_eq!(c["cell_collision_pairs"], 2);
         assert!(report["g_cap"].is_null());
     }
 
     #[test]
+    fn tie_mass_is_the_alias_mass() {
+        // Tokens 0 and 2 tie exactly; two rows target the losing member 2.
+        let report = census(&table(), spec(4), &[0, 2, 2, 1], None, None).unwrap();
+        let t = &report["within_cell_tie_mass"];
+        assert_eq!(t["tokens_in_alias_groups"], 2);
+        assert_eq!(t["dev_rows_targeting_non_representative"], 2);
+    }
+
+    #[test]
+    fn a_split_alias_group_is_an_instrument_fault() {
+        // Tokens 0 and 2 have identical rows, so the exporter must give one cell.
+        let error = census(&table(), spec(4), &[0], Some(&[5, 9, 6, 9]), None).unwrap_err();
+        assert!(error.to_string().contains("different exported cells"));
+    }
+
+    #[test]
     fn malformed_inputs_are_refused() {
         assert!(alias_representatives(&table()[..10], spec(4)).is_err());
+        let mut empty = spec(4);
+        empty.blocks = 0;
+        assert!(alias_representatives(&[], empty).is_err());
         assert!(census(&table(), spec(4), &[7], None, None).is_err());
-        assert!(census(&table(), spec(4), &[0], Some(&[0, 1, 2]), None).is_err());
-        assert!(census(&table(), spec(4), &[0], Some(&[0, 1, 2, 300]), None).is_err());
+        assert!(census(&table(), spec(4), &[0], Some(&[0, 1, 0]), None).is_err());
+        assert!(census(&table(), spec(4), &[0], Some(&[0, 1, 0, 300]), None).is_err());
     }
 }

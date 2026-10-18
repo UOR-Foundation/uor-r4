@@ -2,7 +2,7 @@
 //! A separate binary so the training driver's source identity is unchanged.
 //! Host-only: grouping and counting over stored data; no model execution.
 //!
-//! Usage: coverage-census CONFIG CHECKPOINT OUTPUT [--token-cells RECEIPT] [--bar ROWS]
+//! Usage: coverage-census CONFIG CHECKPOINT OUTPUT [--token-cells RECEIPT] [--bar-rows ROWS]
 //! OUTPUT must not exist; it is created exclusively.
 
 use std::fs::{self, OpenOptions};
@@ -14,7 +14,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let (positional, flags) = args.split_at(args.len().min(3));
     if positional.len() != 3 {
         return Err(
-            "usage: coverage-census CONFIG CHECKPOINT OUTPUT [--token-cells RECEIPT] [--bar ROWS]"
+            "usage: coverage-census CONFIG CHECKPOINT OUTPUT [--token-cells RECEIPT] [--bar-rows ROWS]"
                 .into(),
         );
     }
@@ -24,14 +24,17 @@ fn run(args: &[String]) -> Result<(), String> {
     while let Some(flag) = rest.next() {
         let value = rest.next().ok_or(format!("{flag} needs a value"))?;
         match flag.as_str() {
-            "--token-cells" => cells = Some(fs::read(value).map_err(|e| format!("{value}: {e}"))?),
-            "--bar" => {
+            "--token-cells" if cells.is_none() => {
+                cells = Some(fs::read(value).map_err(|e| format!("{value}: {e}"))?)
+            }
+            "--bar-rows" if bar.is_none() => {
                 bar = Some(
                     value
                         .parse::<u64>()
-                        .map_err(|e| format!("--bar {value}: {e}"))?,
+                        .map_err(|e| format!("--bar-rows {value}: {e}"))?,
                 )
             }
+            "--token-cells" | "--bar-rows" => return Err(format!("{flag} given twice")),
             other => return Err(format!("unknown flag {other}")),
         }
     }
