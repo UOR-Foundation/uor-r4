@@ -8,7 +8,7 @@ streams (`finish_stream`). Linux smoke: scratch workspace defaults inside the ch
 `spiralcore-base/wire/local/` outputs and added `.gitignore`. Worktree checks: `WIRE_INTERPOSER_PASS`,
 `WIRE_MUX_PASS`, `WIRE_MUX_ROUTING_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no model compute.
 Record: [labs/spiralcore-wire-review-fixes-2026-10-18](../labs/spiralcore-wire-review-fixes-2026-10-18/README.md).
-PR: (added after creation).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2614
 
 ## 2026-10-18  Wire transport side exploration merged (`deepseek/spiralcore-wire-side-exploration`)
 
