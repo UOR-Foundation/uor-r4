@@ -7,6 +7,38 @@ This applies the DeepSeek and AGY FIT-WITH-FIXES items for piece 1 and the paren
 - **Parent sheet:** per-family cursors, tie-breaks, and the Stage C split into C1 (scoring) and C2 (apply).
 
 The rows image and the driver hash are unchanged. Host checks are listed in the PR. The **GPU run is still NOT_RUN** pending the FIT flip and the owner's release. No compute, $0.
+## 2026-10-18 — R1 live documented; A1 partial DATA custody complete (deepseek)
+
+R1 launched once at 21:26:32Z on the same pod/GPU with the existing admission and frozen 21224b446
+source/ELF; PID 176300, source cursor 1,408 completed / 58 accepted / next target 90,112 at 21:29:48Z.
+Canonical NOW/ROADMAP/STATUS/README/docs-labs now say R1 RUNNING (not NOT_STARTED) and the ROADMAP M1
+Status cell no longer says training NOT_RUN; dated pre-R1 history is preserved. A1 partial DATA cloud
+custody completed for the 2109Z snapshot (three compressed shards; 332 members/1,848,283,971 raw bytes;
+root join `9576bc73…`); four-role/final late-OP not complete; `safe_to_down=false`. A1's one-arm DEV counts
+were 14,287 rows / 2,237 admitted / 65 top-1 / 547 top-8; registered paired interpretation pending, no
+KEEP/fresh/pair claim. Docs-only; claim-wording PASS via existing checker; no build, no compute.
+Record: [labs/a1-completion-docs-2026-10-18](../labs/a1-completion-docs-2026-10-18/README.md).
+
+## 2026-10-18 — A1 completion synced to canonical docs; #2700 docs claim corrected (deepseek)
+
+K16-A/seed1 completed 16,404/407 (exit 0 20:58:35Z; report `fa863063`, final `6936cf99`, four evaluations
+matched), status `COMPLETE_PENDING_REGISTERED_TWO_SEED_INTERPRETATION`. NOW/ROADMAP/STATUS/README/docs-labs
+now state the completed-A1 state and R-seed1 host-unblocked/NOT_STARTED. Corrected the earlier #2700 record:
+commit `1cf87485` only carried its record/current-state, not the canonical-page edits. No result/KEEP claim;
+claim-wording PASS via the existing checker; docs-only, no compute.
+Record: [labs/a1-completion-docs-2026-10-18](../labs/a1-completion-docs-2026-10-18/README.md).
+
+## 2026-10-18 — D38 evidence and injective-draft planning-cost provenance (codex)
+
+ROADMAP R3/R5 now name D5-a post-warmup hardware-counter cache/DRAM bytes per token
+separately from D5-b measured selected parameter access when the model exceeds
+cache, retaining J/token, RSS, tokens/s and D25. Section8 of the unregistered
+injective attention draft labels its historical resource-lifetime extrapolations
+as assumption-based planning estimates, not measured batch-rate/cost bounds,
+under [timing clarification6253995798](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6253995798).
+Changed-lineage throughput and all-in cost remain unmeasured. No scientific bar,
+registered budget, permission or running-status change; no compute, $0 new work.
+Record: [labs/d38-cost-provenance-docs-2026-10-18](../labs/d38-cost-provenance-docs-2026-10-18/README.md).
 
 ## 2026-10-18 — BVG-K Stage C piece 1: K-coordinate row-parallel scoring (claude; W3)
 
