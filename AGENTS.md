@@ -1,8 +1,23 @@
 # AGENTS.md — UOR-R4 Geometric Language Model
 
+> **Current direction, October 18 — D37 offline float.** Floating point is legal in
+> offline training only: float forward passes, gradients and optimizers, and offline
+> numerical training instruments. It still bans softmax/squashing (D23/D25) and
+> matmul/GEMM (D25/D30), keeps GPU-only compute (D24), and requires geometric
+> mechanisms. The integer boundary is the export: the served artifact is D11
+> integer/table only, and every float-trained candidate reports its export gap.
+> The October 14 complex-plane zeta-zero exception stays as written. Archived
+> F32/F64 sheets return only by re-registration and a fresh FIT. The D32 discrete
+> path (`crates/uor-r4-discrete`, Dose 1) is unchanged, and so are the holds.
+> **The bans exist to exclude expensive operations:** the goal is fast local AI that
+> trains fast, runs fast and approaches frontier capability through the geometric
+> method, by stitching the right mechanisms together and optimizing the details.
+> See [D37](docs/integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised).
+
 > **Current direction, October 13 — D32 discrete model and instruments.**
-> D32 supersedes floating-point model/learning permissions: no floating-point
-> forward, gradients, optimizer or numerical model instrument, and no matrix
+> D32 superseded floating-point model/learning permissions (for offline
+> training, now revised by D37 above): no floating-point forward, gradients,
+> optimizer or numerical model instrument on the discrete path, and no matrix
 > multiplication. Use native SpiralCore/E8/FBS geometry and one integer
 > input/carry/output writer. Source `a2a5b89c` passes eleven admitted CUDA
 > construction controls after Claude FIT; apply remains NEVER_RUN. Delivery: #2379.
@@ -149,9 +164,10 @@ invariants still apply to the runtime where they are declared.
   table/tropical/codec parts, prism, LexLean/PrismPM patterns) are the shared
   ecosystem floor - reuse before rewriting. Python only where Rust genuinely cannot
   do the job.
-  D32 requires discrete GPU model computation and instruments, including learning:
-  no floating-point forward/gradient/optimizer, matrix multiplication or prohibited
-  squashing. Training remains held. Final inference
+  The D32 discrete path is GPU-only and integer. Under D37, offline training may
+  use float forward passes, gradients and optimizers, but never matrix
+  multiplication or prohibited squashing. The exported artifact is D11 integer.
+  Training remains held. Final inference
   executes learned geometric operators through bounded routing, state updates
   and integer/table lookup. A dense transformer hidden behind lookup is not the
   target. Preserve old Python/dense references as evidence; do not add a Python
@@ -325,8 +341,9 @@ may run on it.
 
 ## Architecture and claim boundaries
 
-**Current D32 substrate:** model computation and its instruments, including learning,
-are discrete/exact and GPU-only, with no floating point, gradient optimizer or matmul.
+**Current substrate (D32 + D37):** the active discrete path is exact and GPU-only.
+Under D37, offline training may use floating point (forward, gradients,
+optimizer), but no matmul or prohibited squashing. Serving is D11 integer/table.
 The following pre-D32 permission paragraph is retained historical context only;
 its offline scalar-float allowance is inactive and cannot authorize execution.
 
@@ -339,9 +356,10 @@ Bounded inference and contextual/copy attention exist. General prose, general re
 ## Execution-lane invariants
 
 
-- **Native learning:** use discrete/exact geometric GPU moves and comparisons under
-  D32, with no floating-point model/instrument, gradient, optimizer, matrix
-  multiplication or prohibited squashing. Training is held.
+- **Native learning:** use geometric GPU learning. That means the D32 discrete moves,
+  or, under D37 and a new FIT'd pre-registration, offline float forward passes,
+  gradients and optimizers in a separately scanned module, with a reported export
+  gap. No matrix multiplication or prohibited squashing anywhere. Training is held.
   Bind the source/configuration, tokenizer, data and learned parameters to each
   artifact. An offline teacher can be a declared comparator or training source;
   it cannot author serving responses.
