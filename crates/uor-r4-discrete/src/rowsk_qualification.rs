@@ -60,6 +60,15 @@ fn refusal_text(status: u32) -> String {
 }
 
 type Control = fn(&mut Tally) -> Result<()>;
+/// (label, model, scoring handle, carried batch, block, expected refusal text).
+type RefusalCase<'a> = (
+    &'a str,
+    &'a Device,
+    &'a RowsKScoring,
+    &'a crate::device::CarriedBatch,
+    Vec<Parameter>,
+    &'a str,
+);
 
 #[derive(Default)]
 struct Tally {
@@ -68,6 +77,8 @@ struct Tally {
     successes: u64,
     refusals: u64,
     racy_refusals: u64,
+    /// (rows, rows-K) observed status-set sizes for each racy refusal.
+    racy_set_sizes: Vec<(usize, usize)>,
 }
 
 fn unchanged<T>(device: &Device, call: impl FnOnce() -> Result<T>) -> Result<T> {
@@ -124,31 +135,36 @@ fn compare_block(
                     // Lane terminals publish through atomicExch on both paths, so
                     // a block whose lanes end on different statuses has a racy
                     // final code. Re-run both and require the sets to overlap.
-                    let mut seen_rows = BTreeSet::from([text.clone()]);
-                    let mut seen_k = BTreeSet::from([mine]);
-                    for _ in 0..4 {
-                        match device.propose_rows(&input, targets, parameter, rows) {
-                            Err(Error::Invalid(t)) => {
-                                seen_rows.insert(t);
+                    // The retries sit inside the same unchanged-state check.
+                    let (seen_rows, seen_k) = unchanged(device, || {
+                        let mut seen_rows = BTreeSet::from([text.clone()]);
+                        let mut seen_k = BTreeSet::from([mine.clone()]);
+                        for _ in 0..4 {
+                            match device.propose_rows(&input, targets, parameter, rows) {
+                                Err(Error::Invalid(t)) => {
+                                    seen_rows.insert(t);
+                                }
+                                Err(e @ Error::Cuda(_)) => return Err(e),
+                                other => {
+                                    return Err(Error::Invalid(format!(
+                                        "{parameter:?}: rows retry changed outcome class: ok={}",
+                                        other.is_ok()
+                                    )))
+                                }
                             }
-                            Err(e @ Error::Cuda(_)) => return Err(e),
-                            other => {
-                                return Err(Error::Invalid(format!(
-                                    "{parameter:?}: rows retry changed outcome class: ok={}",
-                                    other.is_ok()
-                                )))
-                            }
+                            let again: Vec<CoordinateScore> =
+                                device.score_rows_k(&input, targets, block, rowsk)?;
+                            let s = again
+                                .iter()
+                                .find(|x| x.parameter == parameter)
+                                .map(|x| x.status)
+                                .unwrap_or(0);
+                            require(s != 0, "rows-K retry succeeded after the case refused")?;
+                            seen_k.insert(refusal_text(s));
                         }
-                        let again: Vec<CoordinateScore> =
-                            device.score_rows_k(&input, targets, block, rowsk)?;
-                        let s = again
-                            .iter()
-                            .find(|x| x.parameter == parameter)
-                            .map(|x| x.status)
-                            .unwrap_or(0);
-                        require(s != 0, "rows-K retry succeeded after the case refused")?;
-                        seen_k.insert(refusal_text(s));
-                    }
+                        Ok((seen_rows, seen_k))
+                    })?;
+                    tally.racy_set_sizes.push((seen_rows.len(), seen_k.len()));
                     require(
                         seen_rows.intersection(&seen_k).next().is_some(),
                         &format!(
@@ -254,25 +270,82 @@ fn block_refusals(tally: &mut Tally) -> Result<()> {
     let over: Vec<Parameter> = (0..(MAX_COORDINATE_BLOCK as u32 + 1))
         .map(|i| Parameter::VectorBlock(i % 32))
         .collect();
-    for (label, block) in [
-        ("empty", Vec::new()),
-        ("over-long", over),
+    // A Relation model for the read-kind refusals.
+    let relation = Device::new_with_objective(
+        spec,
+        ReadSpec::Relation { kept: 2, sweeps: 1 },
+        ObjectivePolicy::NearestAddressMarginV1,
+        7,
+        0,
+    )?;
+    let relation_scoring = relation.rowsk_scoring()?;
+    let relation_input = relation.carry_windows(&batch)?;
+    let gates = relation.snapshot()?.gates.len() as u32;
+    // Each case must refuse with its own reason, not merely with some error.
+    let cases: [RefusalCase; 6] = [
+        (
+            "empty",
+            &device,
+            &rowsk,
+            &input,
+            Vec::new(),
+            "coordinate block must hold 1..=64",
+        ),
+        (
+            "over-long",
+            &device,
+            &rowsk,
+            &input,
+            over,
+            "coordinate block must hold 1..=64",
+        ),
         (
             "mixed-kind",
+            &device,
+            &rowsk,
+            &input,
             vec![Parameter::Route(0), Parameter::VectorBlock(0)],
+            "must hold one parameter kind",
         ),
-        ("out-of-inventory", vec![Parameter::VectorBlock(32)]),
-    ] {
+        (
+            "out-of-inventory",
+            &device,
+            &rowsk,
+            &input,
+            vec![Parameter::VectorBlock(32)],
+            "exceeds its declared inventory",
+        ),
+        (
+            "route-in-relation",
+            &relation,
+            &relation_scoring,
+            &relation_input,
+            vec![Parameter::Route(0)],
+            "route parameters are inactive in a relation model",
+        ),
+        (
+            "gate-past-count",
+            &relation,
+            &relation_scoring,
+            &relation_input,
+            vec![Parameter::Gate(gates)],
+            "exceeds its declared inventory",
+        ),
+    ];
+    for (label, model, scoring, carried, block, expected) in cases {
         tally.cases += 1;
-        let refused = unchanged(&device, || {
-            match device.score_rows_k(&input, &targets, &block, &rowsk) {
-                Err(Error::Invalid(_)) => Ok(true),
+        let text = unchanged(model, || {
+            match model.score_rows_k(carried, &targets, &block, scoring) {
                 Err(e @ Error::Cuda(_)) => Err(e),
-                Err(_) => Ok(true),
-                Ok(_) => Ok(false),
+                Err(error) => Ok(Some(error.to_string())),
+                Ok(_) => Ok(None),
             }
         })?;
-        require(refused, &format!("{label} block was not refused"))?;
+        let text = text.ok_or_else(|| Error::Invalid(format!("{label} block was not refused")))?;
+        require(
+            text.contains(expected),
+            &format!("{label} block refused for the wrong reason: {text}"),
+        )?;
         tally.refusals += 1;
     }
     Ok(())
@@ -371,6 +444,7 @@ pub fn run(report: &Path) -> Result<()> {
                 "name": name, "status": "PASS", "blocks": tally.blocks, "cases": tally.cases,
                 "successes": tally.successes, "refusals": tally.refusals,
                 "racy_refusals": tally.racy_refusals,
+                "racy_set_sizes_rows_rowsk": tally.racy_set_sizes,
             }),
             Err(error) => {
                 failed = true;
