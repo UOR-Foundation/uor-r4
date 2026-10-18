@@ -58,4 +58,14 @@ __pycache__/
 # 30 GB disk floor. The bytes live in `icloud:UOR-R4/results/owner-docs/` and restore with
 # `scripts/storage/research-data restore <name> --run`. The owner checkout keeps a working copy;
 # worktrees must not carry one.
-/research/
+/research/*
+!/research/README.md
+
+# macOS AppleDouble files (ExFAT external drives)
+._*
+
+# Build artifacts from wasm-bindgen/mk-synthetic-stack
+/pkg-serving/
+librust_out.rlib
+synthetic-stack.lut
+

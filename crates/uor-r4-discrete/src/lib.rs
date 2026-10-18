@@ -6,6 +6,7 @@ pub mod baseline_reuse;
 mod baseline_reuse_source;
 pub mod controller;
 pub mod corpus;
+pub mod coverage_census;
 pub mod decomposition;
 #[cfg(test)]
 mod decomposition_source;
@@ -18,6 +19,7 @@ pub mod measurement;
 pub mod metadata;
 pub mod objective;
 pub mod proposal_timing;
+pub mod rows_source;
 pub use objective::ObjectivePolicy;
 pub mod training;
 
@@ -411,3 +413,5 @@ pub mod flock_qualification;
 pub mod qualification;
 #[cfg(feature = "cuda")]
 pub mod relation_qualification;
+#[cfg(feature = "cuda")]
+pub mod rows_qualification;

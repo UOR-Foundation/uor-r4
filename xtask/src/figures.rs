@@ -2,9 +2,9 @@
 //!
 //! The README and `docs/geometry.md` diagrams are drawn here, in Rust (D27: Rust
 //! for tooling), so a status change is a one-line edit and a reviewable diff
-//! instead of a hand-edited SVG. Every figure uses one vocabulary: cards with a
-//! status, status pills, arrows and a legend, in the colour-blind-safe palette the
-//! earlier figures used. Text never overflows its card: each line's width is
+//! instead of a hand-edited SVG. Figures share the original fine outlines,
+//! small annotations, status keys and colour-blind-safe palette. Architecture
+//! has landscape and narrow layouts. Text never overflows its card: each line's width is
 //! estimated and the task fails instead of writing a clipped figure.
 //!
 //! Without `--write` the task checks that every generated file is current (the
@@ -42,6 +42,7 @@ const DATE: &str = "13 October 2026";
 enum St {
     Working,
     Built,
+    Historical,
     Progress,
     Planned,
     Held,
@@ -54,6 +55,7 @@ impl St {
         match self {
             St::Working => "WORKING",
             St::Built => "BUILT & TESTED",
+            St::Historical => "HISTORICAL · INACTIVE",
             St::Progress => "IN PROGRESS",
             St::Planned => "PLANNED",
             St::Held => "HELD",
@@ -65,6 +67,7 @@ impl St {
         match self {
             St::Working => "Working",
             St::Built => "Built & tested",
+            St::Historical => "Historical · inactive",
             St::Progress => "In progress",
             St::Planned => "Planned",
             St::Held => "Held by the owner",
@@ -77,6 +80,7 @@ impl St {
         match self {
             St::Working => ("#E3F4EE", GREEN, 2.5, None),
             St::Built => ("#E4EFF8", BLUE, 1.75, None),
+            St::Historical => ("#F6F8FA", "#8C959F", 1.5, Some("4 4")),
             St::Progress => ("url(#hP)", "#B87A00", 2.0, None),
             St::Planned => ("#FFFFFF", "#6E7781", 1.75, Some("6 5")),
             St::Held => ("#F4F0F8", PURPLE, 2.0, Some("9 4")),
@@ -96,6 +100,7 @@ impl St {
         match self {
             St::Working => (GREEN, GREEN, "#FFFFFF", None),
             St::Built => (BLUE, BLUE, "#FFFFFF", None),
+            St::Historical => ("#E6E9ED", "#8C959F", INK, Some("4 3")),
             St::Progress => (ORANGE, "#B87A00", INK, None),
             St::Planned => ("#FFFFFF", "#6E7781", ARROW, Some("4 3")),
             St::Held => (PURPLE, PURPLE, "#FFFFFF", None),
@@ -312,187 +317,263 @@ impl Svg {
 
 // ---------------------------------------------------------------- figures
 
+/// Current arrows are sourced individually in docs/architecture.md.
+/// Landscape schema follows Claude's multi-lane figure at 3778e1d6.
+/// A separate narrow SVG keeps labels readable without enlarging the desktop art.
 fn architecture() -> Result<String, Fail> {
-    let mut s = Svg::new("architecture", 1200.0, 900.0);
-    s.header(
-        "UOR-R4 Geometric Language Model: architecture",
-        &format!("Pre-alpha, {DATE}. Two lines join as one served model at M4. Training is held until the whole executed path is lawful."),
+    let mut s = Svg::new("architecture", 1200.0, 660.0);
+    s.header("UOR-R4: discrete geometric architecture", "18 October 2026 · implemented source; language quality and unified D11 serving remain unqualified");
+    s.section(116.0, "M1 · SHARED REPRESENTATION AND ORDERED READ");
+    s.rect(
+        [190.0, 140.0, 390.0, 64.0],
+        5.0,
+        ("#FFFFFF", BLUE, 1.5, None),
     );
-    s.section(118.0, "LINE A   Geometric stack: the language base (M1)");
-    s.card(
-        [40.0, 130.0, 220.0, 132.0],
-        St::Working,
-        "Data & tokenizer",
-        &[
-            "byte-BPE tokenizer (#1017),",
-            "corpora and memory",
-            "dialogues, in the HF store",
-        ],
-        true,
+    s.text(
+        [206.0, 165.0],
+        (15.0, 700, INK),
+        "start",
+        "Shared token-vector table V",
     );
-    s.card(
-        [290.0, 130.0, 260.0, 132.0],
-        St::Built,
-        "Compliant trunk (source)",
-        &[
-            "recurrence: rotation transport,",
-            "clamped opening, exact rate table",
-            "feed-forward: SpiralCore/FBS + G2",
-        ],
-        true,
+    s.text(
+        [206.0, 187.0],
+        (14.0, 400, BODY),
+        "start",
+        "8D blocks · 16 carrier roots · 64 signed actions",
     );
-    s.card(
-        [580.0, 130.0, 170.0, 132.0],
-        St::Planned,
-        "Geometric head",
-        &["OP3a product-key", "head; replaces the", "dense tied head"],
-        true,
+    s.path("M580,172 H968 V238", ARROW, 1.5, None, true);
+    s.text(
+        [768.0, 161.0],
+        (13.0, 400, MUTED),
+        "middle",
+        "same table for input and output",
     );
-    s.card(
-        [780.0, 130.0, 170.0, 132.0],
-        St::Held,
-        "Rung 0 training",
-        &["first lawful run;", "pre-registered,", "waits on the head"],
-        true,
+    s.arrow(278.0, 204.0, 278.0, 238.0, false);
+    for (x, w, title, lines) in [
+        (40.0, 110.0, "Token IDs", vec!["x₁, …, xₜ"]),
+        (
+            190.0,
+            176.0,
+            "Encode",
+            vec!["table lookup", "discrete_encode"],
+        ),
+        (
+            406.0,
+            180.0,
+            "Ordered context",
+            vec!["ternary FBS plans", "preserve order"],
+        ),
+        (
+            906.0,
+            154.0,
+            "Shared writer",
+            vec!["cell admission", "integer distance"],
+        ),
+    ] {
+        s.rect([x, 238.0, w, 82.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
+        s.fit([x + 12.0, 264.0], (15.0, 700, INK), w - 24.0, title);
+        for (i, line) in lines.iter().enumerate() {
+            s.fit(
+                [x + 12.0, 287.0 + 18.0 * i as f64],
+                (14.0, 400, BODY),
+                w - 24.0,
+                line,
+            );
+        }
+    }
+    s.rect(
+        [626.0, 214.0, 240.0, 130.0],
+        5.0,
+        ("#FFFFFF", BLUE, 1.5, None),
     );
-    s.arrow(260.0, 196.0, 290.0, 196.0, false);
-    s.arrow(550.0, 196.0, 580.0, 196.0, false);
-    s.arrow(750.0, 196.0, 780.0, 196.0, false);
-    s.arrow(950.0, 196.0, 990.0, 196.0, false);
-
+    s.text([642.0, 241.0], (15.0, 700, INK), "start", "Read vector");
+    s.text(
+        [642.0, 266.0],
+        (14.0, 400, BODY),
+        "start",
+        "Route: one carrier + transport",
+    );
+    s.path("M642,278 H850", RULE, 1.0, None, false);
+    s.text(
+        [642.0, 299.0],
+        (14.0, 400, BODY),
+        "start",
+        "Flock / Relation: select,",
+    );
+    s.text(
+        [642.0, 321.0],
+        (14.0, 400, BODY),
+        "start",
+        "transport, equal sum → snap",
+    );
+    for (a, b) in [
+        (150.0, 190.0),
+        (366.0, 406.0),
+        (586.0, 626.0),
+        (866.0, 906.0),
+        (1060.0, 1100.0),
+    ] {
+        s.arrow(a, 279.0, b, 279.0, false);
+    }
+    s.circle(1128.0, 279.0, 28.0, "#FFFFFF", BLUE, 1.5);
+    s.text([1128.0, 285.0], (16.0, 700, INK), "middle", "xₜ₊₁");
+    s.text([1128.0, 330.0], (13.0, 400, MUTED), "middle", "selected ID");
+    s.section(386.0, "LEARNING · EXACT VIRTUAL MOVES ON A FIXED BATCH");
+    for (x, title, detail) in [
+        (40.0, "Snapshot + batch", "fixed objective inputs"),
+        (328.0, "Virtual proposals", "rows_v1 is opt-in"),
+        (616.0, "Compare objectives", "exact integer scores"),
+        (904.0, "Accepted snapshot", "improvement + admission"),
+    ] {
+        s.rect([x, 404.0, 256.0, 64.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
+        s.text([x + 14.0, 430.0], (15.0, 700, INK), "start", title);
+        s.text([x + 14.0, 452.0], (14.0, 400, BODY), "start", detail);
+        if x < 904.0 {
+            s.arrow(x + 256.0, 436.0, x + 288.0, 436.0, false);
+        }
+    }
     s.section(
-        290.0,
-        "LINE B   Native learner: grounded reply from exact memory (M2, M3)",
+        512.0,
+        "SEPARATE RESEARCH AND SERVING BOUNDARIES · NO INTEGRATION ARROWS",
     );
     s.card(
-        [40.0, 302.0, 220.0, 112.0],
-        St::Built,
-        "Compiler",
-        &["text to typed facts", "(H4 / zeta tables)"],
-        true,
+        [40.0, 530.0, 340.0, 66.0],
+        St::Held,
+        "M2 compiler / emitter",
+        &["Held research; outside the current M1 path"],
+        false,
     );
     s.card(
-        [290.0, 302.0, 260.0, 112.0],
-        St::Built,
-        "Exact addressed store",
-        &["versioned facts, exact identity,", "prime and H4 addresses"],
-        true,
-    );
-    s.card(
-        [580.0, 302.0, 370.0, 112.0],
-        St::Progress,
-        "Emitter",
-        &[
-            "437 of 512 dev replies complete, 0 of 128",
-            "on fresh transfer: panel fitting; held",
-        ],
-        true,
-    );
-    s.arrow(260.0, 358.0, 290.0, 358.0, false);
-    s.arrow(550.0, 358.0, 580.0, 358.0, false);
-    s.arrow(950.0, 358.0, 990.0, 358.0, true);
-    s.text([970.0, 346.0], (11.5, 700, ARROW), "middle", "M4");
-
-    s.card(
-        [990.0, 130.0, 170.0, 284.0],
+        [406.0, 530.0, 350.0, 66.0],
         St::Planned,
-        "M4: one model",
-        &[
-            "the M4 join, served",
-            "under D11: no float,",
-            "no multiplier, no",
-            "transformer. The D11",
-            "engine is bit-exact;",
-            "no lawful model to",
-            "serve exists yet.",
-        ],
-        true,
+        "Object store and Hopf / fibre",
+        &["Store not integrated; Hopf helpers offline"],
+        false,
     );
+    s.card(
+        [782.0, 530.0, 378.0, 66.0],
+        St::Planned,
+        "Unified D11 serving",
+        &["Separate qualification still required"],
+        false,
+    );
+    s.legend(641.0, &[St::Built, St::Held, St::Planned]);
+    s.finish(
+        "Current discrete M1 architecture",
+        "discrete_encode looks up token IDs in the shared table to produce encoded blocks. Ordered FBS plans feed Route single-carrier transport or Flock/Relation transported sums and snaps. The same vector table supplies the writer and selected token. Learning compares exact virtual moves on a fixed batch. M2, object-store integration, Hopf fibre tracking and unified D11 serving are separate boundaries. Every current arrow is sourced in docs/architecture.md.",
+    )
+}
 
-    s.section(444.0, "SERVING AND ACCESS (M4, M7)");
-    s.card(
-        [40.0, 456.0, 360.0, 112.0],
-        St::Working,
-        "D11 engine (uor-r4-integer)",
-        &[
-            "adds, shifts, compares and table reads;",
-            "bit-exact with its float reference",
-        ],
-        true,
+fn architecture_narrow() -> Result<String, Fail> {
+    let mut s = Svg::new("architecture-narrow", 380.0, 810.0);
+    s.text(
+        [16.0, 28.0],
+        (18.0, 700, INK),
+        "start",
+        "Discrete geometric M1",
     );
-    s.card(
-        [430.0, 456.0, 340.0, 112.0],
-        St::Built,
-        "Local API: r4-native-chat",
-        &["serves the native learner only"],
-        true,
+    s.text(
+        [16.0, 50.0],
+        (13.0, 400, MUTED),
+        "start",
+        "Implemented source · 18 October 2026",
     );
-    s.card(
-        [800.0, 456.0, 360.0, 112.0],
-        St::Frozen,
-        "WASM Studio (Pages)",
-        &[
-            "runs the older R4G1 router, not",
-            "the native or stack model",
-        ],
-        true,
+    s.rect([16.0, 72.0, 348.0, 58.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
+    s.text(
+        [30.0, 96.0],
+        (15.0, 700, INK),
+        "start",
+        "Shared token-vector table V",
     );
-
-    s.rect([40.0, 590.0, 1120.0, 210.0], 14.0, (PANEL, RULE, 1.0, None));
-    s.text([62.0, 618.0], (16.0, 700, INK), "start", "Shared geometry");
-    s.text([1138.0, 618.0], (12.5, 400, MUTED), "end", "Structure is verified mathematics; a measured predictive advantage is not yet established.");
-    let geo: [(&str, [&str; 2]); 5] = [
+    s.text(
+        [30.0, 117.0],
+        (13.0, 400, BODY),
+        "start",
+        "8D blocks · 16 roots · 64 signed actions",
+    );
+    s.arrow(190.0, 130.0, 190.0, 154.0, false);
+    for (y, title, detail) in [
+        (154.0, "Token IDs → encode", "discrete_encode: table lookup"),
+        (236.0, "Ordered context", "ternary FBS plans preserve order"),
         (
-            "Prime addresses",
-            ["exact identity; gcd and", "n-let admission"],
-        ),
-        ("Zeta phases", ["fixed γ·(log p − log q)", "phase table"]),
-        (
-            "R4/S3 quaternions",
-            ["state and transport;", "Hamilton gate rotations"],
-        ),
-        (
-            "H4, icosians, E8",
-            ["120-icosian codebook,", "exact Z[φ], H4 ⊕ φH4"],
+            318.0,
+            "Route / Flock / Relation",
+            "one carrier / transported sum → snap",
         ),
         (
-            "SpiralCore / FBS",
-            ["signed BFS transport of", "selected carriers"],
+            400.0,
+            "Shared writer → selected ID",
+            "address admission + integer distance",
         ),
-    ];
-    for (i, (t, l)) in geo.iter().enumerate() {
-        s.card(
-            [62.0 + 216.0 * i as f64, 636.0, 200.0, 140.0],
-            St::Built,
+    ] {
+        s.rect([32.0, y, 316.0, 58.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
+        s.text([46.0, y + 24.0], (15.0, 700, INK), "start", title);
+        s.fit([46.0, y + 45.0], (13.0, 400, BODY), 288.0, detail);
+        if y < 400.0 {
+            s.arrow(190.0, y + 58.0, 190.0, y + 82.0, false);
+        }
+    }
+    s.path("M364,101 H372 V429 H348", ARROW, 1.25, None, true);
+    s.text(
+        [16.0, 501.0],
+        (14.0, 700, BLUE),
+        "start",
+        "FIXED-BATCH LEARNING",
+    );
+    for (x, title, detail) in [
+        (16.0, "Snapshot + batch", "virtual proposals"),
+        (206.0, "Compare → accept", "improvement required"),
+    ] {
+        s.rect([x, 518.0, 158.0, 62.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
+        s.text([x + 10.0, 543.0], (14.0, 700, INK), "start", title);
+        s.text([x + 10.0, 565.0], (12.5, 400, BODY), "start", detail);
+    }
+    s.arrow(174.0, 549.0, 206.0, 549.0, false);
+    s.text(
+        [16.0, 618.0],
+        (14.0, 700, BLUE),
+        "start",
+        "SEPARATE BOUNDARIES",
+    );
+    s.rect(
+        [16.0, 636.0, 348.0, 48.0],
+        5.0,
+        ("#FFFFFF", PURPLE, 1.5, Some("7 4")),
+    );
+    s.text(
+        [30.0, 665.0],
+        (14.0, 400, INK),
+        "start",
+        "M2 compiler / emitter: held research",
+    );
+    s.rect(
+        [16.0, 698.0, 348.0, 88.0],
+        5.0,
+        ("#FFFFFF", MUTED, 1.25, Some("5 4")),
+    );
+    for (i, t) in [
+        "Object store: no model integration",
+        "Hopf / fibre: offline helpers outside M1",
+        "Unified D11 serving: unqualified",
+    ]
+    .iter()
+    .enumerate()
+    {
+        s.text(
+            [30.0, 722.0 + 24.0 * i as f64],
+            (14.0, 400, BODY),
+            "start",
             t,
-            l,
-            true,
         );
     }
-    s.fit([40.0, 828.0], (12.5, 400, MUTED), 1120.0, "Infrastructure: the research harness (claims, presence, pre-registration and TEST FITNESS), Vast.ai GPU pods bootstrapped from the private");
-    s.fit([40.0, 846.0], (12.5, 400, MUTED), 1120.0, "Hugging Face store, results in iCloud and the store. Built & tested means source with focused tests, not a trained model.");
-    s.legend(
-        884.0,
-        &[
-            St::Working,
-            St::Built,
-            St::Progress,
-            St::Planned,
-            St::Held,
-            St::Frozen,
-        ],
-    );
-    s.finish(
-        "UOR-R4 architecture overview",
-        "Line A, the geometric stack language base, now has a compliant trunk as tested source (rotation recurrence with geometric gates, a SpiralCore/FBS projection and the Hamilton gate) but no geometric head yet, and its first lawful training run is held. Line B, the native learner, completes 437 of 512 development replies but 0 of 128 on fresh transfer. Both are meant to join as one model served under D11 at milestone M4.",
-    )
+    s.finish("Current discrete M1 architecture, narrow layout", "The same implemented flow as architecture.svg, arranged for narrow Markdown columns. A shared table supplies encoder and writer. Ordered ternary context feeds Route single-carrier transport or Flock/Relation transported sums and snaps. Fixed-batch learning accepts improving admitted moves. M2 is held; object-store integration, offline Hopf utilities and unqualified unified serving are separate boundaries. This is source structure, not a language-quality claim.")
 }
 
 fn compliant_path() -> Result<String, Fail> {
     let mut s = Svg::new("compliant-path", 1200.0, 760.0);
     s.header(
-        "How the next token will be predicted: the compliant path",
-        "The path rung 0 trains: no softmax, sigmoid, tanh, softplus or dense matrix product, forward or backward.",
+        "Historical float operator path (12–13 October)",
+        "Delivered float source is inactive. Current integer M1 data flow: architecture.svg.",
     );
     s.card(
         [40.0, 150.0, 120.0, 92.0],
@@ -520,7 +601,7 @@ fn compliant_path() -> Result<String, Fail> {
     );
     s.card(
         [412.0, 154.0, 360.0, 270.0],
-        St::Built,
+        St::Historical,
         "recurrence (r layer), #2293",
         &[
             "per 4-lane quaternion state h:",
@@ -536,7 +617,7 @@ fn compliant_path() -> Result<String, Fail> {
     );
     s.card(
         [790.0, 154.0, 350.0, 270.0],
-        St::Built,
+        St::Historical,
         "geometric feed-forward",
         &[
             "SpiralCore/FBS projection (#2279):",
@@ -560,12 +641,12 @@ fn compliant_path() -> Result<String, Fail> {
     );
     s.card(
         [160.0, 500.0, 340.0, 130.0],
-        St::Planned,
+        St::Historical,
         "geometric head (OP3a)",
         &[
             "product-key scoring over the vocabulary;",
             "replaces the dense tied head.",
-            "Rung 0 dependency 2: not built yet.",
+            "Delivered; float source now inactive.",
         ],
         true,
     );
@@ -621,18 +702,18 @@ fn compliant_path() -> Result<String, Fail> {
     );
 
     s.fit([40.0, 694.0], (12.5, 400, MUTED), 1120.0, "Later: read layers (starling / rank-table reads) join in rung 0b. Before any run: device qualification (dependency 4), TEST FITNESS and the owner's hold");
-    s.fit([40.0, 712.0], (12.5, 400, MUTED), 1120.0, "release. Built & tested means landed source with focused tests: none of this path has been trained yet.");
-    s.legend(746.0, &[St::Working, St::Built, St::Planned]);
+    s.fit([40.0, 712.0], (12.5, 400, MUTED), 1120.0, "release. Historical · inactive means preserved float source, not an executed path: none of this path runs or has been trained.");
+    s.legend(746.0, &[St::Historical]);
     s.finish(
-        "The compliant next-token path",
-        "Token, embedding table read, recurrence layers with a clamped opening, an exact rate table and a Hamilton output gate, a geometric feed-forward made of the SpiralCore/FBS projection and the G2 Hamilton gate, then a geometric head that is not built yet, raw scores, a rank-margin hinge in training and greedy argmax in serving.",
+        "Historical operator path (12–13 October)",
+        "Token, embedding table read, recurrence layers with a clamped opening, an exact rate table and a Hamilton output gate, a geometric feed-forward made of the SpiralCore/FBS projection and the G2 Hamilton gate, then the delivered geometric head (float source now inactive), raw scores, a rank-margin hinge in training and greedy argmax in serving.",
     )
 }
 
 fn operators() -> Result<String, Fail> {
     let mut s = Svg::new("operators", 1200.0, 600.0);
     s.header(
-        "The three geometric operators of the compliant trunk",
+        "The three geometric operators of the earlier float trunk (inactive)",
         "Each replaces a banned operation with geometry: a rotation for a squash, a selection for a dense sum, a margin for a softmax.",
     );
     // panel frames
@@ -860,7 +941,9 @@ fn training_pipeline() -> Result<String, Fail> {
     let mut s = Svg::new("training-pipeline", 1200.0, 680.0);
     s.header(
         "Training: three gates before any GPU time",
-        &format!("Every run is pre-registered, reviewed and released by the owner before it starts. Status {DATE}: no compliant run yet."),
+        &format!(
+            "Historical operator snapshot, {DATE}. Later discrete pilot/dose evidence: STATUS.md."
+        ),
     );
     s.section(118.0, "BEFORE THE RUN");
     s.card(
@@ -979,15 +1062,15 @@ fn training_pipeline() -> Result<String, Fail> {
     s.legend(656.0, &[St::Working, St::Built, St::Planned, St::Held]);
     s.finish(
         "The gated training pipeline",
-        "Data from the private HF store, a pre-registration sheet, a TEST FITNESS review and the owner's hold release come before any GPU time. A Vast.ai pod bootstrapped from the store trains the compliant trunk on GPU only, evaluates with raw-score measures and keeps the results in iCloud and the store. Export to D11 waits for the integer engine to bind the new geometric modes.",
+        "Historical operator-phase workflow: data, pre-registration, review, scoped owner release, GPU training/evaluation and artifact preservation. This dated diagram is not the active execution status; see STATUS.md. Unified D11 serving remains unqualified.",
     )
 }
 
 fn serving_pipeline() -> Result<String, Fail> {
     let mut s = Svg::new("serving-pipeline", 1200.0, 660.0);
     s.header(
-        "Serving: the D11 contract",
-        "Served kernels use adds, subtracts, shifts, compares and table reads: no floating point, no multiplier instruction, no transformer.",
+        "Historical serving paths and D11 target",
+        "Historical executors below are excluded from the selected build. Unified D11 serving remains unqualified.",
     );
     s.section(118.0, "STACK MODEL");
     s.card(
@@ -1063,17 +1146,18 @@ fn milestones() -> Result<String, Fail> {
     let mut s = Svg::new("milestones", 1200.0, 660.0);
     s.header(
         "Progress toward the alpha",
-        &format!("Pre-alpha, {DATE}. No model holds a useful conversation yet. Each milestone closes only on a saved model."),
+        &format!("Pre-alpha, 18 October 2026. No model holds a useful conversation yet. Each milestone closes only on a saved model."),
     );
-    let items: [(&str, &str, St, [&str; 3]); 8] = [
+    let items: [(&str, &str, St, [&str; 4]); 8] = [
         (
             "M1",
             "Language base",
             St::Progress,
             [
-                "reply 37/232 → 116",
-                "memory 20/40 → 34",
-                "trunk: source landed",
+                "reply 37/232 suspended",
+                "pilot: 236 updates",
+                "Dose2 stopped at Q1;",
+                "admission collapse",
             ],
         ),
         (
@@ -1084,6 +1168,7 @@ fn milestones() -> Result<String, Fail> {
                 "437/512 dev replies,",
                 "0/128 fresh transfer;",
                 "training held",
+                "",
             ],
         ),
         (
@@ -1094,41 +1179,38 @@ fn milestones() -> Result<String, Fail> {
                 "evaluator and session",
                 "built; waits on an",
                 "M1 or M2 model",
+                "",
             ],
         ),
         (
             "M4",
             "One served model",
             St::Held,
-            [
-                "softmax at runtime:",
-                "yes, must be no (D23);",
-                "needs a lawful model",
-            ],
+            ["unified D11 model", "and export remain", "unqualified", ""],
         ),
         (
             "M5",
             "Laptop cost",
             St::Planned,
-            ["J/token on an M1", "laptop: not measured", ""],
+            ["J/token on an M1", "laptop: not measured", "", ""],
         ),
         (
             "M6",
             "Reasoning & coding",
             St::Planned,
-            ["exact arithmetic is", "the visible gap", ""],
+            ["exact arithmetic is", "the visible gap", "", ""],
         ),
         (
             "M7",
             "Distribution",
             St::Planned,
-            ["API, WASM, Studio;", "local API only so far", ""],
+            ["API, WASM, Studio;", "local API only so far", "", ""],
         ),
         (
             "M8",
             "Alpha release",
             St::Planned,
-            ["one labelled release", "on the same model", ""],
+            ["one labelled release", "on the same model", "", ""],
         ),
     ];
     let cy = 168.0;
@@ -1180,7 +1262,7 @@ fn milestones() -> Result<String, Fail> {
     s.legend(636.0, &[St::Progress, St::Held, St::Paused, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "M1 language base in progress (reply 37 of 232, memory 20 of 40, compliant trunk source landed); M2 grounded reply held (437 of 512 development replies, 0 of 128 on fresh transfer); M3 durable memory paused; M4 one served model held; M5 to M8 not started.",
+        "M1 language base in progress (reply 37 of 232 suspended, pilot 236 updates, Dose2 stopped at Q1 with admission collapse in both arms); M2 grounded reply held (437 of 512 development replies, 0 of 128 on fresh transfer); M3 durable memory paused; M4 one served model held; M5 to M8 not started.",
     )
 }
 
@@ -1189,74 +1271,74 @@ fn geometry_stack() -> Result<String, Fail> {
         (
             "Prime / UOR addressing",
             "exact identity; gcd and n-let admission",
-            St::Built,
+            St::Historical,
             "stack memory port; native store",
         ),
         (
             "Zeta phases",
             "fixed γ·(log p − log q) table",
-            St::Built,
+            St::Historical,
             "native learner tables",
         ),
         (
             "R4/S3 quaternion state",
             "state carried by rotation",
-            St::Built,
+            St::Historical,
             "every recurrence layer",
         ),
         (
             "H4, icosians, E8",
-            "120-icosian codebook; E8 = H4 ⊕ φH4",
-            St::Built,
-            "native tables; E8 anchor orbit",
+            "120 icosians; reduced-metric E8 construction",
+            St::Historical,
+            "historical toolbox; separate from M1",
         ),
         (
             "Exact Z[φ]",
             "golden integers a + bφ, no rounding",
-            St::Built,
+            St::Historical,
             "compiler and native tables",
         ),
         (
             "Hopf S³ → S², fibre kept",
-            "observation without losing phase",
-            St::Built,
-            "native learner only",
+            "float-backed; Q30 storage",
+            St::Historical,
+            "offline geometry; outside M1",
         ),
         (
             "Chirality and polarity",
             "exact orientation signs",
-            St::Built,
+            St::Historical,
             "compiler and native paths",
         ),
         (
             "G2 Hamilton gate",
             "a rotation q(g) ⊗ u, not a squash",
-            St::Built,
+            St::Historical,
             "trunk feed-forward and recurrence",
         ),
         (
             "SpiralCore / FBS projection",
             "select one carrier, transport by BFS",
-            St::Built,
+            St::Historical,
             "every trunk projection",
         ),
         (
             "Geometric recurrence gates",
             "clamped opening, exact rate table",
-            St::Built,
+            St::Historical,
             "trunk recurrence",
         ),
         (
             "Rank-margin objective",
             "hinge over declared rivals, raw scores",
-            St::Built,
+            St::Historical,
             "rung 0 training objective",
         ),
         (
             "Geometric head (OP3a)",
             "product-key vocabulary scoring",
-            St::Planned,
-            "rung 0 dependency 2",
+            St::Historical,
+            "delivered float source; inactive",
         ),
         (
             "Starling / rank-table read",
@@ -1270,8 +1352,8 @@ fn geometry_stack() -> Result<String, Fail> {
     let h = top + row_h * rows.len() as f64 + 110.0;
     let mut s = Svg::new("geometry-stack", 1200.0, h);
     s.header(
-        "Geometric primitives and operators: what each does and where it is used",
-        &format!("From the source on {DATE}. Built & tested means landed source with focused tests, not a trained model or an advantage."),
+        "Geometric primitives and operators: the historical float form",
+        &format!("Historical operator inventory, {DATE}. Float source is inactive; current M1: architecture.svg."),
     );
     s.text(
         [40.0, 132.0],
@@ -1282,7 +1364,7 @@ fn geometry_stack() -> Result<String, Fail> {
     s.text([350.0, 132.0], (13.5, 700, INK), "start", "What it does");
     s.text([700.0, 132.0], (13.5, 700, INK), "start", "Status");
     s.text(
-        [860.0, 132.0],
+        [880.0, 132.0],
         (13.5, 700, INK),
         "start",
         "Where it is used",
@@ -1300,14 +1382,14 @@ fn geometry_stack() -> Result<String, Fail> {
         s.fit([60.0, y + 28.0], (14.5, 700, INK), 280.0, name);
         s.fit([350.0, y + 28.0], (12.5, 400, BODY), 340.0, role);
         s.pill(700.0, y + 12.0, *st);
-        s.fit([860.0, y + 28.0], (12.5, 400, BODY), 290.0, used);
+        s.fit([880.0, y + 28.0], (12.5, 400, BODY), 270.0, used);
     }
     let y = top + row_h * rows.len() as f64 + 20.0;
-    s.fit([40.0, y], (12.5, 400, MUTED), 1120.0, "Shaded rows: the geometric primitives. White rows: the operators of the compliant trunk (12–13 October), built to replace softmax, squashing and dense products.");
-    s.legend(h - 26.0, &[St::Built, St::Progress, St::Planned]);
+    s.fit([40.0, y], (12.5, 400, MUTED), 1120.0, "Shaded rows: the geometric primitives. White rows: operators of the earlier float trunk, written to replace softmax, squashing and dense products.");
+    s.legend(h - 26.0, &[St::Historical, St::Progress]);
     s.finish(
         "Geometric primitives and operators",
-        "Thirteen rows: prime addressing, zeta phases, quaternion state, H4/icosian/E8, exact Z[phi], Hopf observation and chirality are the primitives; the G2 Hamilton gate, the SpiralCore/FBS projection, the geometric recurrence gates and the rank-margin objective are built as source for the compliant trunk; the geometric head is not built; the starling read is in progress for rung 0b.",
+        "Thirteen rows: prime addressing, zeta phases, quaternion state, H4/icosian/E8, exact Z[phi], Hopf observation and chirality are the primitives; the G2 Hamilton gate, the SpiralCore/FBS projection, the geometric recurrence gates and the rank-margin objective are written as dormant source for the earlier float trunk; the geometric head is delivered as inactive float source; the starling read is in progress for rung 0b.",
     )
 }
 
@@ -1318,6 +1400,7 @@ type Builder = fn() -> Result<String, Fail>;
 fn figures() -> Vec<(&'static str, Builder)> {
     vec![
         ("docs/figures/architecture.svg", architecture),
+        ("docs/figures/architecture-narrow.svg", architecture_narrow),
         ("docs/figures/milestones.svg", milestones),
         ("docs/figures/training-pipeline.svg", training_pipeline),
         ("docs/figures/serving-pipeline.svg", serving_pipeline),
