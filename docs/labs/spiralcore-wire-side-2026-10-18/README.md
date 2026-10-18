@@ -61,5 +61,7 @@ spiralcore-base/wire/docs/OPTIMIZATION-CLOSEOUT.md and PERFORMANCE.md.
 
 ## Next
 
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2613
+
 Independent exact-head review, protected merge, then branch/worktree cleanup and
 `scripts/storage/uor-hygiene --apply`. Any promotion into the roadmap path is a PM decision.

@@ -9,7 +9,7 @@ no change to the dose path or D11 serving. Measured: Rust peer 2.10/2.86/3.30 ms
 2.16 ms for 1.25 MiB; Rust adapter ~1.6x faster than Python; 1 KiB RTT 41.8 us vs plain 55.1 us.
 Record: [labs/spiralcore-wire-side-2026-10-18](../labs/spiralcore-wire-side-2026-10-18/README.md).
 Next: independent exact-head review, then merge queue; PM (kimi/pm1) holds routing for any promotion
-into the roadmap path.
+into the roadmap path. PR: https://github.com/UOR-Foundation/uor-r4/pull/2613.
 
 ## 2026-10-18 — Falsify-then-optimize is the current path (owner direction; kimi/pm1)
 
