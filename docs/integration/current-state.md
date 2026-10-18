@@ -10,7 +10,7 @@ A new host binary, `coverage-census` (`crates/uor-r4-discrete/src/coverage_censu
 **Validation:**
 - It reproduces W0 exactly on the same stored checkpoints and 14,287 DEV rows: Q4 has 264 vectors and an 8,948-row ceiling; the initial snapshot has 16 and 1,986.
 - 6/6 unit tests pass, and a split-alias negative gate FAILs as required.
-- A non-reviewer adversarial pass returned APPROVE-WITH-NITS; every finding is applied or resolved from the source.
+- A non-author adversarial review returned APPROVE-WITH-NITS; every finding is applied or resolved from the source.
 - `driver_source_sha256` is unchanged.
 
 **Limits.** The GPU exporter admits only attention-learning configs, so Route configs (the K16 redirect) have no cell receipt yet and report cell metrics as UNAVAILABLE. A full positive run awaits a native K16 checkpoint on the host. [Record](../labs/coverage-census-2026-10-18/README.md). No compute, $0.
