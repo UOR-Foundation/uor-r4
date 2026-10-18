@@ -56,7 +56,8 @@ come from the owner through the PM.
   training is allowed only in a separately scanned geometric module (SpiralCore/E8/FBS,
   icosian/quaternion, prime/zeta) whose own scanned allowlist entry is added and reviewed with the
   pre-registration (never by widening the discrete crate scan), while the active discrete path, D11 serving
-  and the no-squashing/no-matmul bans are unchanged), and `scripts/check_claim_wording.py`.
+  and the no-squashing/no-matmul bans are unchanged), and the claim-wording gate
+  (`cargo run -q --locked -p uor-r4-claim-wording -- .`).
 - **Why.** The bans erode one "temporary" site at a time; a baseline is a floor, not a budget.
 - **Harness surface.** `lint check` and `uor-harness check` invoke both the D23 (`Kind::NormExp`) and D25
   (`Kind::Matmul`) interlocks in process via `prlint.d23_interlock`; a PR that raises either baseline fails.

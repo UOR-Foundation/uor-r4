@@ -51,7 +51,7 @@ No other path changed.
 |---|---|
 | `CARGO_TARGET_DIR=local/harness-target cargo test --locked --offline -p uor-r4-harness prep::` | PASS — 14 selected tests, including both `applicable_rules_tests`; 0 failed |
 | `python3.12 scripts/harness/parity.py --build` | PASS — prep sheets, milestone registry and rendered sheet identical; all agreement checks ok |
-| `local/harness-target/debug/uor-harness check` | PASS — exit 0. Reviewed run: 122 rules, 0 errors, 87 warnings, 1 info finding (88 non-ok). Final re-run: 120 rules, 0 errors, 86 warnings, 1 info (87 non-ok), because live peer claim/branch state moved; no `harness.owner_rules_applied` finding |
+| `local/harness-target/debug/uor-harness check` | PASS — exit 0. Reviewed run: 122 rules, 0 errors, 87 warnings, 1 info finding (88 non-ok). Final pre-merge re-run: 120 rules, 0 errors, 86 warnings, 1 info (87 non-ok). Merged-head run: 114 rules, 0 errors, 79 warnings, 1 info (80 non-ok). Live peer claim/branch state moved each time; no `harness.owner_rules_applied` finding |
 | `local/harness-target/debug/uor-harness prep-render -m m1` (stdout) | contains `- D37:` once; stale “Supersedes D25's offline scalar floating-point allowance, which is now inactive” count 0 |
 | `CARGO_TARGET_DIR=local/harness-target cargo run --locked --offline -p uor-r4-core --bin r4-policy-check -- .` | PASS — `uor-r4.agent-execution-policy/7`; serving float/transcendental/multiplier false, training matmul false |
 | `local/harness-target/debug/uor-harness ratchet d23` | PASS — 2,253 sites / 154 files, baseline 2,253 |

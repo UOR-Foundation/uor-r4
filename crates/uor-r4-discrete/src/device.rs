@@ -35,6 +35,9 @@ pub use decomposition_device::DecompositionProfiler;
 #[path = "baseline_reuse_device.rs"]
 mod baseline_reuse_device;
 pub use baseline_reuse_device::BaselineReuseProfiler;
+#[path = "rows_device.rs"]
+mod rows_device;
+pub use rows_device::{compiled_rows_image_sha256, RowsCounterfactual};
 static NEXT_MODEL: AtomicU64 = AtomicU64::new(1);
 
 /// Trace ABI from the production flock read, ordered by row then payload block:
@@ -509,6 +512,30 @@ fn source_sha256() -> [u8; 32] {
         source.update((bytes.len() as u64).to_le_bytes());
         source.update(bytes);
     }
+    // The opt-in row-parallel image is bound in its own versioned record.
+    source.update(b"uor-r4.rows-image/1");
+    for (name, bytes) in [
+        (
+            "rows_source.rs",
+            include_bytes!("rows_source.rs").as_slice(),
+        ),
+        (
+            "rows_device.rs",
+            include_bytes!("rows_device.rs").as_slice(),
+        ),
+        ("rows.cu", rows_device::ROWS_SOURCE.as_bytes()),
+        ("rows.ptx", rows_device::ROWS_PTX.as_bytes()),
+        ("rows.cubin", rows_device::ROWS_CUBIN),
+        (
+            "rows-resources.txt",
+            rows_device::ROWS_RESOURCE_REPORT.as_bytes(),
+        ),
+    ] {
+        source.update((name.len() as u64).to_le_bytes());
+        source.update(name.as_bytes());
+        source.update((bytes.len() as u64).to_le_bytes());
+        source.update(bytes);
+    }
     source.finalize().into()
 }
 
@@ -728,6 +755,8 @@ pub struct Device {
     metadata: BinderPlan,
     kernels: Kernels,
     binding: Binding,
+    /// Lazily loaded opt-in row-parallel module, bound to this model/stream.
+    rows_cache: std::sync::OnceLock<RowsCounterfactual>,
 }
 
 fn packed_geometry() -> Vec<u32> {
@@ -945,6 +974,7 @@ impl Device {
             metadata,
             kernels,
             binding,
+            rows_cache: std::sync::OnceLock::new(),
         })
     }
 
