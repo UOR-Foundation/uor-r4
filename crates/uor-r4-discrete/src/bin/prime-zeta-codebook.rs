@@ -54,10 +54,15 @@ fn run(args: &[String]) -> Result<(), String> {
     if words_sha256 != codebook.table_sha256 {
         return Err("constructor table digest differs from the pinned-table digest".into());
     }
+    if CodebookTable::count_distinct(&codebook.table, spec.blocks) != codebook.unique_table_vectors
+    {
+        return Err("constructor distinct-vector count differs from the recount".into());
+    }
     let table = CodebookTable {
         schema: CODEBOOK_TABLE_SCHEMA.into(),
         spec,
         mode: codebook.mode.clone(),
+        distinct_vectors: CodebookTable::count_distinct(&codebook.table, spec.blocks),
         table: codebook.table,
         table_sha256: words_sha256,
     };

@@ -98,11 +98,25 @@ pub struct CodebookTable {
     pub mode: String,
     pub table: Vec<i32>,
     pub table_sha256: String,
+    /// Declared number of distinct full token vectors (4,096 means injective at
+    /// V4096). The loader recounts it, so a claimed property is a checked one.
+    pub distinct_vectors: usize,
 }
 impl CodebookTable {
     pub fn words_sha256(table: &[i32]) -> String {
         let bytes: Vec<u8> = table.iter().flat_map(|w| w.to_le_bytes()).collect();
         corpus::sha256(&bytes)
+    }
+    /// Distinct full token vectors (all blocks) in a table of `blocks` blocks.
+    pub fn count_distinct(table: &[i32], blocks: u32) -> usize {
+        let width = blocks as usize * 8;
+        if width == 0 {
+            return 0;
+        }
+        table
+            .chunks_exact(width)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
     }
     /// Read and check a pinned table for `spec`. Host metadata only: root
     /// membership is admitted on the GPU when the table is loaded.
@@ -125,6 +139,11 @@ impl CodebookTable {
         if Self::words_sha256(&file.table) != file.table_sha256 {
             return Err(invalid(
                 "codebook table words differ from their declared SHA-256",
+            ));
+        }
+        if Self::count_distinct(&file.table, spec.blocks) != file.distinct_vectors {
+            return Err(invalid(
+                "codebook table distinct-vector count differs from its declaration",
             ));
         }
         Ok(file.table)
@@ -1322,9 +1341,13 @@ mod tests {
             spec,
             mode: "prime_zeta".into(),
             table_sha256: CodebookTable::words_sha256(&table),
+            distinct_vectors: CodebookTable::count_distinct(&table, spec.blocks),
             table: table.clone(),
         };
-        let dir = std::env::temp_dir().join(format!("uor-codebook-table-{}", std::process::id()));
+        // Gitignored scratch under the repository root (never /tmp).
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../local/test-scratch")
+            .join(format!("codebook-table-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| invalid(e.to_string()))?;
         let pin = |name: &str, file: &CodebookTable| -> Result<FilePin> {
             let path = dir.join(name);
@@ -1345,11 +1368,17 @@ mod tests {
         wrong_digest.table[0] += 1;
         let mut other_spec = good.clone();
         other_spec.spec.vocabulary = 3;
+        let mut other_blocks = good.clone();
+        other_blocks.spec.blocks = 4;
+        let mut false_distinct = good.clone();
+        false_distinct.distinct_vectors += 1;
         for (name, file) in [
             ("schema.json", &wrong_schema),
             ("short.json", &short),
             ("digest.json", &wrong_digest),
             ("spec.json", &other_spec),
+            ("blocks.json", &other_blocks),
+            ("distinct.json", &false_distinct),
         ] {
             assert!(
                 CodebookTable::load(&pin(name, file)?, spec).is_err(),
