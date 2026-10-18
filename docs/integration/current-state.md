@@ -1,3 +1,13 @@
+## 2026-10-18  Object-store pipelined FETCH window (deepseek)
+
+Follow-up to #2607: `pull` was strict lock-step per chunk, so batch tuning still left one RTT per
+chunk. `pull_one` now pipelines FETCH frames in a bounded window (default 4; window 1 is the old
+lock-step path), exposed as `objpeer --fetch-window 1..=64` on pull/sync/repair and rejected
+elsewhere. Host-only delay-proxy matrix: 3.706 s lock-step vs 1.902 s window 4 vs 1.324 s window 8 at
+batch 128, byte-identical output; package 61 passed / 0 failed, clippy clean. No protocol change, no
+model compute. Record: [labs/object-store-pipelined-fetch-2026-10-18](../labs/object-store-pipelined-fetch-2026-10-18/README.md).
+PR: (added after creation).
+
 ## 2026-10-18  Third DeepSeek claims cleanup (deepseek)
 
 Removes the merged #2635 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
