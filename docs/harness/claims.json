@@ -20,18 +20,25 @@
     "lab": "antigravity",
     "note": "Implement and wire un-dispatched harness.owner_rules_applied, harness.entry_point, harness.documented_commands (with GROUPS/FLAGS validation), prlint.gates_declared, and receipts.skill_usage_recorded in uor-r4-harness (#2570)"
   },
-  "claude/d37-offline-float-20261018": {
-    "branch": "claude/d37-offline-float-20261018",
-    "claimed_at": "2026-10-17T22:35:33-04:00",
-    "head": "94d4d34ad",
+  "claude/c1-coupling-draft-20261018": {
+    "branch": "claude/c1-coupling-draft-20261018",
+    "claimed_at": "2026-10-17T23:08:55-04:00",
+    "head": "d1f0a9a99",
     "lab": "claude",
     "note": ""
   },
-  "claude/public-face-reconcile-2026-10-15": {
-    "branch": "claude/public-face-reconcile-2026-10-15",
-    "claimed_at": "2026-10-15T18:19:36-04:00",
-    "head": "b7421576a",
+  "claude/starling-brief-20261018": {
+    "branch": "claude/starling-brief-20261018",
+    "claimed_at": "2026-10-17T22:53:57-04:00",
+    "head": "4f3dff6f8",
     "lab": "claude",
+    "note": ""
+  },
+  "codex/cf1-attention-dose-packet": {
+    "branch": "codex/cf1-attention-dose-packet",
+    "claimed_at": "2026-10-17T22:43:56-04:00",
+    "head": "94d4d34ad",
+    "lab": "codex",
     "note": ""
   },
   "codex/cf1-attention-hash-domains": {

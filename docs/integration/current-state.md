@@ -9,6 +9,21 @@ unset `WIRE_SMOKE_WORK` under `set -u`. Worktree checks: `WIRE_INTERPOSER_PASS`,
 Record: [labs/spiralcore-wire-review-fixes-2-2026-10-18](../labs/spiralcore-wire-review-fixes-2-2026-10-18/README.md).
 PR: https://github.com/UOR-Foundation/uor-r4/pull/2619
 
+## 2026-10-18 — C1 flock-coupling draft: finite controls and export-gap contract (claude)
+
+The [C1 draft](../harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md) specifies the D37 float-trained coupling magnitude for the discrete Flock read, exported to integer Gate weights (`ReadSpec::FlockCoupled`, with `k_max = 1 ≡ Flock`). It contains:
+- 22 finite controls (C0, X1–X12 and nine F rows), with literals hand-derived from the generated 16-root orbit: cache fidelity, the integer export kernel, and the float primitive (including an export-gap witness);
+- a writer-structured mean-L1 proxy objective with a proxy-agreement instrument;
+- a box-projected update, needed because the writer's address margin exceeds the inter-root distance;
+- the export-gap contract on the Dose 1 evaluator;
+- arms A0/A1/A2/A2-int/A2′/Z/R at matched writer-evaluation budget.
+
+**Review:** three fresh-context reviewer subagents (literal recomputation, test fitness, round-2). Every finding is resolved: the empty-level `terms`, ABSENT cache rows, the proxy units and blocks, the Adam `pow`, the Relation-trit scope, and the trace encoding. **Status:** not registered, no FIT requested, no source change, no compute, $0. Training/M2/Stage B stay HELD. **Next:** registration after the Dose 1 decision. The open items are k_max>1 under D11, the D21 line status, the owner/PM reading of the float gap forward, and the agreement threshold and C0 sample.
+
+## 2026-10-18 — Starling/murmuration brief: discrete Flock named as the integer murmuration read; post-dose candidates (claude)
+
+[`docs/mechanisms/starling-read.md`](../mechanisms/starling-read.md) now records that the active discrete `ReadSpec::Flock` (`discrete.cu:125`) already realises the murmuration rule: frame-transported consensus, with a ternary coupling trit. Six finite controls PASS and it has never been trained. The brief also records that Dose 1 tests relation trits on top of Flock, not Flock against Route. It ranks three post-dose candidates under D37: C1, a float-trained coupling exported to Gate trits; C2, lawful soft-to-hard selection; C3, the FBS ternary-tree read. These are hypotheses only: nothing is registered, no compute ran, $0. The merged claims `claude/d37-offline-float-20261018` and `claude/public-face-reconcile-2026-10-15` are released. Training/M2/Stage B stay HELD. **Next:** a C1 finite-control draft, with the pre-registration after the Dose 1 decision.
+
 ## 2026-10-18  Wire side-exploration claims cleanup (deepseek)
 
 Removes the stale committed claims for the merged wire branches (`deepseek/spiralcore-wire-side-exploration`,
@@ -20,6 +35,10 @@ No code, model, evidence or dispatch change; coordination record only. Reference
 The owner revised D32. Float forward passes, gradients and optimizers are legal in offline training. Softmax/squashing and matmul stay banned everywhere, and compute stays GPU-only. The export is the integer boundary: D11 serving, with a reported export gap. The October 14 zeta-zero exception is unchanged, and archived float sheets return only by re-registration and a fresh FIT. The owner also stated the reason behind the bans: exclude expensive operations, for fast local training and serving.
 
 [D37](DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised); [record](../labs/d37-offline-float-2026-10-18/README.md). The policy JSON moves to schema `/7`, and `r4-policy-check` now pins the serving float/transcendental/multiplier commitments. The D32 discrete path, the Dose 1 sheet/packet and all holds are unchanged; no compute ran, $0. **Next:** pre-registrations may cite D37 for offline float learning in a separately scanned module; the starling/murmuration coupling (C1) is drafted only after the Dose 1 decision.
+
+## 2026-10-18 — Dose 1 static packet and actual fresh metadata sealed (Codex/cf1)
+
+The [packet record](../labs/attention-dose1-packet-2026-10-18/README.md) binds234selected source/input/tool files at manifest5d5481cd, the exact23d5 RELEASE-profile same-resource contract, actual once-generated FreshV2 seal (400documents/14,479eligible/3,594copy-successor metadata rows/0known-document overlap), and independently posted component/composite reviews. Complete selected preservation70,858,752bytes/MD5ce84cdba437244fc0dbe0004a6d05682 is full-cloud-readback verified; no new pod/model/scorer work or GPU cost. Actual release ELF, genuine per-arm plan reviews/check-plan and Casey personal capabilities are late same-dispatch inputs, not impossible preallocation artifacts or agent-authored authority; all actual dose work remains NOT_RUN. **Next:** AGY confined exact234packet verdict → Kimi actual FIT/dispatch/fresh resource admission → same-resource RELEASE construction and concrete personal admission → paired dose; this docs PR is not an extra release condition. Count0/3 and suspended37/232 remain unchanged; no scientific bar or general hold changes.
 
 ## 2026-10-18  Wire side-exploration review fixes (Codex P1 findings; `deepseek/spiralcore-wire-review-fixes`)
 
