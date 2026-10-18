@@ -16,7 +16,9 @@
 - each refusal-parity case is refused;
 - at the Dose 1 timing shape, both paths return the same losses.
 
-Any mismatch is a FAIL that stops adoption, for diagnosis (D31); it is never a mechanism negative. The timing numbers are reported only; there is no speed bar. Making the row path the default needs a separate PR after a PASS.
+Any mismatch is a FAIL that stops adoption, for diagnosis (D31); it is never a mechanism negative. The timing numbers are reported only; there is no speed bar. A refusal or CUDA error at the timing shape is still a FAIL for diagnosis, because the Bar requires equal losses there.
+
+**Racy refusals.** When the two paths refuse with different text, both re-run up to four more times, and the observed status sets must overlap. That is weaker than exact text equality, because both kernels race on `atomicExch` across lanes. The count is reported as `racy_refusals`. Making the row path the default needs a separate PR after a PASS.
 
 ## Base artifact
 
@@ -61,4 +63,4 @@ One RTX 5090 at about $0.91/h for an estimated 0.5–1 h (bootstrap, build, suit
 - **Gap:** an early break followed by a later *error*, and status 12 overflow, are not forced. They are covered by the source-level ordering test (`rows_source.rs` `only_the_reducer_publishes_status`) and by the adversarial review.
 - **Negative gate (on the pod):** delete the reducer's `|| (f&ROWS_TR_BIT)==0` clause, rebuild, rerun and require FAIL; then restore and rebuild.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT — non-author reviewer subagent (owner-authorized peer review, 18 Oct), at head `97807e8e1`. It was conditional on three items, now resolved: (1) the `rows_qualification` declaration (present at `lib.rs:416` under `cfg(feature = "cuda")`); (2) `serde_json` being a normal dependency (it is); (3) the timing-failure wording added above. No compute or hold is released beyond this one finite parity and timing run.
