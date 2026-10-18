@@ -16,6 +16,7 @@ pub const NAMES: &[&str] = &[
     "rows_flock_gate_parity",
     "rows_relation_gate_parity",
     "rows_refusal_parity",
+    "rows_forced_terminal_parity",
 ];
 
 fn require(ok: bool, why: &str) -> Result<()> {
@@ -63,7 +64,99 @@ fn windows(rng: &mut Lcg, rows: usize, context: u32, vocabulary: u32) -> Vec<Vec
 struct Tally {
     cases: u64,
     successes: u64,
+    /// Successes in which at least one active lane ended at the MAX sentinel
+    /// (a broken lane: virtual cost MAX or virtual token_rivals 0).
+    successes_with_broken_lane: u64,
+    racy_refusals: u64,
     refusals: Vec<String>,
+}
+
+const A: [i32; 8] = [2, 2, 0, 0, 0, 0, 0, 0];
+const B: [i32; 8] = [0, 0, 2, 0, 2, 0, 0, 0];
+
+/// A two-block Flock device whose codebook rows are `tokens` ([block0, block1])
+/// and whose gates are all zero, built like the flock controls' fixture.
+fn table_device(context: u32, kept_cells: u32, tokens: &[[[i32; 8]; 2]]) -> Result<Device> {
+    let spec = Spec {
+        vocabulary: tokens.len() as u32,
+        blocks: 2,
+        context,
+        kept_cells,
+    };
+    let device = Device::new_with_read(spec, ReadSpec::Flock { kept: 1 }, 7, 0)?;
+    let mut snapshot = device.snapshot()?;
+    for (token, blocks) in tokens.iter().enumerate() {
+        let row: Vec<i32> = blocks.iter().flatten().copied().collect();
+        snapshot.table[token * 16..token * 16 + 16].copy_from_slice(&row);
+    }
+    for gate in snapshot.gates.iter_mut() {
+        *gate = 0;
+    }
+    Device::from_snapshot(snapshot, 0)
+}
+
+fn ident(token: u32, occurrence: u64) -> Identity {
+    Identity {
+        token,
+        occurrence,
+        record: 17,
+        version: 9,
+    }
+}
+
+/// Deterministic terminal paths (C8 geometry, `kept_cells = 1`, gates 0):
+/// tokens 0 = (a, b) and 1 = (a, a) occupy different cells; with gates 0 the
+/// read is the query's own vector.
+/// - Every row ineligible: query token 0, target 0 → the only admitted cell is
+///   the target's, with no rival token → status 8 on both paths.
+/// - Lane +1 breaks: query token 0, target 1. The baseline admits token 0's
+///   cell (one rival), so the row is eligible; Gate(1)=+1 moves block 1 to
+///   snap(b + a, 2) = a, so the virtual read is token 1's vector and its only
+///   admitted cell is the target's: virtual token_rivals 0 → that lane breaks
+///   at row 0 and stays MAX although later rows are eligible.
+fn rows_forced_terminal_parity(tally: &mut Tally) -> Result<()> {
+    let device = table_device(2, 1, &[[A, B], [A, A]])?;
+    let rows = device.rows_counterfactual()?;
+    let window = |o: u64| vec![ident(1, o), ident(0, o + 1)];
+    // Status 8: three rows, all target 0.
+    let before = tally.refusals.len();
+    compare(
+        &device,
+        &rows,
+        &[window(1), window(3), window(5)],
+        &[0, 0, 0],
+        Parameter::Gate(1),
+        tally,
+    )?;
+    require(
+        tally.refusals.len() == before + 1
+            && tally.refusals[before].ends_with("refused with status 8"),
+        "all-ineligible batch did not refuse with status 8 on both paths",
+    )?;
+    // Break: row 0 breaks lane +1; rows 1 and 2 are eligible for lane CURRENT.
+    let input = device.carry_windows(&[window(11), window(13), window(15)])?;
+    let ordinary = device.propose(&input, &[1, 1, 1], Parameter::Gate(1))?;
+    let losses = ordinary.candidate_losses()?;
+    require(
+        losses[0] != u64::MAX && losses[2] == u64::MAX,
+        &format!(
+            "break fixture: expected CURRENT finite and +1 at MAX (−1 also breaks by the index tie), observed {:?}",
+            &losses[..3]
+        ),
+    )?;
+    let broken = tally.successes_with_broken_lane;
+    compare(
+        &device,
+        &rows,
+        &[window(11), window(13), window(15)],
+        &[1, 1, 1],
+        Parameter::Gate(1),
+        tally,
+    )?;
+    require(
+        tally.successes_with_broken_lane == broken + 1,
+        "break fixture was not counted as a broken-lane success",
+    )
 }
 
 /// Run both paths on one case and require identical observable results.
@@ -104,13 +197,40 @@ fn compare(
                 &format!("{parameter:?}: observation differs: {oa} vs {ob}"),
             )?;
             tally.successes += 1;
+            let active = if matches!(parameter, Parameter::Gate(_)) {
+                3
+            } else {
+                16
+            };
+            if la[..active].contains(&u64::MAX) {
+                tally.successes_with_broken_lane += 1;
+            }
             Ok(())
         }
         (Err(Error::Invalid(a)), Err(Error::Invalid(b))) => {
-            require(
-                a == b,
-                &format!("{parameter:?}: refusal differs: {a:?} vs {b:?}"),
-            )?;
+            if a != b {
+                // Both kernels publish lane terminals through atomicExch, so a
+                // batch whose lanes end on different statuses has a racy final
+                // code on either path. Re-run both and require the observed
+                // status sets to overlap; the texts are recorded either way.
+                let mut seen_a = std::collections::BTreeSet::from([a.clone()]);
+                let mut seen_b = std::collections::BTreeSet::from([b.clone()]);
+                for _ in 0..4 {
+                    if let Err(Error::Invalid(t)) = device.propose(&input, targets, parameter) {
+                        seen_a.insert(t);
+                    }
+                    if let Err(Error::Invalid(t)) =
+                        device.propose_rows(&input, targets, parameter, rows)
+                    {
+                        seen_b.insert(t);
+                    }
+                }
+                require(
+                    seen_a.intersection(&seen_b).next().is_some(),
+                    &format!("{parameter:?}: refusal sets disjoint: {seen_a:?} vs {seen_b:?}"),
+                )?;
+                tally.racy_refusals += 1;
+            }
             tally.refusals.push(a);
             Ok(())
         }
@@ -277,11 +397,12 @@ fn timing() -> Result<serde_json::Value> {
 
 pub fn run(report: &Path) -> Result<()> {
     std::fs::create_dir(report).map_err(|e| Error::Invalid(format!("exclusive report: {e}")))?;
-    let controls: [fn(&mut Tally) -> Result<()>; 4] = [
+    let controls: [fn(&mut Tally) -> Result<()>; 5] = [
         rows_route_parity,
         rows_flock_gate_parity,
         rows_relation_gate_parity,
         rows_refusal_parity,
+        rows_forced_terminal_parity,
     ];
     let mut records = Vec::new();
     let mut failed = false;
@@ -291,6 +412,8 @@ pub fn run(report: &Path) -> Result<()> {
             Ok(()) => serde_json::json!({
                 "index": index + 1, "name": name, "status": "PASS",
                 "cases": tally.cases, "successes": tally.successes,
+                "successes_with_broken_lane": tally.successes_with_broken_lane,
+                "racy_refusals": tally.racy_refusals,
                 "refusals": tally.refusals,
             }),
             Err(error) => {
