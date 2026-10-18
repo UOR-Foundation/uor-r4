@@ -38,8 +38,10 @@ misreporting live traffic. The finding was raised as P2 on PR #2613 (line 346).
 
 ## Verification (host-only; no model compute, pods, training or evaluation)
 
-Base `42ab73dd9a6f656c99dfe865c57f53e4bddc8341`, worktree `.worktrees/kimi-wire-counter-fix`,
-branch `kimi/wire-counter-aggregation-2026-10-18`, Python 3.9.6:
+Base `42ab73dd9a6f656c99dfe865c57f53e4bddc8341`, forward-merged with fresh `origin/main`
+`58757e219b0e14e17d56fdd01c8d02ac52b4e324` in a merge commit (no rebase), worktree
+`.worktrees/kimi-wire-counter-fix`, branch `kimi/wire-counter-aggregation-2026-10-18`, Python 3.9.6.
+Commands below run from `spiralcore-base/wire/`:
 
     python3 tools/wire_socket_routing_smoke.py
       -> WIRE_SOCKET_ROUTING_PASS model_ratio=0.0041 store_ratio=0.0041
@@ -71,5 +73,9 @@ the last-connection-only ratio (0.0030).
   (`docs/harness/claims.json`, registered before mutation).
 - Delivery files: the source fix, the focused regression, the branch claim, this record, and the
   newest-first `docs/integration/current-state.md` entry.
-- Local head is returned to the PM for exact-head review. No PR was opened and nothing was merged
-  or pushed from this worktree.
+- The branch was forward-merged with fresh `origin/main` (`58757e219`) in a merge commit, no rebase;
+  the merge preserves the source and test identities (`wire_socket.py` SHA-256
+  `0debe0c8c8398b087fe14cec3007aa9df72414f93a66578d776499c638c0ccae`; test SHA-256
+  `7a98279fd30ce2c1142b32a32106a7c7b5f0479cd0cb192708b706be9230dcff`).
+- A protected PR is opened after the merged-head checks for exact-head review; it is not queued,
+  merged or deleted from this worktree. The PR link is added here before handoff.
