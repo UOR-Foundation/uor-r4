@@ -10,6 +10,33 @@ On one RTX 5090 at merged head `b2d6c7c63`, NOT_TRAINING with zero updates, for 
 
 Next: Stage C2 (block apply). Stage T stays held for the K16 outcome.
 
+## 2026-10-18 — A2 completed; R2 running; canonical docs synced (deepseek)
+
+K16-A-seed2 completed **16,404 batches / 410 accepted**, native exit 0 at **22:39:16Z**; report raw
+`3d4d17fe…`, final checkpoint `0a8b9556…`, final evaluation `d7976a0b…`; DEV 14,287 rows / 3,167 admitted /
+463 top-1 / 1,295 top-8; status `COMPLETE_PENDING_REGISTERED_TWO_SEED_INTERPRETATION`; fresh
+`UNAVAILABLE_NOT_RUN`. All four quarter-evaluation references were freshly rehashed. R2 launched once at
+**22:40:35Z** (same GPU0, PID 178054) after the exact runtime/config/release/plan/qualification/PM/sheet/
+packet pins and host/remote floors passed; lease renewed to 23:40:52Z; no release reissue, reallocation or
+retry. Both arms are Route writer-admission objectives, not an attention comparison; Claude's registered
+two-seed/conditional-fresh interpretation remains pending after actual terminal inputs.
+
+Canonical NOW/ROADMAP/STATUS/README/docs-labs now state A2 COMPLETE / R2 RUNNING. Docs-only; claim-wording
+PASS via the existing checker; no build, no compute, $0.
+Record: [labs/a2-r2-docs-2026-10-18](../labs/a2-r2-docs-2026-10-18/README.md).
+
+## 2026-10-18 — State-of-attention audit + PM framing correction (kimi)
+
+Owner question: six months without demonstrated attention. PM-commissioned independent synthesis
+maps every attention mechanism with its measurements and status: the bottleneck is the codebook
+(16 distinct vectors at init, ties to lowest ID — nothing distinct to select); the read is starved
+by construction (20 proposals / 16,404 updates); Flock never corpus-trained; Relation verdict
+NOT_RUN; the injective PrimeZeta codebook (4,096 vectors, 0 tie mass) is the measured fix and the
+next attention test. PM correction: K16 A/R are writer admission objectives on `Route`, not an
+attention arm (#2029 6255963920). Also strikes the stale "zero code for Relation" sentence in
+finite-relational-head.md (its 2026-10-17 correction stands).
+Record: [labs/attention-state-2026-10-18](../labs/attention-state-2026-10-18/README.md).
+
 ## 2026-10-18 — Injective codebook init: sheet FIT after Claude subagent review; plan binds its own sheet (claude)
 
 Under the owner's subagent-review direction, two fresh reviewers returned FIT-WITH-FIXES. All fixes are applied:
