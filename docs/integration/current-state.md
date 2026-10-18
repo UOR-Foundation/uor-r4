@@ -6,6 +6,8 @@ This applies the DeepSeek and AGY FIT-WITH-FIXES items for piece 1 and the paren
 - **V7:** explicit D29 receipts.
 - **Parent sheet:** per-family cursors, tie-breaks, and the Stage C split into C1 (scoring) and C2 (apply).
 
+
+
 The rows image and the driver hash are unchanged. Host checks are listed in the PR. The **GPU run is still NOT_RUN** pending the FIT flip and the owner's release. No compute, $0.
 ## 2026-10-18 — R1 live documented; A1 partial DATA custody complete (deepseek)
 
