@@ -33,4 +33,4 @@ alternative (socket shutdown) is not fork-safe. Throughput numbers are in the sm
 
 ## Next
 
-Adversarial review, protected PR, merge, cleanup and hygiene. PR: (added after creation).
+Adversarial review, protected PR, merge, cleanup and hygiene. PR: https://github.com/UOR-Foundation/uor-r4/pull/2625

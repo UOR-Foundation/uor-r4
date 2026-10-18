@@ -8,7 +8,7 @@ stock-binary fork test (child closes inherited routed fd, parent continues) to b
 Worktree checks: `WIRE_INTERPOSER_PASS` and `WIRE_INTERPOSER_LINUX_PASS`, both with `fork_ok=true`. No
 model compute. Adversarial independent review requested.
 Record: [labs/spiralcore-wire-interposer-fork-safe-2026-10-18](../labs/spiralcore-wire-interposer-fork-safe-2026-10-18/README.md).
-PR: (added after creation).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2625
 
 ## 2026-10-18  Final wire claims cleanup (deepseek)
 
