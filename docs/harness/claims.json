@@ -27,6 +27,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/briefs-aliasing-20261018": {
+    "branch": "claude/briefs-aliasing-20261018",
+    "claimed_at": "2026-10-18T15:46:01-04:00",
+    "head": "182546fb2",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/c1-coupling-draft-20261018": {
     "branch": "claude/c1-coupling-draft-20261018",
     "claimed_at": "2026-10-17T23:08:55-04:00",
