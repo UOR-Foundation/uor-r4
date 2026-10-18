@@ -10,29 +10,39 @@ model that runs on a laptop?*
 [![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
 
-**Pre-alpha, 18 October 2026.** We are building a local language model around geometric
-state, transport and addressed memory. No model here holds a useful conversation yet;
-**0 of 8 milestones are complete**. The active [discrete crate](crates/uor-r4-discrete/README.md)
-has a shared integer input/carry/output writer and Route, Flock and Relation reads.
-A scoped diagnostic pilot learned 236 vector updates; the original paired attention dose
-was owner-stopped before Q1, with its partials preserved. Both arms of the separate
-`rows_v1` Dose2 attempt then stopped at the registered **Q1 admission-collapse gate
-after 4,096 batches**. P_succ target admission fell from 2,034 to **225 treatment /
-205 control**. These are admission counts, not accuracy or a treatment win.
-[Scientific review](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6248429872) concludes **configured admission collapse in both arms**,
-with no implementation or identity fault found; no registered efficacy hypothesis
-fires, fresh remains sealed, and there is no KEEP or mechanism-negative verdict.
-[Result and preserved custody](docs/labs/attention-rows-q1-diagnosis-2026-10-18/README.md) include pod `56510253` down at **07:53:30 UTC**.
+**Contents:** [What works today](#what-works-today-and-what-does-not) · [The question](#the-question) ·
+[Architecture](#architecture) · [Where we are](#where-we-are) · [Current path](#the-current-path-discrete-geometric-learning) ·
+[Rules](#rules-the-project-works-under) · [Mechanisms](#mechanisms-under-test) · [Results](#results-so-far) ·
+[Bookkeeping](#bookkeeping-where-things-are-recorded) · [Quick start](#quick-start) ·
+[Models and data](#models-and-data) · [Acknowledgements](#acknowledgements)
 
-The immediate M1 priority is the existing FIT K16-A/R admission redirect on
-`rows_v1`, seeds1/2: [timing source and qualification sequence](docs/labs/k16-rows-timing-source-2026-10-18/README.md).
-The timing adapter is source-only. Actual new-head qualification, the two
-checkpoint-0 A/R timing cells with100 samples plus one excluded warmup,
-and an accepted measured D-Packet precede training under the existing conditional
-release. The [owner Q4 timing waiver6251027125](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6251027125) removes the two Q4 cells and importer from the critical path.
+**Pre-alpha, 18 October 2026.** We are building a local language model whose state, memory and
+next-token choice are geometric instead of a transformer's dense attention. **0 of 8 milestones
+are complete, and no model here holds a useful conversation yet.** What exists is a working
+integer substrate — a shared token-vector table, ordered context, Route/Flock/Relation reads and
+a shared writer in [`crates/uor-r4-discrete`](crates/uor-r4-discrete/README.md) — plus a scoped
+diagnostic pilot that learned 236 vector updates. The latest paired attention attempt stopped at
+its pre-registered Q1 admission gate in both arms: a configured admission collapse, not an
+accuracy result or a mechanism verdict
+([record](docs/labs/attention-rows-q1-diagnosis-2026-10-18/README.md)). The immediate priority is
+qualifying the FIT'd K16-A/R redirect before any further training.
 
-Start with the [illustrated geometry](docs/geometry.md), [documentation hub](docs/README.md),
-[current status](STATUS.md), or [contributor guide](CONTRIBUTING.md).
+## What works today, and what does not
+
+| Works today | Does not work yet |
+|---|---|
+| An integer 8D carrier with 16 roots and 64 signed actions | Useful conversation, general prose, reasoning or coding |
+| Route, Flock and Relation reads | Any unified served model |
+| The shared input/carry/output writer | Any measured laptop energy figure |
+| The D19 exact byte store, with no model integration claimed | Running the current model in a browser |
+| 25/25 admitted CUDA construction controls and 1,085 finite parity cases | |
+| A D11 integer WASM runtime for the historical stack ([#2654](https://github.com/UOR-Foundation/uor-r4/pull/2654)) | |
+
+The left column is tested substrate; the right column is what would make it a language model.
+Neither column is a claim of measured language quality.
+
+Start with the [one-page current plan](docs/integration/NOW.md), the [illustrated geometry](docs/geometry.md),
+[documentation hub](docs/README.md), [current status](STATUS.md), or [contributor guide](CONTRIBUTING.md).
 [D37](docs/integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)
 allows offline floating-point training, while retaining the matmul/GEMM and
 softmax/squashing prohibitions and GPU-only model compute. D11 integer serving
@@ -82,6 +92,8 @@ selected Cargo graph and validation boundaries.
   Core and integer currently select fixed geometry/support modules; historical model
   executors are preserved outside that selected build. A unified served model remains unqualified.
 
+<img src="docs/figures/serving-pipeline.svg" alt="The D11 serving pipeline: the integer engine serves exported stack artifacts with adds, shifts, compares and table reads; the existing artifacts are historical, the compliant model cannot yet be exported, and the native learner keeps its own integer runtime and terminal chat" width="100%">
+
 The wider [geometry foundations](docs/geometry.md) include quaternions, icosians,
 exact golden coefficients, Hopf observations and prime/zeta addressing. Each has a
 specific mathematical role; inclusion in the research programme does not imply it
@@ -100,7 +112,7 @@ Live tracker: [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028).
 | M4 One served model (D11 and a CLI) | [#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032) | held | unified D11 model/export unqualified |
 | M5 Laptop cost | [#2033](https://github.com/UOR-Foundation/uor-r4/issues/2033) | not started | energy per token on an M1: not measured |
 | M6 Reasoning and coding | [#2034](https://github.com/UOR-Foundation/uor-r4/issues/2034) | not started | exact arithmetic is the visible gap |
-| M7 Distribution (API, WASM, Studio) | [#2035](https://github.com/UOR-Foundation/uor-r4/issues/2035) | not started | local API only |
+| M7 Distribution (API, WASM, Studio) | [#2035](https://github.com/UOR-Foundation/uor-r4/issues/2035) | runtime delivered; model bundle not integrated | local API only; the D11 WASM runtime and zero-matmul audit gate landed ([#2654](https://github.com/UOR-Foundation/uor-r4/pull/2654); [record](docs/labs/wasm-serving-runtime-2026-10-18/README.md)), but the selected model bundle is not yet reachable |
 | M8 Alpha release | [#2036](https://github.com/UOR-Foundation/uor-r4/issues/2036) | not started | owner decision |
 
 <img src="docs/figures/milestones.svg" alt="Milestones M1 to M8: M1 in progress, M2 and M4 held, M3 paused, M5 to M8 planned" width="100%">
@@ -263,7 +275,7 @@ Sources: [current state](docs/integration/current-state.md), [evidence index](do
 | What | Where |
 |---|---|
 | What is true now, newest first | [docs/integration/current-state.md](docs/integration/current-state.md) |
-| Owner decisions D0–D34 | [docs/integration/DECISIONS.md](docs/integration/DECISIONS.md) |
+| Owner decisions D0–D39 | [docs/integration/DECISIONS.md](docs/integration/DECISIONS.md) |
 | Live tracker and milestone issues | [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028), #2029–#2036 |
 | One dated record per completed unit | `docs/labs/<topic>-<date>/README.md` |
 | Pre-registrations and their `TEST FITNESS` verdicts | [docs/harness/prep/](docs/harness/prep/) and the milestone issue |
@@ -366,9 +378,10 @@ never on a serving path, and no new comparator runs are permitted (D23).
 
 The [project map](docs/PROJECT_MAP.md) covers every crate and directory.
 
-**Historical statistics, 13 October 2026** (mostly multi-agent lab work, not a count of human contributors): about
-1,990 commits since 9 June 2026; 1,761 merged PRs (968 in the last 30 days); about 1.68M lines of Rust;
-8,131 `#[test]` functions; decisions D0 to D27; 14 open issues.
+**Repository statistics, 18 October 2026** (mostly multi-agent lab work, not a count of human contributors):
+2,130 merged PRs (1,000 in the last 30 days); about 1.97M lines of Rust; 9,704 `#[test]` functions;
+decisions D0 to D39; 12 open issues. Git history was consolidated on 18 October, so a commit count since
+9 June is not comparable to the earlier snapshot.
 
 </details>
 
