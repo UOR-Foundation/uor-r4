@@ -2,6 +2,31 @@
 
 The claim-wording gate is now the `uor-r4-claim-wording` crate (D27): run `cargo run -q --locked -p uor-r4-claim-wording -- .` or `uor-harness claim-wording`. It is a line-for-line port of `scripts/check_claim_wording.py`. Its stdout and exit code are byte-identical to the script's on this repository and on a violation probe; the crate has 13 tests. The CI steps, the PR template, AGENTS/CONTRIBUTING, pm-rules, formal vocabulary §6 and the prlint checklist label now call the Rust gate. CI coverage is unchanged, including docs-only diffs in `fast-gate`. The Python script is retired, not deleted. [Record](../labs/claim-wording-rust-port-2026-10-18/README.md). No compute, $0. **Next:** none on this line; the retired script stays as dated evidence.
 
+## 2026-10-18  Final wire claims cleanup (deepseek)
+
+Removes the stale committed claims left by the merged wire side-exploration PRs (#2613, #2614, #2619, #2621) and this cleanup branch from docs/harness/claims.json. No code, model, evidence or dispatch change; coordination record only.
+
+## 2026-10-18  Wire review fixes round 3 (Codex finding on #2619; `deepseek/spiralcore-wire-review-fixes-3`)
+
+Codex reviewed #2619 at `5d6ecdd62` and reported one P1: a blocking `recv` can remain asleep on Linux
+after a close, so a later connect on the reused fd could wait forever on `io_lock`. `close` now issues
+`shutdown(fd, SHUT_RDWR)` after marking the fd inactive and before `sys_close`, waking the receive; buffer
+reset still happens on the next connect. Checks: `WIRE_INTERPOSER_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no
+model compute.
+Record: [labs/spiralcore-wire-review-fixes-3-2026-10-18](../labs/spiralcore-wire-review-fixes-3-2026-10-18/README.md).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2621
+
+## 2026-10-18  Wire review fixes round 2 (Codex findings on #2614; `deepseek/spiralcore-wire-review-fixes-2`)
+
+Codex reviewed #2614 at `448a9cb4f` and reported three P1s plus one P2; all addressed here. Interposer:
+`connect` waits on `io_lock` before resetting a reused fd, closing the fd-reuse-vs-blocked-recv race.
+Mux: streams are registered before their reader starts, and half-closed streams stay registered until
+both client FIN and target EOF (`input_done` + `output_done`). Linux smoke: brace-safe default for an
+unset `WIRE_SMOKE_WORK` under `set -u`. Worktree checks: `WIRE_INTERPOSER_PASS`, `WIRE_MUX_PASS`,
+`WIRE_MUX_ROUTING_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no model compute.
+Record: [labs/spiralcore-wire-review-fixes-2-2026-10-18](../labs/spiralcore-wire-review-fixes-2-2026-10-18/README.md).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2619
+
 ## 2026-10-18 — C1 flock-coupling draft: finite controls and export-gap contract (claude)
 
 The [C1 draft](../harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md) specifies the D37 float-trained coupling magnitude for the discrete Flock read, exported to integer Gate weights (`ReadSpec::FlockCoupled`, with `k_max = 1 ≡ Flock`). It contains:

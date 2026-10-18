@@ -515,9 +515,18 @@ int WIRE_API(connect)(int fd, const struct sockaddr *addr, socklen_t len) {
     }
     FdState *state = &fds[fd];
     pthread_mutex_lock(&state->lock);
-    if (!state->active) {
-        reset_state(state);
+    int need_reset = !state->active;
+    pthread_mutex_unlock(&state->lock);
+    if (need_reset) {
+        /* Wait for a possibly still-running recv on this fd to leave io_lock before
+           resetting state, so fd reuse cannot race a blocked reader. */
+        pthread_mutex_lock(&state->io_lock);
+        pthread_mutex_lock(&state->lock);
+        if (!state->active) reset_state(state);
+        pthread_mutex_unlock(&state->lock);
+        pthread_mutex_unlock(&state->io_lock);
     }
+    pthread_mutex_lock(&state->lock);
     if (sys_connect(fd, (const struct sockaddr *)&route->gateway, sizeof(route->gateway)) < 0) {
         pthread_mutex_unlock(&state->lock);
         return -1;
@@ -615,8 +624,10 @@ int WIRE_API(close)(int fd) {
         state->active = 0;
         state->eof = 1;
         pthread_mutex_unlock(&state->lock);
-        /* Do not reset_state here: a blocking recv may still own the buffers.
-           The next connect on this fd resets them. */
+        /* Wake a recv blocked on another thread before closing: otherwise Linux can leave
+           that receive asleep on the old file, and a later connect on the reused descriptor
+           would wait forever for io_lock. The next connect resets the buffers. */
+        (void)sys_shutdown(fd, SHUT_RDWR);
     }
     return sys_close(fd);
 }
