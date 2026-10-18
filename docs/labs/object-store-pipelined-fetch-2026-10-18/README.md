@@ -37,7 +37,9 @@ clean; fmt clean. Rejection test covers `verify --fetch-window` and out-of-range
 ## Limits
 
 - Default window stays 4 because each in-flight frame is a full batch: a large window can increase
-  socket buffering and latency; the CLI exposes 1..=64 for tuning, not a new default.
+  socket buffering and latency; the CLI exposes 1..=64 for tuning, not a new default. The effective
+  window is also capped by outstanding request bytes (256 KiB), so very large batches degrade to
+  window 1 rather than risking a socket-buffer stall.
 - The proxy delays per forwarded chunk; it approximates RTT but is not a real WAN or a calibrated
   impairment model. Real-link claims still need a WAN measurement.
 - Batch selection and pipelining are orthogonal: the batch still bounds nodes per FETCH, the window

@@ -509,7 +509,13 @@ fn pull_one<R: Read, W: Write>(
         .clamp(1, u16::MAX as usize);
     let mut fetched: BTreeMap<NodeId, Record> = BTreeMap::new();
     let mut stats = PullStats::default();
-    let window = options.window.max(1);
+    // Bound in-flight request bytes as well as frame count: a window of huge batches could fill the
+    // socket buffers and block the reply path. 256 KiB of outstanding FETCH requests is conservative;
+    // very large batches therefore degrade to lock-step instead of risking a stall.
+    let window = options
+        .window
+        .max(1)
+        .min((262_144 / (2 + 12 * batch)).max(1));
     loop {
         let missing = missing_nodes(store, &manifest, &fetched)?;
         if missing.is_empty() {
