@@ -20,6 +20,13 @@
     "lab": "antigravity",
     "note": "Implement and wire un-dispatched harness.owner_rules_applied, harness.entry_point, harness.documented_commands (with GROUPS/FLAGS validation), prlint.gates_declared, and receipts.skill_usage_recorded in uor-r4-harness (#2570)"
   },
+  "claude/d37-offline-float-20261018": {
+    "branch": "claude/d37-offline-float-20261018",
+    "claimed_at": "2026-10-17T22:35:33-04:00",
+    "head": "94d4d34ad",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/public-face-reconcile-2026-10-15": {
     "branch": "claude/public-face-reconcile-2026-10-15",
     "claimed_at": "2026-10-15T18:19:36-04:00",
@@ -215,6 +222,13 @@
     "head": "eb4c349a1",
     "lab": "deepseek",
     "note": "R-queue rule in pm-rules.md"
+  },
+  "deepseek/spiralcore-wire-review-fixes": {
+    "branch": "deepseek/spiralcore-wire-review-fixes",
+    "claimed_at": "2026-10-17T22:42:50-04:00",
+    "head": "94d4d34ad",
+    "lab": "deepseek",
+    "note": "Address Codex P1 review findings on merged side exploration #2613: remove committed local/ build logs, Linux smoke scratch inside checkout, release completed Python mux streams, split interposer recv lock from close/shutdown lock. No model compute."
   },
   "deepseek/spiralcore-wire-side-exploration": {
     "branch": "deepseek/spiralcore-wire-side-exploration",
