@@ -1505,10 +1505,7 @@ impl PreparedDriver {
     ) -> Result<crate::device::Proposal> {
         match self.config.counterfactual_path {
             CounterfactualPath::LanesV1 => model.propose(carried, targets, parameter),
-            CounterfactualPath::RowsV1 => {
-                let rows = model.rows_counterfactual()?;
-                model.propose_rows(carried, targets, parameter, &rows)
-            }
+            CounterfactualPath::RowsV1 => model.propose_rows_cached(carried, targets, parameter),
         }
     }
     /// Deterministic virtual proposal. The returned next cursor changes no model state.
