@@ -345,9 +345,62 @@ pub struct TokenCellsModelBindingsRecord {
     pub seed: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DriverCursorRecord {
+    pub completed_batches: u64,
+    pub accepted_updates: u64,
+    pub corpus_pass: u64,
+    pub next_target: u64,
+    pub next_coordinate: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DriverCheckpointRecord {
+    pub schema: String,
+    pub lineage: DriverLineageRecord,
+    pub cursor: DriverCursorRecord,
+    pub model_sha256: String,
+    pub model: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeviceSnapshotRecord {
+    pub schema: String,
+    pub spec: SpecRecord,
+    pub read_spec: ReadSpecRecord,
+    #[serde(
+        default,
+        skip_serializing_if = "ObjectivePolicyRecord::is_nearest_address_margin"
+    )]
+    pub objective_policy: ObjectivePolicyRecord,
+    #[serde(
+        default,
+        skip_serializing_if = "ReadInitializationRecord::is_zero_gates"
+    )]
+    pub read_initialization: ReadInitializationRecord,
+    pub seed: u32,
+    pub epoch: u64,
+    pub table: Vec<i32>,
+    pub routes: Vec<u32>,
+    pub gates: Vec<i32>,
+    pub operator_kappa: String,
+    pub composition_kappa: String,
+    pub kernel_sha256: String,
+    pub source_sha256: String,
+    pub geometry_sha256: String,
+}
+
 /// Validated GPU-exported `token_cells[4096]` loaded from an `attention-export-token-cells`
-/// receipt (`uor-r4.attention-token-cells/1`) and its bound `token_cells.u16`.
-/// All producer fields emitted by `#2601` are mandatory.
+/// receipt (`uor-r4.attention-token-cells/1`), its bound `token_cells.u16`, and its pinned
+/// `DriverCheckpoint` (`uor-r4.discrete-driver-checkpoint/1`).
+/// All producer fields emitted by `#2601` and all four checkpoint/model hash domains are mandatory:
+/// - `checkpoint_file_sha256`: raw `DriverCheckpoint` JSON file SHA256
+/// - `driver_checkpoint_sha256`: canonical typed `DriverCheckpointRecord` SHA256
+/// - `model_snapshot_sha256`: canonical `serde_json::Value` model SHA256 (`checkpoint.model_sha256` == `export.model_snapshot_sha256`)
+/// - `typed_model_snapshot_sha256`: typed `DeviceSnapshotRecord` SHA256 (`eval.model_snapshot_sha256`)
 #[derive(Debug, Clone)]
 pub struct LoadedTokenCells {
     pub token_cells: Vec<u32>,
@@ -360,6 +413,7 @@ pub struct LoadedTokenCells {
     pub driver_checkpoint_sha256: String,
     pub checkpoint_file_sha256: String,
     pub model_snapshot_sha256: String,
+    pub typed_model_snapshot_sha256: String,
     pub model_epoch: u64,
     pub completed_batches: u64,
     pub model_bindings: TokenCellsModelBindingsRecord,
@@ -375,6 +429,8 @@ pub struct CandidateCellTable {
     pub driver_checkpoint_sha256: String,
     #[serde(default)]
     pub model_snapshot_sha256: Option<String>,
+    #[serde(default)]
+    pub model_value_sha256: Option<String>,
     #[serde(default)]
     pub token_cells_sha256: Option<String>,
     #[serde(default)]
@@ -502,11 +558,238 @@ fn parse_file_pin(val: Option<&Value>, label: &str) -> Result<FilePinRecord, Str
     Ok(pin)
 }
 
+/// Authenticate a raw `DriverCheckpoint` JSON byte slice across all four producer hash domains:
+/// 1. Raw `DriverCheckpoint` JSON file (`checkpoint_file.sha256`)
+/// 2. Canonical typed `DriverCheckpointRecord` (`driver_checkpoint_sha256`)
+/// 3. Canonical `serde_json::Value` model (`checkpoint.model_sha256 == export.model_snapshot_sha256`)
+/// 4. Typed `DeviceSnapshotRecord` re-encoding (`eval.model_snapshot_sha256`)
+///
+/// Returns the typed `DeviceSnapshotRecord` SHA256 (`eval.model_snapshot_sha256` domain).
+#[allow(clippy::too_many_arguments)]
+pub fn verify_driver_checkpoint_domains(
+    ckpt_bytes: &[u8],
+    expected_checkpoint_file_sha256: &str,
+    expected_driver_checkpoint_sha256: &str,
+    expected_config_sha256: &str,
+    expected_lineage_sha256: &str,
+    expected_model_value_sha256: &str,
+    expected_model_epoch: u64,
+    expected_completed_batches: u64,
+    expected_model_bindings: &TokenCellsModelBindingsRecord,
+) -> Result<String, String> {
+    let actual_raw_sha = sha256_hex(ckpt_bytes);
+    if actual_raw_sha != expected_checkpoint_file_sha256 {
+        return Err(format!(
+            "checkpoint: raw file sha256 ({actual_raw_sha}) != checkpoint_file.sha256 ({expected_checkpoint_file_sha256})"
+        ));
+    }
+    let ckpt: DriverCheckpointRecord = serde_json::from_slice(ckpt_bytes)
+        .map_err(|e| format!("checkpoint: invalid DriverCheckpoint JSON: {e}"))?;
+    if ckpt.schema != DRIVER_CHECKPOINT_SCHEMA {
+        return Err(format!(
+            "checkpoint: expected schema '{DRIVER_CHECKPOINT_SCHEMA}', got '{}'",
+            ckpt.schema
+        ));
+    }
+    let actual_ckpt_sha = serde_json::to_vec(&ckpt)
+        .map(|b| sha256_hex(&b))
+        .map_err(|e| format!("checkpoint: serialize DriverCheckpointRecord: {e}"))?;
+    if actual_ckpt_sha != expected_driver_checkpoint_sha256 {
+        return Err(format!(
+            "checkpoint: canonical driver_checkpoint_sha256 ({actual_ckpt_sha}) != expected ({expected_driver_checkpoint_sha256})"
+        ));
+    }
+    let actual_lin_sha = serde_json::to_vec(&ckpt.lineage)
+        .map(|b| sha256_hex(&b))
+        .map_err(|e| format!("checkpoint.lineage: serialize: {e}"))?;
+    if actual_lin_sha != expected_lineage_sha256 {
+        return Err(format!(
+            "checkpoint: lineage_sha256 ({actual_lin_sha}) != expected ({expected_lineage_sha256})"
+        ));
+    }
+    let actual_cfg_sha = serde_json::to_vec(&ckpt.lineage.config)
+        .map(|b| sha256_hex(&b))
+        .map_err(|e| format!("checkpoint.lineage.config: serialize: {e}"))?;
+    if actual_cfg_sha != expected_config_sha256 {
+        return Err(format!(
+            "checkpoint: config_sha256 ({actual_cfg_sha}) != expected ({expected_config_sha256})"
+        ));
+    }
+    if ckpt.cursor.accepted_updates != expected_model_epoch
+        || ckpt.cursor.completed_batches != expected_completed_batches
+    {
+        return Err(format!(
+            "checkpoint: cursor (completed_batches={}, accepted_updates={}) != expected ({expected_completed_batches}, {expected_model_epoch})",
+            ckpt.cursor.completed_batches, ckpt.cursor.accepted_updates
+        ));
+    }
+    let batch_rows = u64::from(ckpt.lineage.config.batch_rows);
+    if batch_rows == 0 || batch_rows > 64 {
+        return Err(format!("checkpoint: invalid batch_rows {batch_rows}"));
+    }
+    let batches_per_pass = ckpt.lineage.train.eligible_targets.div_ceil(batch_rows);
+    if batches_per_pass == 0
+        || ckpt.cursor.accepted_updates > ckpt.cursor.completed_batches
+        || ckpt.cursor.corpus_pass != ckpt.cursor.completed_batches / batches_per_pass
+        || ckpt.cursor.next_target
+            != (ckpt.cursor.completed_batches % batches_per_pass) * batch_rows
+    {
+        return Err(
+            "checkpoint: cursor differs from declared corpus/schedule cycle invariants".to_string(),
+        );
+    }
+
+    validate_sha256_str(&ckpt.model_sha256, "checkpoint.model_sha256")?;
+    let actual_model_val_sha = serde_json::to_vec(&ckpt.model)
+        .map(|b| sha256_hex(&b))
+        .map_err(|e| format!("checkpoint.model: serialize Value: {e}"))?;
+    if actual_model_val_sha != ckpt.model_sha256 {
+        return Err(format!(
+            "checkpoint: model Value sha256 ({actual_model_val_sha}) != checkpoint.model_sha256 ({})",
+            ckpt.model_sha256
+        ));
+    }
+    if actual_model_val_sha != expected_model_value_sha256 {
+        return Err(format!(
+            "checkpoint: model Value sha256 ({actual_model_val_sha}) != token_cells.model_snapshot_sha256 ({expected_model_value_sha256})"
+        ));
+    }
+
+    let snapshot: DeviceSnapshotRecord = serde_json::from_value(ckpt.model.clone())
+        .map_err(|e| format!("checkpoint.model: invalid DeviceSnapshotRecord: {e}"))?;
+    if snapshot.schema != DISCRETE_SNAPSHOT_SCHEMA {
+        return Err(format!(
+            "checkpoint.model: expected schema '{DISCRETE_SNAPSHOT_SCHEMA}', got '{}'",
+            snapshot.schema
+        ));
+    }
+    if snapshot.spec != ckpt.lineage.config.spec
+        || snapshot.spec != expected_model_bindings.spec
+        || snapshot.read_spec != ckpt.lineage.config.read_spec
+        || snapshot.read_spec != expected_model_bindings.read_spec
+        || snapshot.objective_policy != ckpt.lineage.config.objective_policy
+        || snapshot.objective_policy != expected_model_bindings.objective_policy
+        || snapshot.read_initialization != ckpt.lineage.config.read_initialization
+        || snapshot.read_initialization != expected_model_bindings.read_initialization
+        || snapshot.seed != ckpt.lineage.config.seed
+        || snapshot.seed != expected_model_bindings.seed
+        || snapshot.epoch != ckpt.cursor.accepted_updates
+        || snapshot.epoch != expected_model_epoch
+    {
+        return Err(
+            "checkpoint.model: spec/read_spec/objective_policy/read_initialization/seed/epoch disagrees with lineage or token_cells.model_bindings"
+                .to_string(),
+        );
+    }
+    validate_sha256_str(&snapshot.source_sha256, "checkpoint.model.source_sha256")?;
+    validate_sha256_str(&snapshot.kernel_sha256, "checkpoint.model.kernel_sha256")?;
+    validate_sha256_str(
+        &snapshot.geometry_sha256,
+        "checkpoint.model.geometry_sha256",
+    )?;
+    if snapshot.source_sha256 != expected_model_bindings.source_sha256
+        || snapshot.kernel_sha256 != expected_model_bindings.kernel_sha256
+        || snapshot.geometry_sha256 != expected_model_bindings.geometry_sha256
+    {
+        return Err(
+            "checkpoint.model: source/kernel/geometry sha256 disagrees with token_cells.model_bindings"
+                .to_string(),
+        );
+    }
+    let expected_table_len =
+        (snapshot.spec.vocabulary as usize) * (snapshot.spec.blocks as usize) * 8;
+    if snapshot.table.len() != expected_table_len {
+        return Err(format!(
+            "checkpoint.model: table len {} != expected {}",
+            snapshot.table.len(),
+            expected_table_len
+        ));
+    }
+    if snapshot.gates.iter().any(|t| !(-1..=1).contains(t)) {
+        return Err("checkpoint.model: gate trit outside -1..=1".to_string());
+    }
+    if !ckpt.lineage.config.relation_learning_policy.is_learn() {
+        let mut cap = 1usize;
+        let mut stages = 0u32;
+        while cap < snapshot.spec.context as usize {
+            cap *= 3;
+            stages += 1;
+        }
+        let combine_gates = (snapshot.spec.blocks * stages) as usize;
+        if snapshot.gates.len() <= combine_gates
+            || snapshot.gates[combine_gates..].iter().any(|&t| t != 0)
+        {
+            return Err(
+                "checkpoint.model: FrozenZeroV1 requires every relation gate trit to be 0"
+                    .to_string(),
+            );
+        }
+    }
+
+    serde_json::to_vec(&snapshot)
+        .map(|b| sha256_hex(&b))
+        .map_err(|e| format!("checkpoint.model: serialize DeviceSnapshotRecord: {e}"))
+}
+
+fn resolve_checkpoint_bytes_for_report(
+    checkpoint_pin: &FilePinRecord,
+    report_dir: &Path,
+    explicit_checkpoint_path: Option<&Path>,
+) -> Result<Vec<u8>, String> {
+    if let Some(cp) = explicit_checkpoint_path {
+        return fs::read(cp).map_err(|e| format!("explicit checkpoint ({}): {e}", cp.display()));
+    }
+    let mut candidates = Vec::new();
+    candidates.push(checkpoint_pin.path.clone());
+    if checkpoint_pin.path.is_relative() {
+        candidates.push(report_dir.join(&checkpoint_pin.path));
+    }
+    if let (Some(parent), Some(fname)) = (
+        checkpoint_pin.path.parent().and_then(|p| p.file_name()),
+        checkpoint_pin.path.file_name(),
+    ) {
+        if let Some(rep_parent) = report_dir.parent() {
+            candidates.push(rep_parent.join(parent).join(fname));
+        }
+        candidates.push(report_dir.join(parent).join(fname));
+    }
+    if let Some(fname) = checkpoint_pin.path.file_name() {
+        if fname != std::ffi::OsStr::new("report.json") {
+            candidates.push(report_dir.join(fname));
+        }
+    }
+    candidates.push(report_dir.join("checkpoint.json"));
+    candidates.push(report_dir.join("driver-checkpoint.json"));
+
+    for cand in &candidates {
+        if cand.is_file() {
+            if let Ok(bytes) = fs::read(cand) {
+                if sha256_hex(&bytes) == checkpoint_pin.sha256 {
+                    return Ok(bytes);
+                }
+            }
+        }
+    }
+    for cand in &candidates {
+        if cand.is_file() {
+            return fs::read(cand).map_err(|e| format!("checkpoint ({}): {e}", cand.display()));
+        }
+    }
+    Err(format!(
+        "token_cells report: cannot locate pinned DriverCheckpoint file '{}' (sha256={}) locally; pass --checkpoint <path> (or --relation-checkpoint / --control-checkpoint) to bind the local DriverCheckpoint file",
+        checkpoint_pin.path.display(),
+        checkpoint_pin.sha256
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn build_loaded_from_report_and_u16(
     rep_val: &Value,
     rep_sha: String,
     u16_bytes: &[u8],
     u16_label: &str,
+    report_dir: &Path,
+    explicit_checkpoint_path: Option<&Path>,
     expected_driver_checkpoint_sha256: &str,
     expected_model_snapshot_sha256: &str,
 ) -> Result<LoadedTokenCells, String> {
@@ -618,9 +901,29 @@ fn build_loaded_from_report_and_u16(
             "token_cells report driver_checkpoint_sha256 ({ckpt_sha}) != expected ({expected_driver_checkpoint_sha256})"
         ));
     }
-    if !expected_model_snapshot_sha256.is_empty() && snap_sha != expected_model_snapshot_sha256 {
+
+    let ckpt_bytes = resolve_checkpoint_bytes_for_report(
+        &checkpoint_file,
+        report_dir,
+        explicit_checkpoint_path,
+    )?;
+    let typed_model_snapshot_sha256 = verify_driver_checkpoint_domains(
+        &ckpt_bytes,
+        &checkpoint_file.sha256,
+        &ckpt_sha,
+        &config_sha256,
+        &lineage_sha256,
+        &snap_sha,
+        model_epoch,
+        completed_batches,
+        &model_bindings,
+    )?;
+
+    if !expected_model_snapshot_sha256.is_empty()
+        && typed_model_snapshot_sha256 != expected_model_snapshot_sha256
+    {
         return Err(format!(
-            "token_cells report model_snapshot_sha256 ({snap_sha}) != expected ({expected_model_snapshot_sha256})"
+            "token_cells report typed model snapshot sha256 ({typed_model_snapshot_sha256}, value={snap_sha}) != expected ({expected_model_snapshot_sha256})"
         ));
     }
 
@@ -643,6 +946,7 @@ fn build_loaded_from_report_and_u16(
         driver_checkpoint_sha256: ckpt_sha,
         checkpoint_file_sha256: checkpoint_file.sha256,
         model_snapshot_sha256: snap_sha,
+        typed_model_snapshot_sha256,
         model_epoch,
         completed_batches,
         model_bindings,
@@ -653,7 +957,8 @@ fn build_loaded_from_report_and_u16(
 /// - a binary `token_cells.u16` file (`8,192` raw little-endian bytes) accompanied by a
 ///   required sibling `report.json` (`uor-r4.attention-token-cells/1`), or
 /// - a JSON `report.json` (`uor-r4.attention-token-cells/1`) referencing its sibling
-///   `token_cells.u16` binary file.
+///   `token_cells.u16` binary file, and authenticate its pinned `DriverCheckpoint` across
+///   all four producer hash domains.
 ///
 /// Inline `token_cells` JSON arrays and bare `token_cells.u16` files without a sibling
 /// `report.json` are refused.
@@ -662,9 +967,24 @@ pub fn load_gpu_token_cells_file(
     expected_driver_checkpoint_sha256: &str,
     expected_model_snapshot_sha256: &str,
 ) -> Result<LoadedTokenCells, String> {
+    load_gpu_token_cells_file_with_checkpoint(
+        path,
+        None,
+        expected_driver_checkpoint_sha256,
+        expected_model_snapshot_sha256,
+    )
+}
+
+pub fn load_gpu_token_cells_file_with_checkpoint(
+    path: &Path,
+    explicit_checkpoint_path: Option<&Path>,
+    expected_driver_checkpoint_sha256: &str,
+    expected_model_snapshot_sha256: &str,
+) -> Result<LoadedTokenCells, String> {
     let bytes = fs::read(path).map_err(|e| format!("token_cells ({}): {e}", path.display()))?;
     let file_sha = sha256_hex(&bytes);
     let trimmed = bytes.iter().copied().find(|b| !b.is_ascii_whitespace());
+    let report_dir = path.parent().unwrap_or_else(|| Path::new("."));
 
     if trimmed == Some(b'{') {
         let val: Value = serde_json::from_slice(&bytes)
@@ -675,10 +995,7 @@ pub fn load_gpu_token_cells_file(
                 path.display()
             ));
         }
-        let u16_path = path
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join("token_cells.u16");
+        let u16_path = report_dir.join("token_cells.u16");
         let u16_bytes = fs::read(&u16_path).map_err(|e| {
             format!(
                 "token_cells report ({}) sibling {} could not be read: {e}",
@@ -691,16 +1008,15 @@ pub fn load_gpu_token_cells_file(
             file_sha,
             &u16_bytes,
             &u16_path.display().to_string(),
+            report_dir,
+            explicit_checkpoint_path,
             expected_driver_checkpoint_sha256,
             expected_model_snapshot_sha256,
         );
     }
 
     // Binary token_cells.u16 file: require sibling report.json with uor-r4.attention-token-cells/1
-    let sibling_report = path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("report.json");
+    let sibling_report = report_dir.join("report.json");
     if !sibling_report.is_file() {
         return Err(format!(
             "bare token_cells.u16 ({}) without sibling report.json ({TOKEN_CELLS_RECEIPT_SCHEMA}) is refused; device-export receipt is required",
@@ -721,6 +1037,8 @@ pub fn load_gpu_token_cells_file(
         rep_sha,
         &bytes,
         &path.display().to_string(),
+        report_dir,
+        explicit_checkpoint_path,
         expected_driver_checkpoint_sha256,
         expected_model_snapshot_sha256,
     )
@@ -2586,10 +2904,18 @@ pub fn verify_loaded_token_cells_against_arm(
             loaded.checkpoint_file_sha256, arm.checkpoint_file_sha256
         ));
     }
-    if loaded.model_snapshot_sha256 != arm.model_snapshot_sha256 {
+    validate_sha256_str(
+        &loaded.model_snapshot_sha256,
+        "token_cells.model_snapshot_sha256",
+    )?;
+    validate_sha256_str(
+        &loaded.typed_model_snapshot_sha256,
+        "token_cells.typed_model_snapshot_sha256",
+    )?;
+    if loaded.typed_model_snapshot_sha256 != arm.model_snapshot_sha256 {
         return Err(format!(
-            "{label}: model_snapshot_sha256 ({}) != eval ({})",
-            loaded.model_snapshot_sha256, arm.model_snapshot_sha256
+            "{label}: typed_model_snapshot_sha256 ({}) != eval.model_snapshot_sha256 ({})",
+            loaded.typed_model_snapshot_sha256, arm.model_snapshot_sha256
         ));
     }
     if loaded.config_sha256 != arm.config_sha256 {
@@ -2982,8 +3308,14 @@ pub fn build_candidate_cell_table_from_loaded(
     }
     let ckpt_sha = receipt_ckpt_sha.to_string();
     validate_sha256_str(&ckpt_sha, "token_cells.driver_checkpoint_sha256")?;
-    let snap_sha = loaded.model_snapshot_sha256.as_str();
-    validate_sha256_str(snap_sha, "token_cells.model_snapshot_sha256")?;
+    validate_sha256_str(
+        &loaded.model_snapshot_sha256,
+        "token_cells.model_snapshot_sha256",
+    )?;
+    validate_sha256_str(
+        &loaded.typed_model_snapshot_sha256,
+        "token_cells.typed_model_snapshot_sha256",
+    )?;
 
     let expected_rows = if enforce_canonical_pins {
         CANONICAL_DEV_ELIGIBLE_ROWS
@@ -3007,7 +3339,8 @@ pub fn build_candidate_cell_table_from_loaded(
     Ok(CandidateCellTable {
         schema: CANDIDATE_CELL_TABLE_SCHEMA.to_string(),
         driver_checkpoint_sha256: ckpt_sha,
-        model_snapshot_sha256: Some(loaded.model_snapshot_sha256.clone()),
+        model_snapshot_sha256: Some(loaded.typed_model_snapshot_sha256.clone()),
+        model_value_sha256: Some(loaded.model_snapshot_sha256.clone()),
         token_cells_sha256: Some(loaded.token_cells_sha256.clone()),
         ordered_row_binding_sha256: Some(ordered_row_binding_sha256),
         t2_ranked_table_sha256: Some(corpus_tables.t2_ranked_table_sha256),
@@ -3089,6 +3422,8 @@ pub fn score_preflight_dev_values(
             "status": "SCORED_FROM_GPU_TOKEN_CELLS_AND_REGISTERED_CORPUS_TABLES",
             "token_cells_sha256": loaded_tc.token_cells_sha256,
             "token_cells_report_sha256": loaded_tc.report_sha256,
+            "export_model_value_sha256": loaded_tc.model_snapshot_sha256,
+            "eval_typed_model_snapshot_sha256": loaded_tc.typed_model_snapshot_sha256,
             "model_snapshot_sha256": arm.model_snapshot_sha256,
             "occupied_writer_cells": loaded_tc.occupied_cells,
             "target_cell_cross_check_rows": arm.rows.len(),
@@ -3578,6 +3913,12 @@ pub fn score_paired_dev_values(
         )?;
         block["relation_token_cells_report_sha256"] = json!(rel_tc.report_sha256);
         block["control_token_cells_report_sha256"] = json!(ctrl_tc.report_sha256);
+        block["relation_export_model_value_sha256"] = json!(rel_tc.model_snapshot_sha256);
+        block["relation_eval_typed_model_snapshot_sha256"] =
+            json!(rel_tc.typed_model_snapshot_sha256);
+        block["control_export_model_value_sha256"] = json!(ctrl_tc.model_snapshot_sha256);
+        block["control_eval_typed_model_snapshot_sha256"] =
+            json!(ctrl_tc.typed_model_snapshot_sha256);
         block["corpus_pins"] = json!({
             "train_tokens_sha256": corpus_tables.train_tokens_sha256,
             "train_mask_sha256": corpus_tables.train_mask_sha256,
@@ -3689,6 +4030,27 @@ pub fn run_preflight_dev_files(
     candidate_cells_path: Option<&Path>,
     token_cells_and_corpus_paths: Option<(&Path, &CorpusPaths<'_>)>,
 ) -> Result<Value, String> {
+    run_preflight_dev_files_with_checkpoint(
+        panel_path,
+        capture_path,
+        eval_path,
+        d34_path,
+        candidate_cells_path,
+        token_cells_and_corpus_paths,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_preflight_dev_files_with_checkpoint(
+    panel_path: &Path,
+    capture_path: &Path,
+    eval_path: &Path,
+    d34_path: &Path,
+    candidate_cells_path: Option<&Path>,
+    token_cells_and_corpus_paths: Option<(&Path, &CorpusPaths<'_>)>,
+    explicit_checkpoint_path: Option<&Path>,
+) -> Result<Value, String> {
     let (panel, panel_sha) = read_json_and_sha(panel_path, "panel")?;
     let (capture, capture_sha) = read_json_and_sha(capture_path, "capture")?;
     let (eval, eval_sha) = read_json_and_sha(eval_path, "eval")?;
@@ -3703,7 +4065,8 @@ pub fn run_preflight_dev_files(
         None
     };
     let tc_opt = if let Some((tc_path, corpus_paths)) = token_cells_and_corpus_paths {
-        let loaded = load_gpu_token_cells_file(tc_path, "", "")?;
+        let loaded =
+            load_gpu_token_cells_file_with_checkpoint(tc_path, explicit_checkpoint_path, "", "")?;
         Some((loaded, corpus_paths))
     } else {
         None
@@ -3734,6 +4097,35 @@ pub fn run_paired_dev_files(
     d34_path: &Path,
     candidate_tables_paths: Option<(&Path, &Path)>,
     token_cells_and_corpus_paths: Option<(&Path, &Path, &CorpusPaths<'_>)>,
+) -> Result<Value, String> {
+    run_paired_dev_files_with_checkpoints(
+        panel_path,
+        rel_capture_path,
+        rel_eval_path,
+        ctrl_capture_path,
+        ctrl_eval_path,
+        ablation_eval_path,
+        d34_path,
+        candidate_tables_paths,
+        token_cells_and_corpus_paths,
+        None,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_paired_dev_files_with_checkpoints(
+    panel_path: &Path,
+    rel_capture_path: &Path,
+    rel_eval_path: &Path,
+    ctrl_capture_path: &Path,
+    ctrl_eval_path: &Path,
+    ablation_eval_path: Option<&Path>,
+    d34_path: &Path,
+    candidate_tables_paths: Option<(&Path, &Path)>,
+    token_cells_and_corpus_paths: Option<(&Path, &Path, &CorpusPaths<'_>)>,
+    rel_checkpoint_path: Option<&Path>,
+    ctrl_checkpoint_path: Option<&Path>,
 ) -> Result<Value, String> {
     let (panel, panel_sha) = read_json_and_sha(panel_path, "panel")?;
     let (rel_cap, rel_cap_sha) = read_json_and_sha(rel_capture_path, "relation_capture")?;
@@ -3769,14 +4161,17 @@ pub fn run_paired_dev_files(
     } else {
         None
     };
-    let tcs_opt =
-        if let Some((rel_tc_path, ctrl_tc_path, corpus_paths)) = token_cells_and_corpus_paths {
-            let r_loaded = load_gpu_token_cells_file(rel_tc_path, "", "")?;
-            let c_loaded = load_gpu_token_cells_file(ctrl_tc_path, "", "")?;
-            Some((r_loaded, c_loaded, corpus_paths))
-        } else {
-            None
-        };
+    let tcs_opt = if let Some((rel_tc_path, ctrl_tc_path, corpus_paths)) =
+        token_cells_and_corpus_paths
+    {
+        let r_loaded =
+            load_gpu_token_cells_file_with_checkpoint(rel_tc_path, rel_checkpoint_path, "", "")?;
+        let c_loaded =
+            load_gpu_token_cells_file_with_checkpoint(ctrl_tc_path, ctrl_checkpoint_path, "", "")?;
+        Some((r_loaded, c_loaded, corpus_paths))
+    } else {
+        None
+    };
     score_paired_dev_values(
         &panel,
         panel_sha,
@@ -3805,8 +4200,25 @@ pub fn run_bundle_candidate_cells_files(
     d34_path: &Path,
     corpus_paths: &CorpusPaths<'_>,
 ) -> Result<CandidateCellTable, String> {
-    let loaded = load_gpu_token_cells_file(
+    run_bundle_candidate_cells_files_with_checkpoint(
         token_cells_path,
+        None,
+        explicit_driver_checkpoint_sha256,
+        d34_path,
+        corpus_paths,
+    )
+}
+
+pub fn run_bundle_candidate_cells_files_with_checkpoint(
+    token_cells_path: &Path,
+    explicit_checkpoint_path: Option<&Path>,
+    explicit_driver_checkpoint_sha256: Option<&str>,
+    d34_path: &Path,
+    corpus_paths: &CorpusPaths<'_>,
+) -> Result<CandidateCellTable, String> {
+    let loaded = load_gpu_token_cells_file_with_checkpoint(
+        token_cells_path,
+        explicit_checkpoint_path,
         explicit_driver_checkpoint_sha256.unwrap_or(""),
         "",
     )?;
@@ -4496,6 +4908,7 @@ mod tests {
             schema: CANDIDATE_CELL_TABLE_SCHEMA.to_string(),
             driver_checkpoint_sha256: arm.driver_checkpoint_sha256.clone(),
             model_snapshot_sha256: Some(arm.model_snapshot_sha256.clone()),
+            model_value_sha256: None,
             ordered_row_binding_sha256: Some(CANONICAL_ORDERED_ROW_BINDING_SHA256.to_string()),
             token_cells_sha256: Some(tc_sha),
             t2_ranked_table_sha256: Some(t2_sha),
@@ -4591,7 +5004,7 @@ mod tests {
 
     #[test]
     fn raw_token_cells_u16_requires_sibling_report_receipt_and_rejects_bare_file() {
-        let (_panel, rel_cap, rel_eval, _, _, _) = fixture_receipts(1, 0);
+        let (panel, mut rel_cap, mut rel_eval, _, _, d34) = fixture_receipts(1, 0);
         let mut raw = Vec::with_capacity(CANONICAL_VOCAB * 2);
         for tok in 0..CANONICAL_VOCAB {
             let cell = ((tok * 17) % 256) as u16;
@@ -4608,17 +5021,76 @@ mod tests {
         let u16_path = tmp_dir.join("token_cells.u16");
         fs::write(&u16_path, &raw).unwrap();
 
-        let ckpt_sha = rel_cap["driver_checkpoint_sha256"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let snap_sha = rel_eval["model_snapshot_sha256"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        // Construct a real DriverCheckpointRecord whose 4 hash domains are all distinct:
+        // 1. checkpoint_file.sha256 (pretty-printed JSON bytes)
+        // 2. driver_checkpoint_sha256 (canonical DriverCheckpointRecord bytes)
+        // 3. checkpoint.model_sha256 == export.model_snapshot_sha256 (serde_json::Value alphabetically sorted keys)
+        // 4. typed_model_snapshot_sha256 == eval.model_snapshot_sha256 (DeviceSnapshotRecord declaration order)
+        let typed_snapshot = DeviceSnapshotRecord {
+            schema: DISCRETE_SNAPSHOT_SCHEMA.to_string(),
+            spec: serde_json::from_value(rel_eval["model_bindings"]["spec"].clone()).unwrap(),
+            read_spec: serde_json::from_value(rel_eval["model_bindings"]["read_spec"].clone())
+                .unwrap(),
+            objective_policy: ObjectivePolicyRecord::NearestAddressMarginV1,
+            read_initialization: ReadInitializationRecord::ActiveLeafV1,
+            seed: 1,
+            epoch: 0,
+            table: vec![0; 131072],
+            routes: vec![0; 16384],
+            gates: vec![0; 45],
+            operator_kappa: "spiralcore_fbs_v1".to_string(),
+            composition_kappa: "g2_tree_v1".to_string(),
+            kernel_sha256: rel_eval["model_bindings"]["kernel_sha256"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+            source_sha256: rel_eval["model_bindings"]["source_sha256"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+            geometry_sha256: rel_eval["model_bindings"]["geometry_sha256"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        };
+        let typed_snap_sha = sha256_hex(&serde_json::to_vec(&typed_snapshot).unwrap());
+        let model_val = serde_json::to_value(&typed_snapshot).unwrap();
+        let value_model_sha = sha256_hex(&serde_json::to_vec(&model_val).unwrap());
+        assert_ne!(typed_snap_sha, value_model_sha);
+
+        let ckpt_rec = DriverCheckpointRecord {
+            schema: DRIVER_CHECKPOINT_SCHEMA.to_string(),
+            lineage: serde_json::from_value(rel_eval["evaluation_lineage"].clone()).unwrap(),
+            cursor: DriverCursorRecord {
+                completed_batches: 0,
+                accepted_updates: 0,
+                corpus_pass: 0,
+                next_target: 0,
+                next_coordinate: 0,
+            },
+            model_sha256: value_model_sha.clone(),
+            model: model_val,
+        };
+        let ckpt_sha = sha256_hex(&serde_json::to_vec(&ckpt_rec).unwrap());
+        let ckpt_pretty_bytes = serde_json::to_vec_pretty(&ckpt_rec).unwrap();
+        let ckpt_file_sha = sha256_hex(&ckpt_pretty_bytes);
+        assert_ne!(ckpt_file_sha, ckpt_sha);
+        assert_ne!(ckpt_sha, value_model_sha);
+        assert_ne!(ckpt_sha, typed_snap_sha);
+
+        let ckpt_path = tmp_dir.join("checkpoint.json");
+        fs::write(&ckpt_path, &ckpt_pretty_bytes).unwrap();
+
+        rel_eval["model_snapshot_sha256"] = json!(typed_snap_sha);
+        let rel_eval_sha = sha256_hex(&serde_json::to_vec(&rel_eval).unwrap());
+        rel_cap["checkpoint_file"] =
+            json!({"path": ckpt_path.to_string_lossy(), "sha256": ckpt_file_sha});
+        rel_cap["driver_checkpoint_sha256"] = json!(ckpt_sha);
+        rel_cap["evaluation_file"]["sha256"] = json!(rel_eval_sha);
 
         // Bare token_cells.u16 without sibling report.json must be refused.
-        let bare_err = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &snap_sha).unwrap_err();
+        let bare_err =
+            load_gpu_token_cells_file(&u16_path, &ckpt_sha, &typed_snap_sha).unwrap_err();
         assert!(
             bare_err.contains("without sibling report.json"),
             "{bare_err}"
@@ -4630,20 +5102,20 @@ mod tests {
             "schema": TOKEN_CELLS_RECEIPT_SCHEMA,
             "status": TOKEN_CELLS_RECEIPT_STATUS,
             "driver_checkpoint_sha256": ckpt_sha,
-            "model_snapshot_sha256": snap_sha,
+            "model_snapshot_sha256": value_model_sha,
             "updates_applied": 0,
             "snapshot_unchanged": true,
             "token_cells": cells
         });
         fs::write(&inline_json_path, serde_json::to_vec(&inline_val).unwrap()).unwrap();
         let inline_err =
-            load_gpu_token_cells_file(&inline_json_path, &ckpt_sha, &snap_sha).unwrap_err();
+            load_gpu_token_cells_file(&inline_json_path, &ckpt_sha, &typed_snap_sha).unwrap_err();
         assert!(
             inline_err.contains("inline token_cells are refused"),
             "{inline_err}"
         );
 
-        // Writing a valid #2601 sibling report.json succeeds and binds all receipt pins.
+        // Writing a valid #2601 sibling report.json (with Value model_snapshot_sha256) succeeds and binds all 4 checkpoint/model domains.
         let u16_sha = sha256_hex(&raw);
         let report_val = json!({
             "schema": TOKEN_CELLS_RECEIPT_SCHEMA,
@@ -4651,9 +5123,9 @@ mod tests {
             "config_file": rel_cap["config_file"],
             "config_sha256": rel_cap["config_sha256"],
             "lineage_sha256": rel_cap["lineage_sha256"],
-            "checkpoint_file": rel_cap["checkpoint_file"],
+            "checkpoint_file": {"path": ckpt_path.to_string_lossy(), "sha256": ckpt_file_sha},
             "driver_checkpoint_sha256": ckpt_sha,
-            "model_snapshot_sha256": snap_sha,
+            "model_snapshot_sha256": value_model_sha,
             "model_epoch": 0,
             "completed_batches": 0,
             "token_cells_file": {"path": u16_path.to_string_lossy(), "sha256": u16_sha},
@@ -4689,11 +5161,44 @@ mod tests {
         });
         let report_path = tmp_dir.join("report.json");
         fs::write(&report_path, serde_json::to_vec(&report_val).unwrap()).unwrap();
-        let loaded = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &snap_sha).unwrap();
+        let loaded = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &typed_snap_sha).unwrap();
         assert_eq!(loaded.occupied_cells, 256);
-        assert_eq!(
-            loaded.checkpoint_file_sha256,
-            rel_cap["checkpoint_file"]["sha256"].as_str().unwrap()
+        assert_eq!(loaded.checkpoint_file_sha256, ckpt_file_sha);
+        assert_eq!(loaded.driver_checkpoint_sha256, ckpt_sha);
+        assert_eq!(loaded.model_snapshot_sha256, value_model_sha);
+        assert_eq!(loaded.typed_model_snapshot_sha256, typed_snap_sha);
+
+        let arm = validate_arm_inputs(
+            &panel,
+            sha256_hex(b"p_sha"),
+            &rel_cap,
+            sha256_hex(b"rc_sha"),
+            &rel_eval,
+            rel_eval_sha,
+            &d34,
+            sha256_hex(b"d34_sha"),
+            false,
+        )
+        .unwrap();
+        let mut matches_gpu_arm = loaded.clone();
+        matches_gpu_arm.token_cells[7] = 0;
+        verify_loaded_token_cells_against_arm(&arm, &matches_gpu_arm, "test").unwrap();
+
+        // Tampering with eval.model_snapshot_sha256 (wrong typed snapshot hash) must be refused by load_gpu_token_cells_file.
+        let wrong_typed_err =
+            load_gpu_token_cells_file(&u16_path, &ckpt_sha, &value_model_sha).unwrap_err();
+        assert!(
+            wrong_typed_err.contains("typed model snapshot sha256"),
+            "{wrong_typed_err}"
+        );
+
+        // Removing the local checkpoint file without --checkpoint override must be refused.
+        fs::remove_file(&ckpt_path).unwrap();
+        let missing_local_ckpt_err =
+            load_gpu_token_cells_file(&u16_path, &ckpt_sha, &typed_snap_sha).unwrap_err();
+        assert!(
+            missing_local_ckpt_err.contains("cannot locate pinned DriverCheckpoint file"),
+            "{missing_local_ckpt_err}"
         );
 
         // Missing checkpoint_file in report.json must be refused.
@@ -4707,7 +5212,8 @@ mod tests {
             serde_json::to_vec(&missing_ckpt_report).unwrap(),
         )
         .unwrap();
-        let missing_err = load_gpu_token_cells_file(&u16_path, &ckpt_sha, &snap_sha).unwrap_err();
+        let missing_err =
+            load_gpu_token_cells_file(&u16_path, &ckpt_sha, &typed_snap_sha).unwrap_err();
         assert!(missing_err.contains("checkpoint_file"), "{missing_err}");
         let _ = fs::remove_dir_all(&tmp_dir);
     }
