@@ -366,10 +366,10 @@ never on a serving path, and no new comparator runs are permitted (D23).
 
 The [project map](docs/PROJECT_MAP.md) covers every crate and directory.
 
-**Repository statistics** (mostly multi-agent lab work, not a count of human contributors). About
-1,990 commits since 9 June 2026, 1,761 merged PRs and about 1.68M lines of Rust were counted on
-13 October 2026 and not re-counted since. Checked on 18 October 2026: 6,452 `#[test]` functions
-across `crates/` and `xtask/`; 12 open issues; decisions D0 to D39.
+**Repository statistics, 18 October 2026** (mostly multi-agent lab work, not a count of human contributors):
+2,130 merged PRs (1,000 in the last 30 days); about 1.97M lines of Rust; 9,704 `#[test]` functions;
+decisions D0 to D39; 12 open issues. Git history was consolidated on 18 October, so a commit count since
+9 June is not comparable to the earlier snapshot.
 
 </details>
 
