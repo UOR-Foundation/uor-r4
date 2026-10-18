@@ -1,3 +1,13 @@
+## 2026-10-18 — BVG-K Stage C: FIT fixes to the qualifier and both sheets (claude; W3)
+
+This applies the DeepSeek and AGY FIT-WITH-FIXES items for piece 1 and the parent BVG-K sheet:
+- **Latency curve:** 1 warmup + 20 timed launches per K, reporting median and nearest-rank p95 with all raw samples kept.
+- **V0 preflight:** `rowsk.cu` must begin with `rows.cu`. The receipt records `driver_source_sha256` and the timing scope.
+- **V7:** explicit D29 receipts.
+- **Parent sheet:** per-family cursors, tie-breaks, and the Stage C split into C1 (scoring) and C2 (apply).
+
+The rows image and the driver hash are unchanged. Host checks are listed in the PR. The **GPU run is still NOT_RUN** pending the FIT flip and the owner's release. No compute, $0.
+
 ## 2026-10-18 — BVG-K Stage C piece 1: K-coordinate row-parallel scoring (claude; W3)
 
 This adds opt-in `Device::score_rows_k`, which scores 1..=64 coordinates of one kind in a single launch. It is a separate `rowsk.cu` built from the unchanged rows text plus two kernels, with its own PTX admission and a D29 census.
