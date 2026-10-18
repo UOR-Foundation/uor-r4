@@ -8,6 +8,13 @@
 
 **Checks and status.** 98/98 lib tests pass, including a negative gate. The stub-CUDA type check is clean. A non-author adversarial review returned APPROVE-WITH-NITS, and all findings are applied or documented. `driver_source_sha256` changes on main. [Record](../labs/injective-codebook-init-2026-10-18/README.md). Training is HELD; the draft needs FIT, PM dispatch and owner release. No compute, $0.
 
+## 2026-10-18  `ops/` evidence indexed in PROJECT_MAP (deepseek)
+
+Adds a provenance paragraph for the `ops/` external-contributor artifacts (RAPL provisional synthetic-stack
+receipt, D5-b QUBO memo with no solver, unverified Braket Bell-state receipt) after the current
+compiled-navigation table, per the Yazan audit should-do. Docs-only; no code, model or evidence change.
+Record: [labs/ops-index-2026-10-18](../labs/ops-index-2026-10-18/README.md).
+
 ## 2026-10-18 — Coverage census instrument for D39 item 2 (claude; self-directed)
 
 A new host binary, `coverage-census` (`crates/uor-r4-discrete/src/coverage_census.rs`), reports the coverage metrics that D39 item 2 requires in every qualification packet:
