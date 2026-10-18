@@ -27,8 +27,9 @@ same-device, same-state, same-R-objective lanes/rows parity with **>16 occupied 
 actual R>0 row**, 25/25 controls plus `admit_ptx`, G-Pre, C-R1..C-R6,
 required refusal/terminal coverage, wrong-objective/broken-negative checks and zero apply.
 Retain all four checkpoint-0/Q4 × A/R timing cells, **100 samples each** plus
-one excluded warmup, unless explicitly waived. Author results in
-[PR #2658](https://github.com/UOR-Foundation/uor-r4/pull/2658) are not accepted readiness.
+one excluded warmup, unless explicitly waived. [PR #2658](https://github.com/UOR-Foundation/uor-r4/pull/2658) is merged; its
+source-scoped parity and five-sample diagnostic timings do not establish
+new-head qualification, the registered timing or packet acceptance.
 The separate K8 Relation/R successor is deferred planning, not an added K16 gate.
 The existing conditional release preserves qualification → accepted packet →
 training → fresh before KEEP; fresh execution is not a training-start gate.
