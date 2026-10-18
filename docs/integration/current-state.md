@@ -2,6 +2,34 @@
 
 The opt-in row-parallel `discrete_counterfactual` (owner: "Build now, Dose 1 runs on") passes finite GPU parity on an RTX 5090: 468/468 sweep cases (Route, Flock and Relation Gate), refusals, a forced status-8 batch and a forced lane break all match the ordinary kernel exactly, and the negative gate FAILs as required. At the Dose 1 shape (V4096/B4/C192/K8, 64 rows) a proposal takes 69–73 ms against 3.8–4.1 s, about **56–57×**, with identical losses. That derives to ~20 min per Dose 1 arm instead of ~19 h. The default path is unchanged and nothing is wired into training yet. About $0.30; [record](../labs/counterfactual-rows-parity-2026-10-18/README.md). Dose 1 is untouched. Training/M2/Stage B stay HELD. **Next:** opt-in `counterfactual_path` in the training driver (separate PR), then the owner decides whether to re-run Dose 1 on it.
 
+## 2026-10-18  Delivered M1/M4/harness branch claims cleanup (antigravity)
+
+Removes the stale committed branch claims for merged PRs #2565, #2573, #2604, #2605, #2611, #2617, #2618, #2620, and #2623 (`antigravity/*`, `kimi/optimization-path-2026-10-18`, `codex/cf1-attention-hash-domains`, `codex/cf1-attention-dose-packet`, and `claude/*`) from `docs/harness/claims.json` per `#2029` comments `6245248627` and `6245449740`. No code, model, or evidence change; coordination record only. Record: [labs/attention-cell-reference-scorer-2026-10-17](../labs/attention-cell-reference-scorer-2026-10-17/README.md).
+
+## 2026-10-18  PM coordination hygiene: stale DeepSeek claims removed (deepseek)
+
+While Kimi is rate-limited, DeepSeek is covering PM coordination. This removes 25 stale committed
+claims for already-merged DeepSeek branches (object-store series and wire follow-ups), removes the
+orphan local branch flagged by uor-harness check, and records the PM coordination note. No code,
+model or evidence change; no other lab's claims or files touched.
+Record: [labs/pm-coordination-2026-10-18](../labs/pm-coordination-2026-10-18/README.md).
+
+## 2026-10-18  Fork-safe interposer claims cleanup (deepseek)
+
+Removes the stale committed claim for the merged fork-safe interposer branch (#2625) and this cleanup branch from docs/harness/claims.json. No code, model or evidence change; coordination record only.
+
+## 2026-10-18  Interposer fork-safe close (wire side exploration; deepseek)
+
+Closes the Codex P1 residual on the merged wire side exploration: close no longer calls
+shutdown(SHUT_RDWR) (which disturbed fork-shared sockets). Receive is non-blocking chunked
+(MSG_DONTWAIT) with an atomic active re-check; recv/send/shutdown carry a per-fd generation guard;
+atfork child lock re-init and child skip-free windows; fork test covers close-wake and reused-fd
+connect, with an unsafe-build negative control that must exit 7. Checks: WIRE_INTERPOSER_PASS and
+WIRE_INTERPOSER_LINUX_PASS, both fork_ok=true negative_control=true. Trade-off documented (idle
+20 Hz polls; close can wait for current-frame decompression). No model compute.
+Record: [labs/spiralcore-wire-interposer-fork-safe-2026-10-18](../labs/spiralcore-wire-interposer-fork-safe-2026-10-18/README.md).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2625.
+
 ## 2026-10-18 — Claim-wording gate ported to Rust (claude)
 
 The claim-wording gate is now the `uor-r4-claim-wording` crate (D27): run `cargo run -q --locked -p uor-r4-claim-wording -- .` or `uor-harness claim-wording`. It is a line-for-line port of `scripts/check_claim_wording.py`. Its stdout and exit code are byte-identical to the script's on this repository and on a violation probe; the crate has 13 tests. The CI steps, the PR template, AGENTS/CONTRIBUTING, pm-rules, formal vocabulary §6 and the prlint checklist label now call the Rust gate. CI coverage is unchanged, including docs-only diffs in `fast-gate`. The Python script is retired, not deleted. [Record](../labs/claim-wording-rust-port-2026-10-18/README.md). No compute, $0. **Next:** none on this line; the retired script stays as dated evidence.
