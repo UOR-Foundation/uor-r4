@@ -24,4 +24,4 @@ Concurrent recv on one fd remains unsupported. close defers per-fd buffer reset 
 
 ## Next
 
-Exact-head review, protected merge, branch/worktree cleanup and hygiene. PR: (added after creation).
+Exact-head review, protected merge, branch/worktree cleanup and hygiene. PR: https://github.com/UOR-Foundation/uor-r4/pull/2621

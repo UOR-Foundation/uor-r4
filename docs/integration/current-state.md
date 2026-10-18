@@ -6,7 +6,7 @@ after a close, so a later connect on the reused fd could wait forever on `io_loc
 reset still happens on the next connect. Checks: `WIRE_INTERPOSER_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no
 model compute.
 Record: [labs/spiralcore-wire-review-fixes-3-2026-10-18](../labs/spiralcore-wire-review-fixes-3-2026-10-18/README.md).
-PR: (added after creation).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2621
 
 ## 2026-10-18  Wire review fixes round 2 (Codex findings on #2614; `deepseek/spiralcore-wire-review-fixes-2`)
 
