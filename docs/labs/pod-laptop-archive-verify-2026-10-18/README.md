@@ -16,9 +16,11 @@ default path, so this closes the remaining custody hole.
   digest of the sorted per-file manifest) in addition to `dest`/`kb`.
 - `reap` no longer deletes when `vast_archive` fails: it warns and retains the pod, leaving an
   operator to archive by hand and run `down --confirm-archived`.
-- The dry-run suite's fake SSH gains an `ARCHIVE_FILES=/ARCHIVE_SUM=` responder with a
-  `FAKE_ARCHIVE_MISMATCH=1` injection; a new case asserts `down` refuses and retains the pod on a
-  digest mismatch, and the existing success case asserts the verified ledger event.
+- The dry-run suite's fake SSH **executes the actual remote count/digest command** against the fake
+  workspace (with a `sha256sum` shim for macOS), not a synthesized answer, and supports
+  `FAKE_ARCHIVE_MISMATCH=1`; a new case asserts `down` refuses and retains the pod on a digest mismatch,
+  and the existing success case now has **two files** and asserts `verified:true, files:2` in the ledger.
+  This closes the review finding that the earlier stub masked a NUL-list `wc -l` count of 0.
 
 ## Verification (host-only, no pods, no model compute)
 

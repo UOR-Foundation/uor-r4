@@ -1516,13 +1516,13 @@ verify_laptop_archive() {  # POD DEST DIRS -> 0 when count and digest match
     echo "DRY-RUN: verify $pod archive count + SHA-256 manifest before any delete" >&2
     return 0
   fi
-  pod_line=$(pod_ssh "$pod" "cd /workspace && f=\$(mktemp) && find $have -type f -print0 > \$f && LC_ALL=C sort -z \$f -o \$f && echo ARCHIVE_FILES=\$(wc -l < \$f | tr -d ' ') && echo ARCHIVE_SUM=\$(xargs -0r sha256sum < \$f | sha256sum | cut -d' ' -f1) && rm -f \$f" </dev/null) ||
+  pod_line=$(pod_ssh "$pod" "cd /workspace && f=\$(mktemp) && find $have -type f -print0 > \$f && LC_ALL=C sort -z \$f -o \$f && echo ARCHIVE_FILES=\$(tr -cd '\000' < \$f | wc -c | tr -d ' ') && echo ARCHIVE_SUM=\$(xargs -0 sha256sum < \$f | sha256sum | cut -d' ' -f1) && rm -f \$f" </dev/null) ||
     { warn "cannot reach $pod over SSH to verify the laptop archive"; return 1; }
   pod_files=$(printf "%s\n" "$pod_line" | sed -n "s/^ARCHIVE_FILES=//p")
   pod_sum=$(printf "%s\n" "$pod_line" | sed -n "s/^ARCHIVE_SUM=//p")
   case $pod_files in ''|*[!0-9]*) warn "cannot count the results on $pod for archive verification"; return 1;; esac
   [ -n "$pod_sum" ] || { warn "cannot hash the results on $pod for archive verification"; return 1; }
-  local_files=$(cd "$dest" && find $have -type f | wc -l | tr -d " ")
+  local_files=$(cd "$dest" && find $have -type f -print0 | tr -cd '\000' | wc -c | tr -d " ")
   if command -v sha256sum >/dev/null 2>&1; then
     local_sum=$(cd "$dest" && find $have -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d" " -f1)
   else
