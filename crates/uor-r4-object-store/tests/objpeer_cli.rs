@@ -1,10 +1,13 @@
 //! The packaged objpeer CLI replicates a delta between two real processes over loopback.
 
-use std::io::{BufRead, BufReader, Read};
-use std::net::{TcpListener, TcpStream};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use uor_r4_object_store::{peer, Limits, Store};
 
@@ -916,6 +919,8 @@ fn packaged_cli_repair_restores_split_targets() {
         .arg("--addr")
         .arg(&addr2)
         .arg("--json")
+        .arg("--batch")
+        .arg("1024")
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
@@ -1088,4 +1093,193 @@ fn packaged_cli_pull_batch_flag_pulls_exactly() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert_eq!(std::fs::read(&out).unwrap(), payload);
+}
+
+#[test]
+fn packaged_cli_sync_batch_flag_pulls_exactly() {
+    let dir = tmp_dir("sync-batch");
+    let payload = (0..(512 * 1024))
+        .map(|i| (i % 251) as u8)
+        .collect::<Vec<u8>>();
+    let object = dir.join("object.bin");
+    std::fs::write(&object, &payload).unwrap();
+    let sha = sha_hex(&payload);
+    let (mut server, mut reader, addr, _lines) =
+        spawn_serve_many(&dir.join("server.store"), &[&object], 1);
+    let targets = dir.join("targets.txt");
+    std::fs::write(&targets, format!("{}\n", sha)).unwrap();
+    let out_dir = dir.join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+        .arg("sync")
+        .arg("--store")
+        .arg(dir.join("client.store"))
+        .arg("--addr")
+        .arg(&addr)
+        .arg("--targets")
+        .arg(&targets)
+        .arg("--out-dir")
+        .arg(&out_dir)
+        .arg("--batch")
+        .arg("1024")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "sync --batch failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(out_dir.join(format!("{}.bin", sha))).unwrap(),
+        payload
+    );
+    let _ = server.wait();
+    let mut rest = String::new();
+    reader.read_to_string(&mut rest).ok();
+}
+
+#[test]
+fn packaged_cli_rejects_flags_that_the_subcommand_ignores() {
+    let cases: [(&[&str], &str); 5] = [
+        (
+            &["verify", "--store", "unused", "--batch", "8"],
+            "--batch applies only to pull, sync and repair",
+        ),
+        (
+            &["pull", "--store", "unused", "--sessions", "2"],
+            "--sessions/--concurrent apply only to serve",
+        ),
+        (
+            &["join", "--store", "unused", "--concurrent"],
+            "--sessions/--concurrent apply only to serve",
+        ),
+        (
+            &["verify", "--store", "unused", "--fetch-window", "4"],
+            "--fetch-window applies only to pull, sync and repair",
+        ),
+        (
+            &["pull", "--store", "unused", "--fetch-window", "0"],
+            "--fetch-window must be 1..=64",
+        ),
+    ];
+    for (args, needle) in cases {
+        let out = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "args {args:?}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains(needle), "args {args:?}: {stderr}");
+    }
+}
+
+fn forward_delayed(mut from: TcpStream, mut to: TcpStream, delay: Duration, bytes: Arc<AtomicU64>) {
+    let _ = from.set_read_timeout(Some(Duration::from_secs(10)));
+    let mut buf = [0u8; 65536];
+    loop {
+        match from.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                bytes.fetch_add(n as u64, Ordering::Relaxed);
+                if !delay.is_zero() {
+                    thread::sleep(delay);
+                }
+                if to.write_all(&buf[..n]).is_err() {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    let _ = to.shutdown(Shutdown::Both);
+}
+
+/// A small full-duplex TCP relay that sleeps delay per forwarded chunk, standing in for RTT.
+fn delayed_proxy(
+    upstream: String,
+    delay: Duration,
+    connections: usize,
+) -> (String, Arc<AtomicU64>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind proxy");
+    let addr = listener.local_addr().expect("proxy addr").to_string();
+    let bytes = Arc::new(AtomicU64::new(0));
+    let counter = bytes.clone();
+    let handle = thread::spawn(move || {
+        for _ in 0..connections {
+            let (client, _) = listener.accept().expect("accept proxy");
+            let upstream = TcpStream::connect(&upstream).expect("proxy upstream");
+            let (client_reader, client_writer) = (client.try_clone().unwrap(), client);
+            let (upstream_reader, upstream_writer) = (upstream.try_clone().unwrap(), upstream);
+            let a = counter.clone();
+            let to_up =
+                thread::spawn(move || forward_delayed(client_reader, upstream_writer, delay, a));
+            let b = counter.clone();
+            let to_client =
+                thread::spawn(move || forward_delayed(upstream_reader, client_writer, delay, b));
+            let _ = to_up.join();
+            let _ = to_client.join();
+        }
+    });
+    (addr, bytes, handle)
+}
+
+#[test]
+fn packaged_cli_fetch_window_pipelines_under_latency() {
+    let dir = tmp_dir("pipeline");
+    let payload = atoms(8192, 301);
+    let object = dir.join("object.bin");
+    std::fs::write(&object, &payload).unwrap();
+    let sha = sha_hex(&payload);
+    let entries = [(128usize, 1usize), (128, 4), (128, 8), (1024, 4)];
+    let (mut server, mut reader, upstream, _) =
+        spawn_serve_many(&dir.join("server.store"), &[&object], entries.len());
+    let (proxy, bytes, handle) = delayed_proxy(upstream, Duration::from_millis(8), entries.len());
+    let mut measured: Vec<(usize, usize, f64)> = Vec::new();
+    for (batch, window) in entries {
+        let out = dir.join(format!("out-{}-{}.bin", batch, window));
+        let client = dir.join(format!("client-{}-{}.store", batch, window));
+        let started = Instant::now();
+        let result = Command::new(env!("CARGO_BIN_EXE_objpeer"))
+            .arg("pull")
+            .arg("--store")
+            .arg(&client)
+            .arg("--addr")
+            .arg(&proxy)
+            .arg("--select-sha256")
+            .arg(&sha)
+            .arg("--batch")
+            .arg(batch.to_string())
+            .arg("--fetch-window")
+            .arg(window.to_string())
+            .arg("--out")
+            .arg(&out)
+            .output()
+            .unwrap();
+        let seconds = started.elapsed().as_secs_f64();
+        assert!(
+            result.status.success(),
+            "pull batch={batch} window={window} failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(std::fs::read(&out).unwrap(), payload);
+        println!("PIPELINE batch={batch} window={window} secs={seconds:.3}");
+        measured.push((batch, window, seconds));
+    }
+    handle.join().unwrap();
+    let lockstep = measured
+        .iter()
+        .find(|(batch, window, _)| *batch == 128 && *window == 1)
+        .map(|(_, _, seconds)| *seconds)
+        .unwrap();
+    for (batch, window, seconds) in &measured {
+        if *batch == 128 && *window > 1 {
+            assert!(
+                *seconds < lockstep * 0.75,
+                "window {window} ({seconds:.3}s) did not beat lock-step ({lockstep:.3}s) by 25%"
+            );
+        }
+    }
+    println!("PIPELINE_PROXY_BYTES={}", bytes.load(Ordering::Relaxed));
+    let _ = server.wait();
+    let mut sink = String::new();
+    reader.read_to_string(&mut sink).ok();
 }

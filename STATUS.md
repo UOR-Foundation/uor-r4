@@ -1,6 +1,6 @@
 # Status
 
-**Active dependency — learned native attention, 17 October:** the interleaved
+**Active dependency — learned native attention, 18 October:** the interleaved
 Relation learning path and its checkpoint/preflight runner are delivered in
 #2575/#2582, with construction evidence at their recorded sources. An attributable
 learned-attention result is still NOT_RUN. The
@@ -21,12 +21,17 @@ remains construction-only. The [Dose 1 packet](docs/labs/attention-dose1-packet-
 is source/metadata frozen with actual disjoint FreshV2 metadata and posted
 internal independent reviews; AGY's confined verdict and Kimi's actual dispatch
 are recorded in the [dispatch record](docs/labs/attention-dose1-dispatch-2026-10-18/README.md).
-That dispatch then ran: under the owner's launch delegation both arms started at
-03:48:36Z/03:48:38Z and were owner-stopped after 904/1,065 contiguous batches,
-below Q1; attribution is OWNER_STOPPED_STRATEGIC, not a source or mechanism
-negative. Custody is verified and the pod is down; the original attempt is
-consumed and the separate `rows_v1` successor is released. No completed dose,
-learned result or fresh transfer exists. Training/M2/StageB remain HELD;
+The original packet ran at23d5, then was [strategically stopped](docs/labs/attention-dose1-strategic-stop-2026-10-18/README.md)
+at904/1065 batches under the owner's instruction after reviewed rows-driver delivery.
+Q1 was not reached; both raw143 exits and all partials are preserved, full data/operator
+custody preceded down05:16:47Z, and separate closure has independent acceptance6246074493.
+Attribution is OWNER_STOPPED_STRATEGIC, not a source or mechanism negative.
+No completed learned result, final same-cell attribution, fresh transfer, KEEP,
+mechanism negative or count reset follows; count0/3 and reply37/232 SUSPENDED remain.
+The separate `rows_v1` successor (source20d, packet1376/01833fa7) was owner-released
+under6246440910 with a new pod and proceeds under its own release; its outcome is not
+claimed here.
+Training/M2/StageB remain HELD;
 Q4 NOT_EXECUTABLE. The earlier pilot below retains its measured scope.
 
 **Current result — D32/D33, 14 October:** the admitted seed-1 discrete pilot

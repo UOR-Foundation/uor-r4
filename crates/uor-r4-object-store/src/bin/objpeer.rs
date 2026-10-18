@@ -118,7 +118,7 @@ enum RepairStatus {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        die("usage: objpeer info|serve|pull|verify [--store S] [--object F ...] [--have F] [--bind A] [--addr A] [--out F] [--select-sha256 HEX] [--expect-sha256 HEX] [--expect-version HEX] [--expect-bytes N] [--batch N] [--sessions N] [--concurrent]");
+        die("usage: objpeer info|serve|pull|verify|join|sync|repair [--store S] [--object F ...] [--have F] [--bind A] [--addr A] [--out F] [--targets F] [--out-dir D] [--select-sha256 HEX] [--expect-sha256 HEX] [--expect-version HEX] [--expect-bytes N] [--retries N] [--json] [--batch N] [--fetch-window N] (pull/sync/repair) [--sessions N] [--concurrent] (serve)");
     }
     let mut store_path = String::from("objpeer.store");
     let mut objects: Vec<String> = Vec::new();
@@ -128,6 +128,8 @@ fn main() {
     let mut out = String::new();
     let mut sessions: usize = 1;
     let mut concurrent = false;
+    let mut sessions_given = false;
+    let mut concurrent_given = false;
     let mut expect_sha: Option<[u8; 32]> = None;
     let mut expect_version: Option<[u8; 32]> = None;
     let mut expect_bytes: Option<u64> = None;
@@ -137,12 +139,15 @@ fn main() {
     let mut select_shas: Vec<[u8; 32]> = Vec::new();
     let mut retries: usize = 0;
     let mut batch: Option<usize> = None;
+    let mut fetch_window: usize = peer::DEFAULT_FETCH_WINDOW;
+    let mut fetch_window_given = false;
     let mut i = 2usize;
     while i < args.len() {
         let key = args[i].clone();
         i += 1;
         if key == "--concurrent" {
             concurrent = true;
+            concurrent_given = true;
             continue;
         }
         if key == "--json" {
@@ -171,13 +176,33 @@ fn main() {
                 expect_bytes = Some(value.parse().unwrap_or_else(|_| die("bad --expect-bytes")))
             }
             "--select-sha256" => select_shas.push(hex32(&value)),
-            "--sessions" => sessions = value.parse().unwrap_or_else(|_| die("bad --sessions")),
+            "--sessions" => {
+                sessions = value.parse().unwrap_or_else(|_| die("bad --sessions"));
+                sessions_given = true;
+            }
             "--batch" => batch = Some(value.parse().unwrap_or_else(|_| die("bad --batch"))),
+            "--fetch-window" => {
+                fetch_window = value.parse().unwrap_or_else(|_| die("bad --fetch-window"));
+                fetch_window_given = true;
+            }
             other => die(&format!("unknown argument {}", other)),
         }
     }
+    let command = args[1].as_str();
+    if batch.is_some() && !matches!(command, "pull" | "sync" | "repair") {
+        die("--batch applies only to pull, sync and repair");
+    }
+    if (sessions_given || concurrent_given) && command != "serve" {
+        die("--sessions/--concurrent apply only to serve");
+    }
+    if fetch_window_given && !matches!(command, "pull" | "sync" | "repair") {
+        die("--fetch-window applies only to pull, sync and repair");
+    }
+    if !matches!(fetch_window, 1..=64) {
+        die("--fetch-window must be 1..=64");
+    }
     let addr = addrs.first().cloned().unwrap_or_default();
-    match args[1].as_str() {
+    match command {
         "join" => {
             let object = objects
                 .first()
@@ -355,8 +380,14 @@ fn main() {
                             inner: stream,
                             bytes: 0,
                         };
-                        let results =
-                            peer::pull_series(&mut store, &requests, &mut reader, &mut writer)?;
+                        let results = peer::pull_series_with_batch_window(
+                            &mut store,
+                            &requests,
+                            batch,
+                            fetch_window,
+                            &mut reader,
+                            &mut writer,
+                        )?;
                         Ok((results, reader.bytes + writer.bytes))
                     })();
                     match outcome {
@@ -835,9 +866,11 @@ fn main() {
                                 inner: stream,
                                 bytes: 0,
                             };
-                            let results = peer::pull_series(
+                            let results = peer::pull_series_with_batch_window(
                                 &mut store,
                                 &pull_requests,
+                                batch,
+                                fetch_window,
                                 &mut reader,
                                 &mut writer,
                             )?;
@@ -969,18 +1002,20 @@ fn main() {
                         };
                         let selector = select_shas.first().copied();
                         let (manifest, stats) = match batch {
-                            Some(size) => peer::pull_selected_with_batch(
+                            Some(size) => peer::pull_selected_with_batch_window(
                                 &mut store,
                                 expected,
                                 selector,
                                 size,
+                                fetch_window,
                                 &mut reader,
                                 &mut writer,
                             )?,
-                            None => peer::pull_selected(
+                            None => peer::pull_selected_with_window(
                                 &mut store,
                                 expected,
                                 selector,
+                                fetch_window,
                                 &mut reader,
                                 &mut writer,
                             )?,

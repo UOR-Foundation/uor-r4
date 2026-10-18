@@ -1,6 +1,168 @@
 ## 2026-10-18 — Original Dose 1 owner-stopped after 904/1,065 batches; custody verified; rows_v1 successor released separately (kimi)
 
 The [dispatch record](../labs/attention-dose1-dispatch-2026-10-18/README.md) binds the actual PM receipt [#2029 `6244964455`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6244964455) and `DISPATCH_VALID` [#2029 `6244978507`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6244978507): private `dispatch.json` `4f7681690f0ded838f8793a64117f3fdd96f2bf5464b2803730eb12f4fa543bb`, static manifest `5d5481cd6c19513c316d1f7144257bcf623b0c660afb0fb9c34f9052c0fb7c44` (234/234 read-only `shasum -c` pass), AGY verdict bytes `e3209a2a…`, source `23d5b146`, sheet `84481400…`, driver `9538f5c3…`, FIT `6230317153`, owner resolutions `6236444507` and attempt `uor-cf1-dose1-ac60c495ec8d601b267319b8cf548910`. Allocation is **CONFIRMED** at `vast-56488188` (`runtime-allocation.json` `1f1ed8db…58515`, two GPUs `[0,1]`, quote USD `1.893688888888889`/h total, a quote not an invoice, storage/transfer `UNMEASURED`); the RELEASE build is **metadata verified** (`RELEASE_BUILT_METADATA_VERIFIED`, exit 0, shared `8,099,440`-byte ELF `1f7dd526…dbb3`, source `64e4846374…`, kernel `5cd0e732…`, geometry `46ddbb76…`, no CUDA context); AGY approved **both** arms (`6245205468`), finalize exited 0 with final typed plans `e8d25b21…0297`/`a8b76562…8de40`, and both `attention-check-plan` entries are `PLAN_METADATA_VALID` with `owner_release` then `STILL_REQUIRED`. The owner then delegated the launch ([`6245307092`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245307092)) and both arms started at 03:48:36Z/03:48:38Z ([`6245367341`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245367341)). The owner chose **“Stop it; rerun on the fast path”** ([`6245711750`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6245711750)); the run stopped after contiguous **904 treatment / 1,065 frozen-zero batches**, both below Q1 4,096, with native ends `04:58:38Z`/`04:58:40Z` and raw `COMMAND_FAILED_TERMINAL`/exit 143, independently attributed **OWNER_STOPPED_STRATEGIC** — not source failure, mechanism negative, Q1 diagnosis or KEEP. **Q1 NOT_REACHED_BOTH; dose NOT_COMPLETED; final maps/224 capture/fresh NOT_RUN; scientific verdict NOT_ISSUED**; the original dispatch is consumed. Custody was accepted ([`6246074493`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246074493)): 198 regular members/237,872,396 bytes; data `25,345,536`/MD5 `ec029a201130ab41b3cd89b3cc6355de` and late operator `143,634,944`/MD5 `a75a23a70ab438e46f399a96df39ad8e` verified before teardown; down 05:16:47Z; after-down closure `4,026,880`/MD5 `fb4a4a264408c44ae61fbad5559a7e05` read back 05:23:37Z; local closure record `c5ca0f6a…8274e`. The separate `rows_v1` successor was owner-released ([`6246440910`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246440910)) with packet `01833fa7…`, source `20d158ae…` and new pod `vast-56510253`; its outcome is not claimed here. No result, completed dose or count reset follows; `$0` for this record. **Next:** the successor proceeds under its own release; this attempt remains consumed.
+## 2026-10-18 — D37 harness propagation: prep rules, PM rules, plan and optimization record (kimi)
+
+Mechanically propagates the merged [D37](DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised) owner decision into the harness and current-authority documents; no new permission and no reinterpretation. `docs/harness/milestones.json` now scopes the D32 summary to the active discrete path/Dose 1 and adds an all-scope D37 rule sourced to `DECISIONS.md`; `crates/uor-r4-harness/src/prep.rs` and `scripts/harness/prep.py` both carry ten applicable rules including D37. `docs/harness/pm-rules.md` R5 pins policy schema `/7` and the serving float/transcendental/multiplier false commitments; R13 governs the active discrete path only, with a separate D37 offline float lane under R12/D31 that cannot weaken discrete exact instruments; that lane must remain geometric (SpiralCore/E8/FBS, icosian/quaternion, prime/zeta) and use its own scanned allowlist entry, added/reviewed with the pre-registration and never widening the discrete crate scan. `.kimi-code/AGENTS.md`, `docs/integration/project-track.md` and the [optimization path record](../labs/optimization-path-2026-10-18/README.md) now state offline float is legal only under D37 in such a separately scanned geometric module; dense matrix products, squashing, D11 serving, Dose 1 and all holds are unchanged. No model compute, pods or source-behavior change; $0. Checks: prep tests PASS, parity PASS under Python 3.12 (the system Python 3.9 reproduces only the pre-existing brief-receipts mismatch), `uor-harness check` exit 0 (0 errors; 87 + 1 at review, 86 + 1 pre-merge, 79 + 1 merged; live peer state), `prep-render` contains D37 and no stale D25-supersession sentence, policy check PASS, ratchets d23/d25/d32 at baseline, claim wording, fmt and `git diff --check` PASS. Record: [labs/d37-harness-propagation-2026-10-18](../labs/d37-harness-propagation-2026-10-18/README.md). **Next:** independent exact-head review and protected PM delivery; Dose 1 dispatch/decision remains the path dependency.
+
+## 2026-10-18  Fifth DeepSeek claims cleanup (deepseek)
+
+Removes the merged #2641 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
+
+## 2026-10-18  Cold-join benchmark: tools/cold_join.sh (deepseek)
+
+Adds the end-to-end cold-join benchmark requested by the join record: cold store pull vs gzip
+download + local decompress + pinned join, then a warm delta, with real PULL_STATS/JOIN fields and
+fail-closed checks. Host-only loopback, 2 MiB single runs: text cold pull 33,777 B vs gzip 7,223 B
+(warm delta 252 B / 0 nodes); random cold pull 5,734,720 B vs gzip 2,097,823 B (ratio 1.00032),
+confirming the earlier incidental cold-pull figure. No protocol change, no model compute.
+Record: [labs/object-store-join-2026-10-17](../labs/object-store-join-2026-10-17/README.md).
+PR: (added after creation).
+
+## 2026-10-18 — Post-dose drafts: batched verified coordinates (BVG-K) and decode tokens/s baseline (claude)
+
+These two DRAFT prep sheets are not registered: no FIT is requested and no compute runs ($0). Each is to be registered after the fast-path Dose 1 decision. [BVG-K](../harness/prep/m1-batched-verified-coordinates-DRAFT-2026-10-18.md) is path step 3, the batched-coordinate learning-law change. Each batch scores K same-kind coordinates in one row-parallel launch and commits the better of the jointly verified set and the single best move, so each batch's loss can only fall. K = 1 is a bitwise rollback identity. The read share is preserved per coordinate, and the cursor gains a coordinate ordinal plus `committed_moves`. Arms are K = 1/4/16 at equal wall clock, with target-tokens/s as the lead metric. It was revised after an adversarial reviewer-subagent round (10 findings). [Decode tokens/s](../harness/prep/m1-decode-tokens-per-second-DRAFT-2026-10-18.md) is the optimization rung's missing baseline (owner metric: decode speed against context), drafted for Kimi's measurement-plan seat. **Next:** fast-path Dose 1 outcome; then register C1, BVG-K and decode against its decision.
+
+## 2026-10-18 — K16 draft source preserved inactive; no timing prerequisite (Codex)
+
+The unique draft2571 count-hardening source at `a3d8ca2d38f5fb2925e02ef7e7c09c8ead98323a` is retained as an exact six-file inactive patch plus metadata/INDEX row; isolated-index application to based325 restores the entire original tree `9e7208093cbd950a64ea2d31e37a07a760cc0f31`. Source-only review6229329805 remains distinct from construction/tests, the unresolved100-batch bridge and timing/model work, all NOT_RUN; historical disk shortage is not a current blocker or new programme. No active instrument, frozen timing3/binary, scientific bar or count changes: **count0/3, reply37/232 SUSPENDED**, no KEEP/negative/reset. [Canonical inactive record](../labs/k16-inactive-archive-2026-10-18/README.md). **Next:** protected archive delivery/restoration proof, then close2571 and clean only its preserved owned transport; this does not block the rows successor or issue a timing release.
+
+## 2026-10-18  Fourth DeepSeek claims cleanup (deepseek)
+
+Removes the merged #2638 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
+
+## 2026-10-18  Object-store pipelined FETCH window (deepseek)
+
+Follow-up to #2607: `pull` was strict lock-step per chunk, so batch tuning still left one RTT per
+chunk. `pull_one` now pipelines FETCH frames in a bounded window (default 4; window 1 is the old
+lock-step path), exposed as `objpeer --fetch-window 1..=64` on pull/sync/repair and rejected
+elsewhere. Host-only delay-proxy matrix: 3.706 s lock-step vs 1.902 s window 4 vs 1.324 s window 8 at
+batch 128, byte-identical output; package 61 passed / 0 failed, clippy clean. No protocol change, no
+model compute. Record: [labs/object-store-pipelined-fetch-2026-10-18](../labs/object-store-pipelined-fetch-2026-10-18/README.md).
+PR: (added after creation).
+
+## 2026-10-18 — Original Dose1 strategically stopped; partials and closure independently accepted (Codex)
+
+After reviewed rows-driver delivery, the owner's strategic stop ended the original source23d5 paired dose at **904/1065 batches**, before Q1; both raw wrapper/native exits143 remain preserved with separate OWNER_STOPPED_STRATEGIC provenance. Full original-data and late-operator SHA/cloud custody preceded own down at05:16:47Z; the separate after-down closure is also verified, with genuine independent actual-outcome approval [6246074493](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6246074493). No completed dose, final device maps/224 captures, fresh scoring, KEEP, mechanism negative or count reset follows: **count0/3, reply37/232 SUSPENDED**. [Canonical result and sanitized evidence](../labs/attention-dose1-strategic-stop-2026-10-18/README.md). **Next:** whole-packet review and new applicable owner release for the source20d rows successor; its1376-member/01833fa7 static packet is source/metadata preparation, NOT_READY/NOT_RELEASED/NOT_RUN.
+
+## 2026-10-18  Third DeepSeek claims cleanup (deepseek)
+
+Removes the merged #2635 claim and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
+
+## 2026-10-18  Object-store batch plumbing for sync/repair (deepseek)
+
+Follow-up to #2607: objpeer --batch was silently ignored by sync and repair (pull_series hardcoded
+the default). Added pull_series_with_batch, passed batch through sync/repair, rejected flags a
+subcommand ignores, and listed the real subcommands in usage. Tests: sync --batch and repair --batch
+end-to-end plus three rejection cases; package 60 passed / 0 failed, clippy clean. Host-only, no model
+compute. Record: [labs/object-store-batch-plumbing-2026-10-18](../labs/object-store-batch-plumbing-2026-10-18/README.md).
+PR: (added after creation).
+
+## 2026-10-18  Final DeepSeek claims cleanup (deepseek)
+
+Removes the two merged delivery claims (#2629, #2633) and the cleanup branch claim from docs/harness/claims.json. Coordination only; no code/model/evidence change.
+
+## 2026-10-18  Wire matrix reproducibility and claim correction (deepseek)
+
+Fixes evidence defects at the edge of the merged wire side exploration: the three adapter legs now
+resolve objpeer repo-relatively (or via OBJPEER) and fail with the build command instead of hardcoding
+the owner checkout; the matrix preflights objpeer and gains --list (18 legs); and the 15/15 vs 13/13 vs
+18/18 counts plus the absent-tool VERIFY_ALL_PASS/EVIDENCE_OK claims are corrected. Re-measured full
+matrix on main 03d82fb7b: WIRE_MATRIX_RESULT pass=18 fail=0. Host-only, no model compute.
+Record: [labs/wire-matrix-repro-2026-10-18](../labs/wire-matrix-repro-2026-10-18/README.md).
+PR: (added after creation).
+
+## 2026-10-18  Pod store read-back before down (deepseek)
+
+`uor-pod down --to-store` now reads every Vast result upload back before it may destroy the pod:
+file count plus a SHA-256 manifest sidecar must match, otherwise down aborts with the pod retained.
+Dry-run suite 368 passed / 0 failed, including an injected short-upload failure case. Host-only,
+no pods or model compute. Record: [labs/pod-store-readback-2026-10-18](../labs/pod-store-readback-2026-10-18/README.md).
+PR: #2629.
+
+## 2026-10-18 — Row-parallel parity attempt 3: complete inventories PASS (claude; Codex findings fixed)
+
+Codex found two problems in the parity suite: the racy-refusal retries discarded CUDA faults and other outcome classes, outside the state check, and the Route-mode sweep covered only indices `0..blocks`. Both are fixed. Attempt 3 on a fresh RTX 5090 passes **1,080/1,080** cases, including all 684 Route/VectorBlock inventory cases, plus refusals and forced terminals; the negative gate FAILs as required; timing reproduces at ~56×. Attempts 1–2 keep their subset scope, and the record notes that #2630 merged before the findings were read. [Record](../labs/counterfactual-rows-parity-2026-10-18/README.md). About $0.25. **Next:** Codex re-issues fast-path Dose 1 citing attempt 3.
+
+## 2026-10-18 — Training driver: opt-in `counterfactual_path = rows_v1` (claude)
+
+`DriverConfig.counterfactual_path` now routes `propose_next` and `transition` through the row-parallel exact counterfactual from #2630 (identical losses, ~56× faster). The default `lanes_v1` is never serialized, so existing config hashes are unchanged; driver source identity changes for new runs. This is the prerequisite for the owner's decision to stop Dose 1 and rerun it on the fast path. [Record](../labs/driver-rows-path-2026-10-18/README.md). No compute, $0. **Next:** Codex stops Dose 1 under its own lease and re-issues the packet with `rows_v1` on this head; Claude takes the review seat; the owner releases dispatch.
+
+## 2026-10-18 — Row-parallel exact counterfactual: GPU parity PASS, ~56× faster proposals (claude)
+
+The opt-in row-parallel `discrete_counterfactual` (owner: "Build now, Dose 1 runs on") passes finite GPU parity on an RTX 5090: 468/468 sweep cases (Route, Flock and Relation Gate), refusals, a forced status-8 batch and a forced lane break all match the ordinary kernel exactly, and the negative gate FAILs as required. At the Dose 1 shape (V4096/B4/C192/K8, 64 rows) a proposal takes 69–73 ms against 3.8–4.1 s, about **56–57×**, with identical losses. That derives to ~20 min per Dose 1 arm instead of ~19 h. The default path is unchanged and nothing is wired into training yet. About $0.30; [record](../labs/counterfactual-rows-parity-2026-10-18/README.md). Dose 1 is untouched. Training/M2/Stage B stay HELD. **Next:** opt-in `counterfactual_path` in the training driver (separate PR), then the owner decides whether to re-run Dose 1 on it.
+
+## 2026-10-18  Delivered M1/M4/harness branch claims cleanup (antigravity)
+
+Removes the stale committed branch claims for merged PRs #2565, #2573, #2604, #2605, #2611, #2617, #2618, #2620, and #2623 (`antigravity/*`, `kimi/optimization-path-2026-10-18`, `codex/cf1-attention-hash-domains`, `codex/cf1-attention-dose-packet`, and `claude/*`) from `docs/harness/claims.json` per `#2029` comments `6245248627` and `6245449740`. No code, model, or evidence change; coordination record only. Record: [labs/attention-cell-reference-scorer-2026-10-17](../labs/attention-cell-reference-scorer-2026-10-17/README.md).
+
+## 2026-10-18  PM coordination hygiene: stale DeepSeek claims removed (deepseek)
+
+While Kimi is rate-limited, DeepSeek is covering PM coordination. This removes 25 stale committed
+claims for already-merged DeepSeek branches (object-store series and wire follow-ups), removes the
+orphan local branch flagged by uor-harness check, and records the PM coordination note. No code,
+model or evidence change; no other lab's claims or files touched.
+Record: [labs/pm-coordination-2026-10-18](../labs/pm-coordination-2026-10-18/README.md).
+
+## 2026-10-18  Fork-safe interposer claims cleanup (deepseek)
+
+Removes the stale committed claim for the merged fork-safe interposer branch (#2625) and this cleanup branch from docs/harness/claims.json. No code, model or evidence change; coordination record only.
+
+## 2026-10-18  Interposer fork-safe close (wire side exploration; deepseek)
+
+Closes the Codex P1 residual on the merged wire side exploration: close no longer calls
+shutdown(SHUT_RDWR) (which disturbed fork-shared sockets). Receive is non-blocking chunked
+(MSG_DONTWAIT) with an atomic active re-check; recv/send/shutdown carry a per-fd generation guard;
+atfork child lock re-init and child skip-free windows; fork test covers close-wake and reused-fd
+connect, with an unsafe-build negative control that must exit 7. Checks: WIRE_INTERPOSER_PASS and
+WIRE_INTERPOSER_LINUX_PASS, both fork_ok=true negative_control=true. Trade-off documented (idle
+20 Hz polls; close can wait for current-frame decompression). No model compute.
+Record: [labs/spiralcore-wire-interposer-fork-safe-2026-10-18](../labs/spiralcore-wire-interposer-fork-safe-2026-10-18/README.md).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2625.
+
+## 2026-10-18 — Claim-wording gate ported to Rust (claude)
+
+The claim-wording gate is now the `uor-r4-claim-wording` crate (D27): run `cargo run -q --locked -p uor-r4-claim-wording -- .` or `uor-harness claim-wording`. It is a line-for-line port of `scripts/check_claim_wording.py`. Its stdout and exit code are byte-identical to the script's on this repository and on a violation probe; the crate has 13 tests. The CI steps, the PR template, AGENTS/CONTRIBUTING, pm-rules, formal vocabulary §6 and the prlint checklist label now call the Rust gate. CI coverage is unchanged, including docs-only diffs in `fast-gate`. The Python script is retired, not deleted. [Record](../labs/claim-wording-rust-port-2026-10-18/README.md). No compute, $0. **Next:** none on this line; the retired script stays as dated evidence.
+
+## 2026-10-18 — C1 DRAFT sheet shape repaired (claude, Kimi's repair)
+
+The C1 DRAFT (`docs/harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md`, #2620) had no D22 blocks and no verdict line. That failed `prep.sheet_shape` and `prep::tests::the_real_sheets_are_readable` on main. This applies Kimi's repair (`9c60bb154`, which Kimi had not pushed before going offline): the eight blocks are marked NOT_REGISTERED/NOT_RUN at $0, plus `TEST FITNESS: PENDING`. Nothing is registered, and no bar, control, source or hold changes. `uor-harness check` reports 0 errors, and the test passes. **Next:** merge-forward #2623 (claim-wording Rust port) onto this.
+
+## 2026-10-18  Final wire claims cleanup (deepseek)
+
+Removes the stale committed claims left by the merged wire side-exploration PRs (#2613, #2614, #2619, #2621) and this cleanup branch from docs/harness/claims.json. No code, model, evidence or dispatch change; coordination record only.
+
+## 2026-10-18  Wire review fixes round 3 (Codex finding on #2619; `deepseek/spiralcore-wire-review-fixes-3`)
+
+Codex reviewed #2619 at `5d6ecdd62` and reported one P1: a blocking `recv` can remain asleep on Linux
+after a close, so a later connect on the reused fd could wait forever on `io_lock`. `close` now issues
+`shutdown(fd, SHUT_RDWR)` after marking the fd inactive and before `sys_close`, waking the receive; buffer
+reset still happens on the next connect. Checks: `WIRE_INTERPOSER_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no
+model compute.
+Record: [labs/spiralcore-wire-review-fixes-3-2026-10-18](../labs/spiralcore-wire-review-fixes-3-2026-10-18/README.md).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2621
+
+## 2026-10-18  Wire review fixes round 2 (Codex findings on #2614; `deepseek/spiralcore-wire-review-fixes-2`)
+
+Codex reviewed #2614 at `448a9cb4f` and reported three P1s plus one P2; all addressed here. Interposer:
+`connect` waits on `io_lock` before resetting a reused fd, closing the fd-reuse-vs-blocked-recv race.
+Mux: streams are registered before their reader starts, and half-closed streams stay registered until
+both client FIN and target EOF (`input_done` + `output_done`). Linux smoke: brace-safe default for an
+unset `WIRE_SMOKE_WORK` under `set -u`. Worktree checks: `WIRE_INTERPOSER_PASS`, `WIRE_MUX_PASS`,
+`WIRE_MUX_ROUTING_PASS`, `WIRE_INTERPOSER_LINUX_PASS`; no model compute.
+Record: [labs/spiralcore-wire-review-fixes-2-2026-10-18](../labs/spiralcore-wire-review-fixes-2-2026-10-18/README.md).
+PR: https://github.com/UOR-Foundation/uor-r4/pull/2619
+
+## 2026-10-18 — C1 flock-coupling draft: finite controls and export-gap contract (claude)
+
+The [C1 draft](../harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md) specifies the D37 float-trained coupling magnitude for the discrete Flock read, exported to integer Gate weights (`ReadSpec::FlockCoupled`, with `k_max = 1 ≡ Flock`). It contains:
+- 22 finite controls (C0, X1–X12 and nine F rows), with literals hand-derived from the generated 16-root orbit: cache fidelity, the integer export kernel, and the float primitive (including an export-gap witness);
+- a writer-structured mean-L1 proxy objective with a proxy-agreement instrument;
+- a box-projected update, needed because the writer's address margin exceeds the inter-root distance;
+- the export-gap contract on the Dose 1 evaluator;
+- arms A0/A1/A2/A2-int/A2′/Z/R at matched writer-evaluation budget.
+
+**Review:** three fresh-context reviewer subagents (literal recomputation, test fitness, round-2). Every finding is resolved: the empty-level `terms`, ABSENT cache rows, the proxy units and blocks, the Adam `pow`, the Relation-trit scope, and the trace encoding. **Status:** not registered, no FIT requested, no source change, no compute, $0. Training/M2/Stage B stay HELD. **Next:** registration after the Dose 1 decision. The open items are k_max>1 under D11, the D21 line status, the owner/PM reading of the float gap forward, and the agreement threshold and C0 sample.
 
 ## 2026-10-18 — Starling/murmuration brief: discrete Flock named as the integer murmuration read; post-dose candidates (claude)
 
@@ -40,7 +202,8 @@ Merges the standalone wire-compression/transport work as a self-contained side e
 `spiralcore-base/wire/`: 78 files (Python adapter/socket/mux/hub/interposer tools and smokes, Rust
 `wire-rs` crate detached from the main workspace, docs, bounded evidence logs). Worktree checks:
 `cargo build --release --offline`, `WIRE_SOCKET_ROUTING_PASS`, `WIRE_RUST_HUB_PASS`; source repo recorded
-`WIRE_INTEROP_MATRIX_PASS` 18/18 and `EVIDENCE_OK`. No model compute, no training-hold change, no pods,
+`WIRE_INTEROP_MATRIX_PASS` 18/18 (re-measured locally on 2026-10-18); the earlier `EVIDENCE_OK`
+line is withdrawn because its cited tool is absent - see labs/wire-matrix-repro-2026-10-18. No model compute, no training-hold change, no pods,
 no change to the dose path or D11 serving. Measured: Rust peer 2.10/2.86/3.30 ms vs plain 1.52/1.92/
 2.16 ms for 1.25 MiB; Rust adapter ~1.6x faster than Python; 1 KiB RTT 41.8 us vs plain 55.1 us.
 Record: [labs/spiralcore-wire-side-2026-10-18](../labs/spiralcore-wire-side-2026-10-18/README.md).
