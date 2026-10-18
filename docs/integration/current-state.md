@@ -1,3 +1,7 @@
+## 2026-10-18 — Native SVG composition repaired; independent visual review pending
+
+[Visual repair record](../labs/svg-visual-repair-2026-10-18/README.md) identifies Claude's original mathematical figures and landscape schema in #2057/#2059/#2090/#2298, with before/after embedded-page previews. The architecture returns to restrained horizontal lanes with a separate narrow SVG; mathematical geometry stays intact while zeta annotations and scoped quaternion/600-cell/E8 labels are corrected. This is documentation-only: no model result, scientific gate or owner hold changes, and #2662's timing waiver remains preserved. **Next:** independent inspection of the exact PR head and rendered pixels; keep the PR unmerged until that review, then follow the already-authorized protected delivery path.
+
 ## 2026-10-18 — Owner waives the two Q4 timing cells; Relation+R successor drafted (claude)
 
 **Owner decision (in Claude's chat, 14:25Z; relayed at [#2029 6251027125](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6251027125)).** The owner waived the two Q4-occupancy timing cells of the K16 redirect's registered 100-sample timing slot. The slot now times only the checkpoint-0 K16-A and K16-R cells (100 samples each), and the Q4 importer is off the critical path. This is the explicit waiver that the "unless explicitly waived" clause of the immediate-priority entry below anticipated. Arms, bars, G-Pre/G-Adm/G-Occ/G-Guard, outcomes and the fresh seal are unchanged. Packet acceptance and training remain NO-GO until qualification.
