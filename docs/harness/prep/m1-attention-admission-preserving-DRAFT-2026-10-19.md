@@ -29,26 +29,28 @@ and fresh remains sealed. No new split is introduced.
 
 ### 2.1 Gate placement and cadence
 
-**Interval-level gate**, audited every **64 completed batches** (the checkpoint cadence), on both arms. This is the PM disposition: erosion is gradual and visible at 64-batch cadence; the existing eval path is reused; the candidate-level gate is priced below as a successor option, not used here.
+**Interval-level gate**, audited every **64 completed batches** (the checkpoint cadence), on both arms. This is the PM disposition: erosion is gradual and visible at 64-batch cadence. The interval placement reuses the checkpoint schedule, but the post-update TRAIN-anchor evaluator is **not** an existing admitted path (Codex 6263219926) and is a source prerequisite in 5; the candidate-level gate is priced below as a successor option, not used here.
 
 ### 2.2 Fixed anchor (TRAIN-derived)
 
 - At registration, build a deterministic anchor from the pinned **TRAIN** UORT/mask only: in corpus order, take the first **3,847** eligible response targets (mask == 1, non-BOS, in-document predecessor). No DEV or heldout/fresh row may enter the anchor.
 - Bind: ordered row-key list SHA-256 (target token, in-corpus position), corpus token/mask pins inherited from the parent, and the anchor construction rule in the registration checklist. The anchor is an **instrument input**: never used for gradients, loss or target selection.
-- At checkpoint 0, evaluate admitted count on the anchor with the existing admission/eval path. The **anchor baseline must be >= 500**; otherwise the guard cannot detect an erosion and the run is `INSTRUMENT_UNREACHABLE` (D31), not a negative.
+- At checkpoint 0, evaluate admitted count on the anchor with the **new exact TRAIN-anchor evaluator** (5.2 source prerequisite). The **anchor baseline must be >= 500**; otherwise the guard cannot detect an erosion and the run is `INSTRUMENT_UNREACHABLE` (D31), not a negative. The existing `eval-corpus` path is not sufficient: it returns `TrainingHeld` once `accepted_updates != 0` and scores `Split::Dev`, not this TRAIN anchor.
+- **Source prerequisite (not optional):** before any run, a separately exact-head-reviewed source PR adds an evaluator that (a) accepts a post-update checkpoint (`accepted_updates != 0`), (b) reads only the pinned ordered TRAIN anchor rows and never DEV/heldout/fresh, (c) returns the admitted count for the exact anchor hash, and (d) exposes the evaluated cursor/epoch/model-checkpoint SHA. If that source is unavailable or fails, the gate is `INSTRUMENT_UNREACHABLE` (D31); there is no DEV-anchor fallback.
 - Baseline anchor admitted count and anchor SHA are recorded in the release packet before any update.
 
 ### 2.3 Acceptance margin and audit rule
 
 - Proposed **margin = 24 rows** (same scale as the parent's paired MDE/floor; the FIT review may tighten it, but not after observing run results).
 - At every audit checkpoint after 64 batches: evaluate the anchor on the current model and compare with the **checkpoint-0 baseline**. Breach iff `anchor_admitted < baseline - 24`.
-- On breach: **roll back to the last passing checkpoint** (the previous audit checkpoint), record `AUDIT_BREACH` with admitted, baseline, margin, checkpoint SHA and audit index, and **stop for diagnosis**. The rolled-back state is retained for inspection; the run is non-resumable.
+- Audits **synchronously pause training**; no update may run concurrently with an audit. Each audit records the pre-/post-audit cursor, epoch and full model/checkpoint SHA, and proves the model did not change during evaluation.
+- On breach: **roll back to the last passing full checkpoint** (the previous audit checkpoint), record `AUDIT_BREACH` with admitted, baseline, margin, checkpoint SHA and audit index, and **stop for diagnosis**. The rollback restores the complete checkpoint state and is SHA-verified; the run is non-resumable.
 - No audit may be skipped. A missing/unreadable audit is an instrument fault (D31), not a pass.
 - Both arms use the **same anchor and rule**; there is no unguarded new arm in this sheet. The historical A8 unguarded receipts are reference evidence, not a substitute for this run.
 
 ### 2.4 No-op counter-metric
 
-A guard that silently blocks learning must fail. At Q1, record accepted updates, audit triggers and loss trajectory. If the run reaches Q1 with **accepted_updates < 100** (A8's unguarded Relation accepted 396 at Q1) or the guard triggers with zero admission delta at an audit, classify `RULE_EFFECTIVELY_NOOP` and stop for diagnosis. This is a rule/instrument failure, not a mechanism negative.
+A guard that silently blocks learning must fail. At Q1, record accepted updates, audit triggers and loss trajectory. **Precedence:** each audit first evaluates the margin breach; a trigger occurs only on a breach. If the run reaches Q1 with **accepted_updates < 100** (A8's unguarded Relation accepted 396 at Q1) and no breach, classify `RULE_EFFECTIVELY_NOOP` and stop for diagnosis. A trigger with zero admission delta cannot occur under the rule and is classified `RULE_INSTRUMENT_BUG` (D31), not a corpus/mechanism result. Neither is a mechanism negative.
 
 ## 3. Bar
 
@@ -65,7 +67,7 @@ A guard that silently blocks learning must fail. At Q1, record accepted updates,
 ## 4. Cost
 
 - Parent cost basis inherited (~$11.4 full dose both arms at the historical rate; planning figures, not caps).
-- **Gate cost must be measured, not assumed:** before dispatch, time one anchor evaluation on the declared GPU, including checkpoint load. Planned evaluations: baseline + up to 256 audits per arm after 64 batches; budget cap = measured per-eval cost × planned evaluations, and the sheet stops/replans if the projected gate cost exceeds **15%** of the parent run estimate. The release packet records measured eval latency, total gate cost and all-in spend.
+- **Gate cost must be measured, not assumed.** No pre-dispatch GPU rental is authorized by this sheet: calibration happens inside the PM-dispatched, D40-released pre-run/run (or a separately authorized calibration step). Planned evaluations: **258 per arm including baseline** = 1 baseline + 256 regular 64-batch audits + 1 final 20-batch-tail audit at 16,404; ×2 arms = 516 evaluations. Budget cap = measured per-eval cost × planned evaluations; stop/replan if projected gate cost exceeds **15%** of the parent run estimate. The release packet records measured eval latency, total gate cost and all-in spend; a separate calibration request needs its own authorization.
 - Owner caps (<=4 pods, <=$8/h) and disk floors are hard stops.
 
 ## Stop rule
@@ -89,7 +91,7 @@ A guard that silently blocks learning must fail. At Q1, record accepted updates,
 ## 5. Steps
 
 1. FIT this sheet with fresh-context adversarial review; post every finding.
-2. If a source/registration change is needed to register the guard and anchor (not assumed free), land it with exact-head review; otherwise record that the interval gate is an execution-layer rule only.
+2. **Source prerequisite:** land the exact-head-reviewed evaluator/provider from 2.2 (post-update TRAIN-anchor evaluation, synchronous audit state, epoch/full-checkpoint identity, no DEV/fresh); merge and bind its source SHA. No run starts without it; if it is unavailable the gate is `INSTRUMENT_UNREACHABLE` (D31), with no DEV fallback.
 3. Stage the two arms with the parent configs; only the guard/anchor binding is added.
 4. PM dispatch with the measured costed plan; Casey's typed D40 release.
 5. Pre-run gates and anchor baseline; Q1; full dose or breach-stop.
@@ -106,12 +108,13 @@ A guard that silently blocks learning must fail. At Q1, record accepted updates,
 2. PM authorship/design disposition reference (this sheet's 08:32Z transfer).
 3. Parent sheet SHA and A8 table/config pins.
 4. Anchor construction rule, ordered row-key SHA-256, corpus token/mask pins.
-5. Audit cadence (64), margin (24), rollback semantics, stop rule.
-6. No-op counter-metric.
-7. Measured eval latency and projected/actual gate cost.
-8. D31 classification table and non-resumable stop rule.
-9. PM dispatch id and Casey's typed D40 release record.
-10. Record/current-state paths.
+5. Audit cadence (64), margin (24), synchronous-pause/epoch identity, full rollback semantics, stop rule.
+6. No-op counter-metric and trigger-precedence table.
+7. Evaluator source/commit SHA, tests, and the 258-per-arm evaluation plan.
+8. Measured eval latency and projected/actual gate cost (calibrated only under released run/authorized step).
+9. D31 classification table and non-resumable stop rule.
+10. PM dispatch id and Casey's typed D40 release record.
+11. Record/current-state paths.
 
 ---
 

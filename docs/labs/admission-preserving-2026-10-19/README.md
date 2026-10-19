@@ -13,7 +13,7 @@ provides non-author exact-head review and, on request, a consumer verifier.
 ## Artifact
 
 `docs/harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md`  
-SHA-256 `0f7f12997885d468e296f85f1075e21bc80dab21badbe2daea200e7d7d3b0968`, 10,082 B, 118 lines.
+SHA-256 `97f2f5b7f072898f2dcf8ccdbe41828350ac96ec5fb9be010d31d6b7e5101a11`, 11,904 B, 121 lines.
 
 ## Binding design (PM disposition, not re-litigated)
 
@@ -28,6 +28,14 @@ SHA-256 `0f7f12997885d468e296f85f1075e21bc80dab21badbe2daea200e7d7d3b0968`, 10,0
 5. Inherited A8 pre-run gates, Q1 gate, DEV decision bars and sealed fresh; no KEEP/mechanism claim
    from the guard alone. Gate cost is measured before dispatch; projected >15% of the parent run
    estimate stops for re-plan.
+
+## Review findings applied
+
+Codex's exact-head review (6263219926) required five text fixes, now applied: the post-update
+TRAIN-anchor evaluator is a required source prerequisite (no DEV fallback; existing `eval-corpus` refuses
+post-update checkpoints), audits synchronously pause updates with epoch/full-checkpoint identity,
+258 evaluations/arm including baseline and the 20-batch tail, cost calibration occurs only under the
+released run or separately authorized step, and trigger-precedence/unreachable classifications are explicit.
 
 ## What this record is not
 
