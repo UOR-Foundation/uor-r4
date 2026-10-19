@@ -36,12 +36,19 @@ The read can only rank what it admits. This sheet tests whether **placing each t
 ## Construction (host data preparation from TRAIN only; deterministic; integer)
 
 **`address_structured_v1`** builds an injective V4096 / B4 table in which a token's cell is chosen to sit near the cells of the tokens that **precede** it in TRAIN. It does this in four steps.
-1. **Count.** Count TRAIN response-masked bigrams `(s → t)`: predecessor `s` and target `t`, at the same eligible positions the driver scores. The counts are integers.
+1. **Count.** Count TRAIN bigrams `(s → t)` at the driver's **eligible response-masked target positions** (`corpus.rs:243`, `eligible_targets`).
+   - Each scored target at `position` gets the window `tokens[start..position)` (`corpus.rs:270-278`; policy `response-masked-targets/within-document-predecessor/…`, `corpus.rs:9`). So `s = tokens[position − 1]` is the **last context token** of that row.
+   - The counts are integers. Their file is pinned by SHA-256.
 2. **Cell geometry.** Each cell is a pair of root ids `(r0, r3)`. Distance is the same L1 on root coordinates that the writer uses.
-3. **Greedy placement.** Tokens are taken in descending TRAIN frequency, and each goes to the cell minimising `Σ_s count(s→t) · L1(cell(s), cell)` over its already-placed predecessors. The placement respects a **per-cell quota of 16**, so occupancy stays 256 cells × 16, exactly as for PrimeZeta. **The only change is where tokens sit, not how many cells are used.**
-   - Ties go to the lowest cell id.
-   - The first token with no placed predecessor goes to the cell PrimeZeta assigns it.
+3. **Greedy placement.** Tokens are taken in descending TRAIN target frequency, with ties to the lower token id. Each token goes to the cell minimising `Σ_s count(s→t) · L1(cell(s), cell)` over its already-placed predecessors.
+   - The placement respects a **per-cell quota of 16**, so occupancy stays 256 cells × 16, exactly as for PrimeZeta. **The only change is where tokens sit, not how many cells are used.**
+   - **Zero placed-predecessor mass.** This covers every token whose predecessors are not yet placed, not only the first. Such a token goes to its PrimeZeta cell if that cell has quota left; otherwise to the nearest non-full cell by L1, then by cell id. This prevents low-id packing.
+   - The remaining ties go to the lowest cell id.
+   - **Known limitation:** only `s → t` edges with `s` already placed pull a token. Edges toward later-placed successors never pull earlier tokens. This is stated, not corrected, in v1.
 4. **Distinctness.** Within a cell, blocks 1 and 2 are assigned distinct root pairs in token-id order, so all 4,096 vectors are distinct. `distinct_vectors` is recounted on load.
+5. **The proxy, stated.** The greedy optimises the L1 between a target's cell and its **predecessor's** cell. Admission is centred on the read output `q_b = snap_2(u_b + m_b)`, not on `cell(u)`. The frame for block 0 is block B−1 (`frame_block`, `discrete.cu:112`). So `cell(q) = cell(last token)` holds only partially.
+   - **P8 reports, on the device, the distribution of `address_distance(q, cell(last token))`** over the DEV rows. The read trace already records the output and the root of `u`. That distribution states how much any predecessor-keyed placement can gain.
+   - B3 ≥ 500 needs about 13% P_succ admission, against 3.3% today, roughly a 4× gain.
 
 **Source work before any run** (separate PRs, each reviewed):
 - **(a)** A `CodebookMode::AddressStructuredV1` and constructor, exported in the existing `uor-r4.codebook-table/1` format with its `table_sha256`.
@@ -54,10 +61,11 @@ The construction reads **TRAIN only** (pin `3dee858f…`). DEV is never used to 
 
 | Arm | Table | Writer K | Role |
 |---|---|---|---|
-| P8 | PrimeZeta (`83c1380a…`) | 8 | **Control**, re-measured at this head (previously 427 full, 127 P_succ) |
+| P8 | PrimeZeta (`83c1380a…`) | 8 | **Control, and an exactness gate:** must reproduce 427 full-panel and 127 P_succ target-admitted rows exactly. Any difference is an instrument fault (D31), not a reading. |
 | A8 | `address_structured_v1` | 8 | **Treatment** |
-| P16 | PrimeZeta | 16 | **Bracket:** admission from width alone |
-| A16 | `address_structured_v1` | 16 | Bracket: the combined effect, reported |
+| S8 | `address_structured_v1` with the predecessor information removed: the same greedy, but each target's predecessor counts are reassigned to a deterministic seeded permutation of predecessors (a fixed, recorded seed), so frequency order and quota packing are kept | 8 | **Packing control.** It separates the predecessor relation from frequency packing and the low-id tie-breaks. |
+| P16 | PrimeZeta | 16 | **Bracket:** admission from width alone. P_succ is predicted at about 254 / 3,847, still below 500 (K ≥ 34 would be needed), so it **decides nothing**. It shows only whether admission scales with K. |
+| A16 | `address_structured_v1` | 16 | Bracket: the combined effect, reported only |
 
 The P16 / A16 configs differ from P8 / A8 only in `kept_cells`.
 
@@ -70,7 +78,9 @@ The gate below is the parent injective sheet's §3 battery, applied unchanged to
 - **Net G-Cap > max(500, top1_control(cp0) + 24)**, joined from the raw alias ceiling, the zero-update `B3` / `P_succ` admission and the control's checkpoint-0 top-1.
 
 Readings:
-- **Effect of placement.** A8's P_succ admission against P8's, by paired McNemar-style discordance on the same 3,847 rows. It is reported with `F = max(24, 2·sqrt(b+c))` as the decision floor for "placement moved admission".
+- **Effect of placement** (one-sided, fixed before measurement). Paired discordance on the same 3,847 P_succ rows, with `b` = admitted by A8 only and `c` = admitted by P8 only. "Placement moved admission" requires `b − c > F = max(24, 2·sqrt(b+c))`, about 2σ of the null McNemar difference.
+- **Attributed to the predecessor relation** only if, in addition, A8 against S8 clears the same one-sided floor. Otherwise the gain is recorded as frequency packing.
+- **Proxy ceiling.** P8's `address_distance(q, cell(last token))` distribution is reported alongside.
 - **Bracket.** P16 tests whether admission scales with K (expected about 2× P8 if uniform). A16 reports the combined effect. Neither bracket arm can promote anything by itself, because writer K = 16 is outside the attention validator.
 
 ## Base artifact
@@ -87,7 +97,17 @@ None. Every arm is a fresh checkpoint 0 (`init-corpus`, `new_model(0)`) from its
 
 1. Merge source pieces (a), (b) and (c) above after review. Pin the A8 table's file and `table_sha256`, rebuilt on the pod and required to match.
 2. FIT this sheet with a fresh-context adversarial reviewer subagent (owner direction 6255848646), posting every finding. Then PM dispatch.
-3. On one GPU via `uor-pod`: build, then for each arm run `init-corpus` and `eval-corpus` (and `attention-dev-b3` for the K = 8 arms), then `attention-export-token-cells` + `coverage-census --token-cells`, then G-Init with both negatives. For the K = 16 arms, P_succ admission is joined from `eval-corpus` rows to the K = 8 panel's `is_psucc`, which is a host join of stored outputs.
+3. On one GPU via `uor-pod`, build, then run the following per arm:
+   - `init-corpus` and `eval-corpus`;
+   - `attention-dev-b3`, for the K = 8 arms;
+   - `attention-export-token-cells` + `coverage-census --token-cells`;
+   - G-Init with both negatives;
+   - P8's `q`-distance distribution.
+
+   **The K = 16 join** is grading of stored outputs on the host (D24 permits this):
+   - A row is target-admitted when `admitted_cells − address_rivals == 1`, read from `eval-corpus`'s per-row records (`batches[].rows[]`).
+   - Rows join on `(target_position, target_token)` to the K = 8 `attention-panel` rows' `is_psucc`, through an exported file with a pinned SHA.
+   - If `eval-corpus` does not accept a K = 16 Relation config, that is source item (c).
 4. Post the receipt. If A8 clears every gate, draft the A8 training sheet (the parent's Relation versus FrozenZero contrast with only the table changed). Otherwise post the successor decision.
 
 ## Stop rule
@@ -98,11 +118,22 @@ None. Every arm is a fresh checkpoint 0 (`init-corpus`, `new_model(0)`) from its
 
 ## Cost
 
-Under 30 min on one RTX 5090. The build is about 10 min; each arm's checkpoint-0, evaluation and export are under 1 min. That is about $0.40, the same instrument as the 2026-10-19 pre-flight.
+Under 30 min on one RTX 5090. The build is about 10 min; each of the five arms' checkpoint-0, evaluation and export is under 1 min. That is about $0.40, the same instrument as the 2026-10-19 pre-flight.
 
 ## Minimum test power
 
 - B3_init and G-Cap are exact counts on the full fixed DEV panel (14,287 rows; 3,847 P_succ). The 500 floor exceeds the panel's 2-SE row floor.
-- The A8-against-P8 effect uses paired discordance on identical rows with `F = max(24, 2·sqrt(b+c))`. It is reported regardless of the gate.
+- The A8-against-P8 and A8-against-S8 effects use one-sided paired discordance on identical rows, with `F = max(24, 2·sqrt(b+c))`. They are reported regardless of the gate.
+- P8's exact reproduction of 427 and 127 is an instrument gate.
+
+Review: a fresh-context adversarial reviewer subagent returned FIT-WITH-FIXES on the first draft. All eight findings are applied here:
+- the zero-mass placement rule;
+- the S8 packing control;
+- the stated proxy, with P8's q-distance;
+- the row and predecessor citation (`corpus.rs:270-278`);
+- the K = 16 join definition;
+- the P8 exactness gate;
+- the one-sided floor;
+- the one-direction limitation.
 
 TEST FITNESS: PENDING
