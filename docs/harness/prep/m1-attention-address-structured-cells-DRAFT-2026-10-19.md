@@ -50,10 +50,23 @@ The read can only rank what it admits. This sheet tests whether **placing each t
    - **P8 reports, on the device, the distribution of `address_distance(q, cell(last token))`** over the DEV rows. The read trace already records the output and the root of `u`. That distribution states how much any predecessor-keyed placement can gain.
    - B3 ≥ 500 needs about 13% P_succ admission, against 3.3% today, roughly a 4× gain.
 
-**Source work before any run** (separate PRs, each reviewed):
-- **(a)** A `CodebookMode::AddressStructuredV1` and constructor, exported in the existing `uor-r4.codebook-table/1` format with its `table_sha256`.
-- **(b)** The injective scope and attention plumbing accept the new mode with no K or arm change.
-- **(c)** The generic `init-corpus` / `eval-corpus` path accepts the bracketing K = 16 Relation config, or a minimal opt-in allows it.
+**Source work before any run:**
+- **(a) Constructor and exporter — landed** (#2742, record `docs/labs/address-cells-codebook-2026-10-19/`): `src/address_cells.rs` and `address-cells-codebook`. The tables are pinned from the real TRAIN export, and the pod rebuild must reproduce them:
+
+  | Arm table | `table_sha256` | file SHA-256 |
+  |---|---|---|
+  | A8 / A16 (`address_structured_v1`) | `4122cbab44bd88658743984fc1ab79059bf032c3e2fe526ffcf4ea5f95d9cd74` | `6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1` |
+  | S8 (`address_shuffled_v1_seed_20261019`) | `d2fb8680a16e8017f6f0e6518df6810f6206023b0d14388dc076d4cfde2ebc5b` | `a185bdca07077fe7157e947ff1fa80919e6f99165a4dd5a04061a97873c92718` |
+
+  The counts SHA is `755a5a81…`, shared by both tables.
+- **(b) Attention plumbing — no code needed, by source.**
+  - The table loader checks no `mode` string.
+  - `attention_learning::scope` keys on the table file SHA prefix.
+  - `validate_injective_table` requires only `distinct_vectors == V`.
+
+  The host build refuses every model command (D24), so this is **confirmed on the pod** by `attention-build-identity` on the A8 / S8 configs as the battery's first step. A refusal there is an instrument blocker.
+- **(c) K = 16 path — no code needed, by source.** `init-corpus` / `eval-corpus` call only `DriverConfig::validate` (`main.rs:78-100`). That calls `ReadSpec::validate`, which caps the **read** kept count at 8 (`lib.rs:145-148`), and `Spec::validate`, which allows **writer** `kept_cells` up to 16. The attention-only K = 8 pin (`attention_learning.rs:169`) is not on this path.
+- **Arm configs:** staged in `docs/labs/address-cells-preflight-configs-2026-10-19/evidence/` as P8, A8, S8, P16 and A16. Each differs from the injective treatment config (`docs/labs/injective-attention-runbook-2026-10-19/evidence/injective-relation-seed1.json`) only in the table pin and writer K.
 
 The construction reads **TRAIN only** (pin `3dee858f…`). DEV is never used to choose cells.
 

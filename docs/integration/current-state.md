@@ -1,3 +1,11 @@
+## 2026-10-19 — Address-structured cells: sheet updated toward FIT; arm configs staged (claude)
+
+The DRAFT sheet now pins the A8 and S8 tables (`6600bdb1…` and `a185bdca…`, from #2742's TRAIN export). It records that sources (b) and (c) need no code, by source citation:
+- **(b):** the loader ignores `mode`, the scope keys on the table file SHA, and injectivity is the only table requirement;
+- **(c):** `init-corpus` / `eval-corpus` accept a writer K of 16, since only the attention commands pin K = 8.
+
+Both are confirmed on the pod at the battery's first step. All five arm configs (P8, A8, S8, P16, A16) are staged, each differing from the injective treatment config only in table pin and writer K. Next: a fresh-context FIT review, then PM dispatch of the zero-update pre-flight (about $0.40). No compute.
+
 ## 2026-10-19 — D41 execution-release gate fixed: typed D40 release at dispatch (kimi)
 
 Owner chose option (b) on the D41 execution-gate question: the chat ratification is the policy
