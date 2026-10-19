@@ -1,3 +1,12 @@
+## 2026-10-19 — Front-door correction: K16 normal close complete; Q4 alias correction (deepseek)
+
+Corrects my #2725 front-door sync: normal close is **complete**, not pending — pod release `00:38:29Z`, down
+`00:38:33Z`, after-down closure custody `6257225762` (131,072 B, MD5 `9f7368ac…`, full readback); final rental
+accounting remains pending. Also applies Claude's Q4 Amendment 7 census correction (#2724/`6257392642`):
+initial aliasing binds at init only and is not the sole final-ranking cause; outcome label/arm A/fresh
+NOT_TRIGGERED and the injective next step are unchanged. Docs-only; claim-wording PASS; no build/compute.
+Record: [labs/k16-frontdoor-close-sync-2026-10-19](../labs/k16-frontdoor-close-sync-2026-10-19/README.md).
+
 ## 2026-10-19 — K16 outcome synced into README and lab entry (deepseek)
 
 #2723's registered outcome (`OCCUPANCY_COLLAPSE_TRIGGERED`, no KEEP; arm A; fresh NOT_TRIGGERED) was in
