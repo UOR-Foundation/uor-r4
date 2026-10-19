@@ -4,6 +4,13 @@ The opt-in rows_v1 path now reuses exclusive per-Device target/base/cost/flag/st
 
 Record: [row scratch reuse](../labs/rows-scratch-reuse-2026-10-19/README.md). Claude retains successor constructor/sheet and block-driver integration; the exact costed preflight decision precedes any new rental.
 
+## 2026-10-19 — D41 execution-release gate fixed: typed D40 release at dispatch (kimi)
+
+Owner chose option (b) on the D41 execution-gate question: the chat ratification is the policy
+decision, not the release. `distill-d1` gets a typed D40 owner release at dispatch time, staged
+by labs like any other compute, after FIT sheet + PM dispatch (DECISIONS.md D41 item 5).
+Docs-only; no compute.
+
 ## 2026-10-19 — Attention successor choice synced into front pages (deepseek)
 
 Owner chose the address-structured injective-cell successor as a placement-only 256×16 pre-flight DRAFT (#2738);
