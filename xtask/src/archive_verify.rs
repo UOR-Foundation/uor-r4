@@ -9,6 +9,8 @@
 
 use std::collections::BTreeMap;
 use std::io::Write;
+
+use crate::docs_links::{git as git_links, normalize, tracked_files, PathMap, Universe};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -56,10 +58,6 @@ pub fn parse_line(line: &str) -> Option<(String, String)> {
 fn file_sha256(path: &Path) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
     Some(format!("{:x}", Sha256::digest(&bytes)))
-}
-
-fn basename(p: &str) -> &str {
-    p.rsplit('/').next().unwrap_or(p)
 }
 
 /// Verify one manifest's text. `hash_of` maps a repo-relative path to its hash.
@@ -113,23 +111,40 @@ fn counts(entries: &[Entry]) -> [usize; 4] {
     c
 }
 
-/// Entries that were `ok` in the baseline and are not now, matched by
-/// (manifest basename, relpath) so a manifest moved with its files still matches.
-pub fn regressions(baseline: &[Entry], current: &[Entry]) -> Vec<Entry> {
-    let mut was_ok: BTreeMap<(&str, &str), bool> = BTreeMap::new();
-    for b in baseline {
-        let all_ok = was_ok
-            .entry((basename(&b.manifest), &b.path))
-            .or_insert(true);
-        *all_ok &= b.status == "ok";
+fn entry_key(map: &PathMap, manifest: &str, path: &str) -> (String, String) {
+    let rel = normalize(path).unwrap_or_else(|_| path.to_string());
+    (map.map(manifest), rel)
+}
+
+/// Baseline entries that were `ok` and are not now. Each is matched against
+/// exactly the current entry with the same key (mapped full manifest path,
+/// normalized relpath). An `ok` entry with no current counterpart is reported
+/// as `vanished`.
+pub fn regressions(baseline: &[Entry], current: &[Entry], map: &PathMap) -> Vec<Entry> {
+    let mut now: BTreeMap<(String, String), Vec<&Entry>> = BTreeMap::new();
+    for c in current {
+        now.entry(entry_key(map, &c.manifest, &c.path))
+            .or_default()
+            .push(c);
     }
-    current
-        .iter()
-        .filter(|c| {
-            c.status != "ok" && was_ok.get(&(basename(&c.manifest), c.path.as_str())) == Some(&true)
-        })
-        .cloned()
-        .collect()
+    let mut out = Vec::new();
+    for b in baseline.iter().filter(|b| b.status == "ok") {
+        match now.get(&entry_key(map, &b.manifest, &b.path)) {
+            None => out.push(Entry {
+                manifest: map.map(&b.manifest),
+                path: b.path.clone(),
+                status: "vanished".to_string(),
+            }),
+            Some(cs) => {
+                if cs.iter().all(|c| c.status != "ok") {
+                    out.push((*cs[0]).clone());
+                }
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
 
 fn to_json(manifests: usize, entries: &[Entry]) -> Value {
@@ -182,7 +197,12 @@ fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     Ok(out.stdout)
 }
 
-fn part_a(root: &Path, json_out: Option<&str>, baseline: Option<&str>) -> Result<(), String> {
+fn part_a(
+    root: &Path,
+    json_out: Option<&str>,
+    baseline: Option<&str>,
+    renames_from: Option<&str>,
+) -> Result<(), String> {
     let listing = git(root, &["ls-files", "-z"])?;
     let mut manifests: Vec<String> = listing
         .split(|b| *b == 0)
@@ -211,7 +231,21 @@ fn part_a(root: &Path, json_out: Option<&str>, baseline: Option<&str>) -> Result
     }
     let c = counts(&entries);
     let regs = match baseline {
-        Some(b) => regressions(&read_baseline(b)?, &entries),
+        Some(b) => {
+            let map = match renames_from {
+                Some(rev) => {
+                    let out = git_links(
+                        root,
+                        &["diff", "--cached", "-M100%", "--name-status", "-z", rev],
+                    )?;
+                    let mut m = PathMap::parse_renames_z(&out);
+                    m.add_dir_renames(&Universe::new(tracked_files(root)?));
+                    m
+                }
+                None => PathMap::default(),
+            };
+            regressions(&read_baseline(b)?, &entries, &map)
+        }
         None => Vec::new(),
     };
     for r in &regs {
@@ -334,7 +368,12 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             .and_then(|i| args.get(i + 1))
             .map(String::as_str)
     };
-    let a = part_a(root, opt("--json"), opt("--baseline"));
+    let a = part_a(
+        root,
+        opt("--json"),
+        opt("--baseline"),
+        opt("--renames-from"),
+    );
     let b = match opt("--base") {
         Some(rev) => part_b(root, rev),
         None => Ok(()),
@@ -417,11 +456,16 @@ mod archive_verify_tests {
         );
     }
 
+    fn id() -> PathMap {
+        PathMap::default()
+    }
+
     #[test]
     fn ok_to_mismatch_is_a_regression() {
         let r = regressions(
             &[e("d/SHA256SUMS", "a", "ok")],
             &[e("d/SHA256SUMS", "a", "mismatch")],
+            &id(),
         );
         assert_eq!(r.len(), 1);
     }
@@ -431,16 +475,52 @@ mod archive_verify_tests {
         let r = regressions(
             &[e("d/SHA256SUMS", "a", "missing")],
             &[e("d/SHA256SUMS", "a", "missing")],
+            &id(),
         );
         assert!(r.is_empty());
     }
 
+    // T1: same basename in two directories must not share a baseline key.
     #[test]
-    fn moved_manifest_still_matches() {
+    fn same_basename_manifests_are_keyed_apart() {
+        let base = [
+            e("docs/a/SHA256SUMS", "README.md", "ok"),
+            e("docs/b/SHA256SUMS", "README.md", "missing"),
+        ];
+        let cur = [
+            e("docs/a/SHA256SUMS", "README.md", "mismatch"),
+            e("docs/b/SHA256SUMS", "README.md", "missing"),
+        ];
+        let r = regressions(&base, &cur, &id());
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].manifest, "docs/a/SHA256SUMS");
+    }
+
+    // T2: an ok entry with no current counterpart is `vanished`, including a
+    // `./x` -> `x` rewrite without normalization.
+    #[test]
+    fn ok_entries_that_vanish_are_regressions() {
+        let base = [e("d/SHA256SUMS", "a", "ok"), e("d/SHA256SUMS", "b", "ok")];
+        let r = regressions(&base, &[], &id());
+        assert_eq!(r.len(), 2);
+        assert!(r.iter().all(|x| x.status == "vanished"));
+        let dot = regressions(
+            &[e("d/SHA256SUMS", "./x", "ok")],
+            &[e("d/SHA256SUMS", "x", "ok")],
+            &id(),
+        );
+        assert!(dot.is_empty());
+    }
+
+    // T3: a manifest moved by the rename map still matches.
+    #[test]
+    fn moved_manifest_matches_through_the_rename_map() {
+        let map = PathMap::parse_tsv("docs/x\tarchive/x\n").expect("map");
         let base = [e("docs/x/SHA256SUMS", "a", "ok")];
-        let bad = [e("archive/x/SHA256SUMS", "a", "missing")];
-        assert_eq!(regressions(&base, &bad).len(), 1);
         let good = [e("archive/x/SHA256SUMS", "a", "ok")];
-        assert!(regressions(&base, &good).is_empty());
+        assert!(regressions(&base, &good, &map).is_empty());
+        let bad = [e("archive/x/SHA256SUMS", "a", "missing")];
+        assert_eq!(regressions(&base, &bad, &map).len(), 1);
+        assert_eq!(regressions(&base, &[], &map).len(), 1);
     }
 }
