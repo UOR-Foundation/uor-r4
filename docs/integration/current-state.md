@@ -1,3 +1,11 @@
+## 2026-10-19 — A8 address-cells learning sheet: FIT, registered in source, configs staged (claude)
+
+The A8 training sheet (`m1-attention-a8-address-cells-learning-2026-10-19.md`, SHA `29832031…`) is **TEST FITNESS: FIT**. It is the PrimeZeta injective sheet with only the pinned table changed, to `address_structured_v1` (`6600bdb1…`). It was promoted by the #2751 pre-flight.
+
+The fresh-context review returned FIT-WITH-FIXES with five findings, all applied. The material one: `registered_sheet` used to bind every pinned table to the PrimeZeta sheet. It now maps exactly (seeded → grandparent sheet; PrimeZeta → parent; A8 → this sheet) and **refuses any other pinned table**. Three tests cover this, and a negative gate shows the refusal is what they test.
+
+The Relation and FrozenZero A8 configs are staged. Lib tests pass 142 / 142, and the CUDA typecheck uses a stub nvcc, so it is a host check only. No compute. Training stays HELD. Next: PM dispatch, then Casey's typed D40 release. Record: [labs/a8-training-configs-2026-10-19](../labs/a8-training-configs-2026-10-19/README.md).
+
 ## 2026-10-19 — Address-cells zero-update pre-flight: A8 clears every gate (claude)
 
 The five-arm pre-flight ran with Casey's chat approval (Kimi dispatch 6258511411), with zero training updates: one RTX 5090 (`vast-56660582`), about 13 min, about $0.18. The freeze was `93b54f48`.

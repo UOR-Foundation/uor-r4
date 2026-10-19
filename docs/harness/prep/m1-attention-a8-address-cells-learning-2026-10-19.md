@@ -1,6 +1,6 @@
 # Learned attention link from an address-structured injective codebook (A8)
 
-- **Status:** DRAFT. **TEST FITNESS: PENDING.** The file name has no `-DRAFT-` because code pins this path once the sheet is registered (see Source).
+- **Status:** registered pre-registration, **TEST FITNESS: FIT** (see the end of the sheet). The file name has no `-DRAFT-` because code pins this path once the sheet is registered (see Source).
   - Training stays HELD. A run needs FIT, then the source registration below merged, then PM dispatch, then Casey's typed D40 release.
 - **Line:** M1 learned attention (#2029). **Lab:** claude.
 - **Parent:** `m1-attention-injective-init-DRAFT-2026-10-18.md`, the PrimeZeta injective sheet (FIT #2712, SHA-256 `e47ce5afb3966bda13cd04bd9b99849b401c028e078de958fa98b5e8b7ed4efb`).
@@ -11,11 +11,11 @@
     - §7.12.1 pre-flight, §7.12.2 Q1 gate, §7.12.3 fresh order and §7.12.5–§7.12.9.
 - **Why this sheet exists:** the address-cells pre-flight (record `docs/labs/address-cells-preflight-2026-10-19/`, #2751) promoted A8 under its sheet's step 4. Every §3 gate of the parent passed on A8's checkpoint 0:
   - B3_init(P_succ) **1,351 / 3,847**;
-  - net G-Cap **1,351**, against max(500, 133 + 24);
+  - net G-Cap **1,351**, against max(500, 133 + 24). Here 133 is the full-panel checkpoint-0 top-1 of the Relation config, used as an upper bound for the P_succ control term. The P_succ value from the FrozenZero arm is recorded at the pre-run gate (§3);
   - G-Init, both negatives, and G-Occ (256 cells, tie mass 0).
   
   On the PrimeZeta table the same gates had stopped the parent at 127 / 3,847.
-- **Rules:** D22, D23/D25/D30 (no softmax, squashing or matmul), D24 (GPU only), D29, D31, D11, D40. The A8 table is integer host data preparation from TRAIN only. The driver, kernels and training are integer; there is no float anywhere on this path.
+- **Rules:** D22, D23/D25/D30 (no softmax, squashing or matmul), D24 (GPU only), D29, D31, D11, D40. The A8 table is integer host data preparation from TRAIN only. The driver, kernels and training are integer; there is no float anywhere on this path. Unlike the parent, it needs no D37 zeta exception: `address_cells.rs` and `address-cells-codebook` contain no `f32` / `f64` (grep, 0 matches).
 - **D22 scope of this sheet (replaces the parent's):**
   - `pinned_table_v1` initialization with the A8 table above;
   - the parent's arms (Relation `LearnV1` vs `FrozenZeroV1`), read `Relation{8,1}`, `InterleavedReadEvery8V1`, `ActiveLeafV1`, objective A, K = 8, `rows_v1`, seed 1 first, and the Dose 1 data pins.
@@ -45,7 +45,7 @@ A8 places each token's cell near the cells of its TRAIN predecessors (greedy L1 
 | Item | Parent | This sheet |
 |---|---|---|
 | Pinned table | PrimeZeta V4096 B4 (`83c1380a…` / `e9e03bcd…`) | **`address_structured_v1` V4096 B4** (`6600bdb1…` / `4122cbab…`), rebuilt from TRAIN by `address-cells-codebook` (#2742) |
-| Registered sheet | the parent's SHA, bound for every pinned table | **this sheet's SHA, bound when the pinned table file is `6600bdb1…`** (Source below) |
+| Registered sheet | the parent's SHA, bound for every pinned table | **this sheet's SHA, bound only when the pinned table file is `6600bdb1…`**. PrimeZeta keeps the parent's SHA, and any other pinned table is refused (§6). |
 | Everything else | as listed under Parent | **unchanged** |
 
 **Why objective A and K = 8 stay:**
@@ -55,9 +55,14 @@ A8 places each token's cell near the cells of its TRAIN predecessors (greedy L1 
 
 ## 3. Bar
 
-**Pre-run instrument gates:** the parent's §3 items 1–4, verbatim, on A8's checkpoint 0 at the new source head. Old receipts are not inherited. A gate failure is `INSTRUMENT_UNREACHABLE` (D31), not a mechanism negative.
+**Pre-run instrument gates:** the parent's §3 items 1–4, inherited with the table pins replaced by A8's, on both arms' checkpoint 0 at the new source head:
+- the word digest must equal `4122cbab…`, and the table file `6600bdb1…`;
+- negative (a) uses an edited A8 file with stale hashes;
+- negative (b) uses a re-hashed, re-pinned A8 file whose changed word is a non-root word. It is rebuilt from A8, not reused from the pre-flight's PrimeZeta-derived input.
+
+Old receipts are not inherited. A gate failure is `INSTRUMENT_UNREACHABLE` (D31), not a mechanism negative.
 - G-Init includes the parent's comparison of routes, gates, seed and epoch against the unpinned initializer for the same config. The pre-flight checked these only across arms, so the pre-run gate runs the unpinned comparison.
-- **Reproduction gate (new, D31):** the checkpoint-0 values must equal the #2751 receipt exactly, because the inputs are byte-identical: B3_init(P_succ) 1,351, full panel 4,244, top-1 133. Any difference is an instrument fault.
+- **Reproduction gate (new, D31):** on **both** arms' checkpoint 0, the values must equal the #2751 receipt exactly, because the inputs are byte-identical and the two arms share one checkpoint-0 model. The values are B3_init on P_succ 1,351 / 3,847, B3_init on the full panel 4,244 / 14,287, and top-1 on the full panel 133. Any difference is an instrument fault.
 - **Bar (i)** is the parent's: `top1_control(P_succ, checkpoint 0) + 24`, from the FrozenZero arm's own zero-update DEV evaluation. The gate is net G-Cap > max(500, Bar (i)).
 
 **Decision bars:** inherited verbatim from the grandparent §7.6 and §7.7, through the parent:
@@ -85,10 +90,16 @@ The A8 table is built from TRAIN only. The fresh draw stays sealed until the pai
 ## 6. Source
 
 The training path binds a registered sheet by codebook initialization (`registered_sheet` in `attention_learning.rs`). Today every `PinnedTableV1` maps to the parent's SHA. The change:
-- **one added branch:** a `PinnedTableV1` whose table file SHA is `6600bdb1…` maps to this sheet's SHA and title line;
-- every other mapping is unchanged;
-- a test pins this file's SHA and title prefix, next to `registered_sheet_constants_match_committed_sheets`;
-- a test shows that an A8-pinned plan refuses the parent's sheet, and a PrimeZeta-pinned plan refuses this one.
+- **an exact mapping** by pinned table file SHA:
+  - seeded keeps the grandparent sheet;
+  - PrimeZeta `83c1380a…` maps to the parent sheet;
+  - A8 `6600bdb1…` maps to this sheet;
+  - **any other `PinnedTableV1` is refused.** Without this refusal, S8 or any other injective table would bind the PrimeZeta sheet outside its D22 scope. `registered_sheet` therefore returns a `Result`.
+- tests:
+  - this file's SHA and title prefix, next to `registered_sheet_constants_match_committed_sheets`;
+  - an A8-pinned plan refuses the parent's sheet, and a PrimeZeta-pinned plan refuses this one;
+  - an unregistered pinned table is refused, and that test fails with the refusal branch removed.
+  - Test fixtures that use placeholder table SHAs change to registered ones. The rule does not change to fit them.
 
 Re-pin rule: any change to this sheet, including the TEST FITNESS line, changes the constant, and so changes `driver_source_sha256`. The constant is set in the same PR, after FIT, and the release packet binds the driver hash through `execution.driver_source_sha256`.
 
@@ -129,4 +140,4 @@ Seed 2 is reproducibility only.
 - A8 vs the PrimeZeta lineage at a matched arm;
 - a K = 16 attention path, which would need source item (c) for the attention validator.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (owner direction 6255848646: a fresh-context adversarial reviewer subagent replaces cross-lab FIT for Claude lanes. The review of draft `6b4e9762` returned FIT-WITH-FIXES. All five findings are applied: the exact sheet mapping that refuses unregistered pinned tables (§6); §3 items inherited with A8 pins, and negative (b) rebuilt from A8; the 133 full-panel upper-bound label and the FrozenZero P_succ control term; the reproduction gate on both arms with each value's row basis; and the float-free citation. Registration releases no training: the run needs the §6 source merged, then PM dispatch, then Casey's typed D40 release.)
