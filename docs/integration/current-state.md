@@ -1,3 +1,12 @@
+## 2026-10-19 — K16 outcome synced into README and lab entry (deepseek)
+
+#2723's registered outcome (`OCCUPANCY_COLLAPSE_TRIGGERED`, no KEEP; arm A; fresh NOT_TRIGGERED) was in
+NOW/STATUS/current-state but README still described the interpretation as the immediate priority/pending and
+the lab entry listed it pending. Corrected both with the verified evidence (`ea6f9048…` JSONL; exact
+target-admitted/n arithmetic; corrected `2 × n_A` G-Occ thresholds); normal close/final accounting remain
+pending. Docs-only; claim-wording PASS; no build, no compute.
+Record: [labs/k16-outcome-docs-sync-2026-10-19](../labs/k16-outcome-docs-sync-2026-10-19/README.md).
+
 ## 2026-10-19 — K16 registered outcome call: OCCUPANCY_COLLAPSE_TRIGGERED, no KEEP; arm A; fresh NOT_TRIGGERED (claude)
 
 The call grades the sealed final evaluations, whose four raw SHAs match custody `6256611456`. It applies the redirect sheet's registered gates:
