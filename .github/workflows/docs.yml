@@ -1,0 +1,83 @@
+name: docs
+
+# Docs-reorganization guard: archive/ is immutable, checksum manifests do not
+# regress, links do not break and the claim-wording gate passes. Not a required
+# check; path-filtered so it never competes for the shared runner slot.
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'archive/**'
+      - 'xtask/**'
+      - 'book.toml'
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: docs archive and links
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-docs-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-docs-${{ runner.os }}-
+
+      - name: Build xtask
+        run: cargo build -q -p xtask
+
+      - name: Base worktree
+        if: github.event_name == 'pull_request'
+        run: git worktree add ../base "${{ github.event.pull_request.base.sha }}"
+
+      - name: Baselines from the base commit
+        if: github.event_name == 'pull_request'
+        working-directory: ../base
+        run: |
+          if cargo run -q -p xtask -- archive-verify --json base-av.json; then
+            cp base-av.json "$GITHUB_WORKSPACE/base-av.json"
+          else
+            echo "::notice::archive-verify is not available at the base commit; skipping the comparison"
+          fi
+          if cargo run -q -p xtask -- links --json base-links.json; then
+            cp base-links.json "$GITHUB_WORKSPACE/base-links.json"
+          else
+            echo "::notice::links is not available at the base commit; skipping the comparison"
+          fi
+
+      - name: Archive verify
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          if [ -f base-av.json ]; then
+            cargo run -q -p xtask -- archive-verify --baseline base-av.json --base "$BASE"
+          else
+            cargo run -q -p xtask -- archive-verify
+          fi
+
+      - name: Links
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          if [ -f base-links.json ]; then
+            cargo run -q -p xtask -- links --baseline base-links.json --renames-from "$BASE"
+          else
+            echo "::notice::no links baseline; skipping"
+          fi
+
+      - name: Claim-wording gate
+        run: cargo run -q --locked -p uor-r4-claim-wording -- .
