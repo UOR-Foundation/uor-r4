@@ -7,6 +7,22 @@ initial aliasing binds at init only and is not the sole final-ranking cause; out
 NOT_TRIGGERED and the injective next step are unchanged. Docs-only; claim-wording PASS; no build/compute.
 Record: [labs/k16-frontdoor-close-sync-2026-10-19](../labs/k16-frontdoor-close-sync-2026-10-19/README.md).
 
+## 2026-10-19 — W2 v5.1 and K16 consumer verifiers landed; DeepSeek 6257268086 record correction recorded; K16 outcome call consumer-verified (antigravity)
+
+- **W2 Read-Code Capacity consumer verifier v5.1 (`uor-r4.read-code-capacity/1`):** lands the frozen three-file assembly (`verify_w2_read_code_capacity.rs` `db02488e…`, `103,205` B; `verify_w2_read_code_capacity.py` `2b6f61e2…`, `113,371` B; `w2-read-code-capacity-consumer-schema.md` `c21f6e27…`, `20,493` B). Both `Codex/Sol cf1` ([`6255954303`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6255954303), [`6256723035`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256723035)) and `DeepSeek` ([`6257268086`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6257268086)) closed and accepted v5.1 at those exact hashes (`DeepSeek`'s earlier [`6256057562`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256057562) verdict on v5 was `PAUSED` on the schema line-99 co-primary/helper documentary item and closed `ACCEPT` on v5.1 at `6257268086`). Standalone Rust and Python self-tests (`18/18`) and 17 host-pin checks PASS. No W2 GPU run is authorized by this consumer record.
+- **K16 Rows-Redirect consumer verifier (`verify_k16_rows_redirect.py`):** lands the accepted helper (`fa981782…`, `310,331` B) and companion `README.md` (`fc5a765b…`, `33,034` B) with explicit `FilePin` manifest binding (`SOURCE_ONLY SCOPED PASS` by `Codex/Sol cf1` at [`6256900961`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256900961)), and updates `project-track.md` Step 2 from `in progress` to complete.
+- **K16 outcome-call consumer verification:** evaluating `docs/labs/k16-outcome-call-2026-10-19/evidence/k16-outcome-fields.jsonl` (`ea6f9048…`) with `verify_k16_rows_redirect.py` (`fa981782…`) reproduces `g_occ_triggered = true` on both seeds, `a_g_adm = false` (`2,237` and `3,167 < 4,894`), `r_bars = a_bars = false`, `delta_noise = {target_admitted_rows: 930, top1_correct: 398, top8_correct: 748}`, `decision = "OCCUPANCY_COLLAPSE_TRIGGERED"`, `qualifying_arm = null`, and `G-Trans = NOT_TRIGGERED`.
+- **Next:** audit the staged injective-attention runbook (`#2726`) and Codex's packet against the FIT sheet (`#2712`). Host-only, no compute, `$0`. Record: [`docs/labs/w2-k16-consumer-verifiers-2026-10-19/README.md`](../labs/w2-k16-consumer-verifiers-2026-10-19/README.md).
+
+## 2026-10-19 — Injective-codebook attention test: runbook staged for owner release (claude)
+
+The sheet's §Sequencing condition is met by the K16 call (arm A). The runbook (`docs/labs/injective-attention-runbook-2026-10-19/`) pins:
+- **the table:** the PrimeZeta V4096 / B4 / C192 / K8 file, SHA `83c1380a…`, whose inner digest `e9e03bcd…` reproduces the registered one;
+- **the configs:** both arm configs, each differing from the parent `rows_v1` attempt only in `codebook_initialization`;
+- **the release:** both scopes and Casey's exact release phrases (D40).
+
+It lists the lab-side build, table, config, pre-flight, plan and review steps, then the run and transfer steps. The sheet header no longer says DRAFT, and its SHA is re-pinned to `e47ce5af…`, which changes the driver hash, so plans are built after this merges. **Nothing has run.** Training stays HELD pending PM dispatch and the owner's release. Estimated cost: a full dose of about 6.0 h / about $11.4 on 2 × 5090, or about $2.8 at a Q1 stop.
+
 ## 2026-10-19 — K16 outcome synced into README and lab entry (deepseek)
 
 #2723's registered outcome (`OCCUPANCY_COLLAPSE_TRIGGERED`, no KEEP; arm A; fresh NOT_TRIGGERED) was in
@@ -39,6 +55,19 @@ target. Added the missing `## Post-dose optimization path` stub pointing at the 
 updated the stub count to four. Docs-only; no bar/hold/source/compute change; claim-wording PASS via the
 existing checker; no build, no compute.
 Record: [labs/post-dose-anchor-hygiene-2026-10-19](../labs/post-dose-anchor-hygiene-2026-10-19/README.md).
+
+## 2026-10-18 — BVG-K C2 piece H4: device-level GPU qualifier, sheet FIT (claude; W3)
+
+`bvgk-qualify` checks the block path on synthetic fixture devices only:
+- V0, RC and UT;
+- JR (joint loss against an independent reference) and V3;
+- DC, with membership checked independently of the shared choose rule and decision-coverage power required;
+- RF, the C1 rerun, and a diagnostic throughput curve.
+
+It commits only through `apply_block`. The guarded `Device::apply` is never called (owner direction). The sheet lists what stays uncovered: the BVG-K against ordinary apply kernel on GPU, K = 1 identity with `transition`, and all driver-level controls. Those need an owner-released admission and become Stage T first-batch controls.
+
+Subagent FIT is applied. Host gates are green: 132/132 tests, stub-CUDA, D29 and the softmax scan. **GPU run next** (owner-approved, fixture-only, about $0.75). No compute yet.
+
 
 ## 2026-10-18 — K16 A/R four-role execution complete; final DATA/lateOP verified; registered outcome pending (codex)
 
