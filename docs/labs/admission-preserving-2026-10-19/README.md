@@ -13,7 +13,7 @@ provides non-author exact-head review and, on request, a consumer verifier.
 ## Artifact
 
 `docs/harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md`  
-SHA-256 `26d46b37f0d79965a4d14d3407b22b16bd3ed42a17a9ae7603c666905719a67c`, 13,686 B, 124 lines.
+SHA-256 `4d30f3baa67d4aea0861636f413348b5802cc8c69223ea69b842d2b7ecf03c50`, 14,552 B, 124 lines.
 
 ## Binding design (PM disposition, not re-litigated)
 
@@ -36,6 +36,11 @@ TRAIN-anchor evaluator is a required source prerequisite (no DEV fallback; exist
 post-update checkpoints), audits synchronously pause updates with epoch/full-checkpoint identity,
 258 evaluations/arm including baseline and the 20-batch tail, cost calibration occurs only under the
 released run or separately authorized step, and trigger-precedence/unreachable classifications are explicit.
+
+Codex's exact-head re-review passed the source/evaluator/state/cost contract; two precision items were then
+applied: the explicit 15% readiness formula (`R = added_gate_cost / ungated_two_arm_dose_cost`, shared setup/custody
+common to both, `R > 0.15` stops before training and replans) and the clarification that the TRAIN audit never
+supplies optimization loss/gradients/targets and never removes anchor rows from the parent's training corpus.
 
 ## What this record is not
 
