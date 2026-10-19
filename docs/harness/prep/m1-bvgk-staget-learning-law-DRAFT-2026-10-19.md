@@ -73,6 +73,35 @@ T1 costs the base lineage's measured per-batch time, about 1.31 s per batch on t
 
 At equal wall clock all arms cost the same. With 3 arms × 2 seeds at about 6 h each, that is about $34 on 2 × 5090 pods: 3 pod-pairs at about $1.89/h for about 6 h. A Q1-equivalent stop costs about a quarter of that. The owner caps (≤ 4 pods, ≤ $8/h) and the 30 GiB disk floor are hard stops.
 
+## Base artifact
+
+No checkpoint is reused. Every arm starts at checkpoint 0 of the base lineage fixed by precondition 2: the injective treatment configuration, or else the parent `rows_v1` configuration. Each arm's config is that base config with only `coordinate_block` changed, and each is bound by its raw and canonical config SHA and lineage in the release packet.
+
+## Data split
+
+- **Training and evaluation:** the Dose 1 pins inherited from the base lineage. TRAIN tokens are `3dee858f…`. DEV is the frozen 14,287-row `ft/dev` panel, tokens `0919e90f…`, mask `a838bb1a…`, and it is the open development panel.
+- **Fresh transfer:** a sealed slice, opened once and only after a sealed paired DEV decision. If the injective test consumes its fresh V2 slice first, a new fresh slice is pinned at registration and never reused.
+
+## Steps
+
+1. The preconditions hold: C2 PASS, the injective outcome is known, and the margin is fixed.
+2. This sheet is revised to its registered form, with numbers and base lineage fixed. TEST FITNESS comes from a fresh-context adversarial reviewer subagent (owner direction 6255848646), with every finding posted on #2029.
+3. PM dispatch, then the owner's release per arm. Casey types the phrases (D40), and the executor stages the commands.
+4. The run. The first-batch controls (V1d, KId, V8d, V9d, AKd) must PASS before any result is read. Then T1, T16 and optionally T4 run at equal wall clock on both seeds.
+5. Sealed DEV comparison, then fresh transfer under typed PM authorization. Post the receipts, archive, and delete the pod.
+
+## Stop rule
+
+- Any first-batch control FAIL stops the line for diagnosis (D31). It is an instrument blocker, never a negative.
+- The base lineage's registered Q1 stop applies to each arm on the wall-clock axis.
+- The owner caps (≤ 4 pods, ≤ $8/h) and the 30 GiB disk floor are hard stops.
+- A healthy run is extended, not cancelled.
+
+## Minimum test power
+
+- Two seeds per arm. The non-inferiority margin is the base lineage's measured two-seed dispersion and is never narrower than the panel's 2-SE row floors (D22 §3): 20 rows for top-1, 63 for top-8 and 87 for B3.
+- A KEEP needs the same direction on both seeds, beyond the margin.
+
 ## Open items for registration review
 
 - The base-lineage choice (precondition 2).
