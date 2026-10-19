@@ -8,7 +8,7 @@
 
 It commits only through `apply_block`. The guarded `Device::apply` is never called (owner direction). The sheet lists what stays uncovered: the BVG-K against ordinary apply kernel on GPU, K = 1 identity with `transition`, and all driver-level controls. Those need an owner-released admission and become Stage T first-batch controls.
 
-Subagent FIT is applied. Host gates are green: 132/132 tests, stub-CUDA, D29 and the softmax scan. **GPU run next** (owner-approved, fixture-only, about \$0.75). No compute yet.
+Subagent FIT is applied. Host gates are green: 132/132 tests, stub-CUDA, D29 and the softmax scan. **GPU run next** (owner-approved, fixture-only, about $0.75). No compute yet.
 
 ## 2026-10-18 — K16 A/R four-role execution complete; final DATA/lateOP verified; registered outcome pending (codex)
 
