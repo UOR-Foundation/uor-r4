@@ -146,6 +146,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     }
 
     let mut total = 0usize;
+    let mut applied: Vec<&Entry> = Vec::new();
     for e in &entries {
         let n = count_tracked(&tracked, &e.old);
         if !apply {
@@ -163,6 +164,15 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             .output()
             .map_err(|err| format!("git mv: {err}"))?;
         if !out.status.success() {
+            for done in &applied {
+                eprintln!("already moved: {} -> {}", done.old, done.new);
+            }
+            eprintln!(
+                "{} of {} entries were applied before the failure; undo with `git reset --hard` \
+                 (discards all uncommitted changes) or `git mv` each listed path back",
+                applied.len(),
+                entries.len()
+            );
             return Err(format!(
                 "git mv {} {} failed: {}",
                 e.old,
@@ -170,6 +180,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
                 String::from_utf8_lossy(&out.stderr).trim()
             ));
         }
+        applied.push(e);
         total += n;
     }
     if apply {

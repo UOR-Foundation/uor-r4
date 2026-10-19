@@ -309,30 +309,39 @@ fn scan_line(line: &str, line_no: usize, out: &mut Vec<Link>) {
     }
 }
 
-/// Every link target in a markdown text, outside fences and code spans.
+/// Every link target in a markdown text, outside fences and code spans. A
+/// fence still open at the end of the text was never closed: it is rescanned
+/// as ordinary text, so one stray fence cannot hide every later link.
 pub fn extract_links(text: &str) -> Vec<Link> {
-    let mut out = Vec::new();
-    let mut fence: Option<(u8, usize)> = None;
-    for (idx, raw) in text.lines().enumerate() {
-        if let Some((ch, len, blank_rest)) = fence_marker(raw) {
-            match fence {
-                None => {
-                    fence = Some((ch, len));
-                    continue;
+    let lines: Vec<&str> = text.lines().collect();
+    let mut unclosed: Vec<usize> = Vec::new();
+    loop {
+        let mut out = Vec::new();
+        let mut fence: Option<(u8, usize, usize)> = None;
+        for (idx, raw) in lines.iter().enumerate() {
+            if let Some((ch, len, blank_rest)) = fence_marker(raw) {
+                match fence {
+                    None if !unclosed.contains(&idx) => {
+                        fence = Some((ch, len, idx));
+                        continue;
+                    }
+                    Some((fc, fl, _)) if fc == ch && len >= fl && blank_rest => {
+                        fence = None;
+                        continue;
+                    }
+                    _ => {}
                 }
-                Some((fc, fl)) if fc == ch && len >= fl && blank_rest => {
-                    fence = None;
-                    continue;
-                }
-                _ => {}
             }
+            if fence.is_some() {
+                continue;
+            }
+            scan_line(&blank_code_spans(raw), idx + 1, &mut out);
         }
-        if fence.is_some() {
-            continue;
+        match fence {
+            Some((_, _, open)) => unclosed.push(open),
+            None => return out,
         }
-        scan_line(&blank_code_spans(raw), idx + 1, &mut out);
     }
-    out
 }
 
 /// Resolve `.` and `..`; `Err` carries the `../`-prefixed form of a path
@@ -625,6 +634,9 @@ pub struct Comparison {
 
 /// Compare; each baseline `(source, resolved)` absorbs one current entry
 /// keyed by its mapped source with the mapped or the unmapped resolved path.
+/// Known limitation: the unmapped-resolved leniency can, rarely, absorb a link
+/// that a move newly broke when its new resolved path equals an old broken
+/// path from the same source (a false "not new").
 pub fn compare(baseline: &[(String, String)], maps: &[&PathMap], current: &[Broken]) -> Comparison {
     let map_all = |p: &str| maps.iter().fold(p.to_string(), |acc, m| m.map(&acc));
     let mut by_mapped: HashMap<(String, String), Vec<usize>> = HashMap::new();
@@ -930,6 +942,15 @@ mod tests {
         let cmp = compare(&keys(&base), &[&sim], &cur.broken);
         assert_eq!(cmp.new.len(), 1);
         assert_eq!(cmp.new[0].resolved, "archive/c.md");
+    }
+
+    #[test]
+    fn unclosed_fence_does_not_hide_later_links() {
+        let text = "intro\n```rust\nlet x = 1;\n[later](a.md)\n";
+        let links = extract_links(text);
+        assert_eq!(links.len(), 1, "a never-closed fence is rescanned as text");
+        let closed = "```\n[hidden](b.md)\n```\n[shown](c.md)\n";
+        assert_eq!(extract_links(closed).len(), 1);
     }
 
     #[test]

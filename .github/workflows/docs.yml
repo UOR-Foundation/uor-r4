@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # One target dir for the base and head builds, so dependencies are reused.
+  CARGO_TARGET_DIR: ${{ github.workspace }}/target
+
 jobs:
   docs:
     name: docs archive and links
@@ -25,6 +29,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -40,43 +45,53 @@ jobs:
           restore-keys: cargo-docs-${{ runner.os }}-
 
       - name: Build xtask
-        run: cargo build -q -p xtask
+        run: cargo build -q --locked -p xtask
 
       - name: Base worktree
         if: github.event_name == 'pull_request'
         run: git worktree add ../base "${{ github.event.pull_request.base.sha }}"
 
+      # A base commit that predates a task skips that comparison with a notice;
+      # a base that has the task but fails to run it fails the job.
       - name: Baselines from the base commit
         if: github.event_name == 'pull_request'
         working-directory: ../base
         run: |
-          if cargo run -q -p xtask -- archive-verify --json base-av.json; then
-            cp base-av.json "$GITHUB_WORKSPACE/base-av.json"
+          set -euo pipefail
+          if grep -q '"archive-verify"' xtask/src/main.rs; then
+            cargo run -q --locked -p xtask -- archive-verify --json "$GITHUB_WORKSPACE/base-av.json"
           else
-            echo "::notice::archive-verify is not available at the base commit; skipping the comparison"
+            echo "::notice::archive-verify is not in the base commit; skipping the manifest comparison"
           fi
-          if cargo run -q -p xtask -- links --json base-links.json; then
-            cp base-links.json "$GITHUB_WORKSPACE/base-links.json"
+          if grep -q '"links"' xtask/src/main.rs; then
+            cargo run -q --locked -p xtask -- links --json "$GITHUB_WORKSPACE/base-links.json"
           else
-            echo "::notice::links is not available at the base commit; skipping the comparison"
+            echo "::notice::links is not in the base commit; skipping the link comparison"
           fi
 
+      # Archive immutability (--base) needs no baseline file and always runs on PRs.
       - name: Archive verify
         run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            cargo run -q --locked -p xtask -- archive-verify
+            exit 0
+          fi
           BASE=${{ github.event.pull_request.base.sha }}
           if [ -f base-av.json ]; then
-            cargo run -q -p xtask -- archive-verify --baseline base-av.json --base "$BASE"
+            cargo run -q --locked -p xtask -- archive-verify --baseline base-av.json --renames-from "$BASE" --base "$BASE"
           else
-            cargo run -q -p xtask -- archive-verify
+            cargo run -q --locked -p xtask -- archive-verify --base "$BASE"
           fi
 
       - name: Links
         run: |
-          BASE=${{ github.event.pull_request.base.sha }}
+          set -euo pipefail
           if [ -f base-links.json ]; then
-            cargo run -q -p xtask -- links --baseline base-links.json --renames-from "$BASE"
+            cargo run -q --locked -p xtask -- links --baseline base-links.json --renames-from "${{ github.event.pull_request.base.sha }}"
           else
-            echo "::notice::no links baseline; skipping"
+            cargo run -q --locked -p xtask -- links
+            echo "::notice::no links baseline; reported totals only"
           fi
 
       - name: Claim-wording gate
