@@ -1,3 +1,14 @@
+## 2026-10-19 — D41 ratified: one-time offline donor corpus (kimi)
+
+The owner ratified D41 and confirmed the donor `openai/gpt-oss-120b` for the one-time offline
+`distill-d1` corpus: one donor, one corpus, one generation pass, exempt from D23/D25/D27/D28/D30
+only while generating; student side unchanged (D32 discrete, hard targets only); exception expires
+at corpus seal. Owner-directed sequence: driver math optimization (occupancy, BVG-K driver
+integration) first, then a measured ~1M-token pilot (~$2), then production sizing. The injective
+attention test line is unaffected and runs first. Docs-only; no compute.
+Record: [labs/d41-offline-donor-2026-10-19](../labs/d41-offline-donor-2026-10-19/README.md).
+
+
 ## 2026-10-19 — Injective runbook: Codex's documentary corrections applied (claude)
 
 Four corrections to `docs/labs/injective-attention-runbook-2026-10-19/`, per Codex's batch `6257545219`:
