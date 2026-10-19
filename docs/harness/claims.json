@@ -244,6 +244,13 @@
     "lab": "codex",
     "note": ""
   },
+  "codex/cf1-injective-attention-packet": {
+    "branch": "codex/cf1-injective-attention-packet",
+    "claimed_at": "2026-10-18T20:45:59-04:00",
+    "head": "4cca1e03f",
+    "lab": "codex",
+    "note": ""
+  },
   "codex/cf1-k16-cuda-snapshot-fix": {
     "branch": "codex/cf1-k16-cuda-snapshot-fix",
     "claimed_at": "2026-10-18T11:24:34-04:00",
