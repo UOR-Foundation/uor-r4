@@ -37,21 +37,24 @@ and fresh remains sealed. No new split is introduced.
 - At registration, build a deterministic anchor from the pinned **TRAIN** UORT/mask only: filter eligible TRAIN targets by `attention_evidence::is_copy_successor` in the C=192 in-document window, then take the first **3,847** such rows in corpus order from the **unvisited TRAIN tail** starting at eligible index **1,049,856** (the end of the 16,404×64 training prefix). No anchor row is in the training prefix; no in-sample overlap. This is a TRAIN-domain instrument, **not** the parent's DEV P_succ set; do not relabel TRAIN as DEV or bypass any release guard. Row keys use the canonical `(row_ordinal, target_position, target_token, is_psucc)` order. **Host-derived identity (no model compute):** from pinned TRAIN `tokens.u16` `3dee858f…` / `response_mask.u8` `b5e7352d…`, eligible targets = 2,425,925; the anchor is the first 3,847 `P_succ` rows at or after eligible index 1,049,856 — actual rows 1,049,857…1,064,112, all `is_psucc=1`, SHA-256 of the UTF-8 CSV lines `row_ordinal,target_position,target_token,is_psucc\n` = `8c1b80e9b15e4e2bcc765037afa7800b785418be3e20b8cc80ce13ee2e32b3c1` (3,847 lines); no anchor row is in the training prefix.
 - Bind: ordered row-key list SHA-256 (target token, in-corpus position), corpus token/mask pins inherited from the parent, and the anchor construction rule in the registration checklist. The anchor is an **instrument input**: the audit never supplies optimization loss, gradients or target selection, and never removes anchor rows from the parent's unchanged TRAIN corpus/order. The TRAIN audit chooses only the stop/inspection state; it is not held-out confirmation.
 - At checkpoint 0, evaluate admitted count on the anchor with the **new exact TRAIN-anchor evaluator** (5.2 source prerequisite). Admission uses the same `target_admitted` predicate as the parent's P_succ evaluation (writer admitted-cell/rank rule); no new admission metric is introduced. The **anchor baseline must be >= 500**; otherwise the guard cannot detect an erosion and the run is `INSTRUMENT_UNREACHABLE` (D31), not a negative. The existing `eval-corpus` path is not sufficient: it returns `TrainingHeld` once `accepted_updates != 0` and scores `Split::Dev`, not this TRAIN anchor.
+- **Rollback/controller prerequisite (same or a separate exact-head-reviewed source PR):** implement active interval rejection: selective rejection by interval batch (whole interval if the eroding update cannot be isolated), per-update rejection receipts, restore of model/counters/epoch from the last passing checkpoint, schedule-cursor advance past the rejected interval, idempotent gates, and tests proving rejected updates never commit and the next interval starts from the restored state. The run cannot start until evaluator and controller are merged and their source SHAs are bound.
 - **Source prerequisite (not optional):** before any run, a separately exact-head-reviewed source PR adds an evaluator that (a) accepts a post-update checkpoint (`accepted_updates != 0`), (b) reconstructs each ordered TRAIN anchor row with its **original context/document boundaries** (no re-tokenization or re-cutting), (c) never reads DEV/heldout/fresh, (d) returns the admitted count for the exact anchor hash under the precise predicate, and (e) exposes the evaluated cursor/epoch/model-checkpoint SHA. The PR carries positive and negative refusal tests: wrong checkpoint/epoch/anchor, pre-update-vs-post-update mismatch, and any DEV/heldout/fresh read. If that source is unavailable or fails, the gate is `INSTRUMENT_UNREACHABLE` (D31); there is no DEV-anchor fallback.
 - Baseline anchor admitted count and anchor SHA are recorded in the release packet before any update.
 
-### 2.3 Acceptance margin and audit rule
+### 2.3 Active interval rejection (PM disposition 09:04Z, Option A)
 
-- Proposed **margin = 24 rows** (same scale as the parent's paired MDE/floor; the FIT review may tighten it, but not after observing run results).
-- At every audit checkpoint after 64 batches: evaluate the anchor on the current model and compare with the **checkpoint-0 baseline**. Breach iff `anchor_admitted < baseline - 24`.
-- Audits use a **synchronous barrier**: pause transitions at the audit boundary, pin model storage/snapshot + model epoch + driver cursor + family counters + lineage/plan/release + anchor identity, evaluate that exact state on device, and continue only after a passing receipt. No update may run concurrently with an audit.
-- On breach: preserve the failed checkpoint and all append-only transition/audit evidence first, then restore the last passing model/cursor/counters/epoch into a **distinctly identified inspection state**; report attempted versus retained batches separately. Record `AUDIT_BREACH` with admitted, baseline, margin, checkpoint SHA and audit index. Do not overwrite or truncate failed suffixes, and never make a rolled-back artifact look like full-dose completion. The run is non-resumable.
+- Proposed **margin = 24 rows** (a prospective FIT choice; the FIT review may tighten it, but not after observing run results).
+- At each 64-batch audit boundary, after the synchronous barrier and exact anchor evaluation:
+  - **Pass** (`anchor_admitted >= baseline - 24`): the interval's updates are committed; continue.
+  - **Breach**: preserve the failed interval checkpoint and all append-only transition/audit evidence; restore the last passing model/counters/epoch; **reject that interval's updates** (selective per-update rejection if the eroding update can be isolated; otherwise reject the whole interval's updates); record `AUDIT_BREACH` and one rejection receipt per rejected update/interval; advance the schedule cursor past the rejected interval; continue training.
+- Rejected updates never commit; `accepted_updates` counts only committed updates. The next interval starts from the restored state with the advanced schedule cursor.
+- Audits use a **synchronous barrier**: pause transitions at the audit boundary, pin model storage/snapshot + model epoch + driver cursor + family counters + lineage/plan/release + anchor identity, evaluate that exact state on device, and continue only after a passing receipt or a completed rejection. No update may run concurrently with an audit.
 - No audit may be skipped. A missing/unreadable audit is an instrument fault (D31), not a pass.
-- Both arms use the **same anchor and rule**; there is no unguarded new arm in this sheet. The historical A8 unguarded receipts are reference evidence, not a substitute for this run.
+- Both arms use the **same anchor, rule and rejection semantics**; FrozenZero's lock proof still requires zero relation acceptances. The historical A8 unguarded receipts are reference evidence, not a substitute for this run.
 
-### 2.4 No-op counter-metric
+### 2.4 No-op counter-metric (teeth)
 
-A guard that silently blocks learning must fail. **Precedence:** (1) an audit margin breach triggers rollback/stop; (2) otherwise the parent's inherited Q1 gate applies unchanged; (3) otherwise, if Q1 is reached with **accepted_updates < 100** and no breach, classify `RULE_EFFECTIVELY_NOOP` and stop for diagnosis. Records include accepted updates, every audit value/receipt and the loss trajectory. The 100-update threshold and the 24-row margin are **prospective FIT choices, not inherited consequences of the parent's paired MDE**; no zero-delta trigger is defined because it is unreachable under a breach-only rule. Neither no-op nor a breach is a mechanism negative.
+A guard that blocks all learning must fail. **Rejection-rate no-op counter:** with `rejected_intervals` and `audited_intervals`, stop `RULE_EFFECTIVELY_NOOP` for diagnosis if either (a) `rejected_intervals / audited_intervals > 0.50` at Q1 or full, or (b) **3 consecutive full-interval rejections** occur. **Precedence:** interval audit/rejection first; at Q1 the parent's inherited Q1 gate applies; the no-op check applies at Q1 and at full/stop. Records include rates, consecutive rejections, accepted updates, and every audit/rejection receipt. The 24-row margin, 50% rate and 3-consecutive bounds are **prospective FIT choices, not inherited MDE consequences**. A no-op stop is not a mechanism negative.
 
 ## 3. Bar
 
@@ -59,11 +62,11 @@ A guard that silently blocks learning must fail. **Precedence:** (1) an audit ma
 
 **Guard bars:**
 1. Anchor baseline >= 500, bound before updates.
-2. Both arms complete the Q1 audit schedule with **no margin breach**; all audit values recorded.
-3. The parent's Q1 admission gate, DEV decision bars and fresh seal remain unchanged; this sheet adds the guard and records its audits; it does not replace or widen any parent bar.
+2. Active rejection keeps the anchor admitted count within margin at every audit; the rejection rate stays <= 0.50 and no 3 consecutive full-interval rejections occur; both arms complete Q1 and the full schedule.
+3. The parent's Q1 admission gate, DEV decision bars and fresh seal remain unchanged. The active rule changes the trajectory and is intended to let Q1 pass where the unguarded run failed; it does not widen any parent bar or add a KEEP claim.
 4. No-op counter-metric in 2.4 satisfied.
 
-**Decision:** a margin breach or a no-op result is a diagnostic stop for analysis, never a mechanism negative. A completed run with preserved admission is a diagnostic result; KEEP/H_geom/fresh claims remain governed by the parent's 7.7 and the sealed fresh decision. No capability claim follows.
+**Decision:** a no-op threshold breach, a source/instrument fault or a parent Q1-gate failure is a diagnostic stop for analysis, never a mechanism negative. A full-dose completion with the guard and the parent's own bars satisfied is a diagnostic result; KEEP/H_geom/fresh claims remain governed by the parent's 7.7 and the sealed fresh decision. No capability claim follows.
 
 ## 4. Cost
 
@@ -75,13 +78,11 @@ A guard that silently blocks learning must fail. **Precedence:** (1) an audit ma
 
 ## Stop rule
 
-- A margin breach or a no-op counter-metric failure stops for **D31 diagnosis**, after restoring the last passing
-  checkpoint; the run is non-resumable. It is never a mechanism negative.
-- A missing/unreadable audit, a wrong anchor hash, a pre-run gate mismatch or any unexplained status is
-  `INSTRUMENT_UNREACHABLE` (D31), not a pass.
-- Owner caps (<=4 pods, <=$8/h), the disk floors and a failed/diverged run are hard stops; a healthy run is renewed,
-  not cancelled.
-- No resume after a breach; a new rule/run needs a new FIT/registration decision.
+- Rejected intervals themselves do not stop the run: they are recorded and training continues from the restored state with the schedule cursor advanced.
+- A no-op threshold breach, a missing/unreadable audit, a wrong anchor hash, a failed rollback/evaluator source check, a pre-run gate mismatch or any unexplained status is **D31 diagnosis**, not a pass. The run is non-resumable after such a stop.
+- A parent Q1-gate failure is the inherited diagnostic stop.
+- Owner caps (<=4 pods, <=$8/h), the disk floors and a failed/diverged run are hard stops; a healthy run is renewed, not cancelled.
+- A new rule/run needs a new FIT/registration decision; failed/rejected evidence is preserved.
 
 ## Minimum test power (D22 section 3)
 
@@ -94,10 +95,10 @@ A guard that silently blocks learning must fail. **Precedence:** (1) an audit ma
 ## 5. Steps
 
 1. FIT this sheet with fresh-context adversarial review; post every finding.
-2. **Source prerequisite:** land the exact-head-reviewed evaluator/provider from 2.2 (post-update TRAIN-anchor evaluation, synchronous audit state, epoch/full-checkpoint identity, no DEV/fresh); merge and bind its source SHA. The source PR must name the exact command/schema and pin its source SHA; this sheet does not pre-name an implementation path. No run starts without it; if it is unavailable the gate is `INSTRUMENT_UNREACHABLE` (D31), with no DEV fallback.
+2. **Source prerequisite:** land the exact-head-reviewed evaluator/provider and active interval-rejection controller from 2.2/2.3 (post-update TRAIN-anchor evaluation, synchronous audit, selective/whole-interval rejection receipts, restore+cursor advance, epoch/checkpoint identity, no DEV/fresh); merge and bind their source SHAs. The source PR(s) must name the exact commands/schema and pin the SHAs; this sheet does not pre-name an implementation path. No run starts without them; unavailable => `INSTRUMENT_UNREACHABLE` (D31), no DEV fallback.
 3. Stage the two arms with the parent configs; only the guard/anchor binding is added.
 4. PM dispatch with the measured costed plan; Casey's typed D40 release.
-5. Pre-run gates and anchor baseline; Q1; full dose or breach-stop; mandatory final 16,404 audit before any final evaluation/decision.
+5. Pre-run gates and anchor baseline; Q1/full under active interval rejection; mandatory final 16,404 audit before any final evaluation/decision.
 6. Decision per 3; record; no fresh use unless the parent's H_geom path applies.
 7. Record `docs/labs/admission-preserving-2026-10-19/README.md` and a newest-first current-state entry.
 
@@ -111,8 +112,8 @@ A guard that silently blocks learning must fail. **Precedence:** (1) an audit ma
 2. PM authorship/design disposition reference (this sheet's 08:32Z transfer).
 3. Parent sheet SHA and A8 table/config pins.
 4. Anchor construction rule, corpus token/mask pins, exact anchor SHA-256 `8c1b80e9…` (3,847 canonical CSV rows, indices 1,049,857…1,064,112), and serialization format.
-5. Audit cadence (64), margin (24), synchronous-pause/epoch identity, full rollback semantics, stop rule.
-6. No-op counter-metric and trigger-precedence table.
+5. Audit cadence (64), margin (24), synchronous-pause/epoch identity, active selective/whole-interval rejection receipts, restore+cursor-advance semantics, stop rule.
+6. No-op counter-metric: rejection rate <=0.50, 3-consecutive bound, precedence table.
 7. Evaluator source/commit SHA, tests, original-context/window reconstruction and the 258-per-arm evaluation plan.
 8. Synchronous-barrier receipts, model/epoch/cursor/family-counter/lineage/anchor pins, inspection-state identity, attempted-vs-retained batch accounting, and append-only failed-evidence preservation.
 9. Qualification-stage measured gate cost, ungated two-arm dose cost, the explicit 15% readiness formula and `R`; hardware/rate/setup/custody/close provenance.

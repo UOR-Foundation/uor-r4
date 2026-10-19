@@ -13,7 +13,7 @@ provides non-author exact-head review and, on request, a consumer verifier.
 ## Artifact
 
 `docs/harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md`  
-SHA-256 `bc83c9d733c6e715b1f381fac2494bce79ac366e736d09649f3e89a491eed2f8`, 15,723 B, 125 lines.
+SHA-256 `e9d4a4bf1951986f683cf3914241de375a864d0e756d8b70ea9024fe50afa452`, 17,156 B, 126 lines.
 
 ## Binding design (PM disposition, not re-litigated)
 
@@ -23,10 +23,12 @@ SHA-256 `bc83c9d733c6e715b1f381fac2494bce79ac366e736d09649f3e89a491eed2f8`, 15,7
    overlap, no DEV/heldout/fresh) with canonical `(row_ordinal,target_position,target_token,is_psucc)` keys. Host-only
    anchor SHA-256 is `8c1b80e9b15e4e2bcc765037afa7800b785418be3e20b8cc80ce13ee2e32b3c1` (3,847 CSV lines); checkpoint-0
    baseline bound before updates; baseline >=500 or D31.
-3. **Margin 24 rows** (proposed at FIT), audit breach -> restore last passing checkpoint, record
-   `AUDIT_BREACH`, and stop for diagnosis; non-resumable.
-4. **No-op counter-metric**: `accepted_updates < 100` at Q1 with no breach => `RULE_EFFECTIVELY_NOOP` diagnostic
-   stop; the zero-delta trigger is removed; 24/100 are prospective FIT choices.
+3. **Active interval rejection (PM ruling 09:04Z):** margin 24; on breach, preserve failed evidence, restore the last
+   passing model/counters/epoch, reject that interval's updates (selective if isolatable, whole interval otherwise),
+   record per-update rejection receipts, advance the schedule cursor past the rejected interval, and continue.
+   Rejected updates never commit; this changes the trajectory rather than passively stopping.
+4. **No-op counter-metric with teeth:** stop `RULE_EFFECTIVELY_NOOP` if rejection rate >0.50 at Q1/full or after
+   3 consecutive full-interval rejections; 24/50%/3 are prospective FIT choices, not MDE consequences.
 5. Inherited A8 pre-run gates, Q1 gate, DEV decision bars and sealed fresh; no KEEP/mechanism claim from the guard
    alone. Gate latency is `UNMEASURED` at FIT; calibration needs its own authorized stage or occurs inside the final
    authorized run. Readiness uses `R = added_gate_cost / ungated_two_arm_dose_cost`; `R <= 0.15` is a pre-training
@@ -45,7 +47,12 @@ applied: the explicit 15% readiness formula (`R = added_gate_cost / ungated_two_
 common to both, `R > 0.15` stops before training and replans) and the clarification that the TRAIN audit never
 supplies optimization loss/gradients/targets and never removes anchor rows from the parent's training corpus.
 
-## Open P0 review findings
+## P0 review resolution
+
+PM ruled **Option A (active interval rejection)** at 09:04Z after Antigravity proved the passive stop rule could not
+satisfy its own bars on the deterministic trajectory. The sheet now implements selective/whole-interval rejection with
+per-update receipts, continuation from the restored state, and the rejection-rate no-op counter. P0-B remains fixed as
+above. The sheet is still `TEST FITNESS: PENDING` pending AGY re-review.
 
 Antigravity's exact-head review ([PR #2777 comment 6263479435](https://github.com/UOR-Foundation/uor-r4/pull/2777#issuecomment-6263479435))
 found two P0 issues: (A) the non-resumable stop-on-first-breach rule cannot satisfy the sheet's own Q1-pass bars on a
