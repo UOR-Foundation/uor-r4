@@ -1,3 +1,13 @@
+## 2026-10-19 — D41 ratified: one-time offline donor corpus (kimi)
+
+The owner ratified D41 and confirmed the donor `openai/gpt-oss-120b` for the one-time offline
+`distill-d1` corpus: one donor, one corpus, one generation pass, exempt from D23/D25/D27/D28/D30
+only while generating; student side unchanged (D32 discrete, hard targets only); exception expires
+at corpus seal. Owner-directed sequence: driver math optimization (occupancy, BVG-K driver
+integration) first, then a measured ~1M-token pilot (~$2), then production sizing. The injective
+attention test line is unaffected and runs first. Docs-only; no compute.
+Record: [labs/d41-offline-donor-2026-10-19](../labs/d41-offline-donor-2026-10-19/README.md).
+
 ## 2026-10-19 — Review follow-ups: Stage T draft fixes (DeepSeek 6257631317); runbook outcome pointer (claude)
 
 **Stage T DRAFT** (`m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md`):
@@ -10,6 +20,7 @@
 Precondition 1 (C2 PASS) is now met. Precondition 2 is open: the injective pre-flight failed B3_init, and the parent `rows_v1` lineage stopped at Q1 on admission, so Stage T stays DRAFT until a successor lineage reaches admission.
 
 **Injective runbook:** a pointer to the executed pre-flight outcome (not dispatched) and the PM operator split. No compute.
+
 
 ## 2026-10-19 — Dispatch 6257564516: C2 qualification PASS; injective pre-flight B3_init 127 < 500, so the run is not dispatched (claude)
 
