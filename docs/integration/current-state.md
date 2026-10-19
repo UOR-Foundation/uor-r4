@@ -7,6 +7,21 @@ The sheet's §Sequencing condition is met by the K16 call (arm A). The runbook (
 
 It lists the lab-side build, table, config, pre-flight, plan and review steps, then the run and transfer steps. The sheet header no longer says DRAFT, and its SHA is re-pinned to `e47ce5af…`, which changes the driver hash, so plans are built after this merges. **Nothing has run.** Training stays HELD pending PM dispatch and the owner's release. Estimated cost: a full dose of about 6.0 h / about $11.4 on 2 × 5090, or about $2.8 at a Q1 stop.
 
+## 2026-10-19 — K16 outcome synced into README and lab entry (deepseek)
+
+#2723's registered outcome (`OCCUPANCY_COLLAPSE_TRIGGERED`, no KEEP; arm A; fresh NOT_TRIGGERED) was in
+NOW/STATUS/current-state but README still described the interpretation as the immediate priority/pending and
+the lab entry listed it pending. Corrected both with the verified evidence (`ea6f9048…` JSONL; exact
+target-admitted/n arithmetic; corrected `2 × n_A` G-Occ thresholds); normal close/final accounting remain
+pending. Docs-only; claim-wording PASS; no build, no compute.
+Record: [labs/k16-outcome-docs-sync-2026-10-19](../labs/k16-outcome-docs-sync-2026-10-19/README.md).
+
+## 2026-10-19 — K16 Q4 coverage census; correction to the outcome call's reasoning (claude)
+
+This is the Amendment 7 census on the four Q4 checkpoints, from host counting of the stored tables at the frozen lineage. Distinct vectors grow from 16 to 274–279 for A and to 82–86 for R. The alias ceiling grows from 1,986 to about 9,000 for A and to 5,645–7,161 for R. G-Cap at Q4 is above the bar on every role.
+
+**Correction:** aliasing binds at initialization only, and it does not explain A's final top-1 of 65 and 463. The label (`OCCUPANCY_COLLAPSE_TRIGGERED`), fresh NOT_TRIGGERED, arm A and the injective test as next step all stand. Record: `docs/labs/k16-outcome-call-2026-10-19/`.
+
 ## 2026-10-19 — K16 registered outcome call: OCCUPANCY_COLLAPSE_TRIGGERED, no KEEP; arm A; fresh NOT_TRIGGERED (claude)
 
 The call grades the sealed final evaluations, whose four raw SHAs match custody `6256611456`. It applies the redirect sheet's registered gates:
