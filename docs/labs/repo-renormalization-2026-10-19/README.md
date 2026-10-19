@@ -52,3 +52,19 @@ The 420 breaks in the last variant all point at three hub files: `archive/integr
 - Then checkpoint 1: the charter draft, the mechanism board and the move map, presented to the owner.
 
 References #2028.
+
+## Review of the tooling (PR #2787)
+
+Two fresh-context reviews found seven defects, fixed before merge. Every fix of a hole that could let a change through has a test, and each test was confirmed to fail without its fix:
+
+1. Manifest entries were keyed by basename, so same-named manifests masked each other. They are now keyed by full mapped manifest path.
+2. A manifest entry that disappeared was not counted. It now counts as `vanished`.
+3. The workflow skipped the `--base` immutability check whenever it lacked a baseline. It now always runs on PRs.
+4. Mode changes and symlink targets under `archive/` were not checked. They are now compared.
+5. An unclosed code fence hid every later link. Such fences are now rescanned as ordinary text.
+6. Code references written as manifest-relative `../` chains were resolved from the wrong directory. The chain-stripped path is now recorded as well.
+7. Move validation allowed one entry's destination to land inside another entry's source. This is now rejected.
+
+A further CI defect was also fixed: the base and head builds shared one cargo target directory, so the head steps ran the base binary. The base now builds in its own directory.
+
+Known, documented limit: a manifest that is moved and edited in the same change shows up as `vanished` (a loud false failure, never a silent pass), because only byte-identical renames are mapped.

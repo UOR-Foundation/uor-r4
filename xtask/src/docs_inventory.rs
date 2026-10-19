@@ -192,23 +192,34 @@ pub fn scan_refs(file: &str, text: &str, prefixes: &[String]) -> Vec<CodeRef> {
                 end += 1;
             }
             let literal = line[i..end].trim_end_matches(['.', '/']);
-            let path = if literal.starts_with("../") {
+            // A `../` chain is file-relative for `include_*!` but may be
+            // manifest- or cwd-relative at run time: when resolving it from the
+            // referencing file does not land under a prefix (or climbs above the
+            // root), also record the chain-stripped path so no reference is lost.
+            let stripped = line[j..end].trim_end_matches(['.', '/']);
+            let mut paths = Vec::new();
+            if literal.starts_with("../") {
                 match normalize(&format!("{}/{literal}", dir_of(file))) {
-                    Ok(p) => p,
-                    Err(_) => {
-                        i = end;
-                        continue;
+                    Ok(p) => {
+                        let under = prefixes.iter().any(|pre| p.starts_with(pre.as_str()));
+                        paths.push(p);
+                        if !under {
+                            paths.push(stripped.to_string());
+                        }
                     }
+                    Err(_) => paths.push(stripped.to_string()),
                 }
             } else {
-                literal.to_string()
-            };
-            out.push(CodeRef {
-                file: file.to_string(),
-                line: n + 1,
-                literal: literal.to_string(),
-                path,
-            });
+                paths.push(literal.to_string());
+            }
+            for path in paths {
+                out.push(CodeRef {
+                    file: file.to_string(),
+                    line: n + 1,
+                    literal: literal.to_string(),
+                    path,
+                });
+            }
             i = end;
         }
     }
@@ -385,6 +396,23 @@ mod tests {
         assert_eq!(r[0].literal, "../../../docs/labs/a/b.json");
         assert_eq!(r[0].path, "docs/labs/a/b.json");
         assert_eq!(r[0].line, 1);
+    }
+
+    #[test]
+    fn runtime_relative_chain_also_records_stripped_path() {
+        // CARGO_MANIFEST_DIR-relative: resolving from the file gives
+        // crates/docs/harness, so the stripped docs/harness is recorded too.
+        let r = scan_refs(
+            "crates/uor-r4-harness/tests/t.rs",
+            r#"let d = "../../docs/harness";"#,
+            &pf(),
+        );
+        let paths: Vec<&str> = r.iter().map(|c| c.path.as_str()).collect();
+        assert!(paths.contains(&"docs/harness"), "{paths:?}");
+        // A chain that climbs above the root is kept, not dropped.
+        let up = scan_refs("a.rs", r#""../../../docs/x.md""#, &pf());
+        assert_eq!(up.len(), 1);
+        assert_eq!(up[0].path, "docs/x.md");
     }
 
     #[test]

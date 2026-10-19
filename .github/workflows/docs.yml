@@ -16,10 +16,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # One target dir for the base and head builds, so dependencies are reused.
-  CARGO_TARGET_DIR: ${{ github.workspace }}/target
-
 jobs:
   docs:
     name: docs archive and links
@@ -56,6 +52,11 @@ jobs:
       - name: Baselines from the base commit
         if: github.event_name == 'pull_request'
         working-directory: ../base
+        env:
+          # The base gets its own target dir: a shared one lets cargo treat the
+          # newer base artifacts as fresh for the head, so head steps would run
+          # base code.
+          CARGO_TARGET_DIR: ${{ runner.temp }}/base-target
         run: |
           set -euo pipefail
           if grep -q '"archive-verify"' xtask/src/main.rs; then

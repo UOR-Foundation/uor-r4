@@ -89,8 +89,24 @@ pub fn validate(
             problems.push(format!("{}: destination already exists", e.new));
         }
     }
+    for e in entries {
+        if e.old != e.new && overlaps(&e.new, &e.old) {
+            problems.push(format!(
+                "{}: destination {} is inside or above its own source",
+                e.old, e.new
+            ));
+        }
+    }
     for (i, a) in entries.iter().enumerate() {
         for b in &entries[i + 1..] {
+            // One entry's destination inside another's source would be carried
+            // along (or broken) when the later entry moves.
+            if overlaps(&a.new, &b.old) || overlaps(&b.new, &a.old) {
+                problems.push(format!(
+                    "destination overlaps another source: {} -> {} and {} -> {}",
+                    a.old, a.new, b.old, b.new
+                ));
+            }
             if overlaps(&a.old, &b.old) {
                 problems.push(format!("overlapping sources: {} and {}", a.old, b.old));
             }
@@ -260,6 +276,20 @@ mod docs_move_tests {
             .any(|m| m.contains("overlapping destinations")));
         let e = parse_map("handoff\tarchive/h\nhandoff\tarchive/h2\n").unwrap();
         assert!(!validate(&e, &tracked(), &|_| false).is_empty());
+    }
+
+    #[test]
+    fn validate_flags_destination_inside_another_source() {
+        // docs/sub lands under handoff, which a later entry moves away.
+        let e = parse_map("docs/sub\thandoff/sub\nhandoff\tarchive/h\n").unwrap();
+        assert!(validate(&e, &tracked(), &|_| false)
+            .iter()
+            .any(|m| m.contains("destination overlaps another source")));
+        // A destination inside its own source.
+        let e = parse_map("handoff\thandoff/x\n").unwrap();
+        assert!(validate(&e, &tracked(), &|_| false)
+            .iter()
+            .any(|m| m.contains("inside or above its own source")));
     }
 
     #[test]
