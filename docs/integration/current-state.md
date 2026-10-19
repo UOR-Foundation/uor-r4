@@ -1,3 +1,12 @@
+## 2026-10-19 — distill-d1 donor corpus FIT sheet drafted (kimi)
+
+The D41 teacher pass now has its complete pre-registration draft:
+`docs/harness/prep/m1-distill-d1-donor-corpus-DRAFT-2026-10-19.md` — 30M-token target with floor/ceiling,
+five-slice mixture, 14 exact quality gates (dedup, contamination, execution-verified code/math, audits), the
+~$2 1M-token pilot as first tranche of the same pass, hard-targets-only consumption contract, and the
+FIT → owner costed approval → PM dispatch → typed D40 release sequence. Steps 4–8 wait on the driver math
+optimization (owner sequence). Docs-only; no compute.
+
 ## 2026-10-19 — deterministic Rust BPE preparation for V=16,384 (codex)
 
 The [Rust BPE trainer](../labs/rust-bpe-trainer-2026-10-19/README.md) adds `train-bpe` to the shared tokenizer crate under PM6260043935. It reserves BOS/EOS/UNK0/1/2, includes all256 byte symbols, shares runtime segmentation, and selects weighted merges deterministically by count then code-point pair order. Bounded UTF-8 ingestion, strict pre-tokenizer admission, u16 vocabulary ceiling and create-new output fail closed. All21 tokenizer tests pass, including40 exhaustive-recount/runtime-replay comparisons and a bounded16,384-token synthetic fixture; all-target Clippy denies warnings. Host data-preparation tooling only: active A8 source/tokenizer/data and model headline/count remain unchanged; no corpus campaign or model compute was run.
