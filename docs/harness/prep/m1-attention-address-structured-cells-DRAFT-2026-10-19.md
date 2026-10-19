@@ -1,6 +1,6 @@
 # Address-structured injective cells for the learned attention read: pre-flight only — DRAFT
 
-- **Status:** DRAFT. **Not registered. TEST FITNESS: PENDING.**
+- **Status:** DRAFT, pre-flight only. **TEST FITNESS: FIT** (2026-10-19, second-round fresh-context adversarial review; see Review below).
   - **This sheet runs pre-flight only:** zero training updates on any arm. A training sheet follows only if an arm clears the gates below.
   - Training stays HELD. Compute needs FIT, then PM dispatch, then the owner's release for this finite zero-update run.
 - **Line:** M1 learned attention (#2029). **Lab:** claude.
@@ -47,11 +47,11 @@ The read can only rank what it admits. This sheet tests whether **placing each t
    - **Known limitation:** only `s → t` edges with `s` already placed pull a token. Edges toward later-placed successors never pull earlier tokens. This is stated, not corrected, in v1.
 4. **Distinctness.** Within a cell, blocks 1 and 2 are assigned distinct root pairs in token-id order, so all 4,096 vectors are distinct. `distinct_vectors` is recounted on load.
 5. **The proxy, stated.** The greedy optimises the L1 between a target's cell and its **predecessor's** cell. Admission is centred on the read output `q_b = snap_2(u_b + m_b)`, not on `cell(u)`. The frame for block 0 is block B−1 (`frame_block`, `discrete.cu:112`). So `cell(q) = cell(last token)` holds only partially.
-   - **P8 reports, on the device, the distribution of `address_distance(q, cell(last token))`** over the DEV rows. The read trace already records the output and the root of `u`. That distribution states how much any predecessor-keyed placement can gain.
+   - **P8 reports, on the device, the distribution of `address_distance(q, cell(last token))`** over the DEV rows, **reported if an existing device output supplies it; not a gate.** The read trace already records the output and the root of `u`. That distribution states how much any predecessor-keyed placement can gain.
    - B3 ≥ 500 needs about 13% P_succ admission, against 3.3% today, roughly a 4× gain.
 
 **Source work before any run:**
-- **(a) Constructor and exporter — landed** (#2742, record `docs/labs/address-cells-codebook-2026-10-19/`): `src/address_cells.rs` and `address-cells-codebook`. The tables are pinned from the real TRAIN export, and the pod rebuild must reproduce them:
+- **(a) Constructor and exporter — merged** (#2742, `2811c6e93e886552d34f26cccf031d67a004a649`, verified on `origin/main`; record `docs/labs/address-cells-codebook-2026-10-19/`): `src/address_cells.rs` and `address-cells-codebook`. The tables are pinned from the real TRAIN export, and the pod rebuild must reproduce them:
 
   | Arm table | `table_sha256` | file SHA-256 |
   |---|---|---|
@@ -59,6 +59,8 @@ The read can only rank what it admits. This sheet tests whether **placing each t
   | S8 (`address_shuffled_v1_seed_20261019`) | `d2fb8680a16e8017f6f0e6518df6810f6206023b0d14388dc076d4cfde2ebc5b` | `a185bdca07077fe7157e947ff1fa80919e6f99165a4dd5a04061a97873c92718` |
 
   The counts SHA is `755a5a81…`, shared by both tables.
+
+  #2742 also adds two read-only accessors to `corpus.rs` (`eligible_positions()`, `tokens()`), so the driver hash changes. P8's exact reproduction of 427 / 127 under the new hash is the check that this change has no behavioural effect.
 - **(b) Attention plumbing — no code needed, by source.**
   - The table loader checks no `mode` string.
   - `attention_learning::scope` keys on the table file SHA prefix.
@@ -108,19 +110,25 @@ None. Every arm is a fresh checkpoint 0 (`init-corpus`, `new_model(0)`) from its
 
 ## Steps
 
-1. Merge source pieces (a), (b) and (c) above after review. Pin the A8 table's file and `table_sha256`, rebuilt on the pod and required to match.
+1. Source piece (a) is merged (#2742); (b) and (c) need no code. The A8 / S8 tables are pinned above, rebuilt on the pod and required to match.
 2. FIT this sheet with a fresh-context adversarial reviewer subagent (owner direction 6255848646), posting every finding. Then PM dispatch.
 3. On one GPU via `uor-pod`, build, then run the following per arm:
    - `init-corpus` and `eval-corpus`;
    - `attention-dev-b3`, for the K = 8 arms;
    - `attention-export-token-cells` + `coverage-census --token-cells`;
    - G-Init with both negatives;
-   - P8's `q`-distance distribution.
+   - P8's `q`-distance distribution: reported if an existing device output supplies it; not a gate, and no new code is written for it.
 
    **The K = 16 join** is grading of stored outputs on the host (D24 permits this):
    - A row is target-admitted when `admitted_cells − address_rivals == 1`, read from `eval-corpus`'s per-row records (`batches[].rows[]`).
    - Rows join on `(target_position, target_token)` to the K = 8 `attention-panel` rows' `is_psucc`, through an exported file with a pinned SHA.
    - If `eval-corpus` does not accept a K = 16 Relation config, that is source item (c).
+   - **Join precondition (an instrument gate; any miss is D31, never a negative):**
+     - every `eval-corpus` row has both `target_position` and `target_token` (they are `Option`, `device.rs:67-69`);
+     - the keys are unique;
+     - there are 14,287 rows;
+     - exactly 3,847 rows join to `is_psucc = true`.
+   - **Formula check:** on P8's K = 8 rows, counting `admitted_cells − address_rivals == 1` must reproduce 427 overall and 127 on P_succ. Only then is the formula used for P16 / A16.
 4. Post the receipt. If A8 clears every gate, draft the A8 training sheet (the parent's Relation versus FrozenZero contrast with only the table changed). Otherwise post the successor decision.
 
 ## Stop rule
@@ -149,4 +157,9 @@ Review: a fresh-context adversarial reviewer subagent returned FIT-WITH-FIXES on
 - the one-sided floor;
 - the one-direction limitation.
 
-TEST FITNESS: PENDING
+A second fresh-context adversarial reviewer subagent read the revised sheet against `origin/main` and returned FIT-WITH-FIXES, with three wording fixes and no change to any bar. All three are applied:
+- source piece (a) is stated as merged only after #2742 merged and was verified on `origin/main`; P8's exact 427 / 127 is named as the check that #2742's `corpus.rs` accessors change no behaviour under the new driver hash;
+- the K = 16 join has a precondition: both keys present, unique, 14,287 rows and exactly 3,847 P_succ joins (any miss is D31), and the admission formula must reproduce P8's 427 / 127 at K = 8 before it is used at K = 16;
+- P8's q-distance is reported if an existing device output supplies it, and is not a gate.
+
+TEST FITNESS: FIT — fresh-context subagent review (owner direction 6255848646), fixes applied. FIT releases nothing: compute still needs PM dispatch and the owner's release (D40).
