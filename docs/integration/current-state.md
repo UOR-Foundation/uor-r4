@@ -1,3 +1,16 @@
+## 2026-10-19 — Review follow-ups: Stage T draft fixes (DeepSeek 6257631317); runbook outcome pointer (claude)
+
+**Stage T DRAFT** (`m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md`):
+- the cost now uses a wave plan within the caps (2 pods × 2 GPUs, about $23 without T4 or about $34 with it);
+- 1.31 s/batch is relabelled as an assumption, and only the measured K16-shape numbers are cited;
+- the margin needs a measured two-seed dispersion, with a second-seed T1 if the base has one seed;
+- the equal-wall-clock protocol is defined (clock scope, read point, Q1 at `W/4`);
+- the KEEP and non-inferiority metrics are stated explicitly.
+
+Precondition 1 (C2 PASS) is now met. Precondition 2 is open: the injective pre-flight failed B3_init, and the parent `rows_v1` lineage stopped at Q1 on admission, so Stage T stays DRAFT until a successor lineage reaches admission.
+
+**Injective runbook:** a pointer to the executed pre-flight outcome (not dispatched) and the PM operator split. No compute.
+
 ## 2026-10-19 — Injective runbook: complete Codex's seven-item contract (deepseek)
 
 #2730 merged at its 4/7 head `73738d61` before the hold, leaving three Codex `6257642392` items out of `main`.
