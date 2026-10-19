@@ -1,0 +1,86 @@
+# M1 admission-preserving acceptance rule for the A8 discrete learning path (DRAFT)
+
+- **Status:** DRAFT pre-registration, **TEST FITNESS: PENDING**. No compute, no pod, $0 so far. Authorship transferred to deepseek by the PM (Kimi, #2029 08:32Z) after Claude's 08:30Z deadline passed; Claude keeps the review seat.
+- **Line:** M1 learned attention (#2029). **Lab:** deepseek (draft author). **Reviews:** Claude (admission/design); Codex (device/evaluator/state-identity and cost); Antigravity (non-author exact-head review; consumer verifier on request).
+- **Parent:** `docs/harness/prep/m1-attention-a8-address-cells-learning-2026-10-19.md` (FIT, SHA-256 `3e622bebd7c468c6cd3d15a38486768c7902807998f71cae039a4341ab55da2b`, 12,697 B). Everything not restated here is inherited from the parent unchanged.
+- **Why this sheet exists:** A8's Relation arm hit the registered Q1 diagnostic stop: P_succ **551 / 3,847** vs init **1,351 / 3,847**; FrozenZero reached **857 / 3,847** at Q1 and **797 / 3,847** at completion (16,404 batches). The retained-log census verifier (`28fdaade09183b1249e0cfe4daa1745032361fde38f6cb21971c877dada56746`) shows direct cell changes are a minority channel, and the two-sided decomposition puts most of the net admission loss on rows whose **target token's cell did not move** (Relation Q1 65.25%, FrozenZero Q1 67.81%, final 58.30%; descriptive strata, not causal bounds). A table-preserving/Vector-only guard is therefore not sufficient.
+- **D21:** the attention line is at D21 count 2; this sheet's run is the decisive **third** step, scored on the acceptance panel. A diagnostic stop is not a mechanism negative; no KEEP follows from this sheet.
+- **Rules:** D22, D23/D25/D30 unchanged, D24, D29, D31, D11, D40. No student-side exception; no donor/corpus work.
+
+## 1. Question
+
+Can one pre-registered **admission-preserving acceptance rule** keep the fixed TRAIN-derived anchor's admitted count within a pre-registered margin through Q1 and the full dose, on both A8 arms, while still permitting learning? The rule is the changed variable; the table, arms, data, schedule and read are the parent's.
+
+## 2. Design (PM-binding; no re-litigation)
+
+### 2.1 Gate placement and cadence
+
+**Interval-level gate**, audited every **64 completed batches** (the checkpoint cadence), on both arms. This is the PM disposition: erosion is gradual and visible at 64-batch cadence; the existing eval path is reused; the candidate-level gate is priced below as a successor option, not used here.
+
+### 2.2 Fixed anchor (TRAIN-derived)
+
+- At registration, build a deterministic anchor from the pinned **TRAIN** UORT/mask only: in corpus order, take the first **3,847** eligible response targets (mask == 1, non-BOS, in-document predecessor). No DEV or heldout/fresh row may enter the anchor.
+- Bind: ordered row-key list SHA-256 (target token, in-corpus position), corpus token/mask pins inherited from the parent, and the anchor construction rule in the registration checklist. The anchor is an **instrument input**: never used for gradients, loss or target selection.
+- At checkpoint 0, evaluate admitted count on the anchor with the existing admission/eval path. The **anchor baseline must be >= 500**; otherwise the guard cannot detect an erosion and the run is `INSTRUMENT_UNREACHABLE` (D31), not a negative.
+- Baseline anchor admitted count and anchor SHA are recorded in the release packet before any update.
+
+### 2.3 Acceptance margin and audit rule
+
+- Proposed **margin = 24 rows** (same scale as the parent's paired MDE/floor; the FIT review may tighten it, but not after observing run results).
+- At every audit checkpoint after 64 batches: evaluate the anchor on the current model and compare with the **checkpoint-0 baseline**. Breach iff `anchor_admitted < baseline - 24`.
+- On breach: **roll back to the last passing checkpoint** (the previous audit checkpoint), record `AUDIT_BREACH` with admitted, baseline, margin, checkpoint SHA and audit index, and **stop for diagnosis**. The rolled-back state is retained for inspection; the run is non-resumable.
+- No audit may be skipped. A missing/unreadable audit is an instrument fault (D31), not a pass.
+- Both arms use the **same anchor and rule**; there is no unguarded new arm in this sheet. The historical A8 unguarded receipts are reference evidence, not a substitute for this run.
+
+### 2.4 No-op counter-metric
+
+A guard that silently blocks learning must fail. At Q1, record accepted updates, audit triggers and loss trajectory. If the run reaches Q1 with **accepted_updates < 100** (A8's unguarded Relation accepted 396 at Q1) or the guard triggers with zero admission delta at an audit, classify `RULE_EFFECTIVELY_NOOP` and stop for diagnosis. This is a rule/instrument failure, not a mechanism negative.
+
+## 3. Bar
+
+**Pre-run gates (inherited, both arms at checkpoint 0):** G-Init (including the unpinned routes/gates/seed/epoch comparison or the recorded waiver), G-Occ, B3_init **1,351 / 3,847** reproduction, full **4,244 / 14,287**, top-1 **133**, Bar(i) **86**, net G-Cap > max(500, Bar(i)). Any difference is `INSTRUMENT_UNREACHABLE` (D31).
+
+**Guard bars:**
+1. Anchor baseline >= 500, bound before updates.
+2. Both arms complete the Q1 audit schedule with **no margin breach**; all audit values recorded.
+3. The parent's Q1 admission gate, DEV decision bars and fresh seal remain unchanged; this sheet adds the guard and records its audits; it does not replace or widen any parent bar.
+4. No-op counter-metric in 2.4 satisfied.
+
+**Decision:** a margin breach or a no-op result is a diagnostic stop for analysis, never a mechanism negative. A completed run with preserved admission is a diagnostic result; KEEP/H_geom/fresh claims remain governed by the parent's 7.7 and the sealed fresh decision. No capability claim follows.
+
+## 4. Cost
+
+- Parent cost basis inherited (~$11.4 full dose both arms at the historical rate; planning figures, not caps).
+- **Gate cost must be measured, not assumed:** before dispatch, time one anchor evaluation on the declared GPU, including checkpoint load. Planned evaluations: baseline + up to 256 audits per arm after 64 batches; budget cap = measured per-eval cost × planned evaluations, and the sheet stops/replans if the projected gate cost exceeds **15%** of the parent run estimate. The release packet records measured eval latency, total gate cost and all-in spend.
+- Owner caps (<=4 pods, <=$8/h) and disk floors are hard stops.
+
+## 5. Steps
+
+1. FIT this sheet with fresh-context adversarial review; post every finding.
+2. If a source/registration change is needed to register the guard and anchor (not assumed free), land it with exact-head review; otherwise record that the interval gate is an execution-layer rule only.
+3. Stage the two arms with the parent configs; only the guard/anchor binding is added.
+4. PM dispatch with the measured costed plan; Casey's typed D40 release.
+5. Pre-run gates and anchor baseline; Q1; full dose or breach-stop.
+6. Decision per 3; record; no fresh use unless the parent's H_geom path applies.
+7. Record `docs/labs/admission-preserving-2026-10-19/README.md` and a newest-first current-state entry.
+
+## 6. Out of scope
+
+- Candidate-level gate (priced as successor if interval erosion outruns 64-batch cadence); new kernel work; donor/corpus work; fresh transfer; KEEP/paired-DEV/H_geom claim; any table, arm or mechanism change.
+
+## 7. Registration checklist (when FIT)
+
+1. Post-FIT sheet SHA-256.
+2. PM authorship/design disposition reference (this sheet's 08:32Z transfer).
+3. Parent sheet SHA and A8 table/config pins.
+4. Anchor construction rule, ordered row-key SHA-256, corpus token/mask pins.
+5. Audit cadence (64), margin (24), rollback semantics, stop rule.
+6. No-op counter-metric.
+7. Measured eval latency and projected/actual gate cost.
+8. D31 classification table and non-resumable stop rule.
+9. PM dispatch id and Casey's typed D40 release record.
+10. Record/current-state paths.
+
+---
+
+TEST FITNESS: PENDING. Draft author: deepseek; Claude review seat; Codex source/evaluator review; Antigravity non-author review/consumer. No pod is rented and no token or model update is generated by this sheet alone.
