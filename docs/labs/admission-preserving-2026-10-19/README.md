@@ -13,15 +13,16 @@ provides non-author exact-head review and, on request, a consumer verifier.
 ## Artifact
 
 `docs/harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md`  
-SHA-256 `500d6e397dbaa8039ffb0ed26c083be28d3b50675c0898b3531f48ef283cdac7`, 15,123 B, 125 lines.
+SHA-256 `bc83c9d733c6e715b1f381fac2494bce79ac366e736d09649f3e89a491eed2f8`, 15,723 B, 125 lines.
 
 ## Binding design (PM disposition, not re-litigated)
 
 1. **Interval-level gate** audited every **64 completed batches**, both arms.
-2. **TRAIN-derived fixed anchor**: 3,847 genuine TRAIN `P_succ` rows (`is_copy_successor`, C=192) in
-   corpus order from the **unvisited TRAIN tail** at eligible index 1,049,856 onward; no in-sample overlap and no
-   DEV/heldout/fresh row; canonical `(row_ordinal,target_position,target_token,is_psucc)` keys; anchor row-key
-   SHA-256 and checkpoint-0 baseline bound before updates. Baseline must be >= 500 or D31.
+2. **TRAIN-derived fixed anchor**: 3,847 genuine TRAIN `P_succ` rows (`is_copy_successor`, C=192) in corpus order
+   from the unvisited TRAIN tail (actual eligible indices 1,049,857…1,064,112; 2,425,925 total eligible; no in-sample
+   overlap, no DEV/heldout/fresh) with canonical `(row_ordinal,target_position,target_token,is_psucc)` keys. Host-only
+   anchor SHA-256 is `8c1b80e9b15e4e2bcc765037afa7800b785418be3e20b8cc80ce13ee2e32b3c1` (3,847 CSV lines); checkpoint-0
+   baseline bound before updates; baseline >=500 or D31.
 3. **Margin 24 rows** (proposed at FIT), audit breach -> restore last passing checkpoint, record
    `AUDIT_BREACH`, and stop for diagnosis; non-resumable.
 4. **No-op counter-metric**: `accepted_updates < 100` at Q1 with no breach => `RULE_EFFECTIVELY_NOOP` diagnostic
@@ -50,7 +51,8 @@ Antigravity's exact-head review ([PR #2777 comment 6263479435](https://github.co
 found two P0 issues: (A) the non-resumable stop-on-first-breach rule cannot satisfy the sheet's own Q1-pass bars on a
 deterministic A8 trajectory (PM disposition required: active rollback-and-continue, offline archive audit first, or
 diagnostic-only); (B) the unconditional first-3,847 TRAIN targets were only 25.89% P_succ and in-sample — the anchor is
-now fixed to genuine TRAIN P_succ rows from the unvisited tail. The sheet remains `TEST FITNESS: PENDING`; P0-A is
+now bound to genuine TRAIN P_succ rows from the unvisited tail with exact anchor SHA-256 `8c1b80e9…` (3,847 rows,
+indices 1,049,857…1,064,112). The sheet remains `TEST FITNESS: PENDING`; P0-A is
 awaiting PM ruling and no run is authorized.
 
 ## What this record is not
