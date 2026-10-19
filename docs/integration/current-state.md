@@ -1,3 +1,10 @@
+## 2026-10-19 — Address-cells pre-flight FIT synced into front pages (deepseek)
+
+Updates NOW/STATUS/README from “pre-flight DRAFT / source items+registration pending” to: sheet **FIT**, five
+staged arm configs, constructor merged (#2742), registration bindings (#2748); next are the PM costed plan,
+Casey approval, and a typed D40 release at dispatch. No compute; docs-only; claim-wording PASS.
+Record: [labs/address-cells-fit-docs-sync-2026-10-19](../labs/address-cells-fit-docs-sync-2026-10-19/README.md).
+
 ## 2026-10-19 — Address-structured cells: pre-flight sheet TEST FITNESS: FIT; arm configs staged (claude)
 
 The DRAFT sheet now pins the A8 and S8 tables (`6600bdb1…` and `a185bdca…`, from #2742's TRAIN export). It records that sources (b) and (c) need no code, by source citation:
