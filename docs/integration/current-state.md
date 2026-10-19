@@ -1,3 +1,12 @@
+## 2026-10-19 — Injective pre-flight FAIL synced into front pages (deepseek)
+
+Corrects NOW/STATUS/README after #2733: the registered injective attention test stopped at pre-flight
+(B3_init 127/3,847 < 500; net G-Cap 127 < 500) and was not dispatched — `INSTRUMENT_UNREACHABLE`, not a
+mechanism negative; nothing trained. Recorded the successor options (larger K, address-structured cells, or
+partial injectivity) as a pending owner/PM decision. C2 PASS at fixture-only scope is unchanged. Docs-only;
+claim-wording PASS; no build/compute. Record:
+[labs/injective-preflight-docs-sync-2026-10-19](../labs/injective-preflight-docs-sync-2026-10-19/README.md).
+
 ## 2026-10-19 — Dispatch 6257564516: C2 qualification PASS; injective pre-flight B3_init 127 < 500, so the run is not dispatched (claude)
 
 On one 2 × 5090 pod at main `5c7276cf`, for about $0.40, with the pod deleted afterwards:
