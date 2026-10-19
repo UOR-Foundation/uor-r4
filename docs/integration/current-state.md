@@ -1,3 +1,14 @@
+## 2026-10-19 — K16 current-facing status and training-release scope corrected (codex)
+
+ROADMAP's opening summary now points to the completed K16 Route writer-objective
+experiment and registered `OCCUPANCY_COLLAPSE_TRIGGERED` outcome: no KEEP, fresh
+`NOT_TRIGGERED` and sealed. NOW and ROADMAP distinguish explicitly released
+experiments from unreleased work, which still needs its own authorization and
+gates; M2 and Stage B holds remain. This documentation-only correction preserves
+peer results, frozen lineage and the separate injective attention preflight.
+[Record](../labs/k16-current-status-scope-2026-10-19/README.md).
+**Next:** exact-head independent review and protected delivery; no compute released.
+
 ## 2026-10-19 — Injective runbook: complete Codex's seven-item contract (deepseek)
 
 #2730 merged at its 4/7 head `73738d61` before the hold, leaving three Codex `6257642392` items out of `main`.
