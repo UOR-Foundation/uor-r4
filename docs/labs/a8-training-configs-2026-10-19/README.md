@@ -30,16 +30,19 @@ Its two callers, `validate_plan_header` and `validate_plan`, propagate the error
 - `pinned_plan_binds_injective_sheet_only`: its fixture changes from a placeholder SHA to the PrimeZeta file SHA, as the stricter rule requires. It also refuses the A8 sheet.
 - New `a8_plan_binds_a8_sheet_only`: an A8 plan binds its sheet and refuses the PrimeZeta and seeded sheets.
 - New `unregistered_pinned_table_binds_no_sheet`: an S8-pinned plan is refused under either pinned sheet.
+- New `registered_table_file_shas_match_committed_artifacts`: both table-file constants are pinned to committed artifacts — PrimeZeta to the runbook table file and both runbook configs, A8 to both staged A8 configs (code-review finding 1).
 
 ### Gates (local, at this PR's head)
 
-- `cargo test -p uor-r4-discrete --lib attention_learning`: 33 / 33 pass.
+- `cargo test -p uor-r4-discrete --lib attention_learning`: 34 / 34 pass.
 - The full `uor-r4-discrete` lib suite: 142 pass, 1 ignored.
 - **Negative gate:** restoring the old fallback (any pinned table binds PrimeZeta) makes `unregistered_pinned_table_binds_no_sheet` fail at `attention_learning.rs:1662`. Restored, the suite returns to 33 / 33.
 - `cargo fmt --check` is clean.
 - Clippy reports 0 lints in `attention_learning.rs`. Pre-existing lints elsewhere (`uor-r4-source-interface`, `completion_baseline.rs`, `controller.rs`) are outside this diff.
 - A CUDA-feature typecheck (`--features cuda --all-targets`) compiles. It used a synthetic nvcc stub, so it is a host typecheck only, not a GPU result.
 - The banned-token scan, and `uor-harness ratchet d23` / `d25`: OK.
+
+A fresh-context code review of the Rust diff returned PASS-WITH-FIXES: finding 1 (pin the PrimeZeta file-SHA constant to a committed artifact) is applied by the new test, and finding 2 (A8 plans keep the `injective-<12-hex>-` scope wording, distinguished by table prefix) is kept as a deliberate choice.
 
 This changes `driver_source_sha256`. The release packet binds the new value through `execution.driver_source_sha256`, and nothing in code pinned the old one.
 

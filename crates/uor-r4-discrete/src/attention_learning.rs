@@ -1645,6 +1645,37 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn registered_table_file_shas_match_committed_artifacts() -> Result<()> {
+        // The sheets name tables by file SHA-256 through their configs' pins.
+        let prime_zeta = include_bytes!(
+            "../../../docs/labs/injective-attention-runbook-2026-10-19/evidence/prime-zeta-v4096-b4-c192-k8.json"
+        );
+        assert_eq!(corpus::sha256(prime_zeta), PRIME_ZETA_TABLE_FILE_SHA256);
+        let pinned = |bytes: &[u8]| -> Result<String> {
+            let config: DriverConfig =
+                serde_json::from_slice(bytes).map_err(|e| invalid(e.to_string()))?;
+            match config.codebook_initialization {
+                training::CodebookInitialization::PinnedTableV1 { table } => Ok(table.sha256),
+                training::CodebookInitialization::SeededDeviceV1 => {
+                    Err(invalid("committed config is not pinned"))
+                }
+            }
+        };
+        for config in [
+            &include_bytes!("../../../docs/labs/injective-attention-runbook-2026-10-19/evidence/injective-relation-seed1.json")[..],
+            &include_bytes!("../../../docs/labs/injective-attention-runbook-2026-10-19/evidence/injective-frozen-zero-seed1.json")[..],
+        ] {
+            assert_eq!(pinned(config)?, PRIME_ZETA_TABLE_FILE_SHA256);
+        }
+        for config in [
+            &include_bytes!("../../../docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json")[..],
+            &include_bytes!("../../../docs/labs/a8-training-configs-2026-10-19/evidence/a8-frozen-zero-seed1.json")[..],
+        ] {
+            assert_eq!(pinned(config)?, A8_TABLE_FILE_SHA256);
+        }
+        Ok(())
+    }
+    #[test]
     fn a8_plan_binds_a8_sheet_only() -> Result<()> {
         let a8 = with_sheet(pinned_plan(A8_TABLE_FILE_SHA256)?, A8_SHEET_SHA256);
         validate_plan_header(&a8)?;
