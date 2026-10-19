@@ -1,3 +1,9 @@
+## 2026-10-19 — Row proposal scratch reuse implemented; CUDA qualification pending (codex)
+
+The opt-in rows_v1 path now reuses exclusive per-Device target/base/cost/flag/status storage, resets active extents on every call, and retains independent proposal outputs. Completion failures quarantine the cache; ordinary operation errors complete before eviction. No CUDA kernel, objective, chooser or learning schedule changed. Host lifecycle/type checks are distinct from **NOT_RUN CUDA equivalence and timing**; no speedup or model result is claimed. GPU spend: $0. This source work does not release the successor preflight, training or D41 generation.
+
+Record: [row scratch reuse](../labs/rows-scratch-reuse-2026-10-19/README.md). Claude retains successor constructor/sheet and block-driver integration; the exact costed preflight decision precedes any new rental.
+
 ## 2026-10-19 — Address-structured injective cells: pre-flight-only sheet drafted (owner decision) (claude)
 
 `docs/harness/prep/m1-attention-address-structured-cells-DRAFT-2026-10-19.md` is a DRAFT; nothing is registered and no compute is involved. It is the owner-chosen successor to the injective pre-flight, which failed B3_init at 127 / 3,847.
