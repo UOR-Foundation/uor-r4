@@ -11,6 +11,20 @@
 
 Can one pre-registered **admission-preserving acceptance rule** keep the fixed TRAIN-derived anchor's admitted count within a pre-registered margin through Q1 and the full dose, on both A8 arms, while still permitting learning? The rule is the changed variable; the table, arms, data, schedule and read are the parent's.
 
+## Base artifact
+
+None beyond the parent's fresh-model construction. Both arms build a fresh model through the parent's
+`PreparedDriver::new_model` with the pinned A8 table; routes, gates, seed and epoch come from the device
+initializer. The guard and anchor are execution-layer inputs; they do not alter model parameters, the table,
+the read or the mechanism. Parent source/config/table pins are inherited unchanged.
+
+## Data split
+
+The parent's pins are unchanged: TRAIN / DEV and their masks, and the sealed fresh V2 slice. The audit anchor
+is drawn **only** from TRAIN (first 3,847 eligible response targets in pinned corpus order); no DEV, heldout or
+fresh row enters the anchor or the guard. DEV is read only by the parent's inherited evaluation/decision path,
+and fresh remains sealed. No new split is introduced.
+
 ## 2. Design (PM-binding; no re-litigation)
 
 ### 2.1 Gate placement and cadence
@@ -53,6 +67,24 @@ A guard that silently blocks learning must fail. At Q1, record accepted updates,
 - Parent cost basis inherited (~$11.4 full dose both arms at the historical rate; planning figures, not caps).
 - **Gate cost must be measured, not assumed:** before dispatch, time one anchor evaluation on the declared GPU, including checkpoint load. Planned evaluations: baseline + up to 256 audits per arm after 64 batches; budget cap = measured per-eval cost × planned evaluations, and the sheet stops/replans if the projected gate cost exceeds **15%** of the parent run estimate. The release packet records measured eval latency, total gate cost and all-in spend.
 - Owner caps (<=4 pods, <=$8/h) and disk floors are hard stops.
+
+## Stop rule
+
+- A margin breach or a no-op counter-metric failure stops for **D31 diagnosis**, after restoring the last passing
+  checkpoint; the run is non-resumable. It is never a mechanism negative.
+- A missing/unreadable audit, a wrong anchor hash, a pre-run gate mismatch or any unexplained status is
+  `INSTRUMENT_UNREACHABLE` (D31), not a pass.
+- Owner caps (<=4 pods, <=$8/h), the disk floors and a failed/diverged run are hard stops; a healthy run is renewed,
+  not cancelled.
+- No resume after a breach; a new rule/run needs a new FIT/registration decision.
+
+## Minimum test power (D22 section 3)
+
+- Inherited hidden test panel: 14,287 rows / **3,847 P_succ**; parent's `B3_I >= 200` MDE rule; seed 1 first.
+- Guard anchor: **3,847 TRAIN-derived** rows (same size as the hidden P_succ panel), baseline admitted >= 500,
+  evaluated at every 64-batch audit on both arms.
+- This is the decisive third step on the line at D21 count 2; a diagnostic stop does not reset the count. No fresh
+  transfer is used; no KEEP follows without the parent's H_geom/fresh decision.
 
 ## 5. Steps
 
