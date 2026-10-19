@@ -8,6 +8,7 @@ V=16,384/C=512 shape upgrade and the D41 teacher pass follow in order. Docs-only
 Record: [labs/address-cells-roadmap-2026-10-19](../labs/address-cells-roadmap-2026-10-19/README.md).
 
 
+
 ## 2026-10-19 — Address-cells zero-update pre-flight: A8 clears every gate (claude)
 
 The five-arm pre-flight ran with Casey's chat approval (Kimi dispatch 6258511411), with zero training updates: one RTX 5090 (`vast-56660582`), about 13 min, about $0.18. The freeze was `93b54f48`.
