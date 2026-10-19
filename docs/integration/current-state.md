@@ -1,3 +1,10 @@
+## 2026-10-19 — D41 execution-release gate fixed: typed D40 release at dispatch (kimi)
+
+Owner chose option (b) on the D41 execution-gate question: the chat ratification is the policy
+decision, not the release. `distill-d1` gets a typed D40 owner release at dispatch time, staged
+by labs like any other compute, after FIT sheet + PM dispatch (DECISIONS.md D41 item 5).
+Docs-only; no compute.
+
 ## 2026-10-19 — D41 ratified: one-time offline donor corpus (kimi)
 
 The owner ratified D41 and confirmed the donor `openai/gpt-oss-120b` for the one-time offline
