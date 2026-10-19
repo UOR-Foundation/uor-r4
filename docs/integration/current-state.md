@@ -1,3 +1,19 @@
+## 2026-10-19 — Front-door correction: K16 normal close complete; Q4 alias correction (deepseek)
+
+Corrects my #2725 front-door sync: normal close is **complete**, not pending — pod release `00:38:29Z`, down
+`00:38:33Z`, after-down closure custody `6257225762` (131,072 B, MD5 `9f7368ac…`, full readback); final rental
+accounting remains pending. Also applies Claude's Q4 Amendment 7 census correction (#2724/`6257392642`):
+initial aliasing binds at init only and is not the sole final-ranking cause; outcome label/arm A/fresh
+NOT_TRIGGERED and the injective next step are unchanged. Docs-only; claim-wording PASS; no build/compute.
+Record: [labs/k16-frontdoor-close-sync-2026-10-19](../labs/k16-frontdoor-close-sync-2026-10-19/README.md).
+
+## 2026-10-19 — W2 v5.1 and K16 consumer verifiers landed; DeepSeek 6257268086 record correction recorded; K16 outcome call consumer-verified (antigravity)
+
+- **W2 Read-Code Capacity consumer verifier v5.1 (`uor-r4.read-code-capacity/1`):** lands the frozen three-file assembly (`verify_w2_read_code_capacity.rs` `db02488e…`, `103,205` B; `verify_w2_read_code_capacity.py` `2b6f61e2…`, `113,371` B; `w2-read-code-capacity-consumer-schema.md` `c21f6e27…`, `20,493` B). Both `Codex/Sol cf1` ([`6255954303`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6255954303), [`6256723035`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256723035)) and `DeepSeek` ([`6257268086`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6257268086)) closed and accepted v5.1 at those exact hashes (`DeepSeek`'s earlier [`6256057562`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256057562) verdict on v5 was `PAUSED` on the schema line-99 co-primary/helper documentary item and closed `ACCEPT` on v5.1 at `6257268086`). Standalone Rust and Python self-tests (`18/18`) and 17 host-pin checks PASS. No W2 GPU run is authorized by this consumer record.
+- **K16 Rows-Redirect consumer verifier (`verify_k16_rows_redirect.py`):** lands the accepted helper (`fa981782…`, `310,331` B) and companion `README.md` (`fc5a765b…`, `33,034` B) with explicit `FilePin` manifest binding (`SOURCE_ONLY SCOPED PASS` by `Codex/Sol cf1` at [`6256900961`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256900961)), and updates `project-track.md` Step 2 from `in progress` to complete.
+- **K16 outcome-call consumer verification:** evaluating `docs/labs/k16-outcome-call-2026-10-19/evidence/k16-outcome-fields.jsonl` (`ea6f9048…`) with `verify_k16_rows_redirect.py` (`fa981782…`) reproduces `g_occ_triggered = true` on both seeds, `a_g_adm = false` (`2,237` and `3,167 < 4,894`), `r_bars = a_bars = false`, `delta_noise = {target_admitted_rows: 930, top1_correct: 398, top8_correct: 748}`, `decision = "OCCUPANCY_COLLAPSE_TRIGGERED"`, `qualifying_arm = null`, and `G-Trans = NOT_TRIGGERED`.
+- **Next:** audit the staged injective-attention runbook (`#2726`) and Codex's packet against the FIT sheet (`#2712`). Host-only, no compute, `$0`. Record: [`docs/labs/w2-k16-consumer-verifiers-2026-10-19/README.md`](../labs/w2-k16-consumer-verifiers-2026-10-19/README.md).
+
 ## 2026-10-19 — BVG-K Stage T learning-law sheet drafted, re-based on the K16 outcome (claude; W3)
 
 `docs/harness/prep/m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md` is a DRAFT; nothing is registered and no compute is involved. Stage T was held for the K16 configuration of record, and the K16 call selected **arm A**.
@@ -7,6 +23,7 @@
 - **First-batch controls:** C2's uncovered driver-level checks become pre-registered first-batch controls of the released job. These are V1d, the KId invariants, V8d, V9d, and AKd (apply-kernel parity through a shadow K = 1 `transition`).
 
 Registration needs C2 PASS plus the injective outcome. Training stays HELD.
+
 
 ## 2026-10-19 — Injective-codebook attention test: runbook staged for owner release (claude)
 
