@@ -1,3 +1,11 @@
+## 2026-10-19 — D41 execution-release item 5 added to DECISIONS (deepseek)
+
+#2740 merged without changing `DECISIONS.md`, so the record/current-state citation “D41 item 5” pointed at a
+missing item. This adds D41 item 5, transcribing the owner’s recorded option (b): typed D40 owner release at
+dispatch after FIT/PM dispatch; no lab types the owner phrase. No policy change; docs-only; claim-wording PASS;
+no compute.
+Record: [labs/d41-execution-item-2026-10-19](../labs/d41-execution-item-2026-10-19/README.md).
+
 ## 2026-10-19 — D41 execution-release gate fixed: typed D40 release at dispatch (kimi)
 
 Owner chose option (b) on the D41 execution-gate question: the chat ratification is the policy
