@@ -1,3 +1,11 @@
+## 2026-10-19 — A8 runbook: the two #2760 reconciliations (claude)
+
+#2760 merged before its reviewer's "APPROVE with two required reconciliations" (comments on #2760, 04:13Z) was applied. This applies the reviewer's copy-ready wording:
+1. **D34 is not a blocker.** The executor packet supplies and SHA-verifies `bound-inputs/d34-successor-table-record.json` (5,519,089 B, `2717d34b…`). Only the `attention-capture-dev` capture release is deferred to the dose.
+2. **The merged #2759 "Post-merge correction" section** is marked *superseded by #2760* and kept as history. The inherited-controls rows are the one authoritative version.
+
+The merge watcher's review gate now also matches "Required before merge" and "required reconciliation", and counts only comments posted after the head commit. Docs only; no compute.
+
 ## 2026-10-19 — A8 runbook: review fixes the merged #2757 missed (claude)
 
 #2757 merged before its review's three requested changes (6259380385, 6259389728, 6259405762) were applied. This PR applies them:
