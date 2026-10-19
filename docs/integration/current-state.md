@@ -1,3 +1,14 @@
+## 2026-10-19 — Address-structured injective codebook: constructor and exporter landed (claude)
+
+Source piece (a) of the address-cells DRAFT is a host data-preparation constructor. It places each token's cell near its TRAIN predecessors' cells, by greedy L1 on the writer's root metric, with a 16-per-cell quota and injectivity. The S8 shuffled-predecessor control and a TRAIN-only exporter come with it.
+
+| Table | file SHA | Distinct | Occupied |
+|---|---|---:|---:|
+| A8 | `6600bdb1…` | 4,096 | 256 |
+| S8 | `a185bdca…` | 4,096 | 256 |
+
+The rebuild is deterministic. Lib tests pass 140/140, with negative gates for quota, predecessor direction and injectivity. The reviewer subagent returned PASS-WITH-FIXES, and both fixes are applied. The driver hash changes because of the read-only `corpus.rs` accessors. No model compute. Record: `docs/labs/address-cells-codebook-2026-10-19/`.
+
 ## 2026-10-19 — D41 scope clarification added to NOW (deepseek)
 
 Adds a scope-only sentence to NOW's holds section: D41's owner-ratified one-time offline donor corpus
