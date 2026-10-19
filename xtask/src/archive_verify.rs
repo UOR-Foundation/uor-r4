@@ -272,6 +272,51 @@ fn part_a(
     }
 }
 
+/// True when the working-tree executable bit disagrees with the mode git
+/// recorded (`100755` executable, `100644` not).
+fn mode_changed(rev_mode: &str, executable_now: bool) -> bool {
+    match rev_mode {
+        "100755" => !executable_now,
+        "100644" => executable_now,
+        _ => false,
+    }
+}
+
+#[cfg(unix)]
+fn executable(meta: &std::fs::Metadata) -> Option<bool> {
+    use std::os::unix::fs::PermissionsExt;
+    Some(meta.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn executable(_meta: &std::fs::Metadata) -> Option<bool> {
+    None
+}
+
+/// The git blob hash of `bytes`.
+fn blob_hash(root: &Path, bytes: &[u8]) -> Result<String, String> {
+    let mut child = Command::new("git")
+        .args(["hash-object", "--stdin"])
+        .current_dir(root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("git hash-object: {e}"))?;
+    child
+        .stdin
+        .take()
+        .ok_or("git hash-object: no stdin")?
+        .write_all(bytes)
+        .map_err(|e| format!("git hash-object: {e}"))?;
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("git hash-object: {e}"))?;
+    if !out.status.success() {
+        return Err("git hash-object failed".to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
 fn part_b(root: &Path, rev: &str) -> Result<(), String> {
     let listing = git(root, &["ls-tree", "-r", "-z", rev, "--", "archive/"])?;
     // "<mode> <type> <hash>\t<path>"
@@ -292,12 +337,41 @@ fn part_b(root: &Path, rev: &str) -> Result<(), String> {
     }
     let (mut deleted, mut modified) = (Vec::new(), Vec::new());
     let mut to_hash: Vec<&(String, String, String)> = Vec::new();
+    let mut submodules = 0usize;
     for f in &files {
-        match root.join(&f.2).symlink_metadata() {
+        let path = root.join(&f.2);
+        match path.symlink_metadata() {
             Err(_) => deleted.push(f.2.clone()),
-            Ok(_) if f.0 == "120000" || f.0 == "160000" => {}
-            Ok(_) => to_hash.push(f),
+            Ok(_) if f.0 == "160000" => submodules += 1,
+            Ok(meta) if f.0 == "120000" => {
+                // A symlink: its blob is the link target text.
+                let target = if meta.file_type().is_symlink() {
+                    std::fs::read_link(&path).ok()
+                } else {
+                    None
+                };
+                match target {
+                    Some(t) => {
+                        if blob_hash(root, t.as_os_str().as_encoded_bytes())? != f.1 {
+                            modified.push(f.2.clone());
+                        }
+                    }
+                    None => modified.push(f.2.clone()),
+                }
+            }
+            Ok(meta) => {
+                if meta.file_type().is_symlink() {
+                    modified.push(f.2.clone());
+                } else if executable(&meta).is_some_and(|x| mode_changed(&f.0, x)) {
+                    modified.push(f.2.clone());
+                } else {
+                    to_hash.push(f);
+                }
+            }
         }
+    }
+    if submodules > 0 {
+        println!("archive immutability: {submodules} submodule entr(ies) skipped");
     }
     let mut child = Command::new("git")
         .args(["hash-object", "--stdin-paths"])
@@ -391,6 +465,16 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod archive_verify_tests {
     use super::*;
+
+    // T4: an executable-bit flip either way is a modification.
+    #[test]
+    fn executable_bit_flip_is_a_modification() {
+        assert!(mode_changed("100644", true));
+        assert!(mode_changed("100755", false));
+        assert!(!mode_changed("100644", false));
+        assert!(!mode_changed("100755", true));
+        assert!(!mode_changed("120000", true));
+    }
 
     const H: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
