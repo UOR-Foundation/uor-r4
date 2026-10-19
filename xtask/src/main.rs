@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use repo_model::{codegen, Model};
 
 mod audit;
+mod docs_inventory;
 mod docs_links;
 mod figures;
 mod gate;
@@ -51,6 +52,10 @@ fn main() -> ExitCode {
         "gnaf-conformance" => gnaf_conformance::gnaf_conformance(&root, !write),
         "kappa" => kappa::run(&std::env::args().skip(2).collect::<Vec<_>>()),
         "figures" => figures::run(&root, write),
+        "docs-inventory" => {
+            docs_inventory::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+                .map_err(Into::into)
+        }
         "links" => docs_links::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
             .map_err(Fail::from),
         "qubo-codec" => {
@@ -91,6 +96,7 @@ fn main() -> ExitCode {
                  kappa <cmd>       #624: publish/fetch/tag against a kappa-registry (R4_KAPPA_REGISTRY)\n\
                  figures           D27: the README/geometry status diagrams are generated and current\n\
                  links [..]        docs reorganization: tracked-markdown link check (--json OUT, --baseline FILE, --renames-from REV, --simulate MAP.tsv)\n\
+                 docs-inventory --out FILE.json [--prefix P ..]  docs reorganization: docs file inventory and by-string code references\n\
                  \n\
                  --write           check-model/gnaf-root/gnaf-manifest/gnaf-conformance/figures: rewrite the generated file instead of checking it"
             );
