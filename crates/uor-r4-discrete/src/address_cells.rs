@@ -211,7 +211,7 @@ pub fn build(
     }
     let distinct_vectors = crate::training::CodebookTable::count_distinct(&table, spec.blocks);
     let occupied_cells = load.iter().filter(|&&n| n > 0).count();
-    if blocks > 2 && distinct_vectors != v {
+    if distinct_vectors != v {
         return Err(invalid("address-cells table is not injective"));
     }
     if load.iter().any(|&n| n != quota) {
@@ -327,6 +327,39 @@ mod tests {
         // Token 6's only predecessor is 5, so it sits at distance 0 from cell(5).
         assert_ne!(fallback[6], fallback[5]);
         assert_eq!(built.cells[6], built.cells[5]);
+    }
+
+    #[test]
+    fn address_cells_counts_use_the_immediate_predecessor() {
+        // The scored target at position p has window tokens[start..p), so its
+        // predecessor is tokens[p - 1], never tokens[p + 1].
+        let tokens = [10u32, 20, 30, 40, 50];
+        let counts = BigramCounts::count(&tokens, &[2, 3], 512).expect("count");
+        assert_eq!(counts.by_target[30], vec![(20, 1)]);
+        assert_eq!(counts.by_target[40], vec![(30, 1)]);
+        assert!(counts.by_target[50].is_empty());
+        assert_eq!((counts.frequency[30], counts.frequency[40]), (1, 1));
+        assert!(BigramCounts::count(&tokens, &[0], 512).is_err());
+    }
+
+    #[test]
+    fn address_cells_two_block_table_with_shared_cells_is_refused() {
+        // With B = 2 every token in a cell would share one word: the injectivity
+        // recount must refuse it rather than export a non-injective table.
+        let two_block = Spec {
+            vocabulary: 512,
+            blocks: 2,
+            context: 8,
+            kept_cells: 8,
+        };
+        let (counts, fallback) = fixture();
+        assert!(build(
+            two_block,
+            &counts,
+            &fallback,
+            AddressCellsMode::StructuredV1
+        )
+        .is_err());
     }
 
     #[test]

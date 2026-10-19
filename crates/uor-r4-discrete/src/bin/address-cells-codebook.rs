@@ -41,12 +41,9 @@ fn run(args: &[String]) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     let mode = mode(args.get(2))?;
     let spec = config.spec;
-    let mut output = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&args[1])
-        .map_err(|e| format!("exclusive {}: {e}", args[1]))?;
     // TRAIN only; FilePin::read verifies the content SHA. DEV is never loaded.
+    // The output is created only after the table is built, so a failed build
+    // never leaves an empty file that would block an exclusive retry.
     let train = PreparedCorpus::load(&config.train, spec.vocabulary, &config.bos)
         .map_err(|e| e.to_string())?;
     let counts = BigramCounts::count(train.tokens(), train.eligible_positions(), spec.vocabulary)
@@ -61,6 +58,11 @@ fn run(args: &[String]) -> Result<(), String> {
         .collect();
     let placed = build(spec, &counts, &fallback, mode).map_err(|e| e.to_string())?;
     let bytes = table_file_bytes(spec, &placed).map_err(|e| e.to_string())?;
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&args[1])
+        .map_err(|e| format!("exclusive {}: {e}", args[1]))?;
     output
         .write_all(&bytes)
         .and_then(|_| output.sync_all())
