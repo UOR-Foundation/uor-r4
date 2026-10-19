@@ -2,6 +2,9 @@
 //! Static geometry compilation is a build dependency, excluded from the runtime graph.
 //! The routing atlas is one sixteen-root E8 orbit; this is not full-orbit learnability.
 pub mod address_cells;
+pub mod attention_anchor;
+pub mod attention_anchor_device;
+pub mod attention_audit;
 pub mod baseline_reuse;
 #[cfg(test)]
 mod baseline_reuse_source;
@@ -24,6 +27,7 @@ pub mod objective;
 pub mod proposal_timing;
 pub mod rows_source;
 pub mod rowsk_source;
+pub mod snapshot;
 pub use objective::ObjectivePolicy;
 pub mod training;
 
