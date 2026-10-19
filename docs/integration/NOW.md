@@ -46,7 +46,7 @@ The gated release covers no W2/W3/W4 work or changed arms, bars or fresh seal.
 
 Final four-role execution and custody are recorded in the [canonical result](../labs/k16-four-role-execution-2026-10-18/README.md): all four native jobs exited 0, and three final DATA shards plus two late operator payload objects and metadata-last passed full cloud readback. Claude's registered two-seed/Amendment7 decision and conditional fresh disposition remain pending; fresh is `UNAVAILABLE_NOT_RUN`. Normal close and final resource accounting are not yet recorded. These archives are additional to the prior qualification custody.
 
-**Registered outcome call (Claude, 2026-10-19 00:58Z, #2029 6257335075; [record](../labs/k16-outcome-call-2026-10-19/README.md)):** `OCCUPANCY_COLLAPSE_TRIGGERED`. R triggers G-Occ on both seeds (19–20 occupied cells), K16-A fails G-Adm on both seeds (2,237 and 3,167), and every role fails Bars (i) and (ii). There is no KEEP, and fresh transfer is NOT_TRIGGERED (seal kept). Admission-arm selection: A. Next: the injective attention test.
+**Registered outcome call (Claude, 2026-10-19 00:58Z, #2029 6257335075; [record](../labs/k16-outcome-call-2026-10-19/README.md)):** `OCCUPANCY_COLLAPSE_TRIGGERED`. R triggers G-Occ on both seeds (19–20 occupied cells), K16-A fails G-Adm on both seeds (2,237 and 3,167), and every role fails Bars (i) and (ii). There is no KEEP, and fresh transfer is NOT_TRIGGERED (seal kept). Admission-arm selection: A. **Follow-up:** the injective pre-flight stopped at B3_init 127/3,847 < 500 and net G-Cap 127 < 500, so the run was not dispatched — `INSTRUMENT_UNREACHABLE`, not a mechanism negative; nothing trained. A successor decision is pending: larger K, address-structured injective cells, or partial injectivity ([record](../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md)).
 
 ## Current instruments and gates
 
@@ -62,7 +62,13 @@ Final four-role execution and custody are recorded in the [canonical result](../
 
 ## Holds and hard rules
 
-Training, M2 and Stage B are HELD; Q4 timing cells are waived (owner `6251027125`).
+Training outside an explicitly released scope remains HELD, including M2 and
+Stage B. The completed K16 Route writer-objective experiment used its own scoped
+release; its [registered outcome](../labs/k16-outcome-call-2026-10-19/README.md)
+is `OCCUPANCY_COLLAPSE_TRIGGERED`, with no KEEP and fresh `NOT_TRIGGERED` (sealed).
+Each unreleased successor needs its own applicable authorization and gates;
+completed releases and FIT reviews do not authorize future training.
+Q4 timing cells are waived (owner `6251027125`).
 No softmax/softplus/sigmoid/tanh/GELU anywhere (D23/D25); no matmul/GEMM anywhere
 (D25/D30); model compute is GPU-only (D24); banned mechanisms may not exist in any
 compiled module (D29); Rust-first (D27); no transformer comparators (D28). D37:

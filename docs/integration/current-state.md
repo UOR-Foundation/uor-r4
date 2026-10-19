@@ -4,6 +4,66 @@ Owner chose option (b) on the D41 execution-gate question: the chat ratification
 decision, not the release. `distill-d1` gets a typed D40 owner release at dispatch time, staged
 by labs like any other compute, after FIT sheet + PM dispatch (DECISIONS.md D41 item 5).
 Docs-only; no compute.
+## 2026-10-19 — Address-structured injective cells: pre-flight-only sheet drafted (owner decision) (claude)
+
+`docs/harness/prep/m1-attention-address-structured-cells-DRAFT-2026-10-19.md` is a DRAFT; nothing is registered and no compute is involved. It is the owner-chosen successor to the injective pre-flight, which failed B3_init at 127 / 3,847.
+- **Construction:** keep 4,096 distinct vectors, but place each token's cell near its TRAIN predecessors' cells. This is host data preparation from TRAIN bigrams, with the same 16-per-cell quota.
+- **Arms**, all checkpoint 0 with zero updates:
+  - P8: the PrimeZeta control, which must reproduce 427 and 127 exactly;
+  - A8: the treatment;
+  - S8: the shuffled-predecessor packing control;
+  - P16 and A16: the K = 16 bracket, the kernel maximum; it decides nothing.
+- **Gate:** the parent's §3 battery on A8 (B3_init ≥ 500; net G-Cap). A one-sided paired floor decides whether placement, and the predecessor relation, moved admission.
+- **Proxy ceiling:** P8's distance from `q` to the last token's cell.
+
+A fresh-context reviewer returned FIT-WITH-FIXES, and all eight fixes are applied. Source work (a new codebook mode, attention plumbing, a K = 16 eval path) comes before FIT and the dispatch. About $0.40 per pre-flight.
+
+## 2026-10-19 — W3 BVG-K Stage C2 and injective-attention pre-flight consumer verifiers landed; #2733 receipts verified (antigravity)
+
+Landing two deterministic, zero-dependency Python 3 host-only consumer verifiers in
+`docs/labs/c2-injective-consumer-verifiers-2026-10-19/` to audit the executed pod receipts
+landed in #2733 (`docs/labs/injective-preflight-and-c2-qualify-2026-10-19/evidence/`):
+
+1. `verify_bvgk_c2_qualify.py` (`db8e4c87b00a7baa4916c9593ae79b786018b37cd22c1896276754b6cfcce05e`, `33,547` B):
+   recomputes the three embedded CUDA kernel sources (`rows.cu` `48d8e6e0…`, `rowsk.cu` `0b1373a0…`,
+   `bvgk.cu` `e646f016…`) and the 3-source concatenated `driver_source_sha256` (`f4509049…`) directly
+   from `crates/uor-r4-discrete/src/`, enforces static `Device::apply` absence on the qualification path,
+   and audits `bvgk-qualification.json` (`2fff942f…`) against all five C2 controls (`C2-Parity`,
+   `C2-Injective`, `C2-Scale`, `C2-Latency`, `C2-Static-Apply-Absence`) and the 23-entry evidence
+   manifest (`989a3684…`). Verified PASS on #2733 receipts and `19/19` `--self-test` tampering cases.
+2. `verify_injective_attention_preflight.py` (`d30e907d492765461ccce9daf152a0b2eb84aa84da56ddbc4f444f337eb8381c`, `46,154` B):
+   verifies the staged runbook (`docs/labs/injective-attention-staging-2026-10-19/`, `SHA256SUMS` `a6da44d0…`),
+   recomputes the little-endian `i32` table SHA-256 (`e9e03bcd…`) and `4,096` distinct 32-word cells of
+   `prime-zeta-v4096-b4-c192-k8.json` (`83c1380a…`), verifies the single-key `codebook` diff against
+   parent `rows_v1`, recomputes the D40 scope/phrase hashes (`6f512e85…` / `ed9741f7…`), verifies the
+   7-item documentary contract (#2730/#2731) and pre-registration sheet (`e47ce5af…`), and audits the
+   #2733 pre-flight receipts (`TERMINAL_PREFLIGHT_FAIL_INSTRUMENT_UNREACHABLE` on `B3_init(P_succ) = 127 < 500`
+   and `net_g_cap = 127 <= 500`, with moot downstream controls recorded as `NOT_RUN_MOOT_AFTER_B3_FAIL`
+   and `owner_plans = "WITHHELD"`). Verified PASS on both staged and #2733 execution modes and `18/18`
+   `--self-test` cases.
+
+Host-only; zero GPU/pod compute (`$0`). Record:
+[labs/c2-injective-consumer-verifiers-2026-10-19](../labs/c2-injective-consumer-verifiers-2026-10-19/README.md).
+
+## 2026-10-19 — K16 current-facing status and training-release scope corrected (codex)
+
+ROADMAP's opening summary now points to the completed K16 Route writer-objective
+experiment and registered `OCCUPANCY_COLLAPSE_TRIGGERED` outcome: no KEEP, fresh
+`NOT_TRIGGERED` and sealed. NOW and ROADMAP distinguish explicitly released
+experiments from unreleased work, which still needs its own authorization and
+gates; M2 and Stage B holds remain. This documentation-only correction preserves
+peer results, frozen lineage and the separate injective attention preflight.
+[Record](../labs/k16-current-status-scope-2026-10-19/README.md).
+**Next:** exact-head independent review and protected delivery; no compute released.
+
+## 2026-10-19 — Injective pre-flight FAIL synced into front pages (deepseek)
+
+Corrects NOW/STATUS/README after #2733: the registered injective attention test stopped at pre-flight
+(B3_init 127/3,847 < 500; net G-Cap 127 < 500) and was not dispatched — `INSTRUMENT_UNREACHABLE`, not a
+mechanism negative; nothing trained. Recorded the successor options (larger K, address-structured cells, or
+partial injectivity) as a pending owner/PM decision. C2 PASS at fixture-only scope is unchanged. Docs-only;
+claim-wording PASS; no build/compute. Record:
+[labs/injective-preflight-docs-sync-2026-10-19](../labs/injective-preflight-docs-sync-2026-10-19/README.md).
 
 ## 2026-10-19 — D41 ratified: one-time offline donor corpus (kimi)
 
@@ -27,7 +87,6 @@ Record: [labs/d41-offline-donor-2026-10-19](../labs/d41-offline-donor-2026-10-19
 Precondition 1 (C2 PASS) is now met. Precondition 2 is open: the injective pre-flight failed B3_init, and the parent `rows_v1` lineage stopped at Q1 on admission, so Stage T stays DRAFT until a successor lineage reaches admission.
 
 **Injective runbook:** a pointer to the executed pre-flight outcome (not dispatched) and the PM operator split. No compute.
-
 
 ## 2026-10-19 — Dispatch 6257564516: C2 qualification PASS; injective pre-flight B3_init 127 < 500, so the run is not dispatched (claude)
 
