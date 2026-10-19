@@ -46,7 +46,7 @@ The gated release covers no W2/W3/W4 work or changed arms, bars or fresh seal.
 
 Final four-role execution and custody are recorded in the [canonical result](../labs/k16-four-role-execution-2026-10-18/README.md): all four native jobs exited 0, and three final DATA shards plus two late operator payload objects and metadata-last passed full cloud readback. Claude's registered two-seed/Amendment7 decision and conditional fresh disposition remain pending; fresh is `UNAVAILABLE_NOT_RUN`. Normal close and final resource accounting are not yet recorded. These archives are additional to the prior qualification custody.
 
-**Registered outcome call (Claude, 2026-10-19 00:58Z, #2029 6257335075; [record](../labs/k16-outcome-call-2026-10-19/README.md)):** `OCCUPANCY_COLLAPSE_TRIGGERED`. R triggers G-Occ on both seeds (19–20 occupied cells), K16-A fails G-Adm on both seeds (2,237 and 3,167), and every role fails Bars (i) and (ii). There is no KEEP, and fresh transfer is NOT_TRIGGERED (seal kept). Admission-arm selection: A. **Follow-up:** the injective pre-flight stopped at B3_init 127/3,847 < 500 and net G-Cap 127 < 500, so the run was not dispatched — `INSTRUMENT_UNREACHABLE`, not a mechanism negative; nothing trained. A successor decision is pending: larger K, address-structured injective cells, or partial injectivity ([record](../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md)).
+**Registered outcome call (Claude, 2026-10-19 00:58Z, #2029 6257335075; [record](../labs/k16-outcome-call-2026-10-19/README.md)):** `OCCUPANCY_COLLAPSE_TRIGGERED`. R triggers G-Occ on both seeds (19–20 occupied cells), K16-A fails G-Adm on both seeds (2,237 and 3,167), and every role fails Bars (i) and (ii). There is no KEEP, and fresh transfer is NOT_TRIGGERED (seal kept). Admission-arm selection: A. **Follow-up:** the injective pre-flight stopped at B3_init 127/3,847 < 500 and net G-Cap 127 < 500, so the run was not dispatched — `INSTRUMENT_UNREACHABLE`, not a mechanism negative; nothing trained. The owner selected the **address-structured injective-cell** successor as a **placement-only 256×16 pre-flight DRAFT** (`docs/harness/prep/m1-attention-address-structured-cells-DRAFT-2026-10-19.md`); the 32-cell compact form is parked as a fallback. Source items (a/b/c), registration, a costed decision, and a typed D40 owner release at dispatch remain before any run; no compute ([pre-flight record](../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md)).
 
 ## Current instruments and gates
 
@@ -68,6 +68,9 @@ release; its [registered outcome](../labs/k16-outcome-call-2026-10-19/README.md)
 is `OCCUPANCY_COLLAPSE_TRIGGERED`, with no KEEP and fresh `NOT_TRIGGERED` (sealed).
 Each unreleased successor needs its own applicable authorization and gates;
 completed releases and FIT reviews do not authorize future training.
+
+**Separate D41 donor exception:** the owner-ratified one-time offline donor corpus (`distill-d1`) generation is not student training; it runs only after the driver math optimization, under the D41 decision and conditions, and releases no student training hold. Its execution gate (release/PM-dispatch wording) remains a separate owner/PM item.
+
 Q4 timing cells are waived (owner `6251027125`).
 No softmax/softplus/sigmoid/tanh/GELU anywhere (D23/D25); no matmul/GEMM anywhere
 (D25/D30); model compute is GPU-only (D24); banned mechanisms may not exist in any

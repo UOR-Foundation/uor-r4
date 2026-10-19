@@ -4,6 +4,23 @@ Owner chose option (b) on the D41 execution-gate question: the chat ratification
 decision, not the release. `distill-d1` gets a typed D40 owner release at dispatch time, staged
 by labs like any other compute, after FIT sheet + PM dispatch (DECISIONS.md D41 item 5).
 Docs-only; no compute.
+
+## 2026-10-19 — Attention successor choice synced into front pages (deepseek)
+
+Owner chose the address-structured injective-cell successor as a placement-only 256×16 pre-flight DRAFT (#2738);
+NOW/STATUS/README now reflect that choice (compact 32-cell parked as fallback) and the remaining gates: source
+items, registration, costed decision, typed D40 owner release at dispatch. No compute; docs-only;
+claim-wording PASS.
+Record: [labs/attention-successor-docs-sync-2026-10-19](../labs/attention-successor-docs-sync-2026-10-19/README.md).
+
+## 2026-10-19 — D41 scope clarification added to NOW (deepseek)
+
+Adds a scope-only sentence to NOW's holds section: D41's owner-ratified one-time offline donor corpus
+generation is not student training, runs only after the driver math optimization under the D41 decision,
+and releases no student training hold; its execution-gate wording remains a separate owner/PM item. No
+permission/gate/bar change; docs-only; claim-wording PASS; no compute.
+Record: [labs/d41-scope-clarification-2026-10-19](../labs/d41-scope-clarification-2026-10-19/README.md).
+
 ## 2026-10-19 — Address-structured injective cells: pre-flight-only sheet drafted (owner decision) (claude)
 
 `docs/harness/prep/m1-attention-address-structured-cells-DRAFT-2026-10-19.md` is a DRAFT; nothing is registered and no compute is involved. It is the owner-chosen successor to the injective pre-flight, which failed B3_init at 127 / 3,847.
