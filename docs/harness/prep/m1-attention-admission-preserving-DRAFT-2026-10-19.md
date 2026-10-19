@@ -21,8 +21,9 @@ the read or the mechanism. Parent source/config/table pins are inherited unchang
 ## Data split
 
 The parent's pins are unchanged: TRAIN / DEV and their masks, and the sealed fresh V2 slice. The audit anchor
-is drawn **only** from TRAIN (first 3,847 eligible response targets in pinned corpus order); no DEV, heldout or
-fresh row enters the anchor or the guard. DEV is read only by the parent's inherited evaluation/decision path,
+is drawn **only** from TRAIN: 3,847 genuine TRAIN `P_succ` rows (filtered by `is_copy_successor` in the C=192
+in-document window) taken in corpus order from the **unvisited TRAIN tail** at eligible index `1,049,856` onward; no
+DEV, heldout or fresh row enters the anchor or the guard, and no anchor row is in the 16,404-batch training prefix. DEV is read only by the parent's inherited evaluation/decision path,
 and fresh remains sealed. No new split is introduced.
 
 ## 2. Design (PM-binding; no re-litigation)
@@ -33,7 +34,7 @@ and fresh remains sealed. No new split is introduced.
 
 ### 2.2 Fixed anchor (TRAIN-derived)
 
-- At registration, build a deterministic anchor from the pinned **TRAIN** UORT/mask only: in corpus order, take the first **3,847** eligible response targets (mask == 1, non-BOS, in-document predecessor). This is a TRAIN-domain instrument, **not** the parent's DEV P_succ set; do not relabel TRAIN as DEV or bypass any release guard.
+- At registration, build a deterministic anchor from the pinned **TRAIN** UORT/mask only: filter eligible TRAIN targets by `attention_evidence::is_copy_successor` in the C=192 in-document window, then take the first **3,847** such rows in corpus order from the **unvisited TRAIN tail** starting at eligible index **1,049,856** (the end of the 16,404×64 training prefix). No anchor row is in the training prefix; no in-sample overlap. This is a TRAIN-domain instrument, **not** the parent's DEV P_succ set; do not relabel TRAIN as DEV or bypass any release guard. Row keys use the canonical `(row_ordinal, target_position, target_token, is_psucc)` order.
 - Bind: ordered row-key list SHA-256 (target token, in-corpus position), corpus token/mask pins inherited from the parent, and the anchor construction rule in the registration checklist. The anchor is an **instrument input**: the audit never supplies optimization loss, gradients or target selection, and never removes anchor rows from the parent's unchanged TRAIN corpus/order. The TRAIN audit chooses only the stop/inspection state; it is not held-out confirmation.
 - At checkpoint 0, evaluate admitted count on the anchor with the **new exact TRAIN-anchor evaluator** (5.2 source prerequisite). Admission uses the same `target_admitted` predicate as the parent's P_succ evaluation (writer admitted-cell/rank rule); no new admission metric is introduced. The **anchor baseline must be >= 500**; otherwise the guard cannot detect an erosion and the run is `INSTRUMENT_UNREACHABLE` (D31), not a negative. The existing `eval-corpus` path is not sufficient: it returns `TrainingHeld` once `accepted_updates != 0` and scores `Split::Dev`, not this TRAIN anchor.
 - **Source prerequisite (not optional):** before any run, a separately exact-head-reviewed source PR adds an evaluator that (a) accepts a post-update checkpoint (`accepted_updates != 0`), (b) reconstructs each ordered TRAIN anchor row with its **original context/document boundaries** (no re-tokenization or re-cutting), (c) never reads DEV/heldout/fresh, (d) returns the admitted count for the exact anchor hash under the precise predicate, and (e) exposes the evaluated cursor/epoch/model-checkpoint SHA. The PR carries positive and negative refusal tests: wrong checkpoint/epoch/anchor, pre-update-vs-post-update mismatch, and any DEV/heldout/fresh read. If that source is unavailable or fails, the gate is `INSTRUMENT_UNREACHABLE` (D31); there is no DEV-anchor fallback.
@@ -85,8 +86,8 @@ A guard that silently blocks learning must fail. **Precedence:** (1) an audit ma
 ## Minimum test power (D22 section 3)
 
 - Inherited hidden test panel: 14,287 rows / **3,847 P_succ**; parent's `B3_I >= 200` MDE rule; seed 1 first.
-- Guard anchor: **3,847 TRAIN-derived** rows (same size as the hidden P_succ panel), baseline admitted >= 500,
-  evaluated at every 64-batch audit on both arms.
+- Guard anchor: **3,847 genuine TRAIN P_succ rows from the unvisited tail** (same size as the hidden P_succ panel;
+  `is_copy_successor` filtered), baseline admitted >= 500, evaluated at every 64-batch audit on both arms.
 - This is the decisive third step on the line at D21 count 2; a diagnostic stop does not reset the count. No fresh
   transfer is used; no KEEP follows without the parent's H_geom/fresh decision.
 

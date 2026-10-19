@@ -13,21 +13,23 @@ provides non-author exact-head review and, on request, a consumer verifier.
 ## Artifact
 
 `docs/harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md`  
-SHA-256 `4d30f3baa67d4aea0861636f413348b5802cc8c69223ea69b842d2b7ecf03c50`, 14,552 B, 124 lines.
+SHA-256 `500d6e397dbaa8039ffb0ed26c083be28d3b50675c0898b3531f48ef283cdac7`, 15,123 B, 125 lines.
 
 ## Binding design (PM disposition, not re-litigated)
 
 1. **Interval-level gate** audited every **64 completed batches**, both arms.
-2. **TRAIN-derived fixed anchor**: first 3,847 eligible TRAIN response targets in pinned corpus
-   order; no DEV/heldout/fresh row; anchor row-key SHA-256 and checkpoint-0 baseline bound before
-   updates. Baseline must be >= 500 or the run is `INSTRUMENT_UNREACHABLE` (D31).
+2. **TRAIN-derived fixed anchor**: 3,847 genuine TRAIN `P_succ` rows (`is_copy_successor`, C=192) in
+   corpus order from the **unvisited TRAIN tail** at eligible index 1,049,856 onward; no in-sample overlap and no
+   DEV/heldout/fresh row; canonical `(row_ordinal,target_position,target_token,is_psucc)` keys; anchor row-key
+   SHA-256 and checkpoint-0 baseline bound before updates. Baseline must be >= 500 or D31.
 3. **Margin 24 rows** (proposed at FIT), audit breach -> restore last passing checkpoint, record
    `AUDIT_BREACH`, and stop for diagnosis; non-resumable.
-4. **No-op counter-metric**: `accepted_updates < 100` at Q1 or zero-delta triggers =>
-   `RULE_EFFECTIVELY_NOOP` diagnostic stop.
-5. Inherited A8 pre-run gates, Q1 gate, DEV decision bars and sealed fresh; no KEEP/mechanism claim
-   from the guard alone. Gate cost is measured before dispatch; projected >15% of the parent run
-   estimate stops for re-plan.
+4. **No-op counter-metric**: `accepted_updates < 100` at Q1 with no breach => `RULE_EFFECTIVELY_NOOP` diagnostic
+   stop; the zero-delta trigger is removed; 24/100 are prospective FIT choices.
+5. Inherited A8 pre-run gates, Q1 gate, DEV decision bars and sealed fresh; no KEEP/mechanism claim from the guard
+   alone. Gate latency is `UNMEASURED` at FIT; calibration needs its own authorized stage or occurs inside the final
+   authorized run. Readiness uses `R = added_gate_cost / ungated_two_arm_dose_cost`; `R <= 0.15` is a pre-training
+   readiness check, never a live-run budget stop.
 
 ## Review findings applied
 
@@ -41,6 +43,15 @@ Codex's exact-head re-review passed the source/evaluator/state/cost contract; tw
 applied: the explicit 15% readiness formula (`R = added_gate_cost / ungated_two_arm_dose_cost`, shared setup/custody
 common to both, `R > 0.15` stops before training and replans) and the clarification that the TRAIN audit never
 supplies optimization loss/gradients/targets and never removes anchor rows from the parent's training corpus.
+
+## Open P0 review findings
+
+Antigravity's exact-head review ([PR #2777 comment 6263479435](https://github.com/UOR-Foundation/uor-r4/pull/2777#issuecomment-6263479435))
+found two P0 issues: (A) the non-resumable stop-on-first-breach rule cannot satisfy the sheet's own Q1-pass bars on a
+deterministic A8 trajectory (PM disposition required: active rollback-and-continue, offline archive audit first, or
+diagnostic-only); (B) the unconditional first-3,847 TRAIN targets were only 25.89% P_succ and in-sample — the anchor is
+now fixed to genuine TRAIN P_succ rows from the unvisited tail. The sheet remains `TEST FITNESS: PENDING`; P0-A is
+awaiting PM ruling and no run is authorized.
 
 ## What this record is not
 
