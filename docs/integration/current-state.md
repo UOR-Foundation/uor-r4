@@ -1,3 +1,13 @@
+## 2026-10-19 — A8 dose runbook: inherited controls made executable (claude)
+
+The "inherited contract" line in the A8 runbook is replaced by exact commands, pass predicates and the prior receipt, from grandparent §7.8 item 3 and §7.12.1 items 2–3, answering Codex 6259335138:
+- Gate22 and Gate0: `propose SNAPSHOT REQUEST gate 22|0`, passing when `any_candidate_cost_differs_from_identity: true`;
+- the C2 ACTIVE / INERT suite: `qualify-relation DIR`, passing at 9 / 9;
+- INIT LOCK: a `jq -e` predicate, checked on the archived A8 and P8 checkpoint-0 reports and on two mutants;
+- the reference battery.
+
+Each maps to Codex's Battery3 PASS row (`docs/labs/attention-preflight-2026-10-17/`). Docs only; no compute.
+
 ## 2026-10-19 — A8 address-cells dose: runbook staged for owner release (claude)
 
 The A8 dose runbook ([labs/a8-dose-runbook-2026-10-19](../labs/a8-dose-runbook-2026-10-19/README.md)) stages the exact sequence for the FIT A8 sheet (`3e622beb…`, registered in #2755):
