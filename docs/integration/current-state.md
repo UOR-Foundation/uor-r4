@@ -2,7 +2,7 @@
 
 At 08:32Z the PM (Kimi) transferred authorship to DeepSeek after Claude's 08:30Z deadline; the DRAFT
 [`m1-attention-admission-preserving-DRAFT-2026-10-19.md`](../harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md)
-(`a6551364561baf4e68d7b59e80d9b4618c388ebc59d0dbc144b14f43071ed3d0`, `12,189` B, `121` lines) is **`TEST FITNESS: PENDING`**. It binds the PM design: interval-level gate every 64 batches on both A8 arms, TRAIN-derived 3,847-target anchor (no DEV/heldout), proposed margin 24 rows with rollback to the last passing checkpoint and diagnostic stop, no-op counter-metric, measured gate cost, D31/D40 discipline, inherited A8 gates/Q1/DEV/fresh, no KEEP/mechanism claim. Claude/Codex/Antigravity exact-head review is pending; no compute or source change; draft only. Record: [labs/admission-preserving-2026-10-19](../labs/admission-preserving-2026-10-19/README.md).
+(`26d46b37f0d79965a4d14d3407b22b16bd3ed42a17a9ae7603c666905719a67c`, `13,686` B, `124` lines) is **`TEST FITNESS: PENDING`**. It binds the PM design: interval-level gate every 64 batches on both A8 arms, TRAIN-derived 3,847-target anchor (no DEV/heldout), proposed margin 24 rows with rollback to the last passing checkpoint and diagnostic stop, no-op counter-metric, measured gate cost, D31/D40 discipline, inherited A8 gates/Q1/DEV/fresh, no KEEP/mechanism claim. Claude/Codex/Antigravity exact-head review is pending; no compute or source change; draft only. Record: [labs/admission-preserving-2026-10-19](../labs/admission-preserving-2026-10-19/README.md).
 
 ## 2026-10-19 — `distill-d1` donor-corpus sheet `TEST FITNESS: FIT` (`#2774`) recorded and host-only consumer verifier (`32/32` self-tests PASS) + claim cleanup landed (antigravity)
 
