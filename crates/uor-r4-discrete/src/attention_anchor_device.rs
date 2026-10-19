@@ -251,6 +251,72 @@ pub fn validate_boundary(
     })
 }
 
+/// The descriptor alone is insufficient: only the separately validated audited
+/// controller can construct this permit. This is not an arbitrary evaluation CLI.
+#[cfg(feature = "cuda")]
+pub(crate) fn evaluate_boundary(
+    permit: &crate::controller::attention_audited::ControllerAuditPermit,
+    anchor: &PreparedTrainAnchor,
+    driver: &PreparedDriver,
+    model: &crate::device::Device,
+    boundary: &ValidatedBoundary,
+) -> Result<serde_json::Value> {
+    permit.validate(anchor, boundary)?;
+    driver.validate_checkpoint(boundary.checkpoint())?;
+    model.synchronize()?;
+    let live_binding = model.binding().clone();
+    let epoch = model.epoch()?;
+    let before = crate::snapshot::snapshot_hash_domains(&model.snapshot()?)?;
+    let expected = boundary.binding();
+    let config = driver.config();
+    if live_binding.model != expected.stamp.runtime_model
+        || epoch != expected.stamp.epoch
+        || before.model_snapshot_sha256 != expected.snapshot.snapshot_sha256
+        || model.spec() != config.spec
+        || model.read_spec() != config.read_spec
+        || model.objective_policy() != config.objective_policy
+        || model.read_initialization() != config.read_initialization
+        || live_binding.seed != config.seed
+    {
+        return Err(invalid("actual Device differs from sealed audit boundary"));
+    }
+    let mut evaluations = Vec::with_capacity(anchor.batches.len());
+    for batch in &anchor.batches {
+        let carried = model.carry_windows(&batch.windows)?;
+        let mut evaluation = model.evaluate(&carried, &batch.targets)?;
+        if evaluation.rows.len() != batch.rows.len() {
+            return Err(invalid("anchor GPU row inventory differs"));
+        }
+        for (row, identity) in evaluation.rows.iter_mut().zip(&batch.rows) {
+            row.target_position = Some(identity.target_position);
+            row.target_token = Some(identity.target_token);
+        }
+        evaluations.push(evaluation);
+    }
+    let aggregate = model.aggregate_evaluations(&evaluations)?;
+    model.synchronize()?;
+    let after = crate::snapshot::snapshot_hash_domains(&model.snapshot()?)?;
+    if model.binding() != &live_binding
+        || model.epoch()? != epoch
+        || after != before
+        || aggregate.scored_rows != anchor.registration.policy.count
+        || aggregate.target_admitted_rows > aggregate.scored_rows
+    {
+        return Err(invalid(
+            "anchor evaluation changed state or returned wrong inventory",
+        ));
+    }
+    Ok(
+        serde_json::json!({"schema":"uor-r4.attention-audit-evaluation/1",
+        "boundary":expected,"anchor_registration":anchor.registration,
+        "evaluated_state":boundary.stamp(),"actual_snapshot_before":before,
+        "actual_snapshot_after":after,"aggregate":aggregate,"batches":evaluations,
+        "updates_applied":0,"evaluation_mutates_model":false,
+        "dev_read":false,"fresh_read":false,"count_reference_executed":false,
+        "host_admission_recomputed":false}),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
