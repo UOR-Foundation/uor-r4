@@ -477,6 +477,9 @@ pub fn check_one(report: &mut Report, universe: &Universe, source: &str, text: &
 #[derive(Debug, Default)]
 pub struct PathMap {
     entries: HashMap<String, String>,
+    /// Virtual files (`+path` lines) that a simulated move would add, such as
+    /// pointer stubs; they join the universe but are never link sources.
+    added: Vec<String>,
 }
 
 impl PathMap {
@@ -486,12 +489,19 @@ impl PathMap {
         self.entries.insert(old, new);
     }
 
-    /// `old<TAB>new` lines; `#` comments and blank lines are skipped.
+    /// `old<TAB>new` lines and `+path` virtual additions; `#` comments and blank
+    /// lines are skipped.
     pub fn parse_tsv(text: &str) -> Result<Self, String> {
         let mut map = PathMap::default();
         for (i, raw) in text.lines().enumerate() {
             let line = raw.trim();
             if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some(path) = line.strip_prefix('+') {
+                let p = normalize(path.trim())
+                    .map_err(|_| format!("map line {}: escapes root", i + 1))?;
+                map.added.push(p);
                 continue;
             }
             let mut f = line.split('\t');
@@ -507,6 +517,17 @@ impl PathMap {
             }
         }
         Ok(map)
+    }
+
+    /// The tracked set as it would be after the simulated move, plus the
+    /// virtual `+path` additions.
+    pub fn universe<'a, I: IntoIterator<Item = &'a str>>(&self, paths: I) -> Universe {
+        Universe::new(
+            paths
+                .into_iter()
+                .map(|p| self.map(p))
+                .chain(self.added.iter().cloned()),
+        )
     }
 
     /// `R100` entries of `git diff --name-status -z` output.
@@ -700,7 +721,7 @@ pub fn write_json(path: &str, value: &Value) -> Result<(), String> {
 
 /// Check every tracked markdown source, optionally relocated by `sim`.
 pub fn check_repo(root: &Path, tracked: &[String], sim: &PathMap) -> Result<Report, String> {
-    let universe = Universe::new(tracked.iter().map(|p| sim.map(p)));
+    let universe = sim.universe(tracked.iter().map(String::as_str));
     let mut report = Report::default();
     for src in tracked.iter().filter(|p| is_md(p)) {
         let bytes = std::fs::read(root.join(src)).map_err(|e| format!("{src}: {e}"))?;
@@ -805,7 +826,7 @@ mod tests {
     }
 
     fn report_for(paths: &[&str], sources: &[(&str, &str)], sim: &PathMap) -> Report {
-        let universe = Universe::new(paths.iter().map(|p| sim.map(p)));
+        let universe = sim.universe(paths.iter().copied());
         let mut r = Report::default();
         for (src, text) in sources {
             check_one(&mut r, &universe, &sim.map(src), text);
@@ -909,6 +930,20 @@ mod tests {
         let cmp = compare(&keys(&base), &[&sim], &cur.broken);
         assert_eq!(cmp.new.len(), 1);
         assert_eq!(cmp.new[0].resolved, "archive/c.md");
+    }
+
+    #[test]
+    fn simulate_virtual_stub_repairs_moved_source_link() {
+        let paths = ["docs/a/s.md", "docs/c.md"];
+        let srcs = [("docs/a/s.md", "[c](../c.md)")];
+        let base = report_for(&paths, &srcs, &PathMap::default());
+        let sim = PathMap::parse_tsv("docs/a\tarchive/a\n+archive/c.md\n").expect("map");
+        let cur = report_for(&paths, &srcs, &sim);
+        let cmp = compare(&keys(&base), &[&sim], &cur.broken);
+        assert!(
+            cmp.new.is_empty(),
+            "the stub at archive/c.md resolves the link"
+        );
     }
 
     #[test]
