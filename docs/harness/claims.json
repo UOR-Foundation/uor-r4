@@ -1,24 +1,17 @@
 {
-  "antigravity/attention-cell-reference-scorer": {
-    "branch": "antigravity/attention-cell-reference-scorer",
-    "claimed_at": "2026-10-17T15:52:00-04:00",
-    "head": "07bb99b40",
+  "antigravity/w2-k16-consumer-verifiers-20261019": {
+    "branch": "antigravity/w2-k16-consumer-verifiers-20261019",
+    "claimed_at": "2026-10-18T21:11:48-04:00",
+    "head": "5a16ec323",
     "lab": "antigravity",
-    "note": "Standalone Rust same-cell reference scorer (attention-cell-reference-scorer) for Unit 2b preflight-dev and Dose 1 paired-dev receipts in crates/uor-r4-harness (#2029)"
+    "note": "land W2 v5.1 and K16 consumer verifiers and verify K16 outcome call"
   },
-  "antigravity/d32-ratchet-and-proof-model-audit": {
-    "branch": "antigravity/d32-ratchet-and-proof-model-audit",
-    "claimed_at": "2026-10-16T19:52:34-04:00",
-    "head": "2d6794e28",
-    "lab": "antigravity",
-    "note": "Host-only D32 Rust float-type/literal ratchet (uor-harness ratchet d32), Hopper/Blackwell tensor-core ratchet (wgmma/tcgen05), and uor-r4-proof-model D23/D25/D32 inference audit expansion (#2563)"
-  },
-  "antigravity/harness-d32-and-rule-dispatch": {
-    "branch": "antigravity/harness-d32-and-rule-dispatch",
-    "claimed_at": "2026-10-16T22:51:46-04:00",
-    "head": "fa62a670a",
-    "lab": "antigravity",
-    "note": "Implement and wire un-dispatched harness.owner_rules_applied, harness.entry_point, harness.documented_commands (with GROUPS/FLAGS validation), prlint.gates_declared, and receipts.skill_usage_recorded in uor-r4-harness (#2570)"
+  "claude/address-cells-sheet-20261019": {
+    "branch": "claude/address-cells-sheet-20261019",
+    "claimed_at": "2026-10-18T21:49:47-04:00",
+    "head": "314c91f72",
+    "lab": "claude",
+    "note": ""
   },
   "claude/batched-coordinates-draft-20261018": {
     "branch": "claude/batched-coordinates-draft-20261018",
@@ -62,6 +55,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/bvgk-c2-h4-20261018": {
+    "branch": "claude/bvgk-c2-h4-20261018",
+    "claimed_at": "2026-10-18T20:47:24-04:00",
+    "head": "0b3feefd3",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/bvgk-fit-fixes-20261018": {
     "branch": "claude/bvgk-fit-fixes-20261018",
     "claimed_at": "2026-10-18T17:10:46-04:00",
@@ -73,6 +73,13 @@
     "branch": "claude/bvgk-softmax-literal-20261018",
     "claimed_at": "2026-10-18T19:30:27-04:00",
     "head": "8b21d627e",
+    "lab": "claude",
+    "note": ""
+  },
+  "claude/bvgk-staget-draft-20261019": {
+    "branch": "claude/bvgk-staget-draft-20261019",
+    "claimed_at": "2026-10-18T21:12:34-04:00",
+    "head": "e31d7b054",
     "lab": "claude",
     "note": ""
   },
@@ -104,6 +111,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/dispatch-receipts-20261019": {
+    "branch": "claude/dispatch-receipts-20261019",
+    "claimed_at": "2026-10-18T21:35:37-04:00",
+    "head": "6ba4fe774",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/driver-rows-path-20261018": {
     "branch": "claude/driver-rows-path-20261018",
     "claimed_at": "2026-10-18T00:39:46-04:00",
@@ -122,6 +136,13 @@
     "branch": "claude/injective-runbook-20261019",
     "claimed_at": "2026-10-18T21:07:17-04:00",
     "head": "5dec1b4e8",
+    "lab": "claude",
+    "note": ""
+  },
+  "claude/injective-runbook-fixes-20261019": {
+    "branch": "claude/injective-runbook-fixes-20261019",
+    "claimed_at": "2026-10-18T21:19:49-04:00",
+    "head": "dfbc71d3b",
     "lab": "claude",
     "note": ""
   },
@@ -157,6 +178,13 @@
     "branch": "claude/resume-message-20261018",
     "claimed_at": "2026-10-18T12:25:57-04:00",
     "head": "9b234ae40",
+    "lab": "claude",
+    "note": ""
+  },
+  "claude/review-followups-20261019": {
+    "branch": "claude/review-followups-20261019",
+    "claimed_at": "2026-10-18T21:38:41-04:00",
+    "head": "6ba4fe774",
     "lab": "claude",
     "note": ""
   },

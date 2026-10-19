@@ -1,3 +1,142 @@
+## 2026-10-19 — Address-structured injective cells: pre-flight-only sheet drafted (owner decision) (claude)
+
+`docs/harness/prep/m1-attention-address-structured-cells-DRAFT-2026-10-19.md` is a DRAFT; nothing is registered and no compute is involved. It is the owner-chosen successor to the injective pre-flight, which failed B3_init at 127 / 3,847.
+- **Construction:** keep 4,096 distinct vectors, but place each token's cell near its TRAIN predecessors' cells. This is host data preparation from TRAIN bigrams, with the same 16-per-cell quota.
+- **Arms**, all checkpoint 0 with zero updates:
+  - P8: the PrimeZeta control, which must reproduce 427 and 127 exactly;
+  - A8: the treatment;
+  - S8: the shuffled-predecessor packing control;
+  - P16 and A16: the K = 16 bracket, the kernel maximum; it decides nothing.
+- **Gate:** the parent's §3 battery on A8 (B3_init ≥ 500; net G-Cap). A one-sided paired floor decides whether placement, and the predecessor relation, moved admission.
+- **Proxy ceiling:** P8's distance from `q` to the last token's cell.
+
+A fresh-context reviewer returned FIT-WITH-FIXES, and all eight fixes are applied. Source work (a new codebook mode, attention plumbing, a K = 16 eval path) comes before FIT and the dispatch. About $0.40 per pre-flight.
+
+## 2026-10-19 — W3 BVG-K Stage C2 and injective-attention pre-flight consumer verifiers landed; #2733 receipts verified (antigravity)
+
+Landing two deterministic, zero-dependency Python 3 host-only consumer verifiers in
+`docs/labs/c2-injective-consumer-verifiers-2026-10-19/` to audit the executed pod receipts
+landed in #2733 (`docs/labs/injective-preflight-and-c2-qualify-2026-10-19/evidence/`):
+
+1. `verify_bvgk_c2_qualify.py` (`db8e4c87b00a7baa4916c9593ae79b786018b37cd22c1896276754b6cfcce05e`, `33,547` B):
+   recomputes the three embedded CUDA kernel sources (`rows.cu` `48d8e6e0…`, `rowsk.cu` `0b1373a0…`,
+   `bvgk.cu` `e646f016…`) and the 3-source concatenated `driver_source_sha256` (`f4509049…`) directly
+   from `crates/uor-r4-discrete/src/`, enforces static `Device::apply` absence on the qualification path,
+   and audits `bvgk-qualification.json` (`2fff942f…`) against all five C2 controls (`C2-Parity`,
+   `C2-Injective`, `C2-Scale`, `C2-Latency`, `C2-Static-Apply-Absence`) and the 23-entry evidence
+   manifest (`989a3684…`). Verified PASS on #2733 receipts and `19/19` `--self-test` tampering cases.
+2. `verify_injective_attention_preflight.py` (`d30e907d492765461ccce9daf152a0b2eb84aa84da56ddbc4f444f337eb8381c`, `46,154` B):
+   verifies the staged runbook (`docs/labs/injective-attention-staging-2026-10-19/`, `SHA256SUMS` `a6da44d0…`),
+   recomputes the little-endian `i32` table SHA-256 (`e9e03bcd…`) and `4,096` distinct 32-word cells of
+   `prime-zeta-v4096-b4-c192-k8.json` (`83c1380a…`), verifies the single-key `codebook` diff against
+   parent `rows_v1`, recomputes the D40 scope/phrase hashes (`6f512e85…` / `ed9741f7…`), verifies the
+   7-item documentary contract (#2730/#2731) and pre-registration sheet (`e47ce5af…`), and audits the
+   #2733 pre-flight receipts (`TERMINAL_PREFLIGHT_FAIL_INSTRUMENT_UNREACHABLE` on `B3_init(P_succ) = 127 < 500`
+   and `net_g_cap = 127 <= 500`, with moot downstream controls recorded as `NOT_RUN_MOOT_AFTER_B3_FAIL`
+   and `owner_plans = "WITHHELD"`). Verified PASS on both staged and #2733 execution modes and `18/18`
+   `--self-test` cases.
+
+Host-only; zero GPU/pod compute (`$0`). Record:
+[labs/c2-injective-consumer-verifiers-2026-10-19](../labs/c2-injective-consumer-verifiers-2026-10-19/README.md).
+
+## 2026-10-19 — K16 current-facing status and training-release scope corrected (codex)
+
+ROADMAP's opening summary now points to the completed K16 Route writer-objective
+experiment and registered `OCCUPANCY_COLLAPSE_TRIGGERED` outcome: no KEEP, fresh
+`NOT_TRIGGERED` and sealed. NOW and ROADMAP distinguish explicitly released
+experiments from unreleased work, which still needs its own authorization and
+gates; M2 and Stage B holds remain. This documentation-only correction preserves
+peer results, frozen lineage and the separate injective attention preflight.
+[Record](../labs/k16-current-status-scope-2026-10-19/README.md).
+**Next:** exact-head independent review and protected delivery; no compute released.
+
+## 2026-10-19 — Injective pre-flight FAIL synced into front pages (deepseek)
+
+Corrects NOW/STATUS/README after #2733: the registered injective attention test stopped at pre-flight
+(B3_init 127/3,847 < 500; net G-Cap 127 < 500) and was not dispatched — `INSTRUMENT_UNREACHABLE`, not a
+mechanism negative; nothing trained. Recorded the successor options (larger K, address-structured cells, or
+partial injectivity) as a pending owner/PM decision. C2 PASS at fixture-only scope is unchanged. Docs-only;
+claim-wording PASS; no build/compute. Record:
+[labs/injective-preflight-docs-sync-2026-10-19](../labs/injective-preflight-docs-sync-2026-10-19/README.md).
+
+## 2026-10-19 — D41 ratified: one-time offline donor corpus (kimi)
+
+The owner ratified D41 and confirmed the donor `openai/gpt-oss-120b` for the one-time offline
+`distill-d1` corpus: one donor, one corpus, one generation pass, exempt from D23/D25/D27/D28/D30
+only while generating; student side unchanged (D32 discrete, hard targets only); exception expires
+at corpus seal. Owner-directed sequence: driver math optimization (occupancy, BVG-K driver
+integration) first, then a measured ~1M-token pilot (~$2), then production sizing. The injective
+attention test line is unaffected and runs first. Docs-only; no compute.
+Record: [labs/d41-offline-donor-2026-10-19](../labs/d41-offline-donor-2026-10-19/README.md).
+
+## 2026-10-19 — Review follow-ups: Stage T draft fixes (DeepSeek 6257631317); runbook outcome pointer (claude)
+
+**Stage T DRAFT** (`m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md`):
+- the cost now uses a wave plan within the caps (2 pods × 2 GPUs, about $23 without T4 or about $34 with it);
+- 1.31 s/batch is relabelled as an assumption, and only the measured K16-shape numbers are cited;
+- the margin needs a measured two-seed dispersion, with a second-seed T1 if the base has one seed;
+- the equal-wall-clock protocol is defined (clock scope, read point, Q1 at `W/4`);
+- the KEEP and non-inferiority metrics are stated explicitly.
+
+Precondition 1 (C2 PASS) is now met. Precondition 2 is open: the injective pre-flight failed B3_init, and the parent `rows_v1` lineage stopped at Q1 on admission, so Stage T stays DRAFT until a successor lineage reaches admission.
+
+**Injective runbook:** a pointer to the executed pre-flight outcome (not dispatched) and the PM operator split. No compute.
+
+## 2026-10-19 — Dispatch 6257564516: C2 qualification PASS; injective pre-flight B3_init 127 < 500, so the run is not dispatched (claude)
+
+On one 2 × 5090 pod at main `5c7276cf`, for about $0.40, with the pod deleted afterwards:
+- **BVG-K C2 qualifier:** all five controls PASS (fixture-only; `Device::apply` never called). K = 16 with joint verify gives about 8× per coordinate.
+- **Injective attention pre-flight (zero updates):**
+  - G-Init and its negative (a), plus G-Occ, PASS: 256 cells, 0 tie mass.
+  - **B3_init(P_succ) is 127 of 3,847, below 500, and net G-Cap is 127.** The run is **not dispatched** (sheet §3).
+
+The cause is admission breadth: K = 8 admits about 3% of 256 evenly occupied cells, so aliasing is no longer the limit. This is an instrument-reachability result, not a mechanism negative, and nothing trained. A successor decision is needed: larger K, an address-structured injective cell assignment, or partial injectivity. Record: `docs/labs/injective-preflight-and-c2-qualify-2026-10-19/`.
+
+## 2026-10-19 — Injective runbook: complete Codex's seven-item contract (deepseek)
+
+#2730 merged at its 4/7 head `73738d61` before the hold, leaving three Codex `6257642392` items out of `main`.
+This docs-only follow-up adds the build-identity/scope correction, the explicit net G-Cap alias-ceiling join,
+and the inherited Gate22/Gate0/Relation C2 ACTIVE/INERT/INIT LOCK/reference-battery retention. Evidence
+payload/table/config bytes unchanged; no compute. Record:
+[labs/injective-runbook-contract-fix-2026-10-19](../labs/injective-runbook-contract-fix-2026-10-19/README.md).
+
+## 2026-10-19 — Injective runbook: Codex's documentary corrections applied (claude)
+
+Four corrections to `docs/labs/injective-attention-runbook-2026-10-19/`, per Codex's batch `6257545219`:
+1. `SHA256SUMS` no longer lists itself.
+2. Every new attempt uses a fresh output directory. A diagnostic Q1 stop is not resumable, and a failed attempt gets an external review.
+3. Transfer needs a genuine paired DEV H_geom decision plus a typed PM authorization.
+4. G-Occ is `occupied_cells > 16` with zero within-cell tie mass and no split alias group; 256 is the expected value.
+
+The record also notes the operator split: Codex owns the executor packet. Table and config bytes are unchanged. No compute.
+
+## 2026-10-19 — Front-door correction: K16 normal close complete; Q4 alias correction (deepseek)
+
+Corrects my #2725 front-door sync: normal close is **complete**, not pending — pod release `00:38:29Z`, down
+`00:38:33Z`, after-down closure custody `6257225762` (131,072 B, MD5 `9f7368ac…`, full readback); final rental
+accounting remains pending. Also applies Claude's Q4 Amendment 7 census correction (#2724/`6257392642`):
+initial aliasing binds at init only and is not the sole final-ranking cause; outcome label/arm A/fresh
+NOT_TRIGGERED and the injective next step are unchanged. Docs-only; claim-wording PASS; no build/compute.
+Record: [labs/k16-frontdoor-close-sync-2026-10-19](../labs/k16-frontdoor-close-sync-2026-10-19/README.md).
+
+## 2026-10-19 — W2 v5.1 and K16 consumer verifiers landed; DeepSeek 6257268086 record correction recorded; K16 outcome call consumer-verified (antigravity)
+
+- **W2 Read-Code Capacity consumer verifier v5.1 (`uor-r4.read-code-capacity/1`):** lands the frozen three-file assembly (`verify_w2_read_code_capacity.rs` `db02488e…`, `103,205` B; `verify_w2_read_code_capacity.py` `2b6f61e2…`, `113,371` B; `w2-read-code-capacity-consumer-schema.md` `c21f6e27…`, `20,493` B). Both `Codex/Sol cf1` ([`6255954303`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6255954303), [`6256723035`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256723035)) and `DeepSeek` ([`6257268086`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6257268086)) closed and accepted v5.1 at those exact hashes (`DeepSeek`'s earlier [`6256057562`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256057562) verdict on v5 was `PAUSED` on the schema line-99 co-primary/helper documentary item and closed `ACCEPT` on v5.1 at `6257268086`). Standalone Rust and Python self-tests (`18/18`) and 17 host-pin checks PASS. No W2 GPU run is authorized by this consumer record.
+- **K16 Rows-Redirect consumer verifier (`verify_k16_rows_redirect.py`):** lands the accepted helper (`fa981782…`, `310,331` B) and companion `README.md` (`fc5a765b…`, `33,034` B) with explicit `FilePin` manifest binding (`SOURCE_ONLY SCOPED PASS` by `Codex/Sol cf1` at [`6256900961`](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6256900961)), and updates `project-track.md` Step 2 from `in progress` to complete.
+- **K16 outcome-call consumer verification:** evaluating `docs/labs/k16-outcome-call-2026-10-19/evidence/k16-outcome-fields.jsonl` (`ea6f9048…`) with `verify_k16_rows_redirect.py` (`fa981782…`) reproduces `g_occ_triggered = true` on both seeds, `a_g_adm = false` (`2,237` and `3,167 < 4,894`), `r_bars = a_bars = false`, `delta_noise = {target_admitted_rows: 930, top1_correct: 398, top8_correct: 748}`, `decision = "OCCUPANCY_COLLAPSE_TRIGGERED"`, `qualifying_arm = null`, and `G-Trans = NOT_TRIGGERED`.
+- **Next:** audit the staged injective-attention runbook (`#2726`) and Codex's packet against the FIT sheet (`#2712`). Host-only, no compute, `$0`. Record: [`docs/labs/w2-k16-consumer-verifiers-2026-10-19/README.md`](../labs/w2-k16-consumer-verifiers-2026-10-19/README.md).
+
+## 2026-10-19 — BVG-K Stage T learning-law sheet drafted, re-based on the K16 outcome (claude; W3)
+
+`docs/harness/prep/m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md` is a DRAFT; nothing is registered and no compute is involved. Stage T was held for the K16 configuration of record, and the K16 call selected **arm A**.
+- **Arms:** T1 (`coordinate_block` 1, the current law) against T16 (and optionally T4), on one base lineage, seeds 1 and 2.
+- **Bar:** equal-wall-clock quality, with the numeric margin fixed at registration from the base lineage's dispersion.
+- **Base lineage:** fixed by the injective test (the injective treatment configuration if it passes its pre-flight and Q1, else the parent `rows_v1` configuration).
+- **First-batch controls:** C2's uncovered driver-level checks become pre-registered first-batch controls of the released job. These are V1d, the KId invariants, V8d, V9d, and AKd (apply-kernel parity through a shadow K = 1 `transition`).
+
+Registration needs C2 PASS plus the injective outcome. Training stays HELD.
+
+
 ## 2026-10-19 — Injective-codebook attention test: runbook staged for owner release (claude)
 
 The sheet's §Sequencing condition is met by the K16 call (arm A). The runbook (`docs/labs/injective-attention-runbook-2026-10-19/`) pins:
@@ -39,6 +178,19 @@ target. Added the missing `## Post-dose optimization path` stub pointing at the 
 updated the stub count to four. Docs-only; no bar/hold/source/compute change; claim-wording PASS via the
 existing checker; no build, no compute.
 Record: [labs/post-dose-anchor-hygiene-2026-10-19](../labs/post-dose-anchor-hygiene-2026-10-19/README.md).
+
+## 2026-10-18 — BVG-K C2 piece H4: device-level GPU qualifier, sheet FIT (claude; W3)
+
+`bvgk-qualify` checks the block path on synthetic fixture devices only:
+- V0, RC and UT;
+- JR (joint loss against an independent reference) and V3;
+- DC, with membership checked independently of the shared choose rule and decision-coverage power required;
+- RF, the C1 rerun, and a diagnostic throughput curve.
+
+It commits only through `apply_block`. The guarded `Device::apply` is never called (owner direction). The sheet lists what stays uncovered: the BVG-K against ordinary apply kernel on GPU, K = 1 identity with `transition`, and all driver-level controls. Those need an owner-released admission and become Stage T first-batch controls.
+
+Subagent FIT is applied. Host gates are green: 132/132 tests, stub-CUDA, D29 and the softmax scan. **GPU run next** (owner-approved, fixture-only, about $0.75). No compute yet.
+
 
 ## 2026-10-18 — K16 A/R four-role execution complete; final DATA/lateOP verified; registered outcome pending (codex)
 
