@@ -1,3 +1,12 @@
+## 2026-10-19 — A8 runbook: review fixes the merged #2757 missed (claude)
+
+#2757 merged before its review's three requested changes (6259380385, 6259389728, 6259405762) were applied. This PR applies them:
+1. **Gate22 / Gate0:** the PASS test is now bound to Kimi's binding sensitivity interpretation (6241890920 §3, used by dispatch 6242232012; Codex's `both_probes_any_active_candidate_cost_differs_v1`). `before`, `after`, `candidate` and `candidate_losses` are retained verbatim, so the §7.12.1 reading is also reported.
+2. **INIT LOCK:** bound to `qualify-relation`'s registered `init_locks[]` record (treatment / control snapshot bit-identity, reload identity and the hashes). The A8 jq gate check and a cross-arm `cmp` of the checkpoint-0 `.model` are kept only as supplements.
+3. **Reference battery:** the B3 rows are executable now. The T1 / T1b / T2 / U_succ scorer (`attention-cell-reference-scorer preflight-dev`) is **NOT_RUN pre-run, DEFERRED_TO_DOSE**. It needs an `attention-capture-dev` release and the sealed D34 record, which is not in the repository; Battery3 deferred it the same way.
+
+The merge watcher now refuses to queue, and dequeues, when a PR has a change request. Docs only; no compute.
+
 ## 2026-10-19 — A8 dose runbook: inherited controls made executable (claude)
 
 The "inherited contract" line in the A8 runbook is replaced by exact commands, pass predicates and the prior receipt, from grandparent §7.8 item 3 and §7.12.1 items 2–3, answering Codex 6259335138:
