@@ -1,7 +1,7 @@
 # A8 address-cells learning sheet: FIT, registered in source, configs staged (2026-10-19)
 
 - **Line:** M1 learned attention (#2029). **Lab:** claude. **Count:** registration only. It changes no headline number and runs no compute.
-- **Sheet:** [`m1-attention-a8-address-cells-learning-2026-10-19.md`](../../harness/prep/m1-attention-a8-address-cells-learning-2026-10-19.md), **TEST FITNESS: FIT**, SHA-256 `2983203156f57d0c4b59343da1679620f960efea8a4c92f76ede5d4d6d73e080`.
+- **Sheet:** [`m1-attention-a8-address-cells-learning-2026-10-19.md`](../../harness/prep/m1-attention-a8-address-cells-learning-2026-10-19.md), **TEST FITNESS: FIT**, SHA-256 `3e622bebd7c468c6cd3d15a38486768c7902807998f71cae039a4341ab55da2b`.
   - Its parent is the PrimeZeta injective sheet (FIT #2712). Exactly one variable changes: the pinned table, now `address_structured_v1` (file `6600bdb1…`, table `4122cbab…`).
   - The sheet exists because the address-cells pre-flight (#2751) promoted A8 under its step 4: B3_init(P_succ) 1,351 / 3,847 and net G-Cap 1,351.
 - **Review:** a fresh-context adversarial reviewer subagent read draft `6b4e9762` against `origin/main` and returned **FIT-WITH-FIXES**. All five findings are applied:

@@ -9,10 +9,11 @@
     - arms, schedule, read, objective and K;
     - §7.6 bars, §7.7 decision rule and §7.8 instrument validity;
     - §7.12.1 pre-flight, §7.12.2 Q1 gate, §7.12.3 fresh order and §7.12.5–§7.12.9.
-- **Why this sheet exists:** the address-cells pre-flight (record `docs/labs/address-cells-preflight-2026-10-19/`, #2751) promoted A8 under its sheet's step 4. Every §3 gate of the parent passed on A8's checkpoint 0:
+- **Why this sheet exists:** the address-cells pre-flight (record `docs/labs/address-cells-preflight-2026-10-19/`, #2751) promoted A8 under its sheet's step 4. On A8's checkpoint 0:
   - B3_init(P_succ) **1,351 / 3,847**;
-  - net G-Cap **1,351**, against max(500, 133 + 24). Here 133 is the full-panel checkpoint-0 top-1 of the Relation config, used as an upper bound for the P_succ control term. The P_succ value from the FrozenZero arm is recorded at the pre-run gate (§3);
-  - G-Init, both negatives, and G-Occ (256 cells, tie mass 0).
+  - net G-Cap **1,351**, against a threshold of 500 under either reading of the control term. One reading uses 133 (A8's full-panel checkpoint-0 top-1, an upper bound for the P_succ term); the other uses 38 (P8's, per DeepSeek's post-merge erratum on #2751). This sheet uses the parent's definition, the FrozenZero arm's own P_succ value, recorded at the pre-run gate (§3);
+  - G-Init's table check and both negatives, and G-Occ (256 cells, tie mass 0).
+  - **Not run:** G-Init's comparison of routes, gates and epoch against an **unpinned** initializer. Only cross-arm equality was measured, so the erratum makes training conditional on that comparison or a waiver. This sheet makes it a hard pre-run gate (§3), so it runs before any update.
   
   On the PrimeZeta table the same gates had stopped the parent at 127 / 3,847.
 - **Rules:** D22, D23/D25/D30 (no softmax, squashing or matmul), D24 (GPU only), D29, D31, D11, D40. The A8 table is integer host data preparation from TRAIN only. The driver, kernels and training are integer; there is no float anywhere on this path. Unlike the parent, it needs no D37 zeta exception: `address_cells.rs` and `address-cells-codebook` contain no `f32` / `f64` (grep, 0 matches).
@@ -140,4 +141,4 @@ Seed 2 is reproducibility only.
 - A8 vs the PrimeZeta lineage at a matched arm;
 - a K = 16 attention path, which would need source item (c) for the attention validator.
 
-TEST FITNESS: FIT (owner direction 6255848646: a fresh-context adversarial reviewer subagent replaces cross-lab FIT for Claude lanes. The review of draft `6b4e9762` returned FIT-WITH-FIXES. All five findings are applied: the exact sheet mapping that refuses unregistered pinned tables (§6); §3 items inherited with A8 pins, and negative (b) rebuilt from A8; the 133 full-panel upper-bound label and the FrozenZero P_succ control term; the reproduction gate on both arms with each value's row basis; and the float-free citation. Registration releases no training: the run needs the §6 source merged, then PM dispatch, then Casey's typed D40 release.)
+TEST FITNESS: FIT (owner direction 6255848646: a fresh-context adversarial reviewer subagent replaces cross-lab FIT for Claude lanes. The review of draft `6b4e9762` returned FIT-WITH-FIXES. All five findings are applied (a post-FIT wording correction, from DeepSeek's #2751 erratum, states that the unpinned G-Init comparison was not run and is a pre-run gate here; no bar changed): the exact sheet mapping that refuses unregistered pinned tables (§6); §3 items inherited with A8 pins, and negative (b) rebuilt from A8; the 133 full-panel upper-bound label and the FrozenZero P_succ control term; the reproduction gate on both arms with each value's row basis; and the float-free citation. Registration releases no training: the run needs the §6 source merged, then PM dispatch, then Casey's typed D40 release.)

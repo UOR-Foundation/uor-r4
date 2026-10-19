@@ -25,7 +25,7 @@ pub const INJECTIVE_SHEET_SHA256: &str =
     "e47ce5afb3966bda13cd04bd9b99849b401c028e078de958fa98b5e8b7ed4efb";
 /// The address-structured (A8) injective-codebook attention sheet.
 pub const A8_SHEET_SHA256: &str =
-    "2983203156f57d0c4b59343da1679620f960efea8a4c92f76ede5d4d6d73e080";
+    "3e622bebd7c468c6cd3d15a38486768c7902807998f71cae039a4341ab55da2b";
 /// Table file SHA-256s each pinned-table sheet registers (its D22 scope).
 const PRIME_ZETA_TABLE_FILE_SHA256: &str =
     "83c1380a8f507e51d0342faa1b089dea6a20561a03552208c093fa640afc124b";
