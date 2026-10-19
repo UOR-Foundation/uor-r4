@@ -226,6 +226,21 @@ pub fn build(
     })
 }
 
+/// Serialised `uor-r4.codebook-table/1` file for a placed table (shared by the
+/// exporter and its round-trip test).
+pub fn table_file_bytes(spec: Spec, placed: &AddressCells) -> Result<Vec<u8>> {
+    use crate::training::{CodebookTable, CODEBOOK_TABLE_SCHEMA};
+    let table = CodebookTable {
+        schema: CODEBOOK_TABLE_SCHEMA.into(),
+        spec,
+        mode: placed.mode.clone(),
+        distinct_vectors: CodebookTable::count_distinct(&placed.table, spec.blocks),
+        table_sha256: CodebookTable::words_sha256(&placed.table),
+        table: placed.table.clone(),
+    };
+    serde_json::to_vec(&table).map_err(|e| invalid(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,5 +359,33 @@ mod tests {
             ..spec()
         };
         assert!(build(bad, &counts, &fallback, AddressCellsMode::StructuredV1).is_err());
+    }
+
+    #[test]
+    fn address_cells_table_file_loads_through_pinned_loader() {
+        use crate::corpus::{sha256, FilePin};
+        use crate::training::CodebookTable;
+        let (counts, fallback) = fixture();
+        let placed =
+            build(spec(), &counts, &fallback, AddressCellsMode::StructuredV1).expect("build");
+        let bytes = table_file_bytes(spec(), &placed).expect("bytes");
+        let path = std::path::PathBuf::from(env!("OUT_DIR")).join(format!(
+            "address_cells_roundtrip_{}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, &bytes).expect("write");
+        let pin = FilePin {
+            path: path.clone(),
+            sha256: sha256(&bytes),
+        };
+        let loaded = CodebookTable::load(&pin, spec());
+        std::fs::remove_file(&path).ok();
+        let loaded = loaded.expect("load");
+        assert_eq!(loaded, placed.table);
+        assert_eq!(
+            CodebookTable::count_distinct(&loaded, spec().blocks),
+            spec().vocabulary as usize
+        );
+        assert_eq!(placed.distinct_vectors, spec().vocabulary as usize);
     }
 }
