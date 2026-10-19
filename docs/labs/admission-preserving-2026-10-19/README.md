@@ -13,7 +13,7 @@ provides non-author exact-head review and, on request, a consumer verifier.
 ## Artifact
 
 `docs/harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md`  
-SHA-256 `97f2f5b7f072898f2dcf8ccdbe41828350ac96ec5fb9be010d31d6b7e5101a11`, 11,904 B, 121 lines.
+SHA-256 `a6551364561baf4e68d7b59e80d9b4618c388ebc59d0dbc144b14f43071ed3d0`, 12,189 B, 121 lines.
 
 ## Binding design (PM disposition, not re-litigated)
 

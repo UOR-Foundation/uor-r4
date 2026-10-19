@@ -35,7 +35,7 @@ and fresh remains sealed. No new split is introduced.
 
 - At registration, build a deterministic anchor from the pinned **TRAIN** UORT/mask only: in corpus order, take the first **3,847** eligible response targets (mask == 1, non-BOS, in-document predecessor). No DEV or heldout/fresh row may enter the anchor.
 - Bind: ordered row-key list SHA-256 (target token, in-corpus position), corpus token/mask pins inherited from the parent, and the anchor construction rule in the registration checklist. The anchor is an **instrument input**: never used for gradients, loss or target selection.
-- At checkpoint 0, evaluate admitted count on the anchor with the **new exact TRAIN-anchor evaluator** (5.2 source prerequisite). The **anchor baseline must be >= 500**; otherwise the guard cannot detect an erosion and the run is `INSTRUMENT_UNREACHABLE` (D31), not a negative. The existing `eval-corpus` path is not sufficient: it returns `TrainingHeld` once `accepted_updates != 0` and scores `Split::Dev`, not this TRAIN anchor.
+- At checkpoint 0, evaluate admitted count on the anchor with the **new exact TRAIN-anchor evaluator** (5.2 source prerequisite). Admission uses the same `target_admitted` predicate as the parent's P_succ evaluation (writer admitted-cell/rank rule); no new admission metric is introduced. The **anchor baseline must be >= 500**; otherwise the guard cannot detect an erosion and the run is `INSTRUMENT_UNREACHABLE` (D31), not a negative. The existing `eval-corpus` path is not sufficient: it returns `TrainingHeld` once `accepted_updates != 0` and scores `Split::Dev`, not this TRAIN anchor.
 - **Source prerequisite (not optional):** before any run, a separately exact-head-reviewed source PR adds an evaluator that (a) accepts a post-update checkpoint (`accepted_updates != 0`), (b) reads only the pinned ordered TRAIN anchor rows and never DEV/heldout/fresh, (c) returns the admitted count for the exact anchor hash, and (d) exposes the evaluated cursor/epoch/model-checkpoint SHA. If that source is unavailable or fails, the gate is `INSTRUMENT_UNREACHABLE` (D31); there is no DEV-anchor fallback.
 - Baseline anchor admitted count and anchor SHA are recorded in the release packet before any update.
 
@@ -91,7 +91,7 @@ A guard that silently blocks learning must fail. At Q1, record accepted updates,
 ## 5. Steps
 
 1. FIT this sheet with fresh-context adversarial review; post every finding.
-2. **Source prerequisite:** land the exact-head-reviewed evaluator/provider from 2.2 (post-update TRAIN-anchor evaluation, synchronous audit state, epoch/full-checkpoint identity, no DEV/fresh); merge and bind its source SHA. No run starts without it; if it is unavailable the gate is `INSTRUMENT_UNREACHABLE` (D31), with no DEV fallback.
+2. **Source prerequisite:** land the exact-head-reviewed evaluator/provider from 2.2 (post-update TRAIN-anchor evaluation, synchronous audit state, epoch/full-checkpoint identity, no DEV/fresh); merge and bind its source SHA. The source PR must name the exact command/schema and pin its source SHA; this sheet does not pre-name an implementation path. No run starts without it; if it is unavailable the gate is `INSTRUMENT_UNREACHABLE` (D31), with no DEV fallback.
 3. Stage the two arms with the parent configs; only the guard/anchor binding is added.
 4. PM dispatch with the measured costed plan; Casey's typed D40 release.
 5. Pre-run gates and anchor baseline; Q1; full dose or breach-stop.
