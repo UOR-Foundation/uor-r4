@@ -1,3 +1,45 @@
+## 2026-10-19 — Injective-codebook attention test: runbook staged for owner release (claude)
+
+The sheet's §Sequencing condition is met by the K16 call (arm A). The runbook (`docs/labs/injective-attention-runbook-2026-10-19/`) pins:
+- **the table:** the PrimeZeta V4096 / B4 / C192 / K8 file, SHA `83c1380a…`, whose inner digest `e9e03bcd…` reproduces the registered one;
+- **the configs:** both arm configs, each differing from the parent `rows_v1` attempt only in `codebook_initialization`;
+- **the release:** both scopes and Casey's exact release phrases (D40).
+
+It lists the lab-side build, table, config, pre-flight, plan and review steps, then the run and transfer steps. The sheet header no longer says DRAFT, and its SHA is re-pinned to `e47ce5af…`, which changes the driver hash, so plans are built after this merges. **Nothing has run.** Training stays HELD pending PM dispatch and the owner's release. Estimated cost: a full dose of about 6.0 h / about $11.4 on 2 × 5090, or about $2.8 at a Q1 stop.
+
+## 2026-10-19 — K16 outcome synced into README and lab entry (deepseek)
+
+#2723's registered outcome (`OCCUPANCY_COLLAPSE_TRIGGERED`, no KEEP; arm A; fresh NOT_TRIGGERED) was in
+NOW/STATUS/current-state but README still described the interpretation as the immediate priority/pending and
+the lab entry listed it pending. Corrected both with the verified evidence (`ea6f9048…` JSONL; exact
+target-admitted/n arithmetic; corrected `2 × n_A` G-Occ thresholds); normal close/final accounting remain
+pending. Docs-only; claim-wording PASS; no build, no compute.
+Record: [labs/k16-outcome-docs-sync-2026-10-19](../labs/k16-outcome-docs-sync-2026-10-19/README.md).
+
+## 2026-10-19 — K16 Q4 coverage census; correction to the outcome call's reasoning (claude)
+
+This is the Amendment 7 census on the four Q4 checkpoints, from host counting of the stored tables at the frozen lineage. Distinct vectors grow from 16 to 274–279 for A and to 82–86 for R. The alias ceiling grows from 1,986 to about 9,000 for A and to 5,645–7,161 for R. G-Cap at Q4 is above the bar on every role.
+
+**Correction:** aliasing binds at initialization only, and it does not explain A's final top-1 of 65 and 463. The label (`OCCUPANCY_COLLAPSE_TRIGGERED`), fresh NOT_TRIGGERED, arm A and the injective test as next step all stand. Record: `docs/labs/k16-outcome-call-2026-10-19/`.
+
+## 2026-10-19 — K16 registered outcome call: OCCUPANCY_COLLAPSE_TRIGGERED, no KEEP; arm A; fresh NOT_TRIGGERED (claude)
+
+The call grades the sealed final evaluations, whose four raw SHAs match custody `6256611456`. It applies the redirect sheet's registered gates:
+- **R:** triggers G-Occ on both seeds, with 19–20 occupied cells and about 3,400 admitted tokens per row, so its G-Adm pass is vacuous.
+- **A:** fails G-Adm on both seeds (2,237 and 3,167 against 4,894).
+- **Bars:** every role fails Bar (i) (best top-1 463 against 1,941) and Bar (ii).
+
+These are configuration negatives at exact scope only (D22). Fresh transfer is NOT_TRIGGERED, and the seal is kept. **Arm selection: A.** The binding limit is the seeded codebook's alias ceiling (1,986 rows), so **the injective attention test is next.** The Q4 Amendment 7 census is pending. No compute; grading of stored outputs only. Record: `docs/labs/k16-outcome-call-2026-10-19/`.
+
+## 2026-10-19 — Post-dose optimization path anchor restored in project-track (deepseek)
+
+The D32/D37 clarification and the tokens/s DRAFT reference `project-track.md` §Post-dose optimization path,
+but that heading was absent after the D39 archive move (only three stubs existed), so the references had no
+target. Added the missing `## Post-dose optimization path` stub pointing at the archived section text and
+updated the stub count to four. Docs-only; no bar/hold/source/compute change; claim-wording PASS via the
+existing checker; no build, no compute.
+Record: [labs/post-dose-anchor-hygiene-2026-10-19](../labs/post-dose-anchor-hygiene-2026-10-19/README.md).
+
 ## 2026-10-18 — BVG-K C2 piece H4: device-level GPU qualifier, sheet FIT (claude; W3)
 
 `bvgk-qualify` checks the block path on synthetic fixture devices only:
@@ -9,6 +51,7 @@
 It commits only through `apply_block`. The guarded `Device::apply` is never called (owner direction). The sheet lists what stays uncovered: the BVG-K against ordinary apply kernel on GPU, K = 1 identity with `transition`, and all driver-level controls. Those need an owner-released admission and become Stage T first-batch controls.
 
 Subagent FIT is applied. Host gates are green: 132/132 tests, stub-CUDA, D29 and the softmax scan. **GPU run next** (owner-approved, fixture-only, about $0.75). No compute yet.
+
 
 ## 2026-10-18 — K16 A/R four-role execution complete; final DATA/lateOP verified; registered outcome pending (codex)
 
