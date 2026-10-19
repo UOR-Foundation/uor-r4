@@ -207,7 +207,7 @@ multiplication and no floating point at serving (D11). The active discrete path 
 integer/GPU-only. Under D37, offline training may use float forward passes, gradients and
 optimizers in a separately scanned geometric module, with its export gap reported; D25 still
 prohibits matrix multiplication and exponential-family squashing, and D24 keeps model compute
-on the GPU. Non-model preparation/analysis/tooling may run locally. Training remains held.
+on the GPU. Non-model preparation/analysis/tooling may run locally. Training outside an explicitly released scope remains held.
 
 The owner reaffirmed this target on 2026-09-27: "Keep the native, multiplier-free serving
 target" ([#820, closed 2026-10-09; historical quote](https://github.com/UOR-Foundation/uor-r4/issues/820#issuecomment-5852795279)).
