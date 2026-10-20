@@ -458,11 +458,13 @@ pub fn plan(items: &[Item], remote: &Remote, issues_json: &Issues, repo: &str) -
             }
         } else {
             for n in numbers {
-                let labelled = by_number[n]
+                let issue = &by_number[n];
+                let labelled = issue
                     .labels
                     .iter()
                     .any(|l| l.eq_ignore_ascii_case(ITEM_LABEL));
-                if labelled {
+                // A closed issue for a retired item needs nothing more.
+                if labelled && issue.state.eq_ignore_ascii_case("open") {
                     p.warnings.push(format!(
                         "#{n} carries roadmap id `{id}` but {ITEMS_DIR}/{id}.md does not exist; close it by hand or restore the file"
                     ));
@@ -669,8 +671,11 @@ pub fn gather(gh: &dyn Gh, issues_json: &Issues) -> Result<Remote, String> {
         if !listed.contains(n) {
             // A number GitHub cannot show stays out of the remote state, so
             // `plan` warns that it was not found rather than the run aborting.
-            if let Ok(issue) = gh.view_issue(*n) {
-                remote.issues.push(issue);
+            match gh.view_issue(*n) {
+                Ok(issue) => remote.issues.push(issue),
+                Err(e) => {
+                    eprintln!("warning: issues.json names #{n}, which could not be read: {e}")
+                }
             }
         }
     }
@@ -1347,8 +1352,16 @@ mod tests {
             body: format!("x\n\n{}\n", marker(id)),
             ..issue_from(&first.creates[0], n)
         };
-        let remote = remote_with(vec![issue(7, "a"), issue(5, "a"), issue(9, "gone")]);
+        let closed = GhIssue {
+            state: "CLOSED".into(),
+            ..issue(11, "retired")
+        };
+        let remote = remote_with(vec![issue(7, "a"), issue(5, "a"), issue(9, "gone"), closed]);
         let p = plan(&items, &remote, &Issues::new(), R);
+        assert!(
+            !p.warnings.iter().any(|w| w.contains("#11")),
+            "a closed orphan needs no warning"
+        );
         assert_eq!(p.numbers["a"], 5, "the lowest number stays the choice");
         assert!(p
             .warnings
