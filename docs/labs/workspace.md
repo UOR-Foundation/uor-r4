@@ -42,7 +42,7 @@ Nothing project-related lives anywhere else: no `~/uor-r4-local`, no second clon
 
 ## After every merge
 
-Run `uor-hygiene`. It is a dry run and shows what it would remove. Then run `uor-hygiene --apply`. The same command is being ported to `uor-harness hygiene`, and the old name stays as a wrapper.
+Run `uor-hygiene`. It is a dry run and shows what it would remove. Then run `uor-hygiene --apply`. The script is being ported into the Rust harness; `uor-hygiene` stays the name to run.
 
 ## Weekly
 
