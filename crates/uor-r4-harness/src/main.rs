@@ -463,16 +463,15 @@ fn main() -> ExitCode {
         Some("prep-check") => cmd_prep_check(&repo, json),
         Some("registry") => cmd_registry(&repo, json),
         Some("prep-render") => cmd_prep_render(&repo, &rest),
-        Some("brief") => cmd_brief(&repo, &rest),
+        Some("brief") => cmd_brief(&repo, &rest, json),
         Some("shard-check") => cmd_shard_check(&repo, &rest, json),
         Some("status") => cmd_status(&repo, &rest, json),
         Some("ratchet") => cmd_ratchet(&repo, &rest),
         Some("claim-wording") => cmd_claim_wording(&repo),
         Some("lint") => cmd_lint(&repo, &rest, json),
         Some("check-rules") => {
-            // The port's coverage record. `parity.py` compares this against Python's registered
-            // rules, because `check`'s rule set changes while the port is in progress and a module
-            // that matched once can fall behind silently.
+            // The coverage record: which rule ids are implemented, by module. The retired
+            // `parity.py` compared it against Python's registered rules during the port.
             if json {
                 print!("{}", uor_r4_harness::ruleinventory::to_json());
             } else {
@@ -486,17 +485,6 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        // A command this binary has not ported yet runs the Python implementation BENEATH this
-        // entry point, and says so on every call.
-        //
-        // This is the half of the port that was missing: `cli.py` was still the front door, so four
-        // labs typed `python3` forty times a day and could not tell whether they were using the Rust
-        // harness or not. Now `uor-harness` is the interface and Python is an implementation detail
-        // that announces itself - the same honesty `brief` uses for its unported sections.
-        //
-        // The notice goes to stderr and is not suppressible, deliberately: a lab should know when it
-        // is still on the old path, and a silent delegation would make the remaining work invisible
-        // again - which is exactly how it stayed unfinished.
         // **D30: no command reaches Python.** Every subcommand has an arm above, so an
         // unrecognised one is a plain usage error. This arm used to forward to
         // scripts/harness/cli.py, which was the last live Python path in the harness.
@@ -1889,10 +1877,7 @@ fn cmd_multilab(repo: &Path, args: &[String], json: bool) -> ExitCode {
 
 /// `team <action>` - branch claims (D30 port of the Python `team`).
 ///
-/// `claim` / `release` / `claims` are here; `roster` and `dispatch` still delegate, because they read
-/// the roles registry and the port is landing in the order labs use it. **`team` is NOT in the
-/// delegated set**, so the "not ported yet" notice stays off for the actions that are Rust and each
-/// remaining action says so individually.
+/// `claim`, `release`, `claims`, `roster` and `dispatch`.
 fn cmd_team(repo: &Path, args: &[String], json: bool) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     // The action is the first bare word that is NOT the value of a preceding value-taking flag.
@@ -2460,9 +2445,12 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
         let m = regs
             .milestone(key)
             .ok_or_else(|| heartbeatcard::unknown_milestone(&regs, key))?;
+        // `--doing` is the presence alias of `--line`, so the card names the line the check-in records.
         Ok(heartbeatcard::build(
             m,
-            flag_value(args, "--line").as_deref(),
+            flag_value(args, "--line")
+                .or_else(|| flag_value(args, "--doing"))
+                .as_deref(),
             flag_value(args, "--count").as_deref(),
             flag_value(args, "--next").as_deref(),
         ))
@@ -2640,7 +2628,7 @@ fn brief_files(args: &[String]) -> Vec<String> {
     files
 }
 
-fn cmd_brief(repo: &Path, args: &[String]) -> ExitCode {
+fn cmd_brief(repo: &Path, args: &[String], json: bool) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     let regs = match Registries::load(&paths) {
         Ok(r) => r,
@@ -2654,17 +2642,41 @@ fn cmd_brief(repo: &Path, args: &[String]) -> ExitCode {
         .or_else(|| flag_value(args, "-q"))
         .unwrap_or_default();
     let files = brief_files(args);
-    let budget = flag_value(args, "--budget-tokens")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(briefing::DEFAULT_BUDGET);
+    // A budget that does not parse is a usage error, as argparse's `type=int` makes it: a typo must
+    // not silently become the default.
+    let budget = match flag_value(args, "--budget-tokens") {
+        None => briefing::DEFAULT_BUDGET,
+        Some(v) => match v.parse() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("uor-harness brief: argument --budget-tokens: invalid int value: {v:?}");
+                return ExitCode::from(2);
+            }
+        },
+    };
     let pack = if flag_value(args, "--section1-only").is_some() {
         briefing::assemble(&regs, milestone.as_deref(), &query)
     } else {
         briefing::assemble_full(&regs, &paths, milestone.as_deref(), &files, &query, budget)
     };
     let text = pack.render();
-    // Python's `emit` ends the output with exactly one newline.
-    if text.ends_with('\n') {
+    if json {
+        // Python's shape: the pack's provenance plus the rendered markdown.
+        let body = serde_json::json!({
+            "title": pack.title,
+            "tokens": pack.tokens(),
+            "sources": pack.sources.iter().map(|s| serde_json::json!({
+                "path": s.path, "reason": s.reason, "tokens": s.tokens, "section": "",
+            })).collect::<Vec<_>>(),
+            "dropped": pack.dropped,
+            "markdown": text,
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&body).unwrap_or_default()
+        );
+    } else if text.ends_with('\n') {
+        // Python's `emit` ends the output with exactly one newline.
         print!("{text}");
     } else {
         println!("{text}");
@@ -3386,12 +3398,10 @@ fn cmd_ledger(repo: &Path, json: bool) -> ExitCode {
 /// **This is the command that makes the thirteen ported gates reachable.** Everything it needs is
 /// `arena board|compare|lineage` — the regression arena.
 ///
-/// **`lineage` is Rust; `board` and `compare` are not yet and say so.** They share `arena::load`, which
-/// landed with this one, so the next unit is the rendering rather than the reading. This is a
-/// **regression** arena: the report is row by row against the parent, never an aggregate, because a
-/// candidate that gains 0.02 BPB while losing three memory rows is a regression with a headline.
-// The `--json` flag is deliberately unused here: Python's `lineage` action ignores it, because the
-// chain is already a list of ids); `board` honours it; `compare` is still delegated.
+/// `board`, `compare` and `lineage` share `arena::load`. This is a **regression** arena: the report
+/// is row by row against the parent, never an aggregate, because a candidate that gains 0.02 BPB
+/// while losing three memory rows is a regression with a headline.
+// `lineage` ignores `--json`, as Python's did, because the chain is already a list of ids.
 fn cmd_arena(repo: &Path, args: &[String], json: bool) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     let arena = arena::load(&paths.repo);

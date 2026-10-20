@@ -84,26 +84,73 @@ pub fn branch_claimed(paths: &StatePaths) -> Vec<Finding> {
 /// **GitHub adds what content cannot see** (Python's three findings, in its order): a local branch
 /// whose PR merged, even when main has since moved past its content; a remote branch with work main
 /// lacks and no PR; and a worktree left behind at a merged PR head or idle for 24h. A branch reported
-/// through its PR is not reported again by content. Offline, the GitHub findings are simply absent:
-/// a check that cannot ask reports nothing rather than guessing.
+/// through its PR is not reported again by content.
+///
+/// **A check that could not run says so**, as an `info` note naming the reason (Python's "check
+/// skipped"): offline, without `gh`, or with lookups cut short by the per-run cap. Without the note
+/// the dispatcher would record a pass for a check that never asked. A worktree is still judged
+/// offline, by containment in origin/main plus 24h idle.
 pub fn no_orphan_branches(paths: &StatePaths, gh: Github, now: i64) -> Vec<Finding> {
     orphan_findings(
         &paths.repo.display().to_string(),
         &statusdelivery::gather_here(paths, gh, now),
-        &statusdelivery::remote_branches_without_pr(paths, gh, 20),
+        &statusdelivery::remote_branches_without_pr(paths, gh, 20, now),
         &githelp::branch_states(&paths.repo),
     )
+}
+
+fn skipped(what: &str, reason: &str, repo: &str) -> Finding {
+    Finding {
+        rule_id: "status.no_orphan_branches",
+        severity: "info",
+        message: format!("{what}: {}", statusdelivery::unavailable(reason)),
+        path: repo.to_string(),
+        fix: "uor-harness status --refresh, with `gh` installed and authenticated".to_string(),
+    }
 }
 
 /// The rule's decision over gathered facts, so the findings can be tested without git or GitHub.
 pub fn orphan_findings(
     repo: &str,
     facts: &statusdelivery::DeliveryExtras,
-    remote: &[statusdelivery::RemoteBranch],
+    remote: &statusdelivery::RemoteBranches,
     states: &[githelp::BranchState],
 ) -> Vec<Finding> {
     let mut out = Vec::new();
     let repo = repo.to_string();
+    if !facts.pr_check.available {
+        out.push(skipped(
+            "merged-PR branch check skipped",
+            &facts.pr_check.reason,
+            &repo,
+        ));
+    } else if !facts.pr_check.reason.is_empty() {
+        out.push(skipped(
+            "merged-PR branch check incomplete",
+            &facts.pr_check.reason,
+            &repo,
+        ));
+    }
+    if !remote.available {
+        out.push(skipped(
+            "remote-branch check skipped",
+            &remote.reason,
+            &repo,
+        ));
+    } else if !remote.reason.is_empty() {
+        out.push(skipped(
+            "remote-branch check incomplete",
+            &remote.reason,
+            &repo,
+        ));
+    }
+    if !facts.worktrees.available {
+        out.push(skipped(
+            "worktree check skipped",
+            &facts.worktrees.reason,
+            &repo,
+        ));
+    }
     if facts.pr_check.available {
         for o in &facts.merged {
             let moved = if o.head_matches {
@@ -129,7 +176,7 @@ pub fn orphan_findings(
             ));
         }
     }
-    for rb in remote {
+    for rb in &remote.branches {
         out.push(warn(
             "status.no_orphan_branches",
             format!(
@@ -583,8 +630,8 @@ mod tests {
     #[test]
     fn orphan_findings_report_merged_prs_prless_remotes_and_left_worktrees() {
         use crate::statusdelivery::{
-            BranchPrCheck, DeliveryExtras, MergedPrBranch, RemoteBranch, WorktreeItem,
-            WorktreesView,
+            BranchPrCheck, DeliveryExtras, MergedPrBranch, RemoteBranch, RemoteBranches,
+            WorktreeItem, WorktreesView,
         };
         let facts = DeliveryExtras {
             pr_check: BranchPrCheck {
@@ -615,12 +662,16 @@ mod tests {
             },
             ..DeliveryExtras::default()
         };
-        let remote = [RemoteBranch {
-            branch: "r/x".into(),
-            ahead: 2,
-            behind: 5,
-            updated: "2026-10-18".into(),
-        }];
+        let remote = RemoteBranches {
+            available: true,
+            reason: String::new(),
+            branches: vec![RemoteBranch {
+                branch: "r/x".into(),
+                ahead: 2,
+                behind: 5,
+                updated: "2026-10-18".into(),
+            }],
+        };
         let state = |b: &str| githelp::BranchState {
             branch: b.into(),
             state: githelp::MergeState::Merged,
@@ -647,10 +698,53 @@ mod tests {
             f[2].fix,
             "git worktree remove /w/b && git branch -D b && scripts/storage/uor-hygiene --apply"
         );
-        let offline = DeliveryExtras::default();
+        // A check that could not run is never a silent pass: each says so, as info.
+        let offline = orphan_findings(
+            "/repo",
+            &DeliveryExtras::default(),
+            &RemoteBranches::default(),
+            &[],
+        );
+        let notes: Vec<(&str, &str)> = offline
+            .iter()
+            .map(|f| (f.severity, f.message.split(':').next().unwrap_or("")))
+            .collect();
+        assert_eq!(
+            notes,
+            [
+                ("info", "merged-PR branch check skipped"),
+                ("info", "remote-branch check skipped"),
+                ("info", "worktree check skipped"),
+            ]
+        );
+        // Lookups cut short by the per-run cap are reported as incomplete, not as a pass.
+        let capped = DeliveryExtras {
+            pr_check: BranchPrCheck {
+                available: true,
+                reason: "only the first 25 branches were queried this run".into(),
+                ..BranchPrCheck::default()
+            },
+            worktrees: WorktreesView {
+                available: true,
+                ..WorktreesView::default()
+            },
+            ..DeliveryExtras::default()
+        };
+        let f = orphan_findings(
+            "/repo",
+            &capped,
+            &RemoteBranches {
+                available: true,
+                ..RemoteBranches::default()
+            },
+            &[],
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
         assert!(
-            orphan_findings("/repo", &offline, &[], &[]).is_empty(),
-            "a check that could not ask GitHub reports nothing"
+            f[0].message
+                .starts_with("merged-PR branch check incomplete: UNAVAILABLE: only the first 25"),
+            "{}",
+            f[0].message
         );
     }
 }

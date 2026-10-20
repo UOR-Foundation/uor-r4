@@ -152,9 +152,9 @@ fn walk_markdown(repo: &std::path::Path) -> Vec<String> {
 
 /// `doccheck.stale_cli_invocations` — normative docs that still invoke `python3 scripts/harness/cli.py`.
 ///
-/// **`uor-harness` is the interface.** `cli.py` still exists as an implementation and the Rust entry
-/// point delegates to it for unported commands — **but a doc telling a lab to run it puts Python back
-/// in front of them, which is what the port was for.**
+/// **`uor-harness` is the interface, and the only implementation.** `cli.py` is archived under
+/// `archive/scripts/harness/`, **so a doc telling a lab to run it sends them to a file that no longer
+/// runs anything.**
 ///
 /// **A rule rather than a note, because "remember to use the new command" is exactly the kind of
 /// instruction that decays.**

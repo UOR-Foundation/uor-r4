@@ -672,6 +672,16 @@ pub struct RemoteBranch {
 /// (`docs/harness/branches.json`) is never reported: Python flagged `gh-pages-preview`, which the
 /// owner's 20 October rule keeps forever. And a branch whose PR lookup FAILED is skipped rather than
 /// reported as having no PR, so an offline run cannot call every branch an orphan.
+/// A remote branch worth a PR lookup: named, not a trunk or site branch, not protected, and holding
+/// work main lacks (a branch with nothing ahead is finished on its own merits).
+fn is_candidate(name: &str, ahead: usize, protected: &[String]) -> bool {
+    !(name.is_empty()
+        || name.starts_with("HEAD")
+        || ["main", "gh-pages"].contains(&name)
+        || protected.iter().any(|p| p == name)
+        || ahead == 0)
+}
+
 pub fn without_pr(
     rows: &[(String, String, usize, usize)],
     protected: &[String],
@@ -680,12 +690,7 @@ pub fn without_pr(
 ) -> Vec<RemoteBranch> {
     let mut out = Vec::new();
     for (name, updated, ahead, behind) in rows {
-        if name.is_empty()
-            || name.starts_with("HEAD")
-            || ["main", "gh-pages"].contains(&name.as_str())
-            || protected.contains(name)
-            || *ahead == 0
-        {
+        if !is_candidate(name, *ahead, protected) {
             continue;
         }
         if has_pr(name) != Some(false) {
@@ -709,12 +714,17 @@ pub fn remote_branches_without_pr(
     paths: &StatePaths,
     gh: Github,
     limit: usize,
-) -> Vec<RemoteBranch> {
-    if gh == Github::Offline {
-        return Vec::new();
-    }
+    now: i64,
+) -> RemoteBranches {
+    let Github::Ask { refresh } = gh else {
+        return RemoteBranches {
+            available: false,
+            reason: OFFLINE_REASON.to_string(),
+            branches: Vec::new(),
+        };
+    };
     let repo = paths.repo.as_path();
-    let (ok, listing, _) = git(
+    let (ok, listing, err) = git(
         repo,
         &[
             "for-each-ref",
@@ -724,7 +734,11 @@ pub fn remote_branches_without_pr(
         ],
     );
     if !ok {
-        return Vec::new();
+        return RemoteBranches {
+            available: false,
+            reason: err,
+            branches: Vec::new(),
+        };
     }
     let count = |range: &str| {
         let (ok, n, _) = git(repo, &["rev-list", "--count", range]);
@@ -745,16 +759,34 @@ pub fn remote_branches_without_pr(
         })
         .collect();
     let protected = crate::githelp::protected_branches(repo);
+    // The PR lookups go through the same per-branch cache and per-run cap as the local branches,
+    // so `check` never spends one uncached `gh` call per remote branch.
+    let candidates: Vec<String> = rows
+        .iter()
+        .filter(|(name, _, ahead, _)| is_candidate(name, *ahead, &protected))
+        .map(|(name, ..)| name.clone())
+        .collect();
+    let snap = githubcards::github_branch_prs(paths, &candidates, refresh, now);
     let mut has_pr = |name: &str| {
-        let (ok, data, _) = githubcards::gh_json(
-            &[
-                "pr", "list", "--head", name, "--state", "all", "--limit", "1", "--json", "number",
-            ],
-            repo,
-        );
-        ok.then(|| data.as_array().is_some_and(|a| !a.is_empty()))
+        snap.items
+            .get(name)
+            .and_then(|i| i.get("pr"))
+            .map(Value::is_object)
     };
-    without_pr(&rows, &protected, &mut has_pr, limit)
+    RemoteBranches {
+        available: snap.available,
+        reason: snap.reason.clone(),
+        branches: without_pr(&rows, &protected, &mut has_pr, limit),
+    }
+}
+
+/// The remote branches with work and no PR, and whether every lookup could be made.
+#[derive(Debug, Clone, Default)]
+pub struct RemoteBranches {
+    pub available: bool,
+    /// Why some or all lookups failed; empty when every candidate was answered.
+    pub reason: String,
+    pub branches: Vec<RemoteBranch>,
 }
 
 // ---------------------------------------------------------------------------------------------

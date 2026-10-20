@@ -14,8 +14,10 @@ root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 command -v uor-harness >/dev/null 2>&1 || exit 0
 out=$(uor-harness check --staged --repo "$root" 2>&1)
 rc=$?
-case "$out" in
-    *" 0 failed "*) ;;
+# Quiet only when the check exited 0 and its summary (the last line) counts no failure.
+last=$(printf '%s\n' "$out" | tail -n 1)
+case "$rc:$last" in
+    "0:"*" rules, 0 failed ("*) ;;
     *) printf '%s\n' "$out" ;;
 esac
 if [ "$rc" -eq 1 ]; then

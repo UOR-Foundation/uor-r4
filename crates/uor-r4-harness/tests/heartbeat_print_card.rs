@@ -103,6 +103,25 @@ fn print_takes_the_overrides_python_takes() {
     );
 }
 
+/// `--doing` is the presence alias of `--line`, so the card names the line the check-in records.
+#[test]
+fn the_card_reads_doing_as_the_line() {
+    let s = Scratch::new();
+    let out = s.run(&[
+        "heartbeat",
+        "-m",
+        "m1",
+        "--print",
+        "--doing",
+        "exact addressed memory",
+    ]);
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        text.contains(" · line: exact addressed memory · count 0/3 · "),
+        "{text}"
+    );
+}
+
 #[test]
 fn an_unknown_milestone_exits_2_with_pythons_message() {
     let s = Scratch::new();
