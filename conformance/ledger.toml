@@ -1,4 +1,4 @@
-# conformance/ledger.toml --- the honesty ledger for claims that are not conformance
+# model/ledger.toml --- the honesty ledger for claims that are not conformance
 # IDs (R2).
 #
 # uor-r4 #273 Phase 1 seeds this with the four DORMANT modules as `open` claims:
@@ -6,7 +6,7 @@
 # measured and kept with a pre-declared activation gate, registered here rather
 # than deleted (R4 "nothing deferred" is satisfied by registration, not by
 # removal) or asserted (they are `open` — measured and reported, never proven).
-# Conformance IDs and their levels live in `conformance/ids.toml`; this file is the
+# Conformance IDs and their levels live in `model/ids.toml`; this file is the
 # non-ID honesty register only.
 
 spec = "uor-r4/273-phase-1"
