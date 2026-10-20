@@ -235,7 +235,7 @@ The owner approved a layout pass that takes the top level from 20 folders toward
 - `assets/` → `archive/assets/`: historical screenshots and concept art that nothing live uses. The review page had proposed `web/assets/`. The check found that the Studio loads its own `web/studio/assets/`, so these belong in the archive.
 - `t2/` → `archive/t2/`: a dated report and its script.
 - `uor-r4-cli` and `r4-app.sh` → `archive/legacy-cli/`: launchers for the R4G1 `r4` binary, which is no longer built. Two reference pages that still name them (`docs/minimal_client.md`, `docs/CONFIGURATION.md`) are pinned by path and hash in evidence tables, so they are left as they are.
-- `research/README.md` → `archive/research-root/`: the laptop `research/` tree is retired. Its source is in `projects/`, and the full tree is in the HF store `research-archive/2026-10-19/`, checked file by file against the laptop on 20 Oct.
+- `research/README.md` → `archive/research-root-README.md`: the laptop `research/` tree is retired. Its source is in `projects/`, and the full tree is in the HF store `research-archive/2026-10-19/`, checked file by file against the laptop on 20 Oct.
 - `docs/superpowers/plans/…` → `archive/superpowers/plans/`: a dated plan.
 - New page: [How the repository is laid out](../../start/repository-layout.md).
 
@@ -243,4 +243,4 @@ Deferred: `tools/r4-softmax-trainer/` stays. The core crate compiles its `policy
 
 Next: `model/` and `features/` → `conformance/`; the root package (`src/`, `tests/`, `profiles/`) → `crates/uor-r4-wasm-router/`, with `models/` → `data/tokenizers/`; and the unpinned loose reference pages → `docs/reference/`.
 
-The two README files moved into `archive/` above (`archive/assets/images/README.md`, `archive/research-root/README.md`) sit one folder deeper than before, so their relative links were re-pointed by one level; their text is unchanged. A workspace-wide `cargo check --workspace --all-targets` fails on `main` before and after this change (a historical core feature is unified in; the CI job that runs it has not run on `main` since 30 Sep); this change touches no build file.
+Every move is byte-identical (`R100`). The two folder READMEs went to paths at the same folder depth as before (`assets/images/README.md` → `archive/assets/README.md`, `research/README.md` → `archive/research-root-README.md`), so their relative links still resolve without edits. A workspace-wide `cargo check --workspace --all-targets` fails on `main` before and after this change (a historical core feature is unified in; the CI job that runs it has not run on `main` since 30 Sep); this change touches no build file.
