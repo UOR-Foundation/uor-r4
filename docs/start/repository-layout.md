@@ -34,7 +34,7 @@ One more change is planned: the normative reference pages that sit loose in `doc
 | `.devcontainer/` | Editor container settings. Editors look for it at the top level. |
 | `.agents/` | Shared skills for coding agents, in the layout agent tools expect. |
 | `.kimi-code/`, `.codex-lab/` | Onboarding notes for two of the labs. |
-| `.uor-models/` | The runtime's local model store. Only a manifest is tracked; the contents are gitignored. About sixty source files read this path, so it stays. |
+| `.uor-models/` | The runtime's local model store. Only a manifest is tracked; the contents are gitignored. About ninety Rust source files read this path, so it stays. |
 
 ## Files at the top
 

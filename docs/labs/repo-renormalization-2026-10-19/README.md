@@ -229,7 +229,7 @@ Kept: `t2/`, `tools/lab-runner`, `tools/uor-knowledge`, `tools/r4-softmax-traine
 
 ## Root layout pass (ninth unit, 20 Oct 2026)
 
-The owner approved a layout pass that takes the top level from 21 folders toward 11, each with one job, in four pull requests. This first one makes the moves that touch no compiled path:
+The owner approved a layout pass that takes the top level from 20 folders toward 11, each with one job, in four pull requests. This first one makes the moves that touch no compiled path:
 
 - `spiralcore-base/warm-cache/` → `projects/spiralcore/warm-cache/`: DeepSeek's warm-cache exploration from #2808 is a side project. It shares no file with `projects/spiralcore/wire/`.
 - `assets/` → `archive/assets/`: historical screenshots and concept art that nothing live uses. The review page had proposed `web/assets/`. The check found that the Studio loads its own `web/studio/assets/`, so these belong in the archive.
