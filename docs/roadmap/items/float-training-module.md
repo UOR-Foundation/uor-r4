@@ -19,7 +19,7 @@ D37 float training is legal but unused. It must live in a separate module with i
 
 ## Done when
 
-A new module builds CPU-only on the laptop with CPU tests, passes the banned-token scan under its own scanned entry, and carries the 24-kernel extract with no dependency on `crates/uor-r4-training`. The CUDA kernels are built ahead of time by nvcc on the GPU pod (CHARTER Â§3.4); on the laptop they get a stub-nvcc type check only.
+A new module builds CPU-only on the laptop with CPU tests, passes the banned-token scan under its own scanned entry, and carries the 24-kernel extract with no dependency on `crates/uor-r4-training`. The CUDA kernels are built ahead of time by nvcc on the GPU pod (CHARTER §3.4); on the laptop they get a stub-nvcc type check only.
 
 ## How to start
 
