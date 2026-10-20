@@ -99,7 +99,7 @@ cleanup() {
   "$POD_TOOL" ssh "$POD" "tar -C /workspace/uor-r4/evals/$SESSION -cf - ." | tar -C "$ARCHIVE" -xf -
   copied=$?
   if [ "$copied" -eq 0 ] && (cd "$ARCHIVE" && shasum -a 256 -c SHA256SUMS) && \
-     hf upload caseyallard/uor-r4-store "$ARCHIVE" "results/$LAB/$(basename "$ARCHIVE")"; then
+     hf upload caseyallard/uor-r4-store "$ARCHIVE" "results/$LAB/$(basename "$ARCHIVE")" --repo-type dataset; then
     "$POD_TOOL" release "$POD" --lab "$LAB" --session "$SESSION"
     "$POD_TOOL" down "$POD" --lab "$LAB" --session "$SESSION" --confirm-archived
     "$POD_TOOL" status

@@ -20,7 +20,7 @@ This page says where every kind of file lives, and how the laptop is kept tidy. 
 - **Never uploaded:** build output.
 - **Uploaded selectively, at the end of a task:** scratch.
 
-Results go to `results/<lab>/<topic-date>/` with a `SHA256SUMS`. Use `uor-pod down --to-store`, or `/root/uor-store put` on a pod, or `hf upload` from the laptop.
+Results go to `results/<lab>/<topic-date>/` with a `SHA256SUMS`. Use `uor-pod down --to-store`, or `/root/uor-store put` on a pod, or `hf upload caseyallard/uor-r4-store <dir> results/<lab>/<topic-date> --repo-type dataset` from the laptop.
 
 ## The laptop
 
