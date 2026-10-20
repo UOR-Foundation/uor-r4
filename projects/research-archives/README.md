@@ -45,18 +45,6 @@ The original README says the GloVe and manifold caches (about 490 MB) and a nest
 
 The full project is preserved in the private Hugging Face dataset `caseyallard/uor-r4-store` under `research-archive/2026-10-19/tars/archives.tar` (103,435,776 bytes, 128 files, SHA-256 `2553007578044fa4f5f7000714a633b0693d7714f80cb999e0671e7ee71e78b2`). Every file inside is listed in `files.sha256`, and the tar is listed in `tars.sha256`. The tar is named `archives`; the folder here is called `research-archives`.
 
-## Source files brought into this folder
-
-Only scripts and notes come in, as an index of what existed:
-
-- `README.md`
-- `gemini-dev/*.py`
-- `gemini-dev/prime-router/**`
-- `gemini-dev/scratch/**/*.md`
-- an index (a listing, not the files) of `gemini-dev/rust/**/*.rs`, since the current crates replace it
-
-Stay in the store: `wikitext2_proxy/`, the corpora, all NPZ and token files, the `extra_reading` PDFs and `zeta_data/`.
-
 ## Code
 
 `code/` holds 65 files (598,361 bytes) copied byte for byte on 20 October 2026 from `research/archives` (backed up as `archives.tar`): `README.md`, the `gemini-dev/*.py` tools and `run.sh`, `gemini-dev/prime-router/` (with its `tests/vv_test_vectors.json`, which the tests read), the Rust sources and `Cargo.toml` files under `gemini-dev/rust/`, and the `gemini-dev/scratch/` notes and scripts. Excluded: text corpora and logs (`.txt`, `.log`, `.tokens`), NPZ files, PDFs, HTML, CSS, YAML, a lock file, `.gitignore` files, the devcontainer JSON and four `wikitext2_proxy` metadata JSON files that no code reads.

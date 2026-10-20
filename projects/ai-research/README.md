@@ -47,19 +47,13 @@ Treat these as the old workspace's statements. This page reports what the files 
 
 The full project is preserved in the private Hugging Face dataset `caseyallard/uor-r4-store` under `research-archive/2026-10-19/tars/ai-research.tar` (377,595,904 bytes, 3,335 files, SHA-256 `dbdb1fa6f09712b9faba207a0188d23d0a591c9773cdcbb7ec6aeb21b8ddf1ce`). Every file inside is listed in `files.sha256`, and the tar is listed in `tars.sha256`.
 
-## Source files brought into this folder
+## Source files
 
-Only source and short notes come in; all data stays in the store.
+The owner decided on 20 October 2026 that this project's code stays in the store, because it is too large to commit: about 10 MB of source in 809 files. This folder holds two things instead:
+- [`INDEX.tsv`](INDEX.tsv), which lists every file with its size and SHA-256 (3,335 rows);
+- the restore commands in **Restore** below.
 
-- `README.md`, `PROJECT_MAP.md`, and the loose `*_note.md` files
-- `MUDBench/src/**` and `MUDBench/tests/**`
-- `ai-router/**/*.py`, after removing files that duplicate `research-archives`, and `ai-router/preprints/paper1_arxiv_rebuild_v4/**/*.tex`
-- `claims_to_evidence_table.md` files
-- `ramsey/**/*.py` and `deepermath/**/*.py`
-
-Stay in the store: all CSV, NPZ, PNG and PDF files, large run outputs under `router-research/`, preprint build artifacts, and `1608.04200v2.pdf` (a third-party arXiv paper).
-
-The owner's inventory suggests splitting this project into three folders later (router research, MUDBench, Ramsey). That is a proposal and is not decided; this page treats the snapshot as one project.
+The data (CSV, NPZ, images and PDFs) also stays in the store.
 
 ## Restore
 
