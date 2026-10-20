@@ -57,6 +57,14 @@ Only scripts and notes come in, as an index of what existed:
 
 Stay in the store: `wikitext2_proxy/`, the corpora, all NPZ and token files, the `extra_reading` PDFs and `zeta_data/`.
 
+## Code
+
+`code/` holds 65 files (598,361 bytes) copied byte for byte on 20 October 2026 from `research/archives` (backed up as `archives.tar`): `README.md`, the `gemini-dev/*.py` tools and `run.sh`, `gemini-dev/prime-router/` (with its `tests/vv_test_vectors.json`, which the tests read), the Rust sources and `Cargo.toml` files under `gemini-dev/rust/`, and the `gemini-dev/scratch/` notes and scripts. Excluded: text corpora and logs (`.txt`, `.log`, `.tokens`), NPZ files, PDFs, HTML, CSS, YAML, a lock file, `.gitignore` files, the devcontainer JSON and four `wikitext2_proxy` metadata JSON files that no code reads.
+
+`causal-continuation-2026-09-24/` holds 13 files (23,339 bytes) from `research/causal-continuation-2026-09-24` (backed up as `causal-continuation-2026-09-24.tar`): the scripts, plans and the three JSON plan/freeze files the scripts read. One `.txt` file stays in the store.
+
+No licence file or vendored third-party source was found. Absolute `/Users/` paths appear 24 times in 17 files of `code/` and 26 times in 9 files of `causal-continuation-2026-09-24/`; they are left unchanged because these are archive copies. The code is preserved research and is not run by this repository.
+
 ## Go deeper
 
 - [AI-Research](../ai-research/README.md), the workspace that grew alongside this sandbox.

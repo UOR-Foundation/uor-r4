@@ -61,6 +61,19 @@ Stay in the store: all CSV, NPZ, PNG and PDF files, large run outputs under `rou
 
 The owner's inventory suggests splitting this project into three folders later (router research, MUDBench, Ramsey). That is a proposal and is not decided; this page treats the snapshot as one project.
 
+## Restore
+
+The code is not committed here. [`INDEX.tsv`](INDEX.tsv) lists all 3335 files of the project, one row each: `path<TAB>size<TAB>sha256`, with the path relative to the project folder, the size in bytes from the owner's local copy (20 October 2026) and the hash from `files.sha256`. To restore the files (the tar sits under `tars/` in the dataset; the two checksum files sit one level above it):
+
+```sh
+hf download caseyallard/uor-r4-store research-archive/2026-10-19/tars/ai-research.tar research-archive/2026-10-19/tars.sha256 research-archive/2026-10-19/files.sha256 --repo-type dataset --local-dir .
+cd research-archive/2026-10-19/tars
+grep ' ai-research.tar$' ../tars.sha256 | shasum -a 256 -c -
+tar xf ai-research.tar
+grep '  ./ai-research/' ../files.sha256 | shasum -a 256 -c --quiet -
+```
+
+
 ## Go deeper
 
 - [Prime Analysis](../prime-analysis/README.md), which overlaps heavily with this snapshot.

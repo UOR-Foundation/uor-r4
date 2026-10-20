@@ -68,6 +68,19 @@ The full project is preserved in the private Hugging Face dataset `caseyallard/u
 
 Stay in the store: `images/`, `photos/`, PDFs, DOCX files and the manuscripts under `published-manuscripts/`. The slide decks may later serve as figures for the documentation, subject to the licensing review.
 
+## Restore
+
+The code is not committed here. [`INDEX.tsv`](INDEX.tsv) lists all 7708 files of the project, one row each: `path<TAB>size<TAB>sha256`, with the path relative to the project folder, the size in bytes from the owner's local copy (20 October 2026) and the hash from `files.sha256`. To restore the files (the tar sits under `tars/` in the dataset; the two checksum files sit one level above it):
+
+```sh
+hf download caseyallard/uor-r4-store research-archive/2026-10-19/tars/prime-analysis.tar research-archive/2026-10-19/tars.sha256 research-archive/2026-10-19/files.sha256 --repo-type dataset --local-dir .
+cd research-archive/2026-10-19/tars
+grep ' prime-analysis.tar$' ../tars.sha256 | shasum -a 256 -c -
+tar xf prime-analysis.tar
+grep '  ./prime-analysis/' ../files.sha256 | shasum -a 256 -c --quiet -
+```
+
+
 ## Go deeper
 
 - [Primes and zeta](../../docs/geometry/primes-and-zeta.md) and the [prime/zeta codebook mechanism](../../docs/mechanisms/prime-zeta-codebook.md).

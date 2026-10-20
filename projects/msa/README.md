@@ -52,6 +52,10 @@ The full project is preserved in the private Hugging Face dataset `caseyallard/u
 - `README.md` (the original, kept as written)
 - `Structural_Arithmetic.pdf` and `Modular_Structural_Arithmetic_MSA__A_Formal_System.pdf`, after the permission check above
 
+## Code
+
+`code/` holds 1 file (777 bytes) copied byte for byte on 20 October 2026 from `research/msa` (backed up as `msa.tar`): the original `README.md`. The folder has no code; the two papers are PDFs and stay in the store pending the permission check above. No absolute paths, no licence file.
+
 ## Go deeper
 
 - [Project index](../README.md) for the other side projects.
