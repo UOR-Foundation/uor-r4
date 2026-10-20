@@ -228,61 +228,93 @@ fn is_cargo_or_rustc(comm: &str) -> bool {
         .any(|n| comm == *n || comm.ends_with(&format!("/{n}")))
 }
 
-impl System for LiveSystem {
-    fn busy(&self, path: &Path) -> bool {
-        let p = path.to_string_lossy();
-        // A running cargo/rustc that names the folder on its command line.
-        let ps = stdout_of("ps", ["-axo", "pid=,comm=,args="]).unwrap_or_default();
-        for line in ps.lines() {
-            let comm = line.split_whitespace().nth(1).unwrap_or("");
-            if is_cargo_or_rustc(comm) && line.contains(&*p) {
-                return true;
-            }
-        }
-        // ... or that runs from inside it.
-        let mut builders = stdout_of("pgrep", ["-x", "cargo"]).unwrap_or_default();
-        builders.push_str(&stdout_of("pgrep", ["-x", "rustc"]).unwrap_or_default());
-        for pid in builders.split_whitespace() {
-            let cwd = stdout_of("lsof", ["-a", "-p", pid, "-d", "cwd", "-Fn"]).unwrap_or_default();
-            if cwd
-                .lines()
-                .filter_map(|l| l.strip_prefix('n'))
-                .any(|c| c.starts_with(&*p))
-            {
-                return true;
-            }
-        }
-        // Any other process with an open file or working directory inside it (a training run, a
-        // shell, a copy), except this run's own process tree and the indexers.
-        let holders = stdout_of(
-            "lsof",
-            [OsStr::new("-t"), OsStr::new("+D"), path.as_os_str()],
-        )
-        .unwrap_or_default();
-        let pids: BTreeSet<&str> = holders.split_whitespace().collect();
-        for pid in pids {
-            if self.own.iter().any(|o| o == pid) {
-                continue;
-            }
-            let comm = stdout_of("ps", ["-o", "comm=", "-p", pid]).unwrap_or_default();
-            if INDEXERS.iter().any(|i| comm.contains(i)) {
-                continue;
-            }
+/// Runs a helper (`ps`, `pgrep`, `lsof`) and returns its stdout, or `None` when it could not run.
+pub type Runner<'a> = &'a dyn Fn(&str, &[&str]) -> Option<String>;
+
+/// [`System::busy`] over a runner, so a test can state what the helpers print.
+///
+/// **A helper that cannot run makes the path busy.** An empty listing from `lsof` means nothing
+/// holds the folder; a missing `lsof` (a stripped `PATH`, a sandbox) means nobody looked, and a
+/// training run's open scratch must not be moved because the question went unasked.
+pub fn busy_with(path: &Path, own: &[String], run: Runner) -> bool {
+    // A path that is not UTF-8 cannot be named to the helpers exactly.
+    let Some(p) = path.to_str() else {
+        return true;
+    };
+    // A running cargo/rustc that names the folder on its command line.
+    let Some(ps) = run("ps", &["-axo", "pid=,comm=,args="]) else {
+        return true;
+    };
+    for line in ps.lines() {
+        let comm = line.split_whitespace().nth(1).unwrap_or("");
+        if is_cargo_or_rustc(comm) && line.contains(p) {
             return true;
         }
-        false
+    }
+    // ... or that runs from inside it.
+    let (Some(cargo), Some(rustc)) = (
+        run("pgrep", &["-x", "cargo"]),
+        run("pgrep", &["-x", "rustc"]),
+    ) else {
+        return true;
+    };
+    for pid in cargo.split_whitespace().chain(rustc.split_whitespace()) {
+        let Some(cwd) = run("lsof", &["-a", "-p", pid, "-d", "cwd", "-Fn"]) else {
+            return true;
+        };
+        if cwd
+            .lines()
+            .filter_map(|l| l.strip_prefix('n'))
+            .any(|c| c.starts_with(p))
+        {
+            return true;
+        }
+    }
+    // Any other process with an open file or working directory inside it (a training run, a
+    // shell, a copy), except this run's own process tree and the indexers.
+    let Some(holders) = run("lsof", &["-t", "+D", p]) else {
+        return true;
+    };
+    let pids: BTreeSet<&str> = holders.split_whitespace().collect();
+    for pid in pids {
+        if own.iter().any(|o| o == pid) {
+            continue;
+        }
+        let Some(comm) = run("ps", &["-o", "comm=", "-p", pid]) else {
+            return true;
+        };
+        if INDEXERS.iter().any(|i| comm.contains(i)) {
+            continue;
+        }
+        return true;
+    }
+    false
+}
+
+/// [`System::in_use`] over a runner: any `lsof` line means open, and so does an `lsof` that
+/// could not run.
+pub fn in_use_with(path: &Path, is_dir: bool, run: Runner) -> bool {
+    let Some(p) = path.to_str() else {
+        return true;
+    };
+    let listing = if is_dir {
+        run("lsof", &["+D", p])
+    } else {
+        run("lsof", &[p])
+    };
+    listing.is_none_or(|s| !s.trim().is_empty())
+}
+
+impl System for LiveSystem {
+    fn busy(&self, path: &Path) -> bool {
+        busy_with(path, &self.own, &|program, args| stdout_of(program, args))
     }
 
     fn in_use(&self, path: &Path) -> bool {
         let dir = fs::symlink_metadata(path)
             .map(|m| m.is_dir())
             .unwrap_or(false);
-        let out = if dir {
-            stdout_of("lsof", [OsStr::new("+D"), path.as_os_str()])
-        } else {
-            stdout_of("lsof", [path.as_os_str()])
-        };
-        out.is_some_and(|s| !s.trim().is_empty())
+        in_use_with(path, dir, &|program, args| stdout_of(program, args))
     }
 
     fn pull_requests(&self, branch: &str) -> Option<Vec<PullRequest>> {
@@ -368,12 +400,17 @@ where
 {
     let mut cmd = Command::new("git");
     cmd.arg("-C").arg(dir).args(args).stdin(Stdio::null());
-    for (k, _) in std::env::vars_os() {
+    strip_git_vars(&mut cmd, std::env::vars_os().map(|(k, _)| k));
+    cmd
+}
+
+/// Remove every `GIT_*` name in `names` from `cmd`'s environment, whether inherited or set on it.
+fn strip_git_vars(cmd: &mut Command, names: impl IntoIterator<Item = std::ffi::OsString>) {
+    for k in names {
         if k.to_string_lossy().starts_with("GIT_") {
             cmd.env_remove(&k);
         }
     }
-    cmd
 }
 
 /// Stdout of a successful git command, trailing whitespace trimmed; `None` when it failed.
@@ -591,11 +628,25 @@ pub fn ignored_local_data(worktree: &Path) -> Option<bool> {
     )
 }
 
-/// The guards on one worktree, in the bash order.
+/// The running binary (`exe`, canonical) lives beneath `dir`. `dir` is canonicalized first, so a
+/// symlinked `UOR_REPO` or HOME still matches.
+fn holds_exe(exe: Option<&Path>, dir: &Path) -> bool {
+    let Some(exe) = exe else {
+        return false;
+    };
+    let dir = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    exe.starts_with(dir)
+}
+
+const HOLDS_EXE: &str = "holds the running uor-harness";
+
+/// The guards on one worktree, in the bash order. `exe` is the running binary: a worktree holding
+/// it (the wrapper was run from that checkout) is kept.
 pub fn decide_worktree(
     wt: &Worktree,
     repo: &Path,
     main_worktree: &Path,
+    exe: Option<&Path>,
     sys: &dyn System,
 ) -> Verdict {
     if wt.main || wt.bare || wt.path == main_worktree || !wt.path.is_dir() {
@@ -612,6 +663,9 @@ pub fn decide_worktree(
     }
     if keep_local(&wt.path) {
         return Verdict::Keep(KEEP_LOCAL.to_string());
+    }
+    if holds_exe(exe, &wt.path) {
+        return Verdict::Keep(HOLDS_EXE.to_string());
     }
     match git(
         &wt.path,
@@ -720,8 +774,8 @@ pub fn decide_build(path: &Path, cfg: &Config, sys: &dyn System) -> Verdict {
         return Verdict::Keep(KEEP_LOCAL.to_string());
     }
     // The running binary's own build folder: removing it would only force a rebuild next run.
-    if cfg.exe.as_deref().is_some_and(|e| e.starts_with(path)) {
-        return Verdict::Keep("holds the running uor-harness".to_string());
+    if holds_exe(cfg.exe.as_deref(), path) {
+        return Verdict::Keep(HOLDS_EXE.to_string());
     }
     if sys.busy(path) {
         return Verdict::Keep(IN_USE.to_string());
@@ -1085,7 +1139,7 @@ pub fn run(cfg: &Config, sys: &dyn System, echo: bool) -> Result<Report, String>
 
     // 1. Merged, clean worktrees.
     for wt in worktrees(&cfg.repo) {
-        match decide_worktree(&wt, &cfg.repo, &main_worktree, sys) {
+        match decide_worktree(&wt, &cfg.repo, &main_worktree, cfg.exe.as_deref(), sys) {
             Verdict::Skip => {}
             Verdict::Keep(why) => r.push(
                 "worktree",
@@ -1426,7 +1480,7 @@ mod tests {
         let sys = Fake::default();
         let all = worktrees(&f.repo);
         assert_eq!(
-            decide_worktree(&all[0], &f.repo, &f.repo, &sys),
+            decide_worktree(&all[0], &f.repo, &f.repo, None, &sys),
             Verdict::Skip
         );
         let gone = Worktree {
@@ -1436,7 +1490,7 @@ mod tests {
             ..Worktree::default()
         };
         assert_eq!(
-            decide_worktree(&gone, &f.repo, &f.repo, &sys),
+            decide_worktree(&gone, &f.repo, &f.repo, None, &sys),
             Verdict::Skip
         );
     }
@@ -1446,7 +1500,10 @@ mod tests {
         let f = fixture();
         let wt = add_worktree(&f, "done");
         let sys = Fake::default();
-        assert_eq!(decide_worktree(&wt, &f.repo, &f.repo, &sys), Verdict::Act);
+        assert_eq!(
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
+            Verdict::Act
+        );
         assert_eq!(
             *sys.asked.borrow(),
             ["claude/done"],
@@ -1468,7 +1525,7 @@ mod tests {
         let wt = find_worktree(&f, &path);
         let sys = Fake::default();
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &sys),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
             keep("gh-pages is a protected branch")
         );
         // The action refuses on its own, before it removes anything.
@@ -1484,13 +1541,13 @@ mod tests {
         fs::write(wt.path.join("new.txt"), "x").expect("write");
         let dirty = keep("uncommitted or untracked files");
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &Fake::default()),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &Fake::default()),
             dirty
         );
         fs::remove_file(wt.path.join("new.txt")).expect("rm");
         fs::write(wt.path.join("README.md"), "changed\n").expect("write");
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &Fake::default()),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &Fake::default()),
             dirty
         );
     }
@@ -1506,13 +1563,13 @@ mod tests {
             "build output is regenerable"
         );
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &Fake::default()),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &Fake::default()),
             Verdict::Act
         );
         write_aged(&wt.path.join("local/claude/run/out.bin"), "x", 0);
         assert_eq!(ignored_local_data(&wt.path), Some(true));
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &Fake::default()),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &Fake::default()),
             keep("gitignored local data present; upload it to the HF store first")
         );
     }
@@ -1524,7 +1581,7 @@ mod tests {
         commit_in(&path, "work.txt");
         let wt = find_worktree(&f, &path);
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &Fake::default()),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &Fake::default()),
             keep("claude/wip not merged into origin/main")
         );
     }
@@ -1539,13 +1596,16 @@ mod tests {
         sys.prs
             .insert("claude/sq".to_string(), Some(vec![pr("MERGED", "0000")]));
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &sys),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
             keep("claude/sq not merged into origin/main"),
             "a PR merged at another head proves nothing about this one"
         );
         sys.prs
             .insert("claude/sq".to_string(), Some(vec![pr("MERGED", &wt.head)]));
-        assert_eq!(decide_worktree(&wt, &f.repo, &f.repo, &sys), Verdict::Act);
+        assert_eq!(
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
+            Verdict::Act
+        );
     }
 
     #[test]
@@ -1558,7 +1618,7 @@ mod tests {
             Some(vec![pr("MERGED", &wt.head), pr("OPEN", "1111")]),
         );
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &sys),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
             keep("claude/open has an open PR")
         );
     }
@@ -1570,14 +1630,14 @@ mod tests {
         let mut sys = Fake::default();
         sys.prs.insert("claude/offline".to_string(), None);
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &sys),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
             keep("could not ask GitHub whether claude/offline has an open PR")
         );
         // Unmerged and unanswered reads as unmerged, as the shell script read it.
         commit_in(&wt.path, "w.txt");
         let wt = find_worktree(&f, &wt.path);
         assert_eq!(
-            decide_worktree(&wt, &f.repo, &f.repo, &sys),
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
             keep("claude/offline not merged into origin/main")
         );
     }
@@ -1588,21 +1648,24 @@ mod tests {
         let busy = add_worktree(&f, "busy");
         let mut sys = Fake::default();
         sys.busy.insert(busy.path.clone());
-        assert_eq!(decide_worktree(&busy, &f.repo, &f.repo, &sys), keep(IN_USE));
+        assert_eq!(
+            decide_worktree(&busy, &f.repo, &f.repo, None, &sys),
+            keep(IN_USE)
+        );
 
         let path = add_worktree(&f, "locked").path;
         tgit(&f.repo, &["worktree", "lock", s(&path)]);
         let locked = find_worktree(&f, &path);
         assert!(locked.locked);
         assert_eq!(
-            decide_worktree(&locked, &f.repo, &f.repo, &Fake::default()),
+            decide_worktree(&locked, &f.repo, &f.repo, None, &Fake::default()),
             keep("locked")
         );
 
         let marked = add_worktree(&f, "marked");
         fs::write(marked.path.join(".keep-local"), "").expect("write");
         assert_eq!(
-            decide_worktree(&marked, &f.repo, &f.repo, &Fake::default()),
+            decide_worktree(&marked, &f.repo, &f.repo, None, &Fake::default()),
             keep(KEEP_LOCAL)
         );
     }
@@ -1618,7 +1681,10 @@ mod tests {
         let wt = find_worktree(&f, &path);
         assert_eq!(wt.branch, None);
         let sys = Fake::default();
-        assert_eq!(decide_worktree(&wt, &f.repo, &f.repo, &sys), Verdict::Act);
+        assert_eq!(
+            decide_worktree(&wt, &f.repo, &f.repo, None, &sys),
+            Verdict::Act
+        );
         assert!(
             sys.asked.borrow().is_empty(),
             "a detached HEAD has no PR to ask about"
@@ -2065,5 +2131,221 @@ mod tests {
         assert_eq!(applied.trash.as_deref(), Some(cfg.trash.as_path()));
         assert!(text.contains("   moved to the Trash: "), "{text}");
         assert!(!text.contains("FAILED"), "{text}");
+    }
+
+    // ---- review round 1 --------------------------------------------------------------------
+
+    /// A runner that answers from a table of `(program and args) -> stdout`; anything not in the
+    /// table could not run.
+    fn runner(table: &[(&str, &str)]) -> impl Fn(&str, &[&str]) -> Option<String> {
+        let table: HashMap<String, String> = table
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |program, args| {
+            let key = std::iter::once(program)
+                .chain(args.iter().copied())
+                .collect::<Vec<_>>()
+                .join(" ");
+            table.get(&key).cloned()
+        }
+    }
+
+    /// Every helper ran and found nothing.
+    fn quiet(p: &str) -> Vec<(String, String)> {
+        vec![
+            (
+                "ps -axo pid=,comm=,args=".into(),
+                "  1 /sbin/launchd /sbin/launchd\n".into(),
+            ),
+            ("pgrep -x cargo".into(), String::new()),
+            ("pgrep -x rustc".into(), String::new()),
+            (format!("lsof -t +D {p}"), String::new()),
+        ]
+    }
+
+    fn table(rows: &[(String, String)]) -> Vec<(&str, &str)> {
+        rows.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect()
+    }
+
+    #[test]
+    fn a_helper_that_cannot_run_makes_a_path_busy() {
+        let p = "/r/target/claude";
+        let path = Path::new(p);
+        let own = ["100".to_string(), "99".to_string()];
+        let rows = quiet(p);
+        assert!(
+            !busy_with(path, &own, &runner(&table(&rows))),
+            "all helpers ran, none found it"
+        );
+        // Take each helper away in turn: the path is busy every time.
+        for missing in 0..rows.len() {
+            let mut fewer = rows.clone();
+            fewer.remove(missing);
+            assert!(
+                busy_with(path, &own, &runner(&table(&fewer))),
+                "with {:?} unable to run, the path must be busy",
+                rows[missing].0
+            );
+        }
+        assert!(in_use_with(path, true, &runner(&[])), "no lsof: in use");
+        assert!(!in_use_with(
+            path,
+            true,
+            &runner(&[("lsof +D /r/target/claude", "")])
+        ));
+        assert!(in_use_with(
+            path,
+            false,
+            &runner(&[("lsof /r/target/claude", "COMMAND PID\nzsh 7\n")])
+        ));
+    }
+
+    #[test]
+    fn busy_follows_the_scripts_three_tests() {
+        let p = "/r/target/claude";
+        let path = Path::new(p);
+        let own = ["100".to_string(), "99".to_string()];
+        let with = |key: &str, out: &str| {
+            let mut rows = quiet(p);
+            rows.retain(|(k, _)| k != key);
+            rows.push((key.to_string(), out.to_string()));
+            rows
+        };
+        // 1. A cargo/rustc command line naming the folder; another program naming it is not one.
+        let ps = "ps -axo pid=,comm=,args=";
+        let rows = with(
+            ps,
+            " 7 /h/.cargo/bin/cargo cargo build --target-dir /r/target/claude\n",
+        );
+        assert!(busy_with(path, &own, &runner(&table(&rows))));
+        let rows = with(ps, " 7 /usr/bin/vim vim /r/target/claude/x\n");
+        assert!(!busy_with(path, &own, &runner(&table(&rows))));
+        // 2. A cargo whose working directory is inside the folder.
+        let mut rows = with("pgrep -x cargo", "7\n");
+        rows.push((
+            "lsof -a -p 7 -d cwd -Fn".into(),
+            "p7\nfcwd\nn/r/target/claude/sub\n".into(),
+        ));
+        assert!(busy_with(path, &own, &runner(&table(&rows))));
+        // 3. Any other holder, except this run's own process tree and the indexers.
+        let lsof = format!("lsof -t +D {p}");
+        let mut rows = with(&lsof, "100\n99\n55\n");
+        rows.push((
+            "ps -o comm= -p 55".into(),
+            "/System/Library/.../mdworker_shared\n".into(),
+        ));
+        assert!(
+            !busy_with(path, &own, &runner(&table(&rows))),
+            "own tree and an indexer"
+        );
+        let mut rows = with(&lsof, "56\n");
+        rows.push(("ps -o comm= -p 56".into(), "/usr/bin/python3\n".into()));
+        assert!(
+            busy_with(path, &own, &runner(&table(&rows))),
+            "a training run"
+        );
+        let mut rows = with(&lsof, "57\n");
+        rows.push(("ps -o comm= -p 57".into(), String::new()));
+        assert!(
+            busy_with(path, &own, &runner(&table(&rows))),
+            "a holder that has gone"
+        );
+    }
+
+    #[test]
+    fn a_worktree_git_cannot_read_is_kept() {
+        let f = fixture();
+        let head = tgit(&f.repo, &["rev-parse", "HEAD"]);
+        // A worktree whose admin folder was pruned: its `.git` file points nowhere.
+        let path = f.repo.join(".worktrees/broken");
+        fs::create_dir_all(&path).expect("mkdir");
+        let gone = f.root.join("gone");
+        fs::write(path.join(".git"), format!("gitdir: {}\n", gone.display())).expect("write");
+        let wt = Worktree {
+            path,
+            head,
+            branch: Some("claude/broken".to_string()),
+            ..Worktree::default()
+        };
+        // HEAD is main's own commit, so every later guard would pass: only the status guard keeps it.
+        assert_eq!(
+            decide_worktree(&wt, &f.repo, &f.repo, None, &Fake::default()),
+            keep("git status failed")
+        );
+    }
+
+    #[test]
+    fn a_temp_folder_marked_keep_local_is_kept() {
+        let f = fixture();
+        let cfg = config(&f, false);
+        let d = cfg.tmp_roots[0].join("pinned");
+        write_aged(&d.join("f"), "x", 48);
+        write_aged(&d.join(".keep-local"), "", 48);
+        assert_eq!(decide_temp(&d, &cfg, &Fake::default()), keep(KEEP_LOCAL));
+    }
+
+    #[test]
+    fn a_git_dir_in_the_environment_cannot_redirect_git() {
+        let f = fixture();
+        let other = f.root.join("other");
+        fs::create_dir_all(&other).expect("mkdir");
+        tgit(&other, &["init", "-q", "-b", "main"]);
+        let other_git = fs::canonicalize(other.join(".git")).expect("canonical");
+        let git_dir = |strip: bool| {
+            let mut cmd = git_command(&f.repo, ["rev-parse", "--absolute-git-dir"]);
+            cmd.env("GIT_DIR", &other_git);
+            if strip {
+                strip_git_vars(&mut cmd, [std::ffi::OsString::from("GIT_DIR")]);
+            }
+            let out = cmd.output().expect("git runs");
+            PathBuf::from(String::from_utf8_lossy(&out.stdout).trim())
+        };
+        assert_eq!(
+            git_dir(false),
+            other_git,
+            "control: GIT_DIR does redirect git -C"
+        );
+        assert_eq!(
+            git_dir(true),
+            f.repo.join(".git"),
+            "stripped, git reads the named repo"
+        );
+    }
+
+    #[test]
+    fn the_running_binary_is_found_through_a_symlinked_repo() {
+        let f = fixture();
+        let mut cfg = config(&f, false);
+        let exe = f.repo.join("target/hygiene/debug/uor-harness");
+        write_aged(&exe, "x", 48);
+        cfg.exe = Some(exe);
+        let link = f.home.join("link-to-uor-r4");
+        std::os::unix::fs::symlink(&f.repo, &link).expect("symlink");
+        assert_eq!(
+            decide_build(&link.join("target/hygiene"), &cfg, &Fake::default()),
+            keep(HOLDS_EXE)
+        );
+        assert_eq!(
+            decide_build(&link.join("target"), &cfg, &Fake::default()),
+            keep(HOLDS_EXE)
+        );
+    }
+
+    #[test]
+    fn a_worktree_holding_the_running_binary_is_kept() {
+        let f = fixture();
+        let wt = add_worktree(&f, "self");
+        let exe = wt.path.join("target/hygiene/debug/uor-harness");
+        write_aged(&exe, "x", 0);
+        assert_eq!(
+            decide_worktree(&wt, &f.repo, &f.repo, Some(&exe), &Fake::default()),
+            keep(HOLDS_EXE)
+        );
+        assert_eq!(
+            decide_worktree(&wt, &f.repo, &f.repo, None, &Fake::default()),
+            Verdict::Act,
+            "the same worktree is removable when the binary runs from elsewhere"
+        );
     }
 }

@@ -11,7 +11,14 @@
 # the checkout this script is in, so the rules that run are the ones beside it.
 set -euo pipefail
 
-root=$(cd "$(dirname "$0")/../.." && pwd -P)
+# Follow symbolic links to this script (e.g. ~/bin/uor-hygiene), so the checkout is the real one.
+src=$0
+while [ -L "$src" ]; do
+  dir=$(cd -P "$(dirname "$src")" && pwd)
+  src=$(readlink "$src")
+  case $src in /*) ;; *) src=$dir/$src ;; esac
+done
+root=$(cd -P "$(dirname "$src")/../.." && pwd)
 # ~/.cargo/bin first: /opt/homebrew/bin/cargo shadows the Rust toolchain's cargo on this Mac.
 cargo=$HOME/.cargo/bin/cargo
 [ -x "$cargo" ] || cargo=cargo
