@@ -41,6 +41,13 @@ pub enum CborAddressError {
 
 /// Re-encode `raw` (one CBOR item of the R4G1 subset) into its deterministic
 /// canonical form.
+///
+/// **Subset only.** This covers the CBOR that [`crate::r4g1`] constructs:
+/// unsigned integers, byte strings, text strings and arrays, including
+/// indefinite-length strings (chunked) and arrays. Every other major type
+/// (negative integers, maps, tags, simple values and floats) returns
+/// [`CborAddressError::UnsupportedMajorType`], where upstream `uor-addr`
+/// canonicalizes it. Do not use this for general CBOR.
 pub fn canonicalize(raw: &[u8]) -> Result<Vec<u8>, CborAddressError> {
     let mut parser = Parser { data: raw, pos: 0 };
     let mut out = Vec::new();
@@ -53,6 +60,15 @@ pub fn canonicalize(raw: &[u8]) -> Result<Vec<u8>, CborAddressError> {
 
 /// The BLAKE3-axis κ-label (`blake3:<64 lowercase hex>`) of `raw`'s canonical
 /// form.
+///
+/// **Subset only, despite the upstream name.** It matches upstream
+/// `uor_addr::cbor::address_blake3` byte-for-byte on the CBOR that
+/// [`crate::r4g1`] constructs: unsigned integers, byte strings, text strings
+/// and arrays, including indefinite-length strings (chunked) and arrays. For
+/// negative integers, maps, tags, simple values and floats it returns
+/// [`CborAddressError::UnsupportedMajorType`], where upstream returns a label.
+/// A caller that addresses arbitrary CBOR, such as map-bearing records, must
+/// not use it.
 pub fn address_blake3(raw: &[u8]) -> Result<String, CborAddressError> {
     let canonical = canonicalize(raw)?;
     Ok(format!("blake3:{}", blake3::hash(&canonical).to_hex()))
