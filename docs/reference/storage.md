@@ -72,7 +72,7 @@ tar -xf <dir>/local-archive/2026-10-20/uor-r4-local.tar -C ~/restore 'uor-r4-loc
 
 ### Removed without a copy
 
-These were removed because each is regenerable or already stored elsewhere byte for byte:
+These were removed because each is regenerable or already stored elsewhere byte for byte. The checks and the removal are recorded on issue #2029, in the notes of 20 Oct 2026 at 14:28Z and 15:31Z:
 
 - `~/uor-r4/research/`: identical to the HF `research-archive/2026-10-19/` tars. Checked file by file against `files.sha256` on 20 Oct; only a `.DS_Store` differed.
 - `~/uor-r4/tinystories_train.u16`: identical to HF `data/tinystories_train.u16` (sha256 `e930eaa2…`).
