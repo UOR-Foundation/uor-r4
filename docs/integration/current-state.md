@@ -11,6 +11,21 @@ Historical source stays byte-identical and uncompiled, and R4G1 and native-geome
 Checks: all seven touched packages pass `cargo check --all-targets`. Tests pass except one, a #846 CID binding that the cutover's path rewrites moved (shown by restoring the pre-cutover bytes). The d23 (2,253) and d25 (93) ratchets are unchanged. The `r4` CLI and wasm frontend cannot be built under the bans, so `release.yml` is paused like `deploy.yml`. [Record](../labs/legacy-crate-repair-2026-10-19/README.md)
 **Next:** the owner decides whether a compliant R4G1 engine port (Hamming assignment, teacher traits re-homed) is worth pre-registering; M8 rewrites the release pipeline for UORLUT01.
 
+## 2026-10-19 — Charter adopted: CHARTER.md replaces the stacked AGENTS.md directions and D0–D41 (claude)
+
+The owner adopted the charter at checkpoint 1, with eight answers recorded as D42 in the `DECISIONS.md` index. In short:
+- research compute stays on the GPU, while on-device D11 serving is the product;
+- pre-registration is needed only for GPU runs and milestone claims;
+- one release per sheet;
+- one notebook per research line;
+- the owner plus one PM seat;
+- the M1 bar becomes "beat both count tables";
+- a lean harness;
+- the legacy crates are repaired, not archived.
+
+New: `CHARTER.md`, a short `AGENTS.md`, `docs/rules/` and `docs/research/notebook/`. `DECISIONS.md` is now an index that keeps every anchor; the originals are archived byte-identical. [Record](../labs/repo-renormalization-2026-10-19/README.md).
+**Next:** the harness gate PR for the notebook cadence, then the illustrated documentation.
+
 ## 2026-10-19 — Docs cutover: dated records moved byte-identical into `archive/` (claude)
 
 This is the owner-approved move. 8,710 files moved from `docs/X` to `archive/X` at equal depth, all as `R100` renames:
