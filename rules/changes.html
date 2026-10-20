@@ -187,6 +187,14 @@
 <p><em>The charter replaced the older rules in one step on 19 October 2026. Later changes are added to this log as dated entries.</em></p>
 <h2 id="how-an-entry-is-written"><a class="header" href="#how-an-entry-is-written">How an entry is written</a></h2>
 <p>An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the <code>archive/</code> folder, and the live decision index keeps one line saying where each decision went (see the <a href="decision-map.html">decision map</a>).</p>
+<h2 id="20-october-2026-roadmap-issues-and-outside-contributors"><a class="header" href="#20-october-2026-roadmap-issues-and-outside-contributors">20 October 2026: roadmap issues and outside contributors</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in chat, on the roadmap-plan review page.</p>
+<ol>
+<li><strong>Roadmap as issues.</strong> The 73 gaps the documentation names (the stitching map, the transformer-to-geometry map, the mechanism board, the milestone issues, <code>NOW.md</code> and the open questions) each become one item file in <code>docs/roadmap/items/</code>, written as a planned issue. <code>cargo xtask roadmap</code> checks them, turns them into GitHub issues with milestones and labels, keeps a checklist of child issues on each milestone issue, and renders <code>docs/roadmap/README.md</code>. Every piece of work has an issue before it starts, a newly found gap is a new item file in a PR, and the PM runs <code>sync</code> and <code>render</code> weekly. The tooling freeze is lifted for this tool only. (Clause 5.3.)</li>
+<li><strong>Outside contributors and GPU work.</strong> The owner's words: "I'm open to letting people run it on gpu's as long as they have the specs sent with it, not everyone will have a 5090, so we can let them submit whatever, but if they don't have the equivalent of our baseline we will just do another run after they submit their PR with the FIT". Outsiders may run GPU steps on their own GPU with the hardware specs attached; when the hardware is not equivalent to the RTX 5090 baseline, a maintainer re-runs the step under the same FIT. A CPU run is still not research compute. (Clause 5.3.)</li>
+<li><strong>Published inputs.</strong> The inputs of the sealed S1.4 snap-parity record are public in the HF dataset <code>caseyallard/uor-r4-data</code> (<code>s1-4-parity-2026-09-29/</code>, with SHA256SUMS) so outside contributors can reproduce it.</li>
+<li><strong>Owner decisions as issues.</strong> The owner's open decisions are issues labelled <code>owner-decision</code>, assigned to the owner.</li>
+</ol>
 <h2 id="20-october-2026-workspace-reset"><a class="header" href="#20-october-2026-workspace-reset">20 October 2026: workspace reset</a></h2>
 <p><strong>Decided by:</strong> the owner (Casey), in chat, on the workspace-reset review page. Source: <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/workspace.md"><code>docs/labs/workspace.md</code></a> and <code>archive/storage/README.md</code>.</p>
 <p>The owner approved four decisions. One line each, with the clause it touches:</p>
@@ -222,7 +230,7 @@
 <h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Item</th><th>State</th><th>Source</th></tr></thead><tbody>
 <tr><td>Charter in force</td><td>Yes, since 19 October 2026.</td><td><code>CHARTER.md</code></td></tr>
-<tr><td>Entries in this log</td><td>2</td><td>this page</td></tr>
+<tr><td>Entries in this log</td><td>3</td><td>this page</td></tr>
 <tr><td>Open owner questions on the charter</td><td>None recorded at adoption: all 16 rows marked "owner decision needed" in the working rule map were resolved by the eight answers.</td><td><code>charter-diff-notes.md</code></td></tr>
 </tbody></table>
 </div>
