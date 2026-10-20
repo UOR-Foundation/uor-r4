@@ -89,7 +89,7 @@ _HOST_CHECK_RE = re.compile(
 )
 #: ... unless the line is about GPU training or evaluation, or a milestone claim.
 _RESEARCH_RUN_RE = re.compile(
-    r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|bpb|nll|perplexit\w*|accuracy|panel|headline|milestone|seeds?)\b"
+    r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|bpb|nll|perplexit\w*|accuracy|panel|headline|milestone|seeds?|steps?|fit|fits|fitting|scor\w*|loss|top-?\d|held-?out|qualif\w*|reference)\b"
 )
 #: Q1: serving the exported D11 integer artifact on a client device is the product, not research compute ...
 _DEVICE_SERVING_RE = re.compile(
@@ -97,8 +97,11 @@ _DEVICE_SERVING_RE = re.compile(
 )
 #: ... while CPU training, evaluation, qualification and reference execution stay flagged (D24).
 _RESEARCH_CPU_RE = re.compile(
-    r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|qualif\w*|reference|parity|fit|fits|fitting|scor\w*|bpb|nll|perplexit\w*|panel|headline|milestone)\b"
+    r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|qualif\w*|reference|parity|fit|fits|fitting|scor\w*|bpb|nll|perplexit\w*|panel|headline|milestone|accuracy|recall|held-?out)\b"
 )
+#: A host-side fallback is what D24 exists to catch; device serving never is one, so such a line
+#: is never excused.
+_HOST_FALLBACK_RE = re.compile(r"(?i)host[- ]?(?:side[- ]?)?fall-?back")
 
 # D22 pre-registration references: a prep sheet id, a milestone comment link, or a verdict.
 _PREREG_MARKERS = (
@@ -367,7 +370,7 @@ def _has_result_row(text: str) -> bool:
     """A notebook result row (Q4): a markdown table row whose first cell is a ``YYYY-MM-DD`` date.
 
     Mirrors ``prgates::has_result_row`` in the Rust harness."""
-    for line in text.splitlines():
+    for line in text.split("\n"):
         line = line.strip()
         if not line.startswith("|"):
             continue
@@ -383,7 +386,12 @@ def _research_compute_claims(claims: list[Any]) -> list[Any]:
 
 def _research_cpu_claims(claims: list[Any]) -> list[Any]:
     """Q1: drop lines that serve or benchmark the exported D11 artifact on a client device."""
-    return [c for c in claims if not (_DEVICE_SERVING_RE.search(str(c)) and not _RESEARCH_CPU_RE.search(str(c)))]
+    return [
+        c
+        for c in claims
+        if _HOST_FALLBACK_RE.search(str(c))
+        or not (_DEVICE_SERVING_RE.search(str(c)) and not _RESEARCH_CPU_RE.search(str(c)))
+    ]
 
 
 def _dedupe(items: list[Any]) -> list[Any]:
@@ -726,20 +734,25 @@ def check_pr(body: str, paths: HarnessPaths, reg: Registry) -> dict[str, Any]:
                 f"write {record} in this PR (delivery cadence) or correct the path",
             )
         )
-    elif _NOTEBOOK_RE.fullmatch(record):
-        try:
-            text = paths.repo.joinpath(record).read_bytes().decode("utf-8", errors="replace")
-        except OSError:
-            text = ""
-        if not _has_result_row(text):
-            add(
-                Problem(
-                    "prlint.record_path",
-                    "warn",
-                    f"notebook {record} is named but has no dated result row",
-                    "append the result as one row (Date | What ran | Number | Bar | Verdict | Artifact)",
+    else:
+        # Every named notebook must carry a dated row, not only the chosen record: a dated artifact
+        # path wins record_path, and must not hide a notebook that was never written (review of #2798).
+        for notebook in fields.get("record_paths") or []:
+            if not _NOTEBOOK_RE.fullmatch(str(notebook)):
+                continue
+            try:
+                text = paths.repo.joinpath(notebook).read_bytes().decode("utf-8", errors="replace")
+            except OSError:
+                text = ""
+            if not _has_result_row(text):
+                add(
+                    Problem(
+                        "prlint.record_path",
+                        "warn",
+                        f"notebook {notebook} is named but has no dated result row",
+                        "append the result as one row (Date | What ran | Number | Bar | Verdict | Artifact)",
+                    )
                 )
-            )
 
     # --- 8. the current-state entry
     if fields.get("claims_current_state"):
@@ -1032,7 +1045,7 @@ def format_pr_body(fields: dict[str, Any]) -> str:
     ref = f"References #{issues[0]}" if issues else "References #<issue>"
 
     lines = [
-        "## Line and headline (D21, docs/labs/session-goal.md)",
+        "## Line and headline (D21, CHARTER.md)",
         "",
         f"Line: {line_name} · count {count_text} · headline {headline}",
         "",

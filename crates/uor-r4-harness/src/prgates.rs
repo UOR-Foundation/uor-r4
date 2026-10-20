@@ -801,20 +801,26 @@ pub fn record_path(f: &crate::prbody::Fields, repo: &std::path::Path, today: &st
             format!("write {record} in this PR (delivery cadence) or correct the path"),
         )];
     }
-    if crate::prbody::is_notebook_path(&record) {
-        let text = std::fs::read(repo.join(&record))
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
-            .unwrap_or_default();
-        if !has_result_row(&text) {
-            return vec![Problem::new(
+    // Every named notebook must carry a dated row, not only the chosen record: a dated artifact
+    // path wins `record_path`, and must not hide a notebook that was never written (review of #2798).
+    f.record_paths
+        .iter()
+        .filter(|p| crate::prbody::is_notebook_path(p))
+        .filter(|p| {
+            let text = std::fs::read(repo.join(p))
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+                .unwrap_or_default();
+            !has_result_row(&text)
+        })
+        .map(|p| {
+            Problem::new(
                 "prlint.record_path",
                 "warn",
-                format!("notebook {record} is named but has no dated result row"),
+                format!("notebook {p} is named but has no dated result row"),
                 "append the result as one row (Date | What ran | Number | Bar | Verdict | Artifact)",
-            )];
-        }
-    }
-    Vec::new()
+            )
+        })
+        .collect()
 }
 
 /// A notebook result row (Q4): a markdown table row whose first cell is a `YYYY-MM-DD` date.
@@ -1003,6 +1009,23 @@ mod pivot_record_tests {
         );
     }
 
+    /// A dated artifact path wins `record_path`, but must not hide a notebook with no row.
+    #[test]
+    fn a_dated_artifact_does_not_hide_a_notebook_without_a_row() {
+        let dir = notebook_repo("# starling\n\n| Date | What ran |\n|---|---|\n");
+        let ev = dir.path().join("archive/evidence/run-2026-10-19");
+        std::fs::create_dir_all(&ev).expect("evidence dir");
+        std::fs::write(ev.join("README.md"), "sealed").expect("evidence file");
+        let body = format!("{KEEP}Record: docs/research/notebook/starling.md, artifact archive/evidence/run-2026-10-19/README.md\nReferences #2029\n");
+        let f = fields(&body);
+        assert_eq!(f.record_path, "archive/evidence/run-2026-10-19/README.md");
+        let p = record_path(&f, dir.path(), "2026-10-19");
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert!(p[0]
+            .message
+            .contains("starling.md is named but has no dated result row"));
+    }
+
     /// A notebook carrying one dated row is silent.
     #[test]
     fn notebook_with_a_dated_row_is_silent() {
@@ -1018,11 +1041,14 @@ mod pivot_record_tests {
 /// Q2: builds, finite kernel tests and host checks need no pre-registration ...
 const HOST_CHECK_PATTERN: &str = r"(?i)\b(?:cargo|rustc|clippy|fmt|unittest|pytest|builds?|built|compil\w*|tests?|lint|parity|checks?|kernel|finite|host)\b";
 /// ... unless the line is about GPU training or evaluation, or a milestone claim.
-const RESEARCH_RUN_PATTERN: &str = r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|bpb|nll|perplexit\w*|accuracy|panel|headline|milestone|seeds?)\b";
+const RESEARCH_RUN_PATTERN: &str = r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|bpb|nll|perplexit\w*|accuracy|panel|headline|milestone|seeds?|steps?|fit|fits|fitting|scor\w*|loss|top-?\d|held-?out|qualif\w*|reference)\b";
 /// Q1: serving the exported D11 integer artifact on a client device is the product, not research compute ...
 const DEVICE_SERVING_PATTERN: &str = r"(?i)\bd11\b|\bexport(?:ed)?\b[^\n]{0,24}\bartifact\b|\binteger\s+artifact\b|\bserv(?:e|es|ed|ing)\b|\bwasm\b|\bapple\s+silicon\b|\bclient\s+devices?\b|\bon-?device\b";
 /// ... while CPU training, evaluation, qualification and reference execution stay flagged (D24).
-const RESEARCH_CPU_PATTERN: &str = r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|qualif\w*|reference|parity|fit|fits|fitting|scor\w*|bpb|nll|perplexit\w*|panel|headline|milestone)\b";
+const RESEARCH_CPU_PATTERN: &str = r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|qualif\w*|reference|parity|fit|fits|fitting|scor\w*|bpb|nll|perplexit\w*|panel|headline|milestone|accuracy|recall|held-?out)\b";
+/// A host-side fallback is what D24 exists to catch; device serving never is one, so such a line
+/// is never excused.
+const HOST_FALLBACK_PATTERN: &str = r"(?i)host[- ]?(?:side[- ]?)?fall-?back";
 
 fn cached(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
     cell.get_or_init(|| Regex::new(pattern).expect("a valid pattern"))
@@ -1046,13 +1072,15 @@ fn research_compute_claims(claims: &[String]) -> Vec<&String> {
 fn research_cpu_claims(claims: &[String]) -> Vec<&String> {
     static SERVING: OnceLock<Regex> = OnceLock::new();
     static RESEARCH: OnceLock<Regex> = OnceLock::new();
-    let (serving, research) = (
+    static FALLBACK: OnceLock<Regex> = OnceLock::new();
+    let (serving, research, fallback) = (
         cached(&SERVING, DEVICE_SERVING_PATTERN),
         cached(&RESEARCH, RESEARCH_CPU_PATTERN),
+        cached(&FALLBACK, HOST_FALLBACK_PATTERN),
     );
     claims
         .iter()
-        .filter(|c| !(serving.is_match(c) && !research.is_match(c)))
+        .filter(|c| fallback.is_match(c) || !(serving.is_match(c) && !research.is_match(c)))
         .collect()
 }
 
@@ -1269,7 +1297,48 @@ mod body_gate_tests {
     fn a_host_check_line_needs_no_preregistration() {
         let body =
             format!("{NARROW_HEAD}ran cargo test -p x: 561 passed, 0 failed\nReferences #2029\n");
+        assert!(
+            !fields(&body).compute_claims.is_empty(),
+            "the parser must see a claim, or this test proves nothing"
+        );
         assert!(prereg_before_compute(&fields(&body)).is_empty());
+    }
+
+    /// Q2: a host word next to a research result does not excuse it (review of #2798).
+    #[test]
+    fn research_results_beside_a_host_word_still_need_a_preregistration() {
+        for line in [
+            "ran 16,404 steps on the pod, held-out test loss 2.31",
+            "fit on vast-123: top-1 463/14,287 on the test split",
+            "scored 463/14,287 on the held-out test",
+            "ran kernel qualification 463/14,287 on pod",
+            "GPU parity run vs reference 463/14,287",
+        ] {
+            let body = format!("{NARROW_HEAD}{line}\nReferences #2029\n");
+            assert!(
+                !fields(&body).compute_claims.is_empty(),
+                "no compute claim parsed from {line:?}"
+            );
+            let p = prereg_before_compute(&fields(&body));
+            assert_eq!(p.len(), 1, "{line:?} was excused: {p:?}");
+        }
+    }
+
+    /// Q1: a host-side fallback is never excused as device serving, and a CPU accuracy is a result.
+    #[test]
+    fn a_host_fallback_or_cpu_accuracy_is_still_cpu_model_compute() {
+        for line in [
+            "host-side fallback serves the read path, exact 463/14,287 rows",
+            "ran on the laptop in WASM: accuracy 91% on the held-out set",
+        ] {
+            let body = format!("{NARROW_HEAD}{line}\nReferences #2029\n");
+            assert!(
+                !fields(&body).cpu_claims.is_empty(),
+                "no CPU claim parsed from {line:?}"
+            );
+            let p = no_cpu_model_compute(&fields(&body));
+            assert_eq!(p.len(), 1, "{line:?} was excused: {p:?}");
+        }
     }
 
     /// Q2 (b): training with seeds and step counts still needs one.
@@ -1284,6 +1353,10 @@ mod body_gate_tests {
     #[test]
     fn serving_the_artifact_on_a_device_is_not_cpu_model_compute() {
         let body = format!("{NARROW_HEAD}ran on the laptop: served the D11 integer artifact in WASM at 210 tokens/s, 463/14,287 rows\nReferences #2029\n");
+        assert!(
+            !fields(&body).cpu_claims.is_empty(),
+            "the parser must see a claim, or this test proves nothing"
+        );
         assert!(no_cpu_model_compute(&fields(&body)).is_empty());
     }
 
@@ -1884,7 +1957,7 @@ pub fn format_pr_body(f: &crate::prbody::Fields) -> String {
     };
 
     let mut lines: Vec<String> = vec![
-        "## Line and headline (D21, docs/labs/session-goal.md)".into(),
+        "## Line and headline (D21, CHARTER.md)".into(),
         String::new(),
         format!("Line: {line_name} · count {count_text} · headline {headline}"),
         String::new(),
