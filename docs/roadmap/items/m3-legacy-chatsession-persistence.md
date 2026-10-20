@@ -23,11 +23,11 @@ Either the three value stores serialize and the test passes, or the ignored test
 
 ## How to start
 
-1. Decide the direction first, on `#2031`, in a short design note: reactivate or retire. Read `crates/uor-r4-integer/src/session.rs` (`SerializedChatSession`, `SerializedSessionState`, schema constant `SESSION_SCHEMA_V1` near line 475) and `crates/uor-r4-integer/src/capability_api.rs` (the durable-memory text near line 55 and `restore_session` near line 325). Check whether any shipped path still builds a width-576 `ChatSession`. If none does, retiring is the smaller, safer choice.
+1. Decide the direction first, on `#2031`, in a short design note: reactivate or retire. Read `crates/uor-r4-integer/src/session.rs` (`SerializedChatSession`, `SerializedSessionState`, schema constant `SESSION_SCHEMA_V1` near line 475) and `crates/uor-r4-integer/src/capability_api.rs` (the durable-memory text near line 55 and `restore_session` near line 328). Check whether any shipped path still builds a width-576 `ChatSession`. If none does, retiring is the smaller, safer choice.
 2. Note that `crates/uor-r4-integer/src/session_codec.rs` is the codec for the `IntegerStackSession` (`SerializedStackSession`), not the legacy `ChatSession`. Use it as the model for how the stack path is exact: `session_save_and_restore_produces_bit_identical_logits` and `session_pause_save_fresh_restore_greedy_continuation` in `crates/uor-r4-integer/src/stack/tests.rs`. Confirm these are the reload gate that `#1476` means, and name them in the note.
 3. If retiring: remove the ignored test, update the header in `crates/uor-r4-integer/tests/capability_api_tests.rs` and the durable-memory string in `capability_api.rs`, and keep `uor-r4.integer-session/1` tests that need no 576 fixture. Run `~/.cargo/bin/cargo test -p uor-r4-integer` and show that the default (non-ignored) suite still passes.
 4. If completing: add the three stores to the serialized state with a schema bump, using integer-only fields, with a version and tamper check as in `crates/uor-r4-integer/tests/adversarial_m3_session_tamper_prng.rs`. First write a failing round-trip test on the synthetic byte-vocabulary bundle (no fixture needed). Then run the ignored test with `~/.cargo/bin/cargo test -p uor-r4-integer --test capability_api_tests -- --ignored` where the fixture exists.
-5. Open a PR that says `Closes #2031` (it also folds `#1476`). Record the result as one row in `docs/research/notebook/m3-durable-memory.md`.
+5. Open a PR that says `Closes #<this issue>` and `References #2031` (the M3 milestone issue stays open; this defect also folds `#1476`). Record the result as one row in `docs/research/notebook/m3-durable-memory.md`.
 
 ## Rules that apply
 

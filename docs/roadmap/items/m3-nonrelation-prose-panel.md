@@ -23,7 +23,7 @@ A pre-registered non-relation prose panel with grading, plus the baseline false-
 
 ## How to start
 
-1. Read `crates/uor-r4-training/src/relation_compiler.rs` (`SavedCompiler::action`, around line 2205, and `table_action`) and `crates/uor-r4-training/src/stack_grounded_session.rs` (`apply_action`, around line 650). The panel must grade the `CompiledAction` the compiler returns (`Assert`, `Correct`, `QueryCurrent`, `Query` or `Unresolved`) and the `MemoryEffect` the session records (`Write`, `Read`, `Unresolved`).
+1. Read `crates/uor-r4-training/src/relation_compiler.rs` (`SavedCompiler::action`, around line 2219, and `table_action`, around line 2299) and `crates/uor-r4-training/src/stack_grounded_session.rs` (`apply_action`, around line 650). The panel must grade the `CompiledAction` the compiler returns (`Assert`, `Correct`, `QueryCurrent`, `Query` or `Unresolved`) and the `MemoryEffect` the session records (`Write`, `WriteDisabled`, `Read`, `Unresolved`).
 2. Post a design note on the issue. It should define: the panel categories (small talk, opinions, questions with no relation, anaphoric turns, near-misses that look like statements); the grading rule (a turn is clean only if the action is `Unresolved`); the two rates, false-assert (ASSERT on a prose turn) and false-overwrite (CORRECT on a prose turn that changes a stored fact); and a proposed pass bar. Pass bars belong to the owner (CHARTER §5.2), so send the proposed bar as a decision card to the PM rather than fixing it yourself.
 3. Write the panel as a plain-text file with one turn per line and a hash. Freeze it before looking at any compiler output: hash the file with SHA-256 and record the hash in the sheet. Keep no committed corpus files beyond the small panel the sheet names (CHARTER §3.13). Add a held-out slice that the world=v2 training data never contained.
 4. Add the grader as Rust, with finite CPU tests, in a new module beside `relation_compiler.rs` or in `crates/uor-r4-training/tests/`. The tests should feed a stub compiler (the test code in `stack_grounded_session.rs` has a `TestCompiler`) and check each rate on hand-built cases. Run `~/.cargo/bin/cargo test -p uor-r4-training`.
@@ -40,5 +40,5 @@ A pre-registered non-relation prose panel with grading, plus the baseline false-
 ## Sources
 
 - issue#2031 (folds #1718)
-- `crates/uor-r4-training/src/relation_compiler.rs` (action policy, around lines 2205–2300)
+- `crates/uor-r4-training/src/relation_compiler.rs` (action policy, around lines 2219–2342)
 - `crates/uor-r4-training/src/stack_grounded_session.rs` (`apply_action`, around lines 650–712)
