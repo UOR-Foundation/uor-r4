@@ -46,9 +46,7 @@ pub const DEFAULT_PREFIXES: &[&str] = &[
     "profiles/",
     "ops/",
     "relation-pools/",
-    "t2/",
     "prototypes/",
-    "assets/",
 ];
 
 const CODE_EXTS: &[&str] = &[
