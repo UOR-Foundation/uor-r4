@@ -20,6 +20,7 @@ mod docs_relink;
 mod docs_rewrite_refs;
 mod docs_stubs;
 mod figures;
+mod figures_charts;
 mod figures_math;
 mod gate;
 mod gnaf_conformance;
@@ -61,6 +62,9 @@ fn main() -> ExitCode {
         "figures" => figures::run(&root, write),
         "figures-math" => figures_math::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
             .map_err(Into::into),
+        "figures-charts" => {
+            figures_charts::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+        }
         "docs-inventory" => {
             docs_inventory::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
                 .map_err(Into::into)
@@ -122,6 +126,7 @@ fn main() -> ExitCode {
                  kappa <cmd>       #624: publish/fetch/tag against a kappa-registry (R4_KAPPA_REGISTRY)\n\
                  figures           D27: the README/geometry status diagrams are generated and current\n\
                  figures-math      D27: computed geometry figures (E8, 600-cell, flock, SpiralCore, route) are current [--write] [--out DIR]\n\
+                 figures-charts    D27: the docs data charts (status vs baselines, results share, timelines) drawn from the research catalog [--write] [--catalog FILE] [--out DIR]\n\
                  links [..]        docs reorganization: tracked-markdown link check (--json OUT, --baseline FILE, --renames-from REV, --simulate MAP.tsv)\n\
                  docs-inventory --out FILE.json [--prefix P ..]  docs reorganization: docs file inventory and by-string code references\n\
                  docs-move         move files/dirs with git mv from --map MAP.tsv (dry run unless --apply)\n\
