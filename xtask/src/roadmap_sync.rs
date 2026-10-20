@@ -7,12 +7,24 @@
 //! updates issues, refreshes bodies whose "Depends on" line gained numbers,
 //! rewrites the children checklist in the M1..M8 milestone issues
 //! (#2029..#2036), then writes `docs/roadmap/issues.json` and re-renders
-//! `docs/roadmap/README.md`.
+//! `docs/roadmap/README.md`. A plan with an error (an item whose relative link
+//! climbs above the repository root) stops the run before any write.
 //!
 //! An item's issue is the number in `issues.json`, else the open or closed
-//! `roadmap:item` issue whose body holds `<!-- roadmap:id=<id> -->`. Only the
-//! labels in [`managed_label`] are synced; labels and assignees a person added
-//! are kept. All GitHub access goes through the [`Gh`] trait: [`GhCli`] spawns
+//! `roadmap:item` issue whose body holds `<!-- roadmap:id=<id> -->`.
+//!
+//! Label ownership: the labels this tool manages (`roadmap:item`, `area:*`,
+//! `help wanted`, `good first issue`, `status:held`, `owner-decision`) follow
+//! the item file and are added or removed to match it. Every other label, and
+//! every assignee a person added, is kept ([`managed_label`] is the list).
+//!
+//! Problems that need a person are warnings, never writes: an issue whose
+//! marker id has no item file, one id on two issues (the lowest number is
+//! used), a milestone body with malformed children markers (left alone), an
+//! `issues.json` number GitHub cannot show. A milestone body is spliced raw, so
+//! its bytes outside the children markers (CRLF included) are never changed.
+//!
+//! All GitHub access goes through the [`Gh`] trait: [`GhCli`] spawns
 //! `gh`, and the tests use an in-memory fake. Planning is a pure function.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -123,6 +135,8 @@ pub struct Plan {
     /// (milestone issue number, new body).
     pub checklists: Vec<(u64, String)>,
     pub warnings: Vec<String>,
+    /// Items that cannot be planned; `run` stops before any write when non-empty.
+    pub errors: Vec<String>,
     /// id -> number for every item that already has an issue.
     pub numbers: Issues,
 }
@@ -159,14 +173,15 @@ pub trait Gh {
 // Pure pieces: links, bodies, labels, checklists.
 
 /// `target` resolved from `docs/roadmap/items/` to a `blob/main` URL; external
-/// (`scheme:`) and `#anchor` targets are returned unchanged.
-fn absolute_link(target: &str, repo: &str) -> String {
+/// (`scheme:`) and `#anchor` targets are returned unchanged. A target that
+/// climbs above the repository root is an error, never clamped.
+fn absolute_link(target: &str, repo: &str) -> Result<String, String> {
     let t = target.trim();
     let scheme = t
         .split_once(':')
         .is_some_and(|(s, _)| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphabetic()));
     if t.is_empty() || t.starts_with('#') || scheme {
-        return target.to_string();
+        return Ok(target.to_string());
     }
     let (path, fragment) = match t.split_once('#') {
         Some((p, f)) => (p, format!("#{f}")),
@@ -181,38 +196,45 @@ fn absolute_link(target: &str, repo: &str) -> String {
         match seg {
             "" | "." => {}
             ".." => {
-                parts.pop();
+                if parts.pop().is_none() {
+                    return Err(format!(
+                        "link `{}` climbs above the repository root",
+                        target.trim()
+                    ));
+                }
             }
             s => parts.push(s),
         }
     }
-    format!(
+    Ok(format!(
         "https://github.com/{repo}/blob/main/{}{fragment}",
         parts.join("/")
-    )
+    ))
 }
 
-/// Every Markdown link target `](target)` in `text` made absolute.
-pub fn rewrite_links(text: &str, repo: &str) -> String {
+/// Every Markdown link target `](target)` in `text` made absolute; the first
+/// target that climbs above the repository root is the error.
+pub fn rewrite_links(text: &str, repo: &str) -> Result<String, String> {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(at) = rest.find("](") {
         out.push_str(&rest[..at + 2]);
         rest = &rest[at + 2..];
         let end = rest.find(')').unwrap_or(rest.len());
-        out.push_str(&absolute_link(&rest[..end], repo));
+        out.push_str(&absolute_link(&rest[..end], repo)?);
         rest = &rest[end..];
     }
     out.push_str(rest);
-    out
+    Ok(out)
 }
 
 fn marker(id: &str) -> String {
     format!("<!-- roadmap:id={id} -->")
 }
 
-/// The issue body for `item`; `numbers` turns dependencies into `#N`.
-pub fn issue_body(item: &Item, numbers: &Issues, repo: &str) -> String {
+/// The issue body for `item`; `numbers` turns dependencies into `#N`. An error
+/// names the item and the link that climbs above the repository root.
+pub fn issue_body(item: &Item, numbers: &Issues, repo: &str) -> Result<String, String> {
     let mut s = format!(
         "{} · {} · open to {} · needs GPU {}\n",
         item.milestone,
@@ -232,7 +254,7 @@ pub fn issue_body(item: &Item, numbers: &Issues, repo: &str) -> String {
         s.push_str(&format!("\nDepends on: {}\n", deps.join(", ")));
     }
     s.push('\n');
-    s.push_str(&rewrite_links(item.body.trim(), repo));
+    s.push_str(&rewrite_links(item.body.trim(), repo).map_err(|e| format!("{}: {e}", item.id))?);
     s.push_str("\n\n---\n\n");
     let path = format!("{ITEMS_DIR}/{}.md", item.id);
     s.push_str(&format!(
@@ -240,7 +262,7 @@ pub fn issue_body(item: &Item, numbers: &Issues, repo: &str) -> String {
          Edit that file in a PR, not this issue.\n\n{}\n",
         marker(&item.id)
     ));
-    s
+    Ok(s)
 }
 
 /// Whether sync owns `label`: it adds and removes these, and leaves every other label alone.
@@ -337,14 +359,30 @@ pub fn children_lines(items: &[Item], m: &str, numbers: &Issues) -> String {
 
 /// `body` with the text between the children markers replaced by `lines`, or
 /// a new `## Roadmap items` section appended when the markers are missing.
-pub fn splice_children(body: &str, lines: &str) -> String {
-    if let Some(s) = body.find(CHILDREN_START) {
-        let inner = s + CHILDREN_START.len();
-        if let Some(e) = body[inner..].find(CHILDREN_END) {
-            return format!("{}\n{lines}\n{}", &body[..inner], &body[inner + e..]);
-        }
+/// `body` is spliced raw: bytes outside the markers are kept, and the new text
+/// uses `\r\n` when the body does. Markers that are doubled, unpaired or in the
+/// wrong order are an `Err` naming the problem; the body is then left alone.
+pub fn splice_children(body: &str, lines: &str) -> Result<String, String> {
+    let eol = if body.contains("\r\n") { "\r\n" } else { "\n" };
+    let lines = lines.replace('\n', eol);
+    let starts: Vec<usize> = body.match_indices(CHILDREN_START).map(|(i, _)| i).collect();
+    let ends: Vec<usize> = body.match_indices(CHILDREN_END).map(|(i, _)| i).collect();
+    match (starts.as_slice(), ends.as_slice()) {
+        ([], []) => Ok(format!(
+            "{body}{eol}{eol}## Roadmap items{eol}{eol}{CHILDREN_START}{eol}{lines}{eol}{CHILDREN_END}{eol}"
+        )),
+        ([s], [e]) if s < e => Ok(format!(
+            "{}{eol}{lines}{eol}{}",
+            &body[..s + CHILDREN_START.len()],
+            &body[*e..]
+        )),
+        ([_], [_]) => Err("the end marker comes before the start marker".into()),
+        (s, e) => Err(format!(
+            "{} start and {} end markers, expected one of each",
+            s.len(),
+            e.len()
+        )),
     }
-    format!("{body}\n\n## Roadmap items\n\n{CHILDREN_START}\n{lines}\n{CHILDREN_END}\n")
 }
 
 /// GitHub may drop a trailing newline or turn `\n` into `\r\n`; compare without either.
@@ -352,22 +390,33 @@ fn same_body(a: &str, b: &str) -> bool {
     a.replace("\r\n", "\n").trim_end() == b.replace("\r\n", "\n").trim_end()
 }
 
-fn checklist_edits(items: &[Item], numbers: &Issues, remote: &Remote) -> Vec<(u64, String)> {
-    let mut out = Vec::new();
+/// The milestone body edits, and a warning for each body that is left alone.
+fn checklist_plan(
+    items: &[Item],
+    numbers: &Issues,
+    remote: &Remote,
+) -> (Vec<(u64, String)>, Vec<String>) {
+    let (mut out, mut warnings) = (Vec::new(), Vec::new());
     for (k, n) in MILESTONE_ISSUES.iter().enumerate() {
         let Some(body) = remote.milestone_bodies.get(n) else {
             continue;
         };
-        let body = body.replace("\r\n", "\n");
-        let new = splice_children(
-            &body,
+        match splice_children(
+            body,
             &children_lines(items, &format!("M{}", k + 1), numbers),
-        );
-        if !same_body(&new, &body) {
-            out.push((*n, new));
+        ) {
+            Ok(new) if !same_body(&new, body) => out.push((*n, new)),
+            Ok(_) => {}
+            Err(why) => warnings.push(format!(
+                "milestone #{n}: roadmap children markers are malformed ({why}); fix them by hand"
+            )),
         }
     }
-    out
+    (out, warnings)
+}
+
+fn checklist_edits(items: &[Item], numbers: &Issues, remote: &Remote) -> Vec<(u64, String)> {
+    checklist_plan(items, numbers, remote).0
 }
 
 /// The changes that bring GitHub in line with `items`. Pure: reads only its arguments.
@@ -386,6 +435,39 @@ pub fn plan(items: &[Item], remote: &Remote, issues_json: &Issues, repo: &str) -
         });
         if let Some(n) = found {
             p.numbers.insert(item.id.clone(), n);
+        }
+    }
+
+    // Marker id -> every issue number carrying it.
+    let mut carriers: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
+    for i in &remote.issues {
+        for id in marker_ids(&i.body) {
+            carriers.entry(id).or_default().insert(i.number);
+        }
+    }
+    let known: BTreeSet<&str> = items.iter().map(|i| i.id.as_str()).collect();
+    for (id, numbers) in &carriers {
+        if known.contains(id.as_str()) {
+            if numbers.len() > 1 {
+                let list: Vec<String> = numbers.iter().map(|n| format!("#{n}")).collect();
+                let (last, head) = list.split_last().expect("two or more");
+                p.warnings.push(format!(
+                    "roadmap id `{id}` is on {} and {last}; close the duplicate by hand",
+                    head.join(", ")
+                ));
+            }
+        } else {
+            for n in numbers {
+                let labelled = by_number[n]
+                    .labels
+                    .iter()
+                    .any(|l| l.eq_ignore_ascii_case(ITEM_LABEL));
+                if labelled {
+                    p.warnings.push(format!(
+                        "#{n} carries roadmap id `{id}` but {ITEMS_DIR}/{id}.md does not exist; close it by hand or restore the file"
+                    ));
+                }
+            }
         }
     }
 
@@ -409,7 +491,13 @@ pub fn plan(items: &[Item], remote: &Remote, issues_json: &Issues, repo: &str) -
                 item.id, item.milestone
             ));
         }
-        let body = issue_body(item, &p.numbers, repo);
+        let body = match issue_body(item, &p.numbers, repo) {
+            Ok(b) => b,
+            Err(e) => {
+                p.errors.push(e);
+                continue;
+            }
+        };
         let Some(&number) = p.numbers.get(&item.id) else {
             p.creates.push(Create {
                 id: item.id.clone(),
@@ -485,8 +573,24 @@ pub fn plan(items: &[Item], remote: &Remote, issues_json: &Issues, repo: &str) -
             ));
         }
     }
-    p.checklists = checklist_edits(items, &p.numbers, remote);
+    let (edits, warnings) = checklist_plan(items, &p.numbers, remote);
+    p.checklists = edits;
+    p.warnings.extend(warnings);
     p
+}
+
+/// Every id in a `<!-- roadmap:id=<id> -->` marker in `body`.
+fn marker_ids(body: &str) -> Vec<String> {
+    const OPEN: &str = "<!-- roadmap:id=";
+    let mut ids = Vec::new();
+    let mut rest = body;
+    while let Some(at) = rest.find(OPEN) {
+        rest = &rest[at + OPEN.len()..];
+        if let Some(end) = rest.find(" -->") {
+            ids.push(rest[..end].to_string());
+        }
+    }
+    ids
 }
 
 /// `issues.json` text: pretty, keys sorted, trailing newline.
@@ -529,6 +633,9 @@ pub fn print_plan(p: &Plan, repo: &str, apply: bool) {
     for w in &p.warnings {
         println!("  warning: {w}");
     }
+    for e in &p.errors {
+        println!("  error: {e}");
+    }
     if !p.labels.is_empty() {
         println!("  labels to create: {}", p.labels.join(", "));
     }
@@ -560,7 +667,11 @@ pub fn gather(gh: &dyn Gh, issues_json: &Issues) -> Result<Remote, String> {
     let listed: BTreeSet<u64> = remote.issues.iter().map(|i| i.number).collect();
     for n in issues_json.values().collect::<BTreeSet<_>>() {
         if !listed.contains(n) {
-            remote.issues.push(gh.view_issue(*n)?);
+            // A number GitHub cannot show stays out of the remote state, so
+            // `plan` warns that it was not found rather than the run aborting.
+            if let Ok(issue) = gh.view_issue(*n) {
+                remote.issues.push(issue);
+            }
         }
     }
     for n in MILESTONE_ISSUES {
@@ -577,6 +688,12 @@ pub fn apply(
     p: &Plan,
     repo: &str,
 ) -> Result<Issues, String> {
+    if !p.errors.is_empty() {
+        return Err(format!(
+            "not applying a plan with errors: {}",
+            p.errors.join("; ")
+        ));
+    }
     for name in &p.labels {
         let (color, description) = label_spec(name);
         gh.create_label(name, color, &description)?;
@@ -619,7 +736,7 @@ pub fn apply(
         let Some(&n) = numbers.get(&item.id) else {
             continue;
         };
-        let body = issue_body(item, &numbers, repo);
+        let body = issue_body(item, &numbers, repo)?;
         if written.get(&n).is_some_and(|w| same_body(w, &body)) {
             continue;
         }
@@ -663,19 +780,29 @@ impl GhCli {
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("`{call}` did not start: {e}"))?;
+        // A failed write (gh exited and closed the pipe) is not returned yet:
+        // gh's own stderr says why it exited, and the caller needs that.
+        let mut write_failed = None;
         if let Some(text) = stdin {
             let mut pipe = child.stdin.take().expect("stdin is piped");
-            pipe.write_all(text.as_bytes())
-                .map_err(|e| format!("`{call}`: writing the body failed: {e}"))?;
+            write_failed = pipe.write_all(text.as_bytes()).err();
         }
         let out = child
             .wait_with_output()
             .map_err(|e| format!("`{call}` did not finish: {e}"))?;
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        if let Some(e) = write_failed {
+            return Err(format!(
+                "`{call}`: writing the body failed: {e}; gh said ({}): {}",
+                out.status,
+                stderr.trim()
+            ));
+        }
         if !out.status.success() {
             return Err(format!(
                 "`{call}` failed ({}): {}",
                 out.status,
-                String::from_utf8_lossy(&out.stderr).trim()
+                stderr.trim()
             ));
         }
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
@@ -897,6 +1024,12 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let remote = gather(&gh, &issues)?;
     let p = plan(&items, &remote, &issues, &repo);
     print_plan(&p, &repo, do_apply);
+    if !p.errors.is_empty() {
+        return Err(format!(
+            "roadmap sync: {} item(s) cannot be planned; nothing was written",
+            p.errors.len()
+        ));
+    }
     if !do_apply {
         return Ok(());
     }
@@ -974,15 +1107,15 @@ mod tests {
     #[test]
     fn roadmap_sync_rewrites_links() {
         assert_eq!(
-            rewrite_links("[a](../../start/a.md)", R),
+            rewrite_links("[a](../../start/a.md)", R).unwrap(),
             "[a](https://github.com/R/blob/main/docs/start/a.md)"
         );
         assert_eq!(
-            rewrite_links("see [y](../../../crates/x/src/y.rs#L3).", R),
+            rewrite_links("see [y](../../../crates/x/src/y.rs#L3).", R).unwrap(),
             "see [y](https://github.com/R/blob/main/crates/x/src/y.rs#L3)."
         );
         assert_eq!(
-            rewrite_links("[s](sibling.md)", R),
+            rewrite_links("[s](sibling.md)", R).unwrap(),
             "[s](https://github.com/R/blob/main/docs/roadmap/items/sibling.md)"
         );
         for same in [
@@ -991,7 +1124,7 @@ mod tests {
             "[h](#anchor)",
             "no links (here)",
         ] {
-            assert_eq!(rewrite_links(same, R), same);
+            assert_eq!(rewrite_links(same, R).unwrap(), same);
         }
     }
 
@@ -999,7 +1132,7 @@ mod tests {
     fn roadmap_sync_body_has_sections_footer_marker_and_numbered_deps() {
         let it = item("b", "M1", "ready", "", "a, c");
         let numbers = Issues::from([("a".to_string(), 41u64)]);
-        let body = issue_body(&it, &numbers, R);
+        let body = issue_body(&it, &numbers, R).unwrap();
         assert!(
             body.starts_with("M1 · ready · open to anyone · needs GPU no\n"),
             "{body}"
@@ -1015,7 +1148,7 @@ mod tests {
              by `cargo xtask roadmap sync`. Edit that file in a PR, not this issue."
         ));
         assert!(body.trim_end().ends_with("<!-- roadmap:id=b -->"));
-        let none = issue_body(&item("a", "M1", "ready", "", ""), &numbers, R);
+        let none = issue_body(&item("a", "M1", "ready", "", ""), &numbers, R).unwrap();
         assert!(!none.contains("Depends on"));
     }
 
@@ -1084,7 +1217,7 @@ mod tests {
             .zip([10, 11])
             .map(|(c, n)| issue_from(c, n))
             .collect();
-        issues[1].body = issue_body(&items[1], &numbers, R);
+        issues[1].body = issue_body(&items[1], &numbers, R).unwrap();
         let mut remote = remote_with(issues);
         for (n, body) in checklist_edits(&items, &numbers, &remote) {
             remote.milestone_bodies.insert(n, body);
@@ -1125,13 +1258,13 @@ mod tests {
     fn roadmap_sync_splices_checklist() {
         let body = format!("Intro\n\n{CHILDREN_START}\nold\n{CHILDREN_END}\n\nTail **kept**\n");
         assert_eq!(
-            splice_children(&body, "- [ ] #1 x (ready)"),
+            splice_children(&body, "- [ ] #1 x (ready)").unwrap(),
             format!(
                 "Intro\n\n{CHILDREN_START}\n- [ ] #1 x (ready)\n{CHILDREN_END}\n\nTail **kept**\n"
             )
         );
         assert_eq!(
-            splice_children("Intro", "L"),
+            splice_children("Intro", "L").unwrap(),
             format!("Intro\n\n## Roadmap items\n\n{CHILDREN_START}\nL\n{CHILDREN_END}\n")
         );
         let items = vec![
@@ -1144,7 +1277,8 @@ mod tests {
             "- [ ] `a` Do a (ready)\n- [x] #5 Do b (done)"
         );
         let mut remote = remote_with(vec![]);
-        let current = splice_children("Milestone 2030", &children_lines(&items, "M2", &numbers));
+        let current =
+            splice_children("Milestone 2030", &children_lines(&items, "M2", &numbers)).unwrap();
         remote.milestone_bodies.insert(2030, current);
         let edits = checklist_edits(&items, &numbers, &remote);
         assert!(
@@ -1152,6 +1286,137 @@ mod tests {
             "unchanged body plans no edit"
         );
         assert_eq!(edits.len(), 7);
+    }
+
+    #[test]
+    fn roadmap_sync_malformed_markers_are_not_spliced() {
+        let end_first = format!("A\n{CHILDREN_END}\nold\n{CHILDREN_START}\nB\n");
+        let two_starts = format!("{CHILDREN_START}\na\n{CHILDREN_START}\nb\n{CHILDREN_END}\n");
+        let two_ends = format!("{CHILDREN_START}\na\n{CHILDREN_END}\n{CHILDREN_END}\n");
+        let lone_start = format!("{CHILDREN_START}\na\n");
+        for body in [&end_first, &two_starts, &two_ends, &lone_start] {
+            assert!(splice_children(body, "L").is_err(), "{body}");
+        }
+        assert!(splice_children(&end_first, "L")
+            .unwrap_err()
+            .contains("before the start"));
+        // A malformed milestone body plans no edit and warns; the others still plan.
+        let items = vec![item("a", "M2", "ready", "", "")];
+        let mut remote = remote_with(vec![]);
+        remote.milestone_bodies.insert(2030, end_first);
+        let p = plan(&items, &remote, &Issues::new(), R);
+        assert!(p.checklists.iter().all(|(n, _)| *n != 2030), "{p:?}");
+        assert_eq!(p.checklists.len(), 7);
+        assert!(
+            p.warnings.iter().any(|w| w
+                .starts_with("milestone #2030: roadmap children markers are malformed (")
+                && w.ends_with("; fix them by hand")),
+            "{:?}",
+            p.warnings
+        );
+    }
+
+    #[test]
+    fn roadmap_sync_crlf_body_keeps_crlf_outside_markers() {
+        let body =
+            format!("Intro\r\n\r\n{CHILDREN_START}\r\nold\r\n{CHILDREN_END}\r\n\r\nTail\r\n");
+        let got = splice_children(&body, "- [ ] #1 x\n- [ ] #2 y").unwrap();
+        assert_eq!(
+            got,
+            format!(
+                "Intro\r\n\r\n{CHILDREN_START}\r\n- [ ] #1 x\r\n- [ ] #2 y\r\n{CHILDREN_END}\r\n\r\nTail\r\n"
+            )
+        );
+        // An unchanged list plans no edit even though the body is CRLF.
+        let items = vec![item("a", "M2", "ready", "", "")];
+        let mut remote = remote_with(vec![]);
+        let lines = children_lines(&items, "M2", &Issues::new());
+        remote
+            .milestone_bodies
+            .insert(2030, splice_children(&body, &lines).unwrap());
+        assert!(checklist_edits(&items, &Issues::new(), &remote)
+            .iter()
+            .all(|(n, _)| *n != 2030));
+    }
+
+    #[test]
+    fn roadmap_sync_warns_on_orphan_and_duplicate_markers() {
+        let items = vec![item("a", "M1", "ready", "", "")];
+        let first = plan(&items, &remote_with(vec![]), &Issues::new(), R);
+        let issue = |n: u64, id: &str| GhIssue {
+            body: format!("x\n\n{}\n", marker(id)),
+            ..issue_from(&first.creates[0], n)
+        };
+        let remote = remote_with(vec![issue(7, "a"), issue(5, "a"), issue(9, "gone")]);
+        let p = plan(&items, &remote, &Issues::new(), R);
+        assert_eq!(p.numbers["a"], 5, "the lowest number stays the choice");
+        assert!(p
+            .warnings
+            .contains(&"roadmap id `a` is on #5 and #7; close the duplicate by hand".to_string()));
+        assert!(p.warnings.contains(
+            &"#9 carries roadmap id `gone` but docs/roadmap/items/gone.md does not exist; close it by hand or restore the file"
+                .to_string()
+        ));
+        assert!(p.closes.is_empty(), "an orphan is never closed");
+    }
+
+    #[test]
+    fn roadmap_sync_link_above_root_is_a_plan_error() {
+        assert!(rewrite_links("[x](../../../../x.md)", R)
+            .unwrap_err()
+            .contains("../../../../x.md"));
+        assert!(absolute_link("/../x", R).is_err());
+        let mut it = item("a", "M1", "ready", "", "");
+        it.body.push_str("\n[bad](../../../../../etc/x)\n");
+        let e = issue_body(&it, &Issues::new(), R).unwrap_err();
+        assert!(
+            e.starts_with("a: ") && e.contains("../../../../../etc/x"),
+            "{e}"
+        );
+        let p = plan(&[it], &remote_with(vec![]), &Issues::new(), R);
+        assert_eq!(p.errors.len(), 1);
+        assert!(p.creates.is_empty());
+        let gh = FakeGh {
+            labels: RefCell::new(vec![]),
+            issues: RefCell::new(vec![]),
+        };
+        assert!(apply(&gh, &[], &remote_with(vec![]), &p, R).is_err());
+        assert!(gh.issues.borrow().is_empty() && gh.labels.borrow().is_empty());
+    }
+
+    #[test]
+    fn roadmap_sync_unviewable_issues_json_number_warns_instead_of_aborting() {
+        let milestone_issue = |n: u64| GhIssue {
+            number: n,
+            title: String::new(),
+            body: String::new(),
+            labels: vec![],
+            milestone: None,
+            state: "OPEN".into(),
+            assignees: vec![],
+        };
+        let gh = FakeGh {
+            labels: RefCell::new(vec![]),
+            issues: RefCell::new(
+                MILESTONE_ISSUES
+                    .iter()
+                    .map(|n| milestone_issue(*n))
+                    .collect(),
+            ),
+        };
+        let known = Issues::from([("a".to_string(), 999u64)]);
+        let remote = gather(&gh, &known).unwrap();
+        assert!(remote.issues.iter().all(|i| i.number != 999));
+        let items = vec![item("a", "M1", "ready", "", "")];
+        let p = plan(&items, &remote, &known, R);
+        assert!(
+            p.warnings
+                .iter()
+                .any(|w| w.contains("#999") && w.contains("not found on GitHub")),
+            "{:?}",
+            p.warnings
+        );
+        assert!(p.creates.is_empty());
     }
 
     #[test]
