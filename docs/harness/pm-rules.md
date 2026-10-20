@@ -160,8 +160,8 @@ come from the owner through the PM.
     the merge commit never reaches `main`'s history, and exact-head review stays exact:
     `git diff origin/main..<new-head> -- <delivered paths>` must equal the reviewed diff. Rebase only
     when a force push is genuinely needed (a stacked child branch); see #2519 for that path.
-  - **Before removing it** — anything worth keeping goes to the HF store first (`hf upload` to `results/<lab>/<topic-date>/`,
-    or `uor-pod down --to-store`), then clear the local copy. Scratch lives in `~/uor-r4/local/<lab>/`. Never keep a second local copy of
+  - **Before removing it** — anything worth keeping goes to the HF store first (`hf upload caseyallard/uor-r4-store <dir> results/<lab>/<topic-date> --repo-type dataset`, read back and checked,
+    or `/root/uor-store put` on a pod), then clear the local copy. Scratch lives in `~/uor-r4/local/<lab>/<topic>/`. Never keep a second local copy of
     archived material.
   - **After each merge** — run `scripts/storage/uor-hygiene --apply` **from the owner checkout**.
   - **`df -h /` after your next delivery**, not on a schedule. Below 30 GB is a stop condition.

@@ -70,6 +70,7 @@ No secret is printed or copied by this recipe.
 export UOR_LAB="$LAB" PATH="$HOME/.cargo/bin:$HOME/.local/share/uor-r4/bin:$PATH"
 set -euo pipefail
 POD_TOOL="$PWD/scripts/pod/uor-pod"
+ARCHIVE="$HOME/uor-r4/local/$LAB/cuda-check-$SESSION"
 REMOTE_SCRIPT="$PWD/scripts/pod/uor-cuda-check-remote"
 "$POD_TOOL" status
 "$POD_TOOL" up --provider vast --gpu 5090 --count 1 --lab "$LAB" \
@@ -79,7 +80,8 @@ REMOTE_SCRIPT="$PWD/scripts/pod/uor-cuda-check-remote"
 
 Set `POD` to the **new pod ID printed by this successful up**, never a peer ID.
 Install the following EXIT trap before lease/setup. It archives even a failed
-build, verifies SHA256 locally and cloud MD5 round-trip, then releases/deletes
+build, verifies SHA256 locally, uploads to the HF store and reads the upload back
+against its SHA256SUMS, then releases/deletes
 only that pod. If archival fails it deliberately does **not** destroy the sole
 remote evidence: repair storage immediately, retain the lease, and alert PM;
 do not mark it archived. On normal paths there must be no live pod afterwards.
@@ -99,7 +101,10 @@ cleanup() {
   "$POD_TOOL" ssh "$POD" "tar -C /workspace/uor-r4/evals/$SESSION -cf - ." | tar -C "$ARCHIVE" -xf -
   copied=$?
   if [ "$copied" -eq 0 ] && (cd "$ARCHIVE" && shasum -a 256 -c SHA256SUMS) && \
-     hf upload caseyallard/uor-r4-store "$ARCHIVE" "results/$LAB/$(basename "$ARCHIVE")" --repo-type dataset; then
+     hf upload caseyallard/uor-r4-store "$ARCHIVE" "results/$LAB/$(basename "$ARCHIVE")" --repo-type dataset && \
+     hf download caseyallard/uor-r4-store --repo-type dataset --include "results/$LAB/$(basename "$ARCHIVE")/*" \
+       --local-dir "$ARCHIVE.check" && \
+     (cd "$ARCHIVE.check/results/$LAB/$(basename "$ARCHIVE")" && shasum -a 256 -c SHA256SUMS); then
     "$POD_TOOL" release "$POD" --lab "$LAB" --session "$SESSION"
     "$POD_TOOL" down "$POD" --lab "$LAB" --session "$SESSION" --confirm-archived
     "$POD_TOOL" status
