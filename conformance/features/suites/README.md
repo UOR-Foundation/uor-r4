@@ -26,13 +26,13 @@ Feature: <suite name>
   <what the suite is about, in a sentence.>
 
   @RF-01 @build
-  Scenario: <the statement, from model/ids.toml>
+  Scenario: <the statement, from conformance/ids.toml>
     Given <the fixture>
     When the suite exercises RF-01
     Then <the assertion, in the register's words>
 ```
 
-Each row in `model/ids.toml` names the suite file its scenario lives in, its
+Each row in `conformance/ids.toml` names the suite file its scenario lives in, its
 honesty level (`build`), and — since #830 — its execution `scope`, its serving
 `reachability`, and an `evidence` pointer. `CONFORMANCE.md` is generated from the
 register (never edited by hand); `just bdd` / `cargo test -p repo-conformance`
@@ -48,5 +48,5 @@ fixtures absent is `UNAVAILABLE`, never a `PASS` (see RF-29 and
 
 The register currently carries the 29 `RF-*` feature-capability suites migrated
 under #273. Within this historical register, new conformance entries start with a row in
-`model/ids.toml`, then a scenario and marker test. That register procedure does
+`conformance/ids.toml`, then a scenario and marker test. That register procedure does
 not impose a new conformance campaign on every native model change.
