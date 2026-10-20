@@ -496,6 +496,7 @@ mod tests {
             &["harness.".to_string()],
             crate::checkdispatch::Scope::Repo,
             0,
+            crate::statusdelivery::Github::Offline,
         );
         for (expected_id, expected_substr) in [
             ("harness.owner_rules_applied", "D99"),

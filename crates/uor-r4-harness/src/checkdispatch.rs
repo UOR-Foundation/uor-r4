@@ -12,6 +12,7 @@
 use crate::preprules::Finding;
 use crate::registries::Registries;
 use crate::state::StatePaths;
+use crate::statusdelivery::Github;
 
 /// Every rule `check` runs, with the severity the registry gives it.
 ///
@@ -186,8 +187,14 @@ fn severity_rank(s: &str) -> u8 {
 ///
 /// **Firing rules keep their own severity and message; the `ok` records take the table's severity**,
 /// which is what Python does when a rule's results carry no severity of their own.
-pub fn run(paths: &StatePaths, regs: &Registries, only: &[String], now: i64) -> Vec<Finding> {
-    run_scoped(paths, regs, only, Scope::Repo, now)
+pub fn run(
+    paths: &StatePaths,
+    regs: &Registries,
+    only: &[String],
+    now: i64,
+    gh: Github,
+) -> Vec<Finding> {
+    run_scoped(paths, regs, only, Scope::Repo, now, gh)
 }
 
 /// The rules a **scope** selects. Python declares a scope per rule (`repo` is the default, plus
@@ -222,42 +229,48 @@ impl Scope {
 }
 
 /// `check` with a rule-set scope, which is what `--staged` changes.
+///
+/// **A module runs only when the scope and `only` select one of its rules.** `check --staged`
+/// selects none, and it runs from the pre-commit hook, so evaluating every module would put the
+/// status rules' GitHub calls on every commit. `gh` says whether those rules may ask GitHub; the
+/// command asks, tests do not.
 pub fn run_scoped(
     paths: &StatePaths,
     regs: &Registries,
     only: &[String],
     scope: Scope,
     now: i64,
+    gh: Github,
 ) -> Vec<Finding> {
-    let mut per_module: Vec<(&str, Vec<Finding>)> = vec![
-        ("arena", crate::arenarules::all(paths)),
-        ("briefing", crate::briefingrules::all(paths, regs)),
-        ("budget", crate::budgetrules::all(paths)),
-        ("harness", crate::harnessrules::all(paths, regs)),
-        ("mistakes", {
-            let mut v = crate::mistakes::registry_valid(paths);
-            v.extend(crate::mistakes::evidence_exists(paths));
-            v.extend(crate::mistakes::guard_covered(paths));
-            v.extend(crate::mistakes::stale_check(paths));
-            v
-        }),
-        ("multilab", crate::multilabrules::all(paths, now)),
-        ("prep", crate::preprules::all(paths, regs)),
-        ("prlint", crate::prlintrules::all(paths, &[])),
-        ("receipts", crate::receiptsrules::all(paths)),
-        ("status", crate::statusrules::all(paths, regs, now)),
-    ];
-
+    let selected = |id: &str| {
+        scope.includes(id) && (only.is_empty() || only.iter().any(|o| id.starts_with(o.as_str())))
+    };
     let mut out: Vec<Finding> = Vec::new();
-    for (module, findings) in per_module.drain(..) {
-        let Some((_, ids)) = MODULE_RULES.iter().find(|(m, _)| *m == module) else {
+    for (module, ids) in MODULE_RULES.iter() {
+        if !ids.iter().any(|id| selected(id)) {
             continue;
+        }
+        let findings: Vec<Finding> = match *module {
+            "arena" => crate::arenarules::all(paths),
+            "briefing" => crate::briefingrules::all(paths, regs),
+            "budget" => crate::budgetrules::all(paths),
+            "harness" => crate::harnessrules::all(paths, regs),
+            "mistakes" => {
+                let mut v = crate::mistakes::registry_valid(paths);
+                v.extend(crate::mistakes::evidence_exists(paths));
+                v.extend(crate::mistakes::guard_covered(paths));
+                v.extend(crate::mistakes::stale_check(paths));
+                v
+            }
+            "multilab" => crate::multilabrules::all(paths, now),
+            "prep" => crate::preprules::all(paths, regs),
+            "prlint" => crate::prlintrules::all(paths, &[]),
+            "receipts" => crate::receiptsrules::all(paths),
+            "status" => crate::statusrules::all(paths, regs, now, gh),
+            _ => Vec::new(),
         };
         for id in ids.iter() {
-            if !scope.includes(id) {
-                continue;
-            }
-            if !only.is_empty() && !only.iter().any(|o| id.starts_with(o.as_str())) {
+            if !selected(id) {
                 continue;
             }
             let fired: Vec<Finding> = findings
@@ -442,7 +455,7 @@ print(json.dumps(sorted(r.id for r in checkrules.rules())))
         let repo = repo();
         let paths = StatePaths::resolve(repo, None, Some("/nonexistent-live"));
         let regs = Registries::load(&paths).expect("registry");
-        let out = run(&paths, &regs, &[], 1_800_000_000);
+        let out = run(&paths, &regs, &[], 1_800_000_000, Github::Offline);
         let ids: std::collections::BTreeSet<&str> = out.iter().map(|f| f.rule_id).collect();
         assert_eq!(
             ids.len(),
@@ -463,7 +476,13 @@ print(json.dumps(sorted(r.id for r in checkrules.rules())))
         let repo = repo();
         let paths = StatePaths::resolve(repo, None, Some("/nonexistent-live"));
         let regs = Registries::load(&paths).expect("registry");
-        let out = run(&paths, &regs, &["status".to_string()], 1_800_000_000);
+        let out = run(
+            &paths,
+            &regs,
+            &["status".to_string()],
+            1_800_000_000,
+            Github::Offline,
+        );
         assert!(!out.is_empty(), "the status rules are present");
         assert!(
             out.iter().all(|f| f.rule_id.starts_with("status.")),
@@ -525,7 +544,14 @@ print(json.dumps(sorted(r.id for r in checkrules.rules())))
         let repo = repo();
         let paths = StatePaths::resolve(repo, None, Some("/nonexistent-live"));
         let regs = Registries::load(&paths).expect("registry");
-        let out = run_scoped(&paths, &regs, &[], Scope::Staged, 1_800_000_000);
+        let out = run_scoped(
+            &paths,
+            &regs,
+            &[],
+            Scope::Staged,
+            1_800_000_000,
+            Github::Offline,
+        );
         assert!(
             out.iter().all(|f| STAGED_RULES.contains(&f.rule_id)),
             "a non-staged rule ran under --staged"
@@ -539,7 +565,14 @@ print(json.dumps(sorted(r.id for r in checkrules.rules())))
         let repo = repo();
         let paths = StatePaths::resolve(repo, None, Some("/nonexistent-live"));
         let regs = Registries::load(&paths).expect("registry");
-        let out = run_scoped(&paths, &regs, &[], Scope::Repo, 1_800_000_000);
+        let out = run_scoped(
+            &paths,
+            &regs,
+            &[],
+            Scope::Repo,
+            1_800_000_000,
+            Github::Offline,
+        );
         let seen: std::collections::BTreeSet<&str> = out.iter().map(|f| f.rule_id).collect();
         for (id, _) in RULES.iter() {
             assert!(seen.contains(id), "{id} did not run in the repo scope");

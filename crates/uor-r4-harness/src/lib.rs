@@ -58,6 +58,7 @@ pub mod shards;
 pub mod skills;
 pub mod state;
 pub mod status;
+pub mod statusdelivery;
 pub mod statusrules;
 pub mod statusrules_heartbeat;
 pub mod team;

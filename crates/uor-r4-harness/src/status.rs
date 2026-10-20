@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use crate::registries::{fmt_num, Milestone, Registries};
 use crate::state::StatePaths;
+use crate::statusdelivery::Github;
 
 /// How much of a free-text field the view keeps. Python truncates at the same widths, and the widths
 /// matter: they are what makes the view readable in one screen.
@@ -290,6 +291,39 @@ fn bump(counts: &mut Vec<(String, usize)>, key: Option<&str>) {
 
 /// Render the whole view, with a numbered structure so a lab can cite "status section 3".
 pub fn render(paths: &StatePaths, regs: Option<&Registries>, now_rfc3339: &str) -> String {
+    render_with(paths, regs, now_rfc3339, Github::Offline)
+}
+
+/// The issue snapshot section 2 reads: the shared 15-minute cache, fetched when stale.
+fn issue_snapshot(
+    paths: &StatePaths,
+    regs: Option<&Registries>,
+    gh: Github,
+    now_unix: i64,
+) -> crate::githubcards::IssueSnapshot {
+    let unavailable = |reason: &str| crate::githubcards::IssueSnapshot {
+        available: false,
+        reason: reason.to_string(),
+        issues: Value::Null,
+    };
+    match (regs, gh) {
+        (None, _) => unavailable("registry unreadable"),
+        (Some(_), Github::Offline) => unavailable(crate::statusdelivery::OFFLINE_REASON),
+        (Some(r), Github::Ask { refresh }) => {
+            let numbers: Vec<i64> = r.milestones.iter().map(|m| m.issue).collect();
+            crate::githubcards::github_issues(paths, &numbers, false, now_unix, refresh)
+        }
+    }
+}
+
+/// The numbered view. `gh` decides whether sections 2-4 ask GitHub; `status` asks, tests do not.
+pub fn render_with(
+    paths: &StatePaths,
+    regs: Option<&Registries>,
+    now_rfc3339: &str,
+    gh: Github,
+) -> String {
+    let now_unix = crate::state::parse_iso_unix(now_rfc3339).unwrap_or(0);
     let mut lines: Vec<String> = Vec::new();
     lines.push(format!("uor-harness status - {now_rfc3339}"));
     match regs {
@@ -390,25 +424,12 @@ pub fn render(paths: &StatePaths, regs: Option<&Registries>, now_rfc3339: &str) 
         let today = &now_rfc3339[..10];
         let previous = previous_month(month);
         let rows = receipt_rows(paths, month, &previous);
-        let now_unix = crate::state::parse_iso_unix(now_rfc3339).unwrap_or(0);
-        // The issue snapshot comes from the shared 15-minute GitHub cache; when `gh` fails the clause
-        // says UNAVAILABLE and why, never "up to date".
-        let (snap, stale) = match regs {
-            Some(r) => {
-                let numbers: Vec<i64> = r.milestones.iter().map(|m| m.issue).collect();
-                let snap =
-                    crate::githubcards::github_issues(paths, &numbers, false, now_unix, false);
-                let stale = stale_issues(&snap.issues, r, now_unix);
-                (snap, stale)
-            }
-            None => (
-                crate::githubcards::IssueSnapshot {
-                    available: false,
-                    reason: "registry unreadable".to_string(),
-                    issues: Value::Null,
-                },
-                Vec::new(),
-            ),
+        // When `gh` fails, or the view is offline, the clause says UNAVAILABLE and why, never
+        // "up to date".
+        let snap = issue_snapshot(paths, regs, gh, now_unix);
+        let stale = match regs {
+            Some(r) if snap.available => stale_issues(&snap.issues, r, now_unix),
+            _ => Vec::new(),
         };
         lines.extend(render_receipts(
             paths,
@@ -426,13 +447,160 @@ pub fn render(paths: &StatePaths, regs: Option<&Registries>, now_rfc3339: &str) 
         ));
     }
 
-    // 3. DELIVERY - resolved from local git, so a lab offline or rate-limited still learns whether
-    // finished work is sitting on a branch.
-    lines.extend(render_delivery(&delivery_view(paths)));
+    // 3. DELIVERY - the content classification comes from local git, so a lab offline or
+    // rate-limited still learns whether finished work is sitting on a branch.
+    lines.extend(render_delivery(&delivery_view_with(paths, gh, now_unix)));
+    lines.push(String::new());
 
-    let mut out = lines.join("\n");
+    // 4. GITHUB
+    lines.extend(crate::statusdelivery::render_github(
+        &crate::statusdelivery::prs_view(paths, regs, gh, now_unix),
+        &crate::githubcards::cache_path(paths),
+    ));
+
+    let mut out = lines.join("\n").trim_end().to_string();
     out.push('\n');
     out
+}
+
+/// `status --json`: Python's `build_status` top-level keys. `prs` and `delivery` carry Python's
+/// field names; `delivery` adds the content classification as `branches_by_content`.
+pub fn status_json(
+    paths: &StatePaths,
+    regs: Option<&Registries>,
+    now_rfc3339: &str,
+    gh: Github,
+) -> Value {
+    let now_unix = crate::state::parse_iso_unix(now_rfc3339).unwrap_or(0);
+    let refresh = matches!(gh, Github::Ask { refresh: true });
+    let milestones: Vec<Value> = regs
+        .map(|r| milestone_rows(paths, r))
+        .unwrap_or_default()
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "key": m.key, "id": m.id, "issue": m.issue, "lab": m.lab, "status": m.status,
+                "headline": m.headline, "lines": m.line_counts, "panel": m.panel,
+                "mechanisms": m.mechanisms.iter()
+                    .map(|(id, exists)| serde_json::json!({"id": id, "brief_exists": exists}))
+                    .collect::<Vec<_>>(),
+                "next": m.next, "url": m.url,
+            })
+        })
+        .collect();
+    let month = &now_rfc3339[..7];
+    let today = &now_rfc3339[..10];
+    let rows = receipt_rows(paths, month, &previous_month(month));
+    let by_kind = |rows: &[Value]| -> Value {
+        count_by_kind(rows)
+            .into_iter()
+            .map(|(k, n)| (k, Value::from(n)))
+            .collect::<serde_json::Map<_, _>>()
+            .into()
+    };
+    let in_month: Vec<Value> = rows
+        .iter()
+        .filter(|r| {
+            r.get("ts")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t.starts_with(month))
+        })
+        .cloned()
+        .collect();
+    let in_day: Vec<Value> = rows
+        .iter()
+        .filter(|r| {
+            r.get("ts")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t.starts_with(today))
+        })
+        .cloned()
+        .collect();
+    let view = delivery_view_with(paths, gh, now_unix);
+    let mut delivery = crate::statusdelivery::extras_json(&view.extras);
+    for (k, v) in [
+        ("available", Value::Bool(view.error.is_empty())),
+        ("reason", Value::from(view.error.clone())),
+        ("branch", Value::from(view.branch.clone())),
+        ("worktree", Value::from(view.worktree.clone())),
+        ("repo", Value::from(paths.repo.display().to_string())),
+        ("trunk", Value::from(view.trunk.clone())),
+        (
+            "origin_main",
+            serde_json::json!({
+                "ref": "origin/main", "commit": view.origin_main,
+                "subject": truncate(&view.origin_main_subject, 120),
+                "note": "last fetched value; run `git fetch --prune origin` before trusting it",
+            }),
+        ),
+        (
+            "branches_by_content",
+            view.rows
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "branch": r.name, "head": r.head, "unmerged": r.unmerged,
+                        "current": r.current, "orphan": r.orphan, "worktree": r.worktree,
+                        "uncommitted": r.uncommitted, "safe_to_delete": r.safe_to_delete,
+                        "fix": r.fix,
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+    ] {
+        delivery[k] = v;
+    }
+    let snap = issue_snapshot(paths, regs, gh, now_unix);
+    let issue_items: Vec<Value> = match regs {
+        Some(r) if snap.available => r
+            .milestones
+            .iter()
+            .map(|m| {
+                let updated = snap
+                    .issues
+                    .get(m.issue.to_string())
+                    .and_then(|i| i.get("updatedAt"))
+                    .cloned()
+                    .unwrap_or(Value::from(""));
+                let age = age_hours(&updated, now_unix);
+                serde_json::json!({
+                    "milestone": m.id, "issue": m.issue, "updated_at": updated,
+                    "age_hours": age, "stale": age.is_some_and(|a| a > STALE_HOURS),
+                })
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let stale_ids: Vec<Value> = issue_items
+        .iter()
+        .filter(|i| i["stale"] == Value::Bool(true))
+        .map(|i| i["milestone"].clone())
+        .collect();
+    serde_json::json!({
+        "schema": 1,
+        "generated_at": now_rfc3339,
+        "repo": paths.repo.display().to_string(),
+        "refresh": refresh,
+        "milestones": milestones,
+        "registry": {
+            "path": paths.repo.join("docs/harness/milestones.json").display().to_string(),
+            "note": regs.map(|r| r.note.clone()).unwrap_or_default(),
+            "tracker": regs.map(|r| r.tracker.clone()).unwrap_or(Value::Null),
+        },
+        "rules": regs.map(|r| r.owner_rules.clone()).unwrap_or_default(),
+        "receipts": {
+            "today": {"date": today, "total": in_day.len(), "by_kind": by_kind(&in_day)},
+            "month": {"month": month, "total": in_month.len(), "by_kind": by_kind(&in_month)},
+        },
+        "prs": crate::statusdelivery::prs_view(paths, regs, gh, now_unix),
+        "delivery": delivery,
+        "stale": {
+            "threshold_hours": STALE_HOURS,
+            "issues": {"available": snap.available, "reason": snap.reason, "items": issue_items},
+            "stale_milestones": stale_ids,
+        },
+    })
 }
 
 /// The headline acceptance number, formatted for a one-line summary.
@@ -1225,7 +1393,10 @@ mod aggregation_tests {
         assert!(text.contains("done/thing"), "{text}");
         assert!(text.contains("live/thing"), "{text}");
         assert!(text.contains("last fetched value"), "{text}");
-        assert!(text.contains("not available from git alone"), "{text}");
+        assert!(
+            text.contains("branches with a merged PR: UNAVAILABLE: GitHub was not consulted"),
+            "an offline view says which check it could not run: {text}"
+        );
     }
 
     /// The bug this check had on first use, reproduced on controlled state.
@@ -1298,12 +1469,19 @@ mod aggregation_tests {
         );
         assert!(text.contains("origin/main"), "{text}");
         assert!(text.contains("done/thing"), "{text}");
-        // The limit is stated wherever it renders, including in the whole view.
+        // The offline limit is stated wherever it renders, including in the whole view, and section
+        // 4 follows section 3.
         let regs = Registries::load(&paths()).ok();
         let whole = render(&f.paths, regs.as_ref(), "2026-10-13T02:00:00-04:00");
         let delivery = whole.split("3. DELIVERY").nth(1).expect("section 3");
         assert!(
-            delivery.contains("not available from git alone"),
+            delivery.contains("branches with a merged PR: UNAVAILABLE: GitHub was not consulted"),
+            "{delivery}"
+        );
+        assert!(delivery.contains("   worktrees: "), "{delivery}");
+        assert!(delivery.contains("   disk: "), "{delivery}");
+        assert!(
+            delivery.contains("4. GITHUB\n   PRs: UNAVAILABLE: GitHub was not consulted"),
             "{delivery}"
         );
     }
@@ -1523,6 +1701,8 @@ pub struct DeliveryView {
     pub rows: Vec<BranchRow>,
     /// Set when `origin/main` cannot be resolved, which makes every orphan judgement meaningless.
     pub error: String,
+    /// What GitHub, `git worktree` and `df` add: merged-PR branches, worktrees left behind, disk.
+    pub extras: crate::statusdelivery::DeliveryExtras,
 }
 
 impl DeliveryView {
@@ -1556,11 +1736,27 @@ impl DeliveryView {
     }
 }
 
-/// Build the delivery view from local git.
+/// The delivery view without GitHub: content classification, worktrees and disk.
+pub fn delivery_view(paths: &StatePaths) -> DeliveryView {
+    delivery_view_with(paths, crate::statusdelivery::Github::Offline, 0)
+}
+
+/// The delivery view, asking GitHub for each local branch's PR when `gh` allows it.
+pub fn delivery_view_with(
+    paths: &StatePaths,
+    gh: crate::statusdelivery::Github,
+    now_unix: i64,
+) -> DeliveryView {
+    let mut view = content_view(paths);
+    view.extras = crate::statusdelivery::gather(paths, &view.trunk, &view.branch, gh, now_unix);
+    view
+}
+
+/// Build the content classification from local git.
 ///
 /// `refs/heads` is read rather than `git branch`, because `git branch` output is presentation and has
 /// changed between versions; a format string is a contract.
-pub fn delivery_view(paths: &StatePaths) -> DeliveryView {
+fn content_view(paths: &StatePaths) -> DeliveryView {
     let repo = paths.repo.as_path();
     let (_, branch, _) = git_out(repo, &["rev-parse", "--abbrev-ref", "HEAD"]);
     // The trunk is whatever `origin/HEAD` points at; main is the fallback this repository always has.
@@ -1585,6 +1781,7 @@ pub fn delivery_view(paths: &StatePaths) -> DeliveryView {
         trunk,
         rows: Vec::new(),
         error: if ok_main { String::new() } else { main_err },
+        extras: Default::default(),
     };
     if !ok_main {
         return view;
@@ -1665,11 +1862,14 @@ pub fn delivery_view(paths: &StatePaths) -> DeliveryView {
 /// Render section 3.
 pub fn render_delivery(view: &DeliveryView) -> Vec<String> {
     let mut lines = vec!["3. DELIVERY".to_string()];
+    let (merged_pr_lines, extra_lines) = crate::statusdelivery::render_extras(&view.extras);
     if !view.error.is_empty() {
         lines.push(format!(
             "   UNAVAILABLE: cannot resolve origin/main: {}",
             view.error
         ));
+        lines.extend(merged_pr_lines);
+        lines.extend(extra_lines);
         return lines;
     }
     lines.push(format!(
@@ -1695,8 +1895,14 @@ pub fn render_delivery(view: &DeliveryView) -> Vec<String> {
     // Stated every time, because the value is a cached ref and a stale answer here is the one a lab
     // would act on when deciding a branch is safe to delete.
     lines.push("   note: origin/main is the last fetched value; run `git fetch --prune origin` before trusting it".to_string());
+    lines.extend(merged_pr_lines);
 
-    let removable = view.removable();
+    // A branch already listed under its merged PR is not listed again here.
+    let removable: Vec<&BranchRow> = view
+        .removable()
+        .into_iter()
+        .filter(|r| !view.extras.merged.iter().any(|m| m.branch == r.name))
+        .collect();
     if removable.is_empty() {
         lines.push("   branches holding only finished work: none safe to delete".to_string());
     } else {
@@ -1740,12 +1946,6 @@ pub fn render_delivery(view: &DeliveryView) -> Vec<String> {
             ));
         }
     }
-    // This port reads git, not GitHub, so it cannot name the PR that merged a branch.
-    lines.push(
-        "   PR numbers: not available from git alone - this view proves a branch is FINISHED by \
-         content (`git cherry`), not by which PR merged it. `scripts/harness/cli.py status` asks \
-         GitHub and names the PR."
-            .to_string(),
-    );
+    lines.extend(extra_lines);
     lines
 }

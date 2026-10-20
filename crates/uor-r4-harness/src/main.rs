@@ -53,7 +53,9 @@ const PYTHON_PASSTHROUGH_VALUE_FLAGS: [&str; 1] = ["--only"];
 /// failed with "unknown option --only" before it could delegate. Which defeats the point.
 use uor_r4_harness::ruleinventory::PORTED_COMMANDS;
 
-const SUBCOMMAND_FLAGS: [&str; 33] = [
+const SUBCOMMAND_FLAGS: [&str; 34] = [
+    // `status --refresh`: re-read GitHub instead of the 15-minute cache.
+    "--refresh",
     "--kind",
     "--milestone",
     "-m",
@@ -457,7 +459,7 @@ fn main() -> ExitCode {
         Some("prep-render") => cmd_prep_render(&repo, &rest),
         Some("brief") => cmd_brief(&repo, &rest),
         Some("shard-check") => cmd_shard_check(&repo, &rest, json),
-        Some("status") => cmd_status(&repo, &rest),
+        Some("status") => cmd_status(&repo, &rest, json),
         Some("ratchet") => cmd_ratchet(&repo, &rest),
         Some("claim-wording") => cmd_claim_wording(&repo),
         Some("lint") => cmd_lint(&repo, &rest, json),
@@ -2661,14 +2663,25 @@ fn cmd_shard_check(repo: &Path, args: &[String], json: bool) -> ExitCode {
     }
 }
 
-fn cmd_status(repo: &Path, args: &[String]) -> ExitCode {
+fn cmd_status(repo: &Path, args: &[String], json: bool) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     // A caller may pin the timestamp so two implementations can be compared; otherwise it is now.
     let now = flag_value(args, "--at").unwrap_or_else(uor_r4_harness::receipt::now_rfc3339);
     // No `--lab`: section 2 aggregates EVERY lab's shard, so the view has no "whose receipts"
     // question to answer.
     let regs = Registries::load(&paths).ok();
-    print!("{}", status::render(&paths, regs.as_ref(), &now));
+    let gh = uor_r4_harness::statusdelivery::Github::Ask {
+        refresh: args.iter().any(|a| a == "--refresh"),
+    };
+    if json {
+        let data = status::status_json(&paths, regs.as_ref(), &now, gh);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string())
+        );
+    } else {
+        print!("{}", status::render_with(&paths, regs.as_ref(), &now, gh));
+    }
     ExitCode::SUCCESS
 }
 
@@ -2995,7 +3008,14 @@ fn cmd_check_rules(
     } else {
         uor_r4_harness::checkdispatch::Scope::Repo
     };
-    let findings = uor_r4_harness::checkdispatch::run_scoped(&paths, &regs, &args.only, scope, now);
+    let findings = uor_r4_harness::checkdispatch::run_scoped(
+        &paths,
+        &regs,
+        &args.only,
+        scope,
+        now,
+        uor_r4_harness::statusdelivery::Github::Ask { refresh: false },
+    );
     let (checked, failed, errors, warnings) = uor_r4_harness::checkdispatch::summarize(&findings);
 
     // The frozen formats, in the same shape `check-formats` prints.
