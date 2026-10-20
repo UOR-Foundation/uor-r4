@@ -17,7 +17,7 @@ Every top-level folder has one job. This page lists them, says which ones are ab
 | `web/` | The web client. `web/studio/` is the Studio page served at `/studio/` on the documentation site. |
 | `xtask/` | Repository tooling, run as `cargo xtask <command>`: link checks, the archive check, figures, the catalog and the site build. |
 | `conformance/` | The requirements ledger (`ledger.toml`, `ids.toml`, `authorities.toml`) and its behaviour specifications (`features/suites/*.feature`). The `repo-model` and `repo-conformance` crates read it to produce `CONFORMANCE.md`. Until 20 October 2026 these were the top-level `model/` and `features/` folders. |
-| `tests/` | The Python test suite for the harness (`tests/harness/`) and end-to-end fixtures (`tests/e2e/`). The Rust tests live with their crates. |
+| `tests/` | End-to-end fixtures (`tests/e2e/`). The Rust tests live with their crates; the retired Python harness tests are archived under `archive/tests/harness/`. |
 
 One more change is planned: the normative reference pages that sit loose in `docs/` will gather under `docs/reference/`, except for the few that code pins by path and hash, which stay where they are.
 
