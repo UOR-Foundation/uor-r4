@@ -6,29 +6,36 @@ area: evaluation
 status: ready
 open_to: lab
 needs_gpu: true
-depends_on: [m1-d11-exporter-discrete, a saved trained discrete model (A8 rerun, BVG-K or trunk)]
+depends_on: [m1-d11-exporter-discrete]
 ---
 
 ## Why it matters
 
-M1 bar (d) is defined through the export, and M5 builds on the same measurement.
+M1 bar (d) is defined through the export, and M5 builds on the same measurement. This is Stage 4 of the plan: the first time a model trained under today's rules is read through the integer artifact and timed. See [the lookup-serving page](../../mechanisms/lut-serving.md).
 
 ## What is missing
 
-Tokens per second for a model trained under today's rules has never been measured, and the export gap is unmeasured. Stage 4 needs both prompt-reading and reply-writing rates on a laptop, and integer top-1 scored through the D11 export on the DEV panel.
+Tokens per second for a model trained under today's rules has never been measured, and the export gap is unmeasured. Stage 4 needs both prompt-reading and reply-writing rates on a laptop, and integer top-1 scored through the D11 export on the DEV panel (14,287 rows in the K16 receipts, `docs/integration/NOW.md` row 5). The export-gap rule (D39 item 5) is: a float candidate is disqualified when its export gap exceeds the two-seed band on the same evaluator, fixed per sheet at FIT time. The numeric band is not yet registered.
+
+Two inputs do not exist yet. The exporter is the item `m1-d11-exporter-discrete`. A saved trained discrete model is also needed, from the A8 rerun (`m1-a8-full-dose-rerun`), BVG-K Stage T (`m1-bvg-k-stage-t-training`) or the trunk (`m1-trunk-assembly-and-training`). This item cannot run until both exist.
 
 ## Done when
 
-Stage 4 bar: 'the integer audits stay green, the gap stays within the noise band, and tokens per second is reported for both reading the prompt and writing the reply.'
+Stage 4 bar: 'the integer audits stay green, the gap stays within the noise band, and tokens per second is reported for both reading the prompt and writing the reply.' Decode and context rates are reported separately.
 
 ## How to start
 
-Open these first:
-
-- `crates/uor-r4-integer`
-- `docs/labs/k16-outcome-call-2026-10-19/README.md`
-- `docs/labs/wasm-serving-runtime-2026-10-18/README.md`
-- `docs/mechanisms/lut-serving.md`
+1. Read `docs/mechanisms/lut-serving.md`, `docs/integration/NOW.md` lines 94–97 (the export-gap rule), `docs/labs/wasm-serving-runtime-2026-10-18/README.md`, `docs/labs/k16-outcome-call-2026-10-19/README.md` (the DEV panel and its two-seed receipts) and the runtime in `crates/uor-r4-integer`. Check the progress of `m1-d11-exporter-discrete` and of a saved trained model; do not start a run without both.
+2. First deliverable, posted on the issue: a draft pre-registration sheet, one page, modelled on `docs/harness/prep/m1-bvgk-stagec2-block-qualification-2026-10-18.md`. It must define:
+   - the panel: the DEV panel file and its SHA-256, taken from the K16 outcome record and frozen before the run;
+   - the oracle: the training-side evaluator and the integer scorer through the D11 file on the same rows, so the gap is measured on the same evaluator;
+   - the gap statistic (for example the difference in top-1 count on the same rows) and the noise band, taken from two seeds on that evaluator and fixed in the sheet at FIT time;
+   - the timing protocol: laptop model recorded, a warmup, then N timed runs with median, nearest-rank p95 and all raw samples, for the prompt-reading rate and the reply-writing rate separately;
+   - which side runs where. Evaluation runs on the GPU (§3.5), while serving the artifact on a laptop is the product (§3.6). Say which parts run on the pod and which on the laptop, and ask the FIT reviewer to agree.
+3. Request a non-author TEST FITNESS: FIT review. Do not run before it passes.
+4. After FIT: export the saved model with the `m1-d11-exporter-discrete` tool, then run the native audit and `python3 scripts/audit_zero_matmul_wasm.py <wasm> --serving --call-graph --tap` (existing script; add no new Python). Both must report 0 float and 0 mul/div. Build the runtime with `~/.cargo/bin/cargo build --release -p uor-r4-integer`. Score the DEV panel through the artifact and time both rates on the laptop.
+5. Keep the raw outputs and hashes beside the sheet. Report the gap against the band, and tokens per second for both rates. A gap outside the band is a result on that configuration, not a verdict on the mechanism.
+6. Open a PR that says `Closes #<this issue>` (or `References` if partial). Add one row to `docs/research/notebook/m4-serving.md` with the number, the bar fixed in the sheet, the export gap and the verdict word.
 
 ## Rules that apply
 
@@ -48,4 +55,3 @@ Open these first:
 - [`docs/model/architecture.md:55`](../../../docs/model/architecture.md)
 - [`docs/start/where-we-are.md:58`](../../../docs/start/where-we-are.md)
 - [`docs/start/where-were-going.md:50`](../../../docs/start/where-were-going.md)
-

@@ -11,11 +11,20 @@ depends_on: []
 
 ## Why it matters
 
-It reopens a PARKED optimizer path that needs no gradients.
+It reopens a PARKED optimizer path that needs no gradients. Legal construction would replace the optimizer and the rounding step that follows it: each parameter change is picked straight from values the integer model can hold, so every accepted step is already servable. See [legal construction](../../mechanisms/legal-construction.md). It is a candidate learning rule for the discrete model, and today it has no score.
 
 ## What is missing
 
-Legal construction picks each parameter change from values the integer model can hold, but it has never been scored: every attempt stopped on solver numerics. The saved case has 1,960 variables and has not been solved in exact arithmetic. It is a host solver task, so no GPU is assumed.
+Legal construction picks each parameter change from values the integer model can hold, but it has never been scored: every attempt stopped on solver numerics. The saved case has 1,960 variables (and 440 constraints) and has not been solved in exact arithmetic. It is a host solver task, so no GPU is assumed.
+
+From the mechanism page and the archived record:
+
+- The program runs offline in a pure-Rust solver (`microlp`) with a 4,096-node branch-and-bound cap. It returned `InternalError("Singular matrix")` and no assignment.
+- A scale-aware pivot threshold did not make the backend usable on the saved problem.
+- The record's own next step is to instrument the exact failing LP basis and factorization context.
+- The classification is open. The page says it is not yet assessed against D30, because the guard test forms a 380-by-1,960 Jacobian product and the solver does dense LU.
+- The pooled-ranking loss behind the older M2 learner used banned softmax and softplus forms, so a rerun on the real panel needs a compliant objective. The solve itself minimises a saved gradient `g·δ`.
+- No bar for what "scored" must beat is registered.
 
 ## Done when
 
@@ -23,10 +32,12 @@ The saved 1,960-variable case is solved in exact arithmetic and the result is re
 
 ## How to start
 
-Open these first:
-
-- `docs/mechanisms/legal-construction.md`
-- `archive/labs/direct-legal-construction-2026-10-09/README.md`
+1. Read `docs/mechanisms/legal-construction.md` and `archive/labs/direct-legal-construction-2026-10-09/README.md` (the attempts, the saved-case counts and the Next section). Locate the saved case: the record cites the authenticated #2101 objective and protected derivatives; see `archive/labs/direct-legal-construction-2026-10-09/storage.json` and `docs/reference/storage.md`. Post where it lives and its hash.
+2. Post a design note on the issue first. It must give: the exact-arithmetic method and number type; why the solve uses no gradients, softmax or squashing (the objective is a saved vector); and a classification against CHARTER §3.3 and D30 for the dense LU and the Jacobian product. If that classification is unclear, raise it as a decision card to the PM instead of choosing; instrument and mechanism are classified before any result is called.
+3. Write finite CPU controls first. Use tiny instances solved by hand, plus a brute-force enumeration over the keep, lower or higher choices (3 per coefficient, so a few coefficients at most). Cover the legal endpoints `q = ±7` and the noop branch. The archive's exact-source checks (`exact-source-checks.json`, `centered-exact-checks.json`) show the earlier fixtures. The exact solver must agree with enumeration on every control before it touches the saved case.
+4. Implement the solver on the host in Rust. Old code in `archive/` is read-only; copy, do not edit. Add no Python. Run the saved case and record either the optimal assignment and objective, or an infeasibility proof. Re-check the answer independently: evaluate all 380 guard rows exactly on the returned change.
+5. A host solver run needs no pre-registration. Scoring a result on the real panel is a separate step; if it needs the GPU, register and review it before running.
+6. Open a PR that says `Closes #<this issue>`, or `References` if partial. No notebook page covers optimizers, so add one row on a new page `docs/research/notebook/<line>.md` in the format of `docs/research/notebook/README.md` and name the line in the design note.
 
 ## Rules that apply
 
@@ -37,4 +48,3 @@ Open these first:
 ## Sources
 
 - [`docs/mechanisms/README.md:111`](../../../docs/mechanisms/README.md)
-

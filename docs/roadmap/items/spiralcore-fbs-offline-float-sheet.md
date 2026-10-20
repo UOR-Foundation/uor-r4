@@ -6,7 +6,7 @@ area: mechanism
 status: held
 open_to: lab
 needs_gpu: true
-depends_on: [float-training-module, secant-surrogate-descent-check]
+depends_on: [float-training-module, r-secant-surrogate-descent]
 ---
 
 ## Why it matters

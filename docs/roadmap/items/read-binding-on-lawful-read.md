@@ -6,7 +6,7 @@ area: mechanism
 status: held
 open_to: lab
 needs_gpu: true
-depends_on: [relation-read-paired-verdict]
+depends_on: []
 ---
 
 ## Why it matters

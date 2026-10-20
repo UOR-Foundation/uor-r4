@@ -11,11 +11,11 @@ depends_on: []
 
 ## Why it matters
 
-Connects the exact storage system to the model's read path, which M2 grounding needs.
+The model has no exact way to read stored content back by address. Building this connects the delivered object store to the read path, which M2 grounding needs. See [exact memory](../../mechanisms/exact-memory.md) and [the transformer-to-geometry map](../../start/transformer-vs-geometry.md).
 
 ## What is missing
 
-Address as the read has never been built, and nothing yet consumes the object store. The object store is delivered (60 tests, a conformance check pulling 262,144 bytes back byte-identical).
+Address as the read has never been built, and nothing yet consumes the object store. The object store is delivered: 60 tests, and a conformance check that pulled 262,144 bytes back byte-identical.
 
 ## Done when
 
@@ -23,14 +23,13 @@ A read that resolves an address to stored content from the object store, with fi
 
 ## How to start
 
-Open these first:
+1. Read `docs/mechanisms/exact-memory.md`, `archive/labs/addressed-memory-2026-10-10/README.md`, `archive/labs/d19-object-store-2026-10-15/README.md`, `docs/labs/uorobj01-conformance-2026-10-18/README.md` and `docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/exact-memory.json`. Skim the API in `crates/uor-r4-object-store/src/lib.rs`.
+2. First deliverable, posted on the issue: a design note. It gives the geometric construction (what an address is, how it resolves to an object id, what a read returns), why it needs no softmax and no matmul, and the finite CPU controls (exact hit, exact miss, wrong address, byte-identical round trip).
+3. Add a failing test first, then a small consumer module that resolves an address through `uor-r4-object-store`. Run `~/.cargo/bin/cargo test -p uor-r4-object-store` and the new tests.
+4. Write a one-page pre-registration for the ranking test. The bar is not yet registered; the sheet must set it before any run. Use a frozen, hashed panel and a non-author FIT review (CHARTER section 4.5).
+5. Run the registered test only after FIT. Record exact numbers, including a negative.
+6. Open a PR that says `Closes #<this issue>` (or `References` if partial), and add one row to `docs/research/notebook/m3-durable-memory.md`.
 
-- `archive/labs/addressed-memory-2026-10-10/README.md`
-- `archive/labs/d19-object-store-2026-10-15/README.md`
-- `docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/exact-memory.json`
-- `docs/labs/uorobj01-conformance-2026-10-18/README.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/exact-memory.md`
 
 ## Rules that apply
 

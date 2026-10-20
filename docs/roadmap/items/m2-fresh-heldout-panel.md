@@ -11,11 +11,13 @@ depends_on: []
 
 ## Why it matters
 
-Without a fresh panel the 40% bar cannot even be attempted.
+Without a fresh panel the M2 bar of 40% on genuinely fresh questions cannot be attempted. The only earlier fresh check scored 0 of 128 and showed that 437 of 512 was panel fitting. Building and sealing the panel needs no GPU and is open to anyone. See [where we're going](../../start/where-were-going.md).
 
 ## What is missing
 
-The saved parent scored 437/512 on the development panel but 0/128 on the opened transfer diagnostic; the audit calls the reply model a panel-fitting failure on rows already seen. A genuinely fresh test is NOT_RUN. The M2 bar needs at least 40% on fresh questions with the existing graders unchanged (D22).
+The saved parent scored 437/512 on the frozen development panel but 0/128 on the opened transfer draw, and the audit calls the reply model a panel-fitting failure on rows already seen. The 128-row draw was opened, so it cannot serve as fresh again. A genuinely fresh test is `NOT_RUN`. The M2 bar needs at least 40% on fresh questions, with the existing graders unchanged.
+
+The frozen panel file (`docs/harness/panels/m2-reply512.json`) names the grader as the saved native learner's own complete-reply evaluator (`uor-r4-core::native_geometric` compiler, exact store, emitter). CHARTER §4.3 asks for at least 2 seeds or at least 200 fresh rows with bars no narrower than measured noise. The 128-row draw was below that, and no noise is stated for the 512 panel anywhere.
 
 ## Done when
 
@@ -23,10 +25,12 @@ A fresh panel registered and sealed in advance, graded by the existing determini
 
 ## How to start
 
-Open these first:
-
-- `docs/labs/m2-masked-train-reference-2026-10-13/README.md`
-- `docs/research/open-questions.md`
+1. Read the old panel and why it failed. Open `docs/harness/panels/m2-reply512.json`, `docs/research/open-questions.md` (line 74), `docs/mechanisms/native-geometric.md`, `CHARTER.md` §4.3 and `STATUS.md`. The `docs/labs/m2-masked-train-reference-2026-10-13/README.md` file cited as a source does not exist in this checkout; use the panel file instead. Build the harness (`CARGO_TARGET_DIR=local/harness-target ~/.cargo/bin/cargo build -p uor-r4-harness`) and run `uor-harness brief -m m2` to see the milestone context.
+2. Post a written registration draft on #2030 as your first deliverable. It must say how the fresh questions are produced, and that the source is independent of the 512 development rows, the opened 128-row draw and every training corpus. It must say how overlap is excluded (exact and near-duplicate checks against all three), the row count (at least 200, so 40% is at least 80; choose it from a noise estimate), and that the grader is not touched.
+3. Measure noise before fixing the bar: score the saved parent on the development panel with the existing grader and record the spread you can measure. The panel file says no spread is stated, so do not invent one. The bar must not be narrower than what you measure.
+4. Build the panel with Rust tooling only (no new Python). Freeze it: record its row count and content hash, add it as a new frozen entry beside the old one in `docs/harness/panels/`, and keep the rows sealed and unscored. Store the bytes the way `docs/reference/storage.md` describes for other corpora; do not commit the corpus itself.
+5. Ask a non-author (a fresh-context reviewer counts) to check the overlap exclusion and the seal before anything scores against the panel. The M2 training run stays HELD until the owner releases it, and this item does not release it.
+6. Open a PR that says `Closes #<this issue>` when the sealed panel and its registration are in. Mention #2030 (M2) in the PR. There is no M2 notebook page yet; add `docs/research/notebook/m2-grounded-reply.md` in the format of `docs/research/notebook/README.md` with one row for the panel.
 
 ## Rules that apply
 

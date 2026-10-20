@@ -11,22 +11,25 @@ depends_on: [m1-export-gap-and-toks]
 
 ## Why it matters
 
-Prevents a panel-fitted result from closing M1 (the M2 reply model failed that way).
+M1 bar (e) stops a result that only fits its development panel from closing M1. The M2 reply model failed exactly this way: 437 of 512 on its development panel, then 0 of 128 on rows it had not seen. It cannot run before the earlier bars pass. See [where we're going](../../start/where-were-going.md).
 
 ## What is missing
 
-M1 bar (e) needs the gain to hold on a fresh, sealed test panel registered in advance. The fresh slice is still sealed (fresh transfer NOT_TRIGGERED or NOT_RUN) and opens only after the earlier bars pass.
+M1 bar (e) needs the gain to hold on a fresh, sealed test panel registered in advance. The fresh slice is still sealed: the 19 October outcome call records fresh transfer as `NOT_TRIGGERED` (the fresh slice, binding `4bd108ad…`, stays unopened), and G-Trans runs only when an arm reaches KEEP. The A8 sheet names the fresh V2 tokens, mask and seal as `0b7e754c…`, `a1cda529…` and `df5d074a…`. No saved model has passed bars (a) to (d), so nothing exists to score yet. Frozen `ft/dev` is not reported as fresh.
+
+The size, noise floor and threshold for the fresh panel are not yet registered. CHARTER §4.3 requires bars no narrower than measured noise and a fresh transfer number with every development gain.
 
 ## Done when
 
-'(e) Fresh transfer. The gain holds on a fresh, sealed test panel registered in advance.'
+'(e) Fresh transfer. The gain holds on a fresh, sealed test panel registered in advance.' Read with bar (d), "the gain" is integer top-1 through the D11 export beating the unigram table (1,226 of 14,287) and the next-word table (6,300 of 14,287) on each of two seeds. The fresh-panel threshold is not yet registered; step 3 registers it.
 
 ## How to start
 
-Open these first:
-
-- `docs/labs/k16-outcome-call-2026-10-19/README.md`
-- `docs/research/open-questions.md`
+1. Read the current state. Open `docs/labs/k16-outcome-call-2026-10-19/README.md` (line 53, fresh transfer `NOT_TRIGGERED`), `docs/harness/prep/m1-attention-a8-address-cells-learning-2026-10-19.md` (the fresh order, lines 73, 87-89 and 120), `crates/uor-r4-discrete/src/attention_transfer.rs` (the deferred paired fresh evaluation) and `docs/research/open-questions.md`. Check whether the scoring path already refuses to open the slice before a sealed DEV decision. If it does not, write a failing test that shows it.
+2. Post a design note on the issue as your first deliverable. It must say what "the gain" is on the fresh slice (read with bar (d): integer top-1 through the D11 export against the same two count tables), what is frozen before the slice opens (row count, the seal hashes, the tables, the seeds), and who opens it. If any of this changes the bar, it is a decision card to the PM or owner (CHARTER §5.2), not your call.
+3. Draft the one-page pre-registration sheet in `docs/harness/prep/` (use the A8 sheet as the format model). Register the fresh-panel threshold and noise floor, bound to the sealed bytes by their hashes. Verify the seal against the stored bytes without opening or scoring the slice. A non-author must give TEST FITNESS: FIT before it runs (CHARTER §4.5).
+4. Do not run it until `m1-export-gap-and-toks` has produced a saved model that passes the earlier bars on two seeds, and the owner has typed the release. Score once. Do not re-draw or re-open the slice; use DEV for any earlier look.
+5. Open a PR that says `References #<this issue>` for the note, the test and the sheet, and `Closes #<this issue>` only when the fresh number is recorded. Add one row to `docs/research/notebook/m1-discrete-attention.md`.
 
 ## Rules that apply
 

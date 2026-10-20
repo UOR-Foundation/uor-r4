@@ -6,7 +6,7 @@ area: training
 status: held
 open_to: lab
 needs_gpu: true
-depends_on: [driver math optimization (named in NOW, not scoped)]
+depends_on: [d41-driver-math-pilot]
 ---
 
 ## Why it matters

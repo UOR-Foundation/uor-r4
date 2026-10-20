@@ -11,28 +11,26 @@ depends_on: [m1-w2-capacity-capture]
 
 ## Why it matters
 
-Tests the leading hypothesis for the low top-1 and is Stage 1, 'make the capacity measurable'.
+This tests the leading hypothesis for the low top-1 and is Stage 1, "make the capacity measurable". It is the first step of the recovery plan for the discrete-attention line. See [discrete learning](../../mechanisms/discrete-learning.md) and [where we are](../../start/where-we-are.md).
 
 ## What is missing
 
-The address key uses only the first and last block and takes only 5 values (0, 4, 8, 12, 16) to order up to 256 cells (proof, from discrete.cu), so which cells open is largely decided by arbitrary numbering. The architect's likely lever is a full-vector or interior-block address metric, built and measured at zero training. It needs new kernel code and a fresh CUDA qualification.
+The address key uses only the first and last block and takes only 5 values (0, 4, 8, 12, 16) to order up to 256 cells (proof, read from `discrete.cu`). Which cells open is therefore largely decided by arbitrary numbering. The architect's likely lever is a full-vector or interior-block address metric, built and measured at zero training. It needs new kernel code and a fresh CUDA qualification.
 
 ## Done when
 
-Stage 1 bar: 'enough distinct vectors that the number of positions still winnable clears the run bar of 1,941, and a starting reach above the address-cell model's 1,351 of 3,847', measured before any training.
+Stage 1 bar: "enough distinct vectors that the number of positions still winnable clears the run bar of 1,941, and a starting reach above the address-cell model's 1,351 of 3,847", measured before any training. The audit also lists within-cell tie mass. The bar is not G-Pre of 4,894 at checkpoint 0, which every K16 arm already met.
 
 ## How to start
 
-Open these first:
+1. Read `docs/labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md` (section 3.2 and section 6 W1), `docs/labs/address-cells-preflight-2026-10-19/README.md` and `docs/mechanisms/discrete-learning.md`.
+2. Open the reusable host code in `crates/uor-r4-discrete/src/`: `address_cells.rs`, `coverage_census.rs`, `attention_preflight.rs`, and the kernel in `crates/uor-r4-discrete/src/discrete.cu`. This item waits on [m1-w2-capacity-capture](m1-w2-capacity-capture.md) for the same measurement setup.
+3. First deliverable, posted on the issue: a design note. It gives the metric (full vector or interior block), why it uses no softmax and no matmul, and finite CPU controls on `address_cells.rs` (distinct-vector count, alias ceiling, tie mass on a fixed fixture).
+4. Build the host version first and run `~/.cargo/bin/cargo test -p uor-r4-discrete --lib address_cells`. Add the kernel change only after the host numbers look worth it; the kernel needs a stub-nvcc check and a fresh CUDA qualification.
+5. Write the one-page pre-registration for the zero-update GPU pre-flight on the A8 placement. Freeze and hash the panel, give the Stage 1 bar above, and get a non-author FIT before any GPU run.
+6. Run it on the GPU through `scripts/pod/uor-pod` (lease your GPU first) and save results off the pod.
+7. Open a PR that says `Closes #<this issue>` (or `References` if partial), and add one row to `docs/research/notebook/m1-discrete-attention.md`.
 
-- `address_cells.rs`
-- `attention_preflight.rs`
-- `coverage_census.rs`
-- `crates/uor-r4-discrete (discrete.cu)`
-- `crates/uor-r4-discrete/src/discrete.cu`
-- `docs/labs/address-cells-preflight-2026-10-19/README.md`
-- `docs/labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md`
-- `docs/mechanisms/discrete-learning.md`
 
 ## Rules that apply
 
