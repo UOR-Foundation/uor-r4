@@ -4,7 +4,7 @@ title: Measure M1-class laptop cost on the accepted served model
 milestone: M5
 area: evaluation
 status: ready
-open_to: lab
+open_to: anyone
 needs_gpu: false
 depends_on: [m4-export-uorlut01-cli]
 ---
