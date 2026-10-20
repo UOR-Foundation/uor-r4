@@ -35,6 +35,7 @@ pub mod githelp;
 pub mod githubcards;
 pub mod harnessrules;
 pub mod harnessrules_stateformats;
+pub mod heartbeatcard;
 pub mod mistakes;
 pub mod multilab;
 pub mod multilabrules;

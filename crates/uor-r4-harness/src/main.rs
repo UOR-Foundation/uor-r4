@@ -16,6 +16,7 @@ use uor_r4_harness::arenacompare;
 use uor_r4_harness::briefing;
 use uor_r4_harness::budget;
 use uor_r4_harness::githelp;
+use uor_r4_harness::heartbeatcard;
 use uor_r4_harness::mistakes;
 use uor_r4_harness::multilab;
 use uor_r4_harness::notes;
@@ -53,7 +54,7 @@ const PYTHON_PASSTHROUGH_VALUE_FLAGS: [&str; 1] = ["--only"];
 /// failed with "unknown option --only" before it could delegate. Which defeats the point.
 use uor_r4_harness::ruleinventory::PORTED_COMMANDS;
 
-const SUBCOMMAND_FLAGS: [&str; 33] = [
+const SUBCOMMAND_FLAGS: [&str; 34] = [
     "--kind",
     "--milestone",
     "-m",
@@ -82,6 +83,8 @@ const SUBCOMMAND_FLAGS: [&str; 33] = [
     "--cached",
     "--mark-seen",
     "--no-notes",
+    // `heartbeat --print`: the card alone, recording nothing.
+    "--print",
     "--update-baseline",
     "--list",
     "--quiet",
@@ -181,6 +184,7 @@ FLAGS:
         --session S     which session of this lab is checking in
         --lab L         the lab identity (default: $UOR_LAB)
         --dry-run       print the record instead of publishing it
+        --print         show the card without recording a receipt
         --no-notes      do not read the unread-notes cache
 
 WHAT IT WRITES:
@@ -2447,6 +2451,34 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
         );
         return ExitCode::from(2);
     }
+    let card_for = |key: &str| -> Result<heartbeatcard::Card, String> {
+        let regs = Registries::load(&paths)?;
+        let m = regs
+            .milestone(key)
+            .ok_or_else(|| heartbeatcard::unknown_milestone(&regs, key))?;
+        Ok(heartbeatcard::build(
+            m,
+            flag_value(args, "--line").as_deref(),
+            flag_value(args, "--count").as_deref(),
+            flag_value(args, "--next").as_deref(),
+        ))
+    };
+    // `--print` is the documented way to verify an identity, so it must leave no trace of one.
+    if args.iter().any(|a| a == "--print") {
+        let key = flag_value(args, "--milestone")
+            .or_else(|| flag_value(args, "-m"))
+            .unwrap_or_default();
+        return match card_for(&key) {
+            Ok(card) => {
+                println!("{}", card.text);
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
+    }
     // **A check-in must not ERASE what the lab already said.** `heartbeat -m m1` with no `--line`
     // and no `--next` used to rewrite presence with both fields empty, so a lab checking in with
     // the documented command read as live-and-idle on every board - including its own last intent,
@@ -2535,6 +2567,17 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    // A registry this checkout lacks costs the card, never the check-in.
+    let card = match card_for(&p.milestone) {
+        Ok(c) => Some(c.text),
+        Err(e) => {
+            eprintln!("uor-harness: no card: {e}");
+            None
+        }
+    };
+    if let (Some(text), false) = (&card, json) {
+        println!("{text}");
+    }
     // Surface unread notes as part of the check-in: presence without awareness is half the plane.
     // ALWAYS from the live-tier cache, never from GitHub: a five-minute check-in must stay instant, and
     // it used to phone the API here whenever the cache looked stale. Refreshing is the notes command
@@ -2567,11 +2610,12 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
     }
     if json {
         println!(
-            "{{\"lab\": {:?}, \"presence\": {:?}, \"receipt\": {:?}, \"live_tier\": {}}}",
+            "{{\"lab\": {:?}, \"presence\": {:?}, \"receipt\": {:?}, \"live_tier\": {}, \"card\": {}}}",
             lab,
             durable.display().to_string(),
             shard.display().to_string(),
-            live_ok
+            live_ok,
+            serde_json::to_string(&card).unwrap_or_else(|_| "null".to_string())
         );
     } else {
         println!("checked in: {} at {}", durable.display(), p.updated);
