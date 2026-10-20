@@ -71,7 +71,11 @@ jobs:
           command -v mdbook-mermaid >/dev/null || cargo install --locked mdbook-mermaid --version 0.13.0
 
       - name: Stage the book source
-        run: cargo run -q --locked -p xtask -- book-stage
+        run: |
+          set -euo pipefail
+          cargo run -q --locked -p xtask -- book-stage
+          # The mermaid assets are generated, not committed (no vendored blobs, charter §3.13).
+          mdbook-mermaid install .
 
       - name: Build the book
         run: |
