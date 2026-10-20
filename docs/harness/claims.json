@@ -237,6 +237,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/renorm-harness-20261020": {
+    "branch": "claude/renorm-harness-20261020",
+    "claimed_at": "2026-10-20T01:30:59-04:00",
+    "head": "bc15f48a3",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/resume-message-20261018": {
     "branch": "claude/resume-message-20261018",
     "claimed_at": "2026-10-18T12:25:57-04:00",
