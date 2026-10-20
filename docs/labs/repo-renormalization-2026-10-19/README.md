@@ -242,3 +242,5 @@ The owner approved a layout pass that takes the top level from 21 folders toward
 Deferred: `tools/r4-softmax-trainer/` stays. The core crate compiles its `policy.json`, and the core source that does so (`learned_reference/adapter.rs`) is pinned by sha256 in the A2 evidence table. Moving the trainer would break that binding.
 
 Next: `model/` and `features/` → `conformance/`; the root package (`src/`, `tests/`, `profiles/`) → `crates/uor-r4-wasm-router/`, with `models/` → `data/tokenizers/`; and the unpinned loose reference pages → `docs/reference/`.
+
+The two README files moved into `archive/` above (`archive/assets/images/README.md`, `archive/research-root/README.md`) sit one folder deeper than before, so their relative links were re-pointed by one level; their text is unchanged. A workspace-wide `cargo check --workspace --all-targets` fails on `main` before and after this change (a historical core feature is unified in; the CI job that runs it has not run on `main` since 30 Sep); this change touches no build file.
