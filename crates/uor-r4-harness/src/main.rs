@@ -1,11 +1,11 @@
-//! `uor-harness` — the Rust side of the harness port.
+//! `uor-harness` — the multi-lab research harness, and its only implementation.
 //!
-//! Today this reads and validates harness state against the frozen contract. It does not write, and
-//! it is not on the labs' path: the Python harness owns behaviour until this passes the same checks.
+//! The Python mirror (`scripts/harness/`) was archived on 20 October 2026 (owner rule: Rust only,
+//! D27, CHARTER §3.11); its source is kept byte-identical under `archive/scripts/harness/`.
 //!
 //! ```text
-//! uor-harness check [--repo DIR] [--json]   # state against the frozen contract
-//! uor-harness presence [--repo DIR]         # what each lab is doing, live tier first
+//! uor-harness check [--only PREFIX] [--json]   # every machine-checkable rule
+//! uor-harness status [--refresh] [--json]      # what is true now
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -38,15 +38,14 @@ use uor_r4_harness::status;
 use uor_r4_harness::team;
 use uor_r4_harness::Contract;
 
-/// Flags that only a subcommand understands, forwarded rather than rejected at the top level.
-/// Flags a PORTED command shares with its Python original, forwarded rather than interpreted.
+/// Flags forwarded to the subcommand with their value rather than interpreted at the top level.
 ///
-/// `check` is delegated (57 rules), so `check --only <rule>` must reach Python intact. Without this
-/// the flag was forwarded alone and its value became the next command word.
-const PYTHON_PASSTHROUGH_FLAGS: [&str; 1] = ["--only"];
-const PYTHON_PASSTHROUGH_VALUE_FLAGS: [&str; 1] = ["--only"];
+/// `check --only <rule>` must reach `check`'s own parser intact. Without this the flag was
+/// forwarded alone and its value became the next command word.
+const PASSTHROUGH_FLAGS: [&str; 1] = ["--only"];
+const PASSTHROUGH_VALUE_FLAGS: [&str; 1] = ["--only"];
 
-/// Commands this binary implements. Anything else is delegated to the Python harness verbatim.
+/// Commands this binary implements. Anything else is a usage error (D30: no command reaches Python).
 ///
 /// Declared here rather than inferred from the dispatch below, because the decision must be made
 /// BEFORE flag parsing: an unported command's flags are unknown to this binary, and rejecting one
@@ -210,7 +209,7 @@ See docs/harness/README.md and docs/labs/session-goal.md.
 ";
 
 const USAGE: &str = "\
-uor-harness - the multi-lab research harness (Rust side of the port)
+uor-harness - the multi-lab research harness
 
 USAGE:
     uor-harness <COMMAND> [--repo DIR]
@@ -219,10 +218,10 @@ COMMANDS:
     onboard     Verify this machine can use the harness, and say what to do
                 next. Read-only: records nothing, claims nothing. Exits 1 if
                 anything FAILs.
-    check       RUNS THE FULL RULE SET (delegated to Python until every rule
-                is ported). 57 rules; exits 1 on any error.
+    check       Runs every registered rule; exits 1 on any error. --only PREFIX
+                narrows the set; --staged runs the pre-commit set.
     check-formats  Check only the state formats against the frozen contract
-                (docs/harness/state-formats.json). One rule of the 57 - use
+                (docs/harness/state-formats.json). One rule of the set - use
                 `check` unless you specifically want this one.
     presence    What each lab is doing now. Live tier first, durable as the
                 fallback, reporting which answered.
@@ -262,18 +261,17 @@ COMMANDS:
                 sheet to FIT on the milestone before any compute.
     prep-check  Read every pre-registration sheet: its TEST FITNESS verdict and
                 which required blocks are missing. The read half of the D22 gate.
-    registry    The milestone registry as this implementation reads it: headline,
-                panel and line counts per milestone. Compared against Python by
-                parity.py, because the headline is the number a run is scored on.
+    registry    The milestone registry as the harness reads it: headline, panel
+                and line counts per milestone - the number a run is scored on.
     prep-render Render a pre-registration sheet to stdout without writing it. The
-                WRITE half of the D22 gate, checked byte-for-byte against Python.
+                WRITE half of the D22 gate.
     brief       The context pack for a task: state, rules, contract, lessons,
                 skills and receipts. [-m M] [-f FILE..] [-q TEXT] [--write PATH]
     shard-check Refuse a ledger shard that lost lines. A shard may grow and
                 may never shrink; exits 1 on a lost receipt. Compares the
                 working tree against --base (default origin/main).
-    status      What is true now. Sections 1 (milestones) and 2 (receipts) are
-                ported; section 3 (delivery) says so rather than rendering blank.
+    status      What is true now: milestones, receipts, delivery (branches,
+                worktrees, disk) and GitHub PRs. --refresh re-reads GitHub.
     ratchet     d23|d25|d32   (or the banned word each one counts) [--update-baseline] [--list] [--quiet]
                 The D23/D25/D32 ratchets (Rust port of the scripts/check_no_*.py pair
                 plus the D32 discrete-float gate). Exits 1 when a count grew;
@@ -284,8 +282,7 @@ COMMANDS:
                 unlinked machine-verified/exact-equivalence phrase.
     help        This text.
 
-The Python harness owns behaviour until this path passes the same checks; the
-formats are frozen so the two agree about what the shared record says.
+The shared record's formats are frozen in docs/harness/state-formats.json.
 ";
 
 fn main() -> ExitCode {
@@ -367,7 +364,7 @@ fn main() -> ExitCode {
                 } else if command
                     .as_deref()
                     .is_none_or(|c| !PORTED_COMMANDS.contains(&c))
-                    || PYTHON_PASSTHROUGH_FLAGS.contains(&other)
+                    || PASSTHROUGH_FLAGS.contains(&other)
                 {
                     // An unported command's flags are the PYTHON parser's business, and so are the
                     // few flags a ported command shares with its Python original. Forward the token
@@ -375,7 +372,7 @@ fn main() -> ExitCode {
                     // command word, so `check --only harness.state_formats` delegated the command
                     // `harness.state_formats`.
                     rest.push(other.to_string());
-                    if PYTHON_PASSTHROUGH_VALUE_FLAGS.contains(&other) {
+                    if PASSTHROUGH_VALUE_FLAGS.contains(&other) {
                         if let Some(v) = args.get(i + 1) {
                             rest.push(v.clone());
                             i += 1;
@@ -860,8 +857,8 @@ fn cmd_mistakes(repo: &Path, args: &[String], json: bool) -> ExitCode {
                 "  severity {severity}, class {class}, guard {}",
                 check.guard
             );
-            println!("  read it back: python3 scripts/harness/cli.py mistakes show {id}");
-            println!("  check: python3 scripts/harness/cli.py check --only mistakes");
+            println!("  read it back: uor-harness mistakes show {id}");
+            println!("  check: uor-harness check --only mistakes");
             ExitCode::SUCCESS
         }
         "" => {

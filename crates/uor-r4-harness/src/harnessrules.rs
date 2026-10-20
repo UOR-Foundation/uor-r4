@@ -137,7 +137,7 @@ pub fn owner_rules_applied(regs: &Registries) -> Vec<Finding> {
             missing.join(", ")
         ),
         path: "crates/uor-r4-harness/src/prep.rs".into(),
-        fix: "add them to APPLICABLE_RULES in BOTH scripts/harness/prep.py and crates/uor-r4-harness/src/prep.rs, and give each text in docs/harness/milestones.json's owner_rules".into(),
+        fix: "add them to APPLICABLE_RULES in crates/uor-r4-harness/src/prep.rs, and give each text in docs/harness/milestones.json's owner_rules".into(),
     }]
 }
 

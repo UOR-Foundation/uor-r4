@@ -197,16 +197,13 @@ pub fn run(
     run_scoped(paths, regs, only, Scope::Repo, now, gh)
 }
 
-/// The rules a **scope** selects. Python declares a scope per rule (`repo` is the default, plus
-/// `staged` and `pr`) and `check --staged` runs `rules(scope="staged")` - **the scope decides
-/// which rules RUN; it is not a filter applied to results afterwards.**
+/// The rules a **scope** selects. `check --staged` runs the staged-scoped rules - **the scope
+/// decides which rules RUN; it is not a filter applied to results afterwards.**
 ///
-/// **`STAGED_RULES` is empty today and that is a measurement, not a shortcut.** Every rule in
-/// Python's registry declares the default `repo` scope, so `check --staged` legitimately checks
-/// nothing - Python prints `0 rules, 0 failed` for it too. **A table plus a live test that
-/// compares it against `checkrules.rules(scope="staged")` is what keeps that emptiness honest:**
-/// if Python ever gains a staged rule, the test fails instead of this port silently skipping it,
-/// which is the defect class `checkdispatch` exists to catch.
+/// **`STAGED_RULES` is empty, and that is a measurement, not a shortcut.** Every rule declares
+/// the default `repo` scope, as every rule in the retired Python registry did, so `check --staged`
+/// legitimately checks nothing and prints `0 rules, 0 failed`. A rule meant for the pre-commit
+/// hook is added here.
 pub const STAGED_RULES: [&str; 0] = [];
 
 /// Which rule set a `check` invocation runs.
@@ -392,50 +389,6 @@ mod tests {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
     }
 
-    /// **The dispatcher's rule set is exactly Python's `checkrules.rules()`.**
-    ///
-    /// **Ignored by default** (it runs Python). **It asserts the ID SETS are equal, not the result
-    /// counts**: Python returns one result per firing (57 results over 41 ids), while a Rust rule
-    /// returns its violations — **so counting results would compare two different things and call it
-    /// agreement.**
-    ///
-    /// **This is the comparison that matters for dispatch**, and it is the one whose absence let
-    /// `cmd_check` run no rules while `parity` reported the set complete.
-    #[test]
-    #[ignore = "needs python3 and the full doc set"]
-    fn the_table_matches_pythons_checkrules() {
-        let repo = repo();
-        let script = repo.join("scripts/.parity-checkdispatch.py");
-        std::fs::write(
-            &script,
-            r#"
-import sys, json
-sys.path.insert(0, "scripts/harness")
-import checkrules
-print(json.dumps(sorted(r.id for r in checkrules.rules())))
-"#,
-        )
-        .expect("write the probe");
-        let out = std::process::Command::new("python3")
-            .arg(&script)
-            .current_dir(&repo)
-            .output()
-            .expect("run python");
-        let _ = std::fs::remove_file(&script);
-        let py: Vec<String> =
-            serde_json::from_str(String::from_utf8_lossy(&out.stdout).trim()).expect("json");
-        let rust: Vec<String> = RULES.iter().map(|(r, _)| r.to_string()).collect();
-        let rs: std::collections::BTreeSet<&String> = rust.iter().collect();
-        let ps: std::collections::BTreeSet<&String> = py.iter().collect();
-        assert_eq!(
-            rs,
-            ps,
-            "only rust: {:?}\nonly python: {:?}",
-            rs.difference(&ps).collect::<Vec<_>>(),
-            ps.difference(&rs).collect::<Vec<_>>()
-        );
-    }
-
     /// **Every module id in the table is reachable**, so a rule cannot be in `RULES` and in no
     /// module's bucket — which would make it an `ok` record that nothing ever runs.
     #[test]
@@ -577,33 +530,5 @@ print(json.dumps(sorted(r.id for r in checkrules.rules())))
         for (id, _) in RULES.iter() {
             assert!(seen.contains(id), "{id} did not run in the repo scope");
         }
-    }
-
-    /// Live and `#[ignore]`d: the staged set is Python's, and this compares the two rather than
-    /// trusting that the table above stayed right.
-    #[test]
-    #[ignore = "imports the Python harness; compare explicitly, not on every CI run"]
-    fn the_staged_rule_set_is_pythons() {
-        let repo = repo();
-        let out = std::process::Command::new("python3")
-            .arg("-c")
-            .arg(
-                "import sys; sys.path.insert(0,'scripts/harness'); import checkrules; \
-                 print(chr(10).join(sorted(r.id for r in checkrules.rules(scope='staged'))))",
-            )
-            .current_dir(&repo)
-            .output()
-            .expect("python3 runs");
-        assert!(out.status.success(), "python exited {}", out.status);
-        let python: Vec<String> = String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .map(|l| l.trim().to_string())
-            .collect();
-        let rust: Vec<String> = STAGED_RULES.iter().map(|s| s.to_string()).collect();
-        assert_eq!(
-            python, rust,
-            "python and rust disagree about the staged scope"
-        );
     }
 }
