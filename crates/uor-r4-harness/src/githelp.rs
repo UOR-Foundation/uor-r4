@@ -55,7 +55,11 @@ pub fn protected_branches(repo: &Path) -> Vec<String> {
 /// The refusal every branch-delete path returns for a protected name, local or remote.
 pub fn protected_refusal(repo: &Path, branch: &str) -> Option<String> {
     let name = branch.trim_start_matches("refs/heads/");
-    protected_branches(repo).iter().any(|p| p == name).then(|| {
+    // Case-insensitive: on a case-insensitive filesystem `git branch -D Main` can remove `main`.
+    protected_branches(repo)
+        .iter()
+        .any(|p| p.eq_ignore_ascii_case(name))
+        .then(|| {
         format!(
             "refusing to delete protected branch '{name}': it is listed in \
              docs/harness/branches.json and long-lived branches are never deleted (owner, 20 Oct 2026)"
@@ -101,7 +105,7 @@ pub fn branch_states(repo: &Path) -> Vec<BranchState> {
     for branch in refs
         .lines()
         .map(str::trim)
-        .filter(|b| !b.is_empty() && *b != "main")
+        .filter(|b| !b.is_empty() && protected_refusal(repo, b).is_none())
     {
         out.push(classify(repo, branch, &held));
     }
@@ -2201,6 +2205,17 @@ mod protected_branch_tests {
     }
 
     /// The registry's names are protected even with no registry file, and a registry adds names.
+    #[test]
+    fn protection_ignores_case_and_survives_a_missing_registry() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // No docs/harness/branches.json in this directory: the built-in names still protect,
+        // and a case-insensitive filesystem cannot be used to delete `main` as `Main`.
+        assert!(protected_refusal(dir.path(), "Main").is_some());
+        assert!(protected_refusal(dir.path(), "refs/heads/GH-PAGES").is_some());
+        assert!(protected_refusal(dir.path(), "gh-pages-preview").is_some());
+        assert!(protected_refusal(dir.path(), "claude/topic").is_none());
+    }
+
     #[test]
     fn builtin_floor_and_registry_both_protect() {
         let dir = tempfile::tempdir().expect("tempdir");

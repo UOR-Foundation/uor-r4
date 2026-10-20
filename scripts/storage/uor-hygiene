@@ -75,7 +75,7 @@ while IFS=$'\t' read -r wt head br; do
   [ "$wt" = "$main_wt" ] && continue
   [ -d "$wt" ] || continue
   br=${br#refs/heads/}
-  case " $PROTECTED " in *" $br "*) say "keep   worktree $wt ($br is a protected branch)"; continue ;; esac
+  [ -n "$br" ] && case " $PROTECTED " in *" $br "*) say "keep   worktree $wt ($br is a protected branch)"; continue ;; esac
   if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then say "keep   worktree $wt (uncommitted or untracked files)"; continue; fi
   # Gitignored local-only data (e.g. local/) is where the rules keep work data; never delete it
   # with the worktree. Build output under target/ is regenerable and does not count.
