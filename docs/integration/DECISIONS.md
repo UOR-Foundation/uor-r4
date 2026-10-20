@@ -1738,6 +1738,9 @@ overtook.
    `graph-certify`, `api`, `proof-model` and the root crate remain broken on
    the retired core modules; repair or retirement of that surface needs its own
    owner decision, flagged for the PM queue by Claude (6185876280).
+   *Status, 19 Oct 2026:* the owner chose repair (charter Q8). The packages now build
+   their compliant surfaces; see the
+   [legacy-crate repair record](../labs/legacy-crate-repair-2026-10-19/README.md).
 
 ## D37 — Floating point is legal in offline training only; D32's learning-path float ban is revised
 
