@@ -185,6 +185,11 @@ fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     let out = Command::new("git")
         .args(args)
         .current_dir(root)
+        // The repository is `root`; an inherited GIT_DIR (set inside git hooks)
+        // would point every call at another repository.
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .output()
         .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
     if !out.status.success() {
@@ -298,6 +303,9 @@ fn blob_hash(root: &Path, bytes: &[u8]) -> Result<String, String> {
     let mut child = Command::new("git")
         .args(["hash-object", "--stdin"])
         .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -318,13 +326,25 @@ fn blob_hash(root: &Path, bytes: &[u8]) -> Result<String, String> {
 }
 
 /// A base-revision file that is a generated pointer stub (exactly the
-/// `docs_stubs` template) whose `docs/` target no longer exists: the record it
-/// pointed to was moved over it, which is the stub's purpose.
-fn stub_replaced(base: &[u8], target_exists: &dyn Fn(&str) -> bool) -> bool {
+/// `docs_stubs` template) replaced by the very record it pointed to: the stub's
+/// `docs/` target no longer exists in the working tree, and the new content is
+/// byte-identical to that target as it was at the base revision (`rev_blob`
+/// gives the target's blob id at REV). Anything else written over a stub is a
+/// modification, so a stub can never become an unrelated "archived record".
+fn stub_replaced(
+    base: &[u8],
+    new_blob: &str,
+    target_exists: &dyn Fn(&str) -> bool,
+    rev_blob: &dyn Fn(&str) -> Option<String>,
+) -> bool {
     std::str::from_utf8(base)
         .ok()
         .and_then(crate::docs_stubs::stub_target)
-        .is_some_and(|t| t.starts_with("docs/") && !target_exists(t))
+        .is_some_and(|t| {
+            t.starts_with("docs/")
+                && !target_exists(t)
+                && rev_blob(t).is_some_and(|b| b == new_blob)
+        })
 }
 
 fn part_b(root: &Path, rev: &str) -> Result<(), String> {
@@ -387,6 +407,9 @@ fn part_b(root: &Path, rev: &str) -> Result<(), String> {
     let mut child = Command::new("git")
         .args(["hash-object", "--stdin-paths"])
         .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -418,7 +441,20 @@ fn part_b(root: &Path, rev: &str) -> Result<(), String> {
     for (f, h) in to_hash.iter().zip(&hashes) {
         if *h != f.1 {
             let base = git(root, &["cat-file", "blob", &f.1]).unwrap_or_default();
-            if stub_replaced(&base, &|t| root.join(t).symlink_metadata().is_ok()) {
+            let rev_blob = |t: &str| {
+                git(
+                    root,
+                    &["rev-parse", "--verify", "-q", &format!("{rev}:{t}")],
+                )
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o).trim().to_string())
+            };
+            if stub_replaced(
+                &base,
+                h,
+                &|t| root.join(t).symlink_metadata().is_ok(),
+                &rev_blob,
+            ) {
                 replaced.push(f.2.clone());
             } else {
                 modified.push(f.2.clone());
@@ -641,8 +677,13 @@ mod archive_verify_tests {
         assert!(c.output().expect("git").status.success(), "git {args:?}");
     }
 
-    /// A throwaway repo under the gitignored `local/` with archive/ files
-    /// `stub.md` (stub of docs/t.md), `other.md` and `gone.md`, committed.
+    /// The record `docs/t.md` holds at the base commit of every `stub_repo`.
+    const RECORD: &str = "the real record\n";
+
+    /// A throwaway repo under the gitignored `local/`, committed with
+    /// `archive/stub.md` (a stub of `docs/t.md`), `archive/other.md` and the
+    /// record `docs/t.md`. Unless `target_exists`, `docs/t.md` is then removed
+    /// from the working tree, as a move of the record into the archive would.
     fn stub_repo(name: &str, target_exists: bool) -> std::path::PathBuf {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../local/archive-verify-tests")
@@ -653,14 +694,7 @@ mod archive_verify_tests {
         let stub = crate::docs_stubs::stub_text("docs/t.md", "../docs/t.md");
         std::fs::write(dir.join("archive/stub.md"), stub).expect("w");
         std::fs::write(dir.join("archive/other.md"), "record\n").expect("w");
-        std::fs::write(
-            dir.join("archive/gone.md"),
-            crate::docs_stubs::stub_text("docs/g.md", "../docs/g.md"),
-        )
-        .expect("w");
-        if target_exists {
-            std::fs::write(dir.join("docs/t.md"), "live\n").expect("w");
-        }
+        std::fs::write(dir.join("docs/t.md"), RECORD).expect("w");
         git_in(&dir, &["init", "-q"]);
         git_in(&dir, &["add", "-A"]);
         git_in(
@@ -675,14 +709,40 @@ mod archive_verify_tests {
                 "base",
             ],
         );
+        let top = Command::new("git")
+            .args(["rev-parse", "--show-toplevel"])
+            .current_dir(&dir)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .output()
+            .expect("git");
+        assert_eq!(
+            std::fs::canonicalize(String::from_utf8_lossy(&top.stdout).trim()).expect("top"),
+            std::fs::canonicalize(&dir).expect("dir"),
+            "the test repo must be its own repository"
+        );
+        if !target_exists {
+            std::fs::remove_file(dir.join("docs/t.md")).expect("rm");
+        }
         dir
     }
 
     #[test]
     fn replaced_stub_passes() {
         let d = stub_repo("replaced", false);
-        std::fs::write(d.join("archive/stub.md"), "the real record\n").expect("w");
+        std::fs::write(d.join("archive/stub.md"), RECORD).expect("w");
         assert!(part_b(&d, "HEAD").is_ok());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A stub overwritten with anything but the record it pointed to is a
+    /// modification, even when the record's live path is gone (review of #2801).
+    #[test]
+    fn stub_replaced_by_other_content_fails() {
+        let d = stub_repo("other-content", false);
+        std::fs::write(d.join("archive/stub.md"), "arbitrary\n").expect("w");
+        assert!(part_b(&d, "HEAD").is_err());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -695,8 +755,9 @@ mod archive_verify_tests {
     #[test]
     fn stub_whose_target_still_exists_fails() {
         let d = stub_repo("target-lives", true);
-        std::fs::write(d.join("archive/stub.md"), "the real record\n").expect("w");
+        std::fs::write(d.join("archive/stub.md"), RECORD).expect("w");
         assert!(part_b(&d, "HEAD").is_err());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -711,7 +772,14 @@ mod archive_verify_tests {
         let exact = crate::docs_stubs::stub_text("docs/a.md", "../docs/a.md");
         assert_eq!(crate::docs_stubs::stub_target(&exact), Some("docs/a.md"));
         assert!(crate::docs_stubs::stub_target(&format!("{exact}extra\n")).is_none());
-        assert!(stub_replaced(exact.as_bytes(), &|_| false));
-        assert!(!stub_replaced(exact.as_bytes(), &|_| true));
+        let at_rev = |_: &str| Some("b1".to_string());
+        assert!(stub_replaced(exact.as_bytes(), "b1", &|_| false, &at_rev));
+        assert!(!stub_replaced(exact.as_bytes(), "b1", &|_| true, &at_rev));
+        assert!(!stub_replaced(exact.as_bytes(), "b2", &|_| false, &at_rev));
+        assert!(!stub_replaced(exact.as_bytes(), "b1", &|_| false, &|_| {
+            None
+        }));
+        let near = format!("{exact}extra\n");
+        assert!(!stub_replaced(near.as_bytes(), "b1", &|_| false, &at_rev));
     }
 }
