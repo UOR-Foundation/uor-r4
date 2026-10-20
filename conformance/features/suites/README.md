@@ -4,15 +4,15 @@
 earlier R4G1 programme’s contracts and evidence. They are not an automatic
 development gate for the active geometric-intelligence research programme.
 Use focused checks required by the changed behavior under the
-[canonical plan](../../docs/integration/project-track.md) and current agent
+[canonical plan](../../../docs/integration/project-track.md) and current agent
 policy; broader conformance and release checks apply when their boundaries are
 affected. PR/merge-queue statuses are compatibility acknowledgements, not suite
 execution. `CONFORMANCE.md` remains generated history and is not edited by
 hand.
 
-The [project map](../../docs/PROJECT_MAP.md),
-[current-state](../../docs/integration/current-state.md) and
-[model direction](../../archive/integration/model-direction-2026-09.md) distinguish
+The [project map](../../../docs/PROJECT_MAP.md),
+[current-state](../../../docs/integration/current-state.md) and
+[model direction](../../../archive/integration/model-direction-2026-09.md) distinguish
 accepted native bounded attention/inference from these historical contracts.
 A conformance marker does not establish general prose completion or reasoning.
 
