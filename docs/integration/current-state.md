@@ -1,3 +1,20 @@
+## 2026-10-19 — Docs cutover: dated records moved byte-identical into `archive/` (claude)
+
+This is the owner-approved move. 8,710 files moved from `docs/X` to `archive/X` at equal depth, all as `R100` renames:
+- `docs/history`;
+- `docs/evidence`;
+- the loose `docs/integration` files (the hubs stay);
+- the loose result files in `docs/`;
+- lab records older than 2026-10-18, except 7 records that code or the harness names.
+
+The cutover also:
+- rewrote 1,003 live links and 380 live code paths;
+- added 106 pointer stubs;
+- generated `archive/CATALOG.md` from 1,173 records.
+
+The gates held. There are 0 archived byte changes and 0 manifest regressions. There are also 0 new broken links in live content; 367 permanent breaks sit inside protected files and are listed. Tag `pre-renorm-2026-10-19` is the last pre-move commit. [Record](../labs/repo-renormalization-2026-10-19/README.md).
+**Next:** lift the freeze on #2029 with a "what changed for labs" note, then the charter-adoption PR.
+
 ## 2026-10-19 — Docs cutover tools: relink, rewrite-refs, catalog, stubs (claude)
 
 Second unit of the owner-directed reorganization. It adds four `xtask` tasks that make the move mechanical:
