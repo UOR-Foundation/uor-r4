@@ -1,74 +1,4 @@
 {
-  "antigravity/a8-audited-source-consumer-binding-20261019": {
-    "branch": "antigravity/a8-audited-source-consumer-binding-20261019",
-    "claimed_at": "2026-10-19T07:52:15-04:00",
-    "head": "fd409fcdf",
-    "lab": "antigravity",
-    "note": "Bind integrated admission-preserving controller & finite qualification source/schemas (PR #2782, fd409fcdf) in verify_a8_address_cells_dose.py (64/64 PASS)"
-  },
-  "claude/a8-dose-outcome-20261019": {
-    "branch": "claude/a8-dose-outcome-20261019",
-    "claimed_at": "2026-10-19T01:37:23-04:00",
-    "head": "4d3ae4f6b",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/a8-runbook-20261019": {
-    "branch": "claude/a8-runbook-20261019",
-    "claimed_at": "2026-10-18T23:52:31-04:00",
-    "head": "50ed2977f",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/a8-runbook-controls-20261019": {
-    "branch": "claude/a8-runbook-controls-20261019",
-    "claimed_at": "2026-10-19T00:01:05-04:00",
-    "head": "32c3af547",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/a8-runbook-reconcile-20261019": {
-    "branch": "claude/a8-runbook-reconcile-20261019",
-    "claimed_at": "2026-10-19T00:17:26-04:00",
-    "head": "13ea42d42",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/a8-runbook-review-fixes-20261019": {
-    "branch": "claude/a8-runbook-review-fixes-20261019",
-    "claimed_at": "2026-10-19T00:08:12-04:00",
-    "head": "b57dd0b40",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/a8-training-sheet-20261019": {
-    "branch": "claude/a8-training-sheet-20261019",
-    "claimed_at": "2026-10-18T23:30:55-04:00",
-    "head": "502ef6d14",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/address-cells-fit-prep-20261019": {
-    "branch": "claude/address-cells-fit-prep-20261019",
-    "claimed_at": "2026-10-18T22:24:14-04:00",
-    "head": "b8f834b19",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/address-cells-preflight-receipt-20261019": {
-    "branch": "claude/address-cells-preflight-receipt-20261019",
-    "claimed_at": "2026-10-18T23:22:03-04:00",
-    "head": "232b67a6a",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/address-cells-registration-20261019": {
-    "branch": "claude/address-cells-registration-20261019",
-    "claimed_at": "2026-10-18T22:35:02-04:00",
-    "head": "05b90b4e5",
-    "lab": "claude",
-    "note": ""
-  },
   "claude/batched-coordinates-draft-20261018": {
     "branch": "claude/batched-coordinates-draft-20261018",
     "claimed_at": "2026-10-18T02:18:32-04:00",
@@ -230,6 +160,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/renorm-projects-import-20261020": {
+    "branch": "claude/renorm-projects-import-20261020",
+    "claimed_at": "2026-10-20T08:56:56-04:00",
+    "head": "0d9bbef3c",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/resume-message-20261018": {
     "branch": "claude/resume-message-20261018",
     "claimed_at": "2026-10-18T12:25:57-04:00",
@@ -293,13 +230,6 @@
     "lab": "codex",
     "note": ""
   },
-  "codex/cf1-admission-anchor-audit": {
-    "branch": "codex/cf1-admission-anchor-audit",
-    "claimed_at": "2026-10-19T05:11:16-04:00",
-    "head": "258dc3ef9",
-    "lab": "codex",
-    "note": ""
-  },
   "codex/cf1-attention-battery3-result": {
     "branch": "codex/cf1-attention-battery3-result",
     "claimed_at": "2026-10-17T19:25:30-04:00",
@@ -325,20 +255,6 @@
     "branch": "codex/cf1-attention-strategic-stop",
     "claimed_at": "2026-10-18T01:29:12-04:00",
     "head": "fe4c327b5",
-    "lab": "codex",
-    "note": ""
-  },
-  "codex/cf1-bpe-policy-fix": {
-    "branch": "codex/cf1-bpe-policy-fix",
-    "claimed_at": "2026-10-19T01:59:38-04:00",
-    "head": "2b6c8b333",
-    "lab": "codex",
-    "note": ""
-  },
-  "codex/cf1-injective-attention-packet": {
-    "branch": "codex/cf1-injective-attention-packet",
-    "claimed_at": "2026-10-18T20:45:59-04:00",
-    "head": "4cca1e03f",
     "lab": "codex",
     "note": ""
   },
@@ -370,13 +286,6 @@
     "lab": "codex",
     "note": ""
   },
-  "codex/cf1-rust-bpe-trainer": {
-    "branch": "codex/cf1-rust-bpe-trainer",
-    "claimed_at": "2026-10-19T01:07:50-04:00",
-    "head": "65451d828",
-    "lab": "codex",
-    "note": ""
-  },
   "codex/counterfactual-baseline-reuse": {
     "branch": "codex/counterfactual-baseline-reuse",
     "claimed_at": "2026-10-16T19:20:37-04:00",
@@ -396,14 +305,14 @@
     "claimed_at": "2026-10-16T17:58:18-04:00",
     "head": "afd6f721a",
     "lab": "codex",
-    "note": "Docs-only Stage1 pass receipt, docs/labs/counterfactual-controls-pass-2026-10-16/ and prior counterfactual status notices, current-state, STATUS/ROADMAP M1 readiness only; claims and own ledger. No code changes"
+    "note": "Docs-only Stage1 pass receipt, archive/labs/counterfactual-controls-pass-2026-10-16/ and prior counterfactual status notices, current-state, STATUS/ROADMAP M1 readiness only; claims and own ledger. No code changes"
   },
   "codex/counterfactual-controls-result": {
     "branch": "codex/counterfactual-controls-result",
     "claimed_at": "2026-10-16T17:01:00-04:00",
     "head": "7bdfe7aa5",
     "lab": "codex",
-    "note": "cf1: Stage1 finite-control receipt only. Own docs/labs/counterfactual-controls-run-2026-10-16/, current-state newest entry, prior control/readiness status updates, own claims/ledger. No kernel/instrument source changes; Stage2 separately gated."
+    "note": "cf1: Stage1 finite-control receipt only. Own archive/labs/counterfactual-controls-run-2026-10-16/, current-state newest entry, prior control/readiness status updates, own claims/ledger. No kernel/instrument source changes; Stage2 separately gated."
   },
   "codex/counterfactual-decomposition": {
     "branch": "codex/counterfactual-decomposition",
@@ -417,7 +326,7 @@
     "claimed_at": "2026-10-16T18:25:48-04:00",
     "head": "223eb0a5f",
     "lab": "codex",
-    "note": "Docs-only Stage2 result: docs/labs/counterfactual-decomposition-run-2026-10-16, related counterfactual status/prep notices, current-state.md, STATUS.md, ROADMAP.md, README.md measured-cost paragraph, docs/mechanisms/discrete-geometric-learning.md latest diagnostic, own claims/ledger; no kernel changes."
+    "note": "Docs-only Stage2 result: archive/labs/counterfactual-decomposition-run-2026-10-16, related counterfactual status/prep notices, current-state.md, STATUS.md, ROADMAP.md, README.md measured-cost paragraph, docs/mechanisms/discrete-geometric-learning.md latest diagnostic, own claims/ledger; no kernel changes."
   },
   "codex/counterfactual-finite-controls": {
     "branch": "codex/counterfactual-finite-controls",

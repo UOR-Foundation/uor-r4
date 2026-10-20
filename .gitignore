@@ -20,9 +20,8 @@ manifold_cache_rust.json
 .uor-models/corpora/*/*
 !.uor-models/corpora/*/manifest.json
 # #639-1: local T5 SentencePiece source (spiece.model), pinned by κ in
-# models/t5-base-tokenizer.json; the bytes stay local like other sources.
+# data/tokenizers/t5-base-tokenizer.json; the bytes stay local like other sources.
 .uor-models/sources/t5-base-tokenizer/
-uor_standards/
 crates/uor-r4-graph-format/fuzz/target/
 pkg/
 trend_output/
@@ -36,8 +35,8 @@ Claude outputs/
 .zed/
 
 # Finished numeric run output lives on canonical /workspace or cloud-store.
-/t2/run*/
-/docs/research/minilm-phase0/run*/
+/archive/t2/run*/
+/archive/research/minilm-phase0/run*/
 
 # Local-only data and tool state (owner, 9 October 2026): never committed.
 /local/
@@ -58,8 +57,7 @@ __pycache__/
 # 30 GB disk floor. The bytes live in `icloud:UOR-R4/results/owner-docs/` and restore with
 # `scripts/storage/research-data restore <name> --run`. The owner checkout keeps a working copy;
 # worktrees must not carry one.
-/research/*
-!/research/README.md
+/research/
 
 # macOS AppleDouble files (ExFAT external drives)
 ._*
@@ -69,3 +67,6 @@ __pycache__/
 librust_out.rlib
 synthetic-stack.lut
 
+/book/
+/mermaid.min.js
+/mermaid-init.js

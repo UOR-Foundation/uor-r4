@@ -72,7 +72,7 @@ door, not a fourth store. Use what is already here, through it:
 |---|---|---|
 | `~/.local/bin/uor-knowledge search` | SQLite FTS5 over 8,492 project items with provenance | the place to look up a term's history; **the index is a snapshot, so refresh before acting** (`scripts/sync_project_knowledge.py --open-issues --ingest`) |
 | `docs/research/retired-mechanisms-catalogue-2026-10-01.md` | 1,350 lines of retired mechanisms with `CLEAN / TOO TIGHT / CONFOUNDED / UNDER-POWERED / POLICY-KILLED / INSTRUMENT-DEFECT` verdicts | the deepest negative-results record in the repo; a `mistakes` entry cites it as evidence rather than restating it |
-| `docs/history/branch-archive/INDEX.md` | 193 rows of preserved branch patches with restore bases | where retained-but-inactive source lives; the harness does not duplicate it |
+| `archive/history/branch-archive/INDEX.md` | 193 rows of preserved branch patches with restore bases | where retained-but-inactive source lives; the harness does not duplicate it |
 | `docs/mechanisms/*.md` | one brief per novel mechanism incl. "what has been tried, honestly" | loaded into every brief for that milestone |
 | `scripts/research-lab-context.sh` | read-only session-start receipt (HEAD, SHA-256 of authority files, disk) | run alongside `status`; it is the machine receipt, `status` is the project view |
 | `~/.local/share/uor-r4/ledger/` + `compute/ledger.jsonl` | 357 closeout receipts and the append-only compute ledger | the authoritative cumulative cost; `budget show` reads it rather than inventing a total |
@@ -264,6 +264,13 @@ cannot be proved merged — there is no tree to compare, and after a squash merg
 `uor-harness team release --branch <branch> --lab <lab>`, and never releases it on a guess. That residue
 is also what `status.branch_claimed` flags on every `check`; this report says which branches they are
 without going to the tracker.
+
+**Three branches are never deleted (owner, 20 Oct 2026).** `main`, `gh-pages` (the live documentation
+site and Studio) and `gh-pages-preview` are listed in `docs/harness/branches.json`. Every branch delete in
+the harness (`clean-merged`, the merged-branch delete, the remote delete) refuses a protected name, and the
+built-in three stay protected even if the file is damaged. `status.protected_branches_present` fails
+`check` when either site branch, or `main`, is missing from `origin`. Every other branch is `<lab>/<topic>`,
+one per open PR, deleted after its merge. `scripts/storage/uor-hygiene` skips protected branches too.
 
 **Writes are atomic, and a release lands for everyone when the PR does.** The committed store and the
 live mirror are both written by a temporary file plus a rename, so a peer reading while you publish sees

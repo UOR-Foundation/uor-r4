@@ -66,18 +66,18 @@ const PRIOR_908_CHANGED: u64 = 39_360;
 fn repo_root() -> PathBuf {
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         for ancestor in std::path::Path::new(&manifest_dir).ancestors() {
-            if ancestor.join("model/ledger.toml").is_file() {
+            if ancestor.join("conformance/ledger.toml").is_file() {
                 return ancestor.to_path_buf();
             }
         }
     }
     let cwd = std::env::current_dir().expect("current directory is readable");
     for ancestor in cwd.ancestors() {
-        if ancestor.join("model/ledger.toml").is_file() {
+        if ancestor.join("conformance/ledger.toml").is_file() {
             return ancestor.to_path_buf();
         }
     }
-    panic!("repository root not found: no runtime ancestor contains model/ledger.toml");
+    panic!("repository root not found: no runtime ancestor contains conformance/ledger.toml");
 }
 
 fn bundle_root() -> PathBuf {
@@ -870,7 +870,7 @@ fn feature_evidence(observations: &[Observation]) -> Value {
 
 fn verify_prior_records() {
     let prior_837: Value = serde_json::from_slice(
-        &std::fs::read(repo_root().join("docs/calibrator_837_result.json"))
+        &std::fs::read(repo_root().join("archive/calibrator_837_result.json"))
             .expect("#837 predecessor record"),
     )
     .expect("parse #837 record");
@@ -907,7 +907,7 @@ fn verify_prior_records() {
     );
 
     let prior_908: Value = serde_json::from_slice(
-        &std::fs::read(repo_root().join("docs/skipmix_endtoend_causal_908_result.json"))
+        &std::fs::read(repo_root().join("archive/skipmix_endtoend_causal_908_result.json"))
             .expect("#908 predecessor record"),
     )
     .expect("parse #908 record");
@@ -2153,7 +2153,7 @@ fn selective_calibrator_reentry_full_931() {
     });
     let mut bytes = serde_json::to_vec_pretty(&report).expect("pretty result JSON");
     bytes.push(b'\n');
-    let out = repo_root().join("docs/selective_calibrator_reentry_931_result.json");
+    let out = repo_root().join("archive/selective_calibrator_reentry_931_result.json");
     std::fs::write(&out, &bytes).expect("write #931 result record");
     println!("VERDICT             : {}", report["result"]["verdict"]);
     println!("result CID          : {result_cid}");
