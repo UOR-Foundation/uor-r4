@@ -170,6 +170,16 @@ fn check_sections(body: &str) -> Vec<String> {
     errors
 }
 
+/// `^[a-z0-9]+(-[a-z0-9]+)*$`, checked by hand.
+fn valid_id(id: &str) -> bool {
+    id.split('-').all(|part| {
+        !part.is_empty()
+            && part
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    })
+}
+
 /// Parse and check one item file on its own; errors are prefixed with `file`.
 pub fn parse_item(file: &str, text: &str) -> Result<Item, Vec<String>> {
     let fail = |m: String| vec![format!("{file}: {m}")];
@@ -191,6 +201,11 @@ pub fn parse_item(file: &str, text: &str) -> Result<Item, Vec<String>> {
     let get = |k: &str| fields[k].clone();
     let id = get("id");
     let title = get("title");
+    if !valid_id(&id) {
+        errors.push(format!(
+            "id `{id}` must be lowercase letters, digits and single hyphens"
+        ));
+    }
     if title.is_empty() {
         errors.push("title is empty".into());
     }
@@ -224,6 +239,12 @@ pub fn parse_item(file: &str, text: &str) -> Result<Item, Vec<String>> {
         errors.push(e);
         Vec::new()
     });
+    let mut listed = BTreeSet::new();
+    for dep in &depends_on {
+        if !listed.insert(dep.as_str()) {
+            errors.push(format!("depends_on lists `{dep}` twice"));
+        }
+    }
     errors.extend(check_sections(&body));
     if !errors.is_empty() {
         return Err(errors.into_iter().map(|e| format!("{file}: {e}")).collect());
@@ -311,9 +332,15 @@ pub fn validate(
         }
     }
     let ids: BTreeSet<&str> = items.iter().map(|i| i.id.as_str()).collect();
+    // Known ids are the file stems, so a dependency on an item that failed to
+    // parse is not also reported as unknown.
+    let known: BTreeSet<&str> = files
+        .iter()
+        .map(|(file, _)| file.strip_suffix(".md").unwrap_or(file))
+        .collect();
     for item in &items {
         for dep in &item.depends_on {
-            if !ids.contains(dep.as_str()) {
+            if !known.contains(dep.as_str()) {
                 errors.push(format!(
                     "{}: depends_on names unknown id `{dep}`",
                     item.file
@@ -388,6 +415,8 @@ fn find_cycles(items: &[Item]) -> Vec<String> {
 
 fn cell(text: &str) -> String {
     text.replace('|', "\\|")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
 }
 
 fn item_link(item: &Item) -> String {
@@ -431,6 +460,13 @@ pub fn render(items: &[Item], issues: Option<&BTreeMap<String, u64>>) -> String 
         "This page lists every documented gap between the project today and its eight milestones. \
          Each item is tracked as one GitHub issue. \
          The files in `items/` are the source, and this page is generated from them.",
+    );
+    line("");
+    line(
+        "Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync`: \
+         the title, body, roadmap labels (`roadmap:item`, `area:*`, `help wanted`, \
+         `good first issue`, `status:held`, `owner-decision`) and milestone follow the file, \
+         so change the file in a PR rather than the issue.",
     );
     line("");
     line("## How this roadmap works");
@@ -585,15 +621,29 @@ pub(crate) fn load_checked(
     issues_path: &Path,
 ) -> Result<(Vec<Item>, Option<Issues>), String> {
     let files = load_dir(items_dir)?;
-    let issues = read_issues(issues_path)?;
-    let items = validate(&files, issues.as_ref()).map_err(|errors| {
-        format!(
-            "roadmap check failed with {} problem(s):\n  {}",
-            errors.len(),
-            errors.join("\n  ")
-        )
-    })?;
+    // An unreadable issues.json joins the item errors instead of hiding them.
+    let (issues, issues_error) = match read_issues(issues_path) {
+        Ok(issues) => (issues, None),
+        Err(e) => (None, Some(e)),
+    };
+    let items = validate(&files, issues.as_ref());
+    let items = match (items, issues_error) {
+        (Ok(items), None) => items,
+        (Ok(_), Some(e)) => return Err(roadmap_failed(&[e])),
+        (Err(mut errors), e) => {
+            errors.extend(e);
+            return Err(roadmap_failed(&errors));
+        }
+    };
     Ok((items, issues))
+}
+
+fn roadmap_failed(errors: &[String]) -> String {
+    format!(
+        "roadmap check failed with {} problem(s):\n  {}",
+        errors.len(),
+        errors.join("\n  ")
+    )
 }
 
 /// `render` against explicit paths; `check` compares instead of writing.
@@ -614,7 +664,14 @@ pub fn render_to(
         );
         return Ok(());
     }
-    let current = fs::read_to_string(readme).unwrap_or_default();
+    if !readme.exists() {
+        return Err(format!(
+            "{} does not exist; run `cargo xtask roadmap render`",
+            readme.display()
+        ));
+    }
+    let current =
+        fs::read_to_string(readme).map_err(|e| format!("read {}: {e}", readme.display()))?;
     if current == page {
         println!("roadmap render --check: {} is current", readme.display());
         return Ok(());
@@ -624,6 +681,12 @@ pub fn render_to(
     loop {
         match (want.next(), have.next()) {
             (Some(w), Some(h)) if w == h => n += 1,
+            (None, None) => {
+                return Err(format!(
+                    "{} differs only in line endings or the final newline; run `cargo xtask roadmap render`",
+                    readme.display()
+                ));
+            }
             (w, h) => {
                 return Err(format!(
                     "{} is stale; run `cargo xtask roadmap render`. First difference at line {n}:\n  expected: {}\n  found:    {}",
@@ -634,6 +697,18 @@ pub fn render_to(
             }
         }
     }
+}
+
+/// The arguments after `render`: only `--check` is allowed.
+fn parse_render_args(args: &[String]) -> Result<bool, String> {
+    let mut check = false;
+    for arg in args {
+        match arg.as_str() {
+            "--check" => check = true,
+            other => return Err(format!("roadmap render: unknown argument `{other}`")),
+        }
+    }
+    Ok(check)
 }
 
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
@@ -655,7 +730,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("render") => {
-            let check = args.iter().skip(1).any(|a| a == "--check");
+            let check = parse_render_args(&args[1..])?;
             render_to(&items_dir, &issues_path, &base.join("README.md"), check)
         }
         Some("sync") => crate::roadmap_sync::run(root, &args[1..]),
@@ -835,5 +910,174 @@ mod tests {
         assert!(err.contains(&format!("line {line}")), "{err}");
         stale.clear();
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("xtask-roadmap-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("items")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn roadmap_check_rejects_bad_id_characters() {
+        for bad in ["a_b", "A-b", "a--b", "a.b"] {
+            let errors = errors_of(&[(format!("{bad}.md"), item_text(bad, "", SECTIONS))]);
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.contains(&format!("id `{bad}` must be lowercase letters"))),
+                "{bad}: {errors:?}"
+            );
+        }
+        assert!(validate(&[file("a-b2", "")], None).is_ok());
+    }
+
+    #[test]
+    fn roadmap_check_reports_bad_issues_json_with_item_errors() {
+        let dir = scratch("issues-and-items");
+        let bad = item_text("a", "", SECTIONS).replace("status: ready", "status: doing");
+        fs::write(dir.join("items/a.md"), bad).unwrap();
+        let issues = dir.join("issues.json");
+        fs::write(&issues, "{\"a\": \"seven\"}").unwrap();
+        let err = load_checked(&dir.join("items"), &issues).unwrap_err();
+        assert!(err.contains("status `doing`"), "{err}");
+        assert!(err.contains("`a` is not an issue number"), "{err}");
+        assert!(err.contains("2 problem(s)"), "{err}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn roadmap_check_does_not_call_a_broken_item_unknown() {
+        let broken = ("broken.md".to_string(), "not an item".to_string());
+        let errors = errors_of(&[file("a", "broken"), broken]);
+        assert!(
+            errors.iter().any(|e| e.starts_with("broken.md:")),
+            "{errors:?}"
+        );
+        assert!(
+            !errors.iter().any(|e| e.contains("unknown id")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn roadmap_render_check_says_when_readme_is_missing() {
+        let dir = scratch("missing-readme");
+        let (name, text) = file("a", "");
+        fs::write(dir.join("items").join(name), text).unwrap();
+        let err = render_to(
+            &dir.join("items"),
+            &dir.join("issues.json"),
+            &dir.join("README.md"),
+            true,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("does not exist; run `cargo xtask roadmap render`"),
+            "{err}"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn roadmap_render_check_says_when_only_line_endings_differ() {
+        let dir = scratch("line-endings");
+        let (name, text) = file("a", "");
+        fs::write(dir.join("items").join(name), text).unwrap();
+        let (issues, readme) = (dir.join("issues.json"), dir.join("README.md"));
+        render_to(&dir.join("items"), &issues, &readme, false).unwrap();
+        let page = fs::read_to_string(&readme).unwrap();
+        for changed in [page.trim_end().to_string(), page.replace('\n', "\r\n")] {
+            fs::write(&readme, changed).unwrap();
+            let err = render_to(&dir.join("items"), &issues, &readme, true).unwrap_err();
+            assert!(
+                err.contains("differs only in line endings or the final newline"),
+                "{err}"
+            );
+        }
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn roadmap_render_rejects_unknown_arguments() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(parse_render_args(&args(&[])), Ok(false));
+        assert_eq!(parse_render_args(&args(&["--check"])), Ok(true));
+        let err = parse_render_args(&args(&["--chek"])).unwrap_err();
+        assert!(err.contains("`--chek`"), "{err}");
+        assert!(parse_render_args(&args(&["--check", "extra"])).is_err());
+    }
+
+    #[test]
+    fn roadmap_check_covers_header_key_rules() {
+        let text = item_text("a", "", SECTIONS);
+        let errors = errors_of(&[("a.md".into(), text.replace("area: mechanism\n", ""))]);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("missing header key `area`")),
+            "{errors:?}"
+        );
+        let errors = errors_of(&[("a.md".into(), text.replace("---\n", "---\nflavor: x\n"))]);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("unknown header key `flavor`")),
+            "{errors:?}"
+        );
+        let errors = errors_of(&[("a.md".into(), text.replace("---\n", "---\nid: a\n"))]);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("header key `id` appears twice")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn roadmap_check_rejects_non_number_issue_value() {
+        let dir = scratch("issue-value");
+        fs::write(dir.join("issues.json"), "{\"a\": \"seven\"}").unwrap();
+        let err = read_issues(&dir.join("issues.json")).unwrap_err();
+        assert!(err.contains("`a` is not an issue number"), "{err}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn roadmap_check_rejects_self_dependency_and_duplicate_dependency() {
+        let errors = errors_of(&[file("a", "a")]);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("dependency cycle: a -> a")),
+            "{errors:?}"
+        );
+        let errors = errors_of(&[file("a", "b, b"), file("b", "")]);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("a.md: depends_on lists `b` twice")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn roadmap_crlf_item_parses_like_lf() {
+        let lf = item_text("a", "b", SECTIONS);
+        let crlf = lf.replace('\n', "\r\n");
+        let from_lf = parse_item("a.md", &lf).unwrap();
+        let from_crlf = parse_item("a.md", &crlf).unwrap();
+        assert_eq!(from_lf, from_crlf);
+    }
+
+    #[test]
+    fn roadmap_render_escapes_brackets_and_states_issue_ownership() {
+        let mut item = parse_item("a.md", &item_text("a", "", SECTIONS)).unwrap();
+        item.title = "Fix [x] | y".to_string();
+        let page = render(&[item], None);
+        assert!(page.contains("[Fix \\[x\\] \\| y](items/a.md)"), "{page}");
+        assert!(page.contains("so change the file in a PR rather than the issue."));
+        assert!(page.contains("by `cargo xtask roadmap sync`"));
     }
 }
