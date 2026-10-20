@@ -521,7 +521,7 @@ fn style() -> String {
 fn status_vs_baselines() -> Result<String, Fail> {
     let mut d = Doc::new("status-vs-baselines", 440.0);
     d.heading(
-        "Correct first guesses on 14,287 test positions",
+        "Correct first guesses on 14,287 development-panel positions",
         "The best trained model against two simple count tables, on one scale. Higher is better.",
     );
     // Legend.
@@ -595,7 +595,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
     );
     d.finish(
         "Trained model against count tables",
-        "Horizontal bars on one scale from 0 to 14,287 test positions. Next-word table 6,300, unigram table 1,226, trained model seed 2 463, trained model seed 1 65. A dashed line at 6,300 marks the new M1 bar: beat both tables on each of two seeds. The trained model is far below both tables.",
+        "Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, trained model seed 2 463, trained model seed 1 65. A dashed line at 6,300 marks the new M1 bar: beat both tables on each of two seeds. The trained model is far below both tables.",
     )
 }
 
@@ -786,6 +786,13 @@ fn timeline(records: &[Record]) -> Result<String, Fail> {
     let (dated, undated) = dated(records)?;
     let d0 = parse_ymd(TIMELINE_FIRST)?;
     let d1 = parse_ymd(TIMELINE_LAST)?;
+    if let Some(r) = dated.iter().find(|r| !(d0..=d1).contains(&r.day)) {
+        return Err(format!(
+            "a catalog record dated outside the timeline window {TIMELINE_FIRST} to {TIMELINE_LAST} would be left off the chart: {}; extend TIMELINE_LAST and phase E",
+            r.rec.path
+        )
+        .into());
+    }
     let span = (d1 - d0 + 1) as f64;
     let (left, right) = (64.0, 944.0);
     let x = |day: i64| left + (day - d0) as f64 / span * (right - left);
@@ -807,7 +814,7 @@ fn timeline(records: &[Record]) -> Result<String, Fail> {
 
     let mut d = Doc::new("timeline", 560.0);
     d.heading(
-        "Five approaches in sequence, and the records each week left behind",
+        "Five approaches in sequence, and the records each day left behind",
         "Catalog records per day, 10 June to 19 October 2026, under the five phases A to E.",
     );
 
@@ -1262,6 +1269,15 @@ mod tests {
             rec(None, "b", "process", "p6"),
         ];
         parse_records(&rows.join("\n")).expect("sample parses")
+    }
+
+    #[test]
+    fn a_record_outside_the_timeline_window_is_refused_not_dropped() {
+        assert!(timeline(&sample()).is_ok());
+        let late = [rec(Some("2026-10-20"), "b", "positive", "late")];
+        let records = parse_records(&late.join("\n")).expect("parses");
+        let err = timeline(&records).expect_err("a date after the window must fail");
+        assert!(err.to_string().contains("late"), "{err}");
     }
 
     #[test]

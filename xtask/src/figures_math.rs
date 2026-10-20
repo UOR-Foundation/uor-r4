@@ -978,6 +978,14 @@ fn fig_600() -> Result<String, String> {
     if edges.len() != 720 || rg.len() != 4 || rg.iter().any(|(_, m)| m.len() != 30) {
         return Err("600-cell projection is not 720 edges on 4 rings of 30".into());
     }
+    let mut degree = vec![0usize; xy.len()];
+    for &(i, j) in &edges {
+        degree[i] += 1;
+        degree[j] += 1;
+    }
+    if degree.iter().any(|&d| d != 12) {
+        return Err("600-cell: a vertex does not have exactly 12 neighbours".into());
+    }
     let plot = Plot {
         cx: 310.0,
         cy: 338.0,
@@ -1079,7 +1087,7 @@ fn fig_600() -> Result<String, String> {
 /// drawing), its 12 neighbours, and the 7 kept. Which 7 are kept is
 /// illustrative: the 7 whose turned positions lie nearest one direction (a
 /// cap of the icosahedron of neighbours), so their consensus is visible.
-fn flock_choice(cell: &Cell600) -> (usize, Vec<usize>, Vec<usize>) {
+fn flock_choice(cell: &Cell600) -> Result<(usize, Vec<usize>, Vec<usize>), String> {
     let xy = cell.xy();
     let rg = rings(&xy);
     let target = PI / 2.0;
@@ -1097,13 +1105,19 @@ fn flock_choice(cell: &Cell600) -> (usize, Vec<usize>, Vec<usize>) {
     let nb: Vec<usize> = (0..cell.v.len())
         .filter(|&j| (dot(&cell.v[q], &cell.v[j]) - c).abs() < EPS)
         .collect();
+    if nb.len() != 12 {
+        return Err(format!(
+            "flock: vertex {q} has {} neighbours, not 12",
+            nb.len()
+        ));
+    }
     let rel = |j: usize| turned(cell, q, j);
     let lead = rel(nb[0]);
     let mut kept = nb.clone();
     kept.sort_by_key(|&a| (std::cmp::Reverse(key(dot(&rel(a), &lead))), a));
     kept.truncate(7);
     kept.sort_unstable();
-    (q, nb, kept)
+    Ok((q, nb, kept))
 }
 
 /// Neighbour `j` turned into the frame of query `q`: the imaginary part of q̄·n.
@@ -1122,7 +1136,7 @@ fn fig_flock() -> Result<String, String> {
         cy: 345.0,
         s: 226.0 / rmax,
     };
-    let (q, nb, kept) = flock_choice(&cell);
+    let (q, nb, kept) = flock_choice(&cell)?;
     let mut f = Fig::new("flock-read", 960.0, 640.0);
     f.title("The flock read on the 600-cell");
     f.note(
@@ -1204,7 +1218,13 @@ fn fig_flock() -> Result<String, String> {
         10.0,
         "fill:none;stroke:var(--blue);stroke-width:1.5",
     );
-    f.label(56.0, ky, "body", "start", "7 kept earlier tokens");
+    f.label(
+        56.0,
+        ky,
+        "body",
+        "start",
+        &format!("{} kept earlier tokens", kept.len()),
+    );
     f.circle(
         230.0,
         ky - 4.5,
@@ -1216,7 +1236,7 @@ fn fig_flock() -> Result<String, String> {
         ky,
         "body",
         "start",
-        "other neighbours (12 in all, 36° away)",
+        &format!("other neighbours ({} in all, 36° away)", nb.len()),
     );
 
     // Right panel: the kept neighbours turned into the query's frame, drawn in
@@ -2162,7 +2182,7 @@ mod tests {
     #[test]
     fn icosians_are_closed_under_the_flock_rotation() {
         let cell = cell600().unwrap();
-        let (q, nb, kept) = flock_choice(&cell);
+        let (q, nb, kept) = flock_choice(&cell).expect("flock choice");
         assert_eq!(nb.len(), 12);
         assert_eq!(kept.len(), 7);
         for &j in &nb {
