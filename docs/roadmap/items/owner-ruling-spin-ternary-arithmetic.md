@@ -7,6 +7,7 @@ status: decision
 open_to: lab
 needs_gpu: false
 depends_on: []
+assignee: Casey-allard
 ---
 
 ## Why it matters
