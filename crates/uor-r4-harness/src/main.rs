@@ -92,7 +92,7 @@ const SUBCOMMAND_FLAGS: [&str; 33] = [
 ];
 
 /// The subset that takes a value, so the value is not mistaken for a command.
-const SUBCOMMAND_VALUE_FLAGS: [&str; 53] = [
+const SUBCOMMAND_VALUE_FLAGS: [&str; 57] = [
     "--kind",
     "--milestone",
     "-m",
@@ -150,6 +150,11 @@ const SUBCOMMAND_VALUE_FLAGS: [&str; 53] = [
     "--panel",
     "--value",
     "--label",
+    // `brief`.
+    "--query",
+    "-q",
+    "--budget-tokens",
+    "--write",
 ];
 
 /// Per-command help, for the commands whose flags are not guessable from the global usage.
@@ -256,8 +261,8 @@ COMMANDS:
                 parity.py, because the headline is the number a run is scored on.
     prep-render Render a pre-registration sheet to stdout without writing it. The
                 WRITE half of the D22 gate, checked byte-for-byte against Python.
-    brief       The context pack for a task. Section 1 (state) and the owner rules
-                are ported; the rest is listed as unported rather than omitted.
+    brief       The context pack for a task: state, rules, contract, lessons,
+                skills and receipts. [-m M] [-f FILE..] [-q TEXT] [--write PATH]
     shard-check Refuse a ledger shard that lost lines. A shard may grow and
                 may never shrink; exits 1 on a lost receipt. Compares the
                 working tree against --base (default origin/main).
@@ -2585,6 +2590,13 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `brief -f a b c`: Python's `--files` is `nargs="*"`, so every value counts, not just the first.
+fn brief_files(args: &[String]) -> Vec<String> {
+    let mut files = flag_all_values(args, "--files");
+    files.extend(flag_all_values(args, "-f"));
+    files
+}
+
 fn cmd_brief(repo: &Path, args: &[String]) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     let regs = match Registries::load(&paths) {
@@ -2598,20 +2610,35 @@ fn cmd_brief(repo: &Path, args: &[String]) -> ExitCode {
     let query = flag_value(args, "--query")
         .or_else(|| flag_value(args, "-q"))
         .unwrap_or_default();
+    let files = brief_files(args);
+    let budget = flag_value(args, "--budget-tokens")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(briefing::DEFAULT_BUDGET);
     let pack = if flag_value(args, "--section1-only").is_some() {
         briefing::assemble(&regs, milestone.as_deref(), &query)
     } else {
-        briefing::assemble_full(&regs, &paths, milestone.as_deref(), &query)
+        briefing::assemble_full(&regs, &paths, milestone.as_deref(), &files, &query, budget)
     };
-    print!("{}", pack.render());
-    // The sections this port does not provide are STATED, not silently absent: a brief that omitted
-    // the session contract would read as a brief with no session contract.
-    println!();
-    println!(
-        "*Not ported to Rust yet:* the lessons that apply (7) and the skills (8), which need the \
-         mistakes and skills registries. `scripts/harness/cli.py brief` remains authoritative for \
-         those two."
-    );
+    let text = pack.render();
+    // Python's `emit` ends the output with exactly one newline.
+    if text.ends_with('\n') {
+        print!("{text}");
+    } else {
+        println!("{text}");
+    }
+    if let Some(out) = flag_value(args, "--write") {
+        let out = Path::new(&out);
+        if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = std::fs::write(out, format!("{text}\n")) {
+            eprintln!("uor-harness: cannot write {}: {e}", out.display());
+            return ExitCode::from(2);
+        }
+        if !args.iter().any(|a| a == "--quiet") {
+            eprintln!("wrote {}", out.display());
+        }
+    }
     ExitCode::SUCCESS
 }
 
@@ -3850,5 +3877,25 @@ fn cmd_comment(repo: &Path, args: &[String], _json: bool) -> ExitCode {
             eprintln!("uor-harness comment edit: {e}");
             ExitCode::from(1)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(s: &[&str]) -> Vec<String> {
+        s.iter().map(|a| a.to_string()).collect()
+    }
+
+    /// Keeping only the first file would brief a two-file task on one file, silently.
+    #[test]
+    fn brief_files_keeps_every_value_up_to_the_next_flag() {
+        let args = argv(&["-m", "m1", "-f", "a.rs", "b.md", "c.json", "-q", "harness"]);
+        assert_eq!(brief_files(&args), argv(&["a.rs", "b.md", "c.json"]));
+        assert_eq!(
+            brief_files(&argv(&["--files", "x", "y"])),
+            argv(&["x", "y"])
+        );
     }
 }
