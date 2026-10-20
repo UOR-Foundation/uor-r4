@@ -175,7 +175,7 @@ pub fn onboard(repo: &Path, lab_env: Option<String>) -> Report {
     match which_uor_harness() {
         Some(path) => findings.push(Finding::ok(
             "entry point",
-            format!("uor-harness is on PATH ({})", path.display()),
+            format!("on PATH: {}", path.display()),
         )),
         None => findings.push(Finding::warn(
             "entry point",

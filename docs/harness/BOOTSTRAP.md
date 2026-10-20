@@ -159,7 +159,7 @@ uor-harness onboard - can this machine use the harness?
   live tier: ~/.local/share/uor-r4/harness
 
   ok   cargo        ~/.cargo/bin/cargo is the Rust toolchain cargo
-  ok   entry point  uor-harness is on PATH (<path>)
+  ok   entry point  on PATH: <path>/uor-harness
   ok   identity     UOR_LAB=claude
   ok   claims       2 claim(s) visible, 0 held by this lab
   ok   ledger       46 receipts, other labs visible: codex, kimi
