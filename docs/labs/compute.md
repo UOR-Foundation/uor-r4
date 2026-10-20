@@ -62,8 +62,8 @@ all present at base — so the transcript records the lint list; compile errors
 still fail the gate). Set `HOURS=0.5` for that manifest (30 minutes, cold
 training-crate plus vendored candle CUDA builds) and `HOURS=0.25` otherwise.
 Do not reuse a session or another lab's pod. Check status/caps before `up`.
-The laptop needs `gh`, `jq`, `tar`, `shasum` and the configured `cloud-store`;
-the latter lives at `$HOME/.local/share/uor-r4/bin/cloud-store` on the owner host.
+The laptop needs `gh`, `jq`, `tar`, `shasum` and `hf` (logged in to the private HF store);
+results go to `results/<lab>/<topic-date>/` in `caseyallard/uor-r4-store`, not to iCloud.
 No secret is printed or copied by this recipe.
 
 ```bash
@@ -99,7 +99,7 @@ cleanup() {
   "$POD_TOOL" ssh "$POD" "tar -C /workspace/uor-r4/evals/$SESSION -cf - ." | tar -C "$ARCHIVE" -xf -
   copied=$?
   if [ "$copied" -eq 0 ] && (cd "$ARCHIVE" && shasum -a 256 -c SHA256SUMS) && \
-     cloud-store put "$LAB" "$ARCHIVE"; then
+     hf upload caseyallard/uor-r4-store "$ARCHIVE" "results/$LAB/$(basename "$ARCHIVE")"; then
     "$POD_TOOL" release "$POD" --lab "$LAB" --session "$SESSION"
     "$POD_TOOL" down "$POD" --lab "$LAB" --session "$SESSION" --confirm-archived
     "$POD_TOOL" status
@@ -377,8 +377,8 @@ remaining volume and for Runpod-only accounts); every command takes either kind 
   Runpod hot-set relay is skipped for Vast pods.
 - **Results.** `down` copies `/workspace/uor-r4/{jobs,pods,runs,evals}` to
   `~/.local/share/uor-r4/compute/vast-archive/<pod>/` before it destroys the
-  instance, and records the archive in the ledger; move it to iCloud with
-  `cloud-store put`. Above 5 GB (`UOR_POD_VAST_ARCHIVE_MAX_MB`) it refuses;
+  instance, and records the archive in the ledger; upload it to the HF store with
+  `hf upload` under `results/<lab>/<topic-date>/` (the archive path is the code's own default). Above 5 GB (`UOR_POD_VAST_ARCHIVE_MAX_MB`) it refuses;
   `down --to-store` instead has the pod upload them to the HF store under
   `vast-archive/<pod>/` (no laptop copy, no size cap). Each upload is then read
   back before the pod may be destroyed: the store must list the same file count
