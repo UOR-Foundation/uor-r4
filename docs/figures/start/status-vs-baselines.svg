@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="t d">
 <title id="t">Trained model against count tables</title>
-<desc id="d">Horizontal bars on one scale from 0 to 14,287 test positions. Next-word table 6,300, unigram table 1,226, trained model seed 2 463, trained model seed 1 65. A dashed line at 6,300 marks the new M1 bar: beat both tables on each of two seeds. The trained model is far below both tables.</desc>
+<desc id="d">Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, trained model seed 2 463, trained model seed 1 65. A dashed line at 6,300 marks the new M1 bar: beat both tables on each of two seeds. The trained model is far below both tables.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7; }
@@ -24,7 +24,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 .t-pink { fill: var(--pink); } .f-pink { fill: var(--pink); } .s-pink { stroke: var(--pink); }
 </style>
 <rect class="bg" x="0" y="0" width="960" height="440"/>
-<text x="16" y="34" font-size="20" class="t-ink b" text-anchor="start">Correct first guesses on 14,287 test positions</text>
+<text x="16" y="34" font-size="20" class="t-ink b" text-anchor="start">Correct first guesses on 14,287 development-panel positions</text>
 <text x="16" y="54" font-size="12" class="t-muted" text-anchor="start">The best trained model against two simple count tables, on one scale. Higher is better.</text>
 <rect x="16" y="68" width="16" height="12" rx="2" class="f-blue"/>
 <text x="40" y="79" font-size="13" class="t-body" text-anchor="start">Trained model</text>

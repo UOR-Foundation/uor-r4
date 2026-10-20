@@ -30,13 +30,13 @@
 # Geometry
 
 - [The geometry of UOR-R4](geometry/README.md)
-  - [Primes and zeta phases](geometry/primes-and-zeta.md)
-  - [Golden integers](geometry/golden-integers.md)
   - [Quaternions and rotation](geometry/quaternions-and-rotation.md)
   - [E8, H4 and the 600-cell](geometry/e8-h4-and-the-600-cell.md)
-  - [SpiralCore](geometry/spiralcore.md)
+  - [Golden integers](geometry/golden-integers.md)
   - [The Hopf map and the kept fibre](geometry/hopf-observation.md)
+  - [Primes and zeta phases](geometry/primes-and-zeta.md)
   - [VSA and Hamming distance](geometry/vsa-and-hamming.md)
+  - [SpiralCore](geometry/spiralcore.md)
 
 # Mechanisms
 
