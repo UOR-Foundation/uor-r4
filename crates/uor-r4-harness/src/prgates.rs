@@ -1015,6 +1015,47 @@ mod pivot_record_tests {
     }
 }
 
+/// Q2: builds, finite kernel tests and host checks need no pre-registration ...
+const HOST_CHECK_PATTERN: &str = r"(?i)\b(?:cargo|rustc|clippy|fmt|unittest|pytest|builds?|built|compil\w*|tests?|lint|parity|checks?|kernel|finite|host)\b";
+/// ... unless the line is about GPU training or evaluation, or a milestone claim.
+const RESEARCH_RUN_PATTERN: &str = r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|bpb|nll|perplexit\w*|accuracy|panel|headline|milestone|seeds?)\b";
+/// Q1: serving the exported D11 integer artifact on a client device is the product, not research compute ...
+const DEVICE_SERVING_PATTERN: &str = r"(?i)\bd11\b|\bexport(?:ed)?\b[^\n]{0,24}\bartifact\b|\binteger\s+artifact\b|\bserv(?:e|es|ed|ing)\b|\bwasm\b|\bapple\s+silicon\b|\bclient\s+devices?\b|\bon-?device\b";
+/// ... while CPU training, evaluation, qualification and reference execution stay flagged (D24).
+const RESEARCH_CPU_PATTERN: &str = r"(?i)\b(?:train\w*|fine-?tun\w*|evaluat\w*|eval|qualif\w*|reference|parity|fit|fits|fitting|scor\w*|bpb|nll|perplexit\w*|panel|headline|milestone)\b";
+
+fn cached(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
+    cell.get_or_init(|| Regex::new(pattern).expect("a valid pattern"))
+}
+
+/// `_research_compute_claims`: drop host-check lines that are not about training/evaluation.
+fn research_compute_claims(claims: &[String]) -> Vec<&String> {
+    static HOST: OnceLock<Regex> = OnceLock::new();
+    static RUN: OnceLock<Regex> = OnceLock::new();
+    let (host, run) = (
+        cached(&HOST, HOST_CHECK_PATTERN),
+        cached(&RUN, RESEARCH_RUN_PATTERN),
+    );
+    claims
+        .iter()
+        .filter(|c| !(host.is_match(c) && !run.is_match(c)))
+        .collect()
+}
+
+/// `_research_cpu_claims`: drop lines that serve or benchmark the exported D11 artifact on a client device.
+fn research_cpu_claims(claims: &[String]) -> Vec<&String> {
+    static SERVING: OnceLock<Regex> = OnceLock::new();
+    static RESEARCH: OnceLock<Regex> = OnceLock::new();
+    let (serving, research) = (
+        cached(&SERVING, DEVICE_SERVING_PATTERN),
+        cached(&RESEARCH, RESEARCH_CPU_PATTERN),
+    );
+    claims
+        .iter()
+        .filter(|c| !(serving.is_match(c) && !research.is_match(c)))
+        .collect()
+}
+
 /// `prlint.prereg_before_compute` — model numbers with no pre-registration reference (D22 §5d/§5e).
 ///
 /// **This is the gate I tripped repeatedly while writing this port**, and the reason is worth
@@ -1022,14 +1063,17 @@ mod pivot_record_tests {
 /// a **run-word** (`ran`, `runs`, `seeds`, `steps`, `evaluated`…) **and a digit**. So a PR body that
 /// discusses its own verification commands trips it — **in a way that reads as a model-compute claim.**
 ///
-/// **I did not loosen it.** It is a fuzzy gate doing a real job (a lab reporting numbers must have
-/// pre-registered), and **narrowing it would be a behaviour change dressed as a port.** What I did was
-/// stop writing verification counts next to run-words in my own bodies.
+/// **The owner narrowed it on 19 Oct 2026 (Q2):** pre-registration is required only before GPU
+/// training or evaluation and before runs a milestone claim rests on. Builds, finite kernel tests and
+/// host checks need none, so a claim line that matches a host-check word and no research-run word no
+/// longer counts (`research_compute_claims`). The parser's `compute_claims` is unchanged; the filter
+/// lives here, mirroring `_research_compute_claims` in `scripts/harness/prlint.py`.
 pub fn prereg_before_compute(f: &crate::prbody::Fields) -> Vec<Problem> {
-    if f.compute_claims.is_empty() || !f.prereg.is_empty() {
+    let claims = research_compute_claims(&f.compute_claims);
+    if claims.is_empty() || !f.prereg.is_empty() {
         return Vec::new();
     }
-    let sample = truncate(&f.compute_claims[0], 80);
+    let sample = truncate(claims[0], 80);
     vec![Problem::new(
         "prlint.prereg_before_compute",
         "error",
@@ -1046,11 +1090,17 @@ pub fn prereg_before_compute(f: &crate::prbody::Fields) -> Vec<Problem> {
 /// (`defect`, `blocked`, `forbidden`, `violat`…). **That exclusion is the whole reason the gate is
 /// usable**: a body that *reports fixing* a host fallback must not be accused of presenting one, and
 /// the port inherits that reasoning rather than re-deciding it here.
+///
+/// **Q1 (owner, 19 Oct 2026):** research compute stays GPU-only, but serving the exported D11 integer
+/// artifact on a client device (CPU, WASM, Apple silicon) is the product. A claim line that matches a
+/// device-serving word and no research-CPU word is dropped (`research_cpu_claims`), mirroring the
+/// Python filter.
 pub fn no_cpu_model_compute(f: &crate::prbody::Fields) -> Vec<Problem> {
-    if f.cpu_claims.is_empty() {
+    let claims = research_cpu_claims(&f.cpu_claims);
+    if claims.is_empty() {
         return Vec::new();
     }
-    let sample = truncate(&f.cpu_claims[0], 90);
+    let sample = truncate(claims[0], 90);
     vec![Problem::new(
         "prlint.no_cpu_model_compute",
         "warn",
@@ -1209,6 +1259,42 @@ mod body_gate_tests {
             "{:?}",
             no_cpu_model_compute(&fields(as_defect))
         );
+    }
+
+    const NARROW_HEAD: &str =
+        "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\n";
+
+    /// Q2 (a): a host check is not model compute, so it needs no pre-registration.
+    #[test]
+    fn a_host_check_line_needs_no_preregistration() {
+        let body =
+            format!("{NARROW_HEAD}ran cargo test -p x: 561 passed, 0 failed\nReferences #2029\n");
+        assert!(prereg_before_compute(&fields(&body)).is_empty());
+    }
+
+    /// Q2 (b): training with seeds and step counts still needs one.
+    #[test]
+    fn a_training_run_line_still_needs_a_preregistration() {
+        let body = format!("{NARROW_HEAD}ran 2 seeds of training to 16,404 steps, top-1 463/14,287\nReferences #2029\n");
+        let p = prereg_before_compute(&fields(&body));
+        assert_eq!(p.len(), 1, "{p:?}");
+    }
+
+    /// Q1 (c): serving the D11 artifact on a client device is not research CPU compute.
+    #[test]
+    fn serving_the_artifact_on_a_device_is_not_cpu_model_compute() {
+        let body = format!("{NARROW_HEAD}ran on the laptop: served the D11 integer artifact in WASM at 210 tokens/s, 463/14,287 rows\nReferences #2029\n");
+        assert!(no_cpu_model_compute(&fields(&body)).is_empty());
+    }
+
+    /// Q1 (d): evaluating on the laptop CPU is still flagged.
+    #[test]
+    fn evaluating_on_the_laptop_cpu_is_still_flagged() {
+        let body = format!(
+            "{NARROW_HEAD}ran on the laptop: evaluated the panel, 463/14,287 rows\nReferences #2029\n"
+        );
+        let p = no_cpu_model_compute(&fields(&body));
+        assert_eq!(p.len(), 1, "{p:?}");
     }
 
     #[test]

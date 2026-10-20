@@ -205,6 +205,25 @@ class TestPreregistration(Fixtures):
         self.assertEqual(len(problems), 1)
         self.assertIn("D24", problems[0]["fix"])
 
+    def _narrow_body(self, line: str) -> str:
+        return fill(result=line + "\nDecision: KEEP")
+
+    def test_host_check_line_needs_no_preregistration(self) -> None:
+        body = self._narrow_body("ran cargo test -p x: 561 passed, 0 failed")
+        self.assertNotIn("prlint.prereg_before_compute", self.rules(body))
+
+    def test_training_run_line_still_needs_preregistration(self) -> None:
+        body = self._narrow_body("ran 2 seeds of training to 16,404 steps, top-1 463/14,287")
+        self.assertIn("prlint.prereg_before_compute", self.rules(body))
+
+    def test_serving_on_a_device_is_not_cpu_model_compute(self) -> None:
+        body = self._narrow_body("ran on the laptop: served the D11 integer artifact in WASM at 210 tokens/s, 463/14,287 rows")
+        self.assertNotIn("prlint.no_cpu_model_compute", self.rules(body))
+
+    def test_evaluating_on_the_laptop_cpu_is_still_flagged(self) -> None:
+        body = self._narrow_body("ran on the laptop: evaluated the panel, 463/14,287 rows")
+        self.assertIn("prlint.no_cpu_model_compute", self.rules(body))
+
     def test_softmax_rule_delegates_to_the_interlock(self) -> None:
         """prlint.softmax_ban must call scripts/check_no_softmax.py, not rescan."""
         import tempfile

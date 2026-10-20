@@ -788,8 +788,9 @@ def check_pr(body: str, paths: HarnessPaths, reg: Registry) -> dict[str, Any]:
                 )
 
     # --- 9. D22: pre-registration before compute
-    if fields.get("compute_claims") and not fields.get("prereg"):
-        sample = truncate(str(fields["compute_claims"][0]), 80)
+    compute_claims = _research_compute_claims(fields.get("compute_claims") or [])
+    if compute_claims and not fields.get("prereg"):
+        sample = truncate(str(compute_claims[0]), 80)
         add(
             Problem(
                 "prlint.prereg_before_compute",
@@ -804,8 +805,9 @@ def check_pr(body: str, paths: HarnessPaths, reg: Registry) -> dict[str, Any]:
     problems.extend(softmax_problems)
 
     # --- 11. D24 no CPU model compute
-    if fields.get("cpu_claims"):
-        sample = truncate(str(fields["cpu_claims"][0]), 90)
+    cpu_claims = _research_cpu_claims(fields.get("cpu_claims") or [])
+    if cpu_claims:
+        sample = truncate(str(cpu_claims[0]), 90)
         add(
             Problem(
                 "prlint.no_cpu_model_compute",
