@@ -1,3 +1,12 @@
+## 2026-10-20 — NOW/ROADMAP yield to CHARTER release scope and retain the A8 source binding (codex)
+
+NOW yields to CHARTER; NOW/ROADMAP state one Casey-typed release per
+pre-registered sheet, with qualification and dose approval still separate.
+The current A8 qualification/dose remains bound to `fd409fcdf`, not later main.
+Scientific holds, source/sheet identities, peer entries and historical evidence are
+unchanged. [Compatibility record](../labs/charter-plan-consistency-2026-10-20/README.md).
+**Next:** exact-head independent review of the draft PR and protected delivery.
+
 ## 2026-10-19 — Legacy crate repair: the five packages broken since D36 build on the current core (claude)
 
 The owner chose to repair, not archive, these packages (charter Q8): `graph-compiler`, `graph-certify`, `api`, `proof-model` and the root package. `graph-cli` and the test targets of `graph-runtime` are repaired too, since they failed for the same reason. Each package gets a `src/native_support.rs` library surface, following the #2345 pattern. It compiles only the modules that need none of four banned paths:
