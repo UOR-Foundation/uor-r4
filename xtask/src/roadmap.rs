@@ -6,7 +6,8 @@
 //! required sections in a fixed order. `check` validates every item, the
 //! dependency graph and `docs/roadmap/issues.json` (an optional JSON object of
 //! id -> issue number). `render` writes `docs/roadmap/README.md`
-//! deterministically from the items; `render --check` compares instead.
+//! deterministically from the items; `render --check` compares instead. `sync`
+//! turns the items into GitHub issues (see `roadmap_sync.rs`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -17,7 +18,7 @@ use serde_json::Value;
 const MILESTONES: &[&str] = &[
     "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "research", "infra",
 ];
-const AREAS: &[&str] = &[
+pub(crate) const AREAS: &[&str] = &[
     "architecture",
     "mechanism",
     "training",
@@ -26,9 +27,9 @@ const AREAS: &[&str] = &[
     "tooling",
     "docs",
 ];
-const STATUSES: &[&str] = &["ready", "held", "decision", "done"];
+pub(crate) const STATUSES: &[&str] = &["ready", "held", "decision", "done"];
 const OPEN_TO: &[&str] = &["anyone", "lab"];
-const SECTIONS: &[&str] = &[
+pub(crate) const SECTIONS: &[&str] = &[
     "Why it matters",
     "What is missing",
     "Done when",
@@ -64,6 +65,11 @@ pub struct Item {
     pub open_to: String,
     pub needs_gpu: bool,
     pub depends_on: Vec<String>,
+    /// Optional GitHub login from the `assignee` header key.
+    pub assignee: Option<String>,
+    pub good_first: bool,
+    /// Everything after the closing `---`: the six sections, verbatim.
+    pub body: String,
 }
 
 /// Split `text` into its header fields and the body after the closing `---`.
@@ -232,6 +238,9 @@ pub fn parse_item(file: &str, text: &str) -> Result<Item, Vec<String>> {
         open_to: get("open_to"),
         needs_gpu,
         depends_on,
+        assignee: fields.get("assignee").filter(|a| !a.is_empty()).cloned(),
+        good_first: fields.get("good_first").is_some_and(|v| v == "true"),
+        body,
     })
 }
 
@@ -392,7 +401,7 @@ fn issue_cell(id: &str, issues: Option<&BTreeMap<String, u64>>) -> String {
     }
 }
 
-fn status_rank(status: &str) -> usize {
+pub(crate) fn status_rank(status: &str) -> usize {
     STATUSES
         .iter()
         .position(|s| *s == status)
@@ -571,7 +580,7 @@ fn counts_line(items: &[Item], key: impl Fn(&Item) -> &str, order: &[&str]) -> S
         .join(", ")
 }
 
-fn load_checked(
+pub(crate) fn load_checked(
     items_dir: &Path,
     issues_path: &Path,
 ) -> Result<(Vec<Item>, Option<Issues>), String> {
@@ -649,7 +658,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             let check = args.iter().skip(1).any(|a| a == "--check");
             render_to(&items_dir, &issues_path, &base.join("README.md"), check)
         }
-        _ => Err("usage: cargo xtask roadmap check | render [--check]".into()),
+        Some("sync") => crate::roadmap_sync::run(root, &args[1..]),
+        _ => Err("usage: cargo xtask roadmap check | render [--check] | sync [--apply] [--repo OWNER/NAME]".into()),
     }
 }
 
