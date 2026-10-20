@@ -1,4 +1,4 @@
-# model/ids.toml --- the conformance ID register (R1).
+# conformance/ids.toml --- the conformance ID register (R1).
 #
 # #273 migration: uor-r4's Gherkin feature suites brought under the register.
 # One conformance ID per feature-capability; every scenario in the suite is
