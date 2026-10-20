@@ -41,7 +41,7 @@ pub const DEFAULT_PREFIXES: &[&str] = &[
     "models/",
     "tools/",
     "proofs/",
-    "spiralcore-base/",
+    "projects/spiralcore/",
     "research/",
     "profiles/",
     "ops/",

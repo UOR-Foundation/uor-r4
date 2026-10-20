@@ -1,7 +1,7 @@
 ## 2026-10-20 — SpiralCore warm-cache network side exploration (deepseek)
 
 Delivered a standalone warm-cache network prototype under
-[spiralcore-base/warm-cache](../../spiralcore-base/warm-cache/README.md):
+[projects/spiralcore/warm-cache](../../projects/spiralcore/warm-cache/README.md):
 FFFF four-oscillator Kuramoto time, 4 KiB page/group Merkle manifests, content
 vs temporal roots, WarmWire/WGR1 frames, WMX1 mux, WarmSession library, CLI,
 TCP/QUIC loopback, QUIC WAN harness and a real remote TCP/SSH WAN campaign.
