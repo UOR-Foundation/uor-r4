@@ -418,7 +418,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/d2-manifest.json
-          key: d2-manifest-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'src/**/*.rs', 'crates/**/*.rs', 'scripts/d2_differential_compile.sh') }}
+          key: d2-manifest-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'crates/**/*.rs', 'scripts/d2_differential_compile.sh') }}
 
       - name: Run canonical differential compile
         if: steps.d2_manifest_cache.outputs.cache-hit != 'true'
