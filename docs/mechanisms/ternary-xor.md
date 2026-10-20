@@ -72,7 +72,7 @@ Each position contributes $+1$ if and only if $P_i=x_i=1$, and $-1$ if and only 
 
 ## A fair test needs
 
-*From the earlier brief, [archive/mechanisms/briefs/ternary-xor-arithmetic.md](../../archive/mechanisms/briefs/ternary-xor-arithmetic.md).*
+*From the earlier brief, [archive/mechanisms/ternary-xor-arithmetic-2026-10-20.md](../../archive/mechanisms/ternary-xor-arithmetic-2026-10-20.md).*
 
 - **Mechanism trained in from step 0**, not quantised post hoc. Every existing `TernaryLinear` use is a
   post-hoc snap of a float master; that arm is a reading, never a verdict.

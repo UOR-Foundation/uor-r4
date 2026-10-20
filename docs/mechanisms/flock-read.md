@@ -23,7 +23,7 @@ Attention, both halves: choosing which earlier positions to read, and mixing wha
 **The live integer form.** Per 8-dimensional block, context sits in a ternary tree whose leaves are earlier positions ([route-read](./route-read.md) uses the same tree). Each interior node holds the snapped sum of its three transported children. For each tree level $\ell$ there is one learned gate $g_\ell\in\{-1,0,+1\}$.
 
 1. **Rank (Definition).** Eligible nodes at level $\ell$ end strictly before the query. Keep the best $K$ ($1\le K\le 8$) under the lexicographic key $\big(d_{L1}(f_n,f_q),\ d_{H}(f_n,f_q),\ -\mathrm{last}(n),\ n\big)$. Here $f$ is a node's frame root among the 16 roots of one E8 orbit and $d_H$ is coordinate Hamming distance.
-2. **Carry.** Each kept payload $p_n$ is moved into the query's frame by the precomputed transport action between the two roots: $c_n=\mathrm{BFS}[f_n\to f_q](p_n)$.
+2. **Carry.** Each kept payload $p_n$ is moved into the query's frame by the precomputed transport action between the two roots: $c_n=\mathrm{BFS}[f_n\to f_q]\,(p_n)$.
 3. **Consensus.** $m_\ell=\operatorname{snap}\big(\sum_{n\in\text{kept}}c_n\big)$, the nearest of the 16 roots.
 4. **Gated add.** $v\leftarrow v+g_\ell\,m_\ell$. Trit $+1$ adds the consensus root, $-1$ subtracts it, $0$ skips the level. The output is $v$ snapped back to a root.
 

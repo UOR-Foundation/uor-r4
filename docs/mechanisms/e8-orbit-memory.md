@@ -72,7 +72,7 @@ BPB means bits per byte on held-out text, lower is better.
 
 ## A fair test needs
 
-*From the earlier brief, [archive/mechanisms/briefs/e8-orbit-memory.md](../../archive/mechanisms/briefs/e8-orbit-memory.md).*
+*From the earlier brief, [archive/mechanisms/e8-orbit-memory-2026-10-20.md](../../archive/mechanisms/e8-orbit-memory-2026-10-20.md).*
 
 - A capacity-matched learned-key control (P).
 - Routing health (entropy and slot share), to tell collapse from capacity.

@@ -150,7 +150,7 @@ The two gaps matter. The only position-related result is about recurrent state t
 
 ## Where the audit questions a status
 
-Statuses are left as each dossier set them. Two are open to challenge:
+Statuses are left as the audit dossiers set them (`docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/`). Two are open to challenge:
 
 - **D11 integer serving** is ACTIVE as the end-of-pipeline contract, but no lawful model has ever been exported through it, so READY may be more accurate.
 - **Hopf observation** is PARKED, but its kept-fibre map is built and unit-tested and its language test never ran. Only sector routing failed, so splitting the two forms may be more accurate.

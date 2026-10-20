@@ -34,7 +34,7 @@ Under the [charter](../../CHARTER.md), serving this artifact on client devices (
 
 **One projection (definition).** For a weight matrix $W$ and an integer activation vector $x$, the output is $y_i=\sum_j w_{ij}x_j$, where each weight is a group scale times a 4-bit code, $w_{ij}=s_g\,q_{ij}$ with $s_g=m\,2^{e}$. The engine does not multiply $q_{ij}$ by $x_j$. For each activation it builds a 16-entry table $T_j[q]=q\,x_j$, which needs only additions to fill, and then reads $T_j[q_{ij}]$ for each weight. Four output rows are blocked to reuse the table. The scale $s_g$ is applied by shifts and adds.
 
-**Products of two runtime values.** A score, a gate or a value mix uses a quarter-square table, built on the identity $ab=\lfloor (a+b)^2/4\rfloor-\lfloor (a-b)^2/4\rfloor$. It holds for all integers because $a+b$ and $a-b$ have the same parity, so the two floors drop the same fraction (proof). Normalisation uses an integer square root or a table. Sampling is integer min-p.
+**Products of two runtime values.** A score, a gate or a value mix needs a true product of two numbers known only at run time. The engine builds a table of the sixteen multiples of one operand by repeated addition, reads it at each base-16 digit of the other operand, and sums the reads with shifts: $ab=\sum_k 16^k\,T_a[d_k(b)]$, exact by the definition of base-16 digits (proof; `stack_mul_u64` and `stack_mul_u128` in `kernels.rs`). The quarter-square identity would also be allowed, but the serving engine does not use it. Normalisation uses an integer square root or a table. Sampling is integer min-p.
 
 **Session state.** A conversation's state is saved and restored byte-for-byte (the `UR4SESS1` format).
 
@@ -98,7 +98,7 @@ UORLUT01; the D11 integer engine; the D10 LUT engine (superseded); `uor-r4-lut`;
 
 ## Code
 
-- [`kernels.rs`](../../crates/uor-r4-integer/src/stack/kernels.rs): table kernels, blocked product tables, quarter-square products. [`session.rs`](../../crates/uor-r4-integer/src/stack/session.rs): the per-token step and exact session state.
+- [`kernels.rs`](../../crates/uor-r4-integer/src/stack/kernels.rs): table kernels, blocked product tables, radix-16 multiples-table products (`stack_mul_u64`, `stack_mul_u128`). [`session.rs`](../../crates/uor-r4-integer/src/stack/session.rs): the per-token step and exact session state.
 - [`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs): the container and its schemas. [`flock.rs`](../../crates/uor-r4-integer/src/stack/flock.rs): integer flock rank selection.
 - [`simd.rs`](../../crates/uor-r4-integer/src/stack/simd.rs): WebAssembly SIMD fixtures, not on the hot path. [`wasm_serve.rs`](../../crates/uor-r4-integer/src/wasm_serve.rs): browser and Node entry points. [`session_codec.rs`](../../crates/uor-r4-integer/src/session_codec.rs): the exact session snapshot.
 - [`native_geometry.rs`](../../crates/uor-r4-integer/src/native_geometry.rs): integer geometry for the discrete model's export. [`uor-r4-stack.rs`](../../crates/uor-r4-integer/src/bin/uor-r4-stack.rs): the command-line program the audit checks.
