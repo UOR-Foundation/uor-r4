@@ -11,23 +11,32 @@ depends_on: [m1-d11-exporter-discrete, m4-lawful-likelihood-bpb, m1-close-saved-
 
 ## Why it matters
 
-Unifies the M1 to M3 model into the one served artifact that M5 to M8 depend on.
+M4 (issue #2032) is the step that turns the M1 to M3 work into one served artifact, which M5 to M8 all depend on. The integer serving engine and the `uor-chat` command line exist, but no trained model has been exported to them. Background: [serving and export](../../model/serving-and-export.md).
 
 ## What is missing
 
-One chosen model must be exported as a single UORLUT01 file, serve through the uor-chat CLI, report its training-to-D11 export gap and meet the held-out bar; none exists. The native and WASM serving audits pass on today's build and must stay at 0 float, 0 softmax or squashing, 0 matmul and 0 mul/div on the final build. M4 is held.
+One chosen model must be exported as a single UORLUT01 file, serve through the `uor-chat` CLI, report its training-to-D11 export gap and meet the held-out bar; none exists. `STATUS.md` records that no model trained under today's rules has been exported, and `docs/model/architecture.md` records "no exporter". M4 is held.
+
+The native and WASM serving audits pass on today's build (44 native symbol ranges, 7 of 7 WebAssembly) and must stay at 0 float, 0 softmax or squashing, 0 matmul and 0 mul/div on the final build.
+
+Two things are open. First, `crates/uor-r4-integer/src/bin/uor-chat.rs` describes `--stack` as serving a UORLUT01 geometric-stack artifact, while the geometric stack is PARKED and the live model is the discrete one. Whether a discrete model fits UORLUT01, or needs new sections, is not settled in the sources. Second, the held-out panel behind the 0.90 bits-per-byte bar is not yet registered.
 
 ## Done when
 
-M4 bar: 'One model exported as an integer file under the serving contract (D11), usable from a command line, with held-out quality at or below 0.90 bits per byte'; export gap reported (D37); static audits green; fresh-process restore bit-identical.
+M4 bar: 'One model exported as an integer file under the serving contract (D11), usable from a command line, with held-out quality at or below 0.90 bits per byte'. In addition:
+
+- The export gap is reported (D37).
+- The static audits are green.
+- A fresh-process restore is bit-identical.
 
 ## How to start
 
-Open these first:
-
-- `crates/uor-r4-integer`
-- `scripts/audit_zero_matmul_serving.py`
-- `scripts/audit_zero_matmul_wasm.py`
+1. **Read the contract and the code.** Open `docs/model/serving-and-export.md`, `docs/mechanisms/lut-serving.md`, `crates/uor-r4-lut/src/format.rs` (the UORLUT01 layout), `crates/uor-r4-integer/src/bin/uor-chat.rs` and `crates/uor-r4-integer/README.md`. Read the headers of `scripts/audit_zero_matmul_serving.py` and `scripts/audit_zero_matmul_wasm.py` for their arguments, and run both once to record today's baseline.
+2. **First deliverable: a design note on the issue.** Say how the output of `m1-d11-exporter-discrete` maps into UORLUT01 and how `uor-chat` loads it. Say how the serve path stays at 0 float, 0 softmax or squashing, 0 matmul and 0 mul/div, and how a fresh-process restore is bit-identical. Confirm with `m1-d11-exporter-discrete` that both items target the same container.
+3. **Write a finite control as a failing test.** In `crates/uor-r4-integer/tests/`, export a toy model (see `crates/uor-r4-integer/src/bin/mk-synthetic-stack.rs`), start `uor-chat` on it in two fresh processes, and require identical token output. Run it with `~/.cargo/bin/cargo test -p uor-r4-integer`.
+4. **Draft the pre-registration sheet.** Name the chosen artifact, the frozen held-out byte panel with its SHA-256, and the scorer from `m4-lawful-likelihood-bpb`. Register the 0.90 bar, the export-gap method (float candidate against integer artifact on the same evaluator, `CHARTER.md` section 3.7), the tokens-per-second report, the stop rule and the cost. Ask a non-author for a TEST FITNESS: FIT review.
+5. **Wait for the owner.** M4 is held, and one typed owner release covers one sheet; Casey types it. After release, run the export and evaluation on a GPU (outside contributors attach hardware specs), then rerun both audits on the final build.
+6. **Open a PR** that says `Closes #<this issue>` (or `References` if partial), and record the result as one row in `docs/research/notebook/m4-serving.md`.
 
 ## Rules that apply
 
