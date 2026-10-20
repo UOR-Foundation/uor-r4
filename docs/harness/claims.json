@@ -230,6 +230,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/renorm-archive-curated-20261020": {
+    "branch": "claude/renorm-archive-curated-20261020",
+    "claimed_at": "2026-10-20T01:51:21-04:00",
+    "head": "00fa2935e",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/renorm-harness-20261020": {
     "branch": "claude/renorm-harness-20261020",
     "claimed_at": "2026-10-20T01:30:59-04:00",
