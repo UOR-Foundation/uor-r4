@@ -55,6 +55,11 @@ impl Book {
         Ok(Book { pages })
     }
 
+    /// Book pages for which `exists` says the repository file is absent.
+    pub fn missing_pages(&self, exists: &dyn Fn(&str) -> bool) -> Vec<String> {
+        self.pages.keys().filter(|r| !exists(r)).cloned().collect()
+    }
+
     /// Where a repository path is staged, if it is part of the book.
     fn staged(&self, repo: &str) -> Option<String> {
         if let Some(s) = self.pages.get(repo) {
@@ -472,11 +477,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let summary = fs::read_to_string(&summary_path)
         .map_err(|e| format!("read {}: {e}", summary_path.display()))?;
     let book = Book::from_summary(&summary)?;
-    let missing: Vec<&String> = book
-        .pages
-        .keys()
-        .filter(|r| !root.join(r).is_file())
-        .collect();
+    let missing = book.missing_pages(&|r| root.join(r).is_file());
     if !missing.is_empty() {
         let list: Vec<String> = missing.iter().map(|m| format!("  {m}")).collect();
         return Err(format!(
@@ -697,6 +698,17 @@ mod tests {
             stage("$5 then $x$", "docs/start/a.md"),
             "$5 then \\\\(x\\\\)"
         );
+    }
+
+    #[test]
+    fn missing_pages_lists_absent_files_only() {
+        let b = book();
+        let present = |p: &str| p != "CHARTER.md" && p != "projects/p/README.md";
+        assert_eq!(
+            b.missing_pages(&present),
+            vec!["CHARTER.md".to_string(), "projects/p/README.md".to_string()]
+        );
+        assert!(b.missing_pages(&|_| true).is_empty());
     }
 
     #[test]
