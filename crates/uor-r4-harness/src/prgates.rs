@@ -1787,8 +1787,8 @@ mod check_pr_tests {
 /// than left to a reader to notice.
 const CHECKLIST: [&str; 8] = [
     "Checks run at this exact head (commands and outcomes posted on this PR)",
-    "Research record: docs/labs/<topic>-<YYYY-MM-DD>/README.md (or docs/evidence/…)",
-    "New entry at the top of docs/integration/current-state.md, with **Next:**",
+    "Result recorded: one row in docs/research/notebook/<line>.md (a dated docs/labs/<topic>-<YYYY-MM-DD>/ folder only when a run seals artifacts)",
+    "docs/integration/NOW.md updated if the next action changed",
     "Every document this change makes stale is updated",
     "STATUS.md / ROADMAP.md / #2028 table updated, or state unchanged",
     "README updated in its existing sections, or nothing a reader relies on changed",
@@ -1904,8 +1904,8 @@ pub fn format_pr_body(f: &crate::prbody::Fields) -> String {
     lines.push("## Checklist".into());
     lines.push(String::new());
     for label in CHECKLIST {
-        let rendered = if label.contains("Research record") {
-            format!("Research record: `{record}`")
+        let rendered = if label.starts_with("Result recorded") && !record.contains('<') {
+            format!("{label} - `{record}`")
         } else {
             label.to_string()
         };

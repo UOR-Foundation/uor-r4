@@ -1003,8 +1003,8 @@ def _softmax_scan(module: Any, script: Path) -> tuple[dict[str, int], dict[str, 
 
 _CHECKLIST = (
     ("Checks run at this exact head (commands and outcomes posted on this PR)", False),
-    ("Research record: docs/labs/<topic>-<YYYY-MM-DD>/README.md (or docs/evidence/…)", False),
-    ("New entry at the top of docs/integration/current-state.md, with **Next:**", False),
+    ("Result recorded: one row in docs/research/notebook/<line>.md (a dated docs/labs/<topic>-<YYYY-MM-DD>/ folder only when a run seals artifacts)", False),
+    ("docs/integration/NOW.md updated if the next action changed", False),
     ("Every document this change makes stale is updated", False),
     ("STATUS.md / ROADMAP.md / #2028 table updated, or state unchanged", False),
     ("README updated in its existing sections, or nothing a reader relies on changed", False),
@@ -1052,8 +1052,8 @@ def format_pr_body(fields: dict[str, Any]) -> str:
         "",
     ]
     for label, _ in _CHECKLIST:
-        if "Research record" in label:
-            label = f"Research record: `{record}`"
+        if label.startswith("Result recorded") and "<" not in record:
+            label = f"{label} - `{record}`"
         body_tail.append(f"- [ ] {label}")
     body_tail += ["", ref, ""]
     return redact("\n".join(lines + body_tail))
