@@ -181,6 +181,13 @@
     "lab": "claude",
     "note": ""
   },
+  "claude/graph-format-cbor-port": {
+    "branch": "claude/graph-format-cbor-port",
+    "claimed_at": "2026-10-20T01:39:54-04:00",
+    "head": "fb639e3e7",
+    "lab": "claude",
+    "note": ""
+  },
   "claude/injective-fit-fixes-20261018": {
     "branch": "claude/injective-fit-fixes-20261018",
     "claimed_at": "2026-10-18T18:32:44-04:00",
@@ -213,13 +220,6 @@
     "branch": "claude/k16-q4-census-20261019",
     "claimed_at": "2026-10-18T20:58:36-04:00",
     "head": "5dec1b4e8",
-    "lab": "claude",
-    "note": ""
-  },
-  "claude/legacy-crate-repair": {
-    "branch": "claude/legacy-crate-repair",
-    "claimed_at": "2026-10-19T22:51:54-04:00",
-    "head": "d7b39d6a9",
     "lab": "claude",
     "note": ""
   },
