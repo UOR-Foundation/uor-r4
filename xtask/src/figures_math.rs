@@ -1934,6 +1934,69 @@ fn fig_route() -> Result<String, String> {
     )
 }
 
+/// Split an SVG into alternating text and number tokens. A number is an
+/// optional `-` directly before a digit, digits, and an optional `.` fraction.
+fn svg_tokens(s: &str) -> Vec<(bool, &str)> {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let (mut i, mut start) = (0, 0);
+    while i < b.len() {
+        let neg = b[i] == b'-' && b.get(i + 1).is_some_and(u8::is_ascii_digit);
+        if b[i].is_ascii_digit() || neg {
+            if start < i {
+                out.push((false, &s[start..i]));
+            }
+            let j0 = i;
+            i += usize::from(neg);
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i + 1 < b.len() && b[i] == b'.' && b[i + 1].is_ascii_digit() {
+                i += 1;
+                while i < b.len() && b[i].is_ascii_digit() {
+                    i += 1;
+                }
+            }
+            out.push((true, &s[j0..i]));
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+    if start < b.len() {
+        out.push((false, &s[start..]));
+    }
+    out
+}
+
+/// Whether a committed SVG matches a freshly generated one. Text must be
+/// identical; numbers may differ by one unit in the second decimal, because
+/// `sin`, `cos` and the eigen-solve differ in their last bits between platform
+/// maths libraries, and a value near a rounding boundary can then print one
+/// digit apart (seen on Linux CI against macOS for the 600-cell).
+pub(crate) fn svg_matches(committed: &str, generated: &str) -> bool {
+    svg_mismatch(committed, generated).is_none()
+}
+
+/// The first token where the committed and generated SVGs disagree, for the
+/// check's error output; `None` when they match.
+pub(crate) fn svg_mismatch(committed: &str, generated: &str) -> Option<String> {
+    let (a, b) = (svg_tokens(committed), svg_tokens(generated));
+    for (k, (&(na, ta), &(nb, tb))) in a.iter().zip(&b).enumerate() {
+        let same = na == nb
+            && (ta == tb
+                || (na
+                    && matches!(
+                        (ta.parse::<f64>(), tb.parse::<f64>()),
+                        (Ok(x), Ok(y)) if (x - y).abs() <= 0.010_000_1
+                    )));
+        if !same {
+            return Some(format!("token {k}: committed {ta:?}, generated {tb:?}"));
+        }
+    }
+    (a.len() != b.len()).then(|| format!("{} tokens committed, {} generated", a.len(), b.len()))
+}
+
 type Build = fn() -> Result<String, String>;
 
 fn figures() -> [(&'static str, Build); 5] {
@@ -1969,7 +2032,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             }
             std::fs::write(&path, &svg).map_err(|e| format!("{}: {e}", path.display()))?;
             println!("wrote {}", path.display());
-        } else if std::fs::read_to_string(&path).ok().as_deref() != Some(svg.as_str()) {
+        } else if !std::fs::read_to_string(&path).is_ok_and(|c| svg_matches(&c, &svg)) {
+            let why = std::fs::read_to_string(&path)
+                .map(|c| svg_mismatch(&c, &svg).unwrap_or_default())
+                .unwrap_or_else(|e| e.to_string());
+            eprintln!("{rel}: {why}");
             stale.push(rel);
         }
     }
@@ -1992,6 +2059,22 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn svg_check_tolerates_last_digit_rounding_only() {
+        let a = r#"<path d="M12.34 -5.6L7 8"/><text>ring 1 r = 0.618</text>"#;
+        assert!(svg_matches(a, a));
+        // One unit in the second decimal, either sign, is platform rounding.
+        assert!(svg_matches(a, &a.replace("12.34", "12.35")));
+        assert!(svg_matches(a, &a.replace("-5.6", "-5.59")));
+        // A larger numeric change, a changed word or a missing token is not.
+        assert!(!svg_matches(a, &a.replace("12.34", "12.36")));
+        assert!(!svg_matches(a, &a.replace("ring 1", "ring 2")));
+        assert!(!svg_matches(a, &a.replace("ring", "rung")));
+        assert!(!svg_matches(a, &a.replace("L7 8", "L7")));
+        // A sign is part of the number: "-5.6" against "5.6" is a change.
+        assert!(!svg_matches(a, &a.replace("-5.6", "5.6")));
+    }
 
     #[test]
     fn e8_has_240_roots_of_norm_two() {

@@ -1218,7 +1218,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), Fail> {
             }
             std::fs::write(&path, svg)?;
             println!("wrote {}", path.display());
-        } else if std::fs::read_to_string(&path).ok().as_deref() != Some(svg.as_str()) {
+        } else if !std::fs::read_to_string(&path)
+            .is_ok_and(|c| crate::figures_math::svg_matches(&c, svg))
+        {
             stale.push(*rel);
         }
     }
