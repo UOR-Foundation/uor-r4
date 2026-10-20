@@ -510,7 +510,7 @@ fn exact_executor_contract_components() -> Vec<(&'static str, &'static [u8])> {
         workspace_component!("conformance/features/suites/teacher_parity_benchmarks.feature"),
         workspace_component!("conformance/ids.toml"),
         workspace_component!("src/lib.rs"),
-        workspace_component!("src/r4g1.rs"),
+        workspace_component!("crates/uor-r4-wasm-router/src/r4g1.rs"),
         workspace_component!("src/release_bundle_loader.rs"),
         workspace_component!("crates/uor-r4-api/Cargo.toml"),
         workspace_component!("crates/uor-r4-api/src/capability_suite.rs"),
