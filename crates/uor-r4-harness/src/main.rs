@@ -2837,6 +2837,12 @@ fn cmd_status(repo: &Path, args: &[String], json: bool) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     // A caller may pin the timestamp so two implementations can be compared; otherwise it is now.
     let now = flag_value(args, "--at").unwrap_or_else(uor_r4_harness::receipt::now_rfc3339);
+    // The view slices the instant into month and day, so a value that is not a full ISO-8601
+    // instant is a usage error rather than a panic.
+    if uor_r4_harness::state::parse_iso_unix(&now).is_none() || now.len() < 10 {
+        eprintln!("uor-harness status: --at must be an ISO-8601 instant, got {now:?}");
+        return ExitCode::from(2);
+    }
     // No `--lab`: section 2 aggregates EVERY lab's shard, so the view has no "whose receipts"
     // question to answer.
     let regs = Registries::load(&paths).ok();

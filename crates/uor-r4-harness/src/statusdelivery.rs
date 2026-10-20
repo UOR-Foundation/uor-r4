@@ -665,13 +665,6 @@ pub struct RemoteBranch {
     pub updated: String,
 }
 
-/// `githelp.remote_branches_without_pr`'s decision, over `(name, updated, ahead, behind)` rows newest
-/// first. `has_pr` answers `None` when it could not ask.
-///
-/// **Two departures from Python, both toward reporting less.** A protected branch
-/// (`docs/harness/branches.json`) is never reported: Python flagged `gh-pages-preview`, which the
-/// owner's 20 October rule keeps forever. And a branch whose PR lookup FAILED is skipped rather than
-/// reported as having no PR, so an offline run cannot call every branch an orphan.
 /// A remote branch worth a PR lookup: named, not a trunk or site branch, not protected, and holding
 /// work main lacks (a branch with nothing ahead is finished on its own merits).
 fn is_candidate(name: &str, ahead: usize, protected: &[String]) -> bool {
@@ -682,6 +675,13 @@ fn is_candidate(name: &str, ahead: usize, protected: &[String]) -> bool {
         || ahead == 0)
 }
 
+/// `githelp.remote_branches_without_pr`'s decision, over `(name, updated, ahead, behind)` rows newest
+/// first. `has_pr` answers `None` when it could not ask.
+///
+/// **Two departures from Python, both toward reporting less.** A protected branch
+/// (`docs/harness/branches.json`) is never reported: Python flagged `gh-pages-preview`, which the
+/// owner's 20 October rule keeps forever. And a branch whose PR lookup FAILED is skipped rather than
+/// reported as having no PR, so an offline run cannot call every branch an orphan.
 pub fn without_pr(
     rows: &[(String, String, usize, usize)],
     protected: &[String],
@@ -759,8 +759,9 @@ pub fn remote_branches_without_pr(
         })
         .collect();
     let protected = crate::githelp::protected_branches(repo);
-    // The PR lookups go through the same per-branch cache and per-run cap as the local branches,
-    // so `check` never spends one uncached `gh` call per remote branch.
+    // The PR lookups go through the same per-branch cache as the local branches, capped at
+    // `BRANCH_PR_LIMIT` calls here and again for the local branches (so at most 50 per run), so
+    // `check` never spends one uncached `gh` call per remote branch.
     let candidates: Vec<String> = rows
         .iter()
         .filter(|(name, _, ahead, _)| is_candidate(name, *ahead, &protected))

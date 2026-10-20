@@ -445,6 +445,7 @@ pub fn render_with(
                 stale_issues: &stale,
             },
         ));
+        lines.push(String::new());
     }
 
     // 3. DELIVERY - the content classification comes from local git, so a lab offline or
@@ -543,6 +544,7 @@ pub fn status_json(
                         "current": r.current, "orphan": r.orphan, "worktree": r.worktree,
                         "uncommitted": r.uncommitted, "safe_to_delete": r.safe_to_delete,
                         "fix": r.fix,
+                        "merged_pr": view.extras.merged.iter().any(|m| m.branch == r.name),
                     })
                 })
                 .collect::<Vec<_>>()
@@ -1933,7 +1935,19 @@ pub fn render_delivery(view: &DeliveryView) -> Vec<String> {
             ));
         }
     }
-    let unfinished = view.unfinished();
+    // A branch whose merged PR head is still its head is finished, whatever `git cherry` says: a
+    // squash merge cannot be matched commit by commit. One that moved on after the merge stays here.
+    let unfinished: Vec<&BranchRow> = view
+        .unfinished()
+        .into_iter()
+        .filter(|r| {
+            !view
+                .extras
+                .merged
+                .iter()
+                .any(|m| m.branch == r.name && m.head_matches)
+        })
+        .collect();
     if !unfinished.is_empty() {
         lines.push(format!(
             "   branches with unmerged work: {} (these are live; their owners decide)",
@@ -1948,4 +1962,68 @@ pub fn render_delivery(view: &DeliveryView) -> Vec<String> {
     }
     lines.extend(extra_lines);
     lines
+}
+
+#[cfg(test)]
+mod delivery_render_tests {
+    use super::*;
+    use crate::statusdelivery::{BranchPrCheck, DeliveryExtras, MergedPrBranch};
+
+    fn view(head_matches: bool) -> DeliveryView {
+        DeliveryView {
+            branch: "x".into(),
+            worktree: "/w".into(),
+            origin_main: "0123456789abcdef".into(),
+            origin_main_subject: String::new(),
+            trunk: "main".into(),
+            rows: vec![BranchRow {
+                name: "a/merged".into(),
+                head: "h".into(),
+                unmerged: 1747,
+                current: false,
+                orphan: false,
+                worktree: String::new(),
+                uncommitted: 0,
+                safe_to_delete: false,
+                fix: String::new(),
+            }],
+            error: String::new(),
+            extras: DeliveryExtras {
+                pr_check: BranchPrCheck {
+                    available: true,
+                    ..BranchPrCheck::default()
+                },
+                merged: vec![MergedPrBranch {
+                    branch: "a/merged".into(),
+                    head: "h".into(),
+                    pr: 7,
+                    pr_title: String::new(),
+                    merged_at: "2026-10-09T00:00:00Z".into(),
+                    head_matches,
+                    current: false,
+                    fix: "git branch -D a/merged".into(),
+                    checked_out_in: Vec::new(),
+                }],
+                ..DeliveryExtras::default()
+            },
+        }
+    }
+
+    /// **A branch is not told "delete it" and "its owner decides" at once.** At its merged PR head it
+    /// is finished, whatever `git cherry` counts after a squash; once it moved on, it stays listed.
+    #[test]
+    fn a_merged_pr_branch_at_its_pr_head_is_not_also_unmerged_work() {
+        let text = render_delivery(&view(true)).join("\n");
+        assert!(
+            text.contains("a/merged -> PR #7 merged 2026-10-09"),
+            "{text}"
+        );
+        assert!(!text.contains("branches with unmerged work"), "{text}");
+        let moved = render_delivery(&view(false)).join("\n");
+        assert!(
+            moved.contains("(branch head has moved on)")
+                && moved.contains("branches with unmerged work: 1"),
+            "{moved}"
+        );
+    }
 }
