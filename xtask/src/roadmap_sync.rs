@@ -681,6 +681,15 @@ impl GhCli {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     }
 
+    /// A call that creates or changes something on GitHub, followed by a pause:
+    /// GitHub asks for at least a second between content writes, and a first
+    /// run makes about 150 of them.
+    fn write(&self, args: &[&str], stdin: Option<&str>) -> Result<String, String> {
+        let out = self.gh(args, stdin)?;
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        Ok(out)
+    }
+
     fn json(&self, args: &[&str]) -> Result<Value, String> {
         let text = self.gh(args, None)?;
         serde_json::from_str(&text)
@@ -778,7 +787,7 @@ impl Gh for GhCli {
     }
 
     fn create_label(&self, name: &str, color: &str, description: &str) -> Result<(), String> {
-        self.gh(
+        self.write(
             &[
                 "label",
                 "create",
@@ -815,7 +824,7 @@ impl Gh for GhCli {
         if let Some(a) = &c.assignee {
             args.extend(["--assignee", a.as_str()]);
         }
-        let out = self.gh(&args, Some(&c.body))?;
+        let out = self.write(&args, Some(&c.body))?;
         // gh prints the new issue's URL; its last path segment is the number.
         out.trim()
             .rsplit('/')
@@ -849,12 +858,12 @@ impl Gh for GhCli {
         if let Some(a) = &u.add_assignee {
             args.extend(["--add-assignee", a.as_str()]);
         }
-        self.gh(&args, u.body.as_deref()).map(drop)
+        self.write(&args, u.body.as_deref()).map(drop)
     }
 
     fn close_issue(&self, number: u64) -> Result<(), String> {
         let n = number.to_string();
-        self.gh(&["issue", "close", &n, "--repo", &self.repo], None)
+        self.write(&["issue", "close", &n, "--repo", &self.repo], None)
             .map(drop)
     }
 }
