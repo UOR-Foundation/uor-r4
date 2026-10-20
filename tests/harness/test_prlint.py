@@ -336,6 +336,41 @@ class TestRecordsAndChecks(Fixtures):
         self.assertEqual(len(problems), 1)
         self.assertIn("does not exist", problems[0]["message"])
 
+    def test_archive_evidence_path_is_parsed_as_record(self) -> None:
+        fields = prlint.parse_pr_body("Record: archive/evidence/some-run-2026-10-01/README.md\n")
+        self.assertIn("archive/evidence/some-run-2026-10-01/README.md", fields["record_paths"])
+
+    def test_notebook_path_is_chosen_when_no_dated_path(self) -> None:
+        fields = prlint.parse_pr_body("Record: docs/research/notebook/m4-serving.md\n")
+        self.assertEqual(fields["record_path"], "docs/research/notebook/m4-serving.md")
+
+    def test_dated_path_wins_over_notebook_path(self) -> None:
+        body = "Record: docs/research/notebook/m4-serving.md and docs/labs/x-topic-2026-10-14/README.md\n"
+        fields = prlint.parse_pr_body(body)
+        self.assertEqual(fields["record_path"], "docs/labs/x-topic-2026-10-14/README.md")
+
+    def _notebook_problems(self, notebook_text: str) -> list[dict]:
+        import tempfile
+
+        rel = "docs/research/notebook/m9-test.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "docs" / "research" / "notebook").mkdir(parents=True)
+            (repo / rel).write_text(notebook_text, encoding="utf-8")
+            paths = HarnessPaths.discover(repo=repo)
+            body = fill().replace("`docs/labs/pointer-gate-finetune-2026-10-10/README.md`", f"`{rel}`")
+            result = prlint.check_pr(body, paths, self.reg)
+            return [p for p in result["problems"] if p["rule"] == "prlint.record_path"]
+
+    def test_notebook_without_dated_row_warns(self) -> None:
+        problems = self._notebook_problems("# m9\n\n| Date | What ran |\n|---|---|\n")
+        self.assertEqual(len(problems), 1)
+        self.assertIn("has no dated result row", problems[0]["message"])
+
+    def test_notebook_with_dated_row_is_silent(self) -> None:
+        problems = self._notebook_problems("# m9\n\n| Date | What ran |\n|---|---|\n| 2026-10-20 | a run |\n")
+        self.assertEqual(problems, [])
+
     def test_no_dated_record_path_warns(self) -> None:
         body = fill().replace("`docs/labs/pointer-gate-finetune-2026-10-10/README.md`", "the research record")
         self.assertIn("prlint.record_path", self.rules(body))

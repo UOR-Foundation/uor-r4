@@ -775,20 +775,22 @@ pub fn pivot_at_three(f: &crate::prbody::Fields, regs: &Registries, today: &str)
     )]
 }
 
-/// `prlint.record_path` — a dated record path is named, and **it exists on disk**.
+/// `prlint.record_path` — a record path is named (a notebook page
+/// `docs/research/notebook/<line>.md` (charter Q4), a dated `docs/labs/<topic>-<date>/README.md`, or
+/// `archive/evidence/…`), **it exists on disk**, and a notebook page carries a dated result row.
 ///
 /// **This is the first gate that reads the filesystem rather than only the body and the registry**,
-/// and that is why it was not ported with the field-only group. Two different problems share the id:
-/// **no path named**, and **a path named that does not exist** — the second is the one worth having,
-/// because it catches a PR that describes a record it never wrote.
+/// and that is why it was not ported with the field-only group. Three different problems share the
+/// id: **no path named**, **a path named that does not exist** — the one worth having, because it
+/// catches a PR that describes a record it never wrote — and **a notebook named with no result row**.
 pub fn record_path(f: &crate::prbody::Fields, repo: &std::path::Path, today: &str) -> Vec<Problem> {
     let record = f.record_path.clone();
     if record.is_empty() {
         return vec![Problem::new(
             "prlint.record_path",
             "warn",
-            "no dated record path (docs/labs/<topic>-<YYYY-MM-DD>/README.md or docs/evidence/…) is named",
-            format!("add the record path to the checklist item: docs/labs/<topic>-{today}/README.md"),
+            "no record path (docs/research/notebook/<line>.md, docs/labs/<topic>-<YYYY-MM-DD>/README.md or archive/evidence/…) is named",
+            format!("add one result row to docs/research/notebook/<line>.md and name it in the checklist (or a dated record docs/labs/<topic>-{today}/README.md when the run seals artifacts)"),
         )];
     }
     if !repo.join(&record).exists() {
@@ -799,7 +801,39 @@ pub fn record_path(f: &crate::prbody::Fields, repo: &std::path::Path, today: &st
             format!("write {record} in this PR (delivery cadence) or correct the path"),
         )];
     }
+    if crate::prbody::is_notebook_path(&record) {
+        let text = std::fs::read(repo.join(&record))
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default();
+        if !has_result_row(&text) {
+            return vec![Problem::new(
+                "prlint.record_path",
+                "warn",
+                format!("notebook {record} is named but has no dated result row"),
+                "append the result as one row (Date | What ran | Number | Bar | Verdict | Artifact)",
+            )];
+        }
+    }
     Vec::new()
+}
+
+/// A notebook result row (Q4): a markdown table row whose first cell is a `YYYY-MM-DD` date.
+/// Mirrors `prlint._has_result_row` in the Python harness.
+fn has_result_row(text: &str) -> bool {
+    text.lines().any(|line| {
+        line.trim()
+            .strip_prefix('|')
+            .and_then(|rest| rest.split('|').next())
+            .is_some_and(|cell| {
+                let c = cell.trim().as_bytes();
+                c.len() == 10
+                    && c[4] == b'-'
+                    && c[7] == b'-'
+                    && c.iter()
+                        .enumerate()
+                        .all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit())
+            })
+    })
 }
 
 #[cfg(test)]
@@ -876,14 +910,13 @@ mod pivot_record_tests {
         let p = record_path(&fields(none), &repo(), "2026-10-14");
         assert_eq!(p.len(), 1, "{p:?}");
         assert_eq!(p[0].severity, "warn");
-        assert!(
-            p[0].message.starts_with("no dated record path"),
-            "{}",
-            p[0].message
+        assert_eq!(
+            p[0].message,
+            "no record path (docs/research/notebook/<line>.md, docs/labs/<topic>-<YYYY-MM-DD>/README.md or archive/evidence/…) is named"
         );
         assert_eq!(
             p[0].fix,
-            "add the record path to the checklist item: docs/labs/<topic>-2026-10-14/README.md",
+            "add one result row to docs/research/notebook/<line>.md and name it in the checklist (or a dated record docs/labs/<topic>-2026-10-14/README.md when the run seals artifacts)",
             "the fix names TODAY, which is why the date is a parameter"
         );
 
@@ -903,6 +936,82 @@ mod pivot_record_tests {
         let body = "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nRecord: docs/labs/prlint-registry-gates-2026-10-14/README.md\nReferences #2029\n";
         let p = record_path(&fields(body), &repo(), "2026-10-14");
         assert!(p.is_empty(), "an existing record must be silent: {p:?}");
+    }
+
+    const KEEP: &str =
+        "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\n";
+
+    /// Dated records moved byte-identically to `archive/evidence/…`; the parser still finds them.
+    #[test]
+    fn archive_evidence_path_is_parsed() {
+        let f = fields(&format!(
+            "{KEEP}Record: archive/evidence/k16-2026-10-14/summary.json\nReferences #2029\n"
+        ));
+        assert_eq!(
+            f.record_paths,
+            vec!["archive/evidence/k16-2026-10-14/summary.json"]
+        );
+        assert_eq!(
+            f.record_path,
+            "archive/evidence/k16-2026-10-14/summary.json"
+        );
+    }
+
+    /// With no dated path, the notebook page is the record path (Q4).
+    #[test]
+    fn notebook_path_is_parsed_and_chosen_when_no_dated_path() {
+        let f = fields(&format!(
+            "{KEEP}Record: docs/research/notebook/starling.md\nReferences #2029\n"
+        ));
+        assert_eq!(f.record_paths, vec!["docs/research/notebook/starling.md"]);
+        assert_eq!(f.record_path, "docs/research/notebook/starling.md");
+    }
+
+    /// A dated record still wins over a notebook page named first.
+    #[test]
+    fn dated_path_wins_over_notebook() {
+        let f = fields(&format!(
+            "{KEEP}Notebook: docs/research/notebook/starling.md\nRecord: docs/labs/x-2026-10-19/README.md\nReferences #2029\n"
+        ));
+        assert_eq!(f.record_path, "docs/labs/x-2026-10-19/README.md");
+    }
+
+    fn notebook_repo(page: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let nb = dir.path().join("docs/research/notebook");
+        std::fs::create_dir_all(&nb).expect("mkdir");
+        std::fs::write(nb.join("starling.md"), page).expect("write");
+        dir
+    }
+
+    /// A notebook with only its header and separator has no result row: warned.
+    #[test]
+    fn notebook_without_a_dated_row_warns() {
+        let dir = notebook_repo(
+            "# starling\n\n| Date | What ran | Number | Bar | Verdict | Artifact |\n|---|---|---|---|---|---|\n| note | not a row | | | | |\n",
+        );
+        let body = format!("{KEEP}Record: docs/research/notebook/starling.md\nReferences #2029\n");
+        let p = record_path(&fields(&body), dir.path(), "2026-10-19");
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(
+            p[0].message,
+            "notebook docs/research/notebook/starling.md is named but has no dated result row"
+        );
+        assert_eq!(
+            p[0].fix,
+            "append the result as one row (Date | What ran | Number | Bar | Verdict | Artifact)"
+        );
+    }
+
+    /// A notebook carrying one dated row is silent.
+    #[test]
+    fn notebook_with_a_dated_row_is_silent() {
+        let dir = notebook_repo(
+            "| Date | What ran | Number | Bar | Verdict | Artifact |\n|---|---|---|---|---|---|\n| 2026-10-19 | v5 read | 20/40 | 34/40 | KEEP | archive/evidence/x |\n",
+        );
+        let body = format!("{KEEP}Record: docs/research/notebook/starling.md\nReferences #2029\n");
+        let p = record_path(&fields(&body), dir.path(), "2026-10-19");
+        assert!(p.is_empty(), "{p:?}");
     }
 }
 
