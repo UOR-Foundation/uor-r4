@@ -22,7 +22,6 @@ manifold_cache_rust.json
 # #639-1: local T5 SentencePiece source (spiece.model), pinned by κ in
 # models/t5-base-tokenizer.json; the bytes stay local like other sources.
 .uor-models/sources/t5-base-tokenizer/
-uor_standards/
 crates/uor-r4-graph-format/fuzz/target/
 pkg/
 trend_output/
@@ -37,7 +36,7 @@ Claude outputs/
 
 # Finished numeric run output lives on canonical /workspace or cloud-store.
 /t2/run*/
-/docs/research/minilm-phase0/run*/
+/archive/research/minilm-phase0/run*/
 
 # Local-only data and tool state (owner, 9 October 2026): never committed.
 /local/
@@ -69,3 +68,6 @@ __pycache__/
 librust_out.rlib
 synthetic-stack.lut
 
+/book/
+/mermaid.min.js
+/mermaid-init.js

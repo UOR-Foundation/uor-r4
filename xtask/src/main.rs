@@ -12,10 +12,18 @@ use repo_model::{codegen, Model};
 
 mod archive_verify;
 mod audit;
+mod book_check;
+mod book_stage;
+mod docs_catalog;
 mod docs_inventory;
 mod docs_links;
 mod docs_move;
+mod docs_relink;
+mod docs_rewrite_refs;
+mod docs_stubs;
 mod figures;
+mod figures_charts;
+mod figures_math;
 mod gate;
 mod gnaf_conformance;
 mod gnaf_firewall;
@@ -54,6 +62,11 @@ fn main() -> ExitCode {
         "gnaf-conformance" => gnaf_conformance::gnaf_conformance(&root, !write),
         "kappa" => kappa::run(&std::env::args().skip(2).collect::<Vec<_>>()),
         "figures" => figures::run(&root, write),
+        "figures-math" => figures_math::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+            .map_err(Into::into),
+        "figures-charts" => {
+            figures_charts::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+        }
         "docs-inventory" => {
             docs_inventory::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
                 .map_err(Into::into)
@@ -63,6 +76,20 @@ fn main() -> ExitCode {
         "docs-move" => {
             docs_move::run(&root, &std::env::args().skip(2).collect::<Vec<_>>()).map_err(Into::into)
         }
+        "docs-relink" => docs_relink::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+            .map_err(Into::into),
+        "docs-rewrite-refs" => {
+            docs_rewrite_refs::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+                .map_err(Into::into)
+        }
+        "docs-catalog" => docs_catalog::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+            .map_err(Into::into),
+        "docs-stubs" => docs_stubs::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+            .map_err(Into::into),
+        "book-check" => book_check::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+            .map_err(Into::into),
+        "book-stage" => book_stage::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+            .map_err(Into::into),
         "archive-verify" => {
             archive_verify::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
                 .map_err(Into::into)
@@ -104,9 +131,17 @@ fn main() -> ExitCode {
                  gnaf-conformance  #653 SPEC 17.3: CONFORMANCE.md is deterministically generated from model/claims.json and current\n\
                  kappa <cmd>       #624: publish/fetch/tag against a kappa-registry (R4_KAPPA_REGISTRY)\n\
                  figures           D27: the README/geometry status diagrams are generated and current\n\
-                 links [..]        docs reorganization: tracked-markdown link check (--json OUT, --baseline FILE, --renames-from REV, --simulate MAP.tsv)\n\
+                 figures-math      D27: computed geometry figures (E8, 600-cell, flock, SpiralCore, route) are current [--write] [--out DIR]\n\
+                 figures-charts    D27: the docs data charts (status vs baselines, results share, timelines) drawn from the research catalog [--write] [--catalog FILE] [--out DIR]\n\
+                 links [..]        docs reorganization: tracked-markdown link check (--json OUT, --baseline FILE, --renames-from REV, --simulate MAP.tsv); a moved target linked from an unchanged archive/ or prep record is reported as MOVED, not failed\n\
                  docs-inventory --out FILE.json [--prefix P ..]  docs reorganization: docs file inventory and by-string code references\n\
                  docs-move         move files/dirs with git mv from --map MAP.tsv (dry run unless --apply)\n\
+                 docs-relink       rewrite live markdown links into moved paths from --map MAP.tsv [--exclude P ..] [--json OUT] (dry run unless --apply)\n\
+                 docs-rewrite-refs rewrite by-string code references into moved paths from --map MAP.tsv [--exclude P ..] [--json OUT] (dry run unless --apply)\n\
+                 docs-catalog      generate archive/CATALOG.md and archive/catalog/*.md from archive/catalog.jsonl [--input FILE] [--check]\n\
+                 docs-stubs        pointer stubs at archive/ positions from --list FILE (dry run unless --apply)\n\
+                 book-check        check that every relative link in the built book resolves [--dir DIR] (default book)\n\
+                 book-stage        stage the mdBook source from docs/SUMMARY.md: links out to GitHub, $…$ maths to MathJax [--out DIR] (default target/book-src)\n\
                  archive-verify    SHA256SUMS manifests vs the tree [--json OUT] [--baseline FILE]; archive/ immutability [--base REV]\n\
                  \n\
                  --write           check-model/gnaf-root/gnaf-manifest/gnaf-conformance/figures: rewrite the generated file instead of checking it"
