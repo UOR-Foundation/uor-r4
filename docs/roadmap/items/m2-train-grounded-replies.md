@@ -27,7 +27,7 @@ Open these first:
 
 - `ROADMAP.md`
 - `crates/uor-r4-core/src/native_geometric/learner`
-- `docs/labs/m2-masked-train-reference-2026-10-13/README.md`
+- `archive/labs/count-reference-2026-10-13/README.md` (the record of the M2 masked-train reference)
 - `docs/mechanisms/exact-memory.md`
 - `docs/mechanisms/object-store.md`
 
