@@ -36,6 +36,12 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
     "xtask/src/docs_stubs.rs",
 ];
 
+/// Records are evidence and are never edited: dated lab records, pinned prep
+/// sheets (the relink defaults) and SHA256SUMS-covered files.
+pub fn is_protected(file: &str, covered: &std::collections::BTreeSet<String>) -> bool {
+    crate::docs_relink::is_default_excluded(file) || covered.contains(file)
+}
+
 /// Whether references in `file` may be rewritten.
 pub fn file_in_scope(file: &str, map: &PathMap, excludes: &[String]) -> bool {
     map.map(file) == file
@@ -200,6 +206,18 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         if r.edits.is_empty() {
             continue;
         }
+        // Records are evidence: a dated lab record, a pinned prep sheet or a
+        // SHA256SUMS-covered file is never edited, even when a literal in it
+        // points at a moved path. Report each such literal instead.
+        if is_protected(f, &covered) {
+            for e in &r.edits {
+                let why = "protected record (dated lab record, prep sheet or SHA256SUMS-covered); not edited";
+                println!("UNREWRITTEN {f}:{}: {} ({why})", e.line, e.old);
+                unrewritten_json
+                    .push(json!({"file": f, "line": e.line, "literal": e.old, "reason": why}));
+            }
+            continue;
+        }
         files += 1;
         if covered.contains(f.as_str()) {
             covered_edited.push(f.clone());
@@ -270,6 +288,25 @@ mod tests {
             r.text,
             "let p = \"archive/evidence/x.json\"; let q = \"docs/evidencex/y\";"
         );
+    }
+
+    #[test]
+    fn records_and_covered_files_are_protected() {
+        let mut covered = std::collections::BTreeSet::new();
+        covered.insert("docs/evidence/x.json".to_string());
+        assert!(is_protected(
+            "docs/labs/w2-k16-consumer-verifiers-2026-10-19/k16/v.py",
+            &covered
+        ));
+        assert!(is_protected(
+            "docs/harness/prep/m1-x-2026-10-13.md",
+            &covered
+        ));
+        assert!(is_protected("docs/evidence/x.json", &covered));
+        assert!(!is_protected(
+            "crates/uor-r4-discrete/src/completion.rs",
+            &covered
+        ));
     }
 
     #[test]
