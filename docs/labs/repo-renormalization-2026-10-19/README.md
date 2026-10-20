@@ -68,3 +68,30 @@ Two fresh-context reviews found seven defects, fixed before merge. Every fix of 
 A further CI defect was also fixed: the base and head builds shared one cargo target directory, so the head steps ran the base binary. The base now builds in its own directory.
 
 Known, documented limit: a manifest that is moved and edited in the same change shows up as `vanished` (a loud false failure, never a silent pass), because only byte-identical renames are mapped.
+
+## Cutover tools (second unit)
+
+Four more `xtask` tasks. They make the move itself mechanical:
+
+| Task | What it does |
+|---|---|
+| `docs-relink --map MAP.tsv [--apply]` | Rewrites only the link targets in **live** markdown files that point at moved paths. It never touches archived, SHA256SUMS-covered, pinned FIT-sheet or dated lab-record files. Run before the move. |
+| `docs-rewrite-refs --map MAP.tsv [--exclude P] [--apply]` | Rewrites `docs/…` path literals in live code, including `include_bytes!` `../` chains, to `archive/…`. A literal it cannot place exactly is reported `UNREWRITTEN`. The cutover tools' own sources are excluded, because their tests use synthetic paths. |
+| `docs-catalog [--check]` | Renders `archive/CATALOG.md` and one page per research line under `archive/catalog/` from `archive/catalog.jsonl`. |
+| `docs-stubs --list FILE [--apply]` | Writes pointer stubs, or copies figures, at the `archive/` positions where archived records link to files that stay live. |
+
+**Rehearsal.** I rehearsed the full cutover in a throwaway clone of this branch: relink, rewrite references, move, add stubs, then build the catalog. The results:
+- 1,007 links rewritten in 75 live documents, with 0 left unmatched.
+- 8,733 files moved, every one an R100 rename.
+- 104 stubs and copies written.
+- 1,173 records catalogued.
+- All 405 pre-existing `archive/` files unchanged, and 0 manifest regressions.
+
+The move leaves 365 links newly broken, and none of them are in live content:
+- 318 are inside archived records, mostly absolute `blob/main` URLs that cannot be edited.
+- 44 are in SHA-pinned FIT sheets.
+- 3 are in records dated 18–19 October, which resolve again once those records are archived at equal depth.
+
+The rehearsal also caught problems in the cutover inputs, all fixed before any real run:
+- The tools' own tests had been rewritten.
+- The harness's tests name six real records and rely on `docs/labs/` semantics. Those records now stay live, and the harness and claim-wording code are excluded from rewriting until the path registry lands.
