@@ -38,6 +38,13 @@ jobs:
     env:
       TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'gh-pages-preview' }}
     steps:
+      - name: Only main publishes live
+        run: |
+          if [ "$TARGET" = gh-pages ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::gh-pages may only be published from main (ref is $GITHUB_REF)"
+            exit 1
+          fi
+
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
@@ -86,6 +93,9 @@ jobs:
             exit 1
           fi
 
+      - name: Check the built links
+        run: cargo run -q --locked -p xtask -- book-check
+
       - name: Publish
         env:
           GIT_AUTHOR_NAME: github-actions[bot]
@@ -104,7 +114,7 @@ jobs:
           # One time: the old Studio web app moves to studio/.
           if [ ! -d site/studio ]; then
             mkdir site/studio
-            for e in $(git -C site ls-tree --name-only HEAD); do
+            git -C site ls-tree --name-only -z HEAD | while IFS= read -r -d '' e; do
               git -C site mv "$e" "studio/$e"
             done
           fi

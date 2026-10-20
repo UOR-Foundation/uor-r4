@@ -107,6 +107,15 @@ fn relative(from: &str, to: &str) -> String {
     )
 }
 
+/// mdBook publishes every `README.md` chapter as `index.html`, and its index
+/// preprocessor rewrites only SUMMARY entries, so body links name `index.md`.
+fn index_page(rel: &str) -> String {
+    match rel.strip_suffix("README.md") {
+        Some(dir) if dir.is_empty() || dir.ends_with('/') => format!("{dir}index.md"),
+        _ => rel.to_string(),
+    }
+}
+
 /// The staged form of link destination `dest` in repository file `src`, or
 /// `None` to leave it as written (external, same-page anchor, or unresolvable).
 fn rewrite_dest(
@@ -141,7 +150,7 @@ fn rewrite_dest(
     let dir_link = path.ends_with('/') || path.is_empty() || is_dir(&repo);
     if !dir_link {
         if let Some(to) = book.staged(&repo) {
-            return Some(format!("{}{anchor}", relative(&from, &to)));
+            return Some(format!("{}{anchor}", index_page(&relative(&from, &to))));
         }
         let kind = if IMAGE_EXTS
             .iter()
@@ -159,7 +168,7 @@ fn rewrite_dest(
         format!("{repo}/README.md")
     };
     if let Some(to) = book.staged(&readme) {
-        return Some(format!("{}{anchor}", relative(&from, &to)));
+        return Some(format!("{}{anchor}", index_page(&relative(&from, &to))));
     }
     Some(format!("{REPO_URL}/tree/main/{repo}{anchor}"))
 }
@@ -459,6 +468,39 @@ fn copy_tree(from: &Path, to: &Path, count: &mut usize) -> Result<(), String> {
     Ok(())
 }
 
+/// Written into a staged output so a later run knows the directory is its own.
+const MARKER: &str = ".book-stage";
+
+/// Refuses to clear `out` unless it is plainly a staging directory: never the
+/// repository root or an ancestor of it, and otherwise only when it is absent,
+/// empty, carries the marker of an earlier run, or lives under `target/` or `local/`.
+fn check_clearable(root: &Path, out: &Path) -> Result<(), String> {
+    let norm = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let (root, out_n) = (norm(root), norm(out));
+    if root.starts_with(&out_n) {
+        return Err(format!(
+            "book-stage: refusing --out {}: it is the repository root or contains it",
+            out.display()
+        ));
+    }
+    if !out.exists() || out.join(MARKER).is_file() {
+        return Ok(());
+    }
+    let empty = fs::read_dir(out)
+        .map(|mut d| d.next().is_none())
+        .unwrap_or(false);
+    let scratch = ["target", "local"]
+        .iter()
+        .any(|d| out_n.starts_with(root.join(d)));
+    if empty || scratch {
+        return Ok(());
+    }
+    Err(format!(
+        "book-stage: refusing to clear {}: it is not empty and has no {MARKER} marker from an earlier run",
+        out.display()
+    ))
+}
+
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut out = PathBuf::from("target/book-src");
     let mut it = args.iter();
@@ -491,6 +533,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             list.join("\n")
         ));
     }
+    check_clearable(root, &out)?;
     if out.exists() {
         fs::remove_dir_all(&out).map_err(|e| format!("clear {}: {e}", out.display()))?;
     }
@@ -506,6 +549,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     }
     let mut figures = 0;
     copy_tree(&root.join(FIGURES), &out.join("figures"), &mut figures)?;
+    fs::write(out.join(MARKER), "staged by cargo xtask book-stage\n")
+        .map_err(|e| format!("write marker: {e}"))?;
     println!(
         "book-stage: {} pages and {figures} figure files staged in {}",
         book.pages.len(),
@@ -605,8 +650,32 @@ mod tests {
         );
         assert_eq!(
             stage("[m](../mechanisms/)", "docs/start/a.md"),
-            "[m](../mechanisms/README.md)"
+            "[m](../mechanisms/index.md)"
         );
+    }
+
+    #[test]
+    fn direct_readme_links_point_at_index() {
+        assert_eq!(
+            stage("[p](../../projects/p/README.md#x)", "docs/start/a.md"),
+            "[p](../projects/p/index.md#x)"
+        );
+    }
+
+    #[test]
+    fn staging_output_guard_refuses_the_repo_and_unmarked_content() {
+        let base = std::env::temp_dir().join(format!("book-stage-guard-{}", std::process::id()));
+        let root = base.join("repo");
+        let docs = root.join("docs");
+        fs::create_dir_all(&docs).expect("mkdir");
+        fs::write(docs.join("x.md"), "x").expect("write");
+        assert!(check_clearable(&root, &root).is_err());
+        assert!(check_clearable(&root, &base).is_err());
+        assert!(check_clearable(&root, &docs).is_err());
+        fs::write(docs.join(MARKER), "").expect("marker");
+        assert!(check_clearable(&root, &docs).is_ok());
+        assert!(check_clearable(&root, &root.join("nope")).is_ok());
+        fs::remove_dir_all(&base).expect("cleanup");
     }
 
     #[test]
