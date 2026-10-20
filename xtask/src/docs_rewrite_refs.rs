@@ -25,6 +25,15 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
     "uor_standards/",
     "third_party/",
     "docs/harness/prep/",
+    // The cutover tools themselves: their tests use synthetic docs/ paths on purpose.
+    "xtask/src/archive_verify.rs",
+    "xtask/src/docs_catalog.rs",
+    "xtask/src/docs_inventory.rs",
+    "xtask/src/docs_links.rs",
+    "xtask/src/docs_move.rs",
+    "xtask/src/docs_relink.rs",
+    "xtask/src/docs_rewrite_refs.rs",
+    "xtask/src/docs_stubs.rs",
 ];
 
 /// Whether references in `file` may be rewritten.
@@ -261,6 +270,14 @@ mod tests {
             r.text,
             "let p = \"archive/evidence/x.json\"; let q = \"docs/evidencex/y\";"
         );
+    }
+
+    #[test]
+    fn cutover_tool_sources_are_never_rewritten() {
+        let map = PathMap::parse_tsv("docs/history\tarchive/history\n").expect("map");
+        assert!(!file_in_scope("xtask/src/docs_relink.rs", &map, &[]));
+        assert!(!file_in_scope("xtask/src/archive_verify.rs", &map, &[]));
+        assert!(file_in_scope("xtask/src/gnaf_scan.rs", &map, &[]));
     }
 
     #[test]
