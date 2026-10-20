@@ -22,8 +22,11 @@ const MIN_CORRECTION_LAG: usize = 17;
 const SOURCE_SNAPSHOT: &str = "b020f34a09816ba235984cedde1c50f4c8e9cae2";
 const TOKENIZER_SHA256: &str = "a7ac75b68aa997fe7cc338d25d843157f2dc9d4265fb2f958ee779bb04828d6f";
 
-// Each line is path|SHA-256 from the committed source snapshot above. The fit
-// source families exclude the dev r4_zoology/serving docs and graph-runtime crate.
+// Each line is path|SHA-256. The bytes are those of the committed source
+// snapshot above; paths are current paths: files that lived under `docs/` at the
+// snapshot moved byte-identical to `archive/` in the 2026-10 docs cutover (tag
+// `pre-renorm-2026-10-19` keeps the old layout). The fit source families exclude
+// the dev r4_zoology/serving docs and graph-runtime crate.
 const FIT_SOURCES: &str = r#"
 docs/CONFIGURATION.md|b35f5a2bbb8b5c0349df1f6f29a9b0f6a3771199456d8dd54a3836fe4e6c7eab
 docs/RELEASE_PIPELINE.md|14f9bf9eed2560fadc74a8474679c6c6315a357e71de279118a7958530535295
