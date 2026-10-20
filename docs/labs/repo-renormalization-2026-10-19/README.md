@@ -95,3 +95,10 @@ The move leaves 365 links newly broken, and none of them are in live content:
 The rehearsal also caught problems in the cutover inputs, all fixed before any real run:
 - The tools' own tests had been rewritten.
 - The harness's tests name six real records and rely on `docs/labs/` semantics. Those records now stay live, and the harness and claim-wording code are excluded from rewriting until the path registry lands.
+
+**Review and compile footprint.**
+- A fresh-context review found one policy gap. `docs-rewrite-refs` would have edited code inside three live dated records, including a verifier whose `git show {rev}:docs/…` reads are correct only at the old path. Records, pinned prep sheets and SHA256SUMS-covered files are now never edited, and each such literal is reported instead. A test pins the rule.
+- One more record, `rung0-pilot-release-2026-10-14`, stays live because a live verifier reads it from the working tree.
+- I compared the rehearsed tree with unmodified `main`, package by package, for every crate whose code the cutover rewrites: `cargo check -p … --all-targets` and `--keep-going` full error sets. They are identical. For example, `uor-r4-core`, `uor-r4-integer` and `uor-r4-router` show the same 1,156 pre-existing messages on both sides, so the cutover adds no compile error.
+- The discrete crate checks clean with and without CUDA (stub `nvcc`), and its 198 library tests pass.
+- The harness keeps only its one failure, which `main` already has.
