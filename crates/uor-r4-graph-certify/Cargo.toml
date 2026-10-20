@@ -74,6 +74,9 @@ serde_json = "1.0"
 # without bit-rotting. Per-mechanism granularity — one feature per claim. The
 # shipped default build is byte-identical whether or not these are enabled.
 anti-degeneracy = []
+# fairness-provenance and predictive-sufficiency now compile nothing: their
+# modules use the retired transformerless runtime/transitions and are preserved,
+# not built, outside src/native_support.rs (legacy-crate repair, 19 Oct 2026).
 fairness-provenance = []
 holographic-encoding = []
 patch-lifecycle = []

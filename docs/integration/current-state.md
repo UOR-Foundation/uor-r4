@@ -15,10 +15,10 @@ The owner chose to repair, not archive, these packages (charter Q8): `graph-comp
 - the retired compiler's normalized-exponential samplers;
 - the retired runtime's dense dot-argmax.
 
-Historical source stays byte-identical and uncompiled, and R4G1 and native-geometric stay PARKED. `model-source` and the `uor-matmul` family leave the workspace graph. About 13.4k of 176k lines are compiled; `api` keeps only a current-core re-export.
+Historical source stays byte-identical and uncompiled, and R4G1 and native-geometric stay PARKED. `model-source` and the `uor-matmul` family leave the workspace graph; the router and the root no longer link the git `uor-addr`. About 13.4k of 176k lines are compiled; `api` keeps only a current-core re-export.
 
-Checks: all seven touched packages pass `cargo check --all-targets`. Tests pass except one, a #846 CID binding that the cutover's path rewrites moved (shown by restoring the pre-cutover bytes). The d23 (2,253) and d25 (93) ratchets are unchanged. The `r4` CLI and wasm frontend cannot be built under the bans, so `release.yml` is paused like `deploy.yml`. [Record](../labs/legacy-crate-repair-2026-10-19/README.md)
-**Next:** the owner decides whether a compliant R4G1 engine port (Hamming assignment, teacher traits re-homed) is worth pre-registering; M8 rewrites the release pipeline for UORLUT01.
+Checks: all seven touched packages pass `cargo check --all-targets`, and their tests pass (#846 after #2794). The d23 (2,253) and d25 (93) ratchets are unchanged. The `r4` CLI and wasm frontend cannot be built under the bans, so `release.yml` is paused like `deploy.yml`. [Record](../labs/legacy-crate-repair-2026-10-19/README.md)
+**Next:** the owner decides two things: whether `graph-format`'s R4G1 κ path moves to the vendored `uor-addr` (it needs a CBOR canonicalizer port; until then it still links the D29-excluded prism packages), and whether a compliant R4G1 engine port is worth pre-registering. M8 rewrites the release pipeline for UORLUT01.
 
 ## 2026-10-19 — Charter adopted: CHARTER.md replaces the stacked AGENTS.md directions and D0–D41 (claude)
 

@@ -13,9 +13,11 @@ name: release
 # See docs/RELEASE_PIPELINE.md for the full convention.
 #
 # PAUSED (legacy-crate repair, 19 October 2026): every job below is skipped, not
-# failing. The owner chose to repair, not archive, the five packages broken since
-# D36 (charter Q8); the repair restores their compliant library surfaces, but
-# neither release asset can be built under the D23/D25/D29/D30 bans. The `r4` CLI
+# failing. The owner chose to repair, not archive, the six packages broken since
+# #2345 (D36 item 3, charter Q8): graph-compiler, graph-certify, api,
+# proof-model, graph-cli and the root package. The repair restores their
+# compliant library surfaces, but neither release asset can be built under the
+# D23/D25/D29/D30 bans. The `r4` CLI
 # (src/main.rs, src/server.rs) serves R4G1 through the retired
 # `transformerless::{compiler, runtime}` and the source-backed teacher in
 # uor-r4-model-source, and the wasm frontend is the R4G1 browser engine D36

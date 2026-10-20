@@ -46,10 +46,17 @@ Manifest changes:
   removed with the links they enabled;
 - targets that drive the historical surface are not built (`autotests`/`autobins`/
   `autobenches` off, with the compliant targets listed explicitly);
-- the six `[profile.test.package.*]` overrides for the removed packages are dropped.
+- the six `[profile.test.package.*]` overrides for the removed packages are dropped;
+- the root's `legacy-engine` forward to `uor-r4-router` is removed, so no feature of a
+  repaired package re-enables a historical engine;
+- the git `uor-addr@165b51e3` (whose `uor-prism` dependency brings in
+  `uor-prism-tensor` and `uor-prism-numerics`, both D29-excluded) is dropped from the
+  root and made optional in `uor-r4-router`, linked only by its non-default
+  `legacy-engine`. Neither crate's compiled surface uses it.
 
 `Cargo.lock` loses `uor-r4-model-source`, the five `uor-matmul*` packages and `bytemuck`.
-None of them remains in the workspace graph.
+None of them remains in the workspace graph. The git `uor-addr` and the two prism packages
+remain, reached only through `uor-r4-graph-format` (see *Not done*).
 
 `graph-cli`'s two kept modules name their error type as
 `uor_r4_model_source::SourceUnavailable`, which that crate re-exports unchanged from
@@ -82,21 +89,24 @@ which name instructions to reject. The new files name no banned operation.
 |---|---|
 | `cargo check --keep-going -p <pkg> --all-targets`, per workspace member (not `--workspace`: core raises a deliberate `compile_error!` under feature unification) | 24 of 28 members pass, including all seven touched here. `uor-r4-core` 947, `uor-r4-integer` 167 and `uor-r4-router` 40 `error[` lines are pre-existing historical targets; none of them depends on a changed package. `uor-r4-workbench`'s 1 error is core's `compile_error!` reached through its features, as before. |
 | `cargo check --all-targets --all-features` for `graph-compiler`, `graph-certify` | pass |
-| `cargo test -p <pkg>` | `graph-compiler` 91/91 (95/95 with all features); `graph-certify` 62 pass, 1 fails, 3 ignored (76 pass with all features); `proof-model` 10/10; `graph-cli` 17/17; `graph-runtime` 30 pass, 1 ignored; root 6/6; `api` builds no tests |
+| `cargo test -p <pkg> --no-fail-fast` | `graph-compiler` 91/91 (95/95 with all features); `graph-certify` 63 pass, 3 ignored (77 pass with all features); `proof-model` 10/10; `graph-cli` 17/17; `graph-runtime` 30 pass, 1 ignored; root 6/6; `api` builds no tests (see below) |
 | `uor-harness ratchet d23` | 2,253 across 154 files, equal to baseline |
 | `uor-harness ratchet d25` | 93 across 26 files, equal to baseline |
+| `cargo tree -e normal,build -p <pkg> \| grep -cE 'uor-prism-(tensor\|numerics)'` | 0 for `router` and `graph-runtime`; 3 for `graph-format` and every package that links it with `alloc` (root, `graph-compiler`, `graph-certify`, `api`, `proof-model`, `graph-cli`); see *Not done* |
+| `uor-harness check` | 0 errors |
 | `cargo run -q --locked -p uor-r4-claim-wording -- .` | pass |
 | `cargo fmt --check` | pass |
 
-**The one failing test is an instrument effect of the docs cutover, not of this repair.**
-`compositional_planning_certification_846::committed_result_binds_the_audit_inputs_and_negative_verdict`
-compares CIDs of six source files with the CIDs in the archived
-`archive/compositional_planning_certification_846_result.json`. The cutover (#2789)
-rewrote one `docs/…` path string to `archive/…` in each of those six files. With their
-pre-cutover bytes restored in the working tree, all three tests in that file pass. With
-the current bytes, the CIDs differ. The archived result must not be edited, so the test
-is left unchanged and reported here (D31: an instrument defect, not a negative). Other
-tests that hash source files the cutover rewrote may drift the same way.
+The #846 binding test `compositional_planning_certification_846` passes 3/3 after #2794, which
+restored the six source files the docs cutover (#2789) had rewritten.
+
+`uor-r4-api`'s `canonical_quality_baseline_934` test builds on the native surface but is
+not registered. Three evidence links in the archived
+`archive/canonical_quality_baseline_934_result.json` (`docs/attested_broad_baseline_833.md`,
+`docs/skipmix_endtoend_causal_908.md` and its `_result.json`) were moved to `archive/` by
+the cutover, so its link check fails (1 pass, 1 fail, 1 ignored when run). The archived
+result must not be edited; the manifest says to register the test once those paths resolve
+again.
 
 ## Not done, for the owner
 
@@ -111,16 +121,28 @@ tests that hash source files the cutover rewrote may drift the same way.
   under the bans, so `.github/workflows/release.yml` skips all three jobs (`if: ${{ false }}`,
   reason and re-enable condition in-file), as D36 did for `deploy.yml`. Rewriting it for
   the UORLUT01 artifact is the separate M8 task.
+- **`uor-r4-graph-format` still links the D29-excluded prism packages.** It depends on
+  the git `uor-addr@165b51e3` (`default-features = false, features = ["alloc"]`), whose
+  unconditional `uor-prism` dependency brings in `uor-prism-tensor` (a dense i8 matrix
+  product at `tensor.rs:133` and a quantized sigmoid at `activation.rs:115`, crate
+  0.4.0) and `uor-prism-numerics`. `scripts/native_dependency_boundary.rs` excludes both. `graph-format` reaches every repaired package except `graph-runtime`
+  (which uses it without `alloc`), so `cargo tree -e normal,build` still counts 3 prism
+  lines for the root, `graph-compiler`, `graph-certify`, `api`, `proof-model` and
+  `graph-cli`. Moving it to the vendored `third_party/uor-addr-0.2.0`, as core does, has an
+  API gap. `src/r4g1.rs` computes every R4G1 section and artifact κ with
+  `uor_addr::cbor::address_blake3`, and the vendored facade has only JSON
+  (`json::address_blake3`); upstream's CBOR canonicalizer (`src/cbor/value.rs`, about 600
+  lines) is built on prism types (`ShapeViolation`, `TermValue`). Closing the gap means
+  porting that canonicalizer into the vendored facade and showing byte-identical κ
+  labels for every existing R4G1 artifact. That is a change to the frozen R4G1 identity
+  path, so it is left for an owner decision. Pre-existing; the active M1 crates do not
+  depend on `graph-format`.
 - **Proof obligation #161** (`structural_guarantees`) stays out because `OpKernel`, a
   plain operation-count struct, lives in the retired `runtime.rs`. Moving that struct
   would touch the qualified core surface.
 
 ## Follow-ups found on the way
 
-- `uor-r4-graph-format` depends on the git `uor-addr` with default features, which
-  brings in `uor-prism-tensor` and `uor-prism-numerics`. `scripts/native_dependency_boundary.rs`
-  lists both as D29-excluded. Core avoids them by using the vendored `uor-addr` with
-  default features off. This is pre-existing and reaches every graph package.
 - The D23/D25 ratchets scan `crates/` and lab instruments only, so the root `src/`
   (including `server.rs`) has never been ratchet-tracked.
 - The manual QA jobs in `.github/workflows/ci.yml` still name the removed `r4` binary and

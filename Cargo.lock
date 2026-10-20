@@ -2567,7 +2567,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "uor-addr 0.2.0 (git+https://github.com/UOR-Foundation/uor-addr.git?rev=165b51e3e2113ee5d032730cde709335d4fe9b60)",
  "uor-foundation",
  "uor-foundation-sdk",
  "uor-foundation-verify",
