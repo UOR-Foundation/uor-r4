@@ -10,13 +10,13 @@ Many of these documents date from earlier stages of the project, and some descri
 |---|---|---|
 | [Formal vocabulary, notation and claim classes](../formal_vocabulary.md) | The claim language: what counts as a proof, a measurement or a hypothesis | `docs/`: cited from about twenty source files and more than fifty pages |
 | [Configuration reference](../CONFIGURATION.md) | Runtime and build configuration | `docs/`: pinned by path in the integrated-attention evidence table |
-| [Inference contract](../inference_contract.md) | The multiplication-free, zero-allocation serving contract | `docs/`: compiled into `uor-r4-graph-format` and pinned by hash |
-| [Inference operation contract](../transformerless/INFERENCE_OPERATION_CONTRACT.md) | The operation-level serving contract | `docs/transformerless/`: compiled into the web-router tests |
+| [Inference contract](../inference_contract.md) | The multiplication-free, zero-allocation serving contract | `docs/`: pinned by hash in the integrated-attention evidence tables, and read by the release workflow |
+| [Inference operation contract](../transformerless/INFERENCE_OPERATION_CONTRACT.md) | The operation-level serving contract | `docs/transformerless/`: compiled in by `uor-r4-graph-format` and by the `uor-r4-wasm-router` tests |
 | [Release pipeline](../RELEASE_PIPELINE.md) | How releases are built and published | `docs/`: pinned by path in the integrated-attention evidence tables |
 | [Minimal client](../minimal_client.md) | The historical terminal client and local vendor API | `docs/`: pinned by path and hash |
 | [Reproducibility](../reproducibility.md) | Byte-identical artifacts under compiler parallelism | `docs/`: linked from many archived records |
 | [Corpus-scale law](../scaling_law.md) | Sizing an observe run for a teacher | `docs/`: linked from many archived records |
-| [Hologram / R⁴ formal monograph](../hologram_r4_formal_monograph.md) | The formal specification of the R⁴ geometry | `docs/`: compiled into `uor-r4-graph-compiler` |
+| [Hologram / R⁴ formal monograph](../hologram_r4_formal_monograph.md) | The formal specification of the R⁴ geometry | `docs/`: compiled into the `uor-r4-graph-compiler` tests |
 
 ## Decision records and design specifications
 
