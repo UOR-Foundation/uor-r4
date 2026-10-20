@@ -3,6 +3,9 @@ name = "uor-r4-wasm-router"
 license = "MIT"
 version = "0.1.0"
 edition = "2021"
+# Not published. Until 20 Oct 2026 this was the root package, outside the shipped-crate
+# audits (xtask audit-limits, audit-deferral); it stays outside them.
+publish = false
 autobins = false
 # Legacy-crate repair (19 Oct 2026): the `r4` binary (src/main.rs) and every
 # integration test except `openai_profile_pin` drive the historical R4G1
