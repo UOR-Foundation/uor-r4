@@ -202,6 +202,13 @@ fn project<const N: usize>(v: &V<N>, (b1, b2): (&V<N>, &V<N>)) -> (f64, f64) {
 }
 
 /// Points grouped by distance from the origin: (radius, member indexes), inner first.
+/// A float sort key rounded to 1e-9, so values equal in exact arithmetic but
+/// apart in their last bits (platform `sin`/`cos`/`atan2` differ there) tie,
+/// and the tie-breaker decides the same way on every platform.
+fn key(x: f64) -> i64 {
+    (x * 1e9).round() as i64
+}
+
 fn rings(xy: &[(f64, f64)]) -> Vec<(f64, Vec<usize>)> {
     let mut order: Vec<usize> = (0..xy.len()).collect();
     let r = |i: usize| xy[i].0.hypot(xy[i].1);
@@ -212,6 +219,9 @@ fn rings(xy: &[(f64, f64)]) -> Vec<(f64, Vec<usize>)> {
             Some((rad, members)) if (r(i) - *rad).abs() < 1e-6 => members.push(i),
             _ => out.push((r(i), vec![i])),
         }
+    }
+    for (_, members) in &mut out {
+        members.sort_unstable();
     }
     out
 }
@@ -1081,7 +1091,7 @@ fn flock_choice(cell: &Cell600) -> (usize, Vec<usize>, Vec<usize>) {
     let q = *rg[3]
         .1
         .iter()
-        .min_by(|&&a, &&b| gap(a).total_cmp(&gap(b)).then(a.cmp(&b)))
+        .min_by_key(|&&a| (key(gap(a)), a))
         .unwrap_or(&0);
     let c = phi() / 2.0;
     let nb: Vec<usize> = (0..cell.v.len())
@@ -1090,11 +1100,7 @@ fn flock_choice(cell: &Cell600) -> (usize, Vec<usize>, Vec<usize>) {
     let rel = |j: usize| turned(cell, q, j);
     let lead = rel(nb[0]);
     let mut kept = nb.clone();
-    kept.sort_by(|&a, &b| {
-        dot(&rel(b), &lead)
-            .total_cmp(&dot(&rel(a), &lead))
-            .then(a.cmp(&b))
-    });
+    kept.sort_by_key(|&a| (std::cmp::Reverse(key(dot(&rel(a), &lead))), a));
     kept.truncate(7);
     kept.sort_unstable();
     (q, nb, kept)
