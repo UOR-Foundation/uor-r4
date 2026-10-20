@@ -391,9 +391,25 @@ pub fn render(paths: &StatePaths, regs: Option<&Registries>, now_rfc3339: &str) 
         let previous = previous_month(month);
         let rows = receipt_rows(paths, month, &previous);
         let now_unix = crate::state::parse_iso_unix(now_rfc3339).unwrap_or(0);
-        // No GitHub call is made here, so the milestone-issue clause reports UNAVAILABLE rather than
-        // claiming the issues are current. "We did not look" and "they are up to date" are different
-        // statements, and the second is the one a lab would act on.
+        // The issue snapshot comes from the shared 15-minute GitHub cache; when `gh` fails the clause
+        // says UNAVAILABLE and why, never "up to date".
+        let (snap, stale) = match regs {
+            Some(r) => {
+                let numbers: Vec<i64> = r.milestones.iter().map(|m| m.issue).collect();
+                let snap =
+                    crate::githubcards::github_issues(paths, &numbers, false, now_unix, false);
+                let stale = stale_issues(&snap.issues, r, now_unix);
+                (snap, stale)
+            }
+            None => (
+                crate::githubcards::IssueSnapshot {
+                    available: false,
+                    reason: "registry unreadable".to_string(),
+                    issues: Value::Null,
+                },
+                Vec::new(),
+            ),
+        };
         lines.extend(render_receipts(
             paths,
             regs,
@@ -403,8 +419,9 @@ pub fn render(paths: &StatePaths, regs: Option<&Registries>, now_rfc3339: &str) 
                 month,
                 previous: &previous,
                 now_unix,
-                issues_available: false,
-                issues_reason: "this implementation does not query GitHub; `scripts/harness/cli.py status` reconciles the live issues",
+                issues_available: snap.available,
+                issues_reason: &snap.reason,
+                stale_issues: &stale,
             },
         ));
     }
@@ -749,6 +766,20 @@ pub fn age_hours(value: &Value, now_unix: i64) -> Option<f64> {
     Some((((now_unix - then) as f64) / 3600.0 * 100.0).round() / 100.0)
 }
 
+/// `status._stale_section` issue half: each milestone issue whose `updatedAt` is older than
+/// `STALE_HOURS`, as `M1 #2029 (1.2d)`. An issue with no stamp is not flagged, as in Python.
+pub fn stale_issues(issues: &Value, regs: &Registries, now_unix: i64) -> Vec<String> {
+    regs.milestones
+        .iter()
+        .filter_map(|m| {
+            let item = issues.get(m.issue.to_string())?;
+            let age = age_hours(item.get("updatedAt")?, now_unix)?;
+            (age > STALE_HOURS)
+                .then(|| format!("{} #{} ({})", m.id, m.issue, hours_text(Some(age))))
+        })
+        .collect()
+}
+
 /// `45m`, `3.5h`, `1.2d`, or `n/a`.
 pub fn hours_text(hours: Option<f64>) -> String {
     let Some(h) = hours else {
@@ -867,6 +898,8 @@ pub struct ReceiptsContext<'a> {
     /// different statements, and only the second is safe to act on.
     pub issues_available: bool,
     pub issues_reason: &'a str,
+    /// `M1 #2029 (30.0h)` for each milestone issue untouched past `STALE_HOURS`.
+    pub stale_issues: &'a [String],
 }
 
 pub fn render_receipts(
@@ -974,7 +1007,12 @@ pub fn render_receipts(
 
     // The 24-hour subsections need the registry; without it there are no milestones to report on.
     if let Some(regs) = regs {
-        if issues_available {
+        if issues_available && !ctx.stale_issues.is_empty() {
+            lines.push(format!(
+                "   milestone issues not updated in 24h: {}",
+                ctx.stale_issues.join(", ")
+            ));
+        } else if issues_available {
             lines.push("   milestone issues: all four updated within 24h".to_string());
         } else {
             lines.push(format!(
@@ -1397,6 +1435,7 @@ mod aggregation_tests {
                 now_unix: 0,
                 issues_available: false,
                 issues_reason: "no GitHub here",
+                stale_issues: &[],
             },
         );
         let clause = lines
@@ -1405,6 +1444,21 @@ mod aggregation_tests {
             .expect("clause");
         assert!(clause.contains("UNAVAILABLE"), "{clause}");
         assert!(!clause.contains("all four updated"), "{clause}");
+    }
+
+    /// An issue untouched for over 24h is named with its age; a fresh one is not.
+    #[test]
+    fn a_milestone_issue_older_than_a_day_is_named() {
+        let regs = Registries::load(&paths()).expect("registry");
+        let m = &regs.milestones[0];
+        let now = crate::state::parse_iso_unix("2026-10-20T00:00:00Z").expect("stamp");
+        let issues =
+            serde_json::json!({ m.issue.to_string(): {"updatedAt": "2026-10-18T00:00:00Z"} });
+        let stale = stale_issues(&issues, &regs, now);
+        assert_eq!(stale, vec![format!("{} #{} (2.0d)", m.id, m.issue)]);
+        let fresh =
+            serde_json::json!({ m.issue.to_string(): {"updatedAt": "2026-10-19T12:00:00Z"} });
+        assert!(stale_issues(&fresh, &regs, now).is_empty());
     }
 }
 
