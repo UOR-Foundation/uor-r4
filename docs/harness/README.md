@@ -253,6 +253,33 @@ Then, only for this lab's own branch (`<lab>/...`; another lab's PR prints `SKIP
 
 Tests replace `gh` with `UOR_LOOP_CLOSE_GH_FAKE=<json>`, and every run with it set prints `FAKE GitHub: UOR_LOOP_CLOSE_GH_FAKE=<path> (tests only)` first (`prs`, each with an optional `state` defaulting to `OPEN`, optional `failSetBody`/`failReady`, `merged` keyed by PR number for `--verify`); never set it outside tests. Tests also set `UOR_LOOP_CLOSE_NO_HYGIENE=1`, which prints `SKIP hygiene` instead of running hygiene.
 
+### `loop queue` (loop PR 7c)
+
+```sh
+uor-harness loop queue --pr <n> --dry-run   # loop step 12: every check, and the merge it would run; writes nothing
+uor-harness loop queue --pr <n>             # the same, then `gh pr merge <n> --match-head-commit <head>`
+uor-harness --json loop queue --pr <n>      # {"pr","head","dry_run","verdict","fake_github","checks":[{"check","verdict","summary","details"}]}
+```
+
+The policy gate is advisory on GitHub (D54), so this command is the lock: it queues a PR only when every check below passes. It prints one `PASS|FAIL|N/A <check> <summary>` line per check, and exits 0 queued (or, with `--dry-run`, would queue), 1 refused, 2 cannot run (usage, a `gh` or `git` failure, a failed merge). In order:
+
+- `pr-state`: `gh pr view` reports the PR `OPEN` and not a draft.
+- `head`: after `git fetch origin main` and `git fetch origin pull/<n>/head`, the fetched commit equals the head GitHub reports; otherwise "the PR moved; re-run".
+- Every `loop pr-check` rule, through the same function (`loopprcheck::evaluate`), in `--pr` mode against `origin/main` at that head, with the PR's branch as the head ref. Any FAIL refuses. This covers the review gate (`review-record`: the last counted `uor-review v1` record at the head is an APPROVE, so a later counted CHANGES refuses, while a CHANGES that does not count, such as another lab's on a setup PR under D59, does not); the policy job's record on every required check, with no commit status using a required name (`required-checks`); and an owner approval in the ORDER for `.github/**` and every other owner path (`owner-paths`).
+- `after-approval`: the comments are read again after the rules ran, so a record posted meanwhile is seen. The last counted record must be an APPROVE, and every comment after it is judged: a `uor-review v1` record is left to the gate, a `[bot]` author is ignored, and a body starting with the tag of a registered lab whose role is not `pm` is ignored. Any other comment refuses, because every lab posts from one GitHub account (D55), so an untagged comment may be the owner's, and a `[kimi]` one is the PM's.
+- `merge`: the only GitHub write. It is skipped by `--dry-run`.
+
+Tests replace `gh` with `UOR_LOOP_QUEUE_GH_FAKE=<json>` (`pr` with `headRefOid`, `headRefName`, `state`, `isDraft`; `comments` with `author` and `body`; `checkRuns`; `statuses`; `failMerge`); merge calls are logged to `<file>.calls.jsonl`, and every run with it set prints `FAKE GitHub: …` first. Never set it outside tests.
+
+### `loop board` (loop PR 7c)
+
+```sh
+uor-harness loop board          # every registered lab: vendor, client, role, presence, live claims, open PRs
+uor-harness --json loop board   # the same as JSON, one entry per lab, plus the untagged PRs
+```
+
+Read-only. For each lab in `docs/harness/labs.json`, sorted by name, it shows vendor, client and role (`-` when none); presence from the live tier, falling back to the committed copy, with the tier named (`no check-in` when the lab has none); the number of claims held by the lab; and its open PRs, those whose title starts with `[<lab>]` exactly, each with number, draft or ready and a 7-character head, from `gh pr list --state open --limit 200 --json number,title,headRefOid,isDraft`. Open PRs with no registered lab tag are listed under `untagged`. It makes no GitHub write: its GitHub trait has no write method. No hook canary yet: that is loop PR 9. Exit 0 rendered, 2 cannot run. Tests replace `gh` with `UOR_LOOP_BOARD_GH_FAKE=<json>`, holding the array `gh pr list --json` prints.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front
