@@ -751,6 +751,8 @@ const VALUE_FLAGS: &[&str] = &[
     "--route",
     "--state",
     "--verdict",
+    "--at",
+    "--out",
 ];
 
 /// Words picked up from surrounding prose rather than from a harness command.

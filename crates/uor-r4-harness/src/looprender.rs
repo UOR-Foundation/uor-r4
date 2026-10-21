@@ -244,7 +244,7 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
     }
 
     o.push_str("\n## Blocked\n\nItems with status `held` or `decision`, each listed once. The owner is `owner` for a decision or for `open_to: owner`, otherwise the item's `open_to`.\n\n");
-    o.push_str("| Item | Title | Status | Owner | Done when |\n|---|---|---|---|---|\n");
+    o.push_str("| Item | Title | Status | Owner |\n|---|---|---|---|\n");
     for it in items.iter().filter(|i| blocked(i)) {
         let owner = if it.status == "decision" || it.open_to == "owner" {
             "owner"
@@ -254,12 +254,11 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
             &it.open_to
         };
         o.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
+            "| {} | {} | {} | {} |\n",
             cell(&it.id),
             cell(&it.title),
             it.status,
-            cell(owner),
-            cell(&it.done_when)
+            cell(owner)
         ));
     }
 
