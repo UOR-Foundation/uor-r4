@@ -4,13 +4,18 @@
 //! that two labs were about to edit the same files. The loop page claims an item by opening a
 //! draft PR carrying its ORDER, and this module refuses the claim first when it must not happen.
 //!
-//! **The checks, in order.** Each refusal exits 2 with its reason.
-//! 1. The item `docs/roadmap/items/<id>.md` exists and its `status:` is `ready`.
+//! **The checks, in order.** Each refusal exits 2 with its reason. First `git fetch origin main`;
+//! if it fails, nothing is checked or written. Every item is then read from `origin/main`
+//! (`git show origin/main:docs/roadmap/items/<id>.md`), never from the working tree.
+//! 1. The item exists on `origin/main` and its `status:` is `ready`.
 //! 2. No open order names it. Open orders are the ORDER files changed on this lab's worktrees under
 //!    `.worktrees/<lab>-*` whose commit is not in `origin/main`, plus the ORDER files changed in
 //!    open PRs. An ORDER names its item in the `Item:` line link `roadmap/items/<id>.md`.
-//! 3. The item has a `scope:` line. Without one the claim is refused; it never guesses.
-//! 4. No scope glob overlaps a glob of an open order's item (see [`globs_overlap`]). Globs under
+//! 3. The item has a `scope:` line. Without one the claim is refused; it never guesses. Each of its
+//!    globs passes [`scope_glob_ok`].
+//! 4. No scope glob overlaps a glob of an open order's item (see [`globs_overlap`]); that item's
+//!    globs must pass [`scope_glob_ok`] too. An open order whose item is missing or has no `scope:`
+//!    is skipped here with a printed warning (it still counts for check 2). Globs under
 //!    `docs/research/notebook/` never count.
 //! 5. The lab's open PRs (head branch `<lab>/...`) are fewer than its `open_pr_limit` in
 //!    `docs/harness/labs.json`.
@@ -18,8 +23,8 @@
 //! A worktree's order also stops being open when its ORDER is on `origin/main` byte for byte,
 //! since a squash-merged branch is never an ancestor of `main`.
 //!
-//! **The writes** (ORDER call 5) happen only after every check has passed, in this order:
-//! `git fetch origin main`; `git worktree add .worktrees/<lab>-<topic> -b <lab>/<topic>
+//! **The writes** (ORDER call 5) happen only after every check has passed, from the `origin/main`
+//! the checks read, in this order: `git worktree add .worktrees/<lab>-<topic> -b <lab>/<topic>
 //! origin/main`; the ORDER `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md` committed there; a draft
 //! PR; a re-list. If the re-list shows a lower-numbered draft PR whose ORDER names the same item,
 //! the claim lost the race: its PR is closed, its pushed branch is deleted from `origin`, and its
@@ -338,6 +343,34 @@ pub(crate) fn read_item(root: &Path, id: &str) -> Result<ItemFields, String> {
     parse_item(&text).map_err(|e| format!("item {id}: {e}"))
 }
 
+/// The item's text on `origin/main`, or `None` when it is not there.
+fn main_item_text(root: &Path, id: &str) -> Option<String> {
+    let spec = format!("origin/main:docs/roadmap/items/{id}.md");
+    crate::loopgates::git(root, &["show", &spec])
+        .ok()
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+}
+
+/// A scope glob both `loop claim` and `loop suborder` accept: not empty, relative, no `.` or `..`
+/// segment (so no `./` prefix), no `//`, and none of `[ ] { } \`. Overlap and containment are
+/// decided on the literal text, so anything that could name a path two ways is refused.
+pub fn scope_glob_ok(glob: &str) -> Result<(), String> {
+    let why = if glob.is_empty() {
+        "is empty".to_string()
+    } else if glob.starts_with('/') {
+        "starts with /".to_string()
+    } else if glob.split('/').any(|s| s == "." || s == "..") {
+        "has a . or .. segment".to_string()
+    } else if glob.contains("//") {
+        "contains //".to_string()
+    } else if let Some(c) = glob.chars().find(|c| "[]{}\\".contains(*c)) {
+        format!("contains {c}")
+    } else {
+        return Ok(());
+    };
+    Err(format!("scope glob `{glob}` {why}"))
+}
+
 /// The item id an ORDER names: the `roadmap/items/<id>.md` link on its `Item:` line.
 pub fn order_item(order_text: &str) -> Option<String> {
     let re = regex::Regex::new(r"roadmap/items/([A-Za-z0-9._-]+)\.md").expect("a valid pattern");
@@ -467,8 +500,14 @@ pub type Refusal = String;
 
 /// Run every check for `item` claimed by `lab`, in order, stopping at the first refusal.
 pub fn check(root: &Path, lab: &str, item: &str, gh: &dyn Gh) -> Result<(), Refusal> {
-    // (a) the item exists and is ready.
-    let fields = read_item(root, item)?;
+    // Fetch first: every check below reads origin/main.
+    crate::loopgates::git(root, &["fetch", "-q", "origin", "main"])
+        .map_err(|e| format!("cannot fetch origin main, so nothing was checked or written: {e}"))?;
+    // (a) the item exists on origin/main and is ready.
+    let text = main_item_text(root, item).ok_or_else(|| {
+        format!("item {item} does not exist (no docs/roadmap/items/{item}.md on origin/main)")
+    })?;
+    let fields = parse_item(&text).map_err(|e| format!("item {item}: {e}"))?;
     match fields.status.as_deref() {
         Some("ready") => {}
         Some(s) => return Err(format!("item {item} has status {s:?}, not \"ready\"")),
@@ -487,17 +526,37 @@ pub fn check(root: &Path, lab: &str, item: &str, gh: &dyn Gh) -> Result<(), Refu
     let Some(scope) = fields.scope else {
         return Err(format!("item {item} has no scope: line"));
     };
-    // (d) no glob overlaps an open order's scope; notebook pages never count.
+    for g in &scope {
+        scope_glob_ok(g).map_err(|e| format!("item {item}: {e}"))?;
+    }
+    // (d) no glob overlaps an open order's scope; notebook pages never count. An open order whose
+    // item is missing or has no scope: is skipped with a warning (it still counted in (b)).
     for o in &orders {
-        let theirs = read_item(root, &o.item)
-            .map_err(|e| format!("open order {}: {e}", o.source))?
-            .scope
-            .ok_or_else(|| {
-                format!(
-                    "open order {} names item {}, which has no scope: line, so overlap cannot be decided",
+        let theirs = match main_item_text(root, &o.item) {
+            None => {
+                eprintln!(
+                    "uor-harness: loop claim: warning: open order {} names {}, which is not on origin/main; overlap not checked against it",
                     o.source, o.item
-                )
-            })?;
+                );
+                continue;
+            }
+            Some(t) => {
+                parse_item(&t)
+                    .map_err(|e| format!("open order {}: item {}: {e}", o.source, o.item))?
+                    .scope
+            }
+        };
+        let Some(theirs) = theirs else {
+            eprintln!(
+                "uor-harness: loop claim: warning: open order {} names {}, which has no scope: line; overlap not checked against it",
+                o.source, o.item
+            );
+            continue;
+        };
+        for g in &theirs {
+            scope_glob_ok(g)
+                .map_err(|e| format!("open order {}: item {}: {e}", o.source, o.item))?;
+        }
         for mine in scope.iter().filter(|g| counts(g)) {
             if let Some(other) = theirs
                 .iter()
@@ -646,7 +705,7 @@ pub fn write(
     topic: &str,
     gh: &dyn Gh,
 ) -> Result<Claimed, String> {
-    crate::loopgates::git(root, &["fetch", "-q", "origin", "main"])?;
+    // No second fetch: the writes start from the origin/main that `check` fetched and read.
     let slug = crate::state::slug(lab);
     let created = Created {
         worktree: root.join(".worktrees").join(format!("{slug}-{topic}")),
@@ -662,8 +721,8 @@ pub fn write(
     if crate::loopgates::git(root, &["rev-parse", "--verify", "--quiet", &branch_ref]).is_ok() {
         return Err(format!("branch {} already exists", created.branch));
     }
-    let item_text = std::fs::read_to_string(item_path(root, item))
-        .map_err(|e| format!("cannot read item {item}: {e}"))?;
+    let item_text = main_item_text(root, item)
+        .ok_or_else(|| format!("cannot read item {item} on origin/main"))?;
     let scope = parse_item(&item_text)?.scope.unwrap_or_default();
     let n = next_order_number(root, &slug)?;
     let base = git(root, &["rev-parse", "--short=9", "origin/main"])?;

@@ -20,18 +20,24 @@ fn literal(glob: &str) -> (&str, bool) {
     }
 }
 
-/// `parent` contains `child` when the parent's literal part is a path prefix of the child's, and
-/// either a wildcard follows the parent's literal or the two globs are equal. A containment test,
-/// not an overlap test: `crates/a/**` contains `crates/a/x.rs` but not `crates/ab/x.rs`.
+/// `parent` contains `child` only when both pass [`scope_glob_ok`] and either they are equal, or the
+/// parent is `<dir>/**` (its only wildcard that trailing `/**`) and the child's literal part starts
+/// with `<dir>/`. Any other parent wildcard contains only an identical child, so `docs/*.md` does
+/// not contain `docs/secret.rs` and `crates/a*` does not contain `crates/ab/deep/x.rs`.
+///
+/// [`scope_glob_ok`]: crate::loopclaim::scope_glob_ok
 pub fn glob_contains(parent: &str, child: &str) -> bool {
-    let (lp, wild) = literal(parent);
-    let (lc, _) = literal(child);
-    if !wild {
-        return parent == child;
+    use crate::loopclaim::scope_glob_ok;
+    if scope_glob_ok(parent).is_err() || scope_glob_ok(child).is_err() {
+        return false;
     }
-    // A wildcard follows the literal, so it can complete a segment the literal ends inside
-    // (`crates/a-*` contains `crates/a-b/x.rs`): a plain string prefix is the path prefix here.
-    lc.starts_with(lp)
+    if parent == child {
+        return true;
+    }
+    match parent.strip_suffix("/**") {
+        Some(dir) if !literal(dir).1 => literal(child).0.starts_with(&format!("{dir}/")),
+        _ => false,
+    }
 }
 
 /// `local/<lab>/<topic>/<kind>/<n>.md` with `<n>` one more than the highest existing number.
@@ -129,6 +135,12 @@ fn suborder(root: &Path, lab: &str, args: &[String]) -> Result<String, String> {
     let theirs = crate::loopclaim::read_item(root, &item)?
         .scope
         .ok_or_else(|| format!("item {item} has no scope: line"))?;
+    for g in &theirs {
+        crate::loopclaim::scope_glob_ok(g).map_err(|e| format!("parent item {item}: {e}"))?;
+    }
+    for g in &globs {
+        crate::loopclaim::scope_glob_ok(g)?;
+    }
     if let Some(out) = globs
         .iter()
         .find(|g| !theirs.iter().any(|p| glob_contains(p, g)))
@@ -238,11 +250,23 @@ mod tests {
         assert!(glob_contains("crates/a/**", "crates/a/src/x.rs"));
         assert!(glob_contains("crates/a/**", "crates/a/src/*.rs"));
         assert!(glob_contains("crates/a/**", "crates/a/**"));
+        assert!(glob_contains("crates/a/**", "crates/a/x/**"));
+        assert!(glob_contains("crates/a/**", "crates/a/y.rs"));
         assert!(glob_contains("docs/x.md", "docs/x.md"));
-        assert!(glob_contains("crates/a-*", "crates/a-b/x.rs"));
+        assert!(glob_contains("docs/*.md", "docs/*.md"));
         assert!(!glob_contains("crates/a/**", "crates/ab/x.rs"));
         assert!(!glob_contains("crates/a/src/*.rs", "crates/a/**"));
         assert!(!glob_contains("docs/x.md", "docs/x.md.bak"));
         assert!(!glob_contains("docs/x", "docs/x/y.md"));
+    }
+
+    #[test]
+    fn containment_cannot_be_escaped() {
+        assert!(!glob_contains("crates/a/**", "crates/a/../b/x.rs"));
+        assert!(!glob_contains("docs/*.md", "docs/secret.rs"));
+        assert!(!glob_contains("crates/a*", "crates/ab/deep/x.rs"));
+        assert!(!glob_contains("crates/a-*", "crates/a-b/x.rs"));
+        assert!(!glob_contains("crates/a/**", "crates/a/./x.rs"));
+        assert!(!glob_contains("crates/*/**", "crates/b/x.rs"));
     }
 }

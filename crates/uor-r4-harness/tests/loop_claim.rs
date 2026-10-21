@@ -402,11 +402,14 @@ fn a_failed_fetch_exits_2_and_creates_nothing() {
     r.git(&["remote", "remove", "origin"]);
     let o = r.claim("ready-a", serde_json::json!([]));
     nothing_created(&r, &o);
-    assert!(
-        String::from_utf8_lossy(&o.stderr).contains("fetch"),
-        "{o:?}"
+    refused(
+        &o,
+        "cannot fetch origin main, so nothing was checked or written",
     );
     assert!(!r.root.join(".worktrees").exists());
+    // The fetch comes before every check: even a missing item reports the fetch.
+    let o = r.claim("no-such-item", serde_json::json!([]));
+    refused(&o, "cannot fetch origin main");
 }
 
 const PARENT: &str = "docs/loop/tasks/ready-a/claude-1/ORDER.md";
@@ -566,4 +569,143 @@ fn ask_refuses_a_missing_field() {
     ]);
     refused(&o, "missing --command");
     assert!(r.card("asks/1.md").is_none(), "nothing is written");
+}
+
+impl Repo {
+    /// Commit `text` as item `id` and push it, so that it is on `origin/main`.
+    fn publish(&self, id: &str, text: &str) {
+        self.write(&format!("docs/roadmap/items/{id}.md"), text);
+        self.git(&["add", "-A"]);
+        self.git(&["commit", "-q", "-m", id]);
+        self.git(&["push", "-q", "origin", "main"]);
+    }
+}
+
+/// Each refused glob form, and the glob the refusal names (`{a,b}` splits at its comma).
+const BAD_GLOBS: [(&str, &str); 6] = [
+    ("crates/a/../b/**", "`crates/a/../b/**`"),
+    ("./x", "`./x`"),
+    ("/abs", "`/abs`"),
+    ("a//b", "`a//b`"),
+    ("{a,b}", "`{a`"),
+    ("a\\b", "`a\\b`"),
+];
+
+#[test]
+fn claim_refuses_an_item_with_a_bad_scope_glob() {
+    let r = Repo::new();
+    for (i, (glob, named)) in BAD_GLOBS.iter().enumerate() {
+        let id = format!("bad-{i}");
+        r.publish(&id, &item("ready", Some(&format!("[{glob}]"))));
+        let o = r.claim(&id, serde_json::json!([]));
+        refused(&o, &format!("scope glob {named}"));
+        assert!(!r.has_branch(&format!("claude/{id}")), "{glob}: no branch");
+        assert!(r.calls().is_empty(), "{glob}: no GitHub write");
+    }
+}
+
+#[test]
+fn suborder_refuses_a_bad_scope_glob() {
+    let r = Repo::new().with_parent();
+    for (glob, named) in BAD_GLOBS {
+        let o = r.loop_cmd(&["suborder", "--parent", PARENT, "--scope", glob]);
+        refused(&o, &format!("scope glob {named}"));
+    }
+    assert!(r.card("orders/1.md").is_none(), "nothing is written");
+}
+
+#[test]
+fn suborder_containment_cannot_be_escaped() {
+    let r = Repo::new().with_parent();
+    let o = r.loop_cmd(&[
+        "suborder",
+        "--parent",
+        PARENT,
+        "--scope",
+        "crates/a/../b/x.rs",
+    ]);
+    refused(&o, "crates/a/../b/x.rs");
+    let o = r.loop_cmd(&[
+        "suborder",
+        "--parent",
+        PARENT,
+        "--scope",
+        "crates/a/x/**,crates/a/y.rs",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    // A parent whose wildcards are not a trailing `/**` contains only identical globs.
+    r.write(
+        "docs/roadmap/items/glob-g.md",
+        &item("ready", Some("[docs/*.md, crates/a*]")),
+    );
+    let parent = "docs/loop/tasks/glob-g/claude-2/ORDER.md";
+    r.write(parent, &order("glob-g"));
+    let o = r.loop_cmd(&["suborder", "--parent", parent, "--scope", "docs/secret.rs"]);
+    refused(&o, "scope docs/secret.rs is outside");
+    let o = r.loop_cmd(&[
+        "suborder",
+        "--parent",
+        parent,
+        "--scope",
+        "crates/ab/deep/x.rs",
+    ]);
+    refused(&o, "scope crates/ab/deep/x.rs is outside");
+    let o = r.loop_cmd(&["suborder", "--parent", parent, "--scope", "docs/*.md"]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+}
+
+#[test]
+fn claim_reads_the_item_from_origin_main_not_the_working_tree() {
+    let r = Repo::new();
+    // Ready in the working tree and in a local commit, still draft on origin/main.
+    r.write(
+        "docs/roadmap/items/draft-b.md",
+        &item("ready", Some("[crates/b/**]")),
+    );
+    r.git(&["commit", "-q", "-am", "local only"]);
+    refused(&r.claim("draft-b", serde_json::json!([])), "not \"ready\"");
+    assert!(!r.has_branch("claude/draft-b"));
+}
+
+#[test]
+fn claim_fetches_before_it_checks() {
+    let r = Repo::new();
+    let stale = String::from_utf8_lossy(&r.out(&r.root, &["rev-parse", "origin/main"]).stdout)
+        .trim()
+        .to_string();
+    // origin's main moves ready-a to draft; our origin/main still says ready until a fetch.
+    r.write(
+        "docs/roadmap/items/ready-a.md",
+        &item("draft", Some("[crates/a/**]")),
+    );
+    r.git(&["commit", "-q", "-am", "ready-a back to draft"]);
+    r.git(&["push", "-q", "origin", "main"]);
+    r.git(&["update-ref", "refs/remotes/origin/main", &stale]);
+    refused(&r.claim("ready-a", serde_json::json!([])), "not \"ready\"");
+    assert!(!r.has_branch("claude/ready-a"));
+}
+
+#[test]
+fn an_open_order_without_scope_warns_and_is_skipped_for_overlap() {
+    let r = Repo::new();
+    let prs = serde_json::json!([
+        pr_with_order(7, "codex/c", "noscope-c"),
+        pr_with_order(8, "codex/z", "ghost-z")
+    ]);
+    let o = r.claim("ready-a", prs.clone());
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("warning: open order PR #7 (docs/loop/tasks/t/codex-7/ORDER.md) names noscope-c, which has no scope: line; overlap not checked against it"),
+        "{err}"
+    );
+    assert!(
+        err.contains("names ghost-z, which is not on origin/main"),
+        "{err}"
+    );
+    // The same item is still refused as claimed.
+    refused(
+        &r.claim("noscope-c", prs),
+        "item noscope-c is already claimed by PR #7",
+    );
 }
