@@ -688,6 +688,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     match args.first().map(String::as_str) {
         Some("gates") => {}
         Some("arrive") => return crate::looparrive::cli(root, lab, &args[1..]),
+        Some("board") => return crate::loopboard::cli(root, &args[1..]),
         Some("claim") => return crate::loopclaim::cli(root, lab, &args[1..]),
         Some("close") => return crate::loopclose::cli(root, lab, &args[1..]),
         Some("next") => return crate::loopnext::cli(root, lab, &args[1..]),

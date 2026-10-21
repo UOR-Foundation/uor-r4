@@ -2575,7 +2575,7 @@ fn cmd_loop(repo: &Path, args: &[String], json: bool) -> ExitCode {
         }
         i += 1;
     }
-    if json && matches!(action, Some("pr-check" | "arrive" | "next")) {
+    if json && matches!(action, Some("pr-check" | "arrive" | "next" | "board")) {
         args.push("--json".to_string());
     }
     let args = &args[..];
