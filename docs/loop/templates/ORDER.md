@@ -1,7 +1,7 @@
 <!-- Copied by hand into docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md; `loop pr-check` checks it. -->
 # ORDER: <item id>, <lab>-<n> (<short title>)
 
-Lab: <lab>. Item: [<item id>](../../../../roadmap/items/<item id>.md) (#<issue>).
+Lab: <lab>. Item: `[<item id>](../../../../roadmap/items/<item id>.md)` (#<issue>). Drop the backticks when filling it in: from the task folder the link resolves.
 Setup row: <row> (setup items only; delete this line otherwise).
 Base: `<short sha of origin/main when the ORDER was written>`.
 
