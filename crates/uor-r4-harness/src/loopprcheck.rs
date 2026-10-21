@@ -11,7 +11,13 @@ use std::process::Command;
 const USAGE: &str = "usage: uor-harness loop pr-check [--base <rev>] [--head <rev>] [--json]";
 
 /// Every rule, in the order it runs and prints.
-const RULES: &[(&str, Rule)] = &[("order", rule_order), ("scope", rule_scope)];
+const RULES: &[(&str, Rule)] = &[
+    ("order", rule_order),
+    ("scope", rule_scope),
+    ("commit-order", rule_commit_order),
+    ("report", rule_report),
+    ("owner-paths", rule_owner_paths),
+];
 
 type Rule = fn(&Pr) -> RuleResult;
 
@@ -97,6 +103,23 @@ fn z_fields(bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
+/// `--name-status -z` fields as changes: a rename or copy carries two paths.
+fn name_status(fields: &[String]) -> Result<Vec<Change>, String> {
+    let mut changes = Vec::new();
+    let mut i = 0;
+    while i < fields.len() {
+        let status = fields[i].chars().next().unwrap_or('?');
+        let n = if matches!(status, 'R' | 'C') { 2 } else { 1 };
+        let paths = fields
+            .get(i + 1..i + 1 + n)
+            .ok_or("git --name-status output is truncated")?
+            .to_vec();
+        changes.push(Change { status, paths });
+        i += 1 + n;
+    }
+    Ok(changes)
+}
+
 impl<'a> Pr<'a> {
     pub fn open(root: &'a Path, base: &str, head: &str) -> Result<Pr<'a>, String> {
         let base_sha = resolve(root, base)?;
@@ -107,19 +130,7 @@ impl<'a> Pr<'a> {
             root,
             &["diff", "-z", "--name-status", "-M", &merge_base, &head],
         )?;
-        let fields = z_fields(&raw);
-        let mut changes = Vec::new();
-        let mut i = 0;
-        while i < fields.len() {
-            let status = fields[i].chars().next().unwrap_or('?');
-            let n = if matches!(status, 'R' | 'C') { 2 } else { 1 };
-            let paths = fields
-                .get(i + 1..i + 1 + n)
-                .ok_or("git diff --name-status output is truncated")?
-                .to_vec();
-            changes.push(Change { status, paths });
-            i += 1 + n;
-        }
+        let changes = name_status(&z_fields(&raw))?;
         Ok(Pr {
             root,
             merge_base,
@@ -341,6 +352,271 @@ fn rule_scope(pr: &Pr) -> RuleResult {
         ),
         &format!("changes outside item {id}'s scope [{}]", scope.join(", ")),
     )
+}
+
+/// The non-merge commits of the PR, oldest first (`rev-list --reverse --topo-order`).
+fn pr_commits(pr: &Pr) -> Result<Vec<String>, String> {
+    let range = format!("{}..{}", pr.merge_base, pr.head);
+    let out = git(
+        pr.root,
+        &["rev-list", "--reverse", "--topo-order", "--parents", &range],
+    )?;
+    Ok(String::from_utf8_lossy(&out)
+        .lines()
+        .filter_map(
+            |l| match l.split_whitespace().collect::<Vec<_>>().as_slice() {
+                [c] | [c, _] => Some(c.to_string()),
+                _ => None,
+            },
+        )
+        .collect())
+}
+
+/// What one non-merge commit changes against its parent.
+fn commit_changes(pr: &Pr, sha: &str) -> Result<Vec<Change>, String> {
+    let parent = format!("{sha}^");
+    let raw = git(
+        pr.root,
+        &[
+            "diff-tree",
+            "--no-commit-id",
+            "-r",
+            "-M",
+            "--name-status",
+            "-z",
+            &parent,
+            sha,
+        ],
+    )?;
+    name_status(&z_fields(&raw))
+}
+
+/// The first non-merge commit adds the ORDER, and that commit changes nothing outside its folder.
+fn rule_commit_order(pr: &Pr) -> RuleResult {
+    const R: &str = "commit-order";
+    let order = match pr.the_order() {
+        Ok(p) => p,
+        Err(e) => return fail(R, format!("cannot check the commit order: {e}")),
+    };
+    let folder = order.trim_end_matches("ORDER.md");
+    let commits = match pr_commits(pr) {
+        Ok(c) => c,
+        Err(e) => return fail(R, format!("cannot list the PR's commits: {e}")),
+    };
+    let mut details = Vec::new();
+    for sha in &commits {
+        let short = &sha[..sha.len().min(9)];
+        let changes = match commit_changes(pr, sha) {
+            Ok(c) => c,
+            Err(e) => return fail(R, format!("cannot read commit {short}: {e}")),
+        };
+        let paths = || {
+            changes
+                .iter()
+                .flat_map(|c| c.paths.iter().map(String::as_str))
+        };
+        let adds_order = changes
+            .iter()
+            .any(|c| c.status == 'A' && c.paths.last().map(String::as_str) == Some(order));
+        if !adds_order {
+            let p: Vec<&str> = paths().collect();
+            if !p.is_empty() {
+                details.push(format!(
+                    "{short} changes {} before the commit that adds {order}",
+                    p.join(", ")
+                ));
+            }
+            continue;
+        }
+        let outside: Vec<&str> = paths().filter(|p| !p.starts_with(folder)).collect();
+        if !outside.is_empty() {
+            details.push(format!(
+                "{short} adds {order} but also changes {}, outside {folder}",
+                outside.join(", ")
+            ));
+        }
+        return result(
+            R,
+            details,
+            &format!("{short} adds {order} first, alone in its folder"),
+            "the ORDER commit does not come first, alone",
+        );
+    }
+    fail(R, format!("no non-merge commit adds {order}"))
+}
+
+/// The `## ` sections a REPORT needs, in this order (each heading starts with one, any case).
+const REPORT_SECTIONS: [&str; 7] = [
+    "What did not work",
+    "What changed",
+    "Measurements",
+    "Checks run at the head",
+    "Skills used",
+    "Still open",
+    "Plain summary",
+];
+
+/// What is wrong with a REPORT's sections; empty when it is valid.
+pub fn report_problems(text: &str) -> Vec<String> {
+    // (lower-cased heading, whether a non-blank line follows before the next `## `)
+    let mut sections: Vec<(String, bool)> = Vec::new();
+    for line in text.lines() {
+        if let Some(h) = line.strip_prefix("## ") {
+            sections.push((h.trim().to_lowercase(), false));
+        } else if !line.trim().is_empty() {
+            if let Some(last) = sections.last_mut() {
+                last.1 = true;
+            }
+        }
+    }
+    let mut out = Vec::new();
+    let mut prev: Option<(usize, &str)> = None;
+    for name in REPORT_SECTIONS {
+        let lower = name.to_lowercase();
+        let Some(i) = sections.iter().position(|(h, _)| h.starts_with(&lower)) else {
+            out.push(format!("no `## {name}` heading"));
+            continue;
+        };
+        if let Some((pi, pname)) = prev {
+            if i < pi {
+                out.push(format!(
+                    "out of order: `## {name}` comes before `## {pname}`"
+                ));
+            }
+        }
+        if !sections[i].1 {
+            out.push(format!("the `## {name}` section is empty"));
+        }
+        prev = Some((i, name));
+    }
+    out
+}
+
+/// `<ORDER folder>/REPORT.md` exists at the head with every section, in order, none empty.
+fn rule_report(pr: &Pr) -> RuleResult {
+    const R: &str = "report";
+    let order = match pr.the_order() {
+        Ok(p) => p,
+        Err(e) => return fail(R, format!("cannot find the REPORT: {e}")),
+    };
+    let path = format!("{}REPORT.md", order.trim_end_matches("ORDER.md"));
+    let Some(text) = pr.at_head(&path) else {
+        return fail(R, format!("{path} is missing at the head"));
+    };
+    result(
+        R,
+        report_problems(&text),
+        &path,
+        &format!("{path} is not a valid REPORT"),
+    )
+}
+
+/// An owner-paths entry covers `path`: `<prefix>/**` covers the prefix and everything below it.
+fn owner_match(entry: &str, path: &str) -> bool {
+    match entry.strip_suffix("/**") {
+        Some(prefix) => path == prefix || path.starts_with(&format!("{prefix}/")),
+        None => path == entry,
+    }
+}
+
+/// What the ORDER's `## Owner approval` section(s) lack for `entries`; empty when approved.
+pub fn owner_approval_missing(order_text: &str, entries: &[&str]) -> Vec<String> {
+    let mut section = String::new();
+    let mut inside = false;
+    for line in order_text.lines() {
+        if line.starts_with("## ") {
+            inside = line.to_lowercase().starts_with("## owner approval");
+        }
+        if inside {
+            section.push_str(line);
+            section.push('\n');
+        }
+    }
+    if section.is_empty() {
+        return vec!["the ORDER has no `## Owner approval` section".into()];
+    }
+    let mut out = Vec::new();
+    for entry in entries {
+        let named = entry.strip_suffix("/**").unwrap_or(entry);
+        if !section.contains(named) {
+            out.push(format!("the owner approval section does not name {entry}"));
+        }
+    }
+    let quote = regex::Regex::new(r#""[^"]+""#).expect("a valid pattern");
+    if !quote.is_match(&section) {
+        out.push("the owner approval section holds no double-quoted answer".into());
+    }
+    let time =
+        regex::Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?Z").expect("a valid pattern");
+    if !time.is_match(&section) {
+        out.push(
+            "the owner approval section holds no ISO UTC time (YYYY-MM-DDTHH:MM[:SS]Z)".into(),
+        );
+    }
+    out
+}
+
+/// A change to a path in `docs/harness/owner-paths.json` (read at the base) carries the owner's
+/// approval in the ORDER: the entry named, a quoted answer and an ISO UTC time.
+fn rule_owner_paths(pr: &Pr) -> RuleResult {
+    const R: &str = "owner-paths";
+    const LIST: &str = "docs/harness/owner-paths.json";
+    let Some(text) = pr.at_base(LIST) else {
+        return fail(R, format!("{LIST} is missing at the merge base"));
+    };
+    let v: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => return fail(R, format!("{LIST} at the merge base: {e}")),
+    };
+    let Some(entries) = v.get("paths").and_then(|p| p.as_array()).and_then(|a| {
+        a.iter()
+            .map(|e| e.get("path").and_then(|p| p.as_str()))
+            .collect::<Option<Vec<&str>>>()
+    }) else {
+        return fail(
+            R,
+            format!("{LIST} at the merge base has no `paths` list of {{\"path\": ..}} entries"),
+        );
+    };
+    let mut details = Vec::new();
+    let mut matched = Vec::new();
+    for entry in entries {
+        let mut hits: Vec<&str> = pr
+            .changed_paths()
+            .map(|(_, p)| p)
+            .filter(|p| owner_match(entry, p))
+            .collect();
+        hits.dedup();
+        if !hits.is_empty() {
+            details.push(format!("{} changed (owner path {entry})", hits.join(", ")));
+            matched.push(entry);
+        }
+    }
+    if matched.is_empty() {
+        return result(R, Vec::new(), "no owner path changed", "");
+    }
+    let missing = match pr.the_order() {
+        Err(e) => vec![format!("no ORDER to carry the owner's approval: {e}")],
+        Ok(order) => match pr.at_head(order) {
+            None => vec![format!("{order} cannot be read at the head")],
+            Some(t) => owner_approval_missing(&t, &matched),
+        },
+    };
+    if missing.is_empty() {
+        return RuleResult {
+            rule: R,
+            verdict: Verdict::Pass,
+            summary: format!("owner approval recorded for {}", matched.join(", ")),
+            details: Vec::new(),
+        };
+    }
+    details.extend(missing);
+    RuleResult {
+        rule: R,
+        verdict: Verdict::Fail,
+        summary: "owner path(s) changed without the owner's approval in the ORDER".into(),
+        details,
+    }
 }
 
 /// Base and head differ only on `status:` lines.

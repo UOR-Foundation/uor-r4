@@ -20,9 +20,19 @@ fn clean(cmd: &mut Command) -> &mut Command {
     cmd.env_remove("UOR_LAB").env_remove("UOR_LOOP_GH_FAKE")
 }
 
-const ITEM_A: &str = "---\nid: item-a\nstatus: ready\nscope: [crates/a/**, docs/a.md]\nnotebook: docs/research/notebook/a.md\n---\n\n## Why\n\nBecause.\n";
+const ITEM_A: &str = "---\nid: item-a\nstatus: ready\nscope: [crates/a/**, docs/a.md, .github/**, CHARTER.md]\nnotebook: docs/research/notebook/a.md\n---\n\n## Why\n\nBecause.\n";
 const NOTEBOOK: &str = "# A notebook\n\n| row | result |\n|---|---|\n| 1 | first |\n";
 const FILEMAP: &str = "# FILEMAP\n\n| path | what |\n|---|---|\n| crates/a | the a crate |\n";
+const OWNER_PATHS: &str = r#"{"schema": 1, "paths": [
+  {"path": "CHARTER.md", "why": "rules"},
+  {"path": ".github/**", "why": "CI"},
+  {"path": "docs/harness/owner-paths.json", "why": "this list"}
+]}"#;
+/// A valid REPORT, headings worded as in a real one.
+const REPORT: &str = "# REPORT\n\n## What did not work, first\n\nNothing.\n\n## What changed\n\nA.\n\n## Measurements\n\nNone.\n\n## Checks run at the head\n\n- tests\n\n## Skills used\n\nNone.\n\n## Still open\n\nNothing.\n\n## Plain summary\n\nDone.\n";
+const APPROVAL: &str = "## Owner approval for `.github/**` (an owner path)\n\nRecorded at 2026-10-21T15:25:16Z.\n- \"Approve?\" Casey: \"Approve (Recommended)\".\n";
+const ORDER_A: &str = "docs/loop/tasks/item-a/claude-1/ORDER.md";
+const REPORT_A: &str = "docs/loop/tasks/item-a/claude-1/REPORT.md";
 
 struct Repo {
     _tmp: tempfile::TempDir,
@@ -72,6 +82,8 @@ impl Repo {
         r.write("docs/start/FILEMAP.md", FILEMAP);
         r.write("crates/a/src/lib.rs", "pub fn a() {}\n");
         r.write("docs/a.md", "# a\n");
+        r.write("docs/harness/owner-paths.json", OWNER_PATHS);
+        r.write("CHARTER.md", "# Charter\n");
         r.git(&["add", "-A"]);
         r.git(&["commit", "-q", "-m", "base"]);
         r.base = r.out(&["rev-parse", "HEAD"]);
@@ -125,10 +137,43 @@ impl Repo {
         );
     }
 
+    /// A head of one commit per step, built from the base; returns its sha.
+    fn commits(&self, steps: Vec<Edit>) -> String {
+        self.git(&["checkout", "-q", "--detach", &self.base]);
+        for step in steps {
+            step(self);
+            self.git(&["add", "-A"]);
+            self.git(&["commit", "-q", "--allow-empty", "-m", "step"]);
+        }
+        self.out(&["rev-parse", "HEAD"])
+    }
+
+    /// A green PR: the ORDER at `path` alone in the first commit, then a valid REPORT and `work`.
+    fn green(&self, path: &str, text: &str, work: impl FnOnce(&Repo) + 'static) -> String {
+        let (path, text) = (path.to_string(), text.to_string());
+        let report = path.replace("ORDER.md", "REPORT.md");
+        self.commits(vec![
+            Box::new(move |r: &Repo| r.write(&path, &text)),
+            Box::new(move |r: &Repo| {
+                r.write(&report, REPORT);
+                work(r);
+            }),
+        ])
+    }
+
+    /// A green PR for `item-a` by claude, with `work` after the ORDER commit.
+    fn green_a(&self, work: impl FnOnce(&Repo) + 'static) -> String {
+        self.green(ORDER_A, &order("claude", "item-a", ""), work)
+    }
+
     fn check(&self, head: &str, extra: &[&str]) -> Output {
+        self.check_against(&self.base, head, extra)
+    }
+
+    fn check_against(&self, base: &str, head: &str, extra: &[&str]) -> Output {
         clean(&mut Command::new(BIN))
             .args(["--repo", self.root.to_str().unwrap(), "loop", "pr-check"])
-            .args(["--base", &self.base, "--head", head])
+            .args(["--base", base, "--head", head])
             .args(extra)
             .env("UOR_LAB", "claude")
             .current_dir(&self.root)
@@ -155,14 +200,180 @@ fn expect(o: &Output, code: i32, line: &str, text: &str) {
 #[test]
 fn a_green_pr_passes_order_and_scope() {
     let r = Repo::new();
-    let h = r.head(|r| {
-        r.order_a();
+    let h = r.green_a(|r| {
         r.write("crates/a/src/lib.rs", "pub fn a() { let _ = 1; }\n");
         r.write("crates/a/src/new.rs", "\n");
     });
     let o = r.check(&h, &[]);
     expect(&o, 0, "PASS order", "verdict: PASS");
     expect(&o, 0, "PASS scope", "size: tests 0 file(s)");
+    expect(&o, 0, "PASS commit-order", "verdict: PASS");
+    expect(&o, 0, "PASS report", REPORT_A);
+    expect(&o, 0, "PASS owner-paths", "no owner path changed");
+}
+
+#[test]
+fn commit_order_needs_the_order_commit_first_and_alone() {
+    let r = Repo::new();
+    let h = r.commits(vec![
+        Box::new(|r: &Repo| r.write("crates/a/src/lib.rs", "//\n")),
+        Box::new(|r: &Repo| {
+            r.order_a();
+            r.write(REPORT_A, REPORT);
+        }),
+    ]);
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL commit-order",
+        "changes crates/a/src/lib.rs before the commit that adds",
+    );
+
+    let h = r.commits(vec![Box::new(|r: &Repo| {
+        r.order_a();
+        r.write(REPORT_A, REPORT);
+        r.write("crates/a/x.rs", "\n");
+    })]);
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL commit-order",
+        "also changes crates/a/x.rs, outside docs/loop/tasks/item-a/claude-1/",
+    );
+}
+
+#[test]
+fn commit_order_skips_a_merge_of_main_after_the_order_commit() {
+    let r = Repo::new();
+    // main moves on after the PR branched.
+    let main = r.commits(vec![Box::new(|r: &Repo| r.write("docs/b.md", "# b\n"))]);
+    let order_commit = r.green_a(|r| r.write("crates/a/src/new.rs", "\n"));
+    r.git(&["checkout", "-q", "--detach", &order_commit]);
+    r.git(&["merge", "-q", "--no-ff", "-m", "merge main", &main]);
+    r.write("crates/a/src/more.rs", "\n");
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "after the merge"]);
+    let h = r.out(&["rev-parse", "HEAD"]);
+    let o = r.check_against(&main, &h, &[]);
+    expect(&o, 0, "PASS commit-order", "verdict: PASS");
+}
+
+#[test]
+fn report_needs_every_section_in_order_and_non_empty() {
+    let r = Repo::new();
+    let h = r.commits(vec![Box::new(|r: &Repo| r.order_a())]);
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL report",
+        "docs/loop/tasks/item-a/claude-1/REPORT.md is missing at the head",
+    );
+    let skills = "## Skills used\n\nNone.\n\n";
+    let still = "## Still open\n\nNothing.\n\n";
+    let cases: Vec<(String, &str)> = vec![
+        (REPORT.replace(skills, ""), "no `## Skills used` heading"),
+        (
+            REPORT
+                .replace(still, "")
+                .replace("## Measurements", &format!("{still}## Measurements")),
+            "out of order: `## Still open` comes before",
+        ),
+        (
+            REPORT.replace("## Measurements\n\nNone.\n\n", "## Measurements\n\n  \n\n"),
+            "the `## Measurements` section is empty",
+        ),
+    ];
+    for (report, why) in cases {
+        let h = r.green_a(move |r| r.write(REPORT_A, &report));
+        expect(&r.check(&h, &[]), 1, "FAIL report", why);
+    }
+}
+
+#[test]
+fn a_github_change_without_owner_approval_fails() {
+    let r = Repo::new();
+    let h = r.green_a(|r| r.write(".github/workflows/x.yml", "on: push\n"));
+    let o = r.check(&h, &[]);
+    expect(
+        &o,
+        1,
+        "FAIL owner-paths",
+        ".github/workflows/x.yml changed (owner path .github/**)",
+    );
+    assert!(stdout(&o).contains("the ORDER has no `## Owner approval` section"));
+}
+
+#[test]
+fn owner_paths_need_the_entry_a_quoted_answer_and_a_time() {
+    let r = Repo::new();
+    let gh = |r: &Repo| r.write(".github/workflows/x.yml", "on: push\n");
+    let h = r.green(ORDER_A, &order("claude", "item-a", APPROVAL), gh);
+    expect(
+        &r.check(&h, &[]),
+        0,
+        "PASS owner-paths",
+        "owner approval recorded for .github/**",
+    );
+
+    let cases = [
+        (
+            APPROVAL.replace("2026-10-21T15:25:16Z", "21 Oct"),
+            "holds no ISO UTC time",
+        ),
+        (
+            APPROVAL.replace("`.github/**`", "CI"),
+            "does not name .github/**",
+        ),
+        (APPROVAL.replace('"', "'"), "holds no double-quoted answer"),
+    ];
+    for (approval, why) in cases {
+        let h = r.green(ORDER_A, &order("claude", "item-a", &approval), gh);
+        expect(&r.check(&h, &[]), 1, "FAIL owner-paths", why);
+    }
+
+    // An exact entry: CHARTER.md.
+    let h = r.green_a(|r| r.write("CHARTER.md", "# Charter, changed\n"));
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL owner-paths",
+        "CHARTER.md changed (owner path CHARTER.md)",
+    );
+}
+
+#[test]
+fn owner_paths_are_read_at_the_merge_base() {
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        r.write(
+            "docs/harness/owner-paths.json",
+            &OWNER_PATHS.replace("  {\"path\": \".github/**\", \"why\": \"CI\"},\n", ""),
+        );
+        r.write(".github/workflows/x.yml", "on: push\n");
+    });
+    let o = r.check(&h, &[]);
+    expect(
+        &o,
+        1,
+        "FAIL owner-paths",
+        ".github/workflows/x.yml changed (owner path .github/**)",
+    );
+}
+
+#[test]
+fn the_real_claude_16_order_approves_its_github_change() {
+    let real = include_str!("../../../docs/loop/tasks/infra-loop-harness/claude-16/ORDER.md");
+    let r = Repo::new();
+    let h = r.green(ORDER_A, real, |r| {
+        r.write(".github/workflows/gate.yml", "on: push\n")
+    });
+    let o = r.check(&h, &[]);
+    let out = stdout(&o);
+    assert!(
+        out.lines()
+            .any(|l| l == "PASS owner-paths owner approval recorded for .github/**"),
+        "{out}"
+    );
 }
 
 #[test]
@@ -225,12 +436,11 @@ fn order_fails_for_each_broken_condition() {
         expect(&r.check(&h, &[]), 1, "FAIL order", why);
     }
     // The setup row satisfies the setup-PR condition.
-    let h = r.head(|r| {
-        r.write(
-            "docs/loop/tasks/infra-loop-pr9/claude-1/ORDER.md",
-            &order("claude", "infra-loop-pr9", "Setup row: 5\n"),
-        )
-    });
+    let h = r.green(
+        "docs/loop/tasks/infra-loop-pr9/claude-1/ORDER.md",
+        &order("claude", "infra-loop-pr9", "Setup row: 5\n"),
+        |_| {},
+    );
     expect(&r.check(&h, &[]), 0, "PASS order", "verdict: PASS");
 }
 
@@ -312,10 +522,7 @@ fn scope_always_allows_status_notebook_append_mistakes_and_filemap_rows() {
         }),
     ];
     for edit in pass {
-        let h = r.head(|r| {
-            r.order_a();
-            edit(r);
-        });
+        let h = r.green_a(edit);
         expect(&r.check(&h, &[]), 0, "PASS scope", "verdict: PASS");
     }
     let fail: Vec<(&str, Edit)> = vec![
@@ -425,10 +632,7 @@ fn a_bad_rev_exits_2_and_json_carries_the_verdict() {
     assert_eq!(o.status.code(), Some(2), "{o:?}");
     assert!(String::from_utf8_lossy(&o.stderr).contains("no-such-rev"));
 
-    let h = r.head(|r| {
-        r.order_a();
-        r.write("crates/a/src/lib.rs", "//\n");
-    });
+    let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
     let o = r.check(&h, &["--json"]);
     assert_eq!(o.status.code(), Some(0), "{o:?}");
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("one JSON object");
@@ -436,7 +640,8 @@ fn a_bad_rev_exits_2_and_json_carries_the_verdict() {
     assert_eq!(v["merge_base"], r.base.as_str());
     assert_eq!(v["head"], h.as_str());
     assert_eq!(v["size"]["code"]["files"], 1);
-    assert_eq!(v["size"]["docs"]["files"], 1);
+    // The ORDER and the REPORT.
+    assert_eq!(v["size"]["docs"]["files"], 2);
     assert_eq!(v["rules"][1]["rule"], "scope");
     assert_eq!(v["rules"][1]["verdict"], "pass");
 

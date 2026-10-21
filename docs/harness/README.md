@@ -118,6 +118,9 @@ Checks a loop PR: the diff from `git merge-base <base> <head>` to `<head>` (`--b
 
 - `order`: the PR adds exactly one `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`; its lab is in `docs/harness/labs.json`, its `Lab:` line names the same lab, its `Item:` names an item in `docs/roadmap/items/`, and an `infra-loop-pr*` item's ORDER carries a `Setup row:` line.
 - `scope`: every changed path (both sides of a rename) matches a glob in the item's `scope:` (`*` and `?` never cross `/`; a `**` segment matches zero or more segments), or is always allowed: the ORDER's own folder, a `status:`-only edit of the item file, an append to the item's `notebook:` page, a new file under `docs/harness/mistakes/`, or rows added to `docs/start/FILEMAP.md`. An item with no `scope:` fails.
+- `commit-order`: among the PR's non-merge commits (`git rev-list --reverse --topo-order <merge-base>..<head>`; merges are skipped), the first to add the ORDER (status `A`) comes before any commit that changes a path, and changes nothing outside the ORDER's folder.
+- `report`: `<ORDER folder>/REPORT.md` exists at the head with `## ` headings starting (any case) "What did not work", "What changed", "Measurements", "Checks run at the head", "Skills used", "Still open", "Plain summary", in that order, each followed by a non-blank line before the next `## `.
+- `owner-paths`: a changed path (either side of a rename) that matches an entry of `docs/harness/owner-paths.json` at the merge base (`<prefix>/**` covers everything below the prefix; any other entry is exact) needs a `## Owner approval` section in the ORDER that names each matched entry (as written, or its prefix), holds a double-quoted answer and an ISO UTC time (`2026-10-21T15:25:16Z`). With no owner path changed it passes.
 
 ## Where it sits against what already exists
 
