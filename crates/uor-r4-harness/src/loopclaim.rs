@@ -22,8 +22,8 @@
 //! `git fetch origin main`; `git worktree add .worktrees/<lab>-<topic> -b <lab>/<topic>
 //! origin/main`; the ORDER `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md` committed there; a draft
 //! PR; a re-list. If the re-list shows a lower-numbered draft PR whose ORDER names the same item,
-//! the claim lost the race: its PR is closed, and its worktree and branch, by exact path and name,
-//! are removed. Nothing else is touched.
+//! the claim lost the race: its PR is closed, its pushed branch is deleted from `origin`, and its
+//! worktree and branch, by exact path and name, are removed. Nothing else is touched.
 //!
 //! **GitHub.** All access goes through the [`Gh`] trait. The real one runs `gh`; tests point the
 //! binary at a JSON file through `UOR_LOOP_GH_FAKE`.
@@ -88,6 +88,8 @@ pub trait Gh {
     fn create_draft_pr(&self, branch: &str, title: &str, body: &str) -> Result<u64, String>;
     /// Close PR `number`.
     fn close_pr(&self, number: u64) -> Result<(), String>;
+    /// Delete exactly `branch` from `origin`: the branch a lost claim pushed.
+    fn delete_remote_branch(&self, branch: &str) -> Result<(), String>;
 }
 
 /// `gh`, run from the repository root.
@@ -163,6 +165,10 @@ impl Gh for RealGh {
 
     fn close_pr(&self, number: u64) -> Result<(), String> {
         run_gh(&self.root, &["pr", "close", &number.to_string()]).map(|_| ())
+    }
+
+    fn delete_remote_branch(&self, branch: &str) -> Result<(), String> {
+        crate::loopgates::git(&self.root, &["push", "-q", "origin", "--delete", branch]).map(|_| ())
     }
 }
 
@@ -262,6 +268,10 @@ impl Gh for FakeGh {
     fn close_pr(&self, number: u64) -> Result<(), String> {
         self.record(serde_json::json!({"call": "close_pr", "number": number}))
     }
+
+    fn delete_remote_branch(&self, branch: &str) -> Result<(), String> {
+        self.record(serde_json::json!({"call": "delete_remote_branch", "branch": branch}))
+    }
 }
 
 fn is_order_path(p: &str) -> bool {
@@ -321,7 +331,7 @@ fn item_path(root: &Path, id: &str) -> PathBuf {
     root.join("docs/roadmap/items").join(format!("{id}.md"))
 }
 
-fn read_item(root: &Path, id: &str) -> Result<ItemFields, String> {
+pub(crate) fn read_item(root: &Path, id: &str) -> Result<ItemFields, String> {
     let path = item_path(root, id);
     let text = std::fs::read_to_string(&path)
         .map_err(|_| format!("item {id} does not exist (no {})", path.display()))?;
@@ -621,6 +631,10 @@ pub enum Claimed {
     Lost {
         pr: u64,
         lower: u64,
+        /// Our branch, deleted from `origin`.
+        branch: String,
+        /// Why deleting it from `origin` failed, if it did.
+        delete_failed: Option<String>,
     },
 }
 
@@ -711,12 +725,19 @@ pub fn write(
     if let Some(lower) = lower {
         gh.close_pr(pr)
             .map_err(|e| format!("lost the race to #{lower}, but closing #{pr} failed: {e}"))?;
+        // Our pushed branch, by its exact name. A failure is reported; it does not change exit 1.
+        let delete_failed = gh.delete_remote_branch(&created.branch).err();
         created.remove(root).map_err(|e| {
             format!(
                 "lost the race to #{lower}; closed #{pr}, but removing our worktree failed: {e}"
             )
         })?;
-        return Ok(Claimed::Lost { pr, lower });
+        return Ok(Claimed::Lost {
+            pr,
+            lower,
+            branch: created.branch,
+            delete_failed,
+        });
     }
     Ok(Claimed::Won {
         worktree: created.worktree,
@@ -792,10 +813,21 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             println!("draft PR: #{pr}");
             0
         }
-        Ok(Claimed::Lost { pr, lower }) => {
+        Ok(Claimed::Lost {
+            pr,
+            lower,
+            branch,
+            delete_failed,
+        }) => {
             eprintln!(
                 "uor-harness: loop claim: lost the race to #{lower}; closed #{pr} and removed its worktree and branch"
             );
+            match delete_failed {
+                None => eprintln!("uor-harness: loop claim: deleted {branch} from origin"),
+                Some(e) => eprintln!(
+                    "uor-harness: loop claim: deleting {branch} from origin failed: {e}; delete it by hand"
+                ),
+            }
             1
         }
         Err(e) => {

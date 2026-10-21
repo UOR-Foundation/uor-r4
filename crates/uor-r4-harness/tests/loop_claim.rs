@@ -330,10 +330,19 @@ fn a_lost_race_closes_our_pr_and_removes_only_what_we_created() {
         "{o:?}"
     );
     let calls = r.calls();
-    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert_eq!(calls.len(), 3, "{calls:?}");
     assert_eq!(
         calls[1],
         serde_json::json!({"call": "close_pr", "number": 50})
+    );
+    assert_eq!(
+        calls[2],
+        serde_json::json!({"call": "delete_remote_branch", "branch": "claude/ready-a"}),
+        "only our pushed branch is deleted from origin"
+    );
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("deleted claude/ready-a from origin"),
+        "{o:?}"
     );
     assert!(!r.root.join(".worktrees/claude-ready-a").exists());
     assert!(!r.has_branch("claude/ready-a"));
@@ -398,4 +407,163 @@ fn a_failed_fetch_exits_2_and_creates_nothing() {
         "{o:?}"
     );
     assert!(!r.root.join(".worktrees").exists());
+}
+
+const PARENT: &str = "docs/loop/tasks/ready-a/claude-1/ORDER.md";
+
+impl Repo {
+    /// Run `uor-harness loop <args>` as claude, with no GitHub at all.
+    fn loop_cmd(&self, args: &[&str]) -> Output {
+        clean(&mut Command::new(BIN))
+            .args(["--repo", self.root.to_str().unwrap(), "loop"])
+            .args(args)
+            .env("UOR_LAB", "claude")
+            .current_dir(&self.root)
+            .output()
+            .expect("uor-harness runs")
+    }
+
+    /// A parent ORDER naming `ready-a`, whose scope is `[crates/a/**, docs/research/notebook/a.md]`.
+    fn with_parent(self) -> Repo {
+        self.write(PARENT, &order("ready-a"));
+        self
+    }
+
+    fn card(&self, rel: &str) -> Option<String> {
+        let p = self.root.join("local/claude/claude-1").join(rel);
+        assert!(p.starts_with(&self.root));
+        std::fs::read_to_string(p).ok()
+    }
+}
+
+#[test]
+fn suborder_accepts_a_narrower_scope_and_writes_the_order() {
+    let r = Repo::new().with_parent();
+    let o = r.loop_cmd(&[
+        "suborder",
+        "--parent",
+        PARENT,
+        "--scope",
+        "crates/a/src/**,crates/a/x.rs",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        out.contains(PARENT) && out.contains("Stop and ask on any file outside this scope"),
+        "{out}"
+    );
+    let card = r.card("orders/1.md").expect("orders/1.md is written");
+    assert!(
+        card.contains("- `crates/a/src/**`") && card.contains("- `crates/a/x.rs`"),
+        "{card}"
+    );
+    let again = r.loop_cmd(&["suborder", "--parent", PARENT, "--scope", "crates/a/y.rs"]);
+    assert_eq!(again.status.code(), Some(0), "{again:?}");
+    assert!(
+        r.card("orders/2.md").is_some(),
+        "the next number is one more"
+    );
+}
+
+#[test]
+fn suborder_refuses_a_glob_outside_the_parent_scope() {
+    let r = Repo::new().with_parent();
+    let o = r.loop_cmd(&[
+        "suborder",
+        "--parent",
+        PARENT,
+        "--scope",
+        "crates/a/x.rs,crates/b/y.rs",
+    ]);
+    refused(&o, "scope crates/b/y.rs is outside the parent's scope");
+    assert!(r.card("orders/1.md").is_none(), "nothing is written");
+}
+
+#[test]
+fn suborder_refuses_a_sibling_whose_prefix_only_partly_matches() {
+    let r = Repo::new().with_parent();
+    let o = r.loop_cmd(&["suborder", "--parent", PARENT, "--scope", "crates/ab/x.rs"]);
+    refused(&o, "scope crates/ab/x.rs is outside");
+    assert!(r.card("orders/1.md").is_none());
+}
+
+#[test]
+fn ask_scope_writes_a_card() {
+    let r = Repo::new().with_parent();
+    let o = r.loop_cmd(&[
+        "ask",
+        "--scope",
+        "--order",
+        PARENT,
+        "--file",
+        "crates/b/lib.rs",
+        "--reason",
+        "the helper lives there",
+        "--lines",
+        "12",
+        "--own-code",
+        "no",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let card = r.card("asks/1.md").expect("asks/1.md is written");
+    for want in [
+        "`crates/b/lib.rs`",
+        "the helper lives there",
+        "roughly: 12",
+        "instead: no",
+    ] {
+        assert!(card.contains(want), "{want} in {card}");
+    }
+}
+
+#[test]
+fn ask_blocked_writes_a_card() {
+    let r = Repo::new().with_parent();
+    let o = r.loop_cmd(&[
+        "ask",
+        "--blocked",
+        "--order",
+        PARENT,
+        "--limit",
+        "4 pods",
+        "--measured",
+        "uor-pod status count",
+        "--command",
+        "scripts/pod/uor-pod status",
+        "--state",
+        "not-reached",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let card = r.card("asks/1.md").expect("asks/1.md is written");
+    for want in [
+        "Limit: 4 pods",
+        "uor-pod status count",
+        "`scripts/pod/uor-pod status`",
+        "State: not-reached",
+    ] {
+        assert!(card.contains(want), "{want} in {card}");
+    }
+}
+
+#[test]
+fn ask_refuses_a_missing_field() {
+    let r = Repo::new().with_parent();
+    let o = r.loop_cmd(&[
+        "ask", "--scope", "--order", PARENT, "--file", "x.rs", "--reason", "r", "--lines", "3",
+    ]);
+    refused(&o, "missing --own-code");
+    let o = r.loop_cmd(&[
+        "ask",
+        "--blocked",
+        "--order",
+        PARENT,
+        "--limit",
+        "l",
+        "--measured",
+        "m",
+        "--state",
+        "refused",
+    ]);
+    refused(&o, "missing --command");
+    assert!(r.card("asks/1.md").is_none(), "nothing is written");
 }

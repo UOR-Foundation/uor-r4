@@ -678,6 +678,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     match args.first().map(String::as_str) {
         Some("gates") => {}
         Some("claim") => return crate::loopclaim::cli(root, lab, &args[1..]),
+        Some(a @ ("suborder" | "ask")) => return crate::loopsub::cli(root, lab, a, &args[1..]),
         Some(other) => {
             eprintln!("uor-harness: loop {other}: not built yet (see the build plan)");
             return 2;
