@@ -140,7 +140,15 @@ impl<'a> Pr<'a> {
         let merge_base = String::from_utf8_lossy(&mb).trim().to_string();
         let raw = git(
             root,
-            &["diff", "-z", "--name-status", "-M", &merge_base, &head],
+            &[
+                "diff",
+                "--ignore-submodules=none",
+                "-z",
+                "--name-status",
+                "-M",
+                &merge_base,
+                &head,
+            ],
         )?;
         let changes = name_status(&z_fields(&raw))?;
         Ok(Pr {
@@ -246,6 +254,12 @@ fn base_labs(pr: &Pr) -> Result<Vec<String>, String> {
     Ok(labs.keys().cloned().collect())
 }
 
+/// The lab an ORDER's `Lab:` line names (its value on the same line).
+fn order_lab(text: &str) -> Option<String> {
+    let re = regex::Regex::new(r"\bLab:[ \t]*([A-Za-z0-9_-]+)").expect("a valid pattern");
+    re.captures(text).map(|c| c[1].to_string())
+}
+
 /// The PR adds exactly one ORDER, by a registered lab, naming an item that exists at the base.
 fn rule_order(pr: &Pr) -> RuleResult {
     const R: &str = "order";
@@ -265,12 +279,10 @@ fn rule_order(pr: &Pr) -> RuleResult {
         )),
         Err(e) => details.push(e),
     }
-    let lab_re = regex::Regex::new(r"\bLab:\s*([A-Za-z0-9_-]+)").expect("a valid pattern");
-    match lab_re.captures(&text) {
-        Some(c) if c[1] == lab => {}
-        Some(c) => details.push(format!(
-            "the ORDER says `Lab: {}` but its folder is lab {lab}",
-            &c[1]
+    match order_lab(&text) {
+        Some(l) if l == lab => {}
+        Some(l) => details.push(format!(
+            "the ORDER says `Lab: {l}` but its folder is lab {lab}"
         )),
         None => details.push("the ORDER has no `Lab: <lab>` line".into()),
     }
@@ -284,7 +296,7 @@ fn rule_order(pr: &Pr) -> RuleResult {
                     "item {id} does not exist at the merge base (docs/roadmap/items/{id}.md)"
                 ));
             }
-            let setup_re = regex::Regex::new(r"Setup row:\s*\S").expect("a valid pattern");
+            let setup_re = regex::Regex::new(r"Setup row:[ \t]*\S").expect("a valid pattern");
             if id.starts_with("infra-loop-pr") && !setup_re.is_match(&text) {
                 details.push(format!(
                     "item {id} is a loop setup PR, so the ORDER needs a `Setup row: <x>` line"
@@ -368,8 +380,9 @@ fn rule_scope(pr: &Pr) -> RuleResult {
     )
 }
 
-/// The non-merge commits of the PR, oldest first (`rev-list --reverse --topo-order`).
-fn pr_commits(pr: &Pr) -> Result<Vec<String>, String> {
+/// The PR's commits, oldest first (`rev-list --reverse --topo-order`), each with whether it is a
+/// merge (more than one parent).
+fn pr_commits(pr: &Pr) -> Result<Vec<(String, bool)>, String> {
     let range = format!("{}..{}", pr.merge_base, pr.head);
     let out = git(
         pr.root,
@@ -377,13 +390,17 @@ fn pr_commits(pr: &Pr) -> Result<Vec<String>, String> {
     )?;
     Ok(String::from_utf8_lossy(&out)
         .lines()
-        .filter_map(
-            |l| match l.split_whitespace().collect::<Vec<_>>().as_slice() {
-                [c] | [c, _] => Some(c.to_string()),
-                _ => None,
-            },
-        )
+        .filter_map(|l| {
+            let mut words = l.split_whitespace();
+            let sha = words.next()?.to_string();
+            Some((sha, words.count() > 1))
+        })
         .collect())
+}
+
+/// The `(Lab:, Item:)` an ORDER text names.
+fn order_identity(text: &str) -> (Option<String>, Option<String>) {
+    (order_lab(text), crate::loopclaim::order_item(text))
 }
 
 /// What one non-merge commit changes against its parent.
@@ -393,6 +410,7 @@ fn commit_changes(pr: &Pr, sha: &str) -> Result<Vec<Change>, String> {
         pr.root,
         &[
             "diff-tree",
+            "--ignore-submodules=none",
             "--no-commit-id",
             "-r",
             "-M",
@@ -418,8 +436,15 @@ fn rule_commit_order(pr: &Pr) -> RuleResult {
         Err(e) => return fail(R, format!("cannot list the PR's commits: {e}")),
     };
     let mut details = Vec::new();
-    for sha in &commits {
+    for (sha, merge) in &commits {
         let short = &sha[..sha.len().min(9)];
+        if *merge {
+            // A merge's own tree can carry work no single-parent diff shows.
+            details.push(format!(
+                "{short} is a merge before the commit that adds {order}"
+            ));
+            continue;
+        }
         let changes = match commit_changes(pr, sha) {
             Ok(c) => c,
             Err(e) => return fail(R, format!("cannot read commit {short}: {e}")),
@@ -429,9 +454,10 @@ fn rule_commit_order(pr: &Pr) -> RuleResult {
                 .iter()
                 .flat_map(|c| c.paths.iter().map(String::as_str))
         };
-        let adds_order = changes
-            .iter()
-            .any(|c| c.status == 'A' && c.paths.last().map(String::as_str) == Some(order));
+        // An add, or the new side of a rename or copy, as in `added_orders`.
+        let adds_order = changes.iter().any(|c| {
+            matches!(c.status, 'A' | 'R' | 'C') && c.paths.last().map(String::as_str) == Some(order)
+        });
         if !adds_order {
             let p: Vec<&str> = paths().collect();
             if !p.is_empty() {
@@ -447,6 +473,14 @@ fn rule_commit_order(pr: &Pr) -> RuleResult {
             details.push(format!(
                 "{short} adds {order} but also changes {}, outside {folder}",
                 outside.join(", ")
+            ));
+        }
+        // Later commits may edit the ORDER (scope widening does), never re-point it.
+        let first = pr.show(sha, order).map(|t| order_identity(&t));
+        let at_head = pr.at_head(order).map(|t| order_identity(&t));
+        if first != at_head {
+            details.push(format!(
+                "the ORDER's `Lab:` or `Item:` at the head differs from the ORDER as {short} added it"
             ));
         }
         return result(
@@ -470,12 +504,34 @@ const REPORT_SECTIONS: [&str; 7] = [
     "Plain summary",
 ];
 
+/// Each line with whether it can be a heading: false inside a ``` or ~~~ fenced code block,
+/// fence lines included.
+fn heading_lines(text: &str) -> impl Iterator<Item = (&str, bool)> {
+    let mut fence: Option<&str> = None;
+    text.lines().map(move |line| {
+        let t = line.trim_start();
+        let marker = ["```", "~~~"].into_iter().find(|m| t.starts_with(m));
+        match (fence, marker) {
+            (None, Some(m)) => {
+                fence = Some(m);
+                (line, false)
+            }
+            (Some(open), Some(m)) if open == m => {
+                fence = None;
+                (line, false)
+            }
+            (Some(_), _) => (line, false),
+            (None, None) => (line, true),
+        }
+    })
+}
+
 /// What is wrong with a REPORT's sections; empty when it is valid.
 pub fn report_problems(text: &str) -> Vec<String> {
     // (lower-cased heading, whether a non-blank line follows before the next `## `)
     let mut sections: Vec<(String, bool)> = Vec::new();
-    for line in text.lines() {
-        if let Some(h) = line.strip_prefix("## ") {
+    for (line, can_head) in heading_lines(text) {
+        if let Some(h) = line.strip_prefix("## ").filter(|_| can_head) {
             sections.push((h.trim().to_lowercase(), false));
         } else if !line.trim().is_empty() {
             if let Some(last) = sections.last_mut() {
@@ -537,8 +593,8 @@ fn owner_match(entry: &str, path: &str) -> bool {
 pub fn owner_approval_missing(order_text: &str, entries: &[&str]) -> Vec<String> {
     let mut section = String::new();
     let mut inside = false;
-    for line in order_text.lines() {
-        if line.starts_with("## ") {
+    for (line, can_head) in heading_lines(order_text) {
+        if can_head && (line.starts_with("## ") || line.starts_with("# ")) {
             inside = line.to_lowercase().starts_with("## owner approval");
         }
         if inside {
@@ -556,7 +612,7 @@ pub fn owner_approval_missing(order_text: &str, entries: &[&str]) -> Vec<String>
             out.push(format!("the owner approval section does not name {entry}"));
         }
     }
-    let quote = regex::Regex::new(r#""[^"]+""#).expect("a valid pattern");
+    let quote = regex::Regex::new(r#""[^"\n]+""#).expect("a valid pattern");
     if !quote.is_match(&section) {
         out.push("the owner approval section holds no double-quoted answer".into());
     }
@@ -989,7 +1045,15 @@ const CLASSES: [&str; 5] = ["tests", "code", "docs", "generated", "other"];
 fn size(pr: &Pr) -> Result<Vec<(&'static str, u64, u64, u64)>, String> {
     let raw = git(
         pr.root,
-        &["diff", "-z", "--numstat", "-M", &pr.merge_base, &pr.head],
+        &[
+            "diff",
+            "--ignore-submodules=none",
+            "-z",
+            "--numstat",
+            "-M",
+            &pr.merge_base,
+            &pr.head,
+        ],
     )?;
     let fields = z_fields(&raw);
     let mut out: Vec<(&'static str, u64, u64, u64)> =

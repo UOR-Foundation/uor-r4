@@ -283,6 +283,95 @@ fn commit_order_skips_a_merge_of_main_after_the_order_commit() {
 }
 
 #[test]
+fn commit_order_fails_an_evil_merge_before_the_order_commit() {
+    let r = Repo::new();
+    // E: an empty commit on the base.
+    let e = r.commits(vec![Box::new(|_: &Repo| {})]);
+    // M: a merge of the base and E whose own tree carries work neither parent has.
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.write("crates/a/src/evil.rs", "\n");
+    r.git(&["add", "-A"]);
+    let tree = r.out(&["write-tree"]);
+    let m = r.out(&["commit-tree", &tree, "-p", &r.base, "-p", &e, "-m", "merge"]);
+    // O: adds only the ORDER; then the REPORT.
+    r.git(&["checkout", "-q", "--detach", &m]);
+    r.order_a();
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "order"]);
+    r.write(REPORT_A, REPORT);
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "report"]);
+    let h = r.out(&["rev-parse", "HEAD"]);
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL commit-order",
+        "is a merge before the commit that adds docs/loop/tasks/item-a/claude-1/ORDER.md",
+    );
+}
+
+#[test]
+fn commit_order_fails_an_order_re_pointed_after_its_commit() {
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        r.write(
+            ORDER_A,
+            &order("claude", "item-noscope", "Scope widened.\n"),
+        )
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL commit-order",
+        "`Item:` at the head differs from the ORDER as",
+    );
+    // Other ORDER edits after its commit stay allowed.
+    let h = r.green_a(|r| r.write(ORDER_A, &order("claude", "item-a", "Scope widened.\n")));
+    expect(&r.check(&h, &[]), 0, "PASS commit-order", "verdict: PASS");
+}
+
+#[test]
+fn commit_order_counts_a_renamed_order_as_adding_it() {
+    let r = Repo::new();
+    // The base holds a draft in the ORDER's folder; the ORDER commit renames it to ORDER.md.
+    let draft = "docs/loop/tasks/item-a/claude-1/DRAFT.md";
+    let text = order("claude", "item-a", "");
+    let base = r.commits(vec![Box::new(move |r: &Repo| r.write(draft, &text))]);
+    r.git(&["mv", draft, ORDER_A]);
+    r.git(&["commit", "-q", "-m", "order"]);
+    r.write(REPORT_A, REPORT);
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "report"]);
+    let h = r.out(&["rev-parse", "HEAD"]);
+    let o = r.check_against(&base, &h, &[]);
+    expect(
+        &o,
+        0,
+        "PASS commit-order",
+        "adds docs/loop/tasks/item-a/claude-1/ORDER.md first",
+    );
+}
+
+#[test]
+fn scope_sees_a_submodule_a_config_would_hide() {
+    let r = Repo::new();
+    r.git(&["config", "diff.ignoreSubmodules", "all"]);
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.order_a();
+    r.git(&["add", "-A"]);
+    let cacheinfo = format!("160000,{},sub", r.base);
+    r.git(&["update-index", "--add", "--cacheinfo", &cacheinfo]);
+    r.git(&["commit", "-q", "-m", "order and a submodule"]);
+    let h = r.out(&["rev-parse", "HEAD"]);
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL scope",
+        "sub is outside item item-a's scope",
+    );
+}
+
+#[test]
 fn report_needs_every_section_in_order_and_non_empty() {
     let r = Repo::new();
     let h = r.commits(vec![Box::new(|r: &Repo| r.order_a())]);
@@ -305,6 +394,14 @@ fn report_needs_every_section_in_order_and_non_empty() {
         (
             REPORT.replace("## Measurements\n\nNone.\n\n", "## Measurements\n\n  \n\n"),
             "the `## Measurements` section is empty",
+        ),
+        (
+            REPORT.replace(skills, &format!("```md\n{skills}```\n\n")),
+            "no `## Skills used` heading",
+        ),
+        (
+            REPORT.replace(skills, &format!("~~~\n```\n{skills}~~~\n\n")),
+            "no `## Skills used` heading",
         ),
     ];
     for (report, why) in cases {
@@ -349,6 +446,17 @@ fn owner_paths_need_the_entry_a_quoted_answer_and_a_time() {
             "does not name .github/**",
         ),
         (APPROVAL.replace('"', "'"), "holds no double-quoted answer"),
+        (
+            APPROVAL
+                .replace("\"Approve (Recommended)\"", "'Approve'")
+                .replace("\"Approve?\" Casey:", "\"Approve? Casey:\n yes\""),
+            "holds no double-quoted answer",
+        ),
+        // A `# ` heading closes the section.
+        (
+            APPROVAL.replace("Recorded at", "# Next\n\nRecorded at"),
+            "holds no ISO UTC time",
+        ),
     ];
     for (approval, why) in cases {
         let h = r.green(ORDER_A, &order("claude", "item-a", &approval), gh);
@@ -441,6 +549,24 @@ fn order_fails_for_each_broken_condition() {
                 r.write(
                     "docs/loop/tasks/infra-loop-pr9/claude-1/ORDER.md",
                     &order("claude", "infra-loop-pr9", ""),
+                )
+            }),
+        ),
+        (
+            "needs a `Setup row: <x>` line",
+            Box::new(|r: &Repo| {
+                r.write(
+                    "docs/loop/tasks/infra-loop-pr9/claude-1/ORDER.md",
+                    &order("claude", "infra-loop-pr9", "Setup row:\n5\n"),
+                )
+            }),
+        ),
+        (
+            "has no `Lab: <lab>` line",
+            Box::new(|r: &Repo| {
+                r.write(
+                    ORDER_A,
+                    "# ORDER\n\nLab:\nclaude. Item: [item-a](../../../../roadmap/items/item-a.md).\n",
                 )
             }),
         ),
