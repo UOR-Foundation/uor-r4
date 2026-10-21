@@ -1029,10 +1029,17 @@ pub fn watch_line(status: &WatchStatus, estimate: Option<f64>) -> String {
 }
 
 /// The latest seconds per gate in a ledger, for the finish estimate.
+///
+/// **UNKNOWN rows are skipped**: they are the rows written for gates not run after an earlier red,
+/// and their `seconds` is always `0.0`. Letting one overwrite a real timing would make the next
+/// estimate read "0.0s left" precisely after an early stop, when the estimate is most useful.
 pub fn last_seconds(ledger: &Path) -> BTreeMap<String, f64> {
     let mut last = BTreeMap::new();
     for line in fs::read_to_string(ledger).unwrap_or_default().lines() {
         if let Ok(r) = serde_json::from_str::<LedgerRow>(line) {
+            if r.verdict == Verdict::Unknown {
+                continue;
+            }
             last.insert(r.gate, r.seconds);
         }
     }
@@ -1106,16 +1113,23 @@ impl WatchWriter {
     }
 }
 
-/// Draws the window on stderr: prints the status line when the file changes, each red as it lands,
-/// and closes when the run is done or after five minutes without change. It never touches the run.
-fn watch_draw(path: PathBuf, last: BTreeMap<String, f64>) {
+/// The window loop, split from the file and the clock so it can be tested with a fake reader, a
+/// fake wait and a short give-up. It writes one line per change and returns when the run is done or
+/// when the status file has not changed for `give_up`; it never touches the run.
+pub fn watch_loop(
+    mut read: impl FnMut() -> String,
+    out: &mut dyn Write,
+    last: &BTreeMap<String, f64>,
+    give_up: Duration,
+    mut wait: impl FnMut(),
+) -> std::io::Result<()> {
     let mut seen = String::new();
     let mut changed_at = Instant::now();
     let mut announced: HashSet<String> = HashSet::new();
     let mut opened = false;
     loop {
-        thread::sleep(WATCH_POLL);
-        let text = fs::read_to_string(&path).unwrap_or_default();
+        wait();
+        let text = read();
         if !text.is_empty() && text != seen {
             seen = text;
             changed_at = Instant::now();
@@ -1124,27 +1138,40 @@ fn watch_draw(path: PathBuf, last: BTreeMap<String, f64>) {
             };
             if !opened {
                 opened = true;
-                eprintln!("watch | opened: {} gate(s)", status.gates.len());
+                writeln!(out, "watch | opened: {} gate(s)", status.gates.len())?;
             }
             for r in &status.results {
                 if r.verdict == Verdict::Red && announced.insert(r.id.clone()) {
-                    eprintln!("watch | RED {} after {:.1}s", r.id, r.seconds);
+                    writeln!(out, "watch | RED {} after {:.1}s", r.id, r.seconds)?;
                 }
             }
             if status.done {
-                eprintln!("watch | {}", watch_line(&status, None));
-                eprintln!("watch | closed after the run");
-                return;
+                writeln!(out, "watch | {}", watch_line(&status, None))?;
+                writeln!(out, "watch | closed after the run")?;
+                return Ok(());
             }
-            eprintln!(
+            writeln!(
+                out,
                 "watch | {}",
-                watch_line(&status, estimate_left(&status, &last))
-            );
-        } else if watch_gives_up(changed_at.elapsed()) {
-            eprintln!("watch | giving up after 5 minutes without change");
-            return;
+                watch_line(&status, estimate_left(&status, last))
+            )?;
+        } else if changed_at.elapsed() >= give_up {
+            // The give-up is timed here, not by `watch_gives_up`, so a test can inject its own
+            // threshold; `WATCH_GIVE_UP` is the five-minute value production uses.
+            writeln!(out, "watch | giving up after 5 minutes without change")?;
+            return Ok(());
         }
     }
+}
+
+/// Draws the window on stderr: the real reader, the real poll and the five-minute give-up.
+fn watch_draw(path: PathBuf, last: BTreeMap<String, f64>) {
+    let mut read = move || fs::read_to_string(&path).unwrap_or_default();
+    let stderr = std::io::stderr();
+    let mut out = stderr.lock();
+    let _ = watch_loop(&mut read, &mut out, &last, WATCH_GIVE_UP, || {
+        thread::sleep(WATCH_POLL)
+    });
 }
 
 #[cfg(test)]

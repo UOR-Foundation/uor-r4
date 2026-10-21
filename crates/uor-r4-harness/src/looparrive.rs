@@ -7,10 +7,12 @@
 //!
 //! **Verdicts.** Every check is `PASS`, `FAIL` or `N/A`. Exit 0 when nothing FAILs, 1 when a check
 //! FAILs, 2 when the command cannot run (usage, no lab, not a git repository). A failed fetch does
-//! not stop the run: the later checks read the `origin/main` already present. The four checks that
-//! used to WARN (checkout, binary, hooks, read-path) FAIL since loop PR 11 raised the loop's named
-//! warnings to errors: the loop relies on them, so a session may not start on a stale or unguarded
-//! checkout.
+//! not stop the run: the later checks read the `origin/main` already present. Three checks that used
+//! to WARN FAIL since loop PR 11 raised the loop's named warnings to errors: a checkout behind
+//! `origin/main`, a binary older than the checkout's build, and a read path above 76,800 B. The loop
+//! relies on those, so a session may not start on a stale or oversized checkout. `hooks` stays WARN:
+//! the shared hook is opt-in until loop PR 12 sanctions installing it, and a check that is always red
+//! teaches labs to ignore FAIL.
 //!
 //! Every git subprocess this module starts has every `GIT_*` variable removed except the ones a
 //! fetch needs to authenticate (`GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_ASKPASS`), so a caller's
@@ -39,6 +41,7 @@ const READ_PATH_WARN: usize = 76_800;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Verdict {
     Pass,
+    Warn,
     Fail,
     Na,
 }
@@ -47,6 +50,7 @@ impl Verdict {
     fn word(self) -> &'static str {
         match self {
             Verdict::Pass => "PASS",
+            Verdict::Warn => "WARN",
             Verdict::Fail => "FAIL",
             Verdict::Na => "N/A",
         }
@@ -209,10 +213,22 @@ fn checkout(root: &Path) -> Check {
             Verdict::Fail,
             "this checkout is behind origin/main; work from a fresh worktree of origin/main",
         ),
+        // `version::stale` cannot place a HEAD that is not an ancestor of `origin/main`: every task
+        // branch and every repaired PR worktree is in that state, and it is the normal one. Only a
+        // checkout it cannot read at all (no HEAD, no origin/main) is a failure.
+        Staleness::Unknown { why }
+            if why.starts_with("HEAD ") && why.ends_with("is not in origin/main") =>
+        {
+            check(
+                "checkout",
+                Verdict::Pass,
+                format!("this branch is ahead of or not in origin/main: {why}"),
+            )
+        }
         Staleness::Unknown { why } => check(
             "checkout",
             Verdict::Fail,
-            format!("cannot place this checkout against origin/main: {why}"),
+            format!("cannot read this checkout against origin/main: {why}"),
         ),
     }
 }
@@ -245,7 +261,8 @@ fn binary(root: &Path) -> Check {
 /// The git `pre-commit` hook against the exact text `uor-harness git install-hooks` writes
 /// ([`crate::githelp::HOOK_SCRIPT`], compiled from the crate's `rules/precommit-hook.sh`).
 fn hooks(root: &Path) -> Check {
-    const FIX: &str = "run `uor-harness git install-hooks`";
+    const FIX: &str =
+        "the shared hook is opt-in until loop PR 12; then run `uor-harness git install-hooks`";
     let dir = match git(root, &["rev-parse", "--git-path", "hooks"]) {
         Ok(out) => {
             let p = PathBuf::from(String::from_utf8_lossy(&out).trim());
@@ -256,7 +273,7 @@ fn hooks(root: &Path) -> Check {
             }
         }
         Err(e) => {
-            let mut c = check("hooks", Verdict::Fail, FIX);
+            let mut c = check("hooks", Verdict::Warn, FIX);
             c.details
                 .push(format!("cannot locate the hooks directory: {e}"));
             return c;
@@ -270,7 +287,7 @@ fn hooks(root: &Path) -> Check {
             format!("{} is the harness hook", hook.display()),
         ),
         Ok(t) if t == crate::githelp::HOOK_SCRIPT => {
-            let mut c = check("hooks", Verdict::Fail, FIX);
+            let mut c = check("hooks", Verdict::Warn, FIX);
             c.details.push(format!(
                 "{} is the harness hook but is not executable, so git skips it",
                 hook.display()
@@ -278,7 +295,7 @@ fn hooks(root: &Path) -> Check {
             c
         }
         Ok(_) => {
-            let mut c = check("hooks", Verdict::Fail, FIX);
+            let mut c = check("hooks", Verdict::Warn, FIX);
             c.details.push(format!(
                 "{} differs from the hook this binary installs",
                 hook.display()
@@ -286,7 +303,7 @@ fn hooks(root: &Path) -> Check {
             c
         }
         Err(_) => {
-            let mut c = check("hooks", Verdict::Fail, FIX);
+            let mut c = check("hooks", Verdict::Warn, FIX);
             c.details.push(format!("no {}", hook.display()));
             c
         }

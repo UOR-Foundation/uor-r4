@@ -93,7 +93,7 @@ UOR_LAB=claude uor-harness loop gates --break all  # plant each declared fault i
 
 Verdicts: GREEN, RED, REFUSED (could not run, or its reads match no file), UNKNOWN (not run after an earlier non-green result), VOID (a read file changed during the run). A break run is CAUGHT (green at HEAD, then red with its declared text), REFUSED (already not green before the break, or red for another reason) or DEFECT (stayed green); `--break` refuses an uncommitted `docs/harness/gates.json`, since breaks run against the committed tree. Logs and exit codes go under `local/<lab>/gates/<run-id>/`; the ledger is `local/<lab>/gates.jsonl`. A leading `cargo` in a gate command resolves to `$CARGO`, then `~/.cargo/bin/cargo`, then `PATH`.
 
-**The progress window (built, loop PR 11).** `--watch` writes a status file after every gate under `local/<lab>/gates/<run-id>/status.json` and draws it on stderr: `gate N of M`, the gate running now, each red as it lands, and a finish estimate from the latest seconds per gate in the ledger ("no estimate yet" on a first run). It opens only for a full run in a terminal, never in CI (`CI` set) and never in a headless or piped run, and it closes after the run. It gives up after five minutes without a change to the status file and says so. Nothing in the run depends on it: if it is off, crashes or gives up, the gates and the exit code are the same.
+**The progress window (built, loop PR 11).** `--watch` writes a status file after every gate under `local/<lab>/gates/<run-id>/status.json` and draws it on stderr: `gate N of M`, the gate running now, each red as it lands, and a finish estimate from the latest seconds per gate in the ledger ("no estimate yet" on a first run). It opens only for a full run in a terminal, never in CI (`CI` set) and never in a headless or piped run, and it closes after the run. It gives up after five minutes without a change to the status file and says so; a single gate that runs longer than five minutes therefore closes the window while the run continues, unchanged. Nothing in the run depends on it: if it is off, crashes or gives up, the gates and the exit code are the same.
 
 ### `loop claim`, `loop suborder` and `loop ask` (loop PR 7a)
 
@@ -497,3 +497,6 @@ The hook runs `uor-harness check --staged`, so `uor-harness` must be on `PATH` f
 anything; without it the hook lets the commit through. It only ever blocks on `error` severity;
 `warn` and `info` print and pass. A hook installed before 20 October 2026 (v1) ran the retired
 Python entry point; `uor-harness git install-hooks` upgrades it in place.
+
+`loop arrive` reports a missing, different or non-executable hook as **WARN**, not FAIL, until loop
+PR 12 sanctions installing the shared hook: a check that is always red teaches labs to ignore FAIL.

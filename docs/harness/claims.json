@@ -426,13 +426,6 @@
     "lab": "codex",
     "note": "Owner-requested native SVG visual repair; docs/figures, generators, embedded previews and documentation record only; no model or gate changes"
   },
-  "deepseek/loop-pr11-watch": {
-    "branch": "deepseek/loop-pr11-watch",
-    "claimed_at": "2026-10-21T18:44:33-04:00",
-    "head": "7864b0516",
-    "lab": "deepseek",
-    "note": ""
-  },
   "kimi-pm-main": {
     "branch": "kimi-pm-main",
     "claimed_at": "2026-10-18T13:44:36-04:00",

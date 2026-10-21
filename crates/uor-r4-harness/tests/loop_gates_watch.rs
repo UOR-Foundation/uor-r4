@@ -3,13 +3,14 @@
 //! The pure status and rendering functions are tested directly. The command-level test proves that
 //! --watch in a non-terminal (headless) run leaves the window off and the run unaffected.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::Duration;
 
 use uor_r4_harness::loopgates::{
-    estimate_left, last_seconds, watch_decision, watch_gives_up, watch_line, WatchDecision,
-    WatchResult, WatchStatus, WATCH_GIVE_UP,
+    estimate_left, last_seconds, watch_decision, watch_gives_up, watch_line, watch_loop,
+    WatchDecision, WatchResult, WatchStatus, WATCH_GIVE_UP,
 };
 
 fn status(gates: &[&str], finished: &[(&str, bool, f64)], current: Option<usize>) -> WatchStatus {
@@ -128,16 +129,96 @@ fn a_finished_status_carries_every_result_and_done() {
     assert!(watch_line(&back, None).contains("gate 1 of 1"));
 }
 
+/// The loop itself: an unchanged status file prints the giving-up line and returns. The wait
+/// closure is bounded, so a missing give-up branch fails this test instead of hanging it.
+#[test]
+fn the_window_gives_up_and_says_so_when_the_status_never_changes() {
+    let mut out: Vec<u8> = Vec::new();
+    let mut read = || String::new();
+    let mut calls = 0u32;
+    let mut wait = || {
+        calls += 1;
+        assert!(
+            calls <= 100,
+            "the window never gave up; its give-up branch is missing"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    };
+    watch_loop(
+        &mut read,
+        &mut out,
+        &BTreeMap::new(),
+        Duration::from_millis(1),
+        &mut wait,
+    )
+    .unwrap();
+    let text = String::from_utf8(out).unwrap();
+    assert!(
+        text.contains("giving up after 5 minutes without change"),
+        "{text}"
+    );
+}
+
+/// A finished run closes the window, and it says so.
+#[test]
+fn the_window_closes_after_the_run() {
+    let mut s = status(
+        &["fmt", "tests"],
+        &[("fmt", false, 0.4), ("tests", false, 2.0)],
+        None,
+    );
+    s.done = true;
+    let text = serde_json::to_string(&s).unwrap();
+    let mut out: Vec<u8> = Vec::new();
+    let mut read = || text.clone();
+    let mut wait = || {};
+    watch_loop(
+        &mut read,
+        &mut out,
+        &BTreeMap::new(),
+        Duration::from_secs(300),
+        &mut wait,
+    )
+    .unwrap();
+    let shown = String::from_utf8(out).unwrap();
+    assert!(shown.contains("gate 2 of 2"), "{shown}");
+    assert!(shown.contains("closed after the run"), "{shown}");
+}
+
+/// A red is printed when it lands, before the run ends.
+#[test]
+fn a_red_is_printed_as_it_lands() {
+    let s = status(&["fmt", "tests"], &[("fmt", true, 0.4)], Some(1));
+    let text = serde_json::to_string(&s).unwrap();
+    let mut out: Vec<u8> = Vec::new();
+    let mut read = || text.clone();
+    let mut wait = || std::thread::sleep(Duration::from_millis(2));
+    watch_loop(
+        &mut read,
+        &mut out,
+        &BTreeMap::new(),
+        Duration::from_millis(1),
+        &mut wait,
+    )
+    .unwrap();
+    let shown = String::from_utf8(out).unwrap();
+    assert!(shown.contains("RED fmt after 0.4s"), "{shown}");
+}
+
 /// A minimal repository with one always-green gate, so the command can run in a temp directory.
 fn repo() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().canonicalize().unwrap();
     let g = |args: &[&str]| -> String {
-        let st = Command::new("git")
+        let mut cmd = Command::new("git");
+        for (k, _) in std::env::vars_os() {
+            if k.to_string_lossy().starts_with("GIT_") {
+                cmd.env_remove(&k);
+            }
+        }
+        let st = cmd
             .args(args)
             .current_dir(&root)
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_WORK_TREE")
             .output()
             .expect("git runs");
         assert!(st.status.success(), "git {args:?}: {st:?}");
@@ -152,12 +233,7 @@ fn repo() -> tempfile::TempDir {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("gates.json"), gates).unwrap();
     std::fs::write(dir.join("labs.json"), labs).unwrap();
-    std::fs::write(
-        root.join("README.md"),
-        "# r
-",
-    )
-    .unwrap();
+    std::fs::write(root.join("README.md"), "# r\n").unwrap();
     g(&["add", "-A"]);
     g(&["commit", "-q", "-m", "init"]);
     tmp
@@ -210,7 +286,12 @@ fn the_ledger_feeds_the_estimate() {
     let tmp = tempfile::tempdir().unwrap();
     let ledger = tmp.path().join("gates.jsonl");
     let row = r#"{"gate":"tests","verdict":"GREEN","seconds":4.5,"commit":"abc","tree":"def","exit":0,"ts":1}"#;
-    std::fs::write(&ledger, format!("{row}\n")).unwrap();
+    let unknown = r#"{"gate":"tests","verdict":"UNKNOWN","seconds":0.0,"commit":"abc","tree":"def","exit":null,"ts":2}"#;
+    std::fs::write(&ledger, format!("{row}\n{unknown}\n")).unwrap();
     let last = last_seconds(&ledger);
-    assert_eq!(last.get("tests"), Some(&4.5));
+    assert_eq!(
+        last.get("tests"),
+        Some(&4.5),
+        "an UNKNOWN row written after a red must not zero the estimate"
+    );
 }

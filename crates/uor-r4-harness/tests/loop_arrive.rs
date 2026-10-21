@@ -161,16 +161,16 @@ fn a_clean_fixture_with_the_hook_passes() {
 }
 
 #[test]
-fn a_missing_hook_fails() {
+fn a_missing_hook_warns_and_still_exits_zero() {
+    // The shared hook is opt-in until loop PR 12 sanctions installing it, so arrive reports it and
+    // does not fail: a check that is always red teaches labs to ignore FAIL.
     let r = Repo::new();
     let o = r.arrive(&[], Some("claude"));
     let out = stdout(&o);
-    assert_eq!(o.status.code(), Some(1), "{o:?}");
-    assert!(
-        has_line(&out, "FAIL hooks run `uor-harness git install-hooks`"),
-        "{out}"
-    );
-    assert!(out.trim_end().ends_with("arrive: FAIL"), "{out}");
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(has_line(&out, "WARN hooks"), "{out}");
+    assert!(out.contains("opt-in until loop PR 12"), "{out}");
+    assert!(out.trim_end().ends_with("arrive: OK"), "{out}");
 }
 
 #[test]
@@ -270,6 +270,22 @@ fn a_committed_view_equal_to_its_render_passes() {
 }
 
 #[test]
+fn a_branch_ahead_of_origin_main_passes_checkout() {
+    // Every task branch and every repaired PR worktree is not in origin/main; that is normal, and
+    // only a checkout that cannot be read at all is a failure.
+    let r = Repo::new();
+    r.install_hook();
+    r.write("topic.txt", "work\n");
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "topic"]);
+    let o = r.arrive(&[], Some("claude"));
+    let out = stdout(&o);
+    assert_eq!(o.status.code(), Some(0), "{out}");
+    assert!(has_line(&out, "PASS checkout"), "{out}");
+    assert!(out.contains("ahead of or not in origin/main"), "{out}");
+}
+
+#[test]
 fn an_unreachable_origin_fails_fetch_and_runs_the_rest() {
     let r = Repo::new();
     let missing = r.tmp.path().canonicalize().unwrap().join("missing.git");
@@ -337,18 +353,15 @@ fn a_pickup_under_the_main_checkout_is_read_from_a_linked_worktree() {
 }
 
 #[test]
-fn a_matching_hook_that_is_not_executable_fails() {
+fn a_matching_hook_that_is_not_executable_warns() {
     use std::os::unix::fs::PermissionsExt;
     let r = Repo::new();
     let hook = r.install_hook();
     std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o644)).unwrap();
     let o = r.arrive(&[], Some("claude"));
     let out = stdout(&o);
-    assert_eq!(o.status.code(), Some(1), "{o:?}");
-    assert!(
-        has_line(&out, "FAIL hooks run `uor-harness git install-hooks`"),
-        "{out}"
-    );
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(has_line(&out, "WARN hooks"), "{out}");
     assert!(out.contains("is not executable"), "{out}");
 }
 
