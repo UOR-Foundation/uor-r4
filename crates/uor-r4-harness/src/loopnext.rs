@@ -190,6 +190,9 @@ pub struct FakeNextGh {
     prs: Vec<NextPr>,
     #[serde(default)]
     comments: BTreeMap<String, Vec<Comment>>,
+    /// PR numbers whose comment read fails.
+    #[serde(default, rename = "failComments")]
+    fail_comments: Vec<u64>,
     #[serde(default)]
     files: BTreeMap<String, String>,
     #[serde(default)]
@@ -220,6 +223,9 @@ impl NextGh for FakeNextGh {
         Ok(self.prs.clone())
     }
     fn comments(&self, n: u64) -> Result<Vec<Comment>, String> {
+        if self.fail_comments.contains(&n) {
+            return Err(format!("fake PR #{n}: comments read failed"));
+        }
         Ok(self
             .comments
             .get(&n.to_string())
@@ -268,15 +274,30 @@ struct PrOrder {
     setup: bool,
 }
 
+/// Why a PR has no ORDER: a `gh` read failed (an own PR fails closed on it), or the PR adds none, or
+/// several.
+enum OrderErr {
+    Read(String),
+    Missing(String),
+}
+
+impl OrderErr {
+    fn note(self) -> String {
+        match self {
+            Self::Read(s) | Self::Missing(s) => s,
+        }
+    }
+}
+
 /// The ORDER a PR adds, or why the PR is skipped: among its changed paths matching
 /// `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`, the ones readable at its head (a deleted one is
 /// not) and absent from `origin/main` (an edited one is not). Exactly one must remain.
-fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, String> {
+fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderErr> {
     let pattern = regex::Regex::new(r"^docs/loop/tasks/[^/]+/[^/]+-[0-9]+/ORDER\.md$")
         .expect("a valid pattern");
     // The listed files stop at 100; a PR that reaches it may have more, so read every page.
     let listed: Vec<String> = if pr.files.len() >= 100 {
-        gh.pr_files(pr.number)?
+        gh.pr_files(pr.number).map_err(OrderErr::Read)?
     } else {
         pr.files.iter().map(|f| f.path.clone()).collect()
     };
@@ -286,8 +307,13 @@ fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, String
         .map(String::as_str)
         .filter(|p| pattern.is_match(p))
     {
-        let Ok(text) = gh.file_at_pr(pr.number, path) else {
-            continue;
+        let text = match gh.file_at_pr(pr.number, path) {
+            Ok(t) => t,
+            // A path deleted at the head is absent (404); any other failure is a read error.
+            Err(e) if e.contains("404") || e.contains("Not Found") || e.contains("has no text") => {
+                continue;
+            }
+            Err(e) => return Err(OrderErr::Read(e)),
         };
         if git(root, &["cat-file", "-e", &format!("origin/main:{path}")]).is_ok() {
             continue;
@@ -296,14 +322,14 @@ fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, String
     }
     let (path, text) = match added.len() {
         1 => added.remove(0),
-        0 => return Err(format!("#{} adds no ORDER", pr.number)),
+        0 => return Err(OrderErr::Missing(format!("#{} adds no ORDER", pr.number))),
         n => {
             let paths: Vec<&str> = added.iter().map(|(p, _)| *p).collect();
-            return Err(format!(
+            return Err(OrderErr::Missing(format!(
                 "#{} adds {n} ORDERs ({})",
                 pr.number,
                 paths.join(", ")
-            ));
+            )));
         }
     };
     let dir = path.trim_end_matches("/ORDER.md");
@@ -412,7 +438,6 @@ pub fn run(
         .iter()
         .filter(|p| p.head_ref_name.starts_with(&prefix))
         .collect();
-    let mut repair_skipped = Vec::new();
     for pr in &own {
         let mut why = Vec::new();
         if pr.mergeable == "CONFLICTING" {
@@ -423,11 +448,16 @@ pub fn run(
                 why.push(format!("check {:?} is {}", c.name, c.conclusion));
             }
         }
-        match pr_order(root, gh, pr).and_then(|o| {
-            counted_records(gh, pr, &o, &vendors).map_err(|e| format!("#{}: {e}", pr.number))
-        }) {
-            Err(note) => repair_skipped.push(note),
-            Ok(records) => {
+        // An own PR fails closed: an unreadable ORDER or comment list stops `next` (exit 2).
+        let unreadable =
+            |e: String| format!("cannot run: could not read own PR #{}: {e}", pr.number);
+        match pr_order(root, gh, pr) {
+            Err(OrderErr::Read(e)) => return Err(unreadable(e)),
+            Err(OrderErr::Missing(_)) => {
+                why.push("its ORDER is missing or ambiguous".to_string());
+            }
+            Ok(o) => {
+                let records = counted_records(gh, pr, &o, &vendors).map_err(unreadable)?;
                 if let Some((rlab, false)) = records.last() {
                     why.push(format!(
                         "the last counted review record at its head ({rlab}) says REQUEST CHANGES"
@@ -452,13 +482,7 @@ pub fn run(
             ));
         }
     }
-    let mut detail = format!("{} own open PR(s), none needs a repair", own.len());
-    if !repair_skipped.is_empty() {
-        detail.push_str(&format!(
-            " (review records not read: {})",
-            repair_skipped.join(", ")
-        ));
-    }
+    let detail = format!("{} own open PR(s), none needs a repair", own.len());
     out.push(source("repairs", "none", detail));
     // 4. reviews.
     let mut skipped = Vec::new();
@@ -466,7 +490,7 @@ pub fn run(
         let order = match pr_order(root, gh, pr) {
             Ok(o) => o,
             Err(note) => {
-                skipped.push(note);
+                skipped.push(note.note());
                 continue;
             }
         };

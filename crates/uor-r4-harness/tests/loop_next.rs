@@ -407,3 +407,38 @@ fn a_stop_file_beats_an_own_pr_that_needs_repair() {
     assert_eq!(o.status.code(), Some(1), "{o:?}");
     assert!(decision(&o).starts_with("STOP kill switch"), "{o:?}");
 }
+
+#[test]
+fn an_own_pr_whose_comments_cannot_be_read_cannot_run() {
+    let r = Repo::new(&[]);
+    let mut f = fake(vec![pr(7, "claude/x", "claude", "it-1")], json!({}));
+    f["failComments"] = json!([7]);
+    let o = r.next(&f);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("cannot run: could not read own PR #7"),
+        "{err}"
+    );
+}
+
+#[test]
+fn an_own_pr_adding_two_orders_is_a_repair() {
+    let r = Repo::new(&[]);
+    let (mut p, mut f) = pr(7, "claude/x", "claude", "it-1");
+    let second = "docs/loop/tasks/it-2/claude-1/ORDER.md";
+    p["files"] = json!([
+        {"path": "docs/loop/tasks/it-1/claude-1/ORDER.md"},
+        {"path": second}
+    ]);
+    let mut fk = fake(vec![(p, f.clone())], json!({}));
+    fk["files"][format!("7:{second}")] = json!(f.1.clone());
+    f.0.clear();
+    let o = r.next(&fk);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        decision(&o).contains("GO repair #7")
+            && decision(&o).contains("its ORDER is missing or ambiguous"),
+        "{o:?}"
+    );
+}

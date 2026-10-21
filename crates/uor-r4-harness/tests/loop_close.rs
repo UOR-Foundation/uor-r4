@@ -669,7 +669,7 @@ fn a_worktree_holding_ignored_notes_is_kept_but_build_and_view_output_is_not() {
 
 /// Main adds `s.txt` (20 lines); the PR, rebased on it, changes line 15; main then changes line 2;
 /// the squash on top of that sets line 15 to `line15`. Returns the squash commit.
-fn shared_file_squash(m: &mut Merged, line15: &str) -> String {
+fn shared_file_squash(m: &mut Merged, pr_line: &str, line15: &str) -> String {
     let lines: Vec<String> = (1..=20).map(|i| format!("l{i}")).collect();
     let text = |l: &[String]| format!("{}\n", l.join("\n"));
     m.write("s.txt", &text(&lines));
@@ -678,7 +678,7 @@ fn shared_file_squash(m: &mut Merged, line15: &str) -> String {
     m.git(&["push", "-q", "origin", "main"]);
     m.git_in(&m.wt, &["rebase", "-q", "main"]);
     let mut pr = lines.clone();
-    pr[14] = "pr".into();
+    pr[14] = pr_line.into();
     std::fs::write(m.wt.join("s.txt"), text(&pr)).unwrap();
     m.git_in(&m.wt, &["commit", "-q", "-am", "pr"]);
     m.head = m.git(&["rev-parse", "claude/x"]);
@@ -705,7 +705,7 @@ fn shared_file_squash(m: &mut Merged, line15: &str) -> String {
 #[test]
 fn main_changing_another_part_of_a_shared_file_still_proves_the_content() {
     let mut m = Merged::new("true");
-    let mc = shared_file_squash(&mut m, "pr");
+    let mc = shared_file_squash(&mut m, "pr", "pr");
     m.fake("MERGED", &mc, "claude/x");
     let (code, out) = m.verify(&["--no-gates"]);
     assert_eq!(code, 0, "{out}");
@@ -715,7 +715,7 @@ fn main_changing_another_part_of_a_shared_file_still_proves_the_content() {
 #[test]
 fn a_squash_carrying_a_different_change_deletes_nothing() {
     let mut m = Merged::new("true");
-    let mc = shared_file_squash(&mut m, "other");
+    let mc = shared_file_squash(&mut m, "pr", "other");
     m.fake("MERGED", &mc, "claude/x");
     let (code, out) = m.verify(&["--no-gates"]);
     assert_eq!(code, 1, "{out}");
@@ -792,4 +792,69 @@ fn green_gates_delete_red_gates_delete_nothing_and_the_verify_worktree_goes_eith
     assert!(m.all_kept(), "{out}");
     assert!(!m.main.join("local/claude/verify-7").exists(), "{out}");
     assert!(!m.git(&["worktree", "list"]).contains("verify-7"), "{out}");
+}
+
+#[test]
+fn a_squash_differing_only_in_whitespace_deletes_nothing() {
+    let mut m = Merged::new("true");
+    let mc = shared_file_squash(&mut m, "x = \"a b c\"", "x = \"ab c\"");
+    m.fake("MERGED", &mc, "claude/x");
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL content"), "{out}");
+    assert!(m.all_kept(), "{out}");
+}
+
+#[test]
+fn a_successful_verify_removes_the_branch_config_section() {
+    let m = Merged::new("true");
+    m.git(&["config", "branch.claude/x.merge", "refs/heads/claude/x"]);
+    assert_eq!(
+        m.git(&["config", "--get", "branch.claude/x.merge"]),
+        "refs/heads/claude/x"
+    );
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 0, "{out}");
+    let o = clean(&mut Command::new("git"))
+        .args(["config", "--get", "branch.claude/x.merge"])
+        .current_dir(&m.main)
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&o.stdout).trim().is_empty(),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_gates_ledger_and_build_output_alone_do_not_keep_the_worktree() {
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    std::fs::create_dir_all(m.wt.join("local/claude")).unwrap();
+    std::fs::write(m.wt.join("local/claude/gates.jsonl"), "{}\n").unwrap();
+    std::fs::create_dir_all(m.wt.join("target")).unwrap();
+    std::fs::write(m.wt.join("target/x"), "build\n").unwrap();
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("PASS worktree"), "{out}");
+    assert!(!m.wt.exists(), "{out}");
+}
+
+#[test]
+fn a_session_naming_a_closed_pr_on_the_current_branch_is_refused() {
+    let r = Repo::new(&valid_report());
+    std::fs::write(
+        r.fake_path(),
+        format!(
+            "{{\"prs\": [{{\"number\": 7, \"headRefName\": \"feat\", \"state\": \"CLOSED\", \"isDraft\": false, \"headRefOid\": \"{}\"}}]}}",
+            r.head()
+        ),
+    )
+    .unwrap();
+    let (code, out) = r.close(Some("claude"), &["--session", "--pr", "7"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("CLOSED"), "{out}");
+    assert!(r.calls().is_empty(), "{out}");
+    assert!(r.pickup().is_none());
 }

@@ -23,7 +23,7 @@
 //! deletion, and nothing is deleted when a proof fails: `state` (GitHub reports `MERGED`), `squash`
 //! (the merge commit is on fresh `origin/main` and its subject ends `(#<n>)`), `content` (for the
 //! files the PR changed, each is identical between the merge commit and the PR head, or the PR's patch
-//! has the merge's `git patch-id --stable`) and `done-when` (`loop gates --full` in a detached
+//! has the merge's `git patch-id --verbatim`) and `done-when` (`loop gates --full` in a detached
 //! worktree of `origin/main`, removed afterwards whatever the result). Then, only for this lab's own
 //! branch (`<lab>/...`), three independent steps, each with its own guard (a kept worktree does not
 //! stop the others): the clean worktree under `.worktrees/<lab>-*` holding no ignored files beyond
@@ -359,7 +359,7 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
         .to_string())
 }
 
-/// The `git patch-id --stable` of `git diff --no-renames from to -- files` (empty for no change).
+/// The `git patch-id --verbatim` of `git diff --no-renames from to -- files` (empty for no change).
 fn patch_id(root: &Path, from: &str, to: &str, files: &[&str]) -> Result<String, String> {
     let mut args = vec![
         "diff",
@@ -377,7 +377,7 @@ fn patch_id(root: &Path, from: &str, to: &str, files: &[&str]) -> Result<String,
     let mut child = cmd
         .arg("-C")
         .arg(root)
-        .args(["patch-id", "--stable"])
+        .args(["patch-id", "--verbatim"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .spawn()
@@ -885,6 +885,11 @@ fn delete_local_branch(main: &Path, branch: &str, head: &str) -> Result<(), Stri
     let refname = format!("refs/heads/{branch}");
     match git(main, &["update-ref", "-d", &refname, head]) {
         Ok(_) => {
+            // `git branch -D` also drops the branch's config section; an absent one is fine.
+            let _ = git(
+                main,
+                &["config", "--remove-section", &format!("branch.{branch}")],
+            );
             step(
                 "PASS",
                 "local-branch",
