@@ -149,6 +149,23 @@ The task folder holds the one `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md` this
 
 Templates in `docs/loop/templates/`: `REPORT.md` (the seven sections, one fill line each), `ORDER.md` (the `Lab:`, `Item:`, `Setup row:` and `Base:` lines, then Goal, Cancel probe, Files in scope, Done when, Stop and ask if) and `PICKUP.md` (branch, head, task folder, open items and next step for the next session).
 
+### `loop arrive` (loop PR 7b)
+
+```sh
+UOR_LAB=claude uor-harness loop arrive          # loop step 2: one line per check, then arrive: OK|FAIL
+UOR_LAB=claude uor-harness --json loop arrive   # {"lab","checks":[{"check","verdict","summary","details"}],"ok"}
+```
+
+Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 every check PASS, WARN or N/A; 1 a check FAILs; 2 cannot run (usage, no lab, not a git repository). The checks, in order:
+
+- `fetch`: `git fetch origin main`; a failure FAILs with git's message, and the later checks read the `origin/main` already present.
+- `checkout`: HEAD against `origin/main`; behind or unplaceable WARNs.
+- `binary`: the running binary against the newest build in this checkout, by age (no commit is baked into the binary; `build.rs` says why); older WARNs with the install command.
+- `hooks`: the git `pre-commit` hook must be the exact text `uor-harness git install-hooks` writes; otherwise WARN. `client-hooks` is N/A until loop PR 9.
+- `views`: renders STATE, HANDOFF and LESSONS from `origin/main` into `local/<lab>/views/`; a view committed at `origin/main` whose text below the stamp line differs from its render FAILs, because the repository's inputs win (run `loop render`).
+- `pickup`: `local/<lab>/PICKUP.md`; absent is N/A; 8,192 bytes or more FAILs, and so does each non-blank line under `## Standing references` that cites no `§<n>`, `D<n>` or `L-<nnn>`.
+- `read-path`: AGENTS.md, CHARTER.md, STATE.md and HANDOFF.md at `origin/main` plus the local PICKUP; AGENTS.md over 80 lines, STATE.md or HANDOFF.md at 24,576 bytes or more, or a total above 128,000 bytes FAILs; a total above 76,800 bytes WARNs.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front
