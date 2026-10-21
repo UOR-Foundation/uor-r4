@@ -1,0 +1,566 @@
+//! `uor-harness loop next [--json]`: loop step 1, decide go or stop (loop PR 7b).
+//!
+//! **Why this exists.** The loop page's step 1 decides go or stop and which kind of session, in a
+//! fixed order of preference: owner direction, repairs to the lab's own PRs, reviews, GPU
+//! collections, premise probes, the top of the lab's lane, then `any`. It stops on the kill switch
+//! (`local/loop/STOP` in the main checkout, or the label `loop:pause` on issue #2028), held work or
+//! an empty queue. Each source prints one line; the first that yields work decides GO.
+//!
+//! **Reads only.** GitHub is read through [`NextGh`]; the real one runs `gh`, tests point the
+//! binary at a JSON file through `UOR_LOOP_NEXT_GH_FAKE`. The `any` source asks
+//! [`crate::loopclaim::check`] whether a claim would be accepted, which fetches `origin main`;
+//! nothing else is written. Exit 0 GO, 1 STOP, 2 cannot run (usage, no lab, git or `gh` error).
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde::Deserialize;
+
+use crate::loopclaim::PrFile;
+use crate::loopprcheck::{Comment, PrGh as _};
+
+const USAGE: &str = "usage: uor-harness loop next [--json]";
+
+/// TEST-ONLY: a JSON file standing in for `gh`: `{"prs": [{number, headRefName, headRefOid,
+/// isDraft, mergeable, files: [{path}], checks: [{name, conclusion}]}], "comments": {"<n>":
+/// [{author, body}]}, "files": {"<n>:<path>": text}, "labels": {"<n>": [name]}}`.
+pub const NEXT_GH_FAKE_ENV: &str = "UOR_LOOP_NEXT_GH_FAKE";
+
+/// The issue whose `loop:pause` label pauses every lab's loop.
+const PAUSE_ISSUE: u64 = 2028;
+const PAUSE_LABEL: &str = "loop:pause";
+
+/// One check at a PR's head: its name and conclusion (`FAILURE`, `SUCCESS`, ...).
+#[derive(Debug, Clone, Deserialize)]
+pub struct PrCheck {
+    pub name: String,
+    #[serde(default)]
+    pub conclusion: String,
+}
+
+/// One open PR, as `gh pr list --json number,headRefName,headRefOid,isDraft,mergeable,files,
+/// statusCheckRollup` prints it, with the rollup reduced to [`PrCheck`]s.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NextPr {
+    pub number: u64,
+    pub head_ref_name: String,
+    #[serde(default)]
+    pub head_ref_oid: String,
+    #[serde(default)]
+    pub is_draft: bool,
+    #[serde(default)]
+    pub mergeable: String,
+    #[serde(default)]
+    pub files: Vec<PrFile>,
+    #[serde(default)]
+    pub checks: Vec<PrCheck>,
+}
+
+/// Every GitHub read `loop next` makes; it never writes.
+pub trait NextGh {
+    fn open_prs(&self) -> Result<Vec<NextPr>, String>;
+    /// The issue comments on PR `n`, oldest first.
+    fn comments(&self, n: u64) -> Result<Vec<Comment>, String>;
+    /// The text of `path` at PR `n`'s head.
+    fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String>;
+    /// The label names on issue `n`.
+    fn issue_labels(&self, n: u64) -> Result<Vec<String>, String>;
+}
+
+/// `gh`, run from the repository root.
+pub struct RealNextGh {
+    pub root: std::path::PathBuf,
+}
+
+impl NextGh for RealNextGh {
+    fn open_prs(&self) -> Result<Vec<NextPr>, String> {
+        let text = crate::loopclaim::run_gh(
+            &self.root,
+            &[
+                "pr",
+                "list",
+                "--state",
+                "open",
+                "--limit",
+                "200",
+                "--json",
+                "number,headRefName,headRefOid,isDraft,mergeable,files,statusCheckRollup",
+            ],
+        )?;
+        let v: Vec<serde_json::Value> = serde_json::from_str(&text)
+            .map_err(|e| format!("gh pr list printed unreadable JSON: {e}"))?;
+        v.into_iter()
+            .map(|mut p| {
+                // A CheckRun has `name` and `conclusion`; a StatusContext has `context` and `state`.
+                let checks: Vec<serde_json::Value> = p
+                    .get("statusCheckRollup")
+                    .and_then(|r| r.as_array())
+                    .into_iter()
+                    .flatten()
+                    .map(|c| {
+                        let s = |k: &str| c.get(k).and_then(|v| v.as_str()).unwrap_or("");
+                        let name = if s("name").is_empty() {
+                            s("context")
+                        } else {
+                            s("name")
+                        };
+                        let conclusion = if s("conclusion").is_empty() {
+                            s("state")
+                        } else {
+                            s("conclusion")
+                        };
+                        serde_json::json!({"name": name, "conclusion": conclusion})
+                    })
+                    .collect();
+                p["checks"] = serde_json::Value::Array(checks);
+                serde_json::from_value(p).map_err(|e| format!("gh pr list: unreadable PR: {e}"))
+            })
+            .collect()
+    }
+
+    fn comments(&self, n: u64) -> Result<Vec<Comment>, String> {
+        crate::loopprcheck::RealPrGh {
+            root: self.root.clone(),
+        }
+        .comments(n)
+    }
+
+    fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String> {
+        let endpoint = crate::loopclaim::contents_endpoint(path, n);
+        crate::loopclaim::run_gh(
+            &self.root,
+            &[
+                "api",
+                "-H",
+                "Accept: application/vnd.github.raw+json",
+                &endpoint,
+            ],
+        )
+    }
+
+    fn issue_labels(&self, n: u64) -> Result<Vec<String>, String> {
+        let endpoint = format!("repos/{{owner}}/{{repo}}/issues/{n}/labels");
+        let text = crate::loopclaim::run_gh(&self.root, &["api", &endpoint])?;
+        let v: Vec<serde_json::Value> = serde_json::from_str(&text)
+            .map_err(|e| format!("gh api {endpoint} printed unreadable JSON: {e}"))?;
+        Ok(v.iter()
+            .filter_map(|l| l.get("name")?.as_str().map(str::to_string))
+            .collect())
+    }
+}
+
+/// The in-memory stand-in for `gh`, read from the file `UOR_LOOP_NEXT_GH_FAKE` names.
+#[derive(Deserialize, Default)]
+pub struct FakeNextGh {
+    #[serde(default)]
+    prs: Vec<NextPr>,
+    #[serde(default)]
+    comments: BTreeMap<String, Vec<Comment>>,
+    #[serde(default)]
+    files: BTreeMap<String, String>,
+    #[serde(default)]
+    labels: BTreeMap<String, Vec<String>>,
+}
+
+impl FakeNextGh {
+    pub fn from_file(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| {
+            format!(
+                "cannot read {NEXT_GH_FAKE_ENV} file {}: {e}",
+                path.display()
+            )
+        })?;
+        serde_json::from_str(&text).map_err(|e| {
+            format!(
+                "{NEXT_GH_FAKE_ENV} file {} is malformed: {e}",
+                path.display()
+            )
+        })
+    }
+}
+
+impl NextGh for FakeNextGh {
+    fn open_prs(&self) -> Result<Vec<NextPr>, String> {
+        Ok(self.prs.clone())
+    }
+    fn comments(&self, n: u64) -> Result<Vec<Comment>, String> {
+        Ok(self
+            .comments
+            .get(&n.to_string())
+            .cloned()
+            .unwrap_or_default())
+    }
+    fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String> {
+        self.files
+            .get(&format!("{n}:{path}"))
+            .cloned()
+            .ok_or_else(|| format!("fake PR #{n} has no text for {path}"))
+    }
+    fn issue_labels(&self, n: u64) -> Result<Vec<String>, String> {
+        Ok(self.labels.get(&n.to_string()).cloned().unwrap_or_default())
+    }
+}
+
+/// One source's line: its name, `stop`, `work`, `none` or `not-built`, and what it found.
+#[derive(Debug)]
+pub struct Source {
+    pub source: &'static str,
+    pub status: &'static str,
+    pub detail: String,
+}
+
+#[derive(Debug)]
+pub enum Decision {
+    Go {
+        kind: &'static str,
+        target: String,
+        reason: String,
+    },
+    Stop(String),
+}
+
+/// The ORDER a PR adds: its lab (from `<lab>-<n>/ORDER.md`) and whether its item is a loop setup
+/// item (`infra-loop-pr*`, D59).
+struct PrOrder {
+    lab: String,
+    setup: bool,
+}
+
+fn pr_order(gh: &dyn NextGh, pr: &NextPr) -> Result<Option<PrOrder>, String> {
+    let Some(path) = pr
+        .files
+        .iter()
+        .map(|f| f.path.as_str())
+        .find(|p| p.starts_with("docs/loop/tasks/") && p.ends_with("/ORDER.md"))
+    else {
+        return Ok(None);
+    };
+    let dir = path.trim_end_matches("/ORDER.md");
+    let lab = dir
+        .rsplit('/')
+        .next()
+        .and_then(|d| d.rsplit_once('-'))
+        .map(|(l, _)| l.to_string())
+        .unwrap_or_default();
+    let text = gh.file_at_pr(pr.number, path)?;
+    let setup = crate::loopclaim::order_item(&text).is_some_and(|i| i.starts_with("infra-loop-pr"));
+    Ok(Some(PrOrder { lab, setup }))
+}
+
+/// Whether `lab`'s record counts on a PR with this ORDER: `claude` alone on a setup PR (D59), else
+/// a registered lab whose vendor differs from the ORDER lab's (D46).
+fn may_review(lab: &str, order: &PrOrder, vendors: &BTreeMap<String, String>) -> bool {
+    let Some(lv) = vendors.get(lab) else {
+        return false;
+    };
+    if order.setup {
+        return lab == "claude";
+    }
+    let ov = vendors.get(&order.lab).map(String::as_str).unwrap_or("");
+    !ov.is_empty() && !lv.is_empty() && ov != lv
+}
+
+/// The counted review records at the PR's head, oldest first: `(lab, approve)`.
+fn counted_records(
+    gh: &dyn NextGh,
+    pr: &NextPr,
+    order: &PrOrder,
+    vendors: &BTreeMap<String, String>,
+) -> Result<Vec<(String, bool)>, String> {
+    Ok(gh
+        .comments(pr.number)?
+        .iter()
+        .filter_map(|c| crate::loopprcheck::parse_review_record(&c.body))
+        .filter(|(lab, sha, _)| *sha == pr.head_ref_oid && may_review(lab, order, vendors))
+        .filter_map(|(lab, _, v)| v.map(|v| (lab, v)))
+        .collect())
+}
+
+fn source(source: &'static str, status: &'static str, detail: impl Into<String>) -> Source {
+    Source {
+        source,
+        status,
+        detail: detail.into(),
+    }
+}
+
+fn not_built(name: &'static str, why: &str) -> Source {
+    source(name, "not-built", format!("not built — {why}"))
+}
+
+fn git(root: &Path, args: &[&str]) -> Result<String, String> {
+    crate::loopgates::git(root, args).map(|b| String::from_utf8_lossy(&b).into_owned())
+}
+
+/// The sources in the loop page's order, stopping at the first that decides.
+pub fn run(
+    root: &Path,
+    lab: &str,
+    gh: &dyn NextGh,
+    claim_gh: &dyn crate::loopclaim::Gh,
+) -> Result<(Vec<Source>, Decision), String> {
+    let mut out = Vec::new();
+    // 1. kill switch.
+    let stop_file = crate::loopclaim::main_checkout(root)?.join("local/loop/STOP");
+    if stop_file.exists() {
+        let why = format!("kill switch: {} exists", stop_file.display());
+        out.push(source("kill-switch", "stop", why.clone()));
+        return Ok((out, Decision::Stop(why)));
+    }
+    let labels = gh
+        .issue_labels(PAUSE_ISSUE)
+        .map_err(|e| format!("cannot read the labels of #{PAUSE_ISSUE}: {e}"))?;
+    if labels.iter().any(|l| l == PAUSE_LABEL) {
+        let why = format!("kill switch: label {PAUSE_LABEL} on #{PAUSE_ISSUE}");
+        out.push(source("kill-switch", "stop", why.clone()));
+        return Ok((out, Decision::Stop(why)));
+    }
+    out.push(source(
+        "kill-switch",
+        "none",
+        format!("off (no local/loop/STOP, no {PAUSE_LABEL} on #{PAUSE_ISSUE})"),
+    ));
+    // 2. owner direction.
+    out.push(not_built(
+        "owner-direction",
+        "owner directions live in PLAN, loop PR 8",
+    ));
+    let vendors: BTreeMap<String, String> = crate::labs::load_labs(root)?
+        .into_iter()
+        .map(|(k, l)| (k, l.vendor))
+        .collect();
+    let mut prs = gh
+        .open_prs()
+        .map_err(|e| format!("cannot list open PRs: {e}"))?;
+    prs.sort_by_key(|p| p.number);
+    // 3. repairs to the lab's own PRs.
+    let prefix = format!("{lab}/");
+    let own: Vec<&NextPr> = prs
+        .iter()
+        .filter(|p| p.head_ref_name.starts_with(&prefix))
+        .collect();
+    for pr in &own {
+        let mut why = Vec::new();
+        if pr.mergeable == "CONFLICTING" {
+            why.push("it conflicts with main".to_string());
+        }
+        for c in &pr.checks {
+            if c.conclusion == "FAILURE" || c.conclusion == "TIMED_OUT" {
+                why.push(format!("check {:?} is {}", c.name, c.conclusion));
+            }
+        }
+        if let Some(order) = pr_order(gh, pr)? {
+            let records = counted_records(gh, pr, &order, &vendors)?;
+            if let Some((rlab, false)) = records.last() {
+                why.push(format!(
+                    "the last counted review record at its head ({rlab}) says REQUEST CHANGES"
+                ));
+            }
+        }
+        if !why.is_empty() {
+            let reason = why.join("; ");
+            out.push(source(
+                "repairs",
+                "work",
+                format!("#{}: {reason}", pr.number),
+            ));
+            return Ok((
+                out,
+                Decision::Go {
+                    kind: "repair",
+                    target: format!("#{}", pr.number),
+                    reason,
+                },
+            ));
+        }
+    }
+    out.push(source(
+        "repairs",
+        "none",
+        format!("{} own open PR(s), none needs a repair", own.len()),
+    ));
+    // 4. reviews.
+    let mut skipped = Vec::new();
+    for pr in prs.iter().filter(|p| !p.is_draft) {
+        let Some(order) = pr_order(gh, pr)? else {
+            skipped.push(format!("#{} has no ORDER", pr.number));
+            continue;
+        };
+        if !may_review(lab, &order, &vendors) {
+            continue;
+        }
+        let records = counted_records(gh, pr, &order, &vendors)?;
+        if records.iter().any(|(l, _)| l == lab) {
+            continue;
+        }
+        let reason = format!(
+            "#{} needs {lab}'s exact-head review at {}",
+            pr.number, pr.head_ref_oid
+        );
+        out.push(source("reviews", "work", reason.clone()));
+        return Ok((
+            out,
+            Decision::Go {
+                kind: "review",
+                target: format!("#{}", pr.number),
+                reason,
+            },
+        ));
+    }
+    let mut detail = "no open PR needs this lab's exact-head review".to_string();
+    if !skipped.is_empty() {
+        detail.push_str(&format!(" (skipped: {})", skipped.join(", ")));
+    }
+    out.push(source("reviews", "none", detail));
+    // 5-7. not built yet.
+    out.push(not_built("gpu-collections", "watchers are loop PR 10"));
+    out.push(not_built(
+        "premise-probes",
+        "PLAN's premise table is loop PR 8",
+    ));
+    out.push(not_built(
+        "lane",
+        "no lab has a lane and no item has `lane:`/`rank:` yet",
+    ));
+    // 8. any: ready, scoped items `loop claim` would accept, in id order.
+    git(root, &["fetch", "-q", "origin", "main"])
+        .map_err(|e| format!("cannot fetch origin main: {e}"))?;
+    let listing = git(
+        root,
+        &[
+            "ls-tree",
+            "--name-only",
+            "origin/main",
+            "docs/roadmap/items/",
+        ],
+    )?;
+    let (mut held, mut ready) = (0usize, Vec::new());
+    for id in listing
+        .lines()
+        .filter_map(|p| p.strip_prefix("docs/roadmap/items/")?.strip_suffix(".md"))
+    {
+        let Ok(item) = crate::loopclaim::read_item(root, id) else {
+            continue;
+        };
+        match item.status.as_deref() {
+            Some("held") => held += 1,
+            Some("ready") if item.scope.is_some() => ready.push(id.to_string()),
+            _ => {}
+        }
+    }
+    let mut refused = Vec::new();
+    for id in &ready {
+        match crate::loopclaim::check(root, lab, id, claim_gh) {
+            Ok(()) => {
+                let reason = format!("item {id} is ready, scoped and claimable");
+                out.push(source("any", "work", reason.clone()));
+                return Ok((
+                    out,
+                    Decision::Go {
+                        kind: "item",
+                        target: id.clone(),
+                        reason,
+                    },
+                ));
+            }
+            Err(e) => refused.push(format!("{id}: {e}")),
+        }
+    }
+    let mut detail = format!("{} ready scoped item(s), none claimable", ready.len());
+    if !refused.is_empty() {
+        detail.push_str(&format!(" ({})", refused.join("; ")));
+    }
+    out.push(source("any", "none", detail));
+    let stop = if held > 0 {
+        format!("held work: {held} item(s) held, none ready and claimable")
+    } else {
+        "empty queue".to_string()
+    };
+    Ok((out, Decision::Stop(stop)))
+}
+
+pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
+    let mut json = false;
+    for a in args {
+        match a.as_str() {
+            "--json" => json = true,
+            _ => {
+                eprintln!("uor-harness: loop next: unexpected argument {a:?}\n{USAGE}");
+                return 2;
+            }
+        }
+    }
+    if lab.trim().is_empty() {
+        eprintln!("uor-harness: loop next: set UOR_LAB or pass --lab\n{USAGE}");
+        return 2;
+    }
+    let gh: Box<dyn NextGh> = match std::env::var_os(NEXT_GH_FAKE_ENV) {
+        Some(p) => match FakeNextGh::from_file(Path::new(&p)) {
+            Ok(f) => Box::new(f),
+            Err(e) => {
+                eprintln!("uor-harness: loop next: {e}");
+                return 2;
+            }
+        },
+        None => Box::new(RealNextGh {
+            root: root.to_path_buf(),
+        }),
+    };
+    let claim_gh: Box<dyn crate::loopclaim::Gh> =
+        match std::env::var_os(crate::loopclaim::GH_FAKE_ENV) {
+            Some(p) => match crate::loopclaim::FakeGh::from_file(Path::new(&p)) {
+                Ok(f) => Box::new(f),
+                Err(e) => {
+                    eprintln!("uor-harness: loop next: {e}");
+                    return 2;
+                }
+            },
+            None => Box::new(crate::loopclaim::RealGh {
+                root: root.to_path_buf(),
+            }),
+        };
+    let (sources, decision) = match run(root, lab, gh.as_ref(), claim_gh.as_ref()) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("uor-harness: loop next: {e}");
+            return 2;
+        }
+    };
+    if json {
+        let d = match &decision {
+            Decision::Go {
+                kind,
+                target,
+                reason,
+            } => serde_json::json!({"go": true, "kind": kind, "target": target, "reason": reason}),
+            Decision::Stop(reason) => serde_json::json!({
+                "go": false, "kind": null, "target": null, "reason": reason
+            }),
+        };
+        let v = serde_json::json!({
+            "lab": lab,
+            "sources": sources.iter().map(|s| serde_json::json!({
+                "source": s.source, "status": s.status, "detail": s.detail,
+            })).collect::<Vec<_>>(),
+            "decision": d,
+        });
+        println!("{v}");
+    } else {
+        for s in &sources {
+            println!("{}: {}", s.source, s.detail);
+        }
+        match &decision {
+            Decision::Go {
+                kind,
+                target,
+                reason,
+            } => println!("GO {kind} {target} — {reason}"),
+            Decision::Stop(reason) => println!("STOP {reason}"),
+        }
+    }
+    match decision {
+        Decision::Go { .. } => 0,
+        Decision::Stop(_) => 1,
+    }
+}

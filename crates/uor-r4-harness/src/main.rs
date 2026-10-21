@@ -2557,9 +2557,13 @@ fn cmd_ledger_sync(repo: &Path, args: &[String], json: bool) -> ExitCode {
 /// `loop gates ...`: the gate runner (loop PR 4); `loop render ...`: the views (loop PR 3). A bad
 /// `UOR_LAB` exits 2 like every recorder.
 fn cmd_loop(repo: &Path, args: &[String], json: bool) -> ExitCode {
-    // The top-level parser consumes `--json`; `loop pr-check` and `loop arrive` read it.
+    // The top-level parser consumes `--json`; `loop pr-check`, `loop arrive` and `loop next` read it.
     let mut args = args.to_vec();
-    if json && args.iter().any(|a| a == "pr-check" || a == "arrive") {
+    if json
+        && args
+            .iter()
+            .any(|a| a == "pr-check" || a == "arrive" || a == "next")
+    {
         args.push("--json".to_string());
     }
     let args = &args[..];

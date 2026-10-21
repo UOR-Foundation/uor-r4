@@ -1381,6 +1381,20 @@ fn base_lab_vendors(pr: &Pr) -> Result<std::collections::BTreeMap<String, String
         .collect())
 }
 
+/// A review record's `(lab, sha, verdict)` when `body` starts `[<lab>] Exact-head review record for
+/// \`<40-hex sha>\``; the verdict is its first line starting `**Verdict: APPROVE` (`Some(true)`) or
+/// `**Verdict: REQUEST CHANGES` (`Some(false)`), `None` when it states neither.
+pub(crate) fn parse_review_record(body: &str) -> Option<(String, String, Option<bool>)> {
+    let re =
+        regex::Regex::new(r"^\[([A-Za-z0-9_-]+)\] Exact-head review record for `([0-9a-f]{40})`")
+            .expect("a valid pattern");
+    let verdict_re =
+        regex::Regex::new(r"(?m)^\*\*Verdict: (APPROVE|REQUEST CHANGES)").expect("a valid pattern");
+    let cap = re.captures(body)?;
+    let verdict = verdict_re.captures(body).map(|v| &v[1] == "APPROVE");
+    Some((cap[1].to_string(), cap[2].to_string(), verdict))
+}
+
 /// A PR comment starting `[<lab>] Exact-head review record for \`<head sha>\`` from a registered
 /// lab that may review this PR: `claude` alone for an `infra-loop-pr*` setup item (D59), else a
 /// lab whose vendor differs from the ORDER lab's (D46). A record's verdict is its first line
@@ -1415,19 +1429,13 @@ fn rule_review_record(pr: &Pr) -> RuleResult {
     };
     let setup = item.starts_with("infra-loop-pr");
     let order_vendor = vendors.get(&order_lab).cloned().unwrap_or_default();
-    let re =
-        regex::Regex::new(r"^\[([A-Za-z0-9_-]+)\] Exact-head review record for `([0-9a-f]{40})`")
-            .expect("a valid pattern");
-    let verdict_re =
-        regex::Regex::new(r"(?m)^\*\*Verdict: (APPROVE|REQUEST CHANGES)").expect("a valid pattern");
     let mut details = Vec::new();
     let mut last: Option<bool> = None;
     for (i, c) in comments.iter().enumerate() {
-        let Some(cap) = re.captures(&c.body) else {
+        let Some((lab, sha, verdict)) = parse_review_record(&c.body) else {
             continue;
         };
-        let (lab, sha) = (&cap[1], &cap[2]);
-        let verdict = verdict_re.captures(&c.body).map(|v| &v[1] == "APPROVE");
+        let (lab, sha) = (lab.as_str(), sha.as_str());
         let said = match verdict {
             Some(true) => "APPROVE",
             Some(false) => "REQUEST CHANGES",

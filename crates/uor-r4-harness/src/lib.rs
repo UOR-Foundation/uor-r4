@@ -36,6 +36,7 @@ pub mod labs;
 pub mod looparrive;
 pub mod loopclaim;
 pub mod loopgates;
+pub mod loopnext;
 pub mod loopprcheck;
 pub mod looprender;
 pub mod loopreport;

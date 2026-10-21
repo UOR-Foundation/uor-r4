@@ -166,6 +166,24 @@ Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 every check PASS, WARN or N/A;
 - `pickup`: `local/<lab>/PICKUP.md`; absent is N/A; 8,192 bytes or more FAILs, and so does each non-blank line under `## Standing references` that cites no `§<n>`, `D<n>` or `L-<nnn>`.
 - `read-path`: AGENTS.md, CHARTER.md, STATE.md and HANDOFF.md at `origin/main` plus the local PICKUP; AGENTS.md over 80 lines, STATE.md or HANDOFF.md at 24,576 bytes or more, or a total above 128,000 bytes FAILs; a total above 76,800 bytes WARNs.
 
+### `loop next` (loop PR 7b)
+
+```sh
+UOR_LAB=claude uor-harness loop next          # loop step 1: one line per source, then GO <kind> <target> — <why> | STOP <reason>
+UOR_LAB=claude uor-harness --json loop next   # {"lab","sources":[{"source","status","detail"}],"decision":{"go","kind","target","reason"}}
+```
+
+Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 GO, 1 STOP, 2 cannot run (usage, no lab, a git or `gh` error). It reads GitHub only; the `any` source runs `loop claim`'s checks, which fetch `origin main`. The sources, in order; the first that yields work decides:
+
+- `kill-switch`: STOP when `local/loop/STOP` exists in the main checkout or issue #2028 carries the label `loop:pause`.
+- `owner-direction`: not built (owner directions live in PLAN, loop PR 8).
+- `repairs`: the lab's own open PRs (head `<lab>/...`) that conflict, have a check at the head with conclusion FAILURE or TIMED_OUT, or whose last counted review record at the head says REQUEST CHANGES; GO `repair #<n>`, lowest number first.
+- `reviews`: open non-draft PRs this lab may review (a setup PR, item `infra-loop-pr*`: `claude` only, D59; any other: a lab of another vendor than the ORDER lab, D46) with no counted record from this lab at the head; GO `review #<n>`, lowest number first. A PR without an ORDER is skipped.
+- `gpu-collections`: not built (watchers are loop PR 10). `premise-probes`: not built (PLAN's premise table is loop PR 8). `lane`: not built (no lab has a lane and no item has `lane:`/`rank:` yet).
+- `any`: the first `status: ready` item at `origin/main` with a `scope:`, in id order, that `loop claim` would accept; GO `item <id>`.
+
+Then STOP `held work` when some item is `status: held`, else STOP `empty queue`.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front
