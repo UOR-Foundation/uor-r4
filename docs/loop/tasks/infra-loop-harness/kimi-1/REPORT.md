@@ -1,6 +1,6 @@
 # REPORT: infra-loop-harness, kimi-1 (scope lines on ready items)
 
-Lab: kimi. Order: [ORDER.md](ORDER.md).
+Lab: kimi. Order: folded into [kimi-3/ORDER.md](../kimi-3/ORDER.md) as history; this folder's original ORDER.md was removed so the PR adds exactly one ORDER, which `loop review --check` and `loop pr-check` both require.
 
 ## What did not work, first
 

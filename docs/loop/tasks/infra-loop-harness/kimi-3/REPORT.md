@@ -8,6 +8,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md).
 - `m2-fresh-heldout-panel` still listed `docs/harness/README.md`, one of the six shared registration files Casey exempted (21 Oct 23:43Z, recorded on #2028: "no item scope lists these six"). Dropped; verified none of the six appears in any `scope:` line.
 - pr03 and pr08 still collided with `infra-loop-harness` on `docs/roadmap/README.md`. Dropped from both; the umbrella keeps it as the PM's render target, and it stays out of every scope until Claude's exemption PR asks Casey to add it (and `docs/harness/gates.json`) to the shared list.
 - The kimi-2 REPORT understated the remaining overlaps: `crates/uor-r4-integer/**` appears in about 8 items. Corrected there, and its "Still open" now records Casey's decision instead of the open question.
+- With the round 2 CHANGES at the head, `loop review --check` refused to run at all: the PR added three ORDERs, and the gates resolve the PR's order only when exactly one is added (`loopnext.rs` and `loopprcheck.rs` agree). The repair chain is therefore folded, as the loop page's "the first ORDER is history" directs: kimi-1's and kimi-2's ORDER.md are removed from the branch in a forward commit, their steps already listed in kimi-3's ORDER with their commits, and both REPORTs stay in place with a pointer. Flagged on #2028 for the reviewer.
 
 ## What changed
 
