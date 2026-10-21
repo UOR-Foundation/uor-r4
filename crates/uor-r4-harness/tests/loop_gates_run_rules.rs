@@ -325,7 +325,7 @@ fn a_break_on_a_gate_already_red_at_head_is_refused() {
     let out = stdout(&o);
     assert!(line(&out, "red").contains("REFUSED"), "{out}");
     assert!(
-        line(&out, "red").contains("gate already red before the break"),
+        line(&out, "red").contains("gate not green before the break (RED: exit 1)"),
         "{out}"
     );
     assert_eq!(o.status.code(), Some(1));
@@ -464,4 +464,146 @@ fn keep_going_still_exits_1_after_a_red() {
     let out = stdout(&o);
     assert!(line(&out, "ok").contains("GREEN"), "{out}");
     assert_eq!(o.status.code(), Some(1), "{o:?}");
+}
+
+/// The run folders under `local/claude/gates/`.
+fn run_folders(r: &Repo) -> usize {
+    std::fs::read_dir(r.root.join("local/claude/gates")).map_or(0, |d| d.count())
+}
+
+#[test]
+fn a_refusal_before_any_gate_leaves_no_run_folder() {
+    let r = repo(&[("checks", CHECKS, "PLANTED\n", "input is broken")]);
+    assert_eq!(r.run(&["--break", "nope"]).status.code(), Some(2));
+    assert_eq!(run_folders(&r), 0);
+    change_gate(&r, 0, |g| g["quick"] = serde_json::json!(false));
+    assert_eq!(r.run(&["--quick"]).status.code(), Some(2));
+    assert_eq!(run_folders(&r), 0);
+    // gates.json is now uncommitted.
+    assert_eq!(r.run(&["--break", "checks"]).status.code(), Some(2));
+    assert_eq!(run_folders(&r), 0);
+}
+
+#[test]
+fn a_break_keeps_the_pre_check_log_apart() {
+    let r = repo(&[("checks", CHECKS, "PLANTED\n", "input is broken")]);
+    let o = r.run(&["--break", "checks"]);
+    assert!(line(&stdout(&o), "checks").contains("CAUGHT"), "{o:?}");
+    let dir = std::fs::read_dir(r.root.join("local/claude/gates"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+    assert_eq!(read("checks.pre.exit"), "0");
+    assert!(!read("checks.pre.log").contains("input is broken"));
+    assert_eq!(read("checks.exit"), "1");
+    assert!(read("checks.log").contains("input is broken"));
+}
+
+/// A file outside the repository's temporary directory, in a temporary directory of its own.
+fn outside_file() -> (tempfile::TempDir, PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    let p = tmp.path().canonicalize().unwrap().join("outside.txt");
+    std::fs::write(&p, "outside\n").unwrap();
+    (tmp, p)
+}
+
+#[test]
+fn a_break_file_that_is_a_tracked_symlink_is_refused() {
+    let (_out_tmp, outside) = outside_file();
+    let r = repo(&[("checks", CHECKS, "PLANTED\n", "input is broken")]);
+    assert!(!outside.starts_with(r._tmp.path().canonicalize().unwrap()));
+    std::os::unix::fs::symlink(&outside, r.root.join("src/link.txt")).unwrap();
+    change_gate(&r, 0, |g| {
+        g["break"]["file"] = serde_json::json!("src/link.txt")
+    });
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "symlink break file"]);
+    let o = r.run(&["--break", "checks"]);
+    let out = stdout(&o);
+    assert_eq!(
+        std::fs::read_to_string(&outside).unwrap(),
+        "outside\n",
+        "the outside file changed"
+    );
+    assert!(line(&out, "checks").contains("REFUSED"), "{out}");
+    assert!(line(&out, "checks").contains("is a symlink"), "{out}");
+    assert_eq!(worktrees_under_local(&r), 0);
+}
+
+#[test]
+fn a_break_file_swapped_for_a_symlink_during_the_pre_check_is_refused() {
+    // The break file is outside the gate's reads, so the swap does not void the pre-check: only
+    // a containment check at the point of write stops the append reaching the outside file.
+    let (_out_tmp, outside) = outside_file();
+    let swap = format!(
+        "rm -f notes/brk.txt && ln -s '{}' notes/brk.txt; exit 0",
+        outside.display()
+    );
+    let r = repo(&[("swaps", &swap, "PLANTED\n", "x")]);
+    r.write("notes/brk.txt", "plain\n");
+    change_gate(&r, 0, |g| {
+        g["break"]["file"] = serde_json::json!("notes/brk.txt")
+    });
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "plain break file"]);
+    let o = r.run(&["--break", "swaps"]);
+    let out = stdout(&o);
+    assert_eq!(
+        std::fs::read_to_string(&outside).unwrap(),
+        "outside\n",
+        "the outside file changed"
+    );
+    assert!(line(&out, "swaps").contains("REFUSED"), "{out}");
+}
+
+/// Whether `kill -0 <pid>` reports that no such process exists.
+fn no_such_process(pid: u32) -> bool {
+    let o = Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+    !o.status.success() && String::from_utf8_lossy(&o.stderr).contains("No such process")
+}
+
+#[test]
+fn the_sweep_removes_only_this_labs_dead_runs_scratch_worktrees() {
+    let r = repo(&[("checks", CHECKS, "PLANTED\n", "input is broken")]);
+    let dead = 2_000_000_000u32;
+    assert!(no_such_process(dead), "pid {dead} must not be live");
+    let live = std::process::id();
+    let wts = [
+        format!("local/claude/gates/1-{dead}/scratch/wt-own-dead"),
+        format!("local/claude/gates/1-{live}/scratch/wt-own-live"),
+        format!("local/kimi/gates/1-{dead}/scratch/wt-other-dead"),
+    ];
+    for wt in &wts {
+        assert!(r.root.join(wt).starts_with(&r.root));
+        r.git(&["worktree", "add", "--detach", "--quiet", wt, "HEAD"]);
+        r.write(&format!("{wt}/untracked.txt"), "keep me\n");
+    }
+    assert_eq!(worktrees_under_local(&r), 3);
+    let o = r.run(&["--break", "checks"]);
+    assert!(line(&stdout(&o), "checks").contains("CAUGHT"), "{o:?}");
+    let list = clean(&mut Command::new("git"))
+        .args(["worktree", "list"])
+        .current_dir(&r.root)
+        .output()
+        .unwrap();
+    let list = stdout(&list);
+    assert!(!list.contains("wt-own-dead"), "{list}");
+    assert!(!r.root.join(&wts[0]).exists());
+    for wt in &wts[1..] {
+        assert!(list.contains(wt.as_str()), "{wt} still registered: {list}");
+        assert_eq!(
+            std::fs::read_to_string(r.root.join(wt).join("untracked.txt")).unwrap(),
+            "keep me\n"
+        );
+    }
+    for wt in &wts[1..] {
+        r.git(&["worktree", "remove", "--force", wt]);
+    }
 }

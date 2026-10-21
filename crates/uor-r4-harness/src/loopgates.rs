@@ -346,6 +346,11 @@ fn now() -> u64 {
 
 /// Run one gate in `root`, logging to `<logdir>/<id>.log` and `<id>.exit`.
 pub fn run_one(root: &Path, gate: &Gate, logdir: &Path) -> Outcome {
+    run_logged(root, gate, logdir, &gate.id)
+}
+
+/// [`run_one`], logging to `<logdir>/<name>.log` and `<name>.exit`.
+fn run_logged(root: &Path, gate: &Gate, logdir: &Path, name: &str) -> Outcome {
     let start = Instant::now();
     let mut signal = None;
     let done = |verdict, exit, signal, reason: String| Outcome {
@@ -368,7 +373,7 @@ pub fn run_one(root: &Path, gate: &Gate, logdir: &Path) -> Outcome {
             )
         }
     };
-    let log_path = logdir.join(format!("{}.log", gate.id));
+    let log_path = logdir.join(format!("{name}.log"));
     let log = match fs::File::create(&log_path) {
         Ok(f) => f,
         Err(e) => {
@@ -421,7 +426,7 @@ pub fn run_one(root: &Path, gate: &Gate, logdir: &Path) -> Outcome {
         (None, Some(s)) => format!("signal {s}"),
         (None, None) => "signal".to_string(),
     };
-    let _ = fs::write(logdir.join(format!("{}.exit", gate.id)), &exit_text);
+    let _ = fs::write(logdir.join(format!("{name}.exit")), &exit_text);
     match reads_hash(root, &gate.reads) {
         Ok((after, _)) if after == before => {}
         Ok(_) => {
@@ -515,10 +520,23 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
         root,
         path: path.clone(),
     };
-    let target = path.join(&gate.brk.file);
-    if fs::symlink_metadata(&target).is_ok_and(|m| m.file_type().is_symlink()) {
-        return refused(format!("break.file {} is a symlink", gate.brk.file));
+    // The gate must be green at HEAD, or a red after planting proves nothing about the fault. Its
+    // log is `<id>.pre.log`, so the break run's own log does not overwrite that evidence.
+    let pre = run_logged(&path, gate, logdir, &format!("{}.pre", gate.id));
+    if pre.verdict != Verdict::Green {
+        let mut o = refused(format!(
+            "gate not green before the break ({}: {})",
+            pre.verdict.word(),
+            pre.reason
+        ));
+        o.exit = pre.exit;
+        o.signal = pre.signal;
+        o.seconds = pre.seconds;
+        return o;
     }
+    // Containment is checked here, after the pre-check and immediately before the write, because
+    // the gate's own run may have changed the scratch tree.
+    let target = path.join(&gate.brk.file);
     let inside = match (
         target.parent().map(fs::canonicalize),
         fs::canonicalize(&path),
@@ -532,18 +550,8 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
             gate.brk.file
         ));
     }
-    // The gate must be green at HEAD, or a red after planting proves nothing about the fault.
-    let pre = run_one(&path, gate, logdir);
-    if pre.verdict != Verdict::Green {
-        let mut o = refused(format!(
-            "gate already red before the break ({}: {})",
-            pre.verdict.word(),
-            pre.reason
-        ));
-        o.exit = pre.exit;
-        o.signal = pre.signal;
-        o.seconds = pre.seconds;
-        return o;
+    if fs::symlink_metadata(&target).is_ok_and(|m| m.file_type().is_symlink()) {
+        return refused(format!("break.file {} is a symlink", gate.brk.file));
     }
     let planted = fs::OpenOptions::new()
         .append(true)
@@ -572,24 +580,53 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
     o
 }
 
-/// Remove scratch worktrees an interrupted earlier run left registered: only entries whose path is
-/// exactly `<root>/local/<lab>/gates/<run>/scratch/wt-<id>`, each by its own path. Never a global
-/// prune, which would touch other sessions' registrations.
-pub fn sweep_stale_scratch(root: &Path) {
+/// Whether `pid` is certainly not a live process: `kill -0 <pid>` fails with "No such process".
+/// Anything else (live, owned by another user, out of range, `kill` not runnable) counts as live.
+fn pid_is_dead(pid: u32) -> bool {
+    if pid == 0 || i32::try_from(pid).is_err() {
+        return false;
+    }
+    match Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .env("LC_ALL", "C")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+    {
+        Ok(o) => {
+            !o.status.success() && String::from_utf8_lossy(&o.stderr).contains("No such process")
+        }
+        Err(_) => false,
+    }
+}
+
+/// Remove scratch worktrees an interrupted earlier run of this lab left registered. An entry is
+/// removed, by its own path, only when all three hold: its path is exactly
+/// `<root>/local/<lab_slug>/gates/<ts>-<pid>/scratch/wt-<id>` for this lab, `<pid>` is not a
+/// live process, and `<pid>` is not this process. Every other lab's and every live run's worktree
+/// is left alone, and there is never a global prune.
+pub fn sweep_stale_scratch(root: &Path, lab_slug: &str) {
     let Ok(list) = git(root, &["worktree", "list", "--porcelain"]) else {
         return;
     };
     let pat = format!(
-        "^{}/local/[^/]+/gates/[^/]+/scratch/wt-[a-z0-9][a-z0-9-]*$",
-        regex::escape(&root.to_string_lossy())
+        "^{}/local/{}/gates/[0-9]+-([0-9]+)/scratch/wt-[a-z0-9][a-z0-9-]*$",
+        regex::escape(&root.to_string_lossy()),
+        regex::escape(lab_slug)
     );
-    let re = regex::Regex::new(&pat).expect("an escaped path is a valid regex");
+    let re = regex::Regex::new(&pat).expect("escaped paths make a valid regex");
     for line in String::from_utf8_lossy(&list).lines() {
-        if let Some(p) = line.strip_prefix("worktree ") {
-            if re.is_match(p) {
-                let _ = git(root, &["worktree", "remove", "--force", p]);
-            }
+        let Some(p) = line.strip_prefix("worktree ") else {
+            continue;
+        };
+        let Some(pid) = re.captures(p).and_then(|c| c[1].parse::<u32>().ok()) else {
+            continue;
+        };
+        if pid == std::process::id() || !pid_is_dead(pid) {
+            continue;
         }
+        let _ = git(root, &["worktree", "remove", "--force", p]);
     }
 }
 
@@ -715,12 +752,16 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             return 2;
         }
     };
+    // Every refusal below comes before the run folder exists, so a refusal leaves no empty folder.
     let run_id = format!("{}-{}", now(), std::process::id());
     let logdir = lab_dir.join("gates").join(&run_id);
-    if let Err(e) = fs::create_dir_all(&logdir) {
-        eprintln!("uor-harness: cannot create {}: {e}", logdir.display());
-        return 2;
-    }
+    let make_logdir = || match fs::create_dir_all(&logdir) {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("uor-harness: cannot create {}: {e}", logdir.display());
+            false
+        }
+    };
     let outcomes = if let Some(which) = brk {
         let chosen: Vec<&Gate> = file
             .gates
@@ -741,7 +782,10 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             );
             return 2;
         }
-        sweep_stale_scratch(root);
+        if !make_logdir() {
+            return 2;
+        }
+        sweep_stale_scratch(root, &crate::state::slug(lab));
         let scratch = logdir.join("scratch");
         let out: Vec<Outcome> = chosen
             .into_iter()
@@ -766,6 +810,9 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
                 return 2;
             }
         };
+        if !make_logdir() {
+            return 2;
+        }
         let out = run_gates(root, &chosen, keep_going, &logdir);
         let ts = now();
         let rows: Vec<LedgerRow> = out
