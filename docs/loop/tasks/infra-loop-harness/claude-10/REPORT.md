@@ -59,7 +59,7 @@ None of the private kit's skills.
 ## Still open
 
 - **The new issues are in ready status but not yet runnable.** Builders start them in the D52 team order, and all reviews follow D59.
-- **CHARTER §6's wording.** Three reviewers misread it. Rewording it is the owner's call.
+- **A correction made after the first review.** The ORDER first gave the owner's consent time as "about 08:00Z". That is later than the apply, which started at 07:56:41Z, while the consent was recorded at 07:56:27Z. A fresh-context review of `f507b569a` caught this. Since an ORDER is never changed after merge, the time was corrected before the merge.
 
 ## Plain summary
 

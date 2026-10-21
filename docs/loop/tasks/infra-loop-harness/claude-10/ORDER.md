@@ -34,7 +34,7 @@ The task stands. Class: instrument.
 
 Outside the repository, the 14 new issues on GitHub, plus any labels the sync creates.
 
-**Scope widened before the apply.** The dry run planned 14 creates, 0 labels, 0 milestone changes and one update: the body of #2839 (`m1-export-gap-and-toks`). The reason is that #2894 edited that item's file at 23:54Z on 20 Oct, after the issue was last synced at 21:40Z. Asked whether to include it, the owner chose "Include #2839 (Recommended)" on 21 Oct 2026, about 08:00Z. That option was worded by Claude. So the #2839 body update is in scope.
+**Scope widened before the apply.** The dry run planned 14 creates, 0 labels, 0 milestone changes and one update: the body of #2839 (`m1-export-gap-and-toks`). The reason is that #2894 edited that item's file at 23:54Z on 20 Oct, after the issue was last synced at 21:40Z. Asked whether to include it, the owner chose "Include #2839 (Recommended)" on 21 Oct 2026, before the apply. This widening commit is dated 07:56:27Z, and the first issue was created at 07:56:41Z. The option was worded by Claude. So the #2839 body update is in scope.
 
 ## Done when
 
