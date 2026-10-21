@@ -541,7 +541,7 @@ const GROUPS: [(&str, &[&str]); 12] = [
         ],
     ),
     ("lint", &["check", "format"]),
-    ("loop", &["ask", "claim", "gates", "suborder"]),
+    ("loop", &["ask", "claim", "gates", "render", "suborder"]),
     ("mistakes", &["capture", "find", "list", "show"]),
     (
         "multilab",
@@ -556,7 +556,7 @@ const GROUPS: [(&str, &[&str]); 12] = [
     ),
 ];
 
-/// The flags this binary accepts, wherever they appear — **76 of them, taken from Python's parser
+/// The flags this binary accepts, wherever they appear — **78 of them, taken from Python's parser
 /// and `main.rs`'s `SUBCOMMAND_FLAGS` / `SUBCOMMAND_VALUE_FLAGS` rather than curated by hand.**
 ///
 /// **My first list was written from memory and was missing `--apply`, `--refresh`, `--dry-run` and
@@ -580,6 +580,7 @@ const FLAGS: &[&str] = &[
     "--break",
     "--budget-tokens",
     "--cached",
+    "--check",
     "--class",
     "--command",
     "--cost",
@@ -618,6 +619,7 @@ const FLAGS: &[&str] = &[
     "--note",
     "--only",
     "--order",
+    "--out",
     "--outcome",
     "--own-code",
     "--panel",
@@ -760,6 +762,8 @@ const VALUE_FLAGS: &[&str] = &[
     "--route",
     "--state",
     "--verdict",
+    "--at",
+    "--out",
 ];
 
 /// Words picked up from surrounding prose rather than from a harness command.
