@@ -209,7 +209,7 @@ fn fake(head: &str, comments: Vec<serde_json::Value>) -> serde_json::Value {
         .map(|n| serde_json::json!({"name": n, "app": "github-actions", "summary": "policy: pass (run 42)"}))
         .collect();
     serde_json::json!({
-        "pr": {"headRefOid": head, "headRefName": "claude/x", "state": "OPEN", "isDraft": false},
+        "pr": {"headRefOid": head, "headRefName": "claude/x", "baseRefName": "main", "state": "OPEN", "isDraft": false},
         "comments": comments,
         "checkRuns": runs,
         "statuses": [],
@@ -414,6 +414,150 @@ fn a_draft_pr_refuses() {
     f["pr"]["isDraft"] = true.into();
     let o = r.queue(&f, &[]);
     assert_refused(&r, &o, "FAIL pr-state");
+}
+
+#[test]
+fn a_closed_pr_refuses() {
+    let r = Repo::new();
+    let h = r.setup_pr();
+    let mut f = fake(
+        &h,
+        vec![record(SETUP_ORDER, "claude", &h, Verdict::Approve)],
+    );
+    f["pr"]["state"] = "CLOSED".into();
+    let o = r.queue(&f, &[]);
+    assert_refused(&r, &o, "FAIL pr-state PR 7 is CLOSED");
+}
+
+#[test]
+fn a_pr_not_based_on_main_refuses() {
+    let r = Repo::new();
+    let h = r.setup_pr();
+    let mut f = fake(
+        &h,
+        vec![record(SETUP_ORDER, "claude", &h, Verdict::Approve)],
+    );
+    f["pr"]["baseRefName"] = "release".into();
+    let o = r.queue(&f, &[]);
+    assert_refused(
+        &r,
+        &o,
+        "FAIL pr-state PR 7 is OPEN, based on \"release\", not main",
+    );
+}
+
+/// A hold written in the record's shape parses as malformed; the gate ignores it, so queue must
+/// refuse on it.
+#[test]
+fn a_malformed_record_after_the_approval_refuses() {
+    let r = Repo::new();
+    let h = r.setup_pr();
+    let comments = vec![
+        record(SETUP_ORDER, "claude", &h, Verdict::Approve),
+        comment(
+            "casey",
+            "[claude] uor-review v1\nHold — the APPROVE above missed X",
+        ),
+    ];
+    let o = r.queue(&fake(&h, comments), &[]);
+    assert_refused(&r, &o, "FAIL after-approval");
+    assert!(
+        text(&o).contains("refused, a malformed uor-review v1 record after the approval"),
+        "{}",
+        text(&o)
+    );
+}
+
+/// The registry comes from `origin/main`: a head that strips kimi's PM role does not let a kimi
+/// comment after the approval through.
+#[test]
+fn the_labs_registry_is_read_from_origin_main_not_the_head() {
+    let r = Repo::new();
+    let order = "# ORDER\n\nLab: claude. Item: [x](../../../../roadmap/items/infra-loop-pr99-x.md) (#1).\nSetup row: 99\n";
+    let h = r.pr(SETUP_ORDER, order, |r| {
+        r.write("crates/a/src/lib.rs", "//\n");
+        r.write(
+            "docs/harness/labs.json",
+            &LABS.replace(r#", "role": "pm""#, ""),
+        );
+    });
+    assert!(r
+        .out(&["show", &format!("{h}:docs/harness/labs.json")])
+        .contains("\"kimi\""));
+    assert!(!r
+        .out(&["show", &format!("{h}:docs/harness/labs.json")])
+        .contains("\"pm\""));
+    let comments = vec![
+        record(SETUP_ORDER, "claude", &h, Verdict::Approve),
+        comment("casey", "[kimi] Wait for the D-entry."),
+    ];
+    let o = r.queue(&fake(&h, comments), &[]);
+    assert_refused(
+        &r,
+        &o,
+        "refused, the PM (kimi) commented after the approval",
+    );
+    assert!(text(&o).contains("FAIL after-approval"), "{}", text(&o));
+}
+
+#[test]
+fn a_required_check_whose_policy_record_says_fail_refuses() {
+    let r = Repo::new();
+    let h = r.setup_pr();
+    let mut f = fake(
+        &h,
+        vec![record(SETUP_ORDER, "claude", &h, Verdict::Approve)],
+    );
+    f["checkRuns"][1]["summary"] = "policy: fail (run 1)".into();
+    let o = r.queue(&f, &[]);
+    assert_refused(&r, &o, "FAIL required-checks");
+}
+
+#[test]
+fn a_required_check_from_another_app_refuses() {
+    let r = Repo::new();
+    let h = r.setup_pr();
+    let mut f = fake(
+        &h,
+        vec![record(SETUP_ORDER, "claude", &h, Verdict::Approve)],
+    );
+    f["checkRuns"][2]["app"] = "other".into();
+    f["checkRuns"][2]["summary"] = "policy: pass (run 1)".into();
+    let o = r.queue(&f, &[]);
+    assert_refused(&r, &o, "FAIL required-checks");
+}
+
+/// A failed merge call is its own verdict with the error on the `merge` line, exit 2.
+#[test]
+fn a_failed_merge_call_is_merge_failed() {
+    let r = Repo::new();
+    let h = r.setup_pr();
+    let mut f = fake(
+        &h,
+        vec![record(SETUP_ORDER, "claude", &h, Verdict::Approve)],
+    );
+    f["failMerge"] = true.into();
+    let o = r.queue(&f, &[]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o));
+    assert!(text(&o).contains("verdict: MERGE-FAILED"), "{}", text(&o));
+    assert!(!text(&o).contains("verdict: REFUSED"), "{}", text(&o));
+    assert!(
+        text(&o).contains(&format!(
+            "FAIL merge `gh pr merge 7 --match-head-commit {h}` failed: fake PR #7: the merge call failed"
+        )),
+        "{}",
+        text(&o)
+    );
+    assert!(r.merges().is_empty(), "{:?}", r.merges());
+
+    let o = r.queue(&f, &["--json"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o));
+    let v: serde_json::Value =
+        serde_json::from_slice(&o.stdout).unwrap_or_else(|_| panic!("{}", text(&o)));
+    assert_eq!(v["verdict"], "merge-failed");
+    let last = v["checks"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(last["check"], "merge");
+    assert_eq!(last["verdict"], "fail");
 }
 
 #[test]

@@ -21,8 +21,8 @@ const USAGE: &str = "usage: uor-harness loop queue --pr <n> [--dry-run] [--json]
 /// The metadata-and-merge side of `gh` and the read side pr-check's rules use.
 type Ghs = (Box<dyn QueueGh>, Box<dyn PrGh>);
 
-/// TEST-ONLY: a JSON file standing in for `gh`: `{"pr": {"headRefOid", "headRefName", "state",
-/// "isDraft"}, "comments": [{"author", "body"}], "checkRuns": [...], "statuses": [...],
+/// TEST-ONLY: a JSON file standing in for `gh`: `{"pr": {"headRefOid", "headRefName",
+/// "baseRefName", "state", "isDraft"}, "comments": [{"author", "body"}], "checkRuns": [...], "statuses": [...],
 /// "failMerge": bool}` (the reads as `UOR_PRCHECK_GH_FAKE` writes them). Each merge call is
 /// appended as a JSON line to `<file>.calls.jsonl`.
 pub const QUEUE_GH_FAKE_ENV: &str = "UOR_LOOP_QUEUE_GH_FAKE";
@@ -33,6 +33,7 @@ pub const QUEUE_GH_FAKE_ENV: &str = "UOR_LOOP_QUEUE_GH_FAKE";
 pub struct QueuePr {
     pub head_ref_oid: String,
     pub head_ref_name: String,
+    pub base_ref_name: String,
     pub state: String,
     pub is_draft: bool,
 }
@@ -58,7 +59,7 @@ impl QueueGh for RealQueueGh {
                 "view",
                 &n.to_string(),
                 "--json",
-                "headRefOid,headRefName,state,isDraft",
+                "headRefOid,headRefName,baseRefName,state,isDraft",
             ],
         )?;
         serde_json::from_str(&out)
@@ -150,9 +151,10 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 /// The after-approval rule over the comments after index `approve` (the last counted record, an
-/// APPROVE): `(refused, details)`. A `uor-review v1` record, well-formed or not, is left to the
-/// gate; a `[bot]` author is ignored; a body starting `[<lab>]` for a registered lab whose role
-/// is not `pm` is ignored; any other comment refuses.
+/// APPROVE): `(refused, details)`. A well-formed `uor-review v1` record is left to the gate; a
+/// malformed one refuses, because the gate ignores it and it may be a hold written in the
+/// record's shape; a `[bot]` author is ignored; a body starting `[<lab>]` for a registered lab
+/// whose role is not `pm` is ignored; any other comment refuses.
 pub fn after_approval(
     comments: &[Comment],
     approve: usize,
@@ -162,12 +164,19 @@ pub fn after_approval(
     let mut details = Vec::new();
     for (i, c) in comments.iter().enumerate().skip(approve + 1) {
         let n = i + 1;
-        if !matches!(
-            crate::loopreview::parse(&c.body),
-            crate::loopreview::Parsed::NotARecord
-        ) {
-            details.push(format!("comment {n}: a review record, left to the gate"));
-            continue;
+        match crate::loopreview::parse(&c.body) {
+            crate::loopreview::Parsed::NotARecord => {}
+            crate::loopreview::Parsed::Record(_) => {
+                details.push(format!("comment {n}: a review record, left to the gate"));
+                continue;
+            }
+            crate::loopreview::Parsed::Malformed(why) => {
+                refused = true;
+                details.push(format!(
+                    "comment {n}: refused, a malformed uor-review v1 record after the approval ({why}); it may be a hold"
+                ));
+                continue;
+            }
         }
         if c.author.ends_with("[bot]") {
             details.push(format!("comment {n}: ignored, from bot {}", c.author));
@@ -262,6 +271,8 @@ enum Outcome {
     Refused,
     WouldQueue,
     Queued,
+    /// Every check passed and the merge call failed.
+    MergeFailed,
 }
 
 fn print(a: &Args, head: &str, checks: &[Check], outcome: &Outcome, fake: Option<&str>) {
@@ -269,6 +280,7 @@ fn print(a: &Args, head: &str, checks: &[Check], outcome: &Outcome, fake: Option
         Outcome::Refused => "refused",
         Outcome::WouldQueue => "would-queue",
         Outcome::Queued => "queued",
+        Outcome::MergeFailed => "merge-failed",
     };
     if a.json {
         let checks: Vec<serde_json::Value> = checks
@@ -312,7 +324,7 @@ fn print(a: &Args, head: &str, checks: &[Check], outcome: &Outcome, fake: Option
 }
 
 /// `loop queue --pr <n> [--dry-run] [--json]`. Exit 0 queued (or would queue), 1 refused, 2 the
-/// run could not finish.
+/// run could not finish (including a failed merge call, reported as `merge-failed`).
 pub fn cli(root: &Path, _lab: &str, args: &[String]) -> u8 {
     let Some(a) = parse_args(args) else {
         eprintln!("{USAGE}");
@@ -353,15 +365,21 @@ pub fn cli(root: &Path, _lab: &str, args: &[String]) -> u8 {
     };
     let head = meta.head_ref_oid.clone();
     let mut checks = Vec::new();
-    let open = meta.state == "OPEN" && !meta.is_draft;
+    let on_main = meta.base_ref_name == "main";
+    let open = meta.state == "OPEN" && !meta.is_draft && on_main;
     checks.push(Check::new(
         "pr-state",
         open,
         format!(
-            "PR {} is {}{}",
+            "PR {} is {}{}{}",
             a.pr,
             meta.state,
-            if meta.is_draft { " and a draft" } else { "" }
+            if meta.is_draft { " and a draft" } else { "" },
+            if on_main {
+                String::new()
+            } else {
+                format!(", based on {:?}, not main", meta.base_ref_name)
+            }
         ),
         Vec::new(),
     ));
@@ -419,8 +437,17 @@ pub fn cli(root: &Path, _lab: &str, args: &[String]) -> u8 {
         return 0;
     }
     if let Err(e) = gh.merge(a.pr, &head) {
-        print(&a, &head, &checks, &Outcome::Refused, fake.as_deref());
-        return cannot(e);
+        checks.push(Check::new(
+            "merge",
+            false,
+            format!(
+                "`gh pr merge {} --match-head-commit {head}` failed: {e}",
+                a.pr
+            ),
+            Vec::new(),
+        ));
+        print(&a, &head, &checks, &Outcome::MergeFailed, fake.as_deref());
+        return 2;
     }
     checks.push(Check::new(
         "merge",

@@ -256,10 +256,27 @@ impl uor_r4_harness::loopboard::BoardGh for OnlyReads {
 fn the_board_makes_no_github_write() {
     let _ = uor_r4_harness::loopboard::BoardGh::open_prs(&OnlyReads);
     let r = Repo::new();
+    r.write_live("claims/claude-1.json", "{\"lab\": \"claude\"}\n");
+    let snapshot = |dir: &std::path::Path| {
+        let mut files = std::collections::BTreeMap::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    files.insert(p.clone(), None);
+                    stack.push(p);
+                } else {
+                    files.insert(p.clone(), Some(std::fs::read(&p).unwrap()));
+                }
+            }
+        }
+        files
+    };
+    let before = snapshot(&r.live);
+    assert!(!before.is_empty());
     stdout(&r.board(&prs(), false));
-    let mut calls = r.fake_path().into_os_string();
-    calls.push(".calls.jsonl");
-    assert!(!PathBuf::from(calls).exists(), "no calls log is written");
+    assert_eq!(snapshot(&r.live), before, "the live tier is unchanged");
     let st = clean(&mut Command::new("git"))
         .args(["status", "--porcelain"])
         .current_dir(&r.root)

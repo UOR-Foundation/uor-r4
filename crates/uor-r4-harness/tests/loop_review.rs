@@ -292,6 +292,25 @@ fn approve_at(c: &Case, comments: &[String]) -> Option<usize> {
     })
 }
 
+/// A loop item whose ORDER names no valid setup row counts no record, so a claude APPROVE gives
+/// no standing approval.
+#[test]
+fn last_counted_approve_is_none_for_a_loop_item_without_a_valid_setup_row() {
+    let approve = fresh("claude", Verdict::Approve);
+    for setup_row in [None, Some("99")] {
+        let c = Case {
+            item: "infra-loop-pr06-review-records",
+            setup_row,
+            ..SETUP_PR
+        };
+        assert_eq!(approve_at(&c, std::slice::from_ref(&approve)), None);
+    }
+    assert_eq!(
+        approve_at(&SETUP_PR, std::slice::from_ref(&approve)),
+        Some(0)
+    );
+}
+
 /// The index of the last counted record when it is an APPROVE; records that do not count and
 /// plain comments are skipped; a last counted CHANGES or no counted record gives `None`.
 #[test]
