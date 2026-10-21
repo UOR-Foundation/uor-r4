@@ -14,7 +14,7 @@ Result at `4611538bb`: `grep -n "Claude's fresh-context\|whichever lab built" CH
 
 ## Files in scope
 
-- `CHARTER.md`: the D59 sentence in §5.5.
+- `CHARTER.md`: the D59 sentence in §5.5, and the D59 clause on §6's retired D46 entry. The scope was widened before that edit, after the review found the clause stale: since the amendment, same-lab review covers only the setup PRs Claude builds.
 - `docs/rules/changes.md`: one new entry.
 - `docs/integration/DECISIONS.md`: row D59 keeps its text, with the amendment appended.
 - `docs/loop/README.md`: the D59 note in the build plan.
