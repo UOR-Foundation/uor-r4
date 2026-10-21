@@ -253,6 +253,21 @@ Then, only for this lab's own branch (`<lab>/...`; another lab's PR prints `SKIP
 
 Tests replace `gh` with `UOR_LOOP_CLOSE_GH_FAKE=<json>`, and every run with it set prints `FAKE GitHub: UOR_LOOP_CLOSE_GH_FAKE=<path> (tests only)` first (`prs`, each with an optional `state` defaulting to `OPEN`, optional `failSetBody`/`failReady`, `merged` keyed by PR number for `--verify`); never set it outside tests. Tests also set `UOR_LOOP_CLOSE_NO_HYGIENE=1`, which prints `SKIP hygiene` instead of running hygiene.
 
+### `loop guard`, `loop install`, `loop onboard` and `loop copyright` (loop PR 9)
+
+```sh
+uor-harness loop guard --client <C> --lab <L> --event <E> [--input <path>]
+uor-harness loop install --all [--home <dir>] [--zip <path>] [--replace] [--dry-run]
+uor-harness loop onboard --client <C> [--home <dir>] [--write-receipt]
+uor-harness loop onboard --check-receipts
+uor-harness loop copyright [--zip <path>]
+```
+
+- `loop guard` is the single hook entry point for `antigravity`, `claude`, `codex`, `deepseek` and `kimi`. When the payload's directory (`cwd` or `workspacePaths`) and the process working directory lie outside the UOR-R4 repository and its worktrees, it exits `0` at once without touching any files. Inside the repository it records subagent state from the P-1 probe shapes (`agent_id` in Claude Code, root vs child `conversationId` in Antigravity, `SubagentStart`/`SubagentStop` depth per `session_id` in Kimi Code) and checks `PreToolUse` calls against owner-only paths (`docs/harness/owner-paths.json`), the shared primary checkout (R10), cross-lab worktrees and `local/` folders, rendered views, `archive/`, active ORDER and subagent suborder (`local/<lab>/<topic>/orders/<n>.md`) scopes, release/cap-override commands (D56) and forbidden git/process/credential commands. Allowed calls exit `0` (printing `{"decision":"allow"}` for Antigravity `PreToolUse`); refused calls exit `2` with `REFUSED: <reason>` on stderr.
+- `loop install` installs the six allowed Loop Kit skills (`gates`, `holding-the-goal`, `scope-guard`, `session-close`, `solution-integrity`, `working-discipline`; skipping `start-here` and quoting unquoted YAML colons in `description:`) into each client's user-level skills folder and writes each client's hook and pointer adapter files. Any write inside the repository lands under gitignored `local/`. Differing existing files are refused unless `--replace` is given, which backs them up to `local/loop/install-backups/` first.
+- `loop onboard --client <C>` prints `PASS`, `FAIL` or `REFUSED` for `rules`, `skills`, `hooks`, `canary`, `identity` and `binary`, followed by `lane:` and `pickup:`. `--write-receipt` writes `docs/harness/onboarding/<client>.json`, and `--check-receipts` verifies all five committed receipts and re-runs each client's live canary write refusal check.
+- `loop copyright` compares tracked repository markdown and text files against the owner's private Loop Kit archive (`--zip <path>` or `~/Downloads/LoopKit*.zip`) using 8-word windows in memory. It runs on the laptop only and never stores kit text or hashes in the repository.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front

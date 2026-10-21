@@ -190,12 +190,12 @@ Per client: Claude Code fires hooks inside subagents, and a SubagentStart hook i
 
 ## Install and onboarding (outline)
 
-- **Who installs.** The owner runs `loop install --all` (to build) once from Terminal. It lists every file it will write, backs up each config it edits to `local/loop/install-backups/`, refuses to replace a differing file without `--replace`, and writes only to gitignored `local/` inside the repository.
+- **Who installs.** The owner runs `loop install --all` (built, loop PR 9) once from Terminal. It lists every file it will write, backs up each config it edits to `local/loop/install-backups/`, refuses to replace a differing file without `--replace`, and writes only to gitignored `local/` inside the repository.
 - **The kit's skills** are installed into each client's own skills folder from the owner's private copy. No text from the kit enters this repository.
-- **One hook entry point.** `loop guard --client C --lab L --event E` (to build) replaces today's presence hooks. It exits at once outside `~/uor-r4` and its worktrees, so it never touches other projects.
+- **One hook entry point.** `loop guard --client C --lab L --event E` (built, loop PR 9) replaces today's presence hooks. It exits at once outside `~/uor-r4` and its worktrees, so it never touches other projects.
 - **Per client.** Claude Code reads `CLAUDE.md` importing AGENTS.md and user-level hooks. Codex reads the AGENTS.md chain, `~/.codex/hooks.json` and a rules file that forbids force push, push to `main`, `gh pr merge`, `--no-verify` and `pkill`; Codex keeps full access. Antigravity reads AGENTS.md and a user-level plugin. Kimi's private start and handoff files become pointers of at most 1 KB, and its own second loop is retired. DeepSeek runs in its own harness with a patch overlay on every launch.
-- **Onboarding check.** `loop onboard --client C` (to build) prints PASS, FAIL or REFUSED for: rules reachable; skills found; hooks on the current binary; a canary write to a denied path refused; `UOR_LAB` set; binary current. It ends with the lab's lane and first PICKUP. The owner pastes one short prompt into each client to run it.
-- **Copyright check.** A local check compares repository text with the owner's private kit copy. It runs on the laptop only. Nothing about the kit, not even hashes, goes to CI.
+- **Onboarding check.** `loop onboard --client C` (built, loop PR 9) prints PASS, FAIL or REFUSED for: rules reachable; skills found; hooks on the current binary; a canary write to a denied path refused; `UOR_LAB` set; binary current. It ends with the lab's lane and first PICKUP. The owner pastes one short prompt into each client to run it.
+- **Copyright check.** `loop copyright` (built, loop PR 9) compares repository text with the owner's private kit copy. It runs on the laptop only. Nothing about the kit, not even hashes, goes to CI.
 
 ## Charter changes
 
@@ -234,7 +234,7 @@ P-5 is dropped: Codex keeps full access.
 | 7b | `next`, `arrive`, `report`, `close`; templates in our words; per-task receipts (built) | a REPORT missing a section is refused |
 | 7c | `queue`, `board` | a later CHANGES record blocks queueing, unless it comes from a lab other than Claude on a setup PR (D59) |
 | 8 | Migration of the notes; AGENTS.md under the 80-line gate; DECISIONS columns; lesson ids; FILEMAP; `pm-rules.md`; bars reconciled | `xtask links` fails a planted broken link |
-| 9 | `guard`, `install`, `onboard`; the local copyright check; committed onboarding receipts | each client's canary write is refused |
+| 9 | `guard`, `install`, `onboard`; the local copyright check; committed onboarding receipts (built) | each client's canary write is refused |
 | 10 | `drive`, watchers, kill switch, render refresh, compaction hooks, the soft check-in | a fake stalled client past 2 hours is closed and carded, while a fake progressing one continues with a note |
 | 11 | `--watch`; warnings raised to errors | the window gives up after 5 minutes without change |
 | 12 | Git hooks: binary current; `pr-check --local` before push; `Lab:` and `Order:` trailers | a commit without trailers is refused |
