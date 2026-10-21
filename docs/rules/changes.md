@@ -18,7 +18,7 @@ An entry gives the date, what changed, which charter clauses it touches, and who
 
 **Decided by:** the owner (Casey), in chat, twice. First: "none of the other labs are onboarded yet so having them review the onboarding will be problematic - anyway, go". Then, after Claude had asked Kimi to review loop PR 1 (#2898) anyway: "I TOLD YOU NOT TO ASK OTHER LABS FOR REVIEWS ON THE SETUP THAT THEY AREN'T RUNNING YET".
 
-1. **The setup is reviewed without the other labs (D59).** Until the other labs are onboarded to the loop, the loop's own setup PRs (the build plan in [docs/loop/README.md](../loop/README.md), from PR 1 to the onboarding PR, plus the loop docs PRs) are reviewed by fresh-context reviewers of the authoring lab, not by the other labs. This is an exception to D46 for the setup only; once the labs are onboarded, D46 applies again. The Kimi review requests for #2898 were withdrawn on #2898 and #2028. (Clause 5.5.)
+1. **The setup is reviewed without the other labs (D59).** Until the other labs are running the loop, the loop's own setup PRs (the build plan in [docs/loop/README.md](../loop/README.md)) are reviewed by fresh-context reviewers of the authoring lab, not by the other labs. This is an exception to D46 for the setup only; once the other labs run the loop, D46 applies again. The Kimi review requests for #2898 were withdrawn on #2898 and #2028. (Clause 5.5.)
 
 ## 20 October 2026: the loop harness, adapted from the Loop Kit
 
