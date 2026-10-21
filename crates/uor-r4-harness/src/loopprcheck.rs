@@ -698,9 +698,33 @@ fn not_applicable(rule: &'static str, summary: &str) -> RuleResult {
     }
 }
 
+/// The markdown headings in `text`: each ATX heading line (up to 3 spaces, 1 to 6 `#`, then a
+/// space, a tab or the line end), and the text line of each setext heading (a non-blank line
+/// over a line of only `=` or only `-`, up to 3 leading spaces).
+fn markdown_headings(text: &str) -> Vec<&str> {
+    let atx = regex::Regex::new(r"^ {0,3}#{1,6}([ \t]|$)").expect("a valid pattern");
+    let underline = regex::Regex::new(r"^ {0,3}(=+|-+)[ \t]*$").expect("a valid pattern");
+    let lines: Vec<&str> = text.lines().collect();
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(i, line)| {
+            let setext = !line.trim().is_empty()
+                && lines
+                    .get(i + 1)
+                    .is_some_and(|next| underline.is_match(next));
+            atx.is_match(line) || setext
+        })
+        .map(|(_, line)| *line)
+        .collect()
+}
+
 /// Outside the files in `docs/harness/rule-sources.json` (read at the base; absent counts as
-/// empty), `archive/`, `docs/loop/tasks/` and `docs/roadmap/items/`, the PR adds no `.md` file
-/// named for a rule and no markdown heading containing the word `rule` or `rules`.
+/// empty), `archive/`, `docs/loop/tasks/` and `docs/roadmap/items/`, the PR adds no markdown
+/// file (`.md`, `.markdown`, `.mdx`, any case) named for a rule and no markdown heading (ATX or
+/// setext) containing the word `rule` or `rules` (`_` and other non-alphanumerics separate words).
+/// A heading counts as added when the base file lacks it; a file renamed or copied out of a listed
+/// or exempt file is compared with an empty base.
 fn rule_rule_sources(pr: &Pr) -> RuleResult {
     const R: &str = "rule-sources";
     const LIST: &str = "docs/harness/rule-sources.json";
@@ -733,14 +757,17 @@ fn rule_rule_sources(pr: &Pr) -> RuleResult {
             .any(|d| p.starts_with(d))
             || listed.iter().any(|l| l == p)
     };
-    let heading = regex::Regex::new(r"^#{1,6} ").expect("a valid pattern");
-    let word = regex::Regex::new(r"(?i)\brules?\b").expect("a valid pattern");
+    let word = regex::Regex::new(r"(?i)(^|[^a-z0-9])rules?([^a-z0-9]|$)").expect("a valid pattern");
+    let markdown = |p: &str| {
+        let p = p.to_lowercase();
+        [".md", ".markdown", ".mdx"].iter().any(|e| p.ends_with(e))
+    };
     let mut details = Vec::new();
     for c in &pr.changes {
         let Some(path) = c.paths.last().map(String::as_str) else {
             continue;
         };
-        if c.status == 'D' || !path.ends_with(".md") || exempt(path) {
+        if c.status == 'D' || !markdown(path) || exempt(path) {
             continue;
         }
         let name = path.rsplit('/').next().unwrap_or(path);
@@ -750,10 +777,15 @@ fn rule_rule_sources(pr: &Pr) -> RuleResult {
         let Some(head) = pr.at_head(path) else {
             continue;
         };
-        let base = pr.at_base(&c.paths[0]).unwrap_or_default();
-        let old: std::collections::HashSet<&str> = base.lines().collect();
-        for line in head.lines() {
-            if heading.is_match(line) && word.is_match(line) && !old.contains(line) {
+        // Text moved or copied out of a listed or exempt file counts as added in full.
+        let base = if matches!(c.status, 'R' | 'C') && exempt(&c.paths[0]) {
+            String::new()
+        } else {
+            pr.at_base(&c.paths[0]).unwrap_or_default()
+        };
+        let old: std::collections::HashSet<&str> = markdown_headings(&base).into_iter().collect();
+        for line in markdown_headings(&head) {
+            if word.is_match(line) && !old.contains(line) {
                 details.push(format!(
                     "{path} adds the rule heading `{line}` outside {LIST}"
                 ));
@@ -837,7 +869,8 @@ type Budget = (
 );
 
 /// The read-path budgets, measured on the head and compared with the base. An item over budget
-/// fails when it grew, and warns when it did not.
+/// fails when it grew, and warns when it did not; the whole path's growth leaves out the ORDER,
+/// which the base never has. A read-path file that is a symlink at the head fails.
 fn rule_read_path(pr: &Pr) -> RuleResult {
     const R: &str = "read-path";
     let bytes = |t: Option<String>| t.map_or(0, |t| t.len() as u64);
@@ -855,25 +888,32 @@ fn rule_read_path(pr: &Pr) -> RuleResult {
         pair("HANDOFF.md"),
     );
     let ord = order.map_or((0, 0), pair);
-    let total = (
-        agents.0 + charter.0 + state.0 + handoff.0 + ord.0,
-        agents.1 + charter.1 + state.1 + handoff.1 + ord.1,
+    // Growth of the whole path is judged without the ORDER, which every PR adds.
+    let core = (
+        agents.0 + charter.0 + state.0 + handoff.0,
+        agents.1 + charter.1 + state.1 + handoff.1,
     );
+    let total = core.1 + ord.1;
     // (name, (base, head), over budget at this value, the budget as words, unit)
-    let items: [Budget; 5] = [
+    let items: [Budget; 4] = [
         ("AGENTS.md", agents_lines, |v| v > 80, "at most 80", "lines"),
         ("STATE.md", state, |v| v >= 24_576, "under 24576", "B"),
         ("HANDOFF.md", handoff, |v| v >= 24_576, "under 24576", "B"),
         ("the ORDER", ord, |v| v >= 4_096, "under 4096", "B"),
-        (
-            "the read path",
-            total,
-            |v| v > 128_000,
-            "stop above 128000",
-            "B",
-        ),
     ];
-    let (mut fails, mut warns) = (Vec::new(), Vec::new());
+    let mut fails = Vec::new();
+    for path in ["AGENTS.md", "CHARTER.md", "STATE.md", "HANDOFF.md"]
+        .into_iter()
+        .chain(order)
+    {
+        let tree = git(pr.root, &["ls-tree", &pr.head, "--", path])
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default();
+        if tree.starts_with("120000 ") {
+            fails.push(format!("{path} is a symlink at the head"));
+        }
+    }
+    let mut warns = Vec::new();
     for (name, (b, h), over, budget, unit) in items {
         if over(h) {
             let line = format!("{name} is {h} {unit} (base {b}), over its budget ({budget})");
@@ -884,15 +924,25 @@ fn rule_read_path(pr: &Pr) -> RuleResult {
             }
         }
     }
-    if total.1 > 76_800 && total.1 <= 128_000 {
+    if total > 128_000 {
+        let line = format!(
+            "the read path is {total} B, over its budget (stop above 128000); AGENTS + CHARTER + STATE + HANDOFF is {} B (base {})",
+            core.1, core.0
+        );
+        if core.1 > core.0 {
+            fails.push(format!("{line} and grew"));
+        } else {
+            warns.push(format!("{line} but did not grow"));
+        }
+    } else if total > 76_800 {
         warns.push(format!(
-            "the read path is {} B (base {}), above the 76800 B warning line",
-            total.1, total.0
+            "the read path is {total} B (AGENTS + CHARTER + STATE + HANDOFF base {}), above the 76800 B warning line",
+            core.0
         ));
     }
     let summary = format!(
         "AGENTS.md {} lines, STATE.md {} B, HANDOFF.md {} B, ORDER {} B, read path {} B (AGENTS + CHARTER + STATE + HANDOFF + ORDER)",
-        agents_lines.1, state.1, handoff.1, ord.1, total.1
+        agents_lines.1, state.1, handoff.1, ord.1, total
     );
     let verdict = if !fails.is_empty() {
         Verdict::Fail
@@ -1093,14 +1143,25 @@ pub struct Comment {
     pub body: String,
 }
 
-/// One check run: its name, the slug of the app that posted it and its output summary.
-#[derive(Debug, Clone, serde::Deserialize)]
+/// One check run: its id (GitHub numbers them in creation order), its name, the slug of the app
+/// that posted it and its output summary.
+#[derive(Debug, Clone)]
 pub struct CheckRun {
+    pub id: u64,
     pub name: String,
-    #[serde(rename = "app")]
     pub app_slug: String,
-    #[serde(default)]
     pub summary: String,
+}
+
+/// A check run as the fake file writes it; a missing `id` is its position in the list.
+#[derive(serde::Deserialize)]
+struct FakeCheckRun {
+    #[serde(default)]
+    id: Option<u64>,
+    name: String,
+    app: String,
+    #[serde(default)]
+    summary: String,
 }
 
 /// One commit status: its context and state.
@@ -1114,10 +1175,9 @@ pub struct Status {
 pub trait PrGh {
     /// The issue comments on PR `pr`, oldest first.
     fn comments(&self, pr: u64) -> Result<Vec<Comment>, String>;
-    /// The check runs on commit `sha`. One page of at most 100: a head with more check runs than
-    /// that is read short, and a required name past the cap reads as missing (fail-closed).
+    /// Every check run on commit `sha`, every page read.
     fn check_runs(&self, sha: &str) -> Result<Vec<CheckRun>, String>;
-    /// The commit statuses on commit `sha` (one page of at most 100).
+    /// Every commit status on commit `sha`, every page read.
     fn statuses(&self, sha: &str) -> Result<Vec<Status>, String>;
 }
 
@@ -1141,22 +1201,16 @@ fn comments_args(pr: u64) -> Vec<String> {
 fn check_runs_args(sha: &str) -> Vec<String> {
     vec![
         "api".into(),
-        "-X".into(),
-        "GET".into(),
-        format!("repos/{{owner}}/{{repo}}/commits/{sha}/check-runs"),
-        "-F".into(),
-        "per_page=100".into(),
+        format!("repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100"),
+        "--paginate".into(),
     ]
 }
 
 fn statuses_args(sha: &str) -> Vec<String> {
     vec![
         "api".into(),
-        "-X".into(),
-        "GET".into(),
-        format!("repos/{{owner}}/{{repo}}/commits/{sha}/statuses"),
-        "-F".into(),
-        "per_page=100".into(),
+        format!("repos/{{owner}}/{{repo}}/commits/{sha}/statuses?per_page=100"),
+        "--paginate".into(),
     ]
 }
 
@@ -1222,6 +1276,7 @@ impl PrGh for RealPrGh {
             .filter_map(|p| p.get("check_runs")?.as_array())
             .flatten()
             .map(|r| CheckRun {
+                id: r.get("id").and_then(serde_json::Value::as_u64).unwrap_or(0),
                 name: str_at(r, &["name"]).to_string(),
                 app_slug: str_at(r, &["app", "slug"]).to_string(),
                 summary: str_at(r, &["output", "summary"]).to_string(),
@@ -1251,7 +1306,7 @@ pub struct FakePrGh {
     #[serde(default)]
     comments: Vec<Comment>,
     #[serde(default)]
-    check_runs: Vec<CheckRun>,
+    check_runs: Vec<FakeCheckRun>,
     #[serde(default)]
     statuses: Vec<Status>,
 }
@@ -1278,7 +1333,17 @@ impl PrGh for FakePrGh {
         Ok(self.comments.clone())
     }
     fn check_runs(&self, _sha: &str) -> Result<Vec<CheckRun>, String> {
-        Ok(self.check_runs.clone())
+        Ok(self
+            .check_runs
+            .iter()
+            .enumerate()
+            .map(|(i, r)| CheckRun {
+                id: r.id.unwrap_or(i as u64),
+                name: r.name.clone(),
+                app_slug: r.app.clone(),
+                summary: r.summary.clone(),
+            })
+            .collect())
     }
     fn statuses(&self, _sha: &str) -> Result<Vec<Status>, String> {
         Ok(self.statuses.clone())
@@ -1318,8 +1383,11 @@ fn base_lab_vendors(pr: &Pr) -> Result<std::collections::BTreeMap<String, String
 
 /// A PR comment starting `[<lab>] Exact-head review record for \`<head sha>\`` from a registered
 /// lab that may review this PR: `claude` alone for an `infra-loop-pr*` setup item (D59), else a
-/// lab whose vendor differs from the ORDER lab's (D46). It passes when a counted record says
-/// `**Verdict: APPROVE` and no later counted record says `REQUEST CHANGES`.
+/// lab whose vendor differs from the ORDER lab's (D46). A record's verdict is its first line
+/// starting `**Verdict: APPROVE` or `**Verdict: REQUEST CHANGES`. It passes when a counted
+/// record says APPROVE and no later counted record says REQUEST CHANGES. The `[<lab>]` label is
+/// self-declared: every lab posts from the same GitHub account (loop page, P-3/P-4), so the
+/// comment author cannot bind it.
 fn rule_review_record(pr: &Pr) -> RuleResult {
     const R: &str = "review-record";
     let (number, gh) = match github(pr, R) {
@@ -1350,6 +1418,8 @@ fn rule_review_record(pr: &Pr) -> RuleResult {
     let re =
         regex::Regex::new(r"^\[([A-Za-z0-9_-]+)\] Exact-head review record for `([0-9a-f]{40})`")
             .expect("a valid pattern");
+    let verdict_re =
+        regex::Regex::new(r"(?m)^\*\*Verdict: (APPROVE|REQUEST CHANGES)").expect("a valid pattern");
     let mut details = Vec::new();
     let mut last: Option<bool> = None;
     for (i, c) in comments.iter().enumerate() {
@@ -1357,13 +1427,7 @@ fn rule_review_record(pr: &Pr) -> RuleResult {
             continue;
         };
         let (lab, sha) = (&cap[1], &cap[2]);
-        let verdict = if c.body.contains("**Verdict: APPROVE") {
-            Some(true)
-        } else if c.body.contains("REQUEST CHANGES") {
-            Some(false)
-        } else {
-            None
-        };
+        let verdict = verdict_re.captures(&c.body).map(|v| &v[1] == "APPROVE");
         let said = match verdict {
             Some(true) => "APPROVE",
             Some(false) => "REQUEST CHANGES",
@@ -1433,8 +1497,8 @@ const REQUIRED_CHECKS: [&str; 5] = [
     "Gate C trend alarm",
 ];
 
-/// Every required name has a check run at the head from the `github-actions` app whose summary
-/// carries `policy: pass (run <n>)`, and no commit status uses a required name, because any token
+/// For every required name, the newest check run at the head (the highest id, from any app) is
+/// from the `github-actions` app and its summary ends `policy: pass (run <n>)`, and no commit status uses a required name, because any token
 /// can post a status (loop page, P-4). The summary format is written by `required-transport` in
 /// `.github/workflows/ci.yml`, which loop PR 5's commit 4 changes.
 fn rule_required_checks(pr: &Pr) -> RuleResult {
@@ -1451,7 +1515,7 @@ fn rule_required_checks(pr: &Pr) -> RuleResult {
         Ok(r) => r,
         Err(e) => return fail(R, e),
     };
-    let policy = regex::Regex::new(r"policy: pass \(run \d+\)").expect("a valid pattern");
+    let policy = regex::Regex::new(r"policy: pass \(run \d+\)$").expect("a valid pattern");
     let mut details = Vec::new();
     for s in &statuses {
         if REQUIRED_CHECKS.contains(&s.context.as_str()) {
@@ -1462,16 +1526,15 @@ fn rule_required_checks(pr: &Pr) -> RuleResult {
         }
     }
     for name in REQUIRED_CHECKS {
-        let named: Vec<&CheckRun> = runs.iter().filter(|r| r.name == name).collect();
-        if named.is_empty() {
-            details.push(format!("`{name}` has no check run at the head"));
-        } else if !named
-            .iter()
-            .any(|r| r.app_slug == "github-actions" && policy.is_match(&r.summary))
-        {
-            details.push(format!(
-                "`{name}` has no github-actions check run whose summary says `policy: pass (run <n>)`"
-            ));
+        let newest = runs.iter().filter(|r| r.name == name).max_by_key(|r| r.id);
+        match newest {
+            None => details.push(format!("`{name}` has no check run at the head")),
+            Some(r)
+                if r.app_slug == "github-actions" && policy.is_match(r.summary.trim_end()) => {}
+            Some(r) => details.push(format!(
+                "`{name}`: the newest check run (id {}, app {}) is not a github-actions run whose summary ends `policy: pass (run <n>)`",
+                r.id, r.app_slug
+            )),
         }
     }
     result(
@@ -1586,6 +1649,7 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
         })
         .collect();
     let failed = results.iter().any(|r| r.verdict == Verdict::Fail);
+    let fake = std::env::var_os(PRCHECK_GH_FAKE_ENV);
     if json {
         let size_obj: serde_json::Map<String, serde_json::Value> = size
             .iter()
@@ -1612,6 +1676,7 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             "merge_base": pr.merge_base,
             "head": pr.head,
             "verdict": if failed { "fail" } else { "pass" },
+            "fake_github": fake.is_some(),
             "size": size_obj,
             "rules": rules,
         });
@@ -1622,6 +1687,12 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             .map(|(c, f, a, d)| format!("{c} {f} file(s) +{a}/-{d}"))
             .collect();
         println!("size: {}", parts.join(", "));
+        if let Some(p) = &fake {
+            println!(
+                "FAKE GitHub: {PRCHECK_GH_FAKE_ENV}={} (tests only)",
+                p.to_string_lossy()
+            );
+        }
         for r in &results {
             println!("{} {} {}", r.verdict.text(), r.rule, r.summary);
             for d in &r.details {
@@ -1652,22 +1723,16 @@ mod tests {
             check_runs_args(sha),
             [
                 "api",
-                "-X",
-                "GET",
-                &format!("repos/{{owner}}/{{repo}}/commits/{sha}/check-runs"),
-                "-F",
-                "per_page=100"
+                &format!("repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100"),
+                "--paginate"
             ]
         );
         assert_eq!(
             statuses_args(sha),
             [
                 "api",
-                "-X",
-                "GET",
-                &format!("repos/{{owner}}/{{repo}}/commits/{sha}/statuses"),
-                "-F",
-                "per_page=100"
+                &format!("repos/{{owner}}/{{repo}}/commits/{sha}/statuses?per_page=100"),
+                "--paginate"
             ]
         );
     }

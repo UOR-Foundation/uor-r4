@@ -815,7 +815,7 @@ fn rule_sources_refuses_rules_outside_the_list() {
         "docs/harness/rule-sources.json",
         r#"{"files": ["docs/harness/pm-rules.md"]}"#,
     );
-    r.write("docs/harness/pm-rules.md", "# PM\n");
+    r.write("docs/harness/pm-rules.md", "# PM\n\n## Rules\n");
     r.git(&["add", "-A"]);
     r.git(&["commit", "-q", "-m", "list"]);
     let base = r.out(&["rev-parse", "HEAD"]);
@@ -844,7 +844,10 @@ fn rule_sources_refuses_rules_outside_the_list() {
         "adds the rule heading `## Team rules`",
     );
     let o = on(Box::new(|r| {
-        r.write("docs/harness/pm-rules.md", "# PM\n\n## Rules\n")
+        r.write(
+            "docs/harness/pm-rules.md",
+            "# PM\n\n## Rules\n\n## More rules\n",
+        )
     }));
     expect(&o, 1, "PASS rule-sources", "no rule stated outside");
     let o = on(Box::new(|r| {
@@ -863,6 +866,35 @@ fn rule_sources_refuses_rules_outside_the_list() {
         1,
         "FAIL rule-sources",
         "docs/team/house-rules.md adds a rule-named file",
+    );
+    for (text, heading) in [
+        ("# a\n\n## _Rules_\n", "`## _Rules_`"),
+        ("# a\n\n## __Rules__\n", "`## __Rules__`"),
+        ("# a\n\n   ## Rules\n", "`   ## Rules`"),
+        ("# a\n\nTeam rules\n====\n", "`Team rules`"),
+        ("# a\n\nTeam rules\n---\n", "`Team rules`"),
+        ("# a\n\n#\tRules\n", "`#\tRules`"),
+    ] {
+        let o = on(Box::new(move |r| r.write("docs/a.md", text)));
+        let want = format!("adds the rule heading {heading}");
+        expect(&o, 1, "FAIL rule-sources", &want);
+    }
+    let o = on(Box::new(|r| r.write("docs/x/HOUSE-RULES.MD", "x\n")));
+    expect(
+        &o,
+        1,
+        "FAIL rule-sources",
+        "docs/x/HOUSE-RULES.MD adds a rule-named file",
+    );
+    // Moving a listed file's rule text to an unlisted path states it outside the list.
+    let o = on(Box::new(|r| {
+        r.git(&["mv", "docs/harness/pm-rules.md", "docs/notes.md"])
+    }));
+    expect(
+        &o,
+        1,
+        "FAIL rule-sources",
+        "docs/notes.md adds the rule heading `## Rules`",
     );
 }
 
@@ -954,6 +986,32 @@ fn read_path_fails_growth_over_budget_and_warns_otherwise() {
     let big = order("claude", "item-a", &"y".repeat(5000));
     let h = r.green(ORDER_A, &big, |_| {});
     expect(&r.check(&h, &[]), 1, "FAIL read-path", "the ORDER is 50");
+
+    // A path already over its total, which the PR does not touch, warns: the ORDER it adds is
+    // not growth.
+    let mut r = Repo::new();
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.write("CHARTER.md", &"c".repeat(130_000));
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "charter"]);
+    r.base = r.out(&["rev-parse", "HEAD"]);
+    let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
+    let o = r.check(&h, &[]);
+    expect(&o, 0, "WARN read-path", "but did not grow");
+
+    // A read-path file turned into a symlink fails.
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        let p = r.root.join("AGENTS.md");
+        let _ = std::fs::remove_file(&p);
+        std::os::unix::fs::symlink("docs/a.md", &p).unwrap();
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL read-path",
+        "AGENTS.md is a symlink at the head",
+    );
 }
 
 /// `filemap`: N/A without the map; a missing row and a stale row fail; an added row passes.
@@ -1067,6 +1125,23 @@ fn review_record_counts_exact_head_records_from_allowed_labs() {
     expect(&o, 1, "FAIL review-record", "(D46)");
     let o = r.check_gh(&h, &fake(vec![record("codex", &h, "APPROVE")]));
     expect(&o, 1, "PASS review-record", "counted");
+
+    // The verdict is the first `**Verdict:` line; a later quoted APPROVE does not change it.
+    let body = format!(
+        "[codex] Exact-head review record for `{h}`\n\n**Verdict: REQUEST CHANGES at `{}`.**\n\nThe last round said:\n\n**Verdict: APPROVE\n",
+        &h[..9]
+    );
+    let quoted = serde_json::json!({"author": "someone", "body": body});
+    let o = r.check_gh(&h, &fake(vec![quoted]));
+    expect(&o, 1, "FAIL review-record", "[codex] REQUEST CHANGES at");
+    // The real record form, `**Verdict: APPROVE at `<short>`.**`, counts.
+    let body = format!(
+        "[codex] Exact-head review record for `{h}`\n\n**Verdict: APPROVE at `{}`.**\n",
+        &h[..9]
+    );
+    let real = serde_json::json!({"author": "someone", "body": body});
+    let o = r.check_gh(&h, &fake(vec![real]));
+    expect(&o, 1, "PASS review-record", "counted");
 }
 
 /// Without GitHub: `--local` and `--ci` make both GitHub rules N/A; no mode at all fails them.
@@ -1117,6 +1192,11 @@ fn required_checks_need_the_policy_record_from_github_actions() {
     let pass = "policy: pass (run 42)";
     let o = r.check_gh(&h, &checks("github-actions", pass, None, &[]));
     expect(&o, 1, "PASS required-checks", "all 5 required checks");
+    assert!(
+        stdout(&o).contains("FAKE GitHub: UOR_PRCHECK_GH_FAKE="),
+        "{}",
+        stdout(&o)
+    );
 
     let o = r.check_gh(
         &h,
@@ -1148,4 +1228,51 @@ fn required_checks_need_the_policy_record_from_github_actions() {
 
     let o = r.check_gh(&h, &checks("some-app", pass, None, &[]));
     expect(&o, 1, "FAIL required-checks", "policy: pass (run <n>)");
+
+    let o = r.check_gh(
+        &h,
+        &checks("github-actions", "policy: pass (run 42) x", None, &[]),
+    );
+    expect(&o, 1, "FAIL required-checks", "policy: pass (run <n>)");
+}
+
+/// The fake with the five required names passing, plus `extra` check runs for `cargo audit`
+/// (each `(id, app, summary)`).
+fn audit_runs(extra: &[(u64, &str, &str)]) -> String {
+    let mut runs: Vec<serde_json::Value> = REQUIRED
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            serde_json::json!({"id": 100 + i, "name": n, "app": "github-actions", "summary": "policy: pass (run 1)"})
+        })
+        .collect();
+    for (id, app, summary) in extra {
+        runs.push(
+            serde_json::json!({"id": id, "name": "cargo audit", "app": app, "summary": summary}),
+        );
+    }
+    serde_json::json!({"comments": [], "checkRuns": runs, "statuses": []}).to_string()
+}
+
+/// `required-checks` judges each name by its newest check run (the highest id) only.
+#[test]
+fn required_checks_judge_the_newest_run_per_name() {
+    let r = Repo::new();
+    let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
+    let older_pass_newer_fail = audit_runs(&[(200, "github-actions", "policy: fail (run 7)\n")]);
+    let o = r.check_gh(&h, &older_pass_newer_fail);
+    expect(
+        &o,
+        1,
+        "FAIL required-checks",
+        "`cargo audit`: the newest check run (id 200",
+    );
+
+    let older_fail_newer_pass = audit_runs(&[(50, "github-actions", "policy: fail (run 7)")]);
+    let o = r.check_gh(&h, &older_fail_newer_pass);
+    expect(&o, 1, "PASS required-checks", "all 5 required checks");
+
+    let newer_other_app = audit_runs(&[(200, "some-app", "policy: pass (run 7)")]);
+    let o = r.check_gh(&h, &newer_other_app);
+    expect(&o, 1, "FAIL required-checks", "app some-app");
 }
