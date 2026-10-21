@@ -50,7 +50,7 @@ Notes carry memory between sessions. Most are rendered, so nobody types them.
 | Note | Path | Who writes it | Rule |
 |---|---|---|---|
 | STATE | `STATE.md` (replaces `STATUS.md`) | the renderer only | Carries a stamp naming the `main` commit of its inputs. `render --check` re-renders at the stamp and needs an exact match, so a hand edit fails. Lines that drop out are appended verbatim to `archive/state/<YYYY-MM>.md`. |
-| HANDOFF | `HANDOFF.md` | the renderer only | Open items only: id, task, done-when, cancel-if, size, status; a blocked table with owners; a not-doing list. "Unknown" must name the item that will find out. |
+| HANDOFF | `HANDOFF.md` | the renderer only | Open items only, each with its item id and title, its check for done, the probe that would cancel it, an estimate and where it stands; a blocked table with owners; a not-doing list. "Unknown" must name the item that will find out. |
 | PLAN | `PLAN.md` (folds in `ROADMAP.md`) | the PM, by PR | Goal; premises with their probes and cancel lines; the M1–M8 route written backwards; approved sequences; not-doing. A route or premise change needs a decision row. |
 | DECISIONS | `docs/integration/DECISIONS.md` | owner or PM, by PR | Append-only. New rows add a "rejected" column and a "cost to reverse" column. Charter changes are also logged in `docs/rules/changes.md`. |
 | LESSONS | `docs/harness/LESSONS.md` | rendered from `docs/harness/mistakes/*.md` | Each lesson keeps a permanent `L-NNN` key. L-001 is "records drifted". The PM picks a top ten that is rendered into AGENTS.md. |
