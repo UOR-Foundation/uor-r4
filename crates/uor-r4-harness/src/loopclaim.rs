@@ -359,14 +359,10 @@ pub fn parse_item(text: &str) -> Result<ItemFields, String> {
     Err("frontmatter is not closed by `---`".into())
 }
 
-fn item_path(root: &Path, id: &str) -> PathBuf {
-    root.join("docs/roadmap/items").join(format!("{id}.md"))
-}
-
+/// The item parsed from `origin/main`, the same source `check` reads; never the working tree.
 pub(crate) fn read_item(root: &Path, id: &str) -> Result<ItemFields, String> {
-    let path = item_path(root, id);
-    let text = std::fs::read_to_string(&path)
-        .map_err(|_| format!("item {id} does not exist (no {})", path.display()))?;
+    let text = main_item_text(root, id)
+        .ok_or_else(|| format!("item {id} does not exist on origin/main"))?;
     parse_item(&text).map_err(|e| format!("item {id}: {e}"))
 }
 

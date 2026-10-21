@@ -40,10 +40,9 @@ pub fn glob_contains(parent: &str, child: &str) -> bool {
     }
 }
 
-/// `local/<lab>/<topic>/<kind>/<n>.md` with `<n>` one more than the highest existing number.
-fn next_card(root: &Path, lab: &str, topic: &str, kind: &str) -> PathBuf {
-    let dir = root.join("local").join(lab).join(topic).join(kind);
-    let highest = std::fs::read_dir(&dir)
+/// One more than the highest `<n>.md` in `dir` (1 when there is none).
+fn next_number(dir: &Path) -> u64 {
+    std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
@@ -55,14 +54,50 @@ fn next_card(root: &Path, lab: &str, topic: &str, kind: &str) -> PathBuf {
                 .ok()
         })
         .max()
-        .unwrap_or(0);
-    dir.join(format!("{}.md", highest + 1))
+        .unwrap_or(0)
+        + 1
 }
 
-fn write_card(path: &Path, text: &str) -> Result<(), String> {
-    std::fs::create_dir_all(path.parent().expect("a card has a folder"))
-        .and_then(|()| std::fs::write(path, text))
-        .map_err(|e| format!("cannot write {}: {e}", path.display()))
+/// How many numbers `write_numbered` tries before it gives up.
+const CARD_ATTEMPTS: u64 = 100;
+
+/// Create `<dir>/<n>.md` from `start` upward with `create_new`, so two writers never share a file
+/// and an existing card is never overwritten. Gives up after `CARD_ATTEMPTS` numbers.
+fn write_numbered(dir: &Path, start: u64, text: &str) -> Result<PathBuf, String> {
+    use std::io::Write;
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    for n in start..start + CARD_ATTEMPTS {
+        let path = dir.join(format!("{n}.md"));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut f) => {
+                f.write_all(text.as_bytes())
+                    .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+                return Ok(path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("cannot write {}: {e}", path.display())),
+        }
+    }
+    Err(format!(
+        "no free card number in {} after {CARD_ATTEMPTS} tries",
+        dir.display()
+    ))
+}
+
+/// Write `text` as the next card under `local/<lab>/<topic>/<kind>/`; returns its path.
+fn write_card(
+    root: &Path,
+    lab: &str,
+    topic: &str,
+    kind: &str,
+    text: &str,
+) -> Result<PathBuf, String> {
+    let dir = root.join("local").join(lab).join(topic).join(kind);
+    write_numbered(&dir, next_number(&dir), text)
 }
 
 /// The parent ORDER's folder name, its path as given, and its text.
@@ -151,7 +186,6 @@ fn suborder(root: &Path, lab: &str, args: &[String]) -> Result<String, String> {
         ));
     }
     let slug = crate::state::slug(lab);
-    let path = next_card(root, &slug, &topic, "orders");
     let mut block = format!(
         "# Suborder of {parent}\n\nLab: {slug}. Parent ORDER: `{parent}`. Item: {item}.\n\n## Scope\n\n"
     );
@@ -159,7 +193,7 @@ fn suborder(root: &Path, lab: &str, args: &[String]) -> Result<String, String> {
         block += &format!("- `{g}`\n");
     }
     block += &format!("\n## Stop rules\n\n{STOP_RULES}\n");
-    write_card(&path, &block)?;
+    let path = write_card(root, &slug, &topic, "orders", &block)?;
     Ok(format!("suborder: {}\n\n{block}", path.display()))
 }
 
@@ -211,8 +245,7 @@ fn ask(root: &Path, lab: &str, args: &[String]) -> Result<String, String> {
     }
     card += "\nThe order pauses here; the supervisor moves on. Nothing was posted.\n";
     let (topic, _) = read_order(root, order)?;
-    let path = next_card(root, &crate::state::slug(lab), &topic, "asks");
-    write_card(&path, &card)?;
+    let path = write_card(root, &crate::state::slug(lab), &topic, "asks", &card)?;
     Ok(format!("ask: {}\n", path.display()))
 }
 
@@ -243,7 +276,33 @@ pub fn cli(root: &Path, lab: &str, action: &str, args: &[String]) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::glob_contains;
+    use super::{glob_contains, write_numbered};
+
+    #[test]
+    fn a_card_is_created_new_and_never_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path().join("cards");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("1.md"), "one").unwrap();
+        std::fs::write(d.join("2.md"), "two").unwrap();
+        let p = write_numbered(&d, 1, "new").unwrap();
+        assert_eq!(p, d.join("3.md"));
+        assert_eq!(std::fs::read_to_string(d.join("1.md")).unwrap(), "one");
+        assert_eq!(std::fs::read_to_string(d.join("2.md")).unwrap(), "two");
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "new");
+    }
+
+    #[test]
+    fn a_card_gives_up_after_100_taken_numbers() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path().join("cards");
+        std::fs::create_dir_all(&d).unwrap();
+        for n in 1..=100 {
+            std::fs::write(d.join(format!("{n}.md")), "x").unwrap();
+        }
+        assert!(write_numbered(&d, 1, "new").is_err());
+        assert!(!d.join("101.md").exists());
+    }
 
     #[test]
     fn containment_is_by_literal_path_prefix_under_a_wildcard() {

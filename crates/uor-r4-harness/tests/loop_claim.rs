@@ -687,10 +687,7 @@ fn suborder_containment_cannot_be_escaped() {
     ]);
     assert_eq!(o.status.code(), Some(0), "{o:?}");
     // A parent whose wildcards are not a trailing `/**` contains only identical globs.
-    r.write(
-        "docs/roadmap/items/glob-g.md",
-        &item("ready", Some("[docs/*.md, crates/a*]")),
-    );
+    r.publish("glob-g", &item("ready", Some("[docs/*.md, crates/a*]")));
     let parent = "docs/loop/tasks/glob-g/claude-2/ORDER.md";
     r.write(parent, &order("glob-g"));
     let o = r.loop_cmd(&["suborder", "--parent", parent, "--scope", "docs/secret.rs"]);
@@ -853,4 +850,90 @@ fn a_worktree_outside_the_main_worktrees_folder_holds_no_open_order() {
         .success());
     let c = r.claim("ready-a", serde_json::json!([]));
     assert_eq!(c.status.code(), Some(0), "{c:?}");
+}
+
+impl Repo {
+    /// Run `uor-harness loop claim <args>` as claude with an empty fake `gh pr list`.
+    fn claim_args(&self, args: &[&str]) -> Output {
+        let fake = self.tmp.path().join("gh-fake-args.json");
+        std::fs::write(&fake, "[]").unwrap();
+        clean(&mut Command::new(BIN))
+            .args(["--repo", self.root.to_str().unwrap(), "loop", "claim"])
+            .args(args)
+            .env("UOR_LAB", "claude")
+            .env("UOR_LOOP_GH_FAKE", &fake)
+            .current_dir(&self.root)
+            .output()
+            .expect("uor-harness runs")
+    }
+}
+
+#[test]
+fn lab_topic_names_the_worktree_and_branch() {
+    let r = Repo::new();
+    let o = r.claim_args(&["ready-a", "--lab-topic", "t9"]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let wt = r.root.join(".worktrees/claude-t9");
+    let head = r.out(&wt, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), "claude/t9");
+    assert!(r.remote_has("claude/t9"));
+    assert!(!r.has_branch("claude/ready-a"));
+}
+
+#[test]
+fn a_bad_item_or_topic_id_exits_2_and_creates_nothing() {
+    let r = Repo::new();
+    for args in [&["A_b"][..], &["--lab-topic", "../x", "ready-a"][..]] {
+        let o = r.claim_args(args);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {o:?}");
+        assert!(!r.root.join(".worktrees").exists(), "{args:?}: no worktree");
+        assert!(!r.has_branch("claude/ready-a"), "{args:?}: no branch");
+        assert!(
+            !r.remote_has("claude/ready-a"),
+            "{args:?}: no remote branch"
+        );
+        assert!(r.calls().is_empty(), "{args:?}: no GitHub write");
+    }
+}
+
+#[test]
+fn a_claim_narrower_than_an_open_order_scope_is_refused_for_overlap() {
+    let r = Repo::new();
+    r.publish("open-r", &item("ready", Some("[crates/a/**]")));
+    r.publish("narrow-s", &item("ready", Some("[crates/a/b.rs]")));
+    let prs = serde_json::json!([pr_with_order(9, "codex/r", "open-r")]);
+    refused(
+        &r.claim("narrow-s", prs),
+        "scope crates/a/b.rs overlaps crates/a/**",
+    );
+    assert!(!r.has_branch("claude/narrow-s"));
+}
+
+#[test]
+fn ask_refuses_both_neither_and_bad_values() {
+    let r = Repo::new().with_parent();
+    let scope = [
+        "ask", "--scope", "--order", PARENT, "--file", "x.rs", "--reason", "r", "--lines", "3",
+    ];
+    let both = [&scope[..], &["--blocked", "--own-code", "yes"][..]].concat();
+    refused(&r.loop_cmd(&both), "exactly one of --scope or --blocked");
+    refused(&r.loop_cmd(&["ask", "--order", PARENT]), "exactly one");
+    let maybe = [&scope[..], &["--own-code", "maybe"][..]].concat();
+    refused(&r.loop_cmd(&maybe), "is not yes or no");
+    let later = [
+        "ask",
+        "--blocked",
+        "--order",
+        PARENT,
+        "--limit",
+        "l",
+        "--measured",
+        "m",
+        "--command",
+        "c",
+        "--state",
+        "later",
+    ];
+    refused(&r.loop_cmd(&later), "is not refused or not-reached");
+    assert!(r.card("asks/1.md").is_none(), "nothing is written");
 }
