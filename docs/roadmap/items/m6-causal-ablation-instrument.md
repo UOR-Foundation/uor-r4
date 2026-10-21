@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [m6-reasoning-panel-freeze, m1-trunk-assembly-and-training]
+scope: [crates/uor-r4-training/**, crates/uor-r4-integer/**, docs/mechanisms/**, docs/model/**, docs/labs/**, scripts/pod/**]
 ---
 
 ## Why it matters

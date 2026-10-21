@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
+scope: [docs/harness/prep/**, crates/uor-r4-discrete/**, docs/mechanisms/flock-read.md, docs/integration/NOW.md, docs/labs/**]
 ---
 
 ## Why it matters

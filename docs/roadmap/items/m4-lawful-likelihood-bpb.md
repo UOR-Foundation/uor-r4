@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
+scope: [crates/uor-r4-discrete/**, crates/uor-r4-integer/**, docs/mechanisms/**, docs/model/serving-and-export.md, docs/research/findings.md, docs/research/open-questions.md, docs/labs/**]
 ---
 
 ## Why it matters

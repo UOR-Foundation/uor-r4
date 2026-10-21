@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: true
 depends_on: [m8-release-packaging]
+scope: [xtask/**, docs/integration/project-track.md, docs/products/**, docs/labs/**]
 ---
 
 ## Why it matters

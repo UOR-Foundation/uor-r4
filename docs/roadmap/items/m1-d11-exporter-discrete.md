@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
+scope: [crates/uor-r4-discrete/**, crates/uor-r4-integer/**, crates/uor-r4-lut/**, docs/mechanisms/**, docs/model/**]
 ---
 
 ## Why it matters

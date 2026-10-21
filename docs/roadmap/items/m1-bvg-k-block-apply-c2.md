@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: []
+scope: [crates/uor-r4-discrete/**, docs/harness/prep/**, docs/labs/**, docs/integration/NOW.md, docs/integration/project-track.md]
 ---
 
 ## Why it matters

@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [infra-loop-pr03-render]
+scope: [AGENTS.md, docs/harness/**, docs/integration/**, docs/loop/**, docs/start/FILEMAP.md, docs/roadmap/items/*.md, docs/roadmap/README.md, docs/mechanisms/README.md]
 ---
 
 ## Why it matters
@@ -27,7 +28,7 @@ STATE, HANDOFF and PLAN replace `STATUS.md`, `NOW.md` and the roadmap page, with
 2. Read "The notes" and "Charter changes" on [the loop page](../../loop/README.md).
 3. Open `STATUS.md`, `docs/integration/NOW.md`, `docs/harness/claims.json`, `docs/harness/pm-rules.md`, `docs/harness/milestones.json`, `docs/harness/mistakes/` and `AGENTS.md`.
 4. Ask the owner in your own chat before each charter-touching step and record the approval verbatim with the time.
-5. Carry an ORDER and REPORT in `docs/loop/tasks/infra-loop-harness/<lab>-<n>/`, build and test on the laptop with `~/.cargo/bin/cargo`, put `Setup row: 8` in the ORDER (PR 6's gate reads it), ask Claude for the exact-head review (D59: no other lab is asked), and open the PR with `References #<the loop issue>`.
+5. Carry an ORDER and REPORT in `docs/loop/tasks/infra-loop-harness/<lab>-<n>/`, build and test on the laptop with `~/.cargo/bin/cargo`, put `Setup row: 8` in the ORDER (PR 6's gate reads it), ask Claude for the exact-head review (D59: no other lab is asked), and open the PR with `Closes #<this item's issue>` and `References #2904`.
 
 ## Rules that apply
 

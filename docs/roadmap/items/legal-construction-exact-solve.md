@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
+scope: [docs/mechanisms/legal-construction.md, docs/labs/**, docs/reference/storage.md, docs/research/**]
 ---
 
 ## Why it matters

@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: [m4-export-uorlut01-cli, m5-laptop-full-path-measurement, m6-qualify-reasoning-coding, m7-parity-library-cli-browser]
+scope: [.github/workflows/release.yml, docs/RELEASE_PIPELINE.md, docs/inference_contract.md, docs/integration/project-track.md, docs/products/**, crates/uor-r4-integer/**, docs/labs/**]
 ---
 
 ## Why it matters

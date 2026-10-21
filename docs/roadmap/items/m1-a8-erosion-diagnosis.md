@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
+scope: [docs/harness/prep/**, docs/labs/**, docs/reference/storage.md, docs/integration/NOW.md]
 ---
 
 ## Why it matters

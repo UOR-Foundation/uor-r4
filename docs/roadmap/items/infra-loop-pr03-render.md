@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [infra-loop-pr02-item-keys]
+scope: [crates/uor-r4-harness/**, docs/harness/**, docs/loop/**, docs/integration/DECISIONS.md, docs/roadmap/README.md, xtask/src/roadmap.rs]
 ---
 
 ## Why it matters
@@ -27,7 +28,7 @@ The build plan's row on [the loop page](../../loop/README.md#build-plan): "`loop
 2. Read "The notes" on [the loop page](../../loop/README.md), including the renderer's inputs.
 3. Open `xtask/src/roadmap.rs` (today's roadmap render), `crates/uor-r4-harness/src/main.rs`, `crates/uor-r4-harness/src/status.rs` and `STATUS.md`.
 4. Add the subcommand with determinism tests.
-5. Carry an ORDER and REPORT in `docs/loop/tasks/infra-loop-harness/<lab>-<n>/`, build and test on the laptop with `~/.cargo/bin/cargo`, put `Setup row: 3` in the ORDER (PR 6's gate reads it), ask Claude for the exact-head review (D59: no other lab is asked), and open the PR with `References #<the loop issue>`.
+5. Carry an ORDER and REPORT in `docs/loop/tasks/infra-loop-harness/<lab>-<n>/`, build and test on the laptop with `~/.cargo/bin/cargo`, put `Setup row: 3` in the ORDER (PR 6's gate reads it), ask Claude for the exact-head review (D59: no other lab is asked), and open the PR with `Closes #<this item's issue>` and `References #2904`.
 
 ## Rules that apply
 

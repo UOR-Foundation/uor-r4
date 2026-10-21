@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m4-export-uorlut01-cli, m6-reasoning-panel-freeze, m6-causal-ablation-instrument, m6-exact-arithmetic-mechanism]
+scope: [docs/harness/**, docs/labs/**, docs/integration/project-track.md]
 ---
 
 ## Why it matters
