@@ -313,6 +313,16 @@ pub fn tree_hash(root: &Path) -> Result<String, String> {
     git_hash(root, &h)
 }
 
+/// The hash [`tree_hash`] records for a clean working tree at HEAD: no status lines, an empty diff
+/// and no untracked files. `loop report --receipts` keeps only ledger rows with this tree.
+pub(crate) fn clean_head_tree_hash(root: &Path) -> Result<String, String> {
+    let mut h: Vec<u8> = Vec::new();
+    section(&mut h, &git(root, &["rev-parse", "HEAD"])?);
+    section(&mut h, b"");
+    section(&mut h, b"");
+    git_hash(root, &h)
+}
+
 fn git_hash(root: &Path, bytes: &[u8]) -> Result<String, String> {
     let mut child = Command::new("git")
         .args(["hash-object", "--stdin"])

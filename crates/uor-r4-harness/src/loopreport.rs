@@ -109,7 +109,7 @@ fn check_problems(text: &str) -> Vec<String> {
     for (line, can_head) in crate::loopprcheck::heading_lines(text) {
         if let Some(h) = line.strip_prefix("## ").filter(|_| can_head) {
             section = Some(h.trim().to_string());
-        } else if line.trim_start().starts_with(FILL) {
+        } else if can_head && line.trim_start().starts_with(FILL) {
             // A template prompt is a line of its own; prose that names the marker is not one.
             out.push(match &section {
                 Some(s) => format!("a `{FILL}` template line is left in `## {s}`"),
@@ -217,6 +217,13 @@ fn run_receipts(root: &Path, lab: &str, folder: &Path, shown: &str) -> u8 {
             return 2;
         }
     };
+    let clean = match crate::loopgates::clean_head_tree_hash(root) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("uor-harness: {e}");
+            return 2;
+        }
+    };
     let ledger = root
         .join("local")
         .join(crate::state::slug(lab))
@@ -231,13 +238,14 @@ fn run_receipts(root: &Path, lab: &str, folder: &Path, shown: &str) -> u8 {
         let (Some(gate), Some(commit)) = (v["gate"].as_str(), v["commit"].as_str()) else {
             continue;
         };
-        if commit == head {
+        // A row from a dirty tree at HEAD is not a receipt for HEAD.
+        if commit == head && v["tree"].as_str() == Some(clean.as_str()) {
             latest.insert(gate.to_string(), line);
         }
     }
     if latest.is_empty() {
         println!(
-            "FAIL receipts: no gate results at HEAD ({head}) in {}; run `loop gates` first",
+            "FAIL receipts: no gate results at HEAD ({head}) on a clean tree in {}; run `loop gates` first",
             ledger.display()
         );
         return 1;

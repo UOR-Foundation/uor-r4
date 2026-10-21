@@ -357,3 +357,53 @@ fn a_pr_that_deletes_an_order_is_skipped_with_a_note_not_fatal() {
         "{o:?}"
     );
 }
+
+#[test]
+fn a_pr_with_a_hundred_listed_files_is_judged_by_its_order_from_every_page() {
+    let r = Repo::new(&[]);
+    let (mut p, f) = pr(14, "codex/big", "codex", "it-2");
+    let order_path = p["files"][0]["path"].as_str().unwrap().to_string();
+    // The listing stops at 100 files, and the ORDER is not among them.
+    p["files"] = Value::Array(
+        (0..100)
+            .map(|i| json!({"path": format!("crates/x/f{i}.rs")}))
+            .collect(),
+    );
+    let mut next = fake(vec![(p, f)], json!({}));
+    next["allFiles"] = json!({"14": [order_path]});
+    let o = r.next(&next);
+    assert!(decision(&o).starts_with("GO review #14 — "), "{o:?}");
+}
+
+#[test]
+fn the_vendors_come_from_origin_main_not_the_working_tree() {
+    let r = Repo::new(&[]);
+    // This branch's labs.json makes claude and codex the same vendor; origin/main still differs.
+    r.write(
+        "docs/harness/labs.json",
+        r#"{"labs":{
+          "claude":{"vendor":"OpenAI","client":"b","headless":"c","open_pr_limit":3},
+          "codex":{"vendor":"OpenAI","client":"b","headless":"c","open_pr_limit":3}}}"#,
+    );
+    let o = r.next(&fake(vec![pr(12, "codex/z", "codex", "it-2")], json!({})));
+    assert!(decision(&o).starts_with("GO review #12"), "{o:?}");
+}
+
+#[test]
+fn a_review_comes_before_a_ready_claimable_item() {
+    let r = Repo::new(&[("b-free", "ready", Some("[crates/b/**]"))]);
+    let o = r.next(&fake(vec![pr(12, "codex/z", "codex", "it-2")], json!({})));
+    assert!(decision(&o).starts_with("GO review #12"), "{o:?}");
+    assert!(!stdout(&o).contains("GO item"), "{o:?}");
+}
+
+#[test]
+fn a_stop_file_beats_an_own_pr_that_needs_repair() {
+    let r = Repo::new(&[]);
+    r.write("local/loop/STOP", "");
+    let (mut p, f) = pr(7, "claude/x", "claude", "it-1");
+    p["checks"] = json!([{"name": "ci", "conclusion": "FAILURE"}]);
+    let o = r.next(&fake(vec![(p, f)], json!({})));
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(decision(&o).starts_with("STOP kill switch"), "{o:?}");
+}

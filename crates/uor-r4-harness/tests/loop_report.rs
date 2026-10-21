@@ -162,6 +162,15 @@ fn check_passes_a_complete_report_and_refuses_fill_lines_and_a_missing_file() {
     let (code, out) = r.report(Some("claude"), &["--check"]);
     assert_eq!(code, 0, "{out}");
     assert!(out.contains("PASS report"), "{out}");
+
+    // A fill line inside a code fence is quoted text, not a template line.
+    r.write(
+        REPORT,
+        &VALID.replace("A.\n", "A.\n```\n<!-- fill: x -->\n```\n"),
+    );
+    let (code, out) = r.report(Some("claude"), &["--check"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("PASS report"), "{out}");
 }
 
 #[test]
@@ -196,14 +205,62 @@ fn new_writes_the_template_once_and_the_fresh_template_fails_check() {
     );
 }
 
+/// The tree hash the harness records for a clean working tree at HEAD: `git hash-object` of the
+/// length-prefixed `rev-parse HEAD` output and two empty length-prefixed sections.
+fn clean_tree_hash(r: &Repo) -> String {
+    use std::io::Write;
+    let head_line = format!("{}\n", r.git(&["rev-parse", "HEAD"]));
+    let mut bytes = (head_line.len() as u64).to_le_bytes().to_vec();
+    bytes.extend_from_slice(head_line.as_bytes());
+    bytes.extend_from_slice(&[0u8; 16]);
+    let mut child = clean(&mut Command::new("git"))
+        .args(["hash-object", "--stdin"])
+        .current_dir(&r.root)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(&bytes).unwrap();
+    let out = child.wait_with_output().unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+#[test]
+fn receipts_skip_a_row_recorded_on_a_dirty_tree_at_head() {
+    let r = Repo::new(&[ORDER]);
+    let head = r.git(&["rev-parse", "HEAD"]);
+    let tree = clean_tree_hash(&r);
+    let row = |gate: &str, tree: &str| {
+        format!(
+            r#"{{"gate":"{gate}","verdict":"green","seconds":1.0,"commit":"{head}","tree":"{tree}","exit":0,"signal":null,"ts":1}}"#
+        )
+    };
+    r.write(
+        "local/claude/gates.jsonl",
+        &(row("dirty", "not-the-clean-tree") + "\n" + &row("clean", &tree) + "\n"),
+    );
+    let (code, out) = r.report(Some("claude"), &["--receipts"]);
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(r.read(RECEIPTS), row("clean", &tree) + "\n");
+
+    r.write(
+        "local/claude/gates.jsonl",
+        &(row("dirty", "not-the-clean-tree") + "\n"),
+    );
+    let (code, out) = r.report(Some("claude"), &["--receipts"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("no gate results at HEAD"), "{out}");
+}
+
 #[test]
 fn receipts_copy_the_latest_head_result_per_gate_sorted() {
     let r = Repo::new(&[ORDER]);
     let head = r.git(&["rev-parse", "HEAD"]);
     let old = r.git(&["rev-parse", "HEAD~1"]);
+    let tree = clean_tree_hash(&r);
     let row = |gate: &str, commit: &str, verdict: &str, ts: u64| {
         format!(
-            r#"{{"gate":"{gate}","verdict":"{verdict}","seconds":1.0,"commit":"{commit}","tree":"t","exit":0,"signal":null,"ts":{ts}}}"#
+            r#"{{"gate":"{gate}","verdict":"{verdict}","seconds":1.0,"commit":"{commit}","tree":"{tree}","exit":0,"signal":null,"ts":{ts}}}"#
         )
     };
     let lines = [

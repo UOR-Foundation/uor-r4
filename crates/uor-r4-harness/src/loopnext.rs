@@ -66,6 +66,8 @@ pub trait NextGh {
     fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String>;
     /// The label names on issue `n`.
     fn issue_labels(&self, n: u64) -> Result<Vec<String>, String>;
+    /// Every changed path of PR `n`, all pages (the listed `files` stops at 100).
+    fn pr_files(&self, n: u64) -> Result<Vec<String>, String>;
 }
 
 /// `gh`, run from the repository root.
@@ -140,14 +142,45 @@ impl NextGh for RealNextGh {
     }
 
     fn issue_labels(&self, n: u64) -> Result<Vec<String>, String> {
-        let endpoint = format!("repos/{{owner}}/{{repo}}/issues/{n}/labels");
-        let text = crate::loopclaim::run_gh(&self.root, &["api", &endpoint])?;
-        let v: Vec<serde_json::Value> = serde_json::from_str(&text)
-            .map_err(|e| format!("gh api {endpoint} printed unreadable JSON: {e}"))?;
-        Ok(v.iter()
+        let args = paginated_args(&format!("repos/{{owner}}/{{repo}}/issues/{n}/labels"));
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        Ok(paged_values(&self.root, &args)?
+            .iter()
             .filter_map(|l| l.get("name")?.as_str().map(str::to_string))
             .collect())
     }
+
+    fn pr_files(&self, n: u64) -> Result<Vec<String>, String> {
+        let args = paginated_args(&format!("repos/{{owner}}/{{repo}}/pulls/{n}/files"));
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        Ok(paged_values(&self.root, &args)?
+            .iter()
+            .filter_map(|f| f.get("filename")?.as_str().map(str::to_string))
+            .collect())
+    }
+}
+
+/// The `gh` arguments for a paginated `gh api` read of `endpoint`.
+fn paginated_args(endpoint: &str) -> Vec<String> {
+    ["api", endpoint, "--paginate"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// The items of a paginated `gh api` array read: `--paginate` prints one JSON array per page.
+fn paged_values(root: &Path, args: &[&str]) -> Result<Vec<serde_json::Value>, String> {
+    let text = crate::loopclaim::run_gh(root, args)?;
+    let mut items = Vec::new();
+    for page in serde_json::Deserializer::from_str(&text).into_iter::<serde_json::Value>() {
+        let page =
+            page.map_err(|e| format!("gh {} printed unreadable JSON: {e}", args.join(" ")))?;
+        match page {
+            serde_json::Value::Array(v) => items.extend(v),
+            other => items.push(other),
+        }
+    }
+    Ok(items)
 }
 
 /// The in-memory stand-in for `gh`, read from the file `UOR_LOOP_NEXT_GH_FAKE` names.
@@ -161,6 +194,8 @@ pub struct FakeNextGh {
     files: BTreeMap<String, String>,
     #[serde(default)]
     labels: BTreeMap<String, Vec<String>>,
+    #[serde(default, rename = "allFiles")]
+    all_files: BTreeMap<String, Vec<String>>,
 }
 
 impl FakeNextGh {
@@ -200,6 +235,12 @@ impl NextGh for FakeNextGh {
     fn issue_labels(&self, n: u64) -> Result<Vec<String>, String> {
         Ok(self.labels.get(&n.to_string()).cloned().unwrap_or_default())
     }
+    fn pr_files(&self, n: u64) -> Result<Vec<String>, String> {
+        self.all_files
+            .get(&n.to_string())
+            .cloned()
+            .ok_or_else(|| format!("fake PR #{n} has no allFiles"))
+    }
 }
 
 /// One source's line: its name, `stop`, `work`, `none` or `not-built`, and what it found.
@@ -233,11 +274,16 @@ struct PrOrder {
 fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, String> {
     let pattern = regex::Regex::new(r"^docs/loop/tasks/[^/]+/[^/]+-[0-9]+/ORDER\.md$")
         .expect("a valid pattern");
+    // The listed files stop at 100; a PR that reaches it may have more, so read every page.
+    let listed: Vec<String> = if pr.files.len() >= 100 {
+        gh.pr_files(pr.number)?
+    } else {
+        pr.files.iter().map(|f| f.path.clone()).collect()
+    };
     let mut added = Vec::new();
-    for path in pr
-        .files
+    for path in listed
         .iter()
-        .map(|f| f.path.as_str())
+        .map(String::as_str)
         .filter(|p| pattern.is_match(p))
     {
         let Ok(text) = gh.file_at_pr(pr.number, path) else {
@@ -349,7 +395,10 @@ pub fn run(
         "owner-direction",
         "owner directions live in PLAN, loop PR 8",
     ));
-    let vendors: BTreeMap<String, String> = crate::labs::load_labs(root)?
+    // The vendors come from `origin/main`, not from this branch's working tree.
+    let labs_text = git(root, &["show", "origin/main:docs/harness/labs.json"])
+        .map_err(|e| format!("cannot read docs/harness/labs.json at origin/main: {e}"))?;
+    let vendors: BTreeMap<String, String> = crate::labs::parse_labs(&labs_text)?
         .into_iter()
         .map(|(k, l)| (k, l.vendor))
         .collect();
@@ -602,5 +651,15 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     match decision {
         Decision::Go { .. } => 0,
         Decision::Stop(_) => 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn paginated_reads_pass_paginate() {
+        let args = super::paginated_args("repos/{owner}/{repo}/issues/1/labels");
+        assert!(args.iter().any(|a| a == "--paginate"), "{args:?}");
+        assert_eq!(args[0], "api");
     }
 }
