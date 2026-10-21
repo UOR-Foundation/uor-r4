@@ -12,6 +12,7 @@ Two fresh-context builders each wrote one commit in parallel, one for `loop queu
   - again in `after-approval`, which re-reads the comments after the rules have run, so a CHANGES posted in between is still caught.
 
   With both set aside, the test fails. Neither path alone is pinned by a test that fails when only it is removed.
+- **I pushed without running `pr-check --local`, and the ORDER was too long.** The ORDER's own done-when names `pr-check --local`, but it was first run (through the live `loop queue` dry run) only after the PR was open. Its `read-path` rule failed: the ORDER was 4,331 bytes, over the 4,096 limit. I shortened the Goal and call 4 to 3,986 bytes; what the ORDER asks for is unchanged.
 - **The first full suite run failed one test.** 927 passed and 1 failed: `harnessrules::tests::the_real_repo_passes_the_ported_rules`. The docs check keeps its own list of `loop` subcommands, and neither builder had added `queue` or `board` to it, so the new README lines counted as commands that do not exist. Fixed in `222b2c84e`, which adds both to the list in `doccheck.rs`. The test now passes.
 - **The top-level parser swallows `--json`.** Both builders had to add their command to the list in `main.rs` that forwards it. Their commits conflicted on that line; I resolved it by hand and updated the comment above it, which still named only three commands.
 - **The board's claim counts are inflated.** It merges live claims with the ones committed in `docs/harness/claims.json`, so stale committed entries count too. On the first live run Claude showed 34 and Codex 36.
@@ -43,7 +44,10 @@ None. This is tooling, with no model run.
   - all pass again once restored.
 - Full harness suite at `222b2c84e`: 928 passed, 0 failed. The first run, before that fix, failed one test; see above.
 - `loop board` on live data rendered all five labs and exited 0.
-- LIVE_QUEUE_LINE
+- **The live `loop queue --pr 2931 --dry-run`, run on this PR, refused it**, exit 1:
+  - while the PR was a draft, at `pr-state`;
+  - once it was ready, `pr-state`, `head` (the fetched commit equals GitHub's), `order`, `commit-order`, `report`, `owner-paths` and `rule-sources` passed;
+  - `scope`, `review-record`, `required-checks` and `after-approval` failed, as expected before review and before scopes land. `read-path` also failed; see above.
 - Claim-wording passes. `xtask links` finds no broken link in the changed files. The copyright check finds 0 matching 8-word runs. `loop pr-check --local` fails only `scope`, as for every loop PR.
 
 ## Skills used

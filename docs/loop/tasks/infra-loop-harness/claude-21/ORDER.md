@@ -4,14 +4,7 @@ Lab: claude. Item: [infra-loop-pr07c-queue-board](../../../../roadmap/items/infr
 
 ## Goal
 
-The item's done-when:
-- `loop queue` queues a PR only when all four of these hold:
-  - the policy check is green at the head;
-  - the APPROVE that PR 6's gate accepts is at the head (Claude's for a loop setup PR under D59; otherwise another vendor's);
-  - no later CHANGES that the gate counts exists;
-  - no owner or PM comment came after the approval.
-- It refuses required checks that did not come from the policy job, and `.github/**` changes made without the owner's approval.
-- `loop board` is a read-only view of the five labs.
+The item's done-when, in short: `loop queue` queues only on a green policy check, an APPROVE that PR 6's gate counts at the head, no later counted CHANGES, and no later owner or PM comment. It refuses required checks not from the policy job, and unapproved `.github/**` changes. `loop board` is a read-only view of the five labs.
 
 The planted fault: **a later CHANGES record blocks queueing, unless it comes from a lab other than Claude on a setup PR (D59).**
 
@@ -33,13 +26,7 @@ Do `loop queue` or `loop board` exist? Result at `7864b0516`: no. Both print "no
    - a comment that starts with the tag of a registered lab whose role is not `pm` does not count;
    - every other comment counts as possibly the owner's or the PM's, and refuses the queue. All labs post from one account (D55), so an untagged comment is the owner's as far as the tool can tell.
 3. **Writing.** The only GitHub write is `gh pr merge <n> --match-head-commit <sha>`, through a trait with a fake. `--dry-run` writes nothing. Exit codes: 0 queued (or would queue), 1 refused, 2 cannot run.
-4. **`loop board [--json]` is read-only.** For each lab in `labs.json` it shows:
-   - vendor, client and role;
-   - presence from the live tier (state, age, doing, next);
-   - the number of live claims;
-   - its open PRs: those whose title starts with `[<lab>]`, each with number, draft or ready, and short head.
-
-   Open PRs with no lab tag are listed apart. GitHub is read through a trait with a fake. No hook canary yet: that is loop PR 9.
+4. **`loop board [--json]` is read-only.** For each lab in `labs.json`: vendor, client, role, live presence, claims, and its open PRs (title starting `[<lab>]`; number, draft or ready, short head). Untagged PRs are listed apart. GitHub is read through a trait with a fake. The hook canary is loop PR 9.
 
 ## Files in scope
 
