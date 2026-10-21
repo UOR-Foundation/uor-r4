@@ -50,13 +50,29 @@ pub struct Gate {
     pub brk: Break,
 }
 
-/// The planted fault: append `append` to `file` (repository-relative) in a scratch worktree.
-/// The gate must then go red with `expect` somewhere in its output.
+/// The planted fault: append text to `file`, or replace one exact text with another, in a scratch
+/// worktree (repository-relative). The gate must then go red with `expect` somewhere in its output.
+///
+/// **A `replace` break exists so a fault can remove behaviour** - delete the branch whose absence the
+/// gate should notice - instead of appending a case that can only make a test pass. Exactly one of
+/// `append` and `replace` is given.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Break {
     pub file: String,
+    /// Text appended verbatim to the file.
+    #[serde(default)]
     pub append: String,
+    /// One literal replacement: `from` must occur exactly once, and is replaced by `to`.
+    #[serde(default)]
+    pub replace: Option<Replace>,
     pub expect: String,
+}
+
+/// One literal replacement for a `replace` break.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Replace {
+    pub from: String,
+    pub to: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,11 +164,21 @@ pub fn load(root: &Path) -> Result<GateFile, String> {
             return Err(format!("gate {:?} needs proves, command and reads", g.id));
         }
         let b = &g.brk;
-        if b.file.trim().is_empty() || b.append.is_empty() || b.expect.trim().is_empty() {
+        let has_append = !b.append.is_empty();
+        let has_replace = b.replace.is_some();
+        if b.file.trim().is_empty() || b.expect.trim().is_empty() || has_append == has_replace {
             return Err(format!(
-                "gate {:?} must declare a break: file, append, expect",
+                "gate {:?} must declare a break: file, exactly one of append or replace, expect",
                 g.id
             ));
+        }
+        if let Some(r) = &b.replace {
+            if r.from.is_empty() {
+                return Err(format!(
+                    "gate {:?}: break.replace.from must not be empty",
+                    g.id
+                ));
+            }
         }
         if !contained_rel(&b.file) {
             return Err(format!(
@@ -583,10 +609,26 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
     if fs::symlink_metadata(&target).is_ok_and(|m| m.file_type().is_symlink()) {
         return refused(format!("break.file {} is a symlink", gate.brk.file));
     }
-    let planted = fs::OpenOptions::new()
-        .append(true)
-        .open(&target)
-        .and_then(|mut f| f.write_all(gate.brk.append.as_bytes()));
+    let planted = if let Some(r) = &gate.brk.replace {
+        match fs::read_to_string(&target) {
+            Ok(text) => {
+                let count = text.matches(r.from.as_str()).count();
+                if count != 1 {
+                    return refused(format!(
+                        "break.replace.from occurs {count} times in {}; it must occur exactly once",
+                        gate.brk.file
+                    ));
+                }
+                fs::write(&target, text.replacen(r.from.as_str(), &r.to, 1))
+            }
+            Err(e) => Err(e),
+        }
+    } else {
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&target)
+            .and_then(|mut f| f.write_all(gate.brk.append.as_bytes()))
+    };
     if let Err(e) = planted {
         return refused(format!("cannot plant the break in {}: {e}", gate.brk.file));
     }

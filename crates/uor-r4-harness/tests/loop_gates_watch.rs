@@ -192,7 +192,15 @@ fn a_red_is_printed_as_it_lands() {
     let text = serde_json::to_string(&s).unwrap();
     let mut out: Vec<u8> = Vec::new();
     let mut read = || text.clone();
-    let mut wait = || std::thread::sleep(Duration::from_millis(2));
+    let mut calls = 0u32;
+    let mut wait = || {
+        calls += 1;
+        assert!(
+            calls <= 100,
+            "the window never gave up; its give-up branch is missing"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    };
     watch_loop(
         &mut read,
         &mut out,

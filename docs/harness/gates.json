@@ -88,9 +88,12 @@
       ],
       "quick": false,
       "break": {
-        "file": "crates/uor-r4-harness/tests/loop_gates_watch.rs",
-        "append": "\n#[test]\nfn planted_break_watch() {\n    let mut calls = 0u64;\n    let mut out = Vec::new();\n    let mut read = || String::new();\n    let mut wait = || {\n        calls += 1;\n        if calls > 100 {\n            panic!(\"watch did not give up\");\n        }\n        std::thread::sleep(std::time::Duration::from_millis(2));\n    };\n    let _ = uor_r4_harness::loopgates::watch_loop(\n        &mut read,\n        &mut out,\n        &std::collections::BTreeMap::new(),\n        std::time::Duration::from_millis(1),\n        &mut wait,\n    );\n    assert!(String::from_utf8_lossy(&out).contains(\"giving up\"));\n}\n",
-        "expect": "watch did not give up"
+        "file": "crates/uor-r4-harness/src/loopgates.rs",
+        "replace": {
+          "from": "        } else if changed_at.elapsed() >= give_up {",
+          "to": "        } else if false {"
+        },
+        "expect": "the window never gave up"
       }
     }
   ]

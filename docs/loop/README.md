@@ -124,7 +124,7 @@ A gate is a check anyone can rerun. Each gate names what it proves, and a plante
 
 **Ledger.** `local/<lab>/gates.jsonl` records gate, verdict, seconds, commit and the working-tree hash. An uncommitted edit makes a result STALE. The ledger is not committed; CI's result at the head is the authority.
 
-**Breaks.** `--break G` plants the gate's declared fault in a scratch worktree. The gate must go red with its declared failure text. Red for another reason, such as a build failure, is REFUSED. Every gate must declare a break. When a PR changes a gate, the old breaks also run against the new gate, so a gate and its break cannot be loosened together. A break that stays green is a gate defect: add the case, never relax the check. A bug that escapes every gate becomes a new gate whose break is that bug.
+**Breaks.** `--break G` plants the gate's declared fault in a scratch worktree. The gate must go red with its declared failure text. Red for another reason, such as a build failure, is REFUSED. Every gate must declare a break: appended text, or one exact replacement (`replace`, whose `from` must occur exactly once), so the planted fault can be a removed branch rather than an added case. When a PR changes a gate, the old breaks also run against the new gate, so a gate and its break cannot be loosened together. A break that stays green is a gate defect: add the case, never relax the check. A bug that escapes every gate becomes a new gate whose break is that bug.
 
 **CI (built, loop PR 5).** One workflow, `gate.yml`, which `ci.yml` calls on every pull request, with no path filters:
 - `tests` runs `loop gates --full` with a read-only token. It takes the lab from the PR's ORDER; a PR with no ORDER is outside the loop and is skipped with a notice.
