@@ -267,11 +267,13 @@ pub enum Decision {
     Stop(String),
 }
 
-/// The ORDER a PR adds: its lab (from `<lab>-<n>/ORDER.md`) and whether its item is a loop setup
-/// item (`infra-loop-pr*`, D59).
+/// The ORDER a PR adds: its lab (from `<lab>-<n>/ORDER.md`), its item and `Setup row:`, and
+/// whether the PR is doc-only; with `origin/main` and the comments, what the review gate reads.
 struct PrOrder {
     lab: String,
-    setup: bool,
+    item: String,
+    setup_row: Option<String>,
+    doc_only: bool,
 }
 
 /// Why a PR has no ORDER: a `gh` read failed (an own PR fails closed on it), or the PR adds none, or
@@ -348,37 +350,38 @@ fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderE
         pr.files.iter().map(|f| f.path.clone()).collect()
     };
     let (_, text, lab) = added_order(root, pr.number, &listed, &|p| gh.file_at_pr(pr.number, p))?;
-    let setup = crate::loopclaim::order_item(&text).is_some_and(|i| i.starts_with("infra-loop-pr"));
-    Ok(PrOrder { lab, setup })
+    Ok(PrOrder {
+        lab,
+        item: crate::loopclaim::order_item(&text).unwrap_or_default(),
+        setup_row: crate::loopreview::setup_row(&text),
+        doc_only: crate::loopreview::doc_only(listed.iter().map(String::as_str)),
+    })
 }
 
-/// Whether `lab`'s record counts on a PR with this ORDER: `claude` alone on a setup PR (D59), else
-/// a registered lab whose vendor differs from the ORDER lab's (D46).
-fn may_review(lab: &str, order: &PrOrder, vendors: &BTreeMap<String, String>) -> bool {
-    let Some(lv) = vendors.get(lab) else {
-        return false;
-    };
-    if order.setup {
-        return lab == "claude";
+/// What the review gate reads for this PR: its head, ORDER and comment bodies, and `origin/main`.
+fn gate_input<'a>(
+    pr: &'a NextPr,
+    order: &'a PrOrder,
+    main: &'a crate::loopreview::MainContext,
+    comments: &'a [String],
+) -> crate::loopreview::GateInput<'a> {
+    crate::loopreview::GateInput {
+        pr: pr.number,
+        head: &pr.head_ref_oid,
+        order_lab: &order.lab,
+        order_item: &order.item,
+        setup_row: order.setup_row.as_deref(),
+        rows: &main.rows,
+        vendors: &main.vendors,
+        d59_in_force: main.d59_in_force,
+        doc_only: order.doc_only,
+        comments,
     }
-    let ov = vendors.get(&order.lab).map(String::as_str).unwrap_or("");
-    !ov.is_empty() && !lv.is_empty() && ov != lv
 }
 
-/// The counted review records at the PR's head, oldest first: `(lab, approve)`.
-fn counted_records(
-    gh: &dyn NextGh,
-    pr: &NextPr,
-    order: &PrOrder,
-    vendors: &BTreeMap<String, String>,
-) -> Result<Vec<(String, bool)>, String> {
-    Ok(gh
-        .comments(pr.number)?
-        .iter()
-        .filter_map(|c| crate::loopprcheck::parse_review_record(&c.body))
-        .filter(|(lab, sha, _)| *sha == pr.head_ref_oid && may_review(lab, order, vendors))
-        .filter_map(|(lab, _, v)| v.map(|v| (lab, v)))
-        .collect())
+/// The PR's comment bodies, oldest first.
+fn comment_bodies(gh: &dyn NextGh, n: u64) -> Result<Vec<String>, String> {
+    Ok(gh.comments(n)?.into_iter().map(|c| c.body).collect())
 }
 
 fn source(source: &'static str, status: &'static str, detail: impl Into<String>) -> Source {
@@ -430,13 +433,10 @@ pub fn run(
         "owner-direction",
         "owner directions live in PLAN, loop PR 8",
     ));
-    // The vendors come from `origin/main`, not from this branch's working tree.
-    let labs_text = git(root, &["show", "origin/main:docs/harness/labs.json"])
-        .map_err(|e| format!("cannot read docs/harness/labs.json at origin/main: {e}"))?;
-    let vendors: BTreeMap<String, String> = crate::labs::parse_labs(&labs_text)?
-        .into_iter()
-        .map(|(k, l)| (k, l.vendor))
-        .collect();
+    // The build-plan rows, vendors and D59 come from `origin/main`, not from this branch's
+    // working tree.
+    let main = crate::loopreview::main_context(root)
+        .map_err(|e| format!("cannot read the review context at origin/main: {e}"))?;
     let mut prs = gh
         .open_prs()
         .map_err(|e| format!("cannot list open PRs: {e}"))?;
@@ -466,10 +466,11 @@ pub fn run(
                 why.push("its ORDER is missing or ambiguous".to_string());
             }
             Ok(o) => {
-                let records = counted_records(gh, pr, &o, &vendors).map_err(unreadable)?;
-                if let Some((rlab, false)) = records.last() {
+                let bodies = comment_bodies(gh, pr.number).map_err(unreadable)?;
+                let records = crate::loopreview::counted(&gate_input(pr, &o, &main, &bodies));
+                if let Some((rlab, crate::loopreview::Verdict::Changes)) = records.last() {
                     why.push(format!(
-                        "the last counted review record at its head ({rlab}) says REQUEST CHANGES"
+                        "the last counted review record at its head ({rlab}) says CHANGES"
                     ));
                 }
             }
@@ -503,16 +504,17 @@ pub fn run(
                 continue;
             }
         };
-        if !may_review(lab, &order, &vendors) {
+        if !crate::loopreview::may_review(&gate_input(pr, &order, &main, &[]), lab) {
             continue;
         }
-        let records = match counted_records(gh, pr, &order, &vendors) {
-            Ok(r) => r,
+        let bodies = match comment_bodies(gh, pr.number) {
+            Ok(b) => b,
             Err(e) => {
                 skipped.push(format!("#{}: {e}", pr.number));
                 continue;
             }
         };
+        let records = crate::loopreview::counted(&gate_input(pr, &order, &main, &bodies));
         if records.iter().any(|(l, _)| l == lab) {
             continue;
         }

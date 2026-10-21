@@ -420,6 +420,37 @@ pub fn gate(input: &GateInput) -> GateOutcome {
     }
 }
 
+/// The counted records, in posting order: `(lab, verdict)` of each record [`gate`] counts.
+pub fn counted(input: &GateInput) -> Vec<(String, Verdict)> {
+    let setup_pr = is_setup_pr(input.setup_row, input.rows, input.order_item);
+    input
+        .comments
+        .iter()
+        .filter_map(|body| match parse(body) {
+            Parsed::Record(r) if refusal(input, setup_pr, &r).is_none() => Some((r.lab, r.verdict)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether a record from `lab` at this PR and head would count. The record is taken to carry
+/// `context: fresh`, which any reviewer may state, so on a doc-only PR the ORDER lab may review.
+pub fn may_review(input: &GateInput, lab: &str) -> bool {
+    let setup_pr = is_setup_pr(input.setup_row, input.rows, input.order_item);
+    let r = Record {
+        lab: lab.to_string(),
+        pr: input.pr,
+        head: input.head.to_string(),
+        model: String::new(),
+        launch: String::new(),
+        verdict: Verdict::Approve,
+        order: String::new(),
+        fresh_context: true,
+        done_when: DoneWhen::Host(String::new()),
+    };
+    refusal(input, setup_pr, &r).is_none()
+}
+
 // ---------------------------------------------------------------------------------------------
 // The `uor-harness loop review` command. Everything above is pure; this section reads git and
 // GitHub (through [`ReviewGh`]) and posts one comment.
@@ -617,25 +648,15 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// Everything about the PR the gate needs except its comments.
-struct Context {
-    head: String,
-    order: String,
-    order_lab: String,
-    order_item: String,
-    setup_row: Option<String>,
-    rows: Vec<String>,
-    vendors: BTreeMap<String, String>,
-    d59_in_force: bool,
-    doc_only: bool,
+/// What `origin/main` says about every PR: the build-plan rows, each lab's vendor and whether
+/// D59 is in force. Shared by `loop review` and `loop next`; reads the local `origin/main`.
+pub(crate) struct MainContext {
+    pub rows: Vec<String>,
+    pub vendors: BTreeMap<String, String>,
+    pub d59_in_force: bool,
 }
 
-fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
-    git(root, &["fetch", "-q", "origin", "main"])?;
-    let pr = gh.pr(n)?;
-    let (order, text, order_lab) =
-        crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p))
-            .map_err(crate::loopnext::OrderErr::note)?;
+pub(crate) fn main_context(root: &Path) -> Result<MainContext, String> {
     let main = |path: &str| git(root, &["show", &format!("origin/main:{path}")]);
     let rows = build_rows(&main("docs/loop/README.md")?);
     let vendors = crate::labs::parse_labs(&main("docs/harness/labs.json")?)?
@@ -647,20 +668,51 @@ fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
         &main("docs/harness/owner-paths.json").unwrap_or_default(),
         main(D59_SWITCH).ok().as_deref(),
     );
-    let doc_only = !pr.files.is_empty()
-        && pr
-            .files
-            .iter()
-            .all(|f| matches!(crate::loopprcheck::size_class(f), "docs" | "generated"));
+    Ok(MainContext {
+        rows,
+        vendors,
+        d59_in_force: d59,
+    })
+}
+
+/// A doc-only PR: it changes at least one path, and every path is `docs` or `generated`.
+pub(crate) fn doc_only<'p>(paths: impl IntoIterator<Item = &'p str>) -> bool {
+    let mut any = false;
+    for p in paths {
+        if !matches!(crate::loopprcheck::size_class(p), "docs" | "generated") {
+            return false;
+        }
+        any = true;
+    }
+    any
+}
+
+/// Everything about the PR the gate needs except its comments.
+struct Context {
+    head: String,
+    order: String,
+    order_lab: String,
+    order_item: String,
+    setup_row: Option<String>,
+    main: MainContext,
+    doc_only: bool,
+}
+
+fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
+    git(root, &["fetch", "-q", "origin", "main"])?;
+    let pr = gh.pr(n)?;
+    let (order, text, order_lab) =
+        crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p))
+            .map_err(crate::loopnext::OrderErr::note)?;
+    let main = main_context(root)?;
+    let doc_only = doc_only(pr.files.iter().map(String::as_str));
     Ok(Context {
         head: pr.head_sha,
         order,
         order_lab,
         order_item: crate::loopclaim::order_item(&text).unwrap_or_default(),
         setup_row: setup_row(&text),
-        rows,
-        vendors,
-        d59_in_force: d59,
+        main,
         doc_only,
     })
 }
@@ -672,9 +724,9 @@ fn run_gate(pr: u64, c: &Context, comments: &[String]) -> GateOutcome {
         order_lab: &c.order_lab,
         order_item: &c.order_item,
         setup_row: c.setup_row.as_deref(),
-        rows: &c.rows,
-        vendors: &c.vendors,
-        d59_in_force: c.d59_in_force,
+        rows: &c.main.rows,
+        vendors: &c.main.vendors,
+        d59_in_force: c.main.d59_in_force,
         doc_only: c.doc_only,
         comments,
     })

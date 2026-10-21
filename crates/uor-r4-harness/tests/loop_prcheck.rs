@@ -90,6 +90,10 @@ impl Repo {
         r.write("crates/a/src/lib.rs", "pub fn a() {}\n");
         r.write("docs/a.md", "# a\n");
         r.write("docs/harness/owner-paths.json", OWNER_PATHS);
+        r.write(
+            "docs/loop/README.md",
+            "# Loop\n\n## Build plan\n\n| PR | What it builds |\n|---|---|\n| 99 | x |\n",
+        );
         r.write("CHARTER.md", "# Charter\n");
         r.git(&["add", "-A"]);
         r.git(&["commit", "-q", "-m", "base"]);
@@ -1071,9 +1075,25 @@ fn setup_pr(r: &Repo) -> String {
     })
 }
 
-/// A review record comment by `lab` at `sha` saying `verdict`.
+/// A `uor-review v1` record comment by `lab` on PR 5 at `sha` saying `verdict` (APPROVE or
+/// CHANGES).
 fn record(lab: &str, sha: &str, verdict: &str) -> serde_json::Value {
-    let body = format!("[{lab}] Exact-head review record for `{sha}`\n\n**Verdict: {verdict}**\n");
+    use uor_r4_harness::loopreview::{render, DoneWhen, Record, Verdict};
+    let body = render(&Record {
+        lab: lab.to_string(),
+        pr: 5,
+        head: sha.to_string(),
+        model: "m".to_string(),
+        launch: "l".to_string(),
+        verdict: if verdict == "APPROVE" {
+            Verdict::Approve
+        } else {
+            Verdict::Changes
+        },
+        order: "docs/loop/tasks/r/x-1/ORDER.md".to_string(),
+        fresh_context: false,
+        done_when: DoneWhen::Host("cargo test: ok".to_string()),
+    });
     serde_json::json!({"author": "someone", "body": body})
 }
 
@@ -1087,8 +1107,9 @@ impl Repo {
     }
 }
 
-/// `review-record`: an exact-head APPROVE from an allowed registered lab, with no later
-/// REQUEST CHANGES, passes; setup items take claude alone (D59), others another vendor (D46).
+/// `review-record` runs the review gate on the PR's `uor-review v1` records: an exact-head
+/// APPROVE that counts, with no later counted CHANGES, passes; a setup PR counts claude alone
+/// (D59), others another vendor (D46); untagged and free-text records do not count.
 #[test]
 fn review_record_counts_exact_head_records_from_allowed_labs() {
     let r = Repo::new();
@@ -1097,50 +1118,59 @@ fn review_record_counts_exact_head_records_from_allowed_labs() {
     expect(&o, 1, "PASS review-record", "counted");
 
     let o = r.check_gh(&h, &fake(vec![record("codex", &h, "APPROVE")]));
-    expect(&o, 1, "FAIL review-record", "only claude reviews (D59)");
+    expect(
+        &o,
+        1,
+        "FAIL review-record",
+        "a setup PR under D59 counts only claude records",
+    );
 
     let other = "0".repeat(40);
     let o = r.check_gh(&h, &fake(vec![record("claude", &other, "APPROVE")]));
-    expect(&o, 1, "FAIL review-record", "not the head");
+    expect(&o, 1, "FAIL review-record", "not the current head");
 
     let o = r.check_gh(
         &h,
         &fake(vec![
             record("claude", &h, "APPROVE"),
-            record("claude", &h, "REQUEST CHANGES"),
+            record("claude", &h, "CHANGES"),
         ]),
     );
-    expect(&o, 1, "FAIL review-record", "REQUEST CHANGES follows");
-
-    let o = r.check_gh(&h, &fake(vec![]));
     expect(
         &o,
         1,
         "FAIL review-record",
-        "no counted exact-head review record",
+        "fail: the last counted record is CHANGES",
     );
 
+    let o = r.check_gh(&h, &fake(vec![]));
+    expect(&o, 1, "FAIL review-record", "fail: no counted record at");
+
+    // An untagged record does not count.
+    let tagged = record("claude", &h, "APPROVE")["body"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let untagged = tagged.replacen("[claude] ", "", 1);
+    let o = r.check_gh(
+        &h,
+        &fake(vec![
+            serde_json::json!({"author": "someone", "body": untagged}),
+        ]),
+    );
+    expect(&o, 1, "FAIL review-record", "malformed record: untagged");
+
+    // An old free-text record no longer counts.
+    let body = format!("[claude] Exact-head review record for `{h}`\n\n**Verdict: APPROVE**\n");
+    let free = serde_json::json!({"author": "someone", "body": body});
+    let o = r.check_gh(&h, &fake(vec![free]));
+    expect(&o, 1, "FAIL review-record", "fail: no counted record at");
+
+    // A code PR: a same-vendor APPROVE does not count; another vendor's does.
     let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
     let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
     expect(&o, 1, "FAIL review-record", "(D46)");
     let o = r.check_gh(&h, &fake(vec![record("codex", &h, "APPROVE")]));
-    expect(&o, 1, "PASS review-record", "counted");
-
-    // The verdict is the first `**Verdict:` line; a later quoted APPROVE does not change it.
-    let body = format!(
-        "[codex] Exact-head review record for `{h}`\n\n**Verdict: REQUEST CHANGES at `{}`.**\n\nThe last round said:\n\n**Verdict: APPROVE\n",
-        &h[..9]
-    );
-    let quoted = serde_json::json!({"author": "someone", "body": body});
-    let o = r.check_gh(&h, &fake(vec![quoted]));
-    expect(&o, 1, "FAIL review-record", "[codex] REQUEST CHANGES at");
-    // The real record form, `**Verdict: APPROVE at `<short>`.**`, counts.
-    let body = format!(
-        "[codex] Exact-head review record for `{h}`\n\n**Verdict: APPROVE at `{}`.**\n",
-        &h[..9]
-    );
-    let real = serde_json::json!({"author": "someone", "body": body});
-    let o = r.check_gh(&h, &fake(vec![real]));
     expect(&o, 1, "PASS review-record", "counted");
 }
 
