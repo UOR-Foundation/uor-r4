@@ -17,7 +17,9 @@ fn clean(cmd: &mut Command) -> &mut Command {
             cmd.env_remove(k);
         }
     }
-    cmd.env_remove("UOR_LAB").env_remove("UOR_LOOP_GH_FAKE")
+    cmd.env_remove("UOR_LAB")
+        .env_remove("UOR_LOOP_GH_FAKE")
+        .env_remove("UOR_PRCHECK_GH_FAKE")
 }
 
 const ITEM_A: &str = "---\nid: item-a\nstatus: ready\nscope: [crates/a/**, docs/a.md, .github/**, CHARTER.md]\nnotebook: docs/research/notebook/a.md\n---\n\n## Why\n\nBecause.\n";
@@ -40,12 +42,13 @@ struct Repo {
     base: String,
 }
 
-/// A lab registry naming `names`, with the fields the binary's own lab check needs.
+/// A lab registry naming `names`, with the fields the binary's own lab check needs; each lab is
+/// its own vendor.
 fn labs(names: &[&str]) -> String {
     let labs: serde_json::Map<String, serde_json::Value> = names
         .iter()
         .map(|n| {
-            let v = serde_json::json!({"vendor": "a", "client": "b", "headless": "c", "open_pr_limit": 2});
+            let v = serde_json::json!({"vendor": n, "client": "b", "headless": "c", "open_pr_limit": 2});
             (n.to_string(), v)
         })
         .collect();
@@ -77,6 +80,10 @@ impl Repo {
         r.write(
             "docs/roadmap/items/infra-loop-pr9.md",
             "---\nid: infra-loop-pr9\nstatus: ready\nscope: [crates/a/**]\n---\n",
+        );
+        r.write(
+            "docs/roadmap/items/infra-loop-pr99-x.md",
+            "---\nid: infra-loop-pr99-x\nstatus: ready\nscope: [crates/a/**]\n---\n",
         );
         r.write("docs/research/notebook/a.md", NOTEBOOK);
         r.write("docs/start/FILEMAP.md", FILEMAP);
@@ -170,9 +177,26 @@ impl Repo {
         self.check_against(&self.base, head, extra)
     }
 
+    /// The check with `extra`; `--local` is added unless `extra` names a GitHub mode.
     fn check_against(&self, base: &str, head: &str, extra: &[&str]) -> Output {
-        clean(&mut Command::new(BIN))
-            .args(["--repo", self.root.to_str().unwrap(), "loop", "pr-check"])
+        let mode = ["--pr", "--local", "--ci"];
+        let mut args = extra.to_vec();
+        if !extra.iter().any(|a| mode.contains(a)) {
+            args.push("--local");
+        }
+        self.check_raw(base, head, &args, None)
+    }
+
+    /// The check with exactly `extra`, and `UOR_PRCHECK_GH_FAKE` holding `fake` when given.
+    fn check_raw(&self, base: &str, head: &str, extra: &[&str], fake: Option<&str>) -> Output {
+        let mut cmd = Command::new(BIN);
+        clean(&mut cmd);
+        if let Some(json) = fake {
+            let p = self._tmp.path().join("gh-fake.json");
+            std::fs::write(&p, json).unwrap();
+            cmd.env("UOR_PRCHECK_GH_FAKE", &p);
+        }
+        cmd.args(["--repo", self.root.to_str().unwrap(), "loop", "pr-check"])
             .args(["--base", base, "--head", head])
             .args(extra)
             .env("UOR_LAB", "claude")
@@ -851,4 +875,151 @@ fn filemap_needs_a_row_per_directory_and_no_stale_rows() {
         "FAIL filemap",
         "stale row: crates/gone",
     );
+}
+
+const SETUP_ORDER: &str = "docs/loop/tasks/infra-loop-pr99-x/claude-1/ORDER.md";
+
+/// A green setup PR (`infra-loop-pr99-x`, ORDER lab claude, `Setup row: 99`).
+fn setup_pr(r: &Repo) -> String {
+    let text = order("claude", "infra-loop-pr99-x", "Setup row: 99\n");
+    r.green(SETUP_ORDER, &text, |r| {
+        r.write("crates/a/src/lib.rs", "//\n")
+    })
+}
+
+/// A review record comment by `lab` at `sha` saying `verdict`.
+fn record(lab: &str, sha: &str, verdict: &str) -> serde_json::Value {
+    let body = format!("[{lab}] Exact-head review record for `{sha}`\n\n**Verdict: {verdict}**\n");
+    serde_json::json!({"author": "someone", "body": body})
+}
+
+fn fake(comments: Vec<serde_json::Value>) -> String {
+    serde_json::json!({"comments": comments, "checkRuns": [], "statuses": []}).to_string()
+}
+
+impl Repo {
+    fn check_gh(&self, head: &str, fake: &str) -> Output {
+        self.check_raw(&self.base, head, &["--pr", "5"], Some(fake))
+    }
+}
+
+/// `review-record`: an exact-head APPROVE from an allowed registered lab, with no later
+/// REQUEST CHANGES, passes; setup items take claude alone (D59), others another vendor (D46).
+#[test]
+fn review_record_counts_exact_head_records_from_allowed_labs() {
+    let r = Repo::new();
+    let h = setup_pr(&r);
+    let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
+    expect(&o, 1, "PASS review-record", "counted");
+
+    let o = r.check_gh(&h, &fake(vec![record("codex", &h, "APPROVE")]));
+    expect(&o, 1, "FAIL review-record", "only claude reviews (D59)");
+
+    let other = "0".repeat(40);
+    let o = r.check_gh(&h, &fake(vec![record("claude", &other, "APPROVE")]));
+    expect(&o, 1, "FAIL review-record", "not the head");
+
+    let o = r.check_gh(
+        &h,
+        &fake(vec![
+            record("claude", &h, "APPROVE"),
+            record("claude", &h, "REQUEST CHANGES"),
+        ]),
+    );
+    expect(&o, 1, "FAIL review-record", "REQUEST CHANGES follows");
+
+    let o = r.check_gh(&h, &fake(vec![]));
+    expect(
+        &o,
+        1,
+        "FAIL review-record",
+        "no counted exact-head review record",
+    );
+
+    let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
+    let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
+    expect(&o, 1, "FAIL review-record", "(D46)");
+    let o = r.check_gh(&h, &fake(vec![record("codex", &h, "APPROVE")]));
+    expect(&o, 1, "PASS review-record", "counted");
+}
+
+/// Without GitHub: `--local` and `--ci` make both GitHub rules N/A; no mode at all fails them.
+#[test]
+fn github_rules_need_a_mode() {
+    let r = Repo::new();
+    let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
+    let o = r.check_raw(&r.base, &h, &["--local"], None);
+    expect(&o, 0, "N/A review-record", "local run");
+    expect(&o, 0, "N/A required-checks", "local run");
+    let o = r.check_raw(&r.base, &h, &["--ci"], None);
+    expect(&o, 0, "N/A review-record", "the policy job runs before");
+    expect(&o, 0, "N/A required-checks", "the policy job runs before");
+    let o = r.check_raw(&r.base, &h, &[], None);
+    expect(&o, 1, "FAIL review-record", "needs --pr <n>, or --local");
+    expect(&o, 1, "FAIL required-checks", "needs --pr <n>, or --local");
+}
+
+const REQUIRED: [&str; 5] = [
+    "fmt / clippy / tests / no_std / κ",
+    "cargo audit",
+    "fuzz smoke (nightly libfuzzer)",
+    "wasm-pack build (dashboard facade, deploy.yml parity)",
+    "Gate C trend alarm",
+];
+
+/// A fake whose check runs are the five required names, each from `app` with `summary`, minus
+/// `skip`, plus the commit statuses `statuses`.
+fn checks(app: &str, summary: &str, skip: Option<&str>, statuses: &[&str]) -> String {
+    let runs: Vec<serde_json::Value> = REQUIRED
+        .iter()
+        .filter(|n| Some(**n) != skip)
+        .map(|n| serde_json::json!({"name": n, "app": app, "summary": summary}))
+        .collect();
+    let st: Vec<serde_json::Value> = statuses
+        .iter()
+        .map(|c| serde_json::json!({"context": c, "state": "success"}))
+        .collect();
+    serde_json::json!({"comments": [], "checkRuns": runs, "statuses": st}).to_string()
+}
+
+/// `required-checks`: every required name needs a github-actions check run with the policy record,
+/// and a commit status under a required name fails.
+#[test]
+fn required_checks_need_the_policy_record_from_github_actions() {
+    let r = Repo::new();
+    let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
+    let pass = "policy: pass (run 42)";
+    let o = r.check_gh(&h, &checks("github-actions", pass, None, &[]));
+    expect(&o, 1, "PASS required-checks", "all 5 required checks");
+
+    let o = r.check_gh(
+        &h,
+        &checks("github-actions", pass, Some("cargo audit"), &[]),
+    );
+    expect(
+        &o,
+        1,
+        "FAIL required-checks",
+        "`cargo audit` has no check run",
+    );
+
+    let o = r.check_gh(&h, &checks("github-actions", pass, None, &["cargo audit"]));
+    expect(
+        &o,
+        1,
+        "FAIL required-checks",
+        "a commit status named `cargo audit`",
+    );
+
+    let o = r.check_gh(&h, &checks("github-actions", "all green", None, &[]));
+    expect(&o, 1, "FAIL required-checks", "policy: pass (run <n>)");
+
+    let o = r.check_gh(
+        &h,
+        &checks("github-actions", "policy: fail (run 42)", None, &[]),
+    );
+    expect(&o, 1, "FAIL required-checks", "policy: pass (run <n>)");
+
+    let o = r.check_gh(&h, &checks("some-app", pass, None, &[]));
+    expect(&o, 1, "FAIL required-checks", "policy: pass (run <n>)");
 }

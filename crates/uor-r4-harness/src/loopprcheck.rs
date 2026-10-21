@@ -2,14 +2,15 @@
 //!
 //! The PR is the diff from `git merge-base <base> <head>` to `<head>`. Registries, items and
 //! budgets are read at the merge base, never at the head, so a PR cannot loosen its own check;
-//! the files the PR adds or changes are read at the head. Nothing reads the working tree, GitHub
-//! or the network. A rule is one function plus one entry in [`RULES`].
+//! the files the PR adds or changes are read at the head. Nothing reads the working tree; only
+//! `review-record` and `required-checks` read GitHub, through the read-only [`PrGh`] and only
+//! with `--pr <n>`. A rule is one function plus one entry in [`RULES`].
 
 use std::path::Path;
 use std::process::Command;
 
 const USAGE: &str =
-    "usage: uor-harness loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--json]";
+    "usage: uor-harness loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--pr <n> | --local | --ci] [--json]";
 
 /// Every rule, in the order it runs and prints.
 const RULES: &[(&str, Rule)] = &[
@@ -22,6 +23,8 @@ const RULES: &[(&str, Rule)] = &[
     ("rendered-lock", rule_rendered_lock),
     ("read-path", rule_read_path),
     ("filemap", rule_filemap),
+    ("review-record", rule_review_record),
+    ("required-checks", rule_required_checks),
 ];
 
 type Rule = fn(&Pr) -> RuleResult;
@@ -68,6 +71,8 @@ pub struct Pr<'a> {
     pub changes: Vec<Change>,
     /// The branch the head is on (`--head-ref`), `""` when unknown; only `rendered-lock` reads it.
     pub head_ref: String,
+    /// How `review-record` and `required-checks` reach GitHub; [`Github::Missing`] until set.
+    pub github: Github,
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
@@ -144,6 +149,7 @@ impl<'a> Pr<'a> {
             head,
             changes,
             head_ref: String::new(),
+            github: Github::Missing,
         })
     }
 
@@ -1013,6 +1019,408 @@ fn size(pr: &Pr) -> Result<Vec<(&'static str, u64, u64, u64)>, String> {
     Ok(out)
 }
 
+/// Tests only: names a JSON file that replaces `gh` for the two GitHub-backed rules.
+pub const PRCHECK_GH_FAKE_ENV: &str = "UOR_PRCHECK_GH_FAKE";
+
+/// One PR comment: its author's login and its body.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Comment {
+    pub author: String,
+    pub body: String,
+}
+
+/// One check run: its name, the slug of the app that posted it and its output summary.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CheckRun {
+    pub name: String,
+    #[serde(rename = "app")]
+    pub app_slug: String,
+    #[serde(default)]
+    pub summary: String,
+}
+
+/// One commit status: its context and state.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Status {
+    pub context: String,
+    pub state: String,
+}
+
+/// Every GitHub read pr-check makes; it never writes.
+pub trait PrGh {
+    /// The issue comments on PR `pr`, oldest first.
+    fn comments(&self, pr: u64) -> Result<Vec<Comment>, String>;
+    /// The check runs on commit `sha`. One page of at most 100: a head with more check runs than
+    /// that is read short, and a required name past the cap reads as missing (fail-closed).
+    fn check_runs(&self, sha: &str) -> Result<Vec<CheckRun>, String>;
+    /// The commit statuses on commit `sha` (one page of at most 100).
+    fn statuses(&self, sha: &str) -> Result<Vec<Status>, String>;
+}
+
+/// How the GitHub-backed rules run: `--pr <n>` reads GitHub, `--local` and `--ci` skip them,
+/// and none of the three fails them.
+pub enum Github {
+    Missing,
+    Local,
+    Ci,
+    Pr(u64, Box<dyn PrGh>),
+}
+
+fn comments_args(pr: u64) -> Vec<String> {
+    vec![
+        "api".into(),
+        format!("repos/{{owner}}/{{repo}}/issues/{pr}/comments"),
+        "--paginate".into(),
+    ]
+}
+
+fn check_runs_args(sha: &str) -> Vec<String> {
+    vec![
+        "api".into(),
+        "-X".into(),
+        "GET".into(),
+        format!("repos/{{owner}}/{{repo}}/commits/{sha}/check-runs"),
+        "-F".into(),
+        "per_page=100".into(),
+    ]
+}
+
+fn statuses_args(sha: &str) -> Vec<String> {
+    vec![
+        "api".into(),
+        "-X".into(),
+        "GET".into(),
+        format!("repos/{{owner}}/{{repo}}/commits/{sha}/statuses"),
+        "-F".into(),
+        "per_page=100".into(),
+    ]
+}
+
+/// `gh`, run from the repository root with every `GIT_*` variable removed.
+pub struct RealPrGh {
+    pub root: std::path::PathBuf,
+}
+
+impl RealPrGh {
+    fn api(&self, args: &[String]) -> Result<Vec<serde_json::Value>, String> {
+        let mut cmd = Command::new("gh");
+        for (k, _) in std::env::vars_os() {
+            if k.to_string_lossy().starts_with("GIT_") {
+                cmd.env_remove(k);
+            }
+        }
+        let out = cmd
+            .args(args)
+            .current_dir(&self.root)
+            .output()
+            .map_err(|e| format!("gh {}: {e}", args.join(" ")))?;
+        if !out.status.success() {
+            return Err(format!(
+                "gh {} failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        // `--paginate` prints one JSON document per page.
+        let text = String::from_utf8_lossy(&out.stdout);
+        serde_json::Deserializer::from_str(&text)
+            .into_iter::<serde_json::Value>()
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("gh {} printed unreadable JSON: {e}", args.join(" ")))
+    }
+}
+
+fn str_at<'v>(v: &'v serde_json::Value, path: &[&str]) -> &'v str {
+    path.iter()
+        .try_fold(v, |v, k| v.get(k))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+}
+
+impl PrGh for RealPrGh {
+    fn comments(&self, pr: u64) -> Result<Vec<Comment>, String> {
+        let pages = self.api(&comments_args(pr))?;
+        Ok(pages
+            .iter()
+            .filter_map(|p| p.as_array())
+            .flatten()
+            .map(|c| Comment {
+                author: str_at(c, &["user", "login"]).to_string(),
+                body: str_at(c, &["body"]).to_string(),
+            })
+            .collect())
+    }
+
+    fn check_runs(&self, sha: &str) -> Result<Vec<CheckRun>, String> {
+        let pages = self.api(&check_runs_args(sha))?;
+        Ok(pages
+            .iter()
+            .filter_map(|p| p.get("check_runs")?.as_array())
+            .flatten()
+            .map(|r| CheckRun {
+                name: str_at(r, &["name"]).to_string(),
+                app_slug: str_at(r, &["app", "slug"]).to_string(),
+                summary: str_at(r, &["output", "summary"]).to_string(),
+            })
+            .collect())
+    }
+
+    fn statuses(&self, sha: &str) -> Result<Vec<Status>, String> {
+        let pages = self.api(&statuses_args(sha))?;
+        Ok(pages
+            .iter()
+            .filter_map(|p| p.as_array())
+            .flatten()
+            .map(|s| Status {
+                context: str_at(s, &["context"]).to_string(),
+                state: str_at(s, &["state"]).to_string(),
+            })
+            .collect())
+    }
+}
+
+/// The in-memory stand-in for `gh`, read from the file `UOR_PRCHECK_GH_FAKE` names; it answers
+/// the same lists for every PR and sha.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FakePrGh {
+    #[serde(default)]
+    comments: Vec<Comment>,
+    #[serde(default)]
+    check_runs: Vec<CheckRun>,
+    #[serde(default)]
+    statuses: Vec<Status>,
+}
+
+impl FakePrGh {
+    pub fn from_file(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| {
+            format!(
+                "cannot read {PRCHECK_GH_FAKE_ENV} file {}: {e}",
+                path.display()
+            )
+        })?;
+        serde_json::from_str(&text).map_err(|e| {
+            format!(
+                "{PRCHECK_GH_FAKE_ENV} file {} is malformed: {e}",
+                path.display()
+            )
+        })
+    }
+}
+
+impl PrGh for FakePrGh {
+    fn comments(&self, _pr: u64) -> Result<Vec<Comment>, String> {
+        Ok(self.comments.clone())
+    }
+    fn check_runs(&self, _sha: &str) -> Result<Vec<CheckRun>, String> {
+        Ok(self.check_runs.clone())
+    }
+    fn statuses(&self, _sha: &str) -> Result<Vec<Status>, String> {
+        Ok(self.statuses.clone())
+    }
+}
+
+/// The PR number and the GitHub reader, or the rule's N/A or FAIL when the mode skips GitHub.
+fn github<'p>(pr: &'p Pr, rule: &'static str) -> Result<(u64, &'p dyn PrGh), RuleResult> {
+    match &pr.github {
+        Github::Pr(n, gh) => Ok((*n, gh.as_ref())),
+        Github::Local => Err(not_applicable(rule, "local run")),
+        Github::Ci => Err(not_applicable(
+            rule,
+            "the policy job runs before the review record and the checks exist",
+        )),
+        Github::Missing => Err(fail(rule, "needs --pr <n>, or --local".into())),
+    }
+}
+
+/// `{lab: vendor}` from `docs/harness/labs.json` at the merge base; a lab without a vendor maps
+/// to `""`.
+fn base_lab_vendors(pr: &Pr) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let text = pr
+        .at_base("docs/harness/labs.json")
+        .ok_or("docs/harness/labs.json is missing at the merge base")?;
+    let v: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("docs/harness/labs.json at the merge base: {e}"))?;
+    let labs = v
+        .get("labs")
+        .and_then(|l| l.as_object())
+        .ok_or("docs/harness/labs.json at the merge base has no `labs` object")?;
+    Ok(labs
+        .iter()
+        .map(|(k, l)| (k.clone(), str_at(l, &["vendor"]).to_string()))
+        .collect())
+}
+
+/// A PR comment starting `[<lab>] Exact-head review record for \`<head sha>\`` from a registered
+/// lab that may review this PR: `claude` alone for an `infra-loop-pr*` setup item (D59), else a
+/// lab whose vendor differs from the ORDER lab's (D46). It passes when a counted record says
+/// `**Verdict: APPROVE` and no later counted record says `REQUEST CHANGES`.
+fn rule_review_record(pr: &Pr) -> RuleResult {
+    const R: &str = "review-record";
+    let (number, gh) = match github(pr, R) {
+        Ok(g) => g,
+        Err(r) => return r,
+    };
+    let order = match pr.the_order() {
+        Ok(p) => p,
+        Err(e) => return fail(R, format!("cannot check the review record: {e}")),
+    };
+    let (_, order_lab, _) = order_parts(order).expect("an added ORDER path parses");
+    let Some(item) = pr
+        .at_head(order)
+        .and_then(|t| crate::loopclaim::order_item(&t))
+    else {
+        return fail(R, format!("{order} names no item at the head"));
+    };
+    let vendors = match base_lab_vendors(pr) {
+        Ok(v) => v,
+        Err(e) => return fail(R, e),
+    };
+    let comments = match gh.comments(number) {
+        Ok(c) => c,
+        Err(e) => return fail(R, e),
+    };
+    let setup = item.starts_with("infra-loop-pr");
+    let order_vendor = vendors.get(&order_lab).cloned().unwrap_or_default();
+    let re =
+        regex::Regex::new(r"^\[([A-Za-z0-9_-]+)\] Exact-head review record for `([0-9a-f]{40})`")
+            .expect("a valid pattern");
+    let mut details = Vec::new();
+    let mut last: Option<bool> = None;
+    for (i, c) in comments.iter().enumerate() {
+        let Some(cap) = re.captures(&c.body) else {
+            continue;
+        };
+        let (lab, sha) = (&cap[1], &cap[2]);
+        let verdict = if c.body.contains("**Verdict: APPROVE") {
+            Some(true)
+        } else if c.body.contains("REQUEST CHANGES") {
+            Some(false)
+        } else {
+            None
+        };
+        let said = match verdict {
+            Some(true) => "APPROVE",
+            Some(false) => "REQUEST CHANGES",
+            None => "no verdict",
+        };
+        let seen = format!("comment {} by {}: [{lab}] {said} at {sha}", i + 1, c.author);
+        let lab_vendor = vendors.get(lab);
+        let reject = if sha != pr.head {
+            Some(format!("not the head {}", pr.head))
+        } else if lab_vendor.is_none() {
+            Some(format!(
+                "lab {lab} is not in docs/harness/labs.json at the merge base"
+            ))
+        } else if setup && lab != "claude" {
+            Some(format!(
+                "item {item} is a loop setup PR, which only claude reviews (D59)"
+            ))
+        } else if !setup
+            && (order_vendor.is_empty()
+                || lab_vendor.is_some_and(|v| v.is_empty() || *v == order_vendor))
+        {
+            Some(format!(
+                "lab {lab} (vendor {:?}) is not of another vendor than the ORDER lab {order_lab} (vendor {order_vendor:?}) (D46)",
+                lab_vendor.map(String::as_str).unwrap_or_default()
+            ))
+        } else if verdict.is_none() {
+            Some("it states no verdict".to_string())
+        } else {
+            None
+        };
+        match reject {
+            Some(why) => details.push(format!("{seen}: rejected, {why}")),
+            None => {
+                details.push(format!("{seen}: counted"));
+                last = verdict;
+            }
+        }
+    }
+    let (verdict, summary) = match last {
+        Some(true) => (
+            Verdict::Pass,
+            format!("an exact-head APPROVE at {} stands", pr.head),
+        ),
+        Some(false) => (
+            Verdict::Fail,
+            "a counted REQUEST CHANGES follows the last counted APPROVE".to_string(),
+        ),
+        None => (
+            Verdict::Fail,
+            format!("no counted exact-head review record at {}", pr.head),
+        ),
+    };
+    RuleResult {
+        rule: R,
+        verdict,
+        summary,
+        details,
+    }
+}
+
+/// The required checks, copied from the branch protection of `main`.
+const REQUIRED_CHECKS: [&str; 5] = [
+    "fmt / clippy / tests / no_std / κ",
+    "cargo audit",
+    "fuzz smoke (nightly libfuzzer)",
+    "wasm-pack build (dashboard facade, deploy.yml parity)",
+    "Gate C trend alarm",
+];
+
+/// Every required name has a check run at the head from the `github-actions` app whose summary
+/// carries `policy: pass (run <n>)`, and no commit status uses a required name, because any token
+/// can post a status (loop page, P-4). The summary format is written by `required-transport` in
+/// `.github/workflows/ci.yml`, which loop PR 5's commit 4 changes.
+fn rule_required_checks(pr: &Pr) -> RuleResult {
+    const R: &str = "required-checks";
+    let (_, gh) = match github(pr, R) {
+        Ok(g) => g,
+        Err(r) => return r,
+    };
+    let statuses = match gh.statuses(&pr.head) {
+        Ok(s) => s,
+        Err(e) => return fail(R, e),
+    };
+    let runs = match gh.check_runs(&pr.head) {
+        Ok(r) => r,
+        Err(e) => return fail(R, e),
+    };
+    let policy = regex::Regex::new(r"policy: pass \(run \d+\)").expect("a valid pattern");
+    let mut details = Vec::new();
+    for s in &statuses {
+        if REQUIRED_CHECKS.contains(&s.context.as_str()) {
+            details.push(format!(
+                "a commit status named `{}` ({}) exists; a required name must come from a check run alone",
+                s.context, s.state
+            ));
+        }
+    }
+    for name in REQUIRED_CHECKS {
+        let named: Vec<&CheckRun> = runs.iter().filter(|r| r.name == name).collect();
+        if named.is_empty() {
+            details.push(format!("`{name}` has no check run at the head"));
+        } else if !named
+            .iter()
+            .any(|r| r.app_slug == "github-actions" && policy.is_match(&r.summary))
+        {
+            details.push(format!(
+                "`{name}` has no github-actions check run whose summary says `policy: pass (run <n>)`"
+            ));
+        }
+    }
+    result(
+        R,
+        details,
+        &format!(
+            "all {} required checks pass the policy",
+            REQUIRED_CHECKS.len()
+        ),
+        "a required check is missing or not from the policy job",
+    )
+}
+
 /// The branch `head` names (`refs/heads/<x>` or `refs/remotes/<x>`), else the current branch,
 /// else `""`.
 fn default_head_ref(root: &Path, head: &str) -> String {
@@ -1027,15 +1435,26 @@ fn default_head_ref(root: &Path, head: &str) -> String {
         .unwrap_or_default()
 }
 
-/// `loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--json]`. Exit 0 every rule passes, 1 a rule
-/// failed, 2 the check could not run.
+/// `loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--pr <n> | --local | --ci]
+/// [--json]`. Exit 0 every rule passes, 1 a rule failed, 2 the check could not run.
 pub fn cli(root: &Path, args: &[String]) -> u8 {
     let (mut base, mut head, mut json) = ("origin/main".to_string(), "HEAD".to_string(), false);
     let mut head_ref: Option<String> = None;
+    let (mut pr_number, mut modes): (Option<u64>, Vec<&str>) = (None, Vec::new());
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--json" => json = true,
+            m @ ("--local" | "--ci") => modes.push(m),
+            "--pr" => {
+                let Some(n) = args.get(i + 1).and_then(|v| v.parse::<u64>().ok()) else {
+                    eprintln!("{USAGE}");
+                    return 2;
+                };
+                pr_number = Some(n);
+                modes.push("--pr");
+                i += 1;
+            }
             flag @ ("--base" | "--head" | "--head-ref") => {
                 let Some(v) = args.get(i + 1) else {
                     eprintln!("{USAGE}");
@@ -1063,6 +1482,30 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
         }
     };
     pr.head_ref = head_ref.unwrap_or_else(|| default_head_ref(root, &head));
+    pr.github = match (modes.as_slice(), pr_number) {
+        ([], _) => Github::Missing,
+        (["--local"], _) => Github::Local,
+        (["--ci"], _) => Github::Ci,
+        (["--pr"], Some(n)) => {
+            let gh: Box<dyn PrGh> = match std::env::var_os(PRCHECK_GH_FAKE_ENV) {
+                Some(p) => match FakePrGh::from_file(Path::new(&p)) {
+                    Ok(f) => Box::new(f),
+                    Err(e) => {
+                        eprintln!("uor-harness: loop pr-check: {e}");
+                        return 2;
+                    }
+                },
+                None => Box::new(RealPrGh {
+                    root: root.to_path_buf(),
+                }),
+            };
+            Github::Pr(n, gh)
+        }
+        _ => {
+            eprintln!("uor-harness: loop pr-check: give at most one of --pr <n>, --local, --ci");
+            return 2;
+        }
+    };
     let size = match size(&pr) {
         Ok(s) => s,
         Err(e) => {
@@ -1129,6 +1572,41 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gh_endpoints() {
+        assert_eq!(
+            comments_args(7),
+            [
+                "api",
+                "repos/{owner}/{repo}/issues/7/comments",
+                "--paginate"
+            ]
+        );
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            check_runs_args(sha),
+            [
+                "api",
+                "-X",
+                "GET",
+                &format!("repos/{{owner}}/{{repo}}/commits/{sha}/check-runs"),
+                "-F",
+                "per_page=100"
+            ]
+        );
+        assert_eq!(
+            statuses_args(sha),
+            [
+                "api",
+                "-X",
+                "GET",
+                &format!("repos/{{owner}}/{{repo}}/commits/{sha}/statuses"),
+                "-F",
+                "per_page=100"
+            ]
+        );
+    }
 
     #[test]
     fn size_classes() {
