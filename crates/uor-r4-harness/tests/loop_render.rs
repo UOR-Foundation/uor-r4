@@ -706,3 +706,229 @@ fn a_git_dir_in_the_environment_does_not_redirect_the_render() {
     assert!(s.lines().next().unwrap().contains(&head), "{s}");
     assert!(!s.contains(&other_head), "{s}");
 }
+
+/// Render to a scratch `--out` (cargo pointed at nothing) and expect a refusal, exit 2, whose
+/// message contains every one of `needles`.
+fn refused(r: &Repo, needles: &[&str]) {
+    let d = r.out_dir("refused");
+    let o = r.render_env(
+        &["--out", d.to_str().unwrap()],
+        &[("CARGO", "/nonexistent/cargo")],
+    );
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    for n in needles {
+        assert!(err.contains(n), "{n:?} in {err}");
+    }
+    assert!(!d.join("STATE.md").exists(), "a refusal writes nothing");
+}
+
+#[test]
+fn frontmatter_without_a_closing_line_is_refused() {
+    let r = repo();
+    r.write(
+        "docs/roadmap/items/z.md",
+        "---\nid: z\nstatus: open\n\n## Done when\n\nNever closed.\n",
+    );
+    r.commit("unclosed frontmatter");
+    refused(&r, &["docs/roadmap/items/z.md", "no closing `---`"]);
+}
+
+#[test]
+fn a_block_list_depends_on_is_refused() {
+    let r = repo();
+    r.write(
+        "docs/roadmap/items/z.md",
+        "---\nid: z\nstatus: open\ndepends_on:\n  - a\n  - b\n---\n\nbody\n",
+    );
+    r.commit("block list");
+    refused(
+        &r,
+        &["docs/roadmap/items/z.md: depends_on must be an inline [a, b] list"],
+    );
+}
+
+#[test]
+fn a_duplicate_or_partial_notebook_table_is_refused_and_subfolders_are_not_read() {
+    let table = "| Date | What ran | Number | Bar | Verdict |\n|---|---|---|---|---|\n| 2026-10-14 | x | 1 | 2 | PASS |\n";
+    // A notebook in a subfolder is not a line: it is never read, so its missing table is fine.
+    let r = repo();
+    r.write("docs/research/notebook/sub/deep.md", "# no table here\n");
+    r.commit("subfolder");
+    let d = r.out_dir("v");
+    let o = r.render_out(&d, &[]);
+    assert!(o.status.success(), "{o:?}");
+    assert!(!state(&d).contains("deep"), "{}", state(&d));
+
+    let r = repo();
+    r.write(
+        "docs/research/notebook/two.md",
+        &format!("{table}\n{table}"),
+    );
+    r.commit("two tables");
+    refused(
+        &r,
+        &[
+            "docs/research/notebook/two.md",
+            "more than one results table",
+        ],
+    );
+
+    let r = repo();
+    r.write(
+        "docs/research/notebook/part.md",
+        "| Date | What ran | Number | Bar |\n|---|---|---|---|\n| 2026-10-14 | x | 1 | 2 |\n",
+    );
+    r.commit("no verdict column");
+    refused(
+        &r,
+        &["docs/research/notebook/part.md", "no `Verdict` column"],
+    );
+}
+
+#[test]
+fn a_stray_board_row_or_an_empty_board_is_refused() {
+    let r = repo();
+    r.write(
+        "docs/mechanisms/README.md",
+        "# Board\n\n## ACTIVE: on path (1)\n\n| Mechanism | x |\n|---|---|\n| [Zeta](z.md) | x |\n| Stray | x |\n",
+    );
+    r.commit("stray row");
+    refused(&r, &["docs/mechanisms/README.md", "| Stray | x |"]);
+
+    let r = repo();
+    r.write(
+        "docs/mechanisms/README.md",
+        "# Board\n\n## ACTIVE: on path (0)\n\n| Mechanism | x |\n|---|---|\n",
+    );
+    r.commit("empty board");
+    refused(
+        &r,
+        &["docs/mechanisms/README.md", "no mechanism rows found"],
+    );
+}
+
+#[test]
+fn malformed_or_duplicate_lesson_ids_are_refused_and_kebab_ids_are_no_id() {
+    for bad in ["l-012", "L-12a", "L-1"] {
+        let r = repo();
+        r.write(
+            "docs/harness/mistakes/bad.md",
+            &format!("---\nid: {bad}\n---\n\n# Bad\n"),
+        );
+        r.commit("bad id");
+        refused(&r, &["docs/harness/mistakes/bad.md", bad]);
+    }
+
+    let r = repo();
+    r.write(
+        "docs/harness/mistakes/one.md",
+        "---\nid: L-001\n---\n\n# One\n",
+    );
+    r.write(
+        "docs/harness/mistakes/two.md",
+        "---\nid: L-001\n---\n\n# Two\n",
+    );
+    r.commit("duplicate id");
+    refused(
+        &r,
+        &[
+            "docs/harness/mistakes/one.md",
+            "docs/harness/mistakes/two.md",
+            "L-001",
+        ],
+    );
+
+    let r = repo();
+    r.write(
+        "docs/harness/mistakes/kebab.md",
+        "---\nid: archive-is-not-deletion\n---\n\n# Kebab\n",
+    );
+    r.commit("kebab id");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    let l = read(&d, "docs/harness/LESSONS.md");
+    let no_id = l.find("Kebab").unwrap_or_else(|| panic!("{l}"));
+    assert!(l[..no_id].contains("Without a lesson id"), "{l}");
+}
+
+#[test]
+fn a_frontmatter_comment_is_never_the_lesson_title() {
+    let r = repo();
+    r.write(
+        "docs/harness/mistakes/c.md",
+        "---\n# a yaml comment\nid: L-001\ntitle: Real title\n---\n\nNo heading in the body.\n",
+    );
+    r.commit("comment in frontmatter");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    let l = read(&d, "docs/harness/LESSONS.md");
+    assert!(l.contains("Real title"), "{l}");
+    assert!(!l.contains("a yaml comment"), "{l}");
+}
+
+#[test]
+fn milestones_sort_by_number() {
+    let r = repo();
+    r.write(
+        "docs/harness/milestones.json",
+        r#"{"schema":1,"milestones":{"m10":{"id":"M10","title":"Ten","status":"s"},"x":{"id":"X","title":"Other","status":"s"},"m2":{"id":"M2","title":"Two","status":"s"}}}"#,
+    );
+    r.commit("m10");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    in_order(&state(&d), &["| M2 Two |", "| M10 Ten |", "| X Other |"]);
+}
+
+#[test]
+fn a_stamp_moved_to_an_older_commit_with_other_inputs_fails_check() {
+    let r = repo();
+    let old = r.git(&["rev-parse", "HEAD"]);
+    r.write(
+        "docs/harness/labs.json",
+        &LABS.replace("Moonshot", "Changed"),
+    );
+    let head = r.commit("change a lab");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    let p = d.join("STATE.md");
+    let text = std::fs::read_to_string(&p).unwrap();
+    assert!(text.contains(&head));
+    std::fs::write(&p, text.replacen(&head, &old, 1)).unwrap();
+    let o = r.render_env(
+        &["--check", "--out", d.to_str().unwrap()],
+        &[("CARGO", "/nonexistent/cargo")],
+    );
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stdout).contains("STATE.md: differs"),
+        "{o:?}"
+    );
+}
+
+#[test]
+fn check_with_at_exits_2() {
+    let r = repo();
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    let o = r.render_env(
+        &["--check", "--out", d.to_str().unwrap(), "--at", "HEAD"],
+        &[("CARGO", "/nonexistent/cargo")],
+    );
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+}
+
+#[test]
+fn two_renders_give_identical_state_handoff_and_lessons() {
+    let r = repo();
+    lesson_files(&r);
+    items(&r);
+    let (a, b) = (r.out_dir("a"), r.out_dir("b"));
+    assert!(r.render_out(&a, &[]).status.success());
+    assert!(r.render_out(&b, &[]).status.success());
+    for v in ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md"] {
+        let x = read(&a, v);
+        assert!(x.len() > 100, "{v}: {x}");
+        assert_eq!(x, read(&b, v), "{v}");
+    }
+}

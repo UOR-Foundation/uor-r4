@@ -108,6 +108,22 @@ impl<'a> AtCommit<'a> {
         v.sort();
         Ok(v)
     }
+
+    /// The `.md` files directly in `dir` at the commit (no subdirectories), sorted.
+    pub fn list_md_top(&self, dir: &str) -> Result<Vec<String>, String> {
+        let spec = format!("{}/", dir.trim_end_matches('/'));
+        let out = git(self.root, &["ls-tree", "-z", &self.sha, "--", &spec])?;
+        let mut v: Vec<String> = String::from_utf8_lossy(&out)
+            .split('\0')
+            .filter_map(|e| {
+                let (meta, path) = e.split_once('\t')?;
+                (meta.split(' ').nth(1) == Some("blob") && path.ends_with(".md"))
+                    .then(|| path.to_string())
+            })
+            .collect();
+        v.sort();
+        Ok(v)
+    }
 }
 
 /// Every view at the commit, as (repository-relative path, bytes), in a fixed order.
@@ -119,10 +135,29 @@ pub fn render_all(c: &AtCommit) -> Result<Vec<(String, String)>, String> {
     ])
 }
 
-/// The frontmatter block between the leading `---` lines, if any.
-fn front_of(text: &str) -> Option<&str> {
-    text.strip_prefix("---\n")
-        .and_then(|r| r.split("\n---").next())
+/// The frontmatter between the leading `---` line and the next line that is exactly `---`, and
+/// the body after that line; `None` when the file does not open with `---`. An opening `---`
+/// with no closing `---` line is refused, naming the file.
+fn split_front<'t>(path: &str, text: &'t str) -> Result<Option<(&'t str, &'t str)>, String> {
+    let Some(r) = text.strip_prefix("---\n") else {
+        return Ok(None);
+    };
+    let mut off = 0;
+    for line in r.split_inclusive('\n') {
+        if line.trim_end_matches(['\n', '\r']) == "---" {
+            let front = r[..off].strip_suffix('\n').unwrap_or(&r[..off]);
+            return Ok(Some((front, &r[off + line.len()..])));
+        }
+        off += line.len();
+    }
+    Err(format!(
+        "{path}: frontmatter opens with `---` but has no closing `---` line"
+    ))
+}
+
+/// The frontmatter block between the leading `---` lines, if any (see [`split_front`]).
+fn front_of<'t>(path: &str, text: &'t str) -> Result<Option<&'t str>, String> {
+    Ok(split_front(path, text)?.map(|(f, _)| f))
 }
 
 /// A frontmatter scalar: the trimmed text after `key:` on its own line.
@@ -180,11 +215,17 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
             continue;
         }
         let text = c.read(&path)?;
-        let front = front_of(&text).ok_or_else(|| format!("{path}: no frontmatter"))?;
+        let front = front_of(&path, &text)?.ok_or_else(|| format!("{path}: no frontmatter"))?;
         let get = |k: &str| front_get(front, k).unwrap_or("").to_string();
         let status = get("status");
         if status.is_empty() {
             return Err(format!("{path}: frontmatter has no status"));
+        }
+        // `depends_on` is absent or an inline `[a, b]` list; a block list or a bare value is refused.
+        if let Some(d) = front_get(front, "depends_on") {
+            if !(d.starts_with('[') && d.ends_with(']')) {
+                return Err(format!("{path}: depends_on must be an inline [a, b] list"));
+            }
         }
         if status == "done" {
             continue;
@@ -278,16 +319,29 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
     Ok(o)
 }
 
-/// The lesson id from an `id: L-NNN` line, as its number.
-fn lesson_id(front: &str) -> Option<(u32, String)> {
-    front.lines().find_map(|l| {
-        let v = l.strip_prefix("id:")?.trim();
-        let n = v.strip_prefix("L-")?;
-        if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) {
-            return None;
-        }
-        Some((n.parse().ok()?, v.to_string()))
-    })
+/// The lesson id from an `id: L-NNN` line, as its number; `None` for no id or a non-`L-` id
+/// (such as a kebab-case name). An id starting `L-` or `l-` that is not `L-` and three digits
+/// is refused, naming the file.
+fn lesson_id(path: &str, front: &str) -> Result<Option<(u32, String)>, String> {
+    let Some(v) = front
+        .lines()
+        .find_map(|l| l.strip_prefix("id:").map(str::trim))
+    else {
+        return Ok(None);
+    };
+    if !(v.starts_with("L-") || v.starts_with("l-")) {
+        return Ok(None);
+    }
+    let n = &v[2..];
+    if !v.starts_with("L-") || n.len() != 3 || !n.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(format!(
+            "{path}: lesson id `{v}` is not `L-` followed by three digits"
+        ));
+    }
+    Ok(Some((
+        n.parse().map_err(|e| format!("{path}: {e}"))?,
+        v.to_string(),
+    )))
 }
 
 /// Lessons with an id as (number, id, title, file name), sorted by id; the rest as (title, name).
@@ -304,8 +358,10 @@ fn lessons(c: &AtCommit) -> Result<Lessons, String> {
             continue;
         }
         let text = c.read(&path)?;
-        let front = front_of(&text).unwrap_or("");
-        let title = text
+        // A `# ` heading is looked for in the body only: inside frontmatter, `#` opens a YAML
+        // comment, never a title.
+        let (front, body) = split_front(&path, &text)?.unwrap_or(("", &text));
+        let title = body
             .lines()
             .find_map(|l| l.strip_prefix("# "))
             .or_else(|| front_get(front, "title"))
@@ -313,8 +369,16 @@ fn lessons(c: &AtCommit) -> Result<Lessons, String> {
             .filter(|t| !t.is_empty())
             .unwrap_or(name.trim_end_matches(".md"))
             .to_string();
-        match lesson_id(front) {
-            Some((n, id)) => with_id.push((n, id, title, name.to_string())),
+        match lesson_id(&path, front)? {
+            Some((n, id)) => {
+                if let Some(prev) = with_id.iter().find(|w| w.1 == id) {
+                    return Err(format!(
+                        "lesson id {id} appears in both docs/harness/mistakes/{} and {path}",
+                        prev.3
+                    ));
+                }
+                with_id.push((n, id, title, name.to_string()))
+            }
             None => without.push((title, name.to_string())),
         }
     }
@@ -608,7 +672,17 @@ pub fn render_state(c: &AtCommit) -> Result<String, String> {
         .and_then(|m| m.as_object())
         .ok_or("docs/harness/milestones.json: no \"milestones\" object")?;
     let mut keys: Vec<&String> = ms.keys().collect();
-    keys.sort();
+    // `m<N>` keys by N (so m10 follows m2), then any other key by name.
+    keys.sort_by_key(|k| {
+        match k
+            .strip_prefix('m')
+            .filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|n| n.parse::<u64>().ok())
+        {
+            Some(n) => (0, n, k.as_str()),
+            None => (1, 0, k.as_str()),
+        }
+    });
     for k in keys {
         let m = &ms[k];
         let field = |f: &str| m.get(f).map(value_text).unwrap_or_else(|| "none".into());
@@ -652,10 +726,7 @@ pub fn render_state(c: &AtCommit) -> Result<String, String> {
             continue;
         }
         let text = c.read(&path)?;
-        let Some(front) = text
-            .strip_prefix("---\n")
-            .and_then(|r| r.split("\n---").next())
-        else {
+        let Some(front) = front_of(&path, &text)? else {
             return Err(format!("{path}: no frontmatter"));
         };
         let status = front
@@ -675,8 +746,8 @@ pub fn render_state(c: &AtCommit) -> Result<String, String> {
     // 3. Newest notebook row per research line.
     o.push_str("\n## Newest notebook row per research line\n\nSource: `docs/research/notebook/*.md`; the row with the latest date, the last such row on a tie.\n\n");
     o.push_str("| Line | Date | Number | Bar | Verdict |\n|---|---|---|---|---|\n");
-    for path in c.list("docs/research/notebook")? {
-        if !path.ends_with(".md") || path.ends_with("/README.md") {
+    for path in c.list_md_top("docs/research/notebook")? {
+        if path.ends_with("/README.md") {
             continue;
         }
         let line_name = path
@@ -693,6 +764,16 @@ pub fn render_state(c: &AtCommit) -> Result<String, String> {
             }
             let cells = row_cells(l);
             if cells.first().map(String::as_str) == Some("Date") {
+                if header.is_some() {
+                    return Err(format!(
+                        "{path}: more than one results table (rows starting `| Date |`)"
+                    ));
+                }
+                for col in ["Number", "Bar", "Verdict"] {
+                    if !cells.iter().any(|c| c == col) {
+                        return Err(format!("{path}: results table has no `{col}` column"));
+                    }
+                }
                 header = Some(cells);
                 continue;
             }
@@ -732,24 +813,41 @@ pub fn render_state(c: &AtCommit) -> Result<String, String> {
     let board = c.read("docs/mechanisms/README.md")?;
     let order = ["ACTIVE", "READY", "PARKED"];
     let mut mech: Vec<(usize, String)> = Vec::new();
+    const BOARD: &str = "docs/mechanisms/README.md";
     let mut current: Option<usize> = None;
-    for l in board.lines() {
+    let mut seen_header = false;
+    for (i, l) in board.lines().enumerate() {
         if let Some(h) = l.strip_prefix("## ") {
             current = order.iter().position(|s| h.starts_with(&format!("{s}:")));
+            seen_header = false;
             continue;
         }
-        if let (Some(s), Some(rest)) = (current, l.strip_prefix("| [")) {
-            if let Some(end) = rest.find("](") {
-                mech.push((s, rest[..end].to_string()));
-            }
+        let Some(s) = current else { continue };
+        if !l.starts_with('|') {
+            continue;
         }
+        // Under ACTIVE / READY / PARKED: one header row, the separator, then `| [Name](page) |`
+        // rows. Any other table row is refused rather than dropped.
+        let bad = || format!("{BOARD}:{}: unexpected row under {}: {l}", i + 1, order[s]);
+        if let Some(rest) = l.strip_prefix("| [") {
+            let end = rest.find("](").ok_or_else(bad)?;
+            mech.push((s, rest[..end].to_string()));
+        } else if l.bytes().all(|b| matches!(b, b'|' | b'-' | b':' | b' ')) {
+            continue;
+        } else if !seen_header {
+            seen_header = true;
+        } else {
+            return Err(bad());
+        }
+    }
+    if mech.is_empty() {
+        return Err(format!(
+            "{BOARD}: no mechanism rows found under ACTIVE, READY or PARKED"
+        ));
     }
     mech.sort();
     for (s, name) in &mech {
         o.push_str(&format!("- {}: {name}\n", order[*s]));
-    }
-    if mech.is_empty() {
-        o.push_str("- no mechanism rows found\n");
     }
 
     // 5. Lab registry.
