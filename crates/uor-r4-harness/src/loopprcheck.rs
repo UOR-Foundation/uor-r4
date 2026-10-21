@@ -506,7 +506,7 @@ const REPORT_SECTIONS: [&str; 7] = [
 
 /// Each line with whether it can be a heading: false inside a ``` or ~~~ fenced code block,
 /// fence lines included.
-fn heading_lines(text: &str) -> impl Iterator<Item = (&str, bool)> {
+pub(crate) fn heading_lines(text: &str) -> impl Iterator<Item = (&str, bool)> {
     let mut fence: Option<&str> = None;
     text.lines().map(move |line| {
         let t = line.trim_start();

@@ -37,6 +37,7 @@ pub mod loopclaim;
 pub mod loopgates;
 pub mod loopprcheck;
 pub mod looprender;
+pub mod loopreport;
 pub mod loopsub;
 pub mod mistakes;
 pub mod multilab;

@@ -132,6 +132,23 @@ Tests only: `UOR_PRCHECK_GH_FAKE=<file>` replaces `gh` for these two rules with 
 
 **In CI.** `ci.yml` calls `.github/workflows/gate.yml` on every pull request. Its `policy` job builds `uor-harness` from the base commit and runs `loop pr-check --ci` against the PR's head, which it reads as data. `required-transport` then writes `policy: <pass|fail|error> (run <id>)` into the five required checks' summaries and leaves them green. That record is what `required-checks` reads back. Its `tests` job runs `loop gates --full` on the PR's code with a read-only token. The [loop page](../loop/README.md#gates) gives the reasons.
 
+### `loop report` (loop PR 7b)
+
+```sh
+UOR_LAB=claude uor-harness loop report --check      # check <task folder>/REPORT.md in the working tree
+UOR_LAB=claude uor-harness loop report --new        # write REPORT.md from the template; never overwrites
+UOR_LAB=claude uor-harness loop report --receipts   # copy HEAD's gate results into <task folder>/receipts.jsonl
+UOR_LAB=claude uor-harness loop report --check --order docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md
+```
+
+The task folder holds the one `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md` this branch adds against `git merge-base origin/main HEAD` (added, or the new side of a rename); none or several exit 2 and name them, and `--order <path>` names it instead. Exit codes: 0 ok; 1 a check failed; 2 cannot run (usage, no ORDER found, git failure, an existing REPORT for `--new`).
+
+- `--check` reads `REPORT.md` from the working tree, so uncommitted text counts. It prints `PASS report` or `FAIL report` with one indented line per problem: the problems `loop pr-check`'s `report` rule finds (the same function), each `<!-- fill:` template line still present (naming its section), or a missing file.
+- `--new` copies `docs/loop/templates/REPORT.md` into the task folder without its first line, filling in `{id}` (the ORDER's `Item:`), `{task}` (`<lab>-<n>`) and `{lab}`. It opens the file with `create_new`, so an existing REPORT is never touched. The fresh REPORT fails `--check` until every fill line is replaced.
+- `--receipts` needs a lab (`UOR_LAB` or `--lab`; none exits 2). From `local/<lab>/gates.jsonl` it keeps the lines whose `commit` is the full `HEAD` sha, takes the latest per `gate`, and writes them sorted by gate name, each byte-for-byte as recorded, to `<task folder>/receipts.jsonl` through a temporary file and a rename. No result at `HEAD` exits 1: run `loop gates` first.
+
+Templates in `docs/loop/templates/`: `REPORT.md` (the seven sections, one fill line each), `ORDER.md` (the `Lab:`, `Item:`, `Setup row:` and `Base:` lines, then Goal, Cancel probe, Files in scope, Done when, Stop and ask if) and `PICKUP.md` (branch, head, task folder, open items and next step for the next session).
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front
