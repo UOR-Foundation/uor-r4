@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 51 |
+| ready | 50 |
 | held | 26 |
 | decision | 4 |
-| done | 6 |
+| done | 7 |
 | total | 87 |
 
 ## Start here
@@ -183,7 +183,6 @@ These items are ready and open to anyone.
 | [Loop PR 8: migrate the notes to STATE, HANDOFF and PLAN](items/infra-loop-pr08-migration.md) | ready | a lab | no | [infra-loop-pr03-render](items/infra-loop-pr03-render.md) | [#2913](https://github.com/UOR-Foundation/uor-r4/issues/2913) |
 | [Loop PR 9: loop guard, install and onboard for each client](items/infra-loop-pr09-client-adapters.md) | ready | a lab | no | [infra-loop-pr07b-session](items/infra-loop-pr07b-session.md) | [#2914](https://github.com/UOR-Foundation/uor-r4/issues/2914) |
 | [Loop PR 10: loop drive, watchers, kill switch and the soft check-in](items/infra-loop-pr10-supervisor.md) | ready | a lab | no | [infra-loop-pr07b-session](items/infra-loop-pr07b-session.md), [infra-loop-pr07c-queue-board](items/infra-loop-pr07c-queue-board.md), [infra-loop-pr09-client-adapters](items/infra-loop-pr09-client-adapters.md) | [#2915](https://github.com/UOR-Foundation/uor-r4/issues/2915) |
-| [Loop PR 11: loop gates --watch and warnings raised to errors](items/infra-loop-pr11-progress-window.md) | ready | a lab | no | [infra-loop-pr04-gates](items/infra-loop-pr04-gates.md) | [#2916](https://github.com/UOR-Foundation/uor-r4/issues/2916) |
 | [Loop PR 12: git hooks, pr-check before push, Lab and Order trailers](items/infra-loop-pr12-git-hooks.md) | ready | a lab | no | [infra-loop-pr05-policy-check](items/infra-loop-pr05-policy-check.md), [infra-loop-pr06-review-records](items/infra-loop-pr06-review-records.md) | [#2917](https://github.com/UOR-Foundation/uor-r4/issues/2917) |
 | [Settle the disputed D11 and Hopf observation statuses on the board](items/owner-decision-board-status-disputes.md) | decision | a lab | no | none | [#2874](https://github.com/UOR-Foundation/uor-r4/issues/2874) |
 | [Loop PR 2: item keys, Cancel if, done-when class and validator](items/infra-loop-pr02-item-keys.md) | done | a lab | no | none | [#2905](https://github.com/UOR-Foundation/uor-r4/issues/2905) |
@@ -192,6 +191,7 @@ These items are ready and open to anyone.
 | [Loop PR 6: loop review with tagged review records](items/infra-loop-pr06-review-records.md) | done | a lab | no | [infra-loop-pr05-policy-check](items/infra-loop-pr05-policy-check.md) | [#2909](https://github.com/UOR-Foundation/uor-r4/issues/2909) |
 | [Loop PR 7a: loop claim, suborder and ask](items/infra-loop-pr07a-claim.md) | done | a lab | no | [infra-loop-pr02-item-keys](items/infra-loop-pr02-item-keys.md) | [#2910](https://github.com/UOR-Foundation/uor-r4/issues/2910) |
 | [Loop PR 7b: loop next, arrive, report and close](items/infra-loop-pr07b-session.md) | done | a lab | no | [infra-loop-pr03-render](items/infra-loop-pr03-render.md), [infra-loop-pr07a-claim](items/infra-loop-pr07a-claim.md) | [#2911](https://github.com/UOR-Foundation/uor-r4/issues/2911) |
+| [Loop PR 11: loop gates --watch and warnings raised to errors](items/infra-loop-pr11-progress-window.md) | done | a lab | no | [infra-loop-pr04-gates](items/infra-loop-pr04-gates.md) | [#2916](https://github.com/UOR-Foundation/uor-r4/issues/2916) |
 
 ## Waiting on the owner
 
