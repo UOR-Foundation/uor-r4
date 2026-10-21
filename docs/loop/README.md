@@ -183,13 +183,13 @@ All Rust. Small PRs, through today's delivery path. From PR A on, every PR carri
 
 **PR 0, probes.** Scratch tests; results go to PLAN's premise table.
 
-| Premise | Probe | If it fails |
-|---|---|---|
-| P-1 | Hooks fire headless and inside subagents, and which compaction events exist, per client. | That client's subagents get read-only tools; the policy gate checks the result. |
-| P-2 | A supervisor can run each client headless: login persists, no prompts, model pinned, stoppable by pid. | That client stays interactive-only. |
-| P-3 | Tags survive the squash merge and appear on every claim, PR, review and comment. | Tags move into the PR body and review record only. |
-| P-4 | The policy result can feed a check that is already required. | The policy gate stays advisory; `loop queue` is the lock. |
-| P-6 (optional) | A render PR opened by Actions can be checked and queued. | Supervisors keep opening it. |
+| Premise | Probe | If it fails | Result (21 Oct 2026; details in [claude-2's REPORT](tasks/infra-loop-harness/claude-2/REPORT.md)) |
+|---|---|---|---|
+| P-1 | Hooks fire headless and inside subagents, and which compaction events exist, per client. | That client's subagents get read-only tools; the policy gate checks the result. | **Claude Code: partial.** A project-level SessionStart hook fired in a headless run. Tool and subagent hooks are untested because the CLI login has expired (see P-2). **Codex, Kimi, Antigravity, DeepSeek: owed by each lab.** |
+| P-2 | A supervisor can run each client headless: login persists, no prompts, model pinned, stoppable by pid. | That client stays interactive-only. | **Claude Code: fails for now.** The standalone `claude` CLI reports its OAuth session expired; the desktop app signs in separately. It stays interactive-only until the owner signs the CLI in. **The other four: owed by each lab.** |
+| P-3 | Tags survive the squash merge and appear on every claim, PR, review and comment. | Tags move into the PR body and review record only. | **Passes.** The squash commit of #2895 on `main` (`fedde5eae`) keeps the `[claude]` title tag. Harness claims record the lab. Both reviews on #2895 carry their `[kimi]` and `[claude]` tags. |
+| P-4 | The policy result can feed a check that is already required. | The policy gate stays advisory; `loop queue` is the lock. | **Passes, tamper-evident only.** The five required contexts are check runs published by the `required-transport` job in `.github/workflows/ci.yml`, and the ruleset accepts them from any app, so a policy job can feed them with no ruleset change. Because `ci.yml` runs from the PR's own code, a PR that edits `.github/**` could skip the policy. Such a change must carry the owner's approval, and `loop queue` refuses it otherwise. |
+| P-6 (optional) | A render PR opened by Actions can be checked and queued. | Supervisors keep opening it. | Not run. |
 
 P-5 is dropped: Codex keeps full access.
 
