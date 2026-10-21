@@ -80,17 +80,23 @@ jobs:
         run: |
           # NOT `set -e`: a failed rule is a verdict to record, not a job failure.
           set -uo pipefail
-          ./target/debug/uor-harness loop pr-check --ci --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF"
+          ./target/debug/uor-harness loop pr-check --ci --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF" > pr-check.out 2>&1
           code=$?
+          cat pr-check.out
           case "$code" in
             0) verdict=pass ;;
             1) verdict=fail ;;
             *) verdict=error ;;
           esac
+          # Bootstrap: a base commit older than loop PR 5 has no pr-check, and this job never runs
+          # the PR's own code. Recorded as unavailable, which `required-checks` does not accept.
+          if [ "$code" -eq 2 ] && grep -q 'loop pr-check: not built yet' pr-check.out; then
+            verdict=unavailable
+          fi
           echo "verdict=${verdict}" >> "$GITHUB_OUTPUT"
           echo "policy: ${verdict} (exit ${code})" >> "$GITHUB_STEP_SUMMARY"
           # Advisory: the job fails only when pr-check could not run at all.
-          [ "$code" -le 1 ]
+          [ "$code" -le 1 ] || [ "$verdict" = "unavailable" ]
 
   tests:
     name: tests (loop gates --full, PR code, read-only token)
