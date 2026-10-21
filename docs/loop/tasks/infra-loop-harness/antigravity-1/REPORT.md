@@ -20,7 +20,7 @@ Lab: antigravity. Order: [ORDER.md](ORDER.md).
 - Added 7 integration tests in `crates/uor-r4-harness/tests/loop_guard.rs`.
 - Added committed onboarding receipts in `docs/harness/onboarding/{antigravity,claude,codex,deepseek,kimi}.json`.
 - Documented the four commands in `docs/harness/README.md` and marked row 9 built in `docs/loop/README.md`.
-- **Size by class:** `code` ~1,240 lines (`loopguard.rs`, `lib.rs`, `loopgates.rs`, `main.rs`, `doccheck.rs`), `tests` ~360 lines (`tests/loop_guard.rs`), `docs` ~250 lines (`docs/harness/onboarding/*.json`, `docs/harness/README.md`, `docs/loop/README.md`, task `ORDER.md`/`REPORT.md`); ratio ~1.0x against the expected five-client adapter scope.
+- **Size by class:** `tests 1 file(s) +673/-0, code 5 file(s) +2810/-3, docs 5 file(s) +123/-6, generated 0 file(s) +0/-0, other 5 file(s) +270/-0`; ratio ~1.0x against the expected five-client adapter scope.
 
 ## Measurements
 
