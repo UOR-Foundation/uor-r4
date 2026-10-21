@@ -227,14 +227,38 @@ struct PrOrder {
     setup: bool,
 }
 
-fn pr_order(gh: &dyn NextGh, pr: &NextPr) -> Result<Option<PrOrder>, String> {
-    let Some(path) = pr
+/// The ORDER a PR adds, or why the PR is skipped: among its changed paths matching
+/// `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`, the ones readable at its head (a deleted one is
+/// not) and absent from `origin/main` (an edited one is not). Exactly one must remain.
+fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, String> {
+    let pattern = regex::Regex::new(r"^docs/loop/tasks/[^/]+/[^/]+-[0-9]+/ORDER\.md$")
+        .expect("a valid pattern");
+    let mut added = Vec::new();
+    for path in pr
         .files
         .iter()
         .map(|f| f.path.as_str())
-        .find(|p| p.starts_with("docs/loop/tasks/") && p.ends_with("/ORDER.md"))
-    else {
-        return Ok(None);
+        .filter(|p| pattern.is_match(p))
+    {
+        let Ok(text) = gh.file_at_pr(pr.number, path) else {
+            continue;
+        };
+        if git(root, &["cat-file", "-e", &format!("origin/main:{path}")]).is_ok() {
+            continue;
+        }
+        added.push((path, text));
+    }
+    let (path, text) = match added.len() {
+        1 => added.remove(0),
+        0 => return Err(format!("#{} adds no ORDER", pr.number)),
+        n => {
+            let paths: Vec<&str> = added.iter().map(|(p, _)| *p).collect();
+            return Err(format!(
+                "#{} adds {n} ORDERs ({})",
+                pr.number,
+                paths.join(", ")
+            ));
+        }
     };
     let dir = path.trim_end_matches("/ORDER.md");
     let lab = dir
@@ -243,9 +267,8 @@ fn pr_order(gh: &dyn NextGh, pr: &NextPr) -> Result<Option<PrOrder>, String> {
         .and_then(|d| d.rsplit_once('-'))
         .map(|(l, _)| l.to_string())
         .unwrap_or_default();
-    let text = gh.file_at_pr(pr.number, path)?;
     let setup = crate::loopclaim::order_item(&text).is_some_and(|i| i.starts_with("infra-loop-pr"));
-    Ok(Some(PrOrder { lab, setup }))
+    Ok(PrOrder { lab, setup })
 }
 
 /// Whether `lab`'s record counts on a PR with this ORDER: `claude` alone on a setup PR (D59), else
@@ -340,6 +363,7 @@ pub fn run(
         .iter()
         .filter(|p| p.head_ref_name.starts_with(&prefix))
         .collect();
+    let mut repair_skipped = Vec::new();
     for pr in &own {
         let mut why = Vec::new();
         if pr.mergeable == "CONFLICTING" {
@@ -350,12 +374,16 @@ pub fn run(
                 why.push(format!("check {:?} is {}", c.name, c.conclusion));
             }
         }
-        if let Some(order) = pr_order(gh, pr)? {
-            let records = counted_records(gh, pr, &order, &vendors)?;
-            if let Some((rlab, false)) = records.last() {
-                why.push(format!(
-                    "the last counted review record at its head ({rlab}) says REQUEST CHANGES"
-                ));
+        match pr_order(root, gh, pr).and_then(|o| {
+            counted_records(gh, pr, &o, &vendors).map_err(|e| format!("#{}: {e}", pr.number))
+        }) {
+            Err(note) => repair_skipped.push(note),
+            Ok(records) => {
+                if let Some((rlab, false)) = records.last() {
+                    why.push(format!(
+                        "the last counted review record at its head ({rlab}) says REQUEST CHANGES"
+                    ));
+                }
             }
         }
         if !why.is_empty() {
@@ -375,22 +403,34 @@ pub fn run(
             ));
         }
     }
-    out.push(source(
-        "repairs",
-        "none",
-        format!("{} own open PR(s), none needs a repair", own.len()),
-    ));
+    let mut detail = format!("{} own open PR(s), none needs a repair", own.len());
+    if !repair_skipped.is_empty() {
+        detail.push_str(&format!(
+            " (review records not read: {})",
+            repair_skipped.join(", ")
+        ));
+    }
+    out.push(source("repairs", "none", detail));
     // 4. reviews.
     let mut skipped = Vec::new();
     for pr in prs.iter().filter(|p| !p.is_draft) {
-        let Some(order) = pr_order(gh, pr)? else {
-            skipped.push(format!("#{} has no ORDER", pr.number));
-            continue;
+        let order = match pr_order(root, gh, pr) {
+            Ok(o) => o,
+            Err(note) => {
+                skipped.push(note);
+                continue;
+            }
         };
         if !may_review(lab, &order, &vendors) {
             continue;
         }
-        let records = counted_records(gh, pr, &order, &vendors)?;
+        let records = match counted_records(gh, pr, &order, &vendors) {
+            Ok(r) => r,
+            Err(e) => {
+                skipped.push(format!("#{}: {e}", pr.number));
+                continue;
+            }
+        };
         if records.iter().any(|(l, _)| l == lab) {
             continue;
         }

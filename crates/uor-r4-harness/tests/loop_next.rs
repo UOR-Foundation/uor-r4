@@ -322,3 +322,38 @@ fn no_lab_exits_2_and_json_parses() {
     assert_eq!(v["decision"]["target"], "#11");
     assert_eq!(v["sources"][0]["source"], "kill-switch");
 }
+
+#[test]
+fn a_pr_is_judged_by_the_order_it_adds_not_another_labs_existing_one() {
+    let r = Repo::new(&[]);
+    // claude-9's ORDER is already on origin/main; the codex PR edits it and adds its own.
+    let existing = "docs/loop/tasks/a/claude-9/ORDER.md";
+    r.write(existing, "# ORDER\n\nLab: claude. Item: [a](x) (#1).\n");
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "claude-9"]);
+    r.git(&["push", "-q", "origin", "main"]);
+    r.git(&["fetch", "-q", "origin"]);
+    let (mut p, f) = pr(13, "codex/x", "codex", "it-2");
+    let own = p["files"][0].clone();
+    p["files"] = json!([{"path": existing}, own]);
+    let mut next = fake(vec![(p, f)], json!({}));
+    next["files"][format!("13:{existing}")] = json!("# ORDER\n\nLab: claude. Item: [a](x) (#1).\n");
+    let o = r.next(&next);
+    assert!(decision(&o).starts_with("GO review #13 — "), "{o:?}");
+}
+
+#[test]
+fn a_pr_that_deletes_an_order_is_skipped_with_a_note_not_fatal() {
+    let r = Repo::new(&[]);
+    let gone = "docs/loop/tasks/z/codex-2/ORDER.md";
+    let next = json!({"prs": [{"number": 14, "headRefName": "codex/d", "headRefOid": HEAD,
+                               "isDraft": false, "files": [{"path": gone}]}]});
+    let o = r.next(&next);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(
+        stdout(&o)
+            .lines()
+            .any(|l| l.starts_with("reviews: ") && l.contains("#14 adds no ORDER")),
+        "{o:?}"
+    );
+}
