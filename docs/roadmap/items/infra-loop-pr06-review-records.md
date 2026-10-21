@@ -21,13 +21,24 @@ The build plan's row on [the loop page](../../loop/README.md#build-plan): "`loop
 
 `loop review` writes and parses the `uor-review v1` comment with the fields the loop page lists. The policy check needs an APPROVE at the current head from a lab whose vendor differs from the author's, with no later CHANGES; a doc-only or generated-only PR may carry a same-lab `fresh-context` record.
 
-**Loop setup PRs follow D59.** While D59 is in force, a setup PR passes only with an APPROVE tagged `claude`, whichever lab built it, and a record from any other lab does not count. A Claude-built setup PR with a Claude APPROVE therefore passes.
+**Loop setup PRs follow D59.** While D59 is in force, a setup PR passes only with an APPROVE tagged `claude`, whichever lab built it. A record from any other lab, APPROVE or CHANGES, does not count. A Claude-built setup PR with a Claude APPROVE therefore passes.
 
 - **What the gate checks.** Under D55 it checks tags, not sessions. That the APPROVE came from a fresh context is the reviewing lab's word, as it already is for a doc-only same-lab record.
-- **Which PRs are setup PRs.** A PR counts as a setup PR only if its ORDER names its build-plan row in a `Setup row:` line (for example `Setup row: 6`), and that row exists in the build-plan table on the loop page. Where the ORDER is filed does not count.
-- **When it ends.** D59 ends when the other labs run the loop. The gate reads this from a switch the owner sets, so ending the exemption needs no code change. The owner decides when the switch flips; this PR's ORDER chooses only where the switch lives.
+- **Which PRs are setup PRs.** A PR counts as a setup PR only if three things hold:
+  - its ORDER names a build-plan row in a `Setup row:` line (for example `Setup row: 6`);
+  - that row exists in the build-plan table on the loop page;
+  - the ORDER's item is `infra-loop-harness` or that row's own item (for row 6, `infra-loop-pr06-review-records`).
 
-Identity is by tags: there is no signing, no key and no signer list (D55). The planted fault turns the check red: **an untagged review record, a same-vendor record on a code or model PR outside D59, or a setup-PR record from a lab other than Claude is refused.** A Claude-built code PR whose ORDER names no build-plan row is outside D59, so a Claude review of it is refused.
+  Where the ORDER is filed does not count. The line is still the author's declaration, like a tag (D55), so it narrows the loophole but does not close it. Claude's reviewer confirms that the PR builds the named row, and refuses the review if it does not.
+- **Which ORDERs need the line.** It applies to setup PRs that reach the gate after this PR lands. Setup PRs already merged, reviewed in free text, need nothing. This PR's own ORDER carries `Setup row: 6`.
+- **When it ends.** D59 ends when the other labs run the loop. The gate reads this from a switch the owner sets, so ending the exemption needs no code change.
+  - **Where the switch lives.** It sits in a file listed in `docs/harness/owner-paths.json`, so no lab can flip it with an ordinary PR. Adding that path is an owner step. This PR's ORDER proposes the file and nothing more.
+  - **Who flips it.** The owner decides when it flips, and a flip records the owner's words verbatim with the time.
+  - **The default.** If the switch is missing or unreadable, D59 is in force.
+
+Identity is by tags: there is no signing, no key and no signer list (D55). The planted fault turns the check red: **an untagged review record, a same-vendor record on a code or model PR outside D59, or a setup-PR record from a lab other than Claude is refused.** Two cases are part of that fault:
+- A Claude-built code PR whose ORDER names no build-plan row is outside D59, so a Claude review of it is refused.
+- A `Setup row:` that names a row the table does not have (for example `Setup row: 99`) does not make a PR a setup PR.
 
 ## How to start
 
