@@ -269,7 +269,7 @@ The policy gate is advisory on GitHub (D54), so this command is the lock: it que
 - `after-approval`: the comments are read again after the rules ran, so a record posted meanwhile is seen. The last counted record must be an APPROVE, and every comment after it is judged: a well-formed `uor-review v1` record is left to the gate, a `[bot]` author is ignored, and a body starting with the tag of a registered lab whose role is not `pm` is ignored. Any other comment refuses, because every lab posts from one GitHub account (D55), so an untagged comment may be the owner's, and a `[kimi]` one is the PM's. A malformed `uor-review v1` record also refuses, because it may be a hold, for example "the APPROVE above missed X". The labs and their roles are read from `origin/main`, never from the PR. Only the PR's issue comments are read: a hold left as a review body or as an inline review comment is not seen.
 - `merge`: the only GitHub write. It is skipped by `--dry-run`.
 
-Tests replace `gh` with `UOR_LOOP_QUEUE_GH_FAKE=<json>` (`pr` with `headRefOid`, `headRefName`, `state`, `isDraft`; `comments` with `author` and `body`; `checkRuns`; `statuses`; `failMerge`); merge calls are logged to `<file>.calls.jsonl`, and every run with it set prints `FAKE GitHub: …` first. Never set it outside tests.
+Tests replace `gh` with `UOR_LOOP_QUEUE_GH_FAKE=<json>` (`pr` with `headRefOid`, `headRefName`, `baseRefName`, `state`, `isDraft`, every one required; `comments` with `author` and `body`; `checkRuns`; `statuses`; `failMerge`); merge calls are logged to `<file>.calls.jsonl`, and every run with it set prints `FAKE GitHub: …` first. Never set it outside tests.
 
 ### `loop board` (loop PR 7c)
 
