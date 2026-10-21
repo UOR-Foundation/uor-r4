@@ -7,6 +7,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md).
 - kimi-1's scopes failed review: the counted CHANGES record at `fa28f9339` (claude, uor-review v1) found the loop items all listed `crates/uor-r4-harness/**`, `docs/loop/**`, `docs/harness/**` and `DECISIONS.md`, and about 38 non-loop items shared `docs/labs/**`, `docs/harness/prep/**` or `docs/integration/NOW.md`. Because `globs_overlap` treats prefix globs as overlapping, `loop claim` would have refused nearly every parallel claim — the scopes unblocked claiming in name only. Every point is answered in this repair.
 - The kimi-1 REPORT claimed `src-tauri/**` exists at origin/main; it does not, and neither does `models/**`. Corrected in `docs/loop/tasks/infra-loop-harness/kimi-1/REPORT.md` (both are new folders named prospectively).
 - `docs/integration/project-track.md` was dropped from the six items that listed it, beyond the letter of the review: it serializes claims exactly like `NOW.md`, which the review named. Flagged here so the reviewer can disagree.
+- `loop pr-check --local` cannot pass on any same-branch repair, by construction: the PR then adds two ORDERs (`order`, `scope`, `commit-order`, `report` rules), and kimi-1's commits changed paths before kimi-2's ORDER commit (`commit-order`). The repair stays on this branch because the review record said to ("post a new review request with the new head"); the gate that counts for the manual merge today is the `uor-review v1` record at the head, and CI's advisory policy job will record `policy: fail` for the same structural reason while the required checks stay green (P-4). Raised on #2028 for the architect.
 
 ## What changed
 
@@ -38,6 +39,7 @@ Size by class: docs 62 insertions, 59 deletions across 52 files (51 items + kimi
 
 ## Still open
 
+- `pr-check`'s one-ORDER-per-PR rule (and `commit-order`) needs a repair-aware variant — for example, count only the lab's highest-`n` ORDER, or read the ORDER the latest counted review record names. Raised on #2028 for the architect (loop PR 7b/5 area); this PR proceeds on the D59 review record per today's manual path.
 - Casey's decision on the shared registration files (Claude is asking): when it lands, the loop items may need one more scope adjustment so harness PRs can touch `lib.rs`, `main.rs`, the dispatcher and the two READMEs under whatever rule he sets.
 - The `docs/labs/<item-id>/**` convention is new; existing evidence folders use dated names. Claiming labs should write new evidence under their item id, and may stop-and-ask to widen a scope when a sheet or folder genuinely needs another name.
 - DeepSeek and Antigravity merge these item edits forward into their in-flight branches.
