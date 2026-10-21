@@ -75,7 +75,7 @@ The main session re-ran each builder's tests at its commit, then ran these at `6
   - `pr-check` passing on any well-formed record: its codex-on-a-setup-PR case.
   - `next` ignoring `may_review`: `on_a_setup_pr_only_claude_owes_the_review`;
   - fix round: the fresh-context requirement under D59 dropped: `a_claude_record_on_a_setup_pr_under_d59_needs_fresh_context`; a loop item without a row treated as ordinary: `a_loop_item_needs_a_valid_setup_row_and_others_are_ordinary`; the D59 switch read at the head in `pr-check`: `the_d59_switch_is_read_at_the_merge_base`.
-- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: 897 passed and 0 failed on the first run; after the fix round, FULLSUITE_PLACEHOLDER.
+- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: 897 passed and 0 failed on the first run; after the fix round (at `7c8ddab46`, with this REPORT in place), 907 passed and 0 failed.
 - **`loop pr-check --local --base 987f72259` on this branch:** `order`, `commit-order`, `report`, `owner-paths`, `rule-sources` and `read-path` pass; `rendered-lock`, `filemap`, `review-record` and `required-checks` are N/A; `scope` fails, as above.
 - **Other gates.** `cargo fmt -p uor-r4-harness --check` is clean, and whole-crate clippy `--all-targets` is clean. Claim-wording passed, `xtask links` finds 0 broken links in the changed files, and the local copyright check finds 0 matching 8-word runs.
 
