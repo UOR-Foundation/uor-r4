@@ -17,6 +17,10 @@ Lab: claude. Base: `fc96b4bea`. Order: [ORDER.md](ORDER.md). The ORDER was commi
   - Only the actions that record a lab name resolve it: team `claim`, `release` and `dispatch`, and multilab `touch`.
   - New integration tests in `crates/uor-r4-harness/tests/lab_registry_cli.rs` pin the subdirectory case, read-only commands accepting any name, and the refusal: exit 2, the five names, nothing written.
   - Onboarding reads `labs.json`. Its one changed assertion now expects FAIL instead of WARN for an unlisted lab, to match the refusal.
+- **The second head borrowed a parent repository's registry.** A round-2 fresh-context review at `168092c91` found that the lookup kept climbing past a git top level that had no `labs.json`, into whatever repository enclosed it. So an old worktree under `.worktrees/` would have borrowed the primary checkout's registry instead of refusing, and the rollout note below was false. The reviewer reproduced this.
+  - The fix: inside a git work tree, only that tree's top level counts. The ancestor walk now runs only outside git.
+  - A new test, `a_nested_repository_without_a_registry_refuses_instead_of_borrowing_one`, failed with the fix set aside (`lab_registry_cli.rs:116`: exit 0, expected 2). With the fix restored, it passes.
+  - The same review found a pasted line that had corrupted a comment in `main.rs`. It is restored.
 - **The subdirectory fix is shown to be needed.** With it set aside, `the_registry_is_found_from_a_subdirectory` failed with "cannot read the lab registry …/crates/deep/er/docs/harness/labs.json"; with the fix restored, the test passed.
 
 ## What changed

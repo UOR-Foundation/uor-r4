@@ -98,6 +98,34 @@ fn the_registry_is_found_from_a_subdirectory() {
     assert!(!stderr(&out).contains("lab registry"), "{}", stderr(&out));
 }
 
+/// Inside a git repository with no registry of its own, a recording command refuses: it must not
+/// climb out of that repository and borrow the registry of one that encloses it. This is the shape
+/// of an old worktree under `.worktrees/` sitting inside the primary checkout.
+#[test]
+fn a_nested_repository_without_a_registry_refuses_instead_of_borrowing_one() {
+    let s = Scratch::new();
+    let inner = s.repo.join("inner");
+    std::fs::create_dir_all(inner.join("sub")).expect("inner dir");
+    let init = git(&inner, &["init", "-q"]);
+    assert!(init.status.success(), "git init inner: {init:?}");
+    let out = s.run_in(
+        &inner.join("sub"),
+        "claude",
+        &["receipt", "--kind", "heartbeat", "-m", "m1", "--dry-run"],
+    );
+    assert_eq!(out.status.code(), Some(2), "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("cannot read the lab registry"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("inner"),
+        "the error must name the inner repository's path: {}",
+        stderr(&out)
+    );
+}
+
 /// A read does not record under the lab, so it must not be refused for the lab's name.
 #[test]
 fn a_read_only_command_works_with_any_lab_name() {

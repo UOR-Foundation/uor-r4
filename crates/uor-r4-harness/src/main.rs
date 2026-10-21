@@ -371,7 +371,7 @@ fn main() -> ExitCode {
             "-h" | "--help" | "help" => {
                 // **`heartbeat --help` printed the global usage**, so a lab could not learn that
                 // `--line`, `--doing`, `--count`, `--next` or `--session` exist and had to read
-                // this file to find out (        eprintln!("{HEARTBEAT_UNATTRIBUTED_WARNING}");/review1, #2028 6163960613 item 3). A command word
+                // this file to find out (claude/review1, #2028 6163960613 item 3). A command word
                 // seen BEFORE the help flag selects its own flag list.
                 if let Some(cmd) = command.as_deref() {
                     if let Some(block) = command_help(cmd) {

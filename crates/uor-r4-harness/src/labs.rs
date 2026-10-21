@@ -46,16 +46,19 @@ fn registry_in(root: &Path) -> PathBuf {
 
 /// `docs/harness/labs.json` for the repository containing `repo`.
 ///
-/// `repo` is the working directory unless `--repo` was given, so it may be a subdirectory. The
-/// registry is found from the git top level (`state::toplevel`, the resolution the state paths
-/// use), and failing that from the nearest ancestor of `repo` that holds the file, for a checkout
-/// that is not a git work tree. With neither, the path under `repo` is returned so the error names
-/// where the file was expected.
+/// `repo` is the working directory unless `--repo` was given, so it may be a subdirectory. Inside a
+/// git work tree the registry is **only** the one at that tree's top level (`state::toplevel`, the
+/// resolution the state paths use). The walk up the ancestors is for a checkout that is not a git
+/// work tree, and it never runs inside one: a worktree under `.worktrees/` branched before the
+/// registry existed would otherwise climb out of itself and borrow the primary checkout's file, so a
+/// missing registry would pass instead of refusing (round-2 review of #2898). With neither, the path
+/// under `repo` is returned so the error names where the file was expected.
 pub fn labs_path(repo: &Path) -> PathBuf {
-    crate::state::toplevel(repo)
-        .into_iter()
-        .chain(repo.ancestors().map(Path::to_path_buf))
-        .map(|root| registry_in(&root))
+    if let Some(top) = crate::state::toplevel(repo) {
+        return registry_in(&top);
+    }
+    repo.ancestors()
+        .map(registry_in)
         .find(|p| p.is_file())
         .unwrap_or_else(|| registry_in(repo))
 }
