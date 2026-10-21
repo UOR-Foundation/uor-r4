@@ -643,7 +643,6 @@ const FLAGS: &[&str] = &[
     "--update-baseline",
     "--value",
     "--verdict",
-    "--watch",
     "--write",
     "-f",
     "-h",

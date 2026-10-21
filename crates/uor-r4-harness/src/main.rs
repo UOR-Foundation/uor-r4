@@ -2541,12 +2541,6 @@ fn cmd_ledger_sync(repo: &Path, args: &[String], json: bool) -> ExitCode {
     }
 }
 
-/// The lab a recording command attributes its record to: `--lab`, then `$UOR_LAB`, checked against
-/// `docs/harness/labs.json`.
-///
-/// **Every recording command goes through this one function**, so none can skip the check. No lab
-/// resolves to an empty string and each command keeps its own warning or refusal for that case; an
-/// unregistered lab, or a registry that cannot be read, is refused with exit 2 and the five names.
 /// `loop gates ...`: the gate runner (loop PR 4). A bad `UOR_LAB` exits 2 like every recorder.
 fn cmd_loop(repo: &Path, args: &[String]) -> ExitCode {
     let lab = match lab_or_refuse(repo, args) {
@@ -2557,6 +2551,12 @@ fn cmd_loop(repo: &Path, args: &[String]) -> ExitCode {
     ExitCode::from(uor_r4_harness::loopgates::cli(&root, &lab, args))
 }
 
+/// The lab a recording command attributes its record to: `--lab`, then `$UOR_LAB`, checked against
+/// `docs/harness/labs.json`.
+///
+/// **Every recording command goes through this one function**, so none can skip the check. No lab
+/// resolves to an empty string and each command keeps its own warning or refusal for that case; an
+/// unregistered lab, or a registry that cannot be read, is refused with exit 2 and the five names.
 fn lab_or_refuse(repo: &Path, args: &[String]) -> Result<String, ExitCode> {
     uor_r4_harness::labs::resolve_lab(
         repo,
