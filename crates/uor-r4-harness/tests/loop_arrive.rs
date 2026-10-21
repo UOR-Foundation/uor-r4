@@ -95,21 +95,31 @@ impl Repo {
         self.git(&["push", "-q", "origin", "main"]);
     }
 
-    fn install_hook(&self) {
+    /// Writes the harness hook, executable as `git install-hooks` leaves it; returns its path.
+    fn install_hook(&self) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
         let dir = self.git(&["rev-parse", "--git-path", "hooks"]);
         let dir = self.root.join(dir);
         assert!(dir.starts_with(&self.root));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("pre-commit"), HOOK).unwrap();
+        let hook = dir.join("pre-commit");
+        std::fs::write(&hook, HOOK).unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        hook
     }
 
     fn arrive(&self, extra: &[&str], lab: Option<&str>) -> Output {
+        self.arrive_in(&self.root, extra, lab)
+    }
+
+    fn arrive_in(&self, dir: &std::path::Path, extra: &[&str], lab: Option<&str>) -> Output {
+        assert!(dir.starts_with(self.tmp.path().canonicalize().unwrap()));
         let mut cmd = Command::new(BIN);
         clean(&mut cmd)
-            .args(["--repo", self.root.to_str().unwrap()])
+            .args(["--repo", dir.to_str().unwrap()])
             .args(extra)
             .args(["loop", "arrive"])
-            .current_dir(&self.root);
+            .current_dir(dir);
         if let Some(l) = lab {
             cmd.env("UOR_LAB", l);
         }
@@ -300,4 +310,78 @@ fn json_parses_and_carries_ok() {
     assert!(checks
         .iter()
         .all(|c| c["verdict"].is_string() && c["details"].is_array()));
+}
+
+#[test]
+fn a_pickup_under_the_main_checkout_is_read_from_a_linked_worktree() {
+    let r = Repo::new();
+    let wt = r.tmp.path().canonicalize().unwrap().join("wt");
+    assert!(wt.starts_with(r.tmp.path().canonicalize().unwrap()));
+    r.git(&["worktree", "add", "-q", wt.to_str().unwrap(), "-b", "wt"]);
+    let pickup = "# PICKUP\n\n## Standing references\n\n- a rule from nowhere\n";
+    r.write("local/claude/PICKUP.md", pickup);
+    let o = r.arrive_in(&wt, &[], Some("claude"));
+    let out = stdout(&o);
+    assert!(has_line(&out, "FAIL pickup"), "{out}");
+    assert!(out.contains("a rule from nowhere"), "{out}");
+    assert!(
+        out.contains(&format!("PICKUP.md {})", pickup.len())),
+        "the read path counts the same PICKUP: {out}"
+    );
+}
+
+#[test]
+fn a_matching_hook_that_is_not_executable_warns() {
+    use std::os::unix::fs::PermissionsExt;
+    let r = Repo::new();
+    let hook = r.install_hook();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let o = r.arrive(&[], Some("claude"));
+    let out = stdout(&o);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        has_line(&out, "WARN hooks run `uor-harness git install-hooks`"),
+        "{out}"
+    );
+    assert!(out.contains("is not executable"), "{out}");
+}
+
+#[test]
+fn the_read_path_measures_an_uncommitted_view_as_rendered() {
+    let r = Repo::new();
+    let o = r.arrive(&[], Some("claude"));
+    let out = stdout(&o);
+    let state = std::fs::metadata(r.root.join("local/claude/views/STATE.md"))
+        .unwrap()
+        .len();
+    assert!(state > 0);
+    assert!(out.contains(&format!("STATE.md {state},")), "{out}");
+}
+
+#[test]
+fn a_standing_subheading_with_a_cited_line_passes() {
+    let r = Repo::new();
+    r.write(
+        "local/claude/PICKUP.md",
+        "# PICKUP\n\n## Standing references\n\n### Charter\n\n- see §5.10\n\n```\nfenced text\n```\n",
+    );
+    let o = r.arrive(&[], Some("claude"));
+    let out = stdout(&o);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(has_line(&out, "PASS pickup"), "{out}");
+}
+
+#[test]
+fn json_goes_only_to_the_action_word() {
+    let r = Repo::new();
+    let o = clean(&mut Command::new(BIN))
+        .args(["--repo", r.root.to_str().unwrap(), "--json"])
+        .args(["loop", "ask", "--scope", "--order", "next"])
+        .env("UOR_LAB", "claude")
+        .current_dir(&r.root)
+        .output()
+        .expect("uor-harness runs");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("loop ask: refused"), "{o:?}");
+    assert!(!err.contains("--json"), "ask was handed --json: {err}");
 }

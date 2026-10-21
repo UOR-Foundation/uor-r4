@@ -161,10 +161,10 @@ Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 every check PASS, WARN or N/A;
 - `fetch`: `git fetch origin main`; a failure FAILs with git's message, and the later checks read the `origin/main` already present.
 - `checkout`: HEAD against `origin/main`; behind or unplaceable WARNs.
 - `binary`: the running binary against the newest build in this checkout, by age (no commit is baked into the binary; `build.rs` says why); older WARNs with the install command.
-- `hooks`: the git `pre-commit` hook must be the exact text `uor-harness git install-hooks` writes; otherwise WARN. `client-hooks` is N/A until loop PR 9.
+- `hooks`: the git `pre-commit` hook must be the exact text `uor-harness git install-hooks` writes and executable; otherwise WARN (a matching hook without an execute bit WARNs "not executable"). `client-hooks` is N/A until loop PR 9.
 - `views`: renders STATE, HANDOFF and LESSONS from `origin/main` into `local/<lab>/views/`; a view committed at `origin/main` whose text below the stamp line differs from its render FAILs, because the repository's inputs win (run `loop render`).
-- `pickup`: `local/<lab>/PICKUP.md`; absent is N/A; 8,192 bytes or more FAILs, and so does each non-blank line under `## Standing references` that cites no `§<n>`, `D<n>` or `L-<nnn>`.
-- `read-path`: AGENTS.md, CHARTER.md, STATE.md and HANDOFF.md at `origin/main` plus the local PICKUP; AGENTS.md over 80 lines, STATE.md or HANDOFF.md at 24,576 bytes or more, or a total above 128,000 bytes FAILs; a total above 76,800 bytes WARNs.
+- `pickup`: `local/<lab>/PICKUP.md` under the main checkout, where `loop close --session` writes it (so a linked worktree reads the same file); absent is N/A, an unlocatable main checkout FAILs; 8,192 bytes or more FAILs, and so does each non-blank line under `## Standing references` that cites no `§<n>`, `D<n>` or `L-<nnn>` (fenced code blocks and `#` subheading lines are skipped; only a `## ` heading outside a fence ends the section).
+- `read-path`: AGENTS.md, CHARTER.md, STATE.md and HANDOFF.md at `origin/main` (a view not committed there is measured as its render in `local/<lab>/views/`) plus the PICKUP the `pickup` check read; AGENTS.md over 80 lines, STATE.md or HANDOFF.md at 24,576 bytes or more, or a total above 128,000 bytes FAILs; a total above 76,800 bytes WARNs.
 
 ### `loop next` (loop PR 7b)
 

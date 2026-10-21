@@ -9,8 +9,11 @@
 //! a check FAILs, 2 when the command cannot run (usage, no lab, not a git repository). A failed
 //! fetch does not stop the run: the later checks read the `origin/main` already present.
 //!
-//! Every git subprocess has every `GIT_*` variable removed, so a caller's `GIT_DIR` cannot point
-//! the checks at another repository, and `GIT_TERMINAL_PROMPT=0` so a fetch never waits on a prompt.
+//! Every git subprocess this module starts has every `GIT_*` variable removed except the ones a
+//! fetch needs to authenticate (`GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_ASKPASS`), so a caller's
+//! `GIT_DIR` cannot point the checks at another repository, and `GIT_TERMINAL_PROMPT=0` so a fetch
+//! never waits on a prompt. The `checkout` and `binary` checks call [`crate::version::stale`] and
+//! [`crate::version::placement_line`], whose git runs with the caller's environment as it is.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -22,6 +25,8 @@ pub(crate) const PICKUP_MAX: usize = 8_192;
 const AGENTS_MAX_LINES: usize = 80;
 /// STATE.md or HANDOFF.md at or above this size fails.
 const VIEW_MAX: usize = 24_576;
+/// `GIT_*` variables a git subprocess keeps: without them `fetch` cannot authenticate.
+const GIT_KEEP: [&str; 3] = ["GIT_SSH_COMMAND", "GIT_SSH", "GIT_ASKPASS"];
 /// The read path (AGENTS, CHARTER, STATE, HANDOFF and PICKUP) above this fails ...
 const READ_PATH_FAIL: usize = 128_000;
 /// ... and above this warns.
@@ -65,7 +70,8 @@ fn check(name: &'static str, verdict: Verdict, summary: impl Into<String>) -> Ch
 fn git_cmd(root: &Path) -> Command {
     let mut cmd = Command::new("git");
     for (k, _) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("GIT_") {
+        let name = k.to_string_lossy();
+        if name.starts_with("GIT_") && !GIT_KEEP.contains(&name.as_ref()) {
             cmd.env_remove(k);
         }
     }
@@ -139,18 +145,38 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
 }
 
 fn run(root: &Path, lab: &str) -> Vec<Check> {
-    let pickup_path = root.join("local").join(lab).join("PICKUP.md");
-    let pickup = std::fs::read(&pickup_path).ok();
-    vec![
+    let mut checks = vec![
         fetch(root),
         checkout(root),
         binary(root),
         hooks(root),
         check("client-hooks", Verdict::Na, "the client guard is loop PR 9"),
-        views(root, lab),
-        pickup_check(pickup.as_deref()),
-        read_path(root, pickup.as_ref().map_or(0, Vec::len)),
-    ]
+    ];
+    let rendered = crate::looprender::AtCommit::resolve(root, "origin/main")
+        .and_then(|c| crate::looprender::render_all(&c));
+    checks.push(views(root, lab, &rendered));
+    // `loop close --session` writes the PICKUP under the main checkout, so a linked worktree reads
+    // that one.
+    let (pickup, pickup_c) = match crate::loopclose::pickup_path(root, lab) {
+        Ok(p) => {
+            let bytes = std::fs::read(&p).ok();
+            let c = pickup_check(bytes.as_deref());
+            (bytes, c)
+        }
+        Err(e) => {
+            let mut c = check("pickup", Verdict::Fail, "cannot locate the PICKUP");
+            c.details.push(e);
+            (None, c)
+        }
+    };
+    checks.push(pickup_c);
+    let rendered = rendered.as_deref().unwrap_or_default();
+    checks.push(read_path(
+        root,
+        rendered,
+        pickup.as_ref().map_or(0, Vec::len),
+    ));
+    checks
 }
 
 fn fetch(root: &Path) -> Check {
@@ -236,11 +262,19 @@ fn hooks(root: &Path) -> Check {
     };
     let hook = dir.join("pre-commit");
     match std::fs::read_to_string(&hook) {
-        Ok(t) if t == crate::githelp::HOOK_SCRIPT => check(
+        Ok(t) if t == crate::githelp::HOOK_SCRIPT && executable(&hook) => check(
             "hooks",
             Verdict::Pass,
             format!("{} is the harness hook", hook.display()),
         ),
+        Ok(t) if t == crate::githelp::HOOK_SCRIPT => {
+            let mut c = check("hooks", Verdict::Warn, FIX);
+            c.details.push(format!(
+                "{} is the harness hook but is not executable, so git skips it",
+                hook.display()
+            ));
+            c
+        }
         Ok(_) => {
             let mut c = check("hooks", Verdict::Warn, FIX);
             c.details.push(format!(
@@ -257,15 +291,25 @@ fn hooks(root: &Path) -> Check {
     }
 }
 
-/// Renders every view from `origin/main` into `local/<lab>/views/`, then compares each view that is
+/// Whether git would run `hook`: on Unix, any execute bit is set.
+#[cfg(unix)]
+fn executable(hook: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(hook).is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn executable(_hook: &Path) -> bool {
+    true
+}
+
+/// Writes every view rendered from `origin/main` into `local/<lab>/views/`, then compares each view that is
 /// also committed at `origin/main` with its render.
 ///
 /// The first line of a view is its stamp, which names the commit its inputs were read at; a view
 /// committed at `origin/main` cannot name `origin/main` itself, so the comparison skips the first
 /// line of both and compares the rest byte for byte.
-fn views(root: &Path, lab: &str) -> Check {
-    let rendered = crate::looprender::AtCommit::resolve(root, "origin/main")
-        .and_then(|c| crate::looprender::render_all(&c));
+fn views(root: &Path, lab: &str, rendered: &Result<Vec<(String, String)>, String>) -> Check {
     let rendered = match rendered {
         Ok(v) => v,
         Err(e) => {
@@ -274,12 +318,12 @@ fn views(root: &Path, lab: &str) -> Check {
                 Verdict::Fail,
                 "cannot render the views at origin/main",
             );
-            c.details.push(e);
+            c.details.push(e.clone());
             return c;
         }
     };
     let out = root.join("local").join(lab).join("views");
-    for (path, text) in &rendered {
+    for (path, text) in rendered {
         let p = out.join(path);
         let written = p
             .parent()
@@ -293,7 +337,7 @@ fn views(root: &Path, lab: &str) -> Check {
     }
     let mut committed = Vec::new();
     let mut details = Vec::new();
-    for (path, text) in &rendered {
+    for (path, text) in rendered {
         let spec = format!("origin/main:{path}");
         if git(root, &["cat-file", "-e", &spec]).is_err() {
             continue;
@@ -376,15 +420,22 @@ fn pickup_check(pickup: Option<&[u8]>) -> Check {
     }
 }
 
-/// The non-blank lines under `## Standing references` (until the next `## `) that cite none of a
-/// charter section, a decision row or a lesson id: the loop page lets a standing-rule line cite
-/// only those, so no lab keeps a private rulebook.
+/// The non-blank lines under `## Standing references` (until the next `## ` outside a fenced code
+/// block) that cite none of a charter section, a decision row or a lesson id: the loop page lets a
+/// standing-rule line cite only those, so no lab keeps a private rulebook. Fenced code blocks and
+/// heading lines (`#`-prefixed) inside the section are not reference lines.
 fn uncited_standing_references(text: &str) -> Vec<String> {
     let mut inside = false;
     let mut bad = Vec::new();
-    for line in text.lines() {
+    for (line, can_head) in crate::loopprcheck::heading_lines(text) {
+        if !can_head {
+            continue;
+        }
         if line.starts_with("## ") {
             inside = line.trim_end() == "## Standing references";
+            continue;
+        }
+        if line.starts_with('#') {
             continue;
         }
         if inside && !line.trim().is_empty() && !cites(line) {
@@ -412,18 +463,53 @@ fn cites(line: &str) -> bool {
     })
 }
 
-fn read_path(root: &Path, pickup: usize) -> Check {
-    let at = |path: &str| git(root, &["show", &format!("origin/main:{path}")]).unwrap_or_default();
-    let agents = at("AGENTS.md");
-    let charter = at("CHARTER.md").len();
-    let state = at("STATE.md").len();
-    let handoff = at("HANDOFF.md").len();
+/// Measures the read path at `origin/main`. A view not committed there is measured as `rendered`
+/// (the copy just written to `local/<lab>/views/`), since that is the one a lab reads.
+fn read_path(root: &Path, rendered: &[(String, String)], pickup: usize) -> Check {
+    let at = |path: &str| git(root, &["show", &format!("origin/main:{path}")]).ok();
+    let view = |path: &str| {
+        at(path).map(|b| b.len()).unwrap_or_else(|| {
+            rendered
+                .iter()
+                .find(|(p, _)| p == path)
+                .map_or(0, |(_, t)| t.len())
+        })
+    };
+    let agents = at("AGENTS.md").unwrap_or_default();
     let agents_lines = String::from_utf8_lossy(&agents).lines().count();
-    let total = agents.len() + charter + state + handoff + pickup;
+    read_path_budget(ReadPath {
+        agents: agents.len(),
+        agents_lines,
+        charter: at("CHARTER.md").unwrap_or_default().len(),
+        state: view("STATE.md"),
+        handoff: view("HANDOFF.md"),
+        pickup,
+    })
+}
+
+/// The sizes, in bytes, of the files a lab reads on arrival.
+struct ReadPath {
+    agents: usize,
+    agents_lines: usize,
+    charter: usize,
+    state: usize,
+    handoff: usize,
+    pickup: usize,
+}
+
+fn read_path_budget(r: ReadPath) -> Check {
+    let ReadPath {
+        agents,
+        agents_lines,
+        charter,
+        state,
+        handoff,
+        pickup,
+    } = r;
+    let total = agents + charter + state + handoff + pickup;
     let summary = format!(
-        "{total} bytes (AGENTS.md {} bytes / {agents_lines} lines, CHARTER.md {charter}, \
-         STATE.md {state}, HANDOFF.md {handoff}, PICKUP.md {pickup})",
-        agents.len()
+        "{total} bytes (AGENTS.md {agents} bytes / {agents_lines} lines, CHARTER.md {charter}, \
+         STATE.md {state}, HANDOFF.md {handoff}, PICKUP.md {pickup})"
     );
     let mut fails = Vec::new();
     if agents_lines > AGENTS_MAX_LINES {
@@ -468,5 +554,40 @@ mod tests {
         assert!(!cites("- AND5 is not a decision"));
         assert!(!cites("- L-12 is too short"));
         assert!(!cites("- my own rule"));
+    }
+
+    fn small() -> ReadPath {
+        ReadPath {
+            agents: 100,
+            agents_lines: 10,
+            charter: 1_000,
+            state: 1_000,
+            handoff: 1_000,
+            pickup: 0,
+        }
+    }
+
+    #[test]
+    fn a_rendered_state_of_25000_bytes_fails_the_read_path() {
+        assert_eq!(read_path_budget(small()).verdict, Verdict::Pass);
+        let c = read_path_budget(ReadPath {
+            state: 25_000,
+            ..small()
+        });
+        assert_eq!(c.verdict, Verdict::Fail);
+        assert!(
+            c.details[0].contains("STATE.md is 25000 bytes"),
+            "{:?}",
+            c.details
+        );
+    }
+
+    #[test]
+    fn standing_references_skip_fences_and_subheadings() {
+        let text = "## Standing references\n\n### Charter\n\n- see §5.10\n\n```\nnot a rule\n## not a heading\nstill fenced\n```\n\n- uncited after the fence\n\n## Next\n\n- free text\n";
+        assert_eq!(
+            uncited_standing_references(text),
+            vec!["- uncited after the fence".to_string()]
+        );
     }
 }
