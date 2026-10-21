@@ -1,6 +1,6 @@
 ---
 id: infra-loop-harness
-title: Build the five-lab loop harness under uor-harness loop
+title: Build the five-lab loop harness (the loop subcommands of uor-harness)
 milestone: infra
 area: tooling
 status: ready
@@ -15,7 +15,7 @@ Five labs from five vendors work on UOR-R4 at once, with nobody watching each st
 
 ## What is missing
 
-None of the loop tooling exists. No `uor-harness loop …` command is built: not `next`, `arrive`, `claim`, `gates`, `render`, `review`, `queue`, `close`, `drive`, `guard`, `install` or `onboard`. There is no `docs/harness/labs.json`, no `gates.json`, no rendered STATE or HANDOFF, and no policy job in CI. Roadmap items carry no `scope:` or "Cancel if" yet. Today labs follow the loop by hand: an ORDER and REPORT in `docs/loop/tasks/`, and a review from another vendor posted in free text. The policy gate will stay advisory on GitHub, because there is no org admin to add a GitHub App or change the ruleset, so the supervisor's local queue step is the lock.
+None of the loop tooling exists. No `loop …` subcommand of `uor-harness` is built: not `next`, `arrive`, `claim`, `gates`, `render`, `review`, `queue`, `close`, `drive`, `guard`, `install` or `onboard`. There is no `docs/harness/labs.json`, no `gates.json`, no rendered STATE or HANDOFF, and no policy job in CI. Roadmap items carry no `scope:` or "Cancel if" yet. Today labs follow the loop by hand: an ORDER and REPORT in `docs/loop/tasks/`, and a review from another vendor posted in free text. The policy gate will stay advisory on GitHub, because there is no org admin to add a GitHub App or change the ruleset, so the supervisor's local queue step is the lock.
 
 ## Done when
 

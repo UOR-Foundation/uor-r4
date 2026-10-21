@@ -3,7 +3,7 @@
 This page describes the loop that every lab follows. It is a plan for tooling that is mostly still to be built.
 CHARTER.md §5.10 holds the rule; this page explains it. Where they disagree, the charter wins.
 
-**Status.** No `uor-harness loop …` command exists yet. Every command on this page named `uor-harness loop …` (or `loop …` for short) is to be built by the PRs in [the build plan](#build-plan). Until a command exists, labs do its step by hand.
+**Status.** None of the `loop …` commands on this page exists yet: each is a planned subcommand of `uor-harness`, to be built by the PRs in [the build plan](#build-plan). Until a command exists, labs do its step by hand.
 Markers used below: **(exists)** means the tool or file is in `main` today; **(to build)** means a PR in the build plan adds it.
 
 ## Credit
@@ -84,7 +84,7 @@ Notes carry memory between sessions. Most are rendered, so nobody types them.
 
 A gate is a check anyone can rerun. Each gate names what it proves, and a planted fault that must turn it red.
 
-**The runner (to build).** `uor-harness loop gates [--quick|--full|--keep-going|--status|--break G|all|--watch]` reads `docs/harness/gates.json`.
+**The runner (to build).** `loop gates [--quick|--full|--keep-going|--status|--break G|all|--watch]` reads `docs/harness/gates.json`.
 
 **Gates that exist today:** `cargo fmt`; clippy and library tests for changed crates; `uor-harness check`; `lint check`; the d23, d25 and d32 ratchets; claim-wording; `cargo xtask links`, `archive-verify --base`, `roadmap check` and `docs-catalog --check`; `shard-check`.
 **Gates to build:** `render --check`, `scope`, `order --check`, `report --check`, `budget`, rule sources, milestone bars against CHARTER §4.8, and the local private-text check.
@@ -164,11 +164,11 @@ Per client: Claude Code fires hooks inside subagents, and a SubagentStart hook i
 
 ## Install and onboarding (outline)
 
-- **Who installs.** The owner runs `uor-harness loop install --all` (to build) once from Terminal. It lists every file it will write, backs up each config it edits to `local/loop/install-backups/`, refuses to replace a differing file without `--replace`, and writes only to gitignored `local/` inside the repository.
+- **Who installs.** The owner runs `loop install --all` (to build) once from Terminal. It lists every file it will write, backs up each config it edits to `local/loop/install-backups/`, refuses to replace a differing file without `--replace`, and writes only to gitignored `local/` inside the repository.
 - **The kit's skills** are installed into each client's own skills folder from the owner's private copy. No text from the kit enters this repository.
-- **One hook entry point.** `uor-harness loop guard --client C --lab L --event E` (to build) replaces today's presence hooks. It exits at once outside `~/uor-r4` and its worktrees, so it never touches other projects.
+- **One hook entry point.** `loop guard --client C --lab L --event E` (to build) replaces today's presence hooks. It exits at once outside `~/uor-r4` and its worktrees, so it never touches other projects.
 - **Per client.** Claude Code reads `CLAUDE.md` importing AGENTS.md and user-level hooks. Codex reads the AGENTS.md chain, `~/.codex/hooks.json` and a rules file that forbids force push, push to `main`, `gh pr merge`, `--no-verify` and `pkill`; Codex keeps full access. Antigravity reads AGENTS.md and a user-level plugin. Kimi's private start and handoff files become pointers of at most 1 KB, and its own second loop is retired. DeepSeek runs in its own harness with a patch overlay on every launch.
-- **Onboarding check.** `uor-harness loop onboard --client C` (to build) prints PASS, FAIL or REFUSED for: rules reachable; skills found; hooks on the current binary; a canary write to a denied path refused; `UOR_LAB` set; binary current. It ends with the lab's lane and first PICKUP. The owner pastes one short prompt into each client to run it.
+- **Onboarding check.** `loop onboard --client C` (to build) prints PASS, FAIL or REFUSED for: rules reachable; skills found; hooks on the current binary; a canary write to a denied path refused; `UOR_LAB` set; binary current. It ends with the lab's lane and first PICKUP. The owner pastes one short prompt into each client to run it.
 - **Copyright check.** A local check compares repository text with the owner's private kit copy. It runs on the laptop only. Nothing about the kit, not even hashes, goes to CI.
 
 ## Charter changes
