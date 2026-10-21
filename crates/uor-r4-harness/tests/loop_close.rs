@@ -276,7 +276,7 @@ fn a_failed_ready_says_the_body_was_already_set() {
 }
 
 #[test]
-fn no_lab_no_pr_and_verify_cannot_run() {
+fn no_lab_no_pr_and_verify_without_pr_cannot_run() {
     let r = Repo::new(&valid_report());
     r.fake(&r.head(), true, "");
     let (code, out) = r.close(None, &["--session"]);
@@ -290,7 +290,337 @@ fn no_lab_no_pr_and_verify_cannot_run() {
 
     let (code, out) = r.close(Some("claude"), &["--verify"]);
     assert_eq!(code, 2, "{out}");
-    assert!(out.contains("not built yet"), "{out}");
+    assert!(out.contains("needs --pr"), "{out}");
     assert!(r.calls().is_empty(), "{out}");
     assert!(r.pickup().is_none());
+}
+
+// ---- `--verify` -------------------------------------------------------------------------------
+
+/// A main checkout at `<tmp>/main` with a bare `origin`, the worktree `.worktrees/claude-x` on
+/// `claude/x` (pushed, and as `refs/pull/7/head`), and `docs/harness/gates.json` with one gate
+/// running `gate_cmd`.
+struct Merged {
+    _tmp: tempfile::TempDir,
+    base: PathBuf,
+    main: PathBuf,
+    wt: PathBuf,
+    head: String,
+}
+
+impl Merged {
+    fn new(gate_cmd: &str) -> Merged {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().canonicalize().unwrap();
+        let main = base.join("main");
+        let origin = base.join("origin.git");
+        let wt = main.join(".worktrees/claude-x");
+        assert!(main.starts_with(&base) && origin.starts_with(&base) && wt.starts_with(&base));
+        std::fs::create_dir_all(&main).unwrap();
+        let mut m = Merged {
+            _tmp: tmp,
+            base,
+            main,
+            wt,
+            head: String::new(),
+        };
+        let o = origin.to_str().unwrap().to_string();
+        m.git(&["init", "-q", "--bare", &o]);
+        m.git(&["init", "-q", "-b", "main"]);
+        m.write("a.txt", "a\n");
+        m.write(".gitignore", ".worktrees/\nlocal/\n");
+        m.write("docs/harness/claims.json", "{}\n");
+        m.write(
+            "docs/harness/labs.json",
+            r#"{"labs": {"claude": {"vendor": "a", "client": "b", "headless": "c", "open_pr_limit": 2}, "codex": {"vendor": "d", "client": "e", "headless": "f", "open_pr_limit": 2}}}"#,
+        );
+        m.write(
+            "docs/harness/gates.json",
+            &format!(
+                r#"{{"version": 1, "gates": [{{"id": "g", "proves": "p", "command": ["{gate_cmd}"], "reads": ["a.txt"], "quick": true, "break": {{"file": "a.txt", "append": "x", "expect": "x"}}}}]}}"#
+            ),
+        );
+        m.git(&["add", "-A"]);
+        m.git(&["commit", "-q", "-m", "base"]);
+        m.git(&["remote", "add", "origin", &o]);
+        m.git(&["push", "-q", "origin", "main"]);
+        m.git(&["fetch", "-q", "origin"]);
+        let w = m.wt.to_str().unwrap().to_string();
+        m.git(&["worktree", "add", "-q", "-b", "claude/x", &w, "main"]);
+        std::fs::write(m.wt.join("x.rs"), "// work\n").unwrap();
+        m.git_in(&m.wt, &["add", "-A"]);
+        m.git_in(&m.wt, &["commit", "-q", "-m", "work"]);
+        m.head = m.git(&["rev-parse", "claude/x"]);
+        m.git(&[
+            "push",
+            "-q",
+            "origin",
+            "claude/x",
+            "claude/x:refs/pull/7/head",
+        ]);
+        m
+    }
+
+    fn git_in(&self, dir: &std::path::Path, args: &[&str]) -> String {
+        assert!(dir.starts_with(&self.base));
+        let o = clean(&mut Command::new("git"))
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .expect("git runs");
+        assert!(
+            o.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+        String::from_utf8_lossy(&o.stdout).trim().to_string()
+    }
+
+    fn git(&self, args: &[&str]) -> String {
+        self.git_in(&self.main, args)
+    }
+
+    fn write(&self, rel: &str, text: &str) {
+        let p = self.main.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    }
+
+    /// A commit with `tree` on top of `origin/main` and `subject`; pushed to origin's `main` when
+    /// `push`.
+    fn squash(&self, tree: &str, subject: &str, push: bool) -> String {
+        let mc = self.git(&["commit-tree", tree, "-p", "origin/main", "-m", subject]);
+        if push {
+            self.git(&["push", "-q", "origin", &format!("{mc}:refs/heads/main")]);
+        }
+        mc
+    }
+
+    /// The usual squash: the branch's tree, `(#7)`, on origin's `main`.
+    fn merged_squash(&self) -> String {
+        self.squash(&format!("{}^{{tree}}", self.head), "work (#7)", true)
+    }
+
+    fn fake(&self, state: &str, mc: &str, head_ref: &str) {
+        std::fs::write(
+            self.base.join("gh.json"),
+            format!(
+                r#"{{"merged": {{"7": {{"state": "{state}", "mergeCommit": "{mc}", "headRefName": "{head_ref}", "headRefOid": "{}"}}}}}}"#,
+                self.head
+            ),
+        )
+        .unwrap();
+    }
+
+    fn verify(&self, extra: &[&str]) -> (i32, String) {
+        let mut cmd = Command::new(BIN);
+        clean(&mut cmd);
+        let o = cmd
+            .env("UOR_LAB", "claude")
+            .env("UOR_LOOP_CLOSE_GH_FAKE", self.base.join("gh.json"))
+            .env("UOR_LOOP_CLOSE_NO_HYGIENE", "1")
+            .args(["--repo", self.main.to_str().unwrap(), "loop", "close"])
+            .args(["--verify", "--pr", "7"])
+            .args(extra)
+            .current_dir(&self.main)
+            .output()
+            .expect("the binary runs");
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&o.stdout),
+            String::from_utf8_lossy(&o.stderr)
+        );
+        (o.status.code().unwrap_or(-1), text)
+    }
+
+    fn has_local(&self, b: &str) -> bool {
+        clean(&mut Command::new("git"))
+            .args(["rev-parse", "--verify", "-q", &format!("refs/heads/{b}")])
+            .current_dir(&self.main)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    }
+
+    fn has_remote(&self, b: &str) -> bool {
+        !self
+            .git(&["ls-remote", "origin", &format!("refs/heads/{b}")])
+            .is_empty()
+    }
+
+    /// The worktree, the local branch and the remote branch all still exist.
+    fn all_kept(&self) -> bool {
+        self.wt.exists() && self.has_local("claude/x") && self.has_remote("claude/x")
+    }
+}
+
+#[test]
+fn every_proof_passing_deletes_the_worktree_and_both_branches() {
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 0, "{out}");
+    for s in [
+        "PASS state",
+        "PASS squash",
+        "PASS content",
+        "SKIP done-when",
+        "PASS worktree",
+    ] {
+        assert!(out.contains(s), "{s}: {out}");
+    }
+    assert!(out.contains("SKIP hygiene"), "{out}");
+    assert!(!m.wt.exists(), "{out}");
+    assert!(!m.has_local("claude/x"), "{out}");
+    assert!(!m.has_remote("claude/x"), "{out}");
+}
+
+#[test]
+fn an_open_pr_deletes_nothing() {
+    let m = Merged::new("true");
+    m.fake("OPEN", &m.merged_squash(), "claude/x");
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL state"), "{out}");
+    assert!(m.all_kept(), "{out}");
+}
+
+#[test]
+fn a_merge_commit_off_main_or_without_the_pr_number_deletes_nothing() {
+    let m = Merged::new("true");
+    let tree = format!("{}^{{tree}}", m.head);
+    m.fake("MERGED", &m.squash(&tree, "work (#7)", false), "claude/x");
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("FAIL squash") && out.contains("not on origin/main"),
+        "{out}"
+    );
+    assert!(m.all_kept(), "{out}");
+
+    m.fake("MERGED", &m.squash(&tree, "work (#8)", true), "claude/x");
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL squash") && out.contains("(#7)"), "{out}");
+    assert!(m.all_kept(), "{out}");
+}
+
+#[test]
+fn a_file_on_main_that_differs_from_the_head_deletes_nothing() {
+    let m = Merged::new("true");
+    // main's tree without the PR's x.rs.
+    m.fake(
+        "MERGED",
+        &m.squash("origin/main^{tree}", "work (#7)", true),
+        "claude/x",
+    );
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL content"), "{out}");
+    assert!(m.all_kept(), "{out}");
+}
+
+#[test]
+fn a_dirty_worktree_is_kept_but_a_claims_only_edit_is_reverted_and_removed() {
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    std::fs::write(m.wt.join("extra.txt"), "x\n").unwrap();
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL worktree"), "{out}");
+    assert!(m.wt.join("extra.txt").exists(), "{out}");
+
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    std::fs::write(m.wt.join("docs/harness/claims.json"), "{\"stale\": 1}\n").unwrap();
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("PASS worktree"), "{out}");
+    assert!(!m.wt.exists(), "{out}");
+}
+
+#[test]
+fn a_local_branch_that_moved_is_kept() {
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    std::fs::write(m.wt.join("more.rs"), "// more\n").unwrap();
+    m.git_in(&m.wt, &["add", "-A"]);
+    m.git_in(&m.wt, &["commit", "-q", "-m", "more"]);
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL local-branch"), "{out}");
+    assert!(m.has_local("claude/x"), "{out}");
+}
+
+#[test]
+fn a_remote_branch_that_moved_is_kept_by_the_lease() {
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    let tree = format!("{}^{{tree}}", m.head);
+    let moved = m.git(&["commit-tree", &tree, "-p", &m.head, "-m", "moved"]);
+    m.git(&[
+        "push",
+        "-q",
+        "origin",
+        &format!("{moved}:refs/heads/claude/x"),
+    ]);
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL remote-branch"), "{out}");
+    assert_eq!(
+        m.git(&["ls-remote", "origin", "refs/heads/claude/x"])
+            .split_whitespace()
+            .next(),
+        Some(moved.as_str())
+    );
+}
+
+#[test]
+fn a_remote_branch_already_gone_is_not_applicable() {
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    m.git(&["push", "-q", "origin", ":refs/heads/claude/x"]);
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("N/A remote-branch"), "{out}");
+    assert!(!m.wt.exists() && !m.has_local("claude/x"), "{out}");
+}
+
+#[test]
+fn another_labs_pr_is_proved_but_nothing_is_deleted() {
+    let m = Merged::new("true");
+    m.git(&["branch", "codex/y", "claude/x"]);
+    m.git(&["push", "-q", "origin", "codex/y"]);
+    m.fake("MERGED", &m.merged_squash(), "codex/y");
+    let (code, out) = m.verify(&["--no-gates"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("PASS content"), "{out}");
+    assert!(out.contains("SKIP cleanup"), "{out}");
+    assert!(
+        m.all_kept() && m.has_local("codex/y") && m.has_remote("codex/y"),
+        "{out}"
+    );
+}
+
+#[test]
+fn green_gates_delete_red_gates_delete_nothing_and_the_verify_worktree_goes_either_way() {
+    let m = Merged::new("true");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    let (code, out) = m.verify(&[]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("PASS done-when"), "{out}");
+    assert!(!m.wt.exists(), "{out}");
+    assert!(!m.main.join("local/claude/verify-7").exists(), "{out}");
+    assert!(!m.git(&["worktree", "list"]).contains("verify-7"), "{out}");
+
+    let m = Merged::new("false");
+    m.fake("MERGED", &m.merged_squash(), "claude/x");
+    let (code, out) = m.verify(&[]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("FAIL done-when"), "{out}");
+    assert!(m.all_kept(), "{out}");
+    assert!(!m.main.join("local/claude/verify-7").exists(), "{out}");
+    assert!(!m.git(&["worktree", "list"]).contains("verify-7"), "{out}");
 }

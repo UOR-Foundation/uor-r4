@@ -14,8 +14,18 @@
 //!    more refuses;
 //! 6. writes: the PR body, then `gh pr ready` when the PR is a draft, then the PICKUP.
 //!
-//! `--dry-run` prints the body and the PICKUP and writes nothing. **`--verify`** is the next commit.
-//! Exit codes: 0 done, 1 refused (a check failed; nothing written), 2 cannot run.
+//! `--dry-run` prints the body and the PICKUP and writes nothing. Exit codes: 0 done, 1 refused (a
+//! check failed; nothing written), 2 cannot run.
+//!
+//! **`--verify --pr <n> [--no-gates]`** is loop step 13, after the merge. Every proof runs before any
+//! deletion, and nothing is deleted when one fails: `state` (GitHub reports `MERGED`), `squash` (the
+//! merge commit is on fresh `origin/main` and its subject ends `(#<n>)`), `content` (each file the PR
+//! changed is identical between the merge commit and the PR head) and `done-when` (`loop gates --full`
+//! in a detached worktree of `origin/main`, removed afterwards whatever the result). Then, only for
+//! this lab's own branch (`<lab>/...`), each with its own guard: the clean worktree under
+//! `.worktrees/<lab>-*`, the local branch at the PR head, and the remote branch by a lease on the PR
+//! head. Exit codes: 0 verified and cleaned up, 1 refused or not verified (or something kept), 2
+//! cannot run.
 
 use serde::Deserialize;
 use std::cell::RefCell;
@@ -23,13 +33,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const USAGE: &str = "usage: uor-harness loop close (--session [--pr <n>] [--dry-run] | --verify)";
+const USAGE: &str = "usage: uor-harness loop close (--session [--pr <n>] [--dry-run] | --verify --pr <n> [--no-gates])";
 const PICKUP_TEMPLATE: &str = "docs/loop/templates/PICKUP.md";
 const ISSUES: &str = "docs/roadmap/issues.json";
 const FOOTER: &str = "🤖 Generated with [Claude Code](https://claude.com/claude-code)";
 
 /// Points `loop close` at a JSON file standing in for `gh`: `prs` (each `number`, `headRefName`,
-/// `isDraft`, `headRefOid`) and optional `failSetBody` / `failReady`. Every write that succeeds is
+/// `isDraft`, `headRefOid`), optional `failSetBody` / `failReady`, and `merged` (`--verify`'s view of a PR,
+/// keyed by number: `state`, `mergeCommit`, `headRefName`, `headRefOid`). Every write that succeeds is
 /// appended as one JSON line to `<file>.calls.jsonl`. Never set it outside tests.
 pub const CLOSE_GH_FAKE_ENV: &str = "UOR_LOOP_CLOSE_GH_FAKE";
 
@@ -50,6 +61,21 @@ pub trait CloseGh {
     fn pr(&self, number: u64) -> Result<PrRef, String>;
     fn set_body(&self, number: u64, body: &str) -> Result<(), String>;
     fn mark_ready(&self, number: u64) -> Result<(), String>;
+    /// A PR's state, squash commit and head, for `--verify`.
+    fn merged(&self, number: u64) -> Result<MergedPr, String>;
+}
+
+/// What `--verify` reads about a PR: its state, the commit it was merged as (empty when none), and
+/// its head branch and sha.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct MergedPr {
+    pub state: String,
+    #[serde(rename = "mergeCommit")]
+    pub merge_commit: String,
+    #[serde(rename = "headRefName")]
+    pub head_ref: String,
+    #[serde(rename = "headRefOid")]
+    pub head_sha: String,
 }
 
 /// `gh`, run from the repository root.
@@ -105,6 +131,41 @@ impl CloseGh for RealCloseGh {
     fn mark_ready(&self, number: u64) -> Result<(), String> {
         crate::loopclaim::run_gh(&self.root, &["pr", "ready", &number.to_string()]).map(|_| ())
     }
+
+    fn merged(&self, number: u64) -> Result<MergedPr, String> {
+        #[derive(Deserialize)]
+        struct Oid {
+            oid: String,
+        }
+        #[derive(Deserialize)]
+        struct View {
+            state: String,
+            #[serde(rename = "mergeCommit")]
+            merge_commit: Option<Oid>,
+            #[serde(rename = "headRefName")]
+            head_ref: String,
+            #[serde(rename = "headRefOid")]
+            head_sha: String,
+        }
+        let out = crate::loopclaim::run_gh(
+            &self.root,
+            &[
+                "pr",
+                "view",
+                &number.to_string(),
+                "--json",
+                "state,mergeCommit,headRefName,headRefOid",
+            ],
+        )?;
+        let v: View = serde_json::from_str(&out)
+            .map_err(|e| format!("gh pr view printed unexpected JSON: {e}"))?;
+        Ok(MergedPr {
+            state: v.state,
+            merge_commit: v.merge_commit.map(|o| o.oid).unwrap_or_default(),
+            head_ref: v.head_ref,
+            head_sha: v.head_sha,
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -126,6 +187,9 @@ struct FakeFile {
     fail_set_body: bool,
     #[serde(default, rename = "failReady")]
     fail_ready: bool,
+    /// `--verify`'s view of each PR, keyed by its number.
+    #[serde(default)]
+    merged: std::collections::BTreeMap<String, MergedPr>,
 }
 
 /// The in-memory stand-in for `gh`, read from the file `UOR_LOOP_CLOSE_GH_FAKE` names.
@@ -216,6 +280,24 @@ impl CloseGh for FakeCloseGh {
         }
         self.record(serde_json::json!({"call": "ready", "number": number}))
     }
+
+    fn merged(&self, number: u64) -> Result<MergedPr, String> {
+        self.file
+            .merged
+            .get(&number.to_string())
+            .cloned()
+            .ok_or_else(|| format!("the fake has no merged entry for PR #{number}"))
+    }
+}
+
+/// The fake when `UOR_LOOP_CLOSE_GH_FAKE` is set, else `gh`.
+fn close_gh(root: &Path) -> Result<Box<dyn CloseGh>, String> {
+    Ok(match std::env::var_os(CLOSE_GH_FAKE_ENV) {
+        Some(p) => Box::new(FakeCloseGh::from_file(Path::new(&p))?),
+        None => Box::new(RealCloseGh {
+            root: root.to_path_buf(),
+        }),
+    })
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<String, String> {
@@ -344,12 +426,14 @@ fn pickup_text(template: &str, f: &PickupFields) -> String {
 /// `loop close ...`; `args` follow the action name.
 pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     let (mut session, mut verify, mut dry_run, mut pr_arg) = (false, false, false, None);
+    let mut no_gates = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--session" => session = true,
             "--verify" => verify = true,
             "--dry-run" => dry_run = true,
+            "--no-gates" => no_gates = true,
             "--pr" => match args.get(i + 1).and_then(|v| v.parse::<u64>().ok()) {
                 Some(n) => {
                     pr_arg = Some(n);
@@ -371,12 +455,29 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
         eprintln!("uor-harness: loop close: give exactly one of --session, --verify\n{USAGE}");
         return 2;
     }
-    if verify {
-        eprintln!("uor-harness: loop close --verify: not built yet (the next commit)");
-        return 2;
-    }
     if lab.is_empty() {
         eprintln!("uor-harness: loop close needs a lab (UOR_LAB or --lab)");
+        return 2;
+    }
+    if verify {
+        let Some(n) = pr_arg else {
+            eprintln!("uor-harness: loop close --verify needs --pr <n>\n{USAGE}");
+            return 2;
+        };
+        if dry_run {
+            eprintln!("uor-harness: loop close --verify has no --dry-run\n{USAGE}");
+            return 2;
+        }
+        return match verify_close(root, lab, n, no_gates) {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("uor-harness: loop close --verify: {e}");
+                2
+            }
+        };
+    }
+    if no_gates {
+        eprintln!("uor-harness: loop close: --no-gates goes with --verify\n{USAGE}");
         return 2;
     }
     match session_close(root, lab, pr_arg, dry_run) {
@@ -385,6 +486,377 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             eprintln!("uor-harness: loop close: {e}");
             2
         }
+    }
+}
+
+/// Set to `1` to print `SKIP hygiene` instead of running `hygiene --dry-run` (the tests set it).
+pub const CLOSE_NO_HYGIENE_ENV: &str = "UOR_LOOP_CLOSE_NO_HYGIENE";
+
+/// The registry file a lab's worktree may hold a stale edit to; `--verify` reverts that edit alone.
+const CLAIMS: &str = "docs/harness/claims.json";
+
+fn step(verdict: &str, name: &str, detail: &str) {
+    println!("{verdict} {name} {detail}");
+}
+
+/// The current executable with every `GIT_*` variable removed.
+fn harness(dir: &Path) -> Result<Command, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("cannot find this executable: {e}"))?;
+    let mut cmd = Command::new(exe);
+    for (k, _) in std::env::vars_os() {
+        if k.to_string_lossy().starts_with("GIT_") {
+            cmd.env_remove(k);
+        }
+    }
+    cmd.current_dir(dir);
+    Ok(cmd)
+}
+
+/// The proofs that the PR is merged into `origin/main` as itself: `state`, `squash`, `content`.
+/// `Ok(())` when all pass; `Err` names the first that failed (and has been printed).
+fn prove_merge(main: &Path, n: u64, m: &MergedPr) -> Result<(), String> {
+    if m.state != "MERGED" {
+        step(
+            "FAIL",
+            "state",
+            &format!("GitHub reports {}, not MERGED", m.state),
+        );
+        return Err("state".into());
+    }
+    step("PASS", "state", "MERGED");
+    let mc = m.merge_commit.as_str();
+    let squash = (|| {
+        if mc.is_empty() {
+            return Err("GitHub names no merge commit".to_string());
+        }
+        git(main, &["fetch", "-q", "origin", "main"])?;
+        git(
+            main,
+            &[
+                "merge-base",
+                "--is-ancestor",
+                mc,
+                "refs/remotes/origin/main",
+            ],
+        )
+        .map_err(|_| format!("{mc} is not on origin/main"))?;
+        let subject = git(main, &["log", "-1", "--format=%s", mc])?;
+        if !subject.ends_with(&format!("(#{n})")) {
+            return Err(format!("the subject {subject:?} does not end with (#{n})"));
+        }
+        Ok(format!("{mc} on origin/main: {subject}"))
+    })();
+    match squash {
+        Ok(d) => step("PASS", "squash", &d),
+        Err(e) => {
+            step("FAIL", "squash", &e);
+            return Err("squash".into());
+        }
+    }
+    let content = (|| {
+        let head = m.head_sha.as_str();
+        git(
+            main,
+            &["fetch", "-q", "origin", &format!("refs/pull/{n}/head")],
+        )?;
+        git(main, &["cat-file", "-e", &format!("{head}^{{commit}}")])
+            .map_err(|_| format!("the PR head {head} is not in this repository"))?;
+        let base = git(main, &["merge-base", head, &format!("{mc}^1")])?;
+        let files = git(main, &["diff", "--name-only", &base, head])?;
+        let files: Vec<&str> = files.lines().filter(|l| !l.is_empty()).collect();
+        if files.is_empty() {
+            return Err("the PR changes no file".to_string());
+        }
+        let mut args = vec!["diff", "--quiet", mc, head, "--"];
+        args.extend(&files);
+        git(main, &args).map_err(|_| {
+            format!("a file the PR changed differs between {mc} and the PR head {head}")
+        })?;
+        Ok(format!("{} changed files identical on main", files.len()))
+    })();
+    match content {
+        Ok(d) => step("PASS", "content", &d),
+        Err(e) => {
+            step("FAIL", "content", &e);
+            return Err("content".into());
+        }
+    }
+    Ok(())
+}
+
+/// `loop gates --full` in a detached worktree of `origin/main` at `local/<lab>/verify-<n>`, removed
+/// afterwards whatever the result. `true` when the gates were green.
+fn done_when(main: &Path, lab: &str, n: u64) -> bool {
+    let path = main
+        .join("local")
+        .join(crate::state::slug(lab))
+        .join(format!("verify-{n}"));
+    let shown = path.display().to_string();
+    if path.exists() {
+        step(
+            "FAIL",
+            "done-when",
+            &format!("{shown} already exists; remove it first"),
+        );
+        return false;
+    }
+    if let Err(e) = git(
+        main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            &shown,
+            "refs/remotes/origin/main",
+        ],
+    ) {
+        step("FAIL", "done-when", &e);
+        return false;
+    }
+    let run = harness(&path).and_then(|mut cmd| {
+        cmd.env("UOR_LAB", lab)
+            .args(["--repo", &shown, "--lab", lab, "loop", "gates", "--full"])
+            .status()
+            .map_err(|e| format!("cannot run loop gates: {e}"))
+    });
+    let removed = git(main, &["worktree", "remove", "--force", &shown]);
+    let green = match run {
+        Ok(s) if s.success() => {
+            step(
+                "PASS",
+                "done-when",
+                "loop gates --full is green on origin/main",
+            );
+            true
+        }
+        Ok(s) => {
+            step(
+                "FAIL",
+                "done-when",
+                &format!("loop gates --full exited {s} on origin/main: a failure becomes a repair"),
+            );
+            false
+        }
+        Err(e) => {
+            step("FAIL", "done-when", &e);
+            false
+        }
+    };
+    if let Err(e) = removed {
+        step("FAIL", "done-when", &format!("cannot remove {shown}: {e}"));
+        return false;
+    }
+    green
+}
+
+/// The worktree checked out on `refs/heads/<branch>`, from `git worktree list --porcelain`.
+fn worktree_of(main: &Path, branch: &str) -> Result<Option<PathBuf>, String> {
+    let list = git(main, &["worktree", "list", "--porcelain"])?;
+    let want = format!("branch refs/heads/{branch}");
+    let mut path = None;
+    for line in list.lines() {
+        if let Some(p) = line.strip_prefix("worktree ") {
+            path = Some(PathBuf::from(p));
+        } else if line == want {
+            return Ok(path);
+        }
+    }
+    Ok(None)
+}
+
+/// Step 5: remove this lab's clean worktree on `branch`. `Err` names what was kept.
+fn remove_worktree(main: &Path, lab: &str, branch: &str) -> Result<(), String> {
+    let Some(wt) = worktree_of(main, branch)? else {
+        step("N/A", "worktree", &format!("no worktree on {branch}"));
+        return Ok(());
+    };
+    let shown = wt.display().to_string();
+    let dir = main.join(".worktrees");
+    let parent_ok = match (wt.parent().map(Path::canonicalize), dir.canonicalize()) {
+        (Some(Ok(p)), Ok(d)) => p == d,
+        _ => false,
+    };
+    let name_ok = wt
+        .file_name()
+        .is_some_and(|f| f.to_string_lossy().starts_with(&format!("{lab}-")));
+    if !(parent_ok && name_ok) {
+        step(
+            "FAIL",
+            "worktree",
+            &format!("{shown} is not under .worktrees/{lab}-*; kept"),
+        );
+        return Err(format!("the worktree {shown}"));
+    }
+    // `git` trims its output, so the first line may have lost its leading space: the path is what
+    // follows the first space after the status letters.
+    let status = |wt: &Path| git(wt, &["status", "--porcelain=v1", "--untracked-files=all"]);
+    let mut dirty = status(&wt)?;
+    if !dirty.is_empty()
+        && dirty
+            .lines()
+            .all(|l| l.trim_start().split_once(' ').map(|(_, p)| p) == Some(CLAIMS))
+    {
+        git(&wt, &["checkout", "--", CLAIMS])?;
+        dirty = status(&wt)?;
+    }
+    if !dirty.is_empty() {
+        step(
+            "FAIL",
+            "worktree",
+            &format!("{shown} has uncommitted changes; kept"),
+        );
+        return Err(format!("the worktree {shown}"));
+    }
+    match git(main, &["worktree", "remove", &shown]) {
+        Ok(_) => {
+            step("PASS", "worktree", &format!("removed {shown}"));
+            Ok(())
+        }
+        Err(e) => {
+            step("FAIL", "worktree", &format!("{e}; kept"));
+            Err(format!("the worktree {shown}"))
+        }
+    }
+}
+
+/// Step 6: delete the local branch only when its tip is the PR head.
+fn delete_local_branch(main: &Path, branch: &str, head: &str) -> Result<(), String> {
+    let Ok(tip) = git(
+        main,
+        &[
+            "rev-parse",
+            "--verify",
+            "-q",
+            &format!("refs/heads/{branch}"),
+        ],
+    ) else {
+        step("N/A", "local-branch", &format!("no local branch {branch}"));
+        return Ok(());
+    };
+    if tip != head {
+        step(
+            "FAIL",
+            "local-branch",
+            &format!("{branch} is at {tip}, not the PR head {head}; kept"),
+        );
+        return Err(format!("the local branch {branch}"));
+    }
+    match git(main, &["branch", "-D", branch]) {
+        Ok(_) => {
+            step(
+                "PASS",
+                "local-branch",
+                &format!("deleted {branch} at {head}"),
+            );
+            Ok(())
+        }
+        Err(e) => {
+            step("FAIL", "local-branch", &format!("{e}; kept"));
+            Err(format!("the local branch {branch}"))
+        }
+    }
+}
+
+/// Step 7: delete the remote branch with a lease on the PR head, so a branch that moved is kept.
+fn delete_remote_branch(main: &Path, branch: &str, head: &str) -> Result<(), String> {
+    let refname = format!("refs/heads/{branch}");
+    let listed = git(main, &["ls-remote", "origin", &refname])?;
+    if listed.is_empty() {
+        step("N/A", "remote-branch", &format!("origin has no {branch}"));
+        return Ok(());
+    }
+    let lease = format!("--force-with-lease={refname}:{head}");
+    match git(
+        main,
+        &["push", "-q", "origin", &lease, &format!(":{refname}")],
+    ) {
+        Ok(_) => {
+            step(
+                "PASS",
+                "remote-branch",
+                &format!("deleted origin {branch} at {head}"),
+            );
+            Ok(())
+        }
+        Err(e) => {
+            step("FAIL", "remote-branch", &format!("{e}; kept"));
+            Err(format!("the remote branch {branch}"))
+        }
+    }
+}
+
+/// Step 8: print hygiene's plan, never `--apply`.
+///
+/// Loop step 13 says to run `uor-hygiene --apply`. This prints the dry-run plan instead, a decision
+/// recorded in the REPORT: hygiene's `--apply` removes every clean merged worktree in the checkout,
+/// other labs' included, and the lab boundary forbids touching another session's files. The lab
+/// reads the plan and removes only what is its own.
+fn hygiene_plan(main: &Path) {
+    if std::env::var(CLOSE_NO_HYGIENE_ENV).as_deref() == Ok("1") {
+        step("SKIP", "hygiene", &format!("{CLOSE_NO_HYGIENE_ENV}=1"));
+        return;
+    }
+    let shown = main.display().to_string();
+    let run = harness(main).and_then(|mut cmd| {
+        cmd.args(["--repo", &shown, "hygiene", "--dry-run"])
+            .status()
+            .map_err(|e| format!("cannot run hygiene: {e}"))
+    });
+    match run {
+        Ok(s) if s.success() => step(
+            "PASS",
+            "hygiene",
+            "the dry-run plan is above; nothing applied",
+        ),
+        Ok(s) => step("FAIL", "hygiene", &format!("hygiene --dry-run exited {s}")),
+        Err(e) => step("FAIL", "hygiene", &e),
+    }
+}
+
+/// `--verify --pr <n>`. `Err` is a cannot-run (exit 2).
+fn verify_close(root: &Path, lab: &str, n: u64, no_gates: bool) -> Result<u8, String> {
+    let main = crate::loopclaim::main_checkout(root)?;
+    let gh = close_gh(&main)?;
+    let m = gh.merged(n)?;
+    let mut proved = prove_merge(&main, n, &m).is_ok();
+    if !proved {
+        // An earlier proof failed: the gates would prove nothing about this PR.
+        step("SKIP", "done-when", "an earlier proof failed");
+    } else if no_gates {
+        step("SKIP", "done-when", "--no-gates");
+    } else {
+        proved = done_when(&main, lab, n);
+    }
+    if !proved {
+        println!("not verified: nothing deleted");
+        return Ok(1);
+    }
+    let mut kept = Vec::new();
+    if m.head_ref.starts_with(&format!("{lab}/")) {
+        for r in [
+            remove_worktree(&main, lab, &m.head_ref),
+            delete_local_branch(&main, &m.head_ref, &m.head_sha),
+            delete_remote_branch(&main, &m.head_ref, &m.head_sha),
+        ] {
+            if let Err(what) = r {
+                kept.push(what);
+            }
+        }
+    } else {
+        step(
+            "SKIP",
+            "cleanup",
+            &format!("not this lab's branch ({}); nothing deleted", m.head_ref),
+        );
+    }
+    hygiene_plan(&main);
+    if kept.is_empty() {
+        println!("verified: PR #{n} is on main");
+        Ok(0)
+    } else {
+        println!("verified, but kept: {}", kept.join(", "));
+        Ok(1)
     }
 }
 
@@ -418,12 +890,7 @@ fn session_close(root: &Path, lab: &str, pr_arg: Option<u64>, dry_run: bool) -> 
     let branch = git(root, &["symbolic-ref", "--short", "HEAD"])
         .map_err(|e| format!("not on a branch: {e}"))?;
     let head = git(root, &["rev-parse", "HEAD"])?;
-    let gh: Box<dyn CloseGh> = match std::env::var_os(CLOSE_GH_FAKE_ENV) {
-        Some(p) => Box::new(FakeCloseGh::from_file(Path::new(&p))?),
-        None => Box::new(RealCloseGh {
-            root: root.to_path_buf(),
-        }),
-    };
+    let gh = close_gh(root)?;
     let pr = match pr_arg {
         Some(n) => gh.pr(n)?,
         None => {

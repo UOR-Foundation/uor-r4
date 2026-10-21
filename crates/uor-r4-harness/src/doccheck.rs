@@ -626,6 +626,7 @@ const FLAGS: &[&str] = &[
     "--milestones",
     "--new",
     "--next",
+    "--no-gates",
     "--no-notes",
     "--note",
     "--only",
