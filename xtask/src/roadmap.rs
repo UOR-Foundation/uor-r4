@@ -61,7 +61,7 @@ const OPTIONAL_KEYS: &[&str] = &[
 ];
 const DONE_CLASSES: &[&str] = &["host", "gpu"];
 /// A `scope:` glob covers the whole repository, and the loop page refuses it, when every
-/// path segment left after leading `./` and `/` is made only of `*` (`**`, `./*`, `**/**`).
+/// path segment left after leading `./` and `/` is made only of `*` and `?` (`**`, `./*`, `?*`).
 fn is_root_wide(glob: &str) -> bool {
     let mut rest = glob;
     while let Some(r) = rest.strip_prefix("./").or_else(|| rest.strip_prefix('/')) {
@@ -69,7 +69,7 @@ fn is_root_wide(glob: &str) -> bool {
     }
     rest.split('/')
         .filter(|s| !s.is_empty() && *s != ".")
-        .all(|s| s.chars().all(|c| c == '*'))
+        .all(|s| s.chars().all(|c| c == '*' || c == '?'))
 }
 /// Optional body section; when present it must not be empty.
 const CANCEL_IF: &str = "Cancel if";
@@ -201,14 +201,18 @@ fn check_sections(body: &str) -> Vec<String> {
     errors
 }
 
-/// A positive integer written as plain digits.
+/// A positive integer written as plain digits, without a leading zero.
 fn positive_int(value: &str) -> bool {
-    value.bytes().all(|b| b.is_ascii_digit()) && value.parse::<u64>().is_ok_and(|n| n > 0)
+    value.bytes().all(|b| b.is_ascii_digit())
+        && !value.starts_with('0')
+        && value.parse::<u64>().is_ok_and(|n| n > 0)
 }
 
-/// `notebook:` form: a repository-relative path to a `.md` file.
+/// `notebook:` form: a `.md` page under `docs/research/notebook/`.
 fn notebook_form_ok(path: &str) -> bool {
-    path.ends_with(".md") && !path.starts_with('/') && !path.split('/').any(|s| s == "..")
+    path.starts_with("docs/research/notebook/")
+        && path.ends_with(".md")
+        && !path.split('/').any(|s| s == "..")
 }
 
 /// Errors for the optional loop keys that are present in `fields`.
@@ -222,7 +226,11 @@ fn check_loop_keys(fields: &BTreeMap<String, String>) -> Vec<String> {
             }
             Ok(globs) => {
                 for glob in &globs {
-                    if is_root_wide(glob) {
+                    if glob.contains(['[', ']', '{', '}']) {
+                        errors.push(format!(
+                            "scope `{glob}` uses `[]` or `{{}}`, which scope globs do not support; list the paths separately"
+                        ));
+                    } else if is_root_wide(glob) {
                         errors.push(format!(
                             "scope `{glob}` is root-wide and refused; name the paths the item changes"
                         ));
@@ -254,7 +262,7 @@ fn check_loop_keys(fields: &BTreeMap<String, String>) -> Vec<String> {
     if let Some(v) = fields.get("notebook") {
         if !notebook_form_ok(v) {
             errors.push(format!(
-                "notebook `{v}` is not a repository-relative path to a `.md` file"
+                "notebook `{v}` is not a page under docs/research/notebook/"
             ));
         }
     }
@@ -270,19 +278,34 @@ fn check_loop_keys(fields: &BTreeMap<String, String>) -> Vec<String> {
 }
 
 /// `notebook:` paths of well-formed items that name no file. The repository
-/// root is three levels above `docs/roadmap/items`.
+/// root is three levels above `docs/roadmap/items`; any other directory is an
+/// error when an item names a notebook, since the root cannot be found.
 fn missing_notebooks(items_dir: &Path, files: &[(String, String)]) -> Vec<String> {
-    let Some(root) = items_dir.ancestors().nth(3) else {
-        return Vec::new();
-    };
-    files
+    let named: Vec<(&String, String)> = files
         .iter()
         .filter_map(|(file, text)| {
             let (fields, _) = parse_header(text).ok()?;
             let nb = fields.get("notebook")?;
-            (notebook_form_ok(nb) && !root.join(nb).is_file())
-                .then(|| format!("{file}: notebook `{nb}` does not exist"))
+            notebook_form_ok(nb).then(|| (file, nb.clone()))
         })
+        .collect();
+    if named.is_empty() {
+        return Vec::new();
+    }
+    let root = items_dir
+        .ends_with("docs/roadmap/items")
+        .then(|| items_dir.ancestors().nth(3))
+        .flatten();
+    let Some(root) = root else {
+        return vec![format!(
+            "cannot find the repository root from {}; notebook paths were not checked",
+            items_dir.display()
+        )];
+    };
+    named
+        .into_iter()
+        .filter(|(_, nb)| !root.join(nb).is_file())
+        .map(|(file, nb)| format!("{file}: notebook `{nb}` does not exist"))
         .collect()
 }
 
@@ -1236,13 +1259,40 @@ mod tests {
     #[test]
     fn roadmap_loop_scope_refuses_every_root_wide_glob() {
         for glob in [
-            "**", "**/*", "/**", "*", "./**", "**/**", "./*", "*/**", "./**/*", "/", ".",
+            "**", "**/*", "/**", "*", "./**", "**/**", "./*", "*/**", "./**/*", "/", ".", "?*",
+            "**/?*", "?", "./?*/**",
         ] {
             let errors = loop_errors(&format!("scope: [docs/**, {glob}]\n"));
             assert_error(
                 &errors,
                 &format!("a.md: scope `{glob}` is root-wide and refused"),
             );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_scope_refuses_unsupported_glob_syntax() {
+        // The list splits on commas, so `{docs,xtask}/**` reports its first piece.
+        for (written, reported) in [
+            ("[!.]*", "[!.]*"),
+            ("{**}", "{**}"),
+            ("{docs,xtask}/**", "{docs"),
+        ] {
+            let errors = loop_errors(&format!("scope: [{written}]\n"));
+            assert_error(
+                &errors,
+                &format!(
+                    "scope `{reported}` uses `[]` or `{{}}`, which scope globs do not support; list the paths separately"
+                ),
+            );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_scope_accepts_ordinary_globs() {
+        for glob in ["docs/**", "*.md", "**/*.rs", "./docs/**", "xtask/src/?.rs"] {
+            let text = loop_item(&format!("scope: [{glob}]\n"), None);
+            assert!(validate(&[("a.md".into(), text)], None).is_ok(), "{glob}");
         }
     }
 
@@ -1263,7 +1313,7 @@ mod tests {
 
     #[test]
     fn roadmap_loop_size_must_be_a_positive_integer() {
-        for bad in ["0", "-3", "+5", "1.5", "many", ""] {
+        for bad in ["0", "-3", "+5", "1.5", "many", "", "05", "007"] {
             assert_error(
                 &loop_errors(&format!("size: {bad}\n")),
                 &format!("size `{bad}` is not a positive integer"),
@@ -1273,7 +1323,7 @@ mod tests {
 
     #[test]
     fn roadmap_loop_rank_must_be_a_positive_integer() {
-        for bad in ["0", "first", "2x"] {
+        for bad in ["0", "first", "2x", "05", "007"] {
             assert_error(
                 &loop_errors(&format!("rank: {bad}\n")),
                 &format!("rank `{bad}` is not a positive integer"),
@@ -1301,12 +1351,45 @@ mod tests {
 
     #[test]
     fn roadmap_loop_notebook_must_be_a_relative_md_path() {
-        for bad in ["", "/abs/x.md", "docs/../x.md", "docs/x.txt"] {
+        for bad in [
+            "",
+            "/abs/x.md",
+            "docs/../x.md",
+            "docs/research/notebook/../x.md",
+            "docs/research/notebook/x.txt",
+            "docs/x.md",
+            "docs/nb/x.md",
+        ] {
             assert_error(
                 &loop_errors(&format!("notebook: {bad}\n")),
-                &format!("notebook `{bad}` is not a repository-relative path"),
+                &format!("notebook `{bad}` is not a page under docs/research/notebook/"),
             );
         }
+    }
+
+    #[test]
+    fn roadmap_loop_notebook_outside_the_notebook_directory_is_refused() {
+        assert_error(
+            &loop_errors("notebook: docs/research/other/x.md\n"),
+            "notebook `docs/research/other/x.md` is not a page under docs/research/notebook/",
+        );
+    }
+
+    #[test]
+    fn roadmap_loop_notebook_needs_a_findable_repository_root() {
+        let dir = scratch("nb-root");
+        fs::write(
+            dir.join("items/a.md"),
+            loop_item("notebook: docs/research/notebook/x.md\n", None),
+        )
+        .unwrap();
+        let err = load_checked(&dir.join("items"), &dir.join("issues.json")).unwrap_err();
+        assert!(
+            err.contains("cannot find the repository root from")
+                && err.contains("notebook paths were not checked"),
+            "{err}"
+        );
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -1315,23 +1398,23 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let items = root.join("docs/roadmap/items");
         fs::create_dir_all(&items).unwrap();
-        fs::create_dir_all(root.join("docs/nb")).unwrap();
-        fs::write(root.join("docs/nb/here.md"), "# notebook\n").unwrap();
+        fs::create_dir_all(root.join("docs/research/notebook")).unwrap();
+        fs::write(root.join("docs/research/notebook/here.md"), "# notebook\n").unwrap();
         let issues = root.join("docs/roadmap/issues.json");
         fs::write(
             items.join("a.md"),
-            loop_item("notebook: docs/nb/here.md\n", None),
+            loop_item("notebook: docs/research/notebook/here.md\n", None),
         )
         .unwrap();
         assert!(load_checked(&items, &issues).is_ok());
         fs::write(
             items.join("a.md"),
-            loop_item("notebook: docs/nb/gone.md\n", None),
+            loop_item("notebook: docs/research/notebook/gone.md\n", None),
         )
         .unwrap();
         let err = load_checked(&items, &issues).unwrap_err();
         assert!(
-            err.contains("a.md: notebook `docs/nb/gone.md` does not exist"),
+            err.contains("a.md: notebook `docs/research/notebook/gone.md` does not exist"),
             "{err}"
         );
         fs::remove_dir_all(&root).unwrap();
