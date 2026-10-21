@@ -11,11 +11,11 @@ depends_on: []
 
 ## Why it matters
 
-Five labs from five vendors work on UOR-R4 at once, with nobody watching each step. Records that drifted out of date have cost the project more than any other failure. The loop gives every unit of work a written order with a clear scope, proves "done" with gates anyone can rerun, needs a review from another vendor at the exact head, and renders the shared status pages from committed inputs so nobody edits them by hand. See [the loop page](../../loop/README.md). It is adapted from the Loop Kit by Ron Brazil.
+Five labs from five vendors work on UOR-R4 at once, with nobody watching each step. Records that drifted out of date have cost the project more than any other failure. The loop gives every unit of work a written order with a clear scope, proves "done" with gates anyone can rerun, needs a review from another vendor at the exact head (during the setup, from Claude's fresh-context reviewers; D59), and renders the shared status pages from committed inputs so nobody edits them by hand. See [the loop page](../../loop/README.md). It is adapted from the Loop Kit by Ron Brazil.
 
 ## What is missing
 
-None of the loop tooling exists. No `loop …` subcommand of `uor-harness` is built: not `next`, `arrive`, `claim`, `gates`, `render`, `review`, `queue`, `close`, `drive`, `guard`, `install` or `onboard`. There is no `docs/harness/labs.json`, no `gates.json`, no rendered STATE or HANDOFF, and no policy job in CI. Roadmap items carry no `scope:` or "Cancel if" yet. Today labs follow the loop by hand: an ORDER and REPORT in `docs/loop/tasks/`, and a review from another vendor posted in free text. The policy gate will stay advisory on GitHub, because there is no org admin to add a GitHub App or change the ruleset, so the supervisor's local queue step is the lock.
+None of the loop tooling exists. No `loop …` subcommand of `uor-harness` is built: not `next`, `arrive`, `claim`, `gates`, `render`, `review`, `queue`, `close`, `drive`, `guard`, `install` or `onboard`. There is no `docs/harness/labs.json`, no `gates.json`, no rendered STATE or HANDOFF, and no policy job in CI. Roadmap items carry no `scope:` or "Cancel if" yet. Today labs follow the loop by hand: an ORDER and REPORT in `docs/loop/tasks/`, and an exact-head review posted in free text, which for the setup PRs comes from Claude's fresh-context reviewers (D59). The policy gate will stay advisory on GitHub, because there is no org admin to add a GitHub App or change the ruleset, so the supervisor's local queue step is the lock.
 
 ## Done when
 
