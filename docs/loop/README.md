@@ -25,12 +25,12 @@ Each part of the kit, what it is for, and what takes its place here. "Private sk
 | holding-the-goal (skill) | Questions to ask before saying no, and before proposing a fix | The opener in every launch prompt, and a stop-and-ask card that names the limiter | Private skill now. `loop ask` comes in PR 7a |
 | solution-integrity (skill) | Questions to ask before, during and after a change | The opener; the REPORT names the parts used | Private skill now |
 | working-discipline (skill) | Habits for arriving, reading, measuring and reporting | The arrival check against the repository, and the REPORT's order (negatives first) | By hand now. `loop arrive` comes in PR 7b |
-| gates (skill) | One command for every check, a record of each run, proof that each check can fail, and a progress view | `loop gates`, with its ledger and its planted faults, and `loop board` | PR 4 and PR 11 |
+| gates (skill) | A single command for all the checks, a log of past runs, a planted fault for each check, and a live view of a long run | `loop gates`, with its ledger and its planted faults, and `loop board` | PR 4 and PR 11 |
 | House rules file | The short rules every session reads first | `AGENTS.md`, with CHARTER §5.10 | Exists |
 | PLAN | The route from today to done | `PLAN.md`, built from `ROADMAP.md` and the roadmap items | PR 8 |
 | STATE | What is true now | `STATE.md`, rendered by the harness | PR 3 |
 | HANDOFF | The next few tasks | `HANDOFF.md`, rendered by the harness | PR 3 |
-| DECISIONS | Why things are the way they are | The append-only table in `docs/integration/DECISIONS.md`, from D43 on | Exists |
+| DECISIONS | The reasons behind each choice | The append-only table in `docs/integration/DECISIONS.md`, from D43 on | Exists |
 | LESSONS | Lessons the project paid for | `LESSONS.md`, rendered from the mistakes store; L-001 is records drift | PR 3 and PR 8 |
 | PICKUP | The note that resumes the next session | `local/<lab>/PICKUP.md`, not committed (D47) | By hand now. `loop close` comes in PR 7b |
 | FILEMAP | What each folder holds | `docs/start/FILEMAP.md` | PR 8 |
