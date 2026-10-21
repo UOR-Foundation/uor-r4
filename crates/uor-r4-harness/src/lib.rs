@@ -40,6 +40,7 @@ pub mod loopclose;
 pub mod loopgates;
 pub mod loopnext;
 pub mod loopprcheck;
+pub mod loopqueue;
 pub mod looprender;
 pub mod loopreport;
 pub mod loopreview;
