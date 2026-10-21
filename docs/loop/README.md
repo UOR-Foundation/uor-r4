@@ -129,7 +129,7 @@ A gate is a check anyone can rerun. Each gate names what it proves, and a plante
 **CI (to build).** One workflow, `gate.yml`, with no path filters:
 - `tests` runs the full gates with a read-only token.
 - `policy` checks order, scope, commit order, review record, REPORT, owner paths, rule sources, the rendered-file lock, read path and FILEMAP. On PR events it runs the base branch's code, never the PR's code.
-- **The policy gate is advisory on GitHub.** There is no org admin, so there is no GitHub App and no ruleset change. The policy is enforced locally: a supervisor queues a PR only when the policy gate is green and another vendor's review is at the head. Where it can, the policy result feeds into the checks that are already required.
+- **The policy gate is advisory on GitHub.** There is no org admin, so there is no GitHub App and no ruleset change. The policy is enforced locally: a supervisor queues a PR only when the policy gate is green and the review it accepts is at the head: another vendor's, or Claude's for a setup PR under D59. Where it can, the policy result feeds into the checks that are already required.
 
 ## The five labs
 

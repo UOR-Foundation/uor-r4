@@ -17,7 +17,7 @@ Lab: claude. Base: `500c61c2c` (#2901 merged). Order: [ORDER.md](ORDER.md), comm
 | `docs/roadmap/items/infra-loop-pr07c-queue-board.md` | docs | **Done-when:** the queue needs the APPROVE that PR 6's gate accepts, and no later CHANGES that the gate counts. **Planted fault:** "a later CHANGES record blocks queueing, unless it comes from a lab other than Claude on a setup PR (D59)". |
 | `docs/roadmap/items/infra-loop-harness.md` | docs | The team-split step and the delivery rule name the D59 exception, with Kimi included among the labs not asked. "Why it matters" and "What is missing" also name it. The second had described today's practice as "a review from another vendor"; the sweep's own check found both, and the ORDER was widened before the edit (`f2fd3f11f`). |
 | `docs/roadmap/items/infra-loop-pr06-review-records.md` | docs | Delta-check low 1: until the owner has listed the switch's path, the gate treats D59 as in force whatever the file says. |
-| `docs/loop/README.md` | docs | **Step 10:** names Claude for setup PRs under D59. **Step 12:** queues on the approval the policy gate accepts. **PR 7c's row:** carries the same planted fault as its item, word for word. |
+| `docs/loop/README.md` | docs | **Step 10:** names Claude for setup PRs under D59. **Step 12:** queues on the approval the policy gate accepts. **The advisory-policy paragraph's supervisor queue rule:** says the same thing; the sweep's own check found it, and the ORDER was widened first (`4c6209362`). **PR 7c's row:** carries the same planted fault as its item, word for word. |
 | `docs/loop/tasks/infra-loop-harness/claude-8/` | docs | This ORDER and REPORT. |
 
 D46, D55, D59 and D52's team assignments are unchanged. No item's title, status or dependencies changed, so the rendered roadmap does not move. No loop item is synced to an issue yet: `docs/roadmap/issues.json` has no `infra-loop` key.
@@ -40,6 +40,14 @@ The PR body lists the checks run at the head:
 ## Skills used
 
 None of the private kit's skills.
+
+## Checked and left as they are
+
+The sweep's own check also found five other-vendor review lines that name no D59. Each was read, and none needs a change:
+- **Loop page, line 45.** It states the steady-state rule for the loop once it runs.
+- **Loop page, line 202.** It records what PR A changed in the charter. That is history.
+- **Loop page, lines 206 and 208.** They are the build-plan intro, and the D59 note right below them (line 210, from #2899) already qualifies them.
+- **Parent item's done-when.** It describes the end state, after every lab is onboarded, when D46 applies again.
 
 ## Still open
 
