@@ -23,7 +23,7 @@ Size by class: docs 62 insertions, 59 deletions across 52 files (51 items + kimi
 - `grep` over `docs/roadmap/items/*.md`: no `scope:` line carries `docs/loop/**`, `docs/harness/**`, `docs/labs/**`, `docs/harness/prep/**`, `docs/integration/NOW.md`, `docs/integration/project-track.md`, `docs/integration/**`, `scripts/pod/**`, `.github/**` or `crates/uor-r4-harness/**` (the one `.github/**` hit is the explanatory note text in m8-release-packaging, not a scope glob).
 - `cargo run -q --locked -p xtask -- roadmap check` → 87 items OK (ready 51).
 - `cargo run -q --locked -p xtask -- roadmap render --check` → current.
-- Known remaining overlaps are pairwise and intentional: the M1 items share `crates/uor-r4-discrete/**` (a dependency chain), and a few item pairs share a mechanisms page.
+- Known remaining overlaps are pairwise and intentional: the M1 items share `crates/uor-r4-discrete/**` (a dependency chain), a few item pairs share a mechanisms page, and `crates/uor-r4-integer/**` appears in about 8 items (m3-qualify, m4-export, m5, m6-causal, the two m7 items, object-store, the Tauri client, m8) — honest contention on the serving crate, not bookkeeping.
 
 ## Checks run at the head
 
@@ -40,7 +40,7 @@ Size by class: docs 62 insertions, 59 deletions across 52 files (51 items + kimi
 ## Still open
 
 - `pr-check`'s one-ORDER-per-PR rule (and `commit-order`) needs a repair-aware variant — for example, count only the lab's highest-`n` ORDER, or read the ORDER the latest counted review record names. Raised on #2028 for the architect (loop PR 7b/5 area); this PR proceeds on the D59 review record per today's manual path.
-- Casey's decision on the shared registration files (Claude is asking): when it lands, the loop items may need one more scope adjustment so harness PRs can touch `lib.rs`, `main.rs`, the dispatcher and the two READMEs under whatever rule he sets.
+- Decided (Casey, 21 Oct 23:43Z, recorded on #2028): the six shared registration files (`crates/uor-r4-harness/src/lib.rs`, `src/main.rs`, the `src/loopgates.rs` dispatcher, `src/doccheck.rs`, `docs/harness/README.md`, `docs/loop/README.md`) are exempt — no item scope lists them, any loop PR may make small additive edits there, and labs merge `origin/main` forward. Claude builds the exemption into `loop claim` and `pr-check` and will ask Casey to add `docs/roadmap/README.md` and `docs/harness/gates.json` to the shared list; both stay out of every scope until then.
 - The `docs/labs/<item-id>/**` convention is new; existing evidence folders use dated names. Claiming labs should write new evidence under their item id, and may stop-and-ask to widen a scope when a sheet or folder genuinely needs another name.
 - DeepSeek and Antigravity merge these item edits forward into their in-flight branches.
 

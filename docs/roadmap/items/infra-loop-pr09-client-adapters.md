@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [infra-loop-pr07b-session]
-scope: [crates/uor-r4-harness/src/loopguard*.rs, crates/uor-r4-harness/src/loopinstall*.rs, crates/uor-r4-harness/src/looponboard*.rs, crates/uor-r4-harness/src/onboard.rs, crates/uor-r4-harness/src/presence.rs, crates/uor-r4-harness/src/skills.rs, crates/uor-r4-harness/tests/loop_guard*.rs, crates/uor-r4-harness/tests/loop_install*.rs, crates/uor-r4-harness/tests/loop_onboard*.rs]
+scope: [crates/uor-r4-harness/src/loopguard*.rs, crates/uor-r4-harness/src/loopinstall*.rs, crates/uor-r4-harness/src/looponboard*.rs, crates/uor-r4-harness/src/onboard.rs, crates/uor-r4-harness/src/presence.rs, crates/uor-r4-harness/src/skills.rs, crates/uor-r4-harness/tests/loop_guard*.rs, crates/uor-r4-harness/tests/loop_install*.rs, crates/uor-r4-harness/tests/loop_onboard*.rs, docs/harness/onboarding/**]
 ---
 
 ## Why it matters

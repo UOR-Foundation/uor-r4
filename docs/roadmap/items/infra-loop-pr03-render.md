@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [infra-loop-pr02-item-keys]
-scope: [crates/uor-r4-harness/src/looprender*.rs, crates/uor-r4-harness/tests/loop_render*.rs, xtask/src/roadmap.rs, STATE.md, HANDOFF.md, docs/harness/LESSONS.md, AGENTS.md, archive/state/**, docs/loop/baseline.json, docs/roadmap/README.md]
+scope: [crates/uor-r4-harness/src/looprender*.rs, crates/uor-r4-harness/tests/loop_render*.rs, xtask/src/roadmap.rs, STATE.md, HANDOFF.md, docs/harness/LESSONS.md, AGENTS.md, archive/state/**, docs/loop/baseline.json]
 ---
 
 ## Why it matters
