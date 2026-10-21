@@ -15,21 +15,33 @@
 //! 5. The lab's open PRs (head branch `<lab>/...`) are fewer than its `open_pr_limit` in
 //!    `docs/harness/labs.json`.
 //!
-//! **GitHub.** All access goes through the [`Gh`] trait. The real one runs read-only `gh`
-//! commands; tests point the binary at a JSON file through `UOR_LOOP_GH_FAKE`.
+//! A worktree's order also stops being open when its ORDER is on `origin/main` byte for byte,
+//! since a squash-merged branch is never an ancestor of `main`.
 //!
-//! This commit runs the checks only. The writes (worktree, ORDER commit, draft PR, re-list and
-//! race) come next and happen only after every check has passed.
+//! **The writes** (ORDER call 5) happen only after every check has passed, in this order:
+//! `git fetch origin main`; `git worktree add .worktrees/<lab>-<topic> -b <lab>/<topic>
+//! origin/main`; the ORDER `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md` committed there; a draft
+//! PR; a re-list. If the re-list shows a lower-numbered draft PR whose ORDER names the same item,
+//! the claim lost the race: its PR is closed, and its worktree and branch, by exact path and name,
+//! are removed. Nothing else is touched.
+//!
+//! **GitHub.** All access goes through the [`Gh`] trait. The real one runs `gh`; tests point the
+//! binary at a JSON file through `UOR_LOOP_GH_FAKE`.
 
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Deserialize;
 
-/// TEST-ONLY: a path to a JSON file standing in for `gh`. It holds the array `gh pr list --json
-/// number,headRefName,isDraft,files` prints, and each PR may add `"orderTexts": {path: text}` for
-/// the ORDER files it changes. Never set it outside tests: it replaces GitHub entirely.
+/// TEST-ONLY: a path to a JSON file standing in for `gh`. It holds either the array `gh pr list
+/// --json number,headRefName,isDraft,files` prints, or an object `{"prs": [...], "nextPrNumber":
+/// n, "afterCreate": [...]}`: `afterCreate` PRs join the list once a draft PR has been created,
+/// and `nextPrNumber` is the number that draft PR gets. Each PR may add `"orderTexts": {path:
+/// text}` for the ORDER files it changes. Each write is appended as one JSON line to
+/// `<file>.calls.jsonl`. Never set it outside tests: it replaces GitHub entirely.
 pub const GH_FAKE_ENV: &str = "UOR_LOOP_GH_FAKE";
 
 const NOTEBOOK: &str = "docs/research/notebook/";
@@ -66,12 +78,16 @@ impl OpenPr {
     }
 }
 
-/// Every GitHub read the claim makes. Nothing here writes.
+/// Every GitHub call the claim makes.
 pub trait Gh {
     /// Every open PR with its head branch and changed files.
     fn list_open_prs(&self) -> Result<Vec<OpenPr>, String>;
     /// The text of `path` on the PR's head branch.
     fn order_text(&self, pr: &OpenPr, path: &str) -> Result<String, String>;
+    /// Publish `branch` and open a draft PR from it against `main`; returns the PR number.
+    fn create_draft_pr(&self, branch: &str, title: &str, body: &str) -> Result<u64, String>;
+    /// Close PR `number`.
+    fn close_pr(&self, number: u64) -> Result<(), String>;
 }
 
 /// `gh`, run from the repository root.
@@ -128,26 +144,103 @@ impl Gh for RealGh {
             ],
         )
     }
+
+    fn create_draft_pr(&self, branch: &str, title: &str, body: &str) -> Result<u64, String> {
+        crate::loopgates::git(&self.root, &["push", "-q", "-u", "origin", branch])?;
+        let url = run_gh(
+            &self.root,
+            &[
+                "pr", "create", "--draft", "--base", "main", "--head", branch, "--title", title,
+                "--body", body,
+            ],
+        )?;
+        url.trim()
+            .rsplit('/')
+            .next()
+            .and_then(|n| n.parse().ok())
+            .ok_or_else(|| format!("gh pr create printed no PR URL: {}", url.trim()))
+    }
+
+    fn close_pr(&self, number: u64) -> Result<(), String> {
+        run_gh(&self.root, &["pr", "close", &number.to_string()]).map(|_| ())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum FakeFile {
+    List(Vec<OpenPr>),
+    #[serde(rename_all = "camelCase")]
+    Full {
+        #[serde(default)]
+        prs: Vec<OpenPr>,
+        #[serde(default)]
+        next_pr_number: Option<u64>,
+        #[serde(default)]
+        after_create: Vec<OpenPr>,
+    },
 }
 
 /// The in-memory stand-in for `gh`, read from the file `UOR_LOOP_GH_FAKE` names.
 pub struct FakeGh {
     pub prs: Vec<OpenPr>,
+    pub after_create: Vec<OpenPr>,
+    pub next_pr_number: u64,
+    created: Cell<bool>,
+    calls: RefCell<Option<std::fs::File>>,
+    calls_path: PathBuf,
 }
 
 impl FakeGh {
     pub fn from_file(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("cannot read {GH_FAKE_ENV} file {}: {e}", path.display()))?;
-        let prs = serde_json::from_str(&text)
+        let file = serde_json::from_str(&text)
             .map_err(|e| format!("{GH_FAKE_ENV} file {} is malformed: {e}", path.display()))?;
-        Ok(FakeGh { prs })
+        let (prs, next, after_create) = match file {
+            FakeFile::List(prs) => (prs, None, Vec::new()),
+            FakeFile::Full {
+                prs,
+                next_pr_number,
+                after_create,
+            } => (prs, next_pr_number, after_create),
+        };
+        let mut calls_path = path.as_os_str().to_owned();
+        calls_path.push(".calls.jsonl");
+        Ok(FakeGh {
+            prs,
+            after_create,
+            next_pr_number: next.unwrap_or(1),
+            created: Cell::new(false),
+            calls: RefCell::new(None),
+            calls_path: calls_path.into(),
+        })
+    }
+
+    fn record(&self, call: serde_json::Value) -> Result<(), String> {
+        let mut slot = self.calls.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&self.calls_path)
+                    .map_err(|e| format!("cannot open {}: {e}", self.calls_path.display()))?,
+            );
+        }
+        let f = slot.as_mut().expect("opened above");
+        writeln!(f, "{call}")
+            .map_err(|e| format!("cannot write {}: {e}", self.calls_path.display()))
     }
 }
 
 impl Gh for FakeGh {
     fn list_open_prs(&self) -> Result<Vec<OpenPr>, String> {
-        Ok(self.prs.clone())
+        let mut prs = self.prs.clone();
+        if self.created.get() {
+            prs.extend(self.after_create.iter().cloned());
+        }
+        Ok(prs)
     }
 
     fn order_text(&self, pr: &OpenPr, path: &str) -> Result<String, String> {
@@ -155,6 +248,19 @@ impl Gh for FakeGh {
             .get(path)
             .cloned()
             .ok_or_else(|| format!("fake PR #{} has no text for {path}", pr.number))
+    }
+
+    fn create_draft_pr(&self, branch: &str, title: &str, body: &str) -> Result<u64, String> {
+        self.record(serde_json::json!({
+            "call": "create_draft_pr", "branch": branch, "title": title, "body": body,
+            "number": self.next_pr_number
+        }))?;
+        self.created.set(true);
+        Ok(self.next_pr_number)
+    }
+
+    fn close_pr(&self, number: u64) -> Result<(), String> {
+        self.record(serde_json::json!({"call": "close_pr", "number": number}))
     }
 }
 
@@ -235,6 +341,8 @@ pub fn order_item(order_text: &str) -> Option<String> {
 pub struct OpenOrder {
     pub source: String,
     pub item: String,
+    /// The PR carrying the order, when it was found on a PR.
+    pub pr: Option<u64>,
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<String, String> {
@@ -276,11 +384,18 @@ fn worktree_orders(root: &Path, lab: &str) -> Result<Vec<OpenOrder>, String> {
         let range = format!("origin/main...{head}");
         let changed = git(root, &["diff", "--name-only", &range])?;
         for file in changed.lines().filter(|f| is_order_path(f)) {
-            let text = git(root, &["show", &format!("{head}:{file}")])?;
+            let bytes = crate::loopgates::git(root, &["show", &format!("{head}:{file}")])?;
+            // Squash-merged: the same ORDER bytes are on origin/main.
+            let on_main = crate::loopgates::git(root, &["show", &format!("origin/main:{file}")]);
+            if on_main.as_deref() == Ok(bytes.as_slice()) {
+                continue;
+            }
+            let text = String::from_utf8_lossy(&bytes);
             if let Some(item) = order_item(&text) {
                 orders.push(OpenOrder {
                     source: format!("worktree {path} ({file})"),
                     item,
+                    pr: None,
                 });
             }
         }
@@ -297,6 +412,7 @@ fn pr_orders(gh: &dyn Gh, prs: &[OpenPr]) -> Result<Vec<OpenOrder>, String> {
                 orders.push(OpenOrder {
                     source: format!("PR #{} ({path})", pr.number),
                     item,
+                    pr: Some(pr.number),
                 });
             }
         }
@@ -405,6 +521,210 @@ pub fn check(root: &Path, lab: &str, item: &str, gh: &dyn Gh) -> Result<(), Refu
     Ok(())
 }
 
+/// The text of an item's `## Done when` section, trimmed.
+fn done_when(item_text: &str) -> String {
+    let mut out = Vec::new();
+    let mut inside = false;
+    for line in item_text.lines() {
+        if line.starts_with("## ") {
+            if inside {
+                break;
+            }
+            inside = line.trim() == "## Done when";
+            continue;
+        }
+        if inside {
+            out.push(line);
+        }
+    }
+    out.join("\n").trim().to_string()
+}
+
+/// `7a` for `infra-loop-pr07a-...`: the build-plan row a loop setup item is.
+fn setup_row(item: &str) -> Option<String> {
+    let re = regex::Regex::new(r"^infra-loop-pr0*([0-9]+[a-z]?)(-|$)").expect("a valid pattern");
+    re.captures(item).map(|c| c[1].to_string())
+}
+
+/// One more than the highest `docs/loop/tasks/*/<lab>-<k>/` on `origin/main`, across all items.
+fn next_order_number(root: &Path, slug: &str) -> Result<u64, String> {
+    let files = git(
+        root,
+        &[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "origin/main",
+            "docs/loop/tasks",
+        ],
+    )?;
+    let prefix = format!("{slug}-");
+    let highest = files
+        .lines()
+        .filter_map(|f| f.strip_prefix("docs/loop/tasks/"))
+        .filter_map(|f| f.split('/').nth(1))
+        .filter_map(|dir| dir.strip_prefix(&prefix)?.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0);
+    Ok(highest + 1)
+}
+
+/// The skeleton ORDER a claim commits. Its `Item:` line is what [`order_item`] reads.
+pub fn order_skeleton(
+    lab: &str,
+    n: u64,
+    item: &str,
+    base: &str,
+    done: &str,
+    scope: &[String],
+) -> String {
+    let mut s = format!("# ORDER: {item}, {lab}-{n}\n\n");
+    s += &format!("Lab: {lab}. Item: [{item}](../../../../roadmap/items/{item}.md).");
+    if let Some(row) = setup_row(item) {
+        s += &format!(" Setup row: {row}.");
+    }
+    s += &format!(" Base: `{base}`.\n\n## Goal\n\nThe item's done-when reads:\n\n");
+    for line in done.lines() {
+        s += &format!(">{}{line}\n", if line.is_empty() { "" } else { " " });
+    }
+    s += "\n## Cancel probe (run first)\n\nTo fill in.\n\n## Files in scope\n\n";
+    for g in scope {
+        s += &format!("- `{g}`\n");
+    }
+    s += "\n## Done when\n\nTo fill in.\n\n## Stop and ask if\n\nTo fill in.\n";
+    s
+}
+
+/// What a claim created, so that a lost race removes exactly that and nothing else.
+struct Created {
+    worktree: PathBuf,
+    branch: String,
+}
+
+impl Created {
+    /// Remove our worktree by its exact path and our branch by its exact name.
+    fn remove(&self, root: &Path) -> Result<(), String> {
+        let wt = self.worktree.to_string_lossy();
+        crate::loopgates::git(root, &["worktree", "remove", "--force", &wt])?;
+        crate::loopgates::git(root, &["branch", "-D", &self.branch])?;
+        Ok(())
+    }
+}
+
+/// The result of the writes: how the claim ended.
+pub enum Claimed {
+    Won {
+        worktree: PathBuf,
+        order: String,
+        pr: u64,
+    },
+    Lost {
+        pr: u64,
+        lower: u64,
+    },
+}
+
+/// The writes after [`check`] passed (ORDER call 5). `Err` means exit 2.
+pub fn write(
+    root: &Path,
+    lab: &str,
+    item: &str,
+    topic: &str,
+    gh: &dyn Gh,
+) -> Result<Claimed, String> {
+    crate::loopgates::git(root, &["fetch", "-q", "origin", "main"])?;
+    let slug = crate::state::slug(lab);
+    let created = Created {
+        worktree: root.join(".worktrees").join(format!("{slug}-{topic}")),
+        branch: format!("{slug}/{topic}"),
+    };
+    if created.worktree.exists() {
+        return Err(format!(
+            "worktree folder {} already exists",
+            created.worktree.display()
+        ));
+    }
+    let branch_ref = format!("refs/heads/{}", created.branch);
+    if crate::loopgates::git(root, &["rev-parse", "--verify", "--quiet", &branch_ref]).is_ok() {
+        return Err(format!("branch {} already exists", created.branch));
+    }
+    let item_text = std::fs::read_to_string(item_path(root, item))
+        .map_err(|e| format!("cannot read item {item}: {e}"))?;
+    let scope = parse_item(&item_text)?.scope.unwrap_or_default();
+    let n = next_order_number(root, &slug)?;
+    let base = git(root, &["rev-parse", "--short=9", "origin/main"])?;
+    let wt = created.worktree.to_string_lossy().into_owned();
+    crate::loopgates::git(
+        root,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--no-track",
+            "-b",
+            &created.branch,
+            &wt,
+            "origin/main",
+        ],
+    )?;
+    // From here on a failure before the PR exists removes what this claim created.
+    let order = format!("docs/loop/tasks/{item}/{slug}-{n}/ORDER.md");
+    let text = order_skeleton(&slug, n, item, base.trim(), &done_when(&item_text), &scope);
+    let committed = (|| {
+        let path = created.worktree.join(&order);
+        std::fs::create_dir_all(path.parent().expect("an ORDER has a folder"))
+            .and_then(|()| std::fs::write(&path, &text))
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        let wt_root = &created.worktree;
+        crate::loopgates::git(wt_root, &["add", "--", &order])?;
+        let msg = format!("[{slug}] loop claim: ORDER for {item} ({slug}-{n})");
+        crate::loopgates::git(wt_root, &["commit", "-q", "-m", &msg, "--", &order])?;
+        let title = format!("[{slug}] {item} ({slug}-{n})");
+        let body =
+            format!("Draft claim of `{item}` by `uor-harness loop claim`.\n\nORDER: `{order}`\n");
+        gh.create_draft_pr(&created.branch, &title, &body)
+    })();
+    let pr = match committed {
+        Ok(pr) => pr,
+        Err(e) => {
+            let undo = created
+                .remove(root)
+                .err()
+                .map(|u| format!("; undo failed: {u}"));
+            return Err(format!("{e}{}", undo.unwrap_or_default()));
+        }
+    };
+    // Re-list: a lower-numbered draft PR whose ORDER names the same item wins the race.
+    let prs = gh
+        .list_open_prs()
+        .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?;
+    let rivals: Vec<OpenPr> = prs
+        .into_iter()
+        .filter(|p| p.is_draft && p.number < pr)
+        .collect();
+    let lower = pr_orders(gh, &rivals)
+        .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?
+        .into_iter()
+        .filter(|o| o.item == item)
+        .filter_map(|o| o.pr)
+        .min();
+    if let Some(lower) = lower {
+        gh.close_pr(pr)
+            .map_err(|e| format!("lost the race to #{lower}, but closing #{pr} failed: {e}"))?;
+        created.remove(root).map_err(|e| {
+            format!(
+                "lost the race to #{lower}; closed #{pr}, but removing our worktree failed: {e}"
+            )
+        })?;
+        return Ok(Claimed::Lost { pr, lower });
+    }
+    Ok(Claimed::Won {
+        worktree: created.worktree,
+        order,
+        pr,
+    })
+}
+
 const USAGE: &str = "usage: uor-harness loop claim <item-id> [--lab-topic <topic>]";
 
 /// `loop claim ...`, with `args` starting after `claim`. Returns the exit code.
@@ -456,13 +776,30 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             root: root.to_path_buf(),
         }),
     };
-    match check(root, lab, &item, gh.as_ref()) {
-        Ok(()) => {
-            println!("claim checks passed; writes come in the next commit");
+    if let Err(reason) = check(root, lab, &item, gh.as_ref()) {
+        eprintln!("uor-harness: loop claim: refused: {reason}");
+        return 2;
+    }
+    let topic = topic.unwrap_or_else(|| item.clone());
+    match write(root, lab, &item, &topic, gh.as_ref()) {
+        Ok(Claimed::Won {
+            worktree,
+            order,
+            pr,
+        }) => {
+            println!("worktree: {}", worktree.display());
+            println!("order: {order}");
+            println!("draft PR: #{pr}");
             0
         }
-        Err(reason) => {
-            eprintln!("uor-harness: loop claim: refused: {reason}");
+        Ok(Claimed::Lost { pr, lower }) => {
+            eprintln!(
+                "uor-harness: loop claim: lost the race to #{lower}; closed #{pr} and removed its worktree and branch"
+            );
+            1
+        }
+        Err(e) => {
+            eprintln!("uor-harness: loop claim: {e}");
             2
         }
     }
@@ -488,5 +825,29 @@ mod tests {
         let t = "# ORDER\n\nLab: claude. Item: [x](../../../../roadmap/items/infra-x.md) (#1).\n";
         assert_eq!(order_item(t).as_deref(), Some("infra-x"));
         assert_eq!(order_item("see roadmap/items/y.md\n"), None);
+    }
+
+    #[test]
+    fn the_skeleton_order_names_its_item_and_setup_row() {
+        let item = "---\nstatus: ready\n---\n\n## Done when\n\nIt works.\n\n## How to start\n\nx\n";
+        let scope = vec!["crates/a/**".to_string()];
+        let s = order_skeleton(
+            "claude",
+            3,
+            "infra-loop-pr07a-claim",
+            "abc",
+            &done_when(item),
+            &scope,
+        );
+        assert_eq!(order_item(&s).as_deref(), Some("infra-loop-pr07a-claim"));
+        assert!(
+            s.contains("Setup row: 7a.") && s.contains("> It works.\n"),
+            "{s}"
+        );
+        assert!(
+            s.contains("- `crates/a/**`") && !s.contains("How to start"),
+            "{s}"
+        );
+        assert!(!order_skeleton("claude", 1, "m1-x", "abc", "", &[]).contains("Setup row"));
     }
 }

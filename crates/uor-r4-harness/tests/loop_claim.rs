@@ -60,7 +60,22 @@ impl Repo {
         }
         r.git(&["add", "-A"]);
         r.git(&["commit", "-q", "-m", "init"]);
-        r.git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        let remote = r.tmp.path().canonicalize().unwrap().join("remote.git");
+        let st = clean(&mut Command::new("git"))
+            .args([
+                "init",
+                "-q",
+                "--bare",
+                "-b",
+                "main",
+                remote.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        assert!(st.status.success(), "{st:?}");
+        r.git(&["remote", "add", "origin", remote.to_str().unwrap()]);
+        r.git(&["push", "-q", "origin", "main"]);
+        r.git(&["fetch", "-q", "origin"]);
         r
     }
 
@@ -157,7 +172,8 @@ fn an_item_named_by_an_open_order_is_refused() {
         "already claimed by worktree",
     );
     // Once its commit is in origin/main, the worktree's order is no longer open.
-    r.git(&["update-ref", "refs/remotes/origin/main", "claude/t"]);
+    r.git(&["push", "-q", "origin", "claude/t:main"]);
+    r.git(&["fetch", "-q", "origin"]);
     let ok = r.claim("ready-a", serde_json::json!([]));
     assert_eq!(ok.status.code(), Some(0), "{ok:?}");
 }
@@ -199,21 +215,187 @@ fn a_lab_at_its_open_pr_limit_is_refused() {
     assert_eq!(r.claim("ready-a", under).status.code(), Some(0));
 }
 
+impl Repo {
+    fn out(&self, dir: &std::path::Path, args: &[&str]) -> Output {
+        assert!(dir.starts_with(&self.root), "git runs inside the temp repo");
+        clean(&mut Command::new("git"))
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .expect("git runs")
+    }
+
+    fn has_branch(&self, b: &str) -> bool {
+        let r = format!("refs/heads/{b}");
+        self.out(&self.root, &["rev-parse", "--verify", "--quiet", &r])
+            .status
+            .success()
+    }
+
+    /// The fake's write log, one JSON value per line; empty when nothing was written.
+    fn calls(&self) -> Vec<serde_json::Value> {
+        let p = self.tmp.path().join("gh-fake.json.calls.jsonl");
+        std::fs::read_to_string(p)
+            .unwrap_or_default()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect()
+    }
+
+    /// Commit an ORDER naming `id` on a new worktree `.worktrees/claude-<name>`.
+    fn order_worktree(&self, name: &str, order_rel: &str, id: &str) -> PathBuf {
+        let wt = format!(".worktrees/claude-{name}");
+        self.git(&[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            &format!("claude/{name}"),
+            &wt,
+        ]);
+        let wt = self.root.join(wt);
+        let o = wt.join(order_rel);
+        std::fs::create_dir_all(o.parent().unwrap()).unwrap();
+        std::fs::write(&o, order(id)).unwrap();
+        assert!(self.out(&wt, &["add", "-A"]).status.success());
+        assert!(self
+            .out(&wt, &["commit", "-q", "-m", "order"])
+            .status
+            .success());
+        wt
+    }
+}
+
+fn nothing_created(r: &Repo, o: &Output) {
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(!r.has_branch("claude/ready-a"), "no branch was created");
+    assert!(r.calls().is_empty(), "no GitHub write: {:?}", r.calls());
+}
+
 #[test]
-fn a_clean_claim_passes_and_writes_nothing() {
+fn a_clean_claim_creates_the_worktree_order_commit_and_draft_pr() {
     let r = Repo::new();
+    let o = r.claim(
+        "ready-a",
+        serde_json::json!({"prs": [], "nextPrNumber": 77}),
+    );
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stdout).contains("draft PR: #77"),
+        "{o:?}"
+    );
+    let wt = r.root.join(".worktrees/claude-ready-a");
+    let head = r.out(&wt, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    assert_eq!(
+        String::from_utf8_lossy(&head.stdout).trim(),
+        "claude/ready-a"
+    );
+    let shown = r.out(
+        &wt,
+        &["show", "HEAD:docs/loop/tasks/ready-a/claude-1/ORDER.md"],
+    );
+    assert!(shown.status.success(), "the ORDER is committed: {shown:?}");
+    let text = String::from_utf8_lossy(&shown.stdout).into_owned();
+    let item_line = text.lines().find(|l| l.contains("Item:")).unwrap();
+    assert!(
+        item_line.contains("(../../../../roadmap/items/ready-a.md)"),
+        "{text}"
+    );
+    assert!(text.contains("- `crates/a/**`"), "{text}");
+    let calls = r.calls();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0]["call"], "create_draft_pr");
+    assert_eq!(calls[0]["branch"], "claude/ready-a");
+}
+
+#[test]
+fn a_lost_race_closes_our_pr_and_removes_only_what_we_created() {
+    let r = Repo::new();
+    r.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "claude/keep",
+        ".worktrees/claude-keep",
+    ]);
+    let fake = serde_json::json!({
+        "prs": [], "nextPrNumber": 50,
+        "afterCreate": [pr_with_order(40, "codex/a", "ready-a")]
+    });
+    let o = r.claim("ready-a", fake);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("lost the race to #40"),
+        "{o:?}"
+    );
+    let calls = r.calls();
+    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert_eq!(
+        calls[1],
+        serde_json::json!({"call": "close_pr", "number": 50})
+    );
+    assert!(!r.root.join(".worktrees/claude-ready-a").exists());
+    assert!(!r.has_branch("claude/ready-a"));
+    assert!(
+        r.root.join(".worktrees/claude-keep").is_dir(),
+        "the unrelated worktree survives"
+    );
+    assert!(r.has_branch("claude/keep"));
+}
+
+#[test]
+fn an_existing_target_worktree_or_branch_is_refused_and_nothing_is_created() {
+    let r = Repo::new();
+    let dir = r.root.join(".worktrees/claude-ready-a");
+    std::fs::create_dir_all(&dir).unwrap();
+    let o = r.claim("ready-a", serde_json::json!([]));
+    nothing_created(&r, &o);
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("already exists"),
+        "{o:?}"
+    );
+    std::fs::remove_dir(&dir).unwrap();
+    r.git(&["branch", "claude/ready-a"]);
+    let o = r.claim("ready-a", serde_json::json!([]));
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(String::from_utf8_lossy(&o.stderr).contains("branch claude/ready-a already exists"));
+    assert!(!dir.exists(), "no worktree was created");
+    assert!(r.calls().is_empty());
+}
+
+#[test]
+fn a_squash_merged_order_no_longer_blocks_a_claim() {
+    let r = Repo::new();
+    let rel = "docs/loop/tasks/t/claude-1/ORDER.md";
+    r.order_worktree("t", rel, "ready-a");
+    refused(
+        &r.claim("ready-a", serde_json::json!([])),
+        "already claimed by worktree",
+    );
+    // Squash-merge: the same ORDER bytes land on main in a new commit; claude/t is no ancestor.
+    r.write(rel, &order("ready-a"));
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "squash"]);
+    r.git(&["push", "-q", "origin", "main"]);
+    r.git(&["fetch", "-q", "origin"]);
     let o = r.claim("ready-a", serde_json::json!([]));
     assert_eq!(o.status.code(), Some(0), "{o:?}");
-    assert!(String::from_utf8_lossy(&o.stdout)
-        .contains("claim checks passed; writes come in the next commit"));
-    let st = clean(&mut Command::new("git"))
-        .args(["status", "--porcelain", "--ignored"])
-        .current_dir(&r.root)
-        .output()
-        .unwrap();
+    // The next number counts the squashed claude-1 folder.
     assert!(
-        st.stdout.is_empty(),
-        "{}",
-        String::from_utf8_lossy(&st.stdout)
+        String::from_utf8_lossy(&o.stdout).contains("docs/loop/tasks/ready-a/claude-2/ORDER.md")
     );
+}
+
+#[test]
+fn a_failed_fetch_exits_2_and_creates_nothing() {
+    let r = Repo::new();
+    r.git(&["remote", "remove", "origin"]);
+    let o = r.claim("ready-a", serde_json::json!([]));
+    nothing_created(&r, &o);
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("fetch"),
+        "{o:?}"
+    );
+    assert!(!r.root.join(".worktrees").exists());
 }
