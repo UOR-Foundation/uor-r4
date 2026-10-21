@@ -8,12 +8,13 @@ Lab: claude. Base: `e61746628`. Order: [ORDER.md](ORDER.md), committed (`918a845
 - **`cargo xtask links` cannot be a single gate run.** CI runs it twice: once at the base to record a baseline, then again with `--baseline`. The tree already has 931 broken links, so a planted broken link stayed green, which is a gate defect. Links stays out of `gates.json` until the runner can carry a base baseline.
 - **The `xtask` cargo alias does not resolve in a scratch worktree.** Gate commands use `cargo run -q --locked -p <package>` instead.
 - **A pre-commit hook staged the branch claim in `docs/harness/claims.json`.** It was taken out of the commit. That file stays uncommitted, as for every claim.
+- **The first head failed the full harness suite.** 678 tests passed and 1 failed: `the_real_repo_passes_the_ported_rules`. The rule `harness.documented_commands` found the new usage lines in `docs/harness/README.md` naming `uor-harness loop gates`, a command its tables did not know. The main session registered `loop`, its `gates` action and its six flags in `doccheck.rs` (`ACCEPTED`, `RUST_ONLY_COMMANDS`, `GROUPS` and `FLAGS`). The full suite then passed: 679 passed, 0 failed.
 
 ## What changed
 
 | File | Class | Lines | What |
 |---|---|---|---|
-| `crates/uor-r4-harness/src/loopgates.rs` (new), `lib.rs`, `main.rs` | code | 649 | `uor-harness loop gates [--quick\|--full\|--keep-going\|--status\|--break G\|all]`. Other `loop` actions exit 2 with "not built yet". `--watch` exits 2 with a pointer to loop PR 11. A bad `UOR_LAB` exits 2 through `lab_or_refuse`. |
+| `crates/uor-r4-harness/src/loopgates.rs` (new), `lib.rs`, `main.rs`, `doccheck.rs` | code | 661 | `uor-harness loop gates [--quick\|--full\|--keep-going\|--status\|--break G\|all]`. Other `loop` actions exit 2 with "not built yet". `--watch` exits 2 with a pointer to loop PR 11. A bad `UOR_LAB` exits 2 through `lab_or_refuse`. |
 | `crates/uor-r4-harness/tests/loop_gates_run_rules.rs` (new) | tests | 252 | 11 tests, one or more per run rule. They use temporary git repositories, strip every `GIT_*` variable from child processes, and assert that each repository is inside its own temp directory. |
 | `docs/harness/gates.json` (new) | data | 41 | Schema version 1. Each gate has `id`, `proves`, `command` (argv), `reads` (globs), `quick`, and `break {file, append, expect}`. The three gates are `fmt-claim-wording`, `fmt-harness` and `claim-wording`. |
 | `docs/harness/README.md`, `docs/loop/README.md` | docs | ~20 | Usage, and the loop page's runner line now says what is built. |
@@ -51,7 +52,8 @@ The main session re-ran each of these after the builder.
 - `UOR_LAB=gemini … loop gates --quick` exits 2. `loop gates --watch` is refused with a pointer to PR 11.
 - `cargo fmt -p uor-r4-harness --check` is clean. Clippy shows no new warnings in the new code.
 - Claim-wording passed.
-- The PR body lists the full `uor-r4-harness` suite, `xtask links` on the changed files and the local copyright check.
+- The full `cargo test -p uor-r4-harness --no-fail-fast`: 679 passed, 0 failed, after the doccheck registration above.
+- `xtask links` on the changed files: 0 broken. The local copyright check against the Loop Kit: 0 matching 8-word runs.
 
 ## Skills used
 
