@@ -78,7 +78,10 @@ jobs:
           HEAD_SHA: ${{ inputs.head_sha }}
           HEAD_REF: ${{ inputs.head_ref }}
         run: |
-          # NOT `set -e`: a failed rule is a verdict to record, not a job failure.
+          # A failed rule is a verdict to record, not a job failure. GitHub runs this step as
+          # `bash -e`, so `-e` must be switched off explicitly, or a non-zero pr-check exit would
+          # end the step before the verdict is written.
+          set +e
           set -uo pipefail
           ./target/debug/uor-harness loop pr-check --ci --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF" > pr-check.out 2>&1
           code=$?
