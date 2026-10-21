@@ -886,6 +886,11 @@ fn a_bad_item_or_topic_id_exits_2_and_creates_nothing() {
     for args in [&["A_b"][..], &["--lab-topic", "../x", "ready-a"][..]] {
         let o = r.claim_args(args);
         assert_eq!(o.status.code(), Some(2), "{args:?}: {o:?}");
+        // Other refusals also exit 2 and create nothing; the message ties this to the id check.
+        assert!(
+            String::from_utf8_lossy(&o.stderr).contains("item and topic must match"),
+            "{args:?}: {o:?}"
+        );
         assert!(!r.root.join(".worktrees").exists(), "{args:?}: no worktree");
         assert!(!r.has_branch("claude/ready-a"), "{args:?}: no branch");
         assert!(
