@@ -132,10 +132,13 @@ pub fn parse(body: &str) -> Parsed {
     static ORDER: OnceLock<regex::Regex> = OnceLock::new();
     let mut lines = body.lines().map(|l| l.strip_suffix('\r').unwrap_or(l));
     let first = lines.next().unwrap_or("");
+    let bad = |why: String| Parsed::Malformed(why);
     if !first.contains(MARK) {
+        if body.lines().skip(1).any(|l| l.contains(MARK)) {
+            return bad(format!("a {MARK} record must start the comment"));
+        }
         return Parsed::NotARecord;
     }
-    let bad = |why: String| Parsed::Malformed(why);
     let Some(tag) = re(&TAG, r"^\[([a-z0-9-]+)\] uor-review v1$")
         .captures(first)
         .map(|c| c[1].to_string())
@@ -274,10 +277,13 @@ pub fn row_item_prefix(row: &str) -> Option<String> {
     (n >= 2).then(|| format!("infra-loop-pr{n:02}{}-", &c[2]))
 }
 
-/// The value of an ORDER's `Setup row:` line, up to whitespace or `.`.
+/// The row an ORDER's `Setup row:` names: a row token (`[0-9]+[a-z]?` or `A`) directly after
+/// `Setup row:` and optional spaces or tabs, followed by `.`, whitespace or the end of the line.
+/// The label may sit mid-line; prose such as "no `Setup row:` line" or `Setup row: **6**` names
+/// no row.
 pub fn setup_row(order_text: &str) -> Option<String> {
     static SETUP: OnceLock<regex::Regex> = OnceLock::new();
-    re(&SETUP, r"Setup row:[ \t]*([^\s.]+)")
+    re(&SETUP, r"(?m)Setup row:[ \t]*([0-9]+[a-z]?|A)(?:[.\s]|$)")
         .captures(order_text)
         .map(|c| c[1].to_string())
 }
@@ -293,6 +299,19 @@ pub fn is_setup_pr(setup_row: Option<&str>, rows: &[String], order_item: &str) -
     }
     order_item == "infra-loop-harness"
         || row_item_prefix(row).is_some_and(|p| order_item.starts_with(&p))
+}
+
+/// Why no record counts on this PR: its ORDER's item is a loop setup item (`infra-loop-…`) but
+/// the ORDER names no valid build-plan row for it, so it can be neither a setup PR nor an
+/// ordinary one until the ORDER is fixed.
+fn bad_loop_item(input: &GateInput, setup_pr: bool) -> Option<String> {
+    (!setup_pr && input.order_item.starts_with("infra-loop-")).then(|| {
+        format!(
+            "fail: a loop setup item's ORDER needs a valid `Setup row:` naming its build-plan row (item {}, row {})",
+            input.order_item,
+            input.setup_row.unwrap_or("none")
+        )
+    })
 }
 
 /// D59 is in force unless both: `owner_paths_json` lists exactly [`D59_SWITCH`], and
@@ -320,6 +339,8 @@ pub fn d59_in_force(owner_paths_json: &str, switch_text: Option<&str>) -> bool {
 pub struct GateInput<'a> {
     pub pr: u64,
     pub head: &'a str,
+    /// The path of the ORDER this PR adds; a record's `order` must equal it.
+    pub order_path: &'a str,
     pub order_lab: &'a str,
     pub order_item: &'a str,
     pub setup_row: Option<&'a str>,
@@ -345,16 +366,25 @@ fn refusal(input: &GateInput, setup_pr: bool, r: &Record) -> Option<String> {
     if r.head != input.head {
         return Some(format!("not the current head {}", input.head));
     }
+    if r.order != input.order_path {
+        return Some(format!(
+            "order {} is not this PR's ORDER {}",
+            r.order, input.order_path
+        ));
+    }
     let Some(lab_vendor) = input.vendors.get(&r.lab) else {
         return Some(format!("lab {} is not a registered lab", r.lab));
     };
     if setup_pr && input.d59_in_force {
-        return (r.lab != "claude").then(|| {
-            format!(
+        if r.lab != "claude" {
+            return Some(format!(
                 "a setup PR under D59 counts only claude records, not {}",
                 r.lab
-            )
-        });
+            ));
+        }
+        // D59: Claude's fresh-context reviewers.
+        return (!r.fresh_context)
+            .then(|| "a claude record on a setup PR under D59 needs `context: fresh`".to_string());
     }
     let order_vendor = input
         .vendors
@@ -380,6 +410,7 @@ fn refusal(input: &GateInput, setup_pr: bool, r: &Record) -> Option<String> {
 /// `details` names every record, malformed ones included, and why it counted or not.
 pub fn gate(input: &GateInput) -> GateOutcome {
     let setup_pr = is_setup_pr(input.setup_row, input.rows, input.order_item);
+    let bad_item = bad_loop_item(input, setup_pr);
     let mut details = Vec::new();
     let mut last: Option<Verdict> = None;
     for (i, body) in input.comments.iter().enumerate() {
@@ -397,6 +428,12 @@ pub fn gate(input: &GateInput) -> GateOutcome {
                     r.head,
                     r.pr
                 );
+                if bad_item.is_some() {
+                    details.push(format!(
+                        "{seen}: not counted, the ORDER names no valid setup row"
+                    ));
+                    continue;
+                }
                 match refusal(input, setup_pr, &r) {
                     Some(why) => details.push(format!("{seen}: not counted, {why}")),
                     None => {
@@ -408,10 +445,13 @@ pub fn gate(input: &GateInput) -> GateOutcome {
         }
     }
     let pass = last == Some(Verdict::Approve);
-    details.push(match last {
-        Some(Verdict::Approve) => format!("pass: a counted APPROVE at {} stands", input.head),
-        Some(Verdict::Changes) => "fail: the last counted record is CHANGES".to_string(),
-        None => format!("fail: no counted record at {}", input.head),
+    details.push(match (bad_item, last) {
+        (Some(why), _) => why,
+        (None, Some(Verdict::Approve)) => {
+            format!("pass: a counted APPROVE at {} stands", input.head)
+        }
+        (None, Some(Verdict::Changes)) => "fail: the last counted record is CHANGES".to_string(),
+        (None, None) => format!("fail: no counted record at {}", input.head),
     });
     GateOutcome {
         pass,
@@ -423,6 +463,9 @@ pub fn gate(input: &GateInput) -> GateOutcome {
 /// The counted records, in posting order: `(lab, verdict)` of each record [`gate`] counts.
 pub fn counted(input: &GateInput) -> Vec<(String, Verdict)> {
     let setup_pr = is_setup_pr(input.setup_row, input.rows, input.order_item);
+    if bad_loop_item(input, setup_pr).is_some() {
+        return Vec::new();
+    }
     input
         .comments
         .iter()
@@ -434,9 +477,14 @@ pub fn counted(input: &GateInput) -> Vec<(String, Verdict)> {
 }
 
 /// Whether a record from `lab` at this PR and head would count. The record is taken to carry
-/// `context: fresh`, which any reviewer may state, so on a doc-only PR the ORDER lab may review.
+/// `context: fresh`, which any reviewer may state, so on a doc-only PR the ORDER lab may review,
+/// and on a setup PR under D59 claude may. A loop item whose ORDER names no valid setup row is
+/// owed no review until the ORDER is fixed.
 pub fn may_review(input: &GateInput, lab: &str) -> bool {
     let setup_pr = is_setup_pr(input.setup_row, input.rows, input.order_item);
+    if bad_loop_item(input, setup_pr).is_some() {
+        return false;
+    }
     let r = Record {
         lab: lab.to_string(),
         pr: input.pr,
@@ -444,7 +492,7 @@ pub fn may_review(input: &GateInput, lab: &str) -> bool {
         model: String::new(),
         launch: String::new(),
         verdict: Verdict::Approve,
-        order: String::new(),
+        order: input.order_path.to_string(),
         fresh_context: true,
         done_when: DoneWhen::Host(String::new()),
     };
@@ -676,7 +724,7 @@ pub(crate) fn main_context(root: &Path) -> Result<MainContext, String> {
 }
 
 /// A doc-only PR: it changes at least one path, and every path is `docs` or `generated`.
-pub(crate) fn doc_only<'p>(paths: impl IntoIterator<Item = &'p str>) -> bool {
+pub fn doc_only<'p>(paths: impl IntoIterator<Item = &'p str>) -> bool {
     let mut any = false;
     for p in paths {
         if !matches!(crate::loopprcheck::size_class(p), "docs" | "generated") {
@@ -721,6 +769,7 @@ fn run_gate(pr: u64, c: &Context, comments: &[String]) -> GateOutcome {
     gate(&GateInput {
         pr,
         head: &c.head,
+        order_path: &c.order,
         order_lab: &c.order_lab,
         order_item: &c.order_item,
         setup_row: c.setup_row.as_deref(),

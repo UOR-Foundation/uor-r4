@@ -270,6 +270,7 @@ pub enum Decision {
 /// The ORDER a PR adds: its lab (from `<lab>-<n>/ORDER.md`), its item and `Setup row:`, and
 /// whether the PR is doc-only; with `origin/main` and the comments, what the review gate reads.
 struct PrOrder {
+    path: String,
     lab: String,
     item: String,
     setup_row: Option<String>,
@@ -349,8 +350,10 @@ fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderE
     } else {
         pr.files.iter().map(|f| f.path.clone()).collect()
     };
-    let (_, text, lab) = added_order(root, pr.number, &listed, &|p| gh.file_at_pr(pr.number, p))?;
+    let (path, text, lab) =
+        added_order(root, pr.number, &listed, &|p| gh.file_at_pr(pr.number, p))?;
     Ok(PrOrder {
+        path,
         lab,
         item: crate::loopclaim::order_item(&text).unwrap_or_default(),
         setup_row: crate::loopreview::setup_row(&text),
@@ -368,6 +371,7 @@ fn gate_input<'a>(
     crate::loopreview::GateInput {
         pr: pr.number,
         head: &pr.head_ref_oid,
+        order_path: &order.path,
         order_lab: &order.lab,
         order_item: &order.item,
         setup_row: order.setup_row.as_deref(),

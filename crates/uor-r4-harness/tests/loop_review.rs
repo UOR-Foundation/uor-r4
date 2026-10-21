@@ -42,6 +42,16 @@ fn body(lab: &str, verdict: Verdict) -> String {
     render(&record(lab, verdict))
 }
 
+/// The record with `context: fresh`, as D59 asks of claude on a setup PR.
+fn fresh(lab: &str, verdict: Verdict) -> String {
+    render(&Record {
+        fresh_context: true,
+        ..record(lab, verdict)
+    })
+}
+
+const ORDER_PATH: &str = "docs/loop/tasks/infra-loop-harness/claude-18/ORDER.md";
+
 /// A gate run over `comments` for a PR built by `order_lab` with item `item`.
 struct Case<'a> {
     order_lab: &'a str,
@@ -72,6 +82,7 @@ fn run(c: &Case, comments: &[String]) -> GateOutcome {
     gate(&GateInput {
         pr: PR,
         head: HEAD,
+        order_path: ORDER_PATH,
         order_lab: c.order_lab,
         order_item: c.item,
         setup_row: c.setup_row,
@@ -142,7 +153,7 @@ fn planted_fault_a_non_claude_record_on_a_setup_pr_is_refused() {
         &SETUP_PR,
         &[
             body("codex", Verdict::Approve),
-            body("claude", Verdict::Approve),
+            fresh("claude", Verdict::Approve),
         ],
     );
     assert!(out.pass, "{:?}", out.details);
@@ -151,7 +162,7 @@ fn planted_fault_a_non_claude_record_on_a_setup_pr_is_refused() {
     let out = run(
         &SETUP_PR,
         &[
-            body("claude", Verdict::Approve),
+            fresh("claude", Verdict::Approve),
             body("codex", Verdict::Changes),
         ],
     );
@@ -160,7 +171,7 @@ fn planted_fault_a_non_claude_record_on_a_setup_pr_is_refused() {
 }
 
 #[test]
-fn a_claude_code_pr_without_a_setup_row_refuses_a_claude_review() {
+fn a_loop_item_without_a_setup_row_counts_no_record() {
     let c = Case {
         item: "infra-loop-pr06-review-records",
         setup_row: None,
@@ -169,7 +180,8 @@ fn a_claude_code_pr_without_a_setup_row_refuses_a_claude_review() {
     let out = run(&c, &[body("claude", Verdict::Approve)]);
     assert!(!out.setup_pr);
     assert!(!out.pass);
-    assert!(has(&out, "same vendor"), "{:?}", out.details);
+    assert!(has(&out, "needs a valid `Setup row:`"), "{:?}", out.details);
+    assert!(!run(&c, &[body("codex", Verdict::Approve)]).pass);
 }
 
 #[test]
@@ -181,7 +193,8 @@ fn a_setup_row_not_in_the_table_is_not_a_setup_pr() {
     let out = run(&c, &[body("claude", Verdict::Approve)]);
     assert!(!out.setup_pr);
     assert!(!out.pass);
-    assert!(has(&out, "same vendor"), "{:?}", out.details);
+    assert!(has(&out, "needs a valid `Setup row:`"), "{:?}", out.details);
+    assert!(!run(&c, &[body("codex", Verdict::Approve)]).pass);
 }
 
 #[test]
@@ -494,13 +507,24 @@ mod cli {
         "cargo test: ok",
     ];
 
+    const FRESH_APPROVE_HOST: [&str; 8] = [
+        "--pr",
+        "2930",
+        "--verdict",
+        "APPROVE",
+        "--host",
+        "cargo test: ok",
+        "--context",
+        "fresh",
+    ];
+
     #[test]
     fn a_claude_approve_on_a_setup_pr_is_posted_as_a_record_at_the_head() {
         let r = Repo::new();
         let o = r.review(
             "claude",
             &fake(SETUP_ORDER, &[CODE_FILE], &[]),
-            &APPROVE_HOST,
+            &FRESH_APPROVE_HOST,
         );
         assert_eq!(o.status.code(), Some(0), "{}", text(&o));
         assert!(text(&o).contains(&format!("review: posted APPROVE on PR #{N} at {HEAD}")));
@@ -558,13 +582,23 @@ mod cli {
         let r = Repo::new();
         let o = r.review("claude", &fake(CODE_ORDER, &[CODE_FILE], &[]), &args);
         assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+        assert!(
+            text(&o).contains("refused, this record would not count"),
+            "{}",
+            text(&o)
+        );
+        assert!(
+            text(&o).contains("not counted, same vendor"),
+            "{}",
+            text(&o)
+        );
         assert!(r.posts().is_empty());
     }
 
     #[test]
     fn dry_run_prints_the_record_and_posts_nothing() {
         let r = Repo::new();
-        let mut args = APPROVE_HOST.to_vec();
+        let mut args = FRESH_APPROVE_HOST.to_vec();
         args.push("--dry-run");
         let o = r.review("claude", &fake(SETUP_ORDER, &[CODE_FILE], &[]), &args);
         assert_eq!(o.status.code(), Some(0), "{}", text(&o));
@@ -574,9 +608,30 @@ mod cli {
         assert!(r.posts().is_empty());
     }
 
+    #[test]
+    fn a_claude_record_on_a_setup_pr_without_fresh_context_is_refused() {
+        let r = Repo::new();
+        let o = r.review(
+            "claude",
+            &fake(SETUP_ORDER, &[CODE_FILE], &[]),
+            &APPROVE_HOST,
+        );
+        assert_eq!(o.status.code(), Some(1), "{}", text(&o));
+        assert!(text(&o).contains("needs `context: fresh`"), "{}", text(&o));
+        assert!(r.posts().is_empty());
+        let o = r.review(
+            "claude",
+            &fake(SETUP_ORDER, &[CODE_FILE], &[]),
+            &FRESH_APPROVE_HOST,
+        );
+        assert_eq!(o.status.code(), Some(0), "{}", text(&o));
+        assert_eq!(r.posts().len(), 1);
+        assert!(r.posts()[0].contains("\ncontext: fresh\n"));
+    }
+
     fn record_body(lab: &str) -> String {
         format!(
-            "[{lab}] uor-review v1\npr: {N}\nhead: {HEAD}\nlab: {lab}\nmodel: m\nlaunch: manual\nverdict: APPROVE\norder: {ORDER}\ndone-when: host: ok\n"
+            "[{lab}] uor-review v1\npr: {N}\nhead: {HEAD}\nlab: {lab}\nmodel: m\nlaunch: manual\nverdict: APPROVE\norder: {ORDER}\ncontext: fresh\ndone-when: host: ok\n"
         )
     }
 
@@ -605,8 +660,115 @@ mod cli {
         assert!(text(&o).contains("adds no ORDER"), "{}", text(&o));
         let mut failing = fake(SETUP_ORDER, &[CODE_FILE], &[]);
         failing["failPost"] = json!(true);
-        let o = r.review("claude", &failing, &APPROVE_HOST);
+        let o = r.review("claude", &failing, &FRESH_APPROVE_HOST);
         assert_eq!(o.status.code(), Some(2), "{}", text(&o));
         assert!(r.posts().is_empty());
     }
+}
+
+#[test]
+fn a_claude_record_on_a_setup_pr_under_d59_needs_fresh_context() {
+    let out = run(&SETUP_PR, &[body("claude", Verdict::Approve)]);
+    assert!(out.setup_pr);
+    assert!(!out.pass);
+    assert!(
+        has(&out, "on a setup PR under D59 needs `context: fresh`"),
+        "{:?}",
+        out.details
+    );
+    assert!(run(&SETUP_PR, &[fresh("claude", Verdict::Approve)]).pass);
+    // Without D59 the fresh claim does not lift the vendor rule.
+    let off = Case {
+        d59: false,
+        ..SETUP_PR
+    };
+    assert!(!run(&off, &[fresh("claude", Verdict::Approve)]).pass);
+}
+
+#[test]
+fn a_loop_item_needs_a_valid_setup_row_and_others_are_ordinary() {
+    for row in [None, Some("99")] {
+        let c = Case {
+            item: "infra-loop-pr07-x",
+            setup_row: row,
+            ..CODE_PR
+        };
+        let out = run(&c, &[body("codex", Verdict::Approve)]);
+        assert!(!out.pass, "{row:?}: {:?}", out.details);
+        assert!(
+            has(&out, "a loop setup item's ORDER needs a valid `Setup row:`"),
+            "{:?}",
+            out.details
+        );
+        let (rows, vendors) = (rows(), vendors());
+        let input = GateInput {
+            pr: PR,
+            head: HEAD,
+            order_path: ORDER_PATH,
+            order_lab: "claude",
+            order_item: "infra-loop-pr07-x",
+            setup_row: row,
+            rows: &rows,
+            vendors: &vendors,
+            d59_in_force: true,
+            doc_only: false,
+            comments: &[],
+        };
+        assert!(!may_review(&input, "claude"));
+        assert!(!may_review(&input, "codex"));
+    }
+    // A non-loop item with no row is an ordinary PR: the vendor rule.
+    assert!(run(&CODE_PR, &[body("codex", Verdict::Approve)]).pass);
+}
+
+#[test]
+fn setup_row_reads_only_a_row_token() {
+    let order = "Lab: claude. Item: [x](../x.md) (#2909). Setup row: 6. Base: abc";
+    assert_eq!(setup_row(order).as_deref(), Some("6"));
+    assert_eq!(setup_row("Setup row:\tA\n").as_deref(), Some("A"));
+    assert_eq!(setup_row("Setup row: 12").as_deref(), Some("12"));
+    assert_eq!(setup_row("Setup row: 7b next").as_deref(), Some("7b"));
+    assert_eq!(setup_row("no `Setup row:` line"), None);
+    assert_eq!(setup_row("Setup row: **6**"), None);
+    assert_eq!(setup_row("Setup row: 6x5"), None);
+    assert_eq!(setup_row("Setup row: B."), None);
+}
+
+#[test]
+fn a_record_marker_below_the_first_line_is_malformed() {
+    let late = format!("Review below.\n{}", body("codex", Verdict::Approve));
+    match parse(&late) {
+        Parsed::Malformed(why) => assert!(why.contains("must start the comment"), "{why}"),
+        other => panic!("expected Malformed, got {other:?}"),
+    }
+    let out = run(&CODE_PR, &[late]);
+    assert!(!out.pass);
+    assert!(has(&out, "must start the comment"), "{:?}", out.details);
+}
+
+#[test]
+fn a_record_for_another_order_does_not_count() {
+    let other = render(&Record {
+        order: "docs/loop/tasks/infra-other/codex-3/ORDER.md".to_string(),
+        ..record("codex", Verdict::Approve)
+    });
+    let out = run(&CODE_PR, &[other]);
+    assert!(!out.pass);
+    assert!(
+        has(&out, &format!("is not this PR's ORDER {ORDER_PATH}")),
+        "{:?}",
+        out.details
+    );
+}
+
+#[test]
+fn doc_only_includes_generated_paths() {
+    let c = Case {
+        doc_only: doc_only(["Cargo.lock", "docs/x.md", ORDER_PATH]),
+        ..CODE_PR
+    };
+    assert!(c.doc_only);
+    assert!(doc_only(["docs/roadmap/README.md", "docs/y.md"]));
+    assert!(!doc_only(["Cargo.lock", "crates/x/src/lib.rs"]));
+    assert!(run(&c, &[fresh("claude", Verdict::Approve)]).pass);
 }

@@ -1076,8 +1076,13 @@ fn setup_pr(r: &Repo) -> String {
 }
 
 /// A `uor-review v1` record comment by `lab` on PR 5 at `sha` saying `verdict` (APPROVE or
-/// CHANGES).
+/// CHANGES) for the setup PR's ORDER, with `context: fresh`.
 fn record(lab: &str, sha: &str, verdict: &str) -> serde_json::Value {
+    record_on(SETUP_ORDER, lab, sha, verdict)
+}
+
+/// [`record`] for the ORDER at `order`.
+fn record_on(order: &str, lab: &str, sha: &str, verdict: &str) -> serde_json::Value {
     use uor_r4_harness::loopreview::{render, DoneWhen, Record, Verdict};
     let body = render(&Record {
         lab: lab.to_string(),
@@ -1090,8 +1095,8 @@ fn record(lab: &str, sha: &str, verdict: &str) -> serde_json::Value {
         } else {
             Verdict::Changes
         },
-        order: "docs/loop/tasks/r/x-1/ORDER.md".to_string(),
-        fresh_context: false,
+        order: order.to_string(),
+        fresh_context: true,
         done_when: DoneWhen::Host("cargo test: ok".to_string()),
     });
     serde_json::json!({"author": "someone", "body": body})
@@ -1168,9 +1173,9 @@ fn review_record_counts_exact_head_records_from_allowed_labs() {
 
     // A code PR: a same-vendor APPROVE does not count; another vendor's does.
     let h = r.green_a(|r| r.write("crates/a/src/lib.rs", "//\n"));
-    let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
+    let o = r.check_gh(&h, &fake(vec![record_on(ORDER_A, "claude", &h, "APPROVE")]));
     expect(&o, 1, "FAIL review-record", "(D46)");
-    let o = r.check_gh(&h, &fake(vec![record("codex", &h, "APPROVE")]));
+    let o = r.check_gh(&h, &fake(vec![record_on(ORDER_A, "codex", &h, "APPROVE")]));
     expect(&o, 1, "PASS review-record", "counted");
 }
 
@@ -1305,4 +1310,29 @@ fn required_checks_judge_the_newest_run_per_name() {
     let newer_other_app = audit_runs(&[(200, "some-app", "policy: pass (run 7)")]);
     let o = r.check_gh(&h, &newer_other_app);
     expect(&o, 1, "FAIL required-checks", "app some-app");
+}
+
+/// The D59 switch is read at the merge base: a setup PR that itself adds the switch reading
+/// `ended` and lists it as an owner path still sees D59 in force.
+#[test]
+fn the_d59_switch_is_read_at_the_merge_base() {
+    let r = Repo::new();
+    let text = order("claude", "infra-loop-pr99-x", "Setup row: 99\n");
+    let h = r.green(SETUP_ORDER, &text, |r| {
+        r.write("crates/a/src/lib.rs", "//\n");
+        r.write("docs/harness/d59.json", r#"{"schema":1,"d59":"ended"}"#);
+        r.write(
+            "docs/harness/owner-paths.json",
+            r#"{"schema":1,"paths":[{"path":"docs/harness/d59.json"}]}"#,
+        );
+    });
+    let o = r.check_gh(&h, &fake(vec![record("codex", &h, "APPROVE")]));
+    expect(
+        &o,
+        1,
+        "FAIL review-record",
+        "a setup PR under D59 counts only claude records",
+    );
+    let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
+    expect(&o, 1, "PASS review-record", "counted");
 }

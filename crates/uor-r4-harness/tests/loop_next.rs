@@ -161,8 +161,9 @@ fn fake(prs: Vec<(Value, (String, String))>, comments: Value) -> Value {
     json!({"prs": list, "comments": comments, "files": files, "labels": {}})
 }
 
-/// A `uor-review v1` record by `lab` on PR `n` at `sha` saying `verdict` (APPROVE or CHANGES).
-fn record(lab: &str, n: u64, sha: &str, verdict: &str) -> Value {
+/// A `uor-review v1` record by `lab` on PR `n` at `sha` saying `verdict` (APPROVE or CHANGES), for
+/// the ORDER that [`pr`] adds for `item` by `order_lab`, with `context: fresh`.
+fn record(lab: &str, n: u64, sha: &str, verdict: &str, (item, order_lab): (&str, &str)) -> Value {
     use uor_r4_harness::loopreview::{render, DoneWhen, Record, Verdict};
     let body = render(&Record {
         lab: lab.to_string(),
@@ -175,8 +176,8 @@ fn record(lab: &str, n: u64, sha: &str, verdict: &str) -> Value {
         } else {
             Verdict::Changes
         },
-        order: "docs/loop/tasks/r/x-1/ORDER.md".to_string(),
-        fresh_context: false,
+        order: format!("docs/loop/tasks/{item}/{order_lab}-1/ORDER.md"),
+        fresh_context: true,
         done_when: DoneWhen::Host("cargo test: ok".to_string()),
     });
     json!({"author": "x", "body": body})
@@ -225,13 +226,13 @@ fn an_own_pr_with_a_counted_request_changes_is_a_repair() {
     let r = Repo::new(&[]);
     let o = r.next(&fake(
         vec![pr(7, "claude/x", "claude", "it-1")],
-        json!({"7": [record("codex", 7, HEAD, "APPROVE"), record("codex", 7, HEAD, "CHANGES")]}),
+        json!({"7": [record("codex", 7, HEAD, "APPROVE", ("it-1", "claude")), record("codex", 7, HEAD, "CHANGES", ("it-1", "claude"))]}),
     ));
     assert!(decision(&o).starts_with("GO repair #7"), "{o:?}");
     // A REQUEST CHANGES at an older head does not count.
     let o = r.next(&fake(
         vec![pr(7, "claude/x", "claude", "it-1")],
-        json!({"7": [record("codex", 7, OLD, "CHANGES")]}),
+        json!({"7": [record("codex", 7, OLD, "CHANGES", ("it-1", "claude"))]}),
     ));
     assert!(!decision(&o).contains("repair"), "{o:?}");
 }
@@ -256,7 +257,7 @@ fn another_labs_setup_pr_needs_a_claude_review_until_claude_approves() {
     assert!(decision(&o).starts_with("GO review #11 — "), "{o:?}");
     let o = r.next(&fake(
         vec![pr(11, "codex/s", "codex", "infra-loop-pr09-x")],
-        json!({"11": [record("claude", 11, HEAD, "APPROVE")]}),
+        json!({"11": [record("claude", 11, HEAD, "APPROVE", ("infra-loop-pr09-x", "codex"))]}),
     ));
     assert!(!decision(&o).contains("review"), "{o:?}");
 }
@@ -294,7 +295,7 @@ fn a_non_setup_pr_needs_a_review_only_from_another_vendor() {
     // Once this lab's counted APPROVE is at the head, no review is owed.
     let o = r.next(&fake(
         vec![with_code(pr(12, "codex/z", "codex", "it-2"))],
-        json!({"12": [record("claude", 12, HEAD, "APPROVE")]}),
+        json!({"12": [record("claude", 12, HEAD, "APPROVE", ("it-2", "codex"))]}),
     ));
     assert!(!decision(&o).contains("review"), "{o:?}");
 }
@@ -505,4 +506,23 @@ fn an_own_pr_adding_two_orders_is_a_repair() {
             && decision(&o).contains("its ORDER is missing or ambiguous"),
         "{o:?}"
     );
+}
+
+#[test]
+fn an_own_doc_only_pr_owes_a_fresh_self_review_and_an_own_code_pr_does_not() {
+    let r = Repo::new(&[]);
+    let (mut p, f) = pr(13, "claude/d", "claude", "it-3");
+    for path in ["docs/x.md", "docs/loop/tasks/it-3/claude-1/REPORT.md"] {
+        p["files"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"path": path}));
+    }
+    let o = r.next(&fake(vec![(p, f)], json!({})));
+    assert!(decision(&o).starts_with("GO review #13"), "{o:?}");
+    let o = r.next(&fake(
+        vec![with_code(pr(13, "claude/d", "claude", "it-3"))],
+        json!({}),
+    ));
+    assert!(!decision(&o).contains("review #13"), "{o:?}");
 }

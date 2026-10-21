@@ -1436,6 +1436,7 @@ fn rule_review_record(pr: &Pr) -> RuleResult {
     let outcome = crate::loopreview::gate(&crate::loopreview::GateInput {
         pr: number,
         head: &pr.head,
+        order_path: order,
         order_lab: &order_lab,
         order_item: &item,
         setup_row: setup_row.as_deref(),
