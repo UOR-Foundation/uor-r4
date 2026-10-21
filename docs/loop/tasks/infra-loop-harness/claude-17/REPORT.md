@@ -29,6 +29,16 @@ Five fresh-context builders wrote one commit each: `report`, `arrive`, `next`, `
     - vendors come from `origin/main`;
     - `--receipts` keeps only rows recorded on a clean tree at HEAD;
     - two ordering tests: review before an item, and STOP before a repair.
+- **Review round 2 at `97479baa0` approved with lows, and its medium came from round 1's own fix.**
+  - The `next`/`arrive`/`report` lens found that skipping an unreadable PR, which is right for reviews, made the lab's own repairs fail open. A transient `gh` error on its own PR could hide a pending REQUEST CHANGES.
+  - The `close` lens found that `git patch-id --stable` ignores whitespace, so a squash differing only in whitespace passed the content proof. It reproduced this in a scratch repository.
+  - The final round, `af5d12319`:
+    - own-PR read errors make `next` exit 2;
+    - an own PR whose ORDER is missing or ambiguous is a repair;
+    - `patch-id --verbatim`;
+    - the branch's config section is removed after the atomic delete;
+    - tests for a closed `--pr` and for the gate-ledger exception.
+  - A deleted ORDER path at a PR head is recognised from `gh`'s 404 or "Not Found" error text, which is string matching.
 - **The first real policy verdict is `fail`, as expected.** CI built `uor-harness` from main (which now has `pr-check`) and judged this PR: `policy: fail (run 39644023923)`, recorded in all five required checks, which stay green. In the job log only `scope` fails, line for line the same as the local run. Loop PR 5's REPORT asked for this run to be quoted. `loop pr-check --pr 2925` would refuse to queue it, but `loop queue` (PR 7c) is not built. Until the supervisor exists, the loop page says the CHARTER §5.5 delivery path applies as written.
 
 - **Step 13 is not followed literally, and the owner should decide.** The loop page says `close --verify` should "run `uor-hygiene --apply`". Hygiene's `--apply` removes every clean, merged worktree with its branch, other labs' included. That crosses the lab boundary: never touch another session's files, and never delete another lab's work. So `close --verify` prints hygiene's plan (`--dry-run`) and does not apply it. The loop page's rule text is unchanged; its command cell says so. Applying it, or limiting hygiene to the lab's own worktrees, is the owner's call. This is reversible.
@@ -51,14 +61,14 @@ Five fresh-context builders wrote one commit each: `report`, `arrive`, `next`, `
 |---|---|---|---|
 | `crates/uor-r4-harness/src/loopreport.rs` (new) | code | 340 | `loop report --check`, `--new` and `--receipts`. |
 | `crates/uor-r4-harness/src/looparrive.rs` (new) | code | 593 | `loop arrive`. In order: fetch, checkout, binary, hooks, client hooks, views, PICKUP, read path. |
-| `crates/uor-r4-harness/src/loopnext.rs` (new) | code | 665 | `loop next`. The sources in the loop page's order, the stops, and a read-only `NextGh` trait with a fake. |
-| `crates/uor-r4-harness/src/loopclose.rs` (new) | code | 1,204 | `loop close --session` and `--verify`, with a `CloseGh` trait whose fake logs every write. |
+| `crates/uor-r4-harness/src/loopnext.rs` (new) | code | 689 | `loop next`. The sources in the loop page's order, the stops, and a read-only `NextGh` trait with a fake. |
+| `crates/uor-r4-harness/src/loopclose.rs` (new) | code | 1,209 | `loop close --session` and `--verify`, with a `CloseGh` trait whose fake logs every write. |
 | `loopprcheck.rs`, `loopclaim.rs`, `loopgates.rs`, `labs.rs`, `doccheck.rs`, `main.rs`, `lib.rs` | code | 100 | Shared helpers: `report_file_problems`, `parse_review_record`, `size_line`, `find_order`, `main_checkout`. Also dispatch, doccheck's loop group and flags, and `--json` pass-through. |
-| `crates/uor-r4-harness/tests/loop_{report,arrive,next,close}.rs` (new), and one line of `loop_gates_run_rules.rs` | tests | 1,962 | 66 tests over fixture repositories with bare remotes and fakes. |
+| `crates/uor-r4-harness/tests/loop_{report,arrive,next,close}.rs` (new), and one line of `loop_gates_run_rules.rs` | tests | 2,062 | 72 tests over fixture repositories with bare remotes and fakes. |
 | `docs/loop/templates/{ORDER,REPORT,PICKUP}.md` (new) | docs | 76 | Templates in our own words. Template prompts are `<!-- fill: -->` lines, which `report --check` refuses. |
 | `docs/harness/README.md`, `docs/loop/README.md` | docs | 93 | Usage, and the steps marked built. |
 
-That totals about 5,030 lines, excluding this ORDER and REPORT; about 1,260 of them came in the review fix rounds. (An earlier version of this line said 3,770, which undercounted even before the fixes.) The ORDER set out five commands across five builder commits, which is what was built.
+That totals about 5,160 lines, excluding this ORDER and REPORT. The review fix rounds added 1,071 of them and removed 130. (Earlier versions of this line said 3,770, an undercount even before review, and then that the fix rounds added "about 1,260", which was only the difference from that undercount.) The ORDER set out five commands across five builder commits, which is what was built.
 
 **Design calls.**
 - **Exit codes.** `next` exits 0 for GO, 1 for STOP and 2 when it cannot run. The others exit 0 when ok, 1 when a check fails or the command refuses, and 2 when they cannot run.
@@ -77,7 +87,7 @@ That totals about 5,030 lines, excluding this ORDER and REPORT; about 1,260 of t
   4. `loop gates --full` passes in a throwaway worktree of `origin/main`.
 
   The deletion guards:
-  - the worktree must be clean, under `.worktrees/<lab>-*`, and hold no ignored files beyond build and view output; it is never force-removed, and a change to the old `claims.json` alone is reverted first;
+  - the worktree must be clean, under `.worktrees/<lab>-*`, and hold no ignored files beyond `target/`, the rendered views and the gate ledger; it is never force-removed, and a change to the old `claims.json` alone is reverted first;
   - the local branch is deleted atomically, and only at the PR head and while no worktree has it checked out;
   - the remote delete only succeeds if the branch is still at the PR head.
 
@@ -87,9 +97,9 @@ None. This is a host tool.
 
 ## Checks run at the head
 
-The main session re-ran each builder's tests at its commit. It ran the checks below first before review, and again after the fix rounds (`5c64948d5`) with this REPORT in place.
+The main session re-ran each builder's tests at its commit. It ran the checks below first before review, and again after the final fix round (`af5d12319`), with this REPORT in place for the full suite.
 
-- **Targeted suites, after the fixes:** `loop_report` 7, `loop_arrive` 17, `loop_next` 18 and `loop_close` 24 passed. `loop_prcheck` (27) and `loop_gates_run_rules` (29) still pass. Before review the four new suites gave 6, 12, 12 and 19.
+- **Targeted suites, after the fixes:** `loop_report` 7, `loop_arrive` 17, `loop_next` 20 and `loop_close` 28 passed. `loop_prcheck` (27) and `loop_gates_run_rules` (29) still pass. Before review the four new suites gave 6, 12, 12 and 19.
 - **Negative gates for the fix rounds**, run the same way:
   - PICKUP written to the old worktree path: the survives-verify test FAILED;
   - the ignored-files guard dropped: the kept-notes test FAILED;
@@ -100,14 +110,15 @@ The main session re-ran each builder's tests at its commit. It ran the checks be
   - first-match ORDER selection restored: the other-lab-ORDER test FAILED;
   - an unreadable ORDER made fatal: the deleted-ORDER test FAILED;
   - the receipts tree match dropped: the dirty-row test FAILED;
-  - the paginated-files fallback dropped: the 100-files test FAILED.
+  - the paginated-files fallback dropped: the 100-files test FAILED;
+  - the final round: the own-PR skip restored: `an_own_pr_whose_comments_cannot_be_read_cannot_run` FAILED; `--stable` restored: `a_squash_differing_only_in_whitespace_deletes_nothing` FAILED.
 - **Negative gates.** These were run by the builders. Each set aside only its own check, ran the test (which FAILED), then restored the file, confirmed byte-identical with `cmp`. The checks and their tests:
   - **The planted fault:** `report --check` ignoring the section problems; `a_report_missing_a_section_is_refused`.
   - **`arrive`'s PICKUP citation check:** the uncited-reference test.
   - **`next`:** the STOP-file check, and repairs ranking ahead of reviews; `a_stop_file_stops_on_the_kill_switch` and `repairs_come_before_reviews`.
   - **`close --session`:** the REPORT check before writes, and the push-first head check.
   - **`close --verify`:** the MERGED proof, the content proof, the own-lab check, and the remote lease (swapped for a plain delete).
-- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: the first run gave 850 passed and 1 failed (see above); at `41bb400ed`, with this REPORT in place, 851 passed and 0 failed; after the fix rounds (at `8f5b1d11e`), 870 passed and 1 failed: `receipt_command_contract`'s `the_short_milestone_form_is_recorded_like_the_long_one` compares two receipt lines whose seconds-resolution `ts` straddled a second (17:59:41 against 17:59:42). This PR does not touch that command or its test; the target then passed three times in a row. It is a flaky test that already existed, listed under "Still open".
+- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: the first run gave 850 passed and 1 failed (see above); at `41bb400ed`, with this REPORT in place, 851 passed and 0 failed; after the fix rounds (at `8f5b1d11e`), 870 passed and 1 failed: `receipt_command_contract`'s `the_short_milestone_form_is_recorded_like_the_long_one` compares two receipt lines whose seconds-resolution `ts` straddled a second (17:59:41 against 17:59:42). This PR does not touch that command or its test; the target then passed three times in a row. It is a flaky test that already existed, listed under "Still open". After the final round (at `af5d12319`, with this REPORT in place): FULLSUITE_PLACEHOLDER.
 - **`loop pr-check --local --base 8c2c76e42`** on this branch: `order`, `commit-order`, `report`, `owner-paths`, `rule-sources` and `read-path` (28,257 B) pass, `rendered-lock`, `filemap`, `review-record` and `required-checks` are N/A, and `scope` fails because the item has no `scope:` at the base, as for every loop PR until scopes are backfilled.
 - **Real-world runs** in this worktree:
   - `loop arrive` exited 0, with a WARN for checkout and hooks;
