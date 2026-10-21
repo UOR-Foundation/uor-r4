@@ -9,8 +9,15 @@
 //! input commit. `--check` reads it back, re-renders at that commit and needs a byte-exact match,
 //! so a hand edit fails (exit 1) and a missing or garbled stamp is refused (exit 2).
 //!
-//! **Views built.** `STATE.md`, `HANDOFF.md` and `docs/harness/LESSONS.md`. The AGENTS block and
-//! the roadmap view follow in the same PR (ORDER claude-14).
+//! **Views built.** `STATE.md`, `HANDOFF.md` and `docs/harness/LESSONS.md`, rendered and checked.
+//! The AGENTS.md top-ten block is rendered only between its markers
+//! (`<!-- loop:lessons-top-ten:start -->` / `<!-- loop:lessons-top-ten:end -->`), which loop PR 8
+//! adds; without them nothing is written to AGENTS.md and a note is printed, and `--check` compares
+//! only the bytes between the markers, whose first line is the block's stamp.
+//! `docs/roadmap/README.md` comes from today's renderer, `cargo run -q --locked -p xtask --
+//! roadmap render [--check]`; it is skipped with a note under `--out`, because xtask writes into
+//! the repository, and an unavailable cargo or xtask is REFUSED (exit 2), never a silent pass.
+//! `docs/loop/baseline.json` is deferred to loop PR 5 (ORDER claude-14, call 5).
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -204,12 +211,14 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
     o.push_str(&stamp(&c.sha));
     o.push_str("\n# HANDOFF\n\nRendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each row gives the first sentence of the item's `Done when` and `Cancel if` sections; `not recorded` means the item has no such section or key yet.\n");
 
-    o.push_str("\n## Open items\n");
+    let blocked = |i: &OpenItem| i.status == "held" || i.status == "decision";
+    let open: Vec<&OpenItem> = items.iter().filter(|i| !blocked(i)).collect();
+    o.push_str("\n## Open items\n\nItems not `held`, `decision` or `done`. Held and decision items are listed once, in the blocked table below.\n");
     let mut group: Option<&str> = None;
-    for it in &items {
+    for it in &open {
         if group != Some(it.status.as_str()) {
             group = Some(it.status.as_str());
-            let n = items.iter().filter(|i| i.status == it.status).count();
+            let n = open.iter().filter(|i| i.status == it.status).count();
             o.push_str(&format!(
                 "\n### {} ({n})\n\n| Item | Title | Done when | Cancel if | Size | Stands |\n|---|---|---|---|---|---|\n",
                 it.status
@@ -230,16 +239,13 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
             cell(&stands)
         ));
     }
-    if items.is_empty() {
+    if open.is_empty() {
         o.push_str("\nnone\n");
     }
 
-    o.push_str("\n## Blocked\n\nItems with status `held` or `decision`. The owner is `owner` for a decision or for `open_to: owner`, otherwise the item's `open_to`.\n\n");
-    o.push_str("| Item | Status | Owner |\n|---|---|---|\n");
-    for it in items
-        .iter()
-        .filter(|i| i.status == "held" || i.status == "decision")
-    {
+    o.push_str("\n## Blocked\n\nItems with status `held` or `decision`, each listed once. The owner is `owner` for a decision or for `open_to: owner`, otherwise the item's `open_to`.\n\n");
+    o.push_str("| Item | Title | Status | Owner | Done when |\n|---|---|---|---|---|\n");
+    for it in items.iter().filter(|i| blocked(i)) {
         let owner = if it.status == "decision" || it.open_to == "owner" {
             "owner"
         } else if it.open_to.is_empty() {
@@ -248,10 +254,12 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
             &it.open_to
         };
         o.push_str(&format!(
-            "| {} | {} | {} |\n",
+            "| {} | {} | {} | {} | {} |\n",
             cell(&it.id),
+            cell(&it.title),
             it.status,
-            cell(owner)
+            cell(owner),
+            cell(&it.done_when)
         ));
     }
 
@@ -271,8 +279,10 @@ fn lesson_id(front: &str) -> Option<(u32, String)> {
     })
 }
 
-/// `docs/harness/LESSONS.md`: the mistakes registry, by lesson id where one is recorded.
-pub fn render_lessons(c: &AtCommit) -> Result<String, String> {
+/// Lessons with an id as (number, id, title, file name), sorted by id; the rest as (title, name).
+type Lessons = (Vec<(u32, String, String, String)>, Vec<(String, String)>);
+
+fn lessons(c: &AtCommit) -> Result<Lessons, String> {
     let mut with_id: Vec<(u32, String, String, String)> = Vec::new();
     let mut without: Vec<(String, String)> = Vec::new();
     for path in c.list("docs/harness/mistakes")? {
@@ -292,32 +302,169 @@ pub fn render_lessons(c: &AtCommit) -> Result<String, String> {
             .filter(|t| !t.is_empty())
             .unwrap_or(name.trim_end_matches(".md"))
             .to_string();
-        let link = format!("[`{name}`](mistakes/{name})");
         match lesson_id(front) {
-            Some((n, id)) => with_id.push((n, id, title, link)),
-            None => without.push((title, link)),
+            Some((n, id)) => with_id.push((n, id, title, name.to_string())),
+            None => without.push((title, name.to_string())),
         }
     }
     with_id.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+    Ok((with_id, without))
+}
 
+/// `docs/harness/LESSONS.md`: the mistakes registry, by lesson id where one is recorded.
+pub fn render_lessons(c: &AtCommit) -> Result<String, String> {
+    let (with_id, without) = lessons(c)?;
+    let link = |name: &str| format!("[`{name}`](mistakes/{name})");
     let mut o = String::new();
     o.push_str(&stamp(&c.sha));
     o.push_str("\n# LESSONS\n\nRendered from `docs/harness/mistakes/*.md` at the commit in the stamp above. A lesson is listed under its `id: L-NNN` line; ids are never invented.\n");
     o.push_str("\n## By lesson id\n\n");
-    for (_, id, title, link) in &with_id {
-        o.push_str(&format!("- **{id}**: {title} ({link})\n"));
+    for (_, id, title, name) in &with_id {
+        o.push_str(&format!("- **{id}**: {title} ({})\n", link(name)));
     }
     if with_id.is_empty() {
         o.push_str("none yet\n");
     }
     o.push_str("\n## Without a lesson id yet (assigned in loop PR 8)\n\n");
-    for (title, link) in &without {
-        o.push_str(&format!("- {title} ({link})\n"));
+    for (title, name) in &without {
+        o.push_str(&format!("- {title} ({})\n", link(name)));
     }
     if without.is_empty() {
         o.push_str("none\n");
     }
     Ok(o)
+}
+
+pub const TOP_TEN_START: &str = "<!-- loop:lessons-top-ten:start -->";
+pub const TOP_TEN_END: &str = "<!-- loop:lessons-top-ten:end -->";
+const NO_MARKERS: &str = "AGENTS.md: no markers; top-ten block not rendered";
+
+/// The byte ranges of the text strictly between the AGENTS.md markers, if both are present in order.
+fn between_markers(text: &str) -> Option<(usize, usize)> {
+    let s = text.find(TOP_TEN_START)? + TOP_TEN_START.len();
+    let e = s + text[s..].find(TOP_TEN_END)?;
+    Some((s, e))
+}
+
+/// The AGENTS.md top-ten block: the bytes that go strictly between the markers. Its stamp is the
+/// block's first line. No PM-owned `top_ten:` list exists yet, so it is the first ten lessons by id.
+pub fn render_top_ten(c: &AtCommit) -> Result<String, String> {
+    let (with_id, _) = lessons(c)?;
+    let mut o = format!("\n{}\n", stamp(&c.sha));
+    for (_, id, title, name) in with_id.iter().take(10) {
+        o.push_str(&format!(
+            "- **{id}**: {title} ([`{name}`](docs/harness/mistakes/{name}))\n"
+        ));
+    }
+    if with_id.is_empty() {
+        o.push_str("no lessons with an id yet\n");
+    }
+    Ok(o)
+}
+
+/// AGENTS.md at the commit with the block re-rendered, or `None` when the markers are absent.
+fn render_agents(c: &AtCommit) -> Result<Option<String>, String> {
+    let Ok(text) = c.read("AGENTS.md") else {
+        return Ok(None);
+    };
+    let Some((s, e)) = between_markers(&text) else {
+        return Ok(None);
+    };
+    Ok(Some(format!(
+        "{}{}{}",
+        &text[..s],
+        render_top_ten(c)?,
+        &text[e..]
+    )))
+}
+
+/// `--check` of the AGENTS block on disk: only the bytes between the markers, only when they exist.
+fn check_agents(root: &Path, file: &Path) -> u8 {
+    let Ok(text) = fs::read_to_string(file) else {
+        println!("{NO_MARKERS}");
+        return 0;
+    };
+    let Some((s, e)) = between_markers(&text) else {
+        println!("{NO_MARKERS}");
+        return 0;
+    };
+    let block = &text[s..e];
+    let Some(sha) = block
+        .strip_prefix('\n')
+        .and_then(|b| b.lines().next())
+        .and_then(parse_stamp)
+    else {
+        eprintln!("uor-harness: loop render --check: the AGENTS.md top-ten block has no valid stamp on its first line");
+        return 2;
+    };
+    let fresh = match AtCommit::resolve(root, sha).and_then(|c| render_top_ten(&c)) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("uor-harness: loop render --check: AGENTS.md: {e}");
+            return 2;
+        }
+    };
+    if fresh == block {
+        println!("AGENTS.md top-ten block: matches its render at {sha}");
+        0
+    } else {
+        println!("AGENTS.md top-ten block: differs from its render at {sha}");
+        1
+    }
+}
+
+const ROADMAP: &str = "docs/roadmap/README.md";
+
+/// The roadmap view through today's renderer: `cargo run -q --locked -p xtask -- roadmap render
+/// [--check]`, cargo resolved as the gates resolve it. 0 written or matching, 1 differs, 2 refused.
+fn roadmap(root: &Path, check: bool) -> u8 {
+    let mut cmd = Command::new(crate::loopgates::resolve_program("cargo"));
+    cmd.args([
+        "run", "-q", "--locked", "-p", "xtask", "--", "roadmap", "render",
+    ]);
+    if check {
+        cmd.arg("--check");
+    }
+    for (k, _) in std::env::vars_os() {
+        if k.to_string_lossy().starts_with("GIT_") {
+            cmd.env_remove(k);
+        }
+    }
+    let out = match cmd.current_dir(root).output() {
+        Ok(o) => o,
+        Err(e) => {
+            println!("{ROADMAP}: REFUSED: cannot run cargo: {e}");
+            return 2;
+        }
+    };
+    match out.status.code() {
+        Some(0) => {
+            println!(
+                "{ROADMAP}: {} through xtask",
+                if check {
+                    "matches its render"
+                } else {
+                    "rendered"
+                }
+            );
+            0
+        }
+        // cargo's own failure code: no workspace, no xtask package, a build error or a panic.
+        Some(101) | None => {
+            println!(
+                "{ROADMAP}: REFUSED: cargo or xtask unavailable: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            2
+        }
+        Some(n) => {
+            println!(
+                "{ROADMAP}: differs from its xtask render (exit {n}): {}",
+                String::from_utf8_lossy(&out.stdout).trim()
+            );
+            1
+        }
+    }
 }
 
 fn value_text(v: &serde_json::Value) -> String {
@@ -628,6 +775,7 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
         }
         i += 1;
     }
+    let out_given = out.is_some();
     let dir = out.unwrap_or_else(|| root.to_path_buf());
     if check {
         if at.is_some() {
@@ -643,11 +791,14 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
                 return 2;
             }
         };
-        return names
+        let mut code = names
             .iter()
             .map(|p| check_one(root, &dir.join(p), p))
             .max()
             .unwrap_or(0);
+        code = code.max(check_agents(root, &dir.join("AGENTS.md")));
+        code = code.max(roadmap_or_skip(root, out_given, true));
+        return code;
     }
     let c = match AtCommit::resolve(root, at.as_deref().unwrap_or("HEAD")) {
         Ok(c) => c,
@@ -656,13 +807,21 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             return 2;
         }
     };
-    let views = match render_all(&c) {
+    let mut views = match render_all(&c) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("uor-harness: loop render: {e}");
             return 2;
         }
     };
+    match render_agents(&c) {
+        Ok(Some(text)) => views.push(("AGENTS.md".to_string(), text)),
+        Ok(None) => println!("{NO_MARKERS}"),
+        Err(e) => {
+            eprintln!("uor-harness: loop render: {e}");
+            return 2;
+        }
+    }
     for (p, bytes) in views {
         let path = dir.join(&p);
         if let Some(parent) = path.parent() {
@@ -683,5 +842,14 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
         }
         println!("wrote {} from {}", path.display(), c.sha);
     }
-    0
+    roadmap_or_skip(root, out_given, false)
+}
+
+/// The roadmap view, or a printed skip under `--out`: xtask writes into the repository itself.
+fn roadmap_or_skip(root: &Path, out_given: bool, check: bool) -> u8 {
+    if out_given {
+        println!("{ROADMAP}: skipped with --out; xtask renders it inside the repository");
+        return 0;
+    }
+    roadmap(root, check)
 }

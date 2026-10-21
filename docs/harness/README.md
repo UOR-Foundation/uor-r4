@@ -66,6 +66,20 @@ uor-harness git install-hooks|status    the pre-commit guard, and this branch's 
 uor-harness check [--staged]            every machine-checkable rule in one pass
 ```
 
+### `loop render` (loop PR 3)
+
+```sh
+UOR_LAB=claude uor-harness loop render                       # render the views in place from HEAD
+UOR_LAB=claude uor-harness loop render --check               # compare the views on disk with a fresh render
+UOR_LAB=claude uor-harness loop render --out /tmp/views      # write the views under a scratch directory
+UOR_LAB=claude uor-harness loop render --at abc1234          # render from an older commit
+```
+
+It reads committed files only, at one commit, and prints that commit in a stamp on the first line of each view. Views: `STATE.md`, `HANDOFF.md` (open items by status, one blocked table for held and decision items, the not-doing list), `docs/harness/LESSONS.md`, the top-ten block in `AGENTS.md` and `docs/roadmap/README.md`. `--check` re-renders at the stamped commit and compares, so a view that lags newer inputs is not flagged here; exit 1 means a view differs, 2 means it could not run.
+
+- **AGENTS block.** Render writes `AGENTS.md` only when it holds both `<!-- loop:lessons-top-ten:start -->` and `<!-- loop:lessons-top-ten:end -->`, and replaces only the bytes between them. Without both markers it leaves the file alone and prints `AGENTS.md: no markers; top-ten block not rendered`. `--check` compares only the bytes between the markers, and passes with that note when they are absent. Loop PR 8 adds the markers.
+- **Roadmap view.** `docs/roadmap/README.md` comes from `cargo run -q --locked -p xtask -- roadmap render [--check]`, which this command runs. A build error, a panic (exit 101) or a missing cargo prints `docs/roadmap/README.md: REFUSED` and exits 2; any other non-zero exit is a difference and exits 1. With `--out` the step is skipped with a note, because xtask renders inside the repository.
+
 ### `loop gates` (loop PR 4)
 
 ```sh

@@ -63,6 +63,13 @@ impl Repo {
             .unwrap()
     }
 
+    /// `loop render` with `--out <dir>` first, so nothing is written into the repository.
+    fn render_out(&self, dir: &Path, args: &[&str]) -> Output {
+        let mut a = vec!["--out", dir.to_str().unwrap()];
+        a.extend_from_slice(args);
+        self.render(&a)
+    }
+
     fn out_dir(&self, name: &str) -> PathBuf {
         let d = self._tmp.path().join(name);
         assert!(d.starts_with(self._tmp.path()));
@@ -156,9 +163,14 @@ fn two_renders_of_one_commit_are_byte_identical() {
 #[test]
 fn check_passes_on_a_fresh_render() {
     let r = repo();
-    assert!(r.render(&[]).status.success());
-    assert!(r.root.join("STATE.md").exists());
-    let o = r.render(&["--check"]);
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    assert!(d.join("STATE.md").exists());
+    assert!(
+        !r.root.join("STATE.md").exists(),
+        "--out must not write in place"
+    );
+    let o = r.render_out(&d, &["--check"]);
     assert_eq!(o.status.code(), Some(0), "{o:?}");
 }
 
@@ -166,13 +178,14 @@ fn check_passes_on_a_fresh_render() {
 #[test]
 fn a_hand_edited_state_fails_check() {
     let r = repo();
-    assert!(r.render(&[]).status.success());
-    let p = r.root.join("STATE.md");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    let p = d.join("STATE.md");
     let edited = std::fs::read_to_string(&p)
         .unwrap()
         .replace("| HELD |", "| released |");
     std::fs::write(&p, edited).unwrap();
-    let o = r.render(&["--check"]);
+    let o = r.render_out(&d, &["--check"]);
     assert_eq!(o.status.code(), Some(1), "{o:?}");
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(out.contains("first at line"), "{out}");
@@ -182,13 +195,14 @@ fn a_hand_edited_state_fails_check() {
 #[test]
 fn a_garbled_or_missing_stamp_exits_2() {
     let r = repo();
-    let o = r.render(&["--check"]);
+    let d = r.out_dir("v");
+    let o = r.render_out(&d, &["--check"]);
     assert_eq!(o.status.code(), Some(2), "missing file: {o:?}");
-    assert!(r.render(&[]).status.success());
-    let p = r.root.join("STATE.md");
+    assert!(r.render_out(&d, &[]).status.success());
+    let p = d.join("STATE.md");
     let text = std::fs::read_to_string(&p).unwrap();
     std::fs::write(&p, text.replacen("from ", "from x", 1)).unwrap();
-    let o = r.render(&["--check"]);
+    let o = r.render_out(&d, &["--check"]);
     assert_eq!(o.status.code(), Some(2), "{o:?}");
     assert!(
         String::from_utf8_lossy(&o.stderr).contains("stamp"),
@@ -325,15 +339,10 @@ fn handoff_lists_open_items_by_status_with_not_recorded_for_absent_fields() {
             "### ready (2)",
             "| b | Title b | First b sentence. | not recorded | not recorded | ready; after a, c |",
             "| f | Title f | First f sentence. | not recorded | not recorded | ready |",
-            "### decision (1)",
-            "| c | Title c |",
-            "### held (2)",
-            "| a | Title a |",
-            "| d | Title d |",
             "## Blocked",
-            "| c | decision | owner |",
-            "| a | held | lab |",
-            "| d | held | owner |",
+            "| c | Title c | decision | owner | First c sentence. |",
+            "| a | Title a | held | lab | First a sentence. |",
+            "| d | Title d | held | owner | First d sentence. |",
             "## Not doing",
             "none recorded",
         ],
@@ -408,14 +417,17 @@ fn lessons_list_id_bearing_files_by_id_and_the_rest_under_the_no_id_heading() {
 fn a_hand_edited_handoff_fails_check() {
     let r = repo();
     items(&r);
-    assert!(r.render(&[]).status.success());
-    assert_eq!(r.render(&["--check"]).status.code(), Some(0));
-    let p = r.root.join("HANDOFF.md");
-    let edited = std::fs::read_to_string(&p)
-        .unwrap()
-        .replace("| d | held | owner |", "| d | held | lab |");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    assert_eq!(r.render_out(&d, &["--check"]).status.code(), Some(0));
+    let p = d.join("HANDOFF.md");
+    let edited = std::fs::read_to_string(&p).unwrap().replace(
+        "| d | Title d | held | owner |",
+        "| d | Title d | held | lab |",
+    );
+    assert_ne!(edited, std::fs::read_to_string(&p).unwrap());
     std::fs::write(&p, edited).unwrap();
-    let o = r.render(&["--check"]);
+    let o = r.render_out(&d, &["--check"]);
     assert_eq!(o.status.code(), Some(1), "{o:?}");
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(out.contains("HANDOFF.md: differs"), "{out}");
@@ -429,15 +441,119 @@ fn a_hand_edited_lessons_fails_check() {
         "---\nid: L-001\ntitle: One\n---\n",
     );
     r.commit("a lesson");
-    assert!(r.render(&[]).status.success());
-    assert_eq!(r.render(&["--check"]).status.code(), Some(0));
-    let p = r.root.join("docs/harness/LESSONS.md");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    assert_eq!(r.render_out(&d, &["--check"]).status.code(), Some(0));
+    let p = d.join("docs/harness/LESSONS.md");
     let edited = std::fs::read_to_string(&p)
         .unwrap()
         .replace("**L-001**: One", "**L-001**: Two");
     std::fs::write(&p, edited).unwrap();
-    let o = r.render(&["--check"]);
+    let o = r.render_out(&d, &["--check"]);
     assert_eq!(o.status.code(), Some(1), "{o:?}");
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(out.contains("docs/harness/LESSONS.md: differs"), "{out}");
+}
+
+const AGENTS_WITH_MARKERS: &str = "# Agents\n\nBefore.\n\n<!-- loop:lessons-top-ten:start -->\nstale text\n<!-- loop:lessons-top-ten:end -->\n\nAfter.\n";
+
+fn lesson_files(r: &Repo) {
+    r.write(
+        "docs/harness/mistakes/x.md",
+        "---\nid: L-001\ntitle: One\n---\n\n# One heading\n",
+    );
+}
+
+#[test]
+fn agents_block_is_rendered_between_markers_and_a_hand_edit_fails_check() {
+    let r = repo();
+    lesson_files(&r);
+    r.write("AGENTS.md", AGENTS_WITH_MARKERS);
+    r.commit("agents with markers");
+    let d = r.out_dir("v");
+    let o = r.render_out(&d, &[]);
+    assert!(o.status.success(), "{o:?}");
+    let s = read(&d, "AGENTS.md");
+    assert!(s.starts_with("# Agents\n\nBefore.\n\n<!-- loop:lessons-top-ten:start -->\n<!-- rendered by uor-harness loop render from "), "{s}");
+    assert!(s.contains("- **L-001**: One heading ([`x.md`](docs/harness/mistakes/x.md))\n<!-- loop:lessons-top-ten:end -->\n\nAfter.\n"), "{s}");
+    assert!(!s.contains("stale text"), "{s}");
+    assert_eq!(r.render_out(&d, &["--check"]).status.code(), Some(0));
+    // Text outside the markers is not compared.
+    let p = d.join("AGENTS.md");
+    std::fs::write(&p, s.replace("Before.", "Changed outside.")).unwrap();
+    assert_eq!(r.render_out(&d, &["--check"]).status.code(), Some(0));
+    // The planted fault: a hand edit inside the markers.
+    std::fs::write(&p, s.replace("**L-001**: One heading", "**L-001**: Edited")).unwrap();
+    let o = r.render_out(&d, &["--check"]);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("AGENTS.md top-ten block: differs"), "{out}");
+}
+
+#[test]
+fn agents_without_markers_is_left_byte_unchanged_with_a_note() {
+    let r = repo();
+    let plain = "# Agents\n\nNo markers here.\n";
+    r.write("AGENTS.md", plain);
+    r.commit("plain agents");
+    let d = r.out_dir("v");
+    let o = r.render_out(&d, &[]);
+    assert!(o.status.success(), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        out.contains("AGENTS.md: no markers; top-ten block not rendered"),
+        "{out}"
+    );
+    assert!(!d.join("AGENTS.md").exists());
+    assert_eq!(
+        std::fs::read_to_string(r.root.join("AGENTS.md")).unwrap(),
+        plain
+    );
+    let o = r.render_out(&d, &["--check"]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stdout).contains("no markers"),
+        "{o:?}"
+    );
+}
+
+#[test]
+fn held_and_decision_items_appear_only_in_the_blocked_table() {
+    let r = repo();
+    items(&r);
+    let d = r.out_dir("h");
+    assert!(r.render_out(&d, &[]).status.success());
+    let s = read(&d, "HANDOFF.md");
+    assert!(!s.contains("### held"), "{s}");
+    assert!(!s.contains("### decision"), "{s}");
+    let (open, blocked) = s.split_once("## Blocked").unwrap();
+    for id in ["a", "c", "d"] {
+        assert!(
+            !open.contains(&format!("| {id} |")),
+            "{id} listed as open:\n{open}"
+        );
+        assert_eq!(
+            s.matches(&format!("| {id} | Title {id} |")).count(),
+            1,
+            "{s}"
+        );
+        assert!(blocked.contains(&format!("| {id} | Title {id} |")), "{s}");
+    }
+    assert!(
+        open.contains("| b | Title b |") && open.contains("| f | Title f |"),
+        "{s}"
+    );
+}
+
+#[test]
+fn in_place_render_and_check_refuse_the_roadmap_without_xtask() {
+    let r = repo();
+    let o = r.render(&[]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("docs/roadmap/README.md: REFUSED"), "{out}");
+    let o = r.render(&["--check"]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("docs/roadmap/README.md: REFUSED"), "{out}");
 }
