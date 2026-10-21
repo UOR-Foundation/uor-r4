@@ -419,3 +419,462 @@ pub fn gate(input: &GateInput) -> GateOutcome {
         details,
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// The `uor-harness loop review` command. Everything above is pure; this section reads git and
+// GitHub (through [`ReviewGh`]) and posts one comment.
+// ---------------------------------------------------------------------------------------------
+
+use std::path::{Path, PathBuf};
+
+const USAGE: &str = "usage: uor-harness loop review --pr <n> --verdict APPROVE|CHANGES (--host <text> | --gpu <64 hex>) [--context fresh] [--model <id>] [--launch <id>] [--body-file <path>] [--dry-run]\n       uor-harness loop review --check --pr <n>";
+
+/// TEST-ONLY: a JSON file standing in for `gh`: `{"pr": {"headRefOid", "files": [path]},
+/// "files": {path: text}, "comments": [body], "failPost": bool}`. Each `post_comment` is
+/// appended as a JSON line to `<file>.calls.jsonl`.
+pub const REVIEW_GH_FAKE_ENV: &str = "UOR_LOOP_REVIEW_GH_FAKE";
+
+/// A PR's head and every changed path.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct ReviewPr {
+    #[serde(rename = "headRefOid")]
+    pub head_sha: String,
+    #[serde(default)]
+    pub files: Vec<String>,
+}
+
+/// Every GitHub call `loop review` makes.
+pub trait ReviewGh {
+    fn pr(&self, n: u64) -> Result<ReviewPr, String>;
+    /// The text of `path` at PR `n`'s head.
+    fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String>;
+    /// The comment bodies on PR `n`, oldest first, every page read.
+    fn comments(&self, n: u64) -> Result<Vec<String>, String>;
+    fn post_comment(&self, n: u64, body: &str) -> Result<(), String>;
+}
+
+/// `gh`, run from the repository root.
+pub struct RealReviewGh {
+    pub root: PathBuf,
+}
+
+impl ReviewGh for RealReviewGh {
+    fn pr(&self, n: u64) -> Result<ReviewPr, String> {
+        use crate::loopnext::NextGh as _;
+        let text = crate::loopclaim::run_gh(
+            &self.root,
+            &["pr", "view", &n.to_string(), "--json", "headRefOid,files"],
+        )?;
+        let v: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("gh pr view printed unreadable JSON: {e}"))?;
+        let head_sha = v
+            .get("headRefOid")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+        let mut files: Vec<String> = v
+            .get("files")
+            .and_then(|f| f.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|f| f.get("path")?.as_str().map(str::to_string))
+            .collect();
+        // The listed files stop at 100; a PR that reaches it may have more, so read every page.
+        if files.len() >= 100 {
+            files = crate::loopnext::RealNextGh {
+                root: self.root.clone(),
+            }
+            .pr_files(n)?;
+        }
+        Ok(ReviewPr { head_sha, files })
+    }
+
+    fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String> {
+        use crate::loopnext::NextGh as _;
+        crate::loopnext::RealNextGh {
+            root: self.root.clone(),
+        }
+        .file_at_pr(n, path)
+    }
+
+    fn comments(&self, n: u64) -> Result<Vec<String>, String> {
+        use crate::loopprcheck::PrGh as _;
+        Ok(crate::loopprcheck::RealPrGh {
+            root: self.root.clone(),
+        }
+        .comments(n)?
+        .into_iter()
+        .map(|c| c.body)
+        .collect())
+    }
+
+    fn post_comment(&self, n: u64, body: &str) -> Result<(), String> {
+        let tmp = std::env::temp_dir().join(format!(
+            "uor-loop-review-{}-{n}-{}.md",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::write(&tmp, body).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
+        let tmp_s = tmp.to_string_lossy().into_owned();
+        let out = crate::loopclaim::run_gh(
+            &self.root,
+            &["pr", "comment", &n.to_string(), "--body-file", &tmp_s],
+        );
+        let _ = std::fs::remove_file(&tmp);
+        out.map(|_| ())
+    }
+}
+
+/// The in-memory stand-in for `gh`, read from the file [`REVIEW_GH_FAKE_ENV`] names.
+#[derive(serde::Deserialize, Default)]
+pub struct FakeReviewGh {
+    #[serde(default)]
+    pr: ReviewPr,
+    #[serde(default)]
+    files: BTreeMap<String, String>,
+    #[serde(default)]
+    comments: Vec<String>,
+    #[serde(default, rename = "failPost")]
+    fail_post: bool,
+    #[serde(skip)]
+    calls: PathBuf,
+}
+
+impl FakeReviewGh {
+    pub fn from_file(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| {
+            format!(
+                "cannot read {REVIEW_GH_FAKE_ENV} file {}: {e}",
+                path.display()
+            )
+        })?;
+        let mut f: Self = serde_json::from_str(&text).map_err(|e| {
+            format!(
+                "{REVIEW_GH_FAKE_ENV} file {} is malformed: {e}",
+                path.display()
+            )
+        })?;
+        f.calls = PathBuf::from(format!("{}.calls.jsonl", path.display()));
+        Ok(f)
+    }
+}
+
+impl ReviewGh for FakeReviewGh {
+    fn pr(&self, _n: u64) -> Result<ReviewPr, String> {
+        Ok(self.pr.clone())
+    }
+    fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String> {
+        self.files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| format!("fake PR #{n} has no text for {path}"))
+    }
+    fn comments(&self, _n: u64) -> Result<Vec<String>, String> {
+        Ok(self.comments.clone())
+    }
+    fn post_comment(&self, n: u64, body: &str) -> Result<(), String> {
+        if self.fail_post {
+            return Err(format!("fake PR #{n}: posting the comment failed"));
+        }
+        use std::io::Write as _;
+        let line = serde_json::json!({"call": "post_comment", "pr": n, "body": body});
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.calls)
+            .and_then(|mut f| writeln!(f, "{line}"))
+            .map_err(|e| format!("cannot log to {}: {e}", self.calls.display()))
+    }
+}
+
+/// `git` from `root` with every `GIT_*` variable removed except the ones that only say how to
+/// reach a remote.
+fn git(root: &Path, args: &[&str]) -> Result<String, String> {
+    let mut cmd = std::process::Command::new("git");
+    for (k, _) in std::env::vars_os() {
+        let k = k.to_string_lossy().into_owned();
+        if k.starts_with("GIT_")
+            && !["GIT_SSH_COMMAND", "GIT_SSH", "GIT_ASKPASS"].contains(&k.as_str())
+        {
+            cmd.env_remove(&k);
+        }
+    }
+    let out = cmd
+        .args(args)
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Everything about the PR the gate needs except its comments.
+struct Context {
+    head: String,
+    order: String,
+    order_lab: String,
+    order_item: String,
+    setup_row: Option<String>,
+    rows: Vec<String>,
+    vendors: BTreeMap<String, String>,
+    d59_in_force: bool,
+    doc_only: bool,
+}
+
+fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
+    git(root, &["fetch", "-q", "origin", "main"])?;
+    let pr = gh.pr(n)?;
+    let (order, text, order_lab) =
+        crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p))
+            .map_err(crate::loopnext::OrderErr::note)?;
+    let main = |path: &str| git(root, &["show", &format!("origin/main:{path}")]);
+    let rows = build_rows(&main("docs/loop/README.md")?);
+    let vendors = crate::labs::parse_labs(&main("docs/harness/labs.json")?)?
+        .into_iter()
+        .map(|(lab, l)| (lab, l.vendor))
+        .collect();
+    // Unreadable owner paths or a missing switch keep D59 in force.
+    let d59 = d59_in_force(
+        &main("docs/harness/owner-paths.json").unwrap_or_default(),
+        main(D59_SWITCH).ok().as_deref(),
+    );
+    let doc_only = !pr.files.is_empty()
+        && pr
+            .files
+            .iter()
+            .all(|f| matches!(crate::loopprcheck::size_class(f), "docs" | "generated"));
+    Ok(Context {
+        head: pr.head_sha,
+        order,
+        order_lab,
+        order_item: crate::loopclaim::order_item(&text).unwrap_or_default(),
+        setup_row: setup_row(&text),
+        rows,
+        vendors,
+        d59_in_force: d59,
+        doc_only,
+    })
+}
+
+fn run_gate(pr: u64, c: &Context, comments: &[String]) -> GateOutcome {
+    gate(&GateInput {
+        pr,
+        head: &c.head,
+        order_lab: &c.order_lab,
+        order_item: &c.order_item,
+        setup_row: c.setup_row.as_deref(),
+        rows: &c.rows,
+        vendors: &c.vendors,
+        d59_in_force: c.d59_in_force,
+        doc_only: c.doc_only,
+        comments,
+    })
+}
+
+/// The parsed command line.
+#[derive(Default)]
+struct Args {
+    pr: Option<u64>,
+    check: bool,
+    verdict: Option<Verdict>,
+    host: Option<String>,
+    gpu: Option<String>,
+    fresh: bool,
+    model: Option<String>,
+    launch: Option<String>,
+    body_file: Option<String>,
+    dry_run: bool,
+}
+
+fn parse_args(args: &[String]) -> Result<Args, String> {
+    let mut a = Args::default();
+    let mut it = args.iter();
+    while let Some(flag) = it.next() {
+        let mut value = || {
+            it.next()
+                .cloned()
+                .ok_or_else(|| format!("{flag} needs a value"))
+        };
+        match flag.as_str() {
+            "--pr" => {
+                let v = value()?;
+                a.pr = Some(v.parse().map_err(|_| format!("bad --pr {v:?}"))?);
+            }
+            "--check" => a.check = true,
+            "--verdict" => {
+                a.verdict = Some(match value()?.as_str() {
+                    "APPROVE" => Verdict::Approve,
+                    "CHANGES" => Verdict::Changes,
+                    v => return Err(format!("bad --verdict {v:?}: APPROVE or CHANGES")),
+                })
+            }
+            "--host" => a.host = Some(value()?),
+            "--gpu" => a.gpu = Some(value()?),
+            "--context" => match value()?.as_str() {
+                "fresh" => a.fresh = true,
+                v => return Err(format!("bad --context {v:?}: only `fresh`")),
+            },
+            "--model" => a.model = Some(value()?),
+            "--launch" => a.launch = Some(value()?),
+            "--body-file" => a.body_file = Some(value()?),
+            "--dry-run" => a.dry_run = true,
+            other => return Err(format!("unexpected argument {other:?}")),
+        }
+    }
+    if a.pr.is_none() {
+        return Err("--pr <n> is required".to_string());
+    }
+    let writes = a.verdict.is_some()
+        || a.host.is_some()
+        || a.gpu.is_some()
+        || a.fresh
+        || a.model.is_some()
+        || a.launch.is_some()
+        || a.body_file.is_some()
+        || a.dry_run;
+    if a.check && writes {
+        return Err("--check takes only --pr".to_string());
+    }
+    if !a.check {
+        if a.verdict.is_none() {
+            return Err("give --check, or --verdict to write a record".to_string());
+        }
+        if a.host.is_some() == a.gpu.is_some() {
+            return Err("give exactly one of --host and --gpu".to_string());
+        }
+    }
+    Ok(a)
+}
+
+/// `flag`, else the non-empty environment variable `env`, else `default`.
+fn or_env(flag: &Option<String>, env: &str, default: &str) -> String {
+    flag.clone()
+        .or_else(|| std::env::var(env).ok().filter(|v| !v.trim().is_empty()))
+        .unwrap_or_else(|| default.to_string())
+}
+
+/// `loop review ...`: exit 0 posted (or printed, or the gate passes), 1 refused (the record would
+/// not count, or the gate fails), 2 cannot run (usage, no lab, no ORDER, git or `gh` error).
+pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
+    let a = match parse_args(args) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("uor-harness: loop review: {e}\n{USAGE}");
+            return 2;
+        }
+    };
+    if lab.trim().is_empty() {
+        eprintln!("uor-harness: loop review: set UOR_LAB or pass --lab\n{USAGE}");
+        return 2;
+    }
+    let gh: Box<dyn ReviewGh> = match std::env::var_os(REVIEW_GH_FAKE_ENV) {
+        Some(p) => match FakeReviewGh::from_file(Path::new(&p)) {
+            Ok(f) => {
+                println!(
+                    "FAKE GitHub: {REVIEW_GH_FAKE_ENV}={} (tests only)",
+                    p.to_string_lossy()
+                );
+                Box::new(f)
+            }
+            Err(e) => {
+                eprintln!("uor-harness: loop review: {e}");
+                return 2;
+            }
+        },
+        None => Box::new(RealReviewGh {
+            root: root.to_path_buf(),
+        }),
+    };
+    let n = a.pr.unwrap_or_default();
+    let c = match context(root, gh.as_ref(), n) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("uor-harness: loop review: {e}");
+            return 2;
+        }
+    };
+    if a.check {
+        let comments = match gh.comments(n) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("uor-harness: loop review: {e}");
+                return 2;
+            }
+        };
+        let out = run_gate(n, &c, &comments);
+        for d in &out.details {
+            println!("{d}");
+        }
+        return if out.pass { 0 } else { 1 };
+    }
+    let record = Record {
+        lab: lab.to_string(),
+        pr: n,
+        head: c.head.clone(),
+        model: or_env(&a.model, "UOR_LOOP_MODEL", "unknown"),
+        launch: or_env(&a.launch, "UOR_LOOP_LAUNCH", "manual"),
+        verdict: a.verdict.unwrap_or(Verdict::Changes),
+        order: c.order.clone(),
+        fresh_context: a.fresh,
+        done_when: match (&a.host, &a.gpu) {
+            (Some(h), _) => DoneWhen::Host(h.clone()),
+            (None, g) => DoneWhen::Gpu(g.clone().unwrap_or_default()),
+        },
+    };
+    let mut body = render(&record);
+    // The record must read back as itself: a bad --gpu, a newline in --host and the like.
+    match parse(&body) {
+        Parsed::Record(r) if r == record => {}
+        Parsed::Malformed(why) => {
+            eprintln!("uor-harness: loop review: the record would be malformed: {why}");
+            return 2;
+        }
+        _ => {
+            eprintln!("uor-harness: loop review: the record does not read back as written");
+            return 2;
+        }
+    }
+    let out = run_gate(n, &c, std::slice::from_ref(&body));
+    if !out.details.iter().any(|d| d.ends_with(": counted")) {
+        eprintln!("uor-harness: loop review: refused, this record would not count; nothing posted");
+        for d in &out.details {
+            eprintln!("  {d}");
+        }
+        return 1;
+    }
+    if let Some(path) = &a.body_file {
+        match std::fs::read_to_string(path) {
+            Ok(t) => {
+                body.push('\n');
+                body.push_str(&t);
+            }
+            Err(e) => {
+                eprintln!("uor-harness: loop review: cannot read --body-file {path}: {e}");
+                return 2;
+            }
+        }
+    }
+    if a.dry_run {
+        print!("{body}");
+        return 0;
+    }
+    if let Err(e) = gh.post_comment(n, &body) {
+        eprintln!("uor-harness: loop review: {e}");
+        return 2;
+    }
+    println!(
+        "review: posted {} on PR #{n} at {}",
+        record.verdict.as_str(),
+        record.head
+    );
+    0
+}

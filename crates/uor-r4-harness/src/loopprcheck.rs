@@ -1068,7 +1068,7 @@ fn segment_match(pat: &[u8], s: &[u8]) -> bool {
 }
 
 /// The size class of a changed path.
-fn size_class(path: &str) -> &'static str {
+pub(crate) fn size_class(path: &str) -> &'static str {
     let name = path.rsplit('/').next().unwrap_or(path);
     if path.split('/').any(|s| s == "tests")
         || name.ends_with("_test.rs")

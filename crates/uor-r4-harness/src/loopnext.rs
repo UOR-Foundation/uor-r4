@@ -276,38 +276,38 @@ struct PrOrder {
 
 /// Why a PR has no ORDER: a `gh` read failed (an own PR fails closed on it), or the PR adds none, or
 /// several.
-enum OrderErr {
+pub(crate) enum OrderErr {
     Read(String),
     Missing(String),
 }
 
 impl OrderErr {
-    fn note(self) -> String {
+    pub(crate) fn note(self) -> String {
         match self {
             Self::Read(s) | Self::Missing(s) => s,
         }
     }
 }
 
-/// The ORDER a PR adds, or why the PR is skipped: among its changed paths matching
-/// `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`, the ones readable at its head (a deleted one is
-/// not) and absent from `origin/main` (an edited one is not). Exactly one must remain.
-fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderErr> {
+/// The ORDER PR `n` adds, as `(path, text, lab)`: among `listed` (every changed path of the PR),
+/// the paths matching `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md` that `read` finds at its head
+/// (a deleted one is not) and that are absent from `origin/main` (an edited one is not). Exactly
+/// one must remain. Shared by `loop next` and `loop review`.
+pub(crate) fn added_order(
+    root: &Path,
+    n: u64,
+    listed: &[String],
+    read: &dyn Fn(&str) -> Result<String, String>,
+) -> Result<(String, String, String), OrderErr> {
     let pattern = regex::Regex::new(r"^docs/loop/tasks/[^/]+/[^/]+-[0-9]+/ORDER\.md$")
         .expect("a valid pattern");
-    // The listed files stop at 100; a PR that reaches it may have more, so read every page.
-    let listed: Vec<String> = if pr.files.len() >= 100 {
-        gh.pr_files(pr.number).map_err(OrderErr::Read)?
-    } else {
-        pr.files.iter().map(|f| f.path.clone()).collect()
-    };
     let mut added = Vec::new();
     for path in listed
         .iter()
         .map(String::as_str)
         .filter(|p| pattern.is_match(p))
     {
-        let text = match gh.file_at_pr(pr.number, path) {
+        let text = match read(path) {
             Ok(t) => t,
             // A path deleted at the head is absent (404); any other failure is a read error.
             Err(e) if path_absent(&e) => continue,
@@ -320,12 +320,11 @@ fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderE
     }
     let (path, text) = match added.len() {
         1 => added.remove(0),
-        0 => return Err(OrderErr::Missing(format!("#{} adds no ORDER", pr.number))),
-        n => {
+        0 => return Err(OrderErr::Missing(format!("#{n} adds no ORDER"))),
+        k => {
             let paths: Vec<&str> = added.iter().map(|(p, _)| *p).collect();
             return Err(OrderErr::Missing(format!(
-                "#{} adds {n} ORDERs ({})",
-                pr.number,
+                "#{n} adds {k} ORDERs ({})",
                 paths.join(", ")
             )));
         }
@@ -337,6 +336,18 @@ fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderE
         .and_then(|d| d.rsplit_once('-'))
         .map(|(l, _)| l.to_string())
         .unwrap_or_default();
+    Ok((path.to_string(), text, lab))
+}
+
+/// The ORDER a PR adds, or why the PR is skipped (see [`added_order`]).
+fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderErr> {
+    // The listed files stop at 100; a PR that reaches it may have more, so read every page.
+    let listed: Vec<String> = if pr.files.len() >= 100 {
+        gh.pr_files(pr.number).map_err(OrderErr::Read)?
+    } else {
+        pr.files.iter().map(|f| f.path.clone()).collect()
+    };
+    let (_, text, lab) = added_order(root, pr.number, &listed, &|p| gh.file_at_pr(pr.number, p))?;
     let setup = crate::loopclaim::order_item(&text).is_some_and(|i| i.starts_with("infra-loop-pr"));
     Ok(PrOrder { lab, setup })
 }
