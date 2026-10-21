@@ -25,10 +25,15 @@
 //!
 //! **The writes** (ORDER call 5) happen only after every check has passed, from the `origin/main`
 //! the checks read, in this order: `git worktree add .worktrees/<lab>-<topic> -b <lab>/<topic>
-//! origin/main`; the ORDER `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md` committed there; a draft
-//! PR; a re-list. If the re-list shows a lower-numbered draft PR whose ORDER names the same item,
-//! the claim lost the race: its PR is closed, its pushed branch is deleted from `origin`, and its
-//! worktree and branch, by exact path and name, are removed. Nothing else is touched.
+//! origin/main`; the ORDER `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md` committed there; a push
+//! leased on the branch being absent from `origin`; a draft PR; a re-list. A branch of that name
+//! already on `origin`, or an `origin` that cannot be checked, refuses before any write. Any
+//! failure after `worktree add`, and a lost race (the re-list shows a lower-numbered draft PR
+//! whose ORDER names the same item), runs one rollback, which attempts every step: close our PR;
+//! delete our branch from `origin`, leased on the commit we pushed, so a branch someone else moved
+//! is never deleted; remove our worktree and branch by exact path and name. Nothing else is
+//! touched. A clean lost race exits 1; a failure, or a rollback that left anything, exits 2 and
+//! names what is left.
 //!
 //! **GitHub.** All access goes through the [`Gh`] trait. The real one runs `gh`; tests point the
 //! binary at a JSON file through `UOR_LOOP_GH_FAKE`.
@@ -89,12 +94,11 @@ pub trait Gh {
     fn list_open_prs(&self) -> Result<Vec<OpenPr>, String>;
     /// The text of `path` on the PR's head branch.
     fn order_text(&self, pr: &OpenPr, path: &str) -> Result<String, String>;
-    /// Publish `branch` and open a draft PR from it against `main`; returns the PR number.
+    /// Open a draft PR against `main` from `branch`, which the claim has already pushed; returns
+    /// the PR number. Pushing and deleting the branch are plain `git` calls, outside this trait.
     fn create_draft_pr(&self, branch: &str, title: &str, body: &str) -> Result<u64, String>;
     /// Close PR `number`.
     fn close_pr(&self, number: u64) -> Result<(), String>;
-    /// Delete exactly `branch` from `origin`: the branch a lost claim pushed.
-    fn delete_remote_branch(&self, branch: &str) -> Result<(), String>;
 }
 
 /// `gh`, run from the repository root.
@@ -153,7 +157,6 @@ impl Gh for RealGh {
     }
 
     fn create_draft_pr(&self, branch: &str, title: &str, body: &str) -> Result<u64, String> {
-        crate::loopgates::git(&self.root, &["push", "-q", "-u", "origin", branch])?;
         let url = run_gh(
             &self.root,
             &[
@@ -171,10 +174,6 @@ impl Gh for RealGh {
     fn close_pr(&self, number: u64) -> Result<(), String> {
         run_gh(&self.root, &["pr", "close", &number.to_string()]).map(|_| ())
     }
-
-    fn delete_remote_branch(&self, branch: &str) -> Result<(), String> {
-        crate::loopgates::git(&self.root, &["push", "-q", "origin", "--delete", branch]).map(|_| ())
-    }
 }
 
 #[derive(Deserialize)]
@@ -189,6 +188,9 @@ enum FakeFile {
         next_pr_number: Option<u64>,
         #[serde(default)]
         after_create: Vec<OpenPr>,
+        /// When true, `create_draft_pr` records nothing and fails.
+        #[serde(default, rename = "createFails")]
+        create_fails: bool,
     },
 }
 
@@ -197,6 +199,7 @@ pub struct FakeGh {
     pub prs: Vec<OpenPr>,
     pub after_create: Vec<OpenPr>,
     pub next_pr_number: u64,
+    pub create_fails: bool,
     created: Cell<bool>,
     calls: RefCell<Option<std::fs::File>>,
     calls_path: PathBuf,
@@ -208,13 +211,14 @@ impl FakeGh {
             .map_err(|e| format!("cannot read {GH_FAKE_ENV} file {}: {e}", path.display()))?;
         let file = serde_json::from_str(&text)
             .map_err(|e| format!("{GH_FAKE_ENV} file {} is malformed: {e}", path.display()))?;
-        let (prs, next, after_create) = match file {
-            FakeFile::List(prs) => (prs, None, Vec::new()),
+        let (prs, next, after_create, create_fails) = match file {
+            FakeFile::List(prs) => (prs, None, Vec::new(), false),
             FakeFile::Full {
                 prs,
                 next_pr_number,
                 after_create,
-            } => (prs, next_pr_number, after_create),
+                create_fails,
+            } => (prs, next_pr_number, after_create, create_fails),
         };
         let mut calls_path = path.as_os_str().to_owned();
         calls_path.push(".calls.jsonl");
@@ -222,6 +226,7 @@ impl FakeGh {
             prs,
             after_create,
             next_pr_number: next.unwrap_or(1),
+            create_fails,
             created: Cell::new(false),
             calls: RefCell::new(None),
             calls_path: calls_path.into(),
@@ -262,6 +267,9 @@ impl Gh for FakeGh {
     }
 
     fn create_draft_pr(&self, branch: &str, title: &str, body: &str) -> Result<u64, String> {
+        if self.create_fails {
+            return Err("the fake gh pr create failed".into());
+        }
         self.record(serde_json::json!({
             "call": "create_draft_pr", "branch": branch, "title": title, "body": body,
             "number": self.next_pr_number
@@ -272,10 +280,6 @@ impl Gh for FakeGh {
 
     fn close_pr(&self, number: u64) -> Result<(), String> {
         self.record(serde_json::json!({"call": "close_pr", "number": number}))
-    }
-
-    fn delete_remote_branch(&self, branch: &str) -> Result<(), String> {
-        self.record(serde_json::json!({"call": "delete_remote_branch", "branch": branch}))
     }
 }
 
@@ -664,20 +668,79 @@ pub fn order_skeleton(
     s
 }
 
-/// What a claim created, so that a lost race removes exactly that and nothing else.
+/// What a claim created, so that a rollback removes exactly that and nothing else.
 struct Created {
     worktree: PathBuf,
     branch: String,
+    /// The commit we pushed to `origin` as `branch`, once the push succeeded.
+    pushed: Option<String>,
+    /// Our draft PR, once it exists.
+    pr: Option<u64>,
 }
 
 impl Created {
-    /// Remove our worktree by its exact path and our branch by its exact name.
-    fn remove(&self, root: &Path) -> Result<(), String> {
+    /// Undo everything this claim created, newest first: close our PR, delete our pushed branch
+    /// from `origin` only while it is still at the commit we pushed, remove our worktree by its
+    /// exact path and our branch by its exact name. Every step is attempted; the result names
+    /// what is left, and is empty when the rollback is clean.
+    fn rollback(&self, root: &Path, gh: &dyn Gh) -> Vec<String> {
+        let mut left = Vec::new();
+        if let Some(pr) = self.pr {
+            if let Err(e) = gh.close_pr(pr) {
+                left.push(format!("draft PR #{pr} is still open ({e})"));
+            }
+        }
+        if let Some(sha) = &self.pushed {
+            // The lease: a branch someone else has moved since our push is never deleted.
+            let lease = format!("--force-with-lease=refs/heads/{}:{sha}", self.branch);
+            let args = ["push", "-q", "origin", &lease, "--delete", &self.branch];
+            if let Err(e) = crate::loopgates::git(root, &args) {
+                left.push(format!("origin still has {} ({e})", self.branch));
+            }
+        }
         let wt = self.worktree.to_string_lossy();
-        crate::loopgates::git(root, &["worktree", "remove", "--force", &wt])?;
-        crate::loopgates::git(root, &["branch", "-D", &self.branch])?;
-        Ok(())
+        if let Err(e) = crate::loopgates::git(root, &["worktree", "remove", "--force", &wt]) {
+            left.push(format!("worktree {wt} is left ({e})"));
+        }
+        if let Err(e) = crate::loopgates::git(root, &["branch", "-D", &self.branch]) {
+            left.push(format!("branch {} is left ({e})", self.branch));
+        }
+        left
     }
+}
+
+/// Whether `branch` exists on `origin`. `git ls-remote --exit-code` exits 0 when it does and 2
+/// when it does not; any other outcome means we cannot tell, which refuses the claim.
+fn on_origin(root: &Path, branch: &str) -> Result<bool, String> {
+    let r = format!("refs/heads/{branch}");
+    let out = std::process::Command::new("git")
+        .args(["ls-remote", "--exit-code", "origin", &r])
+        .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .output()
+        .map_err(|e| format!("cannot check origin for {branch}: {e}"))?;
+    match out.status.code() {
+        Some(0) => Ok(true),
+        Some(2) => Ok(false),
+        _ => Err(format!(
+            "cannot check origin for {branch}: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )),
+    }
+}
+
+/// `reason`, followed by one line for each thing a rollback left behind.
+fn with_leftovers(reason: String, left: &[String]) -> String {
+    if left.is_empty() {
+        return format!("{reason}; everything this claim created was removed");
+    }
+    let mut s = format!("{reason}; the rollback left things a person must remove:");
+    for l in left {
+        s += &format!("\n  left: {l}");
+    }
+    s
 }
 
 /// The result of the writes: how the claim ended.
@@ -690,10 +753,10 @@ pub enum Claimed {
     Lost {
         pr: u64,
         lower: u64,
-        /// Our branch, deleted from `origin`.
+        /// Our branch, which the rollback deleted from `origin`.
         branch: String,
-        /// Why deleting it from `origin` failed, if it did.
-        delete_failed: Option<String>,
+        /// What the rollback could not remove; empty when it was clean.
+        left: Vec<String>,
     },
 }
 
@@ -707,9 +770,11 @@ pub fn write(
 ) -> Result<Claimed, String> {
     // No second fetch: the writes start from the origin/main that `check` fetched and read.
     let slug = crate::state::slug(lab);
-    let created = Created {
+    let mut created = Created {
         worktree: root.join(".worktrees").join(format!("{slug}-{topic}")),
         branch: format!("{slug}/{topic}"),
+        pushed: None,
+        pr: None,
     };
     if created.worktree.exists() {
         return Err(format!(
@@ -720,6 +785,12 @@ pub fn write(
     let branch_ref = format!("refs/heads/{}", created.branch);
     if crate::loopgates::git(root, &["rev-parse", "--verify", "--quiet", &branch_ref]).is_ok() {
         return Err(format!("branch {} already exists", created.branch));
+    }
+    if on_origin(root, &created.branch)? {
+        return Err(format!(
+            "branch {} already exists on origin",
+            created.branch
+        ));
     }
     let item_text = main_item_text(root, item)
         .ok_or_else(|| format!("cannot read item {item} on origin/main"))?;
@@ -740,69 +811,62 @@ pub fn write(
             "origin/main",
         ],
     )?;
-    // From here on a failure before the PR exists removes what this claim created.
+    // From here on every failure runs the rollback of what this claim created.
     let order = format!("docs/loop/tasks/{item}/{slug}-{n}/ORDER.md");
     let text = order_skeleton(&slug, n, item, base.trim(), &done_when(&item_text), &scope);
-    let committed = (|| {
+    let outcome = (|| -> Result<Option<u64>, String> {
         let path = created.worktree.join(&order);
         std::fs::create_dir_all(path.parent().expect("an ORDER has a folder"))
             .and_then(|()| std::fs::write(&path, &text))
             .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-        let wt_root = &created.worktree;
-        crate::loopgates::git(wt_root, &["add", "--", &order])?;
+        let wt_root = created.worktree.clone();
+        crate::loopgates::git(&wt_root, &["add", "--", &order])?;
         let msg = format!("[{slug}] loop claim: ORDER for {item} ({slug}-{n})");
-        crate::loopgates::git(wt_root, &["commit", "-q", "-m", &msg, "--", &order])?;
+        crate::loopgates::git(&wt_root, &["commit", "-q", "-m", &msg, "--", &order])?;
+        let sha = git(&wt_root, &["rev-parse", "HEAD"])?.trim().to_string();
+        // An empty lease value: the push succeeds only while `origin` has no such branch.
+        let lease = format!("--force-with-lease=refs/heads/{}:", created.branch);
+        let branch = created.branch.clone();
+        crate::loopgates::git(&wt_root, &["push", "-q", "-u", "origin", &lease, &branch])?;
+        created.pushed = Some(sha);
         let title = format!("[{slug}] {item} ({slug}-{n})");
         let body =
             format!("Draft claim of `{item}` by `uor-harness loop claim`.\n\nORDER: `{order}`\n");
-        gh.create_draft_pr(&created.branch, &title, &body)
+        let pr = gh.create_draft_pr(&branch, &title, &body)?;
+        created.pr = Some(pr);
+        // Re-list: a lower-numbered draft PR whose ORDER names the same item wins the race.
+        let prs = gh
+            .list_open_prs()
+            .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?;
+        let rivals: Vec<OpenPr> = prs
+            .into_iter()
+            .filter(|p| p.is_draft && p.number < pr)
+            .collect();
+        Ok(pr_orders(gh, &rivals)
+            .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?
+            .into_iter()
+            .filter(|o| o.item == item)
+            .filter_map(|o| o.pr)
+            .min())
     })();
-    let pr = match committed {
-        Ok(pr) => pr,
-        Err(e) => {
-            let undo = created
-                .remove(root)
-                .err()
-                .map(|u| format!("; undo failed: {u}"));
-            return Err(format!("{e}{}", undo.unwrap_or_default()));
-        }
-    };
-    // Re-list: a lower-numbered draft PR whose ORDER names the same item wins the race.
-    let prs = gh
-        .list_open_prs()
-        .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?;
-    let rivals: Vec<OpenPr> = prs
-        .into_iter()
-        .filter(|p| p.is_draft && p.number < pr)
-        .collect();
-    let lower = pr_orders(gh, &rivals)
-        .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?
-        .into_iter()
-        .filter(|o| o.item == item)
-        .filter_map(|o| o.pr)
-        .min();
-    if let Some(lower) = lower {
-        gh.close_pr(pr)
-            .map_err(|e| format!("lost the race to #{lower}, but closing #{pr} failed: {e}"))?;
-        // Our pushed branch, by its exact name. A failure is reported; it does not change exit 1.
-        let delete_failed = gh.delete_remote_branch(&created.branch).err();
-        created.remove(root).map_err(|e| {
-            format!(
-                "lost the race to #{lower}; closed #{pr}, but removing our worktree failed: {e}"
-            )
-        })?;
-        return Ok(Claimed::Lost {
-            pr,
+    match outcome {
+        Err(e) => Err(with_leftovers(e, &created.rollback(root, gh))),
+        Ok(Some(lower)) => Ok(Claimed::Lost {
+            pr: created
+                .pr
+                .expect("the re-list ran after the PR was created"),
             lower,
+            left: created.rollback(root, gh),
             branch: created.branch,
-            delete_failed,
-        });
+        }),
+        Ok(None) => Ok(Claimed::Won {
+            pr: created
+                .pr
+                .expect("the re-list ran after the PR was created"),
+            worktree: created.worktree,
+            order,
+        }),
     }
-    Ok(Claimed::Won {
-        worktree: created.worktree,
-        order,
-        pr,
-    })
 }
 
 const USAGE: &str = "usage: uor-harness loop claim <item-id> [--lab-topic <topic>]";
@@ -876,18 +940,21 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             pr,
             lower,
             branch,
-            delete_failed,
+            left,
         }) => {
-            eprintln!(
-                "uor-harness: loop claim: lost the race to #{lower}; closed #{pr} and removed its worktree and branch"
-            );
-            match delete_failed {
-                None => eprintln!("uor-harness: loop claim: deleted {branch} from origin"),
-                Some(e) => eprintln!(
-                    "uor-harness: loop claim: deleting {branch} from origin failed: {e}; delete it by hand"
-                ),
+            if left.is_empty() {
+                eprintln!(
+                    "uor-harness: loop claim: lost the race to #{lower}; closed #{pr}, deleted {branch} from origin and removed its worktree and branch"
+                );
+                return 1;
             }
-            1
+            eprintln!(
+                "uor-harness: loop claim: lost the race to #{lower}; the rollback of #{pr} left things a person must remove:"
+            );
+            for l in left {
+                eprintln!("  left: {l}");
+            }
+            2
         }
         Err(e) => {
             eprintln!("uor-harness: loop claim: {e}");

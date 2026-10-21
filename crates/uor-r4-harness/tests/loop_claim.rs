@@ -225,6 +225,18 @@ impl Repo {
             .expect("git runs")
     }
 
+    /// Whether the bare `origin` in this temp dir has branch `b`.
+    fn remote_has(&self, b: &str) -> bool {
+        let remote = self.tmp.path().canonicalize().unwrap().join("remote.git");
+        let r = format!("refs/heads/{b}");
+        let o = clean(&mut Command::new("git"))
+            .args(["ls-remote", remote.to_str().unwrap(), &r])
+            .output()
+            .expect("git runs");
+        assert!(o.status.success(), "{o:?}");
+        !o.stdout.is_empty()
+    }
+
     fn has_branch(&self, b: &str) -> bool {
         let r = format!("refs/heads/{b}");
         self.out(&self.root, &["rev-parse", "--verify", "--quiet", &r])
@@ -319,26 +331,27 @@ fn a_lost_race_closes_our_pr_and_removes_only_what_we_created() {
         "claude/keep",
         ".worktrees/claude-keep",
     ]);
+    r.git(&["push", "-q", "origin", "claude/keep"]);
     let fake = serde_json::json!({
         "prs": [], "nextPrNumber": 50,
         "afterCreate": [pr_with_order(40, "codex/a", "ready-a")]
     });
     let o = r.claim("ready-a", fake);
-    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert_eq!(o.status.code(), Some(1), "a clean rollback exits 1: {o:?}");
     assert!(
         String::from_utf8_lossy(&o.stderr).contains("lost the race to #40"),
         "{o:?}"
     );
     let calls = r.calls();
-    assert_eq!(calls.len(), 3, "{calls:?}");
+    assert_eq!(calls.len(), 2, "{calls:?}");
     assert_eq!(
         calls[1],
         serde_json::json!({"call": "close_pr", "number": 50})
     );
-    assert_eq!(
-        calls[2],
-        serde_json::json!({"call": "delete_remote_branch", "branch": "claude/ready-a"}),
-        "only our pushed branch is deleted from origin"
+    assert!(!r.remote_has("claude/ready-a"), "our pushed branch is gone");
+    assert!(
+        r.remote_has("claude/keep"),
+        "the unrelated remote branch survives"
     );
     assert!(
         String::from_utf8_lossy(&o.stderr).contains("deleted claude/ready-a from origin"),
@@ -351,6 +364,37 @@ fn a_lost_race_closes_our_pr_and_removes_only_what_we_created() {
         "the unrelated worktree survives"
     );
     assert!(r.has_branch("claude/keep"));
+}
+
+#[test]
+fn a_branch_already_on_origin_is_refused_and_nothing_is_created() {
+    let r = Repo::new();
+    r.git(&["push", "-q", "origin", "main:refs/heads/claude/ready-a"]);
+    let o = r.claim("ready-a", serde_json::json!([]));
+    nothing_created(&r, &o);
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("already exists on origin"),
+        "{o:?}"
+    );
+    assert!(!r.root.join(".worktrees/claude-ready-a").exists());
+    assert!(r.remote_has("claude/ready-a"), "their branch is untouched");
+}
+
+#[test]
+fn a_failed_create_after_the_push_rolls_everything_back() {
+    let r = Repo::new();
+    let o = r.claim(
+        "ready-a",
+        serde_json::json!({"prs": [], "createFails": true}),
+    );
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(!r.has_branch("claude/ready-a"), "{o:?}");
+    assert!(!r.root.join(".worktrees/claude-ready-a").exists(), "{o:?}");
+    assert!(
+        !r.remote_has("claude/ready-a"),
+        "the pushed branch is deleted: {o:?}"
+    );
+    assert!(r.calls().is_empty(), "{:?}", r.calls());
 }
 
 #[test]
