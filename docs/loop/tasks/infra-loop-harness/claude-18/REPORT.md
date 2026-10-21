@@ -59,9 +59,9 @@ The main session re-ran each builder's tests at its commit, then ran these at `6
   - `loop review`'s would-not-count refusal removed: the codex-on-a-setup-PR test.
   - `pr-check` passing on any well-formed record: its codex-on-a-setup-PR case.
   - `next` ignoring `may_review`: `on_a_setup_pr_only_claude_owes_the_review`.
-- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: FULLSUITE_PLACEHOLDER.
-- **`loop pr-check --local --base 987f72259` on this branch:** PRCHECK_PLACEHOLDER.
-- **Other gates.** `cargo fmt -p uor-r4-harness --check` is clean, and whole-crate clippy `--all-targets` is clean. Claim-wording, `xtask links` and the local copyright check: GATES_PLACEHOLDER.
+- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: 897 passed and 0 failed, on the first run.
+- **`loop pr-check --local --base 987f72259` on this branch:** `order`, `commit-order`, `report`, `owner-paths`, `rule-sources` and `read-path` pass; `rendered-lock`, `filemap`, `review-record` and `required-checks` are N/A; `scope` fails, as above.
+- **Other gates.** `cargo fmt -p uor-r4-harness --check` is clean, and whole-crate clippy `--all-targets` is clean. Claim-wording passed, `xtask links` finds 0 broken links in the changed files, and the local copyright check finds 0 matching 8-word runs.
 
 ## Skills used
 
