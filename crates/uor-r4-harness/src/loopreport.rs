@@ -109,7 +109,8 @@ fn check_problems(text: &str) -> Vec<String> {
     for (line, can_head) in crate::loopprcheck::heading_lines(text) {
         if let Some(h) = line.strip_prefix("## ").filter(|_| can_head) {
             section = Some(h.trim().to_string());
-        } else if line.contains(FILL) {
+        } else if line.trim_start().starts_with(FILL) {
+            // A template prompt is a line of its own; prose that names the marker is not one.
             out.push(match &section {
                 Some(s) => format!("a `{FILL}` template line is left in `## {s}`"),
                 None => format!("a `{FILL}` template line is left before any `## ` heading"),

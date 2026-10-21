@@ -150,6 +150,18 @@ fn check_passes_a_complete_report_and_refuses_fill_lines_and_a_missing_file() {
     assert_eq!(code, 1, "{out}");
     assert!(out.contains("FAIL report"), "{out}");
     assert!(out.contains("left in `## What changed`"), "{out}");
+
+    // Prose that names the marker is not a template line (the claude-17 REPORT does this).
+    r.write(
+        REPORT,
+        &VALID.replace(
+            "A.\n",
+            "A.\nTemplate prompts are `<!-- fill: -->` lines, which `--check` refuses.\n  - It refuses a leftover `<!-- fill:` line.\n",
+        ),
+    );
+    let (code, out) = r.report(Some("claude"), &["--check"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("PASS report"), "{out}");
 }
 
 #[test]
