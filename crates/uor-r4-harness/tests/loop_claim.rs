@@ -100,13 +100,22 @@ impl Repo {
 
     /// Run `loop claim <item>` as claude with `prs` as the fake `gh pr list` output.
     fn claim(&self, item: &str, prs: serde_json::Value) -> Output {
+        self.claim_in(&self.root, item, prs)
+    }
+
+    /// Run `loop claim <item>` as claude with `--repo dir` and `dir` as the current directory.
+    fn claim_in(&self, dir: &std::path::Path, item: &str, prs: serde_json::Value) -> Output {
+        assert!(
+            dir.starts_with(&self.root),
+            "the claim runs inside the temp repo"
+        );
         let fake = self.tmp.path().join("gh-fake.json");
         std::fs::write(&fake, prs.to_string()).unwrap();
         clean(&mut Command::new(BIN))
-            .args(["--repo", self.root.to_str().unwrap(), "loop", "claim", item])
+            .args(["--repo", dir.to_str().unwrap(), "loop", "claim", item])
             .env("UOR_LAB", "claude")
             .env("UOR_LOOP_GH_FAKE", &fake)
-            .current_dir(&self.root)
+            .current_dir(dir)
             .output()
             .expect("uor-harness runs")
     }
@@ -752,4 +761,96 @@ fn an_open_order_without_scope_warns_and_is_skipped_for_overlap() {
         &r.claim("noscope-c", prs),
         "item noscope-c is already claimed by PR #7",
     );
+}
+
+/// A PR that changes an ORDER the fake has no text for, so reading it fails.
+fn pr_with_unreadable_order(number: u64) -> serde_json::Value {
+    serde_json::json!({
+        "number": number, "headRefName": format!("codex/u{number}"), "isDraft": true,
+        "files": [{"path": format!("docs/loop/tasks/t/codex-{number}/ORDER.md")}]
+    })
+}
+
+#[test]
+fn an_unreadable_pr_order_warns_instead_of_blocking() {
+    let r = Repo::new();
+    let o = r.claim("other-d", serde_json::json!([pr_with_unreadable_order(9)]));
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("warning: cannot read PR #9's ORDER") && err.contains("unknown item"),
+        "{err}"
+    );
+    // A lower-numbered unreadable PR names no item, so it never wins the race.
+    let r = Repo::new();
+    let fake = serde_json::json!({
+        "prs": [], "nextPrNumber": 50,
+        "afterCreate": [pr_with_unreadable_order(8)]
+    });
+    let o = r.claim("ready-a", fake);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("cannot read PR #8's ORDER"),
+        "{o:?}"
+    );
+    assert!(r.remote_has("claude/ready-a"), "our claim stands");
+}
+
+#[test]
+fn a_lower_numbered_ready_for_review_pr_wins_the_race() {
+    let r = Repo::new();
+    let mut rival = pr_with_order(40, "codex/a", "ready-a");
+    rival["isDraft"] = serde_json::json!(false);
+    let fake = serde_json::json!({
+        "prs": [], "nextPrNumber": 50, "afterCreate": [rival]
+    });
+    let o = r.claim("ready-a", fake);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("lost the race to #40"),
+        "{o:?}"
+    );
+    assert!(!r.remote_has("claude/ready-a"), "our pushed branch is gone");
+}
+
+#[test]
+fn a_claim_from_a_linked_worktree_places_the_worktree_under_the_main_checkout() {
+    let r = Repo::new();
+    r.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "claude/host",
+        ".worktrees/claude-host",
+    ]);
+    let host = r.root.join(".worktrees/claude-host");
+    let o = r.claim_in(&host, "ready-a", serde_json::json!({"prs": []}));
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(r.root.join(".worktrees/claude-ready-a").is_dir(), "{o:?}");
+    assert!(!host.join(".worktrees").exists(), "{o:?}");
+}
+
+#[test]
+fn a_worktree_outside_the_main_worktrees_folder_holds_no_open_order() {
+    let r = Repo::new();
+    r.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "claude/x",
+        "local/.worktrees/claude-x",
+    ]);
+    let wt = r.root.join("local/.worktrees/claude-x");
+    let o = wt.join("docs/loop/tasks/t/claude-1/ORDER.md");
+    std::fs::create_dir_all(o.parent().unwrap()).unwrap();
+    std::fs::write(&o, order("ready-a")).unwrap();
+    assert!(r.out(&wt, &["add", "-A"]).status.success());
+    assert!(r
+        .out(&wt, &["commit", "-q", "-m", "order"])
+        .status
+        .success());
+    let c = r.claim("ready-a", serde_json::json!([]));
+    assert_eq!(c.status.code(), Some(0), "{c:?}");
 }

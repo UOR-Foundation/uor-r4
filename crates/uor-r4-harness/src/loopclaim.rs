@@ -9,8 +9,10 @@
 //! (`git show origin/main:docs/roadmap/items/<id>.md`), never from the working tree.
 //! 1. The item exists on `origin/main` and its `status:` is `ready`.
 //! 2. No open order names it. Open orders are the ORDER files changed on this lab's worktrees under
-//!    `.worktrees/<lab>-*` whose commit is not in `origin/main`, plus the ORDER files changed in
-//!    open PRs. An ORDER names its item in the `Item:` line link `roadmap/items/<id>.md`.
+//!    the main checkout's `.worktrees/<lab>-*` whose commit is not in `origin/main`, plus the ORDER
+//!    files changed in open PRs, read through `refs/pull/<n>/head`. A PR ORDER that cannot be read
+//!    warns and counts as an open order of unknown item. An ORDER names its item in the `Item:`
+//!    line link `roadmap/items/<id>.md`.
 //! 3. The item has a `scope:` line. Without one the claim is refused; it never guesses. Each of its
 //!    globs passes [`scope_glob_ok`].
 //! 4. No scope glob overlaps a glob of an open order's item (see [`globs_overlap`]); that item's
@@ -25,15 +27,16 @@
 //!
 //! **The writes** (ORDER call 5) happen only after every check has passed, from the `origin/main`
 //! the checks read, in this order: `git worktree add .worktrees/<lab>-<topic> -b <lab>/<topic>
-//! origin/main`; the ORDER `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md` committed there; a push
-//! leased on the branch being absent from `origin`; a draft PR; a re-list. A branch of that name
-//! already on `origin`, or an `origin` that cannot be checked, refuses before any write. Any
-//! failure after `worktree add`, and a lost race (the re-list shows a lower-numbered draft PR
-//! whose ORDER names the same item), runs one rollback, which attempts every step: close our PR;
-//! delete our branch from `origin`, leased on the commit we pushed, so a branch someone else moved
-//! is never deleted; remove our worktree and branch by exact path and name. Nothing else is
-//! touched. A clean lost race exits 1; a failure, or a rollback that left anything, exits 2 and
-//! names what is left.
+//! origin/main`, under the main checkout even when the claim runs from a linked worktree; the
+//! ORDER `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md` committed there; a push leased on the branch
+//! being absent from `origin`; a draft PR; a re-list. A branch of that name already on `origin`,
+//! or an `origin` that cannot be checked, refuses before any write. Any failure after `worktree
+//! add`, and a lost race (the re-list shows a lower-numbered open PR, draft or not, whose ORDER
+//! names the same item), runs one rollback, which attempts every step: close our PR; delete our
+//! branch from `origin`, leased on the commit we pushed, so a branch someone else moved is never
+//! deleted; remove our worktree and branch by exact path and name. Nothing else is touched. A
+//! clean lost race exits 1; a failure, or a rollback that left anything, exits 2 and names what
+//! is left.
 //!
 //! **GitHub.** All access goes through the [`Gh`] trait. The real one runs `gh`; tests point the
 //! binary at a JSON file through `UOR_LOOP_GH_FAKE`.
@@ -122,6 +125,29 @@ fn run_gh(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Percent-encode every byte of `s` outside `A-Za-z0-9-._~` and the bytes in `keep`.
+fn percent_encode(s: &str, keep: &[u8]) -> String {
+    let mut out = String::with_capacity(s.len());
+    for &b in s.as_bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~".contains(&b) || keep.contains(&b) {
+            out.push(char::from(b));
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// The contents API endpoint for `path` on PR `pr`'s head, read through `refs/pull/<pr>/head` so a
+/// PR from a fork, or a branch name that needs escaping, still resolves.
+fn contents_endpoint(path: &str, pr: u64) -> String {
+    format!(
+        "repos/{{owner}}/{{repo}}/contents/{}?ref={}",
+        percent_encode(path, b"/"),
+        percent_encode(&format!("refs/pull/{pr}/head"), b"")
+    )
+}
+
 impl Gh for RealGh {
     fn list_open_prs(&self) -> Result<Vec<OpenPr>, String> {
         let text = run_gh(
@@ -141,10 +167,7 @@ impl Gh for RealGh {
     }
 
     fn order_text(&self, pr: &OpenPr, path: &str) -> Result<String, String> {
-        let endpoint = format!(
-            "repos/{{owner}}/{{repo}}/contents/{path}?ref={}",
-            pr.head_ref_name
-        );
+        let endpoint = contents_endpoint(path, pr.number);
         run_gh(
             &self.root,
             &[
@@ -383,11 +406,12 @@ pub fn order_item(order_text: &str) -> Option<String> {
     re.captures(after).map(|c| c[1].to_string())
 }
 
-/// An order that is open: where it was found and the item it names.
+/// An order that is open: where it was found and the item it names, `None` when its ORDER could
+/// not be read.
 #[derive(Debug, Clone)]
 pub struct OpenOrder {
     pub source: String,
-    pub item: String,
+    pub item: Option<String>,
     /// The PR carrying the order, when it was found on a PR.
     pub pr: Option<u64>,
 }
@@ -396,8 +420,33 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     crate::loopgates::git(root, args).map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
-/// The ORDER files changed on this lab's worktrees whose commit is not in `origin/main`.
-fn worktree_orders(root: &Path, lab: &str) -> Result<Vec<OpenOrder>, String> {
+/// The main checkout of the repository at `root`: the parent of its common git directory, so a
+/// claim run from a linked worktree still places and finds worktrees under the main checkout.
+fn main_checkout(root: &Path) -> Result<PathBuf, String> {
+    let common = git(
+        root,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )?;
+    let common = PathBuf::from(common.trim());
+    common
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| format!("git common dir {} has no parent", common.display()))
+}
+
+/// `a` and `b` name the same directory: equal as given, or equal once both canonicalise (macOS
+/// `/var` is a symlink to `/private/var`).
+fn same_dir(a: &Path, b: &Path) -> bool {
+    a == b
+        || matches!(
+            (a.canonicalize(), b.canonicalize()),
+            (Ok(x), Ok(y)) if x == y
+        )
+}
+
+/// The ORDER files changed on this lab's worktrees under `worktrees` (the main checkout's
+/// `.worktrees`) whose commit is not in `origin/main`.
+fn worktree_orders(root: &Path, worktrees: &Path, lab: &str) -> Result<Vec<OpenOrder>, String> {
     let list = git(root, &["worktree", "list", "--porcelain"])?;
     let prefix = format!("{}-", crate::state::slug(lab));
     let mut orders = Vec::new();
@@ -408,7 +457,7 @@ fn worktree_orders(root: &Path, lab: &str) -> Result<Vec<OpenOrder>, String> {
             continue;
         };
         let p = Path::new(path);
-        let in_worktrees = p.parent().and_then(Path::file_name) == Some(".worktrees".as_ref());
+        let in_worktrees = p.parent().is_some_and(|d| same_dir(d, worktrees));
         let ours = p
             .file_name()
             .and_then(|n| n.to_str())
@@ -441,7 +490,7 @@ fn worktree_orders(root: &Path, lab: &str) -> Result<Vec<OpenOrder>, String> {
             if let Some(item) = order_item(&text) {
                 orders.push(OpenOrder {
                     source: format!("worktree {path} ({file})"),
-                    item,
+                    item: Some(item),
                     pr: None,
                 });
             }
@@ -450,21 +499,34 @@ fn worktree_orders(root: &Path, lab: &str) -> Result<Vec<OpenOrder>, String> {
     Ok(orders)
 }
 
-fn pr_orders(gh: &dyn Gh, prs: &[OpenPr]) -> Result<Vec<OpenOrder>, String> {
+/// The orders on open PRs. An ORDER that cannot be read warns and counts as an open order of
+/// unknown item, so one unreadable PR never blocks every claim.
+fn pr_orders(gh: &dyn Gh, prs: &[OpenPr]) -> Vec<OpenOrder> {
     let mut orders = Vec::new();
     for pr in prs {
         for path in pr.order_paths() {
-            let text = gh.order_text(pr, path)?;
-            if let Some(item) = order_item(&text) {
-                orders.push(OpenOrder {
-                    source: format!("PR #{} ({path})", pr.number),
-                    item,
-                    pr: Some(pr.number),
-                });
-            }
+            let source = format!("PR #{} ({path})", pr.number);
+            let item = match gh.order_text(pr, path) {
+                Ok(text) => match order_item(&text) {
+                    Some(item) => Some(item),
+                    None => continue,
+                },
+                Err(e) => {
+                    eprintln!(
+                        "uor-harness: loop claim: warning: cannot read PR #{}'s ORDER {path}: {e}; treated as an open order of unknown item",
+                        pr.number
+                    );
+                    None
+                }
+            };
+            orders.push(OpenOrder {
+                source,
+                item,
+                pr: Some(pr.number),
+            });
         }
     }
-    Ok(orders)
+    orders
 }
 
 /// The text of a glob before its first `*`, `?` or `[`, and whether a wildcard follows it.
@@ -521,9 +583,9 @@ pub fn check(root: &Path, lab: &str, item: &str, gh: &dyn Gh) -> Result<(), Refu
     let prs = gh
         .list_open_prs()
         .map_err(|e| format!("cannot list open PRs: {e}"))?;
-    let mut orders = worktree_orders(root, lab)?;
-    orders.extend(pr_orders(gh, &prs)?);
-    if let Some(o) = orders.iter().find(|o| o.item == item) {
+    let mut orders = worktree_orders(root, &main_checkout(root)?.join(".worktrees"), lab)?;
+    orders.extend(pr_orders(gh, &prs));
+    if let Some(o) = orders.iter().find(|o| o.item.as_deref() == Some(item)) {
         return Err(format!("item {item} is already claimed by {}", o.source));
     }
     // (c) the item has a scope.
@@ -534,32 +596,36 @@ pub fn check(root: &Path, lab: &str, item: &str, gh: &dyn Gh) -> Result<(), Refu
         scope_glob_ok(g).map_err(|e| format!("item {item}: {e}"))?;
     }
     // (d) no glob overlaps an open order's scope; notebook pages never count. An open order whose
-    // item is missing or has no scope: is skipped with a warning (it still counted in (b)).
+    // item is missing or has no scope: is skipped with a warning (it still counted in (b)); one whose
+    // ORDER could not be read (no item) is skipped, since its scope is unknown.
     for o in &orders {
-        let theirs = match main_item_text(root, &o.item) {
+        let Some(their_item) = o.item.as_deref() else {
+            continue;
+        };
+        let theirs = match main_item_text(root, their_item) {
             None => {
                 eprintln!(
                     "uor-harness: loop claim: warning: open order {} names {}, which is not on origin/main; overlap not checked against it",
-                    o.source, o.item
+                    o.source, their_item
                 );
                 continue;
             }
             Some(t) => {
                 parse_item(&t)
-                    .map_err(|e| format!("open order {}: item {}: {e}", o.source, o.item))?
+                    .map_err(|e| format!("open order {}: item {}: {e}", o.source, their_item))?
                     .scope
             }
         };
         let Some(theirs) = theirs else {
             eprintln!(
                 "uor-harness: loop claim: warning: open order {} names {}, which has no scope: line; overlap not checked against it",
-                o.source, o.item
+                o.source, their_item
             );
             continue;
         };
         for g in &theirs {
             scope_glob_ok(g)
-                .map_err(|e| format!("open order {}: item {}: {e}", o.source, o.item))?;
+                .map_err(|e| format!("open order {}: item {}: {e}", o.source, their_item))?;
         }
         for mine in scope.iter().filter(|g| counts(g)) {
             if let Some(other) = theirs
@@ -569,7 +635,7 @@ pub fn check(root: &Path, lab: &str, item: &str, gh: &dyn Gh) -> Result<(), Refu
             {
                 return Err(format!(
                     "scope {mine} overlaps {other} of item {} ({})",
-                    o.item, o.source
+                    their_item, o.source
                 ));
             }
         }
@@ -771,7 +837,9 @@ pub fn write(
     // No second fetch: the writes start from the origin/main that `check` fetched and read.
     let slug = crate::state::slug(lab);
     let mut created = Created {
-        worktree: root.join(".worktrees").join(format!("{slug}-{topic}")),
+        worktree: main_checkout(root)?
+            .join(".worktrees")
+            .join(format!("{slug}-{topic}")),
         branch: format!("{slug}/{topic}"),
         pushed: None,
         pr: None,
@@ -834,18 +902,15 @@ pub fn write(
             format!("Draft claim of `{item}` by `uor-harness loop claim`.\n\nORDER: `{order}`\n");
         let pr = gh.create_draft_pr(&branch, &title, &body)?;
         created.pr = Some(pr);
-        // Re-list: a lower-numbered draft PR whose ORDER names the same item wins the race.
+        // Re-list: a lower-numbered open PR, draft or not, whose ORDER names the same item wins the
+        // race. An ORDER that cannot be read names no item, so it is never a rival.
         let prs = gh
             .list_open_prs()
             .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?;
-        let rivals: Vec<OpenPr> = prs
-            .into_iter()
-            .filter(|p| p.is_draft && p.number < pr)
-            .collect();
+        let rivals: Vec<OpenPr> = prs.into_iter().filter(|p| p.number < pr).collect();
         Ok(pr_orders(gh, &rivals)
-            .map_err(|e| format!("draft PR #{pr} is open but the re-list failed: {e}"))?
             .into_iter()
-            .filter(|o| o.item == item)
+            .filter(|o| o.item.as_deref() == Some(item))
             .filter_map(|o| o.pr)
             .min())
     })();
@@ -966,6 +1031,14 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contents_endpoint_reads_the_pull_ref_url_encoded() {
+        assert_eq!(
+            contents_endpoint("docs/loop/tasks/a b#c/ORDER.md", 7),
+            "repos/{owner}/{repo}/contents/docs/loop/tasks/a%20b%23c/ORDER.md?ref=refs%2Fpull%2F7%2Fhead"
+        );
+    }
 
     #[test]
     fn overlap_is_by_literal_path_prefix() {
