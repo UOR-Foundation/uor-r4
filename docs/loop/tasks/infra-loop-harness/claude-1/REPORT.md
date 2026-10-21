@@ -5,7 +5,7 @@ Lab: claude. Base: `3429ae024`. Order: [ORDER.md](ORDER.md).
 ## What did not work, first
 
 - **A subagent could not edit the rule files.** The first builder subagent was blocked by the client's permission check when it tried to edit `CHARTER.md`, which is an owner-only rule file, so it stopped without changing anything. The owner then approved, in chat, that the main session make the edits to `CHARTER.md`, `AGENTS.md`, `docs/rules/changes.md` and `docs/integration/DECISIONS.md`. A second subagent wrote the loop page, the roadmap item and the ORDER.
-- **Planned commands looked runnable.** The harness rule `harness.documented_commands` failed on the loop page, because it named `uor-harness loop …` commands that do not exist yet. Planned commands are now written as `loop …`, and one sentence says they are future `uor-harness` subcommands. The rule was right, and it was not loosened.
+- **Planned commands looked runnable.** The harness rule `harness.documented_commands` failed on the loop page, because it named planned `loop …` subcommands of `uor-harness` as if they already existed. Planned commands are now written as `loop …`, and one sentence says they are future `uor-harness` subcommands. The rule was right, and it was not loosened.
 - **Three phrases matched the private kit.** The local copyright check compares every 8-word run in this PR's added lines against the Loop Kit. It matched two table headers and one column list: the decision-table header in `DECISIONS.md` and the HANDOFF column list on the loop page. All three were reworded. The final check finds 0 matches.
 
 ## What changed
