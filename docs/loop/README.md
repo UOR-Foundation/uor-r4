@@ -1,6 +1,6 @@
 # The loop: how five labs work on UOR-R4
 
-This page describes the loop that every lab follows. It is a plan for tooling that is mostly still to be built.
+This page describes the loop that every lab follows. Most of its tooling is built; the steps table and the build plan say which parts are still to build.
 CHARTER.md §5.10 holds the rule; this page explains it. Where they disagree, the charter wins.
 
 **Status.** Most `loop …` commands on this page are built: each step names the loop PR that built it, and a step marked "to build" is still done by hand. The commands are subcommands of `uor-harness`; the rest come from the PRs in [the build plan](#build-plan).
@@ -57,7 +57,7 @@ Steps that need no judgement run in the supervisor, without a model.
 | 4 | Claim | Refused unless the item is ready and unclaimed, its scope overlaps no open order (notebook pages excepted), and the lab is under its open-PR limit. Create a worktree `.worktrees/<lab>-<topic>` from fresh `origin/main`, commit the ORDER, open a draft PR, then list again: of two racing drafts, the higher PR number closes before any work. Post the §5.3 intent note. | `loop claim` (built in loop PR 7a) | session |
 | 5 | Probe | Run the cancel probe first. Commit its result, classed `instrument` or `mechanism`, before any commit outside the task folder. If more than three files are expected, commit a plan first too. A cancel closes this order or configuration only, never a mechanism (§4.1, §4.2). | gate (to build) | session |
 | 6 | Work | Work in scope with WIP commits. GPU work still needs a prep sheet, a non-author FIT, an owner release and `scripts/pod/uor-pod`. | `prep` (exists) | session, subagents |
-| 7 | Gates | Quick gates during work, the full set before review. | `loop gates` (to build) | session |
+| 7 | Gates | Quick gates during work, the full set before review. | `loop gates` (built, loop PR 4) | session |
 | 8 | Report | Write REPORT, a notebook row for any result, and receipts, all in the task folder. | `loop report --check` (built, loop PR 7b) | session |
 | 9 | Ready | Build the PR body from REPORT, size first; mark the PR ready; write PICKUP; end the session. | `loop close --session` (built, loop PR 7b) | session |
 | 10 | Review | A lab from another vendor (for a loop setup PR while D59 is in force, Claude), in a fresh session, reads only the ORDER and the diff. A `host` done-when is re-run at the head. A `gpu` done-when is checked by the sealed artifact's checksum and run receipt, never re-run on the laptop (§3.5). | `loop review` (built, loop PR 6) | other lab (D59: Claude for setup PRs) |

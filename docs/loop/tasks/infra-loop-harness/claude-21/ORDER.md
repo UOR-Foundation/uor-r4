@@ -21,10 +21,10 @@ Do `loop queue` or `loop board` exist? Result at `7864b0516`: no. Both print "no
      - `required-checks`: each required name must carry `policy: pass` from GitHub Actions, and no commit status may use that name;
      - `owner-paths`: `.github/**` needs a recorded owner approval.
 2. **The after-approval rule.** Every comment after the last counted APPROVE record is judged as follows:
-   - a `uor-review v1` record, valid or not, is left to the gate;
+   - a well-formed `uor-review v1` record is left to the gate, and a malformed one refuses (tightened after review; see REPORT);
    - a comment from a `[bot]` account does not count;
    - a comment that starts with the tag of a registered lab whose role is not `pm` does not count;
-   - every other comment counts as possibly the owner's or the PM's, and refuses the queue. All labs post from one account (D55), so an untagged comment is the owner's as far as the tool can tell.
+   - every other comment counts as possibly the owner's or the PM's, and refuses the queue (all labs post from one account, D55).
 3. **Writing.** The only GitHub write is `gh pr merge <n> --match-head-commit <sha>`, through a trait with a fake. `--dry-run` writes nothing. Exit codes: 0 queued (or would queue), 1 refused, 2 cannot run.
 4. **`loop board [--json]` is read-only.** For each lab in `labs.json`: vendor, client, role, live presence, claims, and its open PRs (title starting `[<lab>]`; number, draft or ready, short head). Untagged PRs are listed apart. GitHub is read through a trait with a fake. The hook canary is loop PR 9.
 

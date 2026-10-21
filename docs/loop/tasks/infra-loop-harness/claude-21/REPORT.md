@@ -6,6 +6,7 @@ Two fresh-context builders each wrote one commit in parallel, one for `loop queu
 
 ## What did not work, first
 
+- **Review round 1 found a hole in my own design.** Three fresh-context lenses at `51d39b743` (the queue code, its tests, and the board with the docs and REPORT) each returned APPROVE WITH LOWS. The queue lens showed that architecture call 2 ("a `uor-review v1` record, valid or not, is left to the gate") let a hold through. Suppose the owner posts "Hold — the uor-review v1 APPROVE above missed X" after an APPROVE. That comment parses as a malformed record, the gate ignores malformed records, and the after-approval rule skipped it, so the PR would have been queued. `458068ff8` now refuses on any malformed record after the approval, and the ORDER's call 2 says so.
 - **Today `loop queue` refuses every loop PR, this one included.** Every loop PR's policy record is `fail`, because its item has no `scope:` line, so `required-checks` never sees `policy: pass`. That is the lock working as the item asks, and it lasts until Kimi's scope PR merges. Until then, labs merge by hand under CHARTER §5.5, after a counted APPROVE.
 - **One negative gate first missed the planted fault.** With only the `pr-check` refusal set aside, the planted-fault test still passed. `loop queue` refuses a later counted CHANGES twice:
   - through `pr-check`'s `review-record` rule;
@@ -25,7 +26,9 @@ Two fresh-context builders each wrote one commit in parallel, one for `loop queu
 | `59de8f082` | `loop board` (`loopboard.rs`, `tests/loop_board.rs`, 7 tests). It lists every lab in `labs.json` with vendor, client, role, presence, claims and its `[lab]`-tagged open PRs, and lists untagged PRs separately. Its GitHub trait has no write method. |
 | `e5a0d6743` | `loop queue` (`loopqueue.rs`, `tests/loop_queue.rs`, 13 tests): `pr-state`, `head`, every `pr-check` rule, then `after-approval`, then the merge, which is its one write. Two helpers were factored rather than copied: `loopprcheck::evaluate` (now also used by `cli`) and `ReviewContext`, shared with `rule_review_record` with unchanged failure strings. Also new: `loopreview::last_counted_approve`, with a test in `tests/loop_review.rs`. |
 | `222b2c84e` | Adds `queue` and `board` to the docs check's list of `loop` subcommands, so the README lines that document them pass `harness.documented_commands`. |
-| `8eb8e8067` | Docs, which are the only page changes in this PR. The harness README gains the `loop queue` and `loop board` sections. The loop page's status line now says most commands are built, and step 12 and build-plan row 7c are marked built. The item reads `status: done`, and `docs/roadmap/README.md` is re-rendered. |
+| `458068ff8` | The review fixes:<br>- **Fail closed:** a malformed `uor-review v1` record after the approval refuses.<br>- **Base:** `pr-state` also requires the PR's base to be `main`, read from `baseRefName`; a missing field exits 2.<br>- **Merge failure:** a failed merge gets its own `FAIL merge` line and verdict `MERGE-FAILED`, and exits 2.<br>- **Tests:** seven added to `loop_queue`, now 20 (closed PR, base not `main`, malformed record, labs read from `main` not the head, `policy: fail`, a run from another app, failed merge). One added to `loop_review`, now 27 (`last_counted_approve` on a loop item with no valid setup row). `loop_board`'s no-write test now snapshots the scratch live tier before and after the run. |
+| `d52419621`, `b48d4b9f3`, `51d39b743` and the review-fix doc commit | The ORDER, this REPORT, and their later edits. |
+| `8eb8e8067` | The first docs commit. The harness README gains the `loop queue` and `loop board` sections. The loop page's status line now says most commands are built, and step 12 and build-plan row 7c are marked built. The item reads `status: done`, and `docs/roadmap/README.md` is re-rendered. |
 
 This PR closes the item's issue: closes #2912.
 
@@ -36,13 +39,15 @@ None. This is tooling, with no model run.
 ## Checks run at the head
 
 - fmt is clean and whole-crate clippy with `-D warnings` is clean.
-- `loop_queue` 13, `loop_board` 7, `loop_prcheck` 28 and `loop_review` 26 passed; the `pr-check` verdicts are unchanged.
+- `loop_queue` 20, `loop_board` 7, `loop_prcheck` 28 and `loop_review` 27 passed; the `pr-check` verdicts are unchanged.
 - Negative gates, each run by the main session:
   - with both queue refusals set aside, `planted_fault_a_later_counted_changes_refuses` fails;
   - with `after-approval` made never to refuse, `an_untagged_comment_after_the_approval_refuses` fails;
   - with the `[<lab>]` title match set aside, the two attribution tests in `loop_board` fail;
+  - with the malformed-record refusal set aside, `a_malformed_record_after_the_approval_refuses` fails;
+  - with the base check set aside, `a_pr_not_based_on_main_refuses` fails;
   - all pass again once restored.
-- Full harness suite at `222b2c84e`: 928 passed, 0 failed. The first run, before that fix, failed one test; see above.
+- Full harness suite at `222b2c84e`: 928 passed, 0 failed. The first run, before that fix, failed one test; see above. SUITE2_LINE
 - `loop board` on live data rendered all five labs and exited 0.
 - **The live `loop queue --pr 2931 --dry-run`, run on this PR, refused it**, exit 1:
   - while the PR was a draft, at `pr-state`;
@@ -61,6 +66,8 @@ solution-integrity: `loop queue` calls `pr-check`'s rules instead of a second co
 - **The board's claim counts** include stale committed claims; `docs/harness/claims.json` needs cleaning, or the archive the loop design plans for it.
 - **`loop queue` becomes usable** once Kimi's scope PR gives every loop item a `scope:` line.
 - **Low:** the two refusal paths for a later CHANGES are not pinned one at a time.
+- **Low:** only the PR's issue comments are read, so a hold left as a review body or an inline review comment is not seen. The harness README says so.
+- **Nit:** the head is fetched into `FETCH_HEAD`, which a concurrent fetch in the same worktree can overwrite. That fails closed, because a different commit refuses.
 
 ## Plain summary
 
