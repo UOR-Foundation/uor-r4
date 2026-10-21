@@ -70,7 +70,7 @@ The owner's goal behind every ban (18 Oct, verbatim): *"my goal with all of thes
 
 ## 6. Retired
 
-History only (see the `DECISIONS.md` index): superseded D0, D0-b, D1, D3, D7, D8, D10, D13, D15, D16, D25 (bans live on in §3), D32 item 1, D33, D35 and the dated AGENTS, session-goal, POLICY, KIMI and CODEX blocks; finished one-offs; the expired D18 window. Retired by the owner on 19 Oct: the D14 council and R9's fixed roster (Q5); the 5-, 20- and 30-minute cadence and PM-called queue entries (Q7); per-PR dated records (Q4); the `adopt_policy` hold. Retired by the owner on 20 Oct: the typed owner-release phrase, replaced by approval in the lab's own chat (D56); the harness freeze (D51); same-lab review of code and model PRs (D46), except for the loop's setup PRs until the other labs run the loop (D59).
+History only (see the `DECISIONS.md` index): superseded D0, D0-b, D1, D3, D7, D8, D10, D13, D15, D16, D25 (bans live on in §3), D32 item 1, D33, D35 and the dated AGENTS, session-goal, POLICY, KIMI and CODEX blocks; finished one-offs; the expired D18 window. Retired by the owner on 19 Oct: the D14 council and R9's fixed roster (Q5); the 5-, 20- and 30-minute cadence and PM-called queue entries (Q7); per-PR dated records (Q4); the `adopt_policy` hold. Retired by the owner on 20 Oct: the typed owner-release phrase, replaced by approval in the lab's own chat (D56); the harness freeze (D51); same-lab review of code and model PRs (D46), except for the loop setup PRs that Claude builds, which Claude's fresh-context reviewers review until the other labs run the loop (D59, amended).
 
 ## Changing this charter
 
