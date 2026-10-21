@@ -10,7 +10,7 @@
       "break": {
         "file": "crates/uor-r4-claim-wording/src/lib.rs",
         "append": "\nfn  planted_break( ) { }\n",
-        "expect": "crates/uor-r4-claim-wording/src/lib.rs"
+        "expect": "+fn planted_break() {}"
       }
     },
     {
@@ -22,7 +22,7 @@
       "break": {
         "file": "crates/uor-r4-harness/src/labs.rs",
         "append": "\nfn  planted_break( ) { }\n",
-        "expect": "crates/uor-r4-harness/src/labs.rs"
+        "expect": "+fn planted_break() {}"
       }
     },
     {
@@ -34,7 +34,7 @@
       "break": {
         "file": "docs/README.md",
         "append": "\nThis result is machine-verified.\n",
-        "expect": "Prohibited claim phrase without a linked proof artifact"
+        "expect": "This result is machine-verified."
       }
     }
   ]

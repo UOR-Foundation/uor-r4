@@ -6,14 +6,18 @@
 //! gates are data in `docs/harness/gates.json`; every entry declares a break, a fault that must
 //! turn the gate red with its own failure text, so a gate that has gone blind is caught.
 //!
-//! **Verdicts.** GREEN (exit 0), RED (non-zero exit), REFUSED (could not run), UNKNOWN (not run
-//! after an earlier red), VOID (a read file changed while it ran). A break run is CAUGHT (red with
-//! the declared text), REFUSED (red for another reason) or DEFECT (the gate stayed green).
+//! **Verdicts.** GREEN (exit 0), RED (non-zero exit), REFUSED (could not run, or its reads match
+//! no file), UNKNOWN (not run after an earlier non-green result), VOID (a read file changed while
+//! it ran). A break run is CAUGHT (green at HEAD, then red with the declared text), REFUSED
+//! (already not green before the break, or red for another reason) or DEFECT (the gate stayed
+//! green).
 //!
-//! **Working-tree hash.** `git hash-object --stdin` (git's content hash, so no new dependency) over `HEAD`, `git status --porcelain=v1 -z
-//! --untracked-files=all`, `git diff HEAD --binary`, and the path and bytes of every untracked file
-//! that is not ignored. A tracked edit, a staged edit or a new file each changes it; `local/` is
-//! ignored, so the ledger and logs never do.
+//! **Working-tree hash.** `git hash-object --stdin` (git's content hash, so no new dependency) over
+//! `HEAD`, `git status --porcelain=v1 -z --untracked-files=all`, `git diff HEAD --binary
+//! --no-ext-diff --no-textconv --no-color`, and the path and bytes of every untracked file that is
+//! not ignored, each section prefixed by its `u64` length and a missing file marked apart from an
+//! empty one. A tracked edit, a staged edit or a new file each changes it; `local/` is ignored, so
+//! the ledger and logs never do.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -85,6 +89,8 @@ pub struct Outcome {
     pub id: String,
     pub verdict: Verdict,
     pub exit: Option<i32>,
+    /// The signal that killed the gate, when it did not exit.
+    pub signal: Option<i32>,
     pub seconds: f64,
     pub reason: String,
 }
@@ -98,6 +104,9 @@ pub struct LedgerRow {
     pub commit: String,
     pub tree: String,
     pub exit: Option<i32>,
+    /// Set (and `exit` null) when a signal killed the gate.
+    #[serde(default)]
+    pub signal: Option<i32>,
     pub ts: u64,
 }
 
@@ -233,8 +242,30 @@ fn glob_regex(glob: &str) -> regex::Regex {
     regex::Regex::new(&re).expect("an escaped glob is a valid regex")
 }
 
-/// Content hash of every tracked or untracked-unignored file matching one of `globs`.
-pub fn reads_hash(root: &Path, globs: &[String]) -> Result<String, String> {
+/// Append one hashed section: its length as a little-endian `u64`, then its bytes, so that no two
+/// sequences of sections can run together into the same input.
+fn section(h: &mut Vec<u8>, bytes: &[u8]) {
+    h.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+    h.extend_from_slice(bytes);
+}
+
+/// Append a file's path and contents. A file that cannot be read (listed but deleted) is marked
+/// absent with a `0` byte; a present file is a `1` byte and then its contents, so a missing file
+/// and an empty one hash differently.
+fn file_section(h: &mut Vec<u8>, root: &Path, rel: &str) {
+    section(h, rel.as_bytes());
+    match fs::read(root.join(rel)) {
+        Ok(bytes) => {
+            h.push(1);
+            section(h, &bytes);
+        }
+        Err(_) => h.push(0),
+    }
+}
+
+/// Content hash of every tracked or untracked-unignored file matching one of `globs`, and how
+/// many files matched.
+pub fn reads_hash(root: &Path, globs: &[String]) -> Result<(String, usize), String> {
     let res: Vec<regex::Regex> = globs.iter().map(|g| glob_regex(g)).collect();
     let mut files = split_z(&git(
         root,
@@ -243,33 +274,41 @@ pub fn reads_hash(root: &Path, globs: &[String]) -> Result<String, String> {
     files.sort();
     files.dedup();
     let mut h: Vec<u8> = Vec::new();
+    let mut matched = 0;
     for f in files.iter().filter(|f| res.iter().any(|r| r.is_match(f))) {
-        h.extend_from_slice(f.as_bytes());
-        h.push(0);
-        // A file listed but gone (deleted in the tree) hashes as absent, which still differs.
-        if let Ok(bytes) = fs::read(root.join(f)) {
-            h.extend_from_slice(&bytes);
-        }
-        h.push(0);
+        file_section(&mut h, root, f);
+        matched += 1;
     }
-    git_hash(root, &h)
+    Ok((git_hash(root, &h)?, matched))
 }
 
 /// The working-tree hash recorded in the ledger (see the module comment).
 pub fn tree_hash(root: &Path) -> Result<String, String> {
     let mut h: Vec<u8> = Vec::new();
-    h.extend(git(root, &["rev-parse", "HEAD"])?);
-    h.extend(git(
-        root,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-    )?);
-    h.extend(git(root, &["diff", "HEAD", "--binary"])?);
+    section(&mut h, &git(root, &["rev-parse", "HEAD"])?);
+    section(
+        &mut h,
+        &git(
+            root,
+            &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        )?,
+    );
+    section(
+        &mut h,
+        &git(
+            root,
+            &[
+                "diff",
+                "HEAD",
+                "--binary",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-color",
+            ],
+        )?,
+    );
     for f in split_z(&git(root, &["ls-files", "-z", "-o", "--exclude-standard"])?) {
-        h.extend_from_slice(f.as_bytes());
-        h.push(0);
-        if let Ok(bytes) = fs::read(root.join(&f)) {
-            h.extend_from_slice(&bytes);
-        }
+        file_section(&mut h, root, &f);
     }
     git_hash(root, &h)
 }
@@ -308,25 +347,49 @@ fn now() -> u64 {
 /// Run one gate in `root`, logging to `<logdir>/<id>.log` and `<id>.exit`.
 pub fn run_one(root: &Path, gate: &Gate, logdir: &Path) -> Outcome {
     let start = Instant::now();
-    let done = |verdict, exit, reason: String| Outcome {
+    let mut signal = None;
+    let done = |verdict, exit, signal, reason: String| Outcome {
         id: gate.id.clone(),
         verdict,
         exit,
+        signal,
         seconds: start.elapsed().as_secs_f64(),
         reason,
     };
     let before = match reads_hash(root, &gate.reads) {
-        Ok(h) => h,
-        Err(e) => return done(Verdict::Refused, None, format!("cannot hash reads: {e}")),
+        Ok((_, 0)) => return done(Verdict::Refused, None, None, "reads match no file".into()),
+        Ok((h, _)) => h,
+        Err(e) => {
+            return done(
+                Verdict::Refused,
+                None,
+                None,
+                format!("cannot hash reads: {e}"),
+            )
+        }
     };
     let log_path = logdir.join(format!("{}.log", gate.id));
     let log = match fs::File::create(&log_path) {
         Ok(f) => f,
-        Err(e) => return done(Verdict::Refused, None, format!("cannot open log: {e}")),
+        Err(e) => {
+            return done(
+                Verdict::Refused,
+                None,
+                None,
+                format!("cannot open log: {e}"),
+            )
+        }
     };
     let err = match log.try_clone() {
         Ok(f) => f,
-        Err(e) => return done(Verdict::Refused, None, format!("cannot open log: {e}")),
+        Err(e) => {
+            return done(
+                Verdict::Refused,
+                None,
+                None,
+                format!("cannot open log: {e}"),
+            )
+        }
     };
     let status = Command::new(resolve_program(&gate.command[0]))
         .args(&gate.command[1..])
@@ -344,30 +407,44 @@ pub fn run_one(root: &Path, gate: &Gate, logdir: &Path) -> Outcome {
             return done(
                 Verdict::Refused,
                 None,
+                None,
                 format!("cannot run {:?}: {e}", gate.command[0]),
             )
         }
     };
     let code = status.code();
-    let _ = fs::write(
-        logdir.join(format!("{}.exit", gate.id)),
-        code.map_or("signal".to_string(), |c| c.to_string()),
-    );
+    if code.is_none() {
+        signal = std::os::unix::process::ExitStatusExt::signal(&status);
+    }
+    let exit_text = match (code, signal) {
+        (Some(c), _) => c.to_string(),
+        (None, Some(s)) => format!("signal {s}"),
+        (None, None) => "signal".to_string(),
+    };
+    let _ = fs::write(logdir.join(format!("{}.exit", gate.id)), &exit_text);
     match reads_hash(root, &gate.reads) {
-        Ok(after) if after == before => {}
+        Ok((after, _)) if after == before => {}
         Ok(_) => {
             return done(
                 Verdict::Void,
                 code,
+                signal,
                 "a read file changed during the run".into(),
             )
         }
-        Err(e) => return done(Verdict::Refused, code, format!("cannot hash reads: {e}")),
+        Err(e) => {
+            return done(
+                Verdict::Refused,
+                code,
+                signal,
+                format!("cannot hash reads: {e}"),
+            )
+        }
     }
     match code {
-        Some(0) => done(Verdict::Green, code, String::new()),
-        Some(c) => done(Verdict::Red, code, format!("exit {c}")),
-        None => done(Verdict::Red, None, "killed by a signal".into()),
+        Some(0) => done(Verdict::Green, code, None, String::new()),
+        Some(c) => done(Verdict::Red, code, None, format!("exit {c}")),
+        None => done(Verdict::Red, None, signal, format!("killed by {exit_text}")),
     }
 }
 
@@ -382,8 +459,9 @@ pub fn run_gates(root: &Path, gates: &[Gate], keep_going: bool, logdir: &Path) -
                 id: g.id.clone(),
                 verdict: Verdict::Unknown,
                 exit: None,
+                signal: None,
                 seconds: 0.0,
-                reason: "not run after an earlier red".into(),
+                reason: "not run after an earlier non-green result".into(),
             });
             continue;
         }
@@ -418,6 +496,7 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
         id: gate.id.clone(),
         verdict: Verdict::Refused,
         exit: None,
+        signal: None,
         seconds: 0.0,
         reason,
     };
@@ -452,6 +531,19 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
             "break.file {} resolves outside the scratch worktree",
             gate.brk.file
         ));
+    }
+    // The gate must be green at HEAD, or a red after planting proves nothing about the fault.
+    let pre = run_one(&path, gate, logdir);
+    if pre.verdict != Verdict::Green {
+        let mut o = refused(format!(
+            "gate already red before the break ({}: {})",
+            pre.verdict.word(),
+            pre.reason
+        ));
+        o.exit = pre.exit;
+        o.signal = pre.signal;
+        o.seconds = pre.seconds;
+        return o;
     }
     let planted = fs::OpenOptions::new()
         .append(true)
@@ -639,6 +731,16 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             eprintln!("uor-harness: no gate {which:?} in gates.json");
             return 2;
         }
+        // Breaks run in a scratch worktree of HEAD, so they use the committed gates.json.
+        let rel = "docs/harness/gates.json";
+        let differs = git(root, &["diff", "HEAD", "--quiet", "--", rel]).is_err();
+        let untracked = git(root, &["ls-files", "--error-unmatch", "--", rel]).is_err();
+        if differs || untracked {
+            eprintln!(
+                "uor-harness: {rel} is uncommitted; --break runs against the committed tree, so commit it first"
+            );
+            return 2;
+        }
         sweep_stale_scratch(root);
         let scratch = logdir.join("scratch");
         let out: Vec<Outcome> = chosen
@@ -675,6 +777,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
                 commit: commit.clone(),
                 tree: tree.clone(),
                 exit: o.exit,
+                signal: o.signal,
                 ts,
             })
             .collect();
@@ -701,5 +804,32 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
         0
     } else {
         1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_file_and_an_empty_file_hash_differently() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("empty"), b"").unwrap();
+        let (mut present, mut missing) = (Vec::new(), Vec::new());
+        file_section(&mut present, tmp.path(), "empty");
+        // Same name, but no such file in this directory.
+        let other = tempfile::tempdir().unwrap();
+        file_section(&mut missing, other.path(), "empty");
+        assert_ne!(present, missing);
+    }
+
+    #[test]
+    fn sections_cannot_run_together() {
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        section(&mut a, b"ab");
+        section(&mut a, b"c");
+        section(&mut b, b"a");
+        section(&mut b, b"bc");
+        assert_ne!(a, b);
     }
 }

@@ -75,7 +75,7 @@ UOR_LAB=claude uor-harness loop gates --status     # latest result per gate; STA
 UOR_LAB=claude uor-harness loop gates --break all  # plant each declared fault in a scratch worktree
 ```
 
-Verdicts: GREEN, RED, REFUSED (could not run), UNKNOWN (after an earlier red), VOID (a read file changed during the run). A break run is CAUGHT (red with its declared text), REFUSED (red for another reason) or DEFECT (stayed green). Logs and exit codes go under `local/<lab>/gates/<run-id>/`; the ledger is `local/<lab>/gates.jsonl`. A leading `cargo` in a gate command resolves to `$CARGO`, then `~/.cargo/bin/cargo`, then `PATH`.
+Verdicts: GREEN, RED, REFUSED (could not run, or its reads match no file), UNKNOWN (not run after an earlier non-green result), VOID (a read file changed during the run). A break run is CAUGHT (green at HEAD, then red with its declared text), REFUSED (already not green before the break, or red for another reason) or DEFECT (stayed green); `--break` refuses an uncommitted `docs/harness/gates.json`, since breaks run against the committed tree. Logs and exit codes go under `local/<lab>/gates/<run-id>/`; the ledger is `local/<lab>/gates.jsonl`. A leading `cargo` in a gate command resolves to `$CARGO`, then `~/.cargo/bin/cargo`, then `PATH`.
 
 ## Where it sits against what already exists
 

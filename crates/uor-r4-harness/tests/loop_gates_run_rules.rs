@@ -201,7 +201,9 @@ fn a_break_red_for_its_own_reason_passes() {
 
 #[test]
 fn a_break_red_for_another_reason_is_refused() {
-    let r = repo(&[("other", "exit 101", "PLANTED\n", "input is broken")]);
+    // Green at HEAD, red once planted, but with text other than the declared one.
+    let other = "if grep -q PLANTED src/input.txt; then echo unrelated; exit 101; fi";
+    let r = repo(&[("other", other, "PLANTED\n", "input is broken")]);
     let o = r.run(&["--break", "other"]);
     assert!(
         line(&stdout(&o), "other").contains("REFUSED"),
@@ -298,4 +300,89 @@ fn a_selection_of_zero_gates_exits_2() {
     let o = r.run(&["--quick"]);
     assert_eq!(o.status.code(), Some(2), "{o:?}");
     assert!(r.ledger().is_empty());
+}
+
+#[test]
+fn a_break_on_a_gate_already_red_at_head_is_refused() {
+    // Red with the declared text even before the break is planted: proves nothing about the fault.
+    let r = repo(&[(
+        "red",
+        "echo 'input is broken'; exit 1",
+        "PLANTED\n",
+        "input is broken",
+    )]);
+    let o = r.run(&["--break", "red"]);
+    let out = stdout(&o);
+    assert!(line(&out, "red").contains("REFUSED"), "{out}");
+    assert!(
+        line(&out, "red").contains("gate already red before the break"),
+        "{out}"
+    );
+    assert_eq!(o.status.code(), Some(1));
+    assert_eq!(worktrees_under_local(&r), 0);
+}
+
+#[test]
+fn a_gate_whose_reads_match_no_file_is_refused() {
+    let r = repo(&[OK]);
+    edit_gates(
+        &r,
+        r#""reads":["src/**"]"#,
+        r#""reads":["nothing-here/**"]"#,
+    );
+    let o = r.run(&[]);
+    let out = stdout(&o);
+    assert!(line(&out, "ok").contains("REFUSED"), "{out}");
+    assert!(line(&out, "ok").contains("reads match no file"), "{out}");
+    assert_eq!(o.status.code(), Some(1));
+}
+
+#[test]
+fn a_gate_with_one_matching_read_glob_still_runs() {
+    let r = repo(&[OK]);
+    edit_gates(
+        &r,
+        r#""reads":["src/**"]"#,
+        r#""reads":["nothing-here/**","src/**"]"#,
+    );
+    let out = stdout(&r.run(&[]));
+    assert!(line(&out, "ok").contains("GREEN"), "{out}");
+}
+
+#[test]
+fn a_signal_death_keeps_the_signal() {
+    let r = repo(&[("killed", "kill -TERM $$", "x", "x")]);
+    let out = stdout(&r.run(&[]));
+    assert!(line(&out, "killed").contains("RED"), "{out}");
+    let runs = r.root.join("local/claude/gates");
+    let dir = std::fs::read_dir(&runs)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert_eq!(
+        std::fs::read_to_string(dir.join("killed.exit")).unwrap(),
+        "signal 15"
+    );
+    let ledger = r.ledger();
+    assert!(ledger.contains(r#""exit":null"#), "{ledger}");
+    assert!(ledger.contains(r#""signal":15"#), "{ledger}");
+}
+
+#[test]
+fn break_refuses_an_uncommitted_gates_json() {
+    let r = repo(&[("checks", CHECKS, "PLANTED\n", "input is broken")]);
+    edit_gates(
+        &r,
+        r#""proves":"a fake gate""#,
+        r#""proves":"edited, not committed""#,
+    );
+    let o = r.run(&["--break", "checks"]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("uncommitted"),
+        "{o:?}"
+    );
+    assert_eq!(worktrees_under_local(&r), 0);
 }
