@@ -5,9 +5,12 @@
 //! Each of those is one check here, run in a fixed order and reported one line each, so a lab
 //! arriving in a session sees in one place what is stale before it reads or writes anything.
 //!
-//! **Verdicts.** Every check is `PASS`, `WARN`, `FAIL` or `N/A`. Exit 0 when nothing FAILs, 1 when
-//! a check FAILs, 2 when the command cannot run (usage, no lab, not a git repository). A failed
-//! fetch does not stop the run: the later checks read the `origin/main` already present.
+//! **Verdicts.** Every check is `PASS`, `FAIL` or `N/A`. Exit 0 when nothing FAILs, 1 when a check
+//! FAILs, 2 when the command cannot run (usage, no lab, not a git repository). A failed fetch does
+//! not stop the run: the later checks read the `origin/main` already present. The four checks that
+//! used to WARN (checkout, binary, hooks, read-path) FAIL since loop PR 11 raised the loop's named
+//! warnings to errors: the loop relies on them, so a session may not start on a stale or unguarded
+//! checkout.
 //!
 //! Every git subprocess this module starts has every `GIT_*` variable removed except the ones a
 //! fetch needs to authenticate (`GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_ASKPASS`), so a caller's
@@ -27,15 +30,15 @@ const AGENTS_MAX_LINES: usize = 80;
 const VIEW_MAX: usize = 24_576;
 /// `GIT_*` variables a git subprocess keeps: without them `fetch` cannot authenticate.
 const GIT_KEEP: [&str; 3] = ["GIT_SSH_COMMAND", "GIT_SSH", "GIT_ASKPASS"];
-/// The read path (AGENTS, CHARTER, STATE, HANDOFF and PICKUP) above this fails ...
+/// The read path (AGENTS, CHARTER, STATE, HANDOFF and PICKUP) above this fails (loop PR 11: the
+/// 75 KB warning is an error now).
 const READ_PATH_FAIL: usize = 128_000;
-/// ... and above this warns.
+/// The former warning line: above this used to WARN, and since loop PR 11 it FAILs.
 const READ_PATH_WARN: usize = 76_800;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Verdict {
     Pass,
-    Warn,
     Fail,
     Na,
 }
@@ -44,7 +47,6 @@ impl Verdict {
     fn word(self) -> &'static str {
         match self {
             Verdict::Pass => "PASS",
-            Verdict::Warn => "WARN",
             Verdict::Fail => "FAIL",
             Verdict::Na => "N/A",
         }
@@ -204,12 +206,12 @@ fn checkout(root: &Path) -> Check {
         ),
         Staleness::Behind { .. } => check(
             "checkout",
-            Verdict::Warn,
-            "this checkout is behind origin/main",
+            Verdict::Fail,
+            "this checkout is behind origin/main; work from a fresh worktree of origin/main",
         ),
         Staleness::Unknown { why } => check(
             "checkout",
-            Verdict::Warn,
+            Verdict::Fail,
             format!("cannot place this checkout against origin/main: {why}"),
         ),
     }
@@ -226,8 +228,8 @@ fn binary(root: &Path) -> Check {
         Some(line) => {
             let mut c = check(
                 "binary",
-                Verdict::Warn,
-                "this binary is older than this checkout's newest build",
+                Verdict::Fail,
+                "this binary is older than this checkout's newest build; rebuild it before the session",
             );
             c.details.push(line);
             c
@@ -254,7 +256,7 @@ fn hooks(root: &Path) -> Check {
             }
         }
         Err(e) => {
-            let mut c = check("hooks", Verdict::Warn, FIX);
+            let mut c = check("hooks", Verdict::Fail, FIX);
             c.details
                 .push(format!("cannot locate the hooks directory: {e}"));
             return c;
@@ -268,7 +270,7 @@ fn hooks(root: &Path) -> Check {
             format!("{} is the harness hook", hook.display()),
         ),
         Ok(t) if t == crate::githelp::HOOK_SCRIPT => {
-            let mut c = check("hooks", Verdict::Warn, FIX);
+            let mut c = check("hooks", Verdict::Fail, FIX);
             c.details.push(format!(
                 "{} is the harness hook but is not executable, so git skips it",
                 hook.display()
@@ -276,7 +278,7 @@ fn hooks(root: &Path) -> Check {
             c
         }
         Ok(_) => {
-            let mut c = check("hooks", Verdict::Warn, FIX);
+            let mut c = check("hooks", Verdict::Fail, FIX);
             c.details.push(format!(
                 "{} differs from the hook this binary installs",
                 hook.display()
@@ -284,7 +286,7 @@ fn hooks(root: &Path) -> Check {
             c
         }
         Err(_) => {
-            let mut c = check("hooks", Verdict::Warn, FIX);
+            let mut c = check("hooks", Verdict::Fail, FIX);
             c.details.push(format!("no {}", hook.display()));
             c
         }
@@ -529,15 +531,15 @@ fn read_path_budget(r: ReadPath) -> Check {
             "the read path is {total} bytes; the limit is {READ_PATH_FAIL}"
         ));
     }
+    if total > READ_PATH_WARN {
+        fails.push(format!(
+            "the read path is above {READ_PATH_WARN} bytes; trim it (loop PR 11 raises this warning to an error)"
+        ));
+    }
     let mut c = check("read-path", Verdict::Pass, summary);
     if !fails.is_empty() {
         c.verdict = Verdict::Fail;
         c.details = fails;
-    } else if total > READ_PATH_WARN {
-        c.verdict = Verdict::Warn;
-        c.details.push(format!(
-            "the read path is above {READ_PATH_WARN} bytes; trim it before it reaches {READ_PATH_FAIL}"
-        ));
     }
     c
 }

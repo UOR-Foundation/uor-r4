@@ -90,7 +90,7 @@ Notes carry memory between sessions. Most are rendered, so nobody types them.
 
 **Rule sources.** An owner-only list names the only files allowed to state a rule: CHARTER.md, AGENTS.md, this page, `pm-rules.md`, DECISIONS, the mistakes files and `docs/rules/changes.md`. Other rule-like files become generated files or short pointers.
 
-**Read-path budget.** AGENTS.md stays within about 80 lines. STATE and HANDOFF stay under 24 KB each, PICKUP under 8 KB and an ORDER under 4 KB. The whole read path warns at 75 KB and stops above 125 KB.
+**Read-path budget.** AGENTS.md stays within about 80 lines. STATE and HANDOFF stay under 24 KB each, PICKUP under 8 KB and an ORDER under 4 KB. The whole read path fails above 75 KB (76,800 bytes) since loop PR 11 raised the warning to an error, and above 125 KB the command names the hard limit.
 
 **Today.** `STATUS.md`, `docs/integration/NOW.md`, `docs/harness/claims.json` and the roadmap render all exist and are still edited the old way. The fold-in to STATE, HANDOFF and PLAN is PR 8.
 

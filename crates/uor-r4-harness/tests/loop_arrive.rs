@@ -161,15 +161,16 @@ fn a_clean_fixture_with_the_hook_passes() {
 }
 
 #[test]
-fn a_missing_hook_warns_and_still_exits_zero() {
+fn a_missing_hook_fails() {
     let r = Repo::new();
     let o = r.arrive(&[], Some("claude"));
     let out = stdout(&o);
-    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
     assert!(
-        has_line(&out, "WARN hooks run `uor-harness git install-hooks`"),
+        has_line(&out, "FAIL hooks run `uor-harness git install-hooks`"),
         "{out}"
     );
+    assert!(out.trim_end().ends_with("arrive: FAIL"), "{out}");
 }
 
 #[test]
@@ -205,6 +206,7 @@ fn an_uncited_standing_reference_fails_and_names_the_line() {
 #[test]
 fn a_cited_pickup_passes() {
     let r = Repo::new();
+    r.install_hook();
     r.write(
         "local/claude/PICKUP.md",
         "# PICKUP\n\n## Standing references\n\n- reviews come from another lab (D59)\n- see §5.10 and L-012\n",
@@ -227,13 +229,15 @@ fn an_agents_md_of_81_lines_fails_the_read_path() {
 }
 
 #[test]
-fn a_read_path_between_the_bounds_warns() {
+fn a_read_path_above_the_warning_line_fails() {
     let r = Repo::new();
+    r.install_hook();
     r.publish("CHARTER.md", &"c".repeat(80_000));
     let o = r.arrive(&[], Some("claude"));
     let out = stdout(&o);
-    assert_eq!(o.status.code(), Some(0), "{o:?}");
-    assert!(has_line(&out, "WARN read-path"), "{out}");
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(has_line(&out, "FAIL read-path"), "{out}");
+    assert!(out.contains("above 76800 bytes"), "{out}");
 }
 
 #[test]
@@ -253,6 +257,7 @@ fn a_committed_view_that_differs_from_its_render_fails() {
 #[test]
 fn a_committed_view_equal_to_its_render_passes() {
     let r = Repo::new();
+    r.install_hook();
     // Render once, then commit the render: the stamp line names the previous commit and the body
     // still agrees with the inputs.
     assert_eq!(r.arrive(&[], Some("claude")).status.code(), Some(0));
@@ -300,6 +305,7 @@ fn no_lab_exits_two() {
 #[test]
 fn json_parses_and_carries_ok() {
     let r = Repo::new();
+    r.install_hook();
     let o = r.arrive(&["--json"], Some("claude"));
     assert_eq!(o.status.code(), Some(0), "{o:?}");
     let v: serde_json::Value = serde_json::from_slice(&o.stdout).expect("one JSON object");
@@ -331,16 +337,16 @@ fn a_pickup_under_the_main_checkout_is_read_from_a_linked_worktree() {
 }
 
 #[test]
-fn a_matching_hook_that_is_not_executable_warns() {
+fn a_matching_hook_that_is_not_executable_fails() {
     use std::os::unix::fs::PermissionsExt;
     let r = Repo::new();
     let hook = r.install_hook();
     std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o644)).unwrap();
     let o = r.arrive(&[], Some("claude"));
     let out = stdout(&o);
-    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
     assert!(
-        has_line(&out, "WARN hooks run `uor-harness git install-hooks`"),
+        has_line(&out, "FAIL hooks run `uor-harness git install-hooks`"),
         "{out}"
     );
     assert!(out.contains("is not executable"), "{out}");
@@ -361,6 +367,7 @@ fn the_read_path_measures_an_uncommitted_view_as_rendered() {
 #[test]
 fn a_standing_subheading_with_a_cited_line_passes() {
     let r = Repo::new();
+    r.install_hook();
     r.write(
         "local/claude/PICKUP.md",
         "# PICKUP\n\n## Standing references\n\n### Charter\n\n- see §5.10\n\n```\nfenced text\n```\n",
