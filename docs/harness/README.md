@@ -66,6 +66,17 @@ uor-harness git install-hooks|status    the pre-commit guard, and this branch's 
 uor-harness check [--staged]            every machine-checkable rule in one pass
 ```
 
+### `loop gates` (loop PR 4)
+
+```sh
+UOR_LAB=claude uor-harness loop gates --quick      # run the quick gates in docs/harness/gates.json
+UOR_LAB=claude uor-harness loop gates --keep-going # run every gate even after a red
+UOR_LAB=claude uor-harness loop gates --status     # latest result per gate; STALE after an uncommitted edit
+UOR_LAB=claude uor-harness loop gates --break all  # plant each declared fault in a scratch worktree
+```
+
+Verdicts: GREEN, RED, REFUSED (could not run), UNKNOWN (after an earlier red), VOID (a read file changed during the run). A break run is CAUGHT (red with its declared text), REFUSED (red for another reason) or DEFECT (stayed green). Logs and exit codes go under `local/<lab>/gates/<run-id>/`; the ledger is `local/<lab>/gates.jsonl`. A leading `cargo` in a gate command resolves to `$CARGO`, then `~/.cargo/bin/cargo`, then `PATH`.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front
