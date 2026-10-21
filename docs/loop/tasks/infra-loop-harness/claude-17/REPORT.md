@@ -13,6 +13,7 @@ Five fresh-context builders wrote one commit each: `report`, `arrive`, `next`, `
   - No item has a `scope:` either, so `any` finds nothing. Run against real GitHub, `next` answered "STOP held work: 26 item(s) held, none ready and claimable".
 - **Step 11 is only half built.** `next` finds the lab's PRs that need repair (a conflict, a failed check, or a counted REQUEST CHANGES at the head). Writing the repair ORDER `<lab>-<n+1>` is still done by hand.
 - **The first full suite run failed once (850 passed, 1 failed).** Loop PR 4's `watch_and_other_actions_are_refused` used `loop next` as its example of an action that is not built yet, and this PR builds it. `5cc3c63e5` switches the example to `loop drive` (loop PR 10). The specified behaviour changed; the test was not weakened.
+- **`report --check` refused this REPORT.** The REPORT names the `<!-- fill:` marker in prose, inside backticks, and the check matched the marker anywhere on a line. A template prompt is a line of its own, so `95014fbe3` counts only a line that starts with the marker. A new assertion in the fill-line test reproduces this REPORT's case. With the old match restored, it FAILED.
 - **The ORDER template had a dead link.** Its item link is relative to a task folder, so from `docs/loop/templates/` it resolved nowhere and `xtask links` caught it. `4282b9ff0` puts it in a code span as an example.
 - **The binary's own commit is unknown.** No commit is baked into `uor-harness` (its build script explains why). So `arrive` checks the checkout against `origin/main` and the installed binary against the newest local build, not the binary against `origin/main`.
 - **`arrive` found a real mismatch on its first run.** The shared git `pre-commit` hook differs from the one the current binary installs. It reports this as a WARN, and `uor-harness git install-hooks` fixes it. Client hooks (Claude Code settings) are N/A until loop PR 9.
@@ -63,7 +64,7 @@ None. This is a host tool.
 
 The main session re-ran each builder's tests at its commit, then ran these at `3841803b1` with this REPORT in place.
 
-- Targeted suites: `loop_report` 6 passed, `loop_arrive` 12 passed, `loop_next` 12 passed and `loop_close` 19 passed. `loop_prcheck` still gives 27 passed, after the shared parser and size helpers moved.
+- Targeted suites (after `95014fbe3`): `loop_report` 6 passed, `loop_arrive` 12 passed, `loop_next` 12 passed and `loop_close` 19 passed. `loop_prcheck` still gives 27 passed, after the shared parser and size helpers moved.
 - **Negative gates.** These were run by the builders. Each set aside only its own check, ran the test (which FAILED), then restored the file, confirmed byte-identical with `cmp`. The checks and their tests:
   - **The planted fault:** `report --check` ignoring the section problems; `a_report_missing_a_section_is_refused`.
   - **`arrive`'s PICKUP citation check:** the uncited-reference test.
