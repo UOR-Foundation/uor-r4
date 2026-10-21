@@ -310,9 +310,7 @@ fn pr_order(root: &Path, gh: &dyn NextGh, pr: &NextPr) -> Result<PrOrder, OrderE
         let text = match gh.file_at_pr(pr.number, path) {
             Ok(t) => t,
             // A path deleted at the head is absent (404); any other failure is a read error.
-            Err(e) if e.contains("404") || e.contains("Not Found") || e.contains("has no text") => {
-                continue;
-            }
+            Err(e) if path_absent(&e) => continue,
             Err(e) => return Err(OrderErr::Read(e)),
         };
         if git(root, &["cat-file", "-e", &format!("origin/main:{path}")]).is_ok() {
@@ -678,8 +676,33 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     }
 }
 
+/// Whether a `file_at_pr` error says the path is absent at the PR head. Only `gh`'s own message
+/// after `" failed: "` is read: the command line `run_gh` echoes before it holds the PR number and
+/// the path, either of which may contain "404".
+fn path_absent(e: &str) -> bool {
+    let msg = e.split_once(" failed: ").map_or(e, |(_, m)| m);
+    msg.contains("(HTTP 404)") || msg.contains("Not Found") || msg.contains("has no text")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_gh_s_own_message_can_say_a_path_is_absent() {
+        let call = "gh api repos/{owner}/{repo}/contents/docs/loop/tasks/x/claude-404/ORDER.md?ref=refs%2Fpull%2F4040%2Fhead";
+        assert!(super::path_absent(&format!(
+            "{call} failed: gh: Not Found (HTTP 404)"
+        )));
+        assert!(!super::path_absent(&format!(
+            "{call} failed: HTTP 502: Bad Gateway"
+        )));
+        assert!(!super::path_absent(&format!(
+            "{call} failed: HTTP 401: Bad credentials"
+        )));
+        assert!(super::path_absent(
+            "fake PR #7 has no text for docs/loop/tasks/x/claude-1/ORDER.md"
+        ));
+    }
+
     #[test]
     fn paginated_reads_pass_paginate() {
         let args = super::paginated_args("repos/{owner}/{repo}/issues/1/labels");
