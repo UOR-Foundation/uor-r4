@@ -2,9 +2,34 @@
 
 Lab: claude. Base: `8c2c76e42`. Order: [ORDER.md](ORDER.md), committed first (`4be9a7687`). The cancel probe found no `next`, `arrive`, `report` or `close` under `loop`.
 
-Five fresh-context builders wrote one commit each: `report`, `arrive`, `next`, `close --session` and `close --verify`. The main session re-ran every builder's gates before accepting its commit. It updated the loop page and wrote this REPORT, because a harness hook does not let subagents write REPORT files.
+Five fresh-context builders wrote one commit each: `report`, `arrive`, `next`, `close --session` and `close --verify`. Four more wrote the review fixes. The main session re-ran every builder's gates before accepting its commit. It updated the loop page and wrote this REPORT, because a harness hook does not let subagents write REPORT files.
 
 ## What did not work, first
+
+- **Review round 1 at `0974f2ef7` asked for changes.** Four fresh-context lenses reviewed it. `close` safety and `next`/`report` asked for changes; `arrive` with the shared code, and the tests and docs, approved with lows.
+  - **PICKUP was lost on delivery.** Two lenses found this independently. `close --session` wrote PICKUP inside the task worktree, and `close --verify` deletes that worktree. `/local/` is gitignored, so the cleanliness check never saw the file. `arrive` read PICKUP from the current worktree, so even a surviving copy was invisible to the next session. Fixed in `6a5432ee4` and `702b97154`:
+    - PICKUP now lives under the main checkout's `local/<lab>/`, the lab's own area on the loop page;
+    - `--verify` keeps a worktree that holds ignored files other than `target/`, the rendered views and the gate ledger.
+  - **`next` judged a PR by the first ORDER-shaped path it touched, not the ORDER it adds.** A PR editing another lab's ORDER was judged as that lab's. A PR deleting an ORDER made `next` exit 2 for every lab. `b6e3c0b2a` uses only the ORDER the PR adds, and skips an unreadable PR with a note.
+  - **The other `close` fixes (`6a5432ee4`):**
+    - the content proof also accepts an equal patch, so a PR whose file main also changed is not refused for ever;
+    - renames list both paths;
+    - the local branch delete is one atomic `update-ref -d`, and a branch some worktree still has checked out is kept;
+    - `--session --pr` checks that the PR is open and on this branch;
+    - a FAKE banner prints when the test fake is active;
+    - SSH auth variables survive the env stripping.
+  - **The other `arrive` fixes (`702b97154`):**
+    - the read path counts the rendered STATE and HANDOFF while none is committed;
+    - a hook must be executable;
+    - standing references skip fences and subheadings;
+    - `--json` is passed back only for the action word.
+  - **The other `next` and `report` fixes (`5c64948d5`):**
+    - more than 100 files and the labels are read across pages;
+    - fill markers inside code fences are ignored;
+    - vendors come from `origin/main`;
+    - `--receipts` keeps only rows recorded on a clean tree at HEAD;
+    - two ordering tests: review before an item, and STOP before a repair.
+- **The first real policy verdict is `fail`, as expected.** CI built `uor-harness` from main (which now has `pr-check`) and judged this PR: `policy: fail (run 39644023923)`, recorded in all five required checks, which stay green. In the job log only `scope` fails, line for line the same as the local run. Loop PR 5's REPORT asked for this run to be quoted. `loop pr-check --pr 2925` would refuse to queue it, but `loop queue` (PR 7c) is not built. Until the supervisor exists, the loop page says the CHARTER §5.5 delivery path applies as written.
 
 - **Step 13 is not followed literally, and the owner should decide.** The loop page says `close --verify` should "run `uor-hygiene --apply`". Hygiene's `--apply` removes every clean, merged worktree with its branch, other labs' included. That crosses the lab boundary: never touch another session's files, and never delete another lab's work. So `close --verify` prints hygiene's plan (`--dry-run`) and does not apply it. The loop page's rule text is unchanged; its command cell says so. Applying it, or limiting hygiene to the lab's own worktrees, is the owner's call. This is reversible.
 - **Most of `loop next`'s sources do not exist yet.**
@@ -24,16 +49,16 @@ Five fresh-context builders wrote one commit each: `report`, `arrive`, `next`, `
 
 | File | Class | Lines | What |
 |---|---|---|---|
-| `crates/uor-r4-harness/src/loopreport.rs` (new) | code | 331 | `loop report --check`, `--new` and `--receipts`. |
-| `crates/uor-r4-harness/src/looparrive.rs` (new) | code | 472 | `loop arrive`. In order: fetch, checkout, binary, hooks, client hooks, views, PICKUP, read path. |
-| `crates/uor-r4-harness/src/loopnext.rs` (new) | code | 566 | `loop next`. The sources in the loop page's order, the stops, and a read-only `NextGh` trait with a fake. |
-| `crates/uor-r4-harness/src/loopclose.rs` (new) | code | 1,048 | `loop close --session` and `--verify`, with a `CloseGh` trait whose fake logs every write. |
-| `loopprcheck.rs`, `loopclaim.rs`, `loopgates.rs`, `doccheck.rs`, `main.rs`, `lib.rs` | code | 90 | Shared helpers: `report_file_problems`, `parse_review_record`, `size_line`, `find_order`, `main_checkout`. Also dispatch, doccheck's loop group and flags, and `--json` pass-through. |
-| `crates/uor-r4-harness/tests/loop_{report,arrive,next,close}.rs` (new) | tests | 1,553 | 49 tests over fixture repositories with bare remotes and fakes. |
+| `crates/uor-r4-harness/src/loopreport.rs` (new) | code | 340 | `loop report --check`, `--new` and `--receipts`. |
+| `crates/uor-r4-harness/src/looparrive.rs` (new) | code | 593 | `loop arrive`. In order: fetch, checkout, binary, hooks, client hooks, views, PICKUP, read path. |
+| `crates/uor-r4-harness/src/loopnext.rs` (new) | code | 665 | `loop next`. The sources in the loop page's order, the stops, and a read-only `NextGh` trait with a fake. |
+| `crates/uor-r4-harness/src/loopclose.rs` (new) | code | 1,204 | `loop close --session` and `--verify`, with a `CloseGh` trait whose fake logs every write. |
+| `loopprcheck.rs`, `loopclaim.rs`, `loopgates.rs`, `labs.rs`, `doccheck.rs`, `main.rs`, `lib.rs` | code | 100 | Shared helpers: `report_file_problems`, `parse_review_record`, `size_line`, `find_order`, `main_checkout`. Also dispatch, doccheck's loop group and flags, and `--json` pass-through. |
+| `crates/uor-r4-harness/tests/loop_{report,arrive,next,close}.rs` (new), and one line of `loop_gates_run_rules.rs` | tests | 1,962 | 66 tests over fixture repositories with bare remotes and fakes. |
 | `docs/loop/templates/{ORDER,REPORT,PICKUP}.md` (new) | docs | 76 | Templates in our own words. Template prompts are `<!-- fill: -->` lines, which `report --check` refuses. |
 | `docs/harness/README.md`, `docs/loop/README.md` | docs | 93 | Usage, and the steps marked built. |
 
-That totals about 3,770 lines, excluding this ORDER and REPORT. The ORDER set out five commands across five builder commits, which is what was built.
+That totals about 5,030 lines, excluding this ORDER and REPORT; about 1,260 of them came in the review fix rounds. (An earlier version of this line said 3,770, which undercounted even before the fixes.) The ORDER set out five commands across five builder commits, which is what was built.
 
 **Design calls.**
 - **Exit codes.** `next` exits 0 for GO, 1 for STOP and 2 when it cannot run. The others exit 0 when ok, 1 when a check fails or the command refuses, and 2 when they cannot run.
@@ -44,16 +69,16 @@ That totals about 3,770 lines, excluding this ORDER and REPORT. The ORDER set ou
   - the PR head is not local HEAD;
   - the PICKUP would be 8 KB or more.
 
-  It then sets the body, with the size line first and `References #<issue>` from `docs/roadmap/issues.json`. It marks a draft ready and writes PICKUP.
-- **`close --verify`** deletes nothing until four proofs pass. Then each deletion has its own guard. Another lab's PR is verified but never cleaned up. The proofs:
+  It then sets the body, with the size line first and `References #<issue>` from `docs/roadmap/issues.json`. It marks a draft ready and writes PICKUP under the main checkout's `local/<lab>/`.
+- **`close --verify`** deletes nothing until four proofs pass. Then each deletion has its own guard, and the deletions run independently of one another. Another lab's PR is verified but never cleaned up. The proofs:
   1. GitHub reports MERGED.
   2. The `(#N)` squash commit is on `origin/main`.
-  3. Main's copy of every changed file equals the PR head.
+  3. Main's copy of every changed file equals the PR head, or the PR's patch equals the merge's patch for those files.
   4. `loop gates --full` passes in a throwaway worktree of `origin/main`.
 
   The deletion guards:
-  - the worktree must be clean, under `.worktrees/<lab>-*`, and is never force-removed; a change to the old `claims.json` alone is reverted first;
-  - the local branch must be at the PR head;
+  - the worktree must be clean, under `.worktrees/<lab>-*`, and hold no ignored files beyond build and view output; it is never force-removed, and a change to the old `claims.json` alone is reverted first;
+  - the local branch is deleted atomically, and only at the PR head and while no worktree has it checked out;
   - the remote delete only succeeds if the branch is still at the PR head.
 
 ## Measurements
@@ -62,16 +87,27 @@ None. This is a host tool.
 
 ## Checks run at the head
 
-The main session re-ran each builder's tests at its commit, then ran these at `3841803b1` with this REPORT in place.
+The main session re-ran each builder's tests at its commit. It ran the checks below first before review, and again after the fix rounds (`5c64948d5`) with this REPORT in place.
 
-- Targeted suites (after `95014fbe3`): `loop_report` 6 passed, `loop_arrive` 12 passed, `loop_next` 12 passed and `loop_close` 19 passed. `loop_prcheck` still gives 27 passed, after the shared parser and size helpers moved.
+- **Targeted suites, after the fixes:** `loop_report` 7, `loop_arrive` 17, `loop_next` 18 and `loop_close` 24 passed. `loop_prcheck` (27) and `loop_gates_run_rules` (29) still pass. Before review the four new suites gave 6, 12, 12 and 19.
+- **Negative gates for the fix rounds**, run the same way:
+  - PICKUP written to the old worktree path: the survives-verify test FAILED;
+  - the ignored-files guard dropped: the kept-notes test FAILED;
+  - the patch-id alternative dropped: the shared-file test FAILED;
+  - `arrive` reading PICKUP from the worktree: the main-checkout test FAILED;
+  - the executable-bit guard dropped: its test FAILED;
+  - the `--json` fix set aside: `json_goes_only_to_the_action_word` FAILED;
+  - first-match ORDER selection restored: the other-lab-ORDER test FAILED;
+  - an unreadable ORDER made fatal: the deleted-ORDER test FAILED;
+  - the receipts tree match dropped: the dirty-row test FAILED;
+  - the paginated-files fallback dropped: the 100-files test FAILED.
 - **Negative gates.** These were run by the builders. Each set aside only its own check, ran the test (which FAILED), then restored the file, confirmed byte-identical with `cmp`. The checks and their tests:
   - **The planted fault:** `report --check` ignoring the section problems; `a_report_missing_a_section_is_refused`.
   - **`arrive`'s PICKUP citation check:** the uncited-reference test.
   - **`next`:** the STOP-file check, and repairs ranking ahead of reviews; `a_stop_file_stops_on_the_kill_switch` and `repairs_come_before_reviews`.
   - **`close --session`:** the REPORT check before writes, and the push-first head check.
   - **`close --verify`:** the MERGED proof, the content proof, the own-lab check, and the remote lease (swapped for a plain delete).
-- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: the first run gave 850 passed and 1 failed (see above); at `41bb400ed`, with this REPORT in place, 851 passed and 0 failed.
+- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: the first run gave 850 passed and 1 failed (see above); at `41bb400ed`, with this REPORT in place, 851 passed and 0 failed; after the fix rounds, FULLSUITE_PLACEHOLDER.
 - **`loop pr-check --local --base 8c2c76e42`** on this branch: `order`, `commit-order`, `report`, `owner-paths`, `rule-sources` and `read-path` (28,257 B) pass, `rendered-lock`, `filemap`, `review-record` and `required-checks` are N/A, and `scope` fails because the item has no `scope:` at the base, as for every loop PR until scopes are backfilled.
 - **Real-world runs** in this worktree:
   - `loop arrive` exited 0, with a WARN for checkout and hooks;
@@ -87,8 +123,12 @@ None of the private kit's skills.
 - **Owner call: hygiene in step 13.** Should it be applied, or limited to the lab's own worktrees? See the first bullet above.
 - **The repair ORDER.** Writing `<lab>-<n+1>` for step 11 is not built.
 - **Missing sources for `next`.** PLAN (PR 8) will add owner directions and probes. Watchers (PR 10) will add GPU collections. Lanes need a `lane:` key and a PM ranking.
-- **Real `gh` paths.** They are covered only by reading the code. `next` judges checks by FAILURE and TIMED_OUT only, so an ERROR status does not trigger a repair.
+- **Real `gh` paths.** `close --session` ran once against real GitHub, on this PR: it set the body, marked the PR ready and wrote the PICKUP. The other real paths are covered only by reading the code. `next` judges checks by FAILURE and TIMED_OUT only, so an ERROR status does not trigger a repair.
 - **PICKUP.** The standing references in a written PICKUP are left empty for the lab to fill.
+- **Review lows not fixed:**
+  - a failed hygiene dry-run does not change `--verify`'s exit code;
+  - the test fakes are honoured in release builds, but now print a FAKE banner;
+  - `next` runs `git fetch` of `origin/main`, the only write to the checkout it makes.
 
 ## Plain summary
 
