@@ -122,8 +122,15 @@ pub fn load(root: &Path) -> Result<GateFile, String> {
     if doc.gates.is_empty() {
         return Err(format!("{} lists no gates", path.display()));
     }
+    let id_re = regex::Regex::new("^[a-z0-9][a-z0-9-]*$").expect("a valid pattern");
     let mut seen = std::collections::BTreeSet::new();
     for g in &doc.gates {
+        if !id_re.is_match(&g.id) {
+            return Err(format!(
+                "gate id {:?} must match ^[a-z0-9][a-z0-9-]*$",
+                g.id
+            ));
+        }
         if !seen.insert(g.id.clone()) {
             return Err(format!("gate {:?} is listed twice", g.id));
         }
@@ -137,8 +144,25 @@ pub fn load(root: &Path) -> Result<GateFile, String> {
                 g.id
             ));
         }
+        if !contained_rel(&b.file) {
+            return Err(format!(
+                "gate {:?}: break.file {:?} must be a relative path with no `.`, `..` or root part",
+                g.id, b.file
+            ));
+        }
     }
     Ok(doc)
+}
+
+/// A repository-relative path that cannot leave the tree: not absolute, and no `.`, `..`, root
+/// or prefix part.
+fn contained_rel(file: &str) -> bool {
+    let p = Path::new(file);
+    !p.is_absolute()
+        && !file.starts_with('/')
+        && !file.split('/').any(|s| s == "." || s == "..")
+        && p.components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
 }
 
 /// A leading `cargo` is `$CARGO` when set (it is under `cargo run`), else `~/.cargo/bin/cargo`
@@ -385,7 +409,6 @@ impl Drop for Scratch<'_> {
         if self.path.exists() {
             let _ = fs::remove_dir_all(&self.path);
         }
-        let _ = git(self.root, &["worktree", "prune"]);
     }
 }
 
@@ -414,6 +437,22 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
         path: path.clone(),
     };
     let target = path.join(&gate.brk.file);
+    if fs::symlink_metadata(&target).is_ok_and(|m| m.file_type().is_symlink()) {
+        return refused(format!("break.file {} is a symlink", gate.brk.file));
+    }
+    let inside = match (
+        target.parent().map(fs::canonicalize),
+        fs::canonicalize(&path),
+    ) {
+        (Some(Ok(parent)), Ok(wt)) => parent.starts_with(&wt),
+        _ => false,
+    };
+    if !inside {
+        return refused(format!(
+            "break.file {} resolves outside the scratch worktree",
+            gate.brk.file
+        ));
+    }
     let planted = fs::OpenOptions::new()
         .append(true)
         .open(&target)
@@ -441,15 +480,39 @@ pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) ->
     o
 }
 
+/// Remove scratch worktrees an interrupted earlier run left registered: only entries whose path is
+/// exactly `<root>/local/<lab>/gates/<run>/scratch/wt-<id>`, each by its own path. Never a global
+/// prune, which would touch other sessions' registrations.
+pub fn sweep_stale_scratch(root: &Path) {
+    let Ok(list) = git(root, &["worktree", "list", "--porcelain"]) else {
+        return;
+    };
+    let pat = format!(
+        "^{}/local/[^/]+/gates/[^/]+/scratch/wt-[a-z0-9][a-z0-9-]*$",
+        regex::escape(&root.to_string_lossy())
+    );
+    let re = regex::Regex::new(&pat).expect("an escaped path is a valid regex");
+    for line in String::from_utf8_lossy(&list).lines() {
+        if let Some(p) = line.strip_prefix("worktree ") {
+            if re.is_match(p) {
+                let _ = git(root, &["worktree", "remove", "--force", p]);
+            }
+        }
+    }
+}
+
 fn append_ledger(path: &Path, rows: &[LedgerRow]) -> Result<(), String> {
     let mut f = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
         .map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+    // One write_all per row, newline included, so concurrent runs cannot interleave a row.
     for r in rows {
-        let line = serde_json::to_string(r).map_err(|e| e.to_string())?;
-        writeln!(f, "{line}").map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        let mut line = serde_json::to_string(r).map_err(|e| e.to_string())?;
+        line.push('\n');
+        f.write_all(line.as_bytes())
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
     }
     Ok(())
 }
@@ -576,6 +639,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             eprintln!("uor-harness: no gate {which:?} in gates.json");
             return 2;
         }
+        sweep_stale_scratch(root);
         let scratch = logdir.join("scratch");
         let out: Vec<Outcome> = chosen
             .into_iter()
@@ -589,6 +653,10 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             .into_iter()
             .filter(|g| !quick || g.quick)
             .collect();
+        if chosen.is_empty() {
+            eprintln!("uor-harness: the selection runs no gate (--quick matches none)");
+            return 2;
+        }
         let (commit, tree) = match (git(root, &["rev-parse", "HEAD"]), tree_hash(root)) {
             (Ok(c), Ok(t)) => (String::from_utf8_lossy(&c).trim().to_string(), t),
             (Err(e), _) | (_, Err(e)) => {

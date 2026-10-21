@@ -250,3 +250,52 @@ fn watch_and_other_actions_are_refused() {
     assert_eq!(o.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&o.stderr).contains("not built yet"));
 }
+
+/// Rewrite `docs/harness/gates.json` with `from` replaced by `to`, asserting the text was there.
+fn edit_gates(r: &Repo, from: &str, to: &str) {
+    let g = std::fs::read_to_string(r.root.join("docs/harness/gates.json")).unwrap();
+    assert!(g.contains(from), "{from} not in {g}");
+    r.write("docs/harness/gates.json", &g.replace(from, to));
+}
+
+#[test]
+fn a_break_file_outside_the_tree_exits_2() {
+    for bad in [
+        "/tmp/uor-planted",
+        "../outside.txt",
+        "src/../../outside.txt",
+        "./src/input.txt",
+    ] {
+        let r = repo(&[OK]);
+        edit_gates(
+            &r,
+            r#""file":"src/input.txt""#,
+            &format!(r#""file":"{bad}""#),
+        );
+        let o = r.run(&[]);
+        assert_eq!(o.status.code(), Some(2), "{bad}: {o:?}");
+        assert!(
+            String::from_utf8_lossy(&o.stderr).contains("\"ok\""),
+            "{o:?}"
+        );
+    }
+}
+
+#[test]
+fn a_bad_or_duplicate_gate_id_exits_2() {
+    for id in ["Bad", "-lead", "a/b", "..", ""] {
+        let r = repo(&[(id, "exit 0", "x", "x")]);
+        assert_eq!(r.run(&[]).status.code(), Some(2), "{id:?}");
+    }
+    let r = repo(&[OK, OK]);
+    assert_eq!(r.run(&[]).status.code(), Some(2));
+}
+
+#[test]
+fn a_selection_of_zero_gates_exits_2() {
+    let r = repo(&[OK]);
+    edit_gates(&r, r#""quick":true"#, r#""quick":false"#);
+    let o = r.run(&["--quick"]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(r.ledger().is_empty());
+}
