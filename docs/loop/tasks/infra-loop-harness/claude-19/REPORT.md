@@ -4,7 +4,7 @@ Lab: claude. Base: `1b2f5c9d1`. Order: [ORDER.md](ORDER.md), committed first (`0
 
 ## What did not work, first
 
-- **The items were never closed.** Loop PRs 2, 4, 5, 6, 7a and 7b each said `References #<item>` rather than `Closes #<item>`, and none of them set its item to `status: done`. So all six issues stayed open after the merges, with no comment on any of them. The roadmap page says a finishing PR uses `Closes #N`, and that an issue is claimed with a comment before work starts. Claude did neither.
+- **The items were never closed.** Loop PRs 2, 4, 5, 6, 7a and 7b each said `References #<item>` rather than `Closes #<item>`, and none of them set its item to `status: done`. So all six issues stayed open after the merges, with no comment on any of them at the probe. Claude posted a delivery comment on each after the base commit. The roadmap page says a finishing PR uses `Closes #N`, and that an issue is claimed with a comment before work starts. Claude did neither.
 - **The tool repeats the slip.** `loop close --session` builds the PR body with `References #<issue>` for the ORDER's item and never `Closes`, so a lab following the loop leaves its item open too.
 - **Loop PR 3 is not finished.** Its done-when names `docs/loop/baseline.json`, which does not exist on `main`, so #2906 stays open.
 
@@ -41,7 +41,7 @@ None beyond the delivery path in CHARTER §5.5.
 
 ## Still open
 
-- After merge, a `roadmap sync` dry run and then the applied sync close the six issues.
+- The closing keywords in this PR close the six issues at merge, so the ORDER's last done-when changes: the `roadmap sync` dry run after merge should list no change for these six, and the applied sync then confirms them closed.
 - #2906 (loop PR 3) needs `docs/loop/baseline.json` from `loop render`.
 - `loop close --session` should write `Closes #<issue>` when the diff sets the ORDER's item to `status: done`, and `References` otherwise. This is a code change, for loop PR 7c or its own order.
 - From now on, each loop PR claims its issue with a comment, says `Closes #<item>`, and sets its item to `done` in the same PR.
