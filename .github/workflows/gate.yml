@@ -65,16 +65,9 @@ jobs:
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-gate-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-gate-${{ runner.os }}-
-
+      # No cache here, deliberately. The tests job builds the PR's own code (build scripts
+      # included) and saves its cache; restoring any cache the PR can write would let it plant
+      # compiled dependencies in this "base" build. The harness builds cold in about a minute.
       - name: Build uor-harness from the base
         run: cargo build --locked -p uor-r4-harness --bin uor-harness
 
@@ -121,8 +114,11 @@ jobs:
           set -euo pipefail
           # fetch-depth 0 brings every branch, so the base commit on main is already here.
           git cat-file -e "${BASE_SHA}^{commit}"
-          order="$(git diff --name-only --diff-filter=A "$(git merge-base "$BASE_SHA" HEAD)" HEAD \
-            | grep -E '^docs/loop/tasks/[^/]+/[a-z]+-[0-9]+/ORDER\.md$' | head -n 1 || true)"
+          # A failed merge-base must fail the job, not read as "no ORDER" (`set -e` stops here).
+          mb="$(git merge-base "$BASE_SHA" HEAD)"
+          added="$(git diff --name-only --diff-filter=A "$mb" HEAD)"
+          # grep exits 1 when nothing matches, which only means this PR adds no ORDER.
+          order="$(printf '%s\n' "$added" | grep -E '^docs/loop/tasks/[^/]+/[a-z]+-[0-9]+/ORDER\.md$' | head -n 1 || true)"
           lab=""
           if [ -n "$order" ]; then
             lab="$(basename "$(dirname "$order")")"
