@@ -29,7 +29,7 @@ use uor_r4_harness::presence;
 use uor_r4_harness::presence::{heartbeat, Presence};
 use uor_r4_harness::receipt::{
     append_live, current_month, plan_sync, sync_live_to_committed, Receipt as NewReceipt,
-    UNATTRIBUTED_WARNING,
+    HEARTBEAT_UNATTRIBUTED_WARNING, UNATTRIBUTED_WARNING,
 };
 use uor_r4_harness::registries::Registries;
 use uor_r4_harness::shards;
@@ -371,7 +371,7 @@ fn main() -> ExitCode {
             "-h" | "--help" | "help" => {
                 // **`heartbeat --help` printed the global usage**, so a lab could not learn that
                 // `--line`, `--doing`, `--count`, `--next` or `--session` exist and had to read
-                // this file to find out (claude/review1, #2028 6163960613 item 3). A command word
+                // this file to find out (        eprintln!("{HEARTBEAT_UNATTRIBUTED_WARNING}");/review1, #2028 6163960613 item 3). A command word
                 // seen BEFORE the help flag selects its own flag list.
                 if let Some(cmd) = command.as_deref() {
                     if let Some(block) = command_help(cmd) {
@@ -1787,9 +1787,15 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
 fn cmd_multilab(repo: &Path, args: &[String], json: bool) -> ExitCode {
     let paths = StatePaths::from_env(repo);
     let action = action_word(args);
-    let lab = match lab_or_refuse(repo, args) {
-        Ok(l) => l,
-        Err(code) => return code,
+    // Only `touch` records under a lab; the reads (and `sync-live`, which copies every lab's
+    // presence and names none) work with any `UOR_LAB`.
+    let lab = if action == "touch" {
+        match lab_or_refuse(repo, args) {
+            Ok(l) => l,
+            Err(code) => return code,
+        }
+    } else {
+        String::new()
     };
 
     match action {
@@ -1981,9 +1987,15 @@ fn cmd_team(repo: &Path, args: &[String], json: bool) -> ExitCode {
     // treated as a candidate.
     let action = action_word(args);
     let branch = flag_value(args, "--branch").unwrap_or_default();
-    let lab = match lab_or_refuse(repo, args) {
-        Ok(l) => l,
-        Err(code) => return code,
+    // Only claim, release and dispatch record under a lab; roster, claims and presence are reads and
+    // work with any `UOR_LAB`.
+    let lab = if matches!(action, "claim" | "release" | "dispatch") {
+        match lab_or_refuse(repo, args) {
+            Ok(l) => l,
+            Err(code) => return code,
+        }
+    } else {
+        String::new()
     };
     let note = flag_value(args, "--note").unwrap_or_default();
 
@@ -2553,10 +2565,7 @@ fn cmd_heartbeat(repo: &Path, args: &[String], json: bool) -> ExitCode {
         Err(code) => return code,
     };
     if lab.trim().is_empty() {
-        eprintln!(
-            "uor-harness: WARNING - no lab identity. This check-in would be attributed to nobody.\n\
-             \x20            export UOR_LAB=<antigravity|claude|codex|deepseek|kimi>"
-        );
+        eprintln!("{HEARTBEAT_UNATTRIBUTED_WARNING}");
         return ExitCode::from(2);
     }
     let card_for = |key: &str| -> Result<heartbeatcard::Card, String> {

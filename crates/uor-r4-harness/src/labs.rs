@@ -40,9 +40,24 @@ struct LabsFile {
     labs: BTreeMap<String, Lab>,
 }
 
-/// `docs/harness/labs.json` for a repository.
+fn registry_in(root: &Path) -> PathBuf {
+    root.join("docs").join("harness").join("labs.json")
+}
+
+/// `docs/harness/labs.json` for the repository containing `repo`.
+///
+/// `repo` is the working directory unless `--repo` was given, so it may be a subdirectory. The
+/// registry is found from the git top level (`state::toplevel`, the resolution the state paths
+/// use), and failing that from the nearest ancestor of `repo` that holds the file, for a checkout
+/// that is not a git work tree. With neither, the path under `repo` is returned so the error names
+/// where the file was expected.
 pub fn labs_path(repo: &Path) -> PathBuf {
-    repo.join("docs").join("harness").join("labs.json")
+    crate::state::toplevel(repo)
+        .into_iter()
+        .chain(repo.ancestors().map(Path::to_path_buf))
+        .map(|root| registry_in(&root))
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| registry_in(repo))
 }
 
 /// Every registered lab, keyed and sorted by name.
