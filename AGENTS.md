@@ -15,7 +15,7 @@ Only the owner changes it; changes are logged in [docs/rules/changes.md](docs/ru
 2. **No softmax or squashing.** No softmax, log-softmax, softplus, sigmoid, tanh, GELU or normalized exponential anywhere, including losses, gradients, sampling and renamed or table forms (§3.2).
 3. **No matmul.** No dense matrix multiplication or GEMM in training or serving, including wrappers and hand loops (§3.3).
 4. **GPU-only research compute.** Training, evaluation and qualification run on the GPU; serving the exported integer artifact on client devices is the product and is allowed (§3.5, §3.6).
-5. **Never record an owner release yourself.** Ask Casey in your own chat; only his approval there counts, and you record his words verbatim with the time (§5.1).
+5. **Never grant or assume an owner release yourself.** Ask Casey in your own chat; only his approval there counts, and you record his words verbatim with the time (§5.1).
 6. **Deliver through the full path:** PR → exact-head review by another vendor's lab (doc-only or generated PRs: a fresh-context self-review) → merge queue → verify on fresh `main` → delete the branch and worktree (§5.5).
 
 ## Where things are
