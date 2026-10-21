@@ -18,6 +18,7 @@ Result at `fc96b4bea`: `grep -n "D59\|onboarded" CHARTER.md docs/rules/changes.m
 - `docs/rules/changes.md`: one new entry.
 - `docs/integration/DECISIONS.md`: row D59.
 - `docs/loop/tasks/infra-loop-harness/claude-5/**`.
+- `AGENTS.md`: only the decision-index range label, D0–D58 to D0–D59 (scope widened before the edit, because a new row makes the label stale).
 
 ## Done when
 
