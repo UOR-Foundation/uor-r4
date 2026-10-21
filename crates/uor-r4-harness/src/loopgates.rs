@@ -192,7 +192,7 @@ pub fn resolve_program(argv0: &str) -> PathBuf {
     PathBuf::from(argv0)
 }
 
-fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
+pub(crate) fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     let out = Command::new("git")
         .args(args)
         .current_dir(root)
@@ -677,6 +677,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     }
     match args.first().map(String::as_str) {
         Some("gates") => {}
+        Some("claim") => return crate::loopclaim::cli(root, lab, &args[1..]),
         Some(other) => {
             eprintln!("uor-harness: loop {other}: not built yet (see the build plan)");
             return 2;
