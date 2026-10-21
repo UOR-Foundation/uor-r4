@@ -246,14 +246,21 @@ fn break_all_turns_each_gate_red_for_its_own_reason() {
 }
 
 #[test]
-fn watch_and_other_actions_are_refused() {
+fn watch_needs_a_full_run_and_other_actions_are_refused() {
     let r = repo(&[OK]);
-    let w = r.run(&["--watch"]);
-    assert_eq!(w.status.code(), Some(2));
-    assert!(
-        String::from_utf8_lossy(&w.stderr).contains("loop PR 11"),
-        "{w:?}"
-    );
+    // Loop PR 11 builds --watch; it is only for a full run, so a quick, status or break run refuses.
+    for args in [
+        &["--watch", "--quick"][..],
+        &["--watch", "--status"][..],
+        &["--watch", "--break", "all"][..],
+    ] {
+        let w = r.run(args);
+        assert_eq!(w.status.code(), Some(2), "{args:?}: {w:?}");
+        assert!(
+            String::from_utf8_lossy(&w.stderr).contains("needs a full run"),
+            "{args:?}: {w:?}"
+        );
+    }
     let o = clean(&mut Command::new(BIN))
         // `next` was the example until loop PR 7b built it; `drive` is loop PR 10.
         .args(["--repo", r.root.to_str().unwrap(), "loop", "drive"])
