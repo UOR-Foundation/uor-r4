@@ -6,7 +6,7 @@ Lab: claude. Base: `9c47d30d4`. Order: [ORDER.md](ORDER.md), committed first (`5
 
 - **The DeepSeek harness fails P-1.** It has no hook runner: no hook is wired in any profile, and none fired. Until loop PR 9 adds an adapter, the loop rules are instructions for that client, and only the policy gate checks the result.
 - **No client showed a compaction hook firing.** Kimi Code has PreCompact and PostCompact events, but they did not trigger in short runs. Antigravity and the DeepSeek harness expose no compaction event at all.
-- **Two clients misreport or hide things a guard needs:**
+- **Kimi Code misreports or hides two things a guard needs:**
   - Kimi Code's SessionStart payload reports the config default model, not the pinned one.
   - Kimi Code's subagent tool calls carry no agent id.
 
