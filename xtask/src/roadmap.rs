@@ -60,8 +60,17 @@ const OPTIONAL_KEYS: &[&str] = &[
     "done_class",
 ];
 const DONE_CLASSES: &[&str] = &["host", "gpu"];
-/// `scope:` globs that cover the whole repository; the loop page refuses them.
-const ROOT_WIDE_GLOBS: &[&str] = &["**", "**/*", "/**", "*", "./**"];
+/// A `scope:` glob covers the whole repository, and the loop page refuses it, when every
+/// path segment left after leading `./` and `/` is made only of `*` (`**`, `./*`, `**/**`).
+fn is_root_wide(glob: &str) -> bool {
+    let mut rest = glob;
+    while let Some(r) = rest.strip_prefix("./").or_else(|| rest.strip_prefix('/')) {
+        rest = r;
+    }
+    rest.split('/')
+        .filter(|s| !s.is_empty() && *s != ".")
+        .all(|s| s.chars().all(|c| c == '*'))
+}
 /// Optional body section; when present it must not be empty.
 const CANCEL_IF: &str = "Cancel if";
 const MAX_TITLE: usize = 80;
@@ -213,7 +222,7 @@ fn check_loop_keys(fields: &BTreeMap<String, String>) -> Vec<String> {
             }
             Ok(globs) => {
                 for glob in &globs {
-                    if ROOT_WIDE_GLOBS.contains(&glob.as_str()) {
+                    if is_root_wide(glob) {
                         errors.push(format!(
                             "scope `{glob}` is root-wide and refused; name the paths the item changes"
                         ));
@@ -1226,7 +1235,9 @@ mod tests {
 
     #[test]
     fn roadmap_loop_scope_refuses_every_root_wide_glob() {
-        for glob in ["**", "**/*", "/**", "*", "./**"] {
+        for glob in [
+            "**", "**/*", "/**", "*", "./**", "**/**", "./*", "*/**", "./**/*", "/", ".",
+        ] {
             let errors = loop_errors(&format!("scope: [docs/**, {glob}]\n"));
             assert_error(
                 &errors,
