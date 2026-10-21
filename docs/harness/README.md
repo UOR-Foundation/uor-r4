@@ -111,7 +111,7 @@ Tests only: `UOR_LOOP_GH_FAKE=<file>` replaces `gh` entirely. The file holds eit
 ### `loop pr-check` (loop PR 5)
 
 ```sh
-UOR_LAB=claude uor-harness loop pr-check [--base <rev>] [--head <rev>] [--json]
+UOR_LAB=claude uor-harness loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--json]
 ```
 
 Checks a loop PR: the diff from `git merge-base <base> <head>` to `<head>` (`--base` defaults to `origin/main`, `--head` to `HEAD`), read with `git` alone, never GitHub or the working tree. **Registries and items are read at the merge base**, so a PR cannot loosen its own check; the files it adds are read at the head. It prints a size line by class (tests, code, docs, generated, other), one `PASS|FAIL|WARN|N/A <rule> <summary>` line per rule with indented details, then `verdict: PASS|FAIL`; `--json` prints one object instead. Exit codes: 0 every rule passes (warnings allowed); 1 a rule failed, including a rule whose input could not be read; 2 the check could not run (bad rev, git failure, usage).
@@ -121,6 +121,10 @@ Checks a loop PR: the diff from `git merge-base <base> <head>` to `<head>` (`--b
 - `commit-order`: among the PR's non-merge commits (`git rev-list --reverse --topo-order <merge-base>..<head>`; merges are skipped), the first to add the ORDER (status `A`) comes before any commit that changes a path, and changes nothing outside the ORDER's folder.
 - `report`: `<ORDER folder>/REPORT.md` exists at the head with `## ` headings starting (any case) "What did not work", "What changed", "Measurements", "Checks run at the head", "Skills used", "Still open", "Plain summary", in that order, each followed by a non-blank line before the next `## `.
 - `owner-paths`: a changed path (either side of a rename) that matches an entry of `docs/harness/owner-paths.json` at the merge base (`<prefix>/**` covers everything below the prefix; any other entry is exact) needs a `## Owner approval` section in the ORDER that names each matched entry (as written, or its prefix), holds a double-quoted answer and an ISO UTC time (`2026-10-21T15:25:16Z`). With no owner path changed it passes.
+- `rule-sources`: outside the files in `docs/harness/rule-sources.json` at the merge base (and `archive/`, `docs/loop/tasks/`, `docs/roadmap/items/`), the PR adds no `.md` file whose name contains `rule` (any case) and no markdown heading line containing the word `rule` or `rules`.
+- `rendered-lock`: `STATE.md`, `HANDOFF.md`, `docs/harness/LESSONS.md` and AGENTS.md between the `loop:lessons-top-ten` markers change only when the head ref is `kimi/render` (or `origin/kimi/render`); N/A while none exists. `--head-ref <branch>` names the head ref; it defaults to `--head` when that is a branch, else the current branch.
+- `read-path`: AGENTS.md at most 80 lines; `STATE.md`, `HANDOFF.md` under 24,576 B each; the ORDER under 4,096 B; AGENTS + CHARTER + STATE + HANDOFF + ORDER warn above 76,800 B and stop above 128,000 B. Over budget and grown fails; over budget and not grown warns.
+- `filemap`: when `docs/start/FILEMAP.md` exists at the head, it has a row (first cell a backticked path) for every depth-1 and depth-2 directory (not dot-names, nothing under `archive/`), and every row names a directory at the head.
 
 ## Where it sits against what already exists
 

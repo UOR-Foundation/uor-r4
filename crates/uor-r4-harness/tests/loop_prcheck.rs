@@ -22,7 +22,7 @@ fn clean(cmd: &mut Command) -> &mut Command {
 
 const ITEM_A: &str = "---\nid: item-a\nstatus: ready\nscope: [crates/a/**, docs/a.md, .github/**, CHARTER.md]\nnotebook: docs/research/notebook/a.md\n---\n\n## Why\n\nBecause.\n";
 const NOTEBOOK: &str = "# A notebook\n\n| row | result |\n|---|---|\n| 1 | first |\n";
-const FILEMAP: &str = "# FILEMAP\n\n| path | what |\n|---|---|\n| crates/a | the a crate |\n";
+const FILEMAP: &str = "# FILEMAP\n\n| path | what |\n|---|---|\n| crates/a | the a crate |\n| `crates/` | crates |\n| `crates/a` | a |\n| `docs` | docs |\n| `docs/harness` | h |\n| `docs/loop` | loop |\n| `docs/research` | r |\n| `docs/roadmap` | rm |\n| `docs/start` | s |\n";
 const OWNER_PATHS: &str = r#"{"schema": 1, "paths": [
   {"path": "CHARTER.md", "why": "rules"},
   {"path": ".github/**", "why": "CI"},
@@ -653,4 +653,202 @@ fn a_bad_rev_exits_2_and_json_carries_the_verdict() {
     assert_eq!(o.status.code(), Some(1), "{o:?}");
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).unwrap();
     assert_eq!(v["verdict"], "fail");
+}
+
+/// `rule-sources`: rule files and rule headings outside the base list fail; listed files and the
+/// exempt folders pass, and a PR cannot list its own new file.
+#[test]
+fn rule_sources_refuses_rules_outside_the_list() {
+    let r = Repo::new();
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.write(
+        "docs/harness/rule-sources.json",
+        r#"{"files": ["docs/harness/pm-rules.md"]}"#,
+    );
+    r.write("docs/harness/pm-rules.md", "# PM\n");
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "list"]);
+    let base = r.out(&["rev-parse", "HEAD"]);
+    let on = |work: Box<dyn FnOnce(&Repo)>| {
+        r.git(&["checkout", "-q", "--detach", &base]);
+        r.order_a();
+        r.git(&["add", "-A"]);
+        r.git(&["commit", "-q", "-m", "order"]);
+        work(&r);
+        r.git(&["add", "-A"]);
+        r.git(&["commit", "-q", "-m", "work"]);
+        r.check_against(&base, &r.out(&["rev-parse", "HEAD"]), &[])
+    };
+    let o = on(Box::new(|r| r.write("docs/team/house-rules.md", "x\n")));
+    expect(
+        &o,
+        1,
+        "FAIL rule-sources",
+        "docs/team/house-rules.md adds a rule-named file",
+    );
+    let o = on(Box::new(|r| r.write("docs/a.md", "# a\n\n## Team rules\n")));
+    expect(
+        &o,
+        1,
+        "FAIL rule-sources",
+        "adds the rule heading `## Team rules`",
+    );
+    let o = on(Box::new(|r| {
+        r.write("docs/harness/pm-rules.md", "# PM\n\n## Rules\n")
+    }));
+    expect(&o, 1, "PASS rule-sources", "no rule stated outside");
+    let o = on(Box::new(|r| {
+        r.write("docs/loop/tasks/item-a/claude-1/rules.md", "## Rule\n")
+    }));
+    expect(&o, 1, "PASS rule-sources", "no rule stated outside");
+    let o = on(Box::new(|r| {
+        r.write("docs/team/house-rules.md", "x\n");
+        r.write(
+            "docs/harness/rule-sources.json",
+            r#"{"files": ["docs/harness/pm-rules.md", "docs/team/house-rules.md"]}"#,
+        );
+    }));
+    expect(
+        &o,
+        1,
+        "FAIL rule-sources",
+        "docs/team/house-rules.md adds a rule-named file",
+    );
+}
+
+/// `rendered-lock`: N/A with no view; a view edit fails off `kimi/render` and passes on it;
+/// AGENTS.md counts only between its markers.
+#[test]
+fn rendered_lock_holds_the_views_to_kimi_render() {
+    let r = Repo::new();
+    let h = r.green_a(|_| {});
+    expect(
+        &r.check(&h, &[]),
+        0,
+        "N/A rendered-lock",
+        "no rendered view exists yet",
+    );
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.write("STATE.md", "# State\n");
+    let agents = "# Agents\n<!-- loop:lessons-top-ten:start -->\n1. one\n<!-- loop:lessons-top-ten:end -->\n";
+    r.write("AGENTS.md", agents);
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "views"]);
+    let base = r.out(&["rev-parse", "HEAD"]);
+    let on = |text: &'static str, path: &'static str| {
+        r.git(&["checkout", "-q", "--detach", &base]);
+        r.order_a();
+        r.write(path, text);
+        r.git(&["add", "-A"]);
+        r.git(&["commit", "-q", "-m", "edit"]);
+        r.out(&["rev-parse", "HEAD"])
+    };
+    let h = on("# State\nnew\n", "STATE.md");
+    expect(
+        &r.check_against(&base, &h, &[]),
+        1,
+        "FAIL rendered-lock",
+        "STATE.md changed",
+    );
+    let o = r.check_against(&base, &h, &["--head-ref", "kimi/render"]);
+    assert!(stdout(&o).contains("PASS rendered-lock"), "{}", stdout(&o));
+    let h = on(
+        "# Agents, renamed\n<!-- loop:lessons-top-ten:start -->\n1. one\n<!-- loop:lessons-top-ten:end -->\n",
+        "AGENTS.md",
+    );
+    let o = r.check_against(&base, &h, &[]);
+    assert!(stdout(&o).contains("PASS rendered-lock"), "{}", stdout(&o));
+    let h = on(
+        "# Agents\n<!-- loop:lessons-top-ten:start -->\n1. two\n<!-- loop:lessons-top-ten:end -->\n",
+        "AGENTS.md",
+    );
+    expect(
+        &r.check_against(&base, &h, &[]),
+        1,
+        "FAIL rendered-lock",
+        "AGENTS.md (lessons-top-ten markers) changed",
+    );
+}
+
+/// `read-path`: growth over a budget fails; an untouched over-budget file warns and passes.
+#[test]
+fn read_path_fails_growth_over_budget_and_warns_otherwise() {
+    let lines = |n: usize| "x\n".repeat(n);
+    let r = Repo::new();
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.write("AGENTS.md", &lines(70));
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "agents"]);
+    let base = r.out(&["rev-parse", "HEAD"]);
+    r.write("AGENTS.md", &lines(81));
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "grow"]);
+    let h = r.out(&["rev-parse", "HEAD"]);
+    expect(
+        &r.check_against(&base, &h, &[]),
+        1,
+        "FAIL read-path",
+        "AGENTS.md is 81 lines (base 70)",
+    );
+
+    let mut r = Repo::new();
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.write("AGENTS.md", &lines(85));
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "agents"]);
+    r.base = r.out(&["rev-parse", "HEAD"]);
+    let h = r.green_a(|_| {});
+    expect(&r.check(&h, &[]), 0, "WARN read-path", "but did not grow");
+
+    let r = Repo::new();
+    let big = order("claude", "item-a", &"y".repeat(5000));
+    let h = r.green(ORDER_A, &big, |_| {});
+    expect(&r.check(&h, &[]), 1, "FAIL read-path", "the ORDER is 50");
+}
+
+/// `filemap`: N/A without the map; a missing row and a stale row fail; an added row passes.
+#[test]
+fn filemap_needs_a_row_per_directory_and_no_stale_rows() {
+    let mut r = Repo::new();
+    let h = r.green_a(|r| {
+        std::fs::remove_file(r.root.join("docs/start/FILEMAP.md")).unwrap();
+    });
+    expect(&r.check(&h, &[]), 1, "N/A filemap", "does not exist yet");
+    let h = r.green_a(|_| {});
+    expect(&r.check(&h, &[]), 0, "PASS filemap", "has a row for every");
+    r.git(&["checkout", "-q", "--detach", &r.base]);
+    r.write(
+        "docs/roadmap/items/item-a.md",
+        &ITEM_A.replace("scope: [", "scope: [crates/new/**, "),
+    );
+    r.git(&["add", "-A"]);
+    r.git(&["commit", "-q", "-m", "scope"]);
+    r.base = r.out(&["rev-parse", "HEAD"]);
+    let h = r.green_a(|r| r.write("crates/new/x.rs", "\n"));
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL filemap",
+        "missing row: crates/new",
+    );
+    let h = r.green_a(|r| {
+        r.write("crates/new/x.rs", "\n");
+        r.write(
+            "docs/start/FILEMAP.md",
+            &format!("{FILEMAP}| `crates/new` | new |\n"),
+        );
+    });
+    expect(&r.check(&h, &[]), 0, "PASS filemap", "has a row for every");
+    let h = r.green_a(|r| {
+        r.write(
+            "docs/start/FILEMAP.md",
+            &format!("{FILEMAP}| `crates/gone/` | gone |\n"),
+        );
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL filemap",
+        "stale row: crates/gone",
+    );
 }

@@ -8,7 +8,8 @@
 use std::path::Path;
 use std::process::Command;
 
-const USAGE: &str = "usage: uor-harness loop pr-check [--base <rev>] [--head <rev>] [--json]";
+const USAGE: &str =
+    "usage: uor-harness loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--json]";
 
 /// Every rule, in the order it runs and prints.
 const RULES: &[(&str, Rule)] = &[
@@ -17,6 +18,10 @@ const RULES: &[(&str, Rule)] = &[
     ("commit-order", rule_commit_order),
     ("report", rule_report),
     ("owner-paths", rule_owner_paths),
+    ("rule-sources", rule_rule_sources),
+    ("rendered-lock", rule_rendered_lock),
+    ("read-path", rule_read_path),
+    ("filemap", rule_filemap),
 ];
 
 type Rule = fn(&Pr) -> RuleResult;
@@ -61,6 +66,8 @@ pub struct Pr<'a> {
     pub merge_base: String,
     pub head: String,
     pub changes: Vec<Change>,
+    /// The branch the head is on (`--head-ref`), `""` when unknown; only `rendered-lock` reads it.
+    pub head_ref: String,
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
@@ -136,6 +143,7 @@ impl<'a> Pr<'a> {
             merge_base,
             head,
             changes,
+            head_ref: String::new(),
         })
     }
 
@@ -619,6 +627,275 @@ fn rule_owner_paths(pr: &Pr) -> RuleResult {
     }
 }
 
+fn not_applicable(rule: &'static str, summary: &str) -> RuleResult {
+    RuleResult {
+        rule,
+        verdict: Verdict::NotApplicable,
+        summary: summary.to_string(),
+        details: Vec::new(),
+    }
+}
+
+/// Outside the files in `docs/harness/rule-sources.json` (read at the base; absent counts as
+/// empty), `archive/`, `docs/loop/tasks/` and `docs/roadmap/items/`, the PR adds no `.md` file
+/// named for a rule and no markdown heading containing the word `rule` or `rules`.
+fn rule_rule_sources(pr: &Pr) -> RuleResult {
+    const R: &str = "rule-sources";
+    const LIST: &str = "docs/harness/rule-sources.json";
+    let listed: Vec<String> = match pr.at_base(LIST) {
+        None => Vec::new(),
+        Some(text) => {
+            let files = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| {
+                    v.get("files")?
+                        .as_array()?
+                        .iter()
+                        .map(|f| f.as_str().map(String::from))
+                        .collect::<Option<Vec<String>>>()
+                });
+            match files {
+                Some(f) => f,
+                None => {
+                    return fail(
+                        R,
+                        format!("{LIST} at the merge base has no `files` list of paths"),
+                    )
+                }
+            }
+        }
+    };
+    let exempt = |p: &str| {
+        ["archive/", "docs/loop/tasks/", "docs/roadmap/items/"]
+            .iter()
+            .any(|d| p.starts_with(d))
+            || listed.iter().any(|l| l == p)
+    };
+    let heading = regex::Regex::new(r"^#{1,6} ").expect("a valid pattern");
+    let word = regex::Regex::new(r"(?i)\brules?\b").expect("a valid pattern");
+    let mut details = Vec::new();
+    for c in &pr.changes {
+        let Some(path) = c.paths.last().map(String::as_str) else {
+            continue;
+        };
+        if c.status == 'D' || !path.ends_with(".md") || exempt(path) {
+            continue;
+        }
+        let name = path.rsplit('/').next().unwrap_or(path);
+        if matches!(c.status, 'A' | 'R' | 'C') && name.to_lowercase().contains("rule") {
+            details.push(format!("{path} adds a rule-named file outside {LIST}"));
+        }
+        let Some(head) = pr.at_head(path) else {
+            continue;
+        };
+        let base = pr.at_base(&c.paths[0]).unwrap_or_default();
+        let old: std::collections::HashSet<&str> = base.lines().collect();
+        for line in head.lines() {
+            if heading.is_match(line) && word.is_match(line) && !old.contains(line) {
+                details.push(format!(
+                    "{path} adds the rule heading `{line}` outside {LIST}"
+                ));
+            }
+        }
+    }
+    result(
+        R,
+        details,
+        &format!("no rule stated outside {LIST}"),
+        &format!("a rule is stated outside {LIST}"),
+    )
+}
+
+const AGENTS_START: &str = "<!-- loop:lessons-top-ten:start -->";
+const AGENTS_END: &str = "<!-- loop:lessons-top-ten:end -->";
+
+/// The bytes of AGENTS.md between the lessons markers; `None` when neither marker is there. A
+/// lone or misordered marker yields the whole text, so it still counts as a view.
+fn agents_lessons(text: &str) -> Option<String> {
+    match (text.find(AGENTS_START), text.find(AGENTS_END)) {
+        (None, None) => None,
+        (Some(s), Some(e)) if e >= s + AGENTS_START.len() => {
+            Some(text[s + AGENTS_START.len()..e].to_string())
+        }
+        _ => Some(format!("unpaired marker\n{text}")),
+    }
+}
+
+/// The rendered views change only on the `kimi/render` branch: `STATE.md`, `HANDOFF.md`,
+/// `docs/harness/LESSONS.md` and AGENTS.md between the lessons-top-ten markers. The roadmap
+/// README and `docs/loop/baseline.json` join this lock with loop PR 8.
+fn rule_rendered_lock(pr: &Pr) -> RuleResult {
+    const R: &str = "rendered-lock";
+    let mut views: Vec<(&str, Option<String>, Option<String>)> =
+        ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md"]
+            .iter()
+            .map(|p| (*p, pr.at_base(p), pr.at_head(p)))
+            .collect();
+    views.push((
+        "AGENTS.md (lessons-top-ten markers)",
+        pr.at_base("AGENTS.md").as_deref().and_then(agents_lessons),
+        pr.at_head("AGENTS.md").as_deref().and_then(agents_lessons),
+    ));
+    if views.iter().all(|(_, b, h)| b.is_none() && h.is_none()) {
+        return not_applicable(R, "no rendered view exists yet (loop PR 8 commits them)");
+    }
+    let changed: Vec<String> = views
+        .iter()
+        .filter(|(_, b, h)| b != h)
+        .map(|(p, _, _)| format!("{p} changed"))
+        .collect();
+    if matches!(pr.head_ref.as_str(), "kimi/render" | "origin/kimi/render") {
+        return result(
+            R,
+            Vec::new(),
+            "head ref kimi/render may change the views",
+            "",
+        );
+    }
+    let shown = if pr.head_ref.is_empty() {
+        "(none)"
+    } else {
+        pr.head_ref.as_str()
+    };
+    result(
+        R,
+        changed,
+        "no rendered view changed",
+        &format!("rendered views change only on kimi/render, not head ref {shown}"),
+    )
+}
+
+/// A read-path budget: name, (base, head) value, over budget at a value, the budget, its unit.
+type Budget = (
+    &'static str,
+    (u64, u64),
+    fn(u64) -> bool,
+    &'static str,
+    &'static str,
+);
+
+/// The read-path budgets, measured on the head and compared with the base. An item over budget
+/// fails when it grew, and warns when it did not.
+fn rule_read_path(pr: &Pr) -> RuleResult {
+    const R: &str = "read-path";
+    let bytes = |t: Option<String>| t.map_or(0, |t| t.len() as u64);
+    let lines = |t: Option<String>| t.map_or(0, |t| t.lines().count() as u64);
+    let order = pr.the_order().ok();
+    let pair = |p: &str| (bytes(pr.at_base(p)), bytes(pr.at_head(p)));
+    let agents_lines = (
+        lines(pr.at_base("AGENTS.md")),
+        lines(pr.at_head("AGENTS.md")),
+    );
+    let (agents, charter, state, handoff) = (
+        pair("AGENTS.md"),
+        pair("CHARTER.md"),
+        pair("STATE.md"),
+        pair("HANDOFF.md"),
+    );
+    let ord = order.map_or((0, 0), pair);
+    let total = (
+        agents.0 + charter.0 + state.0 + handoff.0 + ord.0,
+        agents.1 + charter.1 + state.1 + handoff.1 + ord.1,
+    );
+    // (name, (base, head), over budget at this value, the budget as words, unit)
+    let items: [Budget; 5] = [
+        ("AGENTS.md", agents_lines, |v| v > 80, "at most 80", "lines"),
+        ("STATE.md", state, |v| v >= 24_576, "under 24576", "B"),
+        ("HANDOFF.md", handoff, |v| v >= 24_576, "under 24576", "B"),
+        ("the ORDER", ord, |v| v >= 4_096, "under 4096", "B"),
+        (
+            "the read path",
+            total,
+            |v| v > 128_000,
+            "stop above 128000",
+            "B",
+        ),
+    ];
+    let (mut fails, mut warns) = (Vec::new(), Vec::new());
+    for (name, (b, h), over, budget, unit) in items {
+        if over(h) {
+            let line = format!("{name} is {h} {unit} (base {b}), over its budget ({budget})");
+            if h > b {
+                fails.push(format!("{line} and grew"));
+            } else {
+                warns.push(format!("{line} but did not grow"));
+            }
+        }
+    }
+    if total.1 > 76_800 && total.1 <= 128_000 {
+        warns.push(format!(
+            "the read path is {} B (base {}), above the 76800 B warning line",
+            total.1, total.0
+        ));
+    }
+    let summary = format!(
+        "AGENTS.md {} lines, STATE.md {} B, HANDOFF.md {} B, ORDER {} B, read path {} B (AGENTS + CHARTER + STATE + HANDOFF + ORDER)",
+        agents_lines.1, state.1, handoff.1, ord.1, total.1
+    );
+    let verdict = if !fails.is_empty() {
+        Verdict::Fail
+    } else if !warns.is_empty() {
+        Verdict::Warn
+    } else {
+        Verdict::Pass
+    };
+    fails.extend(warns);
+    RuleResult {
+        rule: R,
+        verdict,
+        summary,
+        details: fails,
+    }
+}
+
+/// `docs/start/FILEMAP.md` at the head has a row (a table line whose first cell is a backticked
+/// path) for every depth-1 and depth-2 directory, and every row names a directory at the head.
+fn rule_filemap(pr: &Pr) -> RuleResult {
+    const R: &str = "filemap";
+    const MAP: &str = "docs/start/FILEMAP.md";
+    let Some(text) = pr.at_head(MAP) else {
+        return not_applicable(
+            R,
+            "docs/start/FILEMAP.md does not exist yet (loop PR 8 creates it)",
+        );
+    };
+    let raw = match git(
+        pr.root,
+        &["ls-tree", "-d", "-r", "--name-only", "-z", &pr.head],
+    ) {
+        Ok(r) => r,
+        Err(e) => return fail(R, e),
+    };
+    let dirs = z_fields(&raw);
+    let row = regex::Regex::new(r"^\|\s*`([^`]+)`\s*\|").expect("a valid pattern");
+    let rows: Vec<String> = text
+        .lines()
+        .filter_map(|l| row.captures(l))
+        .map(|c| c[1].trim().trim_end_matches('/').to_string())
+        .collect();
+    let mut details = Vec::new();
+    for d in &dirs {
+        let depth = d.split('/').count();
+        if depth > 2 || d.split('/').any(|s| s.starts_with('.')) || d.starts_with("archive/") {
+            continue;
+        }
+        if !rows.contains(d) {
+            details.push(format!("missing row: {d}"));
+        }
+    }
+    for r in &rows {
+        if !dirs.contains(r) {
+            details.push(format!("stale row: {r} is not a directory at the head"));
+        }
+    }
+    result(
+        R,
+        details,
+        &format!("{MAP} has a row for every depth-1 and depth-2 directory"),
+        &format!("{MAP} has missing or stale rows"),
+    )
+}
+
 /// Base and head differ only on `status:` lines.
 fn status_only_edit(pr: &Pr, path: &str) -> bool {
     let (Some(b), Some(h)) = (pr.at_base(path), pr.at_head(path)) else {
@@ -736,23 +1013,38 @@ fn size(pr: &Pr) -> Result<Vec<(&'static str, u64, u64, u64)>, String> {
     Ok(out)
 }
 
-/// `loop pr-check [--base <rev>] [--head <rev>] [--json]`. Exit 0 every rule passes, 1 a rule
+/// The branch `head` names (`refs/heads/<x>` or `refs/remotes/<x>`), else the current branch,
+/// else `""`.
+fn default_head_ref(root: &Path, head: &str) -> String {
+    for prefix in ["refs/heads/", "refs/remotes/"] {
+        let r = format!("{prefix}{head}");
+        if git(root, &["rev-parse", "--verify", "--quiet", &r]).is_ok() {
+            return head.to_string();
+        }
+    }
+    git(root, &["symbolic-ref", "--short", "-q", "HEAD"])
+        .map(|b| String::from_utf8_lossy(&b).trim().to_string())
+        .unwrap_or_default()
+}
+
+/// `loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--json]`. Exit 0 every rule passes, 1 a rule
 /// failed, 2 the check could not run.
 pub fn cli(root: &Path, args: &[String]) -> u8 {
     let (mut base, mut head, mut json) = ("origin/main".to_string(), "HEAD".to_string(), false);
+    let mut head_ref: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--json" => json = true,
-            flag @ ("--base" | "--head") => {
+            flag @ ("--base" | "--head" | "--head-ref") => {
                 let Some(v) = args.get(i + 1) else {
                     eprintln!("{USAGE}");
                     return 2;
                 };
-                if flag == "--base" {
-                    base = v.clone();
-                } else {
-                    head = v.clone();
+                match flag {
+                    "--base" => base = v.clone(),
+                    "--head" => head = v.clone(),
+                    _ => head_ref = Some(v.clone()),
                 }
                 i += 1;
             }
@@ -763,13 +1055,14 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
         }
         i += 1;
     }
-    let pr = match Pr::open(root, &base, &head) {
+    let mut pr = match Pr::open(root, &base, &head) {
         Ok(pr) => pr,
         Err(e) => {
             eprintln!("uor-harness: loop pr-check: {e}");
             return 2;
         }
     };
+    pr.head_ref = head_ref.unwrap_or_else(|| default_head_ref(root, &head));
     let size = match size(&pr) {
         Ok(s) => s,
         Err(e) => {
