@@ -11,7 +11,7 @@ depends_on: [infra-loop-pr05-policy-check]
 
 ## Why it matters
 
-An exact-head review from another vendor's lab is the last check before `main`. A review posted in free text cannot be checked by a machine.
+An exact-head review is the last check before `main`. It comes from another vendor's lab or, for a loop setup PR under D59, from Claude's fresh-context reviewers. A review posted in free text cannot be checked by a machine.
 
 ## What is missing
 
@@ -21,9 +21,13 @@ The build plan's row on [the loop page](../../loop/README.md#build-plan): "`loop
 
 `loop review` writes and parses the `uor-review v1` comment with the fields the loop page lists. The policy check needs an APPROVE at the current head from a lab whose vendor differs from the author's, with no later CHANGES; a doc-only or generated-only PR may carry a same-lab `fresh-context` record.
 
-**Loop setup PRs follow D59.** Until the other labs run the loop, a setup PR passes only with an APPROVE from Claude's fresh-context reviewers, whichever lab built it, and a record from any other lab does not count. The setup PRs are the build plan's PRs, and each carries its ORDER under `docs/loop/tasks/infra-loop-harness/`. A Claude-built setup PR with a Claude `fresh-context` APPROVE passes. The exemption must end without a code change once the other labs run the loop; how the gate learns that is a design call for this PR's ORDER.
+**Loop setup PRs follow D59.** While D59 is in force, a setup PR passes only with an APPROVE tagged `claude`, whichever lab built it, and a record from any other lab does not count. A Claude-built setup PR with a Claude APPROVE therefore passes.
 
-Identity is by tags: there is no signing, no key and no signer list (D55). The planted fault turns the check red: **an untagged review record, a same-vendor record on a code PR outside D59, or a setup-PR record from a lab other than Claude is refused.**
+- **What the gate checks.** Under D55 it checks tags, not sessions. That the APPROVE came from a fresh context is the reviewing lab's word, as it already is for a doc-only same-lab record.
+- **Which PRs are setup PRs.** A PR counts as a setup PR only if its ORDER names its build-plan row in a `Setup row:` line (for example `Setup row: 6`), and that row exists in the build-plan table on the loop page. Where the ORDER is filed does not count.
+- **When it ends.** D59 ends when the other labs run the loop. The gate reads this from a switch the owner sets, so ending the exemption needs no code change. The owner decides when the switch flips; this PR's ORDER chooses only where the switch lives.
+
+Identity is by tags: there is no signing, no key and no signer list (D55). The planted fault turns the check red: **an untagged review record, a same-vendor record on a code or model PR outside D59, or a setup-PR record from a lab other than Claude is refused.** A Claude-built code PR whose ORDER names no build-plan row is outside D59, so a Claude review of it is refused.
 
 ## How to start
 
@@ -42,5 +46,5 @@ Identity is by tags: there is no signing, no key and no signer list (D55). The p
 ## Sources
 
 - [`docs/loop/README.md`](../../loop/README.md)
-- [`CHARTER.md`](../../../CHARTER.md) §5.10
+- [`CHARTER.md`](../../../CHARTER.md) §5.5 (D59) and §5.10
 - [`docs/integration/DECISIONS.md`](../../integration/DECISIONS.md) D55 and D59
