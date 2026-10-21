@@ -71,7 +71,7 @@ The main session re-ran each builder's tests at its commit, then ran these at `3
   - **`next`:** the STOP-file check, and repairs ranking ahead of reviews; `a_stop_file_stops_on_the_kill_switch` and `repairs_come_before_reviews`.
   - **`close --session`:** the REPORT check before writes, and the push-first head check.
   - **`close --verify`:** the MERGED proof, the content proof, the own-lab check, and the remote lease (swapped for a plain delete).
-- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: FULLSUITE_PLACEHOLDER.
+- **The full suite**, `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: the first run gave 850 passed and 1 failed (see above); at `41bb400ed`, with this REPORT in place, 851 passed and 0 failed.
 - **`loop pr-check --local --base 8c2c76e42`** on this branch: `order`, `commit-order`, `report`, `owner-paths`, `rule-sources` and `read-path` (28,257 B) pass, `rendered-lock`, `filemap`, `review-record` and `required-checks` are N/A, and `scope` fails because the item has no `scope:` at the base, as for every loop PR until scopes are backfilled.
 - **Real-world runs** in this worktree:
   - `loop arrive` exited 0, with a WARN for checkout and hooks;
