@@ -29,7 +29,7 @@ At base `7864b0516`: `loop guard`, `loop install` and `loop onboard` exit 2 with
 - `docs/harness/onboarding/*.json` (committed onboarding receipts per client)
 - `docs/harness/README.md` and `docs/loop/README.md`: usage and what is built
 - `docs/loop/tasks/infra-loop-harness/antigravity-1/**`
-- `docs/roadmap/items/infra-loop-pr09-client-adapters.md` (`status:` line only, at PR open)
+- `docs/roadmap/items/infra-loop-pr09-client-adapters.md` (`status:` line only, at PR open) and `docs/roadmap/README.md` (`cargo xtask roadmap render`)
 
 ## Done when
 
