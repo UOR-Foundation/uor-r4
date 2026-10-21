@@ -209,7 +209,7 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
 
     let mut o = String::new();
     o.push_str(&stamp(&c.sha));
-    o.push_str("\n# HANDOFF\n\nRendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each row gives the first sentence of the item's `Done when` and `Cancel if` sections; `not recorded` means the item has no such section or key yet.\n");
+    o.push_str("\n# HANDOFF\n\nRendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each open-item row gives the first sentence of the item's `Done when` and `Cancel if` sections; blocked items are listed once, in the blocked table, with their owner; `not recorded` means the item has no such section or key yet.\n");
 
     let blocked = |i: &OpenItem| i.status == "held" || i.status == "decision";
     let open: Vec<&OpenItem> = items.iter().filter(|i| !blocked(i)).collect();
