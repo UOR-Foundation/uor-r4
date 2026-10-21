@@ -13,10 +13,13 @@
 //! The AGENTS.md top-ten block is rendered only between its markers
 //! (`<!-- loop:lessons-top-ten:start -->` / `<!-- loop:lessons-top-ten:end -->`), which loop PR 8
 //! adds; without them nothing is written to AGENTS.md and a note is printed, and `--check` compares
-//! only the bytes between the markers, whose first line is the block's stamp.
+//! only the bytes between the markers, whose first line is the block's stamp. In place, the block
+//! is spliced into the working-tree AGENTS.md between its own markers; missing or malformed markers
+//! there, while the commit has them, refuse (exit 2) and write nothing.
 //! `docs/roadmap/README.md` comes from today's renderer, `cargo run -q --locked -p xtask --
 //! roadmap render [--check]`; it is skipped with a note under `--out`, because xtask writes into
-//! the repository, and an unavailable cargo or xtask is REFUSED (exit 2), never a silent pass.
+//! the repository, and with `--at`, because xtask renders the working tree; any xtask failure is
+//! REFUSED (exit 2), except exit 1 under `--check`, which is a difference.
 //! `docs/loop/baseline.json` is deferred to loop PR 5 (ORDER claude-14, call 5).
 
 use std::collections::BTreeMap;
@@ -50,9 +53,17 @@ pub struct AtCommit<'a> {
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
-    let out = Command::new("git")
+    let mut cmd = Command::new("git");
+    // A caller's GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE would point git at another repository.
+    for (k, _) in std::env::vars_os() {
+        if k.to_string_lossy().starts_with("GIT_") {
+            cmd.env_remove(k);
+        }
+    }
+    let out = cmd
         .arg("-C")
         .arg(root)
+        .args(["-c", "core.quotepath=false"])
         .args(args)
         .output()
         .map_err(|e| format!("cannot run git: {e}"))?;
@@ -87,10 +98,11 @@ impl<'a> AtCommit<'a> {
     pub fn list(&self, dir: &str) -> Result<Vec<String>, String> {
         let out = git(
             self.root,
-            &["ls-tree", "-r", "--name-only", &self.sha, "--", dir],
+            &["ls-tree", "-r", "-z", "--name-only", &self.sha, "--", dir],
         )?;
         let mut v: Vec<String> = String::from_utf8_lossy(&out)
-            .lines()
+            .split('\0')
+            .filter(|p| !p.is_empty())
             .map(str::to_string)
             .collect();
         v.sort();
@@ -338,12 +350,36 @@ pub const TOP_TEN_START: &str = "<!-- loop:lessons-top-ten:start -->";
 pub const TOP_TEN_END: &str = "<!-- loop:lessons-top-ten:end -->";
 const NO_MARKERS: &str = "AGENTS.md: no markers; top-ten block not rendered";
 
-/// The byte ranges of the text strictly between the AGENTS.md markers, if both are present in order.
-fn between_markers(text: &str) -> Option<(usize, usize)> {
-    let s = text.find(TOP_TEN_START)? + TOP_TEN_START.len();
-    let e = s + text[s..].find(TOP_TEN_END)?;
-    Some((s, e))
+/// The state of the AGENTS.md markers in one text.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Markers {
+    /// Neither marker.
+    Absent,
+    /// Exactly one start, then exactly one end: the byte range strictly between them.
+    Ok(usize, usize),
+    /// One marker only, a duplicate, or the end before the start.
+    Malformed,
 }
+
+fn markers(text: &str) -> Markers {
+    match (
+        text.matches(TOP_TEN_START).count(),
+        text.matches(TOP_TEN_END).count(),
+    ) {
+        (0, 0) => Markers::Absent,
+        (1, 1) => {
+            let s = text.find(TOP_TEN_START).unwrap_or(0) + TOP_TEN_START.len();
+            match text.find(TOP_TEN_END) {
+                Some(e) if e >= s => Markers::Ok(s, e),
+                _ => Markers::Malformed,
+            }
+        }
+        _ => Markers::Malformed,
+    }
+}
+
+const MALFORMED: &str =
+    "markers malformed: one marker only, a duplicate, or the end before the start";
 
 /// The AGENTS.md top-ten block: the bytes that go strictly between the markers. Its stamp is the
 /// block's first line. No PM-owned `top_ten:` list exists yet, so it is the first ten lessons by id.
@@ -361,31 +397,64 @@ pub fn render_top_ten(c: &AtCommit) -> Result<String, String> {
     Ok(o)
 }
 
-/// AGENTS.md at the commit with the block re-rendered, or `None` when the markers are absent.
-fn render_agents(c: &AtCommit) -> Result<Option<String>, String> {
+/// AGENTS.md with the block rendered from the commit's lessons, or `None` when the commit's
+/// AGENTS.md has no markers. With `disk` (an in-place write) the block is spliced into the
+/// working-tree file's bytes between its own markers and every other byte is kept as it is on disk;
+/// without it (`--out`) into the commit's AGENTS.md. `Err` is a refusal: nothing may be written.
+fn render_agents(c: &AtCommit, disk: Option<&Path>) -> Result<Option<String>, String> {
     let Ok(text) = c.read("AGENTS.md") else {
         return Ok(None);
     };
-    let Some((s, e)) = between_markers(&text) else {
-        return Ok(None);
+    match markers(&text) {
+        Markers::Absent => return Ok(None),
+        Markers::Malformed => return Err(format!("AGENTS.md at {}: {MALFORMED}", c.sha)),
+        Markers::Ok(..) => {}
+    }
+    let base = match disk {
+        None => text,
+        Some(p) => fs::read_to_string(p)
+            .map_err(|e| format!("AGENTS.md on disk: cannot read {}: {e}", p.display()))?,
+    };
+    let Markers::Ok(s, e) = markers(&base) else {
+        return Err(
+            "AGENTS.md on disk: markers missing or malformed while the commit has them; nothing written"
+                .to_string(),
+        );
     };
     Ok(Some(format!(
         "{}{}{}",
-        &text[..s],
+        &base[..s],
         render_top_ten(c)?,
-        &text[e..]
+        &base[e..]
     )))
 }
 
-/// `--check` of the AGENTS block on disk: only the bytes between the markers, only when they exist.
-fn check_agents(root: &Path, file: &Path) -> u8 {
-    let Ok(text) = fs::read_to_string(file) else {
-        println!("{NO_MARKERS}");
-        return 0;
-    };
-    let Some((s, e)) = between_markers(&text) else {
-        println!("{NO_MARKERS}");
-        return 0;
+/// `--check` of the AGENTS block on disk against the markers in `head`'s AGENTS.md: only the bytes
+/// between the markers are compared. 0 match or no markers anywhere, 1 differs or markers missing
+/// or malformed on disk, 2 the commit's markers are malformed or the block's stamp is unusable.
+fn check_agents(root: &Path, head: &AtCommit, file: &Path) -> u8 {
+    let commit = head
+        .read("AGENTS.md")
+        .map(|t| markers(&t))
+        .unwrap_or(Markers::Absent);
+    if commit == Markers::Malformed {
+        eprintln!(
+            "uor-harness: loop render --check: AGENTS.md at {}: {MALFORMED}",
+            head.sha
+        );
+        return 2;
+    }
+    let text = fs::read_to_string(file).unwrap_or_default();
+    let (s, e) = match (commit, markers(&text)) {
+        (_, Markers::Ok(s, e)) => (s, e),
+        (Markers::Absent, Markers::Absent) => {
+            println!("{NO_MARKERS}");
+            return 0;
+        }
+        _ => {
+            println!("AGENTS.md: markers missing or malformed");
+            return 1;
+        }
     };
     let block = &text[s..e];
     let Some(sha) = block
@@ -424,8 +493,15 @@ fn roadmap(root: &Path, check: bool) -> u8 {
     if check {
         cmd.arg("--check");
     }
+    // Git's routing variables, and the parent's build setup (target dir, flags, cargo build
+    // config); CARGO_HOME and PATH are kept.
     for (k, _) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("GIT_") {
+        let n = k.to_string_lossy();
+        if n.starts_with("GIT_")
+            || n.starts_with("CARGO_BUILD_")
+            || n == "CARGO_TARGET_DIR"
+            || n == "RUSTFLAGS"
+        {
             cmd.env_remove(k);
         }
     }
@@ -436,33 +512,37 @@ fn roadmap(root: &Path, check: bool) -> u8 {
             return 2;
         }
     };
-    match out.status.code() {
-        Some(0) => {
-            println!(
-                "{ROADMAP}: {} through xtask",
-                if check {
-                    "matches its render"
-                } else {
-                    "rendered"
-                }
-            );
-            0
-        }
-        // cargo's own failure code: no workspace, no xtask package, a build error or a panic.
-        Some(101) | None => {
-            println!(
-                "{ROADMAP}: REFUSED: cargo or xtask unavailable: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
-            2
-        }
-        Some(n) => {
-            println!(
-                "{ROADMAP}: differs from its xtask render (exit {n}): {}",
-                String::from_utf8_lossy(&out.stdout).trim()
-            );
-            1
-        }
+    let code = out.status.code();
+    match roadmap_verdict(check, code) {
+        0 => println!(
+            "{ROADMAP}: {} through xtask",
+            if check {
+                "matches its render"
+            } else {
+                "rendered"
+            }
+        ),
+        1 => println!(
+            "{ROADMAP}: differs from its xtask render: {}",
+            String::from_utf8_lossy(&out.stdout).trim()
+        ),
+        _ => println!(
+            "{ROADMAP}: REFUSED: cargo or xtask failed ({}): {}",
+            code.map_or("killed by a signal".to_string(), |n| format!("exit {n}")),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ),
+    }
+    roadmap_verdict(check, code)
+}
+
+/// The loop-render exit for xtask's exit code (`None`: killed by a signal). xtask exits 1 for any
+/// error, item validation and I/O included, and 2 for a usage error; cargo exits 101. So only
+/// `--check`'s exit 1 is a difference; every other failure is a refusal.
+pub fn roadmap_verdict(check: bool, code: Option<i32>) -> u8 {
+    match code {
+        Some(0) => 0,
+        Some(1) if check => 1,
+        _ => 2,
     }
 }
 
@@ -783,7 +863,14 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             );
             return 2;
         }
-        let names = match AtCommit::resolve(root, "HEAD").and_then(|c| render_all(&c)) {
+        let head = match AtCommit::resolve(root, "HEAD") {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("uor-harness: loop render --check: {e}");
+                return 2;
+            }
+        };
+        let names = match render_all(&head) {
             Ok(v) => v.into_iter().map(|(p, _)| p).collect::<Vec<_>>(),
             Err(e) => {
                 eprintln!("uor-harness: loop render --check: {e}");
@@ -795,8 +882,21 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             .map(|p| check_one(root, &dir.join(p), p))
             .max()
             .unwrap_or(0);
-        code = code.max(check_agents(root, &dir.join("AGENTS.md")));
-        code = code.max(roadmap_or_skip(root, out_given, true));
+        code = code.max(check_agents(root, &head, &dir.join("AGENTS.md")));
+        // xtask renders the working tree, so a view stamped at an older commit is never compared
+        // with it.
+        let older = names.iter().find_map(|p| {
+            let text = fs::read_to_string(dir.join(p)).ok()?;
+            let sha = parse_stamp(text.lines().next()?)?.to_string();
+            (sha != head.sha).then_some(sha)
+        });
+        code = code.max(match older {
+            Some(sha) if !out_given => {
+                println!("{ROADMAP}: skipped; the stamp names {sha}, not HEAD, and xtask renders the working tree");
+                0
+            }
+            _ => roadmap_or_skip(root, out_given, true),
+        });
         return code;
     }
     let c = match AtCommit::resolve(root, at.as_deref().unwrap_or("HEAD")) {
@@ -813,7 +913,9 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             return 2;
         }
     };
-    match render_agents(&c) {
+    // In place, the block goes into the working-tree AGENTS.md; refused before any view is written.
+    let disk = root.join("AGENTS.md");
+    match render_agents(&c, (!out_given).then_some(disk.as_path())) {
         Ok(Some(text)) => views.push(("AGENTS.md".to_string(), text)),
         Ok(None) => println!("{NO_MARKERS}"),
         Err(e) => {
@@ -840,6 +942,10 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             return 2;
         }
         println!("wrote {} from {}", path.display(), c.sha);
+    }
+    if at.is_some() {
+        println!("{ROADMAP}: skipped with --at; xtask renders the working tree");
+        return 0;
     }
     roadmap_or_skip(root, out_given, false)
 }

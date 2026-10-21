@@ -55,12 +55,29 @@ impl Repo {
     }
 
     fn render(&self, args: &[&str]) -> Output {
-        clean(&mut Command::new(BIN))
+        self.render_env(args, &[])
+    }
+
+    /// `loop render` with extra environment set after every `GIT_*` variable is removed.
+    fn render_env(&self, args: &[&str], env: &[(&str, &str)]) -> Output {
+        let mut cmd = Command::new(BIN);
+        clean(&mut cmd)
             .args(["--repo", self.root.to_str().unwrap(), "loop", "render"])
             .args(args)
-            .env("UOR_LAB", "claude")
-            .output()
-            .unwrap()
+            .env("UOR_LAB", "claude");
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        cmd.output().unwrap()
+    }
+
+    /// A stand-in for cargo (`CARGO`) that exits with `code`, so no test reaches a real cargo.
+    fn fake_cargo(&self, code: i32) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        let p = self._tmp.path().join(format!("fake-cargo-{code}"));
+        std::fs::write(&p, format!("#!/bin/sh\nexit {code}\n")).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        p.to_str().unwrap().to_string()
     }
 
     /// `loop render` with `--out <dir>` first, so nothing is written into the repository.
@@ -548,12 +565,144 @@ fn held_and_decision_items_appear_only_in_the_blocked_table() {
 #[test]
 fn in_place_render_and_check_refuse_the_roadmap_without_xtask() {
     let r = repo();
-    let o = r.render(&[]);
+    let none = [("CARGO", "/nonexistent/uor-loop-render-test/cargo")];
+    let o = r.render_env(&[], &none);
     assert_eq!(o.status.code(), Some(2), "{o:?}");
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(out.contains("docs/roadmap/README.md: REFUSED"), "{out}");
-    let o = r.render(&["--check"]);
+    let o = r.render_env(&["--check"], &none);
     assert_eq!(o.status.code(), Some(2), "{o:?}");
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(out.contains("docs/roadmap/README.md: REFUSED"), "{out}");
+}
+
+#[test]
+fn in_place_render_keeps_uncommitted_bytes_outside_the_markers() {
+    let r = repo();
+    lesson_files(&r);
+    r.write("AGENTS.md", AGENTS_WITH_MARKERS);
+    r.commit("agents with markers");
+    let disk = AGENTS_WITH_MARKERS.replace("After.\n", "After.\nUncommitted line.\n");
+    r.write("AGENTS.md", &disk);
+    let ok = r.fake_cargo(0);
+    let o = r.render_env(&[], &[("CARGO", &ok)]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let s = read(&r.root, "AGENTS.md");
+    assert!(
+        s.ends_with("<!-- loop:lessons-top-ten:end -->\n\nAfter.\nUncommitted line.\n"),
+        "{s}"
+    );
+    assert!(
+        s.starts_with("# Agents\n\nBefore.\n\n<!-- loop:lessons-top-ten:start -->\n"),
+        "{s}"
+    );
+    assert!(!s.contains("stale text") && s.contains("**L-001**"), "{s}");
+    // Markers missing on disk while the commit has them: refused, nothing written.
+    let gone = disk.replace("<!-- loop:lessons-top-ten:end -->\n", "");
+    r.write("AGENTS.md", &gone);
+    std::fs::remove_file(r.root.join("STATE.md")).unwrap();
+    let o = r.render_env(&[], &[("CARGO", &ok)]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert_eq!(read(&r.root, "AGENTS.md"), gone);
+    assert!(!r.root.join("STATE.md").exists());
+}
+
+#[test]
+fn a_missing_marker_on_disk_fails_check() {
+    let r = repo();
+    lesson_files(&r);
+    r.write("AGENTS.md", AGENTS_WITH_MARKERS);
+    r.commit("agents with markers");
+    let d = r.out_dir("v");
+    assert!(r.render_out(&d, &[]).status.success());
+    let s = read(&d, "AGENTS.md");
+    let p = d.join("AGENTS.md");
+    std::fs::write(&p, s.replace("<!-- loop:lessons-top-ten:end -->", "")).unwrap();
+    let o = r.render_out(&d, &["--check"]);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        out.contains("AGENTS.md: markers missing or malformed"),
+        "{out}"
+    );
+    let edited = s
+        .replace("**L-001**: One heading", "**L-001**: Edited")
+        .replace("<!-- loop:lessons-top-ten:start -->", "");
+    std::fs::write(&p, edited).unwrap();
+    assert_eq!(r.render_out(&d, &["--check"]).status.code(), Some(1));
+}
+
+#[test]
+fn a_duplicate_start_marker_in_the_commit_is_refused() {
+    let r = repo();
+    lesson_files(&r);
+    let dup = AGENTS_WITH_MARKERS.replace(
+        "Before.\n",
+        "Before.\n<!-- loop:lessons-top-ten:start -->\n",
+    );
+    r.write("AGENTS.md", &dup);
+    r.commit("duplicate start marker");
+    let d = r.out_dir("v");
+    let o = r.render_out(&d, &[]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(!d.join("AGENTS.md").exists());
+    assert_eq!(r.render_out(&d, &["--check"]).status.code(), Some(2));
+}
+
+#[test]
+fn xtask_exit_1_is_refused_in_render_and_a_difference_only_in_check() {
+    let r = repo();
+    let (ok, one, two) = (r.fake_cargo(0), r.fake_cargo(1), r.fake_cargo(2));
+    // xtask exits 1 for an item-validation error as well, so render cannot call it a difference.
+    let o = r.render_env(&[], &[("CARGO", &one)]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(String::from_utf8_lossy(&o.stdout).contains("docs/roadmap/README.md: REFUSED"));
+    assert_eq!(r.render_env(&[], &[("CARGO", &ok)]).status.code(), Some(0));
+    let o = r.render_env(&["--check"], &[("CARGO", &one)]);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(String::from_utf8_lossy(&o.stdout).contains("docs/roadmap/README.md: differs"));
+    let o = r.render_env(&["--check"], &[("CARGO", &two)]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(String::from_utf8_lossy(&o.stdout).contains("docs/roadmap/README.md: REFUSED"));
+}
+
+#[test]
+fn at_an_older_commit_skips_the_roadmap_view() {
+    let r = repo();
+    r.write(
+        "docs/roadmap/items/z.md",
+        "---\nid: z\nstatus: open\n---\n\nbody\n",
+    );
+    r.commit("second");
+    let none = [("CARGO", "/nonexistent/uor-loop-render-test/cargo")];
+    let o = r.render_env(&["--at", "HEAD~1"], &none);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        out.contains("docs/roadmap/README.md: skipped with --at; xtask renders the working tree"),
+        "{out}"
+    );
+    let o = r.render_env(&["--check"], &none);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(String::from_utf8_lossy(&o.stdout).contains("docs/roadmap/README.md: skipped"));
+}
+
+#[test]
+fn a_git_dir_in_the_environment_does_not_redirect_the_render() {
+    let r = repo();
+    let other = repo();
+    other.write("extra.md", "other\n");
+    let other_head = other.commit("other");
+    let head = r.git(&["rev-parse", "HEAD"]);
+    assert_ne!(head, other_head);
+    let d = r.out_dir("v");
+    let git_dir = other.root.join(".git");
+    let o = r.render_env(
+        &["--out", d.to_str().unwrap()],
+        &[("GIT_DIR", git_dir.to_str().unwrap())],
+    );
+    assert!(o.status.success(), "{o:?}");
+    let s = read(&d, "STATE.md");
+    assert!(s.lines().next().unwrap().contains(&head), "{s}");
+    assert!(!s.contains(&other_head), "{s}");
 }
