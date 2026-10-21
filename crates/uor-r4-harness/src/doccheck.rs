@@ -541,7 +541,10 @@ const GROUPS: [(&str, &[&str]); 12] = [
         ],
     ),
     ("lint", &["check", "format"]),
-    ("loop", &["ask", "claim", "gates", "render", "suborder"]),
+    (
+        "loop",
+        &["ask", "claim", "gates", "pr-check", "render", "suborder"],
+    ),
     ("mistakes", &["capture", "find", "list", "show"]),
     (
         "multilab",

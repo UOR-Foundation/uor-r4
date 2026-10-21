@@ -108,6 +108,17 @@ For `loop claim`, `<topic>` is `--lab-topic`, which defaults to the item id; for
 
 Tests only: `UOR_LOOP_GH_FAKE=<file>` replaces `gh` entirely. The file holds either the array `gh pr list --json number,headRefName,isDraft,files` prints, or an object `{"prs": [...], "nextPrNumber": n, "afterCreate": [...]}`; `afterCreate` PRs join the list once the draft PR exists, and each PR may carry `"orderTexts": {path: text}` for the ORDER files it changes. `"createFails": true` makes `create_draft_pr` fail without recording anything. Each GitHub write the claim makes (`create_draft_pr`, `close_pr`) is appended as one JSON line to `<file>.calls.jsonl`. Never set it outside tests.
 
+### `loop pr-check` (loop PR 5)
+
+```sh
+UOR_LAB=claude uor-harness loop pr-check [--base <rev>] [--head <rev>] [--json]
+```
+
+Checks a loop PR: the diff from `git merge-base <base> <head>` to `<head>` (`--base` defaults to `origin/main`, `--head` to `HEAD`), read with `git` alone, never GitHub or the working tree. **Registries and items are read at the merge base**, so a PR cannot loosen its own check; the files it adds are read at the head. It prints a size line by class (tests, code, docs, generated, other), one `PASS|FAIL|WARN|N/A <rule> <summary>` line per rule with indented details, then `verdict: PASS|FAIL`; `--json` prints one object instead. Exit codes: 0 every rule passes (warnings allowed); 1 a rule failed, including a rule whose input could not be read; 2 the check could not run (bad rev, git failure, usage).
+
+- `order`: the PR adds exactly one `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`; its lab is in `docs/harness/labs.json`, its `Lab:` line names the same lab, its `Item:` names an item in `docs/roadmap/items/`, and an `infra-loop-pr*` item's ORDER carries a `Setup row:` line.
+- `scope`: every changed path (both sides of a rename) matches a glob in the item's `scope:` (`*` and `?` never cross `/`; a `**` segment matches zero or more segments), or is always allowed: the ORDER's own folder, a `status:`-only edit of the item file, an append to the item's `notebook:` page, a new file under `docs/harness/mistakes/`, or rows added to `docs/start/FILEMAP.md`. An item with no `scope:` fails.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front
