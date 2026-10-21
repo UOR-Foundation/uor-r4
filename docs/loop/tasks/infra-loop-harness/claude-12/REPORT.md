@@ -9,7 +9,7 @@ Lab: claude. Base: `e61746628`. Order: [ORDER.md](ORDER.md), committed (`c4ea412
 - **The first review (at `a74fd0a2a`) found more gaps.** It approved, but `?*` and `**/?*` match every top-level name and were still accepted. A builder-lite round (`baa6f9e4c`) made these changes:
   - A segment made only of `*` and `?` now counts as root-wide.
   - Scope globs that use `[` `]` `{` `}` are refused as unsupported ("list the paths separately").
-  - `notebook:` must be a page under `docs/research/notebook/`. In this repository a notebook is one page per research line, which settles "notebook line".
+  - `notebook:` must be a page under `docs/research/notebook/`. In this repository a notebook is one page per research line, which is the reading of "notebook line" used here (see Still open).
   - When an item has a `notebook:` key and its directory does not end in `docs/roadmap/items`, an explicit error replaces the silent skip.
   - `size` and `rank` refuse a leading zero.
   - New tests pin the narrower globs as accepted.
