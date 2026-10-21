@@ -130,6 +130,8 @@ Checks a loop PR: the diff from `git merge-base <base> <head>` to `<head>` (`--b
 
 Tests only: `UOR_PRCHECK_GH_FAKE=<file>` replaces `gh` for these two rules with `{"comments": [{"author", "body"}], "checkRuns": [{"name", "app", "summary"}], "statuses": [{"context", "state"}]}`, answered for every PR and sha. Never set it outside tests.
 
+**In CI.** `ci.yml` calls `.github/workflows/gate.yml` on every pull request. Its `policy` job builds `uor-harness` from the base commit and runs `loop pr-check --ci` against the PR's head, which it reads as data. `required-transport` then writes `policy: <pass|fail|error> (run <id>)` into the five required checks' summaries and leaves them green. That record is what `required-checks` reads back. Its `tests` job runs `loop gates --full` on the PR's code with a read-only token. The [loop page](../loop/README.md#gates) gives the reasons.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front
