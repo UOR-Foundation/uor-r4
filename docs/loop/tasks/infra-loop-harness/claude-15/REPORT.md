@@ -2,54 +2,79 @@
 
 Lab: claude. Base: `32092fca6`. Order: [ORDER.md](ORDER.md), committed (`cdeca0e45`) before the work. The cancel probe found no `claim`, `suborder` or `ask` under `loop`.
 
-Three fresh-context Opus builders each wrote one commit. The main session re-ran the gates and wrote this REPORT, because a harness hook does not let subagents write REPORT files.
+Fresh-context builders wrote the code: three for the first head, then one per fix round. The main session re-ran the gates and wrote this REPORT, because a harness hook does not let subagents write REPORT files.
 
 ## What did not work, first
 
-- **`loop claim --lab-topic` was refused by the top-level flag parser until commit 3.** `main.rs` only lets through the flags in its `SUBCOMMAND_FLAGS` and `SUBCOMMAND_VALUE_FLAGS` tables, and commit 2 did not add `--lab-topic` there. Commit 3 added it, along with the suborder and ask flags. **No test passes `--lab-topic` through the binary yet**, so nothing pins that fix.
-- **The real GitHub paths are untested.** All tests use the fake: `git push -u` followed by `gh pr create --draft`, `gh pr close`, `git push origin --delete`, and `gh api …/contents/<path>?ref=<branch>`. Tests must not touch the network, and the fake records every write call in a log.
-- **A squash-merged branch is never an ancestor of `main`.** Under commit 1's rule, a leftover worktree would have kept its item claimed for ever. Commit 2 now treats an order as merged when its ORDER file exists on `origin/main` with identical bytes.
-- **An ORDER's path does not name its item.** For example, `claude-15` is for `infra-loop-pr07a-claim`. So the claim reads each open order's text to find its `Item:` line. On GitHub, that costs one `gh api` call per open ORDER.
+- **The first head was not safe enough. Two fresh-context reviews of `f94fea8af` asked for changes.** The fixes came in four commits:
+  - **`3fd8372af`: escape and stale inputs.**
+    - Suborder containment was a plain string prefix, so a child could escape its parent: `crates/a/**` contained `crates/a/../b/x.rs`, and `docs/*.md` contained `docs/secret.rs`. Containment is now only an exact match, or a parent `<dir>/**` with the child under `<dir>/`.
+    - One validator, used by both claim and suborder, now refuses any scope glob with a leading `/`, a `..` or `.` segment, `./`, `//`, `[`, `]`, `{`, `}` or `\`.
+    - The checks read the item from a possibly stale working tree. They now fetch first and read items from `origin/main`.
+    - An open order whose item had no `scope:` line refused every claim by every lab. It is now warned about and skipped for overlap. It still counts as "claimed".
+  - **`145e726f2`: the remote side.**
+    - Nothing checked for an existing remote branch, so a stale one could be fast-forwarded and later deleted. A claim now refuses when `origin/<lab>/<topic>` exists, and pushes with `--force-with-lease=refs/heads/<b>:`, which succeeds only when the branch is absent.
+    - A failure after the push used to leave the remote branch and PR behind without saying so. A full rollback now closes our PR, deletes our pushed branch with a lease to our own commit, and removes our worktree and branch. Anything left behind is named, and the claim exits 2.
+    - Push and delete are now plain `git` calls, no longer part of the `Gh` trait.
+  - **`916c4d7e6`: reading other orders.**
+    - ORDERs were read at the head branch name, which fails for fork PRs and for PRs whose branch was deleted, and that failure blocked every claim. Reads now go through `refs/pull/<n>/head`, URL-encoded. An unreadable PR ORDER warns and counts as an order of unknown item.
+    - Any lower-numbered open PR naming the same item is now a race rival, not only drafts.
+    - Worktrees are created under, and scanned from, the main checkout's `.worktrees`.
+  - **`e7fd08521`: tests and docs.**
+    - New tests for `--lab-topic`, bad ids, overlap in the reverse direction, and the ask refusals.
+    - Cards are written with `create_new`, so they are never overwritten.
+    - Suborder reads the parent item from `origin/main`.
+    - The README now gives the containment rule and the folder conventions.
+- **A wrong statement corrected.** Commit 3 of the first head added the loop flags to `main.rs`'s `SUBCOMMAND_FLAGS` and `SUBCOMMAND_VALUE_FLAGS`, saying `loop claim --lab-topic` had been refused without them. The fix-round negative gate disproved that.
+  - With `--lab-topic` removed from the table, `loop claim --lab-topic t9` still worked. `loop` arguments pass straight through to the loop parser.
+  - The table entries are therefore not load-bearing. They are kept, because they are harmless: an audit of every other command found no bare-switch use of those flag names. No test pins them.
+- **The real GitHub paths are untested.** All tests use the fake: `gh pr list`, `gh api …/contents`, `gh pr create --draft` and `gh pr close`. The real `git push` and leased delete are tested against a bare local remote.
+- **A squash-merged branch is never an ancestor of `main`.** So an order also counts as merged when its ORDER file has identical bytes on `origin/main`.
 
 ## What changed
 
 | File | Class | Lines | What |
 |---|---|---|---|
-| `crates/uor-r4-harness/src/loopclaim.rs` (new) | code | 885 | `loop claim <item> [--lab-topic <topic>]`. Refusals, then writes, then race settlement, with GitHub behind the `Gh` trait. |
-| `crates/uor-r4-harness/src/loopsub.rs` (new) | code | 248 | `loop suborder --parent <ORDER> --scope <globs>` and `loop ask --scope\|--blocked`. |
-| `main.rs`, `lib.rs`, `loopgates.rs`, `doccheck.rs` | code | 39 | Dispatch beside `gates`. Flag tables. Doccheck `GROUPS` for `loop` is `ask, claim, gates, suborder`, plus eleven flags. |
-| `crates/uor-r4-harness/tests/loop_claim.rs` (new) | tests | 569 | 17 tests over fixture repositories with a bare remote and the fake `gh`. `GIT_*` is stripped. |
-| `docs/harness/README.md`, `docs/loop/README.md` | docs | 21 | Usage, exit codes and the test-only fake. The loop page marks claim, suborder and ask as built in loop PR 7a. |
+| `crates/uor-r4-harness/src/loopclaim.rs` (new) | code | 1,080 | `loop claim <item> [--lab-topic <topic>]`: refusals, then writes, then race settlement. GitHub reads and PR create and close sit behind the `Gh` trait. |
+| `crates/uor-r4-harness/src/loopsub.rs` (new) | code | 331 | `loop suborder --parent <ORDER> --scope <globs>` and `loop ask --scope\|--blocked`. |
+| `main.rs`, `lib.rs`, `loopgates.rs`, `doccheck.rs` | code | 34 | Dispatch beside `gates`, flag tables, and the doccheck `GROUPS` and `FLAGS`. |
+| `crates/uor-r4-harness/tests/loop_claim.rs` (new) | tests | 939 | 33 tests over fixture repositories with a bare remote and the fake `gh`. `GIT_*` is stripped. |
+| `docs/harness/README.md`, `docs/loop/README.md` | docs | 24 | Usage, exit codes, containment, folders, and the test-only fake. |
 
-That is about 1,750 lines, excluding this ORDER and REPORT.
+That totals about 2,400 lines, excluding this ORDER and REPORT.
 
-**Design calls.** These are the ORDER's calls, plus the builders' decisions:
+**Design calls.**
+- **What counts as claimed.** An item is claimed when an open order names it. Open orders are:
+  - the ORDERs in this lab's worktrees under the main checkout's `.worktrees/<lab>-*`, not yet merged;
+  - the ORDERs in open PRs, read through `refs/pull/<n>/head`.
 
-- **When an item counts as claimed.**
-  - An open order names the item. Open orders are:
-    - the ORDERs in this lab's `.worktrees/<lab>-*` worktrees whose branch is not merged;
-    - the ORDERs changed in open PRs, from `gh pr list --json number,headRefName,isDraft,files`.
-  - A worktree's order counts as merged when its head is an ancestor of `origin/main`, or when its ORDER bytes are identical on `origin/main`.
-- **Refusals.** Each one exits 2, and they run in this order:
-  1. the item is not `ready`;
-  2. the item is claimed;
-  3. the item has no `scope:` line;
-  4. the item's scope overlaps an open order's scope;
-  5. the lab is at its `open_pr_limit` from `docs/harness/labs.json`.
-
-  Overlap is decided by literal prefix. It is conservative: it may refuse a claim that would not really collide, but it never misses one. Globs under `docs/research/notebook/` never count. An open order whose own item has no `scope:` is refused rather than guessed at.
-- **Writes, in the loop page's step-4 order.** They happen only after every refusal passes.
-  1. `git fetch origin main`.
-  2. `git worktree add .worktrees/<lab>-<topic> -b <lab>/<topic> --no-track origin/main`. `<topic>` defaults to the item id. An existing folder or branch is refused.
-  3. Commit a skeleton ORDER at `docs/loop/tasks/<item>/<lab>-<n>/ORDER.md`. It carries `Item:`, `Setup row:` (for loop setup items) and `Base:`, the item's done-when quoted, and placeholders.
+  An order counts as merged when its head is an ancestor of `origin/main`, or when its ORDER bytes are on `origin/main`.
+- **Refusals.** Each exits 2. They run after `git fetch origin main`, against items read from `origin/main`:
+  - the fetch fails;
+  - the item is not `ready`;
+  - the item is already claimed;
+  - the item has no `scope:` line;
+  - a scope glob is invalid;
+  - the item's scope overlaps an open order, judged by conservative literal prefix, with notebook pages excepted;
+  - the lab is at its `open_pr_limit`;
+  - the target worktree or branch exists locally;
+  - the branch exists on origin.
+- **Writes, in this order.**
+  1. Create the worktree under the main checkout's `.worktrees/<lab>-<topic>` (`--no-track`, from `origin/main`).
+  2. Commit the skeleton ORDER at `docs/loop/tasks/<item-id>/<lab>-<n>/ORDER.md`.
+  3. Push only if the branch is absent.
   4. Open the draft PR.
-  5. Re-list.
+  5. Re-list the open PRs.
 
-  A failure before the PR exists removes our exact worktree and branch, and exits 2.
-- **Race settlement.** If the re-list shows a lower-numbered draft PR whose ORDER names the same item, this claim lost. It closes our PR, deletes our pushed remote branch by its exact name, removes our exact worktree and branch, and exits 1 with "lost the race to #N". It never touches anything it did not create.
-- **Suborder.** A child glob must be contained in a parent glob. With no wildcard, the parent must equal the child. With a wildcard, the parent's literal part must be a string prefix of the child's literal part. The suborder writes `local/<lab>/<topic>/orders/<n>.md` and prints the subagent's block: the parent ORDER, the scope, and the stop rules from the loop page.
-- **Ask.** Exactly one of `--scope` (`--file --reason --lines --own-code`) or `--blocked` (`--limit --measured --command --state`) is given, plus `--order`. Each writes a card to `local/<lab>/<topic>/asks/<n>.md` and posts nothing.
-- **The test-only fake.** `UOR_LOOP_GH_FAKE=<json>` names a file of PRs, with optional `orderTexts`, `nextPrNumber` and `afterCreate` (PRs that appear only after our create, which is how a race is staged). Write calls are logged to `<json>.calls.jsonl`.
+  Any failure along the way runs the full rollback, removing only what this claim created, and exits 2.
+- **Lost race.** If any lower-numbered open PR has an ORDER naming the item, the claim runs the same rollback. It exits 1 when everything was removed, and 2 when anything is left that a person must clear.
+- **Suborder.**
+  - A child glob must be contained in a parent glob: equal to it, or under `<dir>/` when the parent is `<dir>/**`.
+  - Writes `local/<lab>/<topic>/orders/<n>.md` and prints the subagent's block.
+- **Ask.**
+  - Exactly one of `--scope` (with `--file --reason --lines --own-code`) or `--blocked` (with `--limit --measured --command --state`), plus `--order`.
+  - Writes a card with `create_new` to `local/<lab>/<topic>/asks/<n>.md` and posts nothing.
+- **Test-only fake.** `UOR_LOOP_GH_FAKE=<json>`, with `prs`, `orderTexts`, `nextPrNumber`, `afterCreate` and `createFails`. Write calls are logged to `<json>.calls.jsonl`.
 
 ## Measurements
 
@@ -57,17 +82,24 @@ None. This is a host-only tool.
 
 ## Checks run at the head
 
-The main session re-ran these at `e02dc4243`.
+The main session re-ran these at `e7fd08521`.
 
-- `cargo test -q --locked -p uor-r4-harness --test loop_claim`: 17 passed.
-- **Negative gates**, run by the builders. Each set aside only its own lines and restored a byte-identical copy afterwards.
-  - With the overlap check forced to "no overlap", `an_overlapping_claim_is_refused` FAILED. This is the planted fault.
-  - With the race-settlement block removed, `a_lost_race_closes_our_pr_and_removes_only_what_we_created` FAILED.
-  - With the containment test forced to true, both suborder-outside tests FAILED.
-- The lost-race test also checks that an unrelated worktree and branch survive.
-- `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: 720 passed, 0 failed.
-- `cargo fmt -p uor-r4-harness --check` is clean, and clippy reports no warnings in the touched files.
-- The PR body lists claim-wording, `xtask links` on the changed files and the local copyright check.
+- `cargo test -q --locked -p uor-r4-harness --test loop_claim`: 33 passed.
+- **Negative gates, run by the builders.** Each set aside only its own lines, and the copy was restored byte-identical afterwards. In each case the named test FAILED:
+  - the overlap check (the planted fault): `an_overlapping_claim_is_refused`;
+  - race settlement: the lost-race test;
+  - suborder containment, as originally written: both suborder-outside tests;
+  - the old string-prefix containment: the `..` test and the `docs/*.md` escape test;
+  - the rollback's leased delete: the create-fails rollback test;
+  - the `ls-remote` refusal: the existing-remote-branch test;
+  - the draft-only rival filter: the ready-for-review rival test.
+- **The `--lab-topic` table entry's negative gate did not fail**; see above.
+- **Lease behaviour, checked against a scratch bare remote:**
+  - an empty lease creates the branch only when it is absent, and is refused when the branch exists;
+  - a delete leased to our commit deletes, and is refused if the branch has moved.
+- `cargo test -q --locked -p uor-r4-harness --no-fail-fast`: 740 passed, 0 failed.
+- `cargo fmt --check` is clean, and clippy reports no warnings in the touched files.
+- The PR body lists claim-wording, `xtask links` and the local copyright check.
 
 ## Skills used
 
@@ -75,14 +107,13 @@ None of the private kit's skills.
 
 ## Still open
 
-- **`--lab-topic` has no test through the binary**; see above.
-- **The real `gh` and `git push` paths are covered only by reading the code.**
-- **No item has a `scope:` line yet.** So `loop claim` refuses every item today with "item has no scope: line". The PM's backfill of `scope:` (PR 2's keys) is what makes `loop claim` usable.
-- **Claims recorded by the older `uor-harness team claim` in `docs/harness/claims.json` are not read.** The loop's claims are its open orders. Retiring `claims.json` belongs to PR 8.
-- **Two small doc items.** A docs hook notes that no docs page lists `loopsub.rs` in its `sources`. The `FLAGS` doc comment in `doccheck.rs` still says "76 of them".
+- **The real `gh` paths are checked by reading the code only.** One open question: `gh pr list --json files` may cap each PR's files at 100.
+- **No item has a `scope:` line yet**, so `loop claim` refuses every item today until the PM backfills scopes.
+- **The older `uor-harness team claim` registry (`docs/harness/claims.json`) is not read.** Retiring it belongs to PR 8.
+- **`docs/research/notebook/README.md` (the index) passes PR 2's notebook check.** Unrelated here, but noted.
 
 ## Plain summary
 
-`uor-harness loop claim` lets a lab take a roadmap item only when the item is ready, unclaimed, and scoped away from everyone else's open work, and only while the lab is under its PR limit. It creates the worktree, commits the ORDER and opens a draft PR. If another lab claimed the same item first, it undoes only its own steps.
+`uor-harness loop claim` lets a lab take a roadmap item only when it is ready, unclaimed, and scoped away from everyone else's open work, and only while the lab is under its PR limit. Before checking, it fetches and reads `main`. It creates the worktree, commits the ORDER, pushes only a new branch, and opens a draft PR. If anything fails, or another lab got there first, it undoes exactly what it created and says what, if anything, is left.
 
-`loop suborder` gives a subagent a narrower scope inside the parent's. `loop ask` writes the two stop-and-ask cards.
+`loop suborder` gives a subagent a narrower scope that it cannot escape. `loop ask` writes the two stop-and-ask cards.
