@@ -1093,16 +1093,37 @@ const CLASSES: [&str; 5] = ["tests", "code", "docs", "generated", "other"];
 
 /// `(files, added, removed)` per class, from `git diff --numstat` (binary files count 0 lines).
 fn size(pr: &Pr) -> Result<Vec<(&'static str, u64, u64, u64)>, String> {
+    size_rows(pr.root, &pr.merge_base, &pr.head)
+}
+
+/// The `size: …` line `pr-check` prints, for the diff `merge_base..head` in `root`.
+pub(crate) fn size_line(root: &Path, merge_base: &str, head: &str) -> Result<String, String> {
+    Ok(size_text(&size_rows(root, merge_base, head)?))
+}
+
+fn size_text(rows: &[(&'static str, u64, u64, u64)]) -> String {
+    let parts: Vec<String> = rows
+        .iter()
+        .map(|(c, f, a, d)| format!("{c} {f} file(s) +{a}/-{d}"))
+        .collect();
+    format!("size: {}", parts.join(", "))
+}
+
+fn size_rows(
+    root: &Path,
+    merge_base: &str,
+    head: &str,
+) -> Result<Vec<(&'static str, u64, u64, u64)>, String> {
     let raw = git(
-        pr.root,
+        root,
         &[
             "diff",
             "--ignore-submodules=none",
             "-z",
             "--numstat",
             "-M",
-            &pr.merge_base,
-            &pr.head,
+            merge_base,
+            head,
         ],
     )?;
     let fields = z_fields(&raw);
@@ -1690,11 +1711,7 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
         });
         println!("{out}");
     } else {
-        let parts: Vec<String> = size
-            .iter()
-            .map(|(c, f, a, d)| format!("{c} {f} file(s) +{a}/-{d}"))
-            .collect();
-        println!("size: {}", parts.join(", "));
+        println!("{}", size_text(&size));
         if let Some(p) = &fake {
             println!(
                 "FAKE GitHub: {PRCHECK_GH_FAKE_ENV}={} (tests only)",

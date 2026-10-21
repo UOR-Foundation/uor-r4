@@ -17,7 +17,7 @@ use std::process::Command;
 
 const USAGE: &str = "usage: uor-harness loop arrive [--json]";
 /// A PICKUP at or above this size fails: it is a note for the next session, not a second log.
-const PICKUP_MAX: usize = 8_192;
+pub(crate) const PICKUP_MAX: usize = 8_192;
 /// AGENTS.md is onboarding; above this many lines it has become a rule book.
 const AGENTS_MAX_LINES: usize = 80;
 /// STATE.md or HANDOFF.md at or above this size fails.

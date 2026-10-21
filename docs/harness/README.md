@@ -184,6 +184,24 @@ Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 GO, 1 STOP, 2 cannot run (usag
 
 Then STOP `held work` when some item is `status: held`, else STOP `empty queue`.
 
+### `loop close` (loop PR 7b)
+
+```sh
+UOR_LAB=claude uor-harness loop close --session              # loop step 9: PR body from REPORT, mark ready, write PICKUP
+UOR_LAB=claude uor-harness loop close --session --pr <n>     # name the PR instead of finding it by branch
+UOR_LAB=claude uor-harness loop close --session --dry-run    # print the body and the PICKUP; write nothing
+```
+
+Needs a lab (`UOR_LAB` or `--lab`). Give exactly one of `--session` or `--verify`; `--verify` comes in the next commit and exits 2 until then. Exit codes: 0 done; 1 refused (a check failed, nothing written); 2 cannot run (usage, no lab, no ORDER, no PR or several, a git or `gh` failure). `--session`, in order:
+
+- The task folder is `loop report`'s: the one ORDER this branch adds. Its `REPORT.md` must pass `loop report --check` (the same function), else exit 1 naming the problems.
+- The PR is `--pr <n>`, else the one open PR whose head branch is the current branch. Its head must equal local `HEAD`, else exit 1 `push first: the PR head is <x>, HEAD is <y>`.
+- The body: the `size: …` line `loop pr-check` prints (the same function) for `git merge-base origin/main HEAD` to `HEAD`, a blank line, the REPORT without its `# ` title line, then `References #<issue>` when `docs/roadmap/issues.json` maps the ORDER's `Item:` to an issue, then the Claude Code footer when the lab is `claude`.
+- The PICKUP is `docs/loop/templates/PICKUP.md` filled with the branch, the head sha, the task folder, the REPORT's "Still open" section verbatim under `## Open items` and "Await the exact-head review of PR #<n>" under `## Next step`; `## Standing references` is left empty. 8,192 bytes or more exits 1 before any write.
+- Writes, in order: the PR body (`gh pr edit <n> --body-file`), `gh pr ready <n>` only for a draft, then `local/<lab>/PICKUP.md` (overwritten). A failed body write exits 2 with nothing else written; a failed `ready` exits 2 saying the body was already set, and writes no PICKUP.
+
+Tests replace `gh` with `UOR_LOOP_CLOSE_GH_FAKE=<json>` (`prs`, optional `failSetBody`/`failReady`); never set it outside tests.
+
 ## Where it sits against what already exists
 
 The repo did not lack for machinery; it lacked a front door. This harness is the front

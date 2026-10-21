@@ -35,6 +35,7 @@ pub mod hygiene;
 pub mod labs;
 pub mod looparrive;
 pub mod loopclaim;
+pub mod loopclose;
 pub mod loopgates;
 pub mod loopnext;
 pub mod loopprcheck;

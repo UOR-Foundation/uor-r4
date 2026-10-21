@@ -544,7 +544,8 @@ const GROUPS: [(&str, &[&str]); 12] = [
     (
         "loop",
         &[
-            "arrive", "ask", "claim", "gates", "next", "pr-check", "render", "report", "suborder",
+            "arrive", "ask", "claim", "close", "gates", "next", "pr-check", "render", "report",
+            "suborder",
         ],
     ),
     ("mistakes", &["capture", "find", "list", "show"]),
@@ -668,6 +669,7 @@ const FLAGS: &[&str] = &[
     "--update-baseline",
     "--value",
     "--verdict",
+    "--verify",
     "--write",
     "-f",
     "-h",

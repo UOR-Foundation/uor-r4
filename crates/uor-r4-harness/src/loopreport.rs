@@ -59,7 +59,7 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 /// The ORDER this branch adds (status `A`, or the new side of an `R`), relative to `root`.
-fn find_order(root: &Path) -> Result<String, String> {
+pub(crate) fn find_order(root: &Path) -> Result<String, String> {
     let mb = git(root, &["merge-base", "origin/main", "HEAD"])?;
     let mb = mb.trim();
     let out = git(
@@ -119,14 +119,19 @@ fn check_problems(text: &str) -> Vec<String> {
     out
 }
 
-fn run_check(folder: &Path, shown: &str) -> u8 {
-    let path = folder.join("REPORT.md");
-    let problems = match fs::read_to_string(&path) {
+/// Each problem `--check` reports for `<folder>/REPORT.md` in the working tree (a missing file is
+/// one); empty when it passes. `shown` is the folder as printed. `loop close` runs the same check.
+pub(crate) fn report_file_problems(folder: &Path, shown: &str) -> Vec<String> {
+    match fs::read_to_string(folder.join("REPORT.md")) {
         Ok(text) => check_problems(&text),
         Err(_) => vec![format!(
             "{shown}/REPORT.md is missing; `loop report --new` writes one"
         )],
-    };
+    }
+}
+
+fn run_check(folder: &Path, shown: &str) -> u8 {
+    let problems = report_file_problems(folder, shown);
     if problems.is_empty() {
         println!("PASS report {shown}/REPORT.md");
         return 0;
