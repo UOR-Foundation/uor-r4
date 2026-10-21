@@ -47,7 +47,23 @@ const REQUIRED_KEYS: &[&str] = &[
     "needs_gpu",
     "depends_on",
 ];
-const OPTIONAL_KEYS: &[&str] = &["assignee", "good_first"];
+/// The loop keys (`scope` .. `done_class`) are optional until the PM backfills
+/// the ready items; each is validated when present (see `check_loop_keys`).
+const OPTIONAL_KEYS: &[&str] = &[
+    "assignee",
+    "good_first",
+    "scope",
+    "size",
+    "lane",
+    "rank",
+    "notebook",
+    "done_class",
+];
+const DONE_CLASSES: &[&str] = &["host", "gpu"];
+/// `scope:` globs that cover the whole repository; the loop page refuses them.
+const ROOT_WIDE_GLOBS: &[&str] = &["**", "**/*", "/**", "*", "./**"];
+/// Optional body section; when present it must not be empty.
+const CANCEL_IF: &str = "Cancel if";
 const MAX_TITLE: usize = 80;
 const ISSUE_URL: &str = "https://github.com/UOR-Foundation/uor-r4/issues/";
 
@@ -167,7 +183,98 @@ fn check_sections(body: &str) -> Vec<String> {
             }
         }
     }
+    if found
+        .iter()
+        .any(|(h, text)| h == CANCEL_IF && text.is_empty())
+    {
+        errors.push(format!("section `## {CANCEL_IF}` is empty"));
+    }
     errors
+}
+
+/// A positive integer written as plain digits.
+fn positive_int(value: &str) -> bool {
+    value.bytes().all(|b| b.is_ascii_digit()) && value.parse::<u64>().is_ok_and(|n| n > 0)
+}
+
+/// `notebook:` form: a repository-relative path to a `.md` file.
+fn notebook_form_ok(path: &str) -> bool {
+    path.ends_with(".md") && !path.starts_with('/') && !path.split('/').any(|s| s == "..")
+}
+
+/// Errors for the optional loop keys that are present in `fields`.
+fn check_loop_keys(fields: &BTreeMap<String, String>) -> Vec<String> {
+    let mut errors = Vec::new();
+    if let Some(v) = fields.get("scope") {
+        match parse_list(v) {
+            Err(_) => errors.push(format!("scope `{v}` is not a `[a, b]` list of globs")),
+            Ok(globs) if globs.is_empty() => {
+                errors.push("scope is empty; list at least one glob".into())
+            }
+            Ok(globs) => {
+                for glob in &globs {
+                    if ROOT_WIDE_GLOBS.contains(&glob.as_str()) {
+                        errors.push(format!(
+                            "scope `{glob}` is root-wide and refused; name the paths the item changes"
+                        ));
+                    } else if glob.starts_with('/') || glob.split('/').any(|s| s == "..") {
+                        errors.push(format!("scope `{glob}` is not repository-relative"));
+                    }
+                }
+            }
+        }
+    }
+    for key in ["size", "rank"] {
+        if let Some(v) = fields.get(key) {
+            if !positive_int(v) {
+                errors.push(format!("{key} `{v}` is not a positive integer"));
+            }
+        }
+    }
+    if let Some(v) = fields.get("lane") {
+        if v.is_empty()
+            || !v
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            errors.push(format!(
+                "lane `{v}` must be lowercase letters, digits and hyphens"
+            ));
+        }
+    }
+    if let Some(v) = fields.get("notebook") {
+        if !notebook_form_ok(v) {
+            errors.push(format!(
+                "notebook `{v}` is not a repository-relative path to a `.md` file"
+            ));
+        }
+    }
+    if let Some(v) = fields.get("done_class") {
+        if !DONE_CLASSES.contains(&v.as_str()) {
+            errors.push(format!(
+                "done_class `{v}` is not one of {}",
+                DONE_CLASSES.join(", ")
+            ));
+        }
+    }
+    errors
+}
+
+/// `notebook:` paths of well-formed items that name no file. The repository
+/// root is three levels above `docs/roadmap/items`.
+fn missing_notebooks(items_dir: &Path, files: &[(String, String)]) -> Vec<String> {
+    let Some(root) = items_dir.ancestors().nth(3) else {
+        return Vec::new();
+    };
+    files
+        .iter()
+        .filter_map(|(file, text)| {
+            let (fields, _) = parse_header(text).ok()?;
+            let nb = fields.get("notebook")?;
+            (notebook_form_ok(nb) && !root.join(nb).is_file())
+                .then(|| format!("{file}: notebook `{nb}` does not exist"))
+        })
+        .collect()
 }
 
 /// `^[a-z0-9]+(-[a-z0-9]+)*$`, checked by hand.
@@ -245,6 +352,7 @@ pub fn parse_item(file: &str, text: &str) -> Result<Item, Vec<String>> {
             errors.push(format!("depends_on lists `{dep}` twice"));
         }
     }
+    errors.extend(check_loop_keys(&fields));
     errors.extend(check_sections(&body));
     if !errors.is_empty() {
         return Err(errors.into_iter().map(|e| format!("{file}: {e}")).collect());
@@ -627,11 +735,13 @@ pub(crate) fn load_checked(
         Err(e) => (None, Some(e)),
     };
     let items = validate(&files, issues.as_ref());
-    let items = match (items, issues_error) {
-        (Ok(items), None) => items,
-        (Ok(_), Some(e)) => return Err(roadmap_failed(&[e])),
-        (Err(mut errors), e) => {
-            errors.extend(e);
+    let mut late = missing_notebooks(items_dir, &files);
+    late.extend(issues_error);
+    let items = match items {
+        Ok(items) if late.is_empty() => items,
+        Ok(_) => return Err(roadmap_failed(&late)),
+        Err(mut errors) => {
+            errors.extend(late);
             return Err(roadmap_failed(&errors));
         }
     };
@@ -1079,5 +1189,146 @@ mod tests {
         assert!(page.contains("[Fix \\[x\\] \\| y](items/a.md)"), "{page}");
         assert!(page.contains("so change the file in a PR rather than the issue."));
         assert!(page.contains("by `cargo xtask roadmap sync`"));
+    }
+
+    const LOOP_KEYS: &str = "scope: [xtask/src/**, docs/roadmap/*.md]\nsize: 250\nlane: infra\n\
+                             rank: 3\nnotebook: docs/research/notebook/x.md\ndone_class: host\n";
+
+    /// Item `a` with `extra` header lines and, when `cancel` is `Some`, a
+    /// `## Cancel if` section holding that text.
+    fn loop_item(extra: &str, cancel: Option<&str>) -> String {
+        let mut text = item_text("a", "", SECTIONS).replacen("---\n", &format!("---\n{extra}"), 1);
+        if let Some(c) = cancel {
+            text.push_str(&format!("\n## Cancel if\n\n{c}\n"));
+        }
+        text
+    }
+
+    fn loop_errors(extra: &str) -> Vec<String> {
+        errors_of(&[("a.md".into(), loop_item(extra, None))])
+    }
+
+    fn assert_error(errors: &[String], want: &str) {
+        assert!(
+            errors.iter().any(|e| e.contains(want)),
+            "{want}: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn roadmap_loop_keys_are_optional_and_accepted_when_well_formed() {
+        assert!(validate(&[file("a", "")], None).is_ok());
+        let full = loop_item(LOOP_KEYS, Some("The probe finds the keys already checked."));
+        assert!(validate(&[("a.md".into(), full)], None).is_ok());
+        let quoted = loop_item("scope: [\"xtask/**\"]\ndone_class: gpu\n", None);
+        assert!(validate(&[("a.md".into(), quoted)], None).is_ok());
+    }
+
+    #[test]
+    fn roadmap_loop_scope_refuses_every_root_wide_glob() {
+        for glob in ["**", "**/*", "/**", "*", "./**"] {
+            let errors = loop_errors(&format!("scope: [docs/**, {glob}]\n"));
+            assert_error(
+                &errors,
+                &format!("a.md: scope `{glob}` is root-wide and refused"),
+            );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_scope_must_be_a_non_empty_relative_list() {
+        assert_error(&loop_errors("scope: []\n"), "scope is empty");
+        assert_error(
+            &loop_errors("scope: docs/**\n"),
+            "scope `docs/**` is not a `[a, b]` list",
+        );
+        for bad in ["/etc/**", "docs/../x/**", "../x"] {
+            assert_error(
+                &loop_errors(&format!("scope: [{bad}]\n")),
+                &format!("scope `{bad}` is not repository-relative"),
+            );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_size_must_be_a_positive_integer() {
+        for bad in ["0", "-3", "+5", "1.5", "many", ""] {
+            assert_error(
+                &loop_errors(&format!("size: {bad}\n")),
+                &format!("size `{bad}` is not a positive integer"),
+            );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_rank_must_be_a_positive_integer() {
+        for bad in ["0", "first", "2x"] {
+            assert_error(
+                &loop_errors(&format!("rank: {bad}\n")),
+                &format!("rank `{bad}` is not a positive integer"),
+            );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_lane_must_be_a_slug() {
+        for bad in ["", "Infra", "in fra", "in_fra"] {
+            assert_error(
+                &loop_errors(&format!("lane: {bad}\n")),
+                &format!("lane `{bad}` must be lowercase letters, digits and hyphens"),
+            );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_done_class_is_host_or_gpu() {
+        assert_error(
+            &loop_errors("done_class: cpu\n"),
+            "done_class `cpu` is not one of host, gpu",
+        );
+    }
+
+    #[test]
+    fn roadmap_loop_notebook_must_be_a_relative_md_path() {
+        for bad in ["", "/abs/x.md", "docs/../x.md", "docs/x.txt"] {
+            assert_error(
+                &loop_errors(&format!("notebook: {bad}\n")),
+                &format!("notebook `{bad}` is not a repository-relative path"),
+            );
+        }
+    }
+
+    #[test]
+    fn roadmap_loop_notebook_must_exist_under_the_repository_root() {
+        let root = std::env::temp_dir().join(format!("xtask-roadmap-nb-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let items = root.join("docs/roadmap/items");
+        fs::create_dir_all(&items).unwrap();
+        fs::create_dir_all(root.join("docs/nb")).unwrap();
+        fs::write(root.join("docs/nb/here.md"), "# notebook\n").unwrap();
+        let issues = root.join("docs/roadmap/issues.json");
+        fs::write(
+            items.join("a.md"),
+            loop_item("notebook: docs/nb/here.md\n", None),
+        )
+        .unwrap();
+        assert!(load_checked(&items, &issues).is_ok());
+        fs::write(
+            items.join("a.md"),
+            loop_item("notebook: docs/nb/gone.md\n", None),
+        )
+        .unwrap();
+        let err = load_checked(&items, &issues).unwrap_err();
+        assert!(
+            err.contains("a.md: notebook `docs/nb/gone.md` does not exist"),
+            "{err}"
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn roadmap_cancel_if_section_must_not_be_empty() {
+        let errors = errors_of(&[("a.md".into(), loop_item("", Some("")))]);
+        assert_error(&errors, "a.md: section `## Cancel if` is empty");
     }
 }
