@@ -197,26 +197,26 @@ UOR_LAB=claude uor-harness loop close --verify --pr <n> --no-gates   # the same 
 Needs a lab (`UOR_LAB` or `--lab`). Give exactly one of `--session` or `--verify`. `--session` exit codes: 0 done; 1 refused (a check failed, nothing written); 2 cannot run (usage, no lab, no ORDER, no PR or several, a git or `gh` failure). `--session`, in order:
 
 - The task folder is `loop report`'s: the one ORDER this branch adds. Its `REPORT.md` must pass `loop report --check` (the same function), else exit 1 naming the problems.
-- The PR is `--pr <n>`, else the one open PR whose head branch is the current branch. Its head must equal local `HEAD`, else exit 1 `push first: the PR head is <x>, HEAD is <y>`.
+- The PR is `--pr <n>` (exit 1 unless `gh` reports it `OPEN` with the current branch as its head branch), else the one open PR whose head branch is the current branch. Its head must equal local `HEAD`, else exit 1 `push first: the PR head is <x>, HEAD is <y>`.
 - The body: the `size: …` line `loop pr-check` prints (the same function) for `git merge-base origin/main HEAD` to `HEAD`, a blank line, the REPORT without its `# ` title line, then `References #<issue>` when `docs/roadmap/issues.json` maps the ORDER's `Item:` to an issue, then the Claude Code footer when the lab is `claude`.
 - The PICKUP is `docs/loop/templates/PICKUP.md` filled with the branch, the head sha, the task folder, the REPORT's "Still open" section verbatim under `## Open items` and "Await the exact-head review of PR #<n>" under `## Next step`; `## Standing references` is left empty. 8,192 bytes or more exits 1 before any write.
-- Writes, in order: the PR body (`gh pr edit <n> --body-file`), `gh pr ready <n>` only for a draft, then `local/<lab>/PICKUP.md` (overwritten). A failed body write exits 2 with nothing else written; a failed `ready` exits 2 saying the body was already set, and writes no PICKUP.
+- Writes, in order: the PR body (`gh pr edit <n> --body-file`), `gh pr ready <n>` only for a draft, then `local/<lab>/PICKUP.md` under the main checkout (the parent of `git rev-parse --git-common-dir`; overwritten), never inside the task worktree, which `--verify` removes. A failed body write exits 2 with nothing else written; a failed `ready` exits 2 saying the body was already set, and writes no PICKUP.
 
-`--verify --pr <n> [--no-gates]` (loop step 13) prints one `PASS|FAIL|SKIP|N/A <step> <detail>` line per step. Exit codes: 0 verified and cleaned up; 1 refused or not verified, or something kept; 2 cannot run. Every proof must pass before anything is deleted, and nothing is deleted when one fails:
+`--verify --pr <n> [--no-gates]` (loop step 13) prints one `PASS|FAIL|SKIP|N/A <step> <detail>` line per step. Exit codes: 0 verified and cleaned up; 1 refused or not verified, or something kept; 2 cannot run. Every proof must pass before anything is deleted, and nothing is deleted when a proof fails:
 
 - `state`: `gh pr view <n> --json state,mergeCommit,headRefName,headRefOid` reports `MERGED`.
 - `squash`: after `git fetch origin main`, the merge commit is an ancestor of `origin/main` and its subject ends with `(#<n>)`.
-- `content`: after `git fetch origin refs/pull/<n>/head`, each file the PR changed (`git diff --name-only` from the merge base of the head and the merge commit's first parent) is identical between the merge commit and the PR head.
+- `content`: after `git fetch origin refs/pull/<n>/head`, for the files the PR changed (`git diff --name-only --no-renames` from the merge base of the head and the merge commit's first parent), either each is identical between the merge commit and the PR head, or the PR's patch (merge base to head) and the merge's patch (first parent to merge commit) over those files have the same `git patch-id --stable` (main may have changed another part of a shared file before the squash).
 - `done-when` (`SKIP` with `--no-gates`): `loop gates --full` in a detached worktree of `origin/main` at `<main checkout>/local/<lab>/verify-<n>`, removed with `git worktree remove --force` afterwards whatever the result. Red is a FAIL: a failure becomes a repair.
 
-Then, only for this lab's own branch (`<lab>/...`; another lab's PR prints `SKIP cleanup` and exits 0), each with its own guard, every one attempted:
+Then, only for this lab's own branch (`<lab>/...`; another lab's PR prints `SKIP cleanup` and exits 0), three independent steps, each with its own guard, every one attempted (a kept worktree does not stop the remote delete, which is still leased to the PR head):
 
-- `worktree`: the worktree on the branch, under `.worktrees/<lab>-*`, removed with `git worktree remove` (never `--force`) only when clean. A change to `docs/harness/claims.json` alone is reverted first; any other change keeps it. None is `N/A`.
-- `local-branch`: `git branch -D` only when its tip is the PR head; otherwise kept.
+- `worktree`: the worktree on the branch, under `.worktrees/<lab>-*`, removed with `git worktree remove` (never `--force`) only when clean. A change to `docs/harness/claims.json` alone is reverted first; any other change keeps it. Because removal deletes ignored files too, any ignored file other than `target/`, `local/<lab>/views/` and `local/<lab>/gates.jsonl` (from `git ls-files --others --ignored --exclude-standard --directory`) keeps it with `FAIL worktree holds ignored files: <first 10 paths>`. None is `N/A`.
+- `local-branch`: kept while a worktree has it checked out; otherwise one atomic `git update-ref -d refs/heads/<b> <head>`, which fails, keeping it, when the branch has moved off the PR head.
 - `remote-branch`: `git push origin --force-with-lease=refs/heads/<b>:<head> :refs/heads/<b>`, so a branch that moved is kept; already gone is `N/A`.
 - `hygiene`: prints the dry-run plan of `uor-hygiene` (this binary's `hygiene` action, run as a subprocess in the main checkout) and never passes `--apply`, because `--apply` removes every clean merged worktree, other labs' included, which the lab boundary forbids (a decision against the loop page's literal step 13).
 
-Tests replace `gh` with `UOR_LOOP_CLOSE_GH_FAKE=<json>` (`prs`, optional `failSetBody`/`failReady`, `merged` keyed by PR number for `--verify`); never set it outside tests. Tests also set `UOR_LOOP_CLOSE_NO_HYGIENE=1`, which prints `SKIP hygiene` instead of running hygiene.
+Tests replace `gh` with `UOR_LOOP_CLOSE_GH_FAKE=<json>`, and every run with it set prints `FAKE GitHub: UOR_LOOP_CLOSE_GH_FAKE=<path> (tests only)` first (`prs`, each with an optional `state` defaulting to `OPEN`, optional `failSetBody`/`failReady`, `merged` keyed by PR number for `--verify`); never set it outside tests. Tests also set `UOR_LOOP_CLOSE_NO_HYGIENE=1`, which prints `SKIP hygiene` instead of running hygiene.
 
 ## Where it sits against what already exists
 

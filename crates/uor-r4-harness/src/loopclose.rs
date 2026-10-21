@@ -5,12 +5,14 @@
 //!
 //! 1. the task folder: the one ORDER this branch adds (`loop report`'s search);
 //! 2. its `REPORT.md` must pass `loop report --check`;
-//! 3. the PR: `--pr <n>`, else the one open PR whose head branch is the current branch; its head sha
-//!    must equal local `HEAD` ("push first" otherwise);
+//! 3. the PR: `--pr <n>` (refused unless it is OPEN with the current branch as its head), else the one
+//!    open PR whose head branch is the current branch; its head sha must equal local `HEAD` ("push
+//!    first" otherwise);
 //! 4. the body: the `size: …` line `loop pr-check` prints for `merge-base origin/main HEAD..HEAD`, the
 //!    REPORT without its `# ` title line, `References #<issue>` from `docs/roadmap/issues.json` when
 //!    the ORDER's item has an issue, and the Claude Code footer when the lab is `claude`;
-//! 5. the PICKUP for `local/<lab>/PICKUP.md`, from `docs/loop/templates/PICKUP.md`; 8,192 bytes or
+//! 5. the PICKUP for `local/<lab>/PICKUP.md` under the main checkout (not the task worktree, which
+//!    `--verify` removes), from `docs/loop/templates/PICKUP.md`; 8,192 bytes or
 //!    more refuses;
 //! 6. writes: the PR body, then `gh pr ready` when the PR is a draft, then the PICKUP.
 //!
@@ -18,13 +20,15 @@
 //! check failed; nothing written), 2 cannot run.
 //!
 //! **`--verify --pr <n> [--no-gates]`** is loop step 13, after the merge. Every proof runs before any
-//! deletion, and nothing is deleted when one fails: `state` (GitHub reports `MERGED`), `squash` (the
-//! merge commit is on fresh `origin/main` and its subject ends `(#<n>)`), `content` (each file the PR
-//! changed is identical between the merge commit and the PR head) and `done-when` (`loop gates --full`
-//! in a detached worktree of `origin/main`, removed afterwards whatever the result). Then, only for
-//! this lab's own branch (`<lab>/...`), each with its own guard: the clean worktree under
-//! `.worktrees/<lab>-*`, the local branch at the PR head, and the remote branch by a lease on the PR
-//! head. Exit codes: 0 verified and cleaned up, 1 refused or not verified (or something kept), 2
+//! deletion, and nothing is deleted when a proof fails: `state` (GitHub reports `MERGED`), `squash`
+//! (the merge commit is on fresh `origin/main` and its subject ends `(#<n>)`), `content` (for the
+//! files the PR changed, each is identical between the merge commit and the PR head, or the PR's patch
+//! has the merge's `git patch-id --stable`) and `done-when` (`loop gates --full` in a detached
+//! worktree of `origin/main`, removed afterwards whatever the result). Then, only for this lab's own
+//! branch (`<lab>/...`), three independent steps, each with its own guard (a kept worktree does not
+//! stop the others): the clean worktree under `.worktrees/<lab>-*` holding no ignored files beyond
+//! `target/`, `local/<lab>/views/` and `local/<lab>/gates.jsonl`; the local branch when it is at the
+//! PR head and checked out nowhere; and the remote branch by a lease on the PR head. Exit codes: 0 verified and cleaned up, 1 refused or not verified (or something kept), 2
 //! cannot run.
 
 use serde::Deserialize;
@@ -48,6 +52,9 @@ pub const CLOSE_GH_FAKE_ENV: &str = "UOR_LOOP_CLOSE_GH_FAKE";
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct PrRef {
     pub number: u64,
+    #[serde(rename = "headRefName")]
+    pub head_ref: String,
+    pub state: String,
     #[serde(rename = "isDraft")]
     pub is_draft: bool,
     #[serde(rename = "headRefOid")]
@@ -95,7 +102,7 @@ impl CloseGh for RealCloseGh {
                 "--head",
                 branch,
                 "--json",
-                "number,isDraft,headRefOid",
+                "number,isDraft,headRefOid,headRefName,state",
             ],
         )?;
         serde_json::from_str(&out).map_err(|e| format!("gh pr list printed unexpected JSON: {e}"))
@@ -109,7 +116,7 @@ impl CloseGh for RealCloseGh {
                 "view",
                 &number.to_string(),
                 "--json",
-                "number,isDraft,headRefOid",
+                "number,isDraft,headRefOid,headRefName,state",
             ],
         )?;
         serde_json::from_str(&out).map_err(|e| format!("gh pr view printed unexpected JSON: {e}"))
@@ -177,6 +184,12 @@ struct FakePr {
     is_draft: bool,
     #[serde(rename = "headRefOid")]
     head_sha: String,
+    #[serde(default = "open_state")]
+    state: String,
+}
+
+fn open_state() -> String {
+    "OPEN".into()
 }
 
 #[derive(Deserialize)]
@@ -241,6 +254,8 @@ impl FakeCloseGh {
     fn pr_ref(p: &FakePr) -> PrRef {
         PrRef {
             number: p.number,
+            head_ref: p.head_ref_name.clone(),
+            state: p.state.clone(),
             is_draft: p.is_draft,
             head_sha: p.head_sha.clone(),
         }
@@ -293,21 +308,35 @@ impl CloseGh for FakeCloseGh {
 /// The fake when `UOR_LOOP_CLOSE_GH_FAKE` is set, else `gh`.
 fn close_gh(root: &Path) -> Result<Box<dyn CloseGh>, String> {
     Ok(match std::env::var_os(CLOSE_GH_FAKE_ENV) {
-        Some(p) => Box::new(FakeCloseGh::from_file(Path::new(&p))?),
+        Some(p) => {
+            println!(
+                "FAKE GitHub: {CLOSE_GH_FAKE_ENV}={} (tests only)",
+                p.to_string_lossy()
+            );
+            Box::new(FakeCloseGh::from_file(Path::new(&p))?)
+        }
         None => Box::new(RealCloseGh {
             root: root.to_path_buf(),
         }),
     })
 }
 
-fn git(root: &Path, args: &[&str]) -> Result<String, String> {
-    let mut cmd = Command::new("git");
-    // A caller's GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE would point git at another repository.
+/// Removes every `GIT_*` variable from `cmd` but the ones a lab may authenticate through: a caller's
+/// GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE would point git at another repository.
+fn strip_git_env(cmd: &mut Command) {
+    const KEEP: [&str; 3] = ["GIT_SSH_COMMAND", "GIT_SSH", "GIT_ASKPASS"];
     for (k, _) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("GIT_") {
-            cmd.env_remove(k);
+        let k_str = k.to_string_lossy();
+        if k_str.starts_with("GIT_") && !KEEP.contains(&k_str.as_ref()) {
+            cmd.env_remove(&k);
         }
     }
+}
+
+/// `git -C root args`, its stdout as given.
+fn git_raw(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
+    let mut cmd = Command::new("git");
+    strip_git_env(&mut cmd);
     let out = cmd
         .arg("-C")
         .arg(root)
@@ -321,7 +350,64 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    Ok(out.stdout)
+}
+
+fn git(root: &Path, args: &[&str]) -> Result<String, String> {
+    Ok(String::from_utf8_lossy(&git_raw(root, args)?)
+        .trim()
+        .to_string())
+}
+
+/// The `git patch-id --stable` of `git diff --no-renames from to -- files` (empty for no change).
+fn patch_id(root: &Path, from: &str, to: &str, files: &[&str]) -> Result<String, String> {
+    let mut args = vec![
+        "diff",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-color",
+        from,
+        to,
+        "--",
+    ];
+    args.extend(files);
+    let diff = git_raw(root, &args)?;
+    let mut cmd = Command::new("git");
+    strip_git_env(&mut cmd);
+    let mut child = cmd
+        .arg("-C")
+        .arg(root)
+        .args(["patch-id", "--stable"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("cannot run git patch-id: {e}"))?;
+    child
+        .stdin
+        .take()
+        .expect("piped")
+        .write_all(&diff)
+        .map_err(|e| format!("cannot feed git patch-id: {e}"))?;
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("git patch-id failed: {e}"))?;
+    if !out.status.success() {
+        return Err("git patch-id failed".into());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_string())
+}
+
+/// Where `loop close --session` writes the lab's PICKUP and `loop arrive` reads it:
+/// `local/<lab>/PICKUP.md` under the main checkout, so it outlives the task worktree.
+pub(crate) fn pickup_path(root: &Path, lab: &str) -> Result<PathBuf, String> {
+    Ok(crate::loopclaim::main_checkout(root)?
+        .join("local")
+        .join(lab)
+        .join("PICKUP.md"))
 }
 
 /// The lines of the REPORT's `## <name>` section, verbatim, without surrounding blank lines.
@@ -503,11 +589,7 @@ fn step(verdict: &str, name: &str, detail: &str) {
 fn harness(dir: &Path) -> Result<Command, String> {
     let exe = std::env::current_exe().map_err(|e| format!("cannot find this executable: {e}"))?;
     let mut cmd = Command::new(exe);
-    for (k, _) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("GIT_") {
-            cmd.env_remove(k);
-        }
-    }
+    strip_git_env(&mut cmd);
     cmd.current_dir(dir);
     Ok(cmd)
 }
@@ -561,18 +643,32 @@ fn prove_merge(main: &Path, n: u64, m: &MergedPr) -> Result<(), String> {
         )?;
         git(main, &["cat-file", "-e", &format!("{head}^{{commit}}")])
             .map_err(|_| format!("the PR head {head} is not in this repository"))?;
-        let base = git(main, &["merge-base", head, &format!("{mc}^1")])?;
-        let files = git(main, &["diff", "--name-only", &base, head])?;
+        let parent = format!("{mc}^1");
+        let base = git(main, &["merge-base", head, &parent])?;
+        let files = git(main, &["diff", "--name-only", "--no-renames", &base, head])?;
         let files: Vec<&str> = files.lines().filter(|l| !l.is_empty()).collect();
         if files.is_empty() {
             return Err("the PR changes no file".to_string());
         }
-        let mut args = vec!["diff", "--quiet", mc, head, "--"];
+        let mut args = vec!["diff", "--quiet", "--no-renames", mc, head, "--"];
         args.extend(&files);
-        git(main, &args).map_err(|_| {
-            format!("a file the PR changed differs between {mc} and the PR head {head}")
-        })?;
-        Ok(format!("{} changed files identical on main", files.len()))
+        if git(main, &args).is_ok() {
+            return Ok(format!("{} changed files identical on main", files.len()));
+        }
+        // Main may have changed another part of a shared file before the squash: then the PR's
+        // patch must be the merge's.
+        let pr = patch_id(main, &base, head, &files)?;
+        let merge = patch_id(main, &parent, mc, &files)?;
+        if pr.is_empty() || pr != merge {
+            return Err(format!(
+                "a file the PR changed differs between {mc} and the PR head {head}, and the \
+                 merge's patch is not the PR's"
+            ));
+        }
+        Ok(format!(
+            "{} changed files: the merge's patch is the PR's (patch-id {pr})",
+            files.len()
+        ))
     })();
     match content {
         Ok(d) => step("PASS", "content", &d),
@@ -708,6 +804,18 @@ fn remove_worktree(main: &Path, lab: &str, branch: &str) -> Result<(), String> {
         );
         return Err(format!("the worktree {shown}"));
     }
+    // `git worktree remove` deletes ignored files too: keep a worktree holding any but the
+    // disposable build and view output.
+    let held = ignored_files(&wt, lab)?;
+    if !held.is_empty() {
+        let first: Vec<&str> = held.iter().take(10).map(String::as_str).collect();
+        step(
+            "FAIL",
+            "worktree",
+            &format!("holds ignored files: {}; kept", first.join(", ")),
+        );
+        return Err(format!("the worktree {shown}"));
+    }
     match git(main, &["worktree", "remove", &shown]) {
         Ok(_) => {
             step("PASS", "worktree", &format!("removed {shown}"));
@@ -720,7 +828,38 @@ fn remove_worktree(main: &Path, lab: &str, branch: &str) -> Result<(), String> {
     }
 }
 
-/// Step 6: delete the local branch only when its tip is the PR head.
+/// The ignored files in `wt` other than `target/`, `local/<lab>/views/` and `local/<lab>/gates.jsonl`,
+/// sorted. A wholly ignored directory is listed as itself unless a disposable path lies inside it.
+fn ignored_files(wt: &Path, lab: &str) -> Result<Vec<String>, String> {
+    let views = format!("local/{lab}/views/");
+    let gates = format!("local/{lab}/gates.jsonl");
+    let disposable = |p: &str| p.starts_with("target/") || p.starts_with(&views) || p == gates;
+    let list = |extra: &[&str]| -> Result<Vec<String>, String> {
+        let mut args = vec!["ls-files", "--others", "--ignored", "--exclude-standard"];
+        args.extend(extra);
+        Ok(git(wt, &args)?
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect())
+    };
+    let mut held = Vec::new();
+    for p in list(&["--directory"])? {
+        if disposable(&p) {
+            continue;
+        }
+        if p.ends_with('/') && (views.starts_with(&p) || gates.starts_with(&p)) {
+            // A directory holding a disposable path: look at its files one by one.
+            held.extend(list(&["--", &p])?.into_iter().filter(|f| !disposable(f)));
+        } else {
+            held.push(p);
+        }
+    }
+    held.sort();
+    Ok(held)
+}
+
+/// Step 6: delete the local branch only when its tip is the PR head and no worktree has it out.
 fn delete_local_branch(main: &Path, branch: &str, head: &str) -> Result<(), String> {
     let Ok(tip) = git(
         main,
@@ -734,15 +873,17 @@ fn delete_local_branch(main: &Path, branch: &str, head: &str) -> Result<(), Stri
         step("N/A", "local-branch", &format!("no local branch {branch}"));
         return Ok(());
     };
-    if tip != head {
+    if let Some(wt) = worktree_of(main, branch)? {
         step(
             "FAIL",
             "local-branch",
-            &format!("{branch} is at {tip}, not the PR head {head}; kept"),
+            &format!("{branch} is checked out in {}; kept", wt.display()),
         );
         return Err(format!("the local branch {branch}"));
     }
-    match git(main, &["branch", "-D", branch]) {
+    // One atomic compare-and-delete: it fails when the branch is no longer at the PR head.
+    let refname = format!("refs/heads/{branch}");
+    match git(main, &["update-ref", "-d", &refname, head]) {
         Ok(_) => {
             step(
                 "PASS",
@@ -751,8 +892,12 @@ fn delete_local_branch(main: &Path, branch: &str, head: &str) -> Result<(), Stri
             );
             Ok(())
         }
-        Err(e) => {
-            step("FAIL", "local-branch", &format!("{e}; kept"));
+        Err(_) => {
+            step(
+                "FAIL",
+                "local-branch",
+                &format!("{branch} is at {tip}, not the PR head {head}; kept"),
+            );
             Err(format!("the local branch {branch}"))
         }
     }
@@ -892,7 +1037,18 @@ fn session_close(root: &Path, lab: &str, pr_arg: Option<u64>, dry_run: bool) -> 
     let head = git(root, &["rev-parse", "HEAD"])?;
     let gh = close_gh(root)?;
     let pr = match pr_arg {
-        Some(n) => gh.pr(n)?,
+        Some(n) => {
+            let pr = gh.pr(n)?;
+            if pr.state != "OPEN" || pr.head_ref != branch {
+                println!(
+                    "REFUSED close: PR #{n} is {} with head branch {}; it must be OPEN with head \
+                     branch {branch}",
+                    pr.state, pr.head_ref
+                );
+                return Ok(1);
+            }
+            pr
+        }
         None => {
             let mut prs = gh.pr_for_branch(&branch)?;
             match prs.len() {
@@ -973,7 +1129,8 @@ fn session_close(root: &Path, lab: &str, pr_arg: Option<u64>, dry_run: bool) -> 
         );
         return Ok(1);
     }
-    let pickup_rel = format!("local/{lab}/PICKUP.md");
+    let pickup_path = pickup_path(root, lab)?;
+    let pickup_rel = pickup_path.display().to_string();
 
     if dry_run {
         println!("--- PR #{} body ---", pr.number);
@@ -1000,7 +1157,6 @@ fn session_close(root: &Path, lab: &str, pr_arg: Option<u64>, dry_run: bool) -> 
             )
         })?;
     }
-    let pickup_path = root.join(&pickup_rel);
     if let Some(dir) = pickup_path.parent() {
         std::fs::create_dir_all(dir)
             .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
