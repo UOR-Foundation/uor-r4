@@ -9,8 +9,8 @@
 //! input commit. `--check` reads it back, re-renders at that commit and needs a byte-exact match,
 //! so a hand edit fails (exit 1) and a missing or garbled stamp is refused (exit 2).
 //!
-//! **Views built.** `STATE.md` (this commit). HANDOFF, LESSONS, the AGENTS block and the roadmap
-//! view follow in the same PR (ORDER claude-14).
+//! **Views built.** `STATE.md`, `HANDOFF.md` and `docs/harness/LESSONS.md`. The AGENTS block and
+//! the roadmap view follow in the same PR (ORDER claude-14).
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -93,7 +93,231 @@ impl<'a> AtCommit<'a> {
 
 /// Every view at the commit, as (repository-relative path, bytes), in a fixed order.
 pub fn render_all(c: &AtCommit) -> Result<Vec<(String, String)>, String> {
-    Ok(vec![("STATE.md".to_string(), render_state(c)?)])
+    Ok(vec![
+        ("STATE.md".to_string(), render_state(c)?),
+        ("HANDOFF.md".to_string(), render_handoff(c)?),
+        ("docs/harness/LESSONS.md".to_string(), render_lessons(c)?),
+    ])
+}
+
+/// The frontmatter block between the leading `---` lines, if any.
+fn front_of(text: &str) -> Option<&str> {
+    text.strip_prefix("---\n")
+        .and_then(|r| r.split("\n---").next())
+}
+
+/// A frontmatter scalar: the trimmed text after `key:` on its own line.
+fn front_get<'t>(front: &'t str, key: &str) -> Option<&'t str> {
+    front.lines().find_map(|l| {
+        l.strip_prefix(key)
+            .and_then(|r| r.strip_prefix(':'))
+            .map(str::trim)
+    })
+}
+
+/// The first paragraph of a `## <name>` section, joined onto one line.
+fn section_first_paragraph(text: &str, name: &str) -> Option<String> {
+    let head = format!("## {name}");
+    let mut lines = text.lines().skip_while(|l| l.trim_end() != head).skip(1);
+    let para: Vec<&str> = lines
+        .by_ref()
+        .skip_while(|l| l.trim().is_empty())
+        .take_while(|l| !l.trim().is_empty() && !l.starts_with("## "))
+        .map(str::trim)
+        .collect();
+    (!para.is_empty()).then(|| para.join(" "))
+}
+
+/// The first sentence of a paragraph: up to and including the first `. `, or all of it.
+fn first_sentence(p: &str) -> &str {
+    p.find(". ").map_or(p, |i| &p[..=i])
+}
+
+struct OpenItem {
+    id: String,
+    title: String,
+    status: String,
+    open_to: String,
+    depends_on: String,
+    done_when: String,
+    cancel_if: String,
+    size: String,
+}
+
+/// Where a status sorts in HANDOFF: ready, decision, held, then any other open status by name.
+fn handoff_rank(status: &str) -> usize {
+    ["ready", "decision", "held"]
+        .iter()
+        .position(|s| *s == status)
+        .unwrap_or(3)
+}
+
+/// `HANDOFF.md`: open items by status, the blocked table and the not-doing list.
+pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
+    const NR: &str = "not recorded";
+    let mut items: Vec<OpenItem> = Vec::new();
+    for path in c.list("docs/roadmap/items")? {
+        if !path.ends_with(".md") || path.ends_with("/README.md") {
+            continue;
+        }
+        let text = c.read(&path)?;
+        let front = front_of(&text).ok_or_else(|| format!("{path}: no frontmatter"))?;
+        let get = |k: &str| front_get(front, k).unwrap_or("").to_string();
+        let status = get("status");
+        if status.is_empty() {
+            return Err(format!("{path}: frontmatter has no status"));
+        }
+        if status == "done" {
+            continue;
+        }
+        let stem = path.rsplit('/').next().unwrap_or(&path);
+        let id = Some(get("id"))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| stem.trim_end_matches(".md").to_string());
+        let deps = get("depends_on");
+        let deps = deps.trim_start_matches('[').trim_end_matches(']').trim();
+        let size = get("size");
+        items.push(OpenItem {
+            id,
+            title: get("title"),
+            open_to: get("open_to"),
+            depends_on: deps.to_string(),
+            done_when: section_first_paragraph(&text, "Done when")
+                .map(|p| first_sentence(&p).to_string())
+                .unwrap_or_else(|| NR.into()),
+            cancel_if: section_first_paragraph(&text, "Cancel if")
+                .map(|p| first_sentence(&p).to_string())
+                .unwrap_or_else(|| NR.into()),
+            size: if size.is_empty() { NR.into() } else { size },
+            status,
+        });
+    }
+    items.sort_by(|a, b| {
+        (handoff_rank(&a.status), &a.status, &a.id).cmp(&(
+            handoff_rank(&b.status),
+            &b.status,
+            &b.id,
+        ))
+    });
+
+    let mut o = String::new();
+    o.push_str(&stamp(&c.sha));
+    o.push_str("\n# HANDOFF\n\nRendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each row gives the first sentence of the item's `Done when` and `Cancel if` sections; `not recorded` means the item has no such section or key yet.\n");
+
+    o.push_str("\n## Open items\n");
+    let mut group: Option<&str> = None;
+    for it in &items {
+        if group != Some(it.status.as_str()) {
+            group = Some(it.status.as_str());
+            let n = items.iter().filter(|i| i.status == it.status).count();
+            o.push_str(&format!(
+                "\n### {} ({n})\n\n| Item | Title | Done when | Cancel if | Size | Stands |\n|---|---|---|---|---|---|\n",
+                it.status
+            ));
+        }
+        let stands = if it.depends_on.is_empty() {
+            it.status.clone()
+        } else {
+            format!("{}; after {}", it.status, it.depends_on)
+        };
+        o.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} |\n",
+            cell(&it.id),
+            cell(&it.title),
+            cell(&it.done_when),
+            cell(&it.cancel_if),
+            cell(&it.size),
+            cell(&stands)
+        ));
+    }
+    if items.is_empty() {
+        o.push_str("\nnone\n");
+    }
+
+    o.push_str("\n## Blocked\n\nItems with status `held` or `decision`. The owner is `owner` for a decision or for `open_to: owner`, otherwise the item's `open_to`.\n\n");
+    o.push_str("| Item | Status | Owner |\n|---|---|---|\n");
+    for it in items
+        .iter()
+        .filter(|i| i.status == "held" || i.status == "decision")
+    {
+        let owner = if it.status == "decision" || it.open_to == "owner" {
+            "owner"
+        } else if it.open_to.is_empty() {
+            NR
+        } else {
+            &it.open_to
+        };
+        o.push_str(&format!(
+            "| {} | {} | {} |\n",
+            cell(&it.id),
+            it.status,
+            cell(owner)
+        ));
+    }
+
+    o.push_str("\n## Not doing\n\nnone recorded\n");
+    Ok(o)
+}
+
+/// The lesson id from an `id: L-NNN` line, as its number.
+fn lesson_id(front: &str) -> Option<(u32, String)> {
+    front.lines().find_map(|l| {
+        let v = l.strip_prefix("id:")?.trim();
+        let n = v.strip_prefix("L-")?;
+        if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        Some((n.parse().ok()?, v.to_string()))
+    })
+}
+
+/// `docs/harness/LESSONS.md`: the mistakes registry, by lesson id where one is recorded.
+pub fn render_lessons(c: &AtCommit) -> Result<String, String> {
+    let mut with_id: Vec<(u32, String, String, String)> = Vec::new();
+    let mut without: Vec<(String, String)> = Vec::new();
+    for path in c.list("docs/harness/mistakes")? {
+        let Some(name) = path.strip_prefix("docs/harness/mistakes/") else {
+            continue;
+        };
+        if !name.ends_with(".md") || name.contains('/') || name == "README.md" {
+            continue;
+        }
+        let text = c.read(&path)?;
+        let front = front_of(&text).unwrap_or("");
+        let title = text
+            .lines()
+            .find_map(|l| l.strip_prefix("# "))
+            .or_else(|| front_get(front, "title"))
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .unwrap_or(name.trim_end_matches(".md"))
+            .to_string();
+        let link = format!("[`{name}`](mistakes/{name})");
+        match lesson_id(front) {
+            Some((n, id)) => with_id.push((n, id, title, link)),
+            None => without.push((title, link)),
+        }
+    }
+    with_id.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+
+    let mut o = String::new();
+    o.push_str(&stamp(&c.sha));
+    o.push_str("\n# LESSONS\n\nRendered from `docs/harness/mistakes/*.md` at the commit in the stamp above. A lesson is listed under its `id: L-NNN` line; ids are never invented.\n");
+    o.push_str("\n## By lesson id\n\n");
+    for (_, id, title, link) in &with_id {
+        o.push_str(&format!("- **{id}**: {title} ({link})\n"));
+    }
+    if with_id.is_empty() {
+        o.push_str("none yet\n");
+    }
+    o.push_str("\n## Without a lesson id yet (assigned in loop PR 8)\n\n");
+    for (title, link) in &without {
+        o.push_str(&format!("- {title} ({link})\n"));
+    }
+    if without.is_empty() {
+        o.push_str("none\n");
+    }
+    Ok(o)
 }
 
 fn value_text(v: &serde_json::Value) -> String {

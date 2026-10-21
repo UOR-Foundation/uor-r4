@@ -249,3 +249,195 @@ fn at_renders_an_older_commit() {
     let o = r.render(&["--at", "no-such-ref", "--out", old.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(2), "{o:?}");
 }
+
+fn read(dir: &Path, rel: &str) -> String {
+    std::fs::read_to_string(dir.join(rel)).unwrap()
+}
+
+fn item(
+    id: &str,
+    status: &str,
+    open_to: &str,
+    deps: &str,
+    extra_front: &str,
+    extra_body: &str,
+) -> String {
+    format!(
+        "---\nid: {id}\ntitle: Title {id}\nstatus: {status}\nopen_to: {open_to}\n{extra_front}depends_on: [{deps}]\n---\n\n## Why it matters\n\nx\n\n## Done when\n\nFirst {id} sentence. Second sentence.\nStill the first paragraph.\n\nA later paragraph.\n{extra_body}\n## Sources\n\n- y\n"
+    )
+}
+
+/// Items in every status, written in an order that is not the rendered order.
+fn items(r: &Repo) {
+    r.write(
+        "docs/roadmap/items/a.md",
+        &item("a", "held", "lab", "", "", ""),
+    );
+    r.write(
+        "docs/roadmap/items/b.md",
+        &item("b", "ready", "anyone", "a, c", "", ""),
+    );
+    r.write(
+        "docs/roadmap/items/c.md",
+        &item("c", "decision", "lab", "", "", ""),
+    );
+    r.write(
+        "docs/roadmap/items/d.md",
+        &item("d", "held", "owner", "", "", ""),
+    );
+    r.write(
+        "docs/roadmap/items/e.md",
+        &item("e", "done", "lab", "", "", ""),
+    );
+    r.write(
+        "docs/roadmap/items/f.md",
+        &item("f", "ready", "lab", "", "", ""),
+    );
+    r.commit("items");
+}
+
+fn in_order(s: &str, wants: &[&str]) {
+    let mut at = 0;
+    for want in wants {
+        let pos = s[at..]
+            .find(want)
+            .unwrap_or_else(|| panic!("{want:?} after byte {at} in\n{s}"));
+        at += pos + want.len();
+    }
+}
+
+#[test]
+fn handoff_lists_open_items_by_status_with_not_recorded_for_absent_fields() {
+    let r = repo();
+    items(&r);
+    let d = r.out_dir("h");
+    assert!(r.render(&["--out", d.to_str().unwrap()]).status.success());
+    let s = read(&d, "HANDOFF.md");
+    let head = r.git(&["rev-parse", "HEAD"]);
+    assert_eq!(
+        s.lines().next().unwrap(),
+        format!("<!-- rendered by uor-harness loop render from {head}; do not edit -->")
+    );
+    in_order(
+        &s,
+        &[
+            "## Open items",
+            "### ready (2)",
+            "| b | Title b | First b sentence. | not recorded | not recorded | ready; after a, c |",
+            "| f | Title f | First f sentence. | not recorded | not recorded | ready |",
+            "### decision (1)",
+            "| c | Title c |",
+            "### held (2)",
+            "| a | Title a |",
+            "| d | Title d |",
+            "## Blocked",
+            "| c | decision | owner |",
+            "| a | held | lab |",
+            "| d | held | owner |",
+            "## Not doing",
+            "none recorded",
+        ],
+    );
+    assert!(!s.contains("| e |"), "a done item is not open:\n{s}");
+    assert!(!s.contains("Second sentence"), "{s}");
+}
+
+#[test]
+fn handoff_shows_cancel_if_and_size_when_present() {
+    let r = repo();
+    items(&r);
+    r.write(
+        "docs/roadmap/items/f.md",
+        &item(
+            "f",
+            "ready",
+            "lab",
+            "",
+            "size: M\n",
+            "\n## Cancel if\n\nA renderer already exists. More.\n\n",
+        ),
+    );
+    r.commit("cancel and size");
+    let d = r.out_dir("h");
+    assert!(r.render(&["--out", d.to_str().unwrap()]).status.success());
+    let s = read(&d, "HANDOFF.md");
+    assert!(
+        s.contains("| f | Title f | First f sentence. | A renderer already exists. | M | ready |"),
+        "{s}"
+    );
+}
+
+#[test]
+fn lessons_list_id_bearing_files_by_id_and_the_rest_under_the_no_id_heading() {
+    let r = repo();
+    let m = "docs/harness/mistakes";
+    r.write(&format!("{m}/README.md"), "# Registry readme\n");
+    r.write(
+        &format!("{m}/a-late.md"),
+        "---\nid: L-010\ntitle: Ten from front\n---\n\n# Ten heading\n",
+    );
+    r.write(
+        &format!("{m}/b-early.md"),
+        "---\nid: L-002\ntitle: Two from front\n---\n\nbody\n",
+    );
+    r.write(
+        &format!("{m}/d-kebab.md"),
+        "---\nid: d-kebab\ntitle: Kebab id\n---\n\nbody\n",
+    );
+    r.write(&format!("{m}/c-bare.md"), "no frontmatter\n");
+    r.commit("mistakes");
+    let d = r.out_dir("l");
+    assert!(r.render(&["--out", d.to_str().unwrap()]).status.success());
+    let s = read(&d, "docs/harness/LESSONS.md");
+    in_order(
+        &s,
+        &[
+            "## By lesson id",
+            "- **L-002**: Two from front ([`b-early.md`](mistakes/b-early.md))",
+            "- **L-010**: Ten heading ([`a-late.md`](mistakes/a-late.md))",
+            "## Without a lesson id yet (assigned in loop PR 8)",
+            "- c-bare ([`c-bare.md`](mistakes/c-bare.md))",
+            "- Kebab id ([`d-kebab.md`](mistakes/d-kebab.md))",
+        ],
+    );
+    assert!(!s.contains("Registry readme"), "{s}");
+    assert_eq!(s.matches("**L-").count(), 2, "no id is invented:\n{s}");
+}
+
+#[test]
+fn a_hand_edited_handoff_fails_check() {
+    let r = repo();
+    items(&r);
+    assert!(r.render(&[]).status.success());
+    assert_eq!(r.render(&["--check"]).status.code(), Some(0));
+    let p = r.root.join("HANDOFF.md");
+    let edited = std::fs::read_to_string(&p)
+        .unwrap()
+        .replace("| d | held | owner |", "| d | held | lab |");
+    std::fs::write(&p, edited).unwrap();
+    let o = r.render(&["--check"]);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("HANDOFF.md: differs"), "{out}");
+}
+
+#[test]
+fn a_hand_edited_lessons_fails_check() {
+    let r = repo();
+    r.write(
+        "docs/harness/mistakes/x.md",
+        "---\nid: L-001\ntitle: One\n---\n",
+    );
+    r.commit("a lesson");
+    assert!(r.render(&[]).status.success());
+    assert_eq!(r.render(&["--check"]).status.code(), Some(0));
+    let p = r.root.join("docs/harness/LESSONS.md");
+    let edited = std::fs::read_to_string(&p)
+        .unwrap()
+        .replace("**L-001**: One", "**L-001**: Two");
+    std::fs::write(&p, edited).unwrap();
+    let o = r.render(&["--check"]);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("docs/harness/LESSONS.md: differs"), "{out}");
+}
