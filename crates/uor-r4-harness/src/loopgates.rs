@@ -1,0 +1,637 @@
+//! `uor-harness loop gates`: the gate runner, its ledger and its planted breaks (loop PR 4).
+//!
+//! **Why this exists.** The loop page's run rules say a gate that cannot run is REFUSED, later
+//! gates read UNKNOWN after a red, the true exit code is kept, and a change to a gate's read files
+//! during the run voids it. Before this module each check ran by hand and none of that held. The
+//! gates are data in `docs/harness/gates.json`; every entry declares a break, a fault that must
+//! turn the gate red with its own failure text, so a gate that has gone blind is caught.
+//!
+//! **Verdicts.** GREEN (exit 0), RED (non-zero exit), REFUSED (could not run), UNKNOWN (not run
+//! after an earlier red), VOID (a read file changed while it ran). A break run is CAUGHT (red with
+//! the declared text), REFUSED (red for another reason) or DEFECT (the gate stayed green).
+//!
+//! **Working-tree hash.** `git hash-object --stdin` (git's content hash, so no new dependency) over `HEAD`, `git status --porcelain=v1 -z
+//! --untracked-files=all`, `git diff HEAD --binary`, and the path and bytes of every untracked file
+//! that is not ignored. A tracked edit, a staged edit or a new file each changes it; `local/` is
+//! ignored, so the ledger and logs never do.
+
+use std::collections::BTreeMap;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
+
+/// `docs/harness/gates.json`.
+#[derive(Debug, Deserialize)]
+pub struct GateFile {
+    pub version: u32,
+    pub gates: Vec<Gate>,
+}
+
+/// One gate: what it proves, how it runs, what it reads, and its declared break.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Gate {
+    pub id: String,
+    pub proves: String,
+    /// argv, run from the repository root. A leading `cargo` resolves as [`resolve_program`] says.
+    pub command: Vec<String>,
+    /// Globs over repository paths (`*` within a segment, `**` across segments).
+    pub reads: Vec<String>,
+    pub quick: bool,
+    #[serde(rename = "break")]
+    pub brk: Break,
+}
+
+/// The planted fault: append `append` to `file` (repository-relative) in a scratch worktree.
+/// The gate must then go red with `expect` somewhere in its output.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Break {
+    pub file: String,
+    pub append: String,
+    pub expect: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Verdict {
+    Green,
+    Red,
+    Refused,
+    Unknown,
+    Void,
+    Caught,
+    Defect,
+}
+
+impl Verdict {
+    pub fn word(self) -> &'static str {
+        match self {
+            Verdict::Green => "GREEN",
+            Verdict::Red => "RED",
+            Verdict::Refused => "REFUSED",
+            Verdict::Unknown => "UNKNOWN",
+            Verdict::Void => "VOID",
+            Verdict::Caught => "CAUGHT",
+            Verdict::Defect => "DEFECT",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Outcome {
+    pub id: String,
+    pub verdict: Verdict,
+    pub exit: Option<i32>,
+    pub seconds: f64,
+    pub reason: String,
+}
+
+/// One ledger line in `local/<lab>/gates.jsonl`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LedgerRow {
+    pub gate: String,
+    pub verdict: Verdict,
+    pub seconds: f64,
+    pub commit: String,
+    pub tree: String,
+    pub exit: Option<i32>,
+    pub ts: u64,
+}
+
+pub fn gates_path(root: &Path) -> PathBuf {
+    root.join("docs/harness/gates.json")
+}
+
+/// Load and validate `gates.json`. Every entry must declare a complete break.
+pub fn load(root: &Path) -> Result<GateFile, String> {
+    let path = gates_path(root);
+    let text =
+        fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let doc: GateFile =
+        serde_json::from_str(&text).map_err(|e| format!("{} is malformed: {e}", path.display()))?;
+    if doc.version != 1 {
+        return Err(format!(
+            "{}: version {} is not 1",
+            path.display(),
+            doc.version
+        ));
+    }
+    if doc.gates.is_empty() {
+        return Err(format!("{} lists no gates", path.display()));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for g in &doc.gates {
+        if !seen.insert(g.id.clone()) {
+            return Err(format!("gate {:?} is listed twice", g.id));
+        }
+        if g.command.is_empty() || g.reads.is_empty() || g.proves.trim().is_empty() {
+            return Err(format!("gate {:?} needs proves, command and reads", g.id));
+        }
+        let b = &g.brk;
+        if b.file.trim().is_empty() || b.append.is_empty() || b.expect.trim().is_empty() {
+            return Err(format!(
+                "gate {:?} must declare a break: file, append, expect",
+                g.id
+            ));
+        }
+    }
+    Ok(doc)
+}
+
+/// A leading `cargo` is `$CARGO` when set (it is under `cargo run`), else `~/.cargo/bin/cargo`
+/// when that file exists (on this project's Mac a Homebrew `cargo` shadows it on `PATH`), else
+/// `cargo` from `PATH`. Any other program is looked up on `PATH` as given.
+pub fn resolve_program(argv0: &str) -> PathBuf {
+    if argv0 == "cargo" {
+        if let Some(c) = std::env::var_os("CARGO") {
+            return PathBuf::from(c);
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            let p = PathBuf::from(home).join(".cargo/bin/cargo");
+            if p.is_file() {
+                return p;
+            }
+        }
+    }
+    PathBuf::from(argv0)
+}
+
+fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .output()
+        .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(out.stdout)
+}
+
+fn split_z(bytes: &[u8]) -> Vec<String> {
+    bytes
+        .split(|b| *b == 0)
+        .filter(|s| !s.is_empty())
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect()
+}
+
+fn glob_regex(glob: &str) -> regex::Regex {
+    let mut re = String::from("^");
+    let mut chars = glob.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' if chars.peek() == Some(&'*') => {
+                chars.next();
+                if chars.peek() == Some(&'/') {
+                    chars.next();
+                    re.push_str("(?:.*/)?");
+                } else {
+                    re.push_str(".*");
+                }
+            }
+            '*' => re.push_str("[^/]*"),
+            '?' => re.push_str("[^/]"),
+            c => re.push_str(&regex::escape(&c.to_string())),
+        }
+    }
+    re.push('$');
+    regex::Regex::new(&re).expect("an escaped glob is a valid regex")
+}
+
+/// Content hash of every tracked or untracked-unignored file matching one of `globs`.
+pub fn reads_hash(root: &Path, globs: &[String]) -> Result<String, String> {
+    let res: Vec<regex::Regex> = globs.iter().map(|g| glob_regex(g)).collect();
+    let mut files = split_z(&git(
+        root,
+        &["ls-files", "-z", "-co", "--exclude-standard"],
+    )?);
+    files.sort();
+    files.dedup();
+    let mut h: Vec<u8> = Vec::new();
+    for f in files.iter().filter(|f| res.iter().any(|r| r.is_match(f))) {
+        h.extend_from_slice(f.as_bytes());
+        h.push(0);
+        // A file listed but gone (deleted in the tree) hashes as absent, which still differs.
+        if let Ok(bytes) = fs::read(root.join(f)) {
+            h.extend_from_slice(&bytes);
+        }
+        h.push(0);
+    }
+    git_hash(root, &h)
+}
+
+/// The working-tree hash recorded in the ledger (see the module comment).
+pub fn tree_hash(root: &Path) -> Result<String, String> {
+    let mut h: Vec<u8> = Vec::new();
+    h.extend(git(root, &["rev-parse", "HEAD"])?);
+    h.extend(git(
+        root,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    )?);
+    h.extend(git(root, &["diff", "HEAD", "--binary"])?);
+    for f in split_z(&git(root, &["ls-files", "-z", "-o", "--exclude-standard"])?) {
+        h.extend_from_slice(f.as_bytes());
+        h.push(0);
+        if let Ok(bytes) = fs::read(root.join(&f)) {
+            h.extend_from_slice(&bytes);
+        }
+    }
+    git_hash(root, &h)
+}
+
+fn git_hash(root: &Path, bytes: &[u8]) -> Result<String, String> {
+    let mut child = Command::new("git")
+        .args(["hash-object", "--stdin"])
+        .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("git hash-object: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(bytes)
+            .map_err(|e| format!("git hash-object: {e}"))?;
+    }
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("git hash-object: {e}"))?;
+    if !out.status.success() {
+        return Err("git hash-object failed".into());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Run one gate in `root`, logging to `<logdir>/<id>.log` and `<id>.exit`.
+pub fn run_one(root: &Path, gate: &Gate, logdir: &Path) -> Outcome {
+    let start = Instant::now();
+    let done = |verdict, exit, reason: String| Outcome {
+        id: gate.id.clone(),
+        verdict,
+        exit,
+        seconds: start.elapsed().as_secs_f64(),
+        reason,
+    };
+    let before = match reads_hash(root, &gate.reads) {
+        Ok(h) => h,
+        Err(e) => return done(Verdict::Refused, None, format!("cannot hash reads: {e}")),
+    };
+    let log_path = logdir.join(format!("{}.log", gate.id));
+    let log = match fs::File::create(&log_path) {
+        Ok(f) => f,
+        Err(e) => return done(Verdict::Refused, None, format!("cannot open log: {e}")),
+    };
+    let err = match log.try_clone() {
+        Ok(f) => f,
+        Err(e) => return done(Verdict::Refused, None, format!("cannot open log: {e}")),
+    };
+    let status = Command::new(resolve_program(&gate.command[0]))
+        .args(&gate.command[1..])
+        .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .stdin(Stdio::null())
+        .stdout(log)
+        .stderr(err)
+        .status();
+    let status = match status {
+        Ok(s) => s,
+        Err(e) => {
+            return done(
+                Verdict::Refused,
+                None,
+                format!("cannot run {:?}: {e}", gate.command[0]),
+            )
+        }
+    };
+    let code = status.code();
+    let _ = fs::write(
+        logdir.join(format!("{}.exit", gate.id)),
+        code.map_or("signal".to_string(), |c| c.to_string()),
+    );
+    match reads_hash(root, &gate.reads) {
+        Ok(after) if after == before => {}
+        Ok(_) => {
+            return done(
+                Verdict::Void,
+                code,
+                "a read file changed during the run".into(),
+            )
+        }
+        Err(e) => return done(Verdict::Refused, code, format!("cannot hash reads: {e}")),
+    }
+    match code {
+        Some(0) => done(Verdict::Green, code, String::new()),
+        Some(c) => done(Verdict::Red, code, format!("exit {c}")),
+        None => done(Verdict::Red, None, "killed by a signal".into()),
+    }
+}
+
+/// Run `gates` in order. After the first non-green verdict the rest are UNKNOWN unless
+/// `keep_going`.
+pub fn run_gates(root: &Path, gates: &[Gate], keep_going: bool, logdir: &Path) -> Vec<Outcome> {
+    let mut out = Vec::new();
+    let mut stopped = false;
+    for g in gates {
+        if stopped {
+            out.push(Outcome {
+                id: g.id.clone(),
+                verdict: Verdict::Unknown,
+                exit: None,
+                seconds: 0.0,
+                reason: "not run after an earlier red".into(),
+            });
+            continue;
+        }
+        let o = run_one(root, g, logdir);
+        if o.verdict != Verdict::Green && !keep_going {
+            stopped = true;
+        }
+        out.push(o);
+    }
+    out
+}
+
+/// Removes the scratch worktree on drop, so an early return or a panic cannot leave it behind.
+struct Scratch<'a> {
+    root: &'a Path,
+    path: PathBuf,
+}
+
+impl Drop for Scratch<'_> {
+    fn drop(&mut self) {
+        let p = self.path.to_string_lossy().into_owned();
+        let _ = git(self.root, &["worktree", "remove", "--force", &p]);
+        if self.path.exists() {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+        let _ = git(self.root, &["worktree", "prune"]);
+    }
+}
+
+/// Plant `gate`'s break in a detached scratch worktree of HEAD under `scratch_dir` and run it.
+pub fn run_break(root: &Path, gate: &Gate, scratch_dir: &Path, logdir: &Path) -> Outcome {
+    let refused = |reason: String| Outcome {
+        id: gate.id.clone(),
+        verdict: Verdict::Refused,
+        exit: None,
+        seconds: 0.0,
+        reason,
+    };
+    let path = scratch_dir.join(format!("wt-{}", gate.id));
+    if let Err(e) = fs::create_dir_all(scratch_dir) {
+        return refused(format!("cannot create {}: {e}", scratch_dir.display()));
+    }
+    let p = path.to_string_lossy().into_owned();
+    if let Err(e) = git(
+        root,
+        &["worktree", "add", "--detach", "--quiet", &p, "HEAD"],
+    ) {
+        return refused(e);
+    }
+    let _guard = Scratch {
+        root,
+        path: path.clone(),
+    };
+    let target = path.join(&gate.brk.file);
+    let planted = fs::OpenOptions::new()
+        .append(true)
+        .open(&target)
+        .and_then(|mut f| f.write_all(gate.brk.append.as_bytes()));
+    if let Err(e) = planted {
+        return refused(format!("cannot plant the break in {}: {e}", gate.brk.file));
+    }
+    let mut o = run_one(&path, gate, logdir);
+    let log = fs::read_to_string(logdir.join(format!("{}.log", gate.id))).unwrap_or_default();
+    match o.verdict {
+        Verdict::Red if log.contains(&gate.brk.expect) => {
+            o.verdict = Verdict::Caught;
+            o.reason = format!("red with {:?}", gate.brk.expect);
+        }
+        Verdict::Red => {
+            o.verdict = Verdict::Refused;
+            o.reason = format!("red without {:?}: red for another reason", gate.brk.expect);
+        }
+        Verdict::Green => {
+            o.verdict = Verdict::Defect;
+            o.reason = "the gate stayed green with its break planted: add the case".into();
+        }
+        _ => {}
+    }
+    o
+}
+
+fn append_ledger(path: &Path, rows: &[LedgerRow]) -> Result<(), String> {
+    let mut f = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+    for r in rows {
+        let line = serde_json::to_string(r).map_err(|e| e.to_string())?;
+        writeln!(f, "{line}").map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    }
+    Ok(())
+}
+
+/// The latest row per gate, each with whether it is STALE against `current_tree`.
+pub fn status_rows(ledger: &Path, current_tree: &str) -> Vec<(LedgerRow, bool)> {
+    let text = fs::read_to_string(ledger).unwrap_or_default();
+    let mut latest: BTreeMap<String, LedgerRow> = BTreeMap::new();
+    for line in text.lines() {
+        if let Ok(r) = serde_json::from_str::<LedgerRow>(line) {
+            latest.insert(r.gate.clone(), r);
+        }
+    }
+    latest
+        .into_values()
+        .map(|r| {
+            let stale = r.tree != current_tree;
+            (r, stale)
+        })
+        .collect()
+}
+
+const USAGE: &str =
+    "usage: uor-harness loop gates [--quick|--full] [--keep-going] [--status] [--break G|all]";
+
+/// `loop <action> ...`. Returns the process exit code: 0 all green or caught, 1 otherwise,
+/// 2 for a usage error or a refusal before any gate ran.
+pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
+    // The top-level parser forwards `--repo <path>` ahead of the action; drop it and `--lab`.
+    let mut args: Vec<String> = args.to_vec();
+    while let Some(p) = args.iter().position(|a| a == "--repo" || a == "--lab") {
+        args.drain(p..(p + 2).min(args.len()));
+    }
+    match args.first().map(String::as_str) {
+        Some("gates") => {}
+        Some(other) => {
+            eprintln!("uor-harness: loop {other}: not built yet (see the build plan)");
+            return 2;
+        }
+        None => {
+            eprintln!("{USAGE}");
+            return 2;
+        }
+    }
+    let (mut quick, mut keep_going, mut status, mut brk) = (false, false, false, None);
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--quick" => quick = true,
+            "--full" => quick = false,
+            "--keep-going" => keep_going = true,
+            "--status" => status = true,
+            "--watch" => {
+                eprintln!("uor-harness: loop gates --watch is not built yet; it is loop PR 11");
+                return 2;
+            }
+            "--break" => match args.get(i + 1) {
+                Some(g) => {
+                    brk = Some(g.clone());
+                    i += 1;
+                }
+                None => {
+                    eprintln!("{USAGE}");
+                    return 2;
+                }
+            },
+            other => {
+                eprintln!("uor-harness: loop gates: unknown argument {other:?}\n{USAGE}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    if lab.trim().is_empty() {
+        eprintln!("uor-harness: loop gates needs a lab: set UOR_LAB or pass --lab");
+        return 2;
+    }
+    let lab_dir = root.join("local").join(crate::state::slug(lab));
+    let ledger = lab_dir.join("gates.jsonl");
+    if status {
+        let tree = match tree_hash(root) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("uor-harness: {e}");
+                return 2;
+            }
+        };
+        let rows = status_rows(&ledger, &tree);
+        if rows.is_empty() {
+            println!("no gate results in {}", ledger.display());
+        }
+        for (r, stale) in rows {
+            let short = r.commit.get(..12).unwrap_or(&r.commit);
+            let mark = if stale { "  STALE" } else { "" };
+            println!(
+                "{:<22} {:<8} {:>8.1}s  {short}{mark}",
+                r.gate,
+                r.verdict.word(),
+                r.seconds
+            );
+        }
+        return 0;
+    }
+    let file = match load(root) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("uor-harness: {e}");
+            return 2;
+        }
+    };
+    let run_id = format!("{}-{}", now(), std::process::id());
+    let logdir = lab_dir.join("gates").join(&run_id);
+    if let Err(e) = fs::create_dir_all(&logdir) {
+        eprintln!("uor-harness: cannot create {}: {e}", logdir.display());
+        return 2;
+    }
+    let outcomes = if let Some(which) = brk {
+        let chosen: Vec<&Gate> = file
+            .gates
+            .iter()
+            .filter(|g| which == "all" || g.id == which)
+            .collect();
+        if chosen.is_empty() {
+            eprintln!("uor-harness: no gate {which:?} in gates.json");
+            return 2;
+        }
+        let scratch = logdir.join("scratch");
+        let out: Vec<Outcome> = chosen
+            .into_iter()
+            .map(|g| run_break(root, g, &scratch, &logdir))
+            .collect();
+        let _ = fs::remove_dir(&scratch);
+        out
+    } else {
+        let chosen: Vec<Gate> = file
+            .gates
+            .into_iter()
+            .filter(|g| !quick || g.quick)
+            .collect();
+        let (commit, tree) = match (git(root, &["rev-parse", "HEAD"]), tree_hash(root)) {
+            (Ok(c), Ok(t)) => (String::from_utf8_lossy(&c).trim().to_string(), t),
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("uor-harness: {e}");
+                return 2;
+            }
+        };
+        let out = run_gates(root, &chosen, keep_going, &logdir);
+        let ts = now();
+        let rows: Vec<LedgerRow> = out
+            .iter()
+            .map(|o| LedgerRow {
+                gate: o.id.clone(),
+                verdict: o.verdict,
+                seconds: o.seconds,
+                commit: commit.clone(),
+                tree: tree.clone(),
+                exit: o.exit,
+                ts,
+            })
+            .collect();
+        if let Err(e) = append_ledger(&ledger, &rows) {
+            eprintln!("uor-harness: {e}");
+            return 2;
+        }
+        out
+    };
+    let mut ok = true;
+    for o in &outcomes {
+        ok &= matches!(o.verdict, Verdict::Green | Verdict::Caught);
+        let exit = o.exit.map_or("-".to_string(), |c| c.to_string());
+        println!(
+            "{:<22} {:<8} exit {exit:<4} {:>7.1}s  {}",
+            o.id,
+            o.verdict.word(),
+            o.seconds,
+            o.reason
+        );
+    }
+    println!("logs: {}", logdir.display());
+    if ok {
+        0
+    } else {
+        1
+    }
+}

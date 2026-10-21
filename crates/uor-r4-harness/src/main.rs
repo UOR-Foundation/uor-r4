@@ -469,6 +469,7 @@ fn main() -> ExitCode {
         // cases caught as `said ok=false, expected True`. **Two commands with two bodies cannot
         // drift that way; a flag can.**
         Some("check-formats") => cmd_check(&repo, json),
+        Some("loop") => cmd_loop(&repo, &rest),
         Some("panel") => cmd_panel(&repo, &rest, json),
         Some("arena") => cmd_arena(&repo, &rest, json),
         Some("budget") => cmd_budget(&repo, &rest, json),
@@ -2546,6 +2547,16 @@ fn cmd_ledger_sync(repo: &Path, args: &[String], json: bool) -> ExitCode {
 /// **Every recording command goes through this one function**, so none can skip the check. No lab
 /// resolves to an empty string and each command keeps its own warning or refusal for that case; an
 /// unregistered lab, or a registry that cannot be read, is refused with exit 2 and the five names.
+/// `loop gates ...`: the gate runner (loop PR 4). A bad `UOR_LAB` exits 2 like every recorder.
+fn cmd_loop(repo: &Path, args: &[String]) -> ExitCode {
+    let lab = match lab_or_refuse(repo, args) {
+        Ok(l) => l,
+        Err(code) => return code,
+    };
+    let root = uor_r4_harness::state::toplevel(repo).unwrap_or_else(|| repo.to_path_buf());
+    ExitCode::from(uor_r4_harness::loopgates::cli(&root, &lab, args))
+}
+
 fn lab_or_refuse(repo: &Path, args: &[String]) -> Result<String, ExitCode> {
     uor_r4_harness::labs::resolve_lab(
         repo,
