@@ -132,6 +132,27 @@ Tests only: `UOR_PRCHECK_GH_FAKE=<file>` replaces `gh` for these two rules with 
 
 **In CI.** `ci.yml` calls `.github/workflows/gate.yml` on every pull request. Its `policy` job builds `uor-harness` from the base commit and runs `loop pr-check --ci` against the PR's head, which it reads as data. `required-transport` then writes `policy: <pass|fail|error> (run <id>)` into the five required checks' summaries and leaves them green. That record is what `required-checks` reads back. Its `tests` job runs `loop gates --full` on the PR's code with a read-only token. The [loop page](../loop/README.md#gates) gives the reasons.
 
+### `loop review` (loop PR 6)
+
+The pure core is built in `crates/uor-r4-harness/src/loopreview.rs`. The `loop review` command, and the switch of `pr-check`'s `review-record` rule and `loop next` to it, come in the next commit. A review record is a PR comment in this form:
+
+```text
+[<lab>] uor-review v1
+pr: <number>
+head: <40 lowercase hex>
+lab: <lab>
+model: <model id or "unknown">
+launch: <launch id or "manual">
+verdict: APPROVE | CHANGES
+order: docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md
+context: fresh            (optional)
+done-when: host: <what was re-run and its result>   |   done-when: gpu: sha256:<64 hex>
+```
+
+Free text (the findings) may follow after a blank line. A comment whose first line does not contain `uor-review v1` is not a record. One that does but is wrong is refused and named in the gate's details: an untagged first line, a tag that differs from `lab:`, a missing, duplicated or unknown field, or a bad `pr`, `head`, `verdict`, `order`, `context` or `done-when`.
+
+The gate counts a record only when its `pr` and `head` are the PR's current ones and its lab is registered. On a setup PR while D59 is in force, only `claude` records count. Otherwise the record's lab must be of another vendor than the ORDER lab's (D46), or the PR is doc-only and the record comes from the ORDER lab itself with `context: fresh`. It passes when the last counted record is an APPROVE, so a later counted CHANGES blocks and a later APPROVE clears it. A setup PR is one whose ORDER `Setup row:` names a row of the [loop page](../loop/README.md#build-plan) build-plan table and whose item is `infra-loop-harness` or that row's own item (`6` → `infra-loop-pr06-…`). D59 stays in force unless `docs/harness/owner-paths.json` at the merge base lists `docs/harness/d59.json` exactly and that file reads `"d59": "ended"`. The claude-18 ORDER proposes the file; the owner adds it and lists it.
+
 ### `loop report` (loop PR 7b)
 
 ```sh
