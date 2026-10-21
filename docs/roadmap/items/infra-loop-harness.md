@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
-scope: [crates/uor-r4-harness/**, docs/harness/**, docs/loop/**, docs/roadmap/items/*.md, docs/roadmap/README.md, .github/workflows/**, docs/integration/**, AGENTS.md, docs/start/FILEMAP.md]
+scope: [docs/roadmap/items/*.md, docs/roadmap/README.md]
 ---
 
 ## Why it matters

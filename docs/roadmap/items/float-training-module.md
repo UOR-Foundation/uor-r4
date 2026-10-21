@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [owner-decision-float-path-scope]
-scope: [crates/uor-r4-training/**, crates/uor-r4-harness/src/ratchet.rs, docs/harness/prep/**, docs/labs/**, docs/integration/DECISIONS.md]
+scope: [crates/uor-r4-training/**, crates/uor-r4-harness/src/ratchet.rs, docs/harness/prep/float-training-module*, docs/labs/float-training-module/**]
 ---
 
 ## Why it matters

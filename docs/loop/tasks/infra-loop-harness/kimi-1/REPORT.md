@@ -6,7 +6,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md).
 
 - `uor-harness loop claim infra-loop-harness` refused with "item infra-loop-harness has no scope: line" — the very gap this PR closes. Fell back to `team claim --branch kimi/item-scopes --lab kimi` plus this hand-written ORDER, as the joining instructions say until scopes land.
 - The ORDER said "eight open loop items" for the `Closes #` step edit; the buggy sentence ("open the PR with `References #<the loop issue>`") existed only in the seven per-PR items (3, 7c, 8, 9, 10, 11, 12). The umbrella item's own step already carries the right semantics ("the last PR says `Closes #<this issue>`"), so it was left unchanged.
-- `pkg/` and `studio/` do not exist at this base (they exist only in the stale owner checkout). Scopes for the M7/M8/desktop-client items point at paths that exist at origin/main (`crates/uor-r4-integer/**`, `web/**`, `src-tauri/**`) instead of naming ghosts.
+- `pkg/` and `studio/` do not exist at this base (they exist only in the stale owner checkout). Scopes for the M7/M8/desktop-client items point at `crates/uor-r4-integer/**` and `web/**`, which exist; `src-tauri/` and `models/` are new folders the scopes name prospectively, not existing paths.
 - `xtask roadmap render` rewrote `docs/roadmap/README.md` byte-identical: the rendered table does not show `scope:`, so the page carries no visible diff. Render --check confirms current.
 
 ## What changed
