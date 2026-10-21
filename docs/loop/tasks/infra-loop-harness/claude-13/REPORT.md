@@ -113,7 +113,7 @@ None of the private kit's skills.
 
 ## Still open
 
-- **A check-to-open race remains for the break file.** Without `O_NOFOLLOW`, a gate command could swap the break file for a symlink between the containment check and the open. The check runs immediately before the open, and a test pins a swap made during the pre-check. Closing the race fully needs `libc`, which is a `Cargo.toml` change.
+- **A check-to-open race remains for the break file.** Without `O_NOFOLLOW`, a gate command could swap the break file for a symlink between the containment check and the open. The check runs immediately before the open, and a test pins a swap made during the pre-check. `O_NOFOLLOW` would close the swap of the final path component; it needs `libc`, which is a `Cargo.toml` change. A swap of a parent directory between the canonical-parent check and the open would need `openat`-style resolution.
 - **Gates still to add to `gates.json`:**
   - clippy and library tests for changed crates;
   - `uor-harness check`, `lint check` and `shard-check`;
@@ -123,6 +123,7 @@ None of the private kit's skills.
 
   A "create file" break kind may be needed.
 - **Old breaks against new gates.** A changed gate's old breaks do not yet run against the new gate. That needs the merge base's `gates.json`.
+- **A pid can be reused.** If a dead run's pid is later taken by an unrelated live process, that run's scratch worktree is never swept. That is the safe direction; such a worktree can be removed by hand.
 - **VOID compares snapshots.** It compares a snapshot taken at the start of the run with one at the end, so a file that changes and changes back during the run is not seen.
 - **Signal deaths in the summary.** The run summary prints `exit -` for a signal death. The signal is in the reason text and in the ledger.
 - **`--watch`** is loop PR 11.
