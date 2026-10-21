@@ -47,7 +47,7 @@ None. This is tooling, with no model run.
   - with the malformed-record refusal set aside, `a_malformed_record_after_the_approval_refuses` fails;
   - with the base check set aside, `a_pr_not_based_on_main_refuses` fails;
   - all pass again once restored.
-- Full harness suite at `222b2c84e`: 928 passed, 0 failed. The first run, before that fix, failed one test; see above. SUITE2_LINE
+- Full harness suite at `222b2c84e`: 928 passed, 0 failed. The first run, before that fix, failed one test; see above. After the review fixes, at `5c536c3b8`: 936 passed, 0 failed.
 - `loop board` on live data rendered all five labs and exited 0.
 - **The live `loop queue --pr 2931 --dry-run`, run on this PR, refused it**, exit 1:
   - while the PR was a draft, at `pr-state`;
