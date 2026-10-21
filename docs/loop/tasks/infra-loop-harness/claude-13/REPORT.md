@@ -16,7 +16,7 @@ Fresh-context Opus builders wrote the code: one for the first head, then one bui
     - At the start of `--break`, a sweep removes stale scratch worktrees whose paths match `local/<lab>/gates/<run>/scratch/wt-<id>` exactly. These are left behind when Ctrl-C kills a run.
     - Each ledger row is one `write_all`.
     - An empty selection exits 2.
-  - **Verdict precision, `7495beef6`.** A break was CAUGHT whenever the gate went red with text that a parse error or an already-red tree would also print. Now a break runs the gate once before planting the fault, and the result is REFUSED if the gate is already red. Each `expect` is text that only the planted fault produces: `+fn planted_break() {}` for the two fmt gates, `This result is machine-verified.` for claim-wording.
+  - **Verdict precision, `7495beef6`.** A break was CAUGHT whenever the gate went red with text that a parse error or an already-red tree would also print. Now a break runs the gate once before planting the fault, and the result is REFUSED if the gate is already red. Each `expect` is text that only the planted fault produces: `+fn planted_break() {}` for the two fmt gates, and for claim-wording the planted sentence itself (see `docs/harness/gates.json`).
     - Hashes ignore user diff configuration (`--no-ext-diff --no-textconv --no-color`) and are length-prefixed, so a missing file and an empty file hash differently.
     - A gate whose `reads` match no file is REFUSED, since VOID would otherwise be blind.
     - A signal death records `signal N`.
