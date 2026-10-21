@@ -7,7 +7,17 @@ Lab: claude. Base: `fc96b4bea`. Order: [ORDER.md](ORDER.md). The ORDER was commi
 - **One planned piece was dropped.** The design had "`version` reports its build commit". `crates/uor-r4-harness/src/version.rs` records two earlier attempts to bake the build commit into the binary; both went stale through cargo's cached build output. The command reads the commit at runtime on purpose, so this PR leaves it alone.
 - **Two map rows matched the private kit.** The local copyright check found two 8-word runs in the new map rows on the loop page. Both rows were reworded (`f86b7d3ad`), and the whole PR now has 0 matches.
 - **The docs builder ran out of room.** It stopped at its context limit after writing the 13 items. The main session wrote the kit-to-loop map.
-- **One roster was out of scope.** `onboard::KNOWN_LABS` in `crates/uor-r4-harness/src/onboard.rs` is still a hard-coded list, not read from `labs.json`. It is listed under "Still open".
+- **The first head had a real bug.** At `33d64d03a`, a fresh-context review found that `labs.json` was read from the current directory, not the repository root. A recording command run from a subdirectory with a valid lab was therefore refused; the reviewer reproduced this.
+- **The same review found three smaller issues:**
+  - read-only `team` and `multilab` actions also refused a bad lab name;
+  - no test pinned the exit-2 contract;
+  - `onboard::KNOWN_LABS` was a second roster that still allowed unlisted labs.
+- **All four were fixed in `7bad586f8`:**
+  - The registry is found from the git top level, then from each ancestor folder.
+  - Only the actions that record a lab name resolve it: team `claim`, `release` and `dispatch`, and multilab `touch`.
+  - New integration tests in `crates/uor-r4-harness/tests/lab_registry_cli.rs` pin the subdirectory case, read-only commands accepting any name, and the refusal: exit 2, the five names, nothing written.
+  - Onboarding reads `labs.json`. Its one changed assertion now expects FAIL instead of WARN for an unlisted lab, to match the refusal.
+- **The subdirectory fix is shown to be needed.** With it set aside, `the_registry_is_found_from_a_subdirectory` failed with "cannot read the lab registry …/crates/deep/er/docs/harness/labs.json"; with the fix restored, the test passed.
 
 ## What changed
 
@@ -28,7 +38,7 @@ Size is reported here, not capped. Everything stayed inside the ORDER's scope.
 
 ## Measurements: gates at the head
 
-- **Harness tests:** `cargo test -p uor-r4-harness --no-fail-fast`: 663 passed, 0 failed.
+- **Harness tests:** `cargo test -p uor-r4-harness --no-fail-fast`: 667 passed, 0 failed, at the fix head.
 - **Planted fault:** `a_sixth_lab_is_refused` passes. With `check_lab`'s comparison forced to accept everything, it failed (`test result: FAILED. 0 passed; 1 failed`, from the builder's run), and it passed again once restored.
 - **Live refusal:** `UOR_LAB=gemini uor-harness heartbeat -m m1` printed the refusal naming the five labs and exited 2. It ran against a scratch live directory, and nothing was written.
 - **Existing records:** every lab name already in the committed ledgers is one of the five (codex 987, antigravity 779, kimi 751, deepseek 115, claude 13, plus `unknown` from runs with no lab set). No current lab is newly refused.
@@ -40,9 +50,10 @@ None of the private kit's skills were invoked. The ORDER's cancel probe was run 
 
 ## Still open
 
-- `onboard::KNOWN_LABS` should read `labs.json`.
 - `owner-paths.json` and `rule-sources.json` are recorded but not yet enforced. The policy check comes in PR 5, and the rule-source check later.
-- Every lab must rebuild `uor-harness` after this merges, to pick up the lab check.
+- **Rollout.**
+  - Every lab must rebuild `uor-harness` after this merges.
+  - A worktree branched before the merge has no `labs.json`, so the new binary refuses recording commands there. This is by design. The lab merges `main` into that worktree, or starts a fresh one.
 
 ## Plain summary
 
