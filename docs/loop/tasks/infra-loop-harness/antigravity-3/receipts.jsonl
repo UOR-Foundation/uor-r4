@@ -1,5 +1,5 @@
-{"gate":"claim-wording","verdict":"GREEN","seconds":6.607617125,"commit":"95048a386d9b428dae48ae6a8ee1bdcc0300576a","tree":"8a26f8898e344ebf127a4461559f15fe7e33e9a7","exit":0,"signal":null,"ts":1792645418}
-{"gate":"fmt-claim-wording","verdict":"GREEN","seconds":1.405256166,"commit":"95048a386d9b428dae48ae6a8ee1bdcc0300576a","tree":"8a26f8898e344ebf127a4461559f15fe7e33e9a7","exit":0,"signal":null,"ts":1792645418}
-{"gate":"fmt-harness","verdict":"GREEN","seconds":8.633107792,"commit":"95048a386d9b428dae48ae6a8ee1bdcc0300576a","tree":"8a26f8898e344ebf127a4461559f15fe7e33e9a7","exit":0,"signal":null,"ts":1792645418}
-{"gate":"git-hooks","verdict":"GREEN","seconds":21.27920525,"commit":"95048a386d9b428dae48ae6a8ee1bdcc0300576a","tree":"8a26f8898e344ebf127a4461559f15fe7e33e9a7","exit":0,"signal":null,"ts":1792645418}
-{"gate":"loop-gates-watch","verdict":"GREEN","seconds":7.280448458,"commit":"95048a386d9b428dae48ae6a8ee1bdcc0300576a","tree":"8a26f8898e344ebf127a4461559f15fe7e33e9a7","exit":0,"signal":null,"ts":1792645418}
+{"gate":"claim-wording","verdict":"GREEN","seconds":1.6507229589999999,"commit":"5e71aeec8aa82fdfb90bcd61eef26865fdaad31f","tree":"cfa603dd6092ffb21fd6fa5541a58ca60c0af4e4","exit":0,"signal":null,"ts":1792645934}
+{"gate":"fmt-claim-wording","verdict":"GREEN","seconds":0.282733625,"commit":"5e71aeec8aa82fdfb90bcd61eef26865fdaad31f","tree":"cfa603dd6092ffb21fd6fa5541a58ca60c0af4e4","exit":0,"signal":null,"ts":1792645934}
+{"gate":"fmt-harness","verdict":"GREEN","seconds":0.819218625,"commit":"5e71aeec8aa82fdfb90bcd61eef26865fdaad31f","tree":"cfa603dd6092ffb21fd6fa5541a58ca60c0af4e4","exit":0,"signal":null,"ts":1792645934}
+{"gate":"git-hooks","verdict":"GREEN","seconds":3.709918333,"commit":"5e71aeec8aa82fdfb90bcd61eef26865fdaad31f","tree":"cfa603dd6092ffb21fd6fa5541a58ca60c0af4e4","exit":0,"signal":null,"ts":1792645934}
+{"gate":"loop-gates-watch","verdict":"GREEN","seconds":7.348626625,"commit":"5e71aeec8aa82fdfb90bcd61eef26865fdaad31f","tree":"cfa603dd6092ffb21fd6fa5541a58ca60c0af4e4","exit":0,"signal":null,"ts":1792645934}
