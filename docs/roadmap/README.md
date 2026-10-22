@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 43 |
+| ready | 41 |
 | held | 26 |
 | decision | 4 |
-| done | 15 |
+| done | 17 |
 | total | 88 |
 
 ## Start here
@@ -36,7 +36,6 @@ These items are ready and open to anyone.
 | [Solve the saved legal-construction case in exact arithmetic](items/legal-construction-exact-solve.md) | research | [#2828](https://github.com/UOR-Foundation/uor-r4/issues/2828) |
 | [Register the finite qualification and stage the admission-preserving A8 runbook](items/m1-a8-registration-and-runbook-staging.md) | M1 | [#2832](https://github.com/UOR-Foundation/uor-r4/issues/2832) |
 | [Build the address-as-read mechanism and an object-store consumer](items/m1-address-as-read.md) | M1 | [#2833](https://github.com/UOR-Foundation/uor-r4/issues/2833) |
-| [Write the exporter from a trained discrete model to a D11 file](items/m1-d11-exporter-discrete.md) | M1 | [#2838](https://github.com/UOR-Foundation/uor-r4/issues/2838) |
 | [Design a lawful normalization mechanism](items/m1-normalization-mechanism.md) | M1 | [#2842](https://github.com/UOR-Foundation/uor-r4/issues/2842) |
 | [Design a lawful position mechanism](items/m1-position-mechanism.md) | M1 | [#2843](https://github.com/UOR-Foundation/uor-r4/issues/2843) |
 | [Build a genuinely fresh held-out reply panel for M2](items/m2-fresh-heldout-panel.md) | M2 | [#2849](https://github.com/UOR-Foundation/uor-r4/issues/2849) |
@@ -62,7 +61,6 @@ These items are ready and open to anyone.
 | [Build the address-as-read mechanism and an object-store consumer](items/m1-address-as-read.md) | ready | anyone | no | none | [#2833](https://github.com/UOR-Foundation/uor-r4/issues/2833) |
 | [Replace the 5-value address key with a full-vector metric](items/m1-address-key-full-vector.md) | ready | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md) | [#2834](https://github.com/UOR-Foundation/uor-r4/issues/2834) |
 | [Draft the BVG-K Stage T pre-registration sheet (C2 has passed)](items/m1-bvg-k-block-apply-c2.md) | ready | a lab | yes | none | [#2835](https://github.com/UOR-Foundation/uor-r4/issues/2835) |
-| [Write the exporter from a trained discrete model to a D11 file](items/m1-d11-exporter-discrete.md) | ready | anyone | no | none | [#2838](https://github.com/UOR-Foundation/uor-r4/issues/2838) |
 | [Measure export gap and tokens per second on a trained model](items/m1-export-gap-and-toks.md) | ready | a lab | yes | [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2839](https://github.com/UOR-Foundation/uor-r4/issues/2839) |
 | [Replace the full-vocabulary writer scan](items/m1-faster-writer.md) | ready | a lab | yes | none | [#2840](https://github.com/UOR-Foundation/uor-r4/issues/2840) |
 | [Evaluate the gain on the fresh sealed panel](items/m1-fresh-panel-transfer.md) | ready | a lab | yes | [m1-export-gap-and-toks](items/m1-export-gap-and-toks.md) | [#2841](https://github.com/UOR-Foundation/uor-r4/issues/2841) |
@@ -78,6 +76,7 @@ These items are ready and open to anyone.
 | [Run the W2 read-code capacity capture](items/m1-w2-capacity-capture.md) | held | a lab | yes | none | [#2845](https://github.com/UOR-Foundation/uor-r4/issues/2845) |
 | [Register and run one float-credit training sheet (W4)](items/m1-w4-float-credit-sheet.md) | held | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md) | [#2846](https://github.com/UOR-Foundation/uor-r4/issues/2846) |
 | [Decide whether a float (D37) path may count toward M1, M2 and the product](items/owner-decision-float-path-scope.md) | decision | a lab | no | none | [#2875](https://github.com/UOR-Foundation/uor-r4/issues/2875) |
+| [Write the exporter from a trained discrete model to a D11 file](items/m1-d11-exporter-discrete.md) | done | anyone | no | none | [#2838](https://github.com/UOR-Foundation/uor-r4/issues/2838) |
 
 ## M2
 
@@ -174,13 +173,13 @@ These items are ready and open to anyone.
 | [Create the separate scanned D37 float training module](items/float-training-module.md) | ready | a lab | no | [owner-decision-float-path-scope](items/owner-decision-float-path-scope.md) | [#2823](https://github.com/UOR-Foundation/uor-r4/issues/2823) |
 | [Build the Tauri desktop client against the synthetic stand-in](items/infra-desktop-client-tauri.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md) | [#2826](https://github.com/UOR-Foundation/uor-r4/issues/2826) |
 | [Build the five-lab loop harness (the loop subcommands of uor-harness)](items/infra-loop-harness.md) | ready | a lab | no | none | [#2904](https://github.com/UOR-Foundation/uor-r4/issues/2904) |
-| [Loop PR 3: loop render for every view, with --check at the stamp](items/infra-loop-pr03-render.md) | ready | a lab | no | [infra-loop-pr02-item-keys](items/infra-loop-pr02-item-keys.md) | [#2906](https://github.com/UOR-Foundation/uor-r4/issues/2906) |
 | [Loop PR 8: migrate the notes to STATE, HANDOFF and PLAN](items/infra-loop-pr08-migration.md) | ready | a lab | no | [infra-loop-pr03-render](items/infra-loop-pr03-render.md) | [#2913](https://github.com/UOR-Foundation/uor-r4/issues/2913) |
 | [Loop PR 10: loop drive, watchers, kill switch and the soft check-in](items/infra-loop-pr10-supervisor.md) | ready | a lab | no | [infra-loop-pr07b-session](items/infra-loop-pr07b-session.md), [infra-loop-pr07c-queue-board](items/infra-loop-pr07c-queue-board.md), [infra-loop-pr09-client-adapters](items/infra-loop-pr09-client-adapters.md) | [#2915](https://github.com/UOR-Foundation/uor-r4/issues/2915) |
 | [Settle the disputed D11 and Hopf observation statuses on the board](items/owner-decision-board-status-disputes.md) | decision | a lab | no | none | [#2874](https://github.com/UOR-Foundation/uor-r4/issues/2874) |
 | [Bench inbox rule: each lab reads the bench messages addressed to it](items/infra-bench-inbox-rule.md) | done | a lab | no | none | not yet synced |
 | [Record K16 normal close and final resource accounting](items/infra-k16-normal-close-accounting.md) | done | a lab | no | none | [#2827](https://github.com/UOR-Foundation/uor-r4/issues/2827) |
 | [Loop PR 2: item keys, Cancel if, done-when class and validator](items/infra-loop-pr02-item-keys.md) | done | a lab | no | none | [#2905](https://github.com/UOR-Foundation/uor-r4/issues/2905) |
+| [Loop PR 3: loop render for every view, with --check at the stamp](items/infra-loop-pr03-render.md) | done | a lab | no | [infra-loop-pr02-item-keys](items/infra-loop-pr02-item-keys.md) | [#2906](https://github.com/UOR-Foundation/uor-r4/issues/2906) |
 | [Loop PR 4: loop gates runner, gates.json, ledger and breaks](items/infra-loop-pr04-gates.md) | done | a lab | no | none | [#2907](https://github.com/UOR-Foundation/uor-r4/issues/2907) |
 | [Loop PR 5: loop pr-check and a policy job feeding the required checks](items/infra-loop-pr05-policy-check.md) | done | a lab | no | [infra-loop-pr02-item-keys](items/infra-loop-pr02-item-keys.md), [infra-loop-pr03-render](items/infra-loop-pr03-render.md), [infra-loop-pr04-gates](items/infra-loop-pr04-gates.md) | [#2908](https://github.com/UOR-Foundation/uor-r4/issues/2908) |
 | [Loop PR 6: loop review with tagged review records](items/infra-loop-pr06-review-records.md) | done | a lab | no | [infra-loop-pr05-policy-check](items/infra-loop-pr05-policy-check.md) | [#2909](https://github.com/UOR-Foundation/uor-r4/issues/2909) |
