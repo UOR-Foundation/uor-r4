@@ -2,7 +2,9 @@
 //! A manifest must be pinned by the caller; its digest is not an authorization signature.
 #![forbid(unsafe_code)]
 
+pub mod address_read;
 pub mod bindings;
+pub mod durable_consumer;
 mod hash;
 mod manifest;
 pub mod peer;
