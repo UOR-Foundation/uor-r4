@@ -3,6 +3,7 @@
 - **Date:** 2026-10-22
 - **Lab:** `antigravity`
 - **Milestone / Issue:** M7 (`#2035`), item [`m7-parity-library-cli-browser`](../../roadmap/items/m7-parity-library-cli-browser.md) (`#2867`)
+- **Bar Registration Request:** [`#2867` comment `6352825431`](https://github.com/UOR-Foundation/uor-r4/issues/2867#issuecomment-6352825431) (superseding [`#2867` comment `6352106589`](https://github.com/UOR-Foundation/uor-r4/issues/2867#issuecomment-6352106589))
 - **Status:** `DRAFT` (`PROPOSED, NOT REGISTERED` — awaiting PM / owner bar registration on `#2867` and an accepted M4 `UORLUT01` model artifact from `#2857`)
 
 ## 1. Bar (Proposed for Registration)

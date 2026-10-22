@@ -4,6 +4,7 @@
 - **Lab:** `antigravity`
 - **Milestone / Issue:** M7 (`#2035`), item [`m7-parity-library-cli-browser`](../../roadmap/items/m7-parity-library-cli-browser.md) (`#2867`)
 - **Pre-registration (`DRAFT`):** [`preregistration-DRAFT-2026-10-22.md`](./preregistration-DRAFT-2026-10-22.md)
+- **Bar Registration Request:** [`#2867` comment `6352825431`](https://github.com/UOR-Foundation/uor-r4/issues/2867#issuecomment-6352825431) (superseding the initial `vocab = 64` draft in [`#2867` comment `6352106589`](https://github.com/UOR-Foundation/uor-r4/issues/2867#issuecomment-6352106589))
 - **Status:** Three-host parity harness implemented and verified (`8 / 8` prompts uninterrupted `48` tokens + `8 / 8` fresh-process `32 + 16` save/restore continuations) on the `seed = 5` `mk-synthetic-stack` (`UORLUT01`) stand-in; item `#2867` remains `status: ready` until PM bar registration and re-execution on an accepted M4 `UORLUT01` model artifact (`#2857`).
 
 ## 1. Architecture & Reference Alignment
@@ -40,7 +41,16 @@
 2. **Corrupted `artifact_sha256` in `UR4SESS1` snapshot:** Flipping 1 hex character of `artifact_sha256` inside a `UR4SESS1` snapshot causes both `IntegerStackSession::restore_state` and `uor-chat --restore-session` to reject the snapshot (`ArtifactMismatch`).
 3. **Truncated `UR4SESS1` stream:** Truncating 1 byte off a valid `UR4SESS1` snapshot causes both `session_codec::decode` and `uor-chat --restore-session` to reject the snapshot (`session codec: truncated input`).
 
-## 4. Staged Research Notebook Entry (`docs/research/notebook/m4-serving.md`)
+## 4. Re-Run Commands & CI Coverage Note
+
+Standard CI jobs run default workspace features and do not execute the feature-gated `--features serving-wasm` parity integration test or the Node.js browser harness (`verify_m7_parity.mjs`), so the local lab verification recorded here is the current evidence. Anyone can reproduce both checks from a clean clone with:
+
+```sh
+CARGO_TARGET_DIR=local/antigravity/target node web/studio/verify_m7_parity.mjs
+CARGO_TARGET_DIR=local/antigravity/target ~/.cargo/bin/cargo test -p uor-r4-integer --features serving-wasm --locked --test m7_parity_library_cli_browser
+```
+
+## 5. Staged Research Notebook Entry (`docs/research/notebook/m4-serving.md`)
 
 > Note: `docs/research/notebook/m4-serving.md` is staged here for verbatim backfill once the umbrella item scope PR adds `notebook:` to `docs/roadmap/items/m7-parity-library-cli-browser.md`.
 
