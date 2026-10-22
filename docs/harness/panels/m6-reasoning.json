@@ -1,18 +1,59 @@
 {
   "schema": 1,
-  "note": "Acceptance panels. A panel is frozen only when its milestone has started and its bar is pre-registered; D21/D22 freeze the panel before the run it scores.",
+  "note": "Frozen acceptance panels. Targets come from the milestone issues (#2029-#2034) and decision cards on #2028; docs/harness/milestones.json is the machine cache. Where a panel's noise is measured from a lawful non-neural count-table baseline (CHARTER section 4.4), the JSON records the exact spread.",
   "panels": {
     "m6-reasoning": {
       "title": "M6 Reasoning and coding on the same native model",
       "milestone": "m6",
-      "frozen": false,
-      "grader": "",
-      "source": "GitHub issue #2034 (milestone not started; acceptance carried over, no panel pre-registered)",
-      "noise": "unstated - a bar must not be narrower than it",
-      "seeds": ">= 2 for a decisive run",
-      "rows": ">= 200 fresh rows for a decisive run",
-      "bars": [],
-      "note": "This milestone has not started and its acceptance criteria are carried over from an earlier issue. There is no pre-registered panel, so the panel is deliberately NOT frozen and carries no bars. Freeze it before the first run this panel would score, and change frozen to true at that point."
+      "frozen": true,
+      "grader": "uor_r4_harness::panels::m6_reasoning::grade_m6_panel (deterministic 3-family oracle: ExactIntermediateAndFinal for 80 Compositions rows, AlteredConstraintOracle with habit-capture and ABSTAIN:UNSATISFIABLE discrimination for 80 AlteredConstraints rows, and 256-step sandboxed 4-vector CodeTaskOracle + rustc --test verifier for 80 CodeTasks rows; D28 compliant, zero neural judge)",
+      "source": "issue #2034 comment 6344264079, issue #2866 comment 6344265209, and #2028 decision card 6344266280; canonical seed 0x004D365F52454153 (unscored prompt JSONL 79215 B sha256:ac2034eda9b8ade5b6c760461a2c40c167955289a7f4a53c5ad1081894ab3edc; sealed oracle JSONL 206422 B sha256:d1e5e4eb295d06d711b90e79805e6e35a84caa47666baeed6e202e203d407203)",
+      "noise": "+-3 rows (measured across 8 independent seeded count-table draws on the 240-row frozen panel: context-keyed count-table scores [12, 16, 17, 18, 14, 17, 12, 18], min 12/240, max 18/240, half-band +-3 rows; unconditioned numeric count-table scores [2, 1, 1, 2, 0, 0, 0, 0] from small-modulus residue collisions; family-conditioned modal count-table ceiling is 20/240 from the 20 ABSTAIN:UNSATISFIABLE rows)",
+      "seeds": ">= 2 for a decisive run (D22 section 3)",
+      "rows": "240 fresh rows (80 Compositions, 80 AlteredConstraints, 80 CodeTasks) from seed 0x004D365F52454153 (>= 200 fresh rows for a decisive run, D22 section 3)",
+      "bars": [
+        {
+          "id": "overall-pass-240",
+          "label": "deterministic oracle pass count on the frozen 240-row M6 reasoning and coding panel",
+          "current": 20,
+          "target": 168,
+          "of": 240,
+          "unit": "rows",
+          "direction": "open",
+          "note": "current (20/240, 8.33%) is the lawful family-conditioned count-table / best-constant ceiling (all 20 ABSTAIN:UNSATISFIABLE rows in AlteredConstraints; context-keyed count table scores 12..18/240 with +-3 rows noise, and numeric-only count table scores 0..2/240). Proposed target 168/240 (70.0%, +148 rows above the count-table ceiling, 49.3x the +-3 row noise band) is registered via decision card #2028 comment 6344266280 for owner confirmation under CHARTER section 5.2."
+        },
+        {
+          "id": "compositions-80",
+          "label": "unseen multi-step compositions (3-step register and versioned-memory arithmetic)",
+          "current": 0,
+          "target": 56,
+          "of": 80,
+          "unit": "rows",
+          "direction": "open",
+          "note": "requires exact integer match on both intermediate addressed-memory/register state (INT) and final output (OUT) across 40 3-step register chains and 40 versioned-slot chains with >= 2 decimal carries and zero overlap with m6_exact_arithmetic.rs control literals; count-table baseline scores 0/80 across all 8 seeds."
+        },
+        {
+          "id": "altered-constraints-80",
+          "label": "altered constraints (non-decimal radix, rebound precedence, modular cap, and unsatisfiable abstention)",
+          "current": 20,
+          "target": 56,
+          "of": 80,
+          "unit": "rows",
+          "direction": "open",
+          "note": "60 satisfiable rows (20 base-7/8/9 arithmetic, 20 rebound [+] over [*] precedence, 20 modular forbidden-residue step cap, each verified to have expected_answer != default_habit_answer) plus 20 unsatisfiable rows requiring ABSTAIN:UNSATISFIABLE; reaching 56/80 requires at least 36/60 on satisfiable altered-constraint rows in addition to abstention discrimination."
+        },
+        {
+          "id": "code-tasks-80",
+          "label": "executable coding tasks (4-vector 256-step sandbox and rustc --test oracle)",
+          "current": 0,
+          "target": 56,
+          "of": 80,
+          "unit": "rows",
+          "direction": "open",
+          "note": "80 parameterized integer algorithm tasks (20 AffinelyScaledClampLoop, 20 RadixDigitWeightedSum, 20 BoundedRingStep, 20 PiecewiseParityRecurrence), each graded on 4 held-out (input, expected_output) test vectors in the 256-step zero-I/O SandboxProgram machine and standalone rustc --test verifier; count-table baseline scores 0/80 across all 8 seeds."
+        }
+      ],
+      "note": "Frozen under m6-reasoning-panel-freeze (#2866) prior to any M6 GPU evaluation run (D21/D22). Byte-exact rows and deterministic oracles are generated in-process by uor_r4_harness::panels::m6_reasoning::generate_frozen_m6_panel() from seed 0x004D365F52454153 without committing bulk corpus files to git. Final numeric bar authority rests with the owner under CHARTER section 5.2 (#2028 comment 6344266280)."
     }
   }
 }
