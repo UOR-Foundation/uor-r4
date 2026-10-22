@@ -1,11 +1,14 @@
-//! Host control tests for the UOR-R4 Tauri desktop client (`infra-desktop-client-tauri`, #2826).
+//! Host control tests for the UOR-R4 desktop client backend (`infra-desktop-client-tauri`, #2826).
 #![forbid(unsafe_code)]
 
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
+use serde_json::json;
 use uor_r4_desktop_client::{
-    build_synthetic_stack_artifact, sha256_bytes, DesktopBackend, DesktopClientError, PinRegistry,
+    build_synthetic_stack_artifact, handle_rpc_line, handle_studio_http_request,
+    run_self_test_receipt, sha256_bytes, DesktopBackend, DesktopClientError, PinRegistry,
     TerminalCommandRequest, SYNTHETIC_STANDIN_FILE_NAME, SYNTHETIC_STANDIN_SEED,
 };
 
@@ -35,12 +38,23 @@ fn native_list_local_models_returns_synthetic_standin_and_refuses_tampered_hash(
     let standin_path = tmp.join(SYNTHETIC_STANDIN_FILE_NAME);
     fs::write(&standin_path, &standin_bytes).expect("write synthetic stand-in");
 
+    // Place an unrelated .bin and .gguf file alongside the pinned stand-in:
+    // they must NOT hide the pinned model during discovery.
+    let unrelated_bin = tmp.join("unrelated.bin");
+    fs::write(&unrelated_bin, b"GGUF_NOT_UORLUT01_PAYLOAD_12345678").expect("write unrelated bin");
+
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
     backend.add_model_search_dir(&tmp);
+    backend.add_model_search_dir(&tmp);
+    assert_eq!(
+        backend.model_search_dirs().len(),
+        1,
+        "add_model_search_dir must deduplicate repeated directory registrations"
+    );
 
     let listed = backend
         .native_list_local_models()
-        .expect("list local models with valid pinned stand-in");
+        .expect("list local models with valid pinned stand-in and unrelated .bin");
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].name, SYNTHETIC_STANDIN_FILE_NAME);
     assert_eq!(listed[0].format, "UORLUT01");
@@ -55,8 +69,16 @@ fn native_list_local_models_returns_synthetic_standin_and_refuses_tampered_hash(
     tampered[last] ^= 0x01;
     fs::write(&standin_path, &tampered).expect("write tampered stand-in");
 
-    let err = backend
+    let after_tamper = backend
         .native_list_local_models()
+        .expect("list local models skips tampered file");
+    assert!(
+        after_tamper.is_empty(),
+        "tampered model must not be listed as a valid pinned model"
+    );
+
+    let err = backend
+        .native_load_model(&standin_path, None)
         .expect_err("tampered model file whose hash differs from its pin must be refused");
     assert!(
         matches!(err, DesktopClientError::UnpinnedOrTamperedModel { .. }),
@@ -64,9 +86,8 @@ fn native_list_local_models_returns_synthetic_standin_and_refuses_tampered_hash(
     );
 
     // Also verify non-UORLUT01 model formats are refused before format.rs.
-    fs::write(&standin_path, b"GGUF_NOT_UORLUT01_PAYLOAD").expect("write non-UORLUT01 file");
     let fmt_err = backend
-        .native_list_local_models()
+        .native_load_model(&unrelated_bin, None)
         .expect_err("non-UORLUT01 file must be refused");
     assert!(
         matches!(fmt_err, DesktopClientError::UnsupportedModelFormat(_)),
@@ -108,7 +129,9 @@ fn native_engine_step_tokens_matches_reference_32_token_trajectory() {
 
 #[test]
 fn durable_memory_object_store_close_and_resume_continues_token_for_token() {
-    let store_dir = unique_temp_dir("durable-store");
+    let root = unique_temp_dir("durable-store");
+    let store_dir = root.join("store");
+    let ungranted_store = root.join("outside-store");
     let standin_bytes = build_synthetic_stack_artifact(SYNTHETIC_STANDIN_SEED);
     let standin_sha = sha256_bytes(&standin_bytes);
 
@@ -116,9 +139,21 @@ fn durable_memory_object_store_close_and_resume_continues_token_for_token() {
     let first_16_tokens: Vec<u32>;
     let save_receipt = {
         let mut backend_a = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        // Setting store_dir before granting must be refused.
+        let ungranted_err = backend_a
+            .set_durable_store_dir(&ungranted_store)
+            .expect_err("storeDir outside granted folders must be refused");
+        assert!(matches!(
+            ungranted_err,
+            DesktopClientError::PathNotGranted(_)
+        ));
+
+        backend_a
+            .native_grant_folder(&root)
+            .expect("grant root folder for store");
         backend_a
             .set_durable_store_dir(&store_dir)
-            .expect("configure durable store dir on backend_a");
+            .expect("configure durable store dir inside granted folder on backend_a");
         backend_a
             .native_load_model_bytes(
                 SYNTHETIC_STANDIN_FILE_NAME,
@@ -145,6 +180,9 @@ fn durable_memory_object_store_close_and_resume_continues_token_for_token() {
     // 2. Start a fresh DesktopBackend process (backend_b), reload the object store from disk,
     //    restore the UR4SESS1 session, and continue 16 more tokens.
     let mut backend_b = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    backend_b
+        .native_grant_folder(&root)
+        .expect("grant root folder on backend_b");
     backend_b
         .set_durable_store_dir(&store_dir)
         .expect("reload durable store dir on backend_b");
@@ -184,11 +222,11 @@ fn durable_memory_object_store_close_and_resume_continues_token_for_token() {
         .expect_err("corrupted manifest must be refused by object-store digest verification");
     assert!(matches!(restore_err, DesktopClientError::ObjectStore(_)));
 
-    let _ = fs::remove_dir_all(&store_dir);
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]
-fn scoped_file_and_git_commands_enforce_granted_folder_allowlist() {
+fn scoped_file_and_git_commands_enforce_granted_folder_and_refuse_dangling_symlinks() {
     let root = unique_temp_dir("scoped-fs");
     let granted_dir = root.join("granted-project");
     let outside_dir = root.join("outside-secret");
@@ -197,6 +235,7 @@ fn scoped_file_and_git_commands_enforce_granted_folder_allowlist() {
 
     let inside_file = granted_dir.join("hello.rs");
     let outside_file = outside_dir.join("secret.txt");
+    let outside_new_target = outside_dir.join("escaped_write.txt");
     fs::write(&outside_file, "classified").expect("write outside file");
 
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
@@ -244,16 +283,55 @@ fn scoped_file_and_git_commands_enforce_granted_folder_allowlist() {
         DesktopClientError::PathTraversalRefused(_)
     ));
 
+    // Dangling symlink inside granted_dir pointing outside (`granted/dangling -> outside_new_target`)
+    // MUST be refused on write and never create `outside_new_target`.
+    #[cfg(unix)]
+    {
+        let dangling_link = granted_dir.join("dangling_escape.txt");
+        std::os::unix::fs::symlink(&outside_new_target, &dangling_link)
+            .expect("create dangling symlink");
+        let sym_err = backend
+            .native_write_file(&dangling_link, "pwned")
+            .expect_err("dangling symlink write must be refused");
+        assert!(
+            matches!(sym_err, DesktopClientError::SymlinkRefused(_)),
+            "expected SymlinkRefused, got {sym_err:?}"
+        );
+        assert!(
+            !outside_new_target.exists(),
+            "dangling symlink target outside grant must not be created"
+        );
+    }
+
+    // Initialize an empty git repo inside granted_dir (no commits yet -> unborn HEAD)
+    // and verify native_git_status reports "HEAD (unborn)" rather than fabricating "main".
+    let git_init = Command::new("git")
+        .arg("init")
+        .current_dir(&granted_dir)
+        .output()
+        .expect("git init");
+    assert!(git_init.status.success());
+    let git_report = backend
+        .native_git_status(&granted_dir)
+        .expect("native_git_status on unborn repo");
+    assert_eq!(git_report.branch, "HEAD (unborn)");
+    assert!(!git_report.is_clean);
+    assert!(git_report.untracked_files.contains(&"hello.rs".to_string()));
+
     let _ = fs::remove_dir_all(&root);
 }
 
 #[test]
-fn terminal_command_is_off_by_default_and_requires_consent_and_granted_folder() {
+fn terminal_command_requires_host_approval_and_confines_arguments_to_granted_folders() {
     let root = unique_temp_dir("terminal-guard");
     let granted_dir = root.join("workspace");
     let ungranted_dir = root.join("ungranted");
     fs::create_dir_all(&granted_dir).expect("create granted dir");
     fs::create_dir_all(&ungranted_dir).expect("create ungranted dir");
+    let inside_file = granted_dir.join("note.txt");
+    fs::write(&inside_file, "safe-content\n").expect("write inside file");
+    let outside_file = ungranted_dir.join("secret.txt");
+    fs::write(&outside_file, "secret-content\n").expect("write outside file");
 
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
     backend
@@ -278,68 +356,105 @@ fn terminal_command_is_off_by_default_and_requires_consent_and_granted_folder() 
         .expect_err("terminal command must be refused while disabled by default");
     assert_eq!(disabled_err, DesktopClientError::TerminalDisabledByDefault);
 
-    // 2. Enable terminal, but omit user confirmation -> refused.
+    // 2. Page RPC cannot enable the terminal (`native_set_terminal_enabled` is host-only).
+    let rpc_enable = handle_rpc_line(
+        &mut backend,
+        r#"{"id":1,"command":"native_set_terminal_enabled","args":{"enabled":true}}"#,
+    );
+    assert_eq!(rpc_enable["ok"], json!(false));
+    assert!(!backend.terminal_enabled());
+
+    // 3. Host enables terminal, but page caller has not received host approval -> refused!
     backend.native_set_terminal_enabled(true);
-    let unconfirmed_req = TerminalCommandRequest {
-        cwd: granted_dir.clone(),
-        command: "pwd".to_string(),
-        user_confirmed: false,
-        confirmed_command: "pwd".to_string(),
-    };
     assert_eq!(
         backend
-            .native_run_terminal_command(&unconfirmed_req)
-            .expect_err("unconfirmed command must be refused"),
+            .native_run_terminal_command(&valid_req)
+            .expect_err("page-only user_confirmed without host approval must be refused"),
         DesktopClientError::TerminalConsentRequired
     );
 
-    // 3. Mismatched confirmed_command -> refused.
-    let mismatched_req = TerminalCommandRequest {
-        cwd: granted_dir.clone(),
-        command: "pwd".to_string(),
-        user_confirmed: true,
-        confirmed_command: "ls".to_string(),
-    };
-    assert_eq!(
-        backend
-            .native_run_terminal_command(&mismatched_req)
-            .expect_err("mismatched confirmed command must be refused"),
-        DesktopClientError::TerminalConsentRequired
-    );
-
-    // 4. Ungranted cwd -> refused.
-    let ungranted_req = TerminalCommandRequest {
-        cwd: ungranted_dir.clone(),
-        command: "pwd".to_string(),
-        user_confirmed: true,
-        confirmed_command: "pwd".to_string(),
-    };
-    assert!(matches!(
-        backend
-            .native_run_terminal_command(&ungranted_req)
-            .expect_err("ungranted cwd must be refused"),
-        DesktopClientError::PathNotGranted(_)
-    ));
-
-    // 5. Shell chaining / metacharacters -> refused.
-    let chained_req = TerminalCommandRequest {
-        cwd: granted_dir.clone(),
-        command: "pwd; whoami".to_string(),
-        user_confirmed: true,
-        confirmed_command: "pwd; whoami".to_string(),
-    };
-    assert!(matches!(
-        backend
-            .native_run_terminal_command(&chained_req)
-            .expect_err("shell chaining must be refused"),
-        DesktopClientError::TerminalMetacharacterRefused(_)
-    ));
-
-    // 6. Confirmed single command inside granted folder -> succeeds.
+    // 4. Host approves `pwd`, then execution succeeds once and consumes the one-shot approval.
+    backend
+        .host_approve_terminal_command(&granted_dir, "pwd")
+        .expect("host approve pwd");
     let out = backend
         .native_run_terminal_command(&valid_req)
-        .expect("confirmed command in granted folder succeeds");
+        .expect("host-approved command in granted folder succeeds");
     assert!(!out.trim().is_empty());
 
+    // Re-running without a fresh host approval is refused.
+    assert_eq!(
+        backend
+            .native_run_terminal_command(&valid_req)
+            .expect_err("reused approval must be refused"),
+        DesktopClientError::TerminalConsentRequired
+    );
+
+    // 5. Command arguments referencing `~`, `..`, or paths outside `granted_folders` are refused
+    //    even if host-approved!
+    for escaped_cmd in [
+        "cat ~/.ssh/id_ed25519",
+        "cat ../ungranted/secret.txt",
+        &format!("cat {}", outside_file.display()),
+    ] {
+        backend
+            .host_approve_terminal_command(&granted_dir, escaped_cmd)
+            .expect("stage approval for escape test");
+        let req = TerminalCommandRequest {
+            cwd: granted_dir.clone(),
+            command: escaped_cmd.to_string(),
+            user_confirmed: true,
+            confirmed_command: escaped_cmd.to_string(),
+        };
+        let err = backend
+            .native_run_terminal_command(&req)
+            .expect_err("argument escaping granted folder must be refused");
+        assert!(
+            matches!(
+                err,
+                DesktopClientError::PathNotGranted(_) | DesktopClientError::PathTraversalRefused(_)
+            ),
+            "unexpected error for {escaped_cmd:?}: {err:?}"
+        );
+    }
+
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn rpc_and_loopback_http_studio_host_serve_commands_and_static_assets() {
+    let receipt = run_self_test_receipt().expect("self-test receipt");
+    assert_eq!(receipt["verdict"], json!("PASS"));
+    assert_eq!(receipt["artifactBytes"], json!(469_252));
+
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    let studio_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../web/studio")
+        .canonicalize()
+        .expect("canonicalize studio_root");
+
+    let (status, ctype, html_bytes) =
+        handle_studio_http_request(&mut backend, &studio_root, "GET", "/", b"");
+    assert_eq!(status, 200);
+    assert_eq!(ctype, "text/html; charset=utf-8");
+    assert!(String::from_utf8_lossy(&html_bytes).contains("Developer Studio"));
+
+    let (status_trav, _, _) =
+        handle_studio_http_request(&mut backend, &studio_root, "GET", "/../Cargo.toml", b"");
+    assert_eq!(status_trav, 403);
+
+    let invoke_body = br#"{"id":7,"command":"native_load_synthetic_standin","args":{}}"#;
+    let (status_post, ctype_post, resp_bytes) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        "POST",
+        "/__tauri_invoke",
+        invoke_body,
+    );
+    assert_eq!(status_post, 200);
+    assert_eq!(ctype_post, "application/json; charset=utf-8");
+    let parsed: serde_json::Value = serde_json::from_slice(&resp_bytes).expect("parse rpc json");
+    assert_eq!(parsed["id"], json!(7));
+    assert_eq!(parsed["ok"], json!(true));
+    assert_eq!(parsed["result"]["artifact_bytes"], json!(469_252));
 }

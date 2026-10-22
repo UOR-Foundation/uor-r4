@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2/capability",
   "identifier": "default",
-  "description": "Local-only capability allowlist for the UOR-R4 desktop client. File access is restricted to user-granted directories; shell execution is off by default and requires per-command user confirmation inside a granted directory; network access is disabled except for an explicit user-triggered release pin check.",
+  "description": "Grants Tauri core:default IPC for the main Studio window while folder allowlists (GrantedFolders with symlink refusal), durable store path confinement, host-owned terminal command approval, and SHA-256 UORLUT01 release-pin checks are enforced in DesktopBackend (src-tauri/src/lib.rs).",
   "windows": ["main"],
   "permissions": [
     "core:default"

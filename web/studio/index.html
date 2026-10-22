@@ -2860,9 +2860,42 @@
             renderWorkspaceTree();
         }
 
-        // Universal GitHub API Helper (Disabled in Local-Only Sovereign / Tauri Mode)
-        async function callGithubApi(endpoint, _token = window.githubToken, _options = {}) {
-            throw new Error(`External GitHub API calls (${endpoint}) are disabled in local-only Studio.`);
+        // Universal GitHub API Helper (Disabled in Desktop / Offline Mode; active in online browser mode)
+        async function callGithubApi(endpoint, token = window.githubToken, options = {}) {
+            if (
+                window.__TAURI__ ||
+                window.UOR_DESKTOP_OFFLINE ||
+                (typeof navigator !== 'undefined' && navigator.onLine === false)
+            ) {
+                throw new Error(`External GitHub API calls (${endpoint}) are disabled in desktop/offline Studio.`);
+            }
+            const origin = window.UOR_GITHUB_API_ORIGIN || ['https:', '', 'api.github.com'].join('/');
+            const url = /^https?:/i.test(endpoint)
+                ? endpoint
+                : `${origin}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+            const headers = {
+                'Accept': 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+                ...(options.headers || {})
+            };
+            const authToken = token || window.githubToken;
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            const response = await fetch(url, {
+                ...options,
+                headers
+            });
+            if (!response.ok) {
+                let errDetail = response.statusText;
+                try {
+                    const errJson = await response.json();
+                    if (errJson && errJson.message) errDetail = errJson.message;
+                } catch (_e) {}
+                throw new Error(`GitHub API HTTP ${response.status}: ${errDetail}`);
+            }
+            if (response.status === 204) return null;
+            return await response.json();
         }
         window.callGithubApi = callGithubApi;
 
@@ -5385,8 +5418,8 @@
             }
 
             // 2. Collapse split math lines and sub-index tokens (e.g. p\n0\np\n0 -> p_0)
-            s = s.replace(/([a-zA-Z])\s*[\r\n]+\s*([0-9]+)\s*[\r\n]+\s*\1\s*[\r\n]+\s*\2/g, '$$$1_$2$$');
-            s = s.replace(/([a-zA-Z])\s*[\r\n]+\s*([0-9]+)/g, '$$$1_$2$$');
+            s = s.replace(/(?<![a-zA-Z])([a-zA-Z])\s*[\r\n]+\s*([0-9]+)\s*[\r\n]+\s*\1\s*[\r\n]+\s*\2(?!\.)/g, '$$$1_$2$$');
+            s = s.replace(/(?<![a-zA-Z])([a-zA-Z])\s*[\r\n]+\s*([0-9]+)(?!\.)/g, '$$$1_$2$$');
             s = s.replace(/([a-zA-Z])\s*\(\s*([a-zA-Z])\s*\)\s*[\r\n]+\s*\1\s*\(\s*\2\s*\)/g, '$$$1($2)$$');
 
             // 3. Normalize fractured variable lines (e.g. r\ninitial -> r_{initial})
@@ -6910,10 +6943,13 @@
             window.renderConversationsList = renderConversationsList;
             window.renderCurrentChatMessages = renderCurrentChatMessages;
             window.renderRichMarkdown = renderRichMarkdown;
+            window.initMonacoEditor = initMonacoEditor;
+            window.initThreeVisualizer = initThreeVisualizer;
+            window.getThreeRenderer = () => renderer;
 
-            // 2. Asynchronously connect stored GitHub credentials
+            // 2. Asynchronously connect stored GitHub credentials (browser mode only)
             const storedPat = localStorage.getItem('uor_github_pat');
-            if (storedPat) {
+            if (storedPat && !window.__TAURI__ && !window.UOR_DESKTOP_OFFLINE) {
                 (async () => {
                     try {
                         const user = await callGithubApi('/user', storedPat).catch(() => null);
