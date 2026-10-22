@@ -27,6 +27,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `#2833` (`References`; the item
 
 `loop report --check`, `loop pr-check --local`, `loop gates --full`, `prep-check` on the sheet, link check for the changed docs, and the same-lab fresh-context review record (docs-only, D46).
 
+## Skills used
+
+- `solution-integrity`: the unit pins only what is provable (the delivered consumer commit) and leaves every owner value as an explicit `PENDING` slot instead of inventing it.
+- `scope-guard` / `working-discipline`: docs-only edits inside the ORDER's scope; no compute, no owner-path change, no case/panel data committed.
+
 ## Still open
 
 - **PM/owner:** panel SHA-256 + 80-vs-200 reconciliation; checkpoint SHA-256 (`#2845` held); registered bar + ISO-UTC time + one baseline; BPB stream/tolerance. When those are in the sheet, re-request the non-author FIT; the GPU oracle run still needs PM dispatch and Casey's typed release.
