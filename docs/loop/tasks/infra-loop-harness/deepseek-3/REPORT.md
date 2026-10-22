@@ -54,7 +54,7 @@ Base: `0e0ff6ce7` (fresh `origin/main`, with PR 11 on it). Closes #2917. Referen
 
 ## Still open
 
-- **`pr-check` scope and commit-order** on this PR: scope needs Kimi's `kimi-4` and the shared-nine exemption on the tool's side; commit-order is fixed in this branch by the rebuilt single-folder ORDER commit. Expect the local verdict to stay FAIL until the scope PR merges.
+- **`pr-check` scope** on this PR: `kimi-4` (#2933, merged as `b40b82e0d`) adds the hook scripts and `tests/git_hooks*.rs`, and the shared-nine exemption covers `main.rs`, `doccheck.rs`, `docs/harness/README.md` and `docs/harness/gates.json` once claude-22 lands its tool side. **`looparrive.rs` is the remaining gap**: PR 11's scope owns it and it is not shared, but this PR changes one function there so arrive checks all three hooks. A scope delta for pr12 (or the shared list) is needed; the alternative is a wrong arrive. Raised on #2028. commit-order is fixed in this branch by the rebuilt single-folder ORDER commit.
 - **The binary-current check cannot see a stale PATH copy when the checkout has no build of its own** (external `CARGO_TARGET_DIR`); a content or commit identity would close it, which is version.rs work.
 - **The pre-push hook blocks repaired branches** until the repair-order tool gap is fixed (claude-22); it is opt-in, and no lab may use `--no-verify`.
 - **`loop arrive` reports a missing hook as WARN, not FAIL**: the shared hook stays opt-in until the hook tooling is settled, and a permanently red check teaches labs to ignore FAIL.
