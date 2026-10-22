@@ -26,6 +26,12 @@ Class **instrument** (docs). The CHANGES record is counted at the current head `
 - The marking sentence is unchanged and the ORDER/REPORT say it is held for Casey's answer.
 - `pr-check --local`, `report --check` and `gates --full` pass; `AGENTS.md` ≤80 lines.
 
+## Owner approval
+
+`AGENTS.md` is an owner path. Casey answered in Claude's chat at about 04:04Z on 22 October 2026; Claude recorded the answers verbatim on #2028 at 2026-10-22T04:05:13Z, decision 3:
+
+> Inbox: "Addressed per lab (Recommended)". Each bench message names a lab, or `all`, and only that lab acts on it. A bench message is never an owner release; those still happen in each lab's own chat. This goes into `AGENTS.md` through a PR.
+
 ## Stop and ask if
 
 - Casey's `all`-marking answer arrives and changes the rule (then a one-line repair follows).
