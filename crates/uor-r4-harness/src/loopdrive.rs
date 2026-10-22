@@ -434,6 +434,124 @@ pub fn watch_until_exit(
     Ok(notes)
 }
 
+/// A leased GPU run's watcher: it **outlives the lab session**. Started as its own detached
+/// process, it renews the lease every `interval_seconds` while the renew command succeeds and stops
+/// when that command reports the lease is gone (a non-zero exit is the lease-ended signal the caller's
+/// command defines). It never signals the run, never edits a lease it does not hold, and never cancels
+/// a healthy run; `ticks` bounds the loop for tests.
+pub fn watch_lease_until_renew_fails(
+    renew: &[String],
+    interval_seconds: u64,
+    ticks: Option<usize>,
+) -> Result<Vec<String>> {
+    if renew.is_empty() {
+        return Err(DriveError::MissingFlag("a renew command after --"));
+    }
+    let mut notes = Vec::new();
+    let mut rounds = 0usize;
+    loop {
+        if let Some(limit) = ticks {
+            if rounds >= limit {
+                notes.push(format!(
+                    "lease watch stopped after {limit} tick(s) (test bound)"
+                ));
+                return Ok(notes);
+            }
+        }
+        let (program, arguments) = (&renew[0], &renew[1..]);
+        let out = Command::new(program)
+            .args(arguments)
+            .output()
+            .map_err(|error| DriveError::Io(format!("cannot run the renew command: {error}")))?;
+        if !out.status.success() {
+            notes.push(format!(
+                "lease ended at {}: renew exited {}; watcher stops without cancelling the run",
+                unix_now(),
+                out.status
+            ));
+            return Ok(notes);
+        }
+        notes.push(format!(
+            "renewed at {}: {}",
+            unix_now(),
+            String::from_utf8_lossy(&out.stdout).trim()
+        ));
+        rounds += 1;
+        std::thread::sleep(std::time::Duration::from_secs(interval_seconds));
+    }
+}
+
+/// The PM card for a closed session: what the PM reads to prompt the lab. Pure so the wording is
+/// tested; the CLI posts it on #2028.
+pub fn pm_card_text(lab: &str, reason: &str, head: &str, commits: u64) -> String {
+    format!(
+        "[{lab}] drive closed a session at the soft 2-hour check-in ({reason}).\n\n- git HEAD: {head}\n- commits: {commits}\nThe REPORT stub and PICKUP are under local/loop/drive/{lab}/close-<time>/. The lab needs a prompt."
+    )
+}
+
+/// Post the PM card on #2028 through `gh`. Live-only: the tests test the wording and the stub files,
+/// never the network.
+pub fn post_pm_card(root: &Path, lab: &str, reason: &str) -> Result<()> {
+    let observation = Observation::take(root, lab);
+    let text = pm_card_text(lab, reason, &observation.head, observation.commits);
+    let path = root
+        .join("local/loop/drive")
+        .join(crate::state::slug(lab))
+        .join("pm-card.md");
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            DriveError::Io(format!("cannot create {}: {error}", parent.display()))
+        })?;
+    }
+    std::fs::write(&path, format!("{text}\n"))
+        .map_err(|error| DriveError::Io(format!("cannot write {}: {error}", path.display())))?;
+    let status = Command::new("gh")
+        .args(["issue", "comment", "2028", "--body-file"])
+        .arg(&path)
+        .current_dir(root)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| DriveError::Io(format!("cannot run gh: {error}")))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(DriveError::Io(format!(
+            "gh issue comment 2028 exited {status}"
+        )))
+    }
+}
+
+/// Commit and push the WIP of a closed session, best effort: the session's changes are staged and
+/// committed with the lab trailer, then pushed. A failure is returned, never silently swallowed; the
+/// supervisor logs it and continues, so nothing is ever force-pushed or deleted.
+pub fn commit_and_push_wip(root: &Path, lab: &str, reason: &str) -> Result<()> {
+    let run = |args: &[&str]| -> Result<()> {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .map_err(|error| DriveError::Io(format!("cannot run git {:?}: {error}", args)))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(DriveError::Io(format!(
+                "git {:?} exited {}: {}",
+                args,
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            )))
+        }
+    };
+    run(&["add", "-A"])?;
+    run(&[
+        "commit",
+        "-m",
+        &format!("[{lab}] WIP: drive closed a session at the 2-hour check-in\n\n- reason: {reason}\n\nLab: {lab}"),
+    ])?;
+    run(&["push"])
+}
+
 /// Seconds since the Unix epoch.
 pub fn unix_now() -> u64 {
     std::time::SystemTime::now()
@@ -450,6 +568,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     let mut prompt: Option<String> = None;
     let mut max_sessions: Option<usize> = None;
     let mut watch = false;
+    let mut lease = false;
     let mut pid: Option<u32> = None;
     let mut interval: u64 = 60;
     let mut launch: Vec<String> = Vec::new();
@@ -465,6 +584,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
         match argument {
             "--" => after_separator = true,
             "--watch" => watch = true,
+            "--lease" => lease = true,
             "--client" | "--model" | "--prompt" | "--max-sessions" | "--pid" | "--interval" => {
                 let Some(value) = args.get(index + 1) else {
                     eprintln!("loop drive: {argument} needs a value");
@@ -491,6 +611,20 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
         index += 1;
     }
     if watch {
+        if lease {
+            return match watch_lease_until_renew_fails(&launch, interval, None) {
+                Ok(notes) => {
+                    for note in notes {
+                        println!("{note}");
+                    }
+                    0
+                }
+                Err(error) => {
+                    eprintln!("loop drive --watch --lease: {error}");
+                    2
+                }
+            };
+        }
         let Some(pid) = pid else {
             eprintln!("loop drive --watch needs --pid <the tracked session pid>");
             return 2;
@@ -625,6 +759,12 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
                 println!("CHECK-IN CLOSE: {reason}");
                 if let Err(error) = close_stalled_session(root, lab, &record, &reason) {
                     eprintln!("loop drive: cannot record the stalled session: {error}");
+                }
+                if let Err(error) = commit_and_push_wip(root, lab, &reason) {
+                    eprintln!("loop drive: cannot commit/push the WIP: {error}");
+                }
+                if let Err(error) = post_pm_card(root, lab, &reason) {
+                    eprintln!("loop drive: cannot post the PM card: {error}");
                 }
             }
         }

@@ -117,9 +117,11 @@ UOR_LAB=claude uor-harness loop drive --watch --pid <pid> --interval 60
 **The 2-hour check-in is soft (D53).** A session under two hours continues. Past it, real progress -
 new commits, new gate runs or a changed working tree - continues **with a note**; a stalled or
 spiraled session is closed with a REPORT stub and a PICKUP written from git state and a card to the
-PM (in `local/loop/drive/<lab>/close-<time>/`). `--watch` is the leased-GPU watcher: while its
-recorded pid is alive it runs the renew command given after `--`, notes it, and ends when the run
-ends; it never cancels a healthy run. The `loop-drive` gate proves these with a fake stalled client
+PM (in `local/loop/drive/<lab>/close-<time>/`, and posted on #2028 when `gh` succeeds). `--watch` is
+the session-bound watcher: while its recorded pid is alive it runs the renew command given after
+`--`, notes it, and ends when the run ends; it never cancels a healthy run. `--watch --lease` is the
+watcher for a leased GPU run and **outlives the lab session** when started detached: it renews while
+the renew command succeeds, notes each renewal, and stops when that command reports the lease ended. The `loop-drive` gate proves these with a fake stalled client
 past two hours (closed and carded) and a fake progressing one (continues with a note); its planted
 fault removes the stalled-session close.
 ### `loop claim`, `loop suborder` and `loop ask` (loop PR 7a)

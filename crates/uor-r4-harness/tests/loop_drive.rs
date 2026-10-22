@@ -7,9 +7,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use uor_r4_harness::loopdrive::{
-    check_in, classify, close_stalled_session, compose_prompt, launch_argv, read_record,
-    session_alive, start_session, terminate_session, watch_until_exit, CheckIn, Observation,
-    Progress, SessionRecord, CHECK_IN_SECONDS,
+    check_in, classify, close_stalled_session, compose_prompt, launch_argv, pm_card_text,
+    read_record, session_alive, start_session, terminate_session, watch_lease_until_renew_fails,
+    watch_until_exit, CheckIn, Observation, Progress, SessionRecord, CHECK_IN_SECONDS,
 };
 
 fn observation(head: &str, commits: u64, gate_runs: u64, changed_paths: usize) -> Observation {
@@ -175,6 +175,35 @@ fn the_watcher_outlives_the_run_and_never_cancels_it() {
     terminate_session(&record).expect("terminate");
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_lease_watcher_outlives_the_session_and_stops_when_the_lease_ends() {
+    // A detached watcher renews while the renew command succeeds...
+    let notes = watch_lease_until_renew_fails(&["true".to_string()], 0, Some(2)).expect("watch");
+    assert!(
+        notes.iter().any(|note| note.contains("renewed")),
+        "the watcher renews a healthy lease: {notes:?}"
+    );
+    assert!(
+        notes.iter().any(|note| note.contains("test bound")),
+        "the bounded watch stops: {notes:?}"
+    );
+    // ...and stops when the lease ends, without cancelling the run.
+    let notes = watch_lease_until_renew_fails(&["false".to_string()], 0, Some(2)).expect("watch");
+    assert!(
+        notes.iter().any(|note| note.contains("lease ended")),
+        "a failed renew ends the watch without cancelling: {notes:?}"
+    );
+}
+
+#[test]
+fn the_pm_card_names_the_lab_reason_head_and_needed_prompt() {
+    let card = pm_card_text("deepseek", "stalled: no commits", "abc1234", 7);
+    assert!(card.starts_with("[deepseek]"), "{card}");
+    assert!(card.contains("stalled: no commits"), "{card}");
+    assert!(card.contains("abc1234"), "{card}");
+    assert!(card.contains("needs a prompt"), "{card}");
 }
 
 #[test]
