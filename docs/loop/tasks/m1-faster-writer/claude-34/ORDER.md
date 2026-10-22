@@ -29,7 +29,7 @@ At `fb6df367b`, does `crates/uor-r4-discrete` already have a host bucketed write
 - A host bucketed writer (CSR index, counting-sort admission, id-ordered bucket walk, serving prune) picks the identical token on seeded small vocabularies. That includes every cell-id and token-id tie, an ABSENT token, a move across cells, and pruned-against-full serving.
 - A counter test pins 0 `token_cell` calls and 256 cell evaluations per row for the bucketed writer.
 - **Negative gates:** breaking the id tie rule, or the prune bound (≥ in place of >), fails a test.
-- `cargo test -p uor-r4-discrete --test writer_bucket_controls`, clippy `-D warnings`, `report --check` and `pr-check --local` all pass.
+- `cargo test -p uor-r4-discrete --test writer_bucket_controls`, `report --check` and `pr-check --local` pass, and clippy reports no new finding. The crate already carries 67 clippy warnings on `main` under the pinned toolchain; they are out of this item's unit.
 
 ## Stop and ask if
 
