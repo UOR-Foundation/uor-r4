@@ -29,7 +29,7 @@ Observed: `exit=130` in ~0.2 s, zero orphan processes.
 ## Done when
 
 - Design note and the 5 open PM/owner registration questions are posted on `#2860`.
-- All finite control literals (`X1`–`X12`, `F1`–`F7`, `F5b`, `F5c`, including `X7` writer losses `[448, 448, 256, 256, 32, 256, 32]` / `X8` / `X9`) are re-derived from current `build.rs` `ROOTS`/`BFS` and `discrete.cu`, and verified by a finite host test in `crates/uor-r4-discrete` (`cargo test -p uor-r4-discrete`).
+- All finite control literals (`X1`–`X12`, `F1`–`F7`, `F5b`, `F5c`, including `X7` writer losses `[448, 448, 448, 256, 64, 256, 64]` / `X8` / `X9`) are re-derived from current `build.rs` `ROOTS`/`BFS` and `discrete.cu`, and verified by a finite host test in `crates/uor-r4-discrete` (`cargo test -p uor-r4-discrete`).
 - `docs/harness/prep/m4-flock-coupling-prereg-DRAFT-2026-10-22.md` passes `uor-harness check` (`prep.sheet_shape`) and `docs/labs/m4-flock-coupling-prereg/README.md` and `docs/mechanisms/flock-read.md` are updated.
 - `uor-harness loop report --check`, `uor-harness loop pr-check --local`, and `uor-harness loop gates --full` are green.
 
