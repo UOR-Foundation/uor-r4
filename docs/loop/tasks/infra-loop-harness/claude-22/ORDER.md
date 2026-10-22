@@ -10,7 +10,7 @@ Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-har
    - `docs/harness/README.md`
    - `docs/loop/README.md`
 
-   Any loop PR may change them, and no item scope may list them.
+   Casey added three more in Claude's chat, 2026-10-22T00:05Z, "Add all three (Recommended)": `crates/uor-r4-harness/src/loopprcheck.rs`, `docs/harness/gates.json` and `docs/roadmap/README.md`. Any loop PR may change these nine, and no item scope may list them.
 
 The planted fault: **a PR whose added ORDERs span two labs or two task folders is still refused, and a review record for a superseded ORDER does not count.**
 
@@ -42,4 +42,4 @@ At `9f5894d85`, does any tool accept a PR that adds two ORDERs? No. `the_order` 
 
 ## Stop and ask if
 
-- Any file outside scope must change, or Casey's list would need a seventh file.
+- Any file outside scope must change, or Casey's list would need a tenth file.
