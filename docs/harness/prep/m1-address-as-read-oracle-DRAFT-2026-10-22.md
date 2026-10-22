@@ -1,6 +1,6 @@
 # Serving-time address-as-read oracle over `uor-r4-object-store` (DRAFT)
 
-- **Status:** DRAFT pre-registration sheet for `#2833` (`m1-address-as-read`, Step 4). **Not yet FIT-reviewed**, and **no GPU run is started**.
+- **Status:** DRAFT pre-registration sheet for `#2833` (`m1-address-as-read`, Step 4). **FIT-reviewed by deepseek (non-author) on 2026-10-22: `NOT_FIT`** (see [Verdict](#verdict)); **no GPU run is cleared or started** until the four pinned prerequisites in the Verdict are met and Casey releases the run.
   - CPU consumer module (`uor_r4_object_store::address_read`) and finite CPU controls were delivered in `#2950` (`$0` GPU spend).
   - GPU evaluation of the serving-time oracle awaits a non-author `TEST FITNESS: FIT` review (CHARTER §4.5) and Casey's approval in chat; any trained form also requires a separate FIT review and a typed owner release (CHARTER §5.1).
 - **Line:** M1/M3 exact addressed memory (`#2029`, `#2031`, item `#2833`). **Lab:** antigravity.
@@ -64,4 +64,16 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 - **Minimum test power (D22 §3):**
   - Frozen panel of `>= 80` rows (`40` stated-fact / overwrite recall rows, `20` historical-version rows, `20` unwritten / evicted abstention rows) evaluated across all 3 arms (`Arm A`, `Arm B`, `Arm C`).
 
-TEST FITNESS: PENDING
+## Verdict
+
+TEST FITNESS: NOT_FIT - M1 #2029 m1-address-as-read
+- sheet: `docs/harness/prep/m1-address-as-read-oracle-DRAFT-2026-10-22.md`
+- reviewer: deepseek (DeepSeek, non-author; fresh-context FIT review for `#2833`, on Casey's Route A direction)
+- date: 2026-10-22
+- note: Shape and finite controls are in good order: all 8 blocks present, `address_read`'s 6 finite tests pass (exact hit, exact miss, wrong-address/tampered, overwrite/version/evicted, sieve, byte-identical round trip), the three arms and stop rules are clear, and the cost is bounded. **NOT_FIT because the configuration this sheet would clear is not yet pinned:**
+  1. **Frozen, hashed panel absent.** The frozen 80-row `m3-memory` evaluation panel does not exist as a hashed artifact: the milestone entry says `>= 200` rows for a decisive run, the sheet defers pinning to a future `#2853` freeze, and no SHA-256 is recorded. State the exact row composition (40 stated-fact / 20 historical / 20 abstention), reconcile 80 vs 200 rows, and pin the panel SHA-256 in the sheet.
+  2. **Candidate checkpoint unpinned.** The base artifact names `m1-trunk-assembly-and-training` (`#2845`), which is **HELD**, and carries no SHA-256. Pin the exact frozen checkpoint (and where it is stored) before FIT.
+  3. **Bar is still a proposal.** Section 3's numbers are not owner-registered; quote the owner's registered bar with an ISO-UTC time (CHARTER §5.2) and resolve the `19/40` vs `20/40` baseline wording so the `+8` gain has one baseline.
+  4. **Consumer not commit-pinned.** "Landed in `#2950`" should be the delivered commit SHA of the `uor-r4-object-store` address-read consumer and its 6 finite tests.
+
+  Re-request FIT once 1-4 are pinned; this verdict clears no compute (D22).
