@@ -111,7 +111,8 @@ supervisor replaces with the session prompt (the caller's `--prompt`, or a defau
 `loop next` decision). The client runs in its own process group; the pid, pgid, client, model,
 prompt SHA-256 and start time are written under `local/loop/drive/<lab>/last-session.json`, and only
 that recorded pid/group is ever signalled, so another lab's worktree and a client's after-stop
-summary process are never touched. `--order <ORDER.md>` names the active ORDER for the scoped WIP
+summary process are never touched. `--model` must appear in the client command: the drive refuses a
+model the launch argv does not carry, so the recorded model is the one actually launched. `--order <ORDER.md>` names the active ORDER for the scoped WIP
 commit a stalled close makes (staging only its task folder, with the `Order:` trailer); `--exempt-lease`
 marks a session whose lease covers it so the check-in never closes it; the command and the signals are
 unix-only, and the flag has no meaning on other targets.
@@ -122,8 +123,12 @@ UOR_LAB=claude uor-harness loop drive --watch --pid <pid> --interval 60
 UOR_LAB=claude uor-harness loop drive --watch --lease --interval 300
 ```
 
+**Supervisor stops card the PM.** `STOP` (the loop next asked the supervisor to stop), an explicit multi-session `--max-sessions` limit being reached, and an error exit each post a card asking the PM to prompt the lab; a clean session exit that the supervisor restarts, and the default single-session unit, are not stops and post no card.
+
 **The 2-hour check-in is soft (D53).** A session under two hours continues. Past it, real progress -
-new commits, new gate runs or a changed working tree - continues **with a note**; a stalled or
+new commits, new gate runs or a changed working tree - continues **with a note** posted on the work
+issue (the PR the decision names, or #2028 for an item or command target) through `gh`, with a copy
+kept under `local/loop/drive/<lab>/note-<time>.md`; a stalled or
 spiraled session is closed with a REPORT stub and a PICKUP written from git state and a card to the
 PM (in `local/loop/drive/<lab>/close-<time>/`, and posted on #2028 when `gh` succeeds). `--watch` is
 the session-bound watcher: while its recorded pid is alive it runs the renew command given after
@@ -191,7 +196,7 @@ done-when: host: <what was re-run and its result>   |   done-when: gpu: sha256:<
 
 Free text (the findings) may follow after a blank line. A comment that does not contain `uor-review v1` is not a record; one that contains it only below its first line is refused (a record must start the comment). One whose first line contains it but is wrong is refused and named in the gate's details: an untagged first line, a tag that differs from `lab:`, a missing, duplicated or unknown field, or a bad `pr`, `head`, `verdict`, `order`, `context` or `done-when`.
 
-The gate counts a record only when its `pr` and `head` are the PR's current ones, its `order` is the PR's active ORDER (the highest of a repair chain; see `order` above), and its lab is registered. On a setup PR while D59 is in force, only `claude` records with `context: fresh` count (D59: Claude's fresh-context reviewers). Otherwise the record's lab must be of another vendor than the ORDER lab's (D46), or the PR is doc-only and the record comes from the ORDER lab itself with `context: fresh`. It passes when the last counted record is an APPROVE, so a later counted CHANGES blocks and a later APPROVE clears it. A setup PR is one whose ORDER `Setup row:` names a row of the [loop page](../loop/README.md#build-plan) build-plan table and whose item is `infra-loop-harness` or that row's own item (`6` → `infra-loop-pr06-…`). The row is the token right after `Setup row:` (`[0-9]+[a-z]?` or `A`, then `.`, a space or the end of the line); other text after the label names no row. An `infra-loop-…` item whose ORDER names no valid row, a row not in the table, or a row that is not its own fails the gate with no record counted, and no review is owed on it until the ORDER is fixed. D59 stays in force unless `docs/harness/owner-paths.json` at the merge base lists `docs/harness/d59.json` exactly and that file reads `"d59": "ended"`. The claude-18 ORDER proposes the file; the owner adds it and lists it.
+The gate counts a record only when its `pr` and `head` are the PR's current ones, its `order` is the PR's active ORDER (the highest of a repair chain; see `order` above), and its lab is registered. On a setup PR while D59 is in force, only `claude` records with `context: fresh` count (D59: Claude's fresh-context reviewers). Otherwise the record's lab must be of another vendor than the ORDER lab's (D46), or the PR is doc-only and the record comes from the ORDER lab itself with `context: fresh`. It passes when a record counts and no counted CHANGES stands: each lab's last counted record at the head must be an APPROVE. A counted CHANGES stands until the author pushes a new head (where no record counts yet) or the same lab posts a later APPROVE; another lab's APPROVE does not clear it (owner, 22 Oct 2026 17:51Z: "No: CHANGES blocks"). A setup PR is one whose ORDER `Setup row:` names a row of the [loop page](../loop/README.md#build-plan) build-plan table and whose item is `infra-loop-harness` or that row's own item (`6` → `infra-loop-pr06-…`). The row is the token right after `Setup row:` (`[0-9]+[a-z]?` or `A`, then `.`, a space or the end of the line); other text after the label names no row. An `infra-loop-…` item whose ORDER names no valid row, a row not in the table, or a row that is not its own fails the gate with no record counted, and no review is owed on it until the ORDER is fixed. D59 stays in force unless `docs/harness/owner-paths.json` at the merge base lists `docs/harness/d59.json` exactly and that file reads `"d59": "ended"`. The claude-18 ORDER proposes the file; the owner adds it and lists it.
 
 ```sh
 UOR_LAB=claude uor-harness loop review --pr <n> --verdict APPROVE --host "<what you re-ran>: ok" --dry-run
@@ -252,7 +257,7 @@ Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 GO, 1 STOP, 2 cannot run (usag
 
 - `kill-switch`: STOP when `local/loop/STOP` exists in the main checkout or issue #2028 carries the label `loop:pause`.
 - `owner-direction`: reads PLAN.md's `## Owner directions` table and offers the first row **whose Status column header is found by name** and reads `open` (a note cell saying "open" is not a status); with no PLAN.md or no table it names what is missing instead of guessing.
-- `repairs`: the lab's own open PRs (head `<lab>/...`) that conflict, have a check at the head with conclusion FAILURE or TIMED_OUT, or whose last `uor-review v1` record counted by the review gate at the head says CHANGES; GO `repair #<n>`, lowest number first.
+- `repairs`: the lab's own open PRs (head `<lab>/...`) that conflict, have a check at the head with conclusion FAILURE or TIMED_OUT, or on which a counted `uor-review v1` CHANGES stands at the head (the review gate's rule: no later APPROVE from the same lab); GO `repair #<n>`, lowest number first.
 - `reviews`: open non-draft PRs on which the review gate would count a `uor-review v1` record from this lab (taken to carry `context: fresh`: on a setup PR under D59 `claude` only; else a lab of another vendor than the ORDER lab, D46, or the ORDER lab itself on a doc-only PR) and that have no counted record at the head from any lab (one counted APPROVE passes the gate, and one counted CHANGES waits on the author's new head); GO `review #<n>`, lowest number first. The gate's context (build-plan rows, vendors, D59) comes from `origin/main`, as in `loop review`. A PR without an ORDER is skipped.
 - `gpu-collections`: not built — a GPU run needs a collection record the watcher (loop PR 10) does not write yet; that record is a separate unit.
 - `premise-probes`: reads `PLAN.md`'s `## Premises` table, finds the Premise/Probe/Status columns by header name, and offers the first open row whose Probe cell carries the command in backticks; malformed open rows are skipped and named, and with no `PLAN.md`/table it says so instead of guessing.
