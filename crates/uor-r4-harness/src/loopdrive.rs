@@ -37,16 +37,15 @@ pub const DRIVE_DIR: &str = "local/loop/drive";
 /// How many sessions one invocation may start by default.
 pub const DEFAULT_MAX_SESSIONS: usize = 1;
 /// The `GIT_*` variables a git child must not inherit.
-const GIT_VARS: [&str; 8] = [
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_NAMESPACE",
-    "GIT_PREFIX",
-    "GIT_COMMON_DIR",
-];
+/// Remove every `GIT_*` variable a child would otherwise inherit: a `GIT_DIR` from a hook would
+/// point git at another repository. A named list misses variables such as `GIT_CONFIG_PARAMETERS`.
+fn strip_git_env(command: &mut Command) {
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("GIT_") {
+            command.env_remove(key);
+        }
+    }
+}
 
 /// Why a drive command refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,9 +102,7 @@ impl Observation {
         let git = |args: &[&str]| -> String {
             let mut command = Command::new("git");
             command.args(args).current_dir(root);
-            for name in GIT_VARS {
-                command.env_remove(name);
-            }
+            strip_git_env(&mut command);
             command
                 .output()
                 .ok()
@@ -398,9 +395,7 @@ pub fn start_session(
             .stderr(Stdio::from(err))
             .env("UOR_LOOP_DRIVE_NONCE", &nonce)
             .env("UOR_LOOP_DRIVE_LAB", lab);
-        for name in GIT_VARS {
-            command.env_remove(name);
-        }
+        strip_git_env(&mut command);
         command.process_group(0);
         let mut child = command
             .spawn()
@@ -649,6 +644,8 @@ pub struct DriveHooks<'a> {
     pub decision: &'a dyn Fn() -> std::result::Result<Option<String>, String>,
     /// Post the PM card for a close; the CLI implementation posts on #2028.
     pub card: &'a dyn Fn(&str) -> std::result::Result<(), String>,
+    /// Notes a person should see (a check-in note, a lease skip); printed by the CLI, recorded by tests.
+    pub notice: &'a dyn Fn(&str),
 }
 
 /// Run the sessions. The check-in is evaluated **while the child is alive**: `try_wait` polls it, the
@@ -721,14 +718,20 @@ pub fn run_sessions(spec: &DriveSpec, hooks: &DriveHooks) -> Result<u8> {
                         };
                         match check_in(elapsed, &progress, stall_count) {
                             CheckIn::Continue { note } => {
-                                println!("{note}");
+                                (hooks.notice)(&note);
                                 before = after;
                                 next_check = next_check.saturating_add(CHECK_IN_SECONDS);
                                 stalls = 0;
                             }
                             CheckIn::Close { reason } => {
                                 if spec.exempt_lease {
-                                    println!("leased session; close skipped: {reason}");
+                                    // A leased run is never closed, but the window must advance:
+                                    // otherwise every poll re-observes and re-prints for hours.
+                                    (hooks.notice)(&format!(
+                                        "leased session; close skipped: {reason}"
+                                    ));
+                                    before = after;
+                                    next_check = next_check.saturating_add(CHECK_IN_SECONDS);
                                 } else {
                                     println!("CHECK-IN CLOSE: {reason}");
                                     terminate_session(&record)?;
@@ -786,9 +789,7 @@ pub fn commit_and_push_wip(
     let git = |args: &[&str]| -> Result<std::process::Output> {
         let mut command = Command::new("git");
         command.args(args).current_dir(root);
-        for name in GIT_VARS {
-            command.env_remove(name);
-        }
+        strip_git_env(&mut command);
         command
             .output()
             .map_err(|error| DriveError::Io(format!("cannot run git {:?}: {error}", args)))
@@ -1127,6 +1128,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     let card = |reason: &str| post_pm_card(root, lab, reason).map_err(|error| error.to_string());
     let now = || unix_now();
     let pause = |seconds: u64| std::thread::sleep(std::time::Duration::from_secs(seconds));
+    let notice = |note: &str| println!("{note}");
     let spec = DriveSpec {
         root,
         lab,
@@ -1143,6 +1145,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
         pause: &pause,
         decision: &decision,
         card: &card,
+        notice: &notice,
     };
     let code = match run_sessions(&spec, &hooks) {
         Ok(0) => 0,

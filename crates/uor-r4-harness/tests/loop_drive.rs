@@ -58,7 +58,7 @@ fn git_in(root: &Path, args: &[&str]) {
 
 fn init_repo(name: &str) -> PathBuf {
     let root = temp_root(name);
-    git_in(&root, &["init", "-q"]);
+    git_in(&root, &["init", "-q", "-b", "main"]);
     git_in(&root, &["config", "user.email", "drive@test"]);
     git_in(&root, &["config", "user.name", "drive test"]);
     std::fs::write(root.join("initial.txt"), "initial\n").expect("write");
@@ -342,11 +342,13 @@ fn the_fake_clock_closes_a_silent_client_and_cards_it() {
         order: None,
         exempt_lease: false,
     };
+    let notice = |_note: &str| {};
     let hooks = DriveHooks {
         now: &now,
         pause: &pause,
         decision: &decision,
         card: &card,
+        notice: &notice,
     };
     let code = run_sessions(&spec, &hooks).expect("the silent session runs");
     assert_eq!(code, 1, "the closed session reports a non-zero code");
@@ -411,11 +413,13 @@ fn the_fake_clock_continues_a_committing_client_with_a_note() {
         order: None,
         exempt_lease: false,
     };
+    let notice = |_note: &str| {};
     let hooks = DriveHooks {
         now: &now,
         pause: &pause,
         decision: &decision,
         card: &card,
+        notice: &notice,
     };
     let code = run_sessions(&spec, &hooks).expect("the progressing session runs");
     assert_eq!(code, 0, "the progressing client exited cleanly");
@@ -440,12 +444,31 @@ fn drive_repo(name: &str) -> PathBuf {
     root
 }
 
+fn git_out(root: &Path, args: &[&str]) -> String {
+    let mut command = Command::new("git");
+    command.args(args).current_dir(root);
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("GIT_") {
+            command.env_remove(key);
+        }
+    }
+    let out = command.output().expect("git runs");
+    String::from_utf8_lossy(&out.stdout).to_string()
+}
 #[test]
 fn the_wip_commit_refuses_main_a_foreign_branch_and_a_foreign_folder() {
     let root = drive_repo("wip-refuse");
     let order = root.join("docs/loop/tasks/deepseek-1/ORDER.md");
     // On main: refused before any git write.
     let error = commit_and_push_wip(&root, "deepseek", Some(&order), "stalled").expect_err("main");
+    assert!(
+        error.to_string().contains("not a deepseek/ branch"),
+        "{error}"
+    );
+    // A different lab branch: refused.
+    git_in(&root, &["checkout", "-q", "-b", "kimi/other"]);
+    let error = commit_and_push_wip(&root, "deepseek", Some(&order), "stalled")
+        .expect_err("foreign branch");
     assert!(
         error.to_string().contains("not a deepseek/ branch"),
         "{error}"
@@ -482,35 +505,21 @@ fn the_wip_commit_stages_only_the_task_folder_and_carries_the_trailers() {
     let error = commit_and_push_wip(&root, "deepseek", Some(&order), "stalled: test")
         .expect_err("push without origin");
     assert!(error.to_string().contains("push origin"), "{error}");
-    let message = Command::new("git")
-        .args(["log", "-1", "--format=%B"])
-        .current_dir(&root)
-        .output()
-        .expect("git log");
-    let message = String::from_utf8_lossy(&message.stdout);
+    let message = git_out(&root, &["log", "-1", "--format=%B"]);
     assert!(message.contains("Lab: deepseek"), "{message}");
     assert!(
         message.contains("Order: docs/loop/tasks/deepseek-1/ORDER.md"),
         "{message}"
     );
-    let changed = Command::new("git")
-        .args(["show", "--name-only", "--format=", "HEAD"])
-        .current_dir(&root)
-        .output()
-        .expect("git show");
-    let changed = String::from_utf8_lossy(&changed.stdout);
+    let changed = git_out(&root, &["show", "--name-only", "--format=", "HEAD"]);
     assert!(changed.contains("deepseek-1/REPORT.md"), "{changed}");
     assert!(
         !changed.contains("unrelated.txt"),
         "scoped, not -A: {changed}"
     );
-    let status = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(&root)
-        .output()
-        .expect("git status");
+    let status = git_out(&root, &["status", "--porcelain"]);
     assert!(
-        String::from_utf8_lossy(&status.stdout).contains("?? unrelated.txt"),
+        status.contains("?? unrelated.txt"),
         "the out-of-scope file stays untracked"
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -560,11 +569,13 @@ fn a_productive_then_silent_client_is_closed_at_the_second_window() {
         order: None,
         exempt_lease: false,
     };
+    let notice = |_note: &str| {};
     let hooks = DriveHooks {
         now: &now,
         pause: &pause,
         decision: &decision,
         card: &card,
+        notice: &notice,
     };
     let code = run_sessions(&spec, &hooks).expect("the two-window session runs");
     let cards = cards.into_inner();
@@ -578,5 +589,71 @@ fn a_productive_then_silent_client_is_closed_at_the_second_window() {
         "a fake stalled client past 2 hours is closed and carded: {cards:?}"
     );
     assert!(code == 1, "the close reports a non-zero code");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_leased_session_is_never_closed_and_notes_once_per_window() {
+    let root = init_repo("lease-exempt");
+    let launch = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        "sleep 0.6".to_string(),
+        "{prompt}".to_string(),
+    ];
+    let cards: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    let notices: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    let decision = || -> std::result::Result<Option<String>, String> {
+        Ok(Some("GO item lease - ready".to_string()))
+    };
+    let card = |reason: &str| {
+        cards.borrow_mut().push(reason.to_string());
+        Ok(())
+    };
+    let notice = |note: &str| notices.borrow_mut().push(note.to_string());
+    let jump = std::cell::Cell::new(0u64);
+    let now = move || {
+        let real = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let seconds = jump.get();
+        jump.set(seconds + 3_600);
+        real + seconds
+    };
+    let pause = |_seconds: u64| std::thread::sleep(std::time::Duration::from_millis(20));
+    let spec = DriveSpec {
+        root: &root,
+        lab: "deepseek",
+        client: "fake-client",
+        model: "pinned-model-1",
+        launch: &launch,
+        prompt: Some("leased session"),
+        max_sessions: 1,
+        order: None,
+        exempt_lease: true,
+    };
+    let hooks = DriveHooks {
+        now: &now,
+        pause: &pause,
+        decision: &decision,
+        card: &card,
+        notice: &notice,
+    };
+    let code = run_sessions(&spec, &hooks).expect("the leased session runs");
+    assert_eq!(code, 0, "a leased session is allowed to finish");
+    assert!(
+        cards.into_inner().is_empty(),
+        "a leased session is never carded"
+    );
+    let notices = notices.into_inner();
+    assert!(
+        notices.len() >= 2,
+        "one skip note per two-hour window: {notices:?}"
+    );
+    assert!(
+        notices.iter().all(|note| note.contains("close skipped")),
+        "every note is the lease skip: {notices:?}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
