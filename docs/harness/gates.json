@@ -72,8 +72,20 @@
     {
       "id": "loop-gates-watch",
       "proves": "The gate progress window shows gate N of M, the running gate, reds and the ledger estimate; it opens only for a full run in a terminal; and it gives up after five minutes without change.",
-      "command": ["cargo", "test", "-q", "--locked", "-p", "uor-r4-harness", "--test", "loop_gates_watch"],
-      "reads": ["crates/uor-r4-harness/**/*.rs", "docs/harness/gates.json"],
+      "command": [
+        "cargo",
+        "test",
+        "-q",
+        "--locked",
+        "-p",
+        "uor-r4-harness",
+        "--test",
+        "loop_gates_watch"
+      ],
+      "reads": [
+        "crates/uor-r4-harness/**/*.rs",
+        "docs/harness/gates.json"
+      ],
       "quick": false,
       "break": {
         "file": "crates/uor-r4-harness/src/loopgates.rs",
@@ -86,15 +98,24 @@
     },
     {
       "id": "git-hooks",
-      "proves": "The three managed git hooks plan and install owner-only, refuse a foreign file, check Lab and Order trailers on lab branches, and run pr-check --local before a push.",
-      "command": ["cargo", "test", "-q", "--locked", "-p", "uor-r4-harness", "--test", "git_hooks"],
+      "proves": "The three managed git hooks plan and install owner-only, replace the stock LFS pre-push with its backup, check Lab and Order trailers on lab branches, and run pr-check --local before a push.",
+      "command": [
+        "cargo",
+        "test",
+        "-q",
+        "--locked",
+        "-p",
+        "uor-r4-harness",
+        "--test",
+        "git_hooks"
+      ],
       "reads": ["crates/uor-r4-harness/**/*.rs", "rules/*-hook.sh"],
       "quick": false,
       "break": {
         "file": "crates/uor-r4-harness/src/githelp.rs",
         "replace": {
-          "from": "    let mut err: Vec<String> = Vec::new();\n    if trailer_final(&text, \"lab\").is_none() {",
-          "to": "    let mut err: Vec<String> = Vec::new();\n    if true {\n        return (0, Vec::new(), Vec::new());\n    }\n    if trailer_final(&text, \"lab\").is_none() {"
+          "from": "    let mut err: Vec<String> = Vec::new();\n    match trailer_final(&text, \"lab\") {",
+          "to": "    let mut err: Vec<String> = Vec::new();\n    if true {\n        return (0, Vec::new(), Vec::new());\n    }\n    match trailer_final(&text, \"lab\") {"
         },
         "expect": "a message without trailers must be refused"
       }

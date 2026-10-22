@@ -14,12 +14,14 @@ root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 tmp=$(mktemp "${TMPDIR:-/tmp}/uor-prepush.XXXXXX") || tmp=
 trap '[ -n "$tmp" ] && rm -f "$tmp"' EXIT
 if [ -n "$tmp" ]; then cat > "$tmp"; fi
-if command -v git-lfs >/dev/null 2>&1; then
-    if [ -n "$tmp" ]; then
-        git lfs pre-push "$@" < "$tmp" || exit $?
-    else
-        git lfs pre-push "$@"
-    fi
+if ! command -v git-lfs >/dev/null 2>&1; then
+    printf >&2 '\n%s\n\n' "This repository is configured for Git LFS but 'git-lfs' was not found on your path. The loop pre-push hook chains to Git LFS; install it, or remove the hook deliberately."
+    exit 2
+fi
+if [ -n "$tmp" ]; then
+    git lfs pre-push "$@" < "$tmp" || exit $?
+else
+    git lfs pre-push "$@"
 fi
 command -v uor-harness >/dev/null 2>&1 || exit 0
 if [ -n "$tmp" ]; then

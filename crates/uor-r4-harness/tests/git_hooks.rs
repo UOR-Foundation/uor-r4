@@ -9,7 +9,7 @@ const BIN: &str = env!("CARGO_BIN_EXE_uor-harness");
 const PRE_COMMIT: &str = include_str!("../rules/precommit-hook.sh");
 const COMMIT_MSG: &str = include_str!("../../../rules/commit-msg-hook.sh");
 const PRE_PUSH: &str = include_str!("../../../rules/prepush-hook.sh");
-const ORDER: &str = "docs/loop/tasks/infra-loop-harness/deepseek-4/ORDER.md";
+const ORDER: &str = "docs/loop/tasks/infra-loop-harness/deepseek-5/ORDER.md";
 
 fn clean(cmd: &mut Command) -> &mut Command {
     for (k, _) in std::env::vars_os() {
@@ -272,6 +272,36 @@ fn install_hooks_backs_up_a_hook_it_replaces() {
     assert_eq!(std::fs::read_to_string(&backups[0]).unwrap(), old);
 }
 
+/// The stock body Git LFS installs as `pre-push`, simplified: replaceable, and backed up.
+const STOCK_LFS_PRE_PUSH: &str = "#!/bin/sh\ncommand -v git-lfs >/dev/null 2>&1 || { printf >&2 \"This repository is configured for Git LFS but git-lfs was not found.\"; exit 2; }\ngit lfs pre-push \"$@\"\n";
+
+#[test]
+fn the_stock_lfs_pre_push_is_replaced_and_backed_up() {
+    let r = Repo::new();
+    let dir = r.hooks_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("pre-push"), STOCK_LFS_PRE_PUSH).unwrap();
+    let o = r.install();
+    assert_code(&o, 0, "the stock LFS pre-push is replaceable");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("pre-push")).unwrap(),
+        PRE_PUSH,
+        "our chained hook is installed"
+    );
+    let mut backups: Vec<PathBuf> = Vec::new();
+    for entry in std::fs::read_dir(r.root.join("local/loop/install-backups")).expect("backups") {
+        let p = entry.unwrap().path().join("pre-push");
+        if p.is_file() {
+            backups.push(p);
+        }
+    }
+    assert_eq!(backups.len(), 1, "the stock hook is backed up: {backups:?}");
+    assert_eq!(
+        std::fs::read_to_string(&backups[0]).unwrap(),
+        STOCK_LFS_PRE_PUSH
+    );
+}
+
 #[test]
 fn install_hooks_refuses_a_lab_session() {
     let r = Repo::new();
@@ -347,6 +377,81 @@ fn trailers_only_count_in_the_final_paragraph_and_keys_are_case_insensitive() {
     assert_code(&o, 0, "keys are case-insensitive");
 }
 
+/// Git runs commit-msg before it strips comments: an editor message ends with a `#` block.
+#[test]
+fn an_editor_message_is_judged_after_the_comment_block_is_stripped() {
+    let r = Repo::new();
+    r.branch("deepseek/topic");
+    let editor = format!(
+        "a subject\n\nwhy\n\nLab: deepseek\nOrder: {ORDER}\n\n# Please enter the commit message for your changes.\n# Lines starting with a hash will be ignored.\n#\n# On branch deepseek/topic\n"
+    );
+    let m = r.message("msg.txt", &editor);
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(
+        &o,
+        0,
+        "the comment block is stripped before the trailer read",
+    );
+    let no_trailers = "a subject\n\n# Please enter the commit message for your changes.\n# On branch deepseek/topic\n";
+    let m = r.message("msg2.txt", no_trailers);
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(&o, 1, "no trailers even without the comment block");
+}
+
+#[test]
+fn the_lab_trailer_must_match_uor_lab() {
+    let r = Repo::new();
+    r.branch("deepseek/topic");
+    let m = r.message(
+        "msg.txt",
+        &format!("a subject\n\nLab: kimi\nOrder: {ORDER}\n"),
+    );
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    let out = text(&o);
+    assert_code(&o, 1, "the Lab trailer must match UOR_LAB");
+    assert!(out.contains("does not match UOR_LAB"), "{out}");
+}
+
+#[test]
+fn only_gits_own_generated_forms_skip_the_check() {
+    let r = Repo::new();
+    r.branch("deepseek/topic");
+    for body in [
+        "Merge branch x into main\n",
+        "Merge pull request #1 from x/y\n",
+        "Merge remote-tracking branch origin/main\n",
+        "Revert \"a change\"\n",
+        "fixup! a subject\n",
+        "squash! a subject\n",
+    ] {
+        let m = r.message("msg.txt", body);
+        let o = r.run(
+            &["git", "check-message", m.to_str().unwrap()],
+            &[("UOR_LAB", "deepseek")],
+            None,
+        );
+        assert_code(&o, 0, "a generated message passes");
+    }
+    let m = r.message("msg.txt", "Merge something by hand\n");
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(&o, 1, "a hand-written Merge subject is not exempt");
+}
 #[test]
 fn generated_and_fixup_messages_pass_on_a_lab_branch() {
     let r = Repo::new();
@@ -533,4 +638,35 @@ fn a_hook_without_uor_harness_on_path_allows_the_commit() {
         .output()
         .expect("hook runs");
     assert_code(&out, 0, "no harness means no block");
+}
+
+#[test]
+fn the_prepush_hook_exits_2_when_git_lfs_is_missing() {
+    let r = Repo::new();
+    assert_code(&r.install(), 0, "install");
+    let sha = r.git(&["rev-parse", "HEAD"]);
+    let line = format!("refs/heads/deepseek/topic {sha} refs/heads/deepseek/topic {sha}\n");
+    let script = r.hooks_dir().join("pre-push");
+    let mut shell = Command::new("/bin/sh");
+    let cmd = clean(&mut shell);
+    let mut child = cmd
+        .arg(&script)
+        .current_dir(&r.root)
+        .env("PATH", "/usr/bin:/bin")
+        .env("UOR_LAB", "deepseek")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("hook runs");
+    use std::io::Write;
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(line.as_bytes())
+        .unwrap();
+    let o = child.wait_with_output().expect("wait");
+    assert_code(&o, 2, "no git-lfs is the stock refusal");
+    assert!(text(&o).contains("Git LFS"), "{}", text(&o));
 }

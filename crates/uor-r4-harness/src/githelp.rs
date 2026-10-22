@@ -1258,7 +1258,8 @@ pub fn install_hooks(
         .join("local")
         .join("loop")
         .join("install-backups")
-        .join(unix_seconds().to_string());
+        .join(format!("{}-{}", unix_seconds(), std::process::id()));
+    let mut backups: Vec<(&'static str, std::path::PathBuf)> = Vec::new();
     for (hook, path, action) in &planned {
         if *action == "install" || *action == "unchanged" {
             continue;
@@ -1276,19 +1277,58 @@ pub fn install_hooks(
             return (1, out, err);
         }
         out.push(format!("backup: {}", dest.display()));
+        backups.push((hook.name, dest));
     }
-    for (hook, path, action) in planned {
-        if let Err(e) = std::fs::write(&path, hook.script) {
-            err.push(format!("cannot write {}: {e}", path.display()));
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        err.push(format!(
+            "cannot create the hooks directory {}: {e}",
+            dir.display()
+        ));
+        return (1, out, err);
+    }
+    // **All three hooks are staged under temporary names first**, so a failure while staging
+    // writes nothing. A failure during the renames restores each hook already replaced from its
+    // backup, and removes one that was freshly installed.
+    let mut staged: Vec<(
+        &'static ManagedHook,
+        std::path::PathBuf,
+        std::path::PathBuf,
+        &'static str,
+    )> = Vec::new();
+    for (hook, path, action) in &planned {
+        let tmp = dir.join(format!(".{}.uor-tmp-{}", hook.name, std::process::id()));
+        if let Err(e) = std::fs::write(&tmp, hook.script) {
+            for (_, t, _, _) in &staged {
+                let _ = std::fs::remove_file(t);
+            }
+            err.push(format!("cannot stage {}: {e}", tmp.display()));
             return (1, out, err);
         }
-        // **The executable bit is part of the artifact** - a hook that is not executable is a file
-        // git silently ignores, and reporting "installed" for one would be the worst outcome here.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
+            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755));
         }
+        staged.push((hook, tmp, path.clone(), action));
+    }
+    let mut done: Vec<(&'static str, std::path::PathBuf)> = Vec::new();
+    for (hook, tmp, path, action) in staged {
+        if let Err(e) = std::fs::rename(&tmp, &path) {
+            for (name, replaced) in &done {
+                match backups.iter().find(|(n, _)| n == name) {
+                    Some((_, dest)) => {
+                        let _ = std::fs::copy(dest, replaced);
+                    }
+                    None => {
+                        let _ = std::fs::remove_file(replaced);
+                    }
+                }
+            }
+            let _ = std::fs::remove_file(&tmp);
+            err.push(format!("cannot install {}: {e}", path.display()));
+            return (1, out, err);
+        }
+        done.push((hook.name, path.clone()));
         let past = match action {
             "install" => "installed",
             "update" => "updated",
@@ -1349,7 +1389,10 @@ fn plan_one_hook(
     // Only the pre-commit hook has a legacy body worth upgrading in place.
     let legacy =
         hook.name == "pre-commit" && LEGACY_HOOK_STARTS.iter().any(|m| previous.contains(m));
-    if !previous.contains(hook.marker) && !legacy {
+    // **Git LFS's stock pre-push hook is replaceable**: the managed hook chains to LFS itself, so
+    // replacing the stock body (after its backup) is the decision's intent, not a conflict.
+    let stock_lfs = hook.name == "pre-push" && is_stock_lfs_pre_push(&previous);
+    if !previous.contains(hook.marker) && !legacy && !stock_lfs {
         let first = previous.lines().next().unwrap_or("(empty file)");
         return Err((
             2,
@@ -1398,11 +1441,12 @@ pub fn check_commit_message(paths: &StatePaths, message: &Path) -> (i32, Vec<Str
             )
         }
     };
+    // Git runs this hook BEFORE it strips comments, so an editor message ends with git's
+    // `# Please enter...` block; strip comment lines and the scissors block first, honouring
+    // `core.commentChar`.
+    let text = strip_git_comments(&text, comment_char(&paths.repo));
     let first = text.lines().next().unwrap_or("");
-    if ["Merge ", "Revert ", "fixup! ", "squash! "]
-        .iter()
-        .any(|p| first.starts_with(p))
-    {
+    if skips_check(first) {
         return (0, Vec::new(), Vec::new());
     }
     let Some(lab) = std::env::var("UOR_LAB")
@@ -1432,8 +1476,12 @@ pub fn check_commit_message(paths: &StatePaths, message: &Path) -> (i32, Vec<Str
         ));
     }
     let mut err: Vec<String> = Vec::new();
-    if trailer_final(&text, "lab").is_none() {
-        err.push("the message has no Lab: trailer; every loop commit names its lab".into());
+    match trailer_final(&text, "lab") {
+        None => err.push("the message has no Lab: trailer; every loop commit names its lab".into()),
+        Some(v) if !v.eq_ignore_ascii_case(&lab) => err.push(format!(
+            "the Lab: trailer {v:?} does not match UOR_LAB {lab:?}"
+        )),
+        Some(_) => {}
     }
     match trailer_final(&text, "order") {
         None => err.push("the message has no Order: trailer; it names the task ORDER path".into()),
@@ -1481,6 +1529,47 @@ fn trailer_final(text: &str, key: &str) -> Option<String> {
         }
     }
     found
+}
+
+/// The forms git itself generates: a real merge, a real revert, a fixup/squash. A hand-written
+/// subject that merely starts with "Merge " is not exempt.
+fn skips_check(first: &str) -> bool {
+    first.starts_with("Merge branch ")
+        || first.starts_with("Merge pull request ")
+        || first.starts_with("Merge remote-tracking branch ")
+        || first.starts_with("Revert \"")
+        || first.starts_with("fixup! ")
+        || first.starts_with("squash! ")
+}
+
+/// The comment character git uses for this repository: `core.commentChar`, or `#`.
+fn comment_char(repo: &Path) -> char {
+    match git_raw(repo, &["config", "--get", "core.commentChar"]) {
+        (0, out) => out
+            .trim()
+            .chars()
+            .next()
+            .filter(|c| !c.is_whitespace())
+            .unwrap_or('#'),
+        _ => '#',
+    }
+}
+
+/// Drop comment lines and the scissors block, as git does after the editor closes.
+fn strip_git_comments(text: &str, comment: char) -> String {
+    let scissors = format!("{comment} ------------------------ >8 ------------------------");
+    let mut out = String::new();
+    for line in text.lines() {
+        if line == scissors {
+            break;
+        }
+        if line.starts_with(comment) {
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
 }
 
 /// `git push-check`: the pre-push hook check. Reads git's ref lines on stdin
@@ -1555,6 +1644,13 @@ pub fn push_check(paths: &StatePaths, stdin_text: &str) -> (i32, Vec<String>, Ve
         (0, out, Vec::new())
     }
 }
+/// Whether `text` is Git LFS's stock `pre-push` hook, which the managed hook replaces and chains.
+fn is_stock_lfs_pre_push(text: &str) -> bool {
+    text.contains("git lfs pre-push")
+        && (text.contains("command -v git-lfs")
+            || text.contains("This repository is configured for Git LFS"))
+}
+
 #[cfg(test)]
 mod install_hooks_tests {
     use super::*;

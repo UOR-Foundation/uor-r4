@@ -522,19 +522,24 @@ every worktree, so the command is **owner-only**: it refuses when `UOR_LAB` is s
 guard repeats the refusal at the client.
 
 By default it **prints the plan and writes nothing**; `--install` writes. Every refusal is checked
-before anything is written, so all three hooks install or none does, and the installer refuses to
-overwrite a hook it did not write, a symlink, or an unreadable file. Every hook it replaces is copied
-first to `local/loop/install-backups/<unix-seconds>/<hook>`, which also covers the pre-v2 `pre-commit`.
+before anything is written, all three hooks are staged under temporary names and renamed into place
+(so a failure during the run restores what was replaced), and the installer refuses to overwrite a
+hook it did not write, a symlink, or an unreadable file. Every hook it replaces is copied first to
+`local/loop/install-backups/<unix-seconds>-<pid>/<hook>`, which also covers the pre-v2 `pre-commit`.
+**Git LFS's stock `pre-push` body is the one foreign hook it replaces by design**, because the
+managed hook chains to LFS itself; the stock body is backed up like any other.
 
 | Hook | Runs | Blocks |
 |---|---|---|
 | `pre-commit` | `uor-harness check --staged` | `error` severity only; `warn` and `info` print and pass |
-| `commit-msg` | `uor-harness git check-message <file>` | on a `<registered-lab>/...` branch with `UOR_LAB` set: a message without `Lab:` and `Order:` trailers in its final paragraph. Merge, Revert, fixup! and squash! messages pass, and the owner's commits and non-loop work are never checked |
-| `pre-push` | Git LFS's own `pre-push` first, on the same stdin, then `uor-harness git push-check` | a pushed `<lab>/...` branch whose `loop pr-check --local` fails; a new branch is checked, a delete is skipped, and a `pr-check` that cannot run is allowed |
+| `commit-msg` | `uor-harness git check-message <file>` | on a `<registered-lab>/...` branch with `UOR_LAB` set: a message whose final paragraph (after git's comment block is stripped) has no `Lab:` or `Order:` trailer, or whose `Lab:` does not equal `UOR_LAB`. Git-generated merge, revert, fixup! and squash! subjects pass, and the owner's commits and non-loop work are never checked |
+| `pre-push` | Git LFS's own `pre-push` first, on the same stdin (exiting 2 when `git-lfs` is missing), then `uor-harness git push-check` | a pushed `<lab>/...` branch whose `loop pr-check --local` fails; a new branch is checked, a delete is skipped, and a `pr-check` that cannot run is allowed |
 
 Every hook lets the commit or push through when `uor-harness` is not on `PATH`, and when the harness
 itself cannot produce a result (any exit other than 0 or 1). The trailers are tags, not proof (D55):
 they record the lab and the ORDER, and no lab may bypass a hook with `--no-verify`. A provably older
-binary is printed as a warning by `check-message`; it does not block the commit. `loop arrive` checks
-all three hooks and reports a missing or different one as **WARN**, not FAIL: installing them is the
-owner's act, and a check that is always red teaches labs to ignore FAIL.
+binary is printed as a warning by `check-message`; it does not block the commit. The lab-session
+detection is `UOR_LAB` only, the charter's convention: `env -u UOR_LAB` is outside what a hook can
+govern. `loop arrive` checks only the `pre-commit` hook today and reports a missing or different one
+as **WARN**, not FAIL: installing the hooks is the owner's act, and a check that is always red
+teaches labs to ignore FAIL. Extending arrive to all three needs `looparrive.rs` in pr12's scope.
