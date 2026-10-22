@@ -1,6 +1,6 @@
 # REPORT: infra-loop-pr11-progress-window, deepseek-1 (loop PR 11: gates --watch and warnings raised to errors)
 
-Lab: deepseek. Order: [ORDER.md](ORDER.md), committed as `1a157a2cd` before any work.
+Lab: deepseek. Order: folded into [deepseek-2/ORDER.md](../deepseek-2/ORDER.md) as history; this folder's original ORDER.md was removed so the PR adds exactly one ORDER, which `loop review --check` and `loop pr-check` both require. It was committed as `1a157a2cd` before any work.
 Base: `7864b05`. `origin/main` did not move while this branch was built.
 Closes #2916. References #2904.
 

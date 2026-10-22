@@ -2,13 +2,12 @@
 
 Lab: deepseek. Item: [infra-loop-pr11-progress-window](../../../../roadmap/items/infra-loop-pr11-progress-window.md) (#2916). Setup row: 11. Base: `a8bec0a` (the reviewed head).
 
-## Finished steps (the deepseek-1 order, in the past tense)
+## Done in deepseek-1 and deepseek-2 (history)
 
-- Committed the deepseek-1 ORDER at `1a157a2cd`.
-- Raised the ORDER-named warnings at `1e76fa688`.
-- Built the progress window at `228e8de64`.
-- Wrote the REPORT and marked the item done at `c136e88c1`; trimmed the ORDER at `dc4a5a5d6`; recorded receipts at `381fe35d1`; re-rendered the roadmap at `a8bec0af6`.
+- deepseek-1: ORDER `1a157a2cd`; the ORDER-named warnings raised `1e76fa688`; the progress window `228e8de64`; REPORT and the item marked done `c136e88c1`; ORDER trimmed `dc4a5a5d6`; receipts `381fe35d1`; roadmap re-rendered `a8bec0af6`.
 - Claude's fresh-context review returned CHANGES at `a8bec0af6` (D59).
+- deepseek-2: the repair `6f0319016`; the `replace` break kind `772e57e82`; the repair REPORT `780371416`; merge-forwards `8ba4a239d` and `9fdaa28cc`. The round-1 repair passed review at `780371416`.
+- The deepseek-1 ORDER.md was removed so this PR adds exactly one ORDER; its REPORT stays as history and points here.
 
 ## Goal
 

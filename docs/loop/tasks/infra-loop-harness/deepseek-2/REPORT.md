@@ -58,6 +58,8 @@ Base: `a8bec0a` (the reviewed head). References #2904. Closes #2916.
 - **A single gate longer than five minutes closes the window**; the run continues and the result is unaffected. That is the specified behaviour.
 - **No pty test**: whether the window opens in a real terminal is decided by the tested decision function, not an allocated terminal.
 - **The `--break` schema now has two kinds**; a break that uses both refuses to load, and a `replace` whose text is absent is REFUSED.
+- **A branch both ahead of and behind `main` still PASSes `checkout`** with no note of the gap: the check now keys on `version.rs`'s "not in origin/main" message to tell the two apart, and a `Staleness::Ahead` variant would be safer. That is version.rs work for a later PR.
+- **The give-up line hardcodes "5 minutes"**, so an injected shorter duration (tests) prints the production wording. That is deliberate today; a parameterised message would need a test update.
 
 ## Plain summary
 

@@ -5,7 +5,7 @@
 //! Each of those is one check here, run in a fixed order and reported one line each, so a lab
 //! arriving in a session sees in one place what is stale before it reads or writes anything.
 //!
-//! **Verdicts.** Every check is `PASS`, `FAIL` or `N/A`. Exit 0 when nothing FAILs, 1 when a check
+//! **Verdicts.** Every check is `PASS`, `WARN`, `FAIL` or `N/A`. Exit 0 when nothing FAILs, 1 when a check
 //! FAILs, 2 when the command cannot run (usage, no lab, not a git repository). A failed fetch does
 //! not stop the run: the later checks read the `origin/main` already present. Three checks that used
 //! to WARN FAIL since loop PR 11 raised the loop's named warnings to errors: a checkout behind
