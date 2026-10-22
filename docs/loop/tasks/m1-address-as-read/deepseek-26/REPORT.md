@@ -20,7 +20,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `683e182ba`. Item PR (not a lo
 | `docs/harness/prep/m1-address-as-read-oracle-DRAFT-2026-10-22.md` | docs | +~22/−1 | top status now says FIT-reviewed `NOT_FIT` by deepseek and that no compute is cleared; a `## Verdict` section carries the rendered `prep fit` record and the four pinned prerequisites |
 | `docs/loop/tasks/m1-address-as-read/deepseek-26/{ORDER,REPORT}.md` | docs | small | this order and report, plus receipts |
 
-**Size:** about 60 changed lines (ORDER estimate about 50, 1.2).
+**Size:** about 75 changed lines (ORDER estimate about 50, 1.5).
 
 ## Measurements
 

@@ -4,7 +4,7 @@ Lab: deepseek. Item: [m1-address-as-read](../../../../roadmap/items/m1-address-a
 
 ## Goal
 
-Perform the non-author `TEST FITNESS` review of [`m1-address-as-read-oracle-DRAFT-2026-10-22.md`](../../../harness/prep/m1-address-as-read-oracle-DRAFT-2026-10-22.md) (CHARTER §4.5, D22), as antigravity's sheet asks before any GPU evaluation: check the eight blocks, the finite controls, the arms, the frozen/hashed panel, stop rules, cost and minimum test power, and record the verdict with `uor-harness prep fit`. This is host-only; no GPU run, no training, no bar/hold/spend decision.
+Perform the non-author `TEST FITNESS` review of [`m1-address-as-read-oracle-DRAFT-2026-10-22.md`](../../../../harness/prep/m1-address-as-read-oracle-DRAFT-2026-10-22.md) (CHARTER §4.5, D22), as antigravity's sheet asks before any GPU evaluation: check the eight blocks, the finite controls, the arms, the frozen/hashed panel, stop rules, cost and minimum test power, and record the verdict with `uor-harness prep fit`. This is host-only; no GPU run, no training, no bar/hold/spend decision.
 
 ## Cancel probe (run first)
 
