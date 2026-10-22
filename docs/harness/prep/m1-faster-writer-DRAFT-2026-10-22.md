@@ -96,7 +96,7 @@ Each planted fault runs in the instrumented build and must produce a mismatch or
 
 On the host (#2983), the flipped tie rule fails 4 of the 6 tests, the `>=` prune fails 3, and an ignored ABSENT token fails the ABSENT test. The stale index has no host test yet; it is new in this qualification. A planted fault that passes is an instrument fault. A negative closes this configuration, never the mechanism (CHARTER §4.1).
 
-## 9. Stop rule and outcomes
+## 9. Stop conditions and outcomes
 
 - **Any mismatch is a hard stop,** diagnosed as an instrument or kernel fault (D31-style), not a mechanism negative.
 - Owner caps: at most 4 pods and $8/h across labs.

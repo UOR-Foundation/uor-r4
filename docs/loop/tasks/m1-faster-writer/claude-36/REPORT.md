@@ -34,7 +34,7 @@ The sheet registers a finite CUDA qualification: no training, no checkpoint. It 
   - B1: 0 output mismatches against the full scan;
   - B2: 0 `token_cell` calls (≤1 for kind 1), exactly 256 admission evaluations, and token distances ≤ the admitted members.
   - Writer time per row is reported, not a bar.
-- **Four planted faults, a stop rule and a cost** of under $1 as a planning figure.
+- **Four planted faults, stop conditions and a cost** of under $1 as a planning figure.
 
 ## Measurements
 
