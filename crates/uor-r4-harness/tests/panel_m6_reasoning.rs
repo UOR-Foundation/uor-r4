@@ -42,7 +42,7 @@ fn panel_seed_determinism_and_sha256_seal() {
 }
 
 /// 2. Overlap exclusion: zero overlap with `m6_exact_arithmetic.rs` / `m6_ablation.rs` CPU
-/// controls and zero prompt or canonical-target overlap across independent seeds.
+///    controls and zero prompt or canonical-target overlap across independent seeds.
 #[test]
 fn panel_overlap_exclusion_and_corpus_disjointness() {
     let frozen = generate_frozen_m6_panel();
@@ -76,8 +76,8 @@ fn panel_overlap_exclusion_and_corpus_disjointness() {
 }
 
 /// 3. Each family oracle (`Compositions`, `AlteredConstraints`, `CodeTasks`) accepts known-correct
-/// answers (`240 / 240`) and rejects known-wrong answers (`0 / 240`), including intermediate-state
-/// errors, default-habit capture errors, false abstentions, and sandbox step-cap/overflow traps.
+///    answers (`240 / 240`) and rejects known-wrong answers (`0 / 240`), including intermediate-state
+///    errors, default-habit capture errors, false abstentions, and sandbox step-cap/overflow traps.
 #[test]
 fn family_oracles_accept_correct_and_reject_wrong_answers() {
     let panel = generate_frozen_m6_panel();
@@ -235,8 +235,8 @@ fn lawful_count_table_baseline_and_noise_measurement() {
 }
 
 /// 5. Registry integration: `docs/harness/panels/m6-reasoning.json` is frozen, passes `panel_frozen`
-/// and `panel_grader_permitted`, and its 4 bars score `PASS`, `FAIL`, and `AT NOISE` via
-/// `uor_r4_harness::panels::classify`.
+///    and `panel_grader_permitted`, and its 4 bars score `PASS`, `FAIL`, and `AT NOISE` via
+///    `uor_r4_harness::panels::classify`.
 #[test]
 fn m6_reasoning_json_registry_is_frozen_and_scorable() {
     let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

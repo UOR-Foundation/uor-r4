@@ -1974,7 +1974,7 @@ pub fn evaluate_count_table_baseline_noise(
         // small modulus/hash collisions experience realistic count-table sampling variance.
         let mut sub_rng = SplitMix64::new(train_seed ^ 0xA5A5_5A5A_F0F0_0F0F);
         for row in &train_panel.rows {
-            if sub_rng.next_u64() % 2 == 0 {
+            if sub_rng.next_u64().is_multiple_of(2) {
                 baseline.observe(row);
             }
         }
