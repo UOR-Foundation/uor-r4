@@ -10,7 +10,7 @@ The item's done-when reads:
 
 ## Cancel probe (run first)
 
-Checked [`crates/uor-r4-training/src/geometric_stack_native.rs`](../../../../crates/uor-r4-training/src/geometric_stack_native.rs) (`hamilton_gate` at line 317, `mlp` at line 990, `HamiltonGate` at line 1430, `mod tests` at line 1559), [`crates/uor-r4-training/src/cuda_stack.cu`](../../../../crates/uor-r4-training/src/cuda_stack.cu) (`hamilton_gate_fwd` at line 172 and `hamilton_gate_bwd` at line 192), and [`docs/mechanisms/hamilton-gate.md`](../../../mechanisms/hamilton-gate.md):
+Checked `crates/uor-r4-training/src/geometric_stack_native.rs` (`hamilton_gate` at line 317, `mlp` at line 990, `HamiltonGate` at line 1430, `mod tests` at line 1559), `crates/uor-r4-training/src/cuda_stack.cu` (`hamilton_gate_fwd` at line 172 and `hamilton_gate_bwd` at line 192), and `docs/mechanisms/hamilton-gate.md`:
 
 1. No test in `crates/uor-r4-training/src/geometric_stack_native.rs::tests` checks the per-block amplitude ratio $\rho(g, u) = |\text{out}|/|u|$ of the Hamilton gate formula across gate norm decades, its exact threshold for half-amplitude attenuation ($\tau = 0.5$), or the coupled backward Jacobian scale $1/r$.
 2. `docs/mechanisms/hamilton-gate.md:60` still lists *"Whether a norm-preserving gate can suppress a signal at all"* under "What has never been tested" as an unsettled reading of the formula, and its `## Code` section still cites only the inactive `geometric_stack.rs` and the `#![cfg(any())]`-disabled parity test file.
