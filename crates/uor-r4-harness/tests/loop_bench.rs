@@ -251,8 +251,9 @@ fn bench_writes_all_five_files() {
         assert!(dir.join(f).is_file(), "{f} missing");
     }
     let state = read(&dir, "STATE.md");
-    assert!(state
-        .contains("## The project in one sentence\n\nThe project builds a model. It runs fast."));
+    assert!(state.contains("## The project in one sentence\n\nThe project builds a model.\n\n"));
+    // One sentence: the opening paragraph's first line only.
+    assert!(!state.contains("It runs fast."));
     assert!(state.contains("## Done looks like\n\nIt is pre-alpha: nothing is done."));
     assert!(state.contains("Last checked at commit `"));
     let t = tables(&state);
