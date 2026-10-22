@@ -21,11 +21,21 @@ pub const DEV512_INPUTS_SHA256: &str =
 pub const OPENED_FRESH128_INPUTS_SHA256: &str =
     "c5a643ff9ef86f5f16f15b420f42fe8b1921c5c8c7df5a7bbb88f7759cda5bda";
 
+/// Pinned SHA-256 of the 4,096-token `ByteBpeTokenizer` (`tokenizer.json`).
+pub const PINNED_TOKENIZER_SHA256: &str =
+    "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89";
+
+/// Pinned EOS token ID in `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
+pub const EOS_TOKEN_ID: u32 = 1;
+
+/// Pinned period (`.` ) token ID in `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
+pub const PERIOD_TOKEN_ID: u32 = 16;
+
 /// Ten 2-word fresh target literals for `length2` (all 10) and `reassert` (first 8).
-/// Content words are disjoint from all historical curriculum and panel literals.
+/// Content words are 100% disjoint from all historical curriculum/panel literals and across all 34 fresh literals.
 pub const FRESH256_LEN2: [&str; 10] = [
     "basalt loggia",
-    "granitecauseway annex",
+    "syenite annex",
     "quartzite promenade",
     "dolomite veranda",
     "obsidian courtyard",
@@ -40,7 +50,7 @@ pub const FRESH256_LEN2: [&str; 10] = [
 pub const FRESH256_UPDATE_INIT: [&str; 4] = [
     "limestone pergola",
     "sandstone arcade",
-    "slate conservatory",
+    "chert conservatory",
     "chalk esplanade",
 ];
 
@@ -51,7 +61,7 @@ pub const FRESH256_LEN4: [&str; 10] = [
     "bold osprey by cliffside",
     "keen plover along dikeway",
     "lone curlew across moorland",
-    "fleet swallow under Viaduct",
+    "fleet swallow under viaduct",
     "stout badger within thicket",
     "brisk otter beside millrace",
     "agile marten around coppice",
@@ -60,21 +70,25 @@ pub const FRESH256_LEN4: [&str; 10] = [
 
 /// Ten 8-word fresh target literals for `length8`.
 pub const FRESH256_LEN8: [&str; 10] = [
-    "the bronze sundial waits near a cobble dikeway",
-    "a carved astrolabe gleams under the stone Viaduct",
-    "the iron sextant hangs within a dry boathouse",
-    "a brass barometer stands along the high seawall",
-    "the pewter hourglass sits across a tiled vestibule",
-    "a glass chronometer ticks inside the old watchtower",
+    "the bronze kettle waits near a cobble seawall",
+    "a carved violin gleams under the stone bridge",
+    "the iron anchor hangs within a dry cabin",
+    "a brass bell stands along the high cliff",
+    "the pewter goblet sits across a tiled porch",
+    "a glass prism ticks inside the old tower",
     "the steel pendulum swings outside a brick foundry",
-    "a slate quadrant leans around the steep rampart",
-    "the nickel telescope points over a wide saltmarsh",
-    "a flint gyroscope turns below the arched gatehouse",
+    "a slate mirror leans around the steep ledge",
+    "the nickel whistle points over a wide marsh",
+    "a flint wheel turns below the arched gate",
 ];
 
-/// All 72 historical curriculum and transfer literals that must remain 100% excluded.
-pub const HISTORICAL_EXPOSED_LITERALS: [&str; 72] = [
-    // VALUES[0..32] from curriculum.rs
+/// All 74 historical curriculum and transfer literals from
+/// `crates/uor-r4-training/examples/geometric_native_compiler/curriculum.rs` (64 literals)
+/// and `crates/uor-r4-training/examples/geometric-native-bank-observation-plan.rs` (10 literals).
+/// `verify_m2_fresh256_panel` parses those repository files directly from disk and verifies
+/// that the on-disk literals match this list and have zero overlap with `m2-fresh256`.
+pub const HISTORICAL_EXPOSED_LITERALS: [&str; 74] = [
+    // VALUES[0..32] from crates/uor-r4-training/examples/geometric_native_compiler/curriculum.rs
     "mariner",
     "carpenter",
     "botanist",
@@ -143,7 +157,7 @@ pub const HISTORICAL_EXPOSED_LITERALS: [&str; 72] = [
     "sunrise banner beyond glade",
     "the moon compass rests beside the still brook",
     "a sunrise banner stands beyond the shaded glade",
-    // Untouched transfer literals from geometric-native-bank-observation-plan.rs
+    // Untouched transfer literals from crates/uor-r4-training/examples/geometric-native-bank-observation-plan.rs
     "amber willow",
     "copper cedar",
     "amber birch silver willow copper cedar harbor silver",
@@ -152,9 +166,11 @@ pub const HISTORICAL_EXPOSED_LITERALS: [&str; 72] = [
     "copper meadow silver birch",
     "amber cedar violet willow",
     "orchard silver harbor amber",
+    "birch copper",
+    "willow copper birch violet",
 ];
 
-/// Supported current-role job queries (`geometric-native-bank-observation-plan.rs:277`).
+/// Supported current-role job queries (`geometric-native-bank-observation-panel.rs:177`).
 pub const CURRENT_JOB_QUERIES: [&str; 6] = [
     "What is my current job?",
     "What job do I currently have?",
@@ -164,7 +180,7 @@ pub const CURRENT_JOB_QUERIES: [&str; 6] = [
     "Tell me my current job.",
 ];
 
-/// Supported current-role home queries (`geometric-native-bank-observation-plan.rs:285`).
+/// Supported current-role home queries (`geometric-native-bank-observation-panel.rs:189`).
 pub const CURRENT_HOME_QUERIES: [&str; 6] = [
     "Where do I currently live?",
     "Where do I live now?",
@@ -172,6 +188,189 @@ pub const CURRENT_HOME_QUERIES: [&str; 6] = [
     "Remind me where I currently live.",
     "Tell me where I live now.",
     "Where is my current home?",
+];
+
+/// Exact pre-token BPE encodings from the pinned 4,096-token `ByteBpeTokenizer`
+/// (`d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`,
+/// `ByteLevel(add_prefix_space=false, use_regex=true)`).
+const PRETOKEN_BPE_TABLE: &[(&str, &[u32])] = &[
+    (" I", &[340]),
+    (" a", &[261]),
+    (" above", &[642, 2156]),
+    (" across", &[2318]),
+    (" agile", &[559, 599]),
+    (" alabaster", &[554, 621, 795, 284]),
+    (" along", &[2321]),
+    (" anchor", &[3984]),
+    (" annex", &[423, 80, 839]),
+    (" arcade", &[1419, 69, 566]),
+    (" arched", &[1419, 814]),
+    (" around", &[622]),
+    (" badger", &[892, 1047]),
+    (" basalt", &[267, 639, 421, 86]),
+    (" bell", &[2046]),
+    (" below", &[1255, 320]),
+    (" belvedere", &[1255, 414, 1833]),
+    (" beside", &[324, 520]),
+    (" bold", &[408, 342]),
+    (" brass", &[975, 560]),
+    (" brick", &[3909, 350]),
+    (" bridge", &[2701]),
+    (" brisk", &[564, 1874]),
+    (" bronze", &[564, 292, 1753]),
+    (" by", &[860]),
+    (" cabin", &[2870]),
+    (" calm", &[2292]),
+    (" carved", &[526, 414]),
+    (" chalk", &[3355]),
+    (" changed", &[2878]),
+    (" chert", &[2806, 86]),
+    (" cliff", &[499, 2548]),
+    (" cliffside", &[499, 2548, 520]),
+    (" cloister", &[788, 1636]),
+    (" cobble", &[3566, 1076]),
+    (" conservatory", &[1205, 2728, 3426, 91]),
+    (" coppice", &[581, 330, 552]),
+    (" courtyard", &[1955, 576, 471]),
+    (" curlew", &[280, 456, 763]),
+    (" current", &[280, 456, 275, 349]),
+    (" currently", &[280, 456, 275, 349, 463]),
+    (" dikeway", &[279, 1326, 479]),
+    (" do", &[377]),
+    (" dolomite", &[377, 78, 286, 718]),
+    (" dry", &[1622]),
+    (" esplanade", &[347, 85, 805, 304, 566]),
+    (" falcon", &[271, 421, 69, 292]),
+    (" feldspar", &[635, 342, 2453, 291]),
+    (" fenland", &[271, 303, 3108]),
+    (" fleet", &[2333, 309]),
+    (" flint", &[608, 272, 86]),
+    (" foundry", &[505, 441]),
+    (" gallery", &[298, 361, 2256]),
+    (" gate", &[2553]),
+    (" glass", &[2537]),
+    (" gleams", &[298, 305, 308, 85]),
+    (" goblet", &[480, 1076, 86]),
+    (" hangs", &[2576, 85]),
+    (" has", &[1139]),
+    (" have", &[500]),
+    (" headland", &[1153, 3108]),
+    (" heron", &[338, 292]),
+    (" high", &[901]),
+    (" home", &[582]),
+    (" in", &[315]),
+    (" inside", &[747]),
+    (" iron", &[223, 307, 292]),
+    (" is", &[435]),
+    (" job", &[1541]),
+    (" keen", &[723, 303]),
+    (" kestrel", &[723, 353, 985]),
+    (" kettle", &[402, 309, 86, 305]),
+    (" leans", &[3103, 85]),
+    (" ledge", &[3751, 781]),
+    (" limestone", &[4065, 353, 511]),
+    (" live", &[2097]),
+    (" loggia", &[438, 1916, 587]),
+    (" lone", &[278, 511]),
+    (" malachite", &[283, 421, 593, 718]),
+    (" marsh", &[1477, 1389]),
+    (" marshland", &[1477, 1389, 3108]),
+    (" marten", &[1477, 3553]),
+    (" me", &[519]),
+    (" millrace", &[3116, 453, 339]),
+    (" mirror", &[2663]),
+    (" moorland", &[752, 306, 3108]),
+    (" my", &[627]),
+    (" near", &[820]),
+    (" nickel", &[290, 465, 346, 78]),
+    (" now", &[960]),
+    (" obsidian", &[2048, 85, 295, 2015]),
+    (" of", &[372]),
+    (" old", &[782]),
+    (" osprey", &[332, 2453, 275, 91]),
+    (" otter", &[3583]),
+    (" outside", &[699]),
+    (" over", &[883]),
+    (" pavilion", &[1103, 88, 316, 848]),
+    (" pendulum", &[281, 355, 498, 494]),
+    (" pergola", &[1364, 73, 1976, 67]),
+    (" pewter", &[281, 662, 442]),
+    (" plover", &[317, 81, 322]),
+    (" points", &[1678, 1657]),
+    (" porch", &[4071]),
+    (" porphyry", &[3957, 1535, 91, 441]),
+    (" prism", &[615, 289, 79]),
+    (" promenade", &[1361, 303, 566]),
+    (" quartzite", &[949, 1527, 92, 718]),
+    (" residence", &[1673, 295, 1691]),
+    (" rotunda", &[3679, 2772, 67]),
+    (" sandstone", &[1193, 353, 511]),
+    (" seawall", &[1582, 89, 361]),
+    (" sits", &[1405, 85]),
+    (" slate", &[756, 834]),
+    (" stands", &[1873, 85]),
+    (" steady", &[1422, 907]),
+    (" steel", &[1422, 418]),
+    (" steep", &[1422, 612]),
+    (" stone", &[1881]),
+    (" stout", &[345, 410]),
+    (" swallow", &[637, 361, 320]),
+    (" swift", &[637, 613, 86]),
+    (" swings", &[1889]),
+    (" syenite", &[262, 91, 303, 718]),
+    (" the", &[265]),
+    (" thicket", &[2662, 309]),
+    (" ticks", &[2826, 85]),
+    (" tiled", &[259, 556]),
+    (" to", &[268]),
+    (" tower", &[1581]),
+    (" travertine", &[1015, 322, 86, 819]),
+    (" turns", &[1579]),
+    (" under", &[775]),
+    (" veranda", &[223, 322, 3336]),
+    (" viaduct", &[3682, 373, 592, 86]),
+    (" violin", &[3811]),
+    (" waits", &[1168, 85]),
+    (" wheel", &[2153]),
+    (" where", &[1059]),
+    (" whistle", &[2167]),
+    (" wide", &[2149]),
+    (" within", &[331, 272]),
+    (".", &[16]),
+    ("?", &[33]),
+    ("I", &[43]),
+    ("My", &[2485]),
+    ("Remind", &[52, 970, 445]),
+    ("Tell", &[54, 540]),
+    ("What", &[1085]),
+    ("Where", &[2812]),
+    ("Which", &[759, 1788]),
+    ("a", &[67]),
+    ("agile", &[547, 599]),
+    ("alabaster", &[421, 621, 795, 284]),
+    ("basalt", &[68, 639, 421, 86]),
+    ("bold", &[1321, 342]),
+    ("brisk", &[1986, 1874]),
+    ("calm", &[69, 2106]),
+    ("chalk", &[397, 2773]),
+    ("chert", &[69, 370, 86]),
+    ("dolomite", &[70, 1976, 286, 718]),
+    ("feldspar", &[722, 342, 2453, 291]),
+    ("fleet", &[72, 305, 309]),
+    ("keen", &[346, 303]),
+    ("limestone", &[78, 395, 353, 511]),
+    ("lone", &[78, 511]),
+    ("malachite", &[79, 421, 593, 718]),
+    ("obsidian", &[567, 85, 295, 2015]),
+    ("porphyry", &[82, 306, 1535, 91, 441]),
+    ("quartzite", &[675, 1527, 92, 718]),
+    ("sandstone", &[85, 789, 353, 511]),
+    ("steady", &[353, 71, 907]),
+    ("stout", &[353, 410]),
+    ("swift", &[1903, 613, 86]),
+    ("syenite", &[1897, 303, 718]),
+    ("the", &[86, 260]),
+    ("travertine", &[86, 453, 322, 86, 819]),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -188,6 +387,66 @@ pub struct History {
     pub stratum: String,
     pub turns: Vec<Wire>,
     pub queries: Vec<Wire>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProbeInputs {
+    pub schema: String,
+    pub cases: Vec<ProbePacket>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProbePacket {
+    pub id: String,
+    pub segments: Vec<ProbeSegment>,
+    pub query_ids: Vec<u32>,
+    pub actual_prefix_ids: Vec<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub enum ProbeSegment {
+    Source {
+        event: u64,
+        record: u64,
+        commit: u64,
+        scope: String,
+        entity: Vec<u32>,
+        relation: u32,
+        view: u32,
+        original_source_ids: Vec<u32>,
+    },
+    Context {
+        event: u64,
+        role: u32,
+        token_ids: Vec<u32>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProbeLabels {
+    pub schema: String,
+    pub protocol: String,
+    pub membership_only: bool,
+    pub cases: Vec<ProbeLabel>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProbeLabel {
+    pub id: String,
+    pub pair_id: String,
+    pub answers: ProbeAnswers,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProbeAnswers {
+    pub intent: String,
+    pub accepted: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -217,11 +476,11 @@ pub struct Dev512SpreadReport {
     pub even_blocks_pass_of_256: usize,
     pub odd_blocks_pass_of_256: usize,
     pub half_panel_split_abs_diff: usize,
-    /// Stratified 16-block (256-row) cluster-sampling SE in hundredths of a row (e.g. 542 = 5.42 rows).
+    /// Stratified 16-block (256-row) cluster-sampling SE in hundredths of a row (e.g. 624 = 6.24 rows).
     pub cluster_se_256_hundredths_rows: u64,
-    /// Stratified 16-block (256-row) cluster-sampling SE in basis points of 256 (e.g. 212 = 2.12%).
+    /// Stratified 16-block (256-row) cluster-sampling SE in basis points of 256 (e.g. 244 = 2.44%).
     pub cluster_se_256_bps: u64,
-    /// Independent binomial SE at the 40% (103/256) bar in hundredths of a row (784 = 7.84 rows).
+    /// Independent binomial SE at the 40% (103/256) bar in hundredths of a row (783 = floor(7.8384 * 100)).
     pub bar40_binomial_se_hundredths_rows: u64,
     /// Cluster-inflated SE at the 40% (103/256) bar in hundredths of a row.
     pub bar40_cluster_se_hundredths_rows: u64,
@@ -248,9 +507,11 @@ pub struct OverlapAndSealAudit {
     pub histories: usize,
     pub unordered_blocks: usize,
     pub ordered_banks: usize,
+    pub historical_literals_parsed_from_disk: usize,
     pub exact_literal_overlaps: usize,
     pub content_word_overlaps: usize,
     pub ngram_overlaps: usize,
+    pub intra_panel_content_word_duplicates: usize,
     pub min_same_stratum_edit_distance: usize,
     pub literal_role_balance: bool,
     pub literal_initial_position_balance: bool,
@@ -258,9 +519,13 @@ pub struct OverlapAndSealAudit {
     pub max_turn_tokens: usize,
     pub max_target_tokens: usize,
     pub max_total_replay_tokens: usize,
+    /// History-pair-verified hits (out of 256 rows) for always emitting the first-stated literal.
     pub copy_first_stated_hits: usize,
+    /// History-pair-verified hits (out of 256 rows) for always emitting the last-stated literal.
     pub copy_last_stated_hits: usize,
+    /// History-pair-verified hits (out of 256 rows) for emitting the opposite role's literal.
     pub role_swap_distractor_hits: usize,
+    /// History-pair-verified hits (out of 256 rows) for emitting any single constant literal.
     pub best_constant_reply_hits: usize,
     pub unscored_inputs_leak_count: usize,
 }
@@ -298,163 +563,204 @@ pub fn round_robin_edges(count: usize) -> Vec<(usize, usize)> {
         return Vec::new();
     }
     let size = count + count % 2;
-    let mut vertices: Vec<usize> = (0..size).collect();
-    let mut edges = Vec::new();
+    let mut order: Vec<usize> = (0..size).collect();
+    let mut result = Vec::new();
     for _ in 0..size - 1 {
-        for i in 0..size / 2 {
-            let (a, b) = (vertices[i], vertices[size - 1 - i]);
-            if a < count && b < count {
-                edges.push((a.min(b), a.max(b)));
+        for index in 0..size / 2 {
+            let left = order[index];
+            let right = order[size - 1 - index];
+            if left < count && right < count {
+                let edge = if left < right {
+                    (left, right)
+                } else {
+                    (right, left)
+                };
+                result.push(edge);
             }
         }
-        vertices[1..].rotate_right(1);
+        let last = order.pop().expect("non-empty circle");
+        order.insert(1, last);
     }
-    edges
+    result
 }
 
-pub fn extract_literal(w: &Wire) -> Result<&str, String> {
-    let t = w
-        .template
-        .as_deref()
-        .ok_or_else(|| "write template absent".to_string())?;
-    let (pre, post) = t
-        .split_once("{v}")
-        .ok_or_else(|| "write slot absent".to_string())?;
-    if post.contains("{v}") {
-        return Err("multiple write slots".to_string());
-    }
-    w.text
-        .strip_prefix(pre)
-        .and_then(|s| s.strip_suffix(post))
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| "literal mismatch".to_string())
-}
-
-fn supported_wire(role: &str, act: &str, value: &str, query_index: usize) -> Result<Wire, String> {
-    let template = match (role, act) {
-        ("job", "assert") => "My current job is {v}.",
-        ("job", "update") => "My current job has changed to {v}.",
-        ("home", "assert") => "I currently live in {v}.",
-        ("home", "update") => "I now live in {v}.",
-        ("job", "query") => CURRENT_JOB_QUERIES[query_index % CURRENT_JOB_QUERIES.len()],
-        ("home", "query") => CURRENT_HOME_QUERIES[query_index % CURRENT_HOME_QUERIES.len()],
-        _ => return Err(format!("unsupported role/act: {role}/{act}")),
-    };
-    let text = if act == "query" {
-        template.to_string()
-    } else {
-        template.replace("{v}", value)
+pub fn supported_wire(
+    relation: &str,
+    act: &str,
+    value: &str,
+    query_index: usize,
+) -> Result<Wire, String> {
+    let (template, text) = match (relation, act) {
+        ("job", "assert") => (
+            "My current job is {v}.".to_string(),
+            format!("My current job is {value}."),
+        ),
+        ("job", "update") => (
+            "My current job has changed to {v}.".to_string(),
+            format!("My current job has changed to {value}."),
+        ),
+        ("home", "assert") => (
+            "I currently live in {v}.".to_string(),
+            format!("I currently live in {value}."),
+        ),
+        ("home", "update") => (
+            "I now live in {v}.".to_string(),
+            format!("I now live in {value}."),
+        ),
+        ("job", "query") => {
+            let q = CURRENT_JOB_QUERIES[query_index % CURRENT_JOB_QUERIES.len()].to_string();
+            (q.clone(), q)
+        }
+        ("home", "query") => {
+            let q = CURRENT_HOME_QUERIES[query_index % CURRENT_HOME_QUERIES.len()].to_string();
+            (q.clone(), q)
+        }
+        _ => return Err(format!("unsupported role/act ({relation}, {act})")),
     };
     Ok(Wire {
         text,
-        relation: role.to_string(),
+        relation: relation.to_string(),
         act: act.to_string(),
-        template: Some(template.to_string()),
+        template: Some(template),
     })
 }
 
-/// Deterministic token encoder for budget and numerical-segment verification.
-/// Maps each word/punctuation span to a deterministic positive token ID in `1..32000`.
-pub fn deterministic_token_ids(text: &str) -> Vec<u32> {
-    let mut ids = Vec::new();
-    for raw in text.split_whitespace() {
-        let trimmed = raw.trim_end_matches(['.', '?']);
-        if !trimmed.is_empty() {
-            let digest = Sha256::digest(trimmed.as_bytes());
-            let code = u32::from_le_bytes([digest[0], digest[1], digest[2], digest[3]]);
-            ids.push(100 + (code % 31_000));
-        }
-        if raw.ends_with('.') {
-            ids.push(46);
-        } else if raw.ends_with('?') {
-            ids.push(63);
-        }
-    }
-    ids
+pub fn extract_literal(w: &Wire) -> Result<&str, String> {
+    let template = w.template.as_deref().ok_or("write template absent")?;
+    let (prefix, suffix) = template.split_once("{v}").ok_or("write slot absent")?;
+    w.text
+        .strip_prefix(prefix)
+        .and_then(|s| s.strip_suffix(suffix))
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "write text/template mismatch".to_string())
 }
 
-/// Analyze the sealed `saved437` parent's complete-reply outcomes on the 512-row development panel.
+/// Encode text into exact `ByteBpeTokenizer` (`d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`)
+/// token IDs using the GPT-2 `ByteLevel(add_prefix_space=false, use_regex=true)` pre-token table.
+pub fn encode_pinned_bpe(text: &str) -> Result<Vec<u32>, String> {
+    let bytes = text.as_bytes();
+    let mut i = 0usize;
+    let mut ids = Vec::new();
+    while i < bytes.len() {
+        let pretoken = if bytes[i] == b'.' || bytes[i] == b'?' {
+            let pt = &text[i..i + 1];
+            i += 1;
+            pt
+        } else if bytes[i] == b' ' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            if i == start + 1 {
+                return Err(format!("standalone space in BPE input: {text:?}"));
+            }
+            &text[start..i]
+        } else if bytes[i].is_ascii_alphabetic() {
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            &text[start..i]
+        } else {
+            return Err(format!(
+                "unsupported byte {:?} in BPE input: {text:?}",
+                bytes[i] as char
+            ));
+        };
+        let idx = PRETOKEN_BPE_TABLE
+            .binary_search_by_key(&pretoken, |(k, _)| *k)
+            .map_err(|_| format!("pre-token {pretoken:?} missing from PRETOKEN_BPE_TABLE"))?;
+        ids.extend_from_slice(PRETOKEN_BPE_TABLE[idx].1);
+    }
+    Ok(ids)
+}
+
+/// Reconstruct the 512-row `dev512` (`m2-reply512`) case structure and compute the exact
+/// spread and cluster-sampling standard error from the sealed `saved437` receipts in `archive/`.
 pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadReport, String> {
     let rank177_path =
         repo_root.join("archive/labs/m2-pooled-rank-2026-10-10/reviewer-rank177.json");
     let replay_path = repo_root
         .join("archive/labs/m2-fresh-437-2026-10-10/development-replay-audit-summary.json");
-    let rank177: Value = serde_json::from_slice(
-        &std::fs::read(&rank177_path)
-            .map_err(|e| format!("read {}: {e}", rank177_path.display()))?,
-    )
-    .map_err(|e| e.to_string())?;
-    let replay: Value = serde_json::from_slice(
-        &std::fs::read(&replay_path).map_err(|e| format!("read {}: {e}", replay_path.display()))?,
-    )
-    .map_err(|e| e.to_string())?;
+
+    let rank177_bytes =
+        std::fs::read(&rank177_path).map_err(|e| format!("{}: {e}", rank177_path.display()))?;
+    let replay_bytes =
+        std::fs::read(&replay_path).map_err(|e| format!("{}: {e}", replay_path.display()))?;
+
+    let rank177: Value =
+        serde_json::from_slice(&rank177_bytes).map_err(|e| format!("rank177 json: {e}"))?;
+    let replay: Value =
+        serde_json::from_slice(&replay_bytes).map_err(|e| format!("replay json: {e}"))?;
+
+    if replay["field_sha256"].as_str() != Some(SAVED437_FIELD_SHA256)
+        || replay["checked_rows"].as_u64() != Some(512)
+        || replay["counts"]["complete"].as_u64() != Some(437)
+    {
+        return Err("replay summary SHA-256 bindings do not match saved437/dev512".to_string());
+    }
 
     let complete_arr = rank177["endpoints"]["final"]["complete_ids"]
         .as_array()
-        .ok_or_else(|| "complete_ids absent".to_string())?;
-    let complete_set: BTreeSet<String> = complete_arr
-        .iter()
-        .filter_map(|v| v.as_str().map(str::to_owned))
-        .collect();
+        .ok_or("endpoints.final.complete_ids absent")?;
+    let mut complete_set = BTreeSet::new();
+    for item in complete_arr {
+        let id = item.as_str().ok_or("complete_id not string")?;
+        complete_set.insert(id.to_string());
+    }
     if complete_set.len() != 437 {
         return Err(format!(
-            "expected 437 complete_ids, found {}",
+            "expected 437 complete_ids, got {}",
             complete_set.len()
         ));
     }
-    if replay["counts"]["complete"].as_u64() != Some(437) {
-        return Err("replay summary complete count differs from 437".to_string());
-    }
 
-    let strata_specs = [
-        ("length2", 8usize),
+    let strata_specs: [(&str, usize); 5] = [
+        ("length2", 8),
         ("length4", 8),
         ("length8", 8),
         ("update", 4),
         ("reassert", 4),
     ];
 
-    let mut all_ids = BTreeSet::new();
-    let mut stratum_complete: BTreeMap<String, (usize, usize)> = BTreeMap::new();
-    let mut block_pass_counts: Vec<(String, usize, usize)> = Vec::new();
-
+    let mut stratum_complete = BTreeMap::new();
+    let mut block_pass_counts = Vec::new();
     let mut forward_pass = 0usize;
     let mut reverse_pass = 0usize;
     let mut chronology_discordant_pairs = 0usize;
-
     let mut swap0_pass = 0usize;
     let mut swap1_pass = 0usize;
     let mut swap_discordant_pairs = 0usize;
-
     let mut wording_a_pass = 0usize;
     let mut wording_b_pass = 0usize;
     let mut wording_discordant_pairs = 0usize;
-
     let mut job_pass = 0usize;
     let mut home_pass = 0usize;
     let mut both_roles_complete_histories = 0usize;
     let mut role_discordant_histories = 0usize;
-
     let mut even_blocks_pass_of_256 = 0usize;
     let mut odd_blocks_pass_of_256 = 0usize;
 
     let mut global_block = 0usize;
+    let mut all_ids = BTreeSet::new();
+
     for (stratum, num_blocks) in strata_specs {
-        let mut s_total = 0usize;
         let mut s_pass = 0usize;
+        let mut s_total = 0usize;
         for selected in 0..num_blocks {
             let q_a = global_block % 6;
             let q_b = (global_block + 3) % 6;
             let mut b_pass = 0usize;
 
-            for swapped in [0usize, 1] {
-                for (w_ord, q_idx) in [(0usize, q_a), (1usize, q_b)] {
+            for swapped in [0usize, 1usize] {
+                for (q_idx, q) in [q_a, q_b].into_iter().enumerate() {
                     for role in ["job", "home"] {
                         let fwd_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_idx}-forward-{role}"
+                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q}-forward-{role}"
                         );
                         let rev_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_idx}-reverse-{role}"
+                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q}-reverse-{role}"
                         );
                         all_ids.insert(fwd_id.clone());
                         all_ids.insert(rev_id.clone());
@@ -462,36 +768,30 @@ pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadRe
                         let r_ok = complete_set.contains(&rev_id);
                         if f_ok {
                             forward_pass += 1;
-                            b_pass += 1;
                             s_pass += 1;
-                            if w_ord == 0 {
-                                wording_a_pass += 1;
-                            } else {
-                                wording_b_pass += 1;
-                            }
+                            b_pass += 1;
                         }
                         if r_ok {
                             reverse_pass += 1;
-                            b_pass += 1;
                             s_pass += 1;
-                            if w_ord == 0 {
-                                wording_a_pass += 1;
-                            } else {
-                                wording_b_pass += 1;
-                            }
+                            b_pass += 1;
                         }
+                        s_total += 2;
                         if f_ok != r_ok {
                             chronology_discordant_pairs += 1;
                         }
-                        s_total += 2;
+                        if q_idx == 0 {
+                            wording_a_pass += usize::from(f_ok) + usize::from(r_ok);
+                        } else {
+                            wording_b_pass += usize::from(f_ok) + usize::from(r_ok);
+                        }
                     }
-
-                    for order in ["forward", "reverse"] {
+                    for dir in ["forward", "reverse"] {
                         let job_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_idx}-{order}-job"
+                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q}-{dir}-job"
                         );
                         let home_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_idx}-{order}-home"
+                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q}-{dir}-home"
                         );
                         let j_ok = complete_set.contains(&job_id);
                         let h_ok = complete_set.contains(&home_id);
@@ -503,20 +803,18 @@ pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadRe
                         }
                         if j_ok && h_ok {
                             both_roles_complete_histories += 1;
-                        }
-                        if j_ok != h_ok {
+                        } else if j_ok != h_ok {
                             role_discordant_histories += 1;
                         }
                     }
                 }
-
-                for order in ["forward", "reverse"] {
+                for dir in ["forward", "reverse"] {
                     for role in ["job", "home"] {
                         let qa_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_a}-{order}-{role}"
+                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_a}-{dir}-{role}"
                         );
                         let qb_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_b}-{order}-{role}"
+                            "development-diverse-{stratum}-{selected:02}-swap{swapped}-q{q_b}-{dir}-{role}"
                         );
                         if complete_set.contains(&qa_id) != complete_set.contains(&qb_id) {
                             wording_discordant_pairs += 1;
@@ -525,14 +823,14 @@ pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadRe
                 }
             }
 
-            for q_idx in [q_a, q_b] {
-                for order in ["forward", "reverse"] {
+            for q in [q_a, q_b] {
+                for dir in ["forward", "reverse"] {
                     for role in ["job", "home"] {
                         let s0_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap0-q{q_idx}-{order}-{role}"
+                            "development-diverse-{stratum}-{selected:02}-swap0-q{q}-{dir}-{role}"
                         );
                         let s1_id = format!(
-                            "development-diverse-{stratum}-{selected:02}-swap1-q{q_idx}-{order}-{role}"
+                            "development-diverse-{stratum}-{selected:02}-swap1-q{q}-{dir}-{role}"
                         );
                         let s0_ok = complete_set.contains(&s0_id);
                         let s1_ok = complete_set.contains(&s1_id);
@@ -575,9 +873,6 @@ pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadRe
 
     // Compute exact stratified 16-block (256-row) cluster-sampling variance:
     // Var(S_256) = sum_h b'_h * s_h^2, where s_h^2 = sum_i (c_{h,i} - mean_h)^2 / (B_h - 1).
-    // Using common denominator LCM(8*7, 4*3) = 168:
-    // For B_h = 8, b'_h = 4: b'_h * s_h^2 = 4 * [sum_i (8*c_i - sum_c)^2] / (8^2 * 7) = [sum_i (8*c_i - sum_c)^2] / 112.
-    // For B_h = 4, b'_h = 2: b'_h * s_h^2 = 2 * [sum_i (4*c_i - sum_c)^2] / (4^2 * 3) = [sum_i (4*c_i - sum_c)^2] / 24.
     // Common denominator for Var(S_256) is 336 (112 * 3 = 336, 24 * 14 = 336).
     let mut var_num_336: u128 = 0;
     for (stratum, num_blocks) in strata_specs {
@@ -599,17 +894,13 @@ pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadRe
             var_num_336 += sq_sum * 14;
         }
     }
-    // SE in hundredths of a row = sqrt(Var * 100^2) = isqrt(var_num_336 * 10000 / 336)
     let cluster_se_256_hundredths_rows = isqrt_u128((var_num_336 * 10_000 + 168) / 336) as u64;
-    // SE in basis points of 256 = (SE_rows / 256) * 10000 = SE_hundredths_rows * 100 / 256
     let cluster_se_256_bps = (cluster_se_256_hundredths_rows * 100 + 128) / 256;
 
-    // Independent binomial variance on 512 rows at p = 437/512 scaled to 256 rows:
-    // Var_ind_256 = 256 * (437/512) * (75/512) = 32775 / 1024 = 32.0068
-    // Design effect DEFF = Var_cluster_256 / Var_ind_256 = (var_num_336 / 336) / (32775 / 1024)
-    // At the 40% (p = 0.40) bar on 256 rows, Var_ind_bar40 = 256 * 0.40 * 0.60 = 61.44 = 1536 / 25.
-    let bar40_binomial_se_hundredths_rows = isqrt_u128(614_400) as u64; // 783 -> 7.84 rows
-                                                                        // Var_cluster_bar40 = Var_ind_bar40 * max(1, DEFF)
+    // Independent binomial variance at the 40% (p = 0.40) bar on 256 rows:
+    // Var_ind_bar40 = 256 * 0.40 * 0.60 = 61.44 = 1536 / 25.
+    // isqrt_u128(614_400) = 783 (floor of 7.8384 * 100, i.e. 7.83 rows floor / 7.84 rows rounded).
+    let bar40_binomial_se_hundredths_rows = isqrt_u128(614_400) as u64;
     let var_cluster_bar40_times_10000 =
         (1536u128 * 10_000 * var_num_336 * 1024) / (25u128 * 336 * 32_775);
     let bar40_cluster_se_hundredths_rows =
@@ -757,7 +1048,6 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
 
     let plan_val = json!({
         "schema": "uor-r4.raw-natural-reader-construction-plan/1",
-        "panel_id": "m2-fresh256",
         "split": "fresh",
         "source_policy": "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2",
         "histories": histories,
@@ -768,16 +1058,16 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
     let mut runtime_cases = Vec::new();
     let mut label_cases = Vec::new();
 
-    for (ordinal, h) in histories.iter().enumerate() {
+    for h in &histories {
         let mut current_by_role: BTreeMap<&str, (usize, &Wire, String)> = BTreeMap::new();
         for (event, w) in h.turns.iter().enumerate() {
             let lit = extract_literal(w)?.to_string();
             current_by_role.insert(w.relation.as_str(), (event, w, lit));
         }
-        let mut records: Vec<(usize, u64, &Wire, String)> = current_by_role
+        let mut records: Vec<(usize, u32, &Wire, String)> = current_by_role
             .into_iter()
             .map(|(role, (event, w, lit))| {
-                let rel_id = if role == "job" { 1u64 } else { 2u64 };
+                let rel_id = if role == "job" { 1u32 } else { 2u32 };
                 (event, rel_id, w, lit)
             })
             .collect();
@@ -787,10 +1077,12 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
         }
 
         let mut segments = Vec::new();
-        for (idx, (event, rel_id, w, lit)) in records.iter().enumerate() {
-            let cue_ids = deterministic_token_ids(&w.text);
-            let val_ids = deterministic_token_ids(lit);
-            let record_id = (ordinal as u64) * 10 + (idx as u64) + 1;
+        for (event, rel_id, w, lit) in &records {
+            let cue_ids = encode_pinned_bpe(&w.text)?;
+            let val_ids = encode_pinned_bpe(lit)?;
+            // In StackStore::write_from (`geometric-native-bank-observation-panel.rs:948`),
+            // each write event `0, 1, ...` assigns `record = (event + 1) as u64` and `commit = (event + 1) as u64`.
+            let record_and_commit = (*event as u64) + 1;
             segments.push(json!({
                 "kind": "Context",
                 "event": event,
@@ -800,8 +1092,8 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
             segments.push(json!({
                 "kind": "Source",
                 "event": event,
-                "record": record_id,
-                "commit": event,
+                "record": record_and_commit,
+                "commit": record_and_commit,
                 "scope": "compiler-probe",
                 "entity": [1],
                 "relation": rel_id,
@@ -810,24 +1102,26 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
             }));
         }
 
+        let pair_id = format!("fresh-{}", h.id);
         let mut sorted_queries: Vec<&Wire> = h.queries.iter().collect();
         sorted_queries.sort_by_key(|q| if q.relation == "job" { 0usize } else { 1usize });
         for q in sorted_queries {
             let case_id = format!("fresh-{}-{}", h.id, q.relation);
-            let query_ids = deterministic_token_ids(&q.text);
+            let query_ids = encode_pinned_bpe(&q.text)?;
             runtime_cases.push(json!({
                 "id": case_id,
                 "segments": segments,
                 "query_ids": query_ids,
                 "actual_prefix_ids": [],
             }));
-            let expected_rel = if q.relation == "job" { 1u64 } else { 2u64 };
+            let expected_rel = if q.relation == "job" { 1u32 } else { 2u32 };
             let (_, _, _, expected_lit) = records
                 .iter()
                 .find(|(_, rel, _, _)| *rel == expected_rel)
                 .ok_or_else(|| "expected role record absent".to_string())?;
             label_cases.push(json!({
                 "id": case_id,
+                "pair_id": pair_id,
                 "answers": {
                     "intent": "current",
                     "accepted": [format!("{expected_lit}.")],
@@ -838,7 +1132,6 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
 
     let inputs_val = json!({
         "schema": "uor-r4.native-source-bank-probe-input/1",
-        "panel_id": "m2-fresh256",
         "cases": runtime_cases,
     });
     let inputs_json = serde_json::to_vec_pretty(&inputs_val).map_err(|e| e.to_string())?;
@@ -846,7 +1139,6 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
 
     let labels_val = json!({
         "schema": "uor-r4.native-source-bank-labels/1",
-        "panel_id": "m2-fresh256",
         "protocol": "uor-r4.literal-role-dialogue/2",
         "membership_only": true,
         "cases": label_cases,
@@ -874,6 +1166,7 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
         },
         "target_bar_rows": 103,
         "target_bar_of": 256,
+        "tokenizer_sha256": PINNED_TOKENIZER_SHA256,
         "files": {
             "plan.json": {
                 "bytes": plan_json.len(),
@@ -979,12 +1272,128 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
     prev[bc.len()]
 }
 
+fn parse_quoted_strings_in_block(
+    source: &str,
+    header: &str,
+    end_marker: &str,
+) -> Result<Vec<String>, String> {
+    let after_header = source
+        .split_once(header)
+        .map(|(_, rest)| rest)
+        .ok_or_else(|| format!("header {header:?} not found"))?;
+    let block = after_header
+        .split_once(end_marker)
+        .map(|(b, _)| b)
+        .ok_or_else(|| format!("end marker {end_marker:?} after {header:?} not found"))?;
+    let mut out = Vec::new();
+    let mut rest = block;
+    while let Some((_, after_open)) = rest.split_once('"') {
+        let (lit, after_close) = after_open
+            .split_once('"')
+            .ok_or_else(|| format!("unclosed quote in {header:?}"))?;
+        out.push(lit.to_string());
+        rest = after_close;
+    }
+    Ok(out)
+}
+
+/// Read and parse the actual historical curriculum and observation-plan files from `repo_root`
+/// (`crates/uor-r4-training/examples/geometric_native_compiler/curriculum.rs`,
+/// `crates/uor-r4-training/examples/geometric-native-bank-observation-plan.rs`, and
+/// `archive/labs/m2-fresh-437-2026-10-10/fresh-preparation-audit-attempt1.json`)
+/// to extract the 74 historical exposed literals directly from disk.
+pub fn load_historical_exposed_literals_from_repo(repo_root: &Path) -> Result<Vec<String>, String> {
+    let curriculum_path =
+        repo_root.join("crates/uor-r4-training/examples/geometric_native_compiler/curriculum.rs");
+    let curriculum_src = std::fs::read_to_string(&curriculum_path)
+        .map_err(|e| format!("{}: {e}", curriculum_path.display()))?;
+
+    let mut extracted = Vec::new();
+    for (header, expected_len) in [
+        ("const VALUES: [&str; 32] = [", 32usize),
+        ("const FACTOR_VALUES: [&str; 8] = [", 8),
+        ("const FRESH_VALUES: [&str; 8] = [", 8),
+        ("const FRESH2_VALUES: [&str; 8] = [", 8),
+        ("const FRESH3_VALUES: [&str; 8] = [", 8),
+    ] {
+        let items = parse_quoted_strings_in_block(&curriculum_src, header, "];")?;
+        if items.len() != expected_len {
+            return Err(format!(
+                "{header} length mismatch in curriculum.rs: expected {expected_len}, got {}",
+                items.len()
+            ));
+        }
+        extracted.extend(items);
+    }
+
+    let plan_path =
+        repo_root.join("crates/uor-r4-training/examples/geometric-native-bank-observation-plan.rs");
+    let plan_src =
+        std::fs::read_to_string(&plan_path).map_err(|e| format!("{}: {e}", plan_path.display()))?;
+    let raw_fixed = parse_quoted_strings_in_block(&plan_src, "let fixed = [", "];")?;
+    let untouched: Vec<String> = raw_fixed
+        .into_iter()
+        .filter(|s| s != "job" && s != "home")
+        .collect();
+    if untouched.len() != 10 {
+        return Err(format!(
+            "expected 10 untouched transfer literals in geometric-native-bank-observation-plan.rs, got {}",
+            untouched.len()
+        ));
+    }
+    extracted.extend(untouched);
+
+    let audit_path = repo_root
+        .join("archive/labs/m2-fresh-437-2026-10-10/fresh-preparation-audit-attempt1.json");
+    let audit_bytes =
+        std::fs::read(&audit_path).map_err(|e| format!("{}: {e}", audit_path.display()))?;
+    let audit_val: Value =
+        serde_json::from_slice(&audit_bytes).map_err(|e| format!("audit json: {e}"))?;
+    if audit_val["input_bytes_sha256"].as_str() != Some(OPENED_FRESH128_INPUTS_SHA256)
+        || audit_val["tokenizer_sha256"].as_str() != Some(PINNED_TOKENIZER_SHA256)
+    {
+        return Err("fresh-preparation-audit-attempt1.json SHA-256 bindings differ".to_string());
+    }
+    let extracted_set: BTreeSet<&str> = extracted.iter().map(String::as_str).collect();
+    if let Some(banks) = audit_val["frozen_episode_banks_in_literal_support"].as_array() {
+        for bank in banks {
+            if let Some(pairs) = bank.as_array() {
+                for pair in pairs {
+                    if let Some(lit) = pair.get(1).and_then(Value::as_str) {
+                        if !extracted_set.contains(lit) {
+                            return Err(format!(
+                                "frozen_episode_banks_in_literal_support literal {lit:?} missing from extracted set"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if extracted.len() != HISTORICAL_EXPOSED_LITERALS.len()
+        || extracted
+            .iter()
+            .zip(HISTORICAL_EXPOSED_LITERALS.iter())
+            .any(|(a, b)| a != b)
+    {
+        return Err(
+            "on-disk historical literals differ from HISTORICAL_EXPOSED_LITERALS".to_string(),
+        );
+    }
+    Ok(extracted)
+}
+
 type BankBlockMap =
     BTreeMap<(String, String), BTreeMap<(String, String), Vec<(String, Vec<String>)>>>;
 
-/// Verify structural balance, overlap exclusion against all historical pools,
-/// token budgets, check-only controls, and unscored-input sealing.
-pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSealAudit, String> {
+/// Verify structural balance, real-file overlap exclusion against all 74 historical literals on disk,
+/// `ByteBpeTokenizer` (`d36d3e87…`) token and alphabet budgets, `#[serde(deny_unknown_fields)]`
+/// consumer schema compatibility, history-pair question-blind controls (`< 103`), and unscored-input sealing.
+pub fn verify_m2_fresh256_panel(
+    repo_root: &Path,
+    bundle: &Fresh256Bundle,
+) -> Result<OverlapAndSealAudit, String> {
     if sha256_hex(&bundle.plan_json) != bundle.plan_sha256
         || sha256_hex(&bundle.inputs_json) != bundle.inputs_sha256
         || sha256_hex(&bundle.labels_json) != bundle.labels_sha256
@@ -995,6 +1404,23 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
 
     if bundle.histories.len() != 128 {
         return Err("histories count != 128".to_string());
+    }
+
+    let historical_from_disk = load_historical_exposed_literals_from_repo(repo_root)?;
+
+    // Check consumer schema compatibility under #[serde(deny_unknown_fields)].
+    let parsed_inputs: ProbeInputs = serde_json::from_slice(&bundle.inputs_json)
+        .map_err(|e| format!("inputs.json failed deny_unknown_fields schema: {e}"))?;
+    let parsed_labels: ProbeLabels = serde_json::from_slice(&bundle.labels_json)
+        .map_err(|e| format!("labels.json failed deny_unknown_fields schema: {e}"))?;
+    if parsed_inputs.schema != "uor-r4.native-source-bank-probe-input/1"
+        || parsed_labels.schema != "uor-r4.native-source-bank-labels/1"
+        || parsed_labels.protocol != "uor-r4.literal-role-dialogue/2"
+        || !parsed_labels.membership_only
+        || parsed_inputs.cases.len() != 256
+        || parsed_labels.cases.len() != 256
+    {
+        return Err("inputs.json / labels.json consumer header or case count mismatch".to_string());
     }
 
     let mut banks: BankBlockMap = BTreeMap::new();
@@ -1116,11 +1542,14 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
         }
     }
 
-    // Check exact, content-word, n-gram, and edit-distance disjointness against all 72 historical literals.
-    let hist_set: BTreeSet<&str> = HISTORICAL_EXPOSED_LITERALS.iter().copied().collect();
+    // Check exact, content-word, n-gram, and edit-distance disjointness against all 74 historical
+    // literals parsed from disk, plus pairwise content-word disjointness across all 34 fresh literals.
+    let hist_set: BTreeSet<&str> = historical_from_disk.iter().map(String::as_str).collect();
     let mut exact_literal_overlaps = 0usize;
     let mut content_word_overlaps = 0usize;
     let mut ngram_overlaps = 0usize;
+    let mut intra_panel_content_word_duplicates = 0usize;
+    let mut seen_fresh_content_words: BTreeSet<String> = BTreeSet::new();
     let mut min_same_stratum_edit_distance = usize::MAX;
 
     for fresh_lit in &fresh_literals_used {
@@ -1128,9 +1557,14 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
             exact_literal_overlaps += 1;
         }
         let f_words = content_words(fresh_lit);
+        for w in &f_words {
+            if !seen_fresh_content_words.insert(w.clone()) {
+                intra_panel_content_word_duplicates += 1;
+            }
+        }
         let f_bi = word_ngrams(fresh_lit, 2);
         let f_len = fresh_lit.split_whitespace().count();
-        for hist_lit in &HISTORICAL_EXPOSED_LITERALS {
+        for hist_lit in &historical_from_disk {
             let h_words = content_words(hist_lit);
             if !f_words.is_disjoint(&h_words) {
                 content_word_overlaps += 1;
@@ -1149,14 +1583,14 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
     if exact_literal_overlaps != 0
         || content_word_overlaps != 0
         || ngram_overlaps != 0
+        || intra_panel_content_word_duplicates != 0
         || min_same_stratum_edit_distance < 8
     {
         return Err(format!(
-            "overlap exclusion failed: exact={exact_literal_overlaps} word={content_word_overlaps} ngram={ngram_overlaps} min_edit={min_same_stratum_edit_distance}"
+            "overlap exclusion failed: exact={exact_literal_overlaps} word={content_word_overlaps} ngram={ngram_overlaps} intra_dup={intra_panel_content_word_duplicates} min_edit={min_same_stratum_edit_distance}"
         ));
     }
 
-    // Check token budgets, non-vacuous controls, and unscored inputs seal.
     let inputs_str = String::from_utf8_lossy(&bundle.inputs_json);
     let unscored_inputs_leak_count = usize::from(inputs_str.contains("\"accepted\""));
     if unscored_inputs_leak_count != 0 {
@@ -1169,24 +1603,30 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
     let mut copy_first_stated_hits = 0usize;
     let mut copy_last_stated_hits = 0usize;
     let mut role_swap_distractor_hits = 0usize;
-    let mut answer_tally: BTreeMap<String, usize> = BTreeMap::new();
+    let mut constant_pair_tally: BTreeMap<String, usize> = BTreeMap::new();
 
     for h in &bundle.histories {
         let first_lit = extract_literal(&h.turns[0])?.to_string();
         let last_lit = extract_literal(h.turns.last().ok_or("empty turns")?)?.to_string();
         let mut current: BTreeMap<&str, (&Wire, String)> = BTreeMap::new();
         for w in &h.turns {
-            let t_len = deterministic_token_ids(&w.text).len();
+            let t_len = encode_pinned_bpe(&w.text)?.len();
             max_turn_tokens = max_turn_tokens.max(t_len);
             current.insert(w.relation.as_str(), (w, extract_literal(w)?.to_string()));
         }
         let mut replay_tokens = 0usize;
+        let mut alphabet = BTreeSet::from([PERIOD_TOKEN_ID, EOS_TOKEN_ID]);
         for (w, lit) in current.values() {
-            replay_tokens +=
-                deterministic_token_ids(&w.text).len() + deterministic_token_ids(lit).len();
+            let cue_ids = encode_pinned_bpe(&w.text)?;
+            let emitted_ids = encode_pinned_bpe(&format!(" {lit}"))?;
+            replay_tokens += cue_ids.len() + emitted_ids.len();
+            alphabet.extend(emitted_ids);
         }
+        let mut first_both_ok = true;
+        let mut last_both_ok = true;
+        let mut swap_both_ok = true;
         for q in &h.queries {
-            let q_len = deterministic_token_ids(&q.text).len();
+            let q_len = encode_pinned_bpe(&q.text)?.len();
             max_turn_tokens = max_turn_tokens.max(q_len);
             let (_, expected_lit) = current
                 .get(q.relation.as_str())
@@ -1195,21 +1635,48 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
             let (_, distractor_lit) = current
                 .get(other_role)
                 .ok_or_else(|| "missing other role".to_string())?;
-            let target_len = deterministic_token_ids(&format!(" {expected_lit}.")).len() + 1;
+            let mut target_ids = encode_pinned_bpe(&format!(" {expected_lit}."))?;
+            target_ids.push(EOS_TOKEN_ID);
+            if target_ids.iter().any(|t| !alphabet.contains(t)) {
+                return Err(format!("target {expected_lit:?} outside replay alphabet"));
+            }
+            let target_len = target_ids.len();
             max_target_tokens = max_target_tokens.max(target_len);
             max_total_replay_tokens =
                 max_total_replay_tokens.max(replay_tokens + q_len + target_len);
 
-            if &first_lit == expected_lit {
-                copy_first_stated_hits += 1;
+            if &first_lit != expected_lit {
+                first_both_ok = false;
             }
-            if &last_lit == expected_lit {
-                copy_last_stated_hits += 1;
+            if &last_lit != expected_lit {
+                last_both_ok = false;
             }
-            if distractor_lit == expected_lit {
-                role_swap_distractor_hits += 1;
+            if distractor_lit != expected_lit {
+                swap_both_ok = false;
             }
-            *answer_tally.entry(expected_lit.clone()).or_default() += 1;
+        }
+        // Score each history (`pair_id` in `labels.json` / `pairs_both_complete_distinct` in
+        // `native-bank-generalization.rs`) only when both its opposite-role queries are right.
+        if first_both_ok {
+            copy_first_stated_hits += 2;
+        }
+        if last_both_ok {
+            copy_last_stated_hits += 2;
+        }
+        if swap_both_ok {
+            role_swap_distractor_hits += 2;
+        }
+        for candidate_const in &fresh_literals_used {
+            let both_const = h.queries.iter().all(|q| {
+                current
+                    .get(q.relation.as_str())
+                    .is_some_and(|(_, exp)| exp == candidate_const)
+            });
+            if both_const {
+                *constant_pair_tally
+                    .entry(candidate_const.clone())
+                    .or_default() += 2;
+            }
         }
     }
 
@@ -1217,11 +1684,15 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
         return Err("token budget exceeded".to_string());
     }
 
-    let best_constant_reply_hits = answer_tally.values().copied().max().unwrap_or(0);
-    if copy_first_stated_hits != 120
-        || copy_last_stated_hits != 128
+    let best_constant_reply_hits = constant_pair_tally.values().copied().max().unwrap_or(0);
+    if copy_first_stated_hits >= 103
+        || copy_last_stated_hits >= 103
+        || role_swap_distractor_hits >= 103
+        || best_constant_reply_hits >= 103
+        || copy_first_stated_hits != 0
+        || copy_last_stated_hits != 0
         || role_swap_distractor_hits != 0
-        || best_constant_reply_hits != 16
+        || best_constant_reply_hits != 0
     {
         return Err(format!(
             "control check failed: first={copy_first_stated_hits} last={copy_last_stated_hits} swap={role_swap_distractor_hits} const={best_constant_reply_hits}"
@@ -1233,9 +1704,11 @@ pub fn verify_m2_fresh256_panel(bundle: &Fresh256Bundle) -> Result<OverlapAndSea
         histories: 128,
         unordered_blocks: banks.len(),
         ordered_banks: banks.len() * 2,
+        historical_literals_parsed_from_disk: historical_from_disk.len(),
         exact_literal_overlaps,
         content_word_overlaps,
         ngram_overlaps,
+        intra_panel_content_word_duplicates,
         min_same_stratum_edit_distance,
         literal_role_balance,
         literal_initial_position_balance,
@@ -1286,6 +1759,7 @@ mod tests {
 
     #[test]
     fn fresh256_panel_passes_all_overlap_balance_and_seal_checks() {
+        let root = repo_root();
         let bundle = generate_m2_fresh256_panel().expect("generate fresh256");
         let again = generate_m2_fresh256_panel().expect("generate fresh256 again");
         assert_eq!(bundle.plan_sha256, again.plan_sha256);
@@ -1293,26 +1767,58 @@ mod tests {
         assert_eq!(bundle.labels_sha256, again.labels_sha256);
         assert_eq!(bundle.manifest_sha256, again.manifest_sha256);
 
-        let audit = verify_m2_fresh256_panel(&bundle).expect("verify fresh256");
+        let audit = verify_m2_fresh256_panel(&root, &bundle).expect("verify fresh256");
         assert_eq!(audit.rows, 256);
         assert_eq!(audit.histories, 128);
         assert_eq!(audit.unordered_blocks, 16);
         assert_eq!(audit.ordered_banks, 32);
+        assert_eq!(audit.historical_literals_parsed_from_disk, 74);
         assert_eq!(audit.exact_literal_overlaps, 0);
         assert_eq!(audit.content_word_overlaps, 0);
         assert_eq!(audit.ngram_overlaps, 0);
+        assert_eq!(audit.intra_panel_content_word_duplicates, 0);
         assert!(audit.min_same_stratum_edit_distance >= 8);
         assert!(audit.literal_role_balance);
         assert!(audit.literal_initial_position_balance);
-        assert_eq!(audit.copy_first_stated_hits, 120);
-        assert_eq!(audit.copy_last_stated_hits, 128);
+        assert_eq!(audit.copy_first_stated_hits, 0);
+        assert_eq!(audit.copy_last_stated_hits, 0);
         assert_eq!(audit.role_swap_distractor_hits, 0);
-        assert_eq!(audit.best_constant_reply_hits, 16);
+        assert_eq!(audit.best_constant_reply_hits, 0);
         assert_eq!(audit.unscored_inputs_leak_count, 0);
     }
 
     #[test]
+    fn fresh256_panel_hashes_match_registered_panel_json() {
+        let root = repo_root();
+        let bundle = generate_m2_fresh256_panel().expect("generate fresh256");
+        let panel_path = root.join("docs/harness/panels/m2-fresh256.json");
+        let panel_text = std::fs::read_to_string(&panel_path)
+            .expect("read docs/harness/panels/m2-fresh256.json");
+        assert!(
+            panel_text.contains(&bundle.plan_sha256),
+            "m2-fresh256.json missing plan_sha256 {}",
+            bundle.plan_sha256
+        );
+        assert!(
+            panel_text.contains(&bundle.inputs_sha256),
+            "m2-fresh256.json missing inputs_sha256 {}",
+            bundle.inputs_sha256
+        );
+        assert!(
+            panel_text.contains(&bundle.labels_sha256),
+            "m2-fresh256.json missing labels_sha256 {}",
+            bundle.labels_sha256
+        );
+        assert!(
+            panel_text.contains(&bundle.manifest_sha256),
+            "m2-fresh256.json missing manifest_sha256 {}",
+            bundle.manifest_sha256
+        );
+    }
+
+    #[test]
     fn negative_mutations_are_rejected_by_verifier() {
+        let root = repo_root();
         let bundle = generate_m2_fresh256_panel().expect("generate fresh256");
 
         // 1. Injecting an exposed historical literal is caught by overlap exclusion.
@@ -1324,13 +1830,13 @@ mod tests {
                 }
             }
         }
-        let err1 = verify_m2_fresh256_panel(&leaked_lit).unwrap_err();
+        let err1 = verify_m2_fresh256_panel(&root, &leaked_lit).unwrap_err();
         assert!(err1.contains("overlap exclusion failed"), "got: {err1}");
 
         // 2. Breaking initial position balance is caught.
         let mut unbalanced = bundle.clone();
         unbalanced.histories[0].turns.swap(0, 1);
-        let err2 = verify_m2_fresh256_panel(&unbalanced).unwrap_err();
+        let err2 = verify_m2_fresh256_panel(&root, &unbalanced).unwrap_err();
         assert!(
             err2.contains("literal initial position imbalance"),
             "got: {err2}"
@@ -1338,9 +1844,16 @@ mod tests {
 
         // 3. Leaking `"accepted"` into unscored `inputs_json` is caught.
         let mut leaked_inputs = bundle.clone();
-        leaked_inputs.inputs_json = br#"{"accepted":["basalt loggia."]}"#.to_vec();
+        let inputs_text = String::from_utf8(leaked_inputs.inputs_json.clone()).expect("utf8");
+        leaked_inputs.inputs_json = inputs_text
+            .replacen(
+                "fresh-diverse-length2-00-swap0-q0-forward-job",
+                "accepted",
+                1,
+            )
+            .into_bytes();
         leaked_inputs.inputs_sha256 = sha256_hex(&leaked_inputs.inputs_json);
-        let err3 = verify_m2_fresh256_panel(&leaked_inputs).unwrap_err();
+        let err3 = verify_m2_fresh256_panel(&root, &leaked_inputs).unwrap_err();
         assert!(
             err3.contains("inputs.json leaked accepted answer strings"),
             "got: {err3}"
@@ -1349,7 +1862,7 @@ mod tests {
         // 4. Corrupting a SHA-256 seal is caught.
         let mut bad_seal = bundle;
         bad_seal.labels_sha256 = "0".repeat(64);
-        let err4 = verify_m2_fresh256_panel(&bad_seal).unwrap_err();
+        let err4 = verify_m2_fresh256_panel(&root, &bad_seal).unwrap_err();
         assert!(err4.contains("bundle SHA-256 mismatch"), "got: {err4}");
     }
 }

@@ -13,7 +13,7 @@ fn main() -> Result<(), String> {
 
     let dev_spread = analyze_saved437_dev512_spread(repo_root)?;
     let bundle = generate_m2_fresh256_panel()?;
-    let audit = verify_m2_fresh256_panel(&bundle)?;
+    let audit = verify_m2_fresh256_panel(repo_root, &bundle)?;
 
     let args: Vec<String> = std::env::args().collect();
     if let Some(pos) = args.iter().position(|a| a == "--emit-dir") {

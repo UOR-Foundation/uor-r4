@@ -3,7 +3,7 @@ id: m2-fresh-heldout-panel
 title: Build a genuinely fresh held-out reply panel for M2
 milestone: M2
 area: evaluation
-status: done
+status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []

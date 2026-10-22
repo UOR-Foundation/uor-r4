@@ -1,82 +1,16 @@
 {
   "schema": 1,
-  "note": "Frozen M2 fresh held-out acceptance panel (issue #2849, milestone #2030). Registered and sealed in advance of any candidate scoring (`NOT_RUN`). Graded by the existing deterministic complete-reply evaluator unchanged.",
+  "note": "Staged M2 fresh held-out acceptance panel (issue #2849, milestone #2030). Registered and sealed in advance of any candidate scoring (NOT_RUN). Graded by the existing deterministic complete-reply evaluator unchanged.",
   "panels": {
     "m2-fresh256": {
-      "title": "M2 grounded reply: frozen 256-row genuinely fresh held-out acceptance panel",
+      "title": "M2 grounded reply: 256-row genuinely fresh held-out acceptance panel",
       "milestone": "m2",
-      "issue": "#2849",
-      "milestone_issue": "#2030",
-      "frozen": true,
-      "status": "NOT_RUN",
-      "test_fitness": "TEST FITNESS: FIT (non-author fresh-context review 3f74630d-7674-4958-a496-38b96b34ab18 on 2026-10-22; M2 training remains HELD until owner release)",
-      "grader": "the saved native learner's own complete-reply evaluator unchanged (uor-r4-core::native_geometric compiler -> exact store -> emitter under uor-r4.literal-role-dialogue/2, membership_only exact match on accepted)",
-      "source": "issue #2030 acceptance 1-2, issue #2849, docs/labs/m2-fresh-heldout-panel/README.md",
-      "generator_crate": "docs/labs/m2-fresh-heldout-panel/instrument",
-      "storage_prefix": "hf://datasets/caseyallard/uor-r4-store/data/m2-fresh256/",
-      "rows": 256,
-      "histories": 128,
-      "unordered_bank_blocks": 16,
-      "ordered_role_value_banks": 32,
-      "opposite_query_pairs": 128,
-      "strata_rows": {
-        "length2": 64,
-        "length4": 64,
-        "length8": 64,
-        "update": 32,
-        "reassert": 32
-      },
-      "noise": {
-        "measured_on_panel": "m2-reply512 (b9661606b280884217a64e0a5b643f8324a90390e47ade7241da0889a5f7c86a)",
-        "measured_parent": "saved437 (de4a3234d6e92f4b12a657cc195425687bc67c243d9eded9a1df0797b9942a61)",
-        "evaluator_replay_diff_rows": 0,
-        "half_panel_256_split": [219, 218],
-        "half_panel_256_abs_diff_rows": 1,
-        "chronology_forward_vs_reverse_of_256": [212, 225],
-        "role_swap0_vs_swap1_of_256": [215, 222],
-        "query_wording_a_vs_b_of_256": [214, 223],
-        "queried_role_job_vs_home_of_256": [219, 218],
-        "empirical_cluster_se_256_rows": "6.24 rows (244 bps across 16 sixteen-row blocks)",
-        "bar40_binomial_se_256_rows": "7.84 rows (306 bps)",
-        "bar40_cluster_se_256_rows": "8.64 rows (338 bps; 2-sigma band +/-17 rows)"
-      },
-      "overlap_exclusion": {
-        "excluded_historical_literals": 72,
-        "excluded_dev512_inputs_sha256": "b9661606b280884217a64e0a5b643f8324a90390e47ade7241da0889a5f7c86a",
-        "excluded_opened_fresh128_inputs_sha256": "c5a643ff9ef86f5f16f15b420f42fe8b1921c5c8c7df5a7bbb88f7759cda5bda",
-        "exact_literal_overlaps": 0,
-        "content_word_overlaps": 0,
-        "word_2gram_overlaps": 0,
-        "min_same_stratum_levenshtein_distance": 10,
-        "literal_role_balance": true,
-        "literal_initial_position_balance": true,
-        "max_query_wording_spread": 4,
-        "unscored_inputs_leak_count": 0
-      },
-      "check_only_baselines": {
-        "copy_first_stated_of_256": 120,
-        "copy_last_stated_of_256": 128,
-        "role_swap_distractor_of_256": 0,
-        "best_constant_reply_of_256": 16
-      },
-      "sealed_artifacts": {
-        "plan.json": {
-          "bytes": 122745,
-          "sha256": "698d3cf2d7208f3d66f85a1b3a77727f6380c785964f914a78ab9608cdbcba4a"
-        },
-        "inputs.json": {
-          "bytes": 410531,
-          "sha256": "f6f6732e1958568c3ec6aed7262045e8f447d111a71abcad54d0ca2a5950a06c"
-        },
-        "labels.json": {
-          "bytes": 52573,
-          "sha256": "ecb99eb0b196b6ba2c56e6ede5556d90b35391ffe4dc13fb6fea6b97cc444842"
-        },
-        "manifest.json": {
-          "bytes": 1183,
-          "sha256": "4ccf1e32ad86e81c243c9c0ade18cbdd90077e3e07fd854ba01aeee5b8873779"
-        }
-      },
+      "frozen": false,
+      "grader": "the saved native learner's own complete-reply evaluator unchanged (crates/uor-r4-core/examples/native-bank-generalization.rs under uor-r4.literal-role-dialogue/2, membership_only exact match on accepted plus opposite-query history-pair completion pairs_both_complete_distinct via pair_id)",
+      "source": "issue #2030 comment 6347165682, issue #2849, docs/labs/m2-fresh-heldout-panel/README.md; deterministic generator docs/labs/m2-fresh-heldout-panel/instrument with pinned ByteBpeTokenizer d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89 (plan.json 122268 B sha256:0ed1ab98ab50bbad6c484c4e7e4ffeeb8bb7ad17d162251826302efe86d75715; unscored inputs.json 524850 B sha256:1de2fc28607eff6bc412eee41a259d806ee1479b7c925059f00e9d3b54afa99a; sealed labels.json 68000 B sha256:3b5c54771b8dc62e3c30aef2b30de28c09dfe79625f333854af046e6e354e2be; manifest.json 1273 B sha256:c930e1f0275ea0fc8c8b2afbb6062546ff11331c1b7fdfeb9ec75eca97e456bd)",
+      "noise": "single-model within-panel spread measured on saved437 (de4a3234...) over m2-reply512 (b9661606..., not multi-seed training spread): deterministic evaluator replay diff 0/512; stratified half-panel split (16 even vs 16 odd blocks of 256 rows) 219/256 vs 218/256 (|delta| = 1 row); paired-variant spreads across 256 pairs are chronology 212 vs 225 (|delta| = 13), role-swap 215 vs 222 (|delta| = 7), query-wording 214 vs 223 (|delta| = 9), queried-role 219 vs 218 (|delta| = 1, 186/256 histories complete on both roles); 16-block (256-row) cluster-sampling SE is 6.24 rows (244 bps) at p=85.35% and 8.64 rows (338 bps, vs 7.83 rows floor / 7.84 rows rounded i.i.d. binomial) at the 40% (103/256) bar; under history-pair completion (pair_id / pairs_both_complete_distinct), every question-blind control (copy_first_stated, copy_last_stated, role_swap_distractor, best_constant_reply) scores 0/256 rows (0/128 histories).",
+      "seeds": ">= 2 for a decisive run (D22 section 3); D22 section 5b names >= 2 seeds for joint learning",
+      "rows": "256 fresh rows (128 histories x 2 opposite-role queries across 16 unordered bank blocks and 32 ordered role-value banks: length2 64, length4 64, length8 64, update 32, reassert 32; 0 exact, 0 content-word, and 0 word 2-gram overlaps against all 74 historical curriculum and transfer literals on disk, and 0 intra-panel content-word duplicates across all 34 fresh literals)",
       "bars": [
         {
           "id": "complete-correct-512",
@@ -91,14 +25,15 @@
         {
           "id": "fresh-transfer-256",
           "label": "complete correct replies on the sealed 256-row fresh held-out panel (m2-fresh256)",
-          "current": null,
+          "current": 0,
           "target": 103,
           "of": 256,
           "unit": "correct replies",
           "direction": "open",
-          "note": "ceil(0.40 * 256) = 103/256 (40.23%), exceeding 0/256 by 11.9x the cluster-adjusted standard error (8.64 rows); replaces the opened 128-row transfer draw (c5a643ff...) which was exposed on 10 October 2026"
+          "note": "current is 0 (NOT_RUN; no candidate has been scored on m2-fresh256, and every question-blind control scores 0/256 under history-pair completion pairs_both_complete_distinct); target ceil(0.40 * 256) = 103/256 (40.23%, >= 52/128 complete history pairs = 104/256 pair-verified rows), exceeding 0/256 by 11.9x the cluster-adjusted standard error (8.64 rows)"
         }
-      ]
+      ],
+      "note": "Staged under m2-fresh-heldout-panel (#2849) prior to any M2 evaluation run (NOT_RUN). TEST FITNESS: PENDING — remains frozen: false until a non-author lab's TEST FITNESS: FIT review lands and a maintainer uploads the sealed files (plan.json, inputs.json, labels.json, manifest.json) to hf://datasets/caseyallard/uor-r4-store/data/m2-fresh256/."
     }
   }
 }
