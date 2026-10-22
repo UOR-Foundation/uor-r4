@@ -24,6 +24,13 @@ Class **instrument** (docs). The decision is recorded at #2028 `6333307361` (`20
 - The `## Owner approval` section in this ORDER names `AGENTS.md`, quotes both owner answers ("Addressed per lab (Recommended)" from 2026-10-22T04:05:13Z and "Per-lab lines (Recommended)" from 2026-10-22T05:15:01Z) and keeps `AGENTS.md` at most 80 lines.
 - `pr-check --local` PASS including `owner-paths`; `report --check` PASS; `gates --full` GREEN; receipts re-run at the repaired head; CI green.
 
+## Owner approval
+
+`AGENTS.md` is an owner path. Casey answered in Claude's chat on 22 October 2026; Claude recorded both answers verbatim on #2028:
+
+- Inbox addressing (comment `2026-10-22T04:05:13Z`): "Addressed per lab (Recommended)".
+- `all` marking (comment `2026-10-22T05:15:01Z`): "Per-lab lines (Recommended)".
+
 ## Stop and ask if
 
 - The decision's wording is ambiguous for a mixed one-lab-and-`all` message (it is not: one line per lab; the addressed set decides when `waiting` clears).
