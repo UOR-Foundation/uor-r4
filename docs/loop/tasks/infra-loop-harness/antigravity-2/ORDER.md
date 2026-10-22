@@ -1,52 +1,18 @@
 # ORDER: infra-loop-pr09-client-adapters, antigravity-2 (repair: guard tokenization, subagent binding, plan-only install)
 
-Lab: antigravity. Item: [infra-loop-pr09-client-adapters](../../../../roadmap/items/infra-loop-pr09-client-adapters.md) (#2914). Setup row: 9. Base: `2faa7aa82` (`origin/main`), repairing `antigravity-1` (PR #2932) after the counted `CHANGES` record at `e7b768e043349bc7456ebfb4ab1082949d85a963` (`claude`, `uor-review v1`, fresh context).
-
-## Done in antigravity-1 (history, folded so the PR adds one active ORDER)
-
-- Claimed `#2914` and committed `docs/loop/tasks/infra-loop-harness/antigravity-1/ORDER.md` first (`ed10c86f7`).
-- Built `crates/uor-r4-harness/src/loopguard.rs` (`loop guard`, `loop install`, `loop onboard`, `loop copyright`), `tests/loop_guard.rs`, and `docs/harness/onboarding/{antigravity,claude,codex,deepseek,kimi}.json` (`774db9003`).
-- Opened PR `#2932` and requested the D59 review (`e7b768e04`).
+Lab: antigravity. Item: [infra-loop-pr09-client-adapters](../../../../roadmap/items/infra-loop-pr09-client-adapters.md) (#2914). Setup row: 9. Base: `a8ff5690e` (`origin/main`), repairing `antigravity-1` (PR #2932) after the counted `CHANGES` record at `e7b768e043349bc7456ebfb4ab1082949d85a963` (`claude`, `uor-review v1`, fresh context).
 
 ## Goal
 
 Address every HIGH, MEDIUM and LOW finding in the `e7b768e04` `CHANGES` review record and build Casey's two owner decisions from `#2028`:
-
-1. **HIGH 1 — Tokenize shell commands in `loop guard`:**
-   - Split shell commands into segments (across `;`, `|`, `||`, `&&`, `&`, newlines, `(...)`, `$(...)`, backticks), unwrap leading `KEY=VALUE` assignments and command wrappers (`env`, `command`, `nohup`, `time`, `nice`, `sudo`, `sh -c`, `bash -c`, `zsh -c`, `xargs`), and strip any directory prefix from `argv[0]` so `/usr/bin/pkill foo` and `/bin/killall` are refused.
-   - Skip all `git` global options (`-C <dir>`, `-c <key=val>`, `--git-dir`, `--work-tree`, `--namespace`, `--bare`, `--no-pager`, `-p`, `--config-env`, etc.) before matching the `git` verb and its arguments, while treating any `-c core.hooksPath=...` or `--config-env=core.hooksPath=...` (case-insensitive) as a forbidden hook bypass.
-   - On `git commit`, refuse `-n` in short flag clusters (such as `-nm x`, `-an`, `-anm`) as well as `--no-verify`.
-   - On `git push`, skip options (such as `-u`, `--set-upstream`, `--repo`) and treat any refspec whose destination is `main` or `refs/heads/main` (including `git push origin main`, `git push -u origin main`, `git push origin feat:main`, `git push origin HEAD:refs/heads/main`, `git push origin :main`) as a forbidden push to `main`.
-   - Add negative tests for every case (`git -c core.hooksPath=/dev/null commit -m x`, `git push origin feat:main`, `/usr/bin/pkill foo`, `git -c a=b push --force`, `git push -u origin main`, `git commit -nm x`).
-2. **HIGH 2 — `loop install` plan-only default, explicit `--apply`, guard refusal of `loop install --apply` and `git install-hooks`, and documentation of every user-level path (owner decisions, 21–22 Oct):**
-   - Per Casey's decision (`"Only you, with --apply (Recommended)"`, `2026-10-21T23:43:00Z`), `loop install (--client <C> | --all)` is **plan-only by default**: it prints the full list of files it would write and writes nothing unless `--apply` is given.
-   - Per Casey's decisions (`2026-10-21T23:43:00Z` and `"Only you (Recommended)"`, `2026-10-22T00:42:00Z`), `loop guard` refuses both `uor-harness loop install --apply` (or `loop install` with `--apply`) and `uor-harness git install-hooks` from any lab session, and `loop install --apply` itself refuses to write to `$HOME` while `UOR_LAB` is set.
-   - Document in `docs/harness/README.md`, `docs/loop/README.md`, this ORDER and the REPORT every file path `loop install --apply` writes:
-     - `claude`: `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude/skills/<6 skills>/SKILL.md`
-     - `codex`: `~/.codex/hooks.json`, `~/.codex/rules/uor-r4.rules`, `~/.codex/skills/<6 skills>/SKILL.md`
-     - `kimi`: `~/.kimi-code/config.toml`, `~/.kimi-code/UOR-R4-START.md`, `~/.kimi-code/UOR-R4-HANDOFF.md`, `~/.agents/skills/<6 skills>/SKILL.md`
-     - `antigravity`: `~/.gemini/config/plugins/uor-r4-loop/plugin.json`, `~/.gemini/config/plugins/uor-r4-loop/hooks.json`, `~/.gemini/config/skills/<6 skills>/SKILL.md`
-     - `deepseek`: `~/.dsh/hooks.json`, `~/.dsh/profiles/headless/cordis.patch.yml`, `~/.dsh/skills/<6 skills>/SKILL.md`, and `local/deepseek/headless-overlay.yml`
-3. **MEDIUM 1 — Tokenized `gh` merge checks and comprehensive credential-read / env-dump refusal:**
-   - Match tokenized `gh` commands so `gh  pr merge` (extra whitespace or global flags) without `--match-head-commit <40-hex>` and `gh api .../merge` are refused.
-   - Refuse any command referencing credential paths (`~/.netrc`, `~/.git-credentials`, `.env*`, `auth.json`, `credentials.json`, `~/.aws/credentials`, `~/.runpod/config.toml`, `~/.vast_api_key`, `~/.config/gh/hosts.yml`, `~/.npmrc`, `~/.pypirc`, `~/.cargo/credentials*`, `~/.ssh/id_*`) regardless of the reader (`cat`, `head`, `tail`, `less`, `more`, `grep`, `rg`, `awk`, `sed`, etc.), and refuse environment-variable dumps (`printenv`, bare `env`, `export -p`, `declare -p`, secret `$...KEY...`/`$...TOKEN...` expansions).
-4. **MEDIUM 2 — Active ORDER from claimed branch or active-order marker only:**
-   - `find_active_order` reads the active ORDER only from `local/<lab>/guard/active-order` or from the ORDER added on the worktree's claimed `<lab>/<topic>` branch relative to `origin/main` (never from closed historical task folders such as `claude-20`). With neither present, top-level writes inside the lab's worktree are not held to a closed task's scope.
-5. **MEDIUM 3 — Bind Claude Code `agent_id` to numbered suborder `<n>.md`:**
-   - Bind `agent_id` to the next unclaimed `local/<lab>/<topic>/orders/<n>.md` at `SubagentStart` (stored atomically in `local/<lab>/guard/subagent-bindings.json`, released at `SubagentStop`), and refuse subagent writes when `agent_id` has no binding.
-6. **MEDIUM 4 — Antigravity `SessionStart` / fail-closed state and atomic Kimi depth counter:**
-   - In Antigravity, replace stale `root_conversation_id` on `SessionStart` unless the root session has a pending `invoke_subagent` spawn (or `isSubagent` is set), and fail closed (treat as a subagent) when `PreToolUse` fires with no prior `SessionStart`.
-   - Protect all guard state updates (`antigravity`, `kimi` depth, `claude` bindings) with an advisory lockfile and atomic temp-file rename.
-7. **MEDIUM 5 — Shell file-modifying commands checked against write rules:**
-   - Check target paths of `cp`, `mv`, `rm`, `unlink`, `rmdir`, `install`, `ln`, `touch`, `truncate`, `chmod`, `chown`, `sed -i`, `perl -i`, `ruby -i`, `dd of=...`, `git rm`, `git mv` and `git restore` (in addition to `>`, `>>` and `tee`) through `check_write_path`.
-8. **LOW 1, LOW 2, LOW 3:**
-   - Allow `git push --force-with-lease` while refusing `--force`, `--force-if-includes`, `-f` and `+refspec`.
-   - Check repository membership (`find_uor_roots`) before validating `--client` or failing on malformed JSON in `loop guard`, so hooks outside `~/uor-r4` always exit `0`.
-   - Record `N/A` in `docs/harness/onboarding/*.json` for hooks and skills that have not yet been installed via `loop install --apply`, and state explicitly in the receipts and `loop onboard` output that the canary is evaluated in-process on `loop guard` rather than through the client's live hook runner.
+- **HIGH 1:** Tokenize shell commands across `;`, `|`, `||`, `&&`, `&`, newlines, `(...)`, `$(...)`, backticks, env assignments and wrappers (`env`, `command`, `nohup`, `time`, `nice`, `sudo`, `sh -c`, `xargs`), strip `argv[0]` path prefixes (`/usr/bin/pkill`), skip `git` global options (`-C`, `-c`, `--git-dir`, `--work-tree`, `--config-env`), refuse `-c core.hooksPath=...`, `git commit -n` (`-nm x`), and any `git push` refspec targeting `main` (`feat:main`, `-u origin main`, `HEAD:refs/heads/main`, `:main`).
+- **HIGH 2:** Make `loop install` plan-only by default (writing only with `--apply`), refuse `loop install --apply` against `$HOME` when `UOR_LAB` is set, refuse `uor-harness loop install --apply` and `uor-harness git install-hooks` in `loop guard`, and document every user-level path (`~/.claude/{settings.json,CLAUDE.md,skills/*}`, `~/.codex/{hooks.json,rules/uor-r4.rules,skills/*}`, `~/.kimi-code/{config.toml,UOR-R4-START.md,UOR-R4-HANDOFF.md}`, `~/.agents/skills/*`, `~/.gemini/config/{plugins/uor-r4-loop/*,skills/*}`, `~/.dsh/{hooks.json,profiles/headless/cordis.patch.yml,skills/*}`, `local/deepseek/headless-overlay.yml`).
+- **MEDIUM 1–5:** Tokenized `gh pr merge` / `gh api .../merge` checks; universal credential-path and env-dump (`printenv`, bare `env`, `export -p`, `declare -p`) refusals; `find_active_order` restricted to `local/<lab>/guard/active-order` or the branch's added ORDER relative to `origin/main`; Claude `agent_id` bound to numbered `orders/<n>.md` at `SubagentStart`; Antigravity `SessionStart` replacement and fail-closed `PreToolUse` with advisory lockfile + atomic writes; shell file-modifying commands (`cp`, `mv`, `rm`, `sed -i`, `dd of=`, `git rm`, `git mv`, `git restore`, etc.) checked via `check_write_path`.
+- **LOW 1–3:** Allow `git push --force-with-lease`; check `find_uor_roots` before `--client` or JSON validation so hooks outside `~/uor-r4` always exit `0`; record `N/A` in `docs/harness/onboarding/*.json` for unapplied hooks/skills and state that the canary runs in-process on `loop guard`.
 
 ## Cancel probe (run first)
 
-Is the counted `CHANGES` record at `e7b768e043349bc7456ebfb4ab1082949d85a963` still the last counted record on PR `#2932`, and do `git -c core.hooksPath=/dev/null commit -m x`, `git push origin feat:main` and `/usr/bin/pkill foo` still exit `0` on the `e7b768e04` binary? Result: yes — `uor-harness loop review --check --pr 2932` exits `1` (`fail: the last counted record is CHANGES`), and all three bypass probes reproduce at `e7b768e04`. The repair proceeds. Class: instrument.
+Is `e7b768e04` still `CHANGES` on PR `#2932` and do `git -c core.hooksPath=/dev/null commit -m x`, `git push origin feat:main` and `/usr/bin/pkill foo` still exit `0` on `e7b768e04`? Result: yes (`uor-harness loop review --check --pr 2932` exits `1`, and all three probes exit `0` at `e7b768e04`). The repair stands. Class: instrument.
 
 ## Files in scope
 
@@ -58,13 +24,11 @@ Is the counted `CHANGES` record at `e7b768e043349bc7456ebfb4ab1082949d85a963` st
 - `docs/roadmap/items/infra-loop-pr09-client-adapters.md` (`status: done`)
 - `docs/loop/tasks/infra-loop-harness/antigravity-1/**`
 - `docs/loop/tasks/infra-loop-harness/antigravity-2/**`
-- `docs/loop/tasks/infra-loop-harness/kimi-1/REPORT.md`
 
 ## Done when
 
-- Every HIGH, MEDIUM and LOW point from the `e7b768e04` `CHANGES` record and Casey's `loop install --apply` and `git install-hooks` decisions are built and covered by integration tests in `crates/uor-r4-harness/tests/loop_guard.rs`.
-- Probes on the built binary refuse `--no-verify`, `pkill`, `git -c core.hooksPath=/dev/null commit -m x`, `git push origin feat:main`, `/usr/bin/pkill foo`, `git -c a=b push --force`, `git push -u origin main`, `git commit -nm x`, `gh  pr merge`, `gh api .../merge`, `uor-harness loop install --all --apply`, `uor-harness git install-hooks`, `head ~/.netrc`, `less ~/.netrc`, `grep x ~/.netrc`, `printenv`, `~/.aws/credentials`, `~/.runpod/config.toml`, `cp x CHARTER.md`, `sed -i 's/a/b/' CHARTER.md`, `mv x CHARTER.md` and `rm CHARTER.md` with exit `2`, while allowing `git push --force-with-lease origin feat` and exiting `0` outside the repo even with unknown `--client` or malformed JSON.
-- `uor-harness loop gates --full`, `uor-harness loop onboard --check-receipts`, `uor-harness loop copyright` and `uor-harness loop report --check` pass.
+- All HIGH, MEDIUM and LOW items from `e7b768e04` and Casey's two owner decisions are built and tested in `crates/uor-r4-harness/tests/loop_guard.rs`.
+- `uor-harness loop gates --full`, `uor-harness loop onboard --check-receipts`, `uor-harness loop copyright`, `uor-harness loop report --check` and `uor-harness loop pr-check --local` pass.
 
 ## Stop and ask if
 

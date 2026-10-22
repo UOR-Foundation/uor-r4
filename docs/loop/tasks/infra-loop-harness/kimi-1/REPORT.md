@@ -34,7 +34,7 @@ Size by class: docs 58 insertions, 7 deletions across 51 item files; no code, no
 
 ## Skills used
 
-- scope-guard: kept edits inside the ORDER's declared file list and inspected `git diff --stat` before review. The ORDER, the loop page and the PM lane note were the opener.
+- scope-guard: the written edge (the ORDER's file list) and "size is checked before content" (`git diff --stat` before review). The ORDER, the loop page and the PM lane note were the opener.
 
 ## Still open
 
