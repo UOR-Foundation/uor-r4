@@ -4,8 +4,8 @@
 //! payloads stored in [`Store`] (`ByteSpan`, `WholeObject`, or `TokenOccurrence`),
 //! with versioned overwrite tracking (`Current` and `Previous`), bounded capacity
 //! eviction (`Evicted`), and division-free sorted-merge GCD sieve admission.
-//! Uses zero floating point, zero softmax/squashing, and zero dense matrix
-//! multiplication (CHARTER §3.1–§3.3, D11, D23, D30).
+//! Uses an exact integer consumer with no floating point, no exponential or
+//! squashing form, and no dense matrix product (CHARTER §3.1–§3.3, D11, D23, D30).
 
 use crate::{
     bindings::{Bindings, PinnedTokenizer},
