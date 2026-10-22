@@ -45,7 +45,7 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 1. Freeze `docs/harness/panels/m3-memory.json` (`>= 80` rows) and pin its SHA-256 digest.
 2. Obtain a non-author `TEST FITNESS: FIT` review on this sheet, owner bar confirmation on `#2028`, PM dispatch, and Casey's approval in chat before any GPU evaluation.
 3. Run the three evaluation arms (`Arm A`, `Arm B`, `Arm C`) on the frozen checkpoint on a single RTX 5090 pod via `scripts/pod/uor-pod` (zero training steps).
-4. Record `check_pass`, `address_match`, abstention/eviction accuracy, and held-out BPB in [`docs/research/notebook/memory.md`](../../research/notebook/memory.md).
+4. Record `check_pass`, `address_match`, abstention/eviction accuracy, and held-out BPB in [`docs/research/notebook/m3-durable-memory.md`](../../research/notebook/m3-durable-memory.md).
 
 ## 7. Stop conditions
 
