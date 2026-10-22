@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "note": "Frozen M2 fresh held-out acceptance panel (issue #2849, milestone #2030). Registered and sealed in advance of any candidate scoring (`NOT_RUN`). Graded by the existing deterministic complete-reply evaluator unchanged.",
+  "panels": {
+    "m2-fresh256": {
+      "title": "M2 grounded reply: frozen 256-row genuinely fresh held-out acceptance panel",
+      "milestone": "m2",
+      "issue": "#2849",
+      "milestone_issue": "#2030",
+      "frozen": true,
+      "status": "NOT_RUN",
+      "test_fitness": "TEST FITNESS: FIT (non-author fresh-context review 3f74630d-7674-4958-a496-38b96b34ab18 on 2026-10-22; M2 training remains HELD until owner release)",
+      "grader": "the saved native learner's own complete-reply evaluator unchanged (uor-r4-core::native_geometric compiler -> exact store -> emitter under uor-r4.literal-role-dialogue/2, membership_only exact match on accepted)",
+      "source": "issue #2030 acceptance 1-2, issue #2849, docs/labs/m2-fresh-heldout-panel/README.md",
+      "generator_crate": "docs/labs/m2-fresh-heldout-panel/instrument",
+      "storage_prefix": "hf://datasets/caseyallard/uor-r4-store/data/m2-fresh256/",
+      "rows": 256,
+      "histories": 128,
+      "unordered_bank_blocks": 16,
+      "ordered_role_value_banks": 32,
+      "opposite_query_pairs": 128,
+      "strata_rows": {
+        "length2": 64,
+        "length4": 64,
+        "length8": 64,
+        "update": 32,
+        "reassert": 32
+      },
+      "noise": {
+        "measured_on_panel": "m2-reply512 (b9661606b280884217a64e0a5b643f8324a90390e47ade7241da0889a5f7c86a)",
+        "measured_parent": "saved437 (de4a3234d6e92f4b12a657cc195425687bc67c243d9eded9a1df0797b9942a61)",
+        "evaluator_replay_diff_rows": 0,
+        "half_panel_256_split": [219, 218],
+        "half_panel_256_abs_diff_rows": 1,
+        "chronology_forward_vs_reverse_of_256": [212, 225],
+        "role_swap0_vs_swap1_of_256": [215, 222],
+        "query_wording_a_vs_b_of_256": [214, 223],
+        "queried_role_job_vs_home_of_256": [219, 218],
+        "empirical_cluster_se_256_rows": "6.24 rows (244 bps across 16 sixteen-row blocks)",
+        "bar40_binomial_se_256_rows": "7.84 rows (306 bps)",
+        "bar40_cluster_se_256_rows": "8.64 rows (338 bps; 2-sigma band +/-17 rows)"
+      },
+      "overlap_exclusion": {
+        "excluded_historical_literals": 72,
+        "excluded_dev512_inputs_sha256": "b9661606b280884217a64e0a5b643f8324a90390e47ade7241da0889a5f7c86a",
+        "excluded_opened_fresh128_inputs_sha256": "c5a643ff9ef86f5f16f15b420f42fe8b1921c5c8c7df5a7bbb88f7759cda5bda",
+        "exact_literal_overlaps": 0,
+        "content_word_overlaps": 0,
+        "word_2gram_overlaps": 0,
+        "min_same_stratum_levenshtein_distance": 10,
+        "literal_role_balance": true,
+        "literal_initial_position_balance": true,
+        "max_query_wording_spread": 4,
+        "unscored_inputs_leak_count": 0
+      },
+      "check_only_baselines": {
+        "copy_first_stated_of_256": 120,
+        "copy_last_stated_of_256": 128,
+        "role_swap_distractor_of_256": 0,
+        "best_constant_reply_of_256": 16
+      },
+      "sealed_artifacts": {
+        "plan.json": {
+          "bytes": 122745,
+          "sha256": "698d3cf2d7208f3d66f85a1b3a77727f6380c785964f914a78ab9608cdbcba4a"
+        },
+        "inputs.json": {
+          "bytes": 410531,
+          "sha256": "f6f6732e1958568c3ec6aed7262045e8f447d111a71abcad54d0ca2a5950a06c"
+        },
+        "labels.json": {
+          "bytes": 52573,
+          "sha256": "ecb99eb0b196b6ba2c56e6ede5556d90b35391ffe4dc13fb6fea6b97cc444842"
+        },
+        "manifest.json": {
+          "bytes": 1183,
+          "sha256": "4ccf1e32ad86e81c243c9c0ade18cbdd90077e3e07fd854ba01aeee5b8873779"
+        }
+      },
+      "bars": [
+        {
+          "id": "complete-correct-512",
+          "label": "complete correct replies on the frozen 512-row development panel",
+          "current": 437,
+          "target": 256,
+          "of": 512,
+          "unit": "correct replies",
+          "direction": "open",
+          "note": "retained from m2-reply512; any candidate must simultaneously hold >= 256/512 on the saved development questions and >= 103/256 (40%) on m2-fresh256"
+        },
+        {
+          "id": "fresh-transfer-256",
+          "label": "complete correct replies on the sealed 256-row fresh held-out panel (m2-fresh256)",
+          "current": null,
+          "target": 103,
+          "of": 256,
+          "unit": "correct replies",
+          "direction": "open",
+          "note": "ceil(0.40 * 256) = 103/256 (40.23%), exceeding 0/256 by 11.9x the cluster-adjusted standard error (8.64 rows); replaces the opened 128-row transfer draw (c5a643ff...) which was exposed on 10 October 2026"
+        }
+      ]
+    }
+  }
+}
