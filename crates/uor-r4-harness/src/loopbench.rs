@@ -569,8 +569,8 @@ fn refresh(
         .split("\n\n")
         .map(str::trim)
         .find(|p| !p.is_empty() && !p.starts_with('#'))
-        .unwrap_or("")
-        .replace('\n', " ");
+        .and_then(|p| p.lines().next())
+        .unwrap_or("");
     let mut state = format!("{banner}# State\n\n## The project in one sentence\n\n{sentence}\n\n");
     if let Some(l) = agents.lines().find(|l| l.starts_with("It is pre-alpha")) {
         state.push_str(&format!("## Done looks like\n\n{l}\n\n"));
