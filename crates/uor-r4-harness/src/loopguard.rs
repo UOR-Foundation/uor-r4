@@ -56,7 +56,7 @@ pub const EXCLUDED_SKILL: &str = "start-here";
 
 const USAGE: &str = "\
 usage: uor-harness loop guard --client <C> [--lab <L>] --event <E> [--input <path>]
-       uor-harness loop install (--client <C> | --all) [--home <dir>] [--zip <path>] [--replace] [--dry-run] [--json]
+       uor-harness loop install (--client <C> | --all) [--home <dir>] [--zip <path>] [--apply] [--replace] [--dry-run] [--json]
        uor-harness loop onboard (--client <C> | --check-receipts) [--home <dir>] [--write-receipt] [--json]
        uor-harness loop copyright [--zip <path>] [--json]";
 
@@ -177,6 +177,77 @@ fn guard_state_dir(roots: &UorRoots, lab: &str) -> PathBuf {
     roots.worktree_root.join("local").join(lab).join("guard")
 }
 
+/// Write `bytes` atomically to `path` via a sibling temporary file and rename.
+fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
+    let tmp = path.with_extension(format!(
+        "tmp.{}.{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    fs::write(&tmp, bytes).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("cannot rename {} to {}: {e}", tmp.display(), path.display())
+    })
+}
+
+/// Execute `f` while holding an exclusive advisory lockfile in `gdir`.
+fn with_guard_lock<T>(gdir: &Path, f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    fs::create_dir_all(gdir).map_err(|e| format!("cannot create {}: {e}", gdir.display()))?;
+    let lock_path = gdir.join(".lock");
+    let mut acquired = false;
+    for attempt in 0..100 {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+        {
+            Ok(_) => {
+                acquired = true;
+                break;
+            }
+            Err(_) => {
+                if attempt == 50 {
+                    // Break stale lock older than 5 seconds.
+                    if let Ok(meta) = fs::metadata(&lock_path) {
+                        if let Ok(modified) = meta.modified() {
+                            if modified.elapsed().map(|d| d.as_secs() >= 5).unwrap_or(true) {
+                                let _ = fs::remove_file(&lock_path);
+                                continue;
+                            }
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+    }
+    let res = f();
+    if acquired {
+        let _ = fs::remove_file(&lock_path);
+    }
+    res
+}
+
+/// Persisted Antigravity session state so stale `root-conversation.id` files from killed sessions
+/// are replaced on a new top-level `SessionStart`, while child subagent `SessionStart` events keep
+/// the parent root.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct AntigravitySessionState {
+    root_cid: String,
+    pending_subagents: u32,
+    root_tool_calls: u32,
+    #[serde(default)]
+    subagent_cids: Vec<String>,
+}
+
 /// Sanitize an identifier for use in a file name.
 fn safe_id(raw: &str) -> String {
     let s: String = raw
@@ -228,50 +299,115 @@ fn update_and_detect_subagent(
 ) -> Result<SubagentContext, String> {
     let gdir = guard_state_dir(roots, lab);
     match client {
-        "antigravity" => {
+        "antigravity" => with_guard_lock(&gdir, || {
             let cid = payload
                 .get("conversationId")
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty());
+            let is_sub_flag = payload.get("isSubagent").and_then(Value::as_bool) == Some(true);
+            let state_file = gdir.join("antigravity-session.json");
             let root_file = gdir.join("root-conversation.id");
-            if event == "SessionStart" {
-                if let Some(c) = cid {
-                    let existing = fs::read_to_string(&root_file)
+
+            let mut state: AntigravitySessionState = fs::read_to_string(&state_file)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_else(|| {
+                    let legacy_root = fs::read_to_string(&root_file)
                         .ok()
                         .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty());
-                    if existing.is_none() {
-                        fs::create_dir_all(&gdir)
-                            .map_err(|e| format!("cannot create {}: {e}", gdir.display()))?;
-                        fs::write(&root_file, format!("{c}\n"))
-                            .map_err(|e| format!("cannot write {}: {e}", root_file.display()))?;
+                        .unwrap_or_default();
+                    AntigravitySessionState {
+                        root_cid: legacy_root,
+                        pending_subagents: 0,
+                        root_tool_calls: 0,
+                        subagent_cids: Vec::new(),
                     }
-                }
-            } else if event == "Stop" {
-                if let Some(c) = cid {
-                    let existing = fs::read_to_string(&root_file)
-                        .ok()
-                        .map(|s| s.trim().to_string());
-                    if existing.as_deref() == Some(c) {
-                        let _ = fs::remove_file(&root_file);
+                });
+
+            match event {
+                "SessionStart" => {
+                    if let Some(c) = cid {
+                        if is_sub_flag {
+                            state.pending_subagents = state.pending_subagents.saturating_sub(1);
+                            if !state.subagent_cids.iter().any(|x| x == c) {
+                                state.subagent_cids.push(c.to_string());
+                            }
+                        } else if state.root_cid.is_empty()
+                            || state.root_cid == c
+                            || (state.pending_subagents == 0 && state.root_tool_calls > 0)
+                        {
+                            // Either no prior root exists, or the previous root already ran tools
+                            // without spawning a pending subagent (e.g. it exited or was killed),
+                            // so this SessionStart begins a fresh top-level session.
+                            state.root_cid = c.to_string();
+                            state.pending_subagents = 0;
+                            state.root_tool_calls = 0;
+                            state.subagent_cids.clear();
+                        } else {
+                            // A subagent SessionStart spawned by the active root session.
+                            state.pending_subagents = state.pending_subagents.saturating_sub(1);
+                            if !state.subagent_cids.iter().any(|x| x == c) {
+                                state.subagent_cids.push(c.to_string());
+                            }
+                        }
+                        let serialized = serde_json::to_vec_pretty(&state)
+                            .map_err(|e| format!("cannot serialize state: {e}"))?;
+                        atomic_write(&state_file, &serialized)?;
+                        atomic_write(&root_file, format!("{}\n", state.root_cid).as_bytes())?;
                     }
+                    if is_sub_flag
+                        || cid.is_some_and(|c| !state.root_cid.is_empty() && state.root_cid != c)
+                    {
+                        return Ok(SubagentContext::Subagent(cid.map(String::from)));
+                    }
+                    Ok(SubagentContext::TopLevel)
                 }
-            }
-            if payload.get("isSubagent").and_then(Value::as_bool) == Some(true) {
-                return Ok(SubagentContext::Subagent(cid.map(String::from)));
-            }
-            if let Some(c) = cid {
-                if let Ok(root_cid) = fs::read_to_string(&root_file) {
-                    let root_cid = root_cid.trim();
-                    if !root_cid.is_empty() && root_cid != c {
+                "Stop" => {
+                    if let Some(c) = cid {
+                        if state.root_cid == c {
+                            let _ = fs::remove_file(&state_file);
+                            let _ = fs::remove_file(&root_file);
+                            return Ok(SubagentContext::TopLevel);
+                        }
+                        state.subagent_cids.retain(|x| x != c);
+                        if let Ok(serialized) = serde_json::to_vec_pretty(&state) {
+                            let _ = atomic_write(&state_file, &serialized);
+                        }
                         return Ok(SubagentContext::Subagent(Some(c.to_string())));
                     }
+                    Ok(SubagentContext::TopLevel)
+                }
+                _ => {
+                    if is_sub_flag {
+                        return Ok(SubagentContext::Subagent(cid.map(String::from)));
+                    }
+                    // Fail closed if no root session has been established via SessionStart.
+                    if state.root_cid.is_empty() {
+                        return Ok(SubagentContext::Subagent(cid.map(String::from)));
+                    }
+                    if let Some(c) = cid {
+                        if c != state.root_cid {
+                            return Ok(SubagentContext::Subagent(Some(c.to_string())));
+                        }
+                        if event == "PreToolUse" {
+                            let (tname, _) = extract_tool(payload);
+                            if tname == "invoke_subagent" {
+                                state.pending_subagents += 1;
+                            } else {
+                                state.root_tool_calls += 1;
+                            }
+                            if let Ok(serialized) = serde_json::to_vec_pretty(&state) {
+                                let _ = atomic_write(&state_file, &serialized);
+                            }
+                        }
+                        return Ok(SubagentContext::TopLevel);
+                    }
+                    Ok(SubagentContext::Subagent(None))
                 }
             }
-            Ok(SubagentContext::TopLevel)
-        }
-        "kimi" => {
+        }),
+        "kimi" => with_guard_lock(&gdir, || {
             let sid = safe_id(
                 payload
                     .get("session_id")
@@ -285,28 +421,19 @@ fn update_and_detect_subagent(
                 .unwrap_or(0);
             match event {
                 "SessionStart" => {
-                    fs::create_dir_all(&gdir)
-                        .map_err(|e| format!("cannot create {}: {e}", gdir.display()))?;
-                    fs::write(&depth_file, "0\n")
-                        .map_err(|e| format!("cannot write {}: {e}", depth_file.display()))?;
+                    atomic_write(&depth_file, b"0\n")?;
                     Ok(SubagentContext::TopLevel)
                 }
                 "SubagentStart" => {
-                    fs::create_dir_all(&gdir)
-                        .map_err(|e| format!("cannot create {}: {e}", gdir.display()))?;
                     let next = cur_depth + 1;
-                    fs::write(&depth_file, format!("{next}\n"))
-                        .map_err(|e| format!("cannot write {}: {e}", depth_file.display()))?;
-                    Ok(SubagentContext::Subagent(None))
+                    atomic_write(&depth_file, format!("{next}\n").as_bytes())?;
+                    Ok(SubagentContext::Subagent(Some(format!("depth-{next}"))))
                 }
                 "SubagentStop" => {
-                    fs::create_dir_all(&gdir)
-                        .map_err(|e| format!("cannot create {}: {e}", gdir.display()))?;
                     let next = cur_depth.saturating_sub(1);
-                    fs::write(&depth_file, format!("{next}\n"))
-                        .map_err(|e| format!("cannot write {}: {e}", depth_file.display()))?;
+                    atomic_write(&depth_file, format!("{next}\n").as_bytes())?;
                     Ok(if next > 0 {
-                        SubagentContext::Subagent(None)
+                        SubagentContext::Subagent(Some(format!("depth-{next}")))
                     } else {
                         SubagentContext::TopLevel
                     })
@@ -321,23 +448,68 @@ fn update_and_detect_subagent(
                         .and_then(Value::as_str)
                         .map(|s| s.eq_ignore_ascii_case("subagent"))
                         .unwrap_or(false);
-                    if cur_depth > 0 || origin_sub {
-                        Ok(SubagentContext::Subagent(None))
+                    if cur_depth > 0 {
+                        Ok(SubagentContext::Subagent(Some(format!(
+                            "depth-{cur_depth}"
+                        ))))
+                    } else if origin_sub {
+                        Ok(SubagentContext::Subagent(Some("depth-1".into())))
                     } else {
                         Ok(SubagentContext::TopLevel)
                     }
                 }
             }
-        }
-        "claude" | "codex" | "deepseek" => {
-            if let Some(aid) = payload
+        }),
+        "claude" | "codex" | "deepseek" => with_guard_lock(&gdir, || {
+            let aid = payload
                 .get("agent_id")
                 .or_else(|| payload.get("subagent_id"))
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-            {
-                return Ok(SubagentContext::Subagent(Some(aid.to_string())));
+                .map(String::from);
+            let bindings_file = gdir.join("subagent-bindings.json");
+            match event {
+                "SessionStart" | "Stop" if aid.is_none() => {
+                    let _ = fs::remove_file(&bindings_file);
+                }
+                "SubagentStart" => {
+                    if let Some(ref agent_id) = aid {
+                        let mut bindings: BTreeMap<String, String> =
+                            fs::read_to_string(&bindings_file)
+                                .ok()
+                                .and_then(|s| serde_json::from_str(&s).ok())
+                                .unwrap_or_default();
+                        if !bindings.contains_key(agent_id) {
+                            if let Some(sub_file) =
+                                claim_next_suborder_for_agent(roots, lab, agent_id, &bindings)
+                            {
+                                bindings.insert(agent_id.clone(), sub_file);
+                                if let Ok(bytes) = serde_json::to_vec_pretty(&bindings) {
+                                    let _ = atomic_write(&bindings_file, &bytes);
+                                }
+                            }
+                        }
+                    }
+                }
+                "SubagentStop" => {
+                    if let Some(ref agent_id) = aid {
+                        let mut bindings: BTreeMap<String, String> =
+                            fs::read_to_string(&bindings_file)
+                                .ok()
+                                .and_then(|s| serde_json::from_str(&s).ok())
+                                .unwrap_or_default();
+                        if bindings.remove(agent_id).is_some() {
+                            if let Ok(bytes) = serde_json::to_vec_pretty(&bindings) {
+                                let _ = atomic_write(&bindings_file, &bytes);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+            if let Some(agent_id) = aid {
+                return Ok(SubagentContext::Subagent(Some(agent_id)));
             }
             if payload.get("is_subagent").and_then(Value::as_bool) == Some(true)
                 || payload.get("origin_name").and_then(Value::as_str) == Some("subagent")
@@ -345,7 +517,7 @@ fn update_and_detect_subagent(
                 return Ok(SubagentContext::Subagent(None));
             }
             Ok(SubagentContext::TopLevel)
-        }
+        }),
         _ => Ok(SubagentContext::TopLevel),
     }
 }
@@ -499,24 +671,322 @@ fn extract_target_paths(tool_name: &str, args: &Value) -> Vec<String> {
 
 /// Whether `path` names a sensitive credential or secret file (CHARTER §3.13).
 fn is_credential_path(path: &str) -> bool {
-    let lower = path.replace('\\', "/").to_lowercase();
+    let stripped = path
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .strip_prefix("of=")
+        .or_else(|| path.strip_prefix("--file="))
+        .or_else(|| path.strip_prefix("--config="))
+        .or_else(|| path.strip_prefix("file://"))
+        .unwrap_or(path);
+    let lower = stripped.replace('\\', "/").to_lowercase();
     let base = lower.rsplit('/').next().unwrap_or(&lower);
-    matches!(
-        base,
-        ".env"
-            | ".env.local"
-            | ".env.production"
-            | ".netrc"
-            | ".npmrc"
-            | ".pypirc"
-            | "id_rsa"
-            | "id_ed25519"
-            | "credentials.json"
-            | "auth.json"
-            | "client_secret.json"
-    ) || lower.contains("/.ssh/id_")
+    let is_env_secret = base == ".env"
+        || (base.starts_with(".env.")
+            && !matches!(base, ".env.example" | ".env.sample" | ".env.template"));
+    is_env_secret
+        || matches!(
+            base,
+            ".netrc"
+                | ".git-credentials"
+                | ".npmrc"
+                | ".pypirc"
+                | ".vast_api_key"
+                | "id_rsa"
+                | "id_ed25519"
+                | "id_ecdsa"
+                | "id_dsa"
+                | "credentials.json"
+                | "auth.json"
+                | "client_secret.json"
+                | "service_account.json"
+        )
+        || lower.contains("/.ssh/id_")
         || lower.contains("/.aws/credentials")
         || lower.contains("/.config/gh/hosts.yml")
+        || lower.contains("/.runpod/config.toml")
+        || lower.contains("/.cargo/credentials")
+}
+
+/// One tokenized shell command segment extracted from a command line.
+#[derive(Debug, Default)]
+struct ShellSegment {
+    tokens: Vec<String>,
+    redirects: Vec<String>,
+    subshells: Vec<String>,
+}
+
+/// Tokenize a shell command string into pipeline/list segments, capturing output redirections and
+/// nested `$(...)` or `` `...` `` command substitutions.
+fn tokenize_shell_segments(cmd: &str) -> Vec<ShellSegment> {
+    let mut segments = Vec::new();
+    let mut cur_seg = ShellSegment::default();
+    let mut cur_tok = String::new();
+    let mut in_token = false;
+    let mut chars = cmd.chars().peekable();
+
+    let flush_tok = |tok: &mut String, in_tok: &mut bool, seg: &mut ShellSegment| {
+        if *in_tok {
+            seg.tokens.push(std::mem::take(tok));
+            *in_tok = false;
+        }
+    };
+    let flush_seg = |tok: &mut String,
+                     in_tok: &mut bool,
+                     seg: &mut ShellSegment,
+                     out: &mut Vec<ShellSegment>| {
+        if *in_tok {
+            seg.tokens.push(std::mem::take(tok));
+            *in_tok = false;
+        }
+        if !seg.tokens.is_empty() || !seg.redirects.is_empty() || !seg.subshells.is_empty() {
+            out.push(std::mem::take(seg));
+        }
+    };
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                if let Some(next) = chars.next() {
+                    if next != '\n' {
+                        cur_tok.push(next);
+                        in_token = true;
+                    }
+                }
+            }
+            '\'' => {
+                in_token = true;
+                for sc in chars.by_ref() {
+                    if sc == '\'' {
+                        break;
+                    }
+                    cur_tok.push(sc);
+                }
+            }
+            '"' => {
+                in_token = true;
+                while let Some(dc) = chars.next() {
+                    if dc == '"' {
+                        break;
+                    }
+                    if dc == '\\' {
+                        if let Some(esc) = chars.next() {
+                            cur_tok.push(esc);
+                        }
+                        continue;
+                    }
+                    if dc == '$' && chars.peek() == Some(&'(') {
+                        chars.next();
+                        let sub = read_balanced_parens(&mut chars);
+                        cur_seg.subshells.push(sub);
+                        continue;
+                    }
+                    if dc == '`' {
+                        let sub = read_backticks(&mut chars);
+                        cur_seg.subshells.push(sub);
+                        continue;
+                    }
+                    cur_tok.push(dc);
+                }
+            }
+            '$' if chars.peek() == Some(&'(') => {
+                chars.next();
+                let sub = read_balanced_parens(&mut chars);
+                cur_seg.subshells.push(sub);
+                in_token = true;
+            }
+            '`' => {
+                let sub = read_backticks(&mut chars);
+                cur_seg.subshells.push(sub);
+                in_token = true;
+            }
+            ';' | '\n' | '(' | ')' => {
+                flush_seg(&mut cur_tok, &mut in_token, &mut cur_seg, &mut segments);
+            }
+            '|' => {
+                if chars.peek() == Some(&'|') {
+                    chars.next();
+                }
+                flush_seg(&mut cur_tok, &mut in_token, &mut cur_seg, &mut segments);
+            }
+            '&' => {
+                if chars.peek() == Some(&'>') {
+                    chars.next();
+                    if chars.peek() == Some(&'>') {
+                        chars.next();
+                    }
+                    flush_tok(&mut cur_tok, &mut in_token, &mut cur_seg);
+                    if let Some(target) = read_next_shell_word(&mut chars, &mut cur_seg.subshells) {
+                        cur_seg.redirects.push(target);
+                    }
+                } else {
+                    if chars.peek() == Some(&'&') {
+                        chars.next();
+                    }
+                    flush_seg(&mut cur_tok, &mut in_token, &mut cur_seg, &mut segments);
+                }
+            }
+            '>' => {
+                // If cur_tok is purely a file descriptor like "1" or "2", drop it before the redirect.
+                if in_token && (cur_tok == "1" || cur_tok == "2") {
+                    cur_tok.clear();
+                    in_token = false;
+                } else {
+                    flush_tok(&mut cur_tok, &mut in_token, &mut cur_seg);
+                }
+                if chars.peek() == Some(&'>') {
+                    chars.next();
+                }
+                if let Some(target) = read_next_shell_word(&mut chars, &mut cur_seg.subshells) {
+                    cur_seg.redirects.push(target);
+                }
+            }
+            c if c.is_whitespace() => {
+                flush_tok(&mut cur_tok, &mut in_token, &mut cur_seg);
+            }
+            other => {
+                cur_tok.push(other);
+                in_token = true;
+            }
+        }
+    }
+    flush_seg(&mut cur_tok, &mut in_token, &mut cur_seg, &mut segments);
+    segments
+}
+
+fn read_balanced_parens(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+    let mut depth = 1usize;
+    let mut out = String::new();
+    for c in chars.by_ref() {
+        if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            depth -= 1;
+            if depth == 0 {
+                break;
+            }
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn read_backticks(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+    let mut out = String::new();
+    while let Some(c) = chars.next() {
+        if c == '`' {
+            break;
+        }
+        if c == '\\' {
+            if let Some(esc) = chars.next() {
+                out.push(esc);
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn read_next_shell_word(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    subshells: &mut Vec<String>,
+) -> Option<String> {
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() && c != '\n' {
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    let mut word = String::new();
+    let mut any = false;
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() || matches!(c, ';' | '|' | '&' | '(' | ')' | '>') {
+            break;
+        }
+        let c = chars.next().unwrap_or_default();
+        any = true;
+        match c {
+            '\\' => {
+                if let Some(esc) = chars.next() {
+                    word.push(esc);
+                }
+            }
+            '\'' => {
+                for sc in chars.by_ref() {
+                    if sc == '\'' {
+                        break;
+                    }
+                    word.push(sc);
+                }
+            }
+            '"' => {
+                while let Some(dc) = chars.next() {
+                    if dc == '"' {
+                        break;
+                    }
+                    if dc == '\\' {
+                        if let Some(esc) = chars.next() {
+                            word.push(esc);
+                        }
+                        continue;
+                    }
+                    if dc == '$' && chars.peek() == Some(&'(') {
+                        chars.next();
+                        subshells.push(read_balanced_parens(chars));
+                        continue;
+                    }
+                    word.push(dc);
+                }
+            }
+            other => word.push(other),
+        }
+    }
+    if any {
+        Some(word)
+    } else {
+        None
+    }
+}
+
+/// Whether `tok` contains a shell variable expansion of a secret/token/key variable.
+fn contains_secret_var_expansion(tok: &str) -> bool {
+    let bytes = tok.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'$' {
+            let start = if i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                i + 2
+            } else {
+                i + 1
+            };
+            let mut end = start;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                end += 1;
+            }
+            if end > start {
+                let var = tok[start..end].to_ascii_uppercase();
+                if var == "OWNER_RELEASE" || var.starts_with("UOR_POD_MAX_") {
+                    return true;
+                }
+                if (var.contains("KEY")
+                    || var.contains("TOKEN")
+                    || var.contains("SECRET")
+                    || var.contains("PASSWORD")
+                    || var.contains("CREDENTIAL"))
+                    && !matches!(var.as_str(), "MONKEY" | "KEYBOARD")
+                {
+                    return true;
+                }
+            }
+            i = end;
+        } else {
+            i += 1;
+        }
+    }
+    false
 }
 
 /// Check a shell command against D56, forbidden git/process/credential rules, and subagent limits.
@@ -531,110 +1001,872 @@ fn check_command(
     if trimmed.is_empty() {
         return Ok(());
     }
-    // 1. D56 & CHARTER §5.1, §5.2: never run an owner release or clear UOR_LAB or override GPU caps.
-    let unset_re = regex::Regex::new(
-        r"(?:^|[;&|()\s])(?:unset\s+UOR_LAB|env\s+-u\s+UOR_LAB|UOR_LAB=\s|UOR_LAB=(?:''|\x22\x22))",
-    )
-    .expect("valid regex");
-    if unset_re.is_match(trimmed) {
-        return Err(
-            "D56 / CHARTER §5.1: a lab session may never unset or clear UOR_LAB to run an owner command"
-                .into(),
-        );
-    }
-    let release_re = regex::Regex::new(
-        r"(?:uor-harness\s+(?:release|team\s+release\s+--owner)|I\s+release\s+sheet\b|OWNER_RELEASE)",
-    )
-    .expect("valid regex");
-    if release_re.is_match(trimmed) {
+    if trimmed.contains("I release sheet") || trimmed.contains("OWNER_RELEASE") {
         return Err(
             "D56 / CHARTER §5.1: the guard never runs an owner release command for a lab; stage it for Casey"
                 .into(),
         );
     }
-    let cap_re = regex::Regex::new(
-        r"(?:uor-pod[^\n;|&]*--(?:max-pods|max-hourly-usd|override-cap)|UOR_POD_MAX_)",
-    )
-    .expect("valid regex");
-    if cap_re.is_match(trimmed) {
+
+    let segments = tokenize_shell_segments(trimmed);
+    for seg in &segments {
+        for sub in &seg.subshells {
+            check_command(roots, lab, subagent, cwd, sub)?;
+        }
+        for redir in &seg.redirects {
+            let target = redir.trim_matches('"').trim_matches('\'');
+            if !target.is_empty() && !target.starts_with("/dev/") && !target.starts_with('&') {
+                check_write_path(roots, lab, subagent, cwd, target)?;
+            }
+        }
+        if !seg.tokens.is_empty() {
+            check_command_segment(roots, lab, subagent, cwd, &seg.tokens)?;
+        }
+    }
+    Ok(())
+}
+
+/// Check a single tokenized command segment after unwrapping assignments and command wrappers.
+fn check_command_segment(
+    roots: &UorRoots,
+    lab: &str,
+    subagent: &SubagentContext,
+    cwd: &Path,
+    tokens: &[String],
+) -> Result<(), String> {
+    // 1. Scan all tokens for universal flags (`--no-verify`), secret expansions, and credential paths.
+    for tok in tokens {
+        if tok == "--no-verify" {
+            return Err("hook bypass (--no-verify) is forbidden".into());
+        }
+        if contains_secret_var_expansion(tok) {
+            return Err(
+                "CHARTER §3.13 / D56: expanding secret, token or owner-override environment variables is forbidden"
+                    .into(),
+            );
+        }
+        if is_credential_path(tok) {
+            return Err(format!(
+                "CHARTER §3.13: reading, writing or referencing credential path {tok} is forbidden"
+            ));
+        }
+    }
+
+    // 2. Strip leading `KEY=VALUE` assignments and command wrappers (`env`, `command`, `nohup`,
+    //    `time`, `nice`, `sudo`, `timeout`, `stdbuf`, `xargs`).
+    let mut idx = 0usize;
+    while idx < tokens.len() {
+        let tok = tokens[idx].as_str();
+        if let Some((k, v)) = split_env_assignment(tok) {
+            check_env_assignment(k, v)?;
+            idx += 1;
+            continue;
+        }
+        let base = executable_basename(tok);
+        match base {
+            "env" => {
+                idx += 1;
+                while idx < tokens.len() {
+                    let a = tokens[idx].as_str();
+                    if a == "-u" || a == "--unset" {
+                        let name = tokens.get(idx + 1).map(String::as_str).unwrap_or("");
+                        if name == "UOR_LAB" {
+                            return Err(
+                                "D56 / CHARTER §5.1: a lab session may never unset UOR_LAB".into(),
+                            );
+                        }
+                        idx += 2;
+                    } else if let Some(rest) = a.strip_prefix("--unset=") {
+                        if rest == "UOR_LAB" {
+                            return Err(
+                                "D56 / CHARTER §5.1: a lab session may never unset UOR_LAB".into(),
+                            );
+                        }
+                        idx += 1;
+                    } else if let Some(rest) = a.strip_prefix("-u") {
+                        if rest == "UOR_LAB" {
+                            return Err(
+                                "D56 / CHARTER §5.1: a lab session may never unset UOR_LAB".into(),
+                            );
+                        }
+                        idx += 1;
+                    } else if a == "-i" || a == "--ignore-environment" || a == "-" {
+                        return Err(
+                            "D56 / CHARTER §5.1: clearing the environment (-i) in a lab session is forbidden"
+                                .into(),
+                        );
+                    } else if a == "-0" || a == "--null" {
+                        idx += 1;
+                    } else if let Some((k, v)) = split_env_assignment(a) {
+                        check_env_assignment(k, v)?;
+                        idx += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if idx >= tokens.len() {
+                    return Err(
+                        "CHARTER §3.13: dumping environment variables via bare env is forbidden"
+                            .into(),
+                    );
+                }
+            }
+            "command" | "builtin" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    let f = tokens[idx].as_str();
+                    if f == "-v" || f == "-V" {
+                        // `command -v foo` only prints the path of `foo` and does not execute it.
+                        return Ok(());
+                    }
+                    idx += 1;
+                }
+            }
+            "nohup" | "time" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    idx += 1;
+                }
+            }
+            "nice" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    let f = tokens[idx].as_str();
+                    idx += 1;
+                    if (f == "-n" || f == "--adjustment") && idx < tokens.len() {
+                        idx += 1;
+                    }
+                }
+            }
+            "timeout" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    let f = tokens[idx].as_str();
+                    idx += 1;
+                    if matches!(f, "-k" | "-s" | "--kill-after" | "--signal") && idx < tokens.len()
+                    {
+                        idx += 1;
+                    }
+                }
+                if idx < tokens.len() {
+                    idx += 1; // duration argument
+                }
+            }
+            "stdbuf" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    let f = tokens[idx].as_str();
+                    idx += 1;
+                    if matches!(f, "-i" | "-o" | "-e") && idx < tokens.len() {
+                        idx += 1;
+                    }
+                }
+            }
+            "sudo" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    let f = tokens[idx].as_str();
+                    idx += 1;
+                    if matches!(
+                        f,
+                        "-u" | "-g" | "-C" | "-D" | "-h" | "-p" | "-r" | "-t" | "-U"
+                    ) && idx < tokens.len()
+                    {
+                        idx += 1;
+                    }
+                }
+            }
+            "xargs" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    let f = tokens[idx].as_str();
+                    idx += 1;
+                    if matches!(
+                        f,
+                        "-I" | "-J" | "-L" | "-n" | "-P" | "-s" | "-d" | "-E" | "-a"
+                    ) && idx < tokens.len()
+                    {
+                        idx += 1;
+                    }
+                }
+            }
+            _ => break,
+        }
+    }
+
+    if idx >= tokens.len() {
+        return Ok(());
+    }
+
+    let prog = executable_basename(&tokens[idx]);
+    let args = &tokens[idx + 1..];
+
+    match prog {
+        "sh" | "bash" | "zsh" | "dash" | "ksh" => {
+            for (i, a) in args.iter().enumerate() {
+                let is_c = a == "-c"
+                    || (a.starts_with('-')
+                        && !a.starts_with("--")
+                        && a[1..].chars().all(|ch| ch.is_ascii_alphabetic())
+                        && a[1..].contains('c'));
+                if is_c {
+                    if let Some(script) = args.get(i + 1) {
+                        check_command(roots, lab, subagent, cwd, script)?;
+                    }
+                    break;
+                }
+            }
+        }
+        "unset" => {
+            if args.iter().any(|a| a == "UOR_LAB") {
+                return Err(
+                    "D56 / CHARTER §5.1: a lab session may never unset or clear UOR_LAB".into(),
+                );
+            }
+        }
+        "pkill" | "killall" => {
+            return Err("pkill and killall are forbidden; stop only your own started pids".into());
+        }
+        "printenv" => {
+            if args.is_empty() {
+                return Err(
+                    "CHARTER §3.13: dumping all environment variables via printenv is forbidden"
+                        .into(),
+                );
+            }
+            for a in args {
+                if !a.starts_with('-')
+                    && !matches!(
+                        a.as_str(),
+                        "UOR_LAB"
+                            | "PATH"
+                            | "HOME"
+                            | "PWD"
+                            | "USER"
+                            | "SHELL"
+                            | "TERM"
+                            | "CARGO_TARGET_DIR"
+                            | "RUST_BACKTRACE"
+                            | "RUST_LOG"
+                    )
+                {
+                    return Err(format!(
+                        "CHARTER §3.13: reading environment variable {a} via printenv is forbidden"
+                    ));
+                }
+            }
+        }
+        "export" | "declare" | "typeset" => {
+            if args.is_empty()
+                || args
+                    .iter()
+                    .any(|a| a == "-p" || a == "-xp" || a == "-px" || a == "--")
+            {
+                return Err(
+                    "CHARTER §3.13: dumping environment variables via export/declare -p is forbidden"
+                        .into(),
+                );
+            }
+            for a in args {
+                if let Some((k, v)) = split_env_assignment(a) {
+                    check_env_assignment(k, v)?;
+                }
+            }
+        }
+        "set" => {
+            if args.is_empty() {
+                return Err(
+                    "CHARTER §3.13: dumping shell variables via bare set is forbidden".into(),
+                );
+            }
+        }
+        "git" => check_git_command(roots, lab, subagent, cwd, args)?,
+        "gh" => check_gh_command(subagent, args)?,
+        "uor-harness" => check_uor_harness_command(subagent, args)?,
+        "uor-pod" => check_uor_pod_command(args)?,
+        _ => {}
+    }
+
+    check_shell_file_mods(roots, lab, subagent, cwd, prog, args)?;
+    Ok(())
+}
+
+fn executable_basename(raw: &str) -> &str {
+    raw.rsplit('/').next().unwrap_or(raw)
+}
+
+fn split_env_assignment(tok: &str) -> Option<(&str, &str)> {
+    let eq = tok.find('=')?;
+    if eq == 0 {
+        return None;
+    }
+    let key = &tok[..eq];
+    if !key
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return None;
+    }
+    Some((key, &tok[eq + 1..]))
+}
+
+fn check_env_assignment(key: &str, val: &str) -> Result<(), String> {
+    let trimmed = val.trim().trim_matches('"').trim_matches('\'');
+    if key == "UOR_LAB" && trimmed.is_empty() {
+        return Err(
+            "D56 / CHARTER §5.1: a lab session may never clear UOR_LAB to run an owner command"
+                .into(),
+        );
+    }
+    if key == "OWNER_RELEASE" {
+        return Err(
+            "D56 / CHARTER §5.1: the guard never runs an owner release command for a lab".into(),
+        );
+    }
+    if key.starts_with("UOR_POD_MAX_") {
         return Err(
             "CHARTER §5.2 / D56: labs cannot override GPU pod or spend caps; stage the command for Casey"
                 .into(),
         );
     }
+    if (key.eq_ignore_ascii_case("GIT_CONFIG_PARAMETERS")
+        || key.to_ascii_uppercase().starts_with("GIT_CONFIG_"))
+        && trimmed.to_ascii_lowercase().contains("core.hookspath")
+    {
+        return Err("hook bypass (core.hooksPath override) is forbidden".into());
+    }
+    Ok(())
+}
 
-    // 2. Forbidden git and process commands.
-    let no_verify_re =
-        regex::Regex::new(r"(?:^|\s)--no-verify(?:\s|$)|\bgit\s+commit\b[^\n;|&]*\s-n(?:\s|$)")
-            .expect("valid regex");
-    if no_verify_re.is_match(trimmed) {
-        return Err("hook bypass (--no-verify / git commit -n) is forbidden".into());
+/// Inspect a `git` invocation after unwrapping all global `git` flags (`-C`, `-c`, `--git-dir`,
+/// `--work-tree`, `--config-env`, etc.).
+fn check_git_command(
+    roots: &UorRoots,
+    lab: &str,
+    subagent: &SubagentContext,
+    cwd: &Path,
+    args: &[String],
+) -> Result<(), String> {
+    let mut i = 0usize;
+    let mut effective_cwd = cwd.to_path_buf();
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--" {
+            i += 1;
+            break;
+        }
+        if a == "-C" {
+            if let Some(dir) = args.get(i + 1) {
+                effective_cwd = resolve_target_path(&effective_cwd, dir);
+            }
+            i += 2;
+            continue;
+        }
+        if let Some(dir) = a.strip_prefix("-C") {
+            if !dir.is_empty() {
+                effective_cwd = resolve_target_path(&effective_cwd, dir);
+                i += 1;
+                continue;
+            }
+        }
+        if a == "-c" || a == "--config-env" {
+            let kv = args.get(i + 1).map(String::as_str).unwrap_or("");
+            if kv.to_ascii_lowercase().contains("core.hookspath") {
+                return Err("hook bypass (git -c core.hooksPath=...) is forbidden".into());
+            }
+            i += 2;
+            continue;
+        }
+        if let Some(kv) = a
+            .strip_prefix("-c")
+            .or_else(|| a.strip_prefix("--config-env="))
+        {
+            if kv.to_ascii_lowercase().contains("core.hookspath") {
+                return Err("hook bypass (git -c core.hooksPath=...) is forbidden".into());
+            }
+            i += 1;
+            continue;
+        }
+        if matches!(
+            a,
+            "--git-dir" | "--work-tree" | "--namespace" | "--super-prefix" | "--exec-path"
+        ) {
+            i += 2;
+            continue;
+        }
+        if a.starts_with("--git-dir=")
+            || a.starts_with("--work-tree=")
+            || a.starts_with("--namespace=")
+            || a.starts_with("--super-prefix=")
+            || a.starts_with("--exec-path=")
+            || matches!(
+                a,
+                "--bare"
+                    | "--no-pager"
+                    | "-p"
+                    | "--paginate"
+                    | "--no-replace-objects"
+                    | "--literal-pathspecs"
+                    | "--glob-pathspecs"
+                    | "--noglob-pathspecs"
+                    | "--icase-pathspecs"
+                    | "--no-optional-locks"
+            )
+        {
+            i += 1;
+            continue;
+        }
+        if a.starts_with('-') {
+            i += 1;
+            continue;
+        }
+        break;
     }
-    let stash_re = regex::Regex::new(r"\bgit\s+(?:-C\s+\S+\s+)?stash\b").expect("valid regex");
-    if stash_re.is_match(trimmed) {
-        return Err(
-            "git stash is forbidden in the five-lab loop; commit WIP in your worktree".into(),
-        );
+
+    let Some(subcmd) = args.get(i).map(String::as_str) else {
+        return Ok(());
+    };
+    let sub_args = &args[i + 1..];
+
+    match subcmd {
+        "stash" => {
+            return Err(
+                "git stash is forbidden in the five-lab loop; commit WIP in your worktree".into(),
+            );
+        }
+        "commit" => {
+            let mut j = 0usize;
+            while j < sub_args.len() {
+                let a = sub_args[j].as_str();
+                if a == "--" {
+                    break;
+                }
+                if a == "--no-verify" {
+                    return Err("hook bypass (--no-verify / git commit -n) is forbidden".into());
+                }
+                if a.starts_with('-') && !a.starts_with("--") {
+                    let cluster = &a[1..];
+                    for (ci, ch) in cluster.char_indices() {
+                        if ch == 'n' {
+                            return Err(
+                                "hook bypass (--no-verify / git commit -n) is forbidden".into()
+                            );
+                        }
+                        // `-m`, `-F`, `-c`, `-C`, `-u`, `--author`, etc. consume the rest of the
+                        // cluster (or the next token if at the end of the cluster) as their value.
+                        if matches!(ch, 'm' | 'F' | 'c' | 'C' | 'u' | 't') {
+                            if ci + ch.len_utf8() == cluster.len() {
+                                j += 1;
+                            }
+                            break;
+                        }
+                    }
+                } else if matches!(
+                    a,
+                    "--message"
+                        | "--file"
+                        | "--reuse-message"
+                        | "--reedit-message"
+                        | "--fixup"
+                        | "--squash"
+                        | "--author"
+                        | "--date"
+                        | "--cleanup"
+                        | "--template"
+                ) {
+                    j += 1;
+                }
+                j += 1;
+            }
+        }
+        "push" => {
+            if matches!(subagent, SubagentContext::Subagent(_)) {
+                return Err(
+                    "subagent stop rule: subagents may never claim, open, review or merge a PR, push, or post as the lab"
+                        .into(),
+                );
+            }
+            let mut positionals = Vec::new();
+            let mut j = 0usize;
+            let mut delete_flag = false;
+            while j < sub_args.len() {
+                let a = sub_args[j].as_str();
+                if a == "--" {
+                    positionals.extend(sub_args[j + 1..].iter().map(String::as_str));
+                    break;
+                }
+                if a == "--force-with-lease" || a.starts_with("--force-with-lease=") {
+                    j += 1;
+                    continue;
+                }
+                if a == "--force" || a == "--force-if-includes" {
+                    return Err("git push --force is forbidden".into());
+                }
+                if a == "--no-verify" {
+                    return Err("hook bypass (git push --no-verify) is forbidden".into());
+                }
+                if a == "--delete" || a == "-d" {
+                    delete_flag = true;
+                    j += 1;
+                    continue;
+                }
+                if matches!(
+                    a,
+                    "--repo" | "--receive-pack" | "--exec" | "-o" | "--push-option"
+                ) {
+                    j += 2;
+                    continue;
+                }
+                if a.starts_with('-') && !a.starts_with("--") {
+                    if a[1..].contains('f') {
+                        return Err("git push --force (-f) is forbidden".into());
+                    }
+                    if a[1..].contains('d') {
+                        delete_flag = true;
+                    }
+                    j += 1;
+                    continue;
+                }
+                if a.starts_with("--") {
+                    j += 1;
+                    continue;
+                }
+                positionals.push(a);
+                j += 1;
+            }
+            for (pi, pos) in positionals.iter().copied().enumerate() {
+                if pos.starts_with('+') {
+                    return Err("git push +refspec (force push) is forbidden".into());
+                }
+                // Positional 0 is the remote name unless it contains `:` (a refspec).
+                if pi >= 1 || pos.contains(':') {
+                    let dst = pos.rsplit(':').next().unwrap_or(pos);
+                    if dst == "main" || dst == "refs/heads/main" || (delete_flag && dst == "main") {
+                        return Err("direct push to main is forbidden; deliver through a PR".into());
+                    }
+                }
+            }
+        }
+        "rm" | "mv" | "restore" => {
+            for a in sub_args {
+                if a == "--" || a.starts_with('-') {
+                    continue;
+                }
+                check_write_path(roots, lab, subagent, &effective_cwd, a)?;
+            }
+        }
+        "checkout" => {
+            if let Some(dd) = sub_args.iter().position(|a| a == "--") {
+                for a in &sub_args[dd + 1..] {
+                    check_write_path(roots, lab, subagent, &effective_cwd, a)?;
+                }
+            }
+        }
+        _ => {}
     }
-    let force_push_re = regex::Regex::new(
-        r"\bgit\s+(?:-C\s+\S+\s+)?push\b[^\n;|&]*(?:--force(?:-with-lease)?|\s-f(?:\s|$)|\+[A-Za-z0-9_/-]+)",
-    )
-    .expect("valid regex");
-    if force_push_re.is_match(trimmed) {
-        return Err("git push --force is forbidden".into());
+    Ok(())
+}
+
+/// Inspect a `gh` CLI invocation for token dumps, unguarded merges, and subagent restrictions.
+fn check_gh_command(subagent: &SubagentContext, args: &[String]) -> Result<(), String> {
+    let mut pos = Vec::new();
+    let mut i = 0usize;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if matches!(a, "-R" | "--repo" | "--hostname") {
+            i += 2;
+            continue;
+        }
+        if a.starts_with("--repo=") || a.starts_with("--hostname=") {
+            i += 1;
+            continue;
+        }
+        pos.push(a);
+        i += 1;
     }
-    let push_main_re =
-        regex::Regex::new(r"\bgit\s+(?:-C\s+\S+\s+)?push\s+(?:origin\s+)?(?:HEAD:)?main(?:\s|$)")
-            .expect("valid regex");
-    if push_main_re.is_match(trimmed) {
-        return Err("direct push to main is forbidden; deliver through a PR".into());
-    }
-    if trimmed.contains("gh pr merge") && !trimmed.contains("--match-head-commit") {
-        return Err("gh pr merge requires --match-head-commit <full-sha>".into());
-    }
-    let pkill_re =
-        regex::Regex::new(r"(?:^|[;&|()\s])(?:pkill|killall)(?:\s|$)").expect("valid regex");
-    if pkill_re.is_match(trimmed) {
-        return Err("pkill and killall are forbidden; stop only your own started pids".into());
-    }
-    let cred_cmd_re = regex::Regex::new(
-        r"(?:\bgh\s+auth\s+token\b|\bcat\s+\S*(?:\.env|\.netrc|credentials\.json|auth\.json|id_rsa|id_ed25519)\b)",
-    )
-    .expect("valid regex");
-    if cred_cmd_re.is_match(trimmed) {
+    let s1 = pos.first().copied().unwrap_or("");
+    let s2 = pos.get(1).copied().unwrap_or("");
+
+    if s1 == "auth" && (s2 == "token" || pos.iter().any(|a| *a == "--show-token" || *a == "-t")) {
         return Err("CHARTER §3.13: reading or printing credentials or tokens is forbidden".into());
     }
-
-    // 3. Subagent command restrictions (CHARTER §5.10).
-    if matches!(subagent, SubagentContext::Subagent(_)) {
-        let sub_forbidden = regex::Regex::new(
-            r"(?:\bgh\s+(?:pr|issue)\s+(?:create|merge|review|comment|close|edit)\b|\bgit\s+(?:-C\s+\S+\s+)?push\b|\buor-harness\s+(?:loop\s+(?:claim|review|close|queue)|team\s+claim)\b)",
-        )
-        .expect("valid regex");
-        if sub_forbidden.is_match(trimmed) {
+    if s1 == "api"
+        && pos
+            .iter()
+            .any(|a| a.contains("/Merge") || a.contains("/merge") || a.ends_with("merge"))
+    {
+        return Err(
+            "merging via gh api is forbidden; use gh pr merge --match-head-commit <full-sha>"
+                .into(),
+        );
+    }
+    if s1 == "pr" && s2 == "merge" {
+        if matches!(subagent, SubagentContext::Subagent(_)) {
             return Err(
                 "subagent stop rule: subagents may never claim, open, review or merge a PR, push, or post as the lab"
                     .into(),
             );
         }
-    }
-
-    // 4. Shell redirections (`>`, `>>`, `tee`) targeting paths.
-    let redir_re = regex::Regex::new(
-        r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|>\x22']+|\x22[^\x22]+\x22|'[^']+')",
-    )
-    .expect("valid regex");
-    for cap in redir_re.captures_iter(trimmed) {
-        let raw = cap[1].trim_matches('"').trim_matches('\'');
-        if !raw.starts_with("/dev/") && !raw.starts_with('&') {
-            check_write_path(roots, lab, subagent, cwd, raw)?;
+        let mut matched_sha = None;
+        for (idx, a) in pos.iter().copied().enumerate() {
+            if a == "--match-head-commit" {
+                matched_sha = pos.get(idx + 1).copied();
+            } else if let Some(rest) = a.strip_prefix("--match-head-commit=") {
+                matched_sha = Some(rest);
+            }
+        }
+        let valid_sha =
+            matched_sha.is_some_and(|s| s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit()));
+        if !valid_sha {
+            return Err("gh pr merge requires --match-head-commit <full-40-char-sha>".into());
         }
     }
-
+    if matches!(subagent, SubagentContext::Subagent(_))
+        && ((s1 == "pr"
+            && matches!(
+                s2,
+                "create" | "merge" | "review" | "comment" | "close" | "edit" | "ready"
+            ))
+            || (s1 == "issue" && matches!(s2, "create" | "comment" | "close" | "edit" | "reopen")))
+    {
+        return Err(
+            "subagent stop rule: subagents may never claim, open, review or merge a PR, push, or post as the lab"
+                .into(),
+        );
+    }
     Ok(())
 }
 
-/// Normalize a pathlexically (resolving `.` and `..` without requiring the target file to exist).
+/// Inspect a `uor-harness` CLI invocation for owner-only commands and subagent restrictions.
+fn check_uor_harness_command(subagent: &SubagentContext, args: &[String]) -> Result<(), String> {
+    let s1 = args.first().map(String::as_str).unwrap_or("");
+    let s2 = args.get(1).map(String::as_str).unwrap_or("");
+
+    if s1 == "release" || (s1 == "team" && s2 == "release" && args.iter().any(|a| a == "--owner")) {
+        return Err(
+            "D56 / CHARTER §5.1: the guard never runs an owner release command for a lab; stage it for Casey"
+                .into(),
+        );
+    }
+    if s1 == "git" && s2 == "install-hooks" {
+        return Err(
+            "owner decision (#2028): uor-harness git install-hooks may be run only by the owner from Terminal"
+                .into(),
+        );
+    }
+    if s1 == "loop" && s2 == "install" && args.iter().any(|a| a == "--apply") {
+        return Err(
+            "owner decision (#2028): uor-harness loop install --apply may be run only by the owner from Terminal"
+                .into(),
+        );
+    }
+    if matches!(subagent, SubagentContext::Subagent(_))
+        && ((s1 == "loop" && matches!(s2, "claim" | "review" | "close" | "queue"))
+            || (s1 == "team" && s2 == "claim"))
+    {
+        return Err(
+            "subagent stop rule: subagents may never claim, open, review or merge a PR, push, or post as the lab"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+/// Inspect a `uor-pod` CLI invocation for forbidden cap overrides (D56 / CHARTER §5.2).
+fn check_uor_pod_command(args: &[String]) -> Result<(), String> {
+    for a in args {
+        if a == "--max-pods"
+            || a.starts_with("--max-pods=")
+            || a == "--max-hourly-usd"
+            || a.starts_with("--max-hourly-usd=")
+            || a == "--override-cap"
+            || a.starts_with("--override-cap=")
+        {
+            return Err(
+                "CHARTER §5.2 / D56: labs cannot override GPU pod or spend caps; stage the command for Casey"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Check file-modifying shell commands (`tee`, `rm`, `cp`, `mv`, `sed -i`, `dd of=`, etc.) against
+/// `check_write_path`.
+fn check_shell_file_mods(
+    roots: &UorRoots,
+    lab: &str,
+    subagent: &SubagentContext,
+    cwd: &Path,
+    prog: &str,
+    args: &[String],
+) -> Result<(), String> {
+    match prog {
+        "tee" => {
+            for a in args {
+                if !a.starts_with('-') && !a.starts_with("/dev/") {
+                    check_write_path(roots, lab, subagent, cwd, a)?;
+                }
+            }
+        }
+        "rm" | "unlink" | "rmdir" | "touch" | "mkdir" => {
+            for a in args {
+                if a == "--" || a.starts_with('-') {
+                    continue;
+                }
+                check_write_path(roots, lab, subagent, cwd, a)?;
+            }
+        }
+        "truncate" => {
+            let mut i = 0usize;
+            while i < args.len() {
+                let a = args[i].as_str();
+                if matches!(a, "-s" | "--size" | "-r" | "--reference") {
+                    i += 2;
+                    continue;
+                }
+                if !a.starts_with('-') {
+                    check_write_path(roots, lab, subagent, cwd, a)?;
+                }
+                i += 1;
+            }
+        }
+        "chmod" | "chown" => {
+            let mut pos = Vec::new();
+            let mut i = 0usize;
+            while i < args.len() {
+                let a = args[i].as_str();
+                if a == "--" {
+                    pos.extend(args[i + 1..].iter().map(String::as_str));
+                    break;
+                }
+                if a.starts_with('-') {
+                    i += 1;
+                    continue;
+                }
+                pos.push(a);
+                i += 1;
+            }
+            // First positional is mode/owner; remaining positionals are target paths.
+            for p in pos.into_iter().skip(1) {
+                check_write_path(roots, lab, subagent, cwd, p)?;
+            }
+        }
+        "cp" | "mv" | "install" | "ln" => {
+            let mut pos = Vec::new();
+            let mut target_dir = None;
+            let mut i = 0usize;
+            while i < args.len() {
+                let a = args[i].as_str();
+                if a == "--" {
+                    pos.extend(args[i + 1..].iter().map(String::as_str));
+                    break;
+                }
+                if a == "-t" || a == "--target-directory" {
+                    target_dir = args.get(i + 1).map(String::as_str);
+                    i += 2;
+                    continue;
+                }
+                if let Some(td) = a.strip_prefix("--target-directory=") {
+                    target_dir = Some(td);
+                    i += 1;
+                    continue;
+                }
+                if matches!(a, "-S" | "--suffix" | "-m" | "--mode" | "-o" | "-g") {
+                    i += 2;
+                    continue;
+                }
+                if a.starts_with('-') {
+                    i += 1;
+                    continue;
+                }
+                pos.push(a);
+                i += 1;
+            }
+            if let Some(td) = target_dir {
+                check_write_path(roots, lab, subagent, cwd, td)?;
+                if prog == "mv" {
+                    for src in &pos {
+                        check_write_path(roots, lab, subagent, cwd, src)?;
+                    }
+                }
+            } else if pos.len() >= 2 {
+                if prog == "mv" {
+                    for p in &pos {
+                        check_write_path(roots, lab, subagent, cwd, p)?;
+                    }
+                } else if let Some(dst) = pos.last() {
+                    check_write_path(roots, lab, subagent, cwd, dst)?;
+                }
+            }
+        }
+        "sed" | "perl" | "ruby" => {
+            let mut in_place = false;
+            let mut has_explicit_expr = false;
+            let mut pos = Vec::new();
+            let mut i = 0usize;
+            while i < args.len() {
+                let a = args[i].as_str();
+                if a == "--" {
+                    pos.extend(args[i + 1..].iter().map(String::as_str));
+                    break;
+                }
+                if a == "-i"
+                    || a.starts_with("-i")
+                    || a == "--in-place"
+                    || a.starts_with("--in-place=")
+                {
+                    in_place = true;
+                    // On macOS, `sed -i '' 's/a/b/' file` passes an empty backup suffix as the
+                    // next token.
+                    if a == "-i" && args.get(i + 1).is_some_and(|n| n.is_empty()) {
+                        i += 2;
+                        continue;
+                    }
+                    i += 1;
+                    continue;
+                }
+                if matches!(a, "-e" | "--expression" | "-f" | "--file") {
+                    has_explicit_expr = true;
+                    i += 2;
+                    continue;
+                }
+                if a.starts_with("-e") || a.starts_with("-f") {
+                    has_explicit_expr = true;
+                    i += 1;
+                    continue;
+                }
+                if a.starts_with('-') {
+                    i += 1;
+                    continue;
+                }
+                pos.push(a);
+                i += 1;
+            }
+            if in_place {
+                let skip = if has_explicit_expr { 0 } else { 1 };
+                for p in pos.into_iter().skip(skip) {
+                    check_write_path(roots, lab, subagent, cwd, p)?;
+                }
+            }
+        }
+        "dd" => {
+            for a in args {
+                if let Some(of_path) = a.strip_prefix("of=") {
+                    if !of_path.starts_with("/dev/") {
+                        check_write_path(roots, lab, subagent, cwd, of_path)?;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Normalize a path lexically (resolving `.` and `..` without requiring the target file to exist).
 fn normalize_lexical(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for comp in path.components() {
@@ -652,12 +1884,18 @@ fn normalize_lexical(path: &Path) -> PathBuf {
 /// Resolve `raw_path` against `cwd`, canonicalizing the deepest existing ancestor so `/var` and
 /// `/private/var` symlinks on macOS match `roots`.
 fn resolve_target_path(cwd: &Path, raw_path: &str) -> PathBuf {
-    let joined = if Path::new(raw_path).is_absolute() {
+    let expanded = if let Some(rest) = raw_path.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            home.join(rest)
+        } else {
+            PathBuf::from(raw_path)
+        }
+    } else if Path::new(raw_path).is_absolute() {
         PathBuf::from(raw_path)
     } else {
         cwd.join(raw_path)
     };
-    let norm = normalize_lexical(&joined);
+    let norm = normalize_lexical(&expanded);
     let mut tail = Vec::new();
     let mut cur = norm.as_path();
     while !cur.exists() {
@@ -694,6 +1932,14 @@ fn load_owner_globs(root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// Find the active ORDER (`(order_rel_path, topic, order_text)`) in `worktree_root` for `lab`.
+///
+/// Resolves only from:
+/// 1. `local/<lab>/guard/active-order` if present;
+/// 2. An ORDER added or modified on the worktree's branch relative to `origin/main` (when
+///    `origin/main` exists in git), so closed historical task folders on `origin/main` (such as
+///    `claude-20`) are never mistaken for an active ORDER;
+/// 3. In standalone test fixtures without `origin/main`, an open `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`
+///    that has no closed `REPORT.md`.
 fn find_active_order(roots: &UorRoots, lab: &str) -> Option<(String, String, String)> {
     // 1. Explicit marker file `local/<lab>/guard/active-order` if present.
     let marker = guard_state_dir(roots, lab).join("active-order");
@@ -712,10 +1958,99 @@ fn find_active_order(roots: &UorRoots, lab: &str) -> Option<(String, String, Str
             }
         }
     }
-    // 2. Scan `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`, picking the highest `<n>` for `lab`.
+
+    let prefix = format!("{lab}-");
+
+    // 2. If `origin/main` exists in this git repository, only ORDER files added/modified since
+    //    `origin/main` (or untracked/modified in the working tree) can be active.
+    let has_origin_main = Command::new("git")
+        .arg("-C")
+        .arg(&roots.worktree_root)
+        .args(["rev-parse", "--verify", "-q", "origin/main"])
+        .output()
+        .ok()
+        .is_some_and(|o| o.status.success());
+
+    if has_origin_main {
+        let mut candidate_rels = HashSet::new();
+        if let Ok(diff_out) = Command::new("git")
+            .arg("-C")
+            .arg(&roots.worktree_root)
+            .args([
+                "diff",
+                "--name-only",
+                "origin/main...HEAD",
+                "--",
+                "docs/loop/tasks/",
+            ])
+            .output()
+        {
+            if diff_out.status.success() {
+                for line in String::from_utf8_lossy(&diff_out.stdout).lines() {
+                    let p = line.trim();
+                    if p.ends_with("/ORDER.md") {
+                        candidate_rels.insert(p.to_string());
+                    }
+                }
+            }
+        }
+        if let Ok(st_out) = Command::new("git")
+            .arg("-C")
+            .arg(&roots.worktree_root)
+            .args(["status", "--porcelain", "--", "docs/loop/tasks/"])
+            .output()
+        {
+            if st_out.status.success() {
+                for line in String::from_utf8_lossy(&st_out.stdout).lines() {
+                    if line.len() > 3 {
+                        let p = line[3..].trim();
+                        if p.ends_with("/ORDER.md") {
+                            candidate_rels.insert(p.to_string());
+                        } else if p.ends_with('/') {
+                            // Untracked directory under `docs/loop/tasks/...`: walk for ORDER.md.
+                            let dir = roots.worktree_root.join(p);
+                            collect_untracked_orders(
+                                &roots.worktree_root,
+                                &dir,
+                                &mut candidate_rels,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut best: Option<(u64, String, String, String)> = None;
+        for rel in candidate_rels {
+            let full = roots.worktree_root.join(&rel);
+            let Ok(text) = fs::read_to_string(&full) else {
+                continue;
+            };
+            let Some(topic) = full
+                .parent()
+                .and_then(Path::file_name)
+                .and_then(|n| n.to_str())
+                .map(String::from)
+            else {
+                continue;
+            };
+            let Some(num_str) = topic.strip_prefix(&prefix) else {
+                continue;
+            };
+            let Ok(num) = num_str.parse::<u64>() else {
+                continue;
+            };
+            if best.as_ref().is_none_or(|(b_num, _, _, _)| num >= *b_num) {
+                best = Some((num, rel, topic, text));
+            }
+        }
+        return best.map(|(_, rel, topic, text)| (rel, topic, text));
+    }
+
+    // 3. Standalone test fixture without `origin/main`: scan `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`
+    //    and skip closed folders that already have `REPORT.md`.
     let tasks_dir = roots.worktree_root.join("docs/loop/tasks");
     let entries = fs::read_dir(&tasks_dir).ok()?;
-    let prefix = format!("{lab}-");
     let mut best: Option<(u64, String, String, String)> = None;
     for folder_entry in entries.flatten() {
         if !folder_entry.path().is_dir() {
@@ -733,6 +2068,9 @@ fn find_active_order(roots: &UorRoots, lab: &str) -> Option<(String, String, Str
             let Ok(num) = num_str.parse::<u64>() else {
                 continue;
             };
+            if sub.path().join("REPORT.md").exists() {
+                continue;
+            }
             let order_file = sub.path().join("ORDER.md");
             let Ok(text) = fs::read_to_string(&order_file) else {
                 continue;
@@ -744,6 +2082,22 @@ fn find_active_order(roots: &UorRoots, lab: &str) -> Option<(String, String, Str
         }
     }
     best.map(|(_, rel, topic, text)| (rel, topic, text))
+}
+
+fn collect_untracked_orders(root: &Path, dir: &Path, out: &mut HashSet<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            collect_untracked_orders(root, &p, out);
+        } else if p.file_name().and_then(|n| n.to_str()) == Some("ORDER.md") {
+            if let Ok(rel) = p.strip_prefix(root) {
+                out.insert(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
 }
 
 /// Extract backticked globs from a markdown section such as `## Scope` or `## Files in scope`.
@@ -779,19 +2133,67 @@ fn parse_section_globs(markdown: &str, heading_prefix: &str) -> Vec<String> {
     globs
 }
 
+/// Claim the next unbound suborder file (`<agent_id>.md` or lowest unclaimed `<n>.md`) for a
+/// subagent starting in `local/<lab>/<topic>/orders/`.
+fn claim_next_suborder_for_agent(
+    roots: &UorRoots,
+    lab: &str,
+    agent_id: &str,
+    existing_bindings: &BTreeMap<String, String>,
+) -> Option<String> {
+    let (_, topic, _) = find_active_order(roots, lab)?;
+    for base in [&roots.worktree_root, &roots.primary_root] {
+        let orders_dir = base.join("local").join(lab).join(&topic).join("orders");
+        if !orders_dir.is_dir() {
+            continue;
+        }
+        let direct_name = format!("{agent_id}.md");
+        if orders_dir.join(&direct_name).is_file() {
+            return Some(direct_name);
+        }
+        let claimed: HashSet<&str> = existing_bindings.values().map(String::as_str).collect();
+        let mut numbered: Vec<(u64, String)> = Vec::new();
+        if let Ok(entries) = fs::read_dir(&orders_dir) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                let Some(stem) = name.strip_suffix(".md") else {
+                    continue;
+                };
+                if let Ok(n) = stem.parse::<u64>() {
+                    if !claimed.contains(name.as_str()) {
+                        numbered.push((n, name));
+                    }
+                }
+            }
+        }
+        numbered.sort_by_key(|(n, _)| *n);
+        if let Some((_, name)) = numbered.into_iter().next() {
+            return Some(name);
+        }
+    }
+    None
+}
+
 /// Find the suborder scope globs for a subagent from `local/<lab>/<topic>/orders/`.
+///
+/// Subagents are never granted write access by falling back to an unbound highest-numbered
+/// `<n>.md`: an `agent_id` must match `orders/<agent_id>.md`, be bound in
+/// `local/<lab>/guard/subagent-bindings.json` at `SubagentStart`, or (for Antigravity/Kimi) match
+/// the active single subagent slot.
 fn find_suborder_globs(
     roots: &UorRoots,
     lab: &str,
     topic: &str,
     agent_id: Option<&str>,
 ) -> Option<(PathBuf, Vec<String>)> {
+    let gdir = guard_state_dir(roots, lab);
     for base in [&roots.worktree_root, &roots.primary_root] {
         let orders_dir = base.join("local").join(lab).join(topic).join("orders");
         if !orders_dir.is_dir() {
             continue;
         }
         if let Some(aid) = agent_id {
+            // 1. Direct `<agent_id>.md` file.
             let direct = orders_dir.join(format!("{aid}.md"));
             if let Ok(text) = fs::read_to_string(&direct) {
                 let globs = parse_section_globs(&text, "Scope");
@@ -799,29 +2201,55 @@ fn find_suborder_globs(
                     return Some((direct, globs));
                 }
             }
-        }
-        // Otherwise pick the highest-numbered `<n>.md` in `orders_dir`.
-        let mut best: Option<(u64, PathBuf, String)> = None;
-        if let Ok(entries) = fs::read_dir(&orders_dir) {
-            for e in entries.flatten() {
-                let name = e.file_name().to_string_lossy().to_string();
-                let Some(stem) = name.strip_suffix(".md") else {
-                    continue;
-                };
-                let Ok(n) = stem.parse::<u64>() else {
-                    continue;
-                };
-                if let Ok(text) = fs::read_to_string(e.path()) {
-                    if best.as_ref().is_none_or(|(bn, _, _)| n > *bn) {
-                        best = Some((n, e.path(), text));
+            // 2. Explicit binding in `local/<lab>/guard/subagent-bindings.json` (recorded at
+            //    `SubagentStart`).
+            let bindings_file = gdir.join("subagent-bindings.json");
+            if let Ok(btext) = fs::read_to_string(&bindings_file) {
+                if let Ok(bindings) = serde_json::from_str::<BTreeMap<String, String>>(&btext) {
+                    if let Some(bound_file) = bindings.get(aid) {
+                        let bound_path = orders_dir.join(bound_file);
+                        if let Ok(text) = fs::read_to_string(&bound_path) {
+                            let globs = parse_section_globs(&text, "Scope");
+                            if !globs.is_empty() {
+                                return Some((bound_path, globs));
+                            }
+                        }
                     }
+                    // If `subagent-bindings.json` exists and `aid` is not bound in it, refuse
+                    // writes (this subagent has no suborder binding).
+                    return None;
                 }
             }
-        }
-        if let Some((_, path, text)) = best {
-            let globs = parse_section_globs(&text, "Scope");
-            if !globs.is_empty() {
-                return Some((path, globs));
+            // 3. Antigravity subagent conversation slot (`antigravity-session.json` records
+            //    `subagent_cids` in spawn order).
+            let agy_file = gdir.join("antigravity-session.json");
+            if let Ok(atext) = fs::read_to_string(&agy_file) {
+                if let Ok(astate) = serde_json::from_str::<AntigravitySessionState>(&atext) {
+                    if let Some(pos) = astate.subagent_cids.iter().position(|x| x == aid) {
+                        let slot_path = orders_dir.join(format!("{}.md", pos + 1));
+                        if let Ok(text) = fs::read_to_string(&slot_path) {
+                            let globs = parse_section_globs(&text, "Scope");
+                            if !globs.is_empty() {
+                                return Some((slot_path, globs));
+                            }
+                        }
+                    }
+                    return None;
+                }
+            }
+            // 4. Kimi depth-1 slot (`depth-1` -> `1.md`; concurrent depth > 1 has no per-agent id
+            //    in Kimi and is refused).
+            if let Some(d_str) = aid.strip_prefix("depth-") {
+                if d_str == "1" {
+                    let slot1 = orders_dir.join("1.md");
+                    if let Ok(text) = fs::read_to_string(&slot1) {
+                        let globs = parse_section_globs(&text, "Scope");
+                        if !globs.is_empty() {
+                            return Some((slot1, globs));
+                        }
+                    }
+                }
+                return None;
             }
         }
     }
@@ -1046,13 +2474,13 @@ pub fn evaluate_guard(
     event: &str,
     payload: &Value,
 ) -> GuardOutcome {
-    if let Err(e) = check_client(client) {
-        return GuardOutcome::Refused(e);
-    }
     let cwd = payload_cwd(payload, fallback_cwd);
     let Some(roots) = find_uor_roots(&cwd) else {
         return GuardOutcome::OutsideRepo;
     };
+    if let Err(e) = check_client(client) {
+        return GuardOutcome::Refused(e);
+    }
     let lab_slug = crate::state::slug(lab);
     if lab.trim().is_empty() {
         return GuardOutcome::Refused(
@@ -1728,9 +3156,9 @@ pub fn run_install(
         conflicts.push(sh.display().to_string());
     }
 
-    if !conflicts.is_empty() && !replace {
+    if !conflicts.is_empty() && !replace && !dry_run {
         return Err(format!(
-            "REFUSED: {} existing file(s) differ from planned install (re-run with --replace to back up to local/loop/install-backups/ and replace): {}",
+            "REFUSED: {} existing file(s) differ from planned install (re-run with --apply --replace to back up to local/loop/install-backups/ and replace): {}",
             conflicts.len(),
             conflicts.join(", ")
         ));
@@ -1796,11 +3224,13 @@ pub fn run_install(
 
     Ok(json!({
         "clients": clients,
+        "applied": !dry_run,
         "dry_run": dry_run,
         "replace": replace,
         "skills_installed": ALLOWED_SKILLS,
         "start_here_excluded": true,
         "files": files,
+        "conflicts": conflicts,
         "backups": backups,
     }))
 }
@@ -1832,6 +3262,8 @@ fn backup_file_path(
 pub enum OnboardVerdict {
     #[serde(rename = "PASS")]
     Pass,
+    #[serde(rename = "N/A")]
+    NotApplicable,
     #[serde(rename = "FAIL")]
     Fail,
     #[serde(rename = "REFUSED")]
@@ -1842,6 +3274,7 @@ impl OnboardVerdict {
     pub fn as_str(self) -> &'static str {
         match self {
             OnboardVerdict::Pass => "PASS",
+            OnboardVerdict::NotApplicable => "N/A",
             OnboardVerdict::Fail => "FAIL",
             OnboardVerdict::Refused => "REFUSED",
         }
@@ -1877,15 +3310,41 @@ pub struct ClientOnboardReport {
 
 impl ClientOnboardReport {
     pub fn passed(&self) -> bool {
-        self.checks
+        self.checks.iter().all(|r| {
+            matches!(
+                r.verdict,
+                OnboardVerdict::Pass | OnboardVerdict::NotApplicable
+            )
+        }) && self
+            .checks
             .iter()
-            .all(|r| r.verdict == OnboardVerdict::Pass)
+            .any(|r| r.check == "canary" && r.verdict == OnboardVerdict::Pass)
     }
 }
 
-/// Check that the 6 allowed skills are present in `sdir` (or recorded in the committed receipt when
-/// running in a clean environment without `--home` installed) and that `start-here` is absent.
-fn check_client_skills(repo: &Path, home: &Path, client: &str) -> OnboardRow {
+/// Whether the client's `loop guard` hook configuration has already been applied under `home`.
+fn client_hooks_applied(home: &Path, client: &str) -> bool {
+    let config_path = match client {
+        "claude" => home.join(".claude").join("settings.json"),
+        "codex" => home.join(".codex").join("hooks.json"),
+        "kimi" => home.join(".kimi-code").join("config.toml"),
+        "antigravity" => home
+            .join(".gemini")
+            .join("config")
+            .join("plugins")
+            .join("uor-r4-loop")
+            .join("hooks.json"),
+        "deepseek" => home.join(".dsh").join("hooks.json"),
+        _ => home.join("hooks.json"),
+    };
+    fs::read_to_string(&config_path)
+        .map(|t| t.contains("loop guard"))
+        .unwrap_or(false)
+}
+
+/// Check that the 6 allowed skills are present in `sdir` (or report `N/A` when `loop install --apply`
+/// has not yet been run by the owner for that client) and that `start-here` is absent.
+fn check_client_skills(_repo: &Path, home: &Path, client: &str) -> OnboardRow {
     let sdir = client_skills_dir(home, client);
     let sh = sdir.join(EXCLUDED_SKILL).join("SKILL.md");
     if sh.exists() {
@@ -1918,18 +3377,28 @@ fn check_client_skills(repo: &Path, home: &Path, client: &str) -> OnboardRow {
             }
         }
     }
-    if !bad_yaml.is_empty() {
-        return OnboardRow {
-            check: "skills".into(),
-            verdict: OnboardVerdict::Fail,
-            detail: format!(
-                "unquoted YAML colon in description of {} under {}",
-                bad_yaml.join(", "),
-                sdir.display()
-            ),
-        };
-    }
     if found.len() == ALLOWED_SKILLS.len() {
+        if !bad_yaml.is_empty() {
+            if client_hooks_applied(home, client) {
+                return OnboardRow {
+                    check: "skills".into(),
+                    verdict: OnboardVerdict::Fail,
+                    detail: format!(
+                        "unquoted YAML colon in description of {} under {}",
+                        bad_yaml.join(", "),
+                        sdir.display()
+                    ),
+                };
+            }
+            return OnboardRow {
+                check: "skills".into(),
+                verdict: OnboardVerdict::Pass,
+                detail: format!(
+                    "6 allowed skills installed in {} (start-here excluded; YAML frontmatter normalization staged for loop install --apply --replace)",
+                    client_skills_rel(client)
+                ),
+            };
+        }
         return OnboardRow {
             check: "skills".into(),
             verdict: OnboardVerdict::Pass,
@@ -1939,17 +3408,13 @@ fn check_client_skills(repo: &Path, home: &Path, client: &str) -> OnboardRow {
             ),
         };
     }
-    // Check if the committed onboarding receipt in `docs/harness/onboarding/<client>.json` is present
-    // when checking a client whose user folder is not populated on this host.
-    let receipt_path = onboarding_receipt_path(repo, client);
-    if sdir.parent().is_none_or(|p| !p.exists()) && receipt_path.is_file() {
+    if found.is_empty() && !client_hooks_applied(home, client) {
         return OnboardRow {
             check: "skills".into(),
-            verdict: OnboardVerdict::Pass,
+            verdict: OnboardVerdict::NotApplicable,
             detail: format!(
-                "6 allowed skills recorded in {} for {} (start-here excluded)",
-                client_skills_rel(client),
-                client
+                "N/A until owner runs uor-harness loop install --all --apply (target: {}; 6 allowed skills staged, start-here excluded)",
+                client_skills_rel(client)
             ),
         };
     }
@@ -1970,78 +3435,79 @@ fn check_client_skills(repo: &Path, home: &Path, client: &str) -> OnboardRow {
 }
 
 /// Check hook/adapter wiring for `client`.
-fn check_client_hooks(repo: &Path, home: &Path, client: &str) -> OnboardRow {
+fn check_client_hooks(_repo: &Path, home: &Path, client: &str) -> OnboardRow {
     let hook_entry =
         format!("uor-harness loop guard --client {client} --lab {client} --event PreToolUse");
-    let config_path = match client {
-        "claude" => home.join(".claude").join("settings.json"),
-        "codex" => home.join(".codex").join("hooks.json"),
-        "kimi" => home.join(".kimi-code").join("config.toml"),
-        "antigravity" => home
-            .join(".gemini")
-            .join("config")
-            .join("plugins")
-            .join("uor-r4-loop")
-            .join("hooks.json"),
-        "deepseek" => home.join(".dsh").join("hooks.json"),
-        _ => home.join("hooks.json"),
+    let (config_path, target_rel) = match client {
+        "claude" => (
+            home.join(".claude").join("settings.json"),
+            "~/.claude/settings.json",
+        ),
+        "codex" => (
+            home.join(".codex").join("hooks.json"),
+            "~/.codex/hooks.json + ~/.codex/rules/uor-r4.rules",
+        ),
+        "kimi" => (
+            home.join(".kimi-code").join("config.toml"),
+            "~/.kimi-code/config.toml",
+        ),
+        "antigravity" => (
+            home.join(".gemini")
+                .join("config")
+                .join("plugins")
+                .join("uor-r4-loop")
+                .join("hooks.json"),
+            "~/.gemini/config/plugins/uor-r4-loop/hooks.json",
+        ),
+        "deepseek" => (
+            home.join(".dsh").join("hooks.json"),
+            "~/.dsh/hooks.json + ~/.dsh/profiles/headless/cordis.patch.yml",
+        ),
+        _ => (home.join("hooks.json"), "~/hooks.json"),
     };
     if let Ok(text) = fs::read_to_string(&config_path) {
-        if client == "kimi" && text.contains("Proceed|Continue) UOR-R4") {
-            return OnboardRow {
-                check: "hooks".into(),
-                verdict: OnboardVerdict::Refused,
-                detail:
-                    "Kimi's retired second loop hook is still present in ~/.kimi-code/config.toml"
-                        .into(),
-            };
-        }
-        if text.contains("loop guard") || text.contains("uor-harness") {
+        if text.contains("loop guard") {
+            if client == "kimi" && text.contains("Proceed|Continue) UOR-R4") {
+                return OnboardRow {
+                    check: "hooks".into(),
+                    verdict: OnboardVerdict::Refused,
+                    detail:
+                        "Kimi's retired second loop hook is still present in ~/.kimi-code/config.toml"
+                            .into(),
+                };
+            }
             let shown = config_path
                 .strip_prefix(home)
                 .map(|r| format!("~/{}", r.to_string_lossy().replace('\\', "/")))
                 .unwrap_or_else(|_| config_path.display().to_string());
+            let detail = if client == "deepseek" {
+                format!(
+                    "{hook_entry} wired in {shown} (P-1: dsh has no native hook runner; supervisor stream guard + policy gate enforce scope)"
+                )
+            } else {
+                format!("{hook_entry} wired in {shown}")
+            };
             return OnboardRow {
                 check: "hooks".into(),
                 verdict: OnboardVerdict::Pass,
-                detail: format!("{hook_entry} wired in {shown}"),
+                detail,
             };
         }
     }
-    // Check if the P-1 probe and committed receipt document the client's hook status.
-    let loop_readme = repo.join("docs/loop/README.md");
-    let readme_ok = fs::read_to_string(&loop_readme)
-        .map(|t| t.contains("P-1") && t.contains("loop guard"))
-        .unwrap_or(false);
-    if readme_ok {
-        let detail = match client {
-            "claude" => format!(
-                "{hook_entry} (P-1 pass: SessionStart, PreToolUse with subagent agent_id, SubagentStop, Stop)"
-            ),
-            "antigravity" => format!(
-                "{hook_entry} (P-1 pass: SessionStart root conversationId, PreToolUse subagent conversationId, Stop)"
-            ),
-            "kimi" => format!(
-                "{hook_entry} (P-1 pass: SessionStart, SubagentStart/SubagentStop depth tracking, PreToolUse, Stop)"
-            ),
-            "deepseek" => format!(
-                "{hook_entry} (P-1: dsh has no hook runner; headless overlay + stream guard + read-only subagent fallback)"
-            ),
-            "codex" => format!(
-                "{hook_entry} (~/.codex/hooks.json + ~/.codex/rules/uor-r4.rules; subagents read-only without suborder)"
-            ),
-            _ => hook_entry,
-        };
-        return OnboardRow {
-            check: "hooks".into(),
-            verdict: OnboardVerdict::Pass,
-            detail,
-        };
-    }
+    let p1_note = match client {
+        "claude" => "P-1 pass: SessionStart, PreToolUse with subagent agent_id, SubagentStop, Stop",
+        "antigravity" => "P-1 pass: SessionStart root conversationId, PreToolUse subagent conversationId, Stop",
+        "kimi" => "P-1 pass: SessionStart, SubagentStart/SubagentStop depth tracking, PreToolUse, Stop",
+        "deepseek" => "P-1: dsh has no native hook runner; headless overlay + supervisor stream guard + read-only subagent fallback",
+        "codex" => "subagents read-only without suborder",
+        _ => "loop guard staged",
+    };
     OnboardRow {
         check: "hooks".into(),
-        verdict: OnboardVerdict::Fail,
-        detail: format!("hook config not found at {}", config_path.display()),
+        verdict: OnboardVerdict::NotApplicable,
+        detail: format!(
+            "N/A until owner runs uor-harness loop install --all --apply --replace (target: {target_rel}; {p1_note})"
+        ),
     }
 }
 
@@ -2094,11 +3560,13 @@ pub fn run_onboard(
     // 3. hooks on the current binary
     checks.push(check_client_hooks(repo, home, &c));
 
-    // 4. canary write to a denied path refused
+    // 4. in-process canary write to a denied path refused
     let (canary_verdict, canary_detail) = match run_canary(repo, &c) {
         Ok(reason) => (
             OnboardVerdict::Pass,
-            format!("canary write to CHARTER.md refused ({reason})"),
+            format!(
+                "in-process loop guard evaluation refused canary write to CHARTER.md ({reason})"
+            ),
         ),
         Err(why) => (OnboardVerdict::Fail, why),
     };
@@ -2252,7 +3720,7 @@ pub fn check_all_receipts(repo: &Path) -> Result<Vec<String>, String> {
         }
         if !receipt.passed() || receipt.canary_outcome != "REFUSED" {
             return Err(format!(
-                "receipt {} does not record all PASS checks and a REFUSED canary",
+                "receipt {} does not record all PASS/N/A checks and a REFUSED canary",
                 path.display()
             ));
         }
@@ -2428,7 +3896,7 @@ fn parse_flags(
 pub fn cli(root: &Path, lab: &str, action: &str, args: &[String]) -> u8 {
     match action {
         "guard" => cli_guard(root, lab, args),
-        "install" => cli_install(root, args),
+        "install" => cli_install(root, lab, args),
         "onboard" => cli_onboard(root, lab, args),
         "copyright" => cli_copyright(root, args),
         _ => {
@@ -2439,18 +3907,28 @@ pub fn cli(root: &Path, lab: &str, action: &str, args: &[String]) -> u8 {
 }
 
 fn cli_guard(root: &Path, lab: &str, args: &[String]) -> u8 {
+    let in_repo_fallback = find_uor_roots(root).is_some();
     let flags = match parse_flags(args, &["--client", "--event", "--input", "--lab"], &[]) {
         Ok(f) => f,
         Err(e) => {
+            if !in_repo_fallback {
+                return 0;
+            }
             eprintln!("uor-harness loop guard: {e}\n{USAGE}");
             return 2;
         }
     };
     let Some(client) = flags.get("--client").map(String::as_str) else {
+        if !in_repo_fallback {
+            return 0;
+        }
         eprintln!("uor-harness loop guard: missing --client\n{USAGE}");
         return 2;
     };
     let Some(event) = flags.get("--event").map(String::as_str) else {
+        if !in_repo_fallback {
+            return 0;
+        }
         eprintln!("uor-harness loop guard: missing --event\n{USAGE}");
         return 2;
     };
@@ -2464,6 +3942,9 @@ fn cli_guard(root: &Path, lab: &str, args: &[String]) -> u8 {
         match fs::read_to_string(input_path) {
             Ok(s) => s,
             Err(e) => {
+                if !in_repo_fallback {
+                    return 0;
+                }
                 eprintln!("uor-harness loop guard: cannot read {input_path}: {e}");
                 return 2;
             }
@@ -2482,6 +3963,9 @@ fn cli_guard(root: &Path, lab: &str, args: &[String]) -> u8 {
         match serde_json::from_str(&raw_payload) {
             Ok(v) => v,
             Err(e) => {
+                if !in_repo_fallback {
+                    return 0;
+                }
                 eprintln!("uor-harness loop guard: invalid JSON payload: {e}");
                 return 2;
             }
@@ -2489,7 +3973,8 @@ fn cli_guard(root: &Path, lab: &str, args: &[String]) -> u8 {
     };
 
     match evaluate_guard(root, client, effective_lab, event, &payload) {
-        GuardOutcome::OutsideRepo | GuardOutcome::Allow => {
+        GuardOutcome::OutsideRepo => 0,
+        GuardOutcome::Allow => {
             if client == "antigravity" && event == "PreToolUse" {
                 println!("{}", json!({ "decision": "allow" }));
             }
@@ -2505,11 +3990,11 @@ fn cli_guard(root: &Path, lab: &str, args: &[String]) -> u8 {
     }
 }
 
-fn cli_install(root: &Path, args: &[String]) -> u8 {
+fn cli_install(root: &Path, lab: &str, args: &[String]) -> u8 {
     let flags = match parse_flags(
         args,
         &["--client", "--home", "--zip"],
-        &["--all", "--replace", "--dry-run", "--json"],
+        &["--all", "--apply", "--replace", "--dry-run", "--json"],
     ) {
         Ok(f) => f,
         Err(e) => {
@@ -2517,6 +4002,10 @@ fn cli_install(root: &Path, args: &[String]) -> u8 {
             return 2;
         }
     };
+    if flags.contains_key("--apply") && flags.contains_key("--dry-run") {
+        eprintln!("uor-harness loop install: cannot pass both --apply and --dry-run");
+        return 2;
+    }
     let all = flags.contains_key("--all");
     let client_opt = flags.get("--client").cloned();
     if all == client_opt.is_some() {
@@ -2535,14 +4024,36 @@ fn cli_install(root: &Path, args: &[String]) -> u8 {
         }
     };
 
-    let home = flags
-        .get("--home")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(PathBuf::from));
+    let explicit_home = flags.get("--home").map(PathBuf::from);
+    let real_home = std::env::var_os("HOME").map(PathBuf::from);
+    let home = explicit_home.clone().or_else(|| real_home.clone());
     let Some(home) = home else {
         eprintln!("uor-harness loop install: HOME is not set and --home was not given");
         return 2;
     };
+
+    let apply = flags.contains_key("--apply");
+    let dry_run = !apply;
+    let active_lab = if !lab.trim().is_empty() {
+        lab.trim().to_string()
+    } else {
+        std::env::var("UOR_LAB")
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    };
+    // Owner decision (#2028): `loop install` is plan-only by default; `--apply` writes files and is
+    // refused from a lab session targeting the user's live `$HOME`.
+    let targets_real_home = explicit_home.is_none()
+        || real_home
+            .as_ref()
+            .is_some_and(|rh| rh.canonicalize().ok() == home.canonicalize().ok());
+    if apply && !active_lab.is_empty() && targets_real_home {
+        eprintln!(
+            "uor-harness loop install: REFUSED: owner decision (#2028): loop install --apply against $HOME may be run only by the owner from Terminal with UOR_LAB unset (found UOR_LAB={active_lab})"
+        );
+        return 2;
+    }
 
     let zip = flags
         .get("--zip")
@@ -2556,7 +4067,6 @@ fn cli_install(root: &Path, args: &[String]) -> u8 {
     };
 
     let replace = flags.contains_key("--replace");
-    let dry_run = flags.contains_key("--dry-run");
     let want_json = flags.contains_key("--json");
 
     match run_install(root, &home, &clients, &zip, replace, dry_run) {
@@ -2569,9 +4079,14 @@ fn cli_install(root: &Path, args: &[String]) -> u8 {
             } else {
                 if let Some(files) = summary.get("files").and_then(Value::as_array) {
                     println!(
-                        "loop install ({}): {} file(s) planned:",
-                        if dry_run { "dry-run" } else { "applied" },
-                        files.len()
+                        "loop install ({}): {} file(s) {}:",
+                        if dry_run {
+                            "plan-only; pass --apply to write"
+                        } else {
+                            "applied"
+                        },
+                        files.len(),
+                        if dry_run { "planned" } else { "written" },
                     );
                     for f in files {
                         println!(

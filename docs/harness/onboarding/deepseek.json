@@ -26,17 +26,17 @@
     {
       "check": "skills",
       "verdict": "PASS",
-      "detail": "6 allowed skills installed in ~/.dsh/skills (start-here excluded)"
+      "detail": "6 allowed skills installed in ~/.dsh/skills (start-here excluded; YAML frontmatter normalization staged for loop install --apply --replace)"
     },
     {
       "check": "hooks",
-      "verdict": "PASS",
-      "detail": "uor-harness loop guard --client deepseek --lab deepseek --event PreToolUse wired in ~/.dsh/hooks.json"
+      "verdict": "N/A",
+      "detail": "N/A until owner runs uor-harness loop install --all --apply --replace (target: ~/.dsh/hooks.json + ~/.dsh/profiles/headless/cordis.patch.yml; P-1: dsh has no native hook runner; headless overlay + supervisor stream guard + read-only subagent fallback)"
     },
     {
       "check": "canary",
       "verdict": "PASS",
-      "detail": "canary write to CHARTER.md refused (CHARTER.md is an owner-only path (CHARTER.md in docs/harness/owner-paths.json))"
+      "detail": "in-process loop guard evaluation refused canary write to CHARTER.md (CHARTER.md is an owner-only path (CHARTER.md in docs/harness/owner-paths.json))"
     },
     {
       "check": "identity",

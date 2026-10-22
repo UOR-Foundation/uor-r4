@@ -1,6 +1,6 @@
 # REPORT: infra-loop-pr09-client-adapters, antigravity-1
 
-Lab: antigravity. Order: [ORDER.md](ORDER.md).
+Lab: antigravity. Order: [antigravity-2/ORDER.md](../antigravity-2/ORDER.md) (`antigravity-1/ORDER.md` folded into `antigravity-2/ORDER.md` after the `e7b768e04` `CHANGES` review so the PR carries one active ORDER).
 
 ## What did not work, first
 

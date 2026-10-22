@@ -25,18 +25,18 @@
     },
     {
       "check": "skills",
-      "verdict": "PASS",
-      "detail": "6 allowed skills installed in ~/.codex/skills (start-here excluded)"
+      "verdict": "N/A",
+      "detail": "N/A until owner runs uor-harness loop install --all --apply (target: ~/.codex/skills; 6 allowed skills staged, start-here excluded)"
     },
     {
       "check": "hooks",
-      "verdict": "PASS",
-      "detail": "uor-harness loop guard --client codex --lab codex --event PreToolUse wired in ~/.codex/hooks.json"
+      "verdict": "N/A",
+      "detail": "N/A until owner runs uor-harness loop install --all --apply --replace (target: ~/.codex/hooks.json + ~/.codex/rules/uor-r4.rules; subagents read-only without suborder)"
     },
     {
       "check": "canary",
       "verdict": "PASS",
-      "detail": "canary write to CHARTER.md refused (CHARTER.md is an owner-only path (CHARTER.md in docs/harness/owner-paths.json))"
+      "detail": "in-process loop guard evaluation refused canary write to CHARTER.md (CHARTER.md is an owner-only path (CHARTER.md in docs/harness/owner-paths.json))"
     },
     {
       "check": "identity",

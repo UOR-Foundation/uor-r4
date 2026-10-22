@@ -280,6 +280,22 @@ fn subagent_scoping_enforced_per_client_p1_design() {
     )
     .expect("write suborder");
 
+    // Bind `subagent-alpha` via SubagentStart (`1.md`).
+    let sub_start_alpha = json!({
+        "cwd": c_root.display().to_string(),
+        "agent_id": "subagent-alpha"
+    });
+    assert_eq!(
+        evaluate_guard(
+            c_root,
+            "claude",
+            "claude",
+            "SubagentStart",
+            &sub_start_alpha
+        ),
+        GuardOutcome::Allow
+    );
+
     // Subagent write inside narrowed suborder (`tests/loop_guard.rs`) is ALLOWED.
     assert_eq!(
         evaluate_guard(
@@ -291,6 +307,19 @@ fn subagent_scoping_enforced_per_client_p1_design() {
         ),
         GuardOutcome::Allow
     );
+    // A second concurrent subagent `subagent-beta` with no second suborder is REFUSED (never
+    // inherits `1.md`).
+    let sub_call_beta = json!({
+        "cwd": c_root.display().to_string(),
+        "agent_id": "subagent-beta",
+        "tool_name": "Write",
+        "tool_input": { "file_path": in_suborder }
+    });
+    assert!(matches!(
+        evaluate_guard(c_root, "claude", "claude", "PreToolUse", &sub_call_beta),
+        GuardOutcome::Refused(_)
+    ));
+
     // Subagent write to `src/loopguard.rs` (in parent ORDER, outside suborder) is REFUSED.
     let sub_call_outside = json!({
         "cwd": c_root.display().to_string(),
@@ -471,15 +500,36 @@ fn command_and_cross_lab_guards_refuse_violations() {
         "scripts/pod/uor-pod up --max-pods 8",
         "UOR_POD_MAX_HOURLY_USD=20 scripts/pod/uor-pod up",
         "git commit -m '[codex] wip' --no-verify",
+        "git commit -nm '[codex] wip'",
+        "git -c core.hooksPath=/dev/null commit -m '[codex] wip'",
         "git stash",
         "git push --force origin codex/test",
+        "git -c a=b push --force origin codex/test",
         "git push origin main",
+        "git push -u origin main",
+        "git push origin feat:main",
+        "git push origin HEAD:refs/heads/main",
         "gh pr merge 2914 --squash",
+        "gh  pr  merge 2914 --squash",
+        "gh api repos/UOR-Foundation/uor-r4/pulls/2914/merge -X PUT",
         "pkill -f uor-harness",
+        "/usr/bin/pkill foo",
         "killall cargo",
         "gh auth token",
         "cat ~/.env",
+        "head -n 20 ~/.netrc",
+        "printenv",
+        "env",
+        "export -p",
+        "echo $GITHUB_TOKEN",
         "echo hacked > CHARTER.md",
+        "rm CHARTER.md",
+        "cp /tmp/x CHARTER.md",
+        "sed -i '' 's/a/b/' CHARTER.md",
+        "dd if=/dev/zero of=CHARTER.md",
+        "git checkout -- CHARTER.md",
+        "uor-harness loop install --all --apply",
+        "uor-harness git install-hooks",
     ];
 
     for cmd in forbidden_cmds {
@@ -494,6 +544,24 @@ fn command_and_cross_lab_guards_refuse_violations() {
                 GuardOutcome::Refused(_)
             ),
             "command should have been refused: {cmd}"
+        );
+    }
+
+    // `git push --force-with-lease` on a feature branch and `uor-harness loop install --all`
+    // (plan-only default without `--apply`) are allowed.
+    for allowed_cmd in [
+        "git push --force-with-lease origin codex/test",
+        "uor-harness loop install --all",
+    ] {
+        let payload = json!({
+            "cwd": root.display().to_string(),
+            "tool_name": "Bash",
+            "tool_input": { "command": allowed_cmd }
+        });
+        assert_eq!(
+            evaluate_guard(root, "codex", "codex", "PreToolUse", &payload),
+            GuardOutcome::Allow,
+            "command should have been allowed: {allowed_cmd}"
         );
     }
 
@@ -670,4 +738,147 @@ fn copyright_check_detects_eight_word_window_and_passes_clean_text() {
         "expected planted 8-word leak to fail"
     );
     assert!(leak_hits.iter().any(|h| h.repo_file == "docs/loop/LEAK.md"));
+}
+
+/// Regression tests for repair order `antigravity-2`:
+/// - closed historical ORDER folders (with `REPORT.md`) do not scope top-level writes;
+/// - Antigravity `PreToolUse` without prior `SessionStart` fails closed as a subagent, and a new
+///   top-level `SessionStart` after the old root ran tool calls replaces a stale `root_cid`;
+/// - outside-repo `loop guard` exits 0 even with an unknown `--client` or malformed JSON;
+/// - `loop install` CLI is plan-only by default (writes nothing without `--apply`).
+#[test]
+fn repair_order_antigravity_2_regressions() {
+    // 1. Closed historical task folder (`claude-1` with `REPORT.md`) is ignored by `find_active_order`.
+    let claude_fixture = make_uor_fixture("claude");
+    let c_root = claude_fixture.path();
+    fs::write(
+        c_root.join("docs/loop/tasks/infra-loop-harness/claude-1/REPORT.md"),
+        "# REPORT: claude-1\n",
+    )
+    .expect("write REPORT.md to close claude-1");
+    let unscoped_write = json!({
+        "cwd": c_root.display().to_string(),
+        "tool_name": "Write",
+        "tool_input": {
+            "file_path": c_root.join("crates/uor-r4-harness/src/doccheck.rs").display().to_string()
+        }
+    });
+    assert_eq!(
+        evaluate_guard(c_root, "claude", "claude", "PreToolUse", &unscoped_write),
+        GuardOutcome::Allow
+    );
+
+    // 2. Antigravity fail-closed PreToolUse without SessionStart, and stale root replacement.
+    let agy_fixture = make_uor_fixture("antigravity");
+    let a_root = agy_fixture.path();
+    let a_file = a_root
+        .join("crates/uor-r4-harness/src/loopguard.rs")
+        .display()
+        .to_string();
+    let pre_without_start = json!({
+        "conversationId": "unregistered-conv",
+        "workspacePaths": [a_root.display().to_string()],
+        "toolCall": { "name": "edit_file", "args": { "Path": a_file } }
+    });
+    assert!(matches!(
+        evaluate_guard(
+            a_root,
+            "antigravity",
+            "antigravity",
+            "PreToolUse",
+            &pre_without_start
+        ),
+        GuardOutcome::Refused(_)
+    ));
+
+    // Establish root `old-root`, run a normal tool call, then start a new top-level session
+    // `new-root` (simulating `old-root` killed without `Stop`): `new-root` replaces `old-root`.
+    let start_old = json!({
+        "conversationId": "old-root",
+        "workspacePaths": [a_root.display().to_string()]
+    });
+    assert_eq!(
+        evaluate_guard(
+            a_root,
+            "antigravity",
+            "antigravity",
+            "SessionStart",
+            &start_old
+        ),
+        GuardOutcome::Allow
+    );
+    let old_write = json!({
+        "conversationId": "old-root",
+        "workspacePaths": [a_root.display().to_string()],
+        "toolCall": { "name": "edit_file", "args": { "Path": a_file } }
+    });
+    assert_eq!(
+        evaluate_guard(
+            a_root,
+            "antigravity",
+            "antigravity",
+            "PreToolUse",
+            &old_write
+        ),
+        GuardOutcome::Allow
+    );
+    let start_new = json!({
+        "conversationId": "new-root",
+        "workspacePaths": [a_root.display().to_string()]
+    });
+    assert_eq!(
+        evaluate_guard(
+            a_root,
+            "antigravity",
+            "antigravity",
+            "SessionStart",
+            &start_new
+        ),
+        GuardOutcome::Allow
+    );
+    let new_write = json!({
+        "conversationId": "new-root",
+        "workspacePaths": [a_root.display().to_string()],
+        "toolCall": { "name": "edit_file", "args": { "Path": a_file } }
+    });
+    assert_eq!(
+        evaluate_guard(
+            a_root,
+            "antigravity",
+            "antigravity",
+            "PreToolUse",
+            &new_write
+        ),
+        GuardOutcome::Allow
+    );
+
+    // 3. Outside-repo `evaluate_guard` returns `OutsideRepo` even for an unknown client.
+    let outside = tempfile::tempdir().expect("outside dir");
+    assert_eq!(
+        evaluate_guard(
+            outside.path(),
+            "unknown-client",
+            "",
+            "PreToolUse",
+            &json!({})
+        ),
+        GuardOutcome::OutsideRepo
+    );
+
+    // 4. `uor-harness loop install --client claude` is plan-only by default (writes nothing).
+    let home = tempfile::tempdir().expect("temp home");
+    let kit = make_synthetic_kit();
+    let out = Command::new(bin())
+        .current_dir(a_root)
+        .args(["loop", "install", "--client", "claude", "--home"])
+        .arg(home.path())
+        .arg("--zip")
+        .arg(kit.path())
+        .output()
+        .expect("run loop install default plan-only");
+    assert_eq!(out.status.code(), Some(0));
+    assert!(
+        !home.path().join(".claude/settings.json").exists(),
+        "default loop install without --apply must not write files"
+    );
 }

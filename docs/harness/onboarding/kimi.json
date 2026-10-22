@@ -26,17 +26,17 @@
     {
       "check": "skills",
       "verdict": "PASS",
-      "detail": "6 allowed skills installed in ~/.agents/skills (start-here excluded)"
+      "detail": "6 allowed skills installed in ~/.agents/skills (start-here excluded; YAML frontmatter normalization staged for loop install --apply --replace)"
     },
     {
       "check": "hooks",
-      "verdict": "PASS",
-      "detail": "uor-harness loop guard --client kimi --lab kimi --event PreToolUse wired in ~/.kimi-code/config.toml"
+      "verdict": "N/A",
+      "detail": "N/A until owner runs uor-harness loop install --all --apply --replace (target: ~/.kimi-code/config.toml; P-1 pass: SessionStart, SubagentStart/SubagentStop depth tracking, PreToolUse, Stop)"
     },
     {
       "check": "canary",
       "verdict": "PASS",
-      "detail": "canary write to CHARTER.md refused (CHARTER.md is an owner-only path (CHARTER.md in docs/harness/owner-paths.json))"
+      "detail": "in-process loop guard evaluation refused canary write to CHARTER.md (CHARTER.md is an owner-only path (CHARTER.md in docs/harness/owner-paths.json))"
     },
     {
       "check": "identity",
