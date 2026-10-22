@@ -2,14 +2,16 @@
 //!
 //! **Why this exists.** The loop page's step 1 decides go or stop and which kind of session, in a
 //! fixed order of preference: owner direction, repairs to the lab's own PRs, reviews, GPU
-//! collections, premise probes, the top of the lab's lane, then `any`. It stops on the kill switch
-//! (`local/loop/STOP` in the main checkout, or the label `loop:pause` on issue #2028), held work or
-//! an empty queue. Each source prints one line; the first that yields work decides GO.
+//! collections, premise probes, the top of the lab's lane, then `any`. It stops only on the kill
+//! switch (`local/loop/STOP` in the main checkout, or the label `loop:pause` on issue #2028); on
+//! held work, a full open-PR limit or an empty queue it waits (`WAIT … — check again in 600s`).
+//! Each source prints one line; the first that yields work decides GO.
 //!
 //! **Reads only.** GitHub is read through [`NextGh`]; the real one runs `gh`, tests point the
 //! binary at a JSON file through `UOR_LOOP_NEXT_GH_FAKE`. The `any` source asks
 //! [`crate::loopclaim::check`] whether a claim would be accepted, which fetches `origin main`;
-//! nothing else is written. Exit 0 GO, 1 STOP, 2 cannot run (usage, no lab, git or `gh` error).
+//! nothing else is written. Exit 0 GO, 1 STOP, 3 WAIT, 2 cannot run (usage, no lab, git or `gh`
+//! error).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -29,6 +31,9 @@ pub const NEXT_GH_FAKE_ENV: &str = "UOR_LOOP_NEXT_GH_FAKE";
 /// The issue whose `loop:pause` label pauses every lab's loop.
 const PAUSE_ISSUE: u64 = 2028;
 const PAUSE_LABEL: &str = "loop:pause";
+
+/// Seconds before a lab told WAIT looks again.
+pub const RECHECK_SECS: u64 = 600;
 
 /// One check at a PR's head: its name and conclusion (`FAILURE`, `SUCCESS`, ...).
 #[derive(Debug, Clone, Deserialize)]
@@ -265,6 +270,8 @@ pub enum Decision {
         reason: String,
     },
     Stop(String),
+    /// No work now, and not the kill switch: look again in [`RECHECK_SECS`].
+    Wait(String),
 }
 
 /// The ORDER a PR adds: its lab (from `<lab>-<n>/ORDER.md`), its item and `Setup row:`, and
@@ -632,12 +639,29 @@ pub fn run(
         ));
     }
     out.push(source("any", "none", detail));
-    let stop = if held > 0 {
-        format!("held work: {held} item(s) held, none ready and claimable")
-    } else {
-        "empty queue".to_string()
-    };
-    Ok((out, Decision::Stop(stop)))
+    // Only the kill switch stops; every other no-work case waits and says what is pending.
+    let mut pending = Vec::new();
+    if refused.iter().any(|r| r.contains("open_pr_limit")) {
+        let mine: Vec<String> = prs
+            .iter()
+            .filter(|p| p.head_ref_name.starts_with(&prefix))
+            .map(|p| format!("#{}", p.number))
+            .collect();
+        pending.push(format!(
+            "open_pr_limit reached: own PRs {} await review",
+            mine.join(", ")
+        ));
+    }
+    if held > 0 {
+        pending.push(format!("held work: {held} item(s) held"));
+    }
+    if !waiting.is_empty() {
+        pending.push(format!("{} item(s) waiting on dependencies", waiting.len()));
+    }
+    if pending.is_empty() {
+        pending.push("empty queue".to_string());
+    }
+    Ok((out, Decision::Wait(pending.join("; "))))
 }
 
 pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
@@ -697,6 +721,10 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             Decision::Stop(reason) => serde_json::json!({
                 "go": false, "kind": null, "target": null, "reason": reason
             }),
+            Decision::Wait(reason) => serde_json::json!({
+                "go": false, "kind": null, "target": null, "reason": reason,
+                "wait": true, "recheck_secs": RECHECK_SECS
+            }),
         };
         let v = serde_json::json!({
             "lab": lab,
@@ -717,12 +745,19 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
                 reason,
             } => println!("GO {kind} {target} — {reason}"),
             Decision::Stop(reason) => println!("STOP {reason}"),
+            Decision::Wait(reason) => println!("{}", wait_line(reason)),
         }
     }
     match decision {
         Decision::Go { .. } => 0,
         Decision::Stop(_) => 1,
+        Decision::Wait(_) => 3,
     }
+}
+
+/// The line `loop next` prints on WAIT.
+pub fn wait_line(reason: &str) -> String {
+    format!("WAIT {reason} — check again in {RECHECK_SECS}s")
 }
 
 /// Whether a `file_at_pr` error says the path is absent at the PR head. Only `gh`'s own message

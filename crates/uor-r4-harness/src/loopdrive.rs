@@ -1123,21 +1123,31 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     let claim_gh = crate::loopclaim::RealGh {
         root: root.to_path_buf(),
     };
+    // WAIT is not a stop: sleep the re-check time and ask `loop next` again.
     let decision = || -> std::result::Result<Option<String>, String> {
-        match crate::loopnext::run(root, lab, &next_gh, &claim_gh) {
-            Ok((_, crate::loopnext::Decision::Stop(reason))) => {
-                println!("STOP {reason}");
-                Ok(None)
+        loop {
+            match crate::loopnext::run(root, lab, &next_gh, &claim_gh) {
+                Ok((_, crate::loopnext::Decision::Wait(reason))) => {
+                    println!("{}", crate::loopnext::wait_line(&reason));
+                    std::thread::sleep(std::time::Duration::from_secs(
+                        crate::loopnext::RECHECK_SECS,
+                    ));
+                    continue;
+                }
+                Ok((_, crate::loopnext::Decision::Stop(reason))) => {
+                    println!("STOP {reason}");
+                    return Ok(None);
+                }
+                Ok((
+                    _,
+                    crate::loopnext::Decision::Go {
+                        kind,
+                        target,
+                        reason,
+                    },
+                )) => return Ok(Some(format!("GO {kind} {target} - {reason}"))),
+                Err(error) => return Err(error),
             }
-            Ok((
-                _,
-                crate::loopnext::Decision::Go {
-                    kind,
-                    target,
-                    reason,
-                },
-            )) => Ok(Some(format!("GO {kind} {target} - {reason}"))),
-            Err(error) => Err(error),
         }
     };
     let card = |reason: &str| post_pm_card(root, lab, reason).map_err(|error| error.to_string());
