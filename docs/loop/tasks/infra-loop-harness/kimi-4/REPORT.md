@@ -1,6 +1,6 @@
 # REPORT: infra-loop-harness, kimi-4 (scope deltas for the shared-nine decision)
 
-Lab: kimi. Order: [ORDER.md](ORDER.md).
+Lab: kimi. Order: folded into [kimi-5/ORDER.md](../kimi-5/ORDER.md) as history; this folder's original ORDER.md was removed so the PR adds exactly one ORDER, which `loop review --check` and `loop pr-check` both require.
 
 ## What did not work, first
 
@@ -12,7 +12,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md).
 
 - pr11: added `crates/uor-r4-harness/src/looparrive.rs` and `crates/uor-r4-harness/tests/loop_arrive*.rs` (raising arrive's warnings to errors changes them — DeepSeek's #2930 needs them).
 - pr12: added `rules/*-hook.sh` and `crates/uor-r4-harness/tests/git_hooks*.rs`.
-- infra-loop-harness (umbrella): added the finished loop items' modules (`src/loopreview.rs`, `src/loopnext.rs`, `src/loopreport.rs`, `src/loopclose.rs`, `src/loopclaim.rs` and the matching `tests/loop_*` stems including `loop_repair_orders*.rs`) so cross-cutting fixes like claude-22 stay in scope, and dropped `docs/roadmap/README.md`.
+- infra-loop-harness (umbrella): added the finished loop items' modules (`src/loopreview.rs`, `src/loopnext.rs`, `src/loopreport.rs`, `src/loopclose.rs`, `src/loopclaim.rs` and the matching `tests/loop_*` stems including `loop_repair_orders*.rs` and, per the kimi-5 repair, `loop_shared_files*.rs`) so cross-cutting fixes like claude-22 stay in scope, and dropped `docs/roadmap/README.md`.
 
 Size by class: docs 3 files, +3/-1 scope lines; no code, no tests, no generated files. The ORDER set no estimate (D48).
 
@@ -26,7 +26,7 @@ Size by class: docs 3 files, +3/-1 scope lines; no code, no tests, no generated 
 - `xtask roadmap check` and `xtask roadmap render --check`: pass.
 - `uor-harness loop gates --quick`: fmt-claim-wording, fmt-harness, claim-wording GREEN.
 - `uor-harness loop report --check`: PASS.
-- `uor-harness loop pr-check --local`: order, commit-order, report, owner-paths, rule-sources PASS; scope N/A by construction now — the item has `scope:` at the merge base (`940fc1730`), and every changed path is an item file inside the umbrella's scope. Result recorded here once run; see the PR body.
+- `uor-harness loop pr-check --local` at `995286d33`: verdict PASS, every rule green (order, scope, commit-order, report, owner-paths, rule-sources) — the first clean pass, now that the merge base carries scopes. Re-run at the kimi-5 head is recorded in kimi-5's REPORT.
 
 ## Skills used
 
