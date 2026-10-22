@@ -9,8 +9,8 @@ use std::process::Command;
 
 use uor_r4_harness::loopdrive::{
     check_in, classify, close_stalled_session, commit_and_push_wip, compose_prompt, launch_argv,
-    model_in_launch, note_body, pm_card_text, post_note_with, read_record, run_sessions,
-    session_alive, start_session, terminate_session, watch_lease_until_renew_fails,
+    model_in_launch, note_body, note_issue, pm_card_text, post_note_with, read_record,
+    run_sessions, session_alive, start_session, terminate_session, watch_lease_until_renew_fails,
     watch_until_exit, CheckIn, DriveHooks, DriveSpec, Next, Observation, Progress, SessionRecord,
     CHECK_IN_SECONDS,
 };
@@ -862,14 +862,30 @@ fn post_note_with_pipes_the_body_to_gh_issue_comment() {
     assert!(body.contains("[deepseek] drive check-in"), "{body}");
     assert!(body.contains("session target: #77"), "{body}");
     assert!(body.contains("No result is claimed"), "{body}");
-    let notes = std::fs::read_dir(root.join("local/loop/drive/deepseek"))
+    let drive = root.join("local/loop/drive/deepseek");
+    let kept: Vec<PathBuf> = std::fs::read_dir(&drive)
+        .expect("the drive directory exists")
+        .map(|entry| entry.expect("a note entry").path())
+        .filter(|path| path.extension().and_then(|e| e.to_str()) == Some("md"))
+        .collect();
+    assert_eq!(kept.len(), 1, "one note file is kept: {kept:?}");
+    let kept_body = std::fs::read_to_string(&kept[0]).expect("read the kept note");
+    assert!(
+        kept_body.contains("[deepseek] drive check-in"),
+        "{kept_body}"
+    );
+    assert!(kept_body.contains("session target: #77"), "{kept_body}");
+    // A second note in the same second gets its own file.
+    post_note_with(&root, &script, "deepseek", 1234, None, "second note").expect("second note");
+    let now = std::fs::read_dir(&drive)
         .expect("the drive directory exists")
         .count();
-    assert!(notes >= 1, "the note file is kept next to the session");
+    assert_eq!(now, 2, "two notes in one second keep two files");
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
-fn a_model_not_in_the_launch_is_refused() {
+fn the_model_pin_matches_whole_arguments_only() {
     let launch = vec![
         "dsh".to_string(),
         "headless".to_string(),
@@ -878,6 +894,34 @@ fn a_model_not_in_the_launch_is_refused() {
         "{prompt}".to_string(),
     ];
     assert!(model_in_launch("deepseek-flash", &launch));
-    assert!(!model_in_launch("claude-haiku", &launch));
+    // Prefix, placeholder and empty are not the model.
+    assert!(!model_in_launch("deepseek", &launch));
+    assert!(!model_in_launch("prompt", &launch));
     assert!(!model_in_launch("", &launch));
+    assert!(!model_in_launch("claude-haiku", &launch));
+    // The equals spellings and a bare argument count.
+    assert!(model_in_launch(
+        "deepseek-flash",
+        &["dsh".to_string(), "--model=deepseek-flash".to_string()]
+    ));
+    assert!(model_in_launch(
+        "deepseek-flash",
+        &["kimi".to_string(), "-m=deepseek-flash".to_string()]
+    ));
+    assert!(model_in_launch(
+        "deepseek-flash",
+        &[
+            "agy".to_string(),
+            "-m".to_string(),
+            "deepseek-flash".to_string()
+        ]
+    ));
+}
+
+#[test]
+fn a_check_in_note_targets_the_named_pr_else_the_tracker() {
+    assert_eq!(note_issue(Some("#1234")), 1234);
+    assert_eq!(note_issue(Some("#0")), 0);
+    assert_eq!(note_issue(Some("item infra-loop-pr10")), 2028);
+    assert_eq!(note_issue(None), 2028);
 }

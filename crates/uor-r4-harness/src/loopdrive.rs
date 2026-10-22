@@ -922,7 +922,15 @@ pub fn post_note_with(
     std::fs::create_dir_all(&directory).map_err(|error| {
         DriveError::Io(format!("cannot create {}: {error}", directory.display()))
     })?;
-    let path = directory.join(format!("note-{}.md", unix_now()));
+    let path = {
+        let mut path = directory.join(format!("note-{}.md", unix_now()));
+        let mut suffix = 1;
+        while path.exists() {
+            path = directory.join(format!("note-{}-{suffix}.md", unix_now()));
+            suffix += 1;
+        }
+        path
+    };
     std::fs::write(&path, format!("{}\n", note_body(lab, target, note)))
         .map_err(|error| DriveError::Io(format!("cannot write {}: {error}", path.display())))?;
     let status = Command::new(gh)
@@ -955,9 +963,39 @@ pub fn post_note(
 }
 
 /// True when the model recorded for the session is actually carried by the launch command, so the
-/// pin is checked rather than free text that only claims to be the model.
+/// pin is checked rather than free text that only claims to be the model. Whole arguments only: an
+/// argument equal to the model, `--model=<model>` or `-m=<model>`, or the value right after
+/// `--model`/`-m`. A substring (`--model deepseek` against `deepseek-flash`, or `prompt` inside
+/// `{prompt}`) never counts.
 pub fn model_in_launch(model: &str, launch: &[String]) -> bool {
-    !model.is_empty() && launch.iter().any(|arg| arg.contains(model))
+    if model.is_empty() {
+        return false;
+    }
+    let mut after_flag = false;
+    for arg in launch {
+        if after_flag && arg == model {
+            return true;
+        }
+        after_flag = arg == "--model" || arg == "-m";
+        if arg == model {
+            return true;
+        }
+        for prefix in ["--model=", "-m="] {
+            if arg.strip_prefix(prefix) == Some(model) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// The issue a check-in note posts on: the number of a `#<pr>` target, else the tracker #2028
+/// (an item id, a command or no target are not an issue number).
+pub fn note_issue(target: Option<&str>) -> u64 {
+    target
+        .and_then(|value| value.strip_prefix('#'))
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(2028)
 }
 /// The PM card for a closed session: what the PM reads to prompt the lab. Pure so the wording is
 /// tested; [`post_pm_card`] sends it on #2028.
@@ -1257,11 +1295,7 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     let notice = |note: &str| {
         println!("{note}");
         let target = last_target.borrow().clone();
-        let issue = target
-            .as_deref()
-            .and_then(|value| value.strip_prefix('#'))
-            .and_then(|value| value.parse::<u64>().ok())
-            .unwrap_or(2028);
+        let issue = note_issue(target.as_deref());
         if let Err(error) = post_note(root, lab, issue, target.as_deref(), note) {
             eprintln!("loop drive: cannot post the check-in note: {error}");
         }
