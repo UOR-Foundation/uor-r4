@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use uor_r4_harness::loopdrive::{
-    check_in, classify, close_stalled_session, compose_prompt, launch_argv, pm_card_text,
-    read_record, run_sessions, session_alive, start_session, terminate_session,
+    check_in, classify, close_stalled_session, commit_and_push_wip, compose_prompt, launch_argv,
+    pm_card_text, read_record, run_sessions, session_alive, start_session, terminate_session,
     watch_lease_until_renew_fails, watch_until_exit, CheckIn, DriveHooks, DriveSpec, Observation,
     Progress, SessionRecord, CHECK_IN_SECONDS,
 };
@@ -30,12 +30,29 @@ fn temp_root(name: &str) -> PathBuf {
     root
 }
 
+const GIT_VARS: [&str; 8] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+    "GIT_COMMON_DIR",
+];
+
 fn git_in(root: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .args(args)
-        .current_dir(root)
-        .status()
-        .expect("git runs");
+    assert!(
+        root.starts_with(std::env::temp_dir()),
+        "a test repository must stay under the temp dir: {}",
+        root.display()
+    );
+    let mut command = Command::new("git");
+    command.args(args).current_dir(root);
+    for name in GIT_VARS {
+        command.env_remove(name);
+    }
+    let status = command.status().expect("git runs");
     assert!(status.success(), "git {args:?} failed");
 }
 
@@ -376,11 +393,13 @@ fn the_fake_clock_continues_a_committing_client_with_a_note() {
         if !marker.exists() {
             return real;
         }
-        let seconds = jump.get();
-        jump.set(seconds + 3_600);
+        // One check-in only: the clock stops at the first window, so the committing client is
+        // seen as progressing and then exits before a second window could open.
+        let seconds = (jump.get() + 3_600).min(7_200);
+        jump.set(seconds);
         real + seconds
     };
-    let pause = |_seconds: u64| std::thread::sleep(std::time::Duration::from_millis(15));
+    let pause = |_seconds: u64| std::thread::sleep(std::time::Duration::from_millis(60));
     let spec = DriveSpec {
         root: &root,
         lab: "deepseek",
@@ -408,5 +427,156 @@ fn the_fake_clock_continues_a_committing_client_with_a_note() {
         close_dirs(&root).is_empty(),
         "a progressing session is not closed"
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+fn drive_repo(name: &str) -> PathBuf {
+    let root = init_repo(name);
+    let order = root.join("docs/loop/tasks/deepseek-1/ORDER.md");
+    std::fs::create_dir_all(order.parent().expect("folder")).expect("folder");
+    std::fs::write(&order, "# ORDER: fixture\n").expect("order");
+    git_in(&root, &["add", "docs"]);
+    git_in(&root, &["commit", "-q", "-m", "order"]);
+    root
+}
+
+#[test]
+fn the_wip_commit_refuses_main_a_foreign_branch_and_a_foreign_folder() {
+    let root = drive_repo("wip-refuse");
+    let order = root.join("docs/loop/tasks/deepseek-1/ORDER.md");
+    // On main: refused before any git write.
+    let error = commit_and_push_wip(&root, "deepseek", Some(&order), "stalled").expect_err("main");
+    assert!(
+        error.to_string().contains("not a deepseek/ branch"),
+        "{error}"
+    );
+    git_in(&root, &["checkout", "-q", "-b", "deepseek/topic"]);
+    // A task folder that is not <lab>-<n>: refused.
+    let foreign = root.join("docs/loop/tasks/other-1/ORDER.md");
+    std::fs::create_dir_all(foreign.parent().expect("folder")).expect("folder");
+    std::fs::write(&foreign, "# ORDER: other\n").expect("order");
+    let error = commit_and_push_wip(&root, "deepseek", Some(&foreign), "stalled")
+        .expect_err("foreign folder");
+    assert!(
+        error.to_string().contains("not a deepseek task folder"),
+        "{error}"
+    );
+    // No ORDER at all: refused rather than staging everything.
+    let error = commit_and_push_wip(&root, "deepseek", None, "stalled").expect_err("no order");
+    assert!(error.to_string().contains("unscoped"), "{error}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_wip_commit_stages_only_the_task_folder_and_carries_the_trailers() {
+    let root = drive_repo("wip-commit");
+    git_in(&root, &["checkout", "-q", "-b", "deepseek/topic"]);
+    let order = root.join("docs/loop/tasks/deepseek-1/ORDER.md");
+    std::fs::write(
+        root.join("docs/loop/tasks/deepseek-1/REPORT.md"),
+        "# REPORT\n",
+    )
+    .expect("write");
+    std::fs::write(root.join("unrelated.txt"), "do not commit\n").expect("write");
+    // No origin exists, so the push fails after the commit; the commit itself is what this test reads.
+    let error = commit_and_push_wip(&root, "deepseek", Some(&order), "stalled: test")
+        .expect_err("push without origin");
+    assert!(error.to_string().contains("push origin"), "{error}");
+    let message = Command::new("git")
+        .args(["log", "-1", "--format=%B"])
+        .current_dir(&root)
+        .output()
+        .expect("git log");
+    let message = String::from_utf8_lossy(&message.stdout);
+    assert!(message.contains("Lab: deepseek"), "{message}");
+    assert!(
+        message.contains("Order: docs/loop/tasks/deepseek-1/ORDER.md"),
+        "{message}"
+    );
+    let changed = Command::new("git")
+        .args(["show", "--name-only", "--format=", "HEAD"])
+        .current_dir(&root)
+        .output()
+        .expect("git show");
+    let changed = String::from_utf8_lossy(&changed.stdout);
+    assert!(changed.contains("deepseek-1/REPORT.md"), "{changed}");
+    assert!(
+        !changed.contains("unrelated.txt"),
+        "scoped, not -A: {changed}"
+    );
+    let status = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&root)
+        .output()
+        .expect("git status");
+    assert!(
+        String::from_utf8_lossy(&status.stdout).contains("?? unrelated.txt"),
+        "the out-of-scope file stays untracked"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_productive_then_silent_client_is_closed_at_the_second_window() {
+    let root = init_repo("two-window");
+    let script = "echo more >> work.txt && git add work.txt && git commit -q -m wip && touch commit.done && sleep 1.4";
+    let launch = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        script.to_string(),
+        "{prompt}".to_string(),
+    ];
+    let cards: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    let decision = || -> std::result::Result<Option<String>, String> {
+        Ok(Some("GO item fake - ready".to_string()))
+    };
+    let card = |reason: &str| {
+        cards.borrow_mut().push(reason.to_string());
+        Ok(())
+    };
+    let marker = root.join("commit.done");
+    let jump = std::cell::Cell::new(0u64);
+    let now = move || {
+        let real = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        if !marker.exists() {
+            return real;
+        }
+        let seconds = jump.get();
+        jump.set(seconds + 3_600);
+        real + seconds
+    };
+    let pause = |_seconds: u64| std::thread::sleep(std::time::Duration::from_millis(15));
+    let spec = DriveSpec {
+        root: &root,
+        lab: "deepseek",
+        client: "fake-client",
+        model: "pinned-model-1",
+        launch: &launch,
+        prompt: Some("fake session"),
+        max_sessions: 1,
+        order: None,
+        exempt_lease: false,
+    };
+    let hooks = DriveHooks {
+        now: &now,
+        pause: &pause,
+        decision: &decision,
+        card: &card,
+    };
+    let code = run_sessions(&spec, &hooks).expect("the two-window session runs");
+    let cards = cards.into_inner();
+    assert_eq!(
+        cards.len(),
+        1,
+        "closed only at the second window: {cards:?}"
+    );
+    assert!(
+        cards[0].starts_with("stalled:"),
+        "a fake stalled client past 2 hours is closed and carded: {cards:?}"
+    );
+    assert!(code == 1, "the close reports a non-zero code");
     let _ = std::fs::remove_dir_all(&root);
 }

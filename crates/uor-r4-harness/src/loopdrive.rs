@@ -325,6 +325,10 @@ pub fn read_record(root: &Path, lab: &str) -> Option<SessionRecord> {
 fn ps_field(pid: u32, field: &str) -> Option<String> {
     let out = Command::new("ps")
         .args(["-o", field, "-p", &pid.to_string()])
+        // The identity string must not depend on the caller's locale or time zone: a watcher
+        // started under another environment must read the same start time.
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
         .output()
         .ok()?;
     if !out.status.success() {
@@ -393,13 +397,24 @@ pub fn start_session(
             .stdout(Stdio::from(out))
             .stderr(Stdio::from(err))
             .env("UOR_LOOP_DRIVE_NONCE", &nonce)
-            .env("UOR_LOOP_DRIVE_LAB", lab)
-            .process_group(0);
+            .env("UOR_LOOP_DRIVE_LAB", lab);
+        for name in GIT_VARS {
+            command.env_remove(name);
+        }
+        command.process_group(0);
         let mut child = command
             .spawn()
             .map_err(|error| DriveError::Io(format!("cannot launch {program}: {error}")))?;
         let pid = child.id();
         let started_lstart = ps_field(pid, "lstart=").unwrap_or_default();
+        if started_lstart.is_empty() {
+            // Without an identity no later signal can be checked, and an unbounded wait could hang.
+            let _ = signal_group(pid, "KILL");
+            let _ = child.wait();
+            return Err(DriveError::Refused(format!(
+                "cannot read the start identity of pid {pid}; refusing to supervise it"
+            )));
+        }
         let record = SessionRecord {
             client: client.to_string(),
             model: model.to_string(),
@@ -571,6 +586,36 @@ pub fn watch_lease_until_renew_fails(
         std::thread::sleep(std::time::Duration::from_secs(interval_seconds));
     }
 }
+/// Reap a terminated child without an unbounded wait: after the signal, poll `try_wait` for a bound;
+/// if it still runs, send KILL to its recorded group once more and poll a short bound, then refuse.
+fn reap_child(child: &mut Child, record: &SessionRecord) -> Result<()> {
+    for _ in 0..50 {
+        if child
+            .try_wait()
+            .map_err(|error| DriveError::Io(format!("cannot poll pid {}: {error}", record.pid)))?
+            .is_some()
+        {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let _ = signal_group(record.pgid, "KILL");
+    for _ in 0..10 {
+        if child
+            .try_wait()
+            .map_err(|error| DriveError::Io(format!("cannot poll pid {}: {error}", record.pid)))?
+            .is_some()
+        {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Err(DriveError::Refused(format!(
+        "pid {} did not exit after TERM and KILL; refusing to wait unbounded",
+        record.pid
+    )))
+}
+
 /// The inputs one `loop drive` invocation needs, separate from the hooks so the session loop can be
 /// tested with a fake clock and a fake card sink.
 pub struct DriveSpec<'a> {
@@ -628,7 +673,7 @@ pub fn run_sessions(spec: &DriveSpec, hooks: &DriveHooks) -> Result<u8> {
         };
         let prompt = compose_prompt(spec.prompt, &decision);
         let argv = launch_argv(spec.launch, &prompt)?;
-        let before = Observation::take(spec.root, spec.lab);
+        let mut before = Observation::take(spec.root, spec.lab);
         let directory = spec.root.join(DRIVE_DIR).join(crate::state::slug(spec.lab));
         let log = directory.join(format!("session-{}-{session}.log", (hooks.now)()));
         let digest = crate::attention_reference::sha256_hex(prompt.as_bytes());
@@ -649,26 +694,15 @@ pub fn run_sessions(spec: &DriveSpec, hooks: &DriveHooks) -> Result<u8> {
             spec.model,
             log.display()
         );
-        let mut checked = false;
+        let mut next_check = record.started_unix + CHECK_IN_SECONDS;
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    let elapsed = (hooks.now)().saturating_sub(record.started_unix);
+                    // The session ended on its own: there is nothing left to close, and the
+                    // check-in only closes a **live** stalled session. Reset the stall counter on
+                    // real progress so the next session starts fresh.
                     let after = Observation::take(spec.root, spec.lab);
-                    let progress = classify(&before, &after);
-                    let stall_count = if matches!(progress, Progress::Stalled) {
-                        stalls + 1
-                    } else {
-                        0
-                    };
-                    if let CheckIn::Close { reason } = check_in(elapsed, &progress, stall_count) {
-                        if spec.exempt_lease {
-                            println!("leased session ended; no close: {reason}");
-                        } else {
-                            println!("CHECK-IN CLOSE: {reason}");
-                            close_actions(spec, &record, &reason, hooks, &mut stalls);
-                        }
-                    } else {
+                    if matches!(classify(&before, &after), Progress::Progressing(_)) {
                         stalls = 0;
                     }
                     last_code = status.code().unwrap_or(1) as u8;
@@ -677,8 +711,7 @@ pub fn run_sessions(spec: &DriveSpec, hooks: &DriveHooks) -> Result<u8> {
                 Ok(None) => {
                     let now = (hooks.now)();
                     let elapsed = now.saturating_sub(record.started_unix);
-                    if !checked && elapsed >= CHECK_IN_SECONDS {
-                        checked = true;
+                    if now >= next_check {
                         let after = Observation::take(spec.root, spec.lab);
                         let progress = classify(&before, &after);
                         let stall_count = if matches!(progress, Progress::Stalled) {
@@ -689,6 +722,8 @@ pub fn run_sessions(spec: &DriveSpec, hooks: &DriveHooks) -> Result<u8> {
                         match check_in(elapsed, &progress, stall_count) {
                             CheckIn::Continue { note } => {
                                 println!("{note}");
+                                before = after;
+                                next_check = next_check.saturating_add(CHECK_IN_SECONDS);
                                 stalls = 0;
                             }
                             CheckIn::Close { reason } => {
@@ -697,7 +732,7 @@ pub fn run_sessions(spec: &DriveSpec, hooks: &DriveHooks) -> Result<u8> {
                                 } else {
                                     println!("CHECK-IN CLOSE: {reason}");
                                     terminate_session(&record)?;
-                                    let _ = child.wait();
+                                    reap_child(&mut child, &record)?;
                                     close_actions(spec, &record, &reason, hooks, &mut stalls);
                                     last_code = 1;
                                     break;
@@ -791,19 +826,37 @@ pub fn commit_and_push_wip(
             "refusing to commit WIP: {folder} is not a {lab} task folder"
         )));
     }
-    git(&["add", "--", folder])?;
+    let add = git(&["add", "--", folder])?;
+    if !add.status.success() {
+        return Err(DriveError::Io(format!(
+            "git add {folder} refused: {}",
+            String::from_utf8_lossy(&add.stderr).trim()
+        )));
+    }
     let staged = git(&["diff", "--cached", "--quiet"])?;
     if staged.status.success() {
         return Ok(());
     }
-    git(&[
+    let commit = git(&[
         "commit",
         "-m",
         &format!(
             "[{lab}] WIP: drive closed a session at the 2-hour check-in\n\n- reason: {reason}\n\nLab: {lab}\nOrder: {order_rel}"
         ),
     ])?;
-    git(&["push"])?;
+    if !commit.status.success() {
+        return Err(DriveError::Io(format!(
+            "git commit refused: {}",
+            String::from_utf8_lossy(&commit.stderr).trim()
+        )));
+    }
+    let push = git(&["push", "origin", &branch])?;
+    if !push.status.success() {
+        return Err(DriveError::Io(format!(
+            "git push origin {branch} refused: {}",
+            String::from_utf8_lossy(&push.stderr).trim()
+        )));
+    }
     Ok(())
 }
 
