@@ -26,7 +26,7 @@ Size by class: docs 4 files, one scope line plus record text; no code, no tests,
 - `xtask roadmap check` and `xtask roadmap render --check`: pass.
 - `uor-harness loop gates --quick`: GREEN (run before commit).
 - `uor-harness loop report --check`: PASS for this REPORT.
-- `uor-harness loop pr-check --local` at the kimi-5 head: recorded here once run — see the PR body; at `995286d33` it was a full PASS and the only changed rule input since is the one scope glob inside the umbrella's own item.
+- `uor-harness loop pr-check --local` at the kimi-5 head: `order` and `report` PASS; `scope` and `commit-order` FAIL for the same structural repair-chain reason flagged in kimi-3 — the rule reads the umbrella's scope at the merge base (the old narrow one), and kimi-4's folder is no longer the order's own folder, so the fold edits fall outside; the ORDER commit cannot be first on a repair branch. The scope check passed at `995286d33` before the repair.
 
 ## Skills used
 
