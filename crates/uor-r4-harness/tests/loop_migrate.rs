@@ -185,7 +185,7 @@ fn broken_link_in_a_migrated_view_fails() {
         &PLAN.replace("docs/harness/pm-rules.md", "docs/harness/pm-rules-GONE.md"),
     );
     let o = r.migrate();
-    assert_eq!(o.status.code(), Some(1));
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("broken link"), "name the broken link: {err}");
+    assert_eq!(o.status.code(), Some(1));
 }
