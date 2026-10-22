@@ -1684,15 +1684,11 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
         "install-hooks" => {
             // **Owner-only:** the hooks change commit behaviour for every worktree, so a lab
             // session never writes them (owner decision, 22 Oct 2026; loop PR 9's guard repeats it).
-            if std::env::var_os("UOR_LAB").is_some() {
-                eprintln!(
-                    "uor-harness git install-hooks: refused; the shared git hooks are the owner's to install. Unset UOR_LAB and run it yourself."
-                );
-                return ExitCode::from(2);
-            }
+            // The library performs the R10 shared-checkout refusal first, then this guard.
             let write = args.iter().any(|a| a == "--install");
+            let from_lab_session = std::env::var_os("UOR_LAB").is_some();
             let paths = StatePaths::from_env(repo);
-            let (code, out, err) = githelp::install_hooks(&paths, write);
+            let (code, out, err) = githelp::install_hooks(&paths, write, from_lab_session);
             for l in &out {
                 println!("{l}");
             }

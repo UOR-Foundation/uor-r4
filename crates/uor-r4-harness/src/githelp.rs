@@ -1205,7 +1205,11 @@ fn hooks_dir(paths: &StatePaths) -> Result<std::path::PathBuf, String> {
 ///   hand or delete it.
 /// * **An unreadable file is refused** rather than replaced: not being able to see what is there is
 ///   not permission to overwrite it.
-pub fn install_hooks(paths: &StatePaths, write: bool) -> (i32, Vec<String>, Vec<String>) {
+pub fn install_hooks(
+    paths: &StatePaths,
+    write: bool,
+    from_lab_session: bool,
+) -> (i32, Vec<String>, Vec<String>) {
     let mut out: Vec<String> = Vec::new();
     let mut err: Vec<String> = Vec::new();
     // R10: this writes hooks into the repository, so it is a checkout write. A lab running it from
@@ -1213,6 +1217,14 @@ pub fn install_hooks(paths: &StatePaths, write: bool) -> (i32, Vec<String>, Vec<
     // guarded - but the shared checkout itself is not a place a lab mutates.
     if let Err(e) = crate::state::refuse_shared_checkout(paths, "the git hooks") {
         err.push(e);
+        return (2, out, err);
+    }
+    // The guard: a lab session may read the plan, but never write the shared hooks.
+    if write && from_lab_session {
+        err.push(
+            "REFUSED: the shared git hooks are the owner's to install; unset UOR_LAB and run it"
+                .into(),
+        );
         return (2, out, err);
     }
     let dir = match hooks_dir(paths) {
@@ -1248,7 +1260,7 @@ pub fn install_hooks(paths: &StatePaths, write: bool) -> (i32, Vec<String>, Vec<
         .join("install-backups")
         .join(unix_seconds().to_string());
     for (hook, path, action) in &planned {
-        if *action == "install" {
+        if *action == "install" || *action == "unchanged" {
             continue;
         }
         let dest = backup.join(hook.name);
@@ -1581,9 +1593,9 @@ mod install_hooks_tests {
     #[test]
     fn it_installs_executable_and_a_rerun_is_unchanged() {
         let (_d, paths) = scratch();
-        let (code, out, err) = install_hooks(&paths, true);
+        let (code, out, err) = install_hooks(&paths, true, false);
         assert_eq!(code, 0, "{out:?} {err:?}");
-        assert!(out[0].starts_with("installed:"), "{out:?}");
+        assert!(out.iter().any(|l| l.starts_with("installed:")), "{out:?}");
         let hook = hook_of(&paths);
         let body = std::fs::read_to_string(&hook).expect("read");
         assert_eq!(
@@ -1601,9 +1613,9 @@ mod install_hooks_tests {
                 "the hook must be executable, mode {mode:o}"
             );
         }
-        let (code2, out2, _) = install_hooks(&paths, true);
+        let (code2, out2, _) = install_hooks(&paths, true, false);
         assert_eq!(code2, 0);
-        assert!(out2[0].starts_with("unchanged:"), "{out2:?}");
+        assert!(out2.iter().any(|l| l.starts_with("unchanged:")), "{out2:?}");
     }
 
     /// **A foreign hook is REFUSED, not clobbered**, and the refusal names the marker and the first
@@ -1615,7 +1627,7 @@ mod install_hooks_tests {
         std::fs::create_dir_all(hook.parent().expect("parent")).expect("mkdir");
         std::fs::write(&hook, "#!/bin/sh\n# somebody else's hook\necho hi\n").expect("write");
 
-        let (code, _out, err) = install_hooks(&paths, true);
+        let (code, _out, err) = install_hooks(&paths, true, false);
         assert_eq!(code, 2, "a conflict is a refusal, not a success: {err:?}");
         assert!(
             err.iter()
@@ -1654,7 +1666,7 @@ mod install_hooks_tests {
         std::fs::write(&target, "#!/bin/sh\necho target\n").expect("write");
         std::os::unix::fs::symlink(&target, &hook).expect("symlink");
 
-        let (code, _out, err) = install_hooks(&paths, true);
+        let (code, _out, err) = install_hooks(&paths, true, false);
         assert_eq!(code, 2, "{err:?}");
         assert!(err.iter().any(|l| l.contains("is a symlink")), "{err:?}");
         // **The target is byte-identical** — this is the assertion that makes the symlink guard real.
@@ -1675,9 +1687,9 @@ mod install_hooks_tests {
         std::fs::create_dir_all(hook.parent().expect("parent")).expect("mkdir");
         std::fs::write(&hook, format!("#!/bin/sh\n{HOOK_START}\n# an older body\n"))
             .expect("write");
-        let (code, out, err) = install_hooks(&paths, true);
+        let (code, out, err) = install_hooks(&paths, true, false);
         assert_eq!(code, 0, "{err:?}");
-        assert!(out[0].starts_with("updated:"), "{out:?}");
+        assert!(out.iter().any(|l| l.starts_with("updated:")), "{out:?}");
         assert_eq!(std::fs::read_to_string(&hook).expect("read"), HOOK_SCRIPT);
     }
 
@@ -1693,9 +1705,9 @@ mod install_hooks_tests {
             LEGACY_HOOK_STARTS[0]
         );
         std::fs::write(&hook, v1).expect("write");
-        let (code, out, err) = install_hooks(&paths, true);
+        let (code, out, err) = install_hooks(&paths, true, false);
         assert_eq!(code, 0, "{err:?}");
-        assert!(out[0].starts_with("updated:"), "{out:?}");
+        assert!(out.iter().any(|l| l.starts_with("updated:")), "{out:?}");
         let body = std::fs::read_to_string(&hook).expect("read");
         assert_eq!(body, HOOK_SCRIPT);
         assert!(
