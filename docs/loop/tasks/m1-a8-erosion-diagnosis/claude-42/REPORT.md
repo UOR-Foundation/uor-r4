@@ -8,8 +8,9 @@ Lab: claude. Base: `8d488457e`. Order: [ORDER.md](ORDER.md), committed first (`a
   - The host data rules out one route: no cell was emptied or filled.
   - It shows that whole-vocabulary placement churn is not higher in the arm that lost more reach.
   - Placement stays a suspect on the row-weighted measures, and the read is not cleared.
-- **The item could not close without two scope fixes:**
+- **The item could not close without three fixes outside it:**
   - #2997 added its `notebook:` field;
+  - #2999 fixed `pr-check`, which refused any row added inside a notebook's table. This branch first failed `scope` on exactly that, then passed once `main` was merged in.
   - the corpus inputs had to be found inside the pod data tars (#2996).
 
 ## What changed
