@@ -4,6 +4,10 @@ Lab: kimi. Item: [infra-loop-pr08-migration](../../../../roadmap/items/infra-loo
 Setup row: 8. Base: `fb6df367b`.
 Parent: [kimi-9/ORDER.md](../kimi-9/ORDER.md).
 
+## Owner approval
+
+**"ok well I approve of #1"** — Casey in the kimi chat, received 2026-10-22T16:49Z, assigning PR 8 to kimi and approving this PR's changes to the owner paths `AGENTS.md` and `docs/integration/DECISIONS.md` (owner-paths.json). Carried unchanged from kimi-9 (the chain rule keeps Lab/Item/Setup row and this section identical).
+
 ## Goal
 
 Repair after the self-found defect in kimi-9's done-when 7: reconciling M1's registry
