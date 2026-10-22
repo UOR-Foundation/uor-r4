@@ -552,6 +552,7 @@ const GROUPS: [(&str, &[&str]); 12] = [
             "claim",
             "close",
             "copyright",
+            "drive",
             "gates",
             "guard",
             "install",
@@ -579,7 +580,7 @@ const GROUPS: [(&str, &[&str]); 12] = [
     ),
 ];
 
-/// The flags this binary accepts, wherever they appear — **80 of them, taken from Python's parser
+/// The flags this binary accepts, wherever they appear — **84 of them, taken from Python's parser
 /// and `main.rs`'s `SUBCOMMAND_FLAGS` / `SUBCOMMAND_VALUE_FLAGS` rather than curated by hand.**
 ///
 /// **My first list was written from memory and was missing `--apply`, `--refresh`, `--dry-run` and
@@ -636,6 +637,7 @@ const FLAGS: &[&str] = &[
     "--id",
     "--input",
     "--install",
+    "--interval",
     "--json",
     "--keep-going",
     "--kind",
@@ -650,6 +652,7 @@ const FLAGS: &[&str] = &[
     "--list",
     "--local",
     "--mark-seen",
+    "--max-sessions",
     "--measured",
     "--mechanism",
     "--milestone",
@@ -668,8 +671,10 @@ const FLAGS: &[&str] = &[
     "--panel",
     "--parent",
     "--paths",
+    "--pid",
     "--pr",
     "--print",
+    "--prompt",
     "--query",
     "--quick",
     "--quiet",
