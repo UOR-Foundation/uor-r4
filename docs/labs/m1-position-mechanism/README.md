@@ -4,7 +4,7 @@
 - **Lab:** `antigravity`
 - **Issue:** `#2843` (`m1-position-mechanism`)
 - **Decision card:** `#2028` (`https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6337522273`)
-- **Pre-registration:** [`preregistration-DRAFT-2026-10-22.md`](preregistration-DRAFT-2026-10-22.md) (`TEST FITNESS: PENDING`)
+- **Pre-registration:** [`docs/harness/prep/m1-position-mechanism-DRAFT-2026-10-22.md`](../../harness/prep/m1-position-mechanism-DRAFT-2026-10-22.md) (`TEST FITNESS: PENDING`)
 - **Code:** [`crates/uor-r4-discrete/src/position_mechanism.rs`](../../../crates/uor-r4-discrete/src/position_mechanism.rs)
 
 ## 1. Summary
@@ -26,5 +26,6 @@ This record delivers:
 
 ## 2. Verification
 
-- `~/.cargo/bin/cargo test -p uor-r4-discrete --lib`: 203 passed (198 existing + 5 new in `position_mechanism::tests`), 0 failed, 1 ignored.
+- `~/.cargo/bin/cargo test -p uor-r4-discrete --lib position_mechanism::tests`: `5 passed; 0 failed`.
+- `~/.cargo/bin/cargo test -p uor-r4-discrete --lib`: `203 passed; 0 failed; 1 ignored` in an unsandboxed host worktree (from `198 passed; 0 failed; 1 ignored` at base); in a sandboxed review worktree where `ps -p` is restricted, the pre-existing test `controller::tests::explicit_unlock_refuses_live_or_foreign_holders_and_preserves_dead_lock` fails both at base and at head (`202 passed; 1 failed; 1 ignored` vs `197 passed; 1 failed; 1 ignored` at base).
 - `uor-harness ratchet d23`, `d25`, and `d32`: all green (0 growth).
