@@ -632,6 +632,157 @@ impl IntegerStackModel {
         self.weights_per_token
     }
 
+    /// Exact parameter and four-phase breakdown (`ingestion`, `routing`,
+    /// `memory_lookup`, `emission`) derived from the loaded artifact.
+    pub fn parameter_breakdown(&self) -> StackParameterBreakdown {
+        let s = &self.shape;
+        let d = s.width as u64;
+        let vocab = s.vocab as u64;
+        let row_bytes = (d / 2) + d.div_ceil(super::format::GROUP as u64);
+
+        let ingestion = StackPhaseParameters {
+            active_4bit_weights_per_token: d,
+            total_4bit_weights: vocab * d,
+            active_4bit_weight_and_scale_bytes_per_token: row_bytes,
+            total_4bit_weight_and_scale_bytes: (self.embed.nibbles.len() + self.embed.scales.len())
+                as u64,
+            learned_scalars_total: 0,
+            learned_scalar_bytes_total: 0,
+        };
+
+        let matrix_weights_and_bytes = |m: &PackedMatrix| -> (u64, u64) {
+            let w = (m.rows as u64) * (m.cols as u64);
+            let b = (m.nibbles.len() + m.scales.len()) as u64;
+            (w, b)
+        };
+
+        let mut routing = StackPhaseParameters::default();
+        let mut memory_lookup = StackPhaseParameters::default();
+
+        for layer in &self.layers {
+            let (gw, gb) = matrix_weights_and_bytes(&layer.gate);
+            let (uw, ub) = matrix_weights_and_bytes(&layer.up);
+            let (dw, db) = matrix_weights_and_bytes(&layer.down);
+            let mlp_w = gw + uw + dw;
+            let mlp_b = gb + ub + db;
+
+            match &layer.mixer {
+                Mixer::Recurrence(r) => {
+                    let (iw, ib) = matrix_weights_and_bytes(&r.input);
+                    let (rw, rb) = matrix_weights_and_bytes(&r.gates);
+                    let (ow, ob) = matrix_weights_and_bytes(&r.out);
+                    let w = iw + rw + ow + mlp_w;
+                    let b = ib + rb + ob + mlp_b;
+                    routing.active_4bit_weights_per_token += w;
+                    routing.total_4bit_weights += w;
+                    routing.active_4bit_weight_and_scale_bytes_per_token += b;
+                    routing.total_4bit_weight_and_scale_bytes += b;
+                    let scalars = (r.taps.len()
+                        + r.conv_bias.len()
+                        + r.gate_bias.len()
+                        + r.rates.len()) as u64;
+                    let scalar_bytes = (r.taps.len() * 2
+                        + r.conv_bias.len() * 4
+                        + r.gate_bias.len() * 4
+                        + r.rates.len() * 2) as u64;
+                    routing.learned_scalars_total += scalars;
+                    routing.learned_scalar_bytes_total += scalar_bytes;
+                }
+                Mixer::Read(r) => {
+                    let (qw, qb) = matrix_weights_and_bytes(&r.query);
+                    let (kw, kb) = matrix_weights_and_bytes(&r.key);
+                    let (vw, vb) = matrix_weights_and_bytes(&r.value);
+                    let (nw, nb) = matrix_weights_and_bytes(&r.null);
+                    let (ow, ob) = matrix_weights_and_bytes(&r.out);
+                    let w = qw + kw + vw + nw + ow + mlp_w;
+                    let b = qb + kb + vb + nb + ob + mlp_b;
+                    memory_lookup.active_4bit_weights_per_token += w;
+                    memory_lookup.total_4bit_weights += w;
+                    memory_lookup.active_4bit_weight_and_scale_bytes_per_token += b;
+                    memory_lookup.total_4bit_weight_and_scale_bytes += b;
+                    let scalars = (r.null_bias.len()
+                        + r.age.len()
+                        + r.beta.len()
+                        + r.offset.len()
+                        + r.learned_rank.len()) as u64;
+                    let scalar_bytes = (r.null_bias.len() * 4
+                        + r.age.len() * 4
+                        + r.beta.len() * 2
+                        + r.offset.len() * 4
+                        + r.learned_rank.len() * 4) as u64;
+                    memory_lookup.learned_scalars_total += scalars;
+                    memory_lookup.learned_scalar_bytes_total += scalar_bytes;
+                }
+            }
+        }
+
+        let (hw, hb) = matrix_weights_and_bytes(&self.head);
+        let mut emission = StackPhaseParameters {
+            active_4bit_weights_per_token: hw,
+            total_4bit_weights: hw,
+            active_4bit_weight_and_scale_bytes_per_token: hb,
+            total_4bit_weight_and_scale_bytes: hb,
+            learned_scalars_total: 0,
+            learned_scalar_bytes_total: 0,
+        };
+        if let Some(p) = &self.pointer {
+            let (pqw, pqb) = matrix_weights_and_bytes(&p.query);
+            let (pkw, pkb) = matrix_weights_and_bytes(&p.key);
+            let (pgw, pgb) = matrix_weights_and_bytes(&p.gate);
+            let pw = pqw + pkw + pgw;
+            let pb = pqb + pkb + pgb;
+            emission.active_4bit_weights_per_token += pw;
+            emission.total_4bit_weights += pw;
+            emission.active_4bit_weight_and_scale_bytes_per_token += pb;
+            emission.total_4bit_weight_and_scale_bytes += pb;
+            let p_scalars = 1 + u64::from(p.lorentz);
+            let p_scalar_bytes = 4 + if p.lorentz { 2 } else { 0 };
+            emission.learned_scalars_total += p_scalars;
+            emission.learned_scalar_bytes_total += p_scalar_bytes;
+        }
+
+        let weights_per_token = ingestion.active_4bit_weights_per_token
+            + routing.active_4bit_weights_per_token
+            + memory_lookup.active_4bit_weights_per_token
+            + emission.active_4bit_weights_per_token;
+        let total_4bit_weights = ingestion.total_4bit_weights
+            + routing.total_4bit_weights
+            + memory_lookup.total_4bit_weights
+            + emission.total_4bit_weights;
+        let active_4bit_weight_and_scale_bytes_per_token =
+            ingestion.active_4bit_weight_and_scale_bytes_per_token
+                + routing.active_4bit_weight_and_scale_bytes_per_token
+                + memory_lookup.active_4bit_weight_and_scale_bytes_per_token
+                + emission.active_4bit_weight_and_scale_bytes_per_token;
+        let total_4bit_weight_and_scale_bytes = ingestion.total_4bit_weight_and_scale_bytes
+            + routing.total_4bit_weight_and_scale_bytes
+            + memory_lookup.total_4bit_weight_and_scale_bytes
+            + emission.total_4bit_weight_and_scale_bytes;
+        let total_learned_scalars = ingestion.learned_scalars_total
+            + routing.learned_scalars_total
+            + memory_lookup.learned_scalars_total
+            + emission.learned_scalars_total;
+        let total_learned_scalar_bytes = ingestion.learned_scalar_bytes_total
+            + routing.learned_scalar_bytes_total
+            + memory_lookup.learned_scalar_bytes_total
+            + emission.learned_scalar_bytes_total;
+
+        StackParameterBreakdown {
+            ingestion,
+            routing,
+            memory_lookup,
+            emission,
+            weights_per_token,
+            total_4bit_weights,
+            active_4bit_weight_and_scale_bytes_per_token,
+            total_4bit_weight_and_scale_bytes,
+            total_learned_scalars,
+            total_learned_scalar_bytes,
+            total_learned_parameters: total_4bit_weights + total_learned_scalars,
+            active_learned_parameters_per_token: weights_per_token + total_learned_scalars,
+        }
+    }
+
     /// A fresh session: zero recurrence states and empty read caches. Every
     /// buffer a step uses is allocated here, for the full context, within the
     /// bounds the loader checked (the shape's limits and read-cache bound).
@@ -819,6 +970,71 @@ pub struct SerializedStackSession {
     pub mixture: Vec<i32>,
     /// Per-layer state snapshots.
     pub layers: Vec<SerializedStackLayerState>,
+}
+
+/// Parameter and byte counts for one of the four step phases
+/// (`ingestion`, `routing`, `memory_lookup`, `emission`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StackPhaseParameters {
+    /// 4-bit matrix weights read per token in this phase.
+    pub active_4bit_weights_per_token: u64,
+    /// Total 4-bit matrix weights stored in the artifact for this phase.
+    pub total_4bit_weights: u64,
+    /// Packed nibble + group-scale bytes read per token in this phase.
+    pub active_4bit_weight_and_scale_bytes_per_token: u64,
+    /// Total packed nibble + group-scale bytes stored in the artifact for this phase.
+    pub total_4bit_weight_and_scale_bytes: u64,
+    /// Learned integer / grid-code scalar parameters stored in the artifact for this phase.
+    pub learned_scalars_total: u64,
+    /// Bytes occupied by learned integer / grid-code scalar parameters in this phase.
+    pub learned_scalar_bytes_total: u64,
+}
+
+/// Exact parameter and four-phase breakdown of an [`IntegerStackModel`]
+/// (`ingestion`, `routing`, `memory_lookup`, `emission`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StackParameterBreakdown {
+    /// Phase 1 (`embed` row lookup).
+    pub ingestion: StackPhaseParameters,
+    /// Phase 2 (`r` recurrence layers + their MLPs).
+    pub routing: StackPhaseParameters,
+    /// Phase 3 (`a` read layers + their MLPs).
+    pub memory_lookup: StackPhaseParameters,
+    /// Phase 4 (`head` unembedding + optional pointer head).
+    pub emission: StackPhaseParameters,
+    /// Total 4-bit matrix weights read per token across all four phases (`model.weights_per_token()`).
+    pub weights_per_token: u64,
+    /// Total 4-bit matrix weights stored across all matrices in the artifact.
+    pub total_4bit_weights: u64,
+    /// Packed nibble + group-scale bytes read per token across all four phases.
+    pub active_4bit_weight_and_scale_bytes_per_token: u64,
+    /// Total packed nibble + group-scale bytes stored across all matrices in the artifact.
+    pub total_4bit_weight_and_scale_bytes: u64,
+    /// Total learned integer / grid-code scalar parameters across all four phases.
+    pub total_learned_scalars: u64,
+    /// Total bytes occupied by learned integer / grid-code scalar parameters.
+    pub total_learned_scalar_bytes: u64,
+    /// Total learned parameters (`total_4bit_weights + total_learned_scalars`).
+    pub total_learned_parameters: u64,
+    /// Active learned parameters per token (`weights_per_token + total_learned_scalars`).
+    pub active_learned_parameters_per_token: u64,
+}
+
+/// Per-step nanosecond durations of the four serving phases (`ingestion`,
+/// `routing`, `memory_lookup`, `emission`), measured outside the audited
+/// [`IntegerStackSession::step`] call graph.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StepPhaseTimingNs {
+    /// Phase 1: token bounds check and embedding row dequantization (`embed`).
+    pub ingestion_ns: u64,
+    /// Phase 2: recurrence layers (`r`) and their MLP blocks.
+    pub routing_ns: u64,
+    /// Phase 3: read / memory lookup layers (`a`) and their MLP blocks.
+    pub memory_lookup_ns: u64,
+    /// Phase 4: final RMSNorm, output `head`, optional copy boost / pointer head, and cursor advance.
+    pub emission_ns: u64,
+    /// End-to-end wall-clock duration of the step in nanoseconds.
+    pub total_ns: u64,
 }
 
 /// One entry of the opt-in snap trace ([`IntegerStackSession::enable_snap_trace`]):
@@ -1651,6 +1867,170 @@ impl IntegerStackSession<'_> {
     pub fn step(&mut self, token: u32) -> Result<&[i32], StackError> {
         stack_step(self, token, false)?;
         Ok(&self.b.logits)
+    }
+
+    /// Execute one single-threaded step while measuring the nanosecond duration
+    /// of each of the four phases (`ingestion`, `routing`, `memory_lookup`,
+    /// `emission`).
+    ///
+    /// Executes the identical integer kernels as [`Self::step`] in the same
+    /// order and produces bit-for-bit identical logits, mixture, and session
+    /// state, while keeping [`Self::step`] and `stack_step` untouched for the
+    /// static zero-multiply disassembly audit.
+    #[inline(never)]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn measure_step_phases(&mut self, token: u32) -> Result<StepPhaseTimingNs, StackError> {
+        let step_t0 = std::time::Instant::now();
+        let model = self.model;
+        let (s, n) = (&model.shape, &model.numerics);
+        let (d, heads, mlp) = (s.width, s.heads, s.mlp);
+        if token as usize >= s.vocab {
+            return Err(StackError::Token {
+                token,
+                vocab: s.vocab,
+            });
+        }
+        if self.position >= s.context {
+            return Err(StackError::ContextFull { context: s.context });
+        }
+        let b = &mut self.b;
+
+        let t_ing = std::time::Instant::now();
+        stack_dequant_row(&model.embed, token as usize, &mut b.x);
+        let ingestion_ns = t_ing.elapsed().as_nanos() as u64;
+
+        let mut routing_ns = 0u64;
+        let mut memory_lookup_ns = 0u64;
+
+        let last_read_idx = model
+            .layers
+            .iter()
+            .rposition(|l| matches!(l.mixer, Mixer::Read(_)));
+        for (idx, (layer, state)) in model
+            .layers
+            .iter()
+            .zip(self.states.iter_mut())
+            .enumerate()
+        {
+            let t_layer = std::time::Instant::now();
+            let norm_exp = stack_rms_norm(&b.x, n.rms_eps, &mut b.scratch[..d], &mut b.norm);
+            stack_activation_tables(&b.norm, &mut b.tables[..d]);
+            stack_pair_tables(&b.tables[..d], &mut b.pairs);
+            let is_recurrence = match (&layer.mixer, state.as_mut()) {
+                (Mixer::Recurrence(r), LayerState::Recurrence { state, history }) => {
+                    stack_recurrence(model, r, state, history, b, norm_exp, false);
+                    true
+                }
+                (
+                    Mixer::Read(r),
+                    LayerState::Read {
+                        keys,
+                        values,
+                        lifts,
+                        codes,
+                    },
+                ) => {
+                    stack_read(
+                        model,
+                        r,
+                        Cache {
+                            keys,
+                            values,
+                            lifts,
+                            codes,
+                            position: self.position,
+                            at: self.cache_at,
+                            lift_at: self.lift_at,
+                        },
+                        b,
+                        norm_exp,
+                        Some(idx) == last_read_idx && self.copy_scale_q16 > 0,
+                        false,
+                    );
+                    false
+                }
+                _ => {
+                    debug_assert!(
+                        false,
+                        "stack step: a layer's state does not match its mixer"
+                    );
+                    return Err(StackError::SessionState);
+                }
+            };
+            for (x, p) in b.x.iter_mut().zip(&b.proj) {
+                *x = x.saturating_add(*p);
+            }
+            let norm_exp = stack_rms_norm(&b.x, n.rms_eps, &mut b.scratch[..d], &mut b.norm);
+            stack_activation_tables(&b.norm, &mut b.tables[..d]);
+            stack_pair_tables(&b.tables[..d], &mut b.pairs);
+            stack_map_pairs2(
+                false,
+                &b.pairs,
+                norm_exp,
+                (&layer.gate, &mut b.gate),
+                (&layer.up, &mut b.up),
+            );
+            stack_swiglu(model, &b.gate, &b.up, &mut b.scratch[..mlp]);
+            let act_exp = stack_quantize16(&b.scratch[..mlp], PRODUCT_EXP, &mut b.act[..mlp]);
+            stack_activation_tables(&b.act[..mlp], &mut b.tables[..mlp]);
+            stack_map_nibbles(false, &layer.down, &b.tables, act_exp, &mut b.proj);
+            for (x, p) in b.x.iter_mut().zip(&b.proj) {
+                *x = x.saturating_add(*p);
+            }
+            let elapsed_ns = t_layer.elapsed().as_nanos() as u64;
+            if is_recurrence {
+                routing_ns += elapsed_ns;
+            } else {
+                memory_lookup_ns += elapsed_ns;
+            }
+        }
+
+        let t_em = std::time::Instant::now();
+        let norm_exp = stack_rms_norm(&b.x, n.rms_eps, &mut b.scratch[..d], &mut b.norm);
+        stack_activation_tables(&b.norm, &mut b.tables[..d]);
+        stack_pair_tables(&b.tables[..d], &mut b.pairs);
+        stack_map_pairs(false, &model.head, &b.pairs, norm_exp, &mut b.logits);
+        if self.copy_scale_q16 > 0 {
+            let scale = i128::from(self.copy_scale_q16);
+            for (j, &tok) in self.tokens[..self.position].iter().enumerate() {
+                if (tok as usize) < s.vocab {
+                    let pw = i128::from(self.b.pointer_weights[j]);
+                    let boost = shift_wide(mul_i128(pw, scale), 31) as i32;
+                    self.b.logits[tok as usize] =
+                        self.b.logits[tok as usize].saturating_add(boost);
+                }
+            }
+        }
+        self.tokens.push(token);
+        if let Some(p) = &model.pointer {
+            stack_pointer(
+                model,
+                p,
+                PointerCache {
+                    tokens: &self.tokens,
+                    keys: &mut self.pointer_keys,
+                    lifts: &mut self.pointer_lifts,
+                    position: self.position,
+                    at: self.pointer_at,
+                },
+                &mut self.b,
+                norm_exp,
+            );
+            self.pointer_at += p.dim;
+        }
+        self.position += 1;
+        self.cache_at += d;
+        self.lift_at += heads;
+        let emission_ns = t_em.elapsed().as_nanos() as u64;
+        let total_ns = step_t0.elapsed().as_nanos() as u64;
+
+        Ok(StepPhaseTimingNs {
+            ingestion_ns,
+            routing_ns,
+            memory_lookup_ns,
+            emission_ns,
+            total_ns,
+        })
     }
 }
 

@@ -1,0 +1,58 @@
+# M5 Laptop Full-Path Cost and Energy Measurement (`m5-laptop-full-path-measurement`)
+
+**Item:** [`docs/roadmap/items/m5-laptop-full-path-measurement.md`](../../roadmap/items/m5-laptop-full-path-measurement.md) ([`#2862`](https://github.com/UOR-Foundation/uor-r4/issues/2862) / [`#2033`](https://github.com/UOR-Foundation/uor-r4/issues/2033))
+**Protocol:** [`docs/compute/energy-measurement-protocol-v3.md`](../../compute/energy-measurement-protocol-v3.md)
+**Provisional rehearsal receipt:** [`provisional-synthetic-stack-receipt.json`](provisional-synthetic-stack-receipt.json) (`sha256:0e8f8a11f28ee8c62e54191d738bb83eefd6dc0cc39980ee1deb06731439c0c8`)
+**Finite host controls:** [`crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs`](../../../crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs)
+
+---
+
+## 1. Classification and Scope Boundary
+
+- **Status:** Host instrumentation, Protocol v3 specification, finite control suite, and provisional Apple M1 rehearsal on `mk-synthetic-stack` (`seed = 5`) complete. **M5 milestone acceptance (`status: done` on `m5-laptop-full-path-measurement`) is NOT claimed**, because the upstream M5 sparse-routing candidate (`m5-route-select-active-subset`, [`#2861`](https://github.com/UOR-Foundation/uor-r4/issues/2861)) is still `ready` and no trained M5 checkpoint has been exported (`0 / 8` milestones complete).
+- **Zero-multiply disassembly audit:** [`IntegerStackSession::step`](../../../crates/uor-r4-integer/src/stack/session.rs) and `stack_step` remain untouched. Running `python3 scripts/audit_zero_matmul_serving.py local/antigravity/target/release/uor-r4-stack --stack` passes all `44 / 44` mandatory symbols and `26` reachable call-graph functions with `0` Class I (multiplier), `0` Class II (divider), and `0` Class III (floating-point / SIMD-to-general transfer) instructions.
+
+---
+
+## 2. Protocol v2 Defects Closed by Protocol v3
+
+[`archive/docs/compute/energy-measurement-protocol-v2.md`](../../../archive/docs/compute/energy-measurement-protocol-v2.md) (§4) identified two defects in [`archive/ops/measurement_report_rnd.json`](../../../archive/ops/measurement_report_rnd.json):
+
+| Defect | In [`archive/ops/measurement_report_rnd.json`](../../../archive/ops/measurement_report_rnd.json) | Exact Value | Relative Error | Protocol v3 Enforcement in [`crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs`](../../../crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs) |
+|---|---|---|---|---|
+| 1. Power / throughput window mismatch | `work_rate_w = 40.5 W` vs `gross_j_per_tok (0.003172) * tokens_per_s (17,190)` | `54.52668 W` | `25.72%` (`> 2.0%` limit) | `ProtocolV3ValidationError::PowerThroughputInconsistency` rejects any receipt where `\|work_rate_w - gross_j_per_tok * tokens_per_s\| / (gross_j_per_tok * tokens_per_s) > 0.02` |
+| 2. Normal $z_{0.975} = 1.96$ instead of Student's $t_{0.975, n-1}$ | `ci95 = 0.037 mJ` on $n = 3$ runs (`[3.135, 3.172, 3.199]` mJ, $s = 0.032130$ mJ) | $t_{0.975, 2} \cdot s / \sqrt{3} = 4.302653 \times 0.018550 = 0.079815\text{ mJ}$ | `53.64%` (`> 2.0%` limit) | `ProtocolV3ValidationError::InvalidStudentTCi95` rejects any receipt whose reported `ci95` differs from $t_{0.975, n-1} \cdot s / \sqrt{n}$ by more than `2.0%` |
+
+---
+
+## 3. Four-Phase Parameter and Latency Breakdown on `mk-synthetic-stack` (`seed = 5`)
+
+Measured on Apple M1 (`Darwin 27.0.0 arm64`) over `mk-synthetic-stack` (`seed = 5`, `sha256:d60f88d6e08ac60763b35484307f9425f702b9fead4615dd8cbe5fdbbced92df`, `vocab = 40, width = 32, heads = 2, mlp = 32, pattern = "ra", context = 64`, `8` windows = `512` steps, `logits_sha256 = 10ff4339c329138e8352cd96c646580c0de082ac3924efb8df366063653524ba`, `phase_instrumentation_logits_match = true`):
+
+| Phase | Active 4-Bit Weights / Token | Total 4-Bit Weights | Active Weight+Scale Bytes / Token | Learned Scalars (Bytes) | Mean Latency ($\mu\text{s}$) | p50 ($\mu\text{s}$) | p90 ($\mu\text{s}$) | p99 ($\mu\text{s}$) | Share of Step |
+|---|---|---|---|---|---|---|---|---|---|
+| 1. `ingestion` (`embed`) | `32` | `1,280` | `17 B` (`/ 680 B`) | `0` (`0 B`) | `0.305` | `0.416` | `0.459` | `0.625` | `0.23%` |
+| 2. `routing` (`l0` `r` + MLP) | `7,424` | `7,424` | `3,944 B` | `208` (`560 B`) | `73.134` | `51.167` | `54.750` | `1,702.541` | `56.18%` |
+| 3. `memory_lookup` (`l1` `a` + MLP) | `7,232` | `7,232` | `3,842 B` | `134` (`532 B`) | `53.284` | `31.625` | `77.708` | `135.458` | `40.93%` |
+| 4. `emission` (`head`) | `1,280` | `1,280` | `680 B` | `0` (`0 B`) | `3.449` | `4.375` | `4.667` | `5.042` | `2.65%` |
+| **Total** | **`15,968`** | **`17,216`** (`92.7509%` active) | **`8,483 B`** (`/ 9,146 B`) | **`342`** (`1,092 B`) | **`130.172`** (unphased mean `103.842` $\mu\text{s}$, p50 `100.041` $\mu\text{s}$, p90 `139.417` $\mu\text{s}$, p99 `350.041` $\mu\text{s}$) | — | — | — | **`100.00%`** |
+
+### Memory and Process Isolation Summary (`provisional-synthetic-stack-receipt.json`)
+
+- **Cold load:** `3.426 ms` (`0.003426 s`).
+- **Kernel high-water-mark footprint (`vmmap -summary` `Physical footprint (peak)`):** `3,784,704 B` (`3.609 MiB`).
+- **Multi-stage `ps -o rss=` checkpoints:** `initial_rss_mb = 1.969 MiB`, `post_load_rss_mb = 3.250 MiB`, `post_session_alloc_rss_mb = 4.516 MiB`, `post_eval_rss_mb = 4.578 MiB`, `peak_rss_mb = 4.578 MiB`.
+- **Analytical bytes touched per token:** `341,531 B/tok` (shape-derived analytical calculation, labelled distinctly from hardware performance-counter traffic).
+- **Process isolation & machine state:** `external_inference_daemons_detected = ["ollama"]` (detected `/Applications/Ollama.app` running on the host) and `load_average_before = "{ 31.69 34.64 32.30 }"` (concurrent five-lab loop builds active). Because the host was not quiescent and the artifact is the `17,558`-parameter synthetic fixture (`92.75%` active 4-bit weights per token), this receipt is explicitly marked `"qualification_status": "PROVISIONAL_SYNTHETIC_FIXTURE_NOT_M5_ACCEPTANCE"`.
+- **Whole-system power & energy rehearsal (`macmon pipe -s 0 -i 100`, `sys_power`, $n = 3$ trials of `32,768` tokens):**
+  - `idle_rate_w = 24.255221 W` (`43` samples over `5.005 s` under concurrent host load).
+  - `work_rate_w = 23.319112 W`, `tokens_per_s = 21,858.645 tok/s`, `gross_j_per_tok = 0.001066814 J/tok` (`0.001066814 * 21858.645 = 23.319112 W`, `0.00%` power/throughput discrepancy).
+  - `gross_mj_per_tok`: samples `[0.988340, 0.964506, 1.247596]` mJ/tok, `mean = 1.066814 mJ/tok`, `sd = 0.157015 mJ/tok`, Student-$t_{0.975, 2}$ `ci95 = 0.390046 mJ/tok`.
+
+---
+
+## 4. Staged Notebook Row (for Backfill Once M5 Candidate Runs)
+
+| Date | Line | Question / Hypothesis | Artifact / Commit | Result | Classification |
+|---|---|---|---|---|---|
+| `2026-10-22` | `m5-active-parameter-routing` | Does `uor-r4-stack cost` + Protocol v3 (`docs/compute/energy-measurement-protocol-v3.md`) measure dynamic per-phase parameter counts (`ingestion`, `routing`, `memory_lookup`, `emission`), per-phase latency (`p50`/`p90`/`p99`) outside the zero-multiply `step` call graph, kernel high-water-mark memory (`vmmap` / `VmHWM`), and Student-$t_{0.975, n-1}$ energy confidence intervals while rejecting Protocol v2's `measurement_report_rnd.json` defects? | `crates/uor-r4-integer/src/stack/session.rs`, `crates/uor-r4-integer/src/bin/uor-r4-stack.rs`, `docs/labs/m5-laptop-full-path-measurement/provisional-synthetic-stack-receipt.json` (`sha256:0e8f8a11f28ee8c62e54191d738bb83eefd6dc0cc39980ee1deb06731439c0c8`) | On `mk-synthetic-stack` (`seed = 5`), `parameter_breakdown` reports `15,968 / 17,216` active 4-bit weights/tok (`92.7509%`, `32 + 7,424 + 7,232 + 1,280`) and `342` learned scalars; `measure_step_phases` matches `step` logits bit-for-bit (`10ff4339...`); `audit_zero_matmul_serving.py --stack` passes `44 / 44` symbols (`0` violations); Protocol v3 validator catches both `measurement_report_rnd.json` defects (`25.72%` power/throughput mismatch and `53.64%` $z$-vs-$t_2$ CI95 understatement). | `instrument ready` (provisional synthetic fixture only; M5 acceptance awaits `m5-route-select-active-subset` `#2861` and owner bar registration on `#2862` / `#2033`) |

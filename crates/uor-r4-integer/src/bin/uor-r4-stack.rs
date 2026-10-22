@@ -19,6 +19,7 @@
 //! `IntegerStackSession::step` and `stack_argmax`; argument parsing, file reading, timing, hashing and JSON
 //! are outside it. The instruction audit targets this binary:
 //! `python3 scripts/audit_zero_matmul_serving.py target/release/uor-r4-stack --stack`.
+#![forbid(unsafe_code)]
 
 use std::path::Path;
 use std::time::Instant;
@@ -283,6 +284,101 @@ fn process_rss_mb() -> Option<f64> {
     Some(kib / 1024.0)
 }
 
+fn parse_vmmap_size_bytes(token: &str) -> Option<u64> {
+    let token = token.trim().trim_end_matches('.');
+    let (num_str, mult) = if let Some(s) = token
+        .strip_suffix("KB")
+        .or_else(|| token.strip_suffix("KiB"))
+        .or_else(|| token.strip_suffix('K'))
+    {
+        (s, 1024.0)
+    } else if let Some(s) = token
+        .strip_suffix("MB")
+        .or_else(|| token.strip_suffix("MiB"))
+        .or_else(|| token.strip_suffix('M'))
+    {
+        (s, 1024.0 * 1024.0)
+    } else if let Some(s) = token
+        .strip_suffix("GB")
+        .or_else(|| token.strip_suffix("GiB"))
+        .or_else(|| token.strip_suffix('G'))
+    {
+        (s, 1024.0 * 1024.0 * 1024.0)
+    } else if let Some(s) = token.strip_suffix('B') {
+        (s, 1.0)
+    } else {
+        (token, 1.0)
+    };
+    let val: f64 = num_str.trim().parse().ok()?;
+    if val <= 0.0 {
+        return None;
+    }
+    Some((val * mult).round() as u64)
+}
+
+fn kernel_peak_memory_bytes() -> Option<u64> {
+    if cfg!(target_os = "macos") {
+        let output = std::process::Command::new("vmmap")
+            .args(["-summary", &std::process::id().to_string()])
+            .output()
+            .ok()?;
+        let text = std::str::from_utf8(&output.stdout).ok()?;
+        for line in text.lines() {
+            if let Some(rest) = line.trim().strip_prefix("Physical footprint (peak):") {
+                let first_token = rest.split_whitespace().next()?;
+                if let Some(bytes) = parse_vmmap_size_bytes(first_token) {
+                    return Some(bytes);
+                }
+            }
+        }
+        None
+    } else if cfg!(target_os = "linux") {
+        let status = std::fs::read_to_string("/proc/self/status").ok()?;
+        for line in status.lines() {
+            if let Some(rest) = line.strip_prefix("VmHWM:") {
+                let kib: u64 = rest.split_whitespace().next()?.parse().ok()?;
+                return Some(kib.saturating_mul(1024));
+            }
+        }
+        None
+    } else {
+        None
+    }
+}
+
+fn detect_external_inference_daemons() -> Vec<String> {
+    const FORBIDDEN_DAEMONS: &[&str] = &[
+        "ollama",
+        "llama-server",
+        "llama-cli",
+        "vllm",
+        "lmstudio",
+        "mlx_lm",
+    ];
+    let Ok(output) = std::process::Command::new("ps")
+        .args(["-axo", "comm="])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let Ok(text) = std::str::from_utf8(&output.stdout) else {
+        return Vec::new();
+    };
+    let mut detected = Vec::new();
+    for line in text.lines() {
+        let base = line.trim().rsplit('/').next().unwrap_or("");
+        for &daemon in FORBIDDEN_DAEMONS {
+            if base == daemon && !detected.iter().any(|d| d == daemon) {
+                detected.push(daemon.to_string());
+            }
+        }
+    }
+    detected
+}
+
 fn sysctl_loadavg() -> String {
     std::process::Command::new("sysctl")
         .args(["-n", "vm.loadavg"])
@@ -490,6 +586,7 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     let prompt_tokens = prompt_len.min(ids.len() / 2).min(context);
     let prompt = &ids[..prompt_tokens];
     let mut session = model.session();
+    let post_session_alloc_rss_mb = process_rss_mb();
     let prompt_clock = Instant::now();
     for &id in prompt {
         session.step(id)?;
@@ -504,21 +601,75 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     let stride = (ids.len() - context - 1) / windows;
     let mut step_us: Vec<f64> = Vec::with_capacity(windows * context);
     let mut total_steps = 0usize;
+    let mut unphased_hash = Sha256::new();
     let eval_clock = Instant::now();
     for window in 0..windows {
         let start = window * stride;
         session.reset();
         for &id in &ids[start..start + context] {
             let step_start = Instant::now();
-            session.step(id)?;
+            let logits = session.step(id)?;
             step_us.push(step_start.elapsed().as_nanos() as f64 / 1000.0);
+            for value in logits {
+                unphased_hash.update(value.to_le_bytes());
+            }
             total_steps += 1;
         }
     }
     let total_eval_seconds = eval_clock.elapsed().as_secs_f64();
+    let unphased_logits_sha256 = hex::encode(unphased_hash.finalize());
     let post_eval_rss_mb = process_rss_mb();
 
+    // 2b. Four-phase latency breakdown over the identical WINDOWS * context steps
+    // using `measure_step_phases` (outside the audited `IntegerStackSession::step` call graph),
+    // verifying bit-identical logits against the unphased pass.
+    let mut ingestion_us: Vec<f64> = Vec::with_capacity(windows * context);
+    let mut routing_us: Vec<f64> = Vec::with_capacity(windows * context);
+    let mut memory_lookup_us: Vec<f64> = Vec::with_capacity(windows * context);
+    let mut emission_us: Vec<f64> = Vec::with_capacity(windows * context);
+    let mut phased_hash = Sha256::new();
+    for window in 0..windows {
+        let start = window * stride;
+        session.reset();
+        for &id in &ids[start..start + context] {
+            let timing = session.measure_step_phases(id)?;
+            ingestion_us.push(timing.ingestion_ns as f64 / 1000.0);
+            routing_us.push(timing.routing_ns as f64 / 1000.0);
+            memory_lookup_us.push(timing.memory_lookup_ns as f64 / 1000.0);
+            emission_us.push(timing.emission_ns as f64 / 1000.0);
+            for value in session.logits() {
+                phased_hash.update(value.to_le_bytes());
+            }
+        }
+    }
+    let phased_logits_sha256 = hex::encode(phased_hash.finalize());
+    let phase_instrumentation_logits_match = unphased_logits_sha256 == phased_logits_sha256;
+
+    let max_sampled_rss_mb = [
+        initial_rss_mb,
+        post_load_rss_mb,
+        post_session_alloc_rss_mb,
+        post_eval_rss_mb,
+    ]
+    .into_iter()
+    .flatten()
+    .reduce(f64::max);
+    let kernel_peak_bytes = kernel_peak_memory_bytes();
+    let kernel_peak_mb = kernel_peak_bytes.map(|b| (b as f64) / (1024.0 * 1024.0));
+    let peak_rss_mb = match (max_sampled_rss_mb, kernel_peak_mb) {
+        (Some(a), Some(b)) => Some(a.max(b)),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    };
+    let external_daemons = detect_external_inference_daemons();
+
     step_us.sort_by(f64::total_cmp);
+    ingestion_us.sort_by(f64::total_cmp);
+    routing_us.sort_by(f64::total_cmp);
+    memory_lookup_us.sort_by(f64::total_cmp);
+    emission_us.sort_by(f64::total_cmp);
+
     let n = step_us.len() as f64;
     let mean_us = step_us.iter().sum::<f64>() / n;
     let stddev_us = (step_us.iter().map(|&x| (x - mean_us).powi(2)).sum::<f64>() / n).sqrt();
@@ -527,10 +678,39 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     let p95_ms = percentile(&step_us, 95) / 1000.0;
     let p99_ms = percentile(&step_us, 99) / 1000.0;
 
+    let ing_mean_us = ingestion_us.iter().sum::<f64>() / n;
+    let rout_mean_us = routing_us.iter().sum::<f64>() / n;
+    let mem_mean_us = memory_lookup_us.iter().sum::<f64>() / n;
+    let em_mean_us = emission_us.iter().sum::<f64>() / n;
+    let phase_sum_mean_us = (ing_mean_us + rout_mean_us + mem_mean_us + em_mean_us).max(1e-9);
+
     let load_avg_after = sysctl_loadavg();
 
-    // 3. Analytical bytes per token estimate
+    // 3. Analytical bytes per token estimate & dynamic parameter breakdown
     let bytes_touched_per_token = estimate_analytical_bytes_per_token(&model);
+    let param_breakdown = model.parameter_breakdown();
+    let active_4bit_ratio = if param_breakdown.total_4bit_weights > 0 {
+        (param_breakdown.weights_per_token as f64) / (param_breakdown.total_4bit_weights as f64)
+    } else {
+        0.0
+    };
+    let active_total_param_ratio = if param_breakdown.total_learned_parameters > 0 {
+        (param_breakdown.active_learned_parameters_per_token as f64)
+            / (param_breakdown.total_learned_parameters as f64)
+    } else {
+        0.0
+    };
+    let weights_notes = format!(
+        "analytical shape-based count: {} 4-bit weights read per token out of {} total 4-bit weights ({:.4}% active; {} bytes active weights/scales out of {} total bytes; {:.2} effective bits per weight; {} learned scalars / {} B)",
+        param_breakdown.weights_per_token,
+        param_breakdown.total_4bit_weights,
+        active_4bit_ratio * 100.0,
+        param_breakdown.active_4bit_weight_and_scale_bytes_per_token,
+        param_breakdown.total_4bit_weight_and_scale_bytes,
+        D11_EFFECTIVE_BITS_PER_WEIGHT,
+        param_breakdown.total_learned_scalars,
+        param_breakdown.total_learned_scalar_bytes,
+    );
     let input_driven_forward_throughput = total_steps as f64 / total_eval_seconds;
 
     let record = json!({
@@ -550,27 +730,41 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             "windows": windows,
             "context": context,
             "total_steps": total_steps,
+            "logits_sha256": unphased_logits_sha256,
+            "phase_instrumentation_logits_match": phase_instrumentation_logits_match,
         },
         "machine": {
             "threads": 1,
             "load_average_before": load_avg_before,
             "load_average_after": load_avg_after,
+            "external_inference_daemons_detected": external_daemons,
         },
         "memory": {
             "initial_rss_mb": initial_rss_mb,
             "post_load_rss_mb": post_load_rss_mb,
+            "post_session_alloc_rss_mb": post_session_alloc_rss_mb,
             "post_eval_rss_mb": post_eval_rss_mb,
-            "peak_rss_mb": post_eval_rss_mb,
+            "max_sampled_rss_mb": max_sampled_rss_mb,
+            "kernel_peak_footprint_bytes": kernel_peak_bytes,
+            "kernel_peak_footprint_mb": kernel_peak_mb,
+            "peak_rss_mb": peak_rss_mb,
             "weights_read_per_token": model.weights_per_token(),
             "analytical_weights_read_per_token": model.weights_per_token(),
+            "total_4bit_weights": param_breakdown.total_4bit_weights,
+            "weights_read_over_total_4bit_weights": active_4bit_ratio,
+            "total_learned_scalars": param_breakdown.total_learned_scalars,
+            "total_learned_parameters": param_breakdown.total_learned_parameters,
+            "active_learned_parameters_per_token": param_breakdown.active_learned_parameters_per_token,
+            "active_over_total_learned_parameters": active_total_param_ratio,
+            "parameter_breakdown": param_breakdown,
             "nominal_bits_per_weight": D11_NOMINAL_BITS_PER_WEIGHT,
             "scale_bits_per_weight": D11_SCALE_BITS_PER_WEIGHT,
             "bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
             "effective_bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
-            "weights_notes": "analytical shape-based count: 7,238,304 weights read per token (3,845,349 bytes weights/scales; 4.25 effective bits per weight)",
+            "weights_notes": weights_notes,
             "bytes_touched_per_token": bytes_touched_per_token,
             "analytical_bytes_touched_per_token_estimate": bytes_touched_per_token,
-            "rss_notes": "peak_rss_mb / post_eval_rss_mb is a single post-evaluation RSS sample via ps, not a continuous high-water mark",
+            "rss_notes": "kernel_peak_footprint_bytes / kernel_peak_footprint_mb is the kernel high-water-mark footprint (vmmap Physical footprint (peak) on macOS, /proc/self/status VmHWM on Linux); max_sampled_rss_mb is the maximum across initial, post-load, post-session-alloc, and post-eval ps -o rss= samples",
             "traffic_notes": "bytes_touched is an analytical estimate derived from tensor shapes, not hardware-instrumented memory traffic",
         },
         "bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
@@ -596,8 +790,41 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             "max_ms": step_us[step_us.len() - 1] / 1000.0,
             "tokens_per_second": input_driven_forward_throughput,
             "input_driven_forward_throughput_tokens_per_second": input_driven_forward_throughput,
-            "throughput_mode": "input-driven teacher-forced stepping over dataset tokens (1 thread, 2,048 steps across 8 windows of context 256), not free-running autoregressive generation",
+            "throughput_mode": format!(
+                "input-driven teacher-forced stepping over dataset tokens (1 thread, {} steps across {} windows of context {}), not free-running autoregressive generation",
+                total_steps, windows, context
+            ),
             "threads": 1,
+            "phase_latency_us": {
+                "ingestion": {
+                    "mean_us": ing_mean_us,
+                    "p50_us": percentile(&ingestion_us, 50),
+                    "p90_us": percentile(&ingestion_us, 90),
+                    "p99_us": percentile(&ingestion_us, 99),
+                    "share_of_step": ing_mean_us / phase_sum_mean_us,
+                },
+                "routing": {
+                    "mean_us": rout_mean_us,
+                    "p50_us": percentile(&routing_us, 50),
+                    "p90_us": percentile(&routing_us, 90),
+                    "p99_us": percentile(&routing_us, 99),
+                    "share_of_step": rout_mean_us / phase_sum_mean_us,
+                },
+                "memory_lookup": {
+                    "mean_us": mem_mean_us,
+                    "p50_us": percentile(&memory_lookup_us, 50),
+                    "p90_us": percentile(&memory_lookup_us, 90),
+                    "p99_us": percentile(&memory_lookup_us, 99),
+                    "share_of_step": mem_mean_us / phase_sum_mean_us,
+                },
+                "emission": {
+                    "mean_us": em_mean_us,
+                    "p50_us": percentile(&emission_us, 50),
+                    "p90_us": percentile(&emission_us, 90),
+                    "p99_us": percentile(&emission_us, 99),
+                    "share_of_step": em_mean_us / phase_sum_mean_us,
+                },
+            },
         },
     });
 

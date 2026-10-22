@@ -78,7 +78,8 @@ pub use format::{
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};
 pub use session::{
     IntegerStackModel, IntegerStackSession, SerializedStackLayerState, SerializedStackSession,
-    SnapTraceEntry, CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
+    SnapTraceEntry, StackParameterBreakdown, StackPhaseParameters, StepPhaseTimingNs,
+    CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
 };
 
 /// SHA-256 of the 120 unit icosians of 2I (the transport snap's roots) as
