@@ -552,3 +552,123 @@ pub fn solve_with_stats(lp: &Lp, mut progress: Option<&mut dyn FnMut(&Stats)>) -
     sx.stats.objective = objective.clone();
     (LpResult::Optimal { x: xs, objective }, sx.stats)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+        fn range(&mut self, lo: i64, hi: i64) -> i64 {
+            lo + (self.next() % (hi - lo + 1) as u64) as i64
+        }
+    }
+
+    fn q(n: i64, d: i64) -> BigRational {
+        BigRational::new(BigInt::from(n), BigInt::from(d))
+    }
+
+    /// `ints` must be `λ·vals` for one λ > 0 (all zero when `vals` is).
+    fn assert_one_positive_factor(vals: &[&BigRational], ints: &[BigInt], what: &str) {
+        assert_eq!(vals.len(), ints.len(), "{what}: length");
+        let Some(first) = vals.iter().position(|v| !v.is_zero()) else {
+            assert!(ints.iter().all(|v| v.is_zero()), "{what}: all-zero input must scale to all zeros");
+            return;
+        };
+        let lambda = rat(&ints[first]) / vals[first].clone();
+        assert!(lambda.is_positive(), "{what}: factor {lambda} is not positive");
+        for (k, (v, i)) in vals.iter().zip(ints).enumerate() {
+            assert_eq!(rat(i), &lambda * *v, "{what}: entry {k} is not scaled by the common factor");
+        }
+    }
+
+    fn assert_row_scaling(rows: &[(Vec<BigRational>, BigRational)], c: &[BigRational], what: &str) {
+        for (i, (a, b)) in rows.iter().enumerate() {
+            let vals: Vec<&BigRational> = a.iter().chain(std::iter::once(b)).collect();
+            assert_one_positive_factor(&vals, &integral(&vals), &format!("{what} row {i}"));
+        }
+        let cv: Vec<&BigRational> = c.iter().collect();
+        assert_one_positive_factor(&cv, &integral(&cv), &format!("{what} objective"));
+    }
+
+    fn random_rat(rng: &mut Rng) -> BigRational {
+        if rng.range(0, 3) == 0 {
+            BigRational::zero()
+        } else {
+            q(rng.range(-40, 40), rng.range(1, 24))
+        }
+    }
+
+    #[test]
+    fn integral_scales_each_row_by_one_positive_factor() {
+        let mut rng = Rng(0x5eed_0001);
+        let mut rows = Vec::new();
+        for r in 0..200 {
+            let len = rng.range(1, 30) as usize;
+            let a: Vec<BigRational> = (0..len).map(|_| random_rat(&mut rng)).collect();
+            let b = match r % 4 {
+                0 => BigRational::zero(),
+                1 => -q(rng.range(1, 40), rng.range(1, 24)),
+                _ => random_rat(&mut rng),
+            };
+            rows.push((a, b));
+        }
+        rows.push((vec![BigRational::zero(); 5], BigRational::zero()));
+        rows.push((vec![BigRational::zero(); 3], q(-3, 7)));
+        let c: Vec<BigRational> = (0..30).map(|_| random_rat(&mut rng)).collect();
+        assert_row_scaling(&rows, &c, "random");
+        assert_row_scaling(&[], &vec![BigRational::zero(); 4], "zero objective");
+        assert_row_scaling(&[], &[q(-6, 4), q(9, 10)], "negative objective");
+    }
+
+    #[test]
+    #[ignore = "reads the real saved case from the owner's local disk"]
+    fn integral_on_saved_case_rows() {
+        let dir = std::path::Path::new(
+            "/Users/casey.allard/uor-r4/local/claude/legal-case/codex-direct-legal-centered-20261009/attempt2",
+        );
+        let (p, _) = crate::saved::load(dir).expect("load the saved case");
+        let lp = crate::bb::relaxation(&p);
+        assert_eq!(lp.rows.len(), 440);
+        assert_row_scaling(&lp.rows, &lp.c, "saved case");
+    }
+
+    #[test]
+    #[should_panic(expected = "certificate: reduced cost of nonbasic 0 (Lower) has the wrong sign")]
+    fn certify_rejects_a_non_optimal_point() {
+        // minimise -x subject to x <= 1, 0 <= x <= 2: optimum x = 1, start x = 0.
+        let stats = Stats {
+            pivots: 0,
+            flips: 0,
+            phase1_pivots: 0,
+            d_bits: 1,
+            d_bits_max: 1,
+            phase: 2,
+            objective: BigRational::zero(),
+        };
+        let sx = Simplex {
+            m: 1,
+            n: 1,
+            cols: vec![vec![(0, BigInt::one())], vec![(0, BigInt::one())]],
+            b: vec![BigInt::one()],
+            lower: vec![BigRational::zero(), BigRational::zero()],
+            upper: vec![Some(q(2, 1)), None],
+            x: vec![BigRational::zero(), BigRational::one()],
+            state: vec![State::Lower, State::Basic],
+            basis: vec![1],
+            minv: vec![vec![BigInt::one()]],
+            d: BigInt::one(),
+            threads: 1,
+            stats,
+        };
+        sx.certify(&[-BigInt::one(), BigInt::zero()]);
+    }
+}

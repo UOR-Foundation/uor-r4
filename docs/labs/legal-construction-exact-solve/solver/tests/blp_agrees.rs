@@ -177,3 +177,25 @@ fn random_agree_with_tableau() {
     eprintln!("random: {} optimal, {} infeasible, {} with phase 1, {} flips", t.optimal, t.infeasible, t.phase1, t.flips);
     assert!(t.optimal > 500 && t.infeasible > 240 + 50 && t.phase1 > 100 && t.flips > 100);
 }
+
+/// `blp` threads once the LP has at least 64 rows (`m >= 64` in `blp.rs`);
+/// every other test here is smaller, so this is the one that runs the
+/// threaded pricing and inverse update.
+#[test]
+fn agrees_with_threaded_path() {
+    const THRESHOLD: usize = 64;
+    for seed in 0..5u64 {
+        let mut rng = Rng(0x7a11_0000 + seed);
+        let n = 8;
+        let masters: Vec<BigRational> = (0..n).map(|_| q(rng.range(-7, 7), 4)).collect();
+        let g: Vec<BigRational> = (0..n).map(|_| q(rng.range(-8, 8), 4)).collect();
+        let guards: Vec<Vec<BigRational>> =
+            (0..72).map(|_| (0..n).map(|_| q(rng.range(-4, 4), 2)).collect()).collect();
+        let p = Problem::new(masters, g, guards);
+        let lp = bb::relaxation(&p);
+        assert!(lp.rows.len() >= THRESHOLD + 8, "seed {seed}: only {} rows", lp.rows.len());
+        let mut t = Tally::default();
+        agree(&lp, &format!("threaded seed {seed}"), &mut t);
+        assert_eq!(t.optimal + t.infeasible, 1);
+    }
+}
