@@ -3273,7 +3273,7 @@ pub fn plan_client_install(
             } else {
                 String::new()
             };
-            let pointer = merge_claude_md(&existing_claude_md);
+            let pointer = merge_claude_md(&existing_claude_md, &claude_md)?;
             writes.push(PlannedWrite {
                 client: c.clone(),
                 path: claude_md,
@@ -3636,24 +3636,53 @@ const CLAUDE_MD_BODY: &str = "# UOR-R4 pointer\n\nWhen working inside `~/uor-r4`
 
 /// Merge the UOR-R4 pointer into `~/.claude/CLAUDE.md` between marker lines so existing user
 /// instructions are preserved and re-runs replace only the marked block.
-fn merge_claude_md(existing: &str) -> String {
+///
+/// Counts `CLAUDE_MD_START` and `CLAUDE_MD_END` markers and accepts only `(0, 0)` or `(1, 1)` with
+/// the start marker preceding the end marker; any other marker state returns `Err` so `loop install`
+/// refuses with exit `2` and writes nothing.
+fn merge_claude_md(existing: &str, path: &Path) -> Result<String, String> {
+    let start_count = existing.matches(CLAUDE_MD_START).count();
+    let end_count = existing.matches(CLAUDE_MD_END).count();
     let marked_block = format!("{CLAUDE_MD_START}\n{CLAUDE_MD_BODY}\n{CLAUDE_MD_END}");
-    if let (Some(s), Some(e)) = (existing.find(CLAUDE_MD_START), existing.find(CLAUDE_MD_END)) {
-        if s < e {
+    match (start_count, end_count) {
+        (0, 0) => {
+            if let Some(pos) = existing.find(CLAUDE_MD_BODY) {
+                let before = &existing[..pos];
+                let after = &existing[pos + CLAUDE_MD_BODY.len()..];
+                let mut out = format!("{before}{marked_block}{after}");
+                if !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                return Ok(out);
+            }
+            let trimmed = existing.trim_end();
+            if trimmed.is_empty() {
+                Ok(format!("{marked_block}\n"))
+            } else {
+                Ok(format!("{trimmed}\n\n{marked_block}\n"))
+            }
+        }
+        (1, 1) => {
+            let s = existing.find(CLAUDE_MD_START).unwrap_or(0);
+            let e = existing.find(CLAUDE_MD_END).unwrap_or(0);
+            if s >= e {
+                return Err(format!(
+                    "REFUSED: malformed UOR-R4 marker state in {}: end marker `{CLAUDE_MD_END}` appears before start marker `{CLAUDE_MD_START}`",
+                    path.display()
+                ));
+            }
             let before = &existing[..s];
             let after = &existing[e + CLAUDE_MD_END.len()..];
             let mut out = format!("{before}{marked_block}{after}");
             if !out.ends_with('\n') {
                 out.push('\n');
             }
-            return out;
+            Ok(out)
         }
-    }
-    let trimmed = existing.trim_end();
-    if trimmed.is_empty() || trimmed == CLAUDE_MD_BODY {
-        format!("{marked_block}\n")
-    } else {
-        format!("{trimmed}\n\n{marked_block}\n")
+        _ => Err(format!(
+            "REFUSED: malformed UOR-R4 marker state in {} (found {start_count} start marker(s) `{CLAUDE_MD_START}` and {end_count} end marker(s) `{CLAUDE_MD_END}`; expected (0,0) or (1,1) with start before end)",
+            path.display()
+        )),
     }
 }
 

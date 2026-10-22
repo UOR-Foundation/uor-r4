@@ -1436,3 +1436,120 @@ fn repair_order_antigravity_4_regressions() {
     assert!(!b1_path.display().to_string().starts_with(&real_prefix));
     assert!(!b2_path.display().to_string().starts_with(&real_prefix));
 }
+
+/// Regression tests for repair order `antigravity-5`:
+/// 1. Stray start marker (`<!-- uor-r4-loop-start -->` with no end marker) in `~/.claude/CLAUDE.md`
+///    refuses with exit 2 and writes nothing.
+/// 2. Two blocks (`(2, 2)`) in `~/.claude/CLAUDE.md` refuses with exit 2 and writes nothing.
+/// 3. End marker before start marker in `~/.claude/CLAUDE.md` refuses with exit 2 and writes nothing.
+/// 4. LOW follow-up: an unmarked pointer embedded inside a larger `~/.claude/CLAUDE.md` is migrated
+///    in place to a marked block without duplicating it.
+#[test]
+fn repair_order_antigravity_5_regressions() {
+    let fixture = make_uor_fixture("claude");
+    let temp_repo = fixture.path();
+    let kit = make_synthetic_kit();
+
+    let malformed_cases = [
+        (
+            "stray start marker",
+            "user line A\n<!-- uor-r4-loop-start -->\nuser line B after a stray start marker\n",
+        ),
+        (
+            "two blocks",
+            "user header\n<!-- uor-r4-loop-start -->\nblock 1\n<!-- uor-r4-loop-end -->\nmiddle\n<!-- uor-r4-loop-start -->\nblock 2\n<!-- uor-r4-loop-end -->\n",
+        ),
+        (
+            "end before start",
+            "user header\n<!-- uor-r4-loop-end -->\nmiddle\n<!-- uor-r4-loop-start -->\ntrailer\n",
+        ),
+    ];
+
+    for (label, bad_content) in malformed_cases {
+        let home = tempfile::tempdir().expect("temp home");
+        let claude_dir = home.path().join(".claude");
+        fs::create_dir_all(&claude_dir).expect("mkdir .claude");
+        let claude_md = claude_dir.join("CLAUDE.md");
+        fs::write(&claude_md, bad_content).expect("write malformed CLAUDE.md");
+
+        let err = run_install(
+            temp_repo,
+            home.path(),
+            &["claude".to_string()],
+            kit.path(),
+            true,
+            false,
+        )
+        .expect_err(&format!(
+            "{label}: run_install must refuse malformed marker state"
+        ));
+        assert!(
+            err.contains("REFUSED") && err.contains("CLAUDE.md") && err.contains("marker"),
+            "{label}: error must name CLAUDE.md and the marker problem, got: {err}"
+        );
+        assert_eq!(
+            fs::read_to_string(&claude_md).expect("read CLAUDE.md"),
+            bad_content,
+            "{label}: malformed CLAUDE.md must not be modified on refusal"
+        );
+        assert!(
+            !claude_dir.join("settings.json").exists(),
+            "{label}: no other files may be written when CLAUDE.md is refused"
+        );
+
+        // Also verify CLI exits 2 and prints REFUSED on stderr.
+        let cli_out = Command::new(bin())
+            .current_dir(temp_repo)
+            .env_remove("UOR_LAB")
+            .args(["loop", "install", "--client", "claude", "--home"])
+            .arg(home.path())
+            .arg("--zip")
+            .arg(kit.path())
+            .arg("--apply")
+            .arg("--replace")
+            .output()
+            .expect("run cli loop install");
+        assert_eq!(
+            cli_out.status.code(),
+            Some(2),
+            "{label}: CLI loop install must exit 2 on malformed CLAUDE.md"
+        );
+        let stderr = String::from_utf8_lossy(&cli_out.stderr);
+        assert!(
+            stderr.contains("REFUSED") && stderr.contains("CLAUDE.md"),
+            "{label}: CLI stderr must name REFUSED and CLAUDE.md, got: {stderr}"
+        );
+    }
+
+    // 4. LOW follow-up: an old unmarked pointer embedded inside a larger `CLAUDE.md` is migrated
+    //    in place to a marked block without duplicating the pointer.
+    let home = tempfile::tempdir().expect("temp home");
+    let claude_dir = home.path().join(".claude");
+    fs::create_dir_all(&claude_dir).expect("mkdir .claude");
+    let claude_md = claude_dir.join("CLAUDE.md");
+    let embedded_unmarked = "# Header\n\n# UOR-R4 pointer\n\nWhen working inside `~/uor-r4` or its worktrees, read `AGENTS.md` and `CHARTER.md` §5.10 first. Where any note disagrees with `CHARTER.md`, the charter wins.\n\n# Footer\n";
+    fs::write(&claude_md, embedded_unmarked).expect("write embedded unmarked CLAUDE.md");
+
+    run_install(
+        temp_repo,
+        home.path(),
+        &["claude".to_string()],
+        kit.path(),
+        true,
+        false,
+    )
+    .expect("in-place migration of embedded unmarked pointer succeeds");
+    let migrated = fs::read_to_string(&claude_md).expect("read migrated CLAUDE.md");
+    assert_eq!(
+        migrated.matches("# UOR-R4 pointer").count(),
+        1,
+        "embedded unmarked pointer must be wrapped in place, not duplicated: {migrated}"
+    );
+    assert!(
+        migrated.contains("# Header")
+            && migrated.contains("# Footer")
+            && migrated.contains("<!-- uor-r4-loop-start -->")
+            && migrated.contains("<!-- uor-r4-loop-end -->"),
+        "migrated CLAUDE.md must keep header/footer and wrap pointer in markers: {migrated}"
+    );
+}
