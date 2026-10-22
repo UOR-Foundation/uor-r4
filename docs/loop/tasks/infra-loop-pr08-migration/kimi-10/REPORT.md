@@ -16,6 +16,13 @@ Lab: kimi. Order: [ORDER.md](ORDER.md). Parent: [kimi-9/REPORT.md](../kimi-9/REP
 - `crates/uor-r4-harness/src/loopprcheck.rs` (shared): the rendered-lock rule passes the views' first commit when none exists at the base.
 - The ORDER's `## Owner approval` section (both owner paths named, the verbatim quote, the ISO time).
 
+Second round (draft-phase feedback on #2982, 21:47–21:52Z, after merging 105 commits of main):
+
+- `docs/start/FILEMAP.md`: rows for `src-tauri` and its three subdirectories — the desktop client landed on main while this PR was open, and the filemap verifier enumerates every tracked directory two levels deep.
+- `crates/uor-r4-harness/tests/loop_migrate.rs`: the unused `Path` import is gone (the one real CI red in the harness job).
+- The views re-rendered from the merged head (`loop render --check` byte-exact).
+- Verified with a PR-code binary and the CI-equivalent commands, against the diagnosis on the PR: rendered-lock PASSes (the first-commit pass applies — no view exists at the base), owner-paths PASSes (this ORDER's section), and `xtask links --baseline --renames-from` at the merged head reports **0 new broken** with 19 COPIED (both archive copies, byte-identical, under #3007). The diagnosed HANDOFF/stub/L-018 link fixes were already in the tree at 84b10704e; the archive copies must NOT be relinked (byte-identity is the migration's premise).
+
 ## Measurements
 
 - The three repo-content tests pass at this head (each named above, run individually).
