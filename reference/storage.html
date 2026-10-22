@@ -190,6 +190,13 @@
 <tr><td>The released 214M model and its data</td><td>the model and dataset cards</td><td>HF public <code>caseyallard/uor-r4-geometric-214m</code>, <code>caseyallard/uor-r4-data</code></td></tr>
 </tbody></table>
 </div>
+<h2 id="k16-after-down-closure-custody"><a class="header" href="#k16-after-down-closure-custody">K16 after-down closure custody</a></h2>
+<p>The K16 run's after-down closure custody is recorded in the
+<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/infra-k16-normal-close-accounting/README.md">normal-close record</a>:
+<code>k16-afterdown-closure-0038z.tar</code>, 13 files, 131,072 B, MD5 <code>9f7368ac…</code>, reported with full cloud
+readback in #2029 <a href="https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6257225762">6257225762</a>.
+Its storage and transfer charges are <strong>unmeasured</strong>, so this page adds no index row for them; the
+tar is not in the 20 October HF store index snapshot.</p>
 <h2 id="the-private-hf-store"><a class="header" href="#the-private-hf-store">The private HF store</a></h2>
 <p><code>caseyallard/uor-r4-store</code> is a private HF dataset, so links to it work only when you are signed in to an account with access. The store's own <a href="https://huggingface.co/datasets/caseyallard/uor-r4-store/blob/main/README.md">README</a> repeats the prefix table below.</p>
 <p><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/storage/hf-store-index-2026-10-20.tsv"><code>hf-store-index-2026-10-20.tsv</code></a> has one row per file, 3,883 rows in all, sorted by path. Columns: <code>path</code>, <code>bytes</code>, <code>hash</code> (<code>sha256:&lt;hex&gt;</code> for LFS files; <code>git-blob:&lt;sha1&gt;</code> for small files), <code>last_commit_utc</code> and <code>last_commit_title</code>. It was taken on 20 Oct 2026 with <code>hf datasets ls caseyallard/uor-r4-store -R --format json</code>; re-take it the same way after large uploads.</p>
