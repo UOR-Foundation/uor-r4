@@ -62,7 +62,9 @@ uor-harness budget show|scan            cumulative cost, and the pod specs of ru
 uor-harness lint check|format           lint a PR body against the contract; render a compliant one
 uor-harness ratchet d23|d25             the D23 (norm-exp/squashing/activation/rotary) and D25 (matmul/tensor-core) ratchets
 uor-harness heartbeat --milestone m1    check in (live tier; 5-minute window)
-uor-harness git install-hooks|status    the pre-commit guard, and this branch's delivery state
+uor-harness git install-hooks|status    the three managed git hooks (owner-only), and this branch's delivery state
+uor-harness git check-message <file>    the commit-msg hook: Lab: and Order: trailers on a lab branch
+uor-harness git push-check              the pre-push hook: pr-check --local for each pushed lab branch
 uor-harness check [--staged]            every machine-checkable rule in one pass
 ```
 
@@ -104,7 +106,7 @@ UOR_LAB=claude uor-harness loop ask --scope --order <ORDER> --file <path> --reas
 UOR_LAB=claude uor-harness loop ask --blocked --order <ORDER> --limit <text> --measured <text> --command <text> --state <refused|not-reached>
 ```
 
-`loop claim` refuses unless the item is ready and unclaimed, has a `scope:` line, overlaps no open order's scope (notebook pages excepted) and the lab is under its `open_pr_limit`. It then creates `.worktrees/<lab>-<topic>` from fresh `origin/main`, commits a skeleton ORDER at `docs/loop/tasks/<item-id>/<lab>-<n>/ORDER.md` (the folder is the item id), opens a draft PR and lists the PRs again. It refuses if the branch already exists on `origin` or `origin` cannot be checked, and pushes only while the branch is absent there. Any failure after the worktree exists, and a lost race, runs one rollback that attempts every step: close our PR, delete our branch from `origin` only while it is still at the commit we pushed, remove our worktree and branch by exact path and name. Exit codes: 0 claimed; 1 lost the race to a lower-numbered open PR for the same item and the rollback was clean; 2 refused, a write failed, or a rollback left something, which is named so a person can remove it.
+`loop claim` refuses unless the item is ready and unclaimed, has a `scope:` line that covers none of the nine shared files (see the `scope` rule below), overlaps no open order's scope (notebook pages and shared files excepted) and the lab is under its `open_pr_limit`. It then creates `.worktrees/<lab>-<topic>` from fresh `origin/main`, commits a skeleton ORDER at `docs/loop/tasks/<item-id>/<lab>-<n>/ORDER.md` (the folder is the item id), opens a draft PR and lists the PRs again. It refuses if the branch already exists on `origin` or `origin` cannot be checked, and pushes only while the branch is absent there. Any failure after the worktree exists, and a lost race, runs one rollback that attempts every step: close our PR, delete our branch from `origin` only while it is still at the commit we pushed, remove our worktree and branch by exact path and name. Exit codes: 0 claimed; 1 lost the race to a lower-numbered open PR for the same item and the rollback was clean; 2 refused, a write failed, or a rollback left something, which is named so a person can remove it.
 For `loop claim`, `<topic>` is `--lab-topic`, which defaults to the item id; for `loop suborder` and `loop ask` it is the parent ORDER's folder name.
 
 `loop suborder` refuses, with exit 2, any glob not inside the parent ORDER's scope (its item's `scope:`): a child glob is contained when it equals the parent glob, or the parent is `<dir>/**` and the child lies under `<dir>/`. The parent item is read from `origin/main`. It writes `local/<lab>/<topic>/orders/<n>.md` (created with `create_new`, so a concurrent card takes the next number), where `<topic>` is the parent ORDER's folder name, and prints the subagent's block with the stop rules. `loop ask` writes a stop-and-ask card to `local/<lab>/<topic>/asks/<n>.md` and posts nothing; a missing field exits 2.
@@ -119,10 +121,10 @@ UOR_LAB=claude uor-harness loop pr-check [--base <rev>] [--head <rev>] [--head-r
 
 Checks a loop PR: the diff from `git merge-base <base> <head>` to `<head>` (`--base` defaults to `origin/main`, `--head` to `HEAD`), read with `git`, never the working tree; only `review-record` and `required-checks` read GitHub, read-only through `gh api` and only with `--pr <n>`. `--local` makes those two rules N/A ("local run"), `--ci` makes them N/A because the policy job runs before the review record and the checks exist, and with none of the three they fail ("needs --pr <n>, or --local"); give at most one. **Registries and items are read at the merge base**, so a PR cannot loosen its own check; the files it adds are read at the head. It prints a size line by class (tests, code, docs, generated, other), one `PASS|FAIL|N/A <rule> <summary>` line per rule with indented details, then `verdict: PASS|FAIL`; `--json` prints one object instead. Exit codes: 0 every rule passes; 1 a rule failed, including a rule whose input could not be read; 2 the check could not run (bad rev, git failure, usage). There are no warnings left: `read-path`'s warning became an error in loop PR 11.
 
-- `order`: the PR adds exactly one `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`; its lab is in `docs/harness/labs.json`, its `Lab:` line names the same lab, its `Item:` names an item in `docs/roadmap/items/`, and an `infra-loop-pr*` item's ORDER carries a `Setup row:` line.
-- `scope`: every changed path (both sides of a rename) matches a glob in the item's `scope:` (`*` and `?` never cross `/`; a `**` segment matches zero or more segments), or is always allowed: the ORDER's own folder, a `status:`-only edit of the item file, an append to the item's `notebook:` page, a new file under `docs/harness/mistakes/`, or rows added to `docs/start/FILEMAP.md`. An item with no `scope:` fails.
-- `commit-order`: among the PR's non-merge commits (`git rev-list --reverse --topo-order <merge-base>..<head>`; merges are skipped), the first to add the ORDER (status `A`) comes before any commit that changes a path, and changes nothing outside the ORDER's folder. A merge commit before the ORDER commit fails, and the ORDER's `Item:` and `Lab:` at the head must equal those in the commit that added it.
-- `report`: `<ORDER folder>/REPORT.md` exists at the head with `## ` headings starting (any case) "What did not work", "What changed", "Measurements", "Checks run at the head", "Skills used", "Still open", "Plain summary", in that order, each followed by a non-blank line before the next `## `.
+- `order`: the PR adds one `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`, or a repair chain: several, all of one lab in one folder, whose highest `n` (numeric, so `-10` beats `-9`) is the **active ORDER** every tool judges, while the rest are history (loop step 11). ORDERs of two labs or two folders, or two with the same `n`, fail. The active ORDER's lab is in `docs/harness/labs.json`, its `Lab:` line names the same lab, its `Item:` names an item in `docs/roadmap/items/`, and an `infra-loop-pr*` item's ORDER carries a `Setup row:` line.
+- `scope`: every changed path (both sides of a rename) matches a glob in the item's `scope:` (`*` and `?` never cross `/`; a `**` segment matches zero or more segments), or is always allowed: the folder of every ORDER in the chain, one of the nine shared files (`crates/uor-r4-harness/src/{lib,main,loopgates,doccheck,loopprcheck}.rs`, `docs/harness/README.md`, `docs/loop/README.md`, `docs/harness/gates.json`, `docs/roadmap/README.md`; `loopclaim::SHARED_FILES`, set by Casey on 21 and 22 Oct), a `status:`-only edit of the item file, an append to the item's `notebook:` page, a new file under `docs/harness/mistakes/`, or rows added to `docs/start/FILEMAP.md`. An item with no `scope:` fails.
+- `commit-order`: among the PR's non-merge commits (`git rev-list --reverse --topo-order <merge-base>..<head>`; merges are skipped), the first to add the ORDER (status `A`; for a repair chain, the lowest `n`) comes before any commit that changes a path, and changes nothing outside the ORDER's folder. Each later ORDER of a chain is added in a commit that touches only its own folder. A merge commit before the ORDER commit fails, and the ORDER's `Item:` and `Lab:` at the head must equal those in the commit that added it.
+- `report`: `<active ORDER folder>/REPORT.md` exists at the head with `## ` headings starting (any case) "What did not work", "What changed", "Measurements", "Checks run at the head", "Skills used", "Still open", "Plain summary", in that order, each followed by a non-blank line before the next `## `.
 - `owner-paths`: a changed path (either side of a rename) that matches an entry of `docs/harness/owner-paths.json` at the merge base (`<prefix>/**` covers everything below the prefix; any other entry is exact) needs a `## Owner approval` section in the ORDER that names each matched entry (as written, or its prefix), holds a double-quoted answer and an ISO UTC time (`2026-10-21T15:25:16Z`). With no owner path changed it passes.
 - `rule-sources`: outside the files in `docs/harness/rule-sources.json` at the merge base (and `archive/`, `docs/loop/tasks/`, `docs/roadmap/items/`), the PR adds no markdown file (`.md`, `.markdown` or `.mdx`, any case) whose name contains `rule` (any case) and no markdown heading containing the word `rule` or `rules` (`(?i)(^|[^a-z0-9])rules?([^a-z0-9]|$)`, so `_Rules_` counts). A heading is an ATX line (`^ {0,3}#{1,6}` then a space, a tab or the line end) or a setext heading (a non-blank line over a line of only `=` or only `-`, up to 3 leading spaces); it is added when the base file lacks it. A file renamed or copied out of a listed or exempt file is compared with an empty base, so moved rule text counts as added.
 - `rendered-lock`: `STATE.md`, `HANDOFF.md`, `docs/harness/LESSONS.md` and AGENTS.md between the `loop:lessons-top-ten` markers change only when the head ref is `kimi/render` (or `origin/kimi/render`); N/A while none exists. `--head-ref <branch>` names the head ref; it defaults to `--head` when that is a branch, else the current branch.
@@ -154,7 +156,7 @@ done-when: host: <what was re-run and its result>   |   done-when: gpu: sha256:<
 
 Free text (the findings) may follow after a blank line. A comment that does not contain `uor-review v1` is not a record; one that contains it only below its first line is refused (a record must start the comment). One whose first line contains it but is wrong is refused and named in the gate's details: an untagged first line, a tag that differs from `lab:`, a missing, duplicated or unknown field, or a bad `pr`, `head`, `verdict`, `order`, `context` or `done-when`.
 
-The gate counts a record only when its `pr` and `head` are the PR's current ones, its `order` is the ORDER the PR adds, and its lab is registered. On a setup PR while D59 is in force, only `claude` records with `context: fresh` count (D59: Claude's fresh-context reviewers). Otherwise the record's lab must be of another vendor than the ORDER lab's (D46), or the PR is doc-only and the record comes from the ORDER lab itself with `context: fresh`. It passes when the last counted record is an APPROVE, so a later counted CHANGES blocks and a later APPROVE clears it. A setup PR is one whose ORDER `Setup row:` names a row of the [loop page](../loop/README.md#build-plan) build-plan table and whose item is `infra-loop-harness` or that row's own item (`6` → `infra-loop-pr06-…`). The row is the token right after `Setup row:` (`[0-9]+[a-z]?` or `A`, then `.`, a space or the end of the line); other text after the label names no row. An `infra-loop-…` item whose ORDER names no valid row, a row not in the table, or a row that is not its own fails the gate with no record counted, and no review is owed on it until the ORDER is fixed. D59 stays in force unless `docs/harness/owner-paths.json` at the merge base lists `docs/harness/d59.json` exactly and that file reads `"d59": "ended"`. The claude-18 ORDER proposes the file; the owner adds it and lists it.
+The gate counts a record only when its `pr` and `head` are the PR's current ones, its `order` is the PR's active ORDER (the highest of a repair chain; see `order` above), and its lab is registered. On a setup PR while D59 is in force, only `claude` records with `context: fresh` count (D59: Claude's fresh-context reviewers). Otherwise the record's lab must be of another vendor than the ORDER lab's (D46), or the PR is doc-only and the record comes from the ORDER lab itself with `context: fresh`. It passes when the last counted record is an APPROVE, so a later counted CHANGES blocks and a later APPROVE clears it. A setup PR is one whose ORDER `Setup row:` names a row of the [loop page](../loop/README.md#build-plan) build-plan table and whose item is `infra-loop-harness` or that row's own item (`6` → `infra-loop-pr06-…`). The row is the token right after `Setup row:` (`[0-9]+[a-z]?` or `A`, then `.`, a space or the end of the line); other text after the label names no row. An `infra-loop-…` item whose ORDER names no valid row, a row not in the table, or a row that is not its own fails the gate with no record counted, and no review is owed on it until the ORDER is fixed. D59 stays in force unless `docs/harness/owner-paths.json` at the merge base lists `docs/harness/d59.json` exactly and that file reads `"d59": "ended"`. The claude-18 ORDER proposes the file; the owner adds it and lists it.
 
 ```sh
 UOR_LAB=claude uor-harness loop review --pr <n> --verdict APPROVE --host "<what you re-ran>: ok" --dry-run
@@ -163,7 +165,7 @@ UOR_LAB=claude uor-harness loop review --pr <n> --verdict APPROVE --host "<check
 UOR_LAB=claude uor-harness loop review --check --pr <n>
 ```
 
-`loop review` needs a lab (`UOR_LAB` or `--lab`; none exits 2). It reads the PR's head and changed files and its one added ORDER (as `loop next` resolves it: a `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md` readable at the head and absent from `origin/main`; none or several exit 2). After `git fetch origin main` it reads the build-plan rows, the lab registry, `owner-paths.json` and the D59 switch from `origin/main`. A PR is doc-only when every changed file's size class is `docs` or `generated`.
+`loop review` needs a lab (`UOR_LAB` or `--lab`; none exits 2). It reads the PR's head and changed files and its active ORDER (as `loop next` resolves it: the `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md` files readable at the head and absent from `origin/main`, one, or a repair chain of one lab in one folder whose highest `n` is active; none, or ORDERs of two labs or two folders, exit 2). After `git fetch origin main` it reads the build-plan rows, the lab registry, `owner-paths.json` and the D59 switch from `origin/main`. A PR is doc-only when every changed file's size class is `docs` or `generated`.
 
 - With `--verdict`, it writes one record at the PR's head: `model` from `--model`, else `UOR_LOOP_MODEL`, else `unknown`; `launch` from `--launch`, else `UOR_LOOP_LAUNCH`, else `manual`; `done-when` from exactly one of `--host` and `--gpu`. It refuses (exit 1, nothing posted) a record the gate would not count, and prints why: a non-claude record, or a claude record without `--context fresh`, on a setup PR under D59, a loop item whose ORDER names no valid setup row, a same-vendor record on a code PR, `context: fresh` on a code PR. `--body-file` text follows the record after a blank line. `--dry-run` prints the comment; otherwise it is posted with `gh pr comment` and the command prints `review: posted <verdict> on PR #<n> at <head>`.
 - With `--check`, it runs the gate over the PR's comments and prints each detail line: exit 0 when it passes, 1 when it does not.
@@ -179,7 +181,7 @@ UOR_LAB=claude uor-harness loop report --receipts   # copy HEAD's gate results i
 UOR_LAB=claude uor-harness loop report --check --order docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md
 ```
 
-The task folder holds the one `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md` this branch adds against `git merge-base origin/main HEAD` (added, or the new side of a rename); none or several exit 2 and name them, and `--order <path>` names it instead. Exit codes: 0 ok; 1 a check failed; 2 cannot run (usage, no ORDER found, git failure, an existing REPORT for `--new`).
+The task folder is that of the active ORDER among the `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md` files this branch adds against `git merge-base origin/main HEAD` (added, or the new side of a rename): one, or the highest `n` of a repair chain of one lab in one folder; none, or ORDERs of two labs or two folders, exit 2 and name them, and `--order <path>` names it instead. Exit codes: 0 ok; 1 a check failed; 2 cannot run (usage, no ORDER found, git failure, an existing REPORT for `--new`).
 
 - `--check` reads `REPORT.md` from the working tree, so uncommitted text counts. It prints `PASS report` or `FAIL report` with one indented line per problem: the problems `loop pr-check`'s `report` rule finds (the same function), each `<!-- fill:` template line still present (naming its section), or a missing file.
 - `--new` copies `docs/loop/templates/REPORT.md` into the task folder without its first line, filling in `{id}` (the ORDER's `Item:`), `{task}` (`<lab>-<n>`) and `{lab}`. It opens the file with `create_new`, so an existing REPORT is never touched. The fresh REPORT fails `--check` until every fill line is replaced.
@@ -218,7 +220,7 @@ Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 GO, 1 STOP, 2 cannot run (usag
 - `repairs`: the lab's own open PRs (head `<lab>/...`) that conflict, have a check at the head with conclusion FAILURE or TIMED_OUT, or whose last `uor-review v1` record counted by the review gate at the head says CHANGES; GO `repair #<n>`, lowest number first.
 - `reviews`: open non-draft PRs on which the review gate would count a `uor-review v1` record from this lab (taken to carry `context: fresh`: on a setup PR under D59 `claude` only; else a lab of another vendor than the ORDER lab, D46, or the ORDER lab itself on a doc-only PR) and that have no counted record from this lab at the head; GO `review #<n>`, lowest number first. The gate's context (build-plan rows, vendors, D59) comes from `origin/main`, as in `loop review`. A PR without an ORDER is skipped.
 - `gpu-collections`: not built (watchers are loop PR 10). `premise-probes`: not built (PLAN's premise table is loop PR 8). `lane`: not built (no lab has a lane and no item has `lane:`/`rank:` yet).
-- `any`: the first `status: ready` item at `origin/main` with a `scope:`, in id order, that `loop claim` would accept; GO `item <id>`.
+- `any`: the first `status: ready` item at `origin/main` with a `scope:` and every `depends_on:` item `status: done`, in id order, that `loop claim` would accept; GO `item <id>`. An item waits while a dependency is missing, unreadable or not done, or while its `depends_on:` is not an inline `[a, b]` list. A waiting item is never offered, and when nothing is claimable the `any` line names it and why: for example `x waits on y (decision)`, `x waits on y (unreadable: …)`, or `x waits: depends_on … is not a [a, b] list`. `loop claim` and `loop pr-check` do not check dependencies, and a malformed `depends_on:` does not stop them.
 
 Then STOP `held work` when some item is `status: held`, else STOP `empty queue`.
 
@@ -530,21 +532,35 @@ A rule added for a mistake cites that mistake's id, so a lesson becomes a guard 
 `gelu`, `silu`, `rope`, `ropei`, `rotary`) and `uor-harness ratchet d25` (`.matmul(`, `MatMul`, `cublas`,
 `gemm`, `wmma`, `mma_sync`) in process across `crates/` and `docs/labs/*/instrument/`.
 
-## Before you install the hook
+## Before you install the hooks
 
-`uor-harness git install-hooks` resolves the hooks directory with
-`git rev-parse --git-path hooks`, which in a linked worktree points at the **shared**
-`.git/hooks` of the whole repository — including the owner's checkout and every other lab's
-worktree. Installing there changes commit behaviour for labs that never asked for it, so:
+`uor-harness git install-hooks` manages three hooks: `pre-commit` (runs `uor-harness check --staged`),
+`commit-msg` (calls `uor-harness git check-message <file>`), and `pre-push` (calls
+`uor-harness git push-check`). It resolves the hooks directory with `git rev-parse --git-path hooks`,
+which in a linked worktree points at the **shared** `.git/hooks` of the whole repository — including
+the owner's checkout and every other lab's worktree. Installing there changes commit behaviour for
+every worktree, so the command is **owner-only**: it refuses when `UOR_LAB` is set, and loop PR 9's
+guard repeats the refusal at the client.
 
-- the installer refuses to overwrite a `pre-commit` hook it did not write, and
-- it is **not installed by default**. Run `check` and `lint` yourself, or install the hook
-  deliberately after telling the other active labs.
+By default it **prints the plan and writes nothing**; `--install` writes. Every refusal is checked
+before anything is written, all three hooks are staged under temporary names and renamed into place
+(so a failure during the run restores what was replaced), and the installer refuses to overwrite a
+hook it did not write, a symlink, or an unreadable file. Every hook it replaces is copied first to
+`local/loop/install-backups/<unix-seconds>-<pid>/<hook>`, which also covers the pre-v2 `pre-commit`.
+**Git LFS's stock `pre-push` body is the one foreign hook it replaces by design**, because the
+managed hook chains to LFS itself; the stock body is backed up like any other.
 
-The hook runs `uor-harness check --staged`, so `uor-harness` must be on `PATH` for it to check
-anything; without it the hook lets the commit through. It only ever blocks on `error` severity;
-`warn` and `info` print and pass. A hook installed before 20 October 2026 (v1) ran the retired
-Python entry point; `uor-harness git install-hooks` upgrades it in place.
+| Hook | Runs | Blocks |
+|---|---|---|
+| `pre-commit` | `uor-harness check --staged` | `error` severity only; `warn` and `info` print and pass |
+| `commit-msg` | `uor-harness git check-message <file>` | on a `<registered-lab>/...` branch with `UOR_LAB` set: a message whose final paragraph (after git's comment block is stripped) has no `Lab:` or `Order:` trailer, or whose `Lab:` does not equal `UOR_LAB`. Git-generated merge, revert, fixup! and squash! subjects pass, and the owner's commits and non-loop work are never checked |
+| `pre-push` | Git LFS's own `pre-push` first, on the same stdin (exiting 2 when `git-lfs` is missing), then `uor-harness git push-check` | a pushed `<lab>/...` branch whose `loop pr-check --local` fails; a new branch is checked, a delete is skipped, and a `pr-check` that cannot run is allowed |
 
-`loop arrive` reports a missing, different or non-executable hook as **WARN**, not FAIL, until loop
-PR 12 sanctions installing the shared hook: a check that is always red teaches labs to ignore FAIL.
+Every hook lets the commit or push through when `uor-harness` is not on `PATH`, and when the harness
+itself cannot produce a result (any exit other than 0 or 1). The trailers are tags, not proof (D55):
+they record the lab and the ORDER, and no lab may bypass a hook with `--no-verify`. A provably older
+binary is printed as a warning by `check-message`; it does not block the commit. The lab-session
+detection is `UOR_LAB` only, the charter's convention: `env -u UOR_LAB` is outside what a hook can
+govern. `loop arrive` checks only the `pre-commit` hook today and reports a missing or different one
+as **WARN**, not FAIL: installing the hooks is the owner's act, and a check that is always red
+teaches labs to ignore FAIL. Extending arrive to all three needs `looparrive.rs` in pr12's scope.

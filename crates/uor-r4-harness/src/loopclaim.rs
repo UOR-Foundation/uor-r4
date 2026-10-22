@@ -14,11 +14,12 @@
 //!    warns and counts as an open order of unknown item. An ORDER names its item in the `Item:`
 //!    line link `roadmap/items/<id>.md`.
 //! 3. The item has a `scope:` line. Without one the claim is refused; it never guesses. Each of its
-//!    globs passes [`scope_glob_ok`].
+//!    globs passes [`scope_glob_ok`] and covers none of the [`SHARED_FILES`].
 //! 4. No scope glob overlaps a glob of an open order's item (see [`globs_overlap`]); that item's
 //!    globs must pass [`scope_glob_ok`] too. An open order whose item is missing or has no `scope:`
 //!    is skipped here with a printed warning (it still counts for check 2). Globs under
-//!    `docs/research/notebook/` never count.
+//!    `docs/research/notebook/` never count, nor does a glob that is exactly one of the
+//!    [`SHARED_FILES`].
 //! 5. The lab's open PRs (head branch `<lab>/...`) are fewer than its `open_pr_limit` in
 //!    `docs/harness/labs.json`.
 //!
@@ -58,6 +59,31 @@ use serde::Deserialize;
 pub const GH_FAKE_ENV: &str = "UOR_LOOP_GH_FAKE";
 
 const NOTEBOOK: &str = "docs/research/notebook/";
+
+/// The shared registration files: any loop PR may change them, and no item's `scope:` may list
+/// them. `pr-check`'s `scope` rule always allows them, and `loop claim` refuses an item whose scope
+/// has a glob covering one. Casey's decisions in Claude's chat (ORDER
+/// `docs/loop/tasks/infra-loop-harness/claude-22/ORDER.md`): 2026-10-21T23:43Z, "Exempt them
+/// (Recommended)", for the first six; 2026-10-22T00:05Z, "Add all three (Recommended)", for
+/// `loopprcheck.rs`, `gates.json` and `docs/roadmap/README.md`.
+pub const SHARED_FILES: [&str; 9] = [
+    "crates/uor-r4-harness/src/lib.rs",
+    "crates/uor-r4-harness/src/main.rs",
+    "crates/uor-r4-harness/src/loopgates.rs",
+    "crates/uor-r4-harness/src/doccheck.rs",
+    "crates/uor-r4-harness/src/loopprcheck.rs",
+    "docs/harness/README.md",
+    "docs/loop/README.md",
+    "docs/harness/gates.json",
+    "docs/roadmap/README.md",
+];
+
+/// The first shared file `glob` covers, matched as `pr-check`'s `scope` rule matches paths.
+pub fn covered_shared_file(glob: &str) -> Option<&'static str> {
+    SHARED_FILES
+        .into_iter()
+        .find(|f| crate::loopprcheck::glob_match(glob, f))
+}
 
 /// One file a PR changes, as `gh pr list --json files` prints it.
 #[derive(Debug, Clone, Deserialize)]
@@ -334,6 +360,23 @@ pub struct ItemFields {
     pub scope: Option<Vec<String>>,
     /// The item's notebook page, from an unquoted-or-quoted `notebook:` line.
     pub notebook: Option<String>,
+    /// The ids in the inline-list `depends_on:` line; empty when there is none.
+    pub depends_on: Vec<String>,
+    /// Why the `depends_on:` line is not an inline list. It is recorded, not an error, so that only
+    /// `loop next`, which reads dependencies, acts on it.
+    pub depends_on_error: Option<String>,
+}
+
+/// The entries of an inline `[a, b]` list, or `None` when `v` is not one.
+fn inline_list(v: &str) -> Option<Vec<String>> {
+    let inner = v.trim().strip_prefix('[')?.strip_suffix(']')?;
+    Some(
+        inner
+            .split(',')
+            .map(|s| unquote(s).to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+    )
 }
 
 fn unquote(s: &str) -> &str {
@@ -346,7 +389,8 @@ fn unquote(s: &str) -> &str {
     s
 }
 
-/// Read `status:`, `notebook:` and the inline-list `scope:` from an item's `---` frontmatter.
+/// Read `status:`, `notebook:` and the inline-list `scope:` and `depends_on:` from an item's `---`
+/// frontmatter.
 pub fn parse_item(text: &str) -> Result<ItemFields, String> {
     let mut lines = text.lines();
     if lines.next().map(str::trim) != Some("---") {
@@ -362,18 +406,18 @@ pub fn parse_item(text: &str) -> Result<ItemFields, String> {
         } else if let Some(v) = line.strip_prefix("notebook:") {
             fields.notebook = Some(unquote(v).to_string());
         } else if let Some(v) = line.strip_prefix("scope:") {
-            let v = v.trim();
-            let inner = v
-                .strip_prefix('[')
-                .and_then(|v| v.strip_suffix(']'))
-                .ok_or_else(|| format!("scope `{v}` is not a `[a, b]` list"))?;
             fields.scope = Some(
-                inner
-                    .split(',')
-                    .map(|s| unquote(s).to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect(),
+                inline_list(v)
+                    .ok_or_else(|| format!("scope `{}` is not a `[a, b]` list", v.trim()))?,
             );
+        } else if let Some(v) = line.strip_prefix("depends_on:") {
+            match inline_list(v) {
+                Some(ids) => fields.depends_on = ids,
+                None => {
+                    fields.depends_on_error =
+                        Some(format!("depends_on `{}` is not a `[a, b]` list", v.trim()))
+                }
+            }
         }
     }
     Err("frontmatter is not closed by `---`".into())
@@ -381,9 +425,14 @@ pub fn parse_item(text: &str) -> Result<ItemFields, String> {
 
 /// The item parsed from `origin/main`, the same source `check` reads; never the working tree.
 pub(crate) fn read_item(root: &Path, id: &str) -> Result<ItemFields, String> {
-    let text = main_item_text(root, id)
-        .ok_or_else(|| format!("item {id} does not exist on origin/main"))?;
-    parse_item(&text).map_err(|e| format!("item {id}: {e}"))
+    read_item_opt(root, id)
+        .map_err(|e| format!("item {id}: {e}"))?
+        .ok_or_else(|| format!("item {id} does not exist on origin/main"))
+}
+
+/// The item parsed from `origin/main`: `Ok(None)` when it is not there, `Err` when it does not parse.
+pub(crate) fn read_item_opt(root: &Path, id: &str) -> Result<Option<ItemFields>, String> {
+    main_item_text(root, id).map(|t| parse_item(&t)).transpose()
 }
 
 /// The item's text on `origin/main`, or `None` when it is not there.
@@ -573,8 +622,9 @@ pub fn globs_overlap(a: &str, b: &str) -> bool {
     prefix_of(a, b) || prefix_of(b, a)
 }
 
+/// A glob counts for overlap unless it is under the notebook or is exactly a shared file.
 fn counts(glob: &str) -> bool {
-    !literal(glob).0.starts_with(NOTEBOOK)
+    !literal(glob).0.starts_with(NOTEBOOK) && !SHARED_FILES.contains(&glob)
 }
 
 /// A refusal: the reason printed after `loop claim: refused: `.
@@ -610,6 +660,11 @@ pub fn check(root: &Path, lab: &str, item: &str, gh: &dyn Gh) -> Result<(), Refu
     };
     for g in &scope {
         scope_glob_ok(g).map_err(|e| format!("item {item}: {e}"))?;
+        if let Some(f) = covered_shared_file(g) {
+            return Err(format!(
+                "item {item}: scope glob `{g}` covers the shared file {f}; Casey (21-22 Oct, \"Exempt them (Recommended)\", \"Add all three (Recommended)\") made the nine shared registration files open to every loop PR, so no item scope may list them"
+            ));
+        }
     }
     // (d) no glob overlaps an open order's scope; notebook pages never count. An open order whose
     // item is missing or has no scope: is skipped with a warning (it still counted in (b)); one whose

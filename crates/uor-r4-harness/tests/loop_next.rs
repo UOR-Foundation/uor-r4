@@ -183,6 +183,39 @@ fn record(lab: &str, n: u64, sha: &str, verdict: &str, (item, order_lab): (&str,
     json!({"author": "x", "body": body})
 }
 
+/// A claude APPROVE at HEAD whose `order:` is `order_path`.
+fn approve_for(n: u64, order_path: &str) -> Value {
+    use uor_r4_harness::loopreview::{render, DoneWhen, Record, Verdict};
+    let body = render(&Record {
+        lab: "claude".to_string(),
+        pr: n,
+        head: HEAD.to_string(),
+        model: "m".to_string(),
+        launch: "l".to_string(),
+        verdict: Verdict::Approve,
+        order: order_path.to_string(),
+        fresh_context: true,
+        done_when: DoneWhen::Host("cargo test: ok".to_string()),
+    });
+    json!({"author": "x", "body": body})
+}
+
+/// A fake with one non-setup codex PR `n` (code plus every ORDER in `orders`, each readable at the
+/// PR head as `docs/loop/tasks/it-2/<order>/ORDER.md`).
+fn chain_fake(n: u64, orders: &[&str], comments: Value) -> Value {
+    let (mut p, (_, text)) = pr(n, "codex/chain", "codex", "it-2");
+    let mut files = vec![json!({"path": "crates/a/src/lib.rs"})];
+    let mut next = fake(vec![], comments);
+    for o in orders {
+        let path = format!("docs/loop/tasks/it-2/{o}/ORDER.md");
+        files.push(json!({"path": path}));
+        next["files"][format!("{n}:{path}")] = json!(text.clone());
+    }
+    p["files"] = Value::Array(files);
+    next["prs"] = json!([p]);
+    next
+}
+
 /// The PR also changes code, so it is not doc-only.
 fn with_code((mut p, f): (Value, (String, String))) -> (Value, (String, String)) {
     p["files"]
@@ -336,6 +369,110 @@ fn no_ready_scoped_item_stops_empty_or_held() {
         "STOP held work: 2 item(s) held, none ready and claimable",
         "{o:?}"
     );
+}
+
+#[test]
+fn an_item_waits_until_every_dependency_is_done() {
+    // The fixture writes `scope: <s>`, so a second line puts `depends_on:` in the frontmatter.
+    let r = Repo::new(&[
+        (
+            "a-waits",
+            "ready",
+            Some("[crates/a/**]\ndepends_on: [b-dep]"),
+        ),
+        ("b-dep", "decision", Some("[crates/b/**]")),
+        (
+            "c-missing",
+            "ready",
+            Some("[crates/c/**]\ndepends_on: [no-such-item]"),
+        ),
+    ]);
+    let o = r.next(&fake(vec![], json!({})));
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert_eq!(decision(&o), "STOP empty queue", "{o:?}");
+    let out = stdout(&o);
+    assert!(out.contains("a-waits waits on b-dep (decision)"), "{o:?}");
+    assert!(
+        out.contains("c-missing waits on no-such-item (missing)"),
+        "{o:?}"
+    );
+    // With the dependency done, the item is offered.
+    let r = Repo::new(&[
+        (
+            "a-waits",
+            "ready",
+            Some("[crates/a/**]\ndepends_on: [b-dep]"),
+        ),
+        ("b-dep", "done", Some("[crates/b/**]")),
+    ]);
+    let o = r.next(&fake(vec![], json!({})));
+    assert!(decision(&o).starts_with("GO item a-waits — "), "{o:?}");
+}
+
+#[test]
+fn a_malformed_or_unreadable_dependency_waits_and_says_why() {
+    let r = Repo::new(&[
+        // Not an inline list, so the dependencies cannot be checked.
+        (
+            "a-bad-list",
+            "ready",
+            Some("[crates/a/**]\ndepends_on: b-dep"),
+        ),
+        ("b-dep", "done", Some("[crates/b/**]")),
+        // The dependency is on origin/main but does not parse: its scope list is not closed.
+        (
+            "c-on-broken",
+            "ready",
+            Some("[crates/c/**]\ndepends_on: [d-broken]"),
+        ),
+        ("d-broken", "done", Some("[crates/d/**")),
+    ]);
+    let o = r.next(&fake(vec![], json!({})));
+    assert_eq!(decision(&o), "STOP empty queue", "{o:?}");
+    let out = stdout(&o);
+    assert!(
+        out.contains("a-bad-list waits: depends_on `b-dep` is not a `[a, b]` list"),
+        "{o:?}"
+    );
+    assert!(
+        out.contains(
+            "c-on-broken waits on d-broken (unreadable: scope `[crates/d/**` is not a `[a, b]` list)"
+        ),
+        "{o:?}"
+    );
+}
+
+#[test]
+fn only_unfinished_dependencies_are_named_and_quoted_done_or_empty_lists_pass() {
+    let r = Repo::new(&[
+        (
+            "a-mixed",
+            "ready",
+            Some("[crates/a/**]\ndepends_on: [b-done, c-open, d-quoted]"),
+        ),
+        ("b-done", "done", Some("[crates/b/**]")),
+        ("c-open", "decision", Some("[crates/c/**]")),
+        ("d-quoted", "\"done\"", Some("[crates/d/**]")),
+    ]);
+    let o = r.next(&fake(vec![], json!({})));
+    assert_eq!(decision(&o), "STOP empty queue", "{o:?}");
+    assert!(
+        stdout(&o).contains("(a-mixed waits on c-open (decision))"),
+        "{o:?}"
+    );
+    let r = Repo::new(&[("a-empty", "ready", Some("[crates/a/**]\ndepends_on: []"))]);
+    let o = r.next(&fake(vec![], json!({})));
+    assert!(decision(&o).starts_with("GO item a-empty — "), "{o:?}");
+    let r = Repo::new(&[
+        (
+            "a-quoted",
+            "ready",
+            Some("[crates/a/**]\ndepends_on: [\"d-quoted\"]"),
+        ),
+        ("d-quoted", "\"done\"", Some("[crates/d/**]")),
+    ]);
+    let o = r.next(&fake(vec![], json!({})));
+    assert!(decision(&o).starts_with("GO item a-quoted — "), "{o:?}");
 }
 
 #[test]
@@ -504,6 +641,44 @@ fn an_own_pr_adding_two_orders_is_a_repair() {
     assert!(
         decision(&o).contains("GO repair #7")
             && decision(&o).contains("its ORDER is missing or ambiguous"),
+        "{o:?}"
+    );
+}
+
+#[test]
+fn a_repair_chain_is_judged_by_its_highest_order() {
+    let r = Repo::new(&[]);
+    let one = "docs/loop/tasks/it-2/codex-1/ORDER.md";
+    let two = "docs/loop/tasks/it-2/codex-2/ORDER.md";
+    let orders = ["codex-1", "codex-2"];
+    // No review yet: the PR needs claude's.
+    let o = r.next(&chain_fake(21, &orders, json!({})));
+    assert!(decision(&o).starts_with("GO review #21 — "), "{o:?}");
+    // An APPROVE naming the superseded codex-1 ORDER does not count, so the review is still owed.
+    let o = r.next(&chain_fake(
+        21,
+        &orders,
+        json!({"21": [approve_for(21, one)]}),
+    ));
+    assert!(decision(&o).starts_with("GO review #21 — "), "{o:?}");
+    // An APPROVE naming the active codex-2 ORDER counts, so no review is owed.
+    let o = r.next(&chain_fake(
+        21,
+        &orders,
+        json!({"21": [approve_for(21, two)]}),
+    ));
+    assert!(!decision(&o).contains("review #21"), "{o:?}");
+}
+
+#[test]
+fn orders_of_two_labs_in_one_pr_are_refused_not_resolved() {
+    let r = Repo::new(&[]);
+    let o = r.next(&chain_fake(22, &["codex-1", "anthro-1"], json!({})));
+    assert!(!decision(&o).contains("review #22"), "{o:?}");
+    assert!(
+        stdout(&o).lines().any(|l| l.starts_with("reviews: ")
+            && l.contains("#22 adds 2 ORDERs that are not one lab's repairs")
+            && l.contains("labs: anthro, codex")),
         "{o:?}"
     );
 }

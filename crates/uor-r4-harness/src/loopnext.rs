@@ -302,13 +302,11 @@ pub(crate) fn added_order(
     listed: &[String],
     read: &dyn Fn(&str) -> Result<String, String>,
 ) -> Result<(String, String, String), OrderErr> {
-    let pattern = regex::Regex::new(r"^docs/loop/tasks/[^/]+/[^/]+-[0-9]+/ORDER\.md$")
-        .expect("a valid pattern");
     let mut added = Vec::new();
     for path in listed
         .iter()
         .map(String::as_str)
-        .filter(|p| pattern.is_match(p))
+        .filter(|p| crate::loopprcheck::order_parts(p).is_some())
     {
         let text = match read(path) {
             Ok(t) => t,
@@ -321,17 +319,17 @@ pub(crate) fn added_order(
         }
         added.push((path, text));
     }
-    let (path, text) = match added.len() {
-        1 => added.remove(0),
-        0 => return Err(OrderErr::Missing(format!("#{n} adds no ORDER"))),
-        k => {
-            let paths: Vec<&str> = added.iter().map(|(p, _)| *p).collect();
-            return Err(OrderErr::Missing(format!(
-                "#{n} adds {k} ORDERs ({})",
-                paths.join(", ")
-            )));
-        }
-    };
+    if added.is_empty() {
+        return Err(OrderErr::Missing(format!("#{n} adds no ORDER")));
+    }
+    // A repair chain resolves to its highest `<lab>-<n>` (loop step 11).
+    let paths: Vec<&str> = added.iter().map(|(p, _)| *p).collect();
+    let active = crate::loopprcheck::active_order(&paths)
+        .map_err(|e| OrderErr::Missing(format!("#{n} adds {e}")))?;
+    let (path, text) = added
+        .into_iter()
+        .find(|(p, _)| *p == active)
+        .expect("the active ORDER is one of the added ORDERs");
     let dir = path.trim_end_matches("/ORDER.md");
     let lab = dir
         .rsplit('/')
@@ -551,7 +549,8 @@ pub fn run(
         "lane",
         "no lab has a lane and no item has `lane:`/`rank:` yet",
     ));
-    // 8. any: ready, scoped items `loop claim` would accept, in id order.
+    // 8. any: ready, scoped items whose dependencies are all done and that `loop claim` would
+    // accept, in id order.
     git(root, &["fetch", "-q", "origin", "main"])
         .map_err(|e| format!("cannot fetch origin main: {e}"))?;
     let listing = git(
@@ -563,7 +562,7 @@ pub fn run(
             "docs/roadmap/items/",
         ],
     )?;
-    let (mut held, mut ready) = (0usize, Vec::new());
+    let (mut held, mut ready, mut waiting) = (0usize, Vec::new(), Vec::new());
     for id in listing
         .lines()
         .filter_map(|p| p.strip_prefix("docs/roadmap/items/")?.strip_suffix(".md"))
@@ -573,7 +572,33 @@ pub fn run(
         };
         match item.status.as_deref() {
             Some("held") => held += 1,
-            Some("ready") if item.scope.is_some() => ready.push(id.to_string()),
+            Some("ready") if item.scope.is_some() => {
+                // Dependencies that cannot be read cannot be checked, so the item waits.
+                if let Some(e) = &item.depends_on_error {
+                    waiting.push(format!("{id} waits: {e}"));
+                    continue;
+                }
+                // An item waits while any dependency is missing, unreadable or not done on
+                // origin/main.
+                let unmet: Vec<String> = item
+                    .depends_on
+                    .iter()
+                    .filter_map(|dep| match crate::loopclaim::read_item_opt(root, dep) {
+                        Ok(Some(d)) if d.status.as_deref() == Some("done") => None,
+                        Ok(Some(d)) => Some(format!(
+                            "{dep} ({})",
+                            d.status.as_deref().unwrap_or("no status")
+                        )),
+                        Ok(None) => Some(format!("{dep} (missing)")),
+                        Err(e) => Some(format!("{dep} (unreadable: {e})")),
+                    })
+                    .collect();
+                if unmet.is_empty() {
+                    ready.push(id.to_string());
+                } else {
+                    waiting.push(format!("{id} waits on {}", unmet.join(", ")));
+                }
+            }
             _ => {}
         }
     }
@@ -598,6 +623,13 @@ pub fn run(
     let mut detail = format!("{} ready scoped item(s), none claimable", ready.len());
     if !refused.is_empty() {
         detail.push_str(&format!(" ({})", refused.join("; ")));
+    }
+    if !waiting.is_empty() {
+        detail.push_str(&format!(
+            "; {} waiting on dependencies ({})",
+            waiting.len(),
+            waiting.join("; ")
+        ));
     }
     out.push(source("any", "none", detail));
     let stop = if held > 0 {
