@@ -1,8 +1,8 @@
-{"gate":"claim-wording","verdict":"GREEN","seconds":1.889579583,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
-{"gate":"fmt-claim-wording","verdict":"GREEN","seconds":0.490386125,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
-{"gate":"fmt-harness","verdict":"GREEN","seconds":0.823438667,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
-{"gate":"git-hooks","verdict":"GREEN","seconds":3.20391625,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
-{"gate":"loop-drive","verdict":"GREEN","seconds":3.728652,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
-{"gate":"loop-gates-watch","verdict":"GREEN","seconds":11.730092834,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
-{"gate":"loop-next-sources","verdict":"GREEN","seconds":1.4792172080000001,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
-{"gate":"loop-next-wait","verdict":"GREEN","seconds":4.994788917,"commit":"3a58a48cc72e16d97e0a5f1275fa6db94b90391a","tree":"590bdcaf76167148c5a2b9c705eecbf861ca1b2d","exit":0,"signal":null,"ts":1792685082}
+{"gate":"claim-wording","verdict":"GREEN","seconds":1.6439913750000001,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
+{"gate":"fmt-claim-wording","verdict":"GREEN","seconds":0.280068916,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
+{"gate":"fmt-harness","verdict":"GREEN","seconds":0.744748334,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
+{"gate":"git-hooks","verdict":"GREEN","seconds":2.682345667,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
+{"gate":"loop-drive","verdict":"GREEN","seconds":2.985122167,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
+{"gate":"loop-gates-watch","verdict":"GREEN","seconds":0.872656625,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
+{"gate":"loop-next-sources","verdict":"GREEN","seconds":1.2692635829999999,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
+{"gate":"loop-next-wait","verdict":"GREEN","seconds":4.923250542,"commit":"510089107f9fd701496f83a71057f68e95d6350d","tree":"42d2171ba4944b4c8f131ee0261bd59a2967241f","exit":0,"signal":null,"ts":1792685098}
