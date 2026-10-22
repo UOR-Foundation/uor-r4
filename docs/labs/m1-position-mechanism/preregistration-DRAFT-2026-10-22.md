@@ -3,7 +3,7 @@
 - **Status:** draft pre-registration, `TEST FITNESS: PENDING` (see the end of the sheet).
   - Training and GPU evaluation remain HELD. A run needs a non-author `TEST FITNESS: FIT` review (CHARTER §4.5), the owner's bar confirmation on `#2028` (`https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6337522273`), `m1-trunk-assembly-and-training`, PM dispatch, and Casey's typed D40 release.
 - **Line:** M1 learned attention and sequence position (#2029, item `m1-position-mechanism` #2843). **Lab:** antigravity.
-- **Parent:** [`m1-attention-a8-address-cells-learning-2026-10-19.md`](m1-attention-a8-address-cells-learning-2026-10-19.md) (the A8 address-structured cells sheet).
+- **Parent:** [`m1-attention-a8-address-cells-learning-2026-10-19.md`](../../harness/prep/m1-attention-a8-address-cells-learning-2026-10-19.md) (the A8 address-structured cells sheet).
   - **What changes from the parent:** replaces the endpoint-only candidate transport in `Flock` / `Relation` (`discrete.cu` `flock_vector`) with causal prefix-holonomy transport `PositionHolonomyV1` (`crates/uor-r4-discrete/src/position_mechanism.rs`) and adds two matched controls (`EndpointControlV1` and shuffled-prefix evaluation `C_shuf`) to isolate sequence-order credit at equal parameter count.
 - **Applicable owner decisions:** D21, D22, D23, D24, D25, D28, D29, D31, D32, D37, D40.
   - Geometry only (`Cl(0,6)` 64-frame signed-permutation group acting on the 16-root $E_8$ orbit $\mathcal{O}_{16}$).

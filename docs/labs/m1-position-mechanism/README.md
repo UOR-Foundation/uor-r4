@@ -4,7 +4,7 @@
 - **Lab:** `antigravity`
 - **Issue:** `#2843` (`m1-position-mechanism`)
 - **Decision card:** `#2028` (`https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6337522273`)
-- **Pre-registration:** [`docs/harness/prep/m1-position-mechanism-DRAFT-2026-10-22.md`](../../harness/prep/m1-position-mechanism-DRAFT-2026-10-22.md) (`TEST FITNESS: PENDING`)
+- **Pre-registration:** [`preregistration-DRAFT-2026-10-22.md`](preregistration-DRAFT-2026-10-22.md) (`TEST FITNESS: PENDING`)
 - **Code:** [`crates/uor-r4-discrete/src/position_mechanism.rs`](../../../crates/uor-r4-discrete/src/position_mechanism.rs)
 
 ## 1. Summary
