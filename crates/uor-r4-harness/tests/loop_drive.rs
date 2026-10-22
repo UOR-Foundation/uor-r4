@@ -1,15 +1,17 @@
 //! The loop PR 10 supervisor tests: the planner is pure and time-injected, and the process layer is
-//! exercised on a real short-lived shell. The planted-fault gate runs this file; the fake stalled
-//! client past two hours must be closed and carded, while a fake progressing one continues with a
-//! note.
+//! exercised on real short-lived shells. The `loop-drive` gate runs this file; its planted fault must
+//! turn it red with the item's own sentence: **a fake stalled client past 2 hours is closed and
+//! carded**, while a fake progressing one continues with a note.
 
-use std::path::PathBuf;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use uor_r4_harness::loopdrive::{
     check_in, classify, close_stalled_session, compose_prompt, launch_argv, pm_card_text,
-    read_record, session_alive, start_session, terminate_session, watch_lease_until_renew_fails,
-    watch_until_exit, CheckIn, Observation, Progress, SessionRecord, CHECK_IN_SECONDS,
+    read_record, run_sessions, session_alive, start_session, terminate_session,
+    watch_lease_until_renew_fails, watch_until_exit, CheckIn, DriveHooks, DriveSpec, Observation,
+    Progress, SessionRecord, CHECK_IN_SECONDS,
 };
 
 fn observation(head: &str, commits: u64, gate_runs: u64, changed_paths: usize) -> Observation {
@@ -28,24 +30,41 @@ fn temp_root(name: &str) -> PathBuf {
     root
 }
 
+fn git_in(root: &Path, args: &[&str]) {
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .status()
+        .expect("git runs");
+    assert!(status.success(), "git {args:?} failed");
+}
+
+fn init_repo(name: &str) -> PathBuf {
+    let root = temp_root(name);
+    git_in(&root, &["init", "-q"]);
+    git_in(&root, &["config", "user.email", "drive@test"]);
+    git_in(&root, &["config", "user.name", "drive test"]);
+    std::fs::write(root.join("initial.txt"), "initial\n").expect("write");
+    std::fs::write(root.join(".gitignore"), "local/\n").expect("write");
+    git_in(&root, &["add", "initial.txt", ".gitignore"]);
+    git_in(&root, &["commit", "-q", "-m", "initial"]);
+    root
+}
+
 #[test]
 fn the_soft_check_in_continues_real_progress_and_closes_a_stall() {
-    // Under two hours: always continue, even with no movement.
     assert!(matches!(
-        check_in(60, &Progress::Stalled, 0),
+        check_in(60, &Progress::Stalled, 1),
         CheckIn::Continue { .. }
     ));
-    // Past two hours: a fake progressing client continues with a note (D53).
     match check_in(CHECK_IN_SECONDS, &Progress::Progressing("new commits"), 0) {
         CheckIn::Continue { note } => assert!(note.contains("real progress"), "{note}"),
         other => panic!("a progressing session must continue with a note, got {other:?}"),
     }
-    // Past two hours: the fake stalled client is closed and carded.
-    match check_in(CHECK_IN_SECONDS, &Progress::Stalled, 0) {
+    match check_in(CHECK_IN_SECONDS, &Progress::Stalled, 1) {
         CheckIn::Close { reason } => assert!(reason.starts_with("stalled:"), "{reason}"),
         other => panic!("a fake stalled client past 2 hours is closed and carded: {other:?}"),
     }
-    // A repeat of the same stall is spiraled, not stalled.
     match check_in(CHECK_IN_SECONDS, &Progress::Stalled, 2) {
         CheckIn::Close { reason } => assert!(reason.starts_with("spiraled:"), "{reason}"),
         other => panic!("a repeated stall is spiraled: {other:?}"),
@@ -75,7 +94,7 @@ fn progress_is_commits_gate_runs_or_edits_and_nothing_else() {
 }
 
 #[test]
-fn the_launch_command_gets_exactly_one_prompt() {
+fn the_launch_command_gets_exactly_one_prompt_and_not_as_the_program() {
     let argv = vec!["dsh".to_string(), "{prompt}".to_string()];
     assert_eq!(
         launch_argv(&argv, "prompt text").unwrap(),
@@ -83,6 +102,7 @@ fn the_launch_command_gets_exactly_one_prompt() {
     );
     assert!(launch_argv(&["dsh".to_string()], "x").is_err());
     assert!(launch_argv(&["{prompt}".to_string(), "{prompt}".to_string()], "x").is_err());
+    assert!(launch_argv(&["{prompt}".to_string(), "arg".to_string()], "x").is_err());
     let default = compose_prompt(None, "GO item infra-loop-pr10 - ready");
     assert!(
         default.contains("GO item infra-loop-pr10 - ready"),
@@ -100,22 +120,24 @@ fn a_real_short_session_is_tracked_and_its_record_read_back() {
         "deepseek",
         "fake-client",
         "pinned-model-1",
-        &["sh".to_string(), "-c".to_string(), "exit 0".to_string()],
-        "deadbeef",
+        &["sh".to_string(), "-c".to_string(), "sleep 0.4".to_string()],
+        "deadbeefdeadbeef",
         &log,
     )
     .expect("start a short session");
     assert_eq!(record.client, "fake-client");
-    assert!(log.exists(), "the session log is created");
     assert!(
-        session_alive(&record),
-        "the session is recorded before the caller waits"
+        !record.started_lstart.is_empty(),
+        "identity recorded: {record:?}"
     );
-    let status = child.wait().expect("wait");
-    assert!(status.success());
-    let read = read_record(&root, "deepseek").expect("the record is on disk");
+    assert!(log.exists(), "the session log is created");
+    assert!(session_alive(&record), "the sleeping child is alive");
+    let read = read_record(&root, "deepseek").expect("the record is on disk before the wait");
     assert_eq!(read.pid, record.pid);
     assert_eq!(read.model, "pinned-model-1");
+    let _ = terminate_session(&record);
+    let _ = child.wait();
+    assert!(!session_alive(&record), "the recorded session is gone");
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -129,11 +151,10 @@ fn the_supervisor_signals_only_its_recorded_session_and_waits_it_out() {
         "fake-client",
         "pinned-model-1",
         &["sh".to_string(), "-c".to_string(), "sleep 30".to_string()],
-        "deadbeef",
+        "deadbeefdeadbeef",
         &log,
     )
     .expect("start a long session");
-    // Give the shell a moment to exist, then close it through the recorded group.
     std::thread::sleep(std::time::Duration::from_millis(200));
     terminate_session(&record).expect("terminate the recorded session");
     let waited = child.wait().expect("wait");
@@ -141,9 +162,10 @@ fn the_supervisor_signals_only_its_recorded_session_and_waits_it_out() {
         !waited.success(),
         "the long session is signalled, not left running"
     );
+    assert!(!session_alive(&record), "the recorded process is gone");
     assert!(
-        !session_alive(&record),
-        "the recorded pid/group is gone after termination"
+        !terminate_session(&record).is_err(),
+        "a dead session is not an error"
     );
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -158,7 +180,7 @@ fn the_watcher_outlives_the_run_and_never_cancels_it() {
         "fake-client",
         "pinned-model-1",
         &["sh".to_string(), "-c".to_string(), "sleep 30".to_string()],
-        "deadbeef",
+        "deadbeefdeadbeef",
         &log,
     )
     .expect("start the watched session");
@@ -166,7 +188,7 @@ fn the_watcher_outlives_the_run_and_never_cancels_it() {
     let notes = watch_until_exit(&record, &["true".to_string()], 0, Some(2)).expect("watch");
     assert!(
         notes.iter().any(|note| note.contains("renewed")),
-        "the watcher renews the lease while the run is alive: {notes:?}"
+        "the watcher renews while the run is alive: {notes:?}"
     );
     assert!(
         session_alive(&record),
@@ -179,7 +201,6 @@ fn the_watcher_outlives_the_run_and_never_cancels_it() {
 
 #[test]
 fn the_lease_watcher_outlives_the_session_and_stops_when_the_lease_ends() {
-    // A detached watcher renews while the renew command succeeds...
     let notes = watch_lease_until_renew_fails(&["true".to_string()], 0, Some(2)).expect("watch");
     assert!(
         notes.iter().any(|note| note.contains("renewed")),
@@ -189,7 +210,6 @@ fn the_lease_watcher_outlives_the_session_and_stops_when_the_lease_ends() {
         notes.iter().any(|note| note.contains("test bound")),
         "the bounded watch stops: {notes:?}"
     );
-    // ...and stops when the lease ends, without cancelling the run.
     let notes = watch_lease_until_renew_fails(&["false".to_string()], 0, Some(2)).expect("watch");
     assert!(
         notes.iter().any(|note| note.contains("lease ended")),
@@ -215,6 +235,8 @@ fn a_closed_session_records_a_report_stub_and_a_pickup_from_git_state() {
         pid: 1,
         pgid: 1,
         started_unix: 0,
+        started_lstart: "identity".to_string(),
+        nonce: "nonce".to_string(),
         prompt_sha256: "deadbeef".to_string(),
     };
     let directory = close_stalled_session(
@@ -241,6 +263,150 @@ fn the_real_repository_reads_a_head_and_commit_count() {
     let observation = Observation::take(&root, "deepseek");
     assert!(observation.head.len() >= 7, "HEAD: {observation:?}");
     assert!(observation.commits > 0, "commits: {observation:?}");
-    // git is available in this workspace; a failed read would leave the fields empty.
-    assert!(!Command::new("git").arg("--version").output().is_err());
+}
+
+/// The close records a run left behind, if any: `local/loop/drive/<lab>/close-*`.
+fn close_dirs(root: &Path) -> Vec<PathBuf> {
+    let directory = root.join("local/loop/drive/deepseek");
+    let Ok(entries) = std::fs::read_dir(&directory) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("close-"))
+        })
+        .collect()
+}
+
+/// A fake clock that jumps 3,600 s on every read, so the 2-hour check-in happens within a few polls.
+fn fake_clock() -> impl Fn() -> u64 {
+    let jump = std::cell::Cell::new(0u64);
+    move || {
+        let seconds = jump.get();
+        jump.set(seconds + 3_600);
+        let real = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        real + seconds
+    }
+}
+
+#[test]
+fn the_fake_clock_closes_a_silent_client_and_cards_it() {
+    let root = init_repo("silent");
+    let launch = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        "sleep 0.6".to_string(),
+        "{prompt}".to_string(),
+    ];
+    let cards: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    let decision = || -> std::result::Result<Option<String>, String> {
+        Ok(Some("GO item fake - ready".to_string()))
+    };
+    let card = |reason: &str| {
+        cards.borrow_mut().push(reason.to_string());
+        Ok(())
+    };
+    let now = fake_clock();
+    let pause = |_seconds: u64| std::thread::sleep(std::time::Duration::from_millis(15));
+    let spec = DriveSpec {
+        root: &root,
+        lab: "deepseek",
+        client: "fake-client",
+        model: "pinned-model-1",
+        launch: &launch,
+        prompt: Some("fake session"),
+        max_sessions: 1,
+        order: None,
+        exempt_lease: false,
+    };
+    let hooks = DriveHooks {
+        now: &now,
+        pause: &pause,
+        decision: &decision,
+        card: &card,
+    };
+    let code = run_sessions(&spec, &hooks).expect("the silent session runs");
+    assert_eq!(code, 1, "the closed session reports a non-zero code");
+    let cards = cards.into_inner();
+    assert_eq!(cards.len(), 1, "exactly one card: {cards:?}");
+    assert!(
+        cards[0].starts_with("stalled:"),
+        "a fake stalled client past 2 hours is closed and carded: {cards:?}"
+    );
+    assert!(
+        !close_dirs(&root).is_empty(),
+        "the close record is written from git state"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_fake_clock_continues_a_committing_client_with_a_note() {
+    let root = init_repo("progress");
+    let script = "echo more >> work.txt && git add work.txt && git commit -q -m wip && touch commit.done && sleep 0.6";
+    let launch = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        script.to_string(),
+        "{prompt}".to_string(),
+    ];
+    let cards: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    let decision = || -> std::result::Result<Option<String>, String> {
+        Ok(Some("GO item fake - ready".to_string()))
+    };
+    let card = |reason: &str| {
+        cards.borrow_mut().push(reason.to_string());
+        Ok(())
+    };
+    // The clock only advances past the check-in after the fake client has committed, so the
+    // test is deterministic: before the marker exists, real time is returned.
+    let marker = root.join("commit.done");
+    let jump = std::cell::Cell::new(0u64);
+    let now = move || {
+        let real = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        if !marker.exists() {
+            return real;
+        }
+        let seconds = jump.get();
+        jump.set(seconds + 3_600);
+        real + seconds
+    };
+    let pause = |_seconds: u64| std::thread::sleep(std::time::Duration::from_millis(15));
+    let spec = DriveSpec {
+        root: &root,
+        lab: "deepseek",
+        client: "fake-client",
+        model: "pinned-model-1",
+        launch: &launch,
+        prompt: Some("fake session"),
+        max_sessions: 1,
+        order: None,
+        exempt_lease: false,
+    };
+    let hooks = DriveHooks {
+        now: &now,
+        pause: &pause,
+        decision: &decision,
+        card: &card,
+    };
+    let code = run_sessions(&spec, &hooks).expect("the progressing session runs");
+    assert_eq!(code, 0, "the progressing client exited cleanly");
+    assert!(
+        cards.into_inner().is_empty(),
+        "a fake progressing client past 2 hours continues with a note, not a card"
+    );
+    assert!(
+        close_dirs(&root).is_empty(),
+        "a progressing session is not closed"
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }

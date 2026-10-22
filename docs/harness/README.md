@@ -107,11 +107,15 @@ supervisor replaces with the session prompt (the caller's `--prompt`, or a defau
 `loop next` decision). The client runs in its own process group; the pid, pgid, client, model,
 prompt SHA-256 and start time are written under `local/loop/drive/<lab>/last-session.json`, and only
 that recorded pid/group is ever signalled, so another lab's worktree and a client's after-stop
-summary process are never touched.
+summary process are never touched. `--order <ORDER.md>` names the active ORDER for the scoped WIP
+commit a stalled close makes (staging only its task folder, with the `Order:` trailer); `--exempt-lease`
+marks a session whose lease covers it so the check-in never closes it; the command and the signals are
+unix-only, and the flag has no meaning on other targets.
 
 ```sh
-UOR_LAB=claude uor-harness loop drive --client claude --model <id> --max-sessions 2
+UOR_LAB=claude uor-harness loop drive --client claude --model <id> --prompt-file <path> --max-sessions 2
 UOR_LAB=claude uor-harness loop drive --watch --pid <pid> --interval 60
+UOR_LAB=claude uor-harness loop drive --watch --lease --interval 300
 ```
 
 **The 2-hour check-in is soft (D53).** A session under two hours continues. Past it, real progress -

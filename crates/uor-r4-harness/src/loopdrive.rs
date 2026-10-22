@@ -5,27 +5,26 @@
 //! One invocation runs one or more **fresh sessions**. Before each session the loop's own
 //! [`loopnext::run`] decides go or stop: the kill switch (`local/loop/STOP` or the `loop:pause`
 //! label on #2028), held work, an empty queue and the rest of the loop page's stops are **not
-//! re-implemented here** - a session starts only when `loop next` says `Go`. The headless client
-//! is launched from the caller's explicit argv with one `{prompt}` placeholder, in its own process
-//! group, with its pid, pgid, client, model, prompt hash and start time recorded under
-//! `local/loop/drive/<lab>/`. The supervisor only ever signals that recorded pid/group, and it
-//! waits on the tracked child, so a client's after-stop summary process is never mistaken for the
-//! lab session.
+//! re-implemented here**. The headless client is launched from the caller's explicit argv with one
+//! `{prompt}` element, in its own process group, and only that recorded pid/process group is ever
+//! signalled. The record (pid, pgid, client, model, prompt hash, start time and the process start
+//! identity) lives under `local/loop/drive/<lab>/`; the supervisor waits on the tracked child, so a
+//! client's after-stop summary process is never mistaken for the lab session.
 //!
 //! # The soft 2-hour check-in (D53)
 //!
-//! At [`CHECK_IN_SECONDS`] on a session the supervisor classifies progress from the repository:
-//! commits, gate-run activity, and working-tree changes are real progress; no movement is stalled,
-//! and a second consecutive stalled session is spiraled. Real progress continues **with a note on
-//! the owning issue**; a stalled or spiraled session is closed with WIP state recorded from git and
-//! a card to the PM. Leased GPU runs are exempt: [`watch_until_exit`] keeps renewing the lease and
-//! never cancels the run.
+//! At [`CHECK_IN_SECONDS`] the supervisor **checks the live session**: commits, gate-run activity and
+//! working-tree changes are real progress (continue with a note); nothing is stalled (close it and
+//! card it); a second consecutive stalled session is spiraled. A leased GPU run is exempt: it is
+//! never closed while a lease covers it, and [`watch_lease_until_renew_fails`] renews it from a
+//! detached watcher that outlives the session.
 //!
 //! # Why the process layer is thin
 //!
 //! The planner ([`classify`], [`check_in`], [`compose_prompt`], [`launch_argv`]) is pure and tested
-//! with a fake clock; the process layer is [`start_session`], [`wait_session`], [`session_alive`]
-//! and [`terminate_session`], so the risky part is small and the tests mostly avoid pids.
+//! with a fake clock; the process actions are [`start_session`], [`session_alive`],
+//! [`terminate_session`] and [`run_sessions`], so the risky part is small and inspectable. Every
+//! signal is gated on an identity match with the recorded process, never on a pattern.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -33,24 +32,35 @@ use std::process::{Child, Command, Stdio};
 
 /// The soft task limit of D53: two hours on a session before the check-in runs.
 pub const CHECK_IN_SECONDS: u64 = 7_200;
-/// Where session records live, relative to the main checkout.
+/// Where session records live, relative to the repository root the supervisor was given.
 pub const DRIVE_DIR: &str = "local/loop/drive";
 /// How many sessions one invocation may start by default.
 pub const DEFAULT_MAX_SESSIONS: usize = 1;
+/// The `GIT_*` variables a git child must not inherit.
+const GIT_VARS: [&str; 8] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+    "GIT_COMMON_DIR",
+];
 
 /// Why a drive command refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DriveError {
-    /// The launch argv does not carry exactly one `{prompt}` placeholder.
+    /// The launch argv does not carry exactly one `{prompt}` placeholder, or one in argv[0].
     PromptPlaceholder(usize),
     /// The client or model flag is missing.
     MissingFlag(&'static str),
     /// The client name is not a registered adapter under `docs/harness/onboarding/`.
     UnknownClient(String),
-    /// A prompt was passed twice.
-    TwoPrompts,
     /// The session could not be launched or its record written.
     Io(String),
+    /// A safety guard refused an action.
+    Refused(String),
 }
 
 impl fmt::Display for DriveError {
@@ -65,8 +75,7 @@ impl fmt::Display for DriveError {
                 formatter,
                 "no client adapter docs/harness/onboarding/{client}.json"
             ),
-            Self::TwoPrompts => formatter.write_str("pass --prompt or --prompt-file, not both"),
-            Self::Io(message) => formatter.write_str(message),
+            Self::Io(message) | Self::Refused(message) => formatter.write_str(message),
         }
     }
 }
@@ -92,9 +101,12 @@ impl Observation {
     /// The observation from `root` and `lab`; read-only, no network.
     pub fn take(root: &Path, lab: &str) -> Observation {
         let git = |args: &[&str]| -> String {
-            Command::new("git")
-                .args(args)
-                .current_dir(root)
+            let mut command = Command::new("git");
+            command.args(args).current_dir(root);
+            for name in GIT_VARS {
+                command.env_remove(name);
+            }
+            command
                 .output()
                 .ok()
                 .filter(|out| out.status.success())
@@ -104,9 +116,12 @@ impl Observation {
         let head = git(&["rev-parse", "HEAD"]);
         let commits = git(&["rev-list", "--count", "HEAD"]).parse().unwrap_or(0);
         let changed = git(&["status", "--porcelain"]);
+        // The supervisor's own drive directory (session logs, records, cards) is ignored for
+        // progress: it changes on every poll and says nothing about the work.
         let changed_paths = changed
             .lines()
             .filter(|line| !line.trim().is_empty())
+            .filter(|line| !line.contains("local/loop/drive/"))
             .count();
         let ledger = root
             .join("local")
@@ -123,7 +138,6 @@ impl Observation {
         }
     }
 }
-
 /// What the repository says about progress between two observations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Progress {
@@ -160,7 +174,7 @@ pub enum CheckIn {
         /// The reason printed or posted.
         note: String,
     },
-    /// Two hours with no progress (and a repeat): close the session with WIP state and a card.
+    /// Two hours with no progress: close the session with WIP state and a card.
     Close {
         /// The reason printed or carded.
         reason: String,
@@ -168,8 +182,8 @@ pub enum CheckIn {
 }
 
 /// The check-in decision. Under [`CHECK_IN_SECONDS`] it always continues; past it, a progressing
-/// session continues with a note (D53) and a stalled one closes - and when the same stall repeats it
-/// is reported as spiraled. The caller counts the repeats.
+/// session continues with a note (D53) and a stalled one closes. `stalled_repeats` counts the
+/// **previous consecutive stalls, including this one**: 1 is the first stall, 2 or more is spiraled.
 pub fn check_in(elapsed_seconds: u64, progress: &Progress, stalled_repeats: u32) -> CheckIn {
     if elapsed_seconds < CHECK_IN_SECONDS {
         return CheckIn::Continue {
@@ -194,13 +208,16 @@ pub fn check_in(elapsed_seconds: u64, progress: &Progress, stalled_repeats: u32)
 }
 
 /// The argv to launch: the caller's command with its single `{prompt}` element replaced by the
-/// composed prompt. A placeholder anywhere else in an argument is left alone, so a client flag that
-/// legitimately contains the word is not rewritten.
+/// composed prompt. The placeholder may not be the program itself, and a placeholder inside another
+/// argument is left alone.
 pub fn launch_argv(launch: &[String], prompt: &str) -> Result<Vec<String>> {
     let mut found = 0usize;
     let mut argv = Vec::with_capacity(launch.len());
-    for argument in launch {
+    for (index, argument) in launch.iter().enumerate() {
         if argument == "{prompt}" {
+            if index == 0 {
+                return Err(DriveError::PromptPlaceholder(0));
+            }
             found += 1;
             argv.push(prompt.to_string());
         } else {
@@ -238,6 +255,10 @@ pub struct SessionRecord {
     pub pgid: u32,
     /// Unix start time.
     pub started_unix: u64,
+    /// `ps -o lstart=` of the child at launch: the identity every signal is checked against.
+    pub started_lstart: String,
+    /// The per-session nonce placed in the child's environment, for `ps -E` inspection.
+    pub nonce: String,
     /// SHA-256 of the prompt, so a session can be tied to what it was asked.
     pub prompt_sha256: String,
 }
@@ -264,6 +285,8 @@ pub fn write_record(root: &Path, lab: &str, record: &SessionRecord) -> Result<()
         "pid": record.pid,
         "pgid": record.pgid,
         "started_unix": record.started_unix,
+        "started_lstart": record.started_lstart,
+        "nonce": record.nonce,
         "prompt_sha256": record.prompt_sha256,
     })
     .to_string();
@@ -284,12 +307,54 @@ pub fn read_record(root: &Path, lab: &str) -> Option<SessionRecord> {
         pid: value.get("pid")?.as_u64()? as u32,
         pgid: value.get("pgid")?.as_u64()? as u32,
         started_unix: value.get("started_unix")?.as_u64()?,
+        started_lstart: value
+            .get("started_lstart")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        nonce: value
+            .get("nonce")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
         prompt_sha256: value.get("prompt_sha256")?.as_str()?.to_string(),
     })
 }
 
-/// Start one session: the argv runs in its own process group, stdout/stderr go to `log`, and the
-/// record is written before the caller waits. Returns the child and its record.
+/// `ps -o <field> -p <pid>`, trimmed; `None` when the process is gone or `ps` fails.
+fn ps_field(pid: u32, field: &str) -> Option<String> {
+    let out = Command::new("ps")
+        .args(["-o", field, "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+/// The supervisor's own process group, for the self-signal guard.
+fn own_pgid() -> Option<u32> {
+    ps_field(std::process::id(), "pgid=").and_then(|value| value.parse().ok())
+}
+
+/// Is the recorded process still the one that was started? Pid plus its `lstart` identity, never a
+/// pattern: a reused pid has another start time, and a leftover child of the client is another pid.
+pub fn session_alive(record: &SessionRecord) -> bool {
+    if record.pid <= 1 || record.started_lstart.is_empty() {
+        return false;
+    }
+    ps_field(record.pid, "lstart=").is_some_and(|current| current == record.started_lstart)
+}
+/// Start one session: the argv runs in its own process group with a per-session nonce in its
+/// environment, stdout/stderr go to `log`, and the record is written before the caller waits. If the
+/// record cannot be written the child is killed by its own group and the error is returned, so no
+/// untracked session is ever left running.
 pub fn start_session(
     root: &Path,
     lab: &str,
@@ -312,6 +377,11 @@ pub fn start_session(
     let err = out
         .try_clone()
         .map_err(|error| DriveError::Io(format!("cannot clone the log handle: {error}")))?;
+    let nonce = format!(
+        "{}-{}",
+        unix_now(),
+        &prompt_sha256[..16.min(prompt_sha256.len())]
+    );
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -322,20 +392,29 @@ pub fn start_session(
             .stdin(Stdio::null())
             .stdout(Stdio::from(out))
             .stderr(Stdio::from(err))
+            .env("UOR_LOOP_DRIVE_NONCE", &nonce)
+            .env("UOR_LOOP_DRIVE_LAB", lab)
             .process_group(0);
-        let child = command
+        let mut child = command
             .spawn()
             .map_err(|error| DriveError::Io(format!("cannot launch {program}: {error}")))?;
         let pid = child.id();
+        let started_lstart = ps_field(pid, "lstart=").unwrap_or_default();
         let record = SessionRecord {
             client: client.to_string(),
             model: model.to_string(),
             pid,
             pgid: pid,
             started_unix: unix_now(),
+            started_lstart,
+            nonce,
             prompt_sha256: prompt_sha256.to_string(),
         };
-        write_record(root, lab, &record)?;
+        if let Err(error) = write_record(root, lab, &record) {
+            let _ = signal_group(pid, "KILL");
+            let _ = child.wait();
+            return Err(error);
+        }
         Ok((child, record))
     }
     #[cfg(not(unix))]
@@ -345,6 +424,7 @@ pub fn start_session(
             arguments,
             out,
             err,
+            nonce,
             client,
             model,
             prompt_sha256,
@@ -356,48 +436,60 @@ pub fn start_session(
     }
 }
 
-/// `kill -0` on the recorded pid/group: is the tracked session still the one running?
-pub fn session_alive(record: &SessionRecord) -> bool {
+/// `kill -<signal> -- -<group>`, the one place a signal is sent.
+fn signal_group(pgid: u32, signal: &str) -> std::io::Result<std::process::ExitStatus> {
+    if pgid <= 1 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("refusing to signal process group {pgid}"),
+        ));
+    }
     Command::new("kill")
-        .args(["-0", &format!("-{}", record.pgid)])
+        .args([&format!("-{signal}"), &format!("--"), &format!("-{pgid}")])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
 }
 
-/// Terminate the recorded session: SIGTERM to its own process group, poll for a short grace, then
+/// Terminate the recorded session: guards, then SIGTERM to its own process group, a short grace, then
 /// SIGKILL to the same group. Nothing else is ever signalled - not another lab's worktree, not a
-/// `pkill`-style pattern, and not a pid that was not recorded.
+/// `pkill`-style pattern, not a pid that was not recorded, and nothing when the identity check fails.
 pub fn terminate_session(record: &SessionRecord) -> Result<()> {
+    if record.pgid <= 1 {
+        return Err(DriveError::Refused(format!(
+            "refusing to signal process group {}: not a session group",
+            record.pgid
+        )));
+    }
+    if record.pgid != record.pid {
+        return Err(DriveError::Refused(format!(
+            "refusing to signal group {}: the recorded pid {} is not its leader",
+            record.pgid, record.pid
+        )));
+    }
+    if own_pgid() == Some(record.pgid) {
+        return Err(DriveError::Refused(format!(
+            "refusing to signal group {}: it is the supervisor's own group",
+            record.pgid
+        )));
+    }
     if !session_alive(record) {
         return Ok(());
     }
-    let group = format!("-{}", record.pgid);
-    let _ = Command::new("kill")
-        .args(["-TERM", &group])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    let _ = signal_group(record.pgid, "TERM");
     for _ in 0..20 {
         if !session_alive(record) {
             return Ok(());
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    let _ = Command::new("kill")
-        .args(["-KILL", &group])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    let _ = signal_group(record.pgid, "KILL");
     Ok(())
 }
 
-/// The watcher for a leased GPU run: while the tracked session pid is alive, run the caller's renew
-/// command every `interval_seconds` and note it; when the session ends, the watcher ends. It never
-/// signals the run and never edits a lease it does not hold. `ticks` bounds the loop for tests;
-/// the caller passes `None` in production.
+/// The session-bound watcher: while the tracked session lives, run the caller's renew command every
+/// `interval_seconds` and note it; when the session ends, the watcher ends. It never signals the run.
+/// `ticks` bounds the loop for tests; production passes `None`.
 pub fn watch_until_exit(
     record: &SessionRecord,
     renew: &[String],
@@ -434,11 +526,10 @@ pub fn watch_until_exit(
     Ok(notes)
 }
 
-/// A leased GPU run's watcher: it **outlives the lab session**. Started as its own detached
-/// process, it renews the lease every `interval_seconds` while the renew command succeeds and stops
-/// when that command reports the lease is gone (a non-zero exit is the lease-ended signal the caller's
-/// command defines). It never signals the run, never edits a lease it does not hold, and never cancels
-/// a healthy run; `ticks` bounds the loop for tests.
+/// A leased GPU run's watcher: it **outlives the lab session**. Started detached, it renews the lease
+/// every `interval_seconds` while the renew command succeeds and stops when that command reports the
+/// lease is gone (a non-zero exit is the caller's lease-ended signal). It never signals the run and
+/// never cancels a healthy one; `ticks` bounds the loop for tests.
 pub fn watch_lease_until_renew_fails(
     renew: &[String],
     interval_seconds: u64,
@@ -480,28 +571,269 @@ pub fn watch_lease_until_renew_fails(
         std::thread::sleep(std::time::Duration::from_secs(interval_seconds));
     }
 }
+/// The inputs one `loop drive` invocation needs, separate from the hooks so the session loop can be
+/// tested with a fake clock and a fake card sink.
+pub struct DriveSpec<'a> {
+    /// Repository root.
+    pub root: &'a Path,
+    /// Lab name.
+    pub lab: &'a str,
+    /// Client adapter name.
+    pub client: &'a str,
+    /// Pinned model id.
+    pub model: &'a str,
+    /// Caller launch argv, with one `{prompt}`.
+    pub launch: &'a [String],
+    /// Caller prompt override.
+    pub prompt: Option<&'a str>,
+    /// How many sessions this invocation may start.
+    pub max_sessions: usize,
+    /// The active ORDER, whose task folder bounds the WIP commit.
+    pub order: Option<&'a Path>,
+    /// A leased session is never closed by the check-in.
+    pub exempt_lease: bool,
+}
+
+/// The impure edges of a drive run, injectable for the fake-clock tests.
+pub struct DriveHooks<'a> {
+    /// Seconds since the epoch.
+    pub now: &'a dyn Fn() -> u64,
+    /// Wait between liveness polls.
+    pub pause: &'a dyn Fn(u64),
+    /// `loop next`: `Ok(Some(go))` starts a session, `Ok(None)` is a clean stop, `Err` refuses.
+    pub decision: &'a dyn Fn() -> std::result::Result<Option<String>, String>,
+    /// Post the PM card for a close; the CLI implementation posts on #2028.
+    pub card: &'a dyn Fn(&str) -> std::result::Result<(), String>,
+}
+
+/// Run the sessions. The check-in is evaluated **while the child is alive**: `try_wait` polls it, the
+/// clock is injected, and only a session classified Stalled is terminated; a Progressing one keeps
+/// running with a note. A leased session (`exempt_lease`) is never closed by the check-in. The
+/// previous consecutive stall count is carried in so a second stall is reported as spiraled.
+pub fn run_sessions(spec: &DriveSpec, hooks: &DriveHooks) -> Result<u8> {
+    let mut last_code = 0u8;
+    let mut stalls: u32 = 0;
+    for session in 0..spec.max_sessions.max(1) {
+        let decision = match (hooks.decision)() {
+            Ok(Some(decision)) => decision,
+            Ok(None) => {
+                println!("STOP");
+                return Ok(0);
+            }
+            Err(error) => {
+                return Err(DriveError::Io(format!(
+                    "cannot decide with loop next: {error}"
+                )));
+            }
+        };
+        let prompt = compose_prompt(spec.prompt, &decision);
+        let argv = launch_argv(spec.launch, &prompt)?;
+        let before = Observation::take(spec.root, spec.lab);
+        let directory = spec.root.join(DRIVE_DIR).join(crate::state::slug(spec.lab));
+        let log = directory.join(format!("session-{}-{session}.log", (hooks.now)()));
+        let digest = crate::attention_reference::sha256_hex(prompt.as_bytes());
+        let (mut child, record) = start_session(
+            spec.root,
+            spec.lab,
+            spec.client,
+            spec.model,
+            &argv,
+            &digest,
+            &log,
+        )?;
+        println!(
+            "started session {session} pid {} pgid {} client {} model {} log {}",
+            record.pid,
+            record.pgid,
+            spec.client,
+            spec.model,
+            log.display()
+        );
+        let mut checked = false;
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let elapsed = (hooks.now)().saturating_sub(record.started_unix);
+                    let after = Observation::take(spec.root, spec.lab);
+                    let progress = classify(&before, &after);
+                    let stall_count = if matches!(progress, Progress::Stalled) {
+                        stalls + 1
+                    } else {
+                        0
+                    };
+                    if let CheckIn::Close { reason } = check_in(elapsed, &progress, stall_count) {
+                        if spec.exempt_lease {
+                            println!("leased session ended; no close: {reason}");
+                        } else {
+                            println!("CHECK-IN CLOSE: {reason}");
+                            close_actions(spec, &record, &reason, hooks, &mut stalls);
+                        }
+                    } else {
+                        stalls = 0;
+                    }
+                    last_code = status.code().unwrap_or(1) as u8;
+                    break;
+                }
+                Ok(None) => {
+                    let now = (hooks.now)();
+                    let elapsed = now.saturating_sub(record.started_unix);
+                    if !checked && elapsed >= CHECK_IN_SECONDS {
+                        checked = true;
+                        let after = Observation::take(spec.root, spec.lab);
+                        let progress = classify(&before, &after);
+                        let stall_count = if matches!(progress, Progress::Stalled) {
+                            stalls + 1
+                        } else {
+                            0
+                        };
+                        match check_in(elapsed, &progress, stall_count) {
+                            CheckIn::Continue { note } => {
+                                println!("{note}");
+                                stalls = 0;
+                            }
+                            CheckIn::Close { reason } => {
+                                if spec.exempt_lease {
+                                    println!("leased session; close skipped: {reason}");
+                                } else {
+                                    println!("CHECK-IN CLOSE: {reason}");
+                                    terminate_session(&record)?;
+                                    let _ = child.wait();
+                                    close_actions(spec, &record, &reason, hooks, &mut stalls);
+                                    last_code = 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    (hooks.pause)(1);
+                }
+                Err(error) => {
+                    let _ = terminate_session(&record);
+                    return Err(DriveError::Io(format!(
+                        "cannot poll pid {}: {error}",
+                        record.pid
+                    )));
+                }
+            }
+        }
+    }
+    Ok(last_code)
+}
+
+fn close_actions(
+    spec: &DriveSpec,
+    record: &SessionRecord,
+    reason: &str,
+    hooks: &DriveHooks,
+    stalls: &mut u32,
+) {
+    *stalls += 1;
+    if let Err(error) = close_stalled_session(spec.root, spec.lab, record, reason) {
+        eprintln!("loop drive: cannot record the stalled session: {error}");
+    }
+    if let Err(error) = commit_and_push_wip(spec.root, spec.lab, spec.order, reason) {
+        eprintln!("loop drive: cannot commit/push the WIP: {error}");
+    }
+    if let Err(error) = (hooks.card)(reason) {
+        eprintln!("loop drive: cannot post the PM card: {error}");
+    }
+}
+/// Commit and push the WIP of a closed session, scoped and legal: it refuses a branch that is not
+/// `<lab>/*` or is `main`, stages **only the active ORDER task folder**, adds the `Order:` trailer and
+/// strips `GIT_*` from the git child. A failure is returned, never silently swallowed; nothing is
+/// ever force-pushed or deleted.
+pub fn commit_and_push_wip(
+    root: &Path,
+    lab: &str,
+    order: Option<&Path>,
+    reason: &str,
+) -> Result<()> {
+    let git = |args: &[&str]| -> Result<std::process::Output> {
+        let mut command = Command::new("git");
+        command.args(args).current_dir(root);
+        for name in GIT_VARS {
+            command.env_remove(name);
+        }
+        command
+            .output()
+            .map_err(|error| DriveError::Io(format!("cannot run git {:?}: {error}", args)))
+    };
+    let branch = git(&["branch", "--show-current"])?;
+    let branch = String::from_utf8_lossy(&branch.stdout).trim().to_string();
+    if branch == "main" || !branch.starts_with(&format!("{lab}/")) {
+        return Err(DriveError::Refused(format!(
+            "refusing to commit WIP on branch {branch:?}: not a {lab}/ branch"
+        )));
+    }
+    let order = order.ok_or_else(|| {
+        DriveError::Refused(
+            "refusing to commit unscoped WIP: pass --order <the active ORDER>".to_string(),
+        )
+    })?;
+    let order_rel = order.strip_prefix(root).map_err(|_| {
+        DriveError::Refused(format!(
+            "the active ORDER {} is not under the repository root",
+            order.display()
+        ))
+    })?;
+    let order_rel = order_rel.to_string_lossy().to_string();
+    if !order_rel.starts_with("docs/loop/tasks/") || !order_rel.ends_with("/ORDER.md") {
+        return Err(DriveError::Refused(format!(
+            "refusing to commit WIP: {order_rel} is not a loop task ORDER"
+        )));
+    }
+    let folder = order_rel
+        .strip_suffix("/ORDER.md")
+        .ok_or_else(|| DriveError::Refused("not an ORDER path".to_string()))?;
+    let folder_name = folder.rsplit('/').next().unwrap_or_default();
+    if !folder_name.starts_with(&format!("{lab}-")) {
+        return Err(DriveError::Refused(format!(
+            "refusing to commit WIP: {folder} is not a {lab} task folder"
+        )));
+    }
+    git(&["add", "--", folder])?;
+    let staged = git(&["diff", "--cached", "--quiet"])?;
+    if staged.status.success() {
+        return Ok(());
+    }
+    git(&[
+        "commit",
+        "-m",
+        &format!(
+            "[{lab}] WIP: drive closed a session at the 2-hour check-in\n\n- reason: {reason}\n\nLab: {lab}\nOrder: {order_rel}"
+        ),
+    ])?;
+    git(&["push"])?;
+    Ok(())
+}
 
 /// The PM card for a closed session: what the PM reads to prompt the lab. Pure so the wording is
-/// tested; the CLI posts it on #2028.
+/// tested; [`post_pm_card`] sends it on #2028.
 pub fn pm_card_text(lab: &str, reason: &str, head: &str, commits: u64) -> String {
     format!(
-        "[{lab}] drive closed a session at the soft 2-hour check-in ({reason}).\n\n- git HEAD: {head}\n- commits: {commits}\nThe REPORT stub and PICKUP are under local/loop/drive/{lab}/close-<time>/. The lab needs a prompt."
+        "[{lab}] drive closed a session at the soft 2-hour check-in ({reason}).\n\n- git HEAD: {head}\n- commits: {commits}\nThe REPORT stub and PICKUP are next to this card under local/loop/drive/{lab}/close-*/. The lab needs a prompt."
     )
 }
 
-/// Post the PM card on #2028 through `gh`. Live-only: the tests test the wording and the stub files,
-/// never the network.
+/// Post the PM card on #2028 through `gh`, with a cheap dedupe: if the card file already carries the
+/// same head and reason, the post is skipped. Live-only: the tests test the wording and the stub
+/// files, never the network.
 pub fn post_pm_card(root: &Path, lab: &str, reason: &str) -> Result<()> {
     let observation = Observation::take(root, lab);
     let text = pm_card_text(lab, reason, &observation.head, observation.commits);
     let path = root
-        .join("local/loop/drive")
+        .join(DRIVE_DIR)
         .join(crate::state::slug(lab))
         .join("pm-card.md");
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
             DriveError::Io(format!("cannot create {}: {error}", parent.display()))
         })?;
+    }
+    if let Ok(previous) = std::fs::read_to_string(&path) {
+        if previous.contains(reason) && previous.contains(&observation.head) {
+            return Ok(());
+        }
     }
     std::fs::write(&path, format!("{text}\n"))
         .map_err(|error| DriveError::Io(format!("cannot write {}: {error}", path.display())))?;
@@ -522,34 +854,50 @@ pub fn post_pm_card(root: &Path, lab: &str, reason: &str) -> Result<()> {
     }
 }
 
-/// Commit and push the WIP of a closed session, best effort: the session's changes are staged and
-/// committed with the lab trailer, then pushed. A failure is returned, never silently swallowed; the
-/// supervisor logs it and continues, so nothing is ever force-pushed or deleted.
-pub fn commit_and_push_wip(root: &Path, lab: &str, reason: &str) -> Result<()> {
-    let run = |args: &[&str]| -> Result<()> {
-        let out = Command::new("git")
-            .args(args)
-            .current_dir(root)
-            .output()
-            .map_err(|error| DriveError::Io(format!("cannot run git {:?}: {error}", args)))?;
-        if out.status.success() {
-            Ok(())
-        } else {
-            Err(DriveError::Io(format!(
-                "git {:?} exited {}: {}",
-                args,
-                out.status,
-                String::from_utf8_lossy(&out.stderr).trim()
-            )))
+/// The per-lab drive lock: one supervisor per lab, created O_EXCL and removed by its guard.
+struct DriveLock {
+    path: PathBuf,
+}
+
+impl DriveLock {
+    fn acquire(root: &Path, lab: &str) -> Result<DriveLock> {
+        let path = root
+            .join(DRIVE_DIR)
+            .join(crate::state::slug(lab))
+            .join("drive.lock");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                DriveError::Io(format!("cannot create {}: {error}", parent.display()))
+            })?;
         }
-    };
-    run(&["add", "-A"])?;
-    run(&[
-        "commit",
-        "-m",
-        &format!("[{lab}] WIP: drive closed a session at the 2-hour check-in\n\n- reason: {reason}\n\nLab: {lab}"),
-    ])?;
-    run(&["push"])
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                use std::io::Write;
+                let _ = writeln!(file, "{}", std::process::id());
+                Ok(DriveLock { path })
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                Err(DriveError::Refused(format!(
+                    "another loop drive holds {}; stop it before starting a second",
+                    path.display()
+                )))
+            }
+            Err(error) => Err(DriveError::Io(format!(
+                "cannot create {}: {error}",
+                path.display()
+            ))),
+        }
+    }
+}
+
+impl Drop for DriveLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 /// Seconds since the Unix epoch.
@@ -559,16 +907,18 @@ pub fn unix_now() -> u64 {
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
 }
-
-/// Dispatch `loop drive`. Returns the exit code, 0 on a clean stop or a completed session, 1 when a
-/// session ran and its client failed, 2 for usage and refusal errors.
+/// Dispatch `loop drive`. Exit codes: 0 on a clean stop or a completed session, 1 when a session ran
+/// and its client failed, 2 for usage and refusal errors.
 pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     let mut client: Option<String> = None;
     let mut model: Option<String> = None;
     let mut prompt: Option<String> = None;
+    let mut prompt_file: Option<PathBuf> = None;
+    let mut order: Option<PathBuf> = None;
     let mut max_sessions: Option<usize> = None;
     let mut watch = false;
     let mut lease = false;
+    let mut exempt_lease = false;
     let mut pid: Option<u32> = None;
     let mut interval: u64 = 60;
     let mut launch: Vec<String> = Vec::new();
@@ -585,7 +935,9 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             "--" => after_separator = true,
             "--watch" => watch = true,
             "--lease" => lease = true,
-            "--client" | "--model" | "--prompt" | "--max-sessions" | "--pid" | "--interval" => {
+            "--exempt-lease" => exempt_lease = true,
+            "--client" | "--model" | "--prompt" | "--prompt-file" | "--max-sessions" | "--pid"
+            | "--interval" | "--order" => {
                 let Some(value) = args.get(index + 1) else {
                     eprintln!("loop drive: {argument} needs a value");
                     return 2;
@@ -594,6 +946,8 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
                     "--client" => client = Some(value.clone()),
                     "--model" => model = Some(value.clone()),
                     "--prompt" => prompt = Some(value.clone()),
+                    "--prompt-file" => prompt_file = Some(PathBuf::from(value)),
+                    "--order" => order = Some(PathBuf::from(value)),
                     "--pid" => pid = value.parse().ok(),
                     "--interval" => interval = value.parse().unwrap_or(60),
                     _ => max_sessions = value.parse().ok(),
@@ -610,6 +964,9 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
         }
         index += 1;
     }
+    // A zero or tiny interval would spin the watcher; the CLI sets a floor, the library keeps the
+    // value for tests that inject it.
+    let interval = interval.max(1);
     if watch {
         if lease {
             return match watch_lease_until_renew_fails(&launch, interval, None) {
@@ -626,11 +983,11 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             };
         }
         let Some(pid) = pid else {
-            eprintln!("loop drive --watch needs --pid <the tracked session pid>");
+            eprintln!("loop drive --watch needs --pid <the tracked session pid>, or --lease");
             return 2;
         };
-        let record = session_by_pid(root, lab, pid).or_else(|| read_record(root, lab));
-        let Some(record) = record.filter(|record| record.pid == pid) else {
+        let record = read_record(root, lab).filter(|record| record.pid == pid);
+        let Some(record) = record else {
             eprintln!("loop drive --watch: no recorded session with pid {pid}");
             return 2;
         };
@@ -646,6 +1003,10 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
                 2
             }
         };
+    }
+    if !cfg!(unix) {
+        eprintln!("loop drive signals process groups and is unix-only");
+        return 2;
     }
     let Some(client) = client else {
         eprintln!("loop drive needs --client <name>");
@@ -671,115 +1032,80 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
         eprintln!("loop drive: the launch command must contain exactly one {{prompt}} placeholder");
         return 2;
     }
-    // The loops's own stop decision, not a re-implementation of it.
+    if let Some(path) = &prompt_file {
+        match std::fs::read_to_string(path) {
+            Ok(text) => prompt = Some(text),
+            Err(error) => {
+                eprintln!("loop drive: cannot read {}: {error}", path.display());
+                return 2;
+            }
+        }
+    }
+    let lock = match DriveLock::acquire(root, lab) {
+        Ok(lock) => lock,
+        Err(error) => {
+            eprintln!("loop drive: {error}");
+            return 2;
+        }
+    };
     let next_gh = crate::loopnext::RealNextGh {
         root: root.to_path_buf(),
     };
     let claim_gh = crate::loopclaim::RealGh {
         root: root.to_path_buf(),
     };
-    let decision = crate::loopnext::run(root, lab, &next_gh, &claim_gh);
-    let decision_text = match decision {
-        Ok((_, crate::loopnext::Decision::Stop(reason))) => {
-            println!("STOP {reason}");
-            return 0;
-        }
-        Ok((
-            _,
-            crate::loopnext::Decision::Go {
-                kind,
-                target,
-                reason,
-            },
-        )) => {
-            format!("GO {kind} {target} - {reason}")
-        }
-        Err(error) => {
-            eprintln!("loop drive: cannot decide with loop next: {error}");
-            return 2;
+    let decision = || -> std::result::Result<Option<String>, String> {
+        match crate::loopnext::run(root, lab, &next_gh, &claim_gh) {
+            Ok((_, crate::loopnext::Decision::Stop(reason))) => {
+                println!("STOP {reason}");
+                Ok(None)
+            }
+            Ok((
+                _,
+                crate::loopnext::Decision::Go {
+                    kind,
+                    target,
+                    reason,
+                },
+            )) => Ok(Some(format!("GO {kind} {target} - {reason}"))),
+            Err(error) => Err(error),
         }
     };
-    let prompt = compose_prompt(prompt.as_deref(), &decision_text);
-    let argv = match launch_argv(&launch, &prompt) {
-        Ok(argv) => argv,
+    let card = |reason: &str| post_pm_card(root, lab, reason).map_err(|error| error.to_string());
+    let now = || unix_now();
+    let pause = |seconds: u64| std::thread::sleep(std::time::Duration::from_secs(seconds));
+    let spec = DriveSpec {
+        root,
+        lab,
+        client: &client,
+        model: &model,
+        launch: &launch,
+        prompt: prompt.as_deref(),
+        max_sessions: max_sessions.unwrap_or(DEFAULT_MAX_SESSIONS),
+        order: order.as_deref(),
+        exempt_lease,
+    };
+    let hooks = DriveHooks {
+        now: &now,
+        pause: &pause,
+        decision: &decision,
+        card: &card,
+    };
+    let code = match run_sessions(&spec, &hooks) {
+        Ok(0) => 0,
+        Ok(_) => 1,
         Err(error) => {
             eprintln!("loop drive: {error}");
-            return 2;
+            2
         }
     };
-    let limit = max_sessions.unwrap_or(DEFAULT_MAX_SESSIONS).max(1);
-    let mut last_code = 0;
-    for session in 0..limit {
-        if session > 0 {
-            // Re-decide between sessions: the kill switch and the rest of the stops apply again.
-            match crate::loopnext::run(root, lab, &next_gh, &claim_gh) {
-                Ok((_, crate::loopnext::Decision::Stop(reason))) => {
-                    println!("STOP {reason}");
-                    return 0;
-                }
-                Ok(_) => {}
-                Err(error) => {
-                    eprintln!("loop drive: cannot decide with loop next: {error}");
-                    return 2;
-                }
-            }
-        }
-        let directory = root.join(DRIVE_DIR).join(crate::state::slug(lab));
-        let log = directory.join(format!("session-{}-{session}.log", unix_now()));
-        let digest = crate::attention_reference::sha256_hex(prompt.as_bytes());
-        let (mut child, record) =
-            match start_session(root, lab, &client, &model, &argv, &digest, &log) {
-                Ok(started) => started,
-                Err(error) => {
-                    eprintln!("loop drive: {error}");
-                    return 2;
-                }
-            };
-        println!(
-            "started session {session} pid {} pgid {} client {client} model {model} log {}",
-            record.pid,
-            record.pgid,
-            log.display()
-        );
-        let status = match child.wait() {
-            Ok(status) => status,
-            Err(error) => {
-                eprintln!("loop drive: cannot wait on pid {}: {error}", record.pid);
-                return 2;
-            }
-        };
-        let elapsed = unix_now().saturating_sub(record.started_unix);
-        let before = Observation::take(root, lab);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        let after = Observation::take(root, lab);
-        let progress = classify(&before, &after);
-        match check_in(elapsed, &progress, 0) {
-            CheckIn::Continue { note } => println!("{note}"),
-            CheckIn::Close { reason } => {
-                println!("CHECK-IN CLOSE: {reason}");
-                if let Err(error) = close_stalled_session(root, lab, &record, &reason) {
-                    eprintln!("loop drive: cannot record the stalled session: {error}");
-                }
-                if let Err(error) = commit_and_push_wip(root, lab, &reason) {
-                    eprintln!("loop drive: cannot commit/push the WIP: {error}");
-                }
-                if let Err(error) = post_pm_card(root, lab, &reason) {
-                    eprintln!("loop drive: cannot post the PM card: {error}");
-                }
-            }
-        }
-        last_code = status.code().unwrap_or(1);
-    }
-    if last_code == 0 {
-        0
-    } else {
-        1
-    }
+    drop(lock);
+    code
 }
 
 /// Record a stalled session from git state: a REPORT stub and a PICKUP under the drive directory, so
-/// the next session (and the PM card) can see what was happening. Nothing is deleted and no other
-/// lab's file is touched.
+/// the next session and the PM card can see what was happening. Nothing is deleted and no other file
+/// outside the drive directory is touched.
 pub fn close_stalled_session(
     root: &Path,
     lab: &str,
@@ -795,10 +1121,7 @@ pub fn close_stalled_session(
     })?;
     let observation = Observation::take(root, lab);
     let stub = format!(
-        "# REPORT stub: session closed by the soft 2-hour check-in\n\n\
-         - lab: {lab}\n- client: {}\n- model: {}\n- pid: {}\n- started_unix: {}\n- reason: {reason}\n\
-         - git HEAD: {}\n- commits: {}\n- changed paths: {}\n\n\
-         Written from git state only; no result is claimed.\n",
+        "# REPORT stub: session closed by the soft 2-hour check-in\n\n- lab: {lab}\n- client: {}\n- model: {}\n- pid: {}\n- started_unix: {}\n- reason: {reason}\n- git HEAD: {}\n- commits: {}\n- changed paths: {}\n\nWritten from git state only; no result is claimed.\n",
         record.client,
         record.model,
         record.pid,
@@ -810,104 +1133,10 @@ pub fn close_stalled_session(
     std::fs::write(directory.join("REPORT-stub.md"), stub)
         .map_err(|error| DriveError::Io(format!("cannot write the REPORT stub: {error}")))?;
     let pickup = format!(
-        "# PICKUP (written by loop drive from git state)\n\n\
-         - closed: {reason}\n- HEAD: {}\n- commits: {}\n\n\
-         Resume by reading the active ORDER and running `uor-harness loop next`.\n",
+        "# PICKUP (written by loop drive from git state)\n\n- closed: {reason}\n- HEAD: {}\n- commits: {}\n\nResume by reading the active ORDER and running `uor-harness loop next`.\n",
         observation.head, observation.commits
     );
     std::fs::write(directory.join("PICKUP.md"), pickup)
         .map_err(|error| DriveError::Io(format!("cannot write the PICKUP: {error}")))?;
     Ok(directory)
-}
-
-/// The session record for a pid, if `last-session.json` names it.
-fn session_by_pid(root: &Path, lab: &str, pid: u32) -> Option<SessionRecord> {
-    read_record(root, lab).filter(|record| record.pid == pid)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn observation(head: &str, commits: u64, gate_runs: u64, changed: usize) -> Observation {
-        Observation {
-            head: head.to_string(),
-            commits,
-            gate_runs,
-            changed_paths: changed,
-        }
-    }
-
-    #[test]
-    fn commits_gate_runs_and_edits_are_progress() {
-        let before = observation("a", 1, 0, 0);
-        assert_eq!(
-            classify(&before, &observation("b", 1, 0, 0)),
-            Progress::Progressing("new HEAD")
-        );
-        assert_eq!(
-            classify(&before, &observation("a", 2, 0, 0)),
-            Progress::Progressing("new commits")
-        );
-        assert_eq!(
-            classify(&before, &observation("a", 1, 1, 0)),
-            Progress::Progressing("new gate runs")
-        );
-        assert_eq!(
-            classify(&before, &observation("a", 1, 0, 2)),
-            Progress::Progressing("working tree changed")
-        );
-        assert_eq!(classify(&before, &before), Progress::Stalled);
-    }
-
-    #[test]
-    fn the_check_in_is_soft_until_two_hours_then_progress_continues() {
-        assert!(matches!(
-            check_in(60, &Progress::Stalled, 0),
-            CheckIn::Continue { .. }
-        ));
-        assert!(matches!(
-            check_in(CHECK_IN_SECONDS, &Progress::Progressing("new commits"), 0),
-            CheckIn::Continue { .. }
-        ));
-    }
-
-    #[test]
-    fn a_stalled_session_past_two_hours_closes_and_a_repeat_is_spiraled() {
-        match check_in(CHECK_IN_SECONDS, &Progress::Stalled, 0) {
-            CheckIn::Close { reason } => assert!(reason.starts_with("stalled:"), "{reason}"),
-            other => panic!("expected a close, got {other:?}"),
-        }
-        match check_in(CHECK_IN_SECONDS, &Progress::Stalled, 2) {
-            CheckIn::Close { reason } => assert!(reason.starts_with("spiraled:"), "{reason}"),
-            other => panic!("expected a spiraled close, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn the_launch_command_needs_exactly_one_prompt_placeholder() {
-        let argv = vec!["dsh".to_string(), "{prompt}".to_string()];
-        assert_eq!(
-            launch_argv(&argv, "hi").unwrap(),
-            vec!["dsh".to_string(), "hi".to_string()]
-        );
-        assert_eq!(
-            launch_argv(&["dsh".to_string()], "hi").unwrap_err(),
-            DriveError::PromptPlaceholder(0)
-        );
-        assert_eq!(
-            launch_argv(&["{prompt}".to_string(), "{prompt}".to_string()], "hi").unwrap_err(),
-            DriveError::PromptPlaceholder(2)
-        );
-    }
-
-    #[test]
-    fn the_default_prompt_carries_the_decision_and_a_caller_prompt_wins() {
-        let default = compose_prompt(None, "GO item x - ready");
-        assert!(default.contains("GO item x - ready"), "{default}");
-        assert_eq!(
-            compose_prompt(Some("my prompt"), "GO item x"),
-            "my prompt".to_string()
-        );
-    }
 }

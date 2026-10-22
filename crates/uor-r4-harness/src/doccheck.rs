@@ -580,7 +580,7 @@ const GROUPS: [(&str, &[&str]); 12] = [
     ),
 ];
 
-/// The flags this binary accepts, wherever they appear — **85 of them, taken from Python's parser
+/// The flags this binary accepts, wherever they appear — **87 of them, taken from Python's parser
 /// and `main.rs`'s `SUBCOMMAND_FLAGS` / `SUBCOMMAND_VALUE_FLAGS` rather than curated by hand.**
 ///
 /// **My first list was written from memory and was missing `--apply`, `--refresh`, `--dry-run` and
@@ -621,6 +621,7 @@ const FLAGS: &[&str] = &[
     "--dry-run",
     "--event",
     "--evidence",
+    "--exempt-lease",
     "--every",
     "--file",
     "--files",
@@ -676,6 +677,7 @@ const FLAGS: &[&str] = &[
     "--pr",
     "--print",
     "--prompt",
+    "--prompt-file",
     "--query",
     "--quick",
     "--quiet",
