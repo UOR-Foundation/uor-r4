@@ -12,6 +12,14 @@ const BIN: &str = env!("CARGO_BIN_EXE_uor-harness");
 const HEAD_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
+/// A `uor-review v1` record from `lab` on PR 30 at HEAD_A, with the field set `loopreview::render`
+/// writes.
+fn record(lab: &str, verdict: &str) -> String {
+    format!(
+        "[{lab}] uor-review v1\npr: 30\nhead: {HEAD_A}\nlab: {lab}\nmodel: m\nlaunch: l\nverdict: {verdict}\norder: docs/loop/tasks/it-claimed/claude-7/ORDER.md\ndone-when: host: cargo test passed\n"
+    )
+}
+
 fn clean(cmd: &mut Command) -> &mut Command {
     for (k, _) in std::env::vars_os() {
         if k.to_string_lossy().starts_with("GIT_") {
@@ -69,6 +77,8 @@ impl Repo {
             "docs/loop/tasks/it-done/codex-3/receipts.jsonl",
             "{\"gate\":\"G1\",\"verdict\":\"pass\",\"seconds\":4,\"commit\":\"abc\",\"ts\":\"2026-10-20T00:00:00Z\"}\n",
         );
+        // `loopreview::main_context` reads the loop page; no build-plan table, so no setup rows.
+        r.write("docs/loop/README.md", "# Loop\n");
         r.write(
             "AGENTS.md",
             "# AGENTS\n\nThe project builds a model.\nIt runs fast.\n\nIt is pre-alpha: nothing is done.\n",
@@ -119,7 +129,7 @@ impl Repo {
                 {"number": 30, "title": "[claude] claimed work", "headRefOid": HEAD_A, "isDraft": false},
             ],
             "files": {"30": ["docs/loop/tasks/it-claimed/claude-6/ORDER.md", pa, "x.rs"], "20": [pb]},
-            "comments": {"30": [{"author": {"login": "k"}, "body": format!("[codex] uor-review v1\nhead: {HEAD_A}\nverdict: CHANGES\n")}]},
+            "comments": {"30": [{"author": {"login": "k"}, "body": record("codex", "CHANGES")}]},
             "contents": {
                 format!("30:{pa}"): order("it-claimed", "the feed writes five files", "loopboard must change"),
                 format!("20:{pb}"): order("elsewhere", "draft done", "draft stop"),
@@ -483,4 +493,23 @@ fn a_lab_pr_without_an_order_still_gets_a_row() {
     assert_eq!(row[1], "[codex] #20 draft work");
     assert_eq!(row[2], "(no ORDER)");
     assert_eq!(row[3], "draft");
+}
+
+#[test]
+fn a_self_review_the_gate_would_not_count_is_not_shown_as_approve() {
+    let r = Repo::new();
+    // PR 30 is claude's and changes x.rs, so it is not doc-only: D46 counts only another vendor.
+    let mut fake = r.fake();
+    fake["comments"]["30"] =
+        json!([{"author": {"login": "k"}, "body": record("claude", "APPROVE")}]);
+    let rows = next_rows(&r, fake);
+    let row = rows.iter().find(|r| r[1].contains("#30")).unwrap();
+    assert_eq!(row[3], "review not counted (claude)", "{row:?}");
+
+    let mut fake = r.fake();
+    fake["comments"]["30"] =
+        json!([{"author": {"login": "k"}, "body": record("codex", "APPROVE")}]);
+    let rows = next_rows(&r, fake);
+    let row = rows.iter().find(|r| r[1].contains("#30")).unwrap();
+    assert_eq!(row[3], "APPROVE at aaaaaaa", "{row:?}");
 }

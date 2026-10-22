@@ -251,6 +251,36 @@ fn review_state(pr: &OpenPr, comments: &[Comment]) -> String {
     "needs review".into()
 }
 
+/// The review cell the merge gate would agree with: `APPROVE at <sha7>` / `CHANGES at <sha7>`
+/// from the last record [`crate::loopreview::counted`] counts at the head; `review not counted
+/// (<lab>)` when the last record at the head is one the gate refuses (D46, D59); else
+/// `needs review`; `draft` for a draft.
+fn gated_review_state(pr: &OpenPr, input: &crate::loopreview::GateInput) -> String {
+    if pr.is_draft {
+        return "draft".into();
+    }
+    let sha7 = pr.head_ref_oid.get(..7).unwrap_or(&pr.head_ref_oid);
+    if let Some((_, v)) = crate::loopreview::counted(input).last() {
+        return format!("{} at {sha7}", v.as_str());
+    }
+    let at_head = input
+        .comments
+        .iter()
+        .rev()
+        .find_map(|b| match crate::loopreview::parse(b) {
+            crate::loopreview::Parsed::Record(r)
+                if r.pr == pr.number && r.head == pr.head_ref_oid =>
+            {
+                Some(r.lab)
+            }
+            _ => None,
+        });
+    match at_head {
+        Some(lab) => format!("review not counted ({lab})"),
+        None => "needs review".into(),
+    }
+}
+
 /// The Status cell of a PR whose ORDER could not be read: the first line of the reason, shortened.
 fn unreadable(reason: &str) -> String {
     let line = reason.lines().next().unwrap_or("").trim();
@@ -262,6 +292,7 @@ fn lab_prs(
     labs: &BTreeMap<String, crate::labs::Lab>,
     prs: &[OpenPr],
     gh: &dyn BenchGh,
+    main: &crate::loopreview::MainContext,
 ) -> Result<Vec<LabPr>, String> {
     let re = regex::Regex::new(r"^docs/loop/tasks/[^/]+/([a-z0-9]+)-([0-9]+)/ORDER\.md$")
         .expect("a valid pattern");
@@ -271,7 +302,7 @@ fn lab_prs(
             continue;
         };
         // One PR's read error degrades that PR to a row; it never fails the refresh.
-        let read = |view: &PrView| -> Result<Option<(u64, String)>, String> {
+        let read = |view: &PrView| -> Result<Option<(u64, String, String)>, String> {
             let best = view
                 .files
                 .iter()
@@ -284,7 +315,7 @@ fn lab_prs(
                 return Ok(None);
             };
             let order = gh.contents(pr.number, &pr.head_ref_oid, &path)?;
-            Ok(Some((n, order)))
+            Ok(Some((n, path, order)))
         };
         let (order_id, order, review, note) = match gh.view(pr.number) {
             Err(e) => (
@@ -296,7 +327,30 @@ fn lab_prs(
             Ok(view) => {
                 let review = review_state(pr, &view.comments);
                 match read(&view) {
-                    Ok(Some((n, order))) => (format!("{lab}-{n}"), Some(order), review, None),
+                    Ok(Some((n, path, order))) => {
+                        // A readable ORDER: show only what the merge gate counts.
+                        let comments: Vec<String> =
+                            view.comments.iter().map(|c| c.body.clone()).collect();
+                        let item = crate::loopclaim::order_item(&order).unwrap_or_default();
+                        let setup_row = crate::loopreview::setup_row(&order);
+                        let input = crate::loopreview::GateInput {
+                            pr: pr.number,
+                            head: &pr.head_ref_oid,
+                            order_path: &path,
+                            order_lab: &lab,
+                            order_item: &item,
+                            setup_row: setup_row.as_deref(),
+                            rows: &main.rows,
+                            vendors: &main.vendors,
+                            d59_in_force: main.d59_in_force,
+                            doc_only: crate::loopreview::doc_only(
+                                view.files.iter().map(String::as_str),
+                            ),
+                            comments: &comments,
+                        };
+                        let review = gated_review_state(pr, &input);
+                        (format!("{lab}-{n}"), Some(order), review, None)
+                    }
                     Ok(None) => (format!("#{}", pr.number), None, review, None),
                     Err(e) => (format!("#{}", pr.number), None, review, Some(e)),
                 }
@@ -314,6 +368,7 @@ fn lab_prs(
     let rank = |r: &str| match r {
         _ if r.starts_with("CHANGES") => 0,
         "needs review" => 1,
+        _ if r.starts_with("review not counted") => 1,
         _ if r.starts_with("APPROVE") => 2,
         _ => 3,
     };
@@ -506,7 +561,9 @@ fn refresh(
             .ok_or("cannot read docs/harness/labs.json at origin/main")?,
     )?;
     let prs = board_gh.open_prs()?;
-    let lab_prs = lab_prs(&labs, &prs, gh)?;
+    // Build-plan rows, vendors and D59 from origin/main, read once for every PR.
+    let main = crate::loopreview::main_context(root)?;
+    let lab_prs = lab_prs(&labs, &prs, gh, &main)?;
     let items = items(root);
 
     // PLAN.md
