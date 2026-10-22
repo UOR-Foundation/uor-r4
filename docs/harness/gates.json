@@ -198,7 +198,7 @@
       "break": {
         "file": "crates/uor-r4-harness/src/loopnext.rs",
         "replace": {
-          "from": "        if !cells.iter().any(|c| c.eq_ignore_ascii_case(\"open\")) {",
+          "from": "        if text.is_empty() {",
           "to": "        if true {"
         },
         "expect": "the open owner direction must be offered before repairs"

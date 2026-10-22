@@ -7,7 +7,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Setup row: 1. Base: `a472d2781`. Thi
 - **The owner-direction source was the last one the plan defines as readable now.** The previous harness unit built `lane` and `premise-probes`; `gpu-collections` needs a collection record the watcher does not write and the watcher file is outside this item, so only `owner-direction` was left. It is built here with the same documented PLAN table contract.
 - **One reader, two sources.** The premise reader is refactored into `plan_open_row(root, heading)` (first row of the named PLAN section whose cells include `open`), and both `premise-probes` and `owner-direction` call it; the source-specific parsing is small (backticked command for a probe, first cell for a direction). This keeps the accepted table shape in one place.
 - **The existing not-built test pinned the old string**, so it was updated for the changed specified behaviour (the source now exists; with no PLAN.md it names the missing file).
-- **No PLAN.md exists yet on the main line.** The reader therefore offers nothing today; it reports `PLAN.md is not on origin/main yet (the PM writes it)` and the loop continues to repairs/reviews/`any`. The contract is documented on the loop page so the PM's PLAN can follow it.
+- **The first version of the reader was positional and the review caught it** (`deepseek-27`): it took the first cell of any row whose cells contained `open` and the first backticked cell anywhere, which read a note cell as a status and could hide a malformed probe. The repair parses the table once, finds the Status/Probe/Direction columns by header name, skips malformed open rows and names them, and pins "before repairs" with a test that carries a failing own PR.
 - **`gpu-collections` remains a named gap** (as in #2969): defining the collection record means changing `loopdrive.rs`, outside this item's scope.
 
 ## What changed
@@ -26,15 +26,15 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Setup row: 1. Base: `a472d2781`. Thi
 ## Measurements
 
 - **`cargo test -p uor-r4-harness --test loop_next_sources`:** 4 passed (owner-direction offer, lane ordering, PLAN premise selection, missing-input lines).
-- **`cargo test -p uor-r4-harness --test loop_next`:** 27 passed (updated not-built test included).
-- **Gates:** eight GREEN including the new `loop-next-owner-direction`; `--break all` CAUGHT with the open-row fault red at "the open owner direction must be offered before repairs".
+- **`cargo test -p uor-r4-harness --test loop_next`:** 28 passed at the repaired head (the main merge added claude-31's WAIT tests; the updated not-built test included).
+- **Gates:** nine GREEN including the new `loop-next-owner-direction` and claude-31's `loop-next-wait`; `--break all` nine CAUGHT with the open-row fault red at "the open owner direction must be offered before repairs".
 - **No GPU work, no owner path, no spend:** the reads are `git show origin/main:PLAN.md` and the registry; nothing writes.
 
 ## Checks run at the head
 
 - `cargo fmt -p uor-r4-harness --check`: GREEN.
-- `UOR_LAB=deepseek uor-harness loop gates --full`: eight GREEN.
-- `UOR_LAB=deepseek uor-harness loop gates --break all`: eight CAUGHT.
+- `UOR_LAB=deepseek uor-harness loop gates --full`: nine GREEN.
+- `UOR_LAB=deepseek uor-harness loop gates --break all`: nine CAUGHT.
 - `cargo test -p uor-r4-harness --test loop_next --test loop_next_sources`: all green.
 - `uor-harness loop report --check` and `loop pr-check --local`: PASS at the receipt head.
 
