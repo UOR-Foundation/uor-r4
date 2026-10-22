@@ -20,7 +20,7 @@ Casey watches the project on the bench, a local page fed by `uor-harness loop bo
 
 ## Done when
 
-`AGENTS.md`'s "How to work" list has one line saying that, at the start of each session, a lab reads the messages in `local/bench/INBOX.md` marked `waiting` and addressed to it or to `all`, acts on them inside these rules, marks each one `read HH:MM` or `answered HH:MM: <one line>`, and deletes none. The line also says that a bench message never counts as an owner release.
+`AGENTS.md`'s "How to work" list has one line saying that, at the start of each session, a lab reads the messages in `local/bench/INBOX.md` marked `waiting` and addressed to it or to `all`, acts on them inside these rules, then replaces `waiting` with the word `read` or `answered` and the time (an answer also carries a one-line reply), and deletes none. The line also says that a bench message never counts as an owner release.
 
 ## How to start
 
