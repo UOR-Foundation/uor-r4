@@ -1,10 +1,10 @@
 //! Tests for the capability API (`IntegerCapabilityApi`).
 //!
-//! The synthetic byte-vocabulary bundle covers the API contract on every run.
-//! The width-576 tests need the local `dialogue-child-bundle-1` fixture; they
-//! are ignored by default and fail when run without it. The width-576
-//! continuation test is also a known failure: the session schema omits the
-//! 576-wide value stores, so a restored width-576 session diverges.
+//! The synthetic byte-vocabulary bundle covers the API contract and width-256
+//! `uor-r4.integer-session/1` save/restore continuation on every run. Exact
+//! stack-session reload is covered by the `IntegerStackSession` reload gate in
+//! `crates/uor-r4-integer/src/stack/tests.rs`. The width-576 lifecycle test
+//! needs the local `dialogue-child-bundle-1` fixture and is ignored by default.
 
 use std::path::Path;
 use uor_r4_integer::capability_api::{
@@ -88,6 +88,22 @@ fn metadata_declares_the_contract_without_certifying_it() -> Result<()> {
     for claim in ["Certified", "Qualified", "ms/tok", "MiB"] {
         assert!(!matrix.contains(claim), "truth matrix states '{claim}'");
     }
+    assert!(meta
+        .truth_matrix
+        .durable_memory
+        .contains("uor-r4.integer-session/1"));
+    assert!(meta
+        .truth_matrix
+        .durable_memory
+        .contains("uor-r4.stack-session/1"));
+    assert!(meta
+        .truth_matrix
+        .durable_memory
+        .contains("Durable-memory capability is not established."));
+    assert!(!meta
+        .truth_matrix
+        .durable_memory
+        .contains("omits the width-576 value stores"));
     Ok(())
 }
 
@@ -166,11 +182,4 @@ fn capability_api_lifecycle_on_dialogue576_bundle() -> Result<()> {
     assert_eq!(saved.session_state.state.len(), 576);
     restore_and_compare_saved_state(&api, session_id)?;
     Ok(())
-}
-
-#[test]
-#[ignore = "known failure, tracked in #1476: uor-r4.integer-session/1 omits the width-576 value stores (persistent_values_576, dialogue_values_576, l2_pages_576), so a restored width-576 session diverges at its first step; also requires the local dialogue-child-bundle-1 fixture"]
-fn restored_dialogue576_session_continues_identically() -> Result<()> {
-    let (api, session_id) = dialogue576_session()?;
-    assert_restore_continues_identically(&api, session_id)
 }

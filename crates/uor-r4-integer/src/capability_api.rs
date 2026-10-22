@@ -52,7 +52,7 @@ impl Default for CapabilityTruthMatrix {
             causal_attention: "Implemented: causal integer-softmax reads over bounded addressed memory (persistent slots, dialogue ring, L2 pages). A structural description, not a measured capability.".into(),
             multi_step_reasoning: "UNQUALIFIED: general reasoning is not established.".into(),
             executable_coding: "UNQUALIFIED: general coding is not established.".into(),
-            durable_memory: "Implemented: bounded session memory with save and restore through uor-r4.integer-session/1. That schema omits the width-576 value stores, so a restored width-576 session does not continue identically. Durable-memory capability is not established.".into(),
+            durable_memory: "Implemented: width-256 session memory with save and restore through uor-r4.integer-session/1; exact stack-session reload is covered by uor-r4.stack-session/1 (IntegerStackSession). Durable-memory capability is not established.".into(),
             serving_guarantees: format!("Declared contract {DECLARED_NUMERICAL_CONTRACT}: no floating point and no multiply or divide instruction in served kernels. {CONTRACT_QUALIFICATION_NOTE}"),
             m1_performance_profile: "UNQUALIFIED: no sealed M1 cost report is bound to this API.".into(),
             general_ai_disavowal: "Pre-alpha: general prose, general reasoning and frontier capability remain unproven.".into(),
@@ -321,10 +321,9 @@ impl IntegerCapabilityApi {
         Ok(temp_session.to_serialized(Some(self.bundle.identity())))
     }
 
-    /// Restore a saved session as a new session, keeping its saved sampler
-    /// state, sampling policy and read mode. `uor-r4.integer-session/1` does
-    /// not carry the width-576 value stores, so a restored width-576 session
-    /// reads empty values and does not continue identically.
+    /// Restore a saved width-256 session as a new session, keeping its saved
+    /// sampler state, sampling policy and read mode. Exact stack-session reload
+    /// uses `IntegerStackSession` (`uor-r4.stack-session/1`).
     pub fn restore_session(&self, serialized: SerializedChatSession) -> Result<u32> {
         let restored =
             ChatSession::from_serialized(&self.bundle, serialized, self.bundle.identity())?;
