@@ -137,16 +137,16 @@ fn the_top_of_the_lab_lane_is_offered_before_any() {
     let o = r.next();
     assert_eq!(o.status.code(), Some(0), "{o:?}");
     assert!(
-        stdout(&o).contains("lane: top of deepseek"),
-        "{}",
-        stdout(&o)
-    );
-    assert!(
         decision(&o).starts_with("GO item lane-b — "),
         "the top of the lab lane must be offered before any: {}",
         decision(&o)
     );
     assert!(decision(&o).contains("builder lane"), "{}", decision(&o));
+    assert!(
+        stdout(&o).contains("lane: top of deepseek"),
+        "{}",
+        stdout(&o)
+    );
 }
 
 #[test]
