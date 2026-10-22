@@ -16,7 +16,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `20f618132`. Item PR, docs-onl
 | `docs/labs/m1-bvg-k-block-apply-c2/README.md` | docs | new 32 lines | the in-scope record: C2 PASS receipt + controls, the Stage T DRAFT pointer, the three registration blockers, the staged notebook row and its backfill note |
 | `docs/loop/tasks/m1-bvg-k-block-apply-c2/deepseek-32/{ORDER,REPORT}.md` | docs | small | this order and report |
 
-**Size:** **104 insertions / 2 deletions** at the final head (`git diff --stat origin/main...HEAD`): the lab record is 32 new lines, the task folder 25 + 45, and the generated roadmap render is +4/−2.
+**Size:** **104 insertions / 2 deletions** at the final head (`git diff --stat origin/main...HEAD`): the lab record is 32 new lines, the task folder 25 + 45, and the generated roadmap render is +2/−2 (four changed lines).
 
 ## Measurements
 
@@ -41,5 +41,5 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `20f618132`. Item PR, docs-onl
 
 ## Plain summary
 
-- **The C2 half of the item is done and recorded** (receipt + controls). The Stage T half cannot honestly complete: its predicate (W2 = `H_law`), its base lineage (none reaches admission) and its registration numbers are all unresolved.
+- **The C2 half of the item is done and recorded** (receipt + controls). The Stage T half cannot honestly complete: its predicate (W2 = `H_law`), its base lineage (none passes admission) and its registration numbers are all unresolved.
 - **The in-scope record says exactly that**, points at the existing Stage T DRAFT instead of forking it, stages the notebook row for its backfill, and asks the PM/owner the two questions that unblock registration. No compute, no release, item stays `ready`.
