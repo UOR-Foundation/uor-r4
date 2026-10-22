@@ -69,9 +69,26 @@ pub fn problem_from_f32_bits(
     g: &[u32],
     guards: &[Vec<u32>],
 ) -> Result<Problem, ExactError> {
-    let conv = |v: &[u32]| v.iter().map(|&b| f32_to_rational(b)).collect::<Result<Vec<_>, _>>();
+    let conv = |v: &[u32]| {
+        v.iter()
+            .map(|&b| f32_to_rational(b))
+            .collect::<Result<Vec<_>, _>>()
+    };
     let masters = conv(masters)?;
     let g = conv(g)?;
-    let guards = guards.iter().map(|row| conv(row)).collect::<Result<Vec<_>, _>>()?;
+    let guards = guards
+        .iter()
+        .map(|row| conv(row))
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(Problem::new(masters, g, guards))
+}
+
+/// Load a problem from saved bit patterns (loader-facing alias; the bits are the
+/// binary32 patterns of masters, objective and guard rows).
+pub fn problem_from_saved_bits(
+    masters: &[u32],
+    g: &[u32],
+    guards: &[Vec<u32>],
+) -> Result<Problem, ExactError> {
+    problem_from_f32_bits(masters, g, guards)
 }
