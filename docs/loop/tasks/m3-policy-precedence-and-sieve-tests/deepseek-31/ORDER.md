@@ -1,6 +1,6 @@
 # ORDER: m3-policy-precedence-and-sieve-tests, deepseek-31 (owner-directed close-out)
 
-Lab: deepseek. Item: [m3-policy-precedence-and-sieve-tests](../../../../roadmap/items/m3-policy-precedence-and-sieve-tests.md) (#2857). Base: `b00d9edad`. Item PR (docs-only close-out).
+Lab: deepseek. Item: [m3-policy-precedence-and-sieve-tests](../../../../roadmap/items/m3-policy-precedence-and-sieve-tests.md) (#2857). Base: `8d488457e` (merged forward; the close-out started from `b00d9edad`). Item PR (docs-only close-out).
 
 ## Owner direction
 
@@ -22,7 +22,9 @@ Class **instrument** (docs-only close-out). At `b00d9edad`: the item's code was 
 
 1. **Module surface:** verified already gated — `pub mod relation_compiler;` and `pub mod stack_grounded_session;` carry `#[cfg(test)]` with the exclusion comment in `crates/uor-r4-training/src/lib.rs`; the non-test graph is unchanged.
 2. **Store-miss / log-sieve coupling:** keep the current rule documented descriptively (Absent says `Memory: none.` and does not consult `log_recall`; Unresolved does), not declaring the mechanism settled. No behaviour change.
-3. **Notebook row:** record it in the in-scope lab README as Option A allows (already present), and note that moving it to the real notebook page and adding the item's `notebook:` field is a follow-up blocked today by Kimi's open PR 8 (#2982) holding `docs/roadmap/items/*.md` scope.
+3. **Notebook row:** record it in the in-scope lab README as Option A allows (already present). The real-page row and the item `notebook:` field are a **PM/infra backfill**: the field needs an ORDER whose item scope covers `docs/roadmap/items/*.md` (only the umbrella/PR-8 scopes do, and #2982 holds them today), and a `done` item cannot be claimed normally.
+
+A fresh-context adversarial subagent attacked all three points; its corrections (helper-level honesty, intended-code-with-measured-limitation coupling framing, backfill naming) are applied in the REPORT and are part of this close-out.
 
 ## Done when
 
