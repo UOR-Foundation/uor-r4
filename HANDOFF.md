@@ -1,4 +1,4 @@
-<!-- rendered by uor-harness loop render from 707dcfa963925f43030c332b997f0f7201fe4306; do not edit -->
+<!-- rendered by uor-harness loop render from b448eb00f0f3a093d12a4eaf6a4ff37b7119e3b6; do not edit -->
 # HANDOFF
 
 Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each open-item row gives the first sentence of the item's `Done when` and `Cancel if` sections; blocked items are listed once, in the blocked table, with their owner; `not recorded` means the item has no such section or key yet.
@@ -7,7 +7,7 @@ Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each o
 
 Items not `held`, `decision` or `done`. Held and decision items are listed once, in the blocked table below.
 
-### ready (36)
+### ready (34)
 
 | Item | Title | Done when | Cancel if | Size | Stands |
 |---|---|---|---|---|---|
@@ -17,7 +17,6 @@ Items not `held`, `decision` or `done`. Held and decision items are listed once,
 | infra-loop-harness | Build the five-lab loop harness (the loop subcommands of uor-harness) | Every PR in the build plan on [the loop page](docs/loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. | not recorded | not recorded | ready |
 | infra-loop-pr08-migration | Loop PR 8: migrate the notes to STATE, HANDOFF and PLAN | STATE, HANDOFF and PLAN replace `STATUS.md`, `NOW.md` and the roadmap page, with the old files moved byte-identical to the archive with pointers (§4.7). | not recorded | not recorded | ready; after infra-loop-pr03-render |
 | legal-construction-exact-solve | Solve the saved legal-construction case in exact arithmetic | The saved 1,960-variable case is solved in exact arithmetic and the result is recorded as an optimal assignment with its objective, or as an infeasibility proof. | not recorded | not recorded | ready |
-| m1-a8-erosion-diagnosis | Diagnose A8 reach erosion from retained checkpoints | A diagnosis note from the retained checkpoints and move logs that states which causal claims it does and does not support; recorded as one notebook row. | not recorded | not recorded | ready |
 | m1-address-as-read | Build the address-as-read mechanism and an object-store consumer | A read that resolves an address to stored content from the object store, with finite tests, and a registered serving-time oracle test that measures the gain from supplying the true address. | not recorded | not recorded | ready |
 | m1-address-key-full-vector | Replace the 5-value address key with a full-vector metric | Stage 1 bar: "enough distinct vectors that the number of positions still winnable clears the run bar of 1,941, and a starting reach above the address-cell model's 1,351 of 3,847", measured before any training. | not recorded | not recorded | ready; after m1-w2-capacity-capture |
 | m1-bvg-k-block-apply-c2 | Draft the BVG-K Stage T pre-registration sheet (C2 has passed) | Already met: Stage C2 finite controls PASS (block apply exact) and are recorded, with the receipt above. | not recorded | not recorded | ready |
@@ -31,7 +30,6 @@ Items not `held`, `decision` or `done`. Held and decision items are listed once,
 | m2-pin-train-mask-sheet | Settle whether the pinned M2 TRAIN-mask sheet is live after D37, and re-pin it | A recorded answer from the PM or owner on whether the Amendment 6 sheet is live under D37 or superseded, and a one-page sheet that is ready for an owner hold-release decision: either the pins re-verified against current main and restated in a refreshed sheet, or the pins carried into the new discrete-law sheet, with a non-author FIT. | not recorded | not recorded | ready |
 | m3-memory-turn-discriminator-gate | Add a memory-turn discriminator or margin gate | The last clause of the M3 bar in `docs/integration/project-track.md:116-120`: non-memory conversational prose does not silently overwrite stored facts. | not recorded | not recorded | ready; after m3-nonrelation-prose-panel |
 | m3-nonrelation-prose-panel | Build a pre-registered non-relation prose panel | A pre-registered non-relation prose panel with grading, plus the baseline false-assert and false-overwrite rates on world=v2. | not recorded | not recorded | ready |
-| m3-policy-precedence-and-sieve-tests | Pin OpPolicy precedence and store-miss sieve coupling with tests | Unit tests for both precedences and a documented, tested store-miss and sieve behaviour. | not recorded | not recorded | ready |
 | m3-qualify-memory | Qualify durable memory on the selected native model | On the selected artifact: | not recorded | not recorded | ready; after m2-train-grounded-replies, m3-memory-turn-discriminator-gate, m3-policy-precedence-and-sieve-tests |
 | m4-export-uorlut01-cli | Serve the chosen model as UORLUT01 through the uor-chat CLI | M4 bar: 'One model exported as an integer file under the serving contract (D11), usable from a command line, with held-out quality at or below 0.90 bits per byte'. | not recorded | not recorded | ready; after m1-d11-exporter-discrete, m4-lawful-likelihood-bpb, m1-close-saved-model, m3-qualify-memory |
 | m4-flock-coupling-prereg | Finish the flock-coupling pre-registration | A registered C1 flock-coupling sheet with a non-author FIT, or a recorded decision that it is superseded. | not recorded | not recorded | ready |
