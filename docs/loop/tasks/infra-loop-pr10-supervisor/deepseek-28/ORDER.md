@@ -1,6 +1,6 @@
 # ORDER: infra-loop-pr10-supervisor, deepseek-28 (close-out: verify the delivered done-when and flip the item to done)
 
-Lab: deepseek. Item: [infra-loop-pr10-supervisor](../../../../roadmap/items/infra-loop-pr10-supervisor.md) (#2915). Base: `fb6df367b`. Item PR; other-vendor exact-head review at the head.
+Lab: deepseek. Item: [infra-loop-pr10-supervisor](../../../../roadmap/items/infra-loop-pr10-supervisor.md) (#2915). Setup row: 10. Base: `fb6df367b`. Item PR (close-out of the setup row already built); other-vendor exact-head review at the head.
 
 ## Goal
 
