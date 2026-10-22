@@ -4,25 +4,22 @@ Lab: deepseek. Item: [infra-loop-pr10-supervisor](../../../../roadmap/items/infr
 
 ## Goal
 
-Answer the counted other-vendor CHANGES record at `13430063e` (Claude, D59, fresh-context process and stall lenses). Required, in order:
+Answer the counted other-vendor CHANGES at `13430063e` (Claude, D59). Required:
 
-1. **HIGH — the check-in must run while the session is live.** Today `child.wait()` blocks and the 10 ms observation pair makes every long session look stalled. Fix: take the before-observation at launch, poll `try_wait` with an injectable clock, at 7200 s classify live progress and terminate **only** a stalled session (never a healthy run, never one covered by a lease); keep progressing sessions with a note; count consecutive stalls so spiraled is reachable. Test with a fake client that commits during a fake 7200 s (Continue) and a silent one (closed and carded).
-2. **HIGH — the WIP commit must be scoped and legal.** Refuse unless the branch is `<lab>/*` and not `main`; stage only the active ORDER's task folder; add the `Order:` trailer; strip `GIT_*` from the git child.
-3. **MEDIUM — signalling safety.** Refuse a pgid of 1 or less, or the drive process's own group; verify identity (recorded `ps -o lstart=` plus a nonce in the child's environment) before any signal.
-4. **MEDIUM — watcher liveness** must be pid plus identity, not `kill -0 -pgid` on a record that outlives the session.
-5. **MEDIUM — a spawned child with no record** is terminated on its own pid if the record write fails.
-6. **MEDIUM — the flaky test** uses a sleeping child and no liveness race.
-7. **MEDIUM — the gate's planted fault must exercise the card path**, not only a pure match arm: a CLI-level test with a fake clock, a fake client and a fake card sink pins "closed and carded".
+1. **HIGH — check-in while the session is live.** `child.wait()` blocked, so every long session looked stalled and none was stopped. Fix: before-observation at launch, `try_wait` polling with an injected clock, at 7200 s classify live progress and terminate only a Stalled session (never a healthy or leased one); keep progressing sessions with a note; count consecutive stalls so spiraled is reachable. Fake-clock tests: committing client continues, silent one is closed and carded.
+2. **HIGH — scoped, legal WIP commit.** Refuse `main` or a non-`<lab>/*` branch; stage only the active ORDER's task folder (refuse otherwise); add the `Order:` trailer; strip `GIT_*`.
+3. **MEDIUM — identity-checked signalling.** Refuse pgid 1/0, the own group, and a pgid that is not the recorded pid; verify pid+lstart before any signal; watcher liveness by pid+identity.
+4. **MEDIUM — a spawn with no record** is killed on its own pid; the flaky test uses a sleeping child; the gate's planted fault is exercised at CLI level with a fake card sink.
 
-LOW, all in scope: a per-lab O_EXCL `drive.lock`; `{prompt}` refused as argv[0]; `--interval` floor; `--prompt-file` parsed or removed; a fresh Go per session's prompt; fix the `:36` comment; card dedupe/`<time>`; trailing newline in `gates.json`; unix-only in the README; receipts at the head; correct REPORT measurements.
+LOW, all in scope: per-lab O_EXCL lock; `{prompt}` refused as argv[0]; `--interval` floor; `--prompt-file`; fresh Go per session; comment fix; card dedupe/`close-*`; `gates.json` newline; unix-only README; receipts at head; corrected REPORT measurements.
 
 ## History
 
-- deepseek-18 `c04f5bbf8` built the supervisor; the review at `13430063e` accepted the launch, stop, group-signal, lease and card mechanics and required the live check-in, the scoped WIP commit, identity-checked signalling, the watcher liveness fix, child cleanup, the flaky test fix, and a CLI-level planted-fault test.
+- deepseek-18 `c04f5bbf8` built the supervisor; the review at `13430063e` accepted the launch, stop, group-signal, lease and card mechanics and required the live check-in, scoped WIP, identity guards, watcher liveness, child cleanup and the CLI-level planted-fault test.
 
 ## Cancel probe (run first)
 
-Class **instrument**. The CHANGES record is counted at the current head; reading `loopdrive.rs:744-756` reproduces that `child.wait()` precedes both observations, and the `loop_drive` test failure at `tests/loop_drive.rs:110` reproduces (the `exit 0` child is gone before `kill -0`). The task stands.
+Class **instrument**. The CHANGES record is counted at the current head; `loopdrive.rs` had `child.wait()` before both observations (`:744-756`) and `tests/loop_drive.rs:110` raced a fast child — both reproduced before the repair. The task stands.
 
 ## Files in scope
 
@@ -30,13 +27,12 @@ Class **instrument**. The CHANGES record is counted at the current head; reading
 
 ## Done when
 
-- The check-in runs while the child is live on an injectable clock: progressing past 7200 s continues with a note; stalled is terminated and carded; leased sessions are exempt; `stalled_repeats` is counted so a second stall is spiraled.
-- WIP commit/push refuses `main` and non-`<lab>/*` branches, stages only the active ORDER's task folder with an `Order:` trailer, and strips `GIT_*`.
-- Signalling refuses pgid 1/own group and mismatched identity; the watcher checks pid+identity; a spawn whose record write fails is terminated by its own pid.
-- The fake-clock CLI test proves a committing fake continues and a silent fake is "closed and carded"; the flaky record test no longer races; the lows are fixed.
-- `AGENTS.md` stays 71 lines; six gates GREEN, `--break all` CAUGHT, `report --check` and `pr-check --local` PASS; receipts at the final head.
+- The live check-in continues real progress with a note, terminates and cards a stalled session, exempts leased ones, and spiraled is reachable.
+- WIP close is branch- and scope-checked with the `Order:` trailer and `GIT_*` stripped; signals are identity-checked and refuse pgid 1/own group; catchers and watchers use pid+lstart; a spawn without a record is killed.
+- The CLI-level fake-clock tests pin closed-and-carded and continues-with-a-note; the flaky record test no longer races; the lows are fixed.
+- `AGENTS.md` 71 lines; six gates GREEN, `--break all` CAUGHT, `report --check` and `pr-check --local` PASS; receipts at the final head.
 
 ## Stop and ask if
 
-- The scoped WIP commit cannot find the active ORDER (then refuse the close action and card instead of guessing a path).
-- A real Claude Code after-stop run is needed to prove the exclusion (the structural wait-only-on-tracked-child fix stays).
+- The active ORDER cannot be found for the WIP commit (refuse the close action and card instead).
+- A real Claude Code after-stop run is needed to prove the exclusion (the structural fix remains).
