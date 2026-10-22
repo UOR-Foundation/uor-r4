@@ -24,6 +24,7 @@ Ran on `d7d9d8d61`:
 - `docs/model/architecture.md`
 - `docs/labs/m6-causal-ablation-instrument/**`
 - `docs/roadmap/items/m6-causal-ablation-instrument.md`
+- `docs/roadmap/README.md`
 - `docs/loop/tasks/m6-causal-ablation-instrument/antigravity-15/**`
 
 ## Expected diff size
