@@ -3267,11 +3267,17 @@ pub fn plan_client_install(
                 description: "Claude Code user-level loop guard hooks",
             });
             let claude_md = home.join(".claude").join("CLAUDE.md");
-            let pointer = "# UOR-R4 pointer\n\nWhen working inside `~/uor-r4` or its worktrees, read `AGENTS.md` and `CHARTER.md` §5.10 first. Where any note disagrees with `CHARTER.md`, the charter wins.\n";
+            let existing_claude_md = if claude_md.exists() {
+                fs::read_to_string(&claude_md)
+                    .map_err(|e| format!("cannot read existing {}: {e}", claude_md.display()))?
+            } else {
+                String::new()
+            };
+            let pointer = merge_claude_md(&existing_claude_md);
             writes.push(PlannedWrite {
                 client: c.clone(),
                 path: claude_md,
-                content: pointer.to_string(),
+                content: pointer,
                 description: "Claude Code user-level pointer to AGENTS.md and CHARTER.md §5.10",
             });
         }
@@ -3624,6 +3630,33 @@ fn strip_kimi_hooks(toml_text: &str) -> Result<String, String> {
     Ok(out.join("\n"))
 }
 
+const CLAUDE_MD_START: &str = "<!-- uor-r4-loop-start -->";
+const CLAUDE_MD_END: &str = "<!-- uor-r4-loop-end -->";
+const CLAUDE_MD_BODY: &str = "# UOR-R4 pointer\n\nWhen working inside `~/uor-r4` or its worktrees, read `AGENTS.md` and `CHARTER.md` §5.10 first. Where any note disagrees with `CHARTER.md`, the charter wins.";
+
+/// Merge the UOR-R4 pointer into `~/.claude/CLAUDE.md` between marker lines so existing user
+/// instructions are preserved and re-runs replace only the marked block.
+fn merge_claude_md(existing: &str) -> String {
+    let marked_block = format!("{CLAUDE_MD_START}\n{CLAUDE_MD_BODY}\n{CLAUDE_MD_END}");
+    if let (Some(s), Some(e)) = (existing.find(CLAUDE_MD_START), existing.find(CLAUDE_MD_END)) {
+        if s < e {
+            let before = &existing[..s];
+            let after = &existing[e + CLAUDE_MD_END.len()..];
+            let mut out = format!("{before}{marked_block}{after}");
+            if !out.ends_with('\n') {
+                out.push('\n');
+            }
+            return out;
+        }
+    }
+    let trimmed = existing.trim_end();
+    if trimmed.is_empty() || trimmed == CLAUDE_MD_BODY {
+        format!("{marked_block}\n")
+    } else {
+        format!("{trimmed}\n\n{marked_block}\n")
+    }
+}
+
 /// Execute `loop install` for the selected clients.
 pub fn run_install(
     repo: &Path,
@@ -3688,7 +3721,18 @@ pub fn run_install(
         ));
     }
 
-    let backup_root = repo.join("local").join("loop").join("install-backups");
+    static BACKUP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = BACKUP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let epoch_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let run_stamp = format!("{epoch_ms}-{}-{seq}", std::process::id());
+    let backup_root = repo
+        .join("local")
+        .join("loop")
+        .join("install-backups")
+        .join(run_stamp);
     let mut backups = Vec::new();
     if !dry_run {
         for (c, sh) in &start_here_existing {
@@ -4583,19 +4627,20 @@ fn cli_install(root: &Path, lab: &str, args: &[String]) -> u8 {
 
     let apply = flags.contains_key("--apply");
     let dry_run = !apply;
+    let lab_env = std::env::var_os("UOR_LAB");
+    let lab_present = !lab.is_empty() || lab_env.is_some();
     let active_lab = if !lab.trim().is_empty() {
         lab.trim().to_string()
     } else {
-        std::env::var("UOR_LAB")
+        lab_env
+            .map(|v| v.to_string_lossy().into_owned())
             .unwrap_or_default()
-            .trim()
-            .to_string()
     };
     // Owner decision (#2028): `loop install` is plan-only by default; `--apply` writes files and is
-    // refused from any lab session (`UOR_LAB` set), regardless of `--home` or `HOME`.
-    if apply && !active_lab.is_empty() {
+    // refused whenever `UOR_LAB` is present in the environment, regardless of `--home` or `HOME`.
+    if apply && lab_present {
         eprintln!(
-            "uor-harness loop install: REFUSED: owner decision (#2028): loop install --apply may be run only by the owner from Terminal with UOR_LAB unset (found UOR_LAB={active_lab})"
+            "uor-harness loop install: REFUSED: owner decision (#2028): loop install --apply may be run only by the owner from Terminal with UOR_LAB unset (found UOR_LAB={active_lab:?})"
         );
         return 2;
     }

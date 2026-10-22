@@ -642,7 +642,7 @@ fn command_and_cross_lab_guards_refuse_violations() {
 #[test]
 fn install_skills_backups_and_replace_refusal() {
     let fixture = make_uor_fixture("antigravity");
-    let root = fixture.path();
+    let temp_repo = fixture.path();
     let home = tempfile::tempdir().expect("temp home");
     let kit = make_synthetic_kit();
 
@@ -660,17 +660,47 @@ fn install_skills_backups_and_replace_refusal() {
 
     // Without `--replace`, `run_install` refuses because `~/.kimi-code/config.toml` already exists
     // and differs.
-    let err = run_install(root, home.path(), &all_clients, kit.path(), false, false)
-        .expect_err("must refuse without --replace");
+    let err = run_install(
+        temp_repo,
+        home.path(),
+        &all_clients,
+        kit.path(),
+        false,
+        false,
+    )
+    .expect_err("must refuse without --replace");
     assert!(err.contains("REFUSED"), "{err}");
 
-    // With `--replace`, `run_install` backs up `config.toml` under `local/loop/install-backups/` and
+    // With `--replace`, `run_install` backs up `config.toml` under `<temp_repo>/local/loop/install-backups/` and
     // writes all client configs and the 6 allowed skills.
-    let summary = run_install(root, home.path(), &all_clients, kit.path(), true, false)
-        .expect("install with --replace succeeds");
+    let summary = run_install(
+        temp_repo,
+        home.path(),
+        &all_clients,
+        kit.path(),
+        true,
+        false,
+    )
+    .expect("install with --replace succeeds");
     assert_eq!(summary["start_here_excluded"], true);
     let backups = summary["backups"].as_array().expect("backups array");
     assert!(!backups.is_empty(), "expected backup of config.toml");
+    let temp_backup_prefix = temp_repo
+        .join("local/loop/install-backups")
+        .display()
+        .to_string();
+    let real_repo_prefix = repo_root().display().to_string();
+    for b in backups {
+        let bs = b.as_str().unwrap_or("");
+        assert!(
+            bs.starts_with(&temp_backup_prefix),
+            "backup {bs} must be inside temp_repo ({temp_backup_prefix})"
+        );
+        assert!(
+            !bs.starts_with(&real_repo_prefix),
+            "backup {bs} must never write into the real checkout ({real_repo_prefix})"
+        );
+    }
 
     for client in CLIENTS {
         let sdir = client_skills_dir(home.path(), client);
@@ -692,7 +722,8 @@ fn install_skills_backups_and_replace_refusal() {
         );
 
         // Run `run_onboard` against the freshly installed `home`.
-        let report = run_onboard(root, home.path(), client, client).expect("run_onboard succeeds");
+        let report =
+            run_onboard(temp_repo, home.path(), client, client).expect("run_onboard succeeds");
         for row in &report.checks {
             if row.check != "binary" {
                 assert_eq!(
@@ -1001,8 +1032,9 @@ fn repair_order_antigravity_3_regressions() {
     }
 
     // 5. MEDIUM 5: `run_install` preserves existing user hooks (`PostToolUse` and non-`uor-harness`
-    //    `PreToolUse` in `.claude/settings.json`; user `[[hooks]]` in `.kimi-code/config.toml`) and
-    //    refuses malformed JSON/TOML.
+    //    `PreToolUse` in `.claude/settings.json`; user hooks in `.codex/hooks.json` and `.dsh/hooks.json`;
+    //    user `[[hooks]]` in `.kimi-code/config.toml`) and refuses malformed JSON/TOML.
+    let temp_repo = fixture.path();
     let home = tempfile::tempdir().expect("temp home");
     let kit = make_synthetic_kit();
     fs::create_dir_all(home.path().join(".claude")).expect("mkdir .claude");
@@ -1018,6 +1050,29 @@ fn repair_order_antigravity_3_regressions() {
         .unwrap(),
     )
     .expect("seed settings.json");
+    fs::create_dir_all(home.path().join(".codex")).expect("mkdir .codex");
+    fs::write(
+        home.path().join(".codex/hooks.json"),
+        serde_json::to_string_pretty(&json!({
+            "schema": 1,
+            "hooks": {
+                "PreToolUse": [{ "command": "echo codex-user-hook" }]
+            }
+        }))
+        .unwrap(),
+    )
+    .expect("seed codex hooks.json");
+    fs::create_dir_all(home.path().join(".dsh")).expect("mkdir .dsh");
+    fs::write(
+        home.path().join(".dsh/hooks.json"),
+        serde_json::to_string_pretty(&json!({
+            "hooks": {
+                "Stop": [{ "command": "echo dsh-user-stop-hook" }]
+            }
+        }))
+        .unwrap(),
+    )
+    .expect("seed dsh hooks.json");
     fs::create_dir_all(home.path().join(".kimi-code")).expect("mkdir .kimi-code");
     fs::write(
         home.path().join(".kimi-code/config.toml"),
@@ -1026,9 +1081,14 @@ fn repair_order_antigravity_3_regressions() {
     .expect("seed kimi config.toml");
 
     run_install(
-        root,
+        temp_repo,
         home.path(),
-        &["claude".to_string(), "kimi".to_string()],
+        &[
+            "claude".to_string(),
+            "codex".to_string(),
+            "deepseek".to_string(),
+            "kimi".to_string(),
+        ],
         kit.path(),
         true,
         false,
@@ -1054,6 +1114,28 @@ fn repair_order_antigravity_3_regressions() {
         2,
         "PreToolUse must keep user hook and append uor-harness hook"
     );
+    let merged_codex: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(home.path().join(".codex/hooks.json")).unwrap())
+            .expect("valid merged codex hooks.json");
+    assert_eq!(
+        merged_codex["hooks"]["PreToolUse"]
+            .as_array()
+            .expect("codex PreToolUse array")
+            .len(),
+        2,
+        "Codex PreToolUse must keep user hook and append uor-harness hook"
+    );
+    let merged_dsh: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(home.path().join(".dsh/hooks.json")).unwrap())
+            .expect("valid merged dsh hooks.json");
+    assert_eq!(
+        merged_dsh["hooks"]["Stop"]
+            .as_array()
+            .expect("dsh Stop array")
+            .len(),
+        2,
+        "DeepSeek Stop must keep user hook and append uor-harness hook"
+    );
     let merged_kimi = fs::read_to_string(home.path().join(".kimi-code/config.toml")).unwrap();
     assert!(
         merged_kimi.contains("echo custom-kimi-hook"),
@@ -1064,7 +1146,7 @@ fn repair_order_antigravity_3_regressions() {
     fs::write(home.path().join(".claude/settings.json"), "{not valid json").unwrap();
     assert!(
         run_install(
-            root,
+            temp_repo,
             home.path(),
             &["claude".to_string()],
             kit.path(),
@@ -1075,29 +1157,41 @@ fn repair_order_antigravity_3_regressions() {
         "malformed settings.json must be refused"
     );
 
-    // 6. MEDIUM 6: CLI `loop install --apply` is refused whenever `UOR_LAB` is set, even with
-    //    `--home <scratch>` and `HOME=<other>`; and `run_install` refuses `--home <repo>/docs`.
+    // 6. MEDIUM 6: CLI `loop install --apply` is refused whenever `UOR_LAB` is present (including
+    //    whitespace-only `UOR_LAB=" "`), even with `--home <scratch>` and `HOME=<other>`, printing
+    //    `REFUSED` and writing nothing; and `run_install` refuses `--home <repo>/docs`.
     let clean_home = tempfile::tempdir().expect("clean home");
-    let out = Command::new(bin())
-        .current_dir(root)
-        .env("UOR_LAB", "claude")
-        .env("HOME", "/tmp")
-        .args(["loop", "install", "--client", "claude", "--home"])
-        .arg(clean_home.path())
-        .arg("--zip")
-        .arg(kit.path())
-        .arg("--apply")
-        .output()
-        .expect("run cli loop install --apply with UOR_LAB=claude");
-    assert_eq!(
-        out.status.code(),
-        Some(2),
-        "CLI loop install --apply must be refused whenever UOR_LAB is set"
-    );
+    for lab_val in ["claude", " "] {
+        let out = Command::new(bin())
+            .current_dir(temp_repo)
+            .env("UOR_LAB", lab_val)
+            .env("HOME", "/tmp")
+            .args(["loop", "install", "--client", "claude", "--home"])
+            .arg(clean_home.path())
+            .arg("--zip")
+            .arg(kit.path())
+            .arg("--apply")
+            .output()
+            .expect("run cli loop install --apply with UOR_LAB set");
+        assert_eq!(
+            out.status.code(),
+            Some(2),
+            "CLI loop install --apply must be refused whenever UOR_LAB={lab_val:?} is present"
+        );
+        let stderr_text = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr_text.contains("REFUSED"),
+            "expected REFUSED in stderr for UOR_LAB={lab_val:?}, got: {stderr_text}"
+        );
+        assert!(
+            !clean_home.path().join(".claude/settings.json").exists(),
+            "refused loop install --apply must write nothing"
+        );
+    }
     assert!(
         run_install(
-            root,
-            &root.join("docs"),
+            temp_repo,
+            &temp_repo.join("docs"),
             &["claude".to_string()],
             kit.path(),
             true,
@@ -1227,4 +1321,118 @@ fn repair_order_antigravity_3_regressions() {
         matches!(locked_outcome, GuardOutcome::Refused(_)),
         "expected MEDIUM 10 held lock to fail closed, got {locked_outcome:?}"
     );
+}
+
+/// Regression tests for all 3 required items in repair order `antigravity-4`:
+/// 1. HIGH 1: `loop install --client claude --apply --replace` preserves existing `~/.claude/CLAUDE.md`
+///    user instructions and inserts/updates only the `<!-- uor-r4-loop-start --> ... <!-- uor-r4-loop-end -->`
+///    marker block.
+/// 2. MEDIUM 2: each `loop install --apply --replace` run writes its backups under a distinct
+///    timestamped folder in `<temp_repo>/local/loop/install-backups/<stamp>/` so subsequent runs
+///    never overwrite earlier backups.
+/// 3. MEDIUM 3: install tests use `temp_repo` (`tempfile::TempDir`) and never write backups into
+///    `repo_root()`.
+#[test]
+fn repair_order_antigravity_4_regressions() {
+    let fixture = make_uor_fixture("claude");
+    let temp_repo = fixture.path();
+    let home = tempfile::tempdir().expect("temp home");
+    let kit = make_synthetic_kit();
+
+    let claude_dir = home.path().join(".claude");
+    fs::create_dir_all(&claude_dir).expect("mkdir .claude");
+    let claude_md = claude_dir.join("CLAUDE.md");
+    let user_v1 = "# Casey's Global Claude Instructions\n\nAlways verify before claiming completion.\nKeep notes concise.\n";
+    fs::write(&claude_md, user_v1).expect("seed user CLAUDE.md v1");
+
+    // First install with `--replace` keeps `user_v1` and appends the marked UOR-R4 pointer block.
+    let run1 = run_install(
+        temp_repo,
+        home.path(),
+        &["claude".to_string()],
+        kit.path(),
+        true,
+        false,
+    )
+    .expect("first install succeeds");
+
+    let after_run1 = fs::read_to_string(&claude_md).expect("read merged CLAUDE.md after run1");
+    assert!(
+        after_run1.contains("# Casey's Global Claude Instructions"),
+        "existing user heading must survive CLAUDE.md install: {after_run1}"
+    );
+    assert!(
+        after_run1.contains("Always verify before claiming completion."),
+        "existing user body must survive CLAUDE.md install: {after_run1}"
+    );
+    assert!(
+        after_run1.contains("<!-- uor-r4-loop-start -->")
+            && after_run1.contains("<!-- uor-r4-loop-end -->"),
+        "marked UOR-R4 block must be present: {after_run1}"
+    );
+    assert!(
+        after_run1.contains("CHARTER.md"),
+        "UOR-R4 pointer text must be present: {after_run1}"
+    );
+
+    let backups1 = run1["backups"].as_array().expect("run1 backups");
+    assert_eq!(backups1.len(), 1, "expected 1 backup from run1");
+    let b1_path = PathBuf::from(backups1[0].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(&b1_path).expect("read b1"),
+        user_v1,
+        "run1 backup must match original user_v1 content"
+    );
+
+    // User edits `CLAUDE.md` (adding a trailing section after the marker block and modifying
+    // the marked block to trigger a diff on the next `--replace` run).
+    let user_v2 = format!(
+        "{}\n# Post-marker user section\n\nCustom footer line.\n",
+        after_run1.replace("# UOR-R4 pointer", "# UOR-R4 pointer (stale edit)")
+    );
+    fs::write(&claude_md, &user_v2).expect("write user_v2");
+
+    // Second install with `--replace` updates only the marked block, preserves both pre-marker and
+    // post-marker user sections, and writes a second timestamped backup without overwriting `b1_path`.
+    let run2 = run_install(
+        temp_repo,
+        home.path(),
+        &["claude".to_string()],
+        kit.path(),
+        true,
+        false,
+    )
+    .expect("second install succeeds");
+
+    let after_run2 = fs::read_to_string(&claude_md).expect("read merged CLAUDE.md after run2");
+    assert!(
+        after_run2.contains("# Casey's Global Claude Instructions")
+            && after_run2.contains("# Post-marker user section")
+            && after_run2.contains("Custom footer line.")
+            && !after_run2.contains("(stale edit)"),
+        "re-run must replace only the marked block and preserve surrounding user text: {after_run2}"
+    );
+
+    let backups2 = run2["backups"].as_array().expect("run2 backups");
+    assert_eq!(backups2.len(), 1, "expected 1 backup from run2");
+    let b2_path = PathBuf::from(backups2[0].as_str().unwrap());
+    assert_ne!(
+        b1_path, b2_path,
+        "subsequent runs must use distinct timestamped backup folders"
+    );
+    assert_eq!(
+        fs::read_to_string(&b1_path).expect("b1 still intact"),
+        user_v1,
+        "earlier backup b1 must not be overwritten by later run2"
+    );
+    assert_eq!(
+        fs::read_to_string(&b2_path).expect("b2 content"),
+        user_v2,
+        "later backup b2 must hold user_v2"
+    );
+
+    // Verify neither backup wrote into the real repository checkout.
+    let real_prefix = repo_root().display().to_string();
+    assert!(!b1_path.display().to_string().starts_with(&real_prefix));
+    assert!(!b2_path.display().to_string().starts_with(&real_prefix));
 }
