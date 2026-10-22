@@ -31,6 +31,7 @@ So the task stood. Class: object.
 | `32ed437dc` | Merged `origin/main`: #2969, #2971 and #2973. `gates.json` keeps both new gates. |
 | `bf9453fe7` | Docs. Loop page step 1 and "Stops and waits"; `AGENTS.md`'s owner-question line (owner path, approved in the ORDER); the D59 switch wording; `loop_next_sources`'s empty-queue assertions. |
 | this REPORT's commit | This REPORT. |
+| `9d60929ff` | The ORDER trimmed to 3135 B. `pr-check`'s `read-path` rule caps an ORDER under 4096 B, and the first version was 5313 B. Same calls, done-when and owner approval. |
 
 ## Measurements
 
