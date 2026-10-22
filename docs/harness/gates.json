@@ -151,6 +151,33 @@
       }
     },
     {
+      "id": "loop-next-wait",
+      "proves": "loop next stops only on the kill switch: a lab with no work, including one at its open_pr_limit whose own PRs await review, gets WAIT naming what is pending, a re-check time and exit 3, so no lab is parked without a time to look again; the planted fault turns that WAIT back into STOP.",
+      "command": [
+        "cargo",
+        "test",
+        "-q",
+        "--locked",
+        "-p",
+        "uor-r4-harness",
+        "--test",
+        "loop_next"
+      ],
+      "reads": [
+        "crates/uor-r4-harness/**/*.rs",
+        "docs/harness/gates.json"
+      ],
+      "quick": false,
+      "break": {
+        "file": "crates/uor-r4-harness/src/loopnext.rs",
+        "replace": {
+          "from": "    Ok((out, Decision::Wait(pending.join(\"; \"))))",
+          "to": "    Ok((out, Decision::Stop(pending.join(\"; \"))))"
+        },
+        "expect": "a lab at its open_pr_limit must WAIT, not STOP"
+      }
+    },
+    {
       "id": "loop-next-owner-direction",
       "proves": "`loop next` offers the first open owner direction from PLAN.md's `## Owner directions` table before repairs, and names the missing PLAN.md when it is absent; the planted fault removes the open-row filter.",
       "command": [
