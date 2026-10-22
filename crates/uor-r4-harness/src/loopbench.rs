@@ -31,10 +31,15 @@ pub struct Comment {
     pub body: String,
 }
 
+/// The file paths and comments of one PR, read with a single `gh pr view`.
+pub struct PrView {
+    pub files: Vec<String>,
+    pub comments: Vec<Comment>,
+}
+
 /// Every per-PR GitHub read the feed makes. Read methods only.
 pub trait BenchGh {
-    fn files(&self, pr: u64) -> Result<Vec<String>, String>;
-    fn comments(&self, pr: u64) -> Result<Vec<Comment>, String>;
+    fn view(&self, pr: u64) -> Result<PrView, String>;
     fn contents(&self, pr: u64, head: &str, path: &str) -> Result<String, String>;
 }
 
@@ -43,28 +48,23 @@ pub struct RealBenchGh {
     pub root: PathBuf,
 }
 
-impl RealBenchGh {
-    fn view(&self, pr: u64) -> Result<Value, String> {
+impl BenchGh for RealBenchGh {
+    fn view(&self, pr: u64) -> Result<PrView, String> {
         let out = crate::loopclaim::run_gh(
             &self.root,
             &["pr", "view", &pr.to_string(), "--json", "files,comments"],
         )?;
-        serde_json::from_str(&out).map_err(|e| format!("gh pr view printed malformed JSON: {e}"))
-    }
-}
-
-impl BenchGh for RealBenchGh {
-    fn files(&self, pr: u64) -> Result<Vec<String>, String> {
-        Ok(self.view(pr)?["files"]
+        let v: Value = serde_json::from_str(&out)
+            .map_err(|e| format!("gh pr view printed malformed JSON: {e}"))?;
+        let files = v["files"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(|f| f["path"].as_str().map(str::to_string))
-            .collect())
-    }
-    fn comments(&self, pr: u64) -> Result<Vec<Comment>, String> {
-        serde_json::from_value(self.view(pr)?["comments"].clone())
-            .map_err(|e| format!("gh pr view comments are malformed: {e}"))
+            .collect();
+        let comments = serde_json::from_value(v["comments"].clone())
+            .map_err(|e| format!("gh pr view comments are malformed: {e}"))?;
+        Ok(PrView { files, comments })
     }
     fn contents(&self, _pr: u64, head: &str, path: &str) -> Result<String, String> {
         let endpoint = format!("repos/{{owner}}/{{repo}}/contents/{path}?ref={head}");
@@ -106,15 +106,12 @@ impl FakeBenchGh {
 }
 
 impl BenchGh for FakeBenchGh {
-    fn files(&self, pr: u64) -> Result<Vec<String>, String> {
-        Ok(self.files.get(&pr.to_string()).cloned().unwrap_or_default())
-    }
-    fn comments(&self, pr: u64) -> Result<Vec<Comment>, String> {
-        Ok(self
-            .comments
-            .get(&pr.to_string())
-            .cloned()
-            .unwrap_or_default())
+    fn view(&self, pr: u64) -> Result<PrView, String> {
+        let key = pr.to_string();
+        Ok(PrView {
+            files: self.files.get(&key).cloned().unwrap_or_default(),
+            comments: self.comments.get(&key).cloned().unwrap_or_default(),
+        })
     }
     fn contents(&self, pr: u64, _head: &str, path: &str) -> Result<String, String> {
         self.contents
@@ -206,8 +203,10 @@ struct LabPr {
     lab: String,
     pr: OpenPr,
     order_id: String,
-    order: String,
+    order: Option<String>,
     review: String,
+    /// Why this PR's ORDER could not be read, when it could not.
+    note: Option<String>,
 }
 
 /// The first `- ` bullet under the `## <heading>` section of an ORDER.
@@ -252,6 +251,13 @@ fn review_state(pr: &OpenPr, comments: &[Comment]) -> String {
     "needs review".into()
 }
 
+/// The Status cell of a PR whose ORDER could not be read: the first line of the reason, shortened.
+fn unreadable(reason: &str) -> String {
+    let line = reason.lines().next().unwrap_or("").trim();
+    let short: String = line.chars().take(80).collect();
+    format!("ORDER unreadable: {short}")
+}
+
 fn lab_prs(
     labs: &BTreeMap<String, crate::labs::Lab>,
     prs: &[OpenPr],
@@ -264,23 +270,45 @@ fn lab_prs(
         let Some(lab) = loopboard::lab_of(&pr.title, labs) else {
             continue;
         };
-        let best = gh
-            .files(pr.number)?
-            .into_iter()
-            .filter_map(|f| {
-                let c = re.captures(&f)?;
-                (c[1] == *lab).then(|| (c[2].parse::<u64>().unwrap_or(0), f.clone()))
-            })
-            .max();
-        let Some((n, path)) = best else { continue };
-        let order = gh.contents(pr.number, &pr.head_ref_oid, &path)?;
-        let review = review_state(pr, &gh.comments(pr.number)?);
+        // One PR's read error degrades that PR to a row; it never fails the refresh.
+        let read = |view: &PrView| -> Result<Option<(u64, String)>, String> {
+            let best = view
+                .files
+                .iter()
+                .filter_map(|f| {
+                    let c = re.captures(f)?;
+                    (c[1] == *lab).then(|| (c[2].parse::<u64>().unwrap_or(0), f.clone()))
+                })
+                .max();
+            let Some((n, path)) = best else {
+                return Ok(None);
+            };
+            let order = gh.contents(pr.number, &pr.head_ref_oid, &path)?;
+            Ok(Some((n, order)))
+        };
+        let (order_id, order, review, note) = match gh.view(pr.number) {
+            Err(e) => (
+                format!("#{}", pr.number),
+                None,
+                "needs review".to_string(),
+                Some(e),
+            ),
+            Ok(view) => {
+                let review = review_state(pr, &view.comments);
+                match read(&view) {
+                    Ok(Some((n, order))) => (format!("{lab}-{n}"), Some(order), review, None),
+                    Ok(None) => (format!("#{}", pr.number), None, review, None),
+                    Err(e) => (format!("#{}", pr.number), None, review, Some(e)),
+                }
+            }
+        };
         out.push(LabPr {
-            order_id: format!("{lab}-{n}"),
+            order_id,
             lab,
             pr: pr.clone(),
             order,
             review,
+            note: note.map(|e| unreadable(&e)),
         });
     }
     let rank = |r: &str| match r {
@@ -443,8 +471,16 @@ fn gates(root: &Path, labs: &BTreeMap<String, crate::labs::Lab>) -> String {
 
 fn write_atomic(dir: &Path, name: &str, text: &str) -> Result<(), String> {
     let tmp = dir.join(format!(".{name}.tmp-{}", std::process::id()));
-    std::fs::write(&tmp, text).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, dir.join(name)).map_err(|e| format!("cannot rename into {name}: {e}"))
+    let put = std::fs::write(&tmp, text)
+        .map_err(|e| format!("cannot write {}: {e}", tmp.display()))
+        .and_then(|()| {
+            std::fs::rename(&tmp, dir.join(name))
+                .map_err(|e| format!("cannot rename into {name}: {e}"))
+        });
+    if put.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    put
 }
 
 /// One refresh: returns (lab PRs, items).
@@ -476,7 +512,7 @@ fn refresh(
     // PLAN.md
     let claims: BTreeMap<String, &LabPr> = lab_prs
         .iter()
-        .filter_map(|p| Some((crate::loopclaim::order_item(&p.order)?, p)))
+        .filter_map(|p| Some((crate::loopclaim::order_item(p.order.as_deref()?)?, p)))
         .collect();
     let plan_rows: Vec<Vec<String>> = items
         .iter()
@@ -519,10 +555,17 @@ fn refresh(
                     p.pr.number,
                     tag.replace(&p.pr.title, "")
                 ),
-                first_bullet(&p.order, "Done when"),
-                first_bullet(&p.order, "Stop and ask if"),
+                match (&p.order, &p.note) {
+                    (Some(o), _) => first_bullet(o, "Done when"),
+                    (None, None) => "(no ORDER)".into(),
+                    (None, Some(_)) => String::new(),
+                },
+                p.order
+                    .as_deref()
+                    .map(|o| first_bullet(o, "Stop and ask if"))
+                    .unwrap_or_default(),
                 String::new(),
-                p.review.clone(),
+                p.note.clone().unwrap_or_else(|| p.review.clone()),
             ]
         })
         .collect();

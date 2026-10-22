@@ -59,8 +59,9 @@ impl Repo {
         }
         let mut dec = String::from("# Decisions\n\n| Id | Date | Decision | Reason | Alternatives turned down | Cost to undo |\n|---|---|---|---|---|---|\n");
         for i in 1..=7 {
+            let cost = if i == 7 { "high" } else { "low" };
             dec.push_str(&format!(
-                "| D{i} | 2026-10-0{i} | decide {i} | r | a | low |\n"
+                "| D{i} | 2026-10-0{i} | decide {i} | r | a | {cost} |\n"
             ));
         }
         r.write("docs/integration/DECISIONS.md", &dec);
@@ -127,8 +128,12 @@ impl Repo {
     }
 
     fn bench(&self, args: &[&str]) -> Output {
+        self.bench_with(self.fake(), args)
+    }
+
+    fn bench_with(&self, fake: Value, args: &[&str]) -> Output {
         let f = self.tmp.path().join("bench-fake.json");
-        std::fs::write(&f, self.fake().to_string()).unwrap();
+        std::fs::write(&f, fake.to_string()).unwrap();
         let mut cmd = Command::new(BIN);
         clean(&mut cmd);
         cmd.arg("--repo")
@@ -336,6 +341,11 @@ fn bench_decisions_keep_all_rows_newest_last() {
         .collect();
     assert_eq!(last6, ["D7", "D6", "D5", "D4", "D3", "D2"]);
     assert_eq!(d.2[0][col(d, "reason")], "r");
+    assert_eq!(
+        d.2[6][col(d, "reversal cost")],
+        "high",
+        "the last row carries its source Cost to undo"
+    );
 }
 
 #[test]
@@ -353,6 +363,9 @@ fn bench_gate_lines_parse_and_inbox_is_untouched() {
     assert_eq!(lines.len(), 2, "one per receipt and ledger line");
     for v in &lines {
         assert!(v["name"].is_string() && v["result"].is_string(), "{v}");
+        for k in ["seconds", "time", "commit"] {
+            assert!(v.get(k).is_some(), "gate line lacks {k}: {v}");
+        }
     }
     assert!(lines
         .iter()
@@ -367,10 +380,20 @@ fn bench_refuses_tracked_dir_and_short_interval() {
     let r = Repo::new();
     let o = r.bench(&["--bench", "docs/x"]);
     assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("is inside the repository"), "{err}");
+    let abs = r.root.join("docs/x");
+    let o = r.bench(&["--bench", abs.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("is inside the repository"), "{err}");
+    assert!(!abs.exists());
     assert!(!r.root.join("docs/x").exists());
     let dir = r.out_dir();
     let o = r.bench(&["--bench", dir.to_str().unwrap(), "--every", "5"]);
     assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("--every must be at least 30 seconds"), "{err}");
     let o = r.bench(&["--bench", "local/bench"]);
     assert!(o.status.success(), "{o:?}");
     assert!(r.root.join("local/bench/PLAN.md").is_file());
@@ -399,4 +422,65 @@ fn bench_reads_the_lab_registry_from_origin_main() {
         "{areas:?}"
     );
     assert!(!areas.iter().any(|a| a.starts_with("kimi")), "{areas:?}");
+}
+
+fn next_rows(r: &Repo, fake: Value) -> Vec<Vec<String>> {
+    let dir = r.out_dir();
+    let o = r.bench_with(fake, &["--bench", dir.to_str().unwrap()]);
+    assert!(o.status.success(), "{o:?}");
+    assert!(String::from_utf8_lossy(&o.stdout).contains("bench feed: wrote 5 files"));
+    for f in [
+        "PLAN.md",
+        "HANDOFF.md",
+        "DECISIONS.md",
+        "STATE.md",
+        ".gates.jsonl",
+    ] {
+        assert!(dir.join(f).is_file(), "{f} missing");
+    }
+    let t = tables(&read(&dir, "HANDOFF.md"));
+    let next = t.iter().find(|t| t.0.starts_with("Next")).unwrap();
+    let c = (col(next, "id"), col(next, "task"), col(next, "done when"));
+    let st = col(next, "status");
+    next.2
+        .iter()
+        .map(|r| {
+            vec![
+                r[c.0].clone(),
+                r[c.1].clone(),
+                r[c.2].clone(),
+                r[st].clone(),
+            ]
+        })
+        .collect()
+}
+
+#[test]
+fn one_unreadable_pr_does_not_stop_the_feed() {
+    let r = Repo::new();
+    let mut fake = r.fake();
+    // PR 20's ORDER was deleted: its contents entry is gone.
+    fake["contents"]
+        .as_object_mut()
+        .unwrap()
+        .remove("20:docs/loop/tasks/it-held/codex-2/ORDER.md");
+    let rows = next_rows(&r, fake);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    let bad = rows.iter().find(|r| r[1].contains("#20")).unwrap();
+    assert!(bad[3].starts_with("ORDER unreadable"), "{bad:?}");
+    let good = rows.iter().find(|r| r[1].contains("#30")).unwrap();
+    assert_eq!(good[0], "claude-7");
+    assert_eq!(good[3], "CHANGES at aaaaaaa");
+}
+
+#[test]
+fn a_lab_pr_without_an_order_still_gets_a_row() {
+    let r = Repo::new();
+    let mut fake = r.fake();
+    fake["files"]["20"] = json!(["x.rs"]);
+    let rows = next_rows(&r, fake);
+    let row = rows.iter().find(|r| r[0] == "#20").expect("a #20 row");
+    assert_eq!(row[1], "[codex] #20 draft work");
+    assert_eq!(row[2], "(no ORDER)");
+    assert_eq!(row[3], "draft");
 }
