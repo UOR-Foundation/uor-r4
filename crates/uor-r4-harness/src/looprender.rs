@@ -170,6 +170,42 @@ fn front_get<'t>(front: &'t str, key: &str) -> Option<&'t str> {
 }
 
 /// The first paragraph of a `## <name>` section, joined onto one line.
+/// Item files live in `docs/roadmap/items/`; their relative links must be re-rooted when the
+/// view that quotes them sits at the repository root (`../../loop/README.md` in an item is
+/// `docs/loop/README.md` in the view). Hand-rendered roots only: the items' home is fixed.
+fn reroot_item_links(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 16);
+    let mut rest = text;
+    while let Some(start) = rest.find("](") {
+        out.push_str(&rest[..start + 2]);
+        let after = &rest[start + 2..];
+        let Some(end) = after.find(')') else {
+            out.push_str(after);
+            return out;
+        };
+        let target = &after[..end];
+        if target.starts_with("http") || target.starts_with('#') || target.starts_with('/') {
+            out.push_str(target);
+        } else {
+            let mut parts: Vec<&str> = vec!["docs", "roadmap", "items"];
+            for seg in target.split('/') {
+                match seg {
+                    ".." => {
+                        parts.pop();
+                    }
+                    "." | "" => {}
+                    other => parts.push(other),
+                }
+            }
+            out.push_str(&parts.join("/"));
+        }
+        out.push(')');
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn section_first_paragraph(text: &str, name: &str) -> Option<String> {
     let head = format!("## {name}");
     let mut lines = text.lines().skip_while(|l| l.trim_end() != head).skip(1);
@@ -243,10 +279,10 @@ pub fn render_handoff(c: &AtCommit) -> Result<String, String> {
             open_to: get("open_to"),
             depends_on: deps.to_string(),
             done_when: section_first_paragraph(&text, "Done when")
-                .map(|p| first_sentence(&p).to_string())
+                .map(|p| reroot_item_links(first_sentence(&p)).to_string())
                 .unwrap_or_else(|| NR.into()),
             cancel_if: section_first_paragraph(&text, "Cancel if")
-                .map(|p| first_sentence(&p).to_string())
+                .map(|p| reroot_item_links(first_sentence(&p)).to_string())
                 .unwrap_or_else(|| NR.into()),
             size: if size.is_empty() { NR.into() } else { size },
             status,
