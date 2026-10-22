@@ -81,7 +81,7 @@ with $m$ the score masses. That function is banned. The allowed replacement is t
 
 - The engine at matched capacity against an ordinary control. It was set aside at 1.68 million parameters.
 - Free-running prose from this engine; continuous loss improved, generated prose scored 0 of 5.
-- A genuinely fresh qualification of any October model after the exposed-panel critique. The one fresh draw scored 0 of 128, and no successor ran. The replacement 256-row fresh held-out panel (`m2-fresh256`, [`docs/harness/panels/m2-fresh256.json`](../harness/panels/m2-fresh256.json), [`docs/labs/m2-fresh-heldout-panel/README.md`](../labs/m2-fresh-heldout-panel/README.md)) is now staged (`NOT_RUN`, `TEST FITNESS: PENDING`, bar `>= 103/256` alongside `>= 256/512` on `m2-reply512`).
+- A genuinely fresh qualification of any October model after the exposed-panel critique. The one fresh draw scored 0 of 128, and no successor ran. The replacement 256-row fresh held-out panel (`m2-fresh256`, [`docs/harness/panels/m2-fresh256.json`](../harness/panels/m2-fresh256.json), [`docs/labs/m2-fresh-heldout-panel/README.md`](../labs/m2-fresh-heldout-panel/README.md)) is now staged (`NOT_RUN`, `TEST FITNESS: PENDING`, owner-registered bar `pairs_both_complete_distinct >= 52/128` (`complete >= 104/256`) alongside `>= 256/512` on `m2-reply512`).
 - A rank-margin or other allowed objective for the cross-state banks.
 - GPU execution of the September engine. Its fitting was recorded as host Rust.
 - Whether version-chain selectors transfer to free-form edited facts, not authored wording.

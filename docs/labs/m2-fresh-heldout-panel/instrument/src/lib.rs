@@ -8,6 +8,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use uor_r4_core::answer_oracle::FrozenAnswers;
+use uor_r4_tokenizer::ByteBpeTokenizer;
 
 /// Sealed SHA-256 of the saved437 cross-state field (`archive/labs/m2-fresh-437-2026-10-10/README.md:97`).
 pub const SAVED437_FIELD_SHA256: &str =
@@ -439,21 +441,17 @@ pub struct ProbeLabels {
 pub struct ProbeLabel {
     pub id: String,
     pub pair_id: String,
-    pub answers: ProbeAnswers,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProbeAnswers {
-    pub intent: String,
-    pub accepted: Vec<String>,
+    pub answers: FrozenAnswers,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dev512SpreadReport {
     pub total_rows: usize,
     pub complete_rows: usize,
-    pub evaluator_replay_diff_rows: usize,
+    /// Status string copied from the saved 2026-10-10 replay audit (`development-replay-audit-summary.json`).
+    pub saved_audit_status: String,
+    /// Checked step count copied from the saved 2026-10-10 replay audit (`development-replay-audit-summary.json`).
+    pub saved_audit_checked_steps: usize,
     pub stratum_complete: BTreeMap<String, (usize, usize)>,
     pub block_pass_counts: Vec<(String, usize, usize)>,
     pub forward_pass: usize,
@@ -907,10 +905,19 @@ pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadRe
         isqrt_u128(var_cluster_bar40_times_10000.max(614_400)) as u64;
     let bar40_cluster_se_bps = (bar40_cluster_se_hundredths_rows * 100 + 128) / 256;
 
+    let saved_audit_status = replay["status"]
+        .as_str()
+        .ok_or("replay status absent")?
+        .to_string();
+    let saved_audit_checked_steps = replay["checked_steps"]
+        .as_u64()
+        .ok_or("replay checked_steps absent")? as usize;
+
     Ok(Dev512SpreadReport {
-        total_rows: 512,
-        complete_rows: 437,
-        evaluator_replay_diff_rows: 0,
+        total_rows: all_ids.len(),
+        complete_rows: complete_set.len(),
+        saved_audit_status,
+        saved_audit_checked_steps,
         stratum_complete,
         block_pass_counts,
         forward_pass,
@@ -1164,7 +1171,10 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
             "update": 32,
             "reassert": 32
         },
-        "target_bar_rows": 103,
+        "target_bar_metric": "pairs_both_complete_distinct",
+        "target_bar_pairs": 52,
+        "target_bar_pairs_of": 128,
+        "target_bar_rows": 104,
         "target_bar_of": 256,
         "tokenizer_sha256": PINNED_TOKENIZER_SHA256,
         "files": {
@@ -1597,37 +1607,56 @@ pub fn verify_m2_fresh256_panel(
         return Err("inputs.json leaked accepted answer strings".to_string());
     }
 
+    let tok = load_pinned_byte_bpe_tokenizer(repo_root)?;
+    for &(pretoken, expected_ids) in PRETOKEN_BPE_TABLE {
+        let actual_ids = tok.encode(pretoken);
+        if actual_ids.as_slice() != expected_ids {
+            return Err(format!(
+                "PRETOKEN_BPE_TABLE mismatch for {pretoken:?}: table={expected_ids:?} vs ByteBpeTokenizer={actual_ids:?}"
+            ));
+        }
+    }
+
     let mut max_turn_tokens = 0usize;
     let mut max_target_tokens = 0usize;
     let mut max_total_replay_tokens = 0usize;
-    let mut copy_first_stated_hits = 0usize;
-    let mut copy_last_stated_hits = 0usize;
-    let mut role_swap_distractor_hits = 0usize;
-    let mut constant_pair_tally: BTreeMap<String, usize> = BTreeMap::new();
+    let mut copy_first_generated = Vec::with_capacity(256);
+    let mut copy_last_generated = Vec::with_capacity(256);
+    let mut role_swap_generated = Vec::with_capacity(256);
 
     for h in &bundle.histories {
         let first_lit = extract_literal(&h.turns[0])?.to_string();
         let last_lit = extract_literal(h.turns.last().ok_or("empty turns")?)?.to_string();
         let mut current: BTreeMap<&str, (&Wire, String)> = BTreeMap::new();
         for w in &h.turns {
-            let t_len = encode_pinned_bpe(&w.text)?.len();
-            max_turn_tokens = max_turn_tokens.max(t_len);
+            let encoded = encode_pinned_bpe(&w.text)?;
+            if encoded != tok.encode(&w.text) {
+                return Err(format!("turn BPE mismatch on {:?}", w.text));
+            }
+            max_turn_tokens = max_turn_tokens.max(encoded.len());
             current.insert(w.relation.as_str(), (w, extract_literal(w)?.to_string()));
         }
         let mut replay_tokens = 0usize;
         let mut alphabet = BTreeSet::from([PERIOD_TOKEN_ID, EOS_TOKEN_ID]);
         for (w, lit) in current.values() {
             let cue_ids = encode_pinned_bpe(&w.text)?;
-            let emitted_ids = encode_pinned_bpe(&format!(" {lit}"))?;
+            let spaced_lit = format!(" {lit}");
+            let emitted_ids = encode_pinned_bpe(&spaced_lit)?;
+            if emitted_ids != tok.encode(&spaced_lit) {
+                return Err(format!("literal BPE mismatch on {spaced_lit:?}"));
+            }
             replay_tokens += cue_ids.len() + emitted_ids.len();
             alphabet.extend(emitted_ids);
         }
-        let mut first_both_ok = true;
-        let mut last_both_ok = true;
-        let mut swap_both_ok = true;
-        for q in &h.queries {
-            let q_len = encode_pinned_bpe(&q.text)?.len();
-            max_turn_tokens = max_turn_tokens.max(q_len);
+
+        let mut sorted_queries: Vec<&Wire> = h.queries.iter().collect();
+        sorted_queries.sort_by_key(|q| if q.relation == "job" { 0usize } else { 1usize });
+        for q in sorted_queries {
+            let q_ids = encode_pinned_bpe(&q.text)?;
+            if q_ids != tok.encode(&q.text) {
+                return Err(format!("query BPE mismatch on {:?}", q.text));
+            }
+            max_turn_tokens = max_turn_tokens.max(q_ids.len());
             let (_, expected_lit) = current
                 .get(q.relation.as_str())
                 .ok_or_else(|| "missing role".to_string())?;
@@ -1635,7 +1664,11 @@ pub fn verify_m2_fresh256_panel(
             let (_, distractor_lit) = current
                 .get(other_role)
                 .ok_or_else(|| "missing other role".to_string())?;
-            let mut target_ids = encode_pinned_bpe(&format!(" {expected_lit}."))?;
+            let target_str = format!(" {expected_lit}.");
+            let mut target_ids = encode_pinned_bpe(&target_str)?;
+            if target_ids != tok.encode(&target_str) {
+                return Err(format!("target BPE mismatch on {target_str:?}"));
+            }
             target_ids.push(EOS_TOKEN_ID);
             if target_ids.iter().any(|t| !alphabet.contains(t)) {
                 return Err(format!("target {expected_lit:?} outside replay alphabet"));
@@ -1643,40 +1676,19 @@ pub fn verify_m2_fresh256_panel(
             let target_len = target_ids.len();
             max_target_tokens = max_target_tokens.max(target_len);
             max_total_replay_tokens =
-                max_total_replay_tokens.max(replay_tokens + q_len + target_len);
+                max_total_replay_tokens.max(replay_tokens + q_ids.len() + target_len);
 
-            if &first_lit != expected_lit {
-                first_both_ok = false;
-            }
-            if &last_lit != expected_lit {
-                last_both_ok = false;
-            }
-            if distractor_lit != expected_lit {
-                swap_both_ok = false;
-            }
-        }
-        // Score each history (`pair_id` in `labels.json` / `pairs_both_complete_distinct` in
-        // `native-bank-generalization.rs`) only when both its opposite-role queries are right.
-        if first_both_ok {
-            copy_first_stated_hits += 2;
-        }
-        if last_both_ok {
-            copy_last_stated_hits += 2;
-        }
-        if swap_both_ok {
-            role_swap_distractor_hits += 2;
-        }
-        for candidate_const in &fresh_literals_used {
-            let both_const = h.queries.iter().all(|q| {
-                current
-                    .get(q.relation.as_str())
-                    .is_some_and(|(_, exp)| exp == candidate_const)
-            });
-            if both_const {
-                *constant_pair_tally
-                    .entry(candidate_const.clone())
-                    .or_default() += 2;
-            }
+            let mut first_ids = tok.encode(&format!("{first_lit}."));
+            first_ids.push(EOS_TOKEN_ID);
+            copy_first_generated.push(first_ids);
+
+            let mut last_ids = tok.encode(&format!("{last_lit}."));
+            last_ids.push(EOS_TOKEN_ID);
+            copy_last_generated.push(last_ids);
+
+            let mut swap_ids = tok.encode(&format!("{distractor_lit}."));
+            swap_ids.push(EOS_TOKEN_ID);
+            role_swap_generated.push(swap_ids);
         }
     }
 
@@ -1684,18 +1696,51 @@ pub fn verify_m2_fresh256_panel(
         return Err("token budget exceeded".to_string());
     }
 
-    let best_constant_reply_hits = constant_pair_tally.values().copied().max().unwrap_or(0);
-    if copy_first_stated_hits >= 103
-        || copy_last_stated_hits >= 103
-        || role_swap_distractor_hits >= 103
-        || best_constant_reply_hits >= 103
-        || copy_first_stated_hits != 0
-        || copy_last_stated_hits != 0
-        || role_swap_distractor_hits != 0
-        || best_constant_reply_hits != 0
+    // Score each control through the real `ByteBpeTokenizer` + `FrozenAnswers` + `pair_id`
+    // grading loop (`crates/uor-r4-core/examples/native-bank-generalization.rs:827-948`).
+    let (_, copy_first_pairs) = grade_generated_replies_with_evaluator_oracle(
+        &tok,
+        &parsed_inputs,
+        &parsed_labels,
+        &copy_first_generated,
+    )?;
+    let (_, copy_last_pairs) = grade_generated_replies_with_evaluator_oracle(
+        &tok,
+        &parsed_inputs,
+        &parsed_labels,
+        &copy_last_generated,
+    )?;
+    let (_, role_swap_pairs) = grade_generated_replies_with_evaluator_oracle(
+        &tok,
+        &parsed_inputs,
+        &parsed_labels,
+        &role_swap_generated,
+    )?;
+    let mut best_constant_pairs = 0usize;
+    for candidate_const in &fresh_literals_used {
+        let mut const_ids = tok.encode(&format!("{candidate_const}."));
+        const_ids.push(EOS_TOKEN_ID);
+        let const_generated = vec![const_ids; 256];
+        let (_, pairs_ok) = grade_generated_replies_with_evaluator_oracle(
+            &tok,
+            &parsed_inputs,
+            &parsed_labels,
+            &const_generated,
+        )?;
+        best_constant_pairs = best_constant_pairs.max(pairs_ok);
+    }
+
+    let copy_first_stated_hits = copy_first_pairs * 2;
+    let copy_last_stated_hits = copy_last_pairs * 2;
+    let role_swap_distractor_hits = role_swap_pairs * 2;
+    let best_constant_reply_hits = best_constant_pairs * 2;
+    if copy_first_pairs != 0
+        || copy_last_pairs != 0
+        || role_swap_pairs != 0
+        || best_constant_pairs != 0
     {
         return Err(format!(
-            "control check failed: first={copy_first_stated_hits} last={copy_last_stated_hits} swap={role_swap_distractor_hits} const={best_constant_reply_hits}"
+            "control check failed (expected 0/128 pairs < 52/128 bar): first={copy_first_pairs} last={copy_last_pairs} swap={role_swap_pairs} const={best_constant_pairs}"
         ));
     }
 
@@ -1724,6 +1769,93 @@ pub fn verify_m2_fresh256_panel(
     })
 }
 
+/// Load the pinned `ByteBpeTokenizer` (`d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`)
+/// from `.uor-models/research/issue-1019/tokenizer/tokenizer.json` (or parent repo `.uor-models/` when in a `.worktrees/` checkout).
+pub fn load_pinned_byte_bpe_tokenizer(repo_root: &Path) -> Result<ByteBpeTokenizer, String> {
+    let candidates = [
+        repo_root.join(".uor-models/research/issue-1019/tokenizer/tokenizer.json"),
+        repo_root.join("../../.uor-models/research/issue-1019/tokenizer/tokenizer.json"),
+        repo_root.join(".uor-models/research/issue-973-group-retention/tokenizer/tokenizer.json"),
+        repo_root
+            .join("../../.uor-models/research/issue-973-group-retention/tokenizer/tokenizer.json"),
+    ];
+    let tok_path = candidates
+        .iter()
+        .find(|p| p.is_file())
+        .ok_or_else(|| {
+            format!(
+                "pinned tokenizer.json ({PINNED_TOKENIZER_SHA256}) not found under {} (.uor-models/research/issue-1019/tokenizer/tokenizer.json)",
+                repo_root.display()
+            )
+        })?;
+    let tok_bytes = std::fs::read(tok_path).map_err(|e| format!("{}: {e}", tok_path.display()))?;
+    if sha256_hex(&tok_bytes) != PINNED_TOKENIZER_SHA256 {
+        return Err("tokenizer.json SHA-256 differs from PINNED_TOKENIZER_SHA256".to_string());
+    }
+    ByteBpeTokenizer::from_tokenizer_json_bytes(&tok_bytes)
+        .ok_or_else(|| "ByteBpeTokenizer::from_tokenizer_json_bytes failed".to_string())
+}
+
+/// Execute the exact `FrozenAnswers` + `ByteBpeTokenizer` + `pair_groups` grading loop from
+/// `crates/uor-r4-core/examples/native-bank-generalization.rs:827-948` over deserialized
+/// `inputs.json` and `labels.json`, returning `(complete_rows, pairs_both_complete_distinct)`.
+pub fn grade_generated_replies_with_evaluator_oracle(
+    tok: &ByteBpeTokenizer,
+    inputs: &ProbeInputs,
+    labels: &ProbeLabels,
+    generated_by_case: &[Vec<u32>],
+) -> Result<(usize, usize), String> {
+    if inputs.cases.len() != labels.cases.len() || inputs.cases.len() != generated_by_case.len() {
+        return Err("case count mismatch in evaluator oracle grading".to_string());
+    }
+    let mut seen = BTreeSet::new();
+    let mut complete = 0usize;
+    let mut pair_groups: BTreeMap<String, Vec<(String, bool, Vec<u32>)>> = BTreeMap::new();
+    for ((p, l), generated_ids) in inputs
+        .cases
+        .iter()
+        .zip(&labels.cases)
+        .zip(generated_by_case)
+    {
+        if p.id.is_empty() || p.id != l.id || !seen.insert(p.id.clone()) {
+            return Err("input/label IDs mismatched or duplicate".to_string());
+        }
+        l.answers.validate().map_err(|e| e.to_string())?;
+        let eos = generated_ids.last().copied() == Some(EOS_TOKEN_ID);
+        let output_ids = if eos {
+            &generated_ids[..generated_ids.len() - 1]
+        } else {
+            &generated_ids[..]
+        };
+        let decoded_bytes = tok.decode_bytes(output_ids);
+        let valid_text = std::str::from_utf8(&decoded_bytes).ok();
+        let accepted = eos && valid_text.is_some_and(|text| l.answers.accepts(text));
+        complete += usize::from(accepted);
+        let target = tok.encode(&l.answers.accepted[0]);
+        if tok.decode_bytes(&target) != l.answers.accepted[0].as_bytes() {
+            return Err("evaluator accepted form does not roundtrip tokenizer".to_string());
+        }
+        if l.pair_id.is_empty() {
+            return Err("empty pair metadata".to_string());
+        }
+        pair_groups.entry(l.pair_id.clone()).or_default().push((
+            p.id.clone(),
+            accepted,
+            generated_ids.clone(),
+        ));
+    }
+    let mut pairs_both_complete_distinct = 0usize;
+    for arms in pair_groups.values() {
+        if arms.len() != 2 {
+            return Err("each evaluator pair must have two cases".to_string());
+        }
+        let both = arms.iter().all(|v| v.1);
+        let distinct = arms[0].2 != arms[1].2;
+        pairs_both_complete_distinct += usize::from(both && distinct);
+    }
+    Ok((complete, pairs_both_complete_distinct))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1741,7 +1873,8 @@ mod tests {
         let report = analyze_saved437_dev512_spread(&repo_root()).expect("dev512 spread");
         assert_eq!(report.total_rows, 512);
         assert_eq!(report.complete_rows, 437);
-        assert_eq!(report.evaluator_replay_diff_rows, 0);
+        assert_eq!(report.saved_audit_status, "PASS_SAVED_EVIDENCE");
+        assert_eq!(report.saved_audit_checked_steps, 7908);
         assert_eq!(report.both_roles_complete_histories, 186);
         assert_eq!(report.forward_pass + report.reverse_pass, 437);
         assert_eq!(report.swap0_pass + report.swap1_pass, 437);
@@ -1755,6 +1888,42 @@ mod tests {
         assert!(
             report.bar40_cluster_se_hundredths_rows >= report.bar40_binomial_se_hundredths_rows
         );
+    }
+
+    #[test]
+    fn real_byte_bpe_tokenizer_and_evaluator_oracle_verify_tokens_and_controls() {
+        let root = repo_root();
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("load real ByteBpeTokenizer");
+        for &(pretoken, expected_ids) in PRETOKEN_BPE_TABLE {
+            assert_eq!(
+                tok.encode(pretoken).as_slice(),
+                expected_ids,
+                "PRETOKEN_BPE_TABLE mismatch on {pretoken:?}"
+            );
+        }
+        let bundle = generate_m2_fresh256_panel().expect("generate fresh256");
+        let inputs: ProbeInputs = serde_json::from_slice(&bundle.inputs_json).expect("inputs");
+        let labels: ProbeLabels = serde_json::from_slice(&bundle.labels_json).expect("labels");
+
+        // Oracle ground-truth answers score 256/256 rows and 128/128 distinct pairs.
+        let oracle_generated: Vec<Vec<u32>> = labels
+            .cases
+            .iter()
+            .map(|l| {
+                let mut ids = tok.encode(&l.answers.accepted[0]);
+                ids.push(EOS_TOKEN_ID);
+                ids
+            })
+            .collect();
+        let (oracle_complete, oracle_pairs) = grade_generated_replies_with_evaluator_oracle(
+            &tok,
+            &inputs,
+            &labels,
+            &oracle_generated,
+        )
+        .expect("grade oracle");
+        assert_eq!(oracle_complete, 256);
+        assert_eq!(oracle_pairs, 128);
     }
 
     #[test]

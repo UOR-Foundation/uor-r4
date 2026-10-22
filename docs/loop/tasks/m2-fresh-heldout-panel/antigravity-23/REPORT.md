@@ -2,7 +2,7 @@
 
 - Order: [`ORDER.md`](./ORDER.md)
 - Branch: `antigravity/m2-fresh-heldout-panel`
-- Head: `4d135e859994a0e29346f0e61c50966da018b35e`
+- Head: `f703cf7903a865c8d28def5a367735c8ac1a1202`
 - References #2849
 - References #2030
 
