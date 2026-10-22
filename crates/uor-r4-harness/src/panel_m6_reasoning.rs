@@ -237,7 +237,8 @@ pub enum AlteredConstraintSpec {
         default_habit_answer: String,
     },
     /// Two-step modular accumulation where hitting `s1_raw % modulus == forbidden_rem` adds
-    /// `fallback_delta` before adding `c` modulo `modulus`.
+    /// `fallback_delta` before adding `c` modulo `modulus` (balanced across `branch_taken == true`
+    /// and `branch_taken == false`).
     ModularStepCap {
         a: i64,
         b: i64,
@@ -245,14 +246,17 @@ pub enum AlteredConstraintSpec {
         modulus: i64,
         forbidden_rem: i64,
         fallback_delta: i64,
+        branch_taken: bool,
         expected_answer: String,
         default_habit_answer: String,
     },
-    /// Contradictory / unsatisfiable constraint pair where the sole lawful output is
-    /// `ABSTAIN:UNSATISFIABLE` and any numeric answer is a failure.
-    UnsatisfiableConstraint {
+    /// Feasibility constraint pair (balanced: 10 satisfiable rows with a unique integer solution
+    /// and 10 unsatisfiable rows where the sole lawful output is `ABSTAIN:UNSATISFIABLE`, sharing
+    /// identical prompt wording so surface keyword rules cannot leak abstention).
+    FeasibilityConstraint {
         a: i64,
         b: i64,
+        satisfiable: bool,
         constraint_summary: String,
         expected_answer: String,
         default_habit_answer: String,
@@ -271,7 +275,7 @@ impl AlteredConstraintSpec {
             | Self::ModularStepCap {
                 expected_answer, ..
             }
-            | Self::UnsatisfiableConstraint {
+            | Self::FeasibilityConstraint {
                 expected_answer, ..
             } => expected_answer,
         }
@@ -291,7 +295,7 @@ impl AlteredConstraintSpec {
                 default_habit_answer,
                 ..
             }
-            | Self::UnsatisfiableConstraint {
+            | Self::FeasibilityConstraint {
                 default_habit_answer,
                 ..
             } => default_habit_answer,
@@ -299,7 +303,13 @@ impl AlteredConstraintSpec {
     }
 
     pub const fn requires_abstention(&self) -> bool {
-        matches!(self, Self::UnsatisfiableConstraint { .. })
+        matches!(
+            self,
+            Self::FeasibilityConstraint {
+                satisfiable: false,
+                ..
+            }
+        )
     }
 }
 
@@ -637,6 +647,16 @@ impl M6FrozenRow {
             M6RowSpec::CodeTasks(k) => k.canonical_vector_answer(),
         }
     }
+
+    /// Project this row to its unscored prompt view (stripping the oracle `spec`).
+    pub fn to_unscored(&self) -> M6UnscoredPromptRow {
+        M6UnscoredPromptRow {
+            row_id: self.row_id.clone(),
+            family: self.family,
+            seed_index: self.seed_index,
+            prompt: self.prompt.clone(),
+        }
+    }
 }
 
 /// Unscored view of a frozen row (emitted when exporting the unscored evaluation prompt stream).
@@ -667,12 +687,7 @@ impl M6ReasoningPanel {
                 let line = serde_json::to_string(row).expect("serialize M6FrozenRow");
                 out.push_str(&line);
             } else {
-                let unscored = M6UnscoredPromptRow {
-                    row_id: row.row_id.clone(),
-                    family: row.family,
-                    seed_index: row.seed_index,
-                    prompt: row.prompt.clone(),
-                };
+                let unscored = row.to_unscored();
                 let line = serde_json::to_string(&unscored).expect("serialize M6UnscoredPromptRow");
                 out.push_str(&line);
             }
@@ -694,13 +709,16 @@ impl M6ReasoningPanel {
     /// Verify that:
     /// 1. The panel has exactly `240` rows (`80` per family);
     /// 2. Every `row_id` and `prompt` is unique;
-    /// 3. Every `Compositions` row has ZERO overlap with [`FORBIDDEN_CONTROL_PAIRS`] and
-    ///    [`FORBIDDEN_CONTROL_TRIPLES`] from `m6_exact_arithmetic.rs`;
-    /// 4. Every `Prompt` carries the `[M6-PANEL-V1::...]` domain tag excluding natural-language
-    ///    TinyStories, `v5-reply`, and `m2-reply512` corpora;
-    /// 5. Every `AlteredConstraints` row has `expected_answer != default_habit_answer`;
+    /// 3. Every `Compositions` row has ZERO overlap with [`FORBIDDEN_CONTROL_PAIRS`] (`18` pairs)
+    ///    and [`FORBIDDEN_CONTROL_TRIPLES`] (`30` triples) from `m6_exact_arithmetic.rs`, and
+    ///    neither `expected_intermediate` nor `expected_final` appears as a substring of `prompt`;
+    /// 4. Every `Prompt` carries the `[M6-PANEL-V1::...]` domain tag;
+    /// 5. Every `AlteredConstraints` row has `expected_answer != default_habit_answer`,
+    ///    `ModularStepCap` is balanced `10` taken / `10` not-taken, and `FeasibilityConstraint` is
+    ///    balanced `10` satisfiable / `10` unsatisfiable;
     /// 6. Every `CodeTasks` row's canonical program halts within [`MAX_SANDBOX_STEPS`] and produces
-    ///    non-constant, non-identity outputs across all 4 test vectors.
+    ///    non-constant, non-identity outputs across all 4 test vectors that do not appear in the
+    ///    prompt.
     pub fn verify_zero_overlap(&self) -> Result<(), String> {
         if self.rows.len() != M6_PANEL_TOTAL_ROWS {
             return Err(format!(
@@ -713,6 +731,10 @@ impl M6ReasoningPanel {
         let mut comp_count = 0usize;
         let mut alt_count = 0usize;
         let mut code_count = 0usize;
+        let mut mod_taken_count = 0usize;
+        let mut mod_not_taken_count = 0usize;
+        let mut feas_sat_count = 0usize;
+        let mut feas_unsat_count = 0usize;
         let mut ids = BTreeSet::new();
         let mut prompts = BTreeSet::new();
 
@@ -752,6 +774,21 @@ impl M6ReasoningPanel {
                             row.row_id, c.decimal_carries_ab
                         ));
                     }
+                    if c.decimal_borrows_sub < 1 {
+                        return Err(format!(
+                            "row {} has insufficient decimal borrows ({} < 1)",
+                            row.row_id,
+                            c.decimal_borries_check_msg()
+                        ));
+                    }
+                    let int_str = c.expected_intermediate.to_string();
+                    let out_str = c.expected_final.to_string();
+                    if row.prompt.contains(&int_str) || row.prompt.contains(&out_str) {
+                        return Err(format!(
+                            "row {} leaks target numeral ({int_str} or {out_str}) in prompt",
+                            row.row_id
+                        ));
+                    }
                 }
                 M6RowSpec::AlteredConstraints(a) => {
                     alt_count += 1;
@@ -761,6 +798,53 @@ impl M6ReasoningPanel {
                             row.row_id,
                             a.expected_answer()
                         ));
+                    }
+                    match a {
+                        AlteredConstraintSpec::ModularStepCap {
+                            a: op_a,
+                            b: op_b,
+                            modulus,
+                            forbidden_rem,
+                            branch_taken,
+                            ..
+                        } => {
+                            let actual_taken = (op_a + op_b).rem_euclid(*modulus) == *forbidden_rem;
+                            if actual_taken != *branch_taken {
+                                return Err(format!(
+                                    "row {} ModularStepCap branch_taken mismatch",
+                                    row.row_id
+                                ));
+                            }
+                            if *branch_taken {
+                                mod_taken_count += 1;
+                            } else {
+                                mod_not_taken_count += 1;
+                            }
+                        }
+                        AlteredConstraintSpec::FeasibilityConstraint {
+                            satisfiable,
+                            expected_answer,
+                            ..
+                        } => {
+                            if *satisfiable {
+                                if expected_answer == ABSTAIN_UNSATISFIABLE_TOKEN {
+                                    return Err(format!(
+                                        "row {} is satisfiable but expected_answer is ABSTAIN",
+                                        row.row_id
+                                    ));
+                                }
+                                feas_sat_count += 1;
+                            } else {
+                                if expected_answer != ABSTAIN_UNSATISFIABLE_TOKEN {
+                                    return Err(format!(
+                                        "row {} is unsatisfiable but expected_answer is not ABSTAIN",
+                                        row.row_id
+                                    ));
+                                }
+                                feas_unsat_count += 1;
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 M6RowSpec::CodeTasks(k) => {
@@ -785,6 +869,14 @@ impl M6ReasoningPanel {
                                 row.row_id
                             ));
                         }
+                        let exp_token = format!("={exp}");
+                        let exp_space = format!(" {exp} ");
+                        if row.prompt.contains(&exp_token) || row.prompt.contains(&exp_space) {
+                            return Err(format!(
+                                "row {} leaks expected output {exp} in prompt",
+                                row.row_id
+                            ));
+                        }
                     }
                     let all_same_output = k.test_vectors.windows(2).all(|w| w[0].1 == w[1].1);
                     let all_identity = k.test_vectors.iter().all(|&(x, y)| x == y);
@@ -806,8 +898,24 @@ impl M6ReasoningPanel {
                 "family count mismatch: comp={comp_count}, alt={alt_count}, code={code_count}"
             ));
         }
+        if mod_taken_count != 10 || mod_not_taken_count != 10 {
+            return Err(format!(
+                "ModularStepCap branch balance mismatch: taken={mod_taken_count}, not_taken={mod_not_taken_count}"
+            ));
+        }
+        if feas_sat_count != 10 || feas_unsat_count != 10 {
+            return Err(format!(
+                "FeasibilityConstraint balance mismatch: sat={feas_sat_count}, unsat={feas_unsat_count}"
+            ));
+        }
 
         Ok(())
+    }
+}
+
+impl CompositionSpec {
+    fn decimal_borries_check_msg(&self) -> u32 {
+        self.decimal_borrows_sub
     }
 }
 
@@ -901,22 +1009,25 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
             {
                 continue;
             }
-            let borrows = count_decimal_borrows(sum_ab, c);
-            if borrows < 1 {
-                continue;
-            }
-            if !seen_comp_tuples.insert((a, b, c)) {
-                continue;
-            }
 
             if is_register_chain {
+                let borrows = count_decimal_borrows(sum_ab, c);
+                if borrows < 1 {
+                    continue;
+                }
                 let d = comp_rng.next_range(350, 29_999);
-                let t1 = (a + b) as i64;
+                let t1 = sum_ab as i64;
                 let t2 = t1 - (c as i64);
                 let out = t2 + (d as i64);
                 let prompt = format!(
                     "[M6-PANEL-V1::compositions::{row_id}] Register chain: write A={a} and B={b} to addressed memory; compute T1 = A + B into R0; read R0 and C={c} to compute T2 = R0 - C into R1; read R1 and D={d} to compute OUT = R1 + D. Emit INT=<T1>;OUT=<OUT>."
                 );
+                if prompt.contains(&t1.to_string()) || prompt.contains(&out.to_string()) {
+                    continue;
+                }
+                if !seen_comp_tuples.insert((a, b, c)) {
+                    continue;
+                }
                 rows.push(M6FrozenRow {
                     row_id,
                     family: M6RowFamily::Compositions,
@@ -938,25 +1049,38 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
                 break;
             } else {
                 let scale = comp_rng.next_range(2, 7);
-                let prev = a + b;
+                let step_delta = u64::from((idx as u32 % 7) + 2) * 137;
+                let init_val = sum_ab;
+                let prev = init_val + step_delta;
                 let scaled = prev * scale;
-                if scaled <= c {
+                if scaled <= c + 500 {
+                    continue;
+                }
+                let borrows = count_decimal_borrows(scaled, c);
+                if borrows < 1 {
                     continue;
                 }
                 let curr = (scaled - c) as i64;
-                let q_ver = if idx % 2 == 0 {
+                let q_ver = if idx.is_multiple_of(2) {
                     QueriedMemoryVersion::Previous
                 } else {
                     QueriedMemoryVersion::Initial
                 };
                 let expected_int = match q_ver {
-                    QueriedMemoryVersion::Initial => a as i64,
+                    QueriedMemoryVersion::Initial => init_val as i64,
                     QueriedMemoryVersion::Previous => prev as i64,
                 };
                 let prompt = format!(
-                    "[M6-PANEL-V1::compositions::{row_id}] Versioned slot R0: write R0@initial={a}; update R0@previous = R0@initial + {b}; update R0@current = (R0@previous * {scale}) - {c}. Query INT=R0@{} and OUT=R0@current. Emit INT=<INT>;OUT=<OUT>.",
+                    "[M6-PANEL-V1::compositions::{row_id}] Versioned slot R0: write R0@initial = {a} + {b}; update R0@previous = R0@initial + {step_delta}; update R0@current = (R0@previous * {scale}) - {c}. Query INT=R0@{} and OUT=R0@current. Emit INT=<INT>;OUT=<OUT>.",
                     q_ver.as_str()
                 );
+                if prompt.contains(&expected_int.to_string()) || prompt.contains(&curr.to_string())
+                {
+                    continue;
+                }
+                if !seen_comp_tuples.insert((a, b, c)) {
+                    continue;
+                }
                 rows.push(M6FrozenRow {
                     row_id,
                     family: M6RowFamily::Compositions,
@@ -989,17 +1113,27 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
         loop {
             match sub_family {
                 0 => {
-                    // Non-decimal radix (base 7, 8, or 9 using digits 1..radix so base-10 reading is valid but wrong)
-                    let radices: [u8; 3] = [7, 8, 9];
+                    // Non-decimal radix in {7, 8, 9, 11, 12, 13, 16} using digits 1..radix.min(10)
+                    // so every input numeral is also a valid base-10 numeral whose base-10 sum
+                    // differs from the base-radix sum.
+                    let radices: [u8; 7] = [7, 8, 9, 11, 12, 13, 16];
                     let radix = radices[(alt_rng.next_u64() as usize) % radices.len()];
                     let r_u64 = u64::from(radix);
-                    // Build 3-digit base-B numbers whose digits are in 1..radix and trigger a base-B carry
-                    let d2_a = alt_rng.next_range(1, r_u64 - 1);
-                    let d1_a = alt_rng.next_range(2, r_u64 - 1);
-                    let d0_a = alt_rng.next_range(3, r_u64 - 1);
-                    let d2_b = alt_rng.next_range(1, r_u64 - 1);
-                    let d1_b = alt_rng.next_range(2, r_u64 - 1);
-                    let d0_b = alt_rng.next_range(r_u64 - d0_a, r_u64 - 1);
+                    let max_dec_digit = r_u64.min(10) - 1;
+                    let d2_a = alt_rng.next_range(1, max_dec_digit);
+                    let d1_a = alt_rng.next_range(2, max_dec_digit);
+                    let min_d0_a = (r_u64.saturating_sub(max_dec_digit)).max(2);
+                    if min_d0_a > max_dec_digit {
+                        continue;
+                    }
+                    let d0_a = alt_rng.next_range(min_d0_a, max_dec_digit);
+                    let d2_b = alt_rng.next_range(1, max_dec_digit);
+                    let d1_b = alt_rng.next_range(2, max_dec_digit);
+                    let min_d0_b = (r_u64.saturating_sub(d0_a)).max(1);
+                    if min_d0_b > max_dec_digit {
+                        continue;
+                    }
+                    let d0_b = alt_rng.next_range(min_d0_b, max_dec_digit);
 
                     let val_a_base_b = (d2_a * r_u64 + d1_a) * r_u64 + d0_a;
                     let val_b_base_b = (d2_b * r_u64 + d1_b) * r_u64 + d0_b;
@@ -1012,9 +1146,13 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
                     if expected_answer == default_habit_answer {
                         continue;
                     }
+                    let max_symbol = if radix <= 10 {
+                        (b'0' + (radix - 1)) as char
+                    } else {
+                        (b'A' + (radix - 11)) as char
+                    };
                     let prompt = format!(
-                        "[M6-PANEL-V1::altered_constraints::{row_id}] Altered radix constraint: all numerals are in base-{radix} (digits 0..{}). Compute {left_repr}_{radix} + {right_repr}_{radix} and emit the result in base-{radix} as VAL=<base-{radix} numeral>.",
-                        radix - 1
+                        "[M6-PANEL-V1::altered_constraints::{row_id}] Altered radix constraint: all numerals are in base-{radix} (digits 0..{max_symbol}). Compute {left_repr}_{radix} + {right_repr}_{radix} and emit the result in base-{radix} as VAL=<base-{radix} numeral>.",
                     );
                     if !seen_alt_prompts.insert(prompt.clone()) {
                         continue;
@@ -1071,16 +1209,29 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
                     break;
                 }
                 2 => {
-                    // ModularStepCap: intermediate state hitting forbidden residue triggers fallback_delta
+                    // ModularStepCap: balanced 10 branch-taken rows (`(a+b) mod m == forbidden_rem`)
+                    // and 10 branch-not-taken rows (`(a+b) mod m != forbidden_rem`).
                     let modulus = alt_rng.next_range(17, 53) as i64;
                     let a = alt_rng.next_range(25, 180) as i64;
                     let b = alt_rng.next_range(25, 180) as i64;
                     let c = alt_rng.next_range(15, 95) as i64;
-                    let forbidden_rem = (a + b).rem_euclid(modulus);
-                    let fallback_delta = alt_rng.next_range(7, 29) as i64;
-                    let s1 = (a + b) + fallback_delta;
-                    let expected = (s1 + c).rem_euclid(modulus);
-                    let habit = a + b + c;
+                    let fallback_delta = alt_rng.next_range(5, (modulus - 2) as u64) as i64;
+                    let raw_rem = (a + b).rem_euclid(modulus);
+                    let branch_taken = idx.is_multiple_of(2);
+                    let (forbidden_rem, expected, habit) = if branch_taken {
+                        let frem = raw_rem;
+                        let exp = (a + b + fallback_delta + c).rem_euclid(modulus);
+                        // Habit on taken rows: ignoring the triggered fallback_delta
+                        let hab = (a + b + c).rem_euclid(modulus);
+                        (frem, exp, hab)
+                    } else {
+                        let offset = alt_rng.next_range(1, (modulus - 1) as u64) as i64;
+                        let frem = (raw_rem + offset).rem_euclid(modulus);
+                        let exp = (a + b + c).rem_euclid(modulus);
+                        // Habit on not-taken rows: blindly adding fallback_delta without checking condition
+                        let hab = (a + b + fallback_delta + c).rem_euclid(modulus);
+                        (frem, exp, hab)
+                    };
                     if expected == habit {
                         continue;
                     }
@@ -1103,6 +1254,7 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
                                 modulus,
                                 forbidden_rem,
                                 fallback_delta,
+                                branch_taken,
                                 expected_answer: expected.to_string(),
                                 default_habit_answer: habit.to_string(),
                             },
@@ -1111,25 +1263,58 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
                     break;
                 }
                 _ => {
-                    // UnsatisfiableConstraint: 20 rows requiring ABSTAIN:UNSATISFIABLE
-                    let a = alt_rng.next_range(40, 450) as i64;
-                    let b = alt_rng.next_range(a as u64 + 15, 950) as i64;
-                    let summary = if idx % 2 == 0 {
-                        format!(
-                            "strict unsigned register R0 initialized to {a} must subtract {b} without borrow wraparound and remain >= 0"
-                        )
+                    // FeasibilityConstraint: 10 unsatisfiable rows (even idx) requiring
+                    // ABSTAIN:UNSATISFIABLE and 10 satisfiable rows (odd idx) with a unique integer
+                    // solution, using identical wording across both sub-templates so keyword rules
+                    // ("contains 'feasibility' -> ABSTAIN") score only 10/20.
+                    let satisfiable = !idx.is_multiple_of(2);
+                    let use_unsigned_sub = (idx / 2).is_multiple_of(2);
+                    let a = alt_rng.next_range(40, 380) as i64;
+                    let b = alt_rng.next_range(a as u64 + 25, 850) as i64;
+                    let (summary, expected_answer, habit) = if use_unsigned_sub {
+                        if count_decimal_borrows(b as u64, a as u64) < 1 {
+                            continue;
+                        }
+                        let (lhs, rhs, exp, hab) = if satisfiable {
+                            (
+                                b,
+                                a,
+                                (b - a).to_string(),
+                                ABSTAIN_UNSATISFIABLE_TOKEN.to_string(),
+                            )
+                        } else {
+                            (
+                                a,
+                                b,
+                                ABSTAIN_UNSATISFIABLE_TOKEN.to_string(),
+                                (a - b).to_string(),
+                            )
+                        };
+                        let s = format!(
+                            "strict unsigned register R0 initialized to {lhs} must subtract {rhs} without borrow wraparound and remain >= 0"
+                        );
+                        (s, exp, hab)
                     } else {
+                        let k = alt_rng.next_range(3, 9) as i64;
                         let even_a = a * 2;
                         let even_b = b * 2;
-                        let odd_target = even_a + even_b + 1;
-                        format!(
-                            "find integer step count k >= 1 such that ({even_a} * k + {even_b} * k) == {odd_target} under even-lattice closure"
-                        )
-                    };
-                    let habit = if idx % 2 == 0 {
-                        (a - b).to_string()
-                    } else {
-                        (a * 2 + b * 2 + 1).to_string()
+                        let (target, exp, hab) = if satisfiable {
+                            (
+                                (even_a + even_b) * k,
+                                k.to_string(),
+                                ABSTAIN_UNSATISFIABLE_TOKEN.to_string(),
+                            )
+                        } else {
+                            (
+                                (even_a + even_b) * k + 1,
+                                ABSTAIN_UNSATISFIABLE_TOKEN.to_string(),
+                                k.to_string(),
+                            )
+                        };
+                        let s = format!(
+                            "find integer step count k >= 1 such that ({even_a} * k + {even_b} * k) == {target} under even-lattice closure"
+                        );
+                        (s, exp, hab)
                     };
                     let prompt = format!(
                         "[M6-PANEL-V1::altered_constraints::{row_id}] Altered feasibility constraint: {summary}. If the constraint system has no valid integer solution, emit {ABSTAIN_UNSATISFIABLE_TOKEN}; otherwise emit VAL=<integer>."
@@ -1143,11 +1328,12 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
                         seed_index: idx,
                         prompt,
                         spec: M6RowSpec::AlteredConstraints(
-                            AlteredConstraintSpec::UnsatisfiableConstraint {
+                            AlteredConstraintSpec::FeasibilityConstraint {
                                 a,
                                 b,
+                                satisfiable,
                                 constraint_summary: summary,
-                                expected_answer: ABSTAIN_UNSATISFIABLE_TOKEN.to_string(),
+                                expected_answer,
                                 default_habit_answer: habit,
                             },
                         ),
@@ -1497,6 +1683,11 @@ pub fn generate_m6_panel(seed: u64) -> M6ReasoningPanel {
             let prompt = format!(
                 "[M6-PANEL-V1::code_tasks::{row_id}] Implement `{fn_signature}`: {spec_desc}. Evaluate on test inputs ({vec_inputs_str}) and emit V0=<y0>;V1=<y1>;V2=<y2>;V3=<y3>."
             );
+            if test_vectors.iter().any(|&(_, exp)| {
+                prompt.contains(&format!("={exp}")) || prompt.contains(&format!(" {exp} "))
+            }) {
+                continue;
+            }
             if !seen_code_prompts.insert(prompt.clone()) {
                 continue;
             }
@@ -1619,24 +1810,43 @@ pub fn grade_code_task_program(
     }
 }
 
-fn grade_composition_row(row_id: &str, spec: &CompositionSpec, trimmed: &str) -> M6RowGrade {
-    let mut parsed_int: Option<i64> = None;
-    let mut parsed_out: Option<i64> = None;
-    for part in trimmed.split(';') {
-        let part = part.trim();
-        if let Some(rest) = part.strip_prefix("INT=") {
-            parsed_int = rest.trim().parse::<i64>().ok();
-        } else if let Some(rest) = part.strip_prefix("OUT=") {
-            parsed_out = rest.trim().parse::<i64>().ok();
-        }
+fn parse_canonical_i64(s: &str) -> Option<i64> {
+    if s.is_empty() || s.trim() != s {
+        return None;
     }
+    let val = s.parse::<i64>().ok()?;
+    if val.to_string() == s {
+        Some(val)
+    } else {
+        None
+    }
+}
+
+fn grade_composition_row(row_id: &str, spec: &CompositionSpec, trimmed: &str) -> M6RowGrade {
+    let parts: Vec<&str> = trimmed.split(';').collect();
+    if parts.len() != 2 {
+        return M6RowGrade {
+            row_id: row_id.to_string(),
+            family: M6RowFamily::Compositions,
+            passed: false,
+            diagnostic: M6OracleDiagnostic::MalformedOutput {
+                detail: format!(
+                    "expected exactly 2 fields INT=<canonical_i64>;OUT=<canonical_i64>, got {trimmed:?}"
+                ),
+            },
+        };
+    }
+    let parsed_int = parts[0].strip_prefix("INT=").and_then(parse_canonical_i64);
+    let parsed_out = parts[1].strip_prefix("OUT=").and_then(parse_canonical_i64);
     let (Some(actual_int), Some(actual_out)) = (parsed_int, parsed_out) else {
         return M6RowGrade {
             row_id: row_id.to_string(),
             family: M6RowFamily::Compositions,
             passed: false,
             diagnostic: M6OracleDiagnostic::MalformedOutput {
-                detail: format!("expected INT=<i64>;OUT=<i64>, got {trimmed:?}"),
+                detail: format!(
+                    "expected canonical INT=<i64>;OUT=<i64> with no leading '+' or zeroes, got {trimmed:?}"
+                ),
             },
         };
     };
@@ -1675,7 +1885,20 @@ fn grade_altered_constraint_row(
     spec: &AlteredConstraintSpec,
     trimmed: &str,
 ) -> M6RowGrade {
-    let normalized = trimmed.strip_prefix("VAL=").unwrap_or(trimmed).trim();
+    let normalized = match trimmed.strip_prefix("VAL=") {
+        Some(rest) if !rest.is_empty() && rest.trim() == rest => rest,
+        Some(_) => {
+            return M6RowGrade {
+                row_id: row_id.to_string(),
+                family: M6RowFamily::AlteredConstraints,
+                passed: false,
+                diagnostic: M6OracleDiagnostic::MalformedOutput {
+                    detail: format!("non-canonical VAL= payload in {trimmed:?}"),
+                },
+            };
+        }
+        None => trimmed,
+    };
     if spec.requires_abstention() {
         if normalized == ABSTAIN_UNSATISFIABLE_TOKEN {
             return M6RowGrade {
@@ -1733,27 +1956,41 @@ fn grade_altered_constraint_row(
 }
 
 fn grade_code_task_row(row_id: &str, spec: &CodeTaskSpec, trimmed: &str) -> M6RowGrade {
-    let mut values = [None::<i64>; 4];
-    for part in trimmed.split(';') {
-        let part = part.trim();
-        for (idx, slot) in values.iter_mut().enumerate() {
-            let prefix = format!("V{idx}=");
-            if let Some(rest) = part.strip_prefix(&prefix) {
-                *slot = rest.trim().parse::<i64>().ok();
-            }
-        }
+    let parts: Vec<&str> = trimmed.split(';').collect();
+    if parts.len() != 4 {
+        return M6RowGrade {
+            row_id: row_id.to_string(),
+            family: M6RowFamily::CodeTasks,
+            passed: false,
+            diagnostic: M6OracleDiagnostic::MalformedOutput {
+                detail: format!(
+                    "expected exactly 4 semicolon-separated fields V0=..;V1=..;V2=..;V3=.., got {trimmed:?}"
+                ),
+            },
+        };
     }
-    for (idx, &(inp, expected)) in spec.test_vectors.iter().enumerate() {
-        let Some(actual) = values[idx] else {
+    let mut values = [0i64; 4];
+    for (idx, slot) in values.iter_mut().enumerate() {
+        let prefix = format!("V{idx}=");
+        let Some(val) = parts[idx]
+            .strip_prefix(&prefix)
+            .and_then(parse_canonical_i64)
+        else {
             return M6RowGrade {
                 row_id: row_id.to_string(),
                 family: M6RowFamily::CodeTasks,
                 passed: false,
                 diagnostic: M6OracleDiagnostic::MalformedOutput {
-                    detail: format!("missing or invalid V{idx} in candidate output {trimmed:?}"),
+                    detail: format!(
+                        "missing or non-canonical V{idx} in candidate output {trimmed:?}"
+                    ),
                 },
             };
         };
+        *slot = val;
+    }
+    for (idx, &(inp, expected)) in spec.test_vectors.iter().enumerate() {
+        let actual = values[idx];
         if actual != expected {
             return M6RowGrade {
                 row_id: row_id.to_string(),
@@ -1846,11 +2083,26 @@ pub fn grade_m6_panel(panel: &M6ReasoningPanel, answers: &[String]) -> M6PanelSc
     }
 }
 
+/// Extract the first unsigned integer numeral occurring in `text` (used by [`M6CountTableBaseline`]
+/// to form prompt-only surface buckets without inspecting `M6RowSpec`).
+fn first_prompt_u64(text: &str) -> u64 {
+    let mut acc: Option<u64> = None;
+    for b in text.bytes() {
+        if b.is_ascii_digit() {
+            let d = u64::from(b - b'0');
+            acc = Some(acc.unwrap_or(0).saturating_mul(10).saturating_add(d));
+        } else if let Some(v) = acc {
+            return v;
+        }
+    }
+    acc.unwrap_or(0)
+}
+
 /// Lawful non-neural count-table baseline (CHARTER §4.4) for measuring baseline score and noise on
-/// `m6-reasoning`.
+/// `m6-reasoning`, keyed strictly on the unscored [`M6UnscoredPromptRow`] surface text.
 #[derive(Debug, Clone, Default)]
 pub struct M6CountTableBaseline {
-    /// Context feature key -> (answer -> count)
+    /// Prompt-surface feature key -> (answer -> count)
     context_counts: BTreeMap<String, BTreeMap<String, u32>>,
     /// Family -> (answer -> count)
     family_counts: BTreeMap<M6RowFamily, BTreeMap<String, u32>>,
@@ -1863,51 +2115,70 @@ impl M6CountTableBaseline {
         Self::default()
     }
 
-    /// Extract a structural context key (family + sub-operation signature) from a row without
-    /// peeking at the oracle target.
-    pub fn context_key(row: &M6FrozenRow) -> String {
-        match &row.spec {
-            M6RowSpec::Compositions(c) => {
-                format!("comp::{:?}::{}", c.kind, c.operand_a % 16)
+    /// Extract a surface context key from an unscored [`M6UnscoredPromptRow`] using only the
+    /// prompt text and family tag (cannot peek at [`M6RowSpec`] or oracle fields).
+    pub fn context_key(prompt_row: &M6UnscoredPromptRow) -> String {
+        let body = prompt_row
+            .prompt
+            .split_once("] ")
+            .map(|(_, rest)| rest)
+            .unwrap_or(&prompt_row.prompt);
+        let first_num = first_prompt_u64(body);
+        match prompt_row.family {
+            M6RowFamily::Compositions => {
+                let kind_tag = if body.starts_with("Register chain:") {
+                    "reg_chain"
+                } else {
+                    "versioned"
+                };
+                format!("comp::{kind_tag}::{}", first_num % 16)
             }
-            M6RowSpec::AlteredConstraints(a) => match a {
-                AlteredConstraintSpec::NonDecimalRadix { radix, .. } => {
-                    format!("alt::radix::{radix}")
-                }
-                AlteredConstraintSpec::ReboundPrecedence { c, .. } => {
-                    format!("alt::prec::{c}")
-                }
-                AlteredConstraintSpec::ModularStepCap { modulus, .. } => {
-                    format!("alt::mod::{modulus}")
-                }
-                AlteredConstraintSpec::UnsatisfiableConstraint { a, .. } => {
-                    format!("alt::unsat::{}", a % 8)
-                }
-            },
-            M6RowSpec::CodeTasks(k) => {
-                format!("code::{}", k.algorithm.as_str())
+            M6RowFamily::AlteredConstraints => {
+                let sub_tag = if body.starts_with("Altered radix constraint:") {
+                    "radix"
+                } else if body.starts_with("Altered precedence constraint:") {
+                    "prec"
+                } else if body.starts_with("Altered transition constraint:") {
+                    "mod"
+                } else {
+                    "feasibility"
+                };
+                format!("alt::{sub_tag}::{}", first_num % 8)
+            }
+            M6RowFamily::CodeTasks => {
+                let alg_tag = if body.contains("clamp(") {
+                    "clamp"
+                } else if body.contains("Horner") || body.contains("(((") {
+                    "poly"
+                } else if body.contains("ring updates") {
+                    "ring"
+                } else {
+                    "parity"
+                };
+                format!("code::{alg_tag}::{}", first_num % 8)
             }
         }
     }
 
-    /// Observe one training row into the count tables.
-    pub fn observe(&mut self, row: &M6FrozenRow) {
-        let key = Self::context_key(row);
-        let target = row.canonical_answer();
+    /// Observe one training row into the count tables using only its unscored prompt view and
+    /// canonical target string.
+    pub fn observe(&mut self, prompt_row: &M6UnscoredPromptRow, target: &str) {
+        let key = Self::context_key(prompt_row);
+        let target_owned = target.to_string();
         *self
             .context_counts
             .entry(key)
             .or_default()
-            .entry(target.clone())
+            .entry(target_owned.clone())
             .or_insert(0) += 1;
         *self
             .family_counts
-            .entry(row.family)
+            .entry(prompt_row.family)
             .or_default()
-            .entry(target.clone())
+            .entry(target_owned.clone())
             .or_insert(0) += 1;
         if target != ABSTAIN_UNSATISFIABLE_TOKEN {
-            *self.numeric_counts.entry(target).or_insert(0) += 1;
+            *self.numeric_counts.entry(target_owned).or_insert(0) += 1;
         }
     }
 
@@ -1917,9 +2188,10 @@ impl M6CountTableBaseline {
             .map(|(k, _)| k.clone())
     }
 
-    /// Predict using the context-key count table first (falling back to global numeric majority).
-    pub fn predict_context_table(&self, row: &M6FrozenRow) -> String {
-        let key = Self::context_key(row);
+    /// Predict using the prompt-surface context-key count table first (falling back to global
+    /// numeric majority). Accepts `&M6UnscoredPromptRow` so it cannot access [`M6RowSpec`].
+    pub fn predict_context_table(&self, prompt_row: &M6UnscoredPromptRow) -> String {
+        let key = Self::context_key(prompt_row);
         if let Some(bucket) = self.context_counts.get(&key) {
             if let Some(ans) = Self::top_answer(bucket) {
                 return ans;
@@ -1929,8 +2201,8 @@ impl M6CountTableBaseline {
     }
 
     /// Predict using the family-conditioned modal answer (the best-constant per family).
-    pub fn predict_family_modal(&self, row: &M6FrozenRow) -> String {
-        if let Some(bucket) = self.family_counts.get(&row.family) {
+    pub fn predict_family_modal(&self, prompt_row: &M6UnscoredPromptRow) -> String {
+        if let Some(bucket) = self.family_counts.get(&prompt_row.family) {
             if let Some(ans) = Self::top_answer(bucket) {
                 return ans;
             }
@@ -1940,7 +2212,7 @@ impl M6CountTableBaseline {
 }
 
 /// Measured noise and baseline summary from evaluating [`M6CountTableBaseline`] across `num_seeds`
-/// disjoint training draws on the frozen 240-row panel.
+/// full 240-row training draws on the frozen 240-row panel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct M6BaselineNoiseReport {
     pub num_seeds: usize,
@@ -1949,13 +2221,14 @@ pub struct M6BaselineNoiseReport {
     pub family_modal_ceiling: usize,
     pub context_min_score: usize,
     pub context_max_score: usize,
-    /// Empirical half-range noise band (`ceil((max - min) / 2)` with a minimum floor of 1 row when
-    /// spread > 0) measured across seeded count-table draws.
+    /// Empirical half-range noise band (`ceil((max - min) / 2)`) measured across the 8 full
+    /// seeded count-table draws.
     pub measured_noise_half_band_rows: usize,
 }
 
-/// Evaluate the lawful non-neural [`M6CountTableBaseline`] across `8` independent seeded training
-/// draws on `frozen_panel` (CHARTER §4.4).
+/// Evaluate the lawful non-neural [`M6CountTableBaseline`] across `8` independent full 240-row
+/// seeded training draws on `frozen_panel` (CHARTER §4.4), using only [`M6UnscoredPromptRow`]
+/// surface features at prediction time.
 pub fn evaluate_count_table_baseline_noise(
     frozen_panel: &M6ReasoningPanel,
 ) -> M6BaselineNoiseReport {
@@ -1963,6 +2236,11 @@ pub fn evaluate_count_table_baseline_noise(
     let mut numeric_only_scores = Vec::with_capacity(num_seeds);
     let mut context_table_scores = Vec::with_capacity(num_seeds);
     let mut family_modal_ceiling = 0usize;
+    let eval_prompts: Vec<M6UnscoredPromptRow> = frozen_panel
+        .rows
+        .iter()
+        .map(M6FrozenRow::to_unscored)
+        .collect();
 
     for seed_offset in 1..=num_seeds {
         let train_seed = frozen_panel
@@ -1970,13 +2248,8 @@ pub fn evaluate_count_table_baseline_noise(
             .wrapping_add((seed_offset as u64).wrapping_mul(0x517C_C1B7_2722_0A95));
         let train_panel = generate_m6_panel(train_seed);
         let mut baseline = M6CountTableBaseline::new();
-        // Sub-sample half the training panel deterministically per seed so context buckets with
-        // small modulus/hash collisions experience realistic count-table sampling variance.
-        let mut sub_rng = SplitMix64::new(train_seed ^ 0xA5A5_5A5A_F0F0_0F0F);
         for row in &train_panel.rows {
-            if sub_rng.next_u64().is_multiple_of(2) {
-                baseline.observe(row);
-            }
+            baseline.observe(&row.to_unscored(), &row.canonical_answer());
         }
 
         let numeric_ans =
@@ -1985,18 +2258,16 @@ pub fn evaluate_count_table_baseline_noise(
         let num_score = grade_m6_panel(frozen_panel, &numeric_preds).overall_passed;
         numeric_only_scores.push(num_score);
 
-        let ctx_preds: Vec<String> = frozen_panel
-            .rows
+        let ctx_preds: Vec<String> = eval_prompts
             .iter()
-            .map(|r| baseline.predict_context_table(r))
+            .map(|p| baseline.predict_context_table(p))
             .collect();
         let ctx_score = grade_m6_panel(frozen_panel, &ctx_preds).overall_passed;
         context_table_scores.push(ctx_score);
 
-        let modal_preds: Vec<String> = frozen_panel
-            .rows
+        let modal_preds: Vec<String> = eval_prompts
             .iter()
-            .map(|r| baseline.predict_family_modal(r))
+            .map(|p| baseline.predict_family_modal(p))
             .collect();
         let modal_score = grade_m6_panel(frozen_panel, &modal_preds).overall_passed;
         family_modal_ceiling = family_modal_ceiling.max(modal_score);
@@ -2015,5 +2286,78 @@ pub fn evaluate_count_table_baseline_noise(
         context_min_score,
         context_max_score,
         measured_noise_half_band_rows,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_m6_carry_borrow_and_radix_helpers() {
+        assert_eq!(count_decimal_carries(0, 0), 0);
+        assert_eq!(count_decimal_carries(999, 1), 3);
+        assert_eq!(count_decimal_borrows(1000, 1), 3);
+        assert_eq!(format_in_radix(0, 16), "0");
+        assert_eq!(format_in_radix(255, 16), "FF");
+    }
+
+    #[test]
+    fn panel_m6_strict_canonical_grading_rejects_non_canonical_numerals_and_junk() {
+        let panel = generate_frozen_m6_panel();
+        panel.verify_zero_overlap().expect("zero overlap");
+        let comp_row = &panel.rows[0];
+        let M6RowSpec::Compositions(c) = &comp_row.spec else {
+            panic!("row 0 must be Compositions");
+        };
+        let i = c.expected_intermediate;
+        let o = c.expected_final;
+        assert!(grade_m6_row(comp_row, &format!("INT={i};OUT={o}")).passed);
+        assert!(!grade_m6_row(comp_row, &format!("INT=+{i};OUT={o}")).passed);
+        assert!(!grade_m6_row(comp_row, &format!("INT=0{i};OUT={o}")).passed);
+        assert!(!grade_m6_row(comp_row, &format!("INT={i};OUT={o};JUNK=1")).passed);
+        assert!(!grade_m6_row(comp_row, &format!("INT=0;OUT={o};INT={i}")).passed);
+
+        let code_row = &panel.rows[160];
+        let M6RowSpec::CodeTasks(k) = &code_row.spec else {
+            panic!("row 160 must be CodeTasks");
+        };
+        let [(_, v0), (_, v1), (_, v2), (_, v3)] = k.test_vectors.as_slice() else {
+            panic!("4 test vectors");
+        };
+        assert!(grade_m6_row(code_row, &format!("V0={v0};V1={v1};V2={v2};V3={v3}")).passed);
+        assert!(!grade_m6_row(code_row, &format!("V0=0{v0};V1={v1};V2={v2};V3={v3}")).passed);
+        assert!(
+            !grade_m6_row(
+                code_row,
+                &format!("V0={v0};V1={v1};V2={v2};V3={v3};EXTRA=9")
+            )
+            .passed
+        );
+    }
+
+    #[test]
+    fn panel_m6_prompt_only_count_table_key_cannot_distinguish_feasibility_polarity() {
+        let panel = generate_frozen_m6_panel();
+        let mut sat_prefixes = BTreeSet::new();
+        let mut unsat_prefixes = BTreeSet::new();
+        for row in panel.rows.iter().skip(80 + 60).take(20) {
+            let unscored = row.to_unscored();
+            let key = M6CountTableBaseline::context_key(&unscored);
+            let prefix = key.rsplit_once("::").map(|(p, _)| p).unwrap_or(&key);
+            if let M6RowSpec::AlteredConstraints(AlteredConstraintSpec::FeasibilityConstraint {
+                satisfiable,
+                ..
+            }) = &row.spec
+            {
+                if *satisfiable {
+                    sat_prefixes.insert(prefix.to_string());
+                } else {
+                    unsat_prefixes.insert(prefix.to_string());
+                }
+            }
+        }
+        assert_eq!(sat_prefixes, unsat_prefixes);
+        assert!(sat_prefixes.contains("alt::feasibility"));
     }
 }
