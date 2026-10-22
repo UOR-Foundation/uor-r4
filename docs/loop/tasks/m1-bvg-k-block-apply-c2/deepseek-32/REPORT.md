@@ -13,10 +13,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `20f618132`. Item PR, docs-onl
 
 | File | Class | Lines | What |
 |---|---|---|---|
-| `docs/labs/m1-bvg-k-block-apply-c2/README.md` | docs | new 30 lines | the in-scope record: C2 PASS receipt + controls, the Stage T DRAFT pointer, the three registration blockers, the staged notebook row and its backfill note |
+| `docs/labs/m1-bvg-k-block-apply-c2/README.md` | docs | new 32 lines | the in-scope record: C2 PASS receipt + controls, the Stage T DRAFT pointer, the three registration blockers, the staged notebook row and its backfill note |
 | `docs/loop/tasks/m1-bvg-k-block-apply-c2/deepseek-32/{ORDER,REPORT}.md` | docs | small | this order and report |
 
-**Size:** about 100 docs changed lines at the head (the lab record is 30 new lines; the rest is the task folder and the merge/render delta).
+**Size:** **104 insertions / 2 deletions** at the final head (`git diff --stat origin/main...HEAD`): the lab record is 32 new lines, the task folder 25 + 45, and the generated roadmap render is +4/−2.
 
 ## Measurements
 
