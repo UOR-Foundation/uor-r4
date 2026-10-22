@@ -593,12 +593,15 @@ fn a_productive_then_silent_client_is_closed_at_the_second_window() {
 }
 
 #[test]
-fn a_leased_session_is_never_closed_and_notes_once_per_window() {
+fn a_leased_session_is_never_closed_and_notes_exactly_once_per_window() {
+    // Deterministic: the fake clock steps 600 s per read (so a 7,200 s window needs exactly 12
+    // reads), the client ends when the pause hook counts 30 polls, and the notice count is exact.
+    // With the two lease-skip lines removed the count becomes ~19, so this test pins them.
     let root = init_repo("lease-exempt");
     let launch = vec![
         "sh".to_string(),
         "-c".to_string(),
-        "sleep 0.6".to_string(),
+        "while [ ! -f stop ]; do sleep 0.01; done".to_string(),
         "{prompt}".to_string(),
     ];
     let cards: RefCell<Vec<String>> = RefCell::new(Vec::new());
@@ -618,10 +621,19 @@ fn a_leased_session_is_never_closed_and_notes_once_per_window() {
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
         let seconds = jump.get();
-        jump.set(seconds + 3_600);
+        jump.set(seconds + 600);
         real + seconds
     };
-    let pause = |_seconds: u64| std::thread::sleep(std::time::Duration::from_millis(20));
+    let polls = std::cell::Cell::new(0u32);
+    let stop = root.join("stop");
+    let pause = |_seconds: u64| {
+        let count = polls.get() + 1;
+        polls.set(count);
+        if count >= 30 {
+            let _ = std::fs::write(&stop, "stop\n");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    };
     let spec = DriveSpec {
         root: &root,
         lab: "deepseek",
@@ -648,12 +660,16 @@ fn a_leased_session_is_never_closed_and_notes_once_per_window() {
     );
     let notices = notices.into_inner();
     assert!(
-        notices.len() >= 2,
-        "one skip note per two-hour window: {notices:?}"
-    );
-    assert!(
         notices.iter().all(|note| note.contains("close skipped")),
         "every note is the lease skip: {notices:?}"
+    );
+    // The clock reaches 7,200 s at read 12 and 14,400 s at read 24; the run stops at 30 polls, so
+    // exactly two windows open. Without advancing next_check (the removed lines) every poll after
+    // read 12 notes, so this exact count is the planted assertion.
+    assert_eq!(
+        notices.len(),
+        2,
+        "one skip note per two-hour window, not one per poll: {notices:?}"
     );
     let _ = std::fs::remove_dir_all(&root);
 }

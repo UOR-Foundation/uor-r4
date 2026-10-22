@@ -37,11 +37,26 @@ pub const DRIVE_DIR: &str = "local/loop/drive";
 /// How many sessions one invocation may start by default.
 pub const DEFAULT_MAX_SESSIONS: usize = 1;
 /// The `GIT_*` variables a git child must not inherit.
-/// Remove every `GIT_*` variable a child would otherwise inherit: a `GIT_DIR` from a hook would
-/// point git at another repository. A named list misses variables such as `GIT_CONFIG_PARAMETERS`.
+/// Remove the `GIT_*` variables that **locate a repository or override config** (including
+/// `GIT_CONFIG_PARAMETERS`), so a child cannot inherit another repository; the transport/auth
+/// variables such as `GIT_SSH_COMMAND` and `GIT_ASKPASS` stay, or a push that needs them breaks.
+const GIT_STRIP: [&str; 8] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+];
+
 fn strip_git_env(command: &mut Command) {
+    for name in GIT_STRIP {
+        command.env_remove(name);
+    }
     for (key, _) in std::env::vars_os() {
-        if key.to_string_lossy().starts_with("GIT_") {
+        if key.to_string_lossy().starts_with("GIT_CONFIG") {
             command.env_remove(key);
         }
     }
