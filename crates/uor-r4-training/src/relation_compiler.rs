@@ -1517,6 +1517,10 @@ pub fn parse_op(
 
 /// Combine a table action and an op-model action under `policy`.
 ///
+/// Extracted from the historical `SavedCompiler::action` (`#[cfg(any())]`, which remains
+/// unbuilt in the native qualification graph) so the policy-precedence rule can be unit-tested
+/// directly under `#[cfg(test)]`.
+///
 /// The `op` closure is invoked only when `policy` may consult the op model (`OpPolicy::Op`,
 /// `OpPolicy::TableStatements` when `table` is a statement, or `OpPolicy::UnlessQuery` when
 /// `table` is not a query). Under both `TableStatements` and `UnlessQuery`, a table statement

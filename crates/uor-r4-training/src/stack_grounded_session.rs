@@ -174,17 +174,16 @@ pub struct SessionLimits {
 
 /// The store effect of a compiled turn.
 ///
-/// Store reads and unresolved turns have distinct recall semantics in
-/// [`GroundedSession::emitter_suffix`]:
-/// - [`MemoryEffect::Read`] with [`StoreRead::Absent`] means the compiler resolved the turn
-///   to a known or derived relation ID whose slot in the store is empty (proven store
-///   absence). It emits `"Memory: none."` ([`RecallDisposition::Absent`]) and **never**
-///   invokes the [`GroundedSession::with_log_recall`] sieve, because falling back to the
-///   prior-turn text sieve on a resolved relation miss would mask genuine absence when the
-///   statement turn failed to write.
-/// - [`MemoryEffect::Unresolved`] means the compiler could not resolve the turn to a store
-///   action at all; when `read` is enabled, [`GroundedSession::with_log_recall`] is
-///   consulted and may supply [`RecallDisposition::LogValue`].
+/// Current recall behaviour in [`resolve_recall_line`] (extracted from the historical
+/// `GroundedSession::emitter_suffix`, which remains `#[cfg(any())]` and unbuilt):
+/// - [`MemoryEffect::Read`] with [`StoreRead::Absent`] represents a turn resolved to a relation
+///   ID whose slot in the store is empty. [`resolve_recall_line`] returns `"Memory: none."`
+///   ([`RecallDisposition::Absent`]) and does not invoke `log_recall`.
+/// - [`MemoryEffect::Unresolved`] represents a turn that was not resolved to a store action;
+///   when `read` is enabled, [`resolve_recall_line`] consults `log_recall` and may return
+///   [`RecallDisposition::LogValue`].
+/// Whether [`StoreRead::Absent`] should also consult `log_recall` or remain strictly separate
+/// is documented here as the current code's behaviour and queued for PM decision (`#2028`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MemoryEffect {
@@ -225,13 +224,12 @@ impl Default for TurnControls {
 pub enum RecallDisposition {
     NotRequested,
     Value,
-    /// The turn was [`MemoryEffect::Unresolved`] (no store read or write applied) and the
-    /// session's log-recall sieve supplied the line ([`GroundedSession::with_log_recall`]).
-    /// Never produced on [`MemoryEffect::Read`], including [`StoreRead::Absent`].
+    /// In [`resolve_recall_line`], returned when the turn is [`MemoryEffect::Unresolved`] and
+    /// `log_recall` supplies a non-sentinel value; not returned on [`MemoryEffect::Read`]
+    /// (including [`StoreRead::Absent`]).
     LogValue,
-    /// The compiler resolved a query to a relation ID whose store slot has never been
-    /// written ([`StoreRead::Absent`]); emits `"Memory: none."` without consulting
-    /// [`GroundedSession::with_log_recall`].
+    /// In [`resolve_recall_line`], returned on [`MemoryEffect::Read`] with [`StoreRead::Absent`],
+    /// emitting `"Memory: none."` without calling `log_recall`.
     Absent,
     Disabled,
     Unsupported {
@@ -366,14 +364,16 @@ pub type LogRecall = std::sync::Arc<dyn Fn(&[&str], &str) -> Option<String> + Se
 /// Resolve the system recall line (`Some("Memory: ...")` or `None`) and [`RecallDisposition`]
 /// for a compiled turn's [`MemoryEffect`].
 ///
-/// Store reads and unresolved turns are strictly separated:
-/// - [`MemoryEffect::Read`] with [`StoreRead::Absent`] is proven store absence for a resolved
-///   relation address; it emits `Some("Memory: none.")` with [`RecallDisposition::Absent`] and
-///   **never** calls `log_recall`.
-/// - [`MemoryEffect::Unresolved`] means the compiler did not resolve a store action; when
-///   `read` is enabled and `log_recall` is attached, it consults `log_recall` against the
-///   prior user turns and returns [`RecallDisposition::LogValue`] when the sieve yields a
-///   non-sentinel value.
+/// Extracted from the historical `GroundedSession::emitter_suffix` (`#[cfg(any())]`, which
+/// remains unbuilt in the native qualification graph) so the current recall-line rule can be
+/// unit-tested directly under `#[cfg(test)]`:
+/// - [`MemoryEffect::Read`] with [`StoreRead::Absent`] emits `Some("Memory: none.")` with
+///   [`RecallDisposition::Absent`] and does not call `log_recall`.
+/// - [`MemoryEffect::Unresolved`] (when `read` is enabled and `log_recall` is attached)
+///   consults `log_recall` against the prior user turns and returns [`RecallDisposition::LogValue`]
+///   when the sieve yields a non-sentinel value.
+/// Whether an absent store read should also consult `log_recall` is documented here as the
+/// current code's behaviour and queued for PM decision (`#2028`).
 pub fn resolve_recall_line<F>(
     effect: &MemoryEffect,
     read: bool,
