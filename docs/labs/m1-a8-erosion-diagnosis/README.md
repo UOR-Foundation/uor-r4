@@ -128,6 +128,7 @@ These totals equal Q3's. Q5 is a timeline only; it says nothing about what a gat
 **Not supported:**
 - Any statement that a given row lost admission. A moved target or a larger predecessor distance is not a lost admission.
 - That the gate writes, or the placement drift, caused Relation's extra loss. Both are co-occurrence. Gates act through `q`, and admission depends on `q` and the cells together, which only a device run can measure.
+- That "the read" means gate writes alone. `q` is computed over the context window's token vectors, so a table write to any block of a context or query token also changes `q`, not only a gate write.
 
 No KEEP, paired-DEV or fresh claim is made.
 
