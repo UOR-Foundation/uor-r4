@@ -8,6 +8,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `cbde25bd3`. Closes the item (
 - **The line had to fit two gates, not just the item.** `AGENTS.md` is capped at 80 lines by the harness check and the read path has its own budget; the file was 70 lines and is 71 now, with the line kept to one bullet.
 - **The rule has four parts and a ban, and dropping any one changes behaviour.** The line states the addressed-to-lab-or-`all` filter, the `waiting`→`read`/`answered`+time update, the one-line reply on an answer, the no-delete rule, and that a bench message is never an owner release.
 - **A same-lab review will not count here either.** The PR carries `receipts.jsonl`, which the gate classes `other`, so it is not doc-only and needs another vendor's exact-head APPROVE — the lesson from #2940 is applied in the PICKUP rather than repeated as a mistake.
+- **The first `pr-check` run failed `owner-paths`, correctly.** `AGENTS.md` is an owner path, and the ORDER carried no `## Owner approval` section. Fixed: the ORDER now names `AGENTS.md` and quotes Casey's verbatim answer ("Addressed per lab (Recommended)", recorded on #2028 at `2026-10-22T04:05:13Z`, chat ~04:04Z); the check passes on the head.
 - **No other file was touched**, and the item was set to `done` only after its line landed.
 
 ## What changed

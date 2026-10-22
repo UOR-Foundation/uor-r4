@@ -20,6 +20,12 @@ Class **instrument** (docs only). At base `cbde25bd3`: `AGENTS.md` has no bench 
 - `AGENTS.md` stays at most 80 lines and the read path stays within budget.
 - The item is set to `done`; `loop gates --full` GREEN; `report --check` and `pr-check --local` pass.
 
+## Owner approval
+
+`AGENTS.md` is an owner path, so this ORDER carries the owner's approval. Casey answered in Claude's chat at about 04:04Z on 22 October 2026; Claude recorded the answers verbatim on #2028 at 2026-10-22T04:05:13Z, decision 3:
+
+> Inbox: "Addressed per lab (Recommended)". Each bench message names a lab, or `all`, and only that lab acts on it. A bench message is never an owner release; those still happen in each lab's own chat. This goes into `AGENTS.md` through a PR.
+
 ## Stop and ask if
 
 - The bench feature's actual message path differs from `local/bench/INBOX.md` before merge (then the rule needs a repair, not a guess).
