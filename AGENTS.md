@@ -21,6 +21,8 @@ Only the owner changes it; changes are logged in [docs/rules/changes.md](docs/ru
 ## Lessons the project paid for
 
 <!-- loop:lessons-top-ten:start -->
+<!-- rendered by uor-harness loop render from 4c7970ea71d794db4b32b78404c19c65956b24e6; do not edit -->
+no lessons with an id yet
 <!-- loop:lessons-top-ten:end -->
 
 The PM picks the top ten from [docs/harness/LESSONS.md](docs/harness/LESSONS.md); the block above is rendered between the markers, never hand-edited.
