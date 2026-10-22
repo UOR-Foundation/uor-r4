@@ -3395,7 +3395,11 @@
         async function loadTauriGitWorkspace(folderPath) {
             if (!window.__TAURI__ || !window.__TAURI__.core) return;
             try {
-                const grantedRoot = await window.__TAURI__.core.invoke('native_grant_folder', { folderPath });
+                const grantedRoots = await window.__TAURI__.core.invoke('native_list_granted_folders', {});
+                const grantedRoot = folderPath || (Array.isArray(grantedRoots) && grantedRoots[0]) || '';
+                if (!grantedRoot) {
+                    throw new Error('No host-granted workspace folder (--grant <dir>)');
+                }
                 const status = await window.__TAURI__.core.invoke('native_git_status', { repoPath: grantedRoot });
                 window.activeTauriFolderPath = grantedRoot;
                 window.activeGitRepoInfo = {

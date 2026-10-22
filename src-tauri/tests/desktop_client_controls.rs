@@ -7,9 +7,10 @@ use std::process::Command;
 
 use serde_json::json;
 use uor_r4_desktop_client::{
-    build_synthetic_stack_artifact, handle_rpc_line, handle_studio_http_request,
-    run_self_test_receipt, sha256_bytes, DesktopBackend, DesktopClientError, PinRegistry,
-    TerminalCommandRequest, SYNTHETIC_STANDIN_FILE_NAME, SYNTHETIC_STANDIN_SEED,
+    build_synthetic_stack_artifact, generate_launch_token, handle_rpc_line,
+    handle_studio_http_request, run_self_test_receipt, sha256_bytes, DesktopBackend,
+    DesktopClientError, PinRegistry, TerminalCommandRequest, SYNTHETIC_STANDIN_FILE_NAME,
+    SYNTHETIC_STANDIN_SEED,
 };
 
 const EXPECTED_SYNTHETIC_32: [u32; 32] = [
@@ -432,23 +433,161 @@ fn rpc_and_loopback_http_studio_host_serve_commands_and_static_assets() {
         .join("../web/studio")
         .canonicalize()
         .expect("canonicalize studio_root");
+    let bound_host = "127.0.0.1:1420";
+    let token = generate_launch_token();
+    assert_eq!(token.len(), 64);
 
-    let (status, ctype, html_bytes) =
-        handle_studio_http_request(&mut backend, &studio_root, "GET", "/", b"");
+    // 1. Page RPC must refuse host-owned `native_grant_folder` and `native_set_terminal_enabled`:
+    let grant_rpc = handle_rpc_line(
+        &mut backend,
+        r#"{"id":1,"command":"native_grant_folder","args":{"folderPath":"/tmp"}}"#,
+    );
+    assert_eq!(grant_rpc["ok"], json!(false));
+    assert!(grant_rpc["error"]
+        .as_str()
+        .unwrap_or("")
+        .contains("host-owned"));
+
+    let term_rpc = handle_rpc_line(
+        &mut backend,
+        r#"{"id":2,"command":"native_set_terminal_enabled","args":{"enabled":true}}"#,
+    );
+    assert_eq!(term_rpc["ok"], json!(false));
+
+    // 2. GET / with matching Host header returns 200 and embeds the per-launch token:
+    let get_headers = vec![("Host".to_string(), bound_host.to_string())];
+    let (status, ctype, html_bytes) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        bound_host,
+        &token,
+        "GET",
+        "/",
+        &get_headers,
+        b"",
+    );
     assert_eq!(status, 200);
     assert_eq!(ctype, "text/html; charset=utf-8");
-    assert!(String::from_utf8_lossy(&html_bytes).contains("Developer Studio"));
+    let html_str = String::from_utf8_lossy(&html_bytes);
+    assert!(html_str.contains("Developer Studio"));
+    assert!(html_str.contains(&token));
 
-    let (status_trav, _, _) =
-        handle_studio_http_request(&mut backend, &studio_root, "GET", "/../Cargo.toml", b"");
+    // 3. GET / with foreign Host header (DNS rebinding) or traversal path is refused with 403:
+    let bad_host_headers = vec![("Host".to_string(), "evil.example:1420".to_string())];
+    let (status_rebind, _, _) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        bound_host,
+        &token,
+        "GET",
+        "/",
+        &bad_host_headers,
+        b"",
+    );
+    assert_eq!(status_rebind, 403);
+
+    let (status_trav, _, _) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        bound_host,
+        &token,
+        "GET",
+        "/../Cargo.toml",
+        &get_headers,
+        b"",
+    );
     assert_eq!(status_trav, 403);
 
+    // 4. POST /__tauri_invoke without token, with wrong token, with foreign Origin, with foreign
+    //    Host, or with text/plain Content-Type (no-cors simple POST) must all be refused with 403:
     let invoke_body = br#"{"id":7,"command":"native_load_synthetic_standin","args":{}}"#;
+
+    let missing_token_headers = vec![
+        ("Host".to_string(), bound_host.to_string()),
+        ("Origin".to_string(), format!("http://{bound_host}")),
+        ("Content-Type".to_string(), "application/json".to_string()),
+    ];
+    let (status_no_tok, _, _) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        bound_host,
+        &token,
+        "POST",
+        "/__tauri_invoke",
+        &missing_token_headers,
+        invoke_body,
+    );
+    assert_eq!(status_no_tok, 403);
+
+    let wrong_origin_headers = vec![
+        ("Host".to_string(), bound_host.to_string()),
+        ("Origin".to_string(), "https://evil.example".to_string()),
+        ("Content-Type".to_string(), "application/json".to_string()),
+        ("X-UOR-Desktop-Token".to_string(), token.clone()),
+    ];
+    let (status_bad_origin, _, _) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        bound_host,
+        &token,
+        "POST",
+        "/__tauri_invoke",
+        &wrong_origin_headers,
+        invoke_body,
+    );
+    assert_eq!(status_bad_origin, 403);
+
+    let wrong_host_post_headers = vec![
+        ("Host".to_string(), "evil.example:1420".to_string()),
+        ("Origin".to_string(), format!("http://{bound_host}")),
+        ("Content-Type".to_string(), "application/json".to_string()),
+        ("X-UOR-Desktop-Token".to_string(), token.clone()),
+    ];
+    let (status_bad_host_post, _, _) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        bound_host,
+        &token,
+        "POST",
+        "/__tauri_invoke",
+        &wrong_host_post_headers,
+        invoke_body,
+    );
+    assert_eq!(status_bad_host_post, 403);
+
+    let nocors_text_headers = vec![
+        ("Host".to_string(), bound_host.to_string()),
+        ("Origin".to_string(), format!("http://{bound_host}")),
+        ("Content-Type".to_string(), "text/plain".to_string()),
+        ("X-UOR-Desktop-Token".to_string(), token.clone()),
+    ];
+    let (status_nocors, _, _) = handle_studio_http_request(
+        &mut backend,
+        &studio_root,
+        bound_host,
+        &token,
+        "POST",
+        "/__tauri_invoke",
+        &nocors_text_headers,
+        invoke_body,
+    );
+    assert_eq!(status_nocors, 403);
+
+    // 5. POST /__tauri_invoke with valid Host, Origin, Content-Type, and X-UOR-Desktop-Token succeeds:
+    let valid_post_headers = vec![
+        ("Host".to_string(), bound_host.to_string()),
+        ("Origin".to_string(), format!("http://{bound_host}")),
+        ("Content-Type".to_string(), "application/json".to_string()),
+        ("X-UOR-Desktop-Token".to_string(), token),
+    ];
     let (status_post, ctype_post, resp_bytes) = handle_studio_http_request(
         &mut backend,
         &studio_root,
+        bound_host,
+        valid_post_headers[3].1.as_str(),
         "POST",
         "/__tauri_invoke",
+        &valid_post_headers,
         invoke_body,
     );
     assert_eq!(status_post, 200);

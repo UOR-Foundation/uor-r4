@@ -1393,8 +1393,9 @@ pub fn build_synthetic_stack_artifact(seed: u64) -> Vec<u8> {
 
 /// Dispatch a single page-invocable desktop command against [`DesktopBackend`].
 ///
-/// Note that `native_set_terminal_enabled` and `host_approve_terminal_command` are host-owned
-/// methods and are intentionally not exposed to unprivileged page RPC calls.
+/// Note that `native_grant_folder`, `native_set_terminal_enabled`, and
+/// `host_approve_terminal_command` are host-owned methods and are intentionally not exposed to
+/// unprivileged page RPC calls.
 pub fn dispatch_rpc_command(
     backend: &mut DesktopBackend,
     cmd: &str,
@@ -1619,16 +1620,18 @@ pub fn dispatch_rpc_command(
                 .map_err(|e| e.to_string())?;
             serde_json::to_value(receipt).map_err(|e| e.to_string())
         }
-        "native_grant_folder" => {
-            let folder = args
-                .get("folderPath")
-                .and_then(Value::as_str)
-                .ok_or_else(|| "missing folderPath".to_string())?;
-            let canonical = backend
-                .native_grant_folder(Path::new(folder))
-                .map_err(|e| e.to_string())?;
-            Ok(json!({ "granted": canonical.to_string_lossy() }))
+        "native_list_granted_folders" => {
+            let folders: Vec<String> = backend
+                .granted_folders()
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect();
+            Ok(json!({ "folders": folders }))
         }
+        "native_grant_folder" => Err(
+            "PathNotGranted: folder grants are host-owned (--grant <dir>) and cannot be granted by page RPC"
+                .to_string(),
+        ),
         "native_read_file" => {
             let file_path = args
                 .get("filePath")
@@ -1760,16 +1763,93 @@ pub fn run_self_test_receipt() -> Result<Value, String> {
     }))
 }
 
+/// Generate a 256-bit (64-hex-character) per-launch token for the loopback Studio host.
+pub fn generate_launch_token() -> String {
+    use std::io::Read;
+    let mut seed_bytes = [0u8; 32];
+    let mut filled = false;
+    if let Ok(mut f) = fs::File::open("/dev/urandom") {
+        if f.read_exact(&mut seed_bytes).is_ok() {
+            filled = true;
+        }
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"UOR-DESKTOP-LAUNCH-TOKEN-V1");
+    hasher.update(seed_bytes);
+    hasher.update(std::process::id().to_le_bytes());
+    if let Ok(dur) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        hasher.update(dur.as_nanos().to_le_bytes());
+    }
+    if !filled {
+        hasher.update(b"fallback-entropy");
+    }
+    hex::encode(hasher.finalize())
+}
+
+fn find_header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.trim())
+}
+
 /// Handle a single loopback HTTP request (`GET /...` for static `web/studio/` assets or
 /// `POST /__tauri_invoke` for `window.__TAURI__.core.invoke` JSON-RPC commands).
+///
+/// Enforces:
+/// 1. `Host` header must match `bound_host` (`127.0.0.1:<port>`) on every request (blocks DNS rebinding).
+/// 2. On `POST /__tauri_invoke`, `Origin` must equal `http://<bound_host>`, `Content-Type` must
+///    start with `application/json` (blocks `no-cors` simple requests), and `X-UOR-Desktop-Token`
+///    must match the per-launch `expected_token` (embedded in the served `index.html`).
+#[allow(clippy::too_many_arguments)]
 pub fn handle_studio_http_request(
     backend: &mut DesktopBackend,
     studio_root: &Path,
+    bound_host: &str,
+    expected_token: &str,
     method: &str,
     path: &str,
+    headers: &[(String, String)],
     body: &[u8],
 ) -> (u16, &'static str, Vec<u8>) {
+    let Some(req_host) = find_header(headers, "host") else {
+        return (
+            403,
+            "text/plain; charset=utf-8",
+            b"Forbidden: missing Host header".to_vec(),
+        );
+    };
+    if !req_host.eq_ignore_ascii_case(bound_host) {
+        return (
+            403,
+            "text/plain; charset=utf-8",
+            b"Forbidden: Host header mismatch".to_vec(),
+        );
+    }
+
     if method == "POST" && path == "/__tauri_invoke" {
+        let expected_origin = format!("http://{bound_host}");
+        let origin_ok = find_header(headers, "origin")
+            .is_some_and(|o| o.eq_ignore_ascii_case(&expected_origin));
+        let content_type_ok = find_header(headers, "content-type").is_some_and(|ct| {
+            ct.split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .eq_ignore_ascii_case("application/json")
+        });
+        let token_ok = !expected_token.is_empty()
+            && find_header(headers, "x-uor-desktop-token").is_some_and(|t| t == expected_token);
+
+        if !origin_ok || !content_type_ok || !token_ok {
+            return (
+                403,
+                "application/json; charset=utf-8",
+                br#"{"ok":false,"error":"Forbidden: invalid Origin, Content-Type, or X-UOR-Desktop-Token"}"#
+                    .to_vec(),
+            );
+        }
+
         let line = String::from_utf8_lossy(body);
         let resp = handle_rpc_line(backend, &line);
         let bytes = serde_json::to_vec(&resp).unwrap_or_default();
@@ -1797,9 +1877,22 @@ pub fn handle_studio_http_request(
     {
         return (403, "text/plain; charset=utf-8", b"Forbidden".to_vec());
     }
-    let Ok(bytes) = fs::read(&candidate) else {
+    let Ok(mut bytes) = fs::read(&candidate) else {
         return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
     };
+    if rel == "index.html" && !expected_token.is_empty() {
+        let html = String::from_utf8_lossy(&bytes);
+        let bootstrap = format!(
+            "<script>window.UOR_DESKTOP_SESSION_TOKEN={:?};window.UOR_ENABLE_LOOPBACK_TAURI=true;</script>\n    <script src=\"./assets/js/uor_offline_vendor.js\"></script>",
+            expected_token
+        );
+        let injected = html.replacen(
+            "<script src=\"./assets/js/uor_offline_vendor.js\"></script>",
+            &bootstrap,
+            1,
+        );
+        bytes = injected.into_bytes();
+    }
     let content_type = if rel.ends_with(".html") {
         "text/html; charset=utf-8"
     } else if rel.ends_with(".js") || rel.ends_with(".mjs") {

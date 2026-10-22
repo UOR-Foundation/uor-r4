@@ -47,7 +47,8 @@ for (const [name, content] of [
 assert(indexHtml.includes('./assets/css/uor_offline_fonts.css'), 'index.html must link local uor_offline_fonts.css');
 assert(indexHtml.includes('./assets/js/uor_offline_vendor.js'), 'index.html must load local uor_offline_vendor.js');
 assert(indexHtml.includes('createTauriNativeModelWorker'), 'index.html must wire createTauriNativeModelWorker in desktop mode');
-assert(indexHtml.includes("invoke('native_grant_folder'"), 'index.html must grant folder before git/file access');
+assert(indexHtml.includes("invoke('native_list_granted_folders'"), 'index.html must query host-granted folders before git/file access');
+assert(!indexHtml.includes("invoke('native_grant_folder'"), 'index.html must not self-grant folders from page script');
 assert(indexHtml.includes("invoke('native_list_directory'"), 'index.html must list workspace files via native_list_directory');
 assert(
     indexHtml.includes('userConfirmed: true') && indexHtml.includes('confirmedCommand: cmd'),
@@ -260,8 +261,12 @@ assert(
     `unexpected objectVersion: ${selfTestReceipt.objectVersion}`,
 );
 
-// Spawn real `uor-desktop-client --stdio` child process and wire `window.__TAURI__.core.invoke`.
-const stdioChild = spawn(desktopBin, ['--stdio'], { stdio: ['pipe', 'pipe', 'inherit'] });
+// Spawn real `uor-desktop-client --stdio --grant <tmpGrantedStoreRoot>` child process and wire `window.__TAURI__.core.invoke`.
+const tmpGrantedStoreRoot = mkdtempSync(join(tmpdir(), 'uor-desktop-verify-granted-'));
+const tmpUngrantedStoreRoot = mkdtempSync(join(tmpdir(), 'uor-desktop-verify-ungranted-'));
+const stdioChild = spawn(desktopBin, ['--stdio', '--grant', tmpGrantedStoreRoot], {
+    stdio: ['pipe', 'pipe', 'inherit'],
+});
 const stdioLines = createInterface({ input: stdioChild.stdout });
 const pendingRpc = new Map();
 let nextRpcId = 1;
@@ -424,13 +429,21 @@ assert(JSON.stringify(genDone.tokenIds) === JSON.stringify(EXPECTED_32), 'deskto
 const streamedForGen = workerEvents.filter((e) => e.action === 'stream_token' && e.id === 'gen_desktop_stdio_1');
 assert(streamedForGen.length === 32, `expected 32 individual step-by-step stream_token events, got ${streamedForGen.length}`);
 
-// Verify that saving a durable session to an ungranted storeDir is refused with PathNotGranted:
-const tmpStoreRoot = mkdtempSync(join(tmpdir(), 'uor-desktop-verify-store-'));
+// Verify that page-invoked `native_grant_folder` is refused over RPC (folder grants are host-owned)
+// and that saving a durable session to an ungranted storeDir is refused with PathNotGranted:
 try {
+    let grantRefused = false;
+    try {
+        await realStdioTauriCore.invoke('native_grant_folder', { folderPath: tmpUngrantedStoreRoot });
+    } catch (err) {
+        grantRefused = String(err).includes('host-owned');
+    }
+    assert(grantRefused, 'page-invoked native_grant_folder must be refused as host-owned');
+
     worker.postMessage({
         action: 'save_session_durable',
         id: 'save_ungranted',
-        payload: { conversationId: 'conv_desktop_1', storeDir: tmpStoreRoot },
+        payload: { conversationId: 'conv_desktop_1', storeDir: tmpUngrantedStoreRoot },
     });
     const ungrantedEv = await waitWorkerEvent((e) => e.action === 'operation_error' && e.id === 'save_ungranted');
     assert(
@@ -438,12 +451,11 @@ try {
         `expected PathNotGranted on ungranted storeDir, got ${JSON.stringify(ungrantedEv)}`,
     );
 
-    // Grant tmpStoreRoot and verify durable save + restore over real stdio IPC:
-    await realStdioTauriCore.invoke('native_grant_folder', { folderPath: tmpStoreRoot });
+    // Verify durable save + restore to the host-granted `--grant` folder over real stdio IPC:
     worker.postMessage({
         action: 'save_session_durable',
         id: 'save_granted',
-        payload: { conversationId: 'conv_desktop_1', storeDir: tmpStoreRoot },
+        payload: { conversationId: 'conv_desktop_1', storeDir: tmpGrantedStoreRoot },
     });
     const durableSaved = await waitWorkerEvent(
         (e) => (e.action === 'session_durable_saved' || e.action === 'operation_error') && e.id === 'save_granted',
@@ -466,7 +478,7 @@ try {
     worker.postMessage({
         action: 'restore_session_durable',
         id: 'restore_granted',
-        payload: { conversationId: 'conv_desktop_1', storeDir: tmpStoreRoot },
+        payload: { conversationId: 'conv_desktop_1', storeDir: tmpGrantedStoreRoot },
     });
     const durableRestored = await waitWorkerEvent(
         (e) => (e.action === 'session_durable_restored' || e.action === 'operation_error') && e.id === 'restore_granted',
@@ -479,7 +491,8 @@ try {
         `restore_session_durable mismatch: ${JSON.stringify(durableRestored)}`,
     );
 } finally {
-    rmSync(tmpStoreRoot, { recursive: true, force: true });
+    rmSync(tmpGrantedStoreRoot, { recursive: true, force: true });
+    rmSync(tmpUngrantedStoreRoot, { recursive: true, force: true });
     stdioChild.stdin.end();
     stdioChild.kill();
 }

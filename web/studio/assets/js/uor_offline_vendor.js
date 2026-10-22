@@ -796,9 +796,13 @@
         return {
             async invoke(command, args = {}) {
                 const id = rpcSeq++;
+                const token = String(globalScope.UOR_DESKTOP_SESSION_TOKEN || '');
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-UOR-Desktop-Token': token,
+                    },
                     body: JSON.stringify({ id, command, args }),
                 });
                 const payload = await response.json();
