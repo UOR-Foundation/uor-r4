@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 39 |
+| ready | 37 |
 | held | 26 |
 | decision | 4 |
-| done | 19 |
+| done | 21 |
 | total | 88 |
 
 ## Start here
@@ -34,7 +34,6 @@ These items are ready and open to anyone.
 |---|---|---|
 | [Build the Tauri desktop client against the synthetic stand-in](items/infra-desktop-client-tauri.md) | infra | [#2826](https://github.com/UOR-Foundation/uor-r4/issues/2826) |
 | [Solve the saved legal-construction case in exact arithmetic](items/legal-construction-exact-solve.md) | research | [#2828](https://github.com/UOR-Foundation/uor-r4/issues/2828) |
-| [Register the finite qualification and stage the admission-preserving A8 runbook](items/m1-a8-registration-and-runbook-staging.md) | M1 | [#2832](https://github.com/UOR-Foundation/uor-r4/issues/2832) |
 | [Build the address-as-read mechanism and an object-store consumer](items/m1-address-as-read.md) | M1 | [#2833](https://github.com/UOR-Foundation/uor-r4/issues/2833) |
 | [Design a lawful normalization mechanism](items/m1-normalization-mechanism.md) | M1 | [#2842](https://github.com/UOR-Foundation/uor-r4/issues/2842) |
 | [Design a lawful position mechanism](items/m1-position-mechanism.md) | M1 | [#2843](https://github.com/UOR-Foundation/uor-r4/issues/2843) |
@@ -44,7 +43,6 @@ These items are ready and open to anyone.
 | [Pin OpPolicy precedence and store-miss sieve coupling with tests](items/m3-policy-precedence-and-sieve-tests.md) | M3 | [#2857](https://github.com/UOR-Foundation/uor-r4/issues/2857) |
 | [Finish the flock-coupling pre-registration](items/m4-flock-coupling-prereg.md) | M4 | [#2860](https://github.com/UOR-Foundation/uor-r4/issues/2860) |
 | [Measure M1-class laptop cost on the accepted served model](items/m5-laptop-full-path-measurement.md) | M5 | [#2862](https://github.com/UOR-Foundation/uor-r4/issues/2862) |
-| [Design exact arithmetic on the geometric path](items/m6-exact-arithmetic-mechanism.md) | M6 | [#2864](https://github.com/UOR-Foundation/uor-r4/issues/2864) |
 | [Build and freeze the m6-reasoning panel and oracles](items/m6-reasoning-panel-freeze.md) | M6 | [#2866](https://github.com/UOR-Foundation/uor-r4/issues/2866) |
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | M7 | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
 | [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | M7 | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
@@ -57,7 +55,6 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Diagnose A8 reach erosion from retained checkpoints](items/m1-a8-erosion-diagnosis.md) | ready | a lab | no | none | [#2829](https://github.com/UOR-Foundation/uor-r4/issues/2829) |
-| [Register the finite qualification and stage the admission-preserving A8 runbook](items/m1-a8-registration-and-runbook-staging.md) | ready | anyone | no | none | [#2832](https://github.com/UOR-Foundation/uor-r4/issues/2832) |
 | [Build the address-as-read mechanism and an object-store consumer](items/m1-address-as-read.md) | ready | anyone | no | none | [#2833](https://github.com/UOR-Foundation/uor-r4/issues/2833) |
 | [Replace the 5-value address key with a full-vector metric](items/m1-address-key-full-vector.md) | ready | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md) | [#2834](https://github.com/UOR-Foundation/uor-r4/issues/2834) |
 | [Draft the BVG-K Stage T pre-registration sheet (C2 has passed)](items/m1-bvg-k-block-apply-c2.md) | ready | a lab | yes | none | [#2835](https://github.com/UOR-Foundation/uor-r4/issues/2835) |
@@ -75,6 +72,7 @@ These items are ready and open to anyone.
 | [Run the W2 read-code capacity capture](items/m1-w2-capacity-capture.md) | held | a lab | yes | none | [#2845](https://github.com/UOR-Foundation/uor-r4/issues/2845) |
 | [Register and run one float-credit training sheet (W4)](items/m1-w4-float-credit-sheet.md) | held | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md) | [#2846](https://github.com/UOR-Foundation/uor-r4/issues/2846) |
 | [Decide whether a float (D37) path may count toward M1, M2 and the product](items/owner-decision-float-path-scope.md) | decision | a lab | no | none | [#2875](https://github.com/UOR-Foundation/uor-r4/issues/2875) |
+| [Register the finite qualification and stage the admission-preserving A8 runbook](items/m1-a8-registration-and-runbook-staging.md) | done | anyone | no | none | [#2832](https://github.com/UOR-Foundation/uor-r4/issues/2832) |
 | [Write the exporter from a trained discrete model to a D11 file](items/m1-d11-exporter-discrete.md) | done | anyone | no | none | [#2838](https://github.com/UOR-Foundation/uor-r4/issues/2838) |
 | [Train a number-aware tokenizer and pin its identity](items/number-aware-tokenizer.md) | done | a lab | no | none | [#2872](https://github.com/UOR-Foundation/uor-r4/issues/2872) |
 
@@ -120,10 +118,10 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Design exact arithmetic on the geometric path](items/m6-exact-arithmetic-mechanism.md) | ready | anyone | no | none | [#2864](https://github.com/UOR-Foundation/uor-r4/issues/2864) |
 | [Qualify reasoning and coding on the served model](items/m6-qualify-reasoning-coding.md) | ready | a lab | yes | [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md), [m6-reasoning-panel-freeze](items/m6-reasoning-panel-freeze.md), [m6-causal-ablation-instrument](items/m6-causal-ablation-instrument.md), [m6-exact-arithmetic-mechanism](items/m6-exact-arithmetic-mechanism.md) | [#2865](https://github.com/UOR-Foundation/uor-r4/issues/2865) |
 | [Build and freeze the m6-reasoning panel and oracles](items/m6-reasoning-panel-freeze.md) | ready | anyone | no | none | [#2866](https://github.com/UOR-Foundation/uor-r4/issues/2866) |
 | [Build the intermediate-state ablation instrument for M6](items/m6-causal-ablation-instrument.md) | done | a lab | no | [m6-reasoning-panel-freeze](items/m6-reasoning-panel-freeze.md), [m1-trunk-assembly-and-training](items/m1-trunk-assembly-and-training.md) | [#2863](https://github.com/UOR-Foundation/uor-r4/issues/2863) |
+| [Design exact arithmetic on the geometric path](items/m6-exact-arithmetic-mechanism.md) | done | anyone | no | none | [#2864](https://github.com/UOR-Foundation/uor-r4/issues/2864) |
 
 ## M7
 
