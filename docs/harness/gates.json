@@ -86,14 +86,17 @@
     },
     {
       "id": "git-hooks",
-      "proves": "The three managed git hooks install, refuse a foreign file, and enforce the commit-message trailers and the pre-push policy check.",
+      "proves": "The three managed git hooks plan and install owner-only, refuse a foreign file, check Lab and Order trailers on lab branches, and run pr-check --local before a push.",
       "command": ["cargo", "test", "-q", "--locked", "-p", "uor-r4-harness", "--test", "git_hooks"],
-      "reads": ["crates/uor-r4-harness/**/*.rs", "crates/uor-r4-harness/rules/*"],
+      "reads": ["crates/uor-r4-harness/**/*.rs", "rules/*-hook.sh"],
       "quick": false,
       "break": {
-        "file": "crates/uor-r4-harness/tests/git_hooks.rs",
-        "append": "\n#[test]\nfn planted_break_hooks() { panic!(\"planted_break_hooks\"); }\n",
-        "expect": "planted_break_hooks"
+        "file": "crates/uor-r4-harness/src/githelp.rs",
+        "replace": {
+          "from": "    let mut err: Vec<String> = Vec::new();\n    if trailer_final(&text, \"lab\").is_none() {",
+          "to": "    let mut err: Vec<String> = Vec::new();\n    if true {\n        return (0, Vec::new(), Vec::new());\n    }\n    if trailer_final(&text, \"lab\").is_none() {"
+        },
+        "expect": "a message without trailers must be refused"
       }
     }
   ]

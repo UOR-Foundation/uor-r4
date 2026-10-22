@@ -1099,10 +1099,10 @@ pub const PREPUSH_START: &str =
     "# >>> uor-harness pre-push v1 (managed by crates/uor-r4-harness) >>>";
 
 /// The commit-msg hook body, carried as a data file for the same reasons as [`HOOK_SCRIPT`].
-pub const COMMIT_MSG_SCRIPT: &str = include_str!("../rules/commit-msg-hook.sh");
+pub const COMMIT_MSG_SCRIPT: &str = include_str!("../../../rules/commit-msg-hook.sh");
 
 /// The pre-push hook body, carried as a data file for the same reasons as [`HOOK_SCRIPT`].
-pub const PREPUSH_SCRIPT: &str = include_str!("../rules/prepush-hook.sh");
+pub const PREPUSH_SCRIPT: &str = include_str!("../../../rules/prepush-hook.sh");
 
 /// One git hook the harness manages: file name, body, marker and a one-line runs description.
 pub struct ManagedHook {
@@ -1114,9 +1114,9 @@ pub struct ManagedHook {
 
 /// Every hook `git install-hooks` writes, in the order it reports them.
 ///
-/// Since loop PR 12 that is three: the pre-commit check, the commit-msg trailer and binary check,
-/// and the pre-push policy check. They are tags and warnings, not proof (D55); a person can always
-/// bypass with `--no-verify`, which no lab may use.
+/// Since loop PR 12 that is three: the pre-commit check, the commit-msg trailer check (on lab
+/// branches only) and the pre-push policy check. They are tags and warnings, not proof (D55); the
+/// owner decides whether they are installed, and no lab may bypass one with `--no-verify`.
 pub const MANAGED_HOOKS: [ManagedHook; 3] = [
     ManagedHook {
         name: "pre-commit",
@@ -1184,9 +1184,19 @@ fn hooks_dir(paths: &StatePaths) -> Result<std::path::PathBuf, String> {
     })
 }
 
-/// `githelp.install_hooks` — install or refresh the three managed git hooks.
+/// `githelp.install_hooks` — plan, then write, the three managed git hooks.
 ///
-/// # It never clobbers a foreign hook, and that is the same three refusals for each hook
+/// # Owner-only
+///
+/// The hooks change commit behaviour for every worktree of this repository, so a lab session never
+/// writes them: `main.rs` refuses when `UOR_LAB` is set, and loop PR 9's guard adds the same refusal
+/// at the client. `write` false prints the plan and changes nothing; writing needs `--install`.
+///
+/// # All three or none, and a backup first
+///
+/// Every refusal is checked before anything is written, so a foreign `commit-msg` hook cannot leave
+/// a half-installed set. Every hook that is replaced is copied to
+/// `local/loop/install-backups/<unix-seconds>/<hook>` first.
 ///
 /// * **A SYMLINK is refused outright.** A symlinked hook is deliberate wiring, often a shared hook
 ///   manager, and writing through it would write to the target.
@@ -1195,11 +1205,7 @@ fn hooks_dir(paths: &StatePaths) -> Result<std::path::PathBuf, String> {
 ///   hand or delete it.
 /// * **An unreadable file is refused** rather than replaced: not being able to see what is there is
 ///   not permission to overwrite it.
-///
-/// **Every refusal names the command to re-run**, and a refusal for one hook does not stop the other
-/// two being installed or refreshed. **`unchanged` is reported when the bytes are already right**,
-/// which is what makes a re-run safe.
-pub fn install_hooks(paths: &StatePaths) -> (i32, Vec<String>, Vec<String>) {
+pub fn install_hooks(paths: &StatePaths, write: bool) -> (i32, Vec<String>, Vec<String>) {
     let mut out: Vec<String> = Vec::new();
     let mut err: Vec<String> = Vec::new();
     // R10: this writes hooks into the repository, so it is a checkout write. A lab running it from
@@ -1216,21 +1222,86 @@ pub fn install_hooks(paths: &StatePaths) -> (i32, Vec<String>, Vec<String>) {
             return (1, out, err);
         }
     };
-    let mut code = 0;
+    // Plan every hook before writing any of them: all three install or none does.
+    let mut planned: Vec<(&'static ManagedHook, std::path::PathBuf, &'static str)> = Vec::new();
     for hook in MANAGED_HOOKS.iter() {
-        match install_one_hook(&dir, hook) {
-            Ok(lines) => out.extend(lines),
-            Err((hook_code, lines)) => {
-                code = code.max(hook_code);
+        match plan_one_hook(&dir, hook) {
+            Ok((action, path)) => planned.push((hook, path, action)),
+            Err((code, lines)) => {
                 err.extend(lines);
+                return (code, out, err);
             }
         }
     }
-    (code, out, err)
+    if !write {
+        for (hook, path, action) in &planned {
+            out.push(format!("would {action}: {}", path.display()));
+            out.push(format!("  runs: {}", hook.runs));
+        }
+        out.push("dry run: pass --install to write; the owner installs the shared hooks".into());
+        return (0, out, err);
+    }
+    let backup = paths
+        .repo
+        .join("local")
+        .join("loop")
+        .join("install-backups")
+        .join(unix_seconds().to_string());
+    for (hook, path, action) in &planned {
+        if *action == "install" {
+            continue;
+        }
+        let dest = backup.join(hook.name);
+        if let Some(p) = dest.parent() {
+            let _ = std::fs::create_dir_all(p);
+        }
+        if let Err(e) = std::fs::copy(path, &dest) {
+            err.push(format!(
+                "cannot back up {} to {}: {e}",
+                path.display(),
+                dest.display()
+            ));
+            return (1, out, err);
+        }
+        out.push(format!("backup: {}", dest.display()));
+    }
+    for (hook, path, action) in planned {
+        if let Err(e) = std::fs::write(&path, hook.script) {
+            err.push(format!("cannot write {}: {e}", path.display()));
+            return (1, out, err);
+        }
+        // **The executable bit is part of the artifact** - a hook that is not executable is a file
+        // git silently ignores, and reporting "installed" for one would be the worst outcome here.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
+        }
+        let past = match action {
+            "install" => "installed",
+            "update" => "updated",
+            _ => "unchanged",
+        };
+        out.push(format!("{past}: {}", path.display()));
+        out.push(format!("  runs: {}", hook.runs));
+    }
+    (0, out, err)
 }
 
-/// Install or refresh one managed hook; the refusals are described in [`install_hooks`].
-fn install_one_hook(dir: &Path, hook: &ManagedHook) -> Result<Vec<String>, (i32, Vec<String>)> {
+/// The unix time, for the backup directory name.
+fn unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// What installing `hook` would do and where it goes; the refusals are described in
+/// [`install_hooks`]. Returns `install`, `update` or `unchanged`.
+fn plan_one_hook(
+    dir: &Path,
+    hook: &ManagedHook,
+) -> Result<(&'static str, std::path::PathBuf), (i32, Vec<String>)> {
     let path = dir.join(hook.name);
     let symlink = std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink());
     let existed = path.exists() || symlink;
@@ -1242,77 +1313,65 @@ fn install_one_hook(dir: &Path, hook: &ManagedHook) -> Result<Vec<String>, (i32,
                     "CONFLICT: {} is a symlink; refusing to replace it.",
                     path.display()
                 ),
-                "  resolve it yourself, or remove it and re-run: uor-harness git install-hooks"
+                "  resolve it yourself, or remove it and re-run: uor-harness git install-hooks --install"
                     .into(),
             ],
         ));
     }
-    let mut previous = String::new();
-    if existed {
-        match std::fs::read_to_string(&path) {
-            Ok(t) => previous = t,
-            Err(e) => {
-                return Err((
-                    2,
-                    vec![format!(
-                        "CONFLICT: cannot read the existing {} hook {}: {e}",
-                        hook.name,
-                        path.display()
-                    )],
-                ))
-            }
-        }
-        // Only the pre-commit hook has a legacy body worth upgrading in place.
-        let legacy =
-            hook.name == "pre-commit" && LEGACY_HOOK_STARTS.iter().any(|m| previous.contains(m));
-        if !previous.contains(hook.marker) && !legacy {
-            let first = previous.lines().next().unwrap_or("(empty file)");
+    if !existed {
+        return Ok(("install", path));
+    }
+    let previous = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) => {
             return Err((
                 2,
-                vec![
-                    format!(
-                        "CONFLICT: {} already exists and was not written by the harness (no marker line).",
-                        path.display()
-                    ),
-                    format!("  marker looked for: {}", hook.marker),
-                    format!(
-                        "  existing file starts: {}",
-                        crate::prbody::truncate(first, 120)
-                    ),
-                    "  merge it by hand, or remove it and re-run: uor-harness git install-hooks"
-                        .into(),
-                ],
-            ));
+                vec![format!(
+                    "CONFLICT: cannot read the existing {} hook {}: {e}",
+                    hook.name,
+                    path.display()
+                )],
+            ))
         }
+    };
+    // Only the pre-commit hook has a legacy body worth upgrading in place.
+    let legacy =
+        hook.name == "pre-commit" && LEGACY_HOOK_STARTS.iter().any(|m| previous.contains(m));
+    if !previous.contains(hook.marker) && !legacy {
+        let first = previous.lines().next().unwrap_or("(empty file)");
+        return Err((
+            2,
+            vec![
+                format!(
+                    "CONFLICT: {} already exists and was not written by the harness (no marker line).",
+                    path.display()
+                ),
+                format!("  marker looked for: {}", hook.marker),
+                format!(
+                    "  existing file starts: {}",
+                    crate::prbody::truncate(first, 120)
+                ),
+                "  merge it by hand, or remove it and re-run: uor-harness git install-hooks --install"
+                    .into(),
+            ],
+        ));
     }
-    if let Err(e) = std::fs::create_dir_all(dir) {
-        return Err((1, vec![format!("cannot write {}: {e}", path.display())]));
-    }
-    if let Err(e) = std::fs::write(&path, hook.script) {
-        return Err((1, vec![format!("cannot write {}: {e}", path.display())]));
-    }
-    // **The executable bit is part of the artifact** - a hook that is not executable is a file git
-    // silently ignores, and reporting "installed" for one would be the worst outcome here.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
-    }
-    let action = if existed && previous != hook.script {
-        "updated"
-    } else if existed {
+    let action = if previous == hook.script {
         "unchanged"
     } else {
-        "installed"
+        "update"
     };
-    Ok(vec![
-        format!("{action}: {}", path.display()),
-        format!("  runs: {}", hook.runs),
-    ])
+    Ok((action, path))
 }
 
 /// `git check-message <file>`: the commit-msg hook check. Exit 0 allows the commit, 1 refuses it,
 /// 2 cannot run. Trailers are tags, not proof (D55).
+///
+/// **Owner decision of 22 Oct 2026, recorded by Claude:** the trailers are checked only on a
+/// `<registered-lab>/...` branch while `UOR_LAB` is set. Merge, Revert, fixup! and squash! messages
+/// pass, and the owner's commits and non-loop work are never checked. A binary the harness can
+/// prove older is a **warning**, not a refusal: the hook is installed by the owner, and a stale copy
+/// on PATH must not block every commit.
 pub fn check_commit_message(paths: &StatePaths, message: &Path) -> (i32, Vec<String>, Vec<String>) {
     let text = match std::fs::read_to_string(message) {
         Ok(t) => t,
@@ -1327,56 +1386,97 @@ pub fn check_commit_message(paths: &StatePaths, message: &Path) -> (i32, Vec<Str
             )
         }
     };
-    let mut err: Vec<String> = Vec::new();
-    if let Some(line) = crate::version::placement_line(&paths.repo) {
-        err.push(format!("the binary is not current: {line}"));
+    let first = text.lines().next().unwrap_or("");
+    if ["Merge ", "Revert ", "fixup! ", "squash! "]
+        .iter()
+        .any(|p| first.starts_with(p))
+    {
+        return (0, Vec::new(), Vec::new());
     }
-    // A merge message is generated, so it cannot carry trailers; every other commit names its lab
-    // and its order, because the squash merge is what carries the record forward.
-    let merge = text.lines().next().is_some_and(|l| l.starts_with("Merge "));
-    if !merge {
-        if trailer(&text, "Lab").is_none() {
-            err.push("the message has no Lab: trailer; every loop commit names its lab".into());
-        }
-        match trailer(&text, "Order") {
-            None => {
-                err.push("the message has no Order: trailer; it names the task ORDER path".into())
-            }
-            Some(o) if !(o.starts_with("docs/loop/tasks/") && o.ends_with("ORDER.md")) => err.push(
-                format!("the Order: trailer {o:?} must name a docs/loop/tasks/.../ORDER.md path"),
-            ),
-            Some(_) => {}
-        }
+    let Some(lab) = std::env::var("UOR_LAB")
+        .ok()
+        .filter(|l| !l.trim().is_empty())
+    else {
+        return (0, Vec::new(), Vec::new());
+    };
+    // A lab name the registry does not know is not a loop branch; the owner's work is not checked.
+    if crate::labs::check_lab(&paths.repo, &lab).is_err() {
+        return (0, Vec::new(), Vec::new());
+    }
+    let branch = match git_raw(&paths.repo, &["rev-parse", "--abbrev-ref", "HEAD"]) {
+        (0, out) => out.trim().to_string(),
+        _ => return (0, Vec::new(), Vec::new()),
+    };
+    let Some(topic) = branch.strip_prefix(&format!("{lab}/")) else {
+        return (0, Vec::new(), Vec::new());
+    };
+    if topic.is_empty() {
+        return (0, Vec::new(), Vec::new());
+    }
+    let mut out: Vec<String> = Vec::new();
+    if let Some(line) = crate::version::placement_line(&paths.repo) {
+        out.push(format!(
+            "warning: the running uor-harness may be older than this checkout: {line}"
+        ));
+    }
+    let mut err: Vec<String> = Vec::new();
+    if trailer_final(&text, "lab").is_none() {
+        err.push("the message has no Lab: trailer; every loop commit names its lab".into());
+    }
+    match trailer_final(&text, "order") {
+        None => err.push("the message has no Order: trailer; it names the task ORDER path".into()),
+        Some(o) if !(o.starts_with("docs/loop/tasks/") && o.ends_with("ORDER.md")) => err.push(
+            format!("the Order: trailer {o:?} must name a docs/loop/tasks/.../ORDER.md path"),
+        ),
+        Some(_) => {}
     }
     if err.is_empty() {
-        (0, Vec::new(), Vec::new())
+        (0, out, Vec::new())
     } else {
         err.push(
-            "add the trailers as the last lines of the message (they are tags, not proof, D55)"
+            "add the trailers as the last paragraph of the message (they are tags, not proof, D55)"
                 .into(),
         );
-        (1, Vec::new(), err)
+        (1, out, err)
     }
 }
 
-/// The value of a `Key: value` trailer anywhere in a message; the last occurrence wins.
-fn trailer(text: &str, key: &str) -> Option<String> {
-    let prefix = format!("{key}:");
+/// The value of a `Key: value` trailer in the message's FINAL paragraph; keys are matched
+/// case-insensitively and values keep their case. Only the last paragraph is read, so a quoted
+/// example higher in the body cannot satisfy the check.
+fn trailer_final(text: &str, key: &str) -> Option<String> {
+    let mut paragraph: Vec<&str> = Vec::new();
+    for line in text.lines().rev() {
+        if line.trim().is_empty() {
+            if paragraph.is_empty() {
+                continue;
+            }
+            break;
+        }
+        paragraph.push(line);
+    }
+    paragraph.reverse();
     let mut found = None;
-    for line in text.lines() {
-        if let Some(v) = line.strip_prefix(&prefix) {
-            let v = v.trim();
-            if !v.is_empty() {
-                found = Some(v.to_string());
+    for line in paragraph {
+        let Some((k, value)) = line.split_once(':') else {
+            continue;
+        };
+        if k.trim().eq_ignore_ascii_case(key) {
+            let value = value.trim();
+            if !value.is_empty() {
+                found = Some(value.to_string());
             }
         }
     }
     found
 }
 
-/// `git push-check`: the pre-push hook check. Reads the ref lines git passes on stdin and runs
-/// `loop pr-check --local` for every pushed `<lab>/...` branch. Exit 0 allows the push, 1 refuses
-/// it because a checked branch failed, 2 cannot run.
+/// `git push-check`: the pre-push hook check. Reads git's ref lines on stdin
+/// (`<local ref> <local sha> <remote ref> <remote sha>`) and runs `loop pr-check --local` for every
+/// pushed `<lab>/...` branch. A **delete** is a local sha of all zeros and is skipped; a **new
+/// branch** still has its local sha and is checked. Exit 0 allows the push, 1 refuses it because
+/// `pr-check` reported a policy failure, 2 cannot run. A `pr-check` that cannot run (exit 2) does
+/// not block the push, as the hook header promises.
 pub fn push_check(paths: &StatePaths, stdin_text: &str) -> (i32, Vec<String>, Vec<String>) {
     let mut out: Vec<String> = Vec::new();
     let mut blocked = false;
@@ -1389,7 +1489,7 @@ pub fn push_check(paths: &StatePaths, stdin_text: &str) -> (i32, Vec<String>, Ve
         else {
             continue;
         };
-        if remote_sha.chars().all(|c| c == '0') {
+        if local_sha.chars().all(|c| c == '0') {
             out.push(format!("skip {remote_ref}: deleting a branch"));
             continue;
         }
@@ -1409,8 +1509,13 @@ pub fn push_check(paths: &StatePaths, stdin_text: &str) -> (i32, Vec<String>, Ve
             continue;
         }
         checked += 1;
+        let kind = if remote_sha.chars().all(|c| c == '0') {
+            " (new branch)"
+        } else {
+            ""
+        };
         out.push(format!(
-            "check {branch} at {}",
+            "check {branch} at {}{kind}",
             crate::version::short(local_sha)
         ));
         let code = crate::loopprcheck::cli(
@@ -1421,8 +1526,12 @@ pub fn push_check(paths: &StatePaths, stdin_text: &str) -> (i32, Vec<String>, Ve
                 local_sha.to_string(),
             ],
         );
-        if code != 0 {
-            blocked = true;
+        match code {
+            0 => {}
+            1 => blocked = true,
+            _ => out.push(format!(
+                "cannot run pr-check for {branch} (exit {code}); the push is allowed"
+            )),
         }
     }
     if checked == 0 && out.is_empty() {
@@ -1472,7 +1581,7 @@ mod install_hooks_tests {
     #[test]
     fn it_installs_executable_and_a_rerun_is_unchanged() {
         let (_d, paths) = scratch();
-        let (code, out, err) = install_hooks(&paths);
+        let (code, out, err) = install_hooks(&paths, true);
         assert_eq!(code, 0, "{out:?} {err:?}");
         assert!(out[0].starts_with("installed:"), "{out:?}");
         let hook = hook_of(&paths);
@@ -1492,7 +1601,7 @@ mod install_hooks_tests {
                 "the hook must be executable, mode {mode:o}"
             );
         }
-        let (code2, out2, _) = install_hooks(&paths);
+        let (code2, out2, _) = install_hooks(&paths, true);
         assert_eq!(code2, 0);
         assert!(out2[0].starts_with("unchanged:"), "{out2:?}");
     }
@@ -1506,7 +1615,7 @@ mod install_hooks_tests {
         std::fs::create_dir_all(hook.parent().expect("parent")).expect("mkdir");
         std::fs::write(&hook, "#!/bin/sh\n# somebody else's hook\necho hi\n").expect("write");
 
-        let (code, _out, err) = install_hooks(&paths);
+        let (code, _out, err) = install_hooks(&paths, true);
         assert_eq!(code, 2, "a conflict is a refusal, not a success: {err:?}");
         assert!(
             err.iter()
@@ -1545,7 +1654,7 @@ mod install_hooks_tests {
         std::fs::write(&target, "#!/bin/sh\necho target\n").expect("write");
         std::os::unix::fs::symlink(&target, &hook).expect("symlink");
 
-        let (code, _out, err) = install_hooks(&paths);
+        let (code, _out, err) = install_hooks(&paths, true);
         assert_eq!(code, 2, "{err:?}");
         assert!(err.iter().any(|l| l.contains("is a symlink")), "{err:?}");
         // **The target is byte-identical** — this is the assertion that makes the symlink guard real.
@@ -1566,7 +1675,7 @@ mod install_hooks_tests {
         std::fs::create_dir_all(hook.parent().expect("parent")).expect("mkdir");
         std::fs::write(&hook, format!("#!/bin/sh\n{HOOK_START}\n# an older body\n"))
             .expect("write");
-        let (code, out, err) = install_hooks(&paths);
+        let (code, out, err) = install_hooks(&paths, true);
         assert_eq!(code, 0, "{err:?}");
         assert!(out[0].starts_with("updated:"), "{out:?}");
         assert_eq!(std::fs::read_to_string(&hook).expect("read"), HOOK_SCRIPT);
@@ -1584,7 +1693,7 @@ mod install_hooks_tests {
             LEGACY_HOOK_STARTS[0]
         );
         std::fs::write(&hook, v1).expect("write");
-        let (code, out, err) = install_hooks(&paths);
+        let (code, out, err) = install_hooks(&paths, true);
         assert_eq!(code, 0, "{err:?}");
         assert!(out[0].starts_with("updated:"), "{out:?}");
         let body = std::fs::read_to_string(&hook).expect("read");

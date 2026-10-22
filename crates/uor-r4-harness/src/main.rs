@@ -54,7 +54,9 @@ const PASSTHROUGH_VALUE_FLAGS: [&str; 1] = ["--only"];
 /// failed with "unknown option --only" before it could delegate. Which defeats the point.
 use uor_r4_harness::ruleinventory::PORTED_COMMANDS;
 
-const SUBCOMMAND_FLAGS: [&str; 36] = [
+const SUBCOMMAND_FLAGS: [&str; 37] = [
+    // `git install-hooks --install`: write the hooks; without it the command only prints the plan.
+    "--install",
     // `status --refresh`: re-read GitHub instead of the 15-minute cache.
     "--refresh",
     "--kind",
@@ -1680,8 +1682,17 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
         // **`install-hooks` is ported because its refusals are the point**: it never clobbers a
         // foreign hook, and each refusal names what it found and how to proceed.
         "install-hooks" => {
+            // **Owner-only:** the hooks change commit behaviour for every worktree, so a lab
+            // session never writes them (owner decision, 22 Oct 2026; loop PR 9's guard repeats it).
+            if std::env::var_os("UOR_LAB").is_some() {
+                eprintln!(
+                    "uor-harness git install-hooks: refused; the shared git hooks are the owner's to install. Unset UOR_LAB and run it yourself."
+                );
+                return ExitCode::from(2);
+            }
+            let write = args.iter().any(|a| a == "--install");
             let paths = StatePaths::from_env(repo);
-            let (code, out, err) = githelp::install_hooks(&paths);
+            let (code, out, err) = githelp::install_hooks(&paths, write);
             for l in &out {
                 println!("{l}");
             }
