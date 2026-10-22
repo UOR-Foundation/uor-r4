@@ -418,6 +418,7 @@ fn rule_scope(pr: &Pr) -> RuleResult {
     let mut details = Vec::new();
     for (change, path) in pr.changed_paths() {
         let allowed = scope.iter().any(|g| glob_match(g, path))
+            || crate::loopclaim::SHARED_FILES.contains(&path)
             || folders.iter().any(|f| path.starts_with(f.as_str()))
             || (path == item_path && status_only_edit(pr, path))
             || (item.notebook.as_deref() == Some(path) && append_only(pr, path))
