@@ -19,11 +19,12 @@ Per row that is V + 1 + A·V `token_cell` calls, where A ≤ K is the number of 
 
 One new writer, built in its own module. It replaces the full-vocabulary scans with a CSR bucket index over the 256 root-pair address cells (`cell = root(block 0)·16 + root(block B−1)`).
 
-- **Index.** `offsets[0..=256]`; `members[0..V)`, token ids grouped by cell, ascending id within a cell; each token's base cell; and an ABSENT count (the host controls showed that a single flag is not enough when the moved token is itself the ABSENT one). It is built on the device from `discrete_export_token_cells` (`:367-372`, which reports status 8 on ABSENT), or an equivalent count/scan/scatter kernel.
-- **Rebuild.** After each accepted move (`discrete_apply`, `:431`), at most one token changes bucket, so the index is updated for that token only. A full rebuild is the control (§5).
+- **Index.** `offsets[0..=256]`; `members[0..V)`, token ids grouped by cell, ascending id within a cell; each token's base cell; and an ABSENT count (the host controls showed that a single flag is not enough when the moved token is itself the ABSENT one). It is built on the device by a count/scan/scatter kernel in the new module that also counts ABSENT tokens. `discrete_export_token_cells` (`:367-372`) cannot be used as is: on ABSENT it returns without writing `cells[token]` and raises one status flag (`:370`).
+- **Rebuild.** After each accepted move (`discrete_apply`, `:431`), at most one token changes bucket, so the index is updated for that token only. A full rebuild is the control (§5). The update cost per accepted move (index entries written) is counted and reported; it falls outside the per-row counts, and shifting `members` between two buckets can touch up to V entries.
 - **Writer.** Occupancy is `offsets[c+1] > offsets[c]`. Admission is one pass over 256 cells ordered by (address distance, cell id). Membership walks each admitted bucket in id order with the unchanged rule `(d < best) || (d == best && t < best_t)`. Every output is produced from the same candidate set as today.
 - **Kind 1** (virtual token/block move, `:26`, `:32`): only the moved token can change cell. It costs one `token_cell` call; its base bucket is walked skipping it, it is scored in its moved cell if that cell is admitted, occupancy is adjusted by ±1, and a moved-ABSENT result returns MAX. Kinds 0, 2 and 3 use the index unchanged.
-- **Serving prune** (serving only): skip an admitted cell only when its address distance is **strictly greater** than the best token distance so far. Training and counterfactual calls keep the full walk, because they need the rivals.
+- **The evaluate entry's top-8 scan** (`discrete_evaluate`, `:479-488`) also calls `token_cell` on every token, after `writer`. It walks the admitted buckets instead. Its result does not depend on visit order, because the insertion uses the total order (distance, token id).
+- **Serving prune: out of scope for this sheet.** Skipping an admitted cell whose address distance exceeds the best token distance also skips that cell's rivals. That changes `token_rivals`, the rival distance, `token_hinge`, the loss and `telemetry[3]` (`:320-322`, `:327`, `:342`), and all three existing entries need those. No entry today is prediction-only. The prune, with its own prediction-only entry, is a named follow-up; the host controls already pin it (#2983).
 - **Build.** `crates/uor-r4-discrete/build.rs` today compiles `src/discrete.cu` with nvcc `-ptx` and then generates five separate modules (decomposition, baseline-reuse, rows, rowsk, bvgk), each with its own `*_source.rs`, its own nvcc invocation, its own `admit_ptx_inventory` entry list and its own cubin in the final assembly loop. The bucketed writer follows that pattern: a new `src/bucket_source.rs` generator that emits `bucket.cu`, a new nvcc block placed after the bvgk block and before the cubin loop, a new `("bucket", bucket.ptx)` entry in that loop, and an admitted entry list. The ordinary `discrete.ptx` and the five existing modules stay byte-for-byte. NVRTC is banned (CHARTER §3.4, `docs/model/gpu-and-cuda.md`); nothing is appended to a shared CUDA source string.
 - **Arithmetic.** Integer only. PTX admission already rejects any float or tensor-core instruction. No normalized-exponential read, no squashing, no dense matrix product.
 - **No CPU fallback.** The host writers in `writer_bucket_controls.rs` are the finite control only.
@@ -35,13 +36,13 @@ Casey registers the bar. This is the form proposed in the design note:
 | Measure | Proposed bar |
 |---|---|
 | Output mismatches against the full scan | 0, on every row and kind (B1) |
-| `token_cell` calls per row | 0 for kinds 0, 2 and 3; at most 1 for kind 1 (B2) |
-| Cell-distance evaluations per row (admission) | exactly 256 (B2) |
-| Token-distance evaluations per row | ≤ the admitted members: equal in training mode, ≤ in serving with the strict `>` prune (B2) |
+| `token_cell` calls per row, in `writer` and the evaluate entry's top-8 scan | 0 for kinds 0, 2 and 3; at most 1 for kind 1 (B2) |
+| Cell-distance evaluations per row, admission pass | at most 256, one per cell (B2) |
+| Token-distance evaluations per row | equal to the members of the admitted cells; this sheet has no prune (B2) |
 
-**B1 compares every output `writer` writes** (signature at `:307`): the return value (the loss, or MAX); `prediction`; `token_rivals`; `address_rivals`; `admitted[0..16)`; `token_hinge`; `address_hinge`; `telemetry[0..6)`, which holds the rank hinge, the target's cell rank, occupancy, the eligible count, `loss_tr` and the reported loss; and `arithmetic_status`, including status 12.
+**B1 compares every output `writer` writes** (signature at `:307`): the return value (the loss, or MAX); `prediction`; `token_rivals`; `address_rivals`; `admitted[0..16)`; `token_hinge`; `address_hinge`; `telemetry[0..6)`, which holds the rank hinge, the target's cell rank, occupancy, the eligible count, `loss_tr` and the reported loss; and `arithmetic_status`, including status 12. For the evaluate entry it also compares the top-8 list, its distances and the status-11 check (`:479-490`). On a MAX row, `writer` returns before writing some outputs (`:309`, `:325`), so both sides prefill every output buffer with the same sentinel and B1 compares the return value, the status and every buffer.
 
-**Reporting.** For V = 4,096 and V = 16,384, report the maximum and the mean of each count, bucketed and full scan, from the same counters on the same rows. Today's full scan is V + 1 + A·V `token_cell` calls and up to K·256 admission evaluations.
+**Reporting.** For V = 4,096 and V = 16,384, report the maximum and the mean of each count, bucketed and full scan, from the same counters on the same rows. Today's full scan is V + 1 + A·V `token_cell` calls in `writer` (plus V more in the evaluate entry's top-8 scan) and up to K·256 admission evaluations. Two costs are outside B2 and are reported beside it: the rank-telemetry pass (`:330-333`, one evaluation per occupied cell, the same in both writers) and the index update cost per accepted move (§2).
 
 **Writer time per row** on an RTX 5090, bucketed against full scan, is reported, not a bar.
 
@@ -60,7 +61,7 @@ None. The tables are seeded or pinned (§5), with no checkpoint and no training.
 - seeded queries (`random_query`): 4,096 rows per table and seed;
 - real DEV reads: the forward pass's `q` on the 14,287-row DEV panel, with the pinned A8 table. This needs a driver path that runs `read_vector` and keeps `q`, as `rows_qualification.rs` and `bvgk_qualification.rs` do for their own modules. **Open choice:** include the real-read panel, or qualify on seeded rows only and defer it.
 
-**Call kinds.** `writer` is called from `discrete_forward` (`:380`, kind 2, the loss kernel), from `discrete_counterfactual` (`:394` baseline kind 2; `:400` the proposal kind 0, 1 or 3, sixteen lanes, gate lanes 0..2) and from `discrete_evaluate` (`:474`, kind 2 with telemetry). All three entries and all four kinds are compared, in both `s[11]` modes.
+**Call kinds.** `writer` is called from `discrete_forward` (`:380`, kind 2, the loss kernel), from `discrete_counterfactual` (`:394` baseline kind 2; `:400` the proposal kind 0, 1 or 3, sixteen lanes, gate lanes 0..2) and from `discrete_evaluate` (`:474`, kind 2 with telemetry). All three entries and all four kinds are compared: kind 0 in Route mode and kind 3 in Flock or Relation mode (the other pairing is refused with status 9, `:388`), kinds 1 and 2 in both, each in both `s[11]` modes.
 
 **Edge cases (finite, each pinned by a row):**
 - a cell-id tie under `cell_precedes`, including a tie at the K-th admitted slot;
@@ -71,7 +72,7 @@ None. The tables are seeded or pinned (§5), with no checkpoint and no training.
 
 ## 6. Source
 
-- `src/bucket_source.rs` and the `build.rs` block (§2), with its admitted entry list;
+- `src/bucket_source.rs` and the `build.rs` block (§2), with its admitted entry list: the index build, the per-move update, the bucketed `writer` and the bucketed top-8 scan;
 - a device wrapper beside `rows_device.rs`;
 - `src/bin/writer-bucket-qualify.rs`, after `rows-qualify.rs`;
 - a counters build, compiled separately (a macro, so the plain module has no counter code), adding the three per-row counts. **Control:** the plain and instrumented builds must give identical outputs on every row.
@@ -90,11 +91,11 @@ None. The tables are seeded or pinned (§5), with no checkpoint and no training.
 
 Each planted fault runs in the instrumented build and must produce a mismatch or a count above the bar:
 - the tie rule flipped (`t > best_t`);
-- the prune at `>=`;
 - the index stale by one move (the update skipped after one accepted move);
-- an ABSENT token ignored.
+- an ABSENT token ignored by the index build;
+- under kind 1, the moved token not skipped in its base bucket, so it is counted twice.
 
-On the host (#2983), the flipped tie rule fails 4 of the 6 tests, the `>=` prune fails 3, and an ignored ABSENT token fails the ABSENT test. The stale index has no host test yet; it is new in this qualification. A planted fault that passes is an instrument fault. A negative closes this configuration, never the mechanism (CHARTER §4.1).
+On the host (#2983), the flipped tie rule fails 4 of the 6 tests and an ignored ABSENT token fails the ABSENT test. The stale index and the double-counted moved token are new in this qualification. A planted fault that passes is an instrument fault. A negative closes this configuration, never the mechanism (CHARTER §4.1).
 
 ## 9. Stop conditions and outcomes
 

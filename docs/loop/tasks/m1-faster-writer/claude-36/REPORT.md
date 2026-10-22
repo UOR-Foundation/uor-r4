@@ -16,6 +16,15 @@ Lab: claude. Base: `e10d10926`. Order: [ORDER.md](ORDER.md), committed first (`e
   The sheet states the corrected forms and scopes that bar to admission.
 - **The B1 output list is longer than the note's.** The `writer` signature also writes `token_hinge`, `address_hinge`, `telemetry[0..6)` and `arithmetic_status`. B1 compares all of them.
 - **One sentence in the first draft paired four planted faults with three host results.** It is fixed in `9c1c60a09`.
+- **The fresh-context self-review of `771ba584d` returned CHANGES,** with one HIGH and three MEDIUM findings. All are fixed in the commit after this REPORT's first version:
+  - **HIGH: the serving prune could never meet B1.** Skipping a cell skips its rivals, which changes `token_rivals`, the rival distance, the hinge, the loss and `telemetry[3]` (`discrete.cu:320-322`, `:327`, `:342`). No existing entry is prediction-only, and the `>=` planted fault had no path to run on. **The prune is now out of scope,** as a named follow-up with its own prediction-only entry, and its planted fault is replaced by a kind-1 double-count fault.
+  - **MEDIUM: `discrete_evaluate` has its own O(V) top-8 scan** (`:479-488`). It is now bucketed too, and B2 counts it.
+  - **MEDIUM: the index update cost per accepted move was invisible.** It is now counted and reported beside B2.
+  - **MEDIUM: `discrete_export_token_cells` cannot build the index,** because it skips ABSENT tokens. The sheet now requires the module's own count/scan/scatter kernel.
+  - **LOW:**
+    - MAX rows prefill a shared sentinel;
+    - B2's 256 is now "at most 256, one per cell";
+    - kinds 0 and 3 are named with their read modes.
 
 ## What changed
 
@@ -32,7 +41,7 @@ The sheet registers a finite CUDA qualification: no training, no checkpoint. It 
 - **Counters:** compiled separately from the measured kernel. The plain and instrumented builds must give identical outputs.
 - **Bar, marked "PROPOSED, NOT REGISTERED":**
   - B1: 0 output mismatches against the full scan;
-  - B2: 0 `token_cell` calls (≤1 for kind 1), exactly 256 admission evaluations, and token distances ≤ the admitted members.
+  - B2, counted over `writer` and the evaluate entry's top-8 scan: 0 `token_cell` calls (≤1 for kind 1), at most 256 admission evaluations (one per cell), and token distances equal to the admitted members (no prune).
   - Writer time per row is reported, not a bar.
 - **Four planted faults, stop conditions and a cost** of under $1 as a planning figure.
 
@@ -58,7 +67,9 @@ scope-guard: one new sheet and this task folder. No code.
   - the seeded or a real 16,384 table;
   - whether to include the real-read DEV panel.
 - **Unit 3:** the CUDA module and the qualification run.
-- **Later:** whether the rows, rowsk and bvgk modules switch to the bucketed writer.
+- **Later:**
+  - whether the rows, rowsk and bvgk modules switch to the bucketed writer;
+  - the serving prune, with its own prediction-only entry.
 
 ## Plain summary
 
