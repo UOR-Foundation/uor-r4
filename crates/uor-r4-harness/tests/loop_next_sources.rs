@@ -150,6 +150,26 @@ fn the_top_of_the_lab_lane_is_offered_before_any() {
 }
 
 #[test]
+fn an_open_owner_direction_is_offered_before_repairs() {
+    let plan = "# PLAN\n\n## Owner directions\n\n| Direction | Status | Date | Note |\n|---|---|---|---|\n| D1 build the GPU collection record | open | 2026-10-22 | x |\n";
+    let r = Repo::new(
+        &[("PLAN.md", plan), ("docs/harness/labs.json", &labs(None))],
+        &[],
+    );
+    let o = r.next();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        stdout(&o).contains("owner-direction: PLAN owner direction"),
+        "{}",
+        stdout(&o)
+    );
+    assert!(
+        decision(&o).starts_with("GO owner-direction D1 build the GPU collection record"),
+        "the open owner direction must be offered before repairs: {}",
+        decision(&o)
+    );
+}
+#[test]
 fn an_open_premise_probe_is_offered_from_plan() {
     let plan = "# PLAN\n\n## Premises\n\n| Premise | Probe | Status | Cancel if |\n|---|---|---|---|\n| P1 memory beats search | `cargo test -p x` | open | if y |\n| P2 already probed | `cargo test -p y` | probed | z |\n";
     let r = Repo::new(
@@ -176,6 +196,10 @@ fn missing_plan_and_missing_lane_are_named_not_guessed() {
     let o = r.next();
     let out = stdout(&o);
     assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert!(
+        out.contains("owner-direction: not built — PLAN.md is not on origin/main yet"),
+        "{out}"
+    );
     assert!(
         out.contains("not built — PLAN.md is not on origin/main yet"),
         "{out}"

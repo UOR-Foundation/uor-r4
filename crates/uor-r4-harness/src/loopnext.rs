@@ -412,57 +412,59 @@ fn origin_file(root: &Path, path: &str) -> Option<String> {
 /// The premise probe PLAN.md offers next: the first row of its `## Premises` table whose status
 /// cell reads `open` and whose probe cell holds a command in backticks. `Ok(None)` means the file
 /// exists with such a table but no open row; `Err` names what is missing.
-fn premise_probe(root: &Path) -> Result<Option<(String, String)>, String> {
+fn plan_open_row(root: &Path, heading: &str) -> Result<Option<Vec<String>>, String> {
     let Some(text) = origin_file(root, "PLAN.md") else {
         return Err("PLAN.md is not on origin/main yet (the PM writes it)".to_string());
     };
+    let wanted = format!("## {}", heading.to_ascii_lowercase());
     let mut inside = false;
     for line in text.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("# ") || trimmed.starts_with("## ") {
-            inside = trimmed.to_ascii_lowercase().starts_with("## premises");
+            inside = trimmed.to_ascii_lowercase().starts_with(&wanted);
             continue;
         }
         if !inside || !trimmed.starts_with('|') {
             continue;
         }
-        let cells: Vec<&str> = trimmed
+        let cells: Vec<String> = trimmed
             .trim_matches('|')
             .split('|')
-            .map(str::trim)
+            .map(|c| c.trim().to_string())
             .collect();
-        if cells.len() < 3 {
-            continue;
-        }
         // The header row and the `|---|` separator are not data.
-        if cells.iter().any(|c| c.eq_ignore_ascii_case("premise"))
+        if cells.len() < 2
+            || cells.iter().any(|c| c.eq_ignore_ascii_case(heading))
             || cells
                 .iter()
                 .all(|c| c.chars().all(|ch| ch == '-' || ch == ':'))
         {
             continue;
         }
-        let Some(status) = cells.iter().position(|c| c.eq_ignore_ascii_case("open")) else {
-            continue;
-        };
-        let Some(probe_cell) = cells
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| *i != status)
-            .map(|(_, c)| *c)
-            .find(|c| c.contains('`'))
-        else {
-            continue;
-        };
-        let Some(command) = probe_cell.split('`').nth(1).map(str::trim) else {
-            continue;
-        };
-        if command.is_empty() {
+        if !cells.iter().any(|c| c.eq_ignore_ascii_case("open")) {
             continue;
         }
-        return Ok(Some((cells[0].to_string(), command.to_string())));
+        return Ok(Some(cells));
     }
     Ok(None)
+}
+
+/// The premise probe PLAN.md offers next: the first open row of its `## Premises` table whose
+/// cells carry a command in backticks. `Ok(None)` means the table exists with no open row.
+fn premise_probe(root: &Path) -> Result<Option<(String, String)>, String> {
+    let Some(cells) = plan_open_row(root, "Premises")? else {
+        return Ok(None);
+    };
+    let Some(cell) = cells.iter().find(|c| c.contains('`')) else {
+        return Ok(None);
+    };
+    let Some(command) = cell.split('`').nth(1).map(str::trim) else {
+        return Ok(None);
+    };
+    if command.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some((cells[0].clone(), command.to_string())))
 }
 
 /// The lane the owner assigned this lab in the owner-only registry, if any.
@@ -566,11 +568,28 @@ pub fn run(
         "none",
         format!("off (no local/loop/STOP, no {PAUSE_LABEL} on #{PAUSE_ISSUE})"),
     ));
-    // 2. owner direction.
-    out.push(not_built(
-        "owner-direction",
-        "owner directions live in PLAN, loop PR 8",
-    ));
+    // 2. owner direction: the first open row of PLAN.md's `## Owner directions` table.
+    match plan_open_row(root, "Owner directions") {
+        Ok(Some(cells)) => {
+            let target = cells[0].clone();
+            let reason = format!("PLAN owner direction {target:?} is open");
+            out.push(source("owner-direction", "work", reason.clone()));
+            return Ok((
+                out,
+                Decision::Go {
+                    kind: "owner-direction",
+                    target,
+                    reason,
+                },
+            ));
+        }
+        Ok(None) => out.push(source(
+            "owner-direction",
+            "none",
+            "PLAN.md has no open owner direction",
+        )),
+        Err(why) => out.push(not_built("owner-direction", &why)),
+    }
     // The build-plan rows, vendors and D59 come from `origin/main`, not from this branch's
     // working tree.
     let main = crate::loopreview::main_context(root)

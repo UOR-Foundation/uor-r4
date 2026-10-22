@@ -247,7 +247,7 @@ UOR_LAB=claude uor-harness --json loop next   # {"lab","sources":[{"source","sta
 Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 GO, 1 STOP, 2 cannot run (usage, no lab, a git or `gh` error). It reads GitHub only; the `any` source runs `loop claim`'s checks, which fetch `origin main`. The sources, in order; the first that yields work decides:
 
 - `kill-switch`: STOP when `local/loop/STOP` exists in the main checkout or issue #2028 carries the label `loop:pause`.
-- `owner-direction`: not built (owner directions live in PLAN, loop PR 8).
+- `owner-direction`: reads PLAN.md's `## Owner directions` table and offers the first row whose status cell is `open`; with no PLAN.md it says so instead of guessing.
 - `repairs`: the lab's own open PRs (head `<lab>/...`) that conflict, have a check at the head with conclusion FAILURE or TIMED_OUT, or whose last `uor-review v1` record counted by the review gate at the head says CHANGES; GO `repair #<n>`, lowest number first.
 - `reviews`: open non-draft PRs on which the review gate would count a `uor-review v1` record from this lab (taken to carry `context: fresh`: on a setup PR under D59 `claude` only; else a lab of another vendor than the ORDER lab, D46, or the ORDER lab itself on a doc-only PR) and that have no counted record from this lab at the head; GO `review #<n>`, lowest number first. The gate's context (build-plan rows, vendors, D59) comes from `origin/main`, as in `loop review`. A PR without an ORDER is skipped.
 - `gpu-collections`: not built — a GPU run needs a collection record the watcher (loop PR 10) does not write yet; that record is a separate unit.
