@@ -56,7 +56,7 @@ Round 2 of the CHANGES records, point by point, after round 1 (`77fd684db`, repa
 - `cargo clippy -q --locked -p uor-r4-harness --all-targets`: no warnings.
 - `UOR_LAB=deepseek uor-harness loop gates --full`: GREEN on five gates.
 - `UOR_LAB=deepseek uor-harness loop gates --break all`: CAUGHT on five gates.
-- `UOR_LAB=deepseek uor-harness loop pr-check --local`: `scope` now PASS; only the structural `commit-order` of the pushed repair history fails.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: **PASS on every rule** - `order`, `scope`, `commit-order`, `report`, `owner-paths`, `rule-sources` and `read-path`.
 
 ## Skills used
 
@@ -64,7 +64,7 @@ Round 2 of the CHANGES records, point by point, after round 1 (`77fd684db`, repa
 
 ## Still open
 
-- **`commit-order` cannot pass without a force push** on this repaired branch, which the rules forbid; the counted review record and CI are the queue gate, as on the PM's own repairs.
+- **None blocking.** The chain repair (restore `deepseek-3`, add `deepseek-5` alone, remove `deepseek-4`) makes `pr-check --local` pass whole, so the queue gate is reached locally, not just through the review record.
 - **`looparrive.rs` is not in this PR**: PR 11's scope owns it, so `loop arrive` checks only `pre-commit`; extending it needs a scope delta and is a follow-up.
 - **The binary warning path has no direct test** (it needs a build inside the checkout).
 - **The LFS chain is tested with a fake `git-lfs`**, not a real transfer.
