@@ -38,7 +38,7 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    fn text(self) -> &'static str {
+    pub fn text(self) -> &'static str {
         match self {
             Verdict::Pass => "PASS",
             Verdict::Fail => "FAIL",
@@ -868,9 +868,11 @@ type Budget = (
     &'static str,
 );
 
-/// The read-path budgets, measured on the head and compared with the base. An item over budget
-/// fails when it grew, and warns when it did not; the whole path's growth leaves out the ORDER,
-/// which the base never has. A read-path file that is a symlink at the head fails.
+/// The read-path budgets, measured on the head and compared with the base. **Any budget overrun is
+/// a failure since loop PR 11**: the loop relies on the read path, so the former warnings (an
+/// over-budget file that did not grow, and a whole path above the 76,800 B line) are errors now.
+/// The whole path's growth leaves out the ORDER, which the base never has. A read-path file that is
+/// a symlink at the head fails.
 fn rule_read_path(pr: &Pr) -> RuleResult {
     const R: &str = "read-path";
     let bytes = |t: Option<String>| t.map_or(0, |t| t.len() as u64);
@@ -913,14 +915,13 @@ fn rule_read_path(pr: &Pr) -> RuleResult {
             fails.push(format!("{path} is a symlink at the head"));
         }
     }
-    let mut warns = Vec::new();
     for (name, (b, h), over, budget, unit) in items {
         if over(h) {
             let line = format!("{name} is {h} {unit} (base {b}), over its budget ({budget})");
             if h > b {
                 fails.push(format!("{line} and grew"));
             } else {
-                warns.push(format!("{line} but did not grow"));
+                fails.push(format!("{line} but did not grow"));
             }
         }
     }
@@ -932,11 +933,11 @@ fn rule_read_path(pr: &Pr) -> RuleResult {
         if core.1 > core.0 {
             fails.push(format!("{line} and grew"));
         } else {
-            warns.push(format!("{line} but did not grow"));
+            fails.push(format!("{line} but did not grow"));
         }
     } else if total > 76_800 {
-        warns.push(format!(
-            "the read path is {total} B (AGENTS + CHARTER + STATE + HANDOFF base {}), above the 76800 B warning line",
+        fails.push(format!(
+            "the read path is {total} B (AGENTS + CHARTER + STATE + HANDOFF base {}), above the 76800 B line",
             core.0
         ));
     }
@@ -944,14 +945,11 @@ fn rule_read_path(pr: &Pr) -> RuleResult {
         "AGENTS.md {} lines, STATE.md {} B, HANDOFF.md {} B, ORDER {} B, read path {} B (AGENTS + CHARTER + STATE + HANDOFF + ORDER)",
         agents_lines.1, state.1, handoff.1, ord.1, total
     );
-    let verdict = if !fails.is_empty() {
-        Verdict::Fail
-    } else if !warns.is_empty() {
-        Verdict::Warn
-    } else {
+    let verdict = if fails.is_empty() {
         Verdict::Pass
+    } else {
+        Verdict::Fail
     };
-    fails.extend(warns);
     RuleResult {
         rule: R,
         verdict,
@@ -1399,53 +1397,15 @@ fn rule_review_record(pr: &Pr) -> RuleResult {
         Ok(g) => g,
         Err(r) => return r,
     };
-    let order = match pr.the_order() {
-        Ok(p) => p,
-        Err(e) => return fail(R, format!("cannot check the review record: {e}")),
-    };
-    let (_, order_lab, _) = order_parts(order).expect("an added ORDER path parses");
-    let Some(text) = pr.at_head(order) else {
-        return fail(R, format!("{order} is unreadable at the head"));
-    };
-    let Some(item) = crate::loopclaim::order_item(&text) else {
-        return fail(R, format!("{order} names no item at the head"));
-    };
-    let Some(page) = pr.at_base("docs/loop/README.md") else {
-        return fail(R, "docs/loop/README.md is missing at the merge base".into());
-    };
-    let rows = crate::loopreview::build_rows(&page);
-    let vendors = match pr
-        .at_base("docs/harness/labs.json")
-        .ok_or("docs/harness/labs.json is missing at the merge base".to_string())
-        .and_then(|t| crate::labs::parse_labs(&t))
-    {
-        Ok(labs) => labs.into_iter().map(|(k, l)| (k, l.vendor)).collect(),
+    let ctx = match ReviewContext::of(pr) {
+        Ok(c) => c,
         Err(e) => return fail(R, e),
     };
-    // Unreadable owner paths or a missing switch keep D59 in force.
-    let d59_in_force = crate::loopreview::d59_in_force(
-        &pr.at_base("docs/harness/owner-paths.json")
-            .unwrap_or_default(),
-        pr.at_base(crate::loopreview::D59_SWITCH).as_deref(),
-    );
     let comments: Vec<String> = match gh.comments(number) {
         Ok(c) => c.into_iter().map(|c| c.body).collect(),
         Err(e) => return fail(R, e),
     };
-    let setup_row = crate::loopreview::setup_row(&text);
-    let outcome = crate::loopreview::gate(&crate::loopreview::GateInput {
-        pr: number,
-        head: &pr.head,
-        order_path: order,
-        order_lab: &order_lab,
-        order_item: &item,
-        setup_row: setup_row.as_deref(),
-        rows: &rows,
-        vendors: &vendors,
-        d59_in_force,
-        doc_only: crate::loopreview::doc_only(pr.changed_paths().map(|(_, p)| p)),
-        comments: &comments,
-    });
+    let outcome = crate::loopreview::gate(&ctx.input(number, &pr.head, &comments));
     let (verdict, summary) = if outcome.pass {
         (
             Verdict::Pass,
@@ -1462,6 +1422,82 @@ fn rule_review_record(pr: &Pr) -> RuleResult {
         verdict,
         summary,
         details: outcome.details,
+    }
+}
+
+/// Everything [`crate::loopreview::gate`] reads about a PR except its comments, read as
+/// `review-record` reads it; `loop queue` builds the same input to find the counted APPROVE.
+pub struct ReviewContext {
+    pub order: String,
+    pub order_lab: String,
+    pub item: String,
+    pub setup_row: Option<String>,
+    pub rows: Vec<String>,
+    pub vendors: std::collections::BTreeMap<String, String>,
+    pub d59_in_force: bool,
+    pub doc_only: bool,
+}
+
+impl ReviewContext {
+    /// The context, or the reason `review-record` fails before it reads any comment.
+    pub fn of(pr: &Pr) -> Result<ReviewContext, String> {
+        let order = pr
+            .the_order()
+            .map_err(|e| format!("cannot check the review record: {e}"))?;
+        let (_, order_lab, _) = order_parts(order).expect("an added ORDER path parses");
+        let text = pr
+            .at_head(order)
+            .ok_or_else(|| format!("{order} is unreadable at the head"))?;
+        let item = crate::loopclaim::order_item(&text)
+            .ok_or_else(|| format!("{order} names no item at the head"))?;
+        let page = pr
+            .at_base("docs/loop/README.md")
+            .ok_or("docs/loop/README.md is missing at the merge base")?;
+        let vendors = pr
+            .at_base("docs/harness/labs.json")
+            .ok_or("docs/harness/labs.json is missing at the merge base".to_string())
+            .and_then(|t| crate::labs::parse_labs(&t))?
+            .into_iter()
+            .map(|(k, l)| (k, l.vendor))
+            .collect();
+        // Unreadable owner paths or a missing switch keep D59 in force.
+        let d59_in_force = crate::loopreview::d59_in_force(
+            &pr.at_base("docs/harness/owner-paths.json")
+                .unwrap_or_default(),
+            pr.at_base(crate::loopreview::D59_SWITCH).as_deref(),
+        );
+        Ok(ReviewContext {
+            order: order.to_string(),
+            order_lab,
+            item,
+            setup_row: crate::loopreview::setup_row(&text),
+            rows: crate::loopreview::build_rows(&page),
+            vendors,
+            d59_in_force,
+            doc_only: crate::loopreview::doc_only(pr.changed_paths().map(|(_, p)| p)),
+        })
+    }
+
+    /// The gate's input for PR `number` at `head` with `comments` (bodies, oldest first).
+    pub fn input<'a>(
+        &'a self,
+        number: u64,
+        head: &'a str,
+        comments: &'a [String],
+    ) -> crate::loopreview::GateInput<'a> {
+        crate::loopreview::GateInput {
+            pr: number,
+            head,
+            order_path: &self.order,
+            order_lab: &self.order_lab,
+            order_item: &self.item,
+            setup_row: self.setup_row.as_deref(),
+            rows: &self.rows,
+            vendors: &self.vendors,
+            d59_in_force: self.d59_in_force,
+            doc_only: self.doc_only,
+            comments,
+        }
     }
 }
 
@@ -1537,6 +1573,18 @@ fn default_head_ref(root: &Path, head: &str) -> String {
     git(root, &["symbolic-ref", "--short", "-q", "HEAD"])
         .map(|b| String::from_utf8_lossy(&b).trim().to_string())
         .unwrap_or_default()
+}
+
+/// Every rule in [`RULES`] run against `pr`, in order; `loop queue` runs the same list.
+pub fn evaluate(pr: &Pr) -> Vec<RuleResult> {
+    RULES
+        .iter()
+        .map(|(name, rule)| {
+            let r = rule(pr);
+            debug_assert_eq!(&r.rule, name);
+            r
+        })
+        .collect()
 }
 
 /// `loop pr-check [--base <rev>] [--head <rev>] [--head-ref <branch>] [--pr <n> | --local | --ci]
@@ -1617,14 +1665,7 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
             return 2;
         }
     };
-    let results: Vec<RuleResult> = RULES
-        .iter()
-        .map(|(name, rule)| {
-            let r = rule(&pr);
-            debug_assert_eq!(&r.rule, name);
-            r
-        })
-        .collect();
+    let results = evaluate(&pr);
     let failed = results.iter().any(|r| r.verdict == Verdict::Fail);
     let fake = std::env::var_os(PRCHECK_GH_FAKE_ENV);
     if json {

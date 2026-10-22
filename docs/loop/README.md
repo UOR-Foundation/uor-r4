@@ -1,9 +1,9 @@
 # The loop: how five labs work on UOR-R4
 
-This page describes the loop that every lab follows. It is a plan for tooling that is mostly still to be built.
+This page describes the loop that every lab follows. Most of its tooling is built; the steps table and the build plan say which parts are still to build.
 CHARTER.md §5.10 holds the rule; this page explains it. Where they disagree, the charter wins.
 
-**Status.** None of the `loop …` commands on this page exists yet: each is a planned subcommand of `uor-harness`, to be built by the PRs in [the build plan](#build-plan). Until a command exists, labs do its step by hand.
+**Status.** Most `loop …` commands on this page are built: each step names the loop PR that built it, and a step marked "to build" is still done by hand. The commands are subcommands of `uor-harness`; the rest come from the PRs in [the build plan](#build-plan).
 Markers used below: **(exists)** means the tool or file is in `main` today; **(to build)** means a PR in the build plan adds it.
 
 ## Credit
@@ -57,12 +57,12 @@ Steps that need no judgement run in the supervisor, without a model.
 | 4 | Claim | Refused unless the item is ready and unclaimed, its scope overlaps no open order (notebook pages excepted), and the lab is under its open-PR limit. Create a worktree `.worktrees/<lab>-<topic>` from fresh `origin/main`, commit the ORDER, open a draft PR, then list again: of two racing drafts, the higher PR number closes before any work. Post the §5.3 intent note. | `loop claim` (built in loop PR 7a) | session |
 | 5 | Probe | Run the cancel probe first. Commit its result, classed `instrument` or `mechanism`, before any commit outside the task folder. If more than three files are expected, commit a plan first too. A cancel closes this order or configuration only, never a mechanism (§4.1, §4.2). | gate (to build) | session |
 | 6 | Work | Work in scope with WIP commits. GPU work still needs a prep sheet, a non-author FIT, an owner release and `scripts/pod/uor-pod`. | `prep` (exists) | session, subagents |
-| 7 | Gates | Quick gates during work, the full set before review. | `loop gates` (to build) | session |
+| 7 | Gates | Quick gates during work, the full set before review. | `loop gates` (built, loop PR 4) | session |
 | 8 | Report | Write REPORT, a notebook row for any result, and receipts, all in the task folder. | `loop report --check` (built, loop PR 7b) | session |
 | 9 | Ready | Build the PR body from REPORT, size first; mark the PR ready; write PICKUP; end the session. | `loop close --session` (built, loop PR 7b) | session |
 | 10 | Review | A lab from another vendor (for a loop setup PR while D59 is in force, Claude), in a fresh session, reads only the ORDER and the diff. A `host` done-when is re-run at the head. A `gpu` done-when is checked by the sealed artifact's checksum and run receipt, never re-run on the laptop (§3.5). | `loop review` (built, loop PR 6) | other lab (D59: Claude for setup PRs) |
 | 11 | Repair | Requested changes, a red gate or a queue ejection give the author lab a new order `<lab>-<n+1>`. It lists finished steps in the past tense with their commits. The first ORDER is history. | `loop next` finds repairs (loop PR 7b); the repair ORDER is still written by hand | session |
-| 12 | Queue | Only when the policy gate is green at the head, the approval the policy gate accepts is at the head (Claude's for a setup PR under D59; otherwise another vendor's), no later "changes requested" that the gate counts exists, and no owner or PM comment came after the approval. | `loop queue` (to build) | supervisor |
+| 12 | Queue | Only when the policy gate is green at the head, the approval the policy gate accepts is at the head (Claude's for a setup PR under D59; otherwise another vendor's), no later "changes requested" that the gate counts exists, and no owner or PM comment came after the approval. | `loop queue` (built, loop PR 7c) | supervisor |
 | 13 | Verify | Find the `(#N)` squash commit on `main`; re-run a `host` done-when on fresh `main`; delete the branch and worktree only when GitHub reports MERGED; run `uor-hygiene --apply`. A failure becomes a repair. | `loop close --verify` (built, loop PR 7b; it prints the hygiene plan and does not apply it, see claude-17 REPORT) | supervisor |
 | 14 | Render | Refresh the render PR. | `loop render --pr` (to build) | Kimi; a cover lab after 2 hours red |
 | 15 | Restart | Start the next fresh session. | `loop drive` (to build) | supervisor |
@@ -90,7 +90,7 @@ Notes carry memory between sessions. Most are rendered, so nobody types them.
 
 **Rule sources.** An owner-only list names the only files allowed to state a rule: CHARTER.md, AGENTS.md, this page, `pm-rules.md`, DECISIONS, the mistakes files and `docs/rules/changes.md`. Other rule-like files become generated files or short pointers.
 
-**Read-path budget.** AGENTS.md stays within about 80 lines. STATE and HANDOFF stay under 24 KB each, PICKUP under 8 KB and an ORDER under 4 KB. The whole read path warns at 75 KB and stops above 125 KB.
+**Read-path budget.** AGENTS.md stays within about 80 lines. STATE and HANDOFF stay under 24 KB each, PICKUP under 8 KB and an ORDER under 4 KB. The whole read path fails above 75 KB (76,800 bytes) since loop PR 11 raised the warning to an error, and above 125 KB the command names the hard limit.
 
 **Today.** `STATUS.md`, `docs/integration/NOW.md`, `docs/harness/claims.json` and the roadmap render all exist and are still edited the old way. The fold-in to STATE, HANDOFF and PLAN is PR 8.
 
@@ -110,7 +110,7 @@ Notes carry memory between sessions. Most are rendered, so nobody types them.
 
 A gate is a check anyone can rerun. Each gate names what it proves, and a planted fault that must turn it red.
 
-**The runner (built, loop PR 4).** `loop gates [--quick|--full|--keep-going|--status|--break G|all]` reads `docs/harness/gates.json`, which lists three gates today: `cargo fmt --check` for the claim-wording and harness crates, and claim-wording. `--watch` is loop PR 11.
+**The runner (built, loop PR 4).** `loop gates [--quick|--full|--keep-going|--status|--watch|--break G|all]` reads `docs/harness/gates.json`, which lists four gates today: `cargo fmt --check` for the claim-wording and harness crates, claim-wording, and the progress-window tests. **The progress window (built, loop PR 11):** `--watch` shows gate N of M, the gate running now, reds as they land and a finish estimate from the ledger. It opens only for a full run in a terminal, never in CI or a headless run, closes after the run, and gives up after 5 minutes without change.
 
 **Gates that exist today:** `cargo fmt`; clippy and library tests for changed crates; `uor-harness check`; `lint check`; the d23, d25 and d32 ratchets; claim-wording; `cargo xtask links`, `archive-verify --base`, `roadmap check` and `docs-catalog --check`; `shard-check`.
 **Gates to build:** `render --check`, `scope`, `order --check`, `report --check`, `budget`, rule sources, milestone bars against CHARTER §4.8, and the local private-text check.
@@ -124,7 +124,7 @@ A gate is a check anyone can rerun. Each gate names what it proves, and a plante
 
 **Ledger.** `local/<lab>/gates.jsonl` records gate, verdict, seconds, commit and the working-tree hash. An uncommitted edit makes a result STALE. The ledger is not committed; CI's result at the head is the authority.
 
-**Breaks.** `--break G` plants the gate's declared fault in a scratch worktree. The gate must go red with its declared failure text. Red for another reason, such as a build failure, is REFUSED. Every gate must declare a break. When a PR changes a gate, the old breaks also run against the new gate, so a gate and its break cannot be loosened together. A break that stays green is a gate defect: add the case, never relax the check. A bug that escapes every gate becomes a new gate whose break is that bug.
+**Breaks.** `--break G` plants the gate's declared fault in a scratch worktree. The gate must go red with its declared failure text. Red for another reason, such as a build failure, is REFUSED. Every gate must declare a break: appended text, or one exact replacement (`replace`, whose `from` must occur exactly once), so the planted fault can be a removed branch rather than an added case. When a PR changes a gate, the old breaks also run against the new gate, so a gate and its break cannot be loosened together. A break that stays green is a gate defect: add the case, never relax the check. A bug that escapes every gate becomes a new gate whose break is that bug.
 
 **CI (built, loop PR 5).** One workflow, `gate.yml`, which `ci.yml` calls on every pull request, with no path filters:
 - `tests` runs `loop gates --full` with a read-only token. It takes the lab from the PR's ORDER; a PR with no ORDER is outside the loop and is skipped with a notice.
@@ -232,7 +232,7 @@ P-5 is dropped: Codex keeps full access.
 | 6 | `loop review` with tagged review records (built) | an untagged review record, a same-vendor record on a code or model PR outside D59, or a setup-PR record from a lab other than Claude is refused |
 | 7a | `claim`, `suborder`, `ask` | an overlapping claim is refused |
 | 7b | `next`, `arrive`, `report`, `close`; templates in our words; per-task receipts (built) | a REPORT missing a section is refused |
-| 7c | `queue`, `board` | a later CHANGES record blocks queueing, unless it comes from a lab other than Claude on a setup PR (D59) |
+| 7c | `queue`, `board` (built) | a later CHANGES record blocks queueing, unless it comes from a lab other than Claude on a setup PR (D59) |
 | 8 | Migration of the notes; AGENTS.md under the 80-line gate; DECISIONS columns; lesson ids; FILEMAP; `pm-rules.md`; bars reconciled | `xtask links` fails a planted broken link |
 | 9 | `guard`, `install`, `onboard`; the local copyright check; committed onboarding receipts (built) | each client's canary write is refused |
 | 10 | `drive`, watchers, kill switch, render refresh, compaction hooks, the soft check-in | a fake stalled client past 2 hours is closed and carded, while a fake progressing one continues with a note |
