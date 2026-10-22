@@ -18,7 +18,8 @@
 //! 4. No scope glob overlaps a glob of an open order's item (see [`globs_overlap`]); that item's
 //!    globs must pass [`scope_glob_ok`] too. An open order whose item is missing or has no `scope:`
 //!    is skipped here with a printed warning (it still counts for check 2). Globs under
-//!    `docs/research/notebook/` never count.
+//!    `docs/research/notebook/` never count, nor does a glob that is exactly one of the
+//!    [`SHARED_FILES`].
 //! 5. The lab's open PRs (head branch `<lab>/...`) are fewer than its `open_pr_limit` in
 //!    `docs/harness/labs.json`.
 //!

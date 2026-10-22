@@ -211,7 +211,7 @@ impl<'a> Pr<'a> {
 }
 
 /// `(folder, lab, n)` of `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`.
-fn order_parts(path: &str) -> Option<(String, String, String)> {
+pub(crate) fn order_parts(path: &str) -> Option<(String, String, String)> {
     let re = regex::Regex::new(r"^docs/loop/tasks/([^/]+)/([A-Za-z0-9_-]+)-([0-9]+)/ORDER\.md$")
         .expect("a valid pattern");
     let c = re.captures(path)?;
@@ -358,7 +358,51 @@ fn rule_order(pr: &Pr) -> RuleResult {
             }
         }
     }
+    match pr.the_chain() {
+        Ok(chain) => details.extend(chain_identity_problems(pr, &chain, path, &text)),
+        Err(e) => details.push(e),
+    }
     result(R, details, path, &format!("{path} is not a valid ORDER"))
+}
+
+/// What differs across a repair chain: every earlier ORDER's `Lab:` matches its folder's lab,
+/// and its `Lab:`, `Item:` and `Setup row:` at the head equal the active ORDER's, so a repair
+/// ORDER can never re-point the PR at another item, lab or setup row.
+fn chain_identity_problems(pr: &Pr, chain: &[String], active: &str, text: &str) -> Vec<String> {
+    let identity = |t: &str| {
+        [
+            ("Lab:", order_lab(t)),
+            ("Item:", crate::loopclaim::order_item(t)),
+            ("Setup row:", crate::loopreview::setup_row(t)),
+        ]
+    };
+    let want = identity(text);
+    let mut details = Vec::new();
+    for order in chain.iter().map(String::as_str).filter(|p| *p != active) {
+        let (_, lab, _) = order_parts(order).expect("a chain ORDER path parses");
+        let Some(t) = pr.at_head(order) else {
+            details.push(format!("{order} cannot be read at the head"));
+            continue;
+        };
+        let got = identity(&t);
+        if got[0].1.as_deref() != Some(lab.as_str()) {
+            details.push(format!(
+                "{order} says `Lab: {}` but its folder is lab {lab}",
+                got[0].1.as_deref().unwrap_or("(none)")
+            ));
+        }
+        for ((field, g), (_, w)) in got.iter().zip(&want) {
+            if g != w {
+                let show = |v: &Option<String>| v.clone().unwrap_or_else(|| "(none)".into());
+                details.push(format!(
+                    "{order} has `{field} {}` but the active ORDER {active} has `{field} {}`",
+                    show(g),
+                    show(w)
+                ));
+            }
+        }
+    }
+    details
 }
 
 /// Every changed path lies inside the ORDER item's `scope:` (read at the base) or is always allowed.
@@ -1869,6 +1913,8 @@ mod tests {
         assert!(labs.contains("labs: deepseek, kimi"), "{labs}");
         let folders = active_order(&[o("f", "kimi-1"), o("g", "kimi-2")]).unwrap_err();
         assert!(folders.contains("folders: f, g"), "{folders}");
+        let same_n = active_order(&[o("f", "kimi-01"), o("f", "kimi-1")]).unwrap_err();
+        assert!(same_n.contains("two with the same number"), "{same_n}");
         let none: [String; 0] = [];
         assert!(active_order(&none)
             .unwrap_err()

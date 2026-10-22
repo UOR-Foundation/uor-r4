@@ -74,8 +74,6 @@ pub(crate) fn find_order(root: &Path) -> Result<String, String> {
             "HEAD",
         ],
     )?;
-    let pattern = regex::Regex::new(r"^docs/loop/tasks/[^/]+/[^/]+-[0-9]+/ORDER\.md$")
-        .expect("a valid pattern");
     let mut fields = out.split('\0').filter(|f| !f.is_empty());
     let mut found = Vec::new();
     while let Some(status) = fields.next() {
@@ -85,7 +83,7 @@ pub(crate) fn find_order(root: &Path) -> Result<String, String> {
         } else {
             fields.next()
         };
-        if let Some(p) = path.filter(|p| pattern.is_match(p)) {
+        if let Some(p) = path.filter(|p| crate::loopprcheck::order_parts(p).is_some()) {
             found.push(p.to_string());
         }
     }

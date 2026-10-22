@@ -135,9 +135,14 @@ impl Repo {
     }
 
     fn claim(&self, id: &str) -> Output {
+        self.claim_with(id, "[]")
+    }
+
+    /// `loop claim <id>` with the open PRs `prs` (the `UOR_LOOP_GH_FAKE` JSON).
+    fn claim_with(&self, id: &str, prs: &str) -> Output {
         let fake = self.tmp.path().join("gh-fake.json");
         assert!(fake.starts_with(self.tmp.path()));
-        std::fs::write(&fake, "[]").unwrap();
+        std::fs::write(&fake, prs).unwrap();
         clean(&mut Command::new(BIN))
             .args(["--repo", self.root.to_str().unwrap(), "loop", "claim", id])
             .env("UOR_LAB", "claude")
@@ -237,5 +242,26 @@ fn claim_refuses_a_scope_listing_a_shared_file() {
 fn claim_accepts_a_scope_clear_of_the_shared_files() {
     let r = Repo::new(&[("watch", Some(WATCH))]);
     let o = r.claim("watch");
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+}
+
+/// An older item listing a shared file exactly does not make that file collide with a new
+/// item: `docs/harness/*.toml` overlaps `docs/harness/gates.json` by prefix alone, and the
+/// claim is not refused for overlap.
+#[test]
+fn an_open_orders_exact_shared_file_glob_never_counts_for_overlap() {
+    let r = Repo::new(&[
+        ("old", Some("[docs/harness/gates.json, crates/old/**]")),
+        ("toml", Some("[docs/harness/*.toml]")),
+    ]);
+    let path = "docs/loop/tasks/old/codex-1/ORDER.md";
+    let open = serde_json::json!([{
+        "number": 1, "headRefName": "codex/old", "isDraft": true,
+        "files": [{"path": path}],
+        "orderTexts": {path: order("old")}
+    }]);
+    let o = r.claim_with("toml", &open.to_string());
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(!err.contains("overlap"), "{err}");
     assert_eq!(o.status.code(), Some(0), "{o:?}");
 }

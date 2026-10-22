@@ -302,13 +302,11 @@ pub(crate) fn added_order(
     listed: &[String],
     read: &dyn Fn(&str) -> Result<String, String>,
 ) -> Result<(String, String, String), OrderErr> {
-    let pattern = regex::Regex::new(r"^docs/loop/tasks/[^/]+/[^/]+-[0-9]+/ORDER\.md$")
-        .expect("a valid pattern");
     let mut added = Vec::new();
     for path in listed
         .iter()
         .map(String::as_str)
-        .filter(|p| pattern.is_match(p))
+        .filter(|p| crate::loopprcheck::order_parts(p).is_some())
     {
         let text = match read(path) {
             Ok(t) => t,
