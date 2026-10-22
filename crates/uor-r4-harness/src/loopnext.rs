@@ -321,17 +321,17 @@ pub(crate) fn added_order(
         }
         added.push((path, text));
     }
-    let (path, text) = match added.len() {
-        1 => added.remove(0),
-        0 => return Err(OrderErr::Missing(format!("#{n} adds no ORDER"))),
-        k => {
-            let paths: Vec<&str> = added.iter().map(|(p, _)| *p).collect();
-            return Err(OrderErr::Missing(format!(
-                "#{n} adds {k} ORDERs ({})",
-                paths.join(", ")
-            )));
-        }
-    };
+    if added.is_empty() {
+        return Err(OrderErr::Missing(format!("#{n} adds no ORDER")));
+    }
+    // A repair chain resolves to its highest `<lab>-<n>` (loop step 11).
+    let paths: Vec<&str> = added.iter().map(|(p, _)| *p).collect();
+    let active = crate::loopprcheck::active_order(&paths)
+        .map_err(|e| OrderErr::Missing(format!("#{n} adds {e}")))?;
+    let (path, text) = added
+        .into_iter()
+        .find(|(p, _)| *p == active)
+        .expect("the active ORDER is one of the added ORDERs");
     let dir = path.trim_end_matches("/ORDER.md");
     let lab = dir
         .rsplit('/')

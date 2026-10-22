@@ -575,12 +575,13 @@ fn order_fails_for_each_broken_condition() {
             }),
         ),
         (
-            "the PR adds 2 ORDERs",
+            // One lab's repair chain is allowed (loop step 11); two labs are not.
+            "the PR adds 2 ORDERs that are not one lab's repairs in one task folder",
             Box::new(|r: &Repo| {
                 r.order_a();
                 r.write(
-                    "docs/loop/tasks/item-a/claude-2/ORDER.md",
-                    &order("claude", "item-a", ""),
+                    "docs/loop/tasks/item-a/codex-2/ORDER.md",
+                    &order("codex", "item-a", ""),
                 );
             }),
         ),
@@ -1334,5 +1335,106 @@ fn the_d59_switch_is_read_at_the_merge_base() {
         "a setup PR under D59 counts only claude records",
     );
     let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
+    expect(&o, 1, "PASS review-record", "counted");
+}
+
+const ORDER_A2: &str = "docs/loop/tasks/item-a/claude-2/ORDER.md";
+const REPORT_A2: &str = "docs/loop/tasks/item-a/claude-2/REPORT.md";
+
+/// A repair PR (loop step 11): `claude-1` alone first, then work, then `claude-2` added by
+/// `repair`, then the REPORT in `claude-2`'s folder alone.
+fn repair_pr(r: &Repo, repair: impl FnOnce(&Repo) + 'static) -> String {
+    r.commits(vec![
+        Box::new(|r: &Repo| r.order_a()),
+        Box::new(|r: &Repo| r.write("crates/a/src/lib.rs", "//\n")),
+        Box::new(repair),
+        Box::new(|r: &Repo| r.write(REPORT_A2, REPORT)),
+    ])
+}
+
+/// The highest `<lab>-<n>` of one lab's ORDERs in one task folder is the active ORDER: `order`,
+/// `commit-order` and `report` judge `claude-2`, and `scope` allows the history folder.
+#[test]
+fn a_repair_pr_resolves_to_the_highest_order() {
+    let r = Repo::new();
+    let h = repair_pr(&r, |r| r.write(ORDER_A2, &order("claude", "item-a", "")));
+    let o = r.check(&h, &[]);
+    expect(&o, 0, "PASS order", "verdict: PASS");
+    expect(&o, 0, "PASS commit-order", "1 repair ORDERs is added alone");
+    expect(&o, 0, "PASS report", REPORT_A2);
+    expect(&o, 0, "PASS scope", "verdict: PASS");
+}
+
+/// A repair ORDER added with a code file fails; so does a PR whose first commit is not the
+/// lowest ORDER.
+#[test]
+fn commit_order_needs_each_repair_order_alone_and_the_lowest_first() {
+    let r = Repo::new();
+    let h = repair_pr(&r, |r| {
+        r.write(ORDER_A2, &order("claude", "item-a", ""));
+        r.write("crates/a/x.rs", "\n");
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL commit-order",
+        "adds the repair ORDER docs/loop/tasks/item-a/claude-2/ORDER.md but also changes crates/a/x.rs",
+    );
+
+    let h = r.commits(vec![
+        Box::new(|r: &Repo| r.write(ORDER_A2, &order("claude", "item-a", ""))),
+        Box::new(|r: &Repo| r.order_a()),
+        Box::new(|r: &Repo| r.write(REPORT_A2, REPORT)),
+    ]);
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL commit-order",
+        "changes docs/loop/tasks/item-a/claude-2/ORDER.md before the commit that adds docs/loop/tasks/item-a/claude-1/ORDER.md",
+    );
+}
+
+/// The planted fault: ORDERs of two labs, or in two task folders, are refused.
+#[test]
+fn orders_of_two_labs_or_two_folders_are_refused() {
+    let r = Repo::new();
+    let h = repair_pr(&r, |r| {
+        r.write(
+            "docs/loop/tasks/item-a/codex-2/ORDER.md",
+            &order("codex", "item-a", ""),
+        )
+    });
+    let o = r.check(&h, &[]);
+    expect(&o, 1, "FAIL order", "labs: claude, codex");
+    expect(
+        &o,
+        1,
+        "FAIL commit-order",
+        "not one lab's repairs in one task folder",
+    );
+
+    let h = repair_pr(&r, |r| {
+        r.write(
+            "docs/loop/tasks/item-b/claude-2/ORDER.md",
+            &order("claude", "item-a", ""),
+        )
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL order",
+        "folders: item-a, item-b",
+    );
+}
+
+/// A counted APPROVE for the superseded `claude-1` does not count once `claude-2` is the
+/// active ORDER; one for `claude-2` counts.
+#[test]
+fn a_review_record_for_a_superseded_order_does_not_count() {
+    let r = Repo::new();
+    let h = repair_pr(&r, |r| r.write(ORDER_A2, &order("claude", "item-a", "")));
+    let o = r.check_gh(&h, &fake(vec![record_on(ORDER_A, "codex", &h, "APPROVE")]));
+    expect(&o, 1, "FAIL review-record", "is not this PR's ORDER");
+    let o = r.check_gh(&h, &fake(vec![record_on(ORDER_A2, "codex", &h, "APPROVE")]));
     expect(&o, 1, "PASS review-record", "counted");
 }
