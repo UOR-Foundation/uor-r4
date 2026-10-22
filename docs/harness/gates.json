@@ -72,20 +72,8 @@
     {
       "id": "loop-gates-watch",
       "proves": "The gate progress window shows gate N of M, the running gate, reds and the ledger estimate; it opens only for a full run in a terminal; and it gives up after five minutes without change.",
-      "command": [
-        "cargo",
-        "test",
-        "-q",
-        "--locked",
-        "-p",
-        "uor-r4-harness",
-        "--test",
-        "loop_gates_watch"
-      ],
-      "reads": [
-        "crates/uor-r4-harness/**/*.rs",
-        "docs/harness/gates.json"
-      ],
+      "command": ["cargo", "test", "-q", "--locked", "-p", "uor-r4-harness", "--test", "loop_gates_watch"],
+      "reads": ["crates/uor-r4-harness/**/*.rs", "docs/harness/gates.json"],
       "quick": false,
       "break": {
         "file": "crates/uor-r4-harness/src/loopgates.rs",
@@ -94,6 +82,18 @@
           "to": "        } else if false {"
         },
         "expect": "the window never gave up"
+      }
+    },
+    {
+      "id": "git-hooks",
+      "proves": "The three managed git hooks install, refuse a foreign file, and enforce the commit-message trailers and the pre-push policy check.",
+      "command": ["cargo", "test", "-q", "--locked", "-p", "uor-r4-harness", "--test", "git_hooks"],
+      "reads": ["crates/uor-r4-harness/**/*.rs", "crates/uor-r4-harness/rules/*"],
+      "quick": false,
+      "break": {
+        "file": "crates/uor-r4-harness/tests/git_hooks.rs",
+        "append": "\n#[test]\nfn planted_break_hooks() { panic!(\"planted_break_hooks\"); }\n",
+        "expect": "planted_break_hooks"
       }
     }
   ]

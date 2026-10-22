@@ -258,8 +258,9 @@ fn binary(root: &Path) -> Check {
     }
 }
 
-/// The git `pre-commit` hook against the exact text `uor-harness git install-hooks` writes
-/// ([`crate::githelp::HOOK_SCRIPT`], compiled from the crate's `rules/precommit-hook.sh`).
+/// The three managed git hooks against the exact text `uor-harness git install-hooks` writes
+/// ([`crate::githelp::MANAGED_HOOKS`], compiled from the crate rules directory): the pre-commit
+/// check, the commit-msg trailer and binary check, and the pre-push policy check (loop PR 12).
 fn hooks(root: &Path) -> Check {
     const FIX: &str =
         "the shared hook is opt-in until loop PR 12; then run `uor-harness git install-hooks`";
@@ -279,34 +280,33 @@ fn hooks(root: &Path) -> Check {
             return c;
         }
     };
-    let hook = dir.join("pre-commit");
-    match std::fs::read_to_string(&hook) {
-        Ok(t) if t == crate::githelp::HOOK_SCRIPT && executable(&hook) => check(
-            "hooks",
-            Verdict::Pass,
-            format!("{} is the harness hook", hook.display()),
-        ),
-        Ok(t) if t == crate::githelp::HOOK_SCRIPT => {
-            let mut c = check("hooks", Verdict::Warn, FIX);
-            c.details.push(format!(
+    let mut installed: Vec<&str> = Vec::new();
+    let mut details: Vec<String> = Vec::new();
+    for spec in crate::githelp::MANAGED_HOOKS.iter() {
+        let hook = dir.join(spec.name);
+        match std::fs::read_to_string(&hook) {
+            Ok(t) if t == spec.script && executable(&hook) => installed.push(spec.name),
+            Ok(t) if t == spec.script => details.push(format!(
                 "{} is the harness hook but is not executable, so git skips it",
                 hook.display()
-            ));
-            c
-        }
-        Ok(_) => {
-            let mut c = check("hooks", Verdict::Warn, FIX);
-            c.details.push(format!(
+            )),
+            Ok(_) => details.push(format!(
                 "{} differs from the hook this binary installs",
                 hook.display()
-            ));
-            c
+            )),
+            Err(_) => details.push(format!("no {}", hook.display())),
         }
-        Err(_) => {
-            let mut c = check("hooks", Verdict::Warn, FIX);
-            c.details.push(format!("no {}", hook.display()));
-            c
-        }
+    }
+    if details.is_empty() {
+        check(
+            "hooks",
+            Verdict::Pass,
+            format!("the harness hooks are installed: {}", installed.join(", ")),
+        )
+    } else {
+        let mut c = check("hooks", Verdict::Warn, FIX);
+        c.details = details;
+        c
     }
 }
 

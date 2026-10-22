@@ -280,8 +280,9 @@ COMMANDS:
                 shows the line without recording it.
     heartbeat   Check in: publish presence and append a receipt, both to the LIVE
                 tier, so a check-in never dirties a working checkout (R10).
-    git         Branch hygiene: clean-merged lists local branches already
-                merged into origin/main, --apply deletes the proven ones.
+    git         Branch hygiene and hooks: clean-merged lists local branches already
+                merged into origin/main (--apply deletes the proven ones); install-hooks
+                writes the commit, commit-msg and pre-push hooks.
     hygiene     Keep the laptop lean: merged worktrees, idle build folders,
                 uploaded scratch, stale temp. A dry run unless --apply; run it
                 as scripts/storage/uor-hygiene. `hygiene --help` lists the guards.
@@ -729,6 +730,34 @@ fn action_word(args: &[String]) -> &str {
     ""
 }
 
+/// The first bare word after the action word, skipping flags and their values.
+///
+/// `args[0]` is the action word for every grouped command, but the global `--repo` and value-taking
+/// subcommand flags are forwarded behind it with their values, so the command one positional argument
+/// is the first bare word after the action.
+fn positional_after_action(args: &[String]) -> Option<String> {
+    const GLOBAL_VALUE_FLAGS: [&str; 2] = ["--repo", "--lab"];
+    let mut skip_next = false;
+    let mut seen_action = false;
+    for a in args {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if a.starts_with('-') {
+            let takes_value = GLOBAL_VALUE_FLAGS.contains(&a.as_str())
+                || (SUBCOMMAND_VALUE_FLAGS.contains(&a.as_str()) && !a.contains('='));
+            skip_next = takes_value && !a.contains('=');
+            continue;
+        }
+        if !seen_action {
+            seen_action = true;
+            continue;
+        }
+        return Some(a.clone());
+    }
+    None
+}
 /// `mistakes <action>` - lessons from what went wrong here before (D30 port).
 ///
 /// `list` and `find` are Rust. `show` and `capture` still delegate by name: `capture` writes a
@@ -1665,6 +1694,37 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
                 ExitCode::from(code as u8)
             }
         }
+        // **`check-message` and `push-check` exist for the two new hooks**: the hook scripts stay
+        // thin and the decisions are Rust, so they are tested like every other rule. Loop PR 12.
+        "check-message" => {
+            let Some(file) = positional_after_action(args) else {
+                eprintln!("uor-harness git check-message: which message file?");
+                eprintln!("usage: uor-harness git check-message <file>");
+                return ExitCode::from(2);
+            };
+            let paths = StatePaths::from_env(repo);
+            let (code, out, err) =
+                githelp::check_commit_message(&paths, std::path::Path::new(&file));
+            for l in &out {
+                println!("{l}");
+            }
+            for l in &err {
+                eprintln!("{l}");
+            }
+            ExitCode::from(code as u8)
+        }
+        "push-check" => {
+            let paths = StatePaths::from_env(repo);
+            let stdin_text = std::io::read_to_string(std::io::stdin()).unwrap_or_default();
+            let (code, out, err) = githelp::push_check(&paths, &stdin_text);
+            for l in &out {
+                println!("{l}");
+            }
+            for l in &err {
+                eprintln!("{l}");
+            }
+            ExitCode::from(code as u8)
+        }
         // **`git status` is Rust**, and it is the whole thing: worktree facts, the PR, the delivery
         // state and the next command. **`merged-unverified` exits 1**, because that state means the PR
         // is merged and its commit is NOT on the origin/main we can see — **a lab that treats it as
@@ -1784,7 +1844,7 @@ fn cmd_git(repo: &Path, args: &[String], json: bool) -> ExitCode {
             }
         }
         "" => {
-            eprintln!("uor-harness git: which action? install-hooks, status, clean-merged, switch, delete-merged");
+            eprintln!("uor-harness git: which action? install-hooks, check-message, push-check, status, clean-merged, switch, delete-merged");
             ExitCode::from(2)
         }
         other => {

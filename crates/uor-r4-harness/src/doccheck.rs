@@ -533,9 +533,11 @@ const GROUPS: [(&str, &[&str]); 12] = [
     (
         "git",
         &[
+            "check-message",
             "clean-merged",
             "delete-merged",
             "install-hooks",
+            "push-check",
             "status",
             "switch",
         ],
