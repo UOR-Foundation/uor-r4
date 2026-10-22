@@ -8,7 +8,7 @@ Delivers Steps 1–4 of [`m1-address-as-read`](../../roadmap/items/m1-address-as
 3. **Finite CPU controls** in [`crates/uor-r4-object-store/tests/address_read.rs`](../../../crates/uor-r4-object-store/tests/address_read.rs) covering exact hit, exact miss (`Absent` with `0` backend fetches), wrong address / tampered manifest / mismatched bindings refusal, versioned overwrite (`Current` vs `Previous`) and bounded capacity eviction (`Evicted`), sorted-merge GCD sieve admission and ranking, and byte-identical round trips across `Store` export/import at carry boundaries.
 4. **Serving-time oracle pre-registration sheet** [`docs/harness/prep/m1-address-as-read-oracle-DRAFT-2026-10-22.md`](../../harness/prep/m1-address-as-read-oracle-DRAFT-2026-10-22.md), ready for non-author `TEST FITNESS: FIT` review before any GPU evaluation run (Step 5).
 
-## Rule compliance
+## Geometry and ratchet checks
 
 - **Geometry only, no softmax, no matmul (CHARTER §3.1–§3.3, D11, D23, D30):** `PrimeAddress` uses integer primality checks, sorted `u32` factor lists, exact semiprime products $k = p_a p_b$, and a two-pointer sorted merge for $\gcd(q, A_c) > 1$ admission and integer tuple ranking `(shared_primes, ordered_pair_matches, sequence)`. Zero floating point, zero exponentials/softmax/squashing, and zero matrix multiplication.
 

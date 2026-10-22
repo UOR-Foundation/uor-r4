@@ -35,9 +35,9 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 - **Oracle gain bar (Arm C):** At least `+8/40` more recalled fact rows than the `19/40` (`20/40` anchor) baseline (`>= 27/40` on the memory recall half, and `>= 54/80` across the full 80-row panel), with `0` wrong-value substitutions from `uor-r4-object-store` (`whole_object_verified` / range-verified byte match `1.000` on every `Hit`) and held-out BPB within `0.01` of Arm A.
 - **Trained follow-up gate:** Only if Arm C meets the oracle gain bar is a trained address-as-read sheet eligible to be drafted (2–3 seeds, frozen `>= 80`-row panel, separate FIT review, and typed owner release).
 
-## 5. Stop rules and cost
+## 5. Stopping criteria and cost
 
-- **Stop rules:** Any finite CPU control failure in `cargo test -p uor-r4-object-store --test address_read` blocks GPU evaluation; zero retries with modified code or panel after FIT.
+- **Stopping criteria:** Any finite CPU control failure in `cargo test -p uor-r4-object-store --test address_read` blocks GPU evaluation; zero retries with modified code or panel after FIT.
 - **Estimated GPU cost:** Single RTX 5090 evaluation-only run (zero training steps), `< 15` minutes (`< $0.25`), within the `<= 4` pods / `<= $8/h` fleet cap.
 
 TEST FITNESS: PENDING
