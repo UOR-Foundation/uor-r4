@@ -9,9 +9,10 @@ use std::process::Command;
 
 use uor_r4_harness::loopdrive::{
     check_in, classify, close_stalled_session, commit_and_push_wip, compose_prompt, launch_argv,
-    pm_card_text, read_record, run_sessions, session_alive, start_session, terminate_session,
-    watch_lease_until_renew_fails, watch_until_exit, CheckIn, DriveHooks, DriveSpec, Next,
-    Observation, Progress, SessionRecord, CHECK_IN_SECONDS,
+    model_in_launch, note_body, pm_card_text, post_note_with, read_record, run_sessions,
+    session_alive, start_session, terminate_session, watch_lease_until_renew_fails,
+    watch_until_exit, CheckIn, DriveHooks, DriveSpec, Next, Observation, Progress, SessionRecord,
+    CHECK_IN_SECONDS,
 };
 
 fn observation(head: &str, commits: u64, gate_runs: u64, changed_paths: usize) -> Observation {
@@ -816,4 +817,67 @@ fn a_wait_then_go_starts_exactly_one_session() {
         "exactly one session after the GO"
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_check_in_note_is_tagged_and_carries_no_claim() {
+    let body = note_body("deepseek", Some("#77"), "continues: 3 commits");
+    assert!(
+        body.starts_with("[deepseek] drive check-in (soft 2-hour, D53): continues: 3 commits"),
+        "{body}"
+    );
+    assert!(body.contains("- session target: #77"), "{body}");
+    assert!(body.contains("No result is claimed"), "{body}");
+}
+
+#[test]
+fn post_note_with_pipes_the_body_to_gh_issue_comment() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = temp_root("note-gh");
+    let args_path = root.join("gh-args.txt");
+    let body_path = root.join("gh-body.md");
+    let script = root.join("fake-gh");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\necho \"$@\" > {args}\nprev=\"\"\nfor a in \"$@\"; do\n  if [ \"$prev\" = \"--body-file\" ]; then cp \"$a\" {body}; fi\n  prev=\"$a\"\ndone\n",
+            args = args_path.display(),
+            body = body_path.display(),
+        ),
+    )
+    .expect("write fake gh");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    post_note_with(
+        &root,
+        &script,
+        "deepseek",
+        1234,
+        Some("#77"),
+        "continues: 3 commits",
+    )
+    .expect("the note posts");
+    let args = std::fs::read_to_string(&args_path).expect("fake gh recorded its argv");
+    assert!(args.contains("issue comment 1234 --body-file"), "{args}");
+    let body = std::fs::read_to_string(&body_path).expect("fake gh recorded the body file");
+    assert!(body.contains("[deepseek] drive check-in"), "{body}");
+    assert!(body.contains("session target: #77"), "{body}");
+    assert!(body.contains("No result is claimed"), "{body}");
+    let notes = std::fs::read_dir(root.join("local/loop/drive/deepseek"))
+        .expect("the drive directory exists")
+        .count();
+    assert!(notes >= 1, "the note file is kept next to the session");
+}
+
+#[test]
+fn a_model_not_in_the_launch_is_refused() {
+    let launch = vec![
+        "dsh".to_string(),
+        "headless".to_string(),
+        "--model".to_string(),
+        "deepseek-flash".to_string(),
+        "{prompt}".to_string(),
+    ];
+    assert!(model_in_launch("deepseek-flash", &launch));
+    assert!(!model_in_launch("claude-haiku", &launch));
+    assert!(!model_in_launch("", &launch));
 }
