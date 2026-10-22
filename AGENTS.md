@@ -18,6 +18,13 @@ Only the owner changes it; changes are logged in [docs/rules/changes.md](docs/ru
 5. **Never grant or assume an owner release yourself.** Ask Casey in your own chat; only his approval there counts, and you record his words verbatim with the time (§5.1).
 6. **Deliver through the full path:** PR → exact-head review by another vendor's lab, loop setup PRs included since the owner ended D59 on 22 Oct 2026 (doc-only or generated PRs: a fresh-context self-review) → merge queue → verify on fresh `main` → delete the branch and worktree (§5.5).
 
+## Lessons the project paid for
+
+<!-- loop:lessons-top-ten:start -->
+<!-- loop:lessons-top-ten:end -->
+
+The PM picks the top ten from [docs/harness/LESSONS.md](docs/harness/LESSONS.md); the block above is rendered between the markers, never hand-edited.
+
 ## Where things are
 
 | What | Where |
@@ -25,18 +32,18 @@ Only the owner changes it; changes are logged in [docs/rules/changes.md](docs/ru
 | Project overview | [README.md](README.md) |
 | Rules | [CHARTER.md](CHARTER.md) |
 | Documentation hub | [docs/README.md](docs/README.md) |
-| Current plan, roster and approved sequences | [docs/integration/NOW.md](docs/integration/NOW.md) |
+| Current plan and approved sequences | [PLAN.md](PLAN.md) |
 | The loop: sessions, orders, reports, review, build plan | [docs/loop/README.md](docs/loop/README.md) (§5.10) |
+| PM rules | [docs/harness/pm-rules.md](docs/harness/pm-rules.md) |
 | Mechanism board (ACTIVE / READY / PARKED) | [docs/mechanisms/README.md](docs/mechanisms/README.md) |
 | Research notebooks, one page per line | [docs/research/notebook/](docs/research/notebook/) |
-| Decision index (D0–D59) | [docs/integration/DECISIONS.md](docs/integration/DECISIONS.md) |
-| Workspace, storage and hygiene | [docs/labs/workspace.md](docs/labs/workspace.md) |
+| Decision index | [docs/integration/DECISIONS.md](docs/integration/DECISIONS.md) |
+| Lessons registry | [docs/harness/LESSONS.md](docs/harness/LESSONS.md) |
 | Archive of retired text and records | [archive/CATALOG.md](archive/CATALOG.md) |
 
 ## How to work
 
-- Pick work from `NOW.md`, post a one-line intent note on the owning issue, claim the branch and continue unless redirected (§5.3).
-- Work in the loop (§5.10): one unit per session, an ORDER before work, a REPORT with negatives first, and your lab name tagged on every claim, PR, review and comment.
+- Pick work from `PLAN.md` and work in the loop (§5.3, §5.10): one unit per session, an ORDER before work, a REPORT with negatives first, your lab name tagged on every claim, PR, review and comment.
 - A change to a bar, a status, a constraint or spend is a decision card to the PM or owner, never a subagent's call (§5.2).
 - GPU training or evaluation, and any run a milestone claim rests on, needs a one-page pre-registration with a non-author FIT first; builds, finite kernel tests and host checks do not (§4.5).
 - A negative closes a configuration, never a mechanism; classify instrument versus mechanism before calling a result (§4.1, §4.2).
