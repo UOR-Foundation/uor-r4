@@ -738,7 +738,11 @@ fn a_lab_at_its_open_pr_limit_waits_naming_its_prs_awaiting_review() {
         p["isDraft"] = json!(true);
     }
     let o = r.next_as("codex", &next, &claim, false);
-    assert_eq!(o.status.code(), Some(3), "{o:?}");
+    assert_eq!(
+        o.status.code(),
+        Some(3),
+        "a lab at its open_pr_limit must WAIT, not STOP: {o:?}"
+    );
     let d = decision(&o);
     assert!(
         d.starts_with("WAIT open_pr_limit reached: own PRs #41, #42, #43 await review"),
