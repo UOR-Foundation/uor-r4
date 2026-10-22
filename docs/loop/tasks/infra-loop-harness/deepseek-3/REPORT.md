@@ -1,6 +1,6 @@
 # REPORT: infra-loop-pr12-git-hooks, deepseek-3 (loop PR 12: git hooks, pr-check before push, Lab and Order trailers)
 
-Lab: deepseek. Order: folded into [deepseek-4/ORDER.md](../deepseek-4/ORDER.md) as history; the original ORDER.md was removed so the PR adds exactly one ORDER.
+Lab: deepseek. Order: folded into [deepseek-4/ORDER.md](../deepseek-5/ORDER.md) as history; the original ORDER.md was removed so the PR adds exactly one ORDER.
 Base: `0e0ff6ce7` (fresh `origin/main`, with PR 11 on it). Closes #2917. References #2904.
 
 ## What did not work, first
