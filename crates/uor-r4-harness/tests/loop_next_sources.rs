@@ -159,14 +159,14 @@ fn an_open_owner_direction_is_offered_before_repairs() {
     let o = r.next();
     assert_eq!(o.status.code(), Some(0), "{o:?}");
     assert!(
-        stdout(&o).contains("owner-direction: PLAN owner direction"),
-        "{}",
-        stdout(&o)
-    );
-    assert!(
         decision(&o).starts_with("GO owner-direction D1 build the GPU collection record"),
         "the open owner direction must be offered before repairs: {}",
         decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("owner-direction: PLAN owner direction"),
+        "{}",
+        stdout(&o)
     );
 }
 #[test]
