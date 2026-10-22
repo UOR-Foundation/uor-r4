@@ -204,7 +204,7 @@ fn filemap(root: &Path, failures: &mut Vec<String>) {
         .filter_map(|l| {
             l.strip_prefix("| `")
                 .and_then(|r| r.split('`').next())
-                .map(str::to_string)
+                .map(|p| p.trim_end_matches('/').to_string())
         })
         .collect();
     let Some(tracked) = git(root, &["ls-files"]) else {
@@ -213,17 +213,18 @@ fn filemap(root: &Path, failures: &mut Vec<String>) {
     };
     let mut dirs = BTreeSet::new();
     for path in tracked.lines() {
+        let parts: Vec<&str> = path.split('/').collect();
         let mut acc = String::new();
-        for part in path.split('/') {
+        // Every component before the last is a real directory (the last is the file).
+        for part in &parts[..parts.len().saturating_sub(1)] {
+            if !acc.is_empty() {
+                acc.push('/');
+            }
             acc.push_str(part);
             let depth = acc.matches('/').count() + 1;
-            if !part.contains('.') && depth <= 2 && !SKIP_DIRS.contains(&acc.as_str()) {
+            if depth <= 2 && !SKIP_DIRS.contains(&acc.as_str()) {
                 dirs.insert(acc.clone());
             }
-            if part.contains('.') || depth >= 2 {
-                break;
-            }
-            acc.push('/');
         }
     }
     for dir in &dirs {

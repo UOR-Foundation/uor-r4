@@ -110,6 +110,32 @@ fails, and so does a row whose path is gone. `uor-harness check`'s FILEMAP rule 
 | `tests/` | Repository-level test fixtures |
 | `third_party/` | Vendored third-party material |
 | `tools/` | Additional tools |
+| `tools/r4-softmax-trainer/` | The retired r4 softmax trainer (reference) |
+| `tools/uor-knowledge/` | The uor-knowledge tool |
 | `web/` | Web assets |
 | `web/studio/` | The Studio web client (M7) |
 | `xtask/` | The `cargo xtask` automation crate (roadmap render/sync, links, catalog) |
+| `xtask/src/` | The xtask sources |
+| `conformance/features/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `tests/e2e/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/arrayref/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/candle-core-0.9.2/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/candle-kernels-0.9.2/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/candle-nn-0.9.2/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/cudarc-0.19.10/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/float8-0.6.1/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/helm-d-reference/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `third_party/uor-addr-0.2.0/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `tools/lab-runner/` | (row added by the migration's own verifier; description to sharpen on use) |
+| `.uor-models/` | Local model artifacts (tracked) |
+| `.uor-models/corpora/` | Local corpus artifacts |
+| `.agents/` | Configuration and agent state |
+| `.agents/skills/` | Configuration and agent state |
+| `.cargo/` | Configuration and agent state |
+| `.codex-lab/` | Configuration and agent state |
+| `.devcontainer/` | Configuration and agent state |
+| `.github/` | GitHub workflows and templates |
+| `.github/ISSUE_TEMPLATE/` | Configuration and agent state |
+| `.github/workflows/` | CI workflows |
+| `.kimi-code/` | Kimi Code agent configuration |
+| `.kimi-code/agents/` | Kimi Code agent definitions |
