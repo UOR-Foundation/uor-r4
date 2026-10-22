@@ -157,7 +157,11 @@ fn an_open_owner_direction_is_offered_before_repairs() {
         &[],
     );
     let o = r.next();
-    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "the open owner direction must be offered before repairs: {o:?}"
+    );
     assert!(
         decision(&o).starts_with("GO owner-direction D1 build the GPU collection record"),
         "the open owner direction must be offered before repairs: {}",
